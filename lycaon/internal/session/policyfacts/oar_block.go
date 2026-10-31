@@ -204,6 +204,7 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 	RegisterWorktreeFacts(ctx, gc, raised.IndexWatch)
 	ObserveEditorConfigMismatch(gc, raised)
 	ObserveHTTPRequestWebPage(gc, raised)
+	ObserveHTTPRequestLoopbackOtherSession(gc, raised)
 	ObserveSourceParsingFeedback(gc, raised)
 	m.ObserveDeferredUnactivated(gc, sess.ID)
 	loopguard.ObserveDoomLoopWarn(gc, doomCompletionCountAfter, loopguard.DoomLoopMaxAttempts, tool, args)

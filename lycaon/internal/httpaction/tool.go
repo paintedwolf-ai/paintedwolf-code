@@ -70,7 +70,8 @@ type result struct {
 	ReceiptToken string         `json:"redaction_receipt,omitempty"`
 	// UnixSocket is the reviewed socket the request reached; the URL host
 	// then names no network destination.
-	UnixSocket string `json:"unix_socket,omitempty"`
+	UnixSocket string                    `json:"unix_socket,omitempty"`
+	Listener   *api.LoopbackListenerFact `json:"listener,omitempty"`
 }
 
 type requestSpec struct {
@@ -161,7 +162,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
 		})
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
-		resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]))
+		resp, landed, bufferedBody, listenerFact, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]))
 		if err != nil {
 			return "", sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err)
 		}
@@ -189,7 +190,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			DurationMS:  resp.DurationMS, TimingMS: resp.Timing, TLS: resp.TLS,
 			Bytes: resp.Bytes, SHA256: resp.SHA256, ContentType: resp.ContentType,
 			Redacted: outbound.redacted, ReceiptToken: outbound.receipt, UnixSocket: spec.socket,
-			Tokens: tokenRec, BodyRedacted: bodyRedacted,
+			Tokens: tokenRec, BodyRedacted: bodyRedacted, Listener: listenerFact,
 		}
 		placement := placeResponseBody(resp, tctx, landed != nil, spec.disposition.discard)
 		out.Body, out.BodyEncoding = placement.inline, placement.encoding
@@ -200,6 +201,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		}
 		out.Cookies = saveCookieJar(ctx, deps, jarReq, jar)
 		reportWebPage(tctx, spec, resp, placement, finalURL)
+		reportLoopbackListener(tctx, listenerFact)
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.RetrievedFrom = retrievedFrom(spec, resp.FinalURL)
 		}
@@ -290,7 +292,9 @@ func send(
 	ctx context.Context, deps Deps, tctx tools.ToolContext, spec requestSpec, outbound outboundRequest,
 	jar *secretcap.CookieJar, tokenJar *secretcap.TokenJar, tokenJarReq secretcap.TokenJarRequest,
 	allowAddress func(netip.Addr, uint16) bool, timeout time.Duration,
-) (outboundhttp.Response, *inboundwrite.Receipt, []byte, error) {
+) (outboundhttp.Response, *inboundwrite.Receipt, []byte, *api.LoopbackListenerFact, error) {
+	var loopbackObs loopbackHopObservation
+	firstHopSeen := false
 	req := outboundhttp.Request{
 		Class:  egressclass.AgentHTTPRequest,
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
@@ -298,12 +302,22 @@ func send(
 		UnixSocket: spec.socket,
 		HostHeader: outbound.hostHeader,
 		Resolve:    spec.resolve,
+		OnFirstHopConn: func(local, remote netip.AddrPort) {
+			loopbackObs.onFirstHopConn(ctx, tctx, local, remote)
+		},
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.
 	if spec.socket == "" {
 		req.BeforeHop = func(hopCtx context.Context, hopURL *url.URL) error {
-			return egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method)
+			if err := egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method); err != nil {
+				return err
+			}
+			if !firstHopSeen {
+				firstHopSeen = true
+				loopbackObs.beforeFirstHop(hopCtx, tctx, spec)
+			}
+			return nil
 		}
 	}
 	if jar != nil {
@@ -336,10 +350,13 @@ func send(
 		}
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, spec.outgoing); err != nil {
-		return outboundhttp.Response{}, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
+		return outboundhttp.Response{}, nil, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
 	}
 	resp, err := outboundhttp.Do(ctx, req)
-	return resp, landed, bufferedResponsePathBytes, err
+	if err != nil {
+		return resp, landed, bufferedResponsePathBytes, nil, err
+	}
+	return resp, landed, bufferedResponsePathBytes, loopbackObs.settle(ctx, tctx, spec, resp), nil
 }
 
 // sendReject maps a typed transport failure after received cookies are saved.
