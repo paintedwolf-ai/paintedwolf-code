@@ -204,6 +204,8 @@ func (s *Server) registerProjectRoutes(r chi.Router) {
 	s.registerV1Operation(r, operationCloneProject, s.Admin.Project.Promotion.HandleCloneProject)
 	s.registerV1Operation(r, operationDetectFolder, s.Admin.Extensions.Suggestions.HandleDetectFolder)
 	s.registerV1Operation(r, operationGetProject, s.Admin.Project.Projects.HandleGetProject)
+	s.registerV1Operation(r, operationListProjectBackgroundProcesses, s.Admin.Project.Projects.HandleListProjectBackgroundProcesses)
+	s.registerV1Operation(r, operationStopProjectBackgroundProcess, s.Admin.Project.Projects.HandleStopProjectBackgroundProcess)
 	s.registerV1Operation(r, operationListProjectSessions, s.Admin.SessionAdmin.Transcript.HandleListProjectSessions)
 	s.registerV1Operation(r, operationGetAgentPresence, s.Routes.Activity.handleGetAgentPresence)
 	s.registerV1Operation(r, operationUpdateProject, s.Admin.Project.Projects.HandleUpdateProject)

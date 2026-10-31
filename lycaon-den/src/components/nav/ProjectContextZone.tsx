@@ -30,6 +30,8 @@ import { STAGE_REGISTRY, stageDefinition } from "../stage/stage-registry.tsx";
 import { isContextNavItemId } from "../../settings/editor/context-nav-prefs.ts";
 import { NavSelectionDot, navRow } from "./NavSelectionDot.tsx";
 import { requestFirstTimeTip } from "../../first-time-tips/first-time-tips-service.ts";
+import { runningBackgroundCountFor } from "../../project/project-background-store.ts";
+import { tabBadge } from "../chatview/tabs.ts";
 
 type Props = {
   projectId?: string | null;
@@ -66,6 +68,7 @@ type RowSharedProps = {
   customizing: boolean;
   entryActive: boolean;
   detached: boolean;
+  badgeCount?: number;
   onOpen: () => void;
   onHide: () => void;
   onContextMenu: (e: MouseEvent) => void;
@@ -206,6 +209,14 @@ function ContextNavRowBody(
             {meta().icon()}
           </span>
           <span class="project-context-zone__entry-label">{meta().label}</span>
+          <Show when={!props.customizing && (props.badgeCount ?? 0) > 0}>
+            <span
+              class="tabs__chip-badge"
+              data-testid={`project-context-badge-${props.id}`}
+            >
+              {tabBadge(props.badgeCount ?? 0)}
+            </span>
+          </Show>
           <Show when={props.detached && !props.customizing}>
             <span
               class="project-context-zone__window-glyph"
@@ -326,6 +337,10 @@ export function ProjectContextZone(props: Props) {
     customizing: customizing(),
     entryActive: props.isStageActive(id) && !isDetached(id),
     detached: isDetached(id),
+    badgeCount:
+      id === "running" && props.projectId
+        ? runningBackgroundCountFor(props.projectId)
+        : 0,
     onOpen: () => openEntry(id),
     onHide: () => void hideItem(id),
     onContextMenu: (e) => openRowMenu(id, e),

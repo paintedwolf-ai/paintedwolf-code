@@ -74,6 +74,13 @@ func (g *windowsGuard) onStarted(cmd *exec.Cmd) error {
 	return nil
 }
 
+func (g *windowsGuard) wait(cmd *exec.Cmd) error {
+	if cmd == nil {
+		return nil
+	}
+	return cmd.Wait()
+}
+
 func (g *windowsGuard) kill(cmd *exec.Cmd) {
 	if g != nil && g.job != 0 {
 		_ = windows.TerminateJobObject(g.job, 1)

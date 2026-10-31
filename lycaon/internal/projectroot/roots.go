@@ -247,3 +247,86 @@ func ScopeRel(root RootRef, abs string) string {
 	}
 	return filepath.ToSlash(rel)
 }
+
+// PathWithinRoot reports whether candidatePath resolves within rootPath after symlink evaluation.
+func PathWithinRoot(rootPath, candidatePath string) bool {
+	canonRoot, ok := canonicalizePath(rootPath)
+	if !ok {
+		return false
+	}
+	canonCandidate, ok := canonicalizePath(candidatePath)
+	if !ok {
+		return false
+	}
+	rel, err := filepath.Rel(canonRoot, canonCandidate)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+}
+
+// MatchRoot resolves candidatePath against the project's roots after symlink
+// evaluation and returns the most specific matching root and slash-normalized
+// relative path.
+func MatchRoot(roots []RootRef, candidatePath string) (RootRef, string, bool) {
+	canonCandidate, ok := canonicalizePath(candidatePath)
+	if !ok {
+		return RootRef{}, "", false
+	}
+	var match RootRef
+	var bestRel string
+	found := false
+	for _, r := range roots {
+		canonRoot, ok := canonicalizePath(r.Path)
+		if !ok {
+			continue
+		}
+		rel, err := filepath.Rel(canonRoot, canonCandidate)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		if !found || len(rel) < len(bestRel) {
+			match = r
+			bestRel = rel
+			found = true
+		}
+	}
+	if !found {
+		return RootRef{}, "", false
+	}
+	if bestRel == "" {
+		bestRel = "."
+	}
+	return match, filepath.ToSlash(bestRel), true
+}
+
+func canonicalizePath(p string) (string, bool) {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "", false
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", false
+	}
+	abs = filepath.Clean(abs)
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return filepath.Clean(resolved), true
+	}
+	cur := abs
+	var suffix []string
+	for {
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return abs, true
+		}
+		suffix = append(suffix, filepath.Base(cur))
+		cur = parent
+		if resolved, err := filepath.EvalSymlinks(cur); err == nil {
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, suffix[i])
+			}
+			return filepath.Clean(resolved), true
+		}
+	}
+}

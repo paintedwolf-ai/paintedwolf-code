@@ -357,6 +357,7 @@ export function Shell(props: ShellProps) {
     artifacts: () => showStage("artifacts"),
     blueprints: () => showStage("blueprints"),
     extensions: () => showStage("extensions"),
+    running: () => showStage("running"),
   };
 
   const { detachStageToWindow, openFocusedSubjectInNewWindow, openFileWindow,

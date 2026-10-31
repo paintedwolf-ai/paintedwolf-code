@@ -31,3 +31,7 @@ export function StageBlueprintsIcon(): JSX.Element {
 export function StageExtensionsIcon(): JSX.Element {
   return <ThemeIcon slot="stage-extensions" size={14} />;
 }
+
+export function StageRunningIcon(): JSX.Element {
+  return <ThemeIcon slot="terminal" size={14} />;
+}

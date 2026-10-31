@@ -33,10 +33,16 @@ func (s *Removal) InitProjectRemoval() {
 }
 
 func (s *Removal) HandleAssessProjectRemoval(w http.ResponseWriter, r *http.Request) {
-	result, err := s.Owner.Assess(r.Context(), chi.URLParam(r, "id"))
+	projectID := chi.URLParam(r, "id")
+	result, err := s.Owner.Assess(r.Context(), projectID)
 	if err != nil {
 		s.writeRemovalLookupError(w, r, err)
 		return
+	}
+	if s.Sessions != nil && s.Sessions.ProjectControl != nil {
+		if procs, bgErr := s.Sessions.ProjectControl.RunningProjectBackground(r.Context(), projectID); bgErr == nil && len(procs) > 0 {
+			result.BackgroundProcesses = procs
+		}
 	}
 	httpio.WriteJSON(w, http.StatusOK, result)
 }

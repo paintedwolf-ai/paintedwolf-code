@@ -27,7 +27,7 @@ func StartInOwnGroup(cmd *exec.Cmd) (func(), func() error, error) {
 	}
 	if err := guard.onStarted(cmd); err != nil {
 		guard.kill(cmd)
-		_ = cmd.Wait()
+		_ = guard.wait(cmd)
 		guard.release()
 		cleanup()
 		return nil, nil, fmt.Errorf("process group: %w", err)
@@ -36,7 +36,7 @@ func StartInOwnGroup(cmd *exec.Cmd) (func(), func() error, error) {
 	var waitErr error
 	wait := func() error {
 		once.Do(func() {
-			waitErr = cmd.Wait()
+			waitErr = guard.wait(cmd)
 			guard.kill(cmd)
 			guard.release()
 			cleanup()

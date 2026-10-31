@@ -1,0 +1,22 @@
+id: painted-wolf/platform:go-context-running
+title: "Show running commands"
+scope: "global"
+keywords:
+  - "running"
+  - "background"
+  - "background commands"
+  - "processes"
+  - "servers"
+when:
+  all:
+    - fact: "project_open"
+    - all:
+        - fact: "context_feature"
+          is: "running"
+        - any:
+            - fact: "context_navigable"
+            - fact: "view_mounted"
+              is: "context"
+action:
+  kind: native_ui
+  handler: "go.context.running"

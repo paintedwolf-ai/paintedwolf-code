@@ -13,6 +13,7 @@ describe("client + store suite", () => {
         topic === "message" ||
         topic === "worker" ||
         topic === "board" ||
+        topic === "project_background" ||
         topic === "process" ||
         topic === "preview" ||
         topic === "attention" ||

@@ -4,6 +4,7 @@ import {
   DEFAULT_SESSION_TITLE,
   type RecentSession,
 } from "../../../shared/app-state-types.ts";
+import { patchProjectBackgroundSession } from "../../project/project-background-store.ts";
 import { nextRecentSession, type RecentsStore } from "../../store/recents-store.ts";
 
 export type SessionLifecycleTarget = {
@@ -42,6 +43,9 @@ export async function setSessionArchived(
     deps.reportError(error, target);
     return false;
   }
+  patchProjectBackgroundSession(target.projectId, target.sessionId, {
+    session_archived: archived,
+  });
   if (archived) deps.removeProjectRow(target.sessionId);
   deps.refreshProjectRows();
   if (archived) await deps.retireLocally(target);

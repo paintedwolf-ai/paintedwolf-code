@@ -49,6 +49,9 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool, repo
 		}
 	}
 	if force {
+		if err := s.Sessions.ProjectControl.StopProjectBackground(ctx, id); err != nil {
+			return err
+		}
 		if err := waitForDrain(ctx); err != nil {
 			return err
 		}

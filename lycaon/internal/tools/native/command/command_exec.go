@@ -259,7 +259,8 @@ func runCommandForeground(
 	}
 	registry.Lifecycle.WatchIndex(tctx.Identity.SessionID, handle, index)
 	networkLife := newCommandNetworkLifecycle(tctx, toolName, bound.lease, directIPApplied)
-	registry.Lifecycle.OnExit(tctx.Identity.SessionID, handle, func() { networkLife.complete(ctx) })
+	exitCtx := context.WithoutCancel(ctx)
+	registry.Lifecycle.OnExit(tctx.Identity.SessionID, handle, func() { networkLife.complete(exitCtx) })
 
 	finished, awaitErr := registry.Lifecycle.Await(ctx, tctx.Identity.SessionID, handle, budget)
 	if awaitErr != nil {
@@ -369,7 +370,12 @@ func stopAwaitedCommand(ctx context.Context, registry *bgprocess.Registry, sessi
 	if registry == nil {
 		return nil
 	}
-	_, stopErr := registry.Lifecycle.Stop(sessionID, handle)
+	fallback := bgprocess.TerminationStoppedByAgent
+	if ctx != nil && ctx.Err() != nil {
+		fallback = bgprocess.TerminationStoppedByUser
+	}
+	reason := bgprocess.TerminationReasonFromContext(ctx, fallback)
+	_, stopErr := registry.Lifecycle.Stop(sessionID, handle, reason)
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commandCancelCleanupTimeout)
 	defer cancel()
 	finished, waitErr := registry.Lifecycle.Await(cleanupCtx, sessionID, handle, 0)

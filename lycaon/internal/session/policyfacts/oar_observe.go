@@ -41,7 +41,7 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	gc.Execution.FailedStages = append([]string(nil), obs.FailedStages...)
 	gc.Execution.ProcessRunning = obs.Running
 	gc.Execution.ProcessTimedOut = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationTimedOut)
-	gc.Execution.ProcessStopped = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationStopped)
+	gc.Execution.ProcessStopped = !obs.Running && bgprocess.TerminationReason(obs.TerminationReason).IsStopped()
 	gc.Execution.ProcessExited = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationExited)
 	observeSandboxRefusals(gc, obs.Refusals)
 	data := map[string]any{"tool": gc.Invocation.Tool}
@@ -243,6 +243,16 @@ func ObserveHTTPRequestWebPage(gc *oar.GuardContext, raised guidance.ToolResultF
 	}
 	gc.Invocation.HTTPRequestWebPage = true
 	gc.PutRejectData(toolrejection.HTTPRequestWebPageCode, raised.FeedbackFor(toolrejection.HTTPRequestWebPageCode).Details)
+}
+
+// ObserveHTTPRequestLoopbackOtherSession publishes loopback listener attribution
+// when http_request reaches a port held by another session or a competing listener.
+func ObserveHTTPRequestLoopbackOtherSession(gc *oar.GuardContext, raised guidance.ToolResultFacts) {
+	if gc == nil || !raised.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
+		return
+	}
+	gc.Invocation.HTTPRequestLoopbackOtherSession = true
+	gc.PutRejectData(toolrejection.HTTPRequestLoopbackOtherSessionCode, raised.FeedbackFor(toolrejection.HTTPRequestLoopbackOtherSessionCode).Details)
 }
 
 // DeferredUnactivatedCount is how many of surfaceID's deferred tools this

@@ -103,6 +103,12 @@ linters:
           msg: use slog instead of fmt.Print* in production code
         - pattern: ^print(|ln)$
           msg: use slog instead of builtin print/println
+        - pattern: ^syscall\.Kill$
+          msg: use osprocess.Signal or osprocess.SignalGroup instead of raw syscall.Kill
+        - pattern: ^(golang\.org/x/sys/)?unix\.(Kill|Killpg|PidfdSendSignal)$
+          msg: use osprocess.Signal or osprocess.SignalGroup instead of raw unix signal syscalls
+        - pattern: ^os\.FindProcess$
+          msg: use osprocess.Incarnation instead of wrapping an unverified PID with os.FindProcess
       analyze-types: true
     paralleltest:
       # Loop subtests that capture a shared var must still call Parallel.
@@ -240,6 +246,12 @@ linters:
           - gosec
       # CLI commands print user-facing output.
       - path: '^cmd/'
+        text: 'use slog instead of'
+        linters:
+          - forbidigo
+      # Low-level process identity and namespace plumbing owns raw signal syscalls.
+      - path: '^internal/(osprocess/|launchguard/|confine/linuxsandbox/|hostprocess/|exec/(supervisor_linux|supervisor_tree_linux|relay_linux)\.go$)'
+        text: 'use osprocess\.'
         linters:
           - forbidigo
       # Tests use fmt.Print* for diagnostic output during development.

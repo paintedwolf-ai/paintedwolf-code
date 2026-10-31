@@ -2458,6 +2458,51 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "result_treatment": "effect"
     },
     {
+      "id": "painted-wolf/platform:go-context-running",
+      "provider": "painted-wolf/platform",
+      "title": "Show running commands",
+      "scope": "global",
+      "keywords": [
+        "running",
+        "background",
+        "background commands",
+        "processes",
+        "servers"
+      ],
+      "icon": "play",
+      "executor": "den",
+      "invocation": "den",
+      "action_kind": "native_ui",
+      "handler_id": "go.context.running",
+      "when": {
+        "all": [
+          {
+            "fact": "project_open"
+          },
+          {
+            "all": [
+              {
+                "fact": "context_feature",
+                "is": "running"
+              },
+              {
+                "any": [
+                  {
+                    "fact": "context_navigable"
+                  },
+                  {
+                    "fact": "view_mounted",
+                    "is": "context"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "result_treatment": "effect"
+    },
+    {
       "id": "painted-wolf/platform:go-context-search",
       "provider": "painted-wolf/platform",
       "title": "Show search",
@@ -4171,6 +4216,14 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "group": "2",
       "order": 5,
       "label": "Files"
+    },
+    {
+      "id": "painted-wolf/platform:app-menu-go-go-context-running",
+      "slot": "app_menu.go",
+      "command": "painted-wolf/platform:go-context-running",
+      "group": "2",
+      "order": 12,
+      "label": "Running"
     },
     {
       "id": "painted-wolf/platform:app-menu-go-go-context-search",
@@ -6207,6 +6260,23 @@ export const STOCK_FRAME: ContributionFrameResponse = {
         ],
         "windows": [
           "Leader F"
+        ]
+      }
+    },
+    {
+      "id": "painted-wolf/platform:key-go-context-running",
+      "command": "painted-wolf/platform:go-context-running",
+      "scope": "global",
+      "allow_in_input": true,
+      "bindings": {
+        "linux": [
+          "Leader P"
+        ],
+        "macos": [
+          "Leader P"
+        ],
+        "windows": [
+          "Leader P"
         ]
       }
     },
@@ -8260,6 +8330,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "global",
+      "chord": "Leader P",
+      "active": "painted-wolf/platform:key-go-context-running",
+      "candidates": [
+        "painted-wolf/platform:key-go-context-running"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "global",
       "chord": "Leader S",
       "active": "painted-wolf/platform:key-go-context-security",
       "candidates": [
@@ -9754,6 +9833,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "macos",
       "scope": "global",
+      "chord": "Leader P",
+      "active": "painted-wolf/platform:key-go-context-running",
+      "candidates": [
+        "painted-wolf/platform:key-go-context-running"
+      ]
+    },
+    {
+      "platform": "macos",
+      "scope": "global",
       "chord": "Leader S",
       "active": "painted-wolf/platform:key-go-context-security",
       "candidates": [
@@ -11144,6 +11232,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-go-context-cost",
       "candidates": [
         "painted-wolf/platform:key-go-context-cost"
+      ]
+    },
+    {
+      "platform": "windows",
+      "scope": "global",
+      "chord": "Leader P",
+      "active": "painted-wolf/platform:key-go-context-running",
+      "candidates": [
+        "painted-wolf/platform:key-go-context-running"
       ]
     },
     {
