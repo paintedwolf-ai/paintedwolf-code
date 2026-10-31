@@ -41,7 +41,7 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	gc.Execution.FailedStages = append([]string(nil), obs.FailedStages...)
 	gc.Execution.ProcessRunning = obs.Running
 	gc.Execution.ProcessTimedOut = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationTimedOut)
-	gc.Execution.ProcessStopped = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationStopped)
+	gc.Execution.ProcessStopped = !obs.Running && bgprocess.TerminationReason(obs.TerminationReason).IsStopped()
 	gc.Execution.ProcessExited = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationExited)
 	observeSandboxRefusals(gc, obs.Refusals)
 	data := map[string]any{"tool": gc.Invocation.Tool}

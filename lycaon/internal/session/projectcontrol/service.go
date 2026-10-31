@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/project"
@@ -70,6 +71,7 @@ type Service struct {
 	pendingPostureBaselines   sync.Map
 	lastSessionExternalHidden sync.Map
 	pendingExternalBaselines  sync.Map
+	processes                 *bgprocess.Registry
 }
 
 func New(store Sessions, stops Stops, status Status, admission Admission, batch Batch, instructions Instructions, transcript Transcript) *Service {
@@ -82,3 +84,5 @@ func (s *Service) SetAnchors(anchors Anchors)         { s.anchors = anchors }
 
 // SetRootHistory selects the attachment change record root changes advance.
 func (s *Service) SetRootHistory(history *projectroot.History) { s.rootHistory = history }
+
+func (s *Service) SetProcesses(processes *bgprocess.Registry) { s.processes = processes }

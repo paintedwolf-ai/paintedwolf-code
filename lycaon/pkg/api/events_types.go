@@ -140,3 +140,20 @@ const (
 	// CLIOpenActionCreate proposes a root for a project that does not exist yet.
 	CLIOpenActionCreate CLIOpenAction = "create"
 )
+
+// BackgroundProcessTerminationReason names why a background command job ended.
+type BackgroundProcessTerminationReason string
+
+const (
+	BackgroundProcessTerminationReasonExited          BackgroundProcessTerminationReason = "exited"
+	BackgroundProcessTerminationReasonTimedOut        BackgroundProcessTerminationReason = "timed_out"
+	BackgroundProcessTerminationReasonStoppedByAgent  BackgroundProcessTerminationReason = "stopped_by_agent"
+	BackgroundProcessTerminationReasonStoppedByUser   BackgroundProcessTerminationReason = "stopped_by_user"
+	BackgroundProcessTerminationReasonChatDeleted     BackgroundProcessTerminationReason = "chat_deleted"
+	BackgroundProcessTerminationReasonProjectDeleted  BackgroundProcessTerminationReason = "project_deleted"
+	BackgroundProcessTerminationReasonRootDetached    BackgroundProcessTerminationReason = "root_detached"
+	BackgroundProcessTerminationReasonAppQuit         BackgroundProcessTerminationReason = "app_quit"
+	BackgroundProcessTerminationReasonWorkerCompleted BackgroundProcessTerminationReason = "worker_completed"
+	BackgroundProcessTerminationReasonWorkerCancelled BackgroundProcessTerminationReason = "worker_cancelled"
+)
+

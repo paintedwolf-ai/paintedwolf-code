@@ -257,7 +257,7 @@ func (m *Service) rootDependentsFor(ctx context.Context, projectID string, detac
 			if len(projectRoots) <= 1 && strings.TrimSpace(sess.WorkspaceRootID) != detached.ID {
 				continue
 			}
-			if sess.Status != api.SessionStatusBusy {
+			if sess.Status != api.SessionStatusBusy && (m.processes == nil || !m.processes.HasRunning(sess.ID)) {
 				continue
 			}
 			out.Sessions = append(out.Sessions, RootDependentSession{

@@ -18,7 +18,8 @@ effect: block
 copy:
   what: Handle {{ paintedwolf.handle }} is unavailable to {{ tool }}, although this session has other running
     jobs.
-  cause: The supplied handle was not found in this session’s retained command jobs.
+  cause: The supplied handle was not found in this session’s retained command jobs. Background commands also
+    end when Painted Wolf Code quits, without attributing this missing handle to a restart.
   why: A handle identifies a particular execution; another running job is not a substitute.
   fix: Use the intended execution’s handle from its actual spawn or yield result. If that result is already
     final or its handle is no longer retained, use the retained outcome and do not restart completed work merely

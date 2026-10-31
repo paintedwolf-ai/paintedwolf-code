@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,6 +20,7 @@ func (m *Service) RetireForProjectDelete(ctx context.Context, projectID string, 
 	if projectID == "" {
 		return fmt.Errorf("project_id required")
 	}
+	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationProjectDeleted)
 	plan, err := planProjectRetirement(ctx, m.store, projectID)
 	if err != nil {
 		return err

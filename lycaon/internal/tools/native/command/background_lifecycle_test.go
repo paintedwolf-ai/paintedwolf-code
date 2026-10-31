@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -55,7 +56,7 @@ func TestBackgroundHandleRetainsOutputAcrossCancellationAndEnforcesSessionOwners
 	var start hostcmd.BackgroundStartResult
 	testutil.FailErr(t, "decode persistent launch", json.Unmarshal([]byte(raw), &start))
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose background session", reg.Lifecycle.DisposeSession(context.Background(), ctx.Identity.SessionID))
+		testutil.FailErr(t, "dispose background session", reg.Lifecycle.DisposeSession(context.Background(), ctx.Identity.SessionID, bgprocess.TerminationChatDeleted))
 	})
 	if start.ExitedEarly || captured.Process == nil || !captured.Process.Running || captured.Process.Handle != start.Handle {
 		t.Fatalf("live launch status = %+v / %+v", start, captured.Process)

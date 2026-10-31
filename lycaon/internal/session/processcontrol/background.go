@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,7 +19,7 @@ func (m *Service) StopBackgroundProcess(sessionID, handle string) (*api.Backgrou
 			return &api.BackgroundProcessStopResult{ProcessID: result.Handle, StopRequested: result.Running, Running: result.Running}, nil
 		}
 	}
-	return m.Background.Lifecycle.Stop(sessionID, handle)
+	return m.Background.Lifecycle.Stop(sessionID, handle, bgprocess.TerminationStoppedByUser)
 }
 
 // ListBackgroundProcesses returns visible processes for session recovery.

@@ -27,7 +27,7 @@ func (r *Terminal) ClosePTY(sessionID, handle string) (PTYCloseResult, error) {
 	if kind != processKindPTY {
 		return PTYCloseResult{}, fmt.Errorf("%w: handle %s", ErrNotPTY, handle)
 	}
-	r.Lifecycle.killProcess(proc)
+	r.Lifecycle.killProcess(proc, TerminationStoppedByAgent)
 	select {
 	case <-proc.done:
 	case <-time.After(ptyCloseTimeout):
@@ -104,15 +104,15 @@ func (r *Terminal) waitPTY(ctx context.Context, proc *Process) {
 		proc.hasExit = true
 		proc.exitCode = exitCode
 		proc.finishedAt = time.Now().UTC()
-		proc.reason = TerminationExited
-		if proc.stopped {
-			proc.reason = TerminationStopped
+		if !proc.stopped || proc.reason == "" {
+			proc.reason = TerminationExited
 		}
 		if len(proc.Stages) == 1 {
 			code := exitCode
 			proc.Stages[0].ExitCode = &code
 		}
 	}
+	reason := proc.reason
 	r.jobs.mu.Unlock()
 	if alreadyClosed {
 		return
@@ -126,7 +126,6 @@ func (r *Terminal) waitPTY(ctx context.Context, proc *Process) {
 		proc.finalScreen = &final
 		r.jobs.mu.Unlock()
 	}
-	close(proc.done)
 	if proc.screen != nil {
 		proc.screen.Close()
 	}
@@ -134,12 +133,14 @@ func (r *Terminal) waitPTY(ctx context.Context, proc *Process) {
 	if r.Output.publish != nil && !proc.silent {
 		exit := exitCode
 		r.Output.publish(ctx, proc.ProjectID, proc.SessionID, api.BackgroundProcessEvent{
-			ProcessID: proc.Handle,
-			SessionID: proc.SessionID,
-			Stream:    "exit",
-			EndOffset: proc.buffer.NextCursor(),
-			Running:   false,
-			ExitCode:  &exit,
+			ProcessID:         proc.Handle,
+			SessionID:         proc.SessionID,
+			Stream:            "exit",
+			EndOffset:         proc.buffer.NextCursor(),
+			Running:           false,
+			ExitCode:          &exit,
+			TerminationReason: api.BackgroundProcessTerminationReason(reason),
 		})
 	}
+	close(proc.done)
 }

@@ -72,7 +72,20 @@ func TestSnapshotReportsRingEviction(t *testing.T) {
 }
 
 func TestTerminalPublicationAndOutputPreserveTermination(t *testing.T) {
-	for _, reason := range []TerminationReason{TerminationTimedOut, TerminationStopped, TerminationExited, "", "future_reason"} {
+	for _, reason := range []TerminationReason{
+		TerminationTimedOut,
+		TerminationStoppedByAgent,
+		TerminationStoppedByUser,
+		TerminationChatDeleted,
+		TerminationProjectDeleted,
+		TerminationRootDetached,
+		TerminationAppQuit,
+		TerminationWorkerCompleted,
+		TerminationWorkerCancelled,
+		TerminationExited,
+		"",
+		"future_reason",
+	} {
 		t.Run(string(reason), func(t *testing.T) {
 			h := newProjectionHarness(t, DefaultRingBufferBytes)
 			h.write("stderr", "exited successfully; timed out; stopped; permission denied")
