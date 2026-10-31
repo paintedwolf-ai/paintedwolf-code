@@ -41,15 +41,189 @@ func TestUnixGuardKillsGroupAfterLeaderIsReaped(t *testing.T) {
 
 	grandchild := waitForPIDFile(t, pidFile)
 
-	// Reap the leader before killing. Getpgid cannot answer for a reaped pid, so
-	// a guard that looks the group up here has nothing left to signal.
-	_ = cmd.Wait()
+	// Reap the leader through the guard before killing.
+	_ = guard.wait(cmd)
 
 	guard.kill(cmd)
 
 	if err := waitForProcessGone(t.Context(), grandchild); err != nil {
 		_ = syscall.Kill(grandchild, syscall.SIGKILL)
 		testutil.FailErr(t, "descendant outlived guard kill", err)
+	}
+}
+
+func TestReapedSessionReuseNeverSignalsStandInProcess(t *testing.T) {
+	bystander := exec.Command("cat")
+	stdin, err := bystander.StdinPipe()
+	testutil.FailErr(t, "bystander stdin", err)
+	defer func() { _ = stdin.Close() }()
+	testutil.FailErr(t, "start bystander", bystander.Start())
+	defer func() {
+		if bystander.ProcessState == nil {
+			_ = bystander.Process.Kill()
+			_ = bystander.Wait()
+		}
+	}()
+	bystanderInc, ok := osprocess.IncarnationOf(bystander.Process.Pid)
+	if !ok {
+		t.Fatal("failed to read bystander incarnation")
+	}
+
+	t.Run("release and fallback timer", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		rawGuard, err := newRunGuard(ProcessPriorityNormal)
+		testutil.FailErr(t, "newRunGuard", err)
+		g := rawGuard.(*unixGuard)
+
+		cmd := exec.CommandContext(ctx, "true")
+		g.configure(cmd)
+		testutil.FailErr(t, "start leader", cmd.Start())
+		testutil.FailErr(t, "onStarted", g.onStarted(cmd))
+		testutil.FailErr(t, "guard wait", g.wait(cmd))
+
+		// Simulate the emptied session ID being reused by bystander after reap.
+		var groupSignals []osprocess.Incarnation
+		g.ops.sessionMembers = func(int) []int { return []int{bystander.Process.Pid} }
+		g.ops.signalGroup = func(leader osprocess.Incarnation, sig syscall.Signal) error {
+			groupSignals = append(groupSignals, leader)
+			return osprocess.SignalGroup(leader, sig)
+		}
+
+		// Simulate the TerminateGrace fallback timer firing after reap, then release.
+		g.kill(cmd)
+		g.release()
+
+		if len(groupSignals) != 0 {
+			t.Fatalf("post-reap guard signalled group %+v", groupSignals)
+		}
+		if !bystanderInc.Alive() {
+			t.Fatal("stand-in process in reused session was killed by post-reap guard")
+		}
+	})
+
+	t.Run("RunInOwnGroup", func(t *testing.T) {
+		cmd, cleanup, err := PrepareCommand(context.Background(), "true", nil, ExecOpts{Launch: HostLaunch("exec test")})
+		testutil.FailErr(t, "PrepareCommand", err)
+		defer cleanup()
+		testutil.FailErr(t, "RunInOwnGroup", RunInOwnGroup(cmd))
+		if !bystanderInc.Alive() {
+			t.Fatal("bystander died after RunInOwnGroup")
+		}
+	})
+
+	t.Run("terminateWired after first stage reaped", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		rawGuard0, err := newRunGuard(ProcessPriorityNormal)
+		testutil.FailErr(t, "newRunGuard 0", err)
+		g0 := rawGuard0.(*unixGuard)
+		cmd0 := exec.CommandContext(ctx, "true")
+		g0.configure(cmd0)
+		testutil.FailErr(t, "start stage 0", cmd0.Start())
+		testutil.FailErr(t, "onStarted stage 0", g0.onStarted(cmd0))
+
+		rawGuard1, err := newRunGuard(ProcessPriorityNormal)
+		testutil.FailErr(t, "newRunGuard 1", err)
+		cmd1 := exec.CommandContext(ctx, "cat")
+		stdin1, err := cmd1.StdinPipe()
+		testutil.FailErr(t, "stage 1 stdin", err)
+		defer func() { _ = stdin1.Close() }()
+		rawGuard1.configure(cmd1)
+		testutil.FailErr(t, "start stage 1", cmd1.Start())
+		testutil.FailErr(t, "onStarted stage 1", rawGuard1.onStarted(cmd1))
+
+		// Stage 0 finishes and is reaped while stage 1 is still running; its
+		// session ID is then taken by bystander before terminateWired runs.
+		stage0Reaped := make(chan struct{})
+		origWait := g0.ops.awaitExit
+		g0.ops.awaitExit = func(pid int) {
+			origWait(pid)
+			close(stage0Reaped)
+		}
+		g0.ops.sessionMembers = func(int) []int {
+			select {
+			case <-stage0Reaped:
+				return []int{bystander.Process.Pid}
+			default:
+				return nil
+			}
+		}
+
+		wired := []wiredStage{
+			{cmd: cmd0, guard: g0, cleanup: func() {}},
+			{cmd: cmd1, guard: rawGuard1, cleanup: func() {}},
+		}
+		defer releaseWired(wired)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_, _ = waitWiredStages(ctx, wired)
+		}()
+
+		<-stage0Reaped
+		// Wait until stage 0 has marked itself reaped under g0.mu.
+		testutil.WaitFor(t, func() bool {
+			g0.mu.Lock()
+			defer g0.mu.Unlock()
+			return g0.reaped
+		})
+		cancel()
+		_ = stdin1.Close()
+		<-done
+
+		if !bystanderInc.Alive() {
+			t.Fatal("terminateWired signalled stand-in process in stage 0's reused session")
+		}
+	})
+}
+
+func TestMemberReplacedBetweenScanAndSignalReceivesNoSignal(t *testing.T) {
+	bystander := exec.Command("cat")
+	stdin, err := bystander.StdinPipe()
+	testutil.FailErr(t, "bystander stdin", err)
+	defer func() { _ = stdin.Close() }()
+	testutil.FailErr(t, "start bystander", bystander.Start())
+	defer func() {
+		if bystander.ProcessState == nil {
+			_ = bystander.Process.Kill()
+			_ = bystander.Wait()
+		}
+	}()
+	bystanderInc, ok := osprocess.IncarnationOf(bystander.Process.Pid)
+	if !ok {
+		t.Fatal("failed to read bystander incarnation")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	rawGuard, err := newRunGuard(ProcessPriorityNormal)
+	testutil.FailErr(t, "newRunGuard", err)
+	g := rawGuard.(*unixGuard)
+	defer g.release()
+
+	cmd := exec.CommandContext(ctx, "true")
+	g.configure(cmd)
+	testutil.FailErr(t, "start leader", cmd.Start())
+	testutil.FailErr(t, "onStarted", g.onStarted(cmd))
+
+	// During the pre-reap snapshot, the member PID was observed with an earlier
+	// start timestamp; before signal delivery it exited and bystander took its PID.
+	g.ops.sessionMembers = func(int) []int { return []int{bystander.Process.Pid} }
+	g.ops.incarnationOf = func(pid int) (osprocess.Incarnation, bool) {
+		if pid == bystander.Process.Pid {
+			return osprocess.Incarnation{PID: pid, Start: bystanderInc.Start - 1}, true
+		}
+		return osprocess.IncarnationOf(pid)
+	}
+
+	testutil.FailErr(t, "guard wait", g.wait(cmd))
+	g.kill(cmd)
+
+	if !bystanderInc.Alive() {
+		t.Fatal("bystander with reassigned PID and newer start time was signalled")
 	}
 }
 

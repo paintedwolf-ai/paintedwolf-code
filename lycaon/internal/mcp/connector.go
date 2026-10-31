@@ -131,38 +131,15 @@ func (c SDKConnector) connectStdio(ctx context.Context, entry MCPProviderEntry, 
 
 	sdkClient := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "lycaon", Version: version.Version}, clientOptions(opts))
 	advertiseRoots(sdkClient, opts.Roots)
-	transport := &trackedTransport{CommandTransport: &sdkmcp.CommandTransport{Command: spawn.cmd}}
+	transport := &stdioTransport{cmd: spawn.cmd}
 	session, err := sdkClient.Connect(ctx, transport, nil)
 	if err != nil {
 		// Reap a child created before a failed handshake.
 		spawn.releaseEgress()
-		reapProcessGroup(spawn.cmd)
-		transport.release()
+		transport.abort()
 		return nil, fmt.Errorf("connect %q: %w", entry.ID, err)
 	}
-	return &sdkSession{session: session, cmd: spawn.cmd, releaseEgress: spawn.releaseEgress, untrack: transport.release}, nil
-}
-
-// trackedTransport registers the server's process group the moment the SDK
-// starts it, so the group dies with the engine even mid-handshake.
-type trackedTransport struct {
-	*sdkmcp.CommandTransport
-	untrack func()
-}
-
-func (t *trackedTransport) Connect(ctx context.Context) (sdkmcp.Connection, error) {
-	conn, err := t.CommandTransport.Connect(ctx)
-	if cmd := t.Command; cmd != nil && cmd.Process != nil {
-		// hardenSpawn made the server its own group leader.
-		t.untrack = execpkg.TrackProcessGroup(cmd.Process.Pid)
-	}
-	return conn, err
-}
-
-func (t *trackedTransport) release() {
-	if t.untrack != nil {
-		t.untrack()
-	}
+	return &sdkSession{session: session, cmd: spawn.cmd, releaseEgress: spawn.releaseEgress, closeTransport: transport.close}, nil
 }
 
 // stdioSpawn is a prepared local MCP subprocess plus the teardown returned by its envelope.
@@ -328,13 +305,12 @@ func spawnEnvFor(entryEnv map[string]string, hostEnv []string) stdioEnv {
 
 type sdkSession struct {
 	session *sdkmcp.ClientSession
-	// cmd retains a local process so Close can reap its process group.
-	cmd *osexec.Cmd
+	cmd     *osexec.Cmd
 	// releaseEgress drops the confined server's proxy-token registration. Nil for
 	// HTTP and unconfined stdio sessions.
 	releaseEgress func()
-	// untrack releases a local server's group from the engine-exit reaper once reaped.
-	untrack func()
+	// closeTransport settles the guarded stdio process tree if session.Close did not.
+	closeTransport func() error
 }
 
 func (s *sdkSession) ListTools(ctx context.Context) ([]*sdkmcp.Tool, error) {
@@ -354,9 +330,8 @@ func (s *sdkSession) CallTool(ctx context.Context, name string, args map[string]
 
 func (s *sdkSession) Close() error {
 	err := s.session.Close()
-	reapProcessGroup(s.cmd)
-	if s.untrack != nil {
-		s.untrack()
+	if s.closeTransport != nil {
+		_ = s.closeTransport()
 	}
 	if s.releaseEgress != nil {
 		s.releaseEgress()
