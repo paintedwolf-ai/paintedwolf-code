@@ -25,6 +25,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
+	"github.com/lycaon/lycaon/internal/detectionpack"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -738,6 +740,85 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	status, out = linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("socketpair"), self, probeTestFlag)
 	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") || !strings.Contains(out, "datagram socketpair: EACCES") {
 		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
+	}
+}
+
+func TestLinuxCredentialStoreAdmitsDBusAndKeyringsReadOnly(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	home := fspath.CanonicalPath(t.TempDir())
+	t.Setenv("HOME", home)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
+
+	paths, err := detectionpack.BundledKeyMaterialPaths()
+	testutil.FailErr(t, "load bundled key-material floor", err)
+	confine.SetKeyMaterialPathsSource(func() []string { return paths })
+	t.Cleanup(func() { confine.SetKeyMaterialPathsSource(func() []string { return keyMaterialTestFloor }) })
+
+	keyringsDir := filepath.Join(home, ".local", "share", "keyrings")
+	kwalletDir := filepath.Join(home, ".local", "share", "kwalletd")
+	sshDir := filepath.Join(home, ".ssh")
+	for _, dir := range []string{keyringsDir, kwalletDir, sshDir} {
+		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o700))
+	}
+	loginKeyring := filepath.Join(keyringsDir, "login.keyring")
+	kdeWallet := filepath.Join(kwalletDir, "kdewallet.kwl")
+	sshKey := filepath.Join(sshDir, "id_ed25519")
+	testutil.FailErr(t, "write login.keyring", os.WriteFile(loginKeyring, []byte("keyring-secret"), 0o600))
+	testutil.FailErr(t, "write kdewallet.kwl", os.WriteFile(kdeWallet, []byte("kwallet-secret"), 0o600))
+	testutil.FailErr(t, "write id_ed25519", os.WriteFile(sshKey, []byte("ssh-secret"), 0o600))
+
+	shortDir, err := os.MkdirTemp("/tmp", "pw-cred-") //nolint:usetesting // Short socket path.
+	testutil.FailErr(t, "socket directory", err)
+	t.Cleanup(func() { _ = os.RemoveAll(shortDir) })
+	shortDir = fspath.CanonicalPath(shortDir)
+	busSock := filepath.Join(shortDir, "bus")
+	otherSock := filepath.Join(shortDir, "other.sock")
+	busLn, err := net.Listen("unix", busSock)
+	testutil.FailErr(t, "listen bus", err)
+	defer func() { _ = busLn.Close() }()
+	otherLn, err := net.Listen("unix", otherSock)
+	testutil.FailErr(t, "listen other", err)
+	defer func() { _ = otherLn.Close() }()
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+busSock)
+
+	base := denyConfinement(t.TempDir())
+	for _, p := range []string{loginKeyring, kdeWallet} {
+		if status, _ := linuxConfinedRun(t, self, base, nil, "/bin/cat", p); status.ExitStatus() == 0 {
+			t.Fatalf("base confinement read %s", p)
+		}
+	}
+
+	withCred := base
+	withCred.CredentialStore = true
+	env := append(probeEnv("unix"), linuxProbePathsEnv+"="+strings.Join([]string{busSock, otherSock}, "\n"))
+	status, out := linuxConfinedRun(t, self, withCred, env, self, probeTestFlag)
+	if status.ExitStatus() != 0 {
+		t.Fatalf("unix probe with credential_store: exit %d: %s", status.ExitStatus(), out)
+	}
+	for _, want := range []string{
+		"unix connect " + busSock + ": ok",
+		"unix bind " + busSock + ": EACCES",
+		"unix connect " + otherSock + ": EACCES",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("unix probe missing %q:\n%s", want, out)
+		}
+	}
+
+	for path, want := range map[string]string{
+		loginKeyring: "keyring-secret",
+		kdeWallet:    "kwallet-secret",
+	} {
+		st, stdout := linuxConfinedRun(t, self, withCred, nil, "/bin/cat", path)
+		if st.ExitStatus() != 0 || strings.TrimSpace(stdout) != want {
+			t.Fatalf("read %s under credential_store: exit %d out=%q", path, st.ExitStatus(), stdout)
+		}
+		if st, _ := linuxConfinedRun(t, self, withCred, nil, "/bin/sh", "-c", "echo x > "+path); st.ExitStatus() == 0 {
+			t.Fatalf("write %s succeeded under credential_store", path)
+		}
+	}
+	if st, _ := linuxConfinedRun(t, self, withCred, nil, "/bin/cat", sshKey); st.ExitStatus() == 0 {
+		t.Fatal("credential_store read ~/.ssh/id_ed25519")
 	}
 }
 
