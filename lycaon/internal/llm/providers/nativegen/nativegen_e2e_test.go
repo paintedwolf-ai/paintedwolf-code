@@ -11,15 +11,13 @@ import (
 	"testing"
 )
 
-// TestServiceRoundTripOverStdio drives the compiled nativegen binary over stdio when configured.
+// TestServiceRoundTripOverStdio drives the compiled nativegen binary over stdio.
 func TestServiceRoundTripOverStdio(t *testing.T) {
-	bin := os.Getenv("NATIVEGEN_BIN")
-	if bin == "" {
-		t.Skip("NATIVEGEN_BIN not set")
-	}
+	bin := ensureRustNativegenBinary(t)
 	dir := os.Getenv("NATIVEGEN_MODEL")
 	if dir == "" {
-		t.Skip("NATIVEGEN_MODEL not set")
+		dir = t.TempDir()
+		writeTinyCheckpointFixture(t, dir)
 	}
 	if _, err := os.Stat(bin); err != nil {
 		t.Fatalf("nativegen binary: %v", err)

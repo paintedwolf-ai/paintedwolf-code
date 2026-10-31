@@ -1,5 +1,5 @@
-// Package nativegen implements the provider adapter that supervises and drives
-// the native local generation service over length-prefixed stdio frames.
+// Package nativegen supervises and drives the native local generation service
+// over length-prefixed stdio frames.
 package nativegen
 
 import (
@@ -17,10 +17,11 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/modelstore"
 )
 
 const (
-	// DefaultModelID identifies the bundled custom Gemma 4 E4B model.
+	// DefaultModelID identifies the bundled Gemma 4 E4B model.
 	DefaultModelID = "gemma4-e4b-paintedwolf"
 	// DefaultContextWindowTokens is the 64K total token window shared by coordinator and summarizer roles.
 	DefaultContextWindowTokens = 65536
@@ -37,6 +38,7 @@ var ErrContextCapacityExceeded = errors.New("nativegen: request exceeds 64K cont
 type Options struct {
 	BinaryPath   string
 	ModelDir     string
+	ModelStore   *modelstore.Store
 	Device       string
 	ContextLimit int
 	Models       []modelinfo.Entry
@@ -61,23 +63,70 @@ func DefaultModelEntry() modelinfo.Entry {
 	}
 }
 
+// ResolveModelDir resolves an active checkpoint directory from store for the given models and device.
+func ResolveModelDir(store *modelstore.Store, models []modelinfo.Entry, device string) (string, error) {
+	lease, err := acquireStoreLease(store, models, device)
+	if err != nil {
+		return "", err
+	}
+	dir := lease.CheckpointDir()
+	lease.Release()
+	return dir, nil
+}
+
+func acquireStoreLease(store *modelstore.Store, models []modelinfo.Entry, device string) (*modelstore.Lease, error) {
+	if store == nil {
+		return nil, errors.New("nativegen: model store is nil")
+	}
+	modelIDs := make([]string, 0, len(models)+1)
+	for _, m := range models {
+		if id := strings.TrimSpace(m.ID); id != "" {
+			modelIDs = append(modelIDs, id)
+		}
+	}
+	modelIDs = append(modelIDs, DefaultModelID)
+
+	devices := []string{device, "cpu", "mlx"}
+	var lastErr error
+	for _, id := range modelIDs {
+		for _, dev := range devices {
+			if strings.TrimSpace(dev) == "" {
+				continue
+			}
+			lease, err := store.AcquireLease(id, dev, "nativegen", 1)
+			if err == nil {
+				return lease, nil
+			}
+			lastErr = err
+		}
+	}
+	if lastErr == nil {
+		lastErr = errors.New("nativegen: no active model revision")
+	}
+	return nil, lastErr
+}
+
 type Provider struct {
 	id      string
 	opts    Options
 	profile providerprofile.Profile
 	modelcall.Catalog
 
-	mu          sync.Mutex
-	writeMu     sync.Mutex
-	cmd         *exec.Cmd
-	stdin       io.WriteCloser
-	stdout      *bufio.Reader
-	loaded      bool
-	generation  uint64
-	cacheHandle string
-	nextID      uint64
-	pending     map[uint64]chan frame
-	streams     map[string]chan frame
+	mu            sync.Mutex
+	writeMu       sync.Mutex
+	cmd           *exec.Cmd
+	stdin         io.WriteCloser
+	stdout        *bufio.Reader
+	loaded        bool
+	generation    uint64
+	cacheHandle   string
+	nextID        uint64
+	pending       map[uint64]chan frame
+	streams       map[string]chan frame
+	lease         *modelstore.Lease
+	leaseOwnedDir bool
+	manifestRev   string
+	tokenizer     *Tokenizer
 }
 
 func New(id string, opts Options) *Provider {
@@ -91,7 +140,18 @@ func New(id string, opts Options) *Provider {
 	if len(models) == 0 {
 		models = []modelinfo.Entry{DefaultModelEntry()}
 	}
-	return &Provider{
+	opts.Models = models
+	if strings.TrimSpace(opts.ModelDir) == "" {
+		if envDir := strings.TrimSpace(os.Getenv("LYCAON_NATIVEGEN_MODEL_DIR")); envDir != "" {
+			opts.ModelDir = envDir
+		}
+	}
+	if opts.ModelStore == nil {
+		if root := modelstore.DefaultRoot(); root != "" {
+			opts.ModelStore = modelstore.New(root, nil)
+		}
+	}
+	p := &Provider{
 		id:      id,
 		opts:    opts,
 		Catalog: modelcall.NewCatalog("nativegen", models),
@@ -99,10 +159,47 @@ func New(id string, opts Options) *Provider {
 		pending: make(map[uint64]chan frame),
 		streams: make(map[string]chan frame),
 	}
+	_, _ = p.resolveModelDirLocked()
+	if p.opts.ModelDir != "" {
+		if tok, err := LoadTokenizer(p.opts.ModelDir); err == nil {
+			p.tokenizer = tok
+		}
+	}
+	return p
 }
 
 func (p *Provider) ID() string                       { return p.id }
 func (p *Provider) Profile() providerprofile.Profile { return p.profile }
+
+// ModelDir returns the configured or store-resolved checkpoint directory.
+func (p *Provider) ModelDir() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	dir, _ := p.resolveModelDirLocked()
+	return dir
+}
+
+func (p *Provider) resolveModelDirLocked() (string, error) {
+	if p.lease == nil && p.opts.ModelStore != nil {
+		if lease, err := acquireStoreLease(p.opts.ModelStore, p.opts.Models, p.opts.Device); err == nil {
+			p.lease = lease
+			p.manifestRev = lease.Manifest.Revision
+			if strings.TrimSpace(p.opts.ModelDir) == "" {
+				p.opts.ModelDir = lease.CheckpointDir()
+				p.leaseOwnedDir = true
+			}
+		}
+	}
+	if strings.TrimSpace(p.opts.ModelDir) == "" {
+		if envDir := strings.TrimSpace(os.Getenv("LYCAON_NATIVEGEN_MODEL_DIR")); envDir != "" {
+			p.opts.ModelDir = envDir
+		}
+	}
+	if strings.TrimSpace(p.opts.ModelDir) == "" {
+		return "", errors.New("nativegen: model directory is not configured and no active modelstore revision is available")
+	}
+	return p.opts.ModelDir, nil
+}
 
 type frame struct {
 	Method   string `json:"method,omitempty"`
@@ -113,7 +210,7 @@ type frame struct {
 	Text     string `json:"text,omitempty"`
 
 	RequestID    string   `json:"request_id,omitempty"`
-	PromptTokens []uint32 `json:"prompt_tokens,omitempty"`
+	PromptTokens []uint32 `json:"-"`
 	MaxNewTokens uint32   `json:"max_new_tokens,omitempty"`
 	Seed         uint64   `json:"seed,omitempty"`
 	Temperature  float32  `json:"temperature,omitempty"`
@@ -138,6 +235,88 @@ type frame struct {
 	Count    int      `json:"count,omitempty"`
 }
 
+// MarshalJSON preserves protocol fields required by the Rust service even when empty or zero.
+func (f frame) MarshalJSON() ([]byte, error) {
+	type rawFrame frame
+	raw, err := json.Marshal(rawFrame(f))
+	if err != nil {
+		return nil, err
+	}
+	if f.Method == "" && len(f.PromptTokens) == 0 && f.Kind != "usage" {
+		return raw, nil
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	if len(f.PromptTokens) > 0 {
+		obj["prompt_tokens"] = f.PromptTokens
+	}
+	if f.Kind == "usage" && f.PromptCount > 0 {
+		obj["prompt_tokens"] = f.PromptCount
+	}
+	switch f.Method {
+	case "load":
+		obj["manifest"] = f.Manifest
+		obj["weights"] = f.Weights
+		obj["device"] = f.Device
+	case "generate":
+		obj["request_id"] = f.RequestID
+		if f.PromptTokens == nil {
+			obj["prompt_tokens"] = []uint32{}
+		} else {
+			obj["prompt_tokens"] = f.PromptTokens
+		}
+		obj["max_new_tokens"] = f.MaxNewTokens
+		obj["seed"] = f.Seed
+		obj["temperature"] = f.Temperature
+		obj["top_p"] = f.TopP
+		if f.StopTokens == nil {
+			obj["stop_tokens"] = []uint32{}
+		} else {
+			obj["stop_tokens"] = f.StopTokens
+		}
+	case "tokenize":
+		obj["text"] = f.Text
+	case "detokenize":
+		if f.Tokens == nil {
+			obj["tokens"] = []uint32{}
+		} else {
+			obj["tokens"] = f.Tokens
+		}
+	case "cancel":
+		obj["request_id"] = f.RequestID
+	}
+	return json.Marshal(obj)
+}
+
+// UnmarshalJSON decodes prompt_tokens as either a token array (generate request) or a token count (usage event).
+func (f *frame) UnmarshalJSON(data []byte) error {
+	type rawFrame frame
+	var rf rawFrame
+	if err := json.Unmarshal(data, &rf); err != nil {
+		return err
+	}
+	*f = frame(rf)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if rawPrompt, ok := fields["prompt_tokens"]; ok && len(rawPrompt) > 0 {
+		var count uint64
+		if err := json.Unmarshal(rawPrompt, &count); err == nil {
+			f.PromptCount = count
+			return nil
+		}
+		var tokens []uint32
+		if err := json.Unmarshal(rawPrompt, &tokens); err != nil {
+			return err
+		}
+		f.PromptTokens = tokens
+	}
+	return nil
+}
+
 // start launches the persistent nativegen child process if not already running.
 func (p *Provider) start(_ context.Context) error {
 	p.mu.Lock()
@@ -148,7 +327,11 @@ func (p *Provider) start(_ context.Context) error {
 	if strings.TrimSpace(p.opts.BinaryPath) == "" {
 		return errors.New("nativegen: binary path is not configured")
 	}
-	cmd := exec.Command(p.opts.BinaryPath, "--model", p.opts.ModelDir, "--device", p.opts.Device) // #nosec G204 -- supervised engine binary path
+	modelDir, err := p.resolveModelDirLocked()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(p.opts.BinaryPath, "--model", modelDir, "--device", p.opts.Device) // #nosec G204 -- supervised engine binary path
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("nativegen stdin: %w", err)
@@ -170,7 +353,7 @@ func (p *Provider) start(_ context.Context) error {
 	return nil
 }
 
-// Close shuts down the supervised nativegen child process.
+// Close shuts down the supervised nativegen child process and releases any active model lease.
 func (p *Provider) Close() error {
 	p.stop()
 	return nil
@@ -180,11 +363,17 @@ func (p *Provider) stop() {
 	p.mu.Lock()
 	cmd := p.cmd
 	stdin := p.stdin
+	lease := p.lease
 	p.cmd = nil
 	p.stdin = nil
 	p.stdout = nil
 	p.loaded = false
 	p.cacheHandle = ""
+	p.lease = nil
+	if p.leaseOwnedDir {
+		p.opts.ModelDir = ""
+		p.leaseOwnedDir = false
+	}
 	p.mu.Unlock()
 	if stdin != nil {
 		_ = stdin.Close()
@@ -192,6 +381,9 @@ func (p *Provider) stop() {
 	if cmd != nil && cmd.Process != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
+	}
+	if lease != nil {
+		lease.Release()
 	}
 }
 
@@ -211,20 +403,34 @@ func (p *Provider) readLoop(r *bufio.Reader) {
 			}
 		}
 		p.mu.Lock()
-		if f.Kind != "" && f.RequestID != "" {
-			ch, ok := p.streams[f.RequestID]
-			p.mu.Unlock()
-			if ok {
-				ch <- *f
+		if f.RequestID != "" && (f.Kind != "" || f.Err != "") {
+			if f.Kind == "" && f.Err != "" {
+				f.Kind = "failed"
 			}
-			continue
+			if ch, ok := p.streams[f.RequestID]; ok {
+				p.mu.Unlock()
+				ch <- *f
+				continue
+			}
 		}
-		ch, ok := p.pending[f.ID]
-		delete(p.pending, f.ID)
+		if f.ID != 0 {
+			if ch, ok := p.pending[f.ID]; ok {
+				delete(p.pending, f.ID)
+				p.mu.Unlock()
+				ch <- *f
+				continue
+			}
+		}
+		if f.Err != "" {
+			for id, ch := range p.pending {
+				delete(p.pending, id)
+				ch <- frame{ID: id, Err: f.Err}
+			}
+			for reqID, ch := range p.streams {
+				ch <- frame{Kind: "failed", RequestID: reqID, Err: f.Err}
+			}
+		}
 		p.mu.Unlock()
-		if ok {
-			ch <- *f
-		}
 	}
 }
 
@@ -335,14 +541,26 @@ func (p *Provider) hello(ctx context.Context) error {
 }
 
 func (p *Provider) load(ctx context.Context) error {
-	f, err := p.call(ctx, frame{Method: "load", Manifest: "", Weights: p.opts.ModelDir, Device: p.opts.Device})
+	p.mu.Lock()
+	modelDir, err := p.resolveModelDirLocked()
+	manifestRev := p.manifestRev
+	device := p.opts.Device
+	p.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	f, err := p.call(ctx, frame{Method: "load", Manifest: manifestRev, Weights: modelDir, Device: device})
 	if err != nil {
 		return err
 	}
 	if f.Loaded == nil || !*f.Loaded {
 		return fmt.Errorf("nativegen: load did not confirm")
 	}
+	tok, tokErr := LoadTokenizer(modelDir)
 	p.mu.Lock()
+	if tokErr == nil {
+		p.tokenizer = tok
+	}
 	p.loaded = true
 	if f.Generation > 0 && f.Generation != p.generation {
 		p.generation = f.Generation
@@ -378,6 +596,18 @@ func (p *Provider) Tokenize(ctx context.Context, text string) ([]uint32, error) 
 		return nil, err
 	}
 	return f.Tokens, nil
+}
+
+// Detokenize decodes token IDs into text through the loaded native service.
+func (p *Provider) Detokenize(ctx context.Context, tokens []uint32) (string, error) {
+	if err := p.ensureReady(ctx); err != nil {
+		return "", err
+	}
+	f, err := p.call(ctx, frame{Method: "detokenize", Tokens: tokens})
+	if err != nil {
+		return "", err
+	}
+	return f.Text, nil
 }
 
 func writeFrame(w io.Writer, payload []byte) error {
@@ -434,6 +664,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		handlePtr = &h
 	}
 	genMark := p.generation
+	streamDec := p.tokenizer.NewStreamDecoder()
 	eventCh := make(chan frame, 64)
 	p.streams[reqID] = eventCh
 	p.mu.Unlock()
@@ -513,8 +744,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 						genMark = ev.Generation
 					}
 				case "token":
-					tokText := p.decodeToken(ev.Token)
-					rawOutput.WriteString(tokText)
+					rawOutput.WriteString(p.decodeStreamToken(ev, streamDec))
 				case "usage":
 					usage = modelcall.TokenUsage{
 						Present:              true,
@@ -531,6 +761,9 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 					}
 					return
 				case "done":
+					if p.opts.TokenDecoder == nil && streamDec != nil {
+						rawOutput.WriteString(streamDec.Flush())
+					}
 					if ev.StopReason != "canceled" {
 						p.mu.Lock()
 						p.cacheHandle = fmt.Sprintf("%s/%d", reqID, genMark)
@@ -563,12 +796,38 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 	return out, nil
 }
 
+func (p *Provider) decodeStreamToken(ev frame, streamDec *StreamDecoder) string {
+	if p.opts.TokenDecoder != nil {
+		return p.opts.TokenDecoder(ev.Token)
+	}
+	if streamDec != nil {
+		if piece, ok := streamDec.Step(ev.Token); ok {
+			return piece
+		}
+	}
+	if ev.Text != "" {
+		return ev.Text
+	}
+	return p.decodeToken(ev.Token)
+}
+
 func (p *Provider) decodeToken(tok uint32) string {
 	if p.opts.TokenDecoder != nil {
 		return p.opts.TokenDecoder(tok)
 	}
-	if tok < 128 && tok >= 32 {
-		return string(rune(tok))
+	p.mu.Lock()
+	t := p.tokenizer
+	if t == nil && p.opts.ModelDir != "" {
+		if loaded, err := LoadTokenizer(p.opts.ModelDir); err == nil {
+			p.tokenizer = loaded
+			t = loaded
+		}
 	}
-	return fmt.Sprintf("<t:%d>", tok)
+	p.mu.Unlock()
+	if t != nil {
+		if piece, ok := t.DecodeToken(tok); ok {
+			return piece
+		}
+	}
+	return ""
 }

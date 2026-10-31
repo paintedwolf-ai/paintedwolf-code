@@ -367,3 +367,101 @@ func TestProviderStreamCancellationWaitsForPhysicalSettlement(t *testing.T) {
 		t.Fatalf("expected context.Canceled, got %v", finalChunk.Err)
 	}
 }
+
+func TestFrameMarshalJSONRetainsRustRequiredFields(t *testing.T) {
+	cases := []struct {
+		name     string
+		f        frame
+		required []string
+	}{
+		{
+			name:     "load",
+			f:        frame{Method: "load", ID: 7, Manifest: "", Weights: "/fixture", Device: "cpu"},
+			required: []string{"manifest", "weights", "device"},
+		},
+		{
+			name: "generate",
+			f: frame{
+				Method:       "generate",
+				ID:           8,
+				RequestID:    "r1",
+				PromptTokens: []uint32{1},
+				MaxNewTokens: 1,
+				Seed:         0,
+				Temperature:  0,
+				TopP:         1,
+				StopTokens:   []uint32{},
+			},
+			required: []string{"request_id", "prompt_tokens", "max_new_tokens", "seed", "temperature", "top_p", "stop_tokens"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := json.Marshal(tc.f)
+			if err != nil {
+				t.Fatalf("marshal request: %v", err)
+			}
+			var obj map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &obj); err != nil {
+				t.Fatalf("unmarshal request: %v", err)
+			}
+			for _, field := range tc.required {
+				if _, ok := obj[field]; !ok {
+					t.Errorf("required field %q missing in %s", field, raw)
+				}
+			}
+		})
+	}
+}
+
+func TestTokenizerAndStreamDecoderIncrementalDecoding(t *testing.T) {
+	pEmpty := New("nativegen", Options{})
+	if got := pEmpty.decodeToken(1000); got != "" {
+		t.Fatalf("expected empty decode without loaded tokenizer, got %q", got)
+	}
+
+	rawTokenizer := []byte(`{
+		"added_tokens": [
+			{"id": 100, "content": "<|tool_call>", "special": true},
+			{"id": 101, "content": "<tool_call|>", "special": true}
+		],
+		"model": {
+			"type": "BPE",
+			"vocab": {
+				"▁Hello": 10,
+				"<0xF0>": 20,
+				"<0x9F>": 21,
+				"<0x90>": 22,
+				"<0xBA>": 23,
+				"call:read_file{path:<|\"|>main.go<|\"|>}": 30
+			}
+		}
+	}`)
+	tok, err := ParseTokenizerJSON(rawTokenizer)
+	if err != nil {
+		t.Fatalf("ParseTokenizerJSON: %v", err)
+	}
+
+	dec := tok.NewStreamDecoder()
+	var b strings.Builder
+	for _, id := range []uint32{10, 20, 21, 22, 23, 100, 30, 101} {
+		piece, ok := dec.Step(id)
+		if !ok {
+			t.Fatalf("Step(%d) failed", id)
+		}
+		b.WriteString(piece)
+	}
+	b.WriteString(dec.Flush())
+
+	content, _, calls, err := ParseModelOutput(b.String())
+	if err != nil {
+		t.Fatalf("ParseModelOutput: %v", err)
+	}
+	if content != "Hello🐺" {
+		t.Fatalf("expected incremental UTF-8 decode %q, got %q", "Hello🐺", content)
+	}
+	if len(calls) != 1 || calls[0].Name != "read_file" || calls[0].Args["path"] != "main.go" {
+		t.Fatalf("expected tool call preserved through tokenizer decode, got %+v", calls)
+	}
+}
+
