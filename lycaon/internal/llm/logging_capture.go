@@ -92,6 +92,11 @@ func captureLLMStream(ctx context.Context, providerID string, profile providerpr
 		var streamErr error
 		var reasoning reasoningCapture
 		for chunk := range ch {
+			if chunk.ResetAttempt() {
+				content.Reset()
+				toolCalls = nil
+				reasoning.reset()
+			}
 			reasoning.append(chunk.Reasoning)
 			if chunk.Err != nil {
 				streamErr = chunk.Err

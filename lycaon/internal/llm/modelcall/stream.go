@@ -22,9 +22,12 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 	var providerID, model string
 	var fallback, scripted bool
 	for chunk := range ch {
-		if chunk.ResetReasoning {
+		if chunk.ResetAttempt() {
+			content.Reset()
+			tokens = nil
 			reasoning.Reset()
 			reasoningDetails = nil
+			toolCalls = nil
 			attemptUsage = &TokenUsage{}
 		}
 		if chunk.ProviderID != "" {
@@ -111,9 +114,12 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 		}
 	}
 	for chunk := range ch {
-		if chunk.ResetReasoning {
+		if chunk.ResetAttempt() {
+			content.Reset()
+			tokens = nil
 			reasoning.Reset()
 			reasoningDetails = nil
+			toolCalls = nil
 			attemptUsage = &TokenUsage{}
 		}
 		if chunk.ProviderID != "" {
@@ -145,7 +151,7 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 		if chunk.Err != nil {
 			return snapshot(), tokens, chunk.Err
 		}
-		if onProgress != nil && (chunk.Content != "" || chunk.Reasoning != "" || len(chunk.ToolCalls) > 0) {
+		if onProgress != nil && (chunk.ResetAttempt() || chunk.Content != "" || chunk.Reasoning != "" || len(chunk.ToolCalls) > 0) {
 			onProgress(snapshot())
 		}
 		if chunk.Done {

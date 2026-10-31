@@ -4,6 +4,7 @@ package openaicompat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -206,8 +207,13 @@ func (p *Provider) streamFromJSONResponse(ctx context.Context, req modelcall.Com
 	go func() {
 		defer close(ch)
 		defer func() { _ = resp.Body.Close() }()
+		respBody, err := providerhttp.ReadCompletionResponse("openai-compatible", resp)
+		if err != nil {
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: failure.InterruptedResponse(ctx, p.id, p.ResolveModel(req), err), Done: true})
+			return
+		}
 		var wire chatCompletionResponseWire
-		if err := providerhttp.DecodeCompletionResponse("openai-compatible", resp, &wire); err != nil {
+		if err := json.Unmarshal(respBody, &wire); err != nil {
 			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: fmt.Errorf("openai-compatible: decode non-SSE stream response: %w", err), Done: true})
 			return
 		}

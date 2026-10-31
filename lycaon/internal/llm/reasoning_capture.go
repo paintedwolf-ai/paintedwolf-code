@@ -25,6 +25,11 @@ func (c *reasoningCapture) append(text string) {
 	c.text.WriteString(text)
 }
 
+func (c *reasoningCapture) reset() {
+	c.bytes = 0
+	c.text.Reset()
+}
+
 func (c *reasoningCapture) summarize(summary *observability.LLMCompletionCapture, err error) *observability.LLMCompletionCapture {
 	if c.bytes == 0 {
 		return summary

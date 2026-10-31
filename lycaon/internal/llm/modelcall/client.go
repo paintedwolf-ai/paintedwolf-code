@@ -115,7 +115,9 @@ func (r CompletionRequest) SystemPrompt() string {
 
 // StreamChunk is one streamed completion delta.
 type StreamChunk struct {
-	// ResetReasoning drops failed-attempt reasoning before an internal retry.
+	// Reset clears failed-attempt output before an internal retry.
+	Reset bool `json:"-" yaml:"-"`
+	// ResetReasoning drops failed-attempt output before an internal retry.
 	ResetReasoning bool `json:"-" yaml:"-"`
 	// Scripted marks a host-supplied fixture response, never a provider claim.
 	Scripted   bool
@@ -135,6 +137,11 @@ type StreamChunk struct {
 	Progress bool
 	// Err is set on the terminal chunk when the provider stream failed.
 	Err error
+}
+
+// ResetAttempt reports whether the chunk clears prior output from a failed attempt.
+func (c StreamChunk) ResetAttempt() bool {
+	return c.Reset || c.ResetReasoning
 }
 
 // Completion is an assembled model response.

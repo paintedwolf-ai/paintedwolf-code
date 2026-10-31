@@ -339,7 +339,7 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := providerhttp.ReadCompletionResponse("ollama", resp)
 	if err != nil {
-		return nil, err
+		return nil, failure.InterruptedResponse(ctx, p.id, payload.Model, err)
 	}
 	var decoded ollamaChatResponse
 	if err := json.Unmarshal(raw, &decoded); err != nil {

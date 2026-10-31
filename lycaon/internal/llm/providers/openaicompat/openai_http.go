@@ -5,9 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -194,28 +192,14 @@ func (p *Provider) streamChatCompletionFromResponse(ctx context.Context, req mod
 				}
 			}
 		}
-		if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-			// Preserve partial-stream failures as terminal errors.
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: failure.InterruptedResponse(ctx, p.id, p.ResolveModel(req), err), Done: true})
+		if err := failure.ClassifyStreamEnd(ctx, p.id, p.ResolveModel(req), scanner.Err(), sawTerminal, sawOutput || len(toolAcc) > 0, "stream ended before a terminal event", true); err != nil {
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Usage: usage, Done: true})
 			return
 		}
 		// Reasoning details are complete only at stream end.
 		var reasoningDetails []json.RawMessage
 		if !reasoningAcc.empty() {
 			reasoningDetails = reasoningAcc.details()
-		}
-		if !sawTerminal {
-			if !sawOutput && len(toolAcc) == 0 {
-				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: &failure.ProviderEmptyCompletionError{
-					ProviderID: p.id,
-					Model:      p.ResolveModel(req),
-					Retryable:  true,
-					Reason:     "stream ended before a terminal event",
-				}, Usage: usage, Done: true})
-				return
-			}
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: failure.InterruptedResponse(ctx, p.id, p.ResolveModel(req), io.ErrUnexpectedEOF), Done: true})
-			return
 		}
 		if len(toolAcc) > 0 {
 			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
