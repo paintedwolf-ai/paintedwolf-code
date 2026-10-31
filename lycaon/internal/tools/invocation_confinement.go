@@ -38,7 +38,7 @@ func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string)
 		overlayReadPaths = tctx.Files.PackageExecution.ApprovedReadPaths
 	}
 	return hitl.ActionConfineInputs{
-		ProcessControl: tctx.Execution.ProcessControl, HostExecution: tctx.Execution.HostExecution,
+		ProcessControl: tctx.Execution.ProcessControl, CredentialStore: tctx.Execution.CredentialStore, HostExecution: tctx.Execution.HostExecution,
 		ProjectID:            tctx.Identity.ProjectID,
 		Roots:                ConfineRootsForAction(tctx),
 		SessionScratchRoot:   tctx.Host.SessionScratchDir,

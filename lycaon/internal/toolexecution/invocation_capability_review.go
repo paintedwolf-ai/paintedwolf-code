@@ -110,7 +110,7 @@ func capabilityReviewDenialCode(plan *hitl.ApprovalPlan) string {
 			return isolation.CodeReadPathDenied
 		case "socket":
 			return isolation.CodeSocketPathDenied
-		case "process_control", "host_execution":
+		case "process_control", "credential_store", "host_execution":
 			return isolation.CodeExecutionCapabilityDenied
 		case "direct_ip":
 			return isolation.CodeDirectIPDenied
@@ -128,7 +128,7 @@ func multipleCapabilityFamilies(request *capabilityrequest.CapabilityRequest) bo
 	count := 0
 	for _, present := range []bool{
 		request.WriteRoot != "", request.ReadPath != "", len(request.SocketPaths) > 0,
-		request.ProcessControl || request.HostExecution, request.DirectIP != nil, request.LocalListen != nil || request.LoopbackConnect != nil,
+		request.ProcessControl || request.HostExecution, request.CredentialStore, request.DirectIP != nil, request.LocalListen != nil || request.LoopbackConnect != nil,
 	} {
 		if present {
 			count++
@@ -194,8 +194,10 @@ func (e *Executor) prepareInvocationCapabilities(ctx context.Context, tool strin
 			return nil, err
 		}
 		predictExecutionReviewCapabilities(&tc, request)
-		if err := collect(e.Process.preflightExecutionCapability(ctx, tool, args, &tc)); err != nil {
-			return nil, err
+		for _, err := range e.Process.reviewExecutionCapabilities(ctx, tool, args, &tc) {
+			if err := collect(err); err != nil {
+				return nil, err
+			}
 		}
 		return reviews, nil
 	}
@@ -204,8 +206,10 @@ func (e *Executor) prepareInvocationCapabilities(ctx context.Context, tool strin
 		return nil, err
 	}
 	predictExecutionReviewCapabilities(&tc, request)
-	if err := collect(e.Process.preflightExecutionCapability(ctx, tool, args, &tc)); err != nil {
-		return nil, err
+	for _, err := range e.Process.reviewExecutionCapabilities(ctx, tool, args, &tc) {
+		if err := collect(err); err != nil {
+			return nil, err
+		}
 	}
 	return reviews, nil
 }
