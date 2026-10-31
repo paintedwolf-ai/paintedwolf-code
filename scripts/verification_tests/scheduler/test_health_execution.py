@@ -197,6 +197,18 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
         self.assertIsNotNone(identity)
         self.assertEqual(health.ownership(os.getpid(), identity, health.process_snapshot()), "present")
 
+    @unittest.skipUnless(sys.platform == "darwin", "Darwin sysctl process sampling")
+    def test_darwin_sysctl_fallback_matches_ps_identity_when_ps_is_blocked(self):
+        pid = os.getpid()
+        ps_identity = health.process_snapshot(pid)[pid]["identity"]
+        with patch.object(subprocess, "run", side_effect=PermissionError("Operation not permitted")):
+            sysctl_single = health.process_snapshot(pid)
+            sysctl_all = health.process_snapshot()
+        self.assertEqual(sysctl_single[pid]["identity"], ps_identity)
+        self.assertEqual(sysctl_all[pid]["identity"], ps_identity)
+        self.assertEqual(sysctl_single[pid]["parent"], os.getppid())
+        self.assertEqual(health.ownership(pid, ps_identity, sysctl_single), "present")
+
     @unittest.skipIf(os.name == "nt", "POSIX process sampling")
     def test_declared_progress_signal_keeps_zero_cpu_daemon_job_active_until_signal_stops(self):
         with tempfile.TemporaryDirectory() as temporary:

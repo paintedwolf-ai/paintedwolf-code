@@ -1,8 +1,11 @@
 """Advisory process health from ownership and activity samples."""
 
 from functools import lru_cache
+import ctypes
+import ctypes.util
 import os
 from pathlib import Path
+import struct
 import subprocess
 import sys
 import time
@@ -14,15 +17,86 @@ SAMPLE_SECONDS = 30
 QUIET_SECONDS = 600
 MAX_SAMPLE_GAP = 90
 NOTICE_STATES = {"supervision_lost", "supervisor_stopped", "suspected_stall", "cleanup_blocked"}
+_DARWIN_KINFO_PROC_SIZE = 648
+_DARWIN_PROC_TASKINFO_SIZE = 96
+_DARWIN_STATES = {1: "I", 2: "R", 3: "S", 4: "T", 5: "Z"}
+
+
+@lru_cache(maxsize=1)
+def _darwin_libc():
+    path = ctypes.util.find_library("c")
+    return ctypes.CDLL(path, use_errno=True) if path else None
+
+
+def _darwin_cpu_time(libc, pid):
+    buf = ctypes.create_string_buffer(_DARWIN_PROC_TASKINFO_SIZE)
+    if libc.proc_pidinfo(int(pid), 4, 0, buf, _DARWIN_PROC_TASKINFO_SIZE) != _DARWIN_PROC_TASKINFO_SIZE:
+        return "0:00.00"
+    user_ns, sys_ns = struct.unpack_from("<QQ", buf.raw, 16)
+    total_seconds = (user_ns + sys_ns) / 1_000_000_000
+    minutes, seconds = divmod(total_seconds, 60)
+    return f"{int(minutes)}:{seconds:05.2f}"
+
+
+def _darwin_process_snapshot(pid=None):
+    libc = _darwin_libc()
+    if libc is None:
+        raise OSError("Process activity sampling is unavailable on this platform")
+    if pid is not None:
+        mib = (ctypes.c_int * 4)(1, 14, 1, int(pid))
+        mib_len = 4
+    else:
+        mib = (ctypes.c_int * 3)(1, 14, 0)
+        mib_len = 3
+    size = ctypes.c_size_t(0)
+    if libc.sysctl(mib, mib_len, None, ctypes.byref(size), None, 0) != 0 or size.value == 0:
+        raise OSError("Process activity sampling failed")
+    extra = 0 if pid is not None else _DARWIN_KINFO_PROC_SIZE * 32
+    buf = ctypes.create_string_buffer(size.value + extra)
+    size.value = len(buf)
+    if libc.sysctl(mib, mib_len, buf, ctypes.byref(size), None, 0) != 0:
+        raise OSError("Process activity sampling failed")
+    raw = buf.raw[:size.value]
+    count = len(raw) // _DARWIN_KINFO_PROC_SIZE
+    records = {}
+    for index in range(count):
+        offset = index * _DARWIN_KINFO_PROC_SIZE
+        tv_sec = struct.unpack_from("<q", raw, offset)[0]
+        stat_code = struct.unpack_from("<b", raw, offset + 36)[0]
+        number = struct.unpack_from("<i", raw, offset + 40)[0]
+        if number <= 0:
+            continue
+        parent = struct.unpack_from("<i", raw, offset + 560)[0]
+        comm = raw[offset + 243:offset + 260].split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+        # Format start time with ctime so sysctl records match LC_ALL=C ps lstart output.
+        started = " ".join(time.ctime(tv_sec).split())
+        records[number] = {
+            "pid": number,
+            "parent": parent,
+            "identity": started,
+            "state": _DARWIN_STATES.get(stat_code, "S"),
+            "cpu": _darwin_cpu_time(libc, number),
+            "command": comm,
+        }
+    if pid is not None and int(pid) not in records:
+        raise OSError("Process activity sampling failed")
+    return records
 
 
 def process_snapshot(pid=None):
     if os.name == "nt":
         raise OSError("Process activity sampling is unavailable on this platform")
     selection = ["-p", str(pid)] if pid is not None else ["-ax"]
-    result = subprocess.run(["ps", *selection, "-o", "pid=,ppid=,lstart=,stat=,time="],
-                            capture_output=True, text=True, timeout=5, env={**os.environ, "LC_ALL": "C"})
+    try:
+        result = subprocess.run(["ps", *selection, "-o", "pid=,ppid=,lstart=,stat=,time="],
+                                capture_output=True, text=True, timeout=5, env={**os.environ, "LC_ALL": "C"})
+    except (OSError, subprocess.SubprocessError):
+        if sys.platform == "darwin":
+            return _darwin_process_snapshot(pid)
+        raise
     if result.returncode != 0:
+        if sys.platform == "darwin":
+            return _darwin_process_snapshot(pid)
         raise OSError("Process activity sampling failed")
     records = {}
     for line in result.stdout.splitlines():
