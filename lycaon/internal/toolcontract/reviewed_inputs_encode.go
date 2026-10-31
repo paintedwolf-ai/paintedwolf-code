@@ -17,10 +17,17 @@ func encodeReviewString(value string) []any {
 }
 
 func encodeReviewValue(ctx context.Context, admission ReviewStateAdmission, leases *reviewLeases, value any) (any, error) {
+	return encodeReviewValueAt(ctx, admission, leases, value, 0)
+}
+
+func encodeReviewValueAt(ctx context.Context, admission ReviewStateAdmission, leases *reviewLeases, value any, depth int) (any, error) {
+	if depth > nativeValueMaxDepth {
+		return nil, fmt.Errorf("native value nesting exceeds %d", nativeValueMaxDepth)
+	}
 	payload := int64(0)
 	switch v := value.(type) {
 	case string:
-		payload = int64(len(v))
+		payload = 2 * int64(base64.StdEncoding.EncodedLen(len(v)))
 	case map[string]any:
 		payload = int64(len(v)) * 128
 	case []any:
@@ -48,10 +55,10 @@ func encodeReviewValue(ctx context.Context, admission ReviewStateAdmission, leas
 		sort.Strings(keys)
 		entries := make([]any, 0, len(keys))
 		for _, key := range keys {
-			if err := leases.reserve(ctx, admission, int64(len(key))); err != nil {
+			if err := leases.reserve(ctx, admission, 2*int64(base64.StdEncoding.EncodedLen(len(key)))); err != nil {
 				return nil, err
 			}
-			item, err := encodeReviewValue(ctx, admission, leases, v[key])
+			item, err := encodeReviewValueAt(ctx, admission, leases, v[key], depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -61,7 +68,7 @@ func encodeReviewValue(ctx context.Context, admission ReviewStateAdmission, leas
 	case []any:
 		items := make([]any, 0, len(v))
 		for _, item := range v {
-			encoded, err := encodeReviewValue(ctx, admission, leases, item)
+			encoded, err := encodeReviewValueAt(ctx, admission, leases, item, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -71,7 +78,7 @@ func encodeReviewValue(ctx context.Context, admission ReviewStateAdmission, leas
 	case []string:
 		items := make([]any, 0, len(v))
 		for _, item := range v {
-			encoded, err := encodeReviewValue(ctx, admission, leases, item)
+			encoded, err := encodeReviewValueAt(ctx, admission, leases, item, depth+1)
 			if err != nil {
 				return nil, err
 			}

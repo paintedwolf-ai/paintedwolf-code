@@ -270,6 +270,27 @@ Reject, expiry, user stop, and approval are all decisions over the held effect. 
 
 ---
 
+### Approval capacity
+
+Native approval authority has one persisted lossless representation. The codec
+validates its domain, digest, canonical grammar and declared host fields before
+installation. Its screened display must match the restored authority. Decoding
+and typed binding share one admitted tree; encoding scratch is released after
+the canonical bytes are retained.
+
+Before publishing a native approval, the host exercises restoration, display
+binding and preparation of every enabled choice under the production decision
+budget. This includes the measured read and person provenance. Resolution,
+recovery and saved-grant replay serialize against the same authority owner;
+recovery and replay release each record before reading the next. Rejection and
+session stop do not require restoring grant authority.
+
+Capacity failures preserve the pending decision and install no authority. The
+API returns `approval_capacity_exceeded` with bounded-account facts and a
+non-retryable notice that identifies rejection and stopping as available exits.
+
+---
+
 ## Who acted
 
 Every record of a person's act names that person, taken from a structured fact rather than inferred.

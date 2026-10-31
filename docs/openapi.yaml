@@ -25586,6 +25586,7 @@ components:
       type: string
       description: Closed machine-readable error identity emitted by the private Den-sidecar API.
       enum:
+        - approval_capacity_exceeded
         - source_view_not_found
         - source_view_revision_changed
         - source_view_capacity

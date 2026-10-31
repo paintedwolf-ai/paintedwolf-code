@@ -50,25 +50,30 @@ func (p NativeAuthorityProjection) Options(ctx context.Context, state toolcontra
 	if err != nil {
 		return nil, nil, err
 	}
+	options, releaseOptions, err := bindNativeAuthority(ctx, state, tree)
+	if err != nil {
+		releaseTree()
+		return nil, nil, err
+	}
+	return options, func() { releaseOptions(); releaseTree() }, nil
+}
+
+func bindNativeAuthority(ctx context.Context, state toolcontract.ReviewStateAdmission, tree any) ([]ApprovalOption, func(), error) {
 	binding := &authorityBinding{ctx: ctx, state: state}
 	var options []ApprovalOption
 	if err := binding.assign(reflect.ValueOf(&options).Elem(), tree); err != nil {
 		binding.close()
-		releaseTree()
 		return nil, nil, err
 	}
 	if len(options) == 0 {
 		binding.close()
-		releaseTree()
 		return nil, nil, fmt.Errorf("native authority options are empty")
 	}
 	if err := validateNativeAuthorityOptions(options); err != nil {
 		binding.close()
-		releaseTree()
 		return nil, nil, err
 	}
-	releaseBinding := binding.release()
-	return options, func() { releaseBinding(); releaseTree() }, nil
+	return options, binding.release(), nil
 }
 
 func validateNativeAuthorityOptions(options []ApprovalOption) error {
@@ -97,31 +102,27 @@ func validateNativeAuthorityOptions(options []ApprovalOption) error {
 // RestoreNativeAuthorityProjection is the canonical native authority reader.
 // Unknown domains, versions and host-field shapes fail before installation.
 func RestoreNativeAuthorityProjection(ctx context.Context, state toolcontract.ReviewStateAdmission, representation, digest, canonical string) (NativeAuthorityProjection, func(), error) {
-	value, release, err := toolcontract.RestoreNativeValue(ctx, state, toolcontract.ApprovalAuthorityDomain, representation, digest, canonical)
+	restored, release, err := restoreNativeAuthority(ctx, state, representation, digest, canonical)
+	return restored.projection, release, err
+}
+
+type restoredAuthority struct {
+	projection NativeAuthorityProjection
+	options    []ApprovalOption
+}
+
+func restoreNativeAuthority(ctx context.Context, state toolcontract.ReviewStateAdmission, representation, digest, canonical string) (restoredAuthority, func(), error) {
+	value, tree, releaseValue, err := toolcontract.RestoreNativeValue(ctx, state, toolcontract.ApprovalAuthorityDomain, representation, digest, canonical)
 	if err != nil {
-		return NativeAuthorityProjection{}, nil, err
+		return restoredAuthority{}, nil, err
 	}
 	projection := NativeAuthorityProjection{value: value}
-	options, releaseOptions, err := projection.Options(ctx, state)
+	options, releaseOptions, err := bindNativeAuthority(ctx, state, tree)
 	if err != nil {
-		release()
-		return NativeAuthorityProjection{}, nil, err
+		releaseValue()
+		return restoredAuthority{}, nil, err
 	}
-	// Rebinding verifies this exact declared typed shape, including timestamp
-	// and numeric canonicality; the scalar codec remains the sole encoder.
-	normalized, releaseNormalized, err := NewNativeAuthorityProjection(ctx, state, options)
-	releaseOptions()
-	if err != nil {
-		release()
-		return NativeAuthorityProjection{}, nil, err
-	}
-	if normalized.Canonical() != canonical {
-		releaseNormalized()
-		release()
-		return NativeAuthorityProjection{}, nil, fmt.Errorf("noncanonical native authority host shape")
-	}
-	release()
-	return normalized, releaseNormalized, nil
+	return restoredAuthority{projection: projection, options: options}, func() { releaseOptions(); releaseValue() }, nil
 }
 
 // NativeAuthorityFormat is the only durable native authority representation.
@@ -235,6 +236,10 @@ func (i *NativeActionInputs) durableAuthority(plan *ApprovalPlan) (NativeAuthori
 		err = display.Validate()
 	}
 	if err != nil {
+		release()
+		return NativeAuthorityProjection{}, nil, nil, err
+	}
+	if err := admitAuthorityLifecycle(r.ctx, projection, options); err != nil {
 		release()
 		return NativeAuthorityProjection{}, nil, nil, err
 	}
