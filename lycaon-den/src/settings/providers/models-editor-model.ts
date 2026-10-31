@@ -193,6 +193,18 @@ export type ProviderPickerGroup = (typeof PROVIDER_PICKER_GROUP_ORDER)[number];
 
 const CUSTOM_PROVIDER_KINDS = new Set(["openai-compatible"]);
 
+export const INCLUDED_PROVIDER_ID = "nativegen";
+export const INCLUDED_MODEL_ID = "gemma4-e4b-paintedwolf";
+export const INCLUDED_CONTEXT_WINDOW_TOKENS = 65536;
+
+export function isIncludedProvider(
+  provider: Pick<ProviderMeta, "id" | "kind">,
+): boolean {
+  const id = provider.id?.trim() ?? "";
+  const kind = provider.kind?.trim() || id;
+  return id === INCLUDED_PROVIDER_ID || kind === INCLUDED_PROVIDER_ID;
+}
+
 export function providerKindIsCustom(kind: string): boolean {
   return CUSTOM_PROVIDER_KINDS.has(kind);
 }
@@ -212,6 +224,9 @@ export function providerPickerGroupForKind(
   requiresApiKey: boolean,
   baseUrl: string,
 ): ProviderPickerGroup {
+  if (kind.trim() === INCLUDED_PROVIDER_ID) {
+    return "local";
+  }
   if (providerKindIsCustom(kind)) {
     return "custom";
   }
@@ -630,7 +645,12 @@ export function groupProvidersByKind(
       return providerDisplayName(a).localeCompare(providerDisplayName(b));
     });
   }
-  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
+  return [...groups.values()].sort((a, b) => {
+    const aIncluded = a.kind === INCLUDED_PROVIDER_ID ? 0 : 1;
+    const bIncluded = b.kind === INCLUDED_PROVIDER_ID ? 0 : 1;
+    if (aIncluded !== bIncluded) return aIncluded - bIncluded;
+    return a.label.localeCompare(b.label);
+  });
 }
 
 export function slugifyProviderId(raw: string): string {

@@ -73,6 +73,11 @@ export const MODELS_SETTINGS_COPY = {
     "This endpoint is on this machine, though a local proxy can still forward requests elsewhere.",
   secretScreenTrustRemoteNote: "This endpoint is not on this machine.",
   removeProvider: "Remove AI provider",
+  includedProviderBadge: "Included",
+  includedProviderModelSummary:
+    "Gemma 4 E4B (Painted Wolf) · 64K context window",
+  includedProviderHint:
+    "Runs locally on this Mac at no token cost. Connect a cloud or local server provider for larger context windows or heavier multi-file work.",
   instanceCount: (n: number) => `${n} instance${n === 1 ? "" : "s"}`,
   usageQuota: (used: number, limit: number, unit: string) =>
     `Daily ${unit}: ${formatQuotaNumber(used)} / ${formatQuotaNumber(limit)} free`,
