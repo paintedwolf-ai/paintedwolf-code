@@ -126,14 +126,94 @@ class MergePreflightTests(unittest.TestCase):
                 expected = [['./task', *hosted_plan.lanes()['ready']['preflight']]]
                 compile_native = ['./task', 'decide:test', '--', '--compile-only']
                 if active:
+                    idx = targets.index(early)
                     expected += [['./task', early]]
                     if not verdict:
-                        expected += [compile_native, ['./task', *[target for target in targets if target != early]]]
+                        if targets[idx + 1:]:
+                            expected += [['./task', *targets[idx + 1:]]]
+                        expected += [compile_native]
+                        if targets[:idx]:
+                            expected += [['./task', *targets[:idx]]]
                 else:
                     expected += [compile_native, ['./task', *targets]]
                 self.assertEqual(commands, expected)
                 record = json.loads((Path(directory) / 'ci/run.json').read_text())
                 self.assertEqual([phase['command'] for phase in record['phases']], expected[1:])
+
+    def test_wrap_around_defers_passed_native_compilation_and_stops_on_after_failure(self):
+        from ci_policy import hosted_execution as execution
+        scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
+        targets = hosted_plan.lanes()['ready']['targets']
+        idx = targets.index('coverage:changes')
+        history = json.dumps({'failed_targets': ['coverage:changes'], 'passed_targets': targets[:idx],
+                              'native_passed': ['decide:test']}, separators=(',', ':'))
+        compile_native, after_cmd, before_cmd = ['./task', 'decide:test', '--', '--compile-only'], ['./task', *targets[idx + 1:]], ['./task', *targets[:idx]]
+        for after_verdict in (0, 1):
+            with self.subTest(after_verdict=after_verdict), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(execution, 'artifact_root', return_value=Path(directory)), \
+                    patch('ci_policy.impact.change', return_value=scope), \
+                    patch('ci_policy.native_admission.commands', return_value=[compile_native]), \
+                    patch.dict(os.environ, GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=history), \
+                    patch.object(execution.subprocess, 'call', side_effect=lambda cmd, **_: after_verdict if cmd == after_cmd else 0) as call:
+                self.assertEqual(execution.run_lane('ready'), after_verdict)
+                expected = [['./task', *hosted_plan.lanes()['ready']['preflight']], ['./task', 'coverage:changes'], after_cmd]
+                if after_verdict == 0:
+                    expected += [compile_native, before_cmd]
+                self.assertEqual([entry.args[0] for entry in call.call_args_list], expected)
+
+    def test_native_only_and_private_group_rotation_preserve_all_targets(self):
+        native_cmds = [['./task', 'den:test:rust', '--', '--compile-only'], ['./task', 'decide:test', '--', '--compile-only']]
+        history = {'failed_targets': [], 'passed_targets': ['build'], 'native_failed': ['den:test:rust'], 'native_passed': []}
+        self.assertEqual(preflight.ready_commands(['build', 'budgets', 'coverage:changes'], native_cmds, history), [
+            ['./task', 'den:test:rust', '--', '--compile-only'], ['./task', 'budgets', 'coverage:changes'],
+            ['./task', 'decide:test', '--', '--compile-only'], ['./task', 'build']])
+        with patch.object(preflight, 'invocation', side_effect=lambda items: [
+            m for item in items for m in (['member:a', 'member:b'] if item == 'group:check' else [item])
+        ]):
+            self.assertEqual(preflight.ready_commands(['build', 'group:check', 'docs:links'], native_cmds[1:],
+                                                      {'failed_targets': ['group:check'], 'passed_targets': ['build']}),
+                             [['./task', 'member:a', 'member:b'], ['./task', 'docs:links'], native_cmds[1], ['./task', 'build']])
+
+    def test_receipt_without_passed_stages_recovers_early_target_pass_from_phases(self):
+        record = {'lane': 'ready', 'shard': '', 'status': 'failed', 'identity': {'run': '20', 'attempt': '2'},
+                  'phases': [{'command': ['./task', 'budgets'], 'exit_code': 0},
+                             {'command': ['./task', 'decide:test', '--', '--compile-only'], 'exit_code': 0},
+                             {'command': ['./task', 'build', 'coverage:changes'], 'exit_code': 1}]}
+        state = preflight.receipt_state(self.history_archive(record, [{'stage': 'coverage:changes', 'status': 'failed'}]),
+                                        {'id': 20, 'run_attempt': 2}, ['build', 'budgets', 'coverage:changes'])
+        self.assertEqual((state['failed_targets'], state['passed_targets'], state['native_passed']),
+                         (['coverage:changes'], ['budgets'], ['decide:test']))
+
+    def test_multi_run_lookback_preserves_target_cursor_across_preflight_failure(self):
+        event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a&b'}}}
+        base = dict(workflow_id=10, event='pull_request', pull_requests=[{'number': 7}], run_attempt=1, status='completed', conclusion='failure')
+        run_20, run_21 = {**base, 'id': 20}, {**base, 'id': 21}
+        art = dict(id=40, name='receipt-verification-fast-ready-1', expired=False, size_in_bytes=200)
+        zip_20 = self.history_archive({'lane': 'ready', 'shard': '', 'status': 'failed', 'identity': {'run': '20', 'attempt': '1'},
+                                       'passed_stages': ['build']}, [{'stage': 'coverage:changes', 'status': 'failed'}])
+        zip_21 = self.history_archive({'lane': 'ready', 'shard': '', 'status': 'failed', 'identity': {'run': '21', 'attempt': '1'}},
+                                      [{'stage': 'test:contract', 'subject': 'github.com/lycaon/lycaon/test/contract/persistence', 'status': 'failed'}])
+        with patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                patch.object(preflight, 'api', side_effect=[{'workflow_id': 10}, {'workflow_runs': [run_21, run_20]}, {'artifacts': [art]}, {'artifacts': [art]}]), \
+                patch.object(preflight.subprocess, 'check_output', side_effect=[zip_21, zip_20]):
+            plan = preflight.previous_plan(event, '30', ['build', 'coverage:changes'])
+        self.assertEqual((plan['contract_failures'], plan['failed_targets'], plan['passed_targets']),
+                         (['./test/contract/persistence'], ['coverage:changes'], ['build']))
+        for prior_conclusion in ('success', 'cancelled', 'timed_out'):
+            with self.subTest(prior_conclusion=prior_conclusion), patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                    patch.object(preflight, 'api', side_effect=[{'workflow_id': 10}, {'workflow_runs': [run_21, {**run_20, 'conclusion': prior_conclusion}]}, {'artifacts': [art]}]), \
+                    patch.object(preflight.subprocess, 'check_output', return_value=zip_21) as fetch:
+                plan = preflight.previous_plan(event, '30', ['build', 'coverage:changes'])
+                self.assertEqual((plan['contract_failures'], plan['failed_targets'], fetch.call_count), (['./test/contract/persistence'], [], 1))
+
+    def test_preflight_contract_rotation_includes_internal_contracts_and_partitions_exhaustively(self):
+        packages = preflight.contract_packages()
+        for expected in ('./test/contract', './test/contract/internal/sizebudget', './test/contract/internal/wirespec', './test/contract/persistence'):
+            self.assertIn(expected, packages)
+        waves = preflight.preflight_commands(['test:contract', '--', './test/contract/...'], {'contract_failures': ['./test/contract/persistence']})
+        first_pkgs, second_pkgs = waves[0][3:], waves[1][3:]
+        idx = packages.index('./test/contract/persistence')
+        self.assertEqual(first_pkgs + second_pkgs, packages[idx:] + packages[:idx])
 
     def test_fixed_platform_arguments_survive_merge_preflight(self):
         for arguments in (["launch"], ["nix"]):
