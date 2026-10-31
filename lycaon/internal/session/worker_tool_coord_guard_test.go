@@ -210,3 +210,19 @@ func TestWorkspaceSnapshotDetectsDeletion(t *testing.T) {
 		t.Fatalf("changed = %v", changed)
 	}
 }
+
+func TestWorkspaceSnapshotSkipsGitlinkFiles(t *testing.T) {
+	dir := t.TempDir()
+	testutil.FailErr(t, "mkdir worktree", os.MkdirAll(filepath.Join(dir, "worktree"), 0o755))
+	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(dir, "worktree", "main.go"), []byte("package main\n"), 0o644))
+	testutil.FailErr(t, "write gitlink", os.WriteFile(filepath.Join(dir, "worktree", ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
+
+	baseline, err := session.SnapshotWorkspace(dir)
+	testutil.FailErr(t, "snapshot workspace", err)
+	if _, ok := baseline["worktree/main.go"]; !ok {
+		t.Fatalf("missing worktree/main.go in %+v", baseline)
+	}
+	if _, ok := baseline["worktree/.git"]; ok {
+		t.Fatalf("snapshot must omit gitlink file: %+v", baseline)
+	}
+}

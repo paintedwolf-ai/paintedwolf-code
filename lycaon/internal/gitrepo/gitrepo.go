@@ -4,6 +4,7 @@ package gitrepo
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -108,15 +109,162 @@ func repoAt(root string) Repo {
 // gitDirPrefix is the one line a .git pointer file carries.
 const gitDirPrefix = "gitdir:"
 
+// IsGitlinkFile reports whether path is a regular .git file whose first line starts with "gitdir:".
+func IsGitlinkFile(path string) bool {
+	if filepath.Base(path) != dotGit {
+		return false
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	line, ok := readFirstLine(path)
+	return ok && strings.HasPrefix(line, gitDirPrefix)
+}
+
+func readFirstLine(path string) (string, bool) {
+	// #nosec G304 -- path is a discovered .git entry.
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = f.Close() }()
+	var buf [1024]byte
+	n, err := f.Read(buf[:])
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", false
+	}
+	line := string(buf[:n])
+	if idx := strings.IndexByte(line, '\n'); idx >= 0 {
+		line = line[:idx]
+	}
+	return strings.TrimRight(line, "\r"), true
+}
+
+// ScopeIncludesLinkedCheckout reports whether any scoped path under projectDir
+// is inside or contains a linked worktree or submodule (.git gitlink file).
+func ScopeIncludesLinkedCheckout(projectDir string, paths []string) bool {
+	projectDir = strings.TrimSpace(projectDir)
+	if projectDir == "" {
+		return false
+	}
+	root := filepath.Clean(projectDir)
+	if len(paths) == 0 {
+		paths = []string{"."}
+	}
+	for _, raw := range paths {
+		if scopePathIncludesLinkedCheckout(root, raw) {
+			return true
+		}
+	}
+	return false
+}
+
+func scopePathIncludesLinkedCheckout(root, raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return false
+	}
+	prefix := literalScopePrefix(trimmed)
+	target := root
+	if prefix != "." && prefix != "" {
+		if filepath.IsAbs(prefix) {
+			target = filepath.Clean(prefix)
+		} else {
+			target = filepath.Clean(filepath.Join(root, prefix))
+		}
+	}
+	if target != root && !strings.HasPrefix(target, root+string(filepath.Separator)) {
+		return false
+	}
+	for cur := target; ; {
+		gitPath := filepath.Join(cur, dotGit)
+		if IsGitlinkFile(gitPath) {
+			return true
+		}
+		if info, err := os.Lstat(gitPath); err == nil && info.IsDir() {
+			break
+		}
+		if cur == root {
+			break
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			break
+		}
+		cur = parent
+	}
+	info, err := os.Lstat(target)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	return dirContainsGitlink(target)
+}
+
+func literalScopePrefix(raw string) string {
+	slash := filepath.ToSlash(strings.TrimSpace(raw))
+	slash = strings.TrimPrefix(slash, "./")
+	slash = strings.TrimPrefix(slash, "/")
+	if slash == "" || slash == "." {
+		return "."
+	}
+	var kept []string
+	for _, part := range strings.Split(slash, "/") {
+		if part == "" || part == "." {
+			continue
+		}
+		if strings.ContainsAny(part, "*?[") {
+			break
+		}
+		kept = append(kept, part)
+	}
+	if len(kept) == 0 {
+		return "."
+	}
+	return filepath.Join(kept...)
+}
+
+func dirContainsGitlink(dir string) bool {
+	const maxDirs = 512
+	visited := 0
+	found := false
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fs.SkipDir
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !d.IsDir() {
+			if d.Name() == dotGit && IsGitlinkFile(path) {
+				found = true
+				return fs.SkipAll
+			}
+			return nil
+		}
+		if d.Name() == dotGit {
+			return fs.SkipDir
+		}
+		visited++
+		if visited > maxDirs {
+			return fs.SkipAll
+		}
+		return nil
+	})
+	return found
+}
+
 // readGitDirPointer resolves a .git file to the git directory it names, relative to the
 // work tree holding it. Anything unparsable returns "" rather than a guess.
 func readGitDirPointer(root, dot string) string {
-	// #nosec G304 -- dot is the discovered .git entry.
-	raw, err := os.ReadFile(dot)
-	if err != nil {
+	line, ok := readFirstLine(dot)
+	if !ok {
 		return ""
 	}
-	line := strings.TrimSpace(string(raw))
+	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, gitDirPrefix) {
 		return ""
 	}

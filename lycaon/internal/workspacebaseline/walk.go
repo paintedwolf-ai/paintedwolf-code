@@ -81,11 +81,15 @@ func (w branchWalker) directory(rel string) error {
 				}
 				continue
 			}
+			abs := filepath.Join(w.abs, filepath.FromSlash(path))
+			if sandbox.IsGitlinkDirEntry(entry.Name(), abs, entry) {
+				continue
+			}
 			info, err := entry.Info()
 			if err != nil {
 				return err
 			}
-			if err := w.visit(CaptureFile{Path: w.qualify(path), Abs: filepath.Join(w.abs, filepath.FromSlash(path)), Info: info}); err != nil {
+			if err := w.visit(CaptureFile{Path: w.qualify(path), Abs: abs, Info: info}); err != nil {
 				return err
 			}
 		}
