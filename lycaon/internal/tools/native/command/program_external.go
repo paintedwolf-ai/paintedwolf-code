@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
@@ -26,6 +27,7 @@ type ExternalStages struct {
 	Dir             string
 	ExtraWriteRoots []string
 	BaseEnvironment []string
+	ObserveStage    func(tools.ToolContext, confine.StampedRefusal, []confine.EgressHost, bool)
 }
 
 var _ commandprogram.ExternalLauncher = ExternalStages{}
@@ -113,6 +115,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	}
 	run, waitErr := async.Wait()
 	detach()
+	l.settleStageConfine(ctx, tctx, bound, commandLine, run)
 	if run != nil && len(run.Stages) == 1 {
 		request.Process.Times.Add(run.Stages[0].UserTime, run.Stages[0].SystemTime)
 	}
@@ -269,3 +272,55 @@ func refusedResult(code string) toolcontract.ProducerResult {
 type launchClosure struct{ lycexec.StageRun }
 
 func (launchClosure) Error() string { return "external producer stopped after its consumer closed" }
+
+func (l ExternalStages) settleStageConfine(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, commandLine string, run *lycexec.PipelineResult) {
+	settleCtx := context.WithoutCancel(ctx)
+	refusals := bound.lease.SettledRefusals(settleCtx)
+	network := bound.close(settleCtx)
+	boundary := confine.BoundaryOf(bound.confinement)
+	if !boundary.Applied {
+		return
+	}
+	termination := string(bgprocess.TerminationExited)
+	var failed []string
+	switch {
+	case ctx.Err() != nil:
+		termination = string(bgprocess.TerminationStopped)
+	case run == nil:
+		failed = []string{commandLine}
+	case len(run.Stages) == 1:
+		if run.Stages[0].Failed {
+			failed = []string{commandLine}
+		}
+	case run.ExitCode != 0:
+		failed = []string{commandLine}
+	}
+	report := CommandConfinementReport(boundary, "", tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
+	stamped := confine.StampRefusal("command", tctx.Identity.SessionID, boundary, confine.RefusalContext{
+		MediatedNetwork:        network,
+		RemotePackageExecution: report.RemotePackageExecution,
+		FailedStages:           failed,
+		TerminationReason:      termination,
+		Refusals:               refusals,
+	})
+	if l.ObserveStage != nil {
+		l.ObserveStage(tctx, stamped, network, bound.directIPApplied)
+		return
+	}
+	if tctx.Effects.Out != nil {
+		tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
+		tools.CaptureExternalAccess(tctx, network, bound.directIPApplied)
+	}
+}
+
+func (d *ProgramDispatcher) recordExternalStage(admitted tools.ToolContext, stamped confine.StampedRefusal, hosts []confine.EgressHost, directIPApplied bool) {
+	if d == nil || d.run == nil || d.run.tc.Effects.Out == nil {
+		return
+	}
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	d.run.tc.Effects.Out.Facts = tools.ApplyRefusalFacts(d.run.tc.Effects.Out.Facts, stamped)
+	childTC := admitted
+	childTC.Effects.Out = d.run.tc.Effects.Out
+	tools.CaptureExternalAccess(childTC, hosts, directIPApplied)
+}

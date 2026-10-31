@@ -58,6 +58,61 @@ type SandboxRefusals struct {
 	Omitted int
 }
 
+// Merge folds another stage's refusal reports into s within the retained cap.
+func (s SandboxRefusals) Merge(other SandboxRefusals) SandboxRefusals {
+	if other.Witness == "" && len(other.Refusals) == 0 && other.Omitted == 0 {
+		return s
+	}
+	if s.Witness == "" && len(s.Refusals) == 0 && s.Omitted == 0 {
+		return SandboxRefusals{
+			Witness:  other.Witness,
+			Refusals: append([]SandboxRefusal(nil), other.Refusals...),
+			Omitted:  other.Omitted,
+		}
+	}
+	out := SandboxRefusals{
+		Witness:  mergeWitness(s.Witness, other.Witness),
+		Refusals: append([]SandboxRefusal(nil), s.Refusals...),
+		Omitted:  s.Omitted + other.Omitted,
+	}
+	keys := make(map[string]int, len(out.Refusals))
+	for i, r := range out.Refusals {
+		keys[refusalKey(r.Operation, r.Target)] = i
+	}
+	for _, r := range other.Refusals {
+		key := refusalKey(r.Operation, r.Target)
+		if i, seen := keys[key]; seen {
+			if i >= 0 {
+				out.Refusals[i].Count += r.Count
+			}
+			continue
+		}
+		if len(out.Refusals) >= maxActionRefusals {
+			if len(keys) < maxActionRefusals+maxOmittedRefusalKeys {
+				keys[key] = -1
+				out.Omitted++
+			}
+			continue
+		}
+		keys[key] = len(out.Refusals)
+		out.Refusals = append(out.Refusals, r)
+	}
+	return out
+}
+
+func mergeWitness(a, b RefusalWitness) RefusalWitness {
+	switch {
+	case a == WitnessUnavailable || b == WitnessUnavailable:
+		return WitnessUnavailable
+	case a == WitnessIncomplete || b == WitnessIncomplete:
+		return WitnessIncomplete
+	case a == WitnessKernel || b == WitnessKernel:
+		return WitnessKernel
+	default:
+		return ""
+	}
+}
+
 // Paths returns the refused filesystem paths for access, with the grant their
 // layer's recovery names.
 func (s SandboxRefusals) Paths(access FilesystemAccess) []BoundaryPath {
