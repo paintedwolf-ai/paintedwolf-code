@@ -135,17 +135,14 @@ schema:
           type: boolean
           enum: [true]
           description: >-
-            `true` requests, for this invocation, read-only access to the host
-            OS credential store (macOS login keychain, Linux Secret Service and
-            KWallet, Windows Credential Manager) while keeping filesystem,
-            write, and network confinement applied.
+            `true` requests read-only access to the host OS credential store
+            while keeping filesystem, write, and network confinement applied.
         host_execution:
           description: >-
-            `true` requests, for this invocation,execution outside the command sandbox,
-            including setuid programs and passwordless sudo. Filesystem,
-            network, and process effects will be unobserved. Use sudo -n;
-            password entry is not supported. Cannot combine with other
-            capability_request fields or socks_proxy.
+            `true` requests execution outside the command sandbox, including
+            setuid programs and passwordless sudo (`sudo -n`). Filesystem,
+            network, and process effects are unobserved. Cannot combine with
+            other capability_request fields or socks_proxy.
           oneOf:
             - type: boolean
               enum: [true]
@@ -153,9 +150,9 @@ schema:
               additionalProperties: false
         direct_ip:
           description: >-
-            `true` requests, for this invocation,direct outbound IP when HTTP mediation
-            or SOCKS is incompatible — UDP (NTP, QUIC), a portless bind, or a
-            client that ignores proxy variables. A destination list or
+            `true` requests direct outbound IP when HTTP mediation or SOCKS is
+            incompatible — UDP (NTP, QUIC), a portless bind, or a client that
+            ignores proxy variables. A destination list or
             {"declared_destinations": ["udp://time.nist.gov:123"]} narrows
             protocol and port. Actual destinations will be unobserved.
           oneOf:
@@ -171,15 +168,10 @@ schema:
                 declared_destinations:
                   type: array
                   description: >-
-                    Destinations this action will reach, as host:port with an optional
-                    tcp:// or udp:// scheme, for example udp://time.nist.gov:123.
-                    Declaring narrows the sandbox to those transports: udp://host:123
-                    permits UDP port 123 and refuses every other protocol and port.
-                    Declaring nothing leaves the action able to use any of them, so
-                    declare whenever you know them. Parsing is all-or-nothing - one entry
-                    without a port, or a scheme such as https:// that only implies one,
-                    drops the narrowing for the whole request. Narrowing bounds protocol
-                    and port only; the host cannot restrict which peer you reach.
+                    Destinations this check reaches, as host:port with optional
+                    tcp:// or udp:// scheme (e.g. udp://time.nist.gov:123).
+                    Declaring narrows protocol and port; every entry must include
+                    an explicit port.
                   maxItems: 16
                   items:
                     type: string
@@ -187,15 +179,10 @@ schema:
         local_listen:
           type: object
           description: >-
-            Local listener authority (bind + accept) so this command can run a
-            dev server or test harness. Put it on the invocation that binds a
-            named port — a traceback is not the errno line, and a bind that
-            names no port is not a server (use direct_ip). Egress stays
-            mediated - this never widens outbound access. Declare ports to
-            narrow the profile; {} requests any local port. The sandbox cannot
-            bound the bind address, so a server told to bind 0.0.0.0 will; this
-            is "a local server", not "loopback only". Listen and
-            loopback-connect are separate fields.
+            Local listener authority (bind + accept) for a test server or
+            harness without widening outbound egress. Declare ports to narrow
+            the profile; {} requests any local port. Listen and loopback-connect
+            are separate fields.
           properties:
             ports:
               type: array
@@ -211,11 +198,9 @@ schema:
           type: object
           description: >-
             Authority to connect to TCP or UDP services on this machine without
-            widening external egress. Put it on the invocation that connects —
-            a traceback is not the errno line. Use together with local_listen
-            when one command starts a server and then exercises it. Declare
-            ports to narrow the profile; {} requests any local port. Permission
-            to bind a server does not imply permission for its client connection.
+            widening external egress. Use with local_listen when a check starts
+            and exercises a local server. Declare ports when known; {} requests
+            any local port.
           properties:
             ports:
               type: array
@@ -231,14 +216,10 @@ schema:
           type: string
           maxLength: 1024
           description: >-
-            One absolute path this invocation must write where the sandbox
-            refuses by default: outside its project and default cache roots, a
-            credential store, or a file agents load as instructions or settings
-            (AGENTS.md at any depth, project skills, `.paintedwolf` settings).
-            It is reviewed before spawn; command output can never grant it. A
-            refused write can fail silently, so declare it up front. A
-            recognized credential-store path grants exactly that file, not
-            temporary, lock, backup, or other sibling names.
+            One absolute path this check must write outside its project and
+            default cache roots, a credential store, or an instruction/settings
+            file. Reviewed before spawn; recognized credential-store paths grant
+            only that exact file.
         read_path:
           type: string
           maxLength: 1024

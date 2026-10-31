@@ -198,10 +198,10 @@ schema:
           type: boolean
           enum: [true]
           description: >-
-            `true` requests, for this invocation, read-only access to the host
-            OS credential store (macOS login keychain, Linux Secret Service and
-            KWallet, Windows Credential Manager) while keeping filesystem,
-            write, and network confinement applied.
+            `true` requests read-only access to the host OS credential store
+            (macOS login keychain, Linux Secret Service and KWallet, Windows
+            Credential Manager) while keeping filesystem, write, and network
+            confinement applied.
         host_execution:
           description: >-
             `true` requests, for this invocation,execution outside the command sandbox,
