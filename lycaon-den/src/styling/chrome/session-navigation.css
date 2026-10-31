@@ -153,6 +153,15 @@
 .focused-session-list__dot[data-attention-class="finished"] {
   --den-attention-tone: var(--den-status-positive);
 }
+/* Small running indicator for live background commands in a chat row. */
+.focused-session-list__background-running {
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--den-status-running);
+}
 /* Sidebar status word — takes the timestamp's place, same footprint. */
 .focused-session-list__status {
   flex-shrink: 0;

@@ -234,11 +234,7 @@ function Section(props: {
         <BackgroundProcessSection
           sessionId={props.sessionId}
           section={
-            props.section as {
-              kind: "background_process";
-              handle: string;
-              running: boolean;
-            }
+            props.section as Extract<StructuredToolSection, { kind: "background_process" }>
           }
         />
       </Match>
@@ -293,7 +289,7 @@ function CompactionSection(props: {
 
 function BackgroundProcessSection(props: {
   sessionId?: string;
-  section: { handle: string; running: boolean };
+  section: Extract<StructuredToolSection, { kind: "background_process" }>;
 }) {
   return (
     <Show when={props.sessionId?.trim()} keyed>
@@ -302,6 +298,7 @@ function BackgroundProcessSection(props: {
           sessionId={id}
           processId={props.section.handle}
           initialRunning={props.section.running}
+          terminationReason={props.section.terminationReason}
         />
       )}
     </Show>

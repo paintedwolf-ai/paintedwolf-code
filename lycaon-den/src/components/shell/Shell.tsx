@@ -150,6 +150,7 @@ export function Shell(props: ShellProps) {
 
   installShellNavigationSinks({
     ...scope, openStageWithPlacement: (stage, arrival, open) => openStageWithPlacement(stage, arrival, open),
+    openRunningForProject: (projectId) => openRunningForProject(projectId),
     openSearch, openNotificationSession, revealConversation,
     resumeSession: (row, options) => resumeSession(row, options), openWorkers,
     closeSearch, closeCrossbar, setNav, openSettings,
@@ -193,6 +194,7 @@ export function Shell(props: ShellProps) {
     conversationInLayout: () => conversationInLayout(), revealConversation, closeSearch, closeCrossbar,
     closeLauncher: () => setLauncherOpen(false),
     focusComposer: () => setPendingRegionFocus("composer"),
+    openRunning: () => goToContextStage("running"),
   });
   const {
     onFreshSession,
@@ -357,6 +359,7 @@ export function Shell(props: ShellProps) {
     artifacts: () => showStage("artifacts"),
     blueprints: () => showStage("blueprints"),
     extensions: () => showStage("extensions"),
+    running: () => showStage("running"),
   };
 
   const { detachStageToWindow, openFocusedSubjectInNewWindow, openFileWindow,
@@ -432,11 +435,19 @@ export function Shell(props: ShellProps) {
     openContextSection(section);
   };
 
+  const openRunningForProject = (projectId?: string) => {
+    if (projectId && props.shell.state.activeProjectId !== projectId) {
+      openProject(projectId);
+    }
+    goToContextStage("running");
+  };
+
   const { toggleStar, renameProject, dialogError, moveTarget, setMoveTarget, moveBusy, moveError, setMoveError, openMoveDialog, submitMove, activeProjectRoots, retryActiveProjectPromotion, cancelActiveProjectPromotion, addFolderToActiveProject, detachFolderFromActiveProject, detachProjectRoot } = createProjectLifecycle({
     projects: props.projects,
     activeProjectId: () => props.shell.state.activeProjectId,
     activeProject,
     report: (projectId, error) => noticeReporterFor(projectScope(projectId)).reportError(error),
+    onOpenRunning: openRunningForProject,
   });
 
   const { cloneOpen, cloneBusy, cloneError, setCloneError, setCloneOpen,
@@ -467,7 +478,10 @@ export function Shell(props: ShellProps) {
 
   const { showPromoteNudge, showNoFolderBanner } = observeProjectNudges();
 
-  const { projectRemovalReview, deleteProject } = createWorkspaceProjectRemoval(props);
+  const { projectRemovalReview, deleteProject } = createWorkspaceProjectRemoval(
+    props,
+    openRunningForProject,
+  );
 
   /** Notifications appear on Home and in the chat dock. */
   const notificationStack = () => (

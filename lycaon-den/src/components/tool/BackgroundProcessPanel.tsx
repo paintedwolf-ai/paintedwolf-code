@@ -1,10 +1,13 @@
 import { createSignal, onCleanup, Show } from "solid-js";
+import type { BackgroundProcessTerminationReason } from "../../api/types.ts";
 import {
   getBackgroundProcessSnapshot,
+  getRecordedBackgroundTerminationReason,
   hasHydratedBackgroundProcesses,
   subscribeBackgroundProcessStore,
 } from "../../chat/tool/background-process-store.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { formatBackgroundTerminationReason } from "../../project/background-termination-reason.ts";
 import { ToolContentLink } from "./ToolContentLink.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
 
@@ -12,6 +15,7 @@ type Props = {
   sessionId: string;
   processId: string;
   initialRunning?: boolean;
+  terminationReason?: BackgroundProcessTerminationReason;
 };
 
 export function BackgroundProcessPanel(props: Props) {
@@ -34,9 +38,31 @@ export function BackgroundProcessPanel(props: Props) {
     (hasHydratedBackgroundProcesses(props.sessionId)
       ? false
       : (props.initialRunning ?? false));
+
+  const recordedReason = () => {
+    revision();
+    return (
+      snapshot()?.terminationReason ??
+      props.terminationReason ??
+      getRecordedBackgroundTerminationReason(props.sessionId, props.processId)
+    );
+  };
+
+  const isUnavailableHistorical = () =>
+    !snapshot() &&
+    hasHydratedBackgroundProcesses(props.sessionId) &&
+    !recordedReason();
+
   const status = () => {
-    if (snapshot()) return running() ? "Running" : "Exited";
-    if (hasHydratedBackgroundProcesses(props.sessionId)) return "Unavailable";
+    if (snapshot()) {
+      return running()
+        ? "Running"
+        : formatBackgroundTerminationReason(recordedReason() ?? "exited");
+    }
+    if (hasHydratedBackgroundProcesses(props.sessionId)) {
+      const reason = recordedReason();
+      return reason ? formatBackgroundTerminationReason(reason) : "No longer available";
+    }
     return running() ? "Running" : "Checking…";
   };
 
@@ -63,7 +89,15 @@ export function BackgroundProcessPanel(props: Props) {
       <div class="den-tool-part-card-facts">
         <div>
           <dt>Status</dt>
-          <dd>{status()}</dd>
+          <dd
+            data-testid={
+              !snapshot() && Boolean(recordedReason())
+                ? "background-process-historical-reason"
+                : undefined
+            }
+          >
+            {status()}
+          </dd>
         </div>
         <Show when={!running() && snapshot()?.exitCode != null}>
           <div>
@@ -88,6 +122,14 @@ export function BackgroundProcessPanel(props: Props) {
           </div>
         </Show>
       </div>
+      <Show when={isUnavailableHistorical()}>
+        <p
+          class="den-tool-part-card-note"
+          data-testid="background-process-unavailable-guidance"
+        >
+          Background commands end when stopped or when Painted Wolf Code quits.
+        </p>
+      </Show>
       <Show when={stopError()}>
         <p class="den-tool-part-card-note">{stopError()}</p>
       </Show>

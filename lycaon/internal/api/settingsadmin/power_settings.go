@@ -1,6 +1,7 @@
 package settingsadmin
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -9,8 +10,8 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetPowerSettings(w http.ResponseWriter, _ *http.Request) {
-	httpio.WriteJSON(w, http.StatusOK, powerSettingsResponse(s.Power.Snapshot()))
+func (s *Handler) HandleGetPowerSettings(w http.ResponseWriter, r *http.Request) {
+	httpio.WriteJSON(w, http.StatusOK, s.powerSettingsResponse(r.Context(), s.Power.Snapshot()))
 }
 
 func (s *Handler) HandleUpdatePowerSettings(w http.ResponseWriter, r *http.Request) {
@@ -32,15 +33,21 @@ func (s *Handler) HandleUpdatePowerSettings(w http.ResponseWriter, r *http.Reque
 		s.Power.SetEnabled(enabled)
 		projectview.PublishSettings(s.Events, s.Projects, r.Context(), wire.SettingsAreaPower, "global", "", "updated")
 	}
-	httpio.WriteJSON(w, http.StatusOK, powerSettingsResponse(s.Power.Snapshot()))
+	httpio.WriteJSON(w, http.StatusOK, s.powerSettingsResponse(r.Context(), s.Power.Snapshot()))
 }
 
-func powerSettingsResponse(status hostpower.Status) wire.PowerSettingsResponse {
-	return wire.PowerSettingsResponse{
+func (s *Handler) powerSettingsResponse(ctx context.Context, status hostpower.Status) wire.PowerSettingsResponse {
+	resp := wire.PowerSettingsResponse{
 		KeepAwakeWhileWorking: status.Enabled,
 		Supported:             status.Supported,
 		Inhibiting:            status.Inhibiting,
 		ActiveWorkCount:       status.ActiveWorkCount,
 		LastError:             status.LastError,
 	}
+	if s.Sessions != nil && s.Sessions.ProjectControl != nil {
+		if procs, err := s.Sessions.ProjectControl.AllRunningBackgroundProcesses(ctx); err == nil && len(procs) > 0 {
+			resp.BackgroundProcesses = procs
+		}
+	}
+	return resp
 }

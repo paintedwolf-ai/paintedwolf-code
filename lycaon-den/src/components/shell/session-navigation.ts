@@ -32,6 +32,7 @@ export function createSessionNavigation(options: Pick<ShellScope,
   conversationInLayout: () => boolean;
   closeLauncher: () => void;
   focusComposer: () => void;
+  openRunning?: () => void;
 }) {
   // Refresh chat inventory with project and connection state.
   createEffect(() => {
@@ -216,7 +217,17 @@ export function createSessionNavigation(options: Pick<ShellScope,
   };
 
   const deleteSidebarSession = async (row: SidebarChatRow) => {
-    if (!(await confirmChatDelete())) return;
+    if (
+      !(await confirmChatDelete({
+        count: 1,
+        projectId: row.projectId,
+        chats: [{ sessionId: row.sessionId, title: row.title }],
+        client: getLycaonClient(),
+        onOpenRunning: options.openRunning,
+      }))
+    ) {
+      return;
+    }
     await deleteSession(sessionRetirementDeps(), sidebarRowAsRecent(row));
   };
 

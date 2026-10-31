@@ -25,6 +25,7 @@ export const ALL_EVENT_TOPICS = [
   "progress",
   "queue",
   "project",
+  "project_background",
   "process",
   "preview",
   "attention",

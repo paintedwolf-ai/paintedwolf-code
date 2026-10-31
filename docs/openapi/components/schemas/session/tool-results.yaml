@@ -158,6 +158,12 @@ components:
           description: >
             Set when submit_verdict recorded a review_loop verdict. The card
             renders these stated facts, never the result prose.
+        listener:
+          x-go-pointer: true
+          $ref: "#/components/schemas/LoopbackListenerFact"
+          description: >
+            Host-observed loopback listener attribution for an http_request whose
+            first hop connected to a loopback address.
     VerdictOutcome:
       x-go-generate: true
       type: object
@@ -417,6 +423,8 @@ components:
           description: >
             The host's view when the result was written. It never flips on exit;
             the session process mirror reports that.
+        termination_reason:
+          $ref: '../events.yaml#/components/schemas/BackgroundProcessTerminationReason'
     CheckpointDecisionMeta:
       x-go-generate: true
       type: object
@@ -574,3 +582,116 @@ components:
       enum:
       - normal
       - benign
+    LoopbackListenerHolder:
+      x-go-generate: true
+      type: object
+      required:
+      - kind
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [this_session, other_session, container_forwarder, external_process, unknown]
+        address:
+          type: string
+        pid:
+          x-go-name: "PID"
+          type: integer
+        process_name:
+          type: string
+        session_id:
+          x-go-name: "SessionID"
+          type: string
+        session_title:
+          type: string
+        project_id:
+          x-go-name: "ProjectID"
+          type: string
+        project_name:
+          type: string
+        handle:
+          type: string
+        command:
+          type: string
+        background:
+          type: boolean
+        container_id:
+          x-go-name: "ContainerID"
+          type: string
+        container_name:
+          type: string
+    LoopbackPublishedContainer:
+      x-go-generate: true
+      type: object
+      required:
+      - host_port
+      additionalProperties: false
+      properties:
+        container_id:
+          x-go-name: "ContainerID"
+          type: string
+        container_name:
+          type: string
+        host_ip:
+          x-go-name: "HostIP"
+          type: string
+        host_port:
+          type: integer
+        loopback_only:
+          type: boolean
+    LoopbackListenerFact:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: >
+        Host-observed loopback listener attribution for an http_request whose
+        first hop connected to a loopback address.
+      properties:
+        kind:
+          type: string
+          enum: [this_session, other_session, container_forwarder, external_process, unknown]
+        address:
+          type: string
+        connected_address:
+          type: string
+        pid:
+          x-go-name: "PID"
+          type: integer
+        process_name:
+          type: string
+        session_id:
+          x-go-name: "SessionID"
+          type: string
+        session_title:
+          type: string
+        project_id:
+          x-go-name: "ProjectID"
+          type: string
+        project_name:
+          type: string
+        handle:
+          type: string
+        command:
+          type: string
+        background:
+          type: boolean
+        container_id:
+          x-go-name: "ContainerID"
+          type: string
+        container_name:
+          type: string
+        ambiguous:
+          type: boolean
+        replaced:
+          type: boolean
+        holders:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoopbackListenerHolder"
+        container_mismatch:
+          type: boolean
+        published_container:
+          x-go-pointer: true
+          $ref: "#/components/schemas/LoopbackPublishedContainer"
+        description:
+          type: string

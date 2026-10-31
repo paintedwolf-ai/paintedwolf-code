@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -92,15 +93,36 @@ type Host struct {
 	Observations   *sessionobservation.Service
 	Submissions    *submissions.Service
 	Decisions      decisions.Store
+	loopbackProv   LoopbackProvenanceResolver
 }
 
 // SetLoopbackProvenance installs the provenance resolver for task container recording.
 func (m *Host) SetLoopbackProvenance(p LoopbackProvenanceResolver) {
 	if m != nil {
-
+		m.loopbackProv = p
 		m.ToolContext.SetContainers(p)
 		m.Chats.SetLoopback(p)
+		if dp, ok := p.(*DefaultLoopbackProvenance); ok {
+			dp.SetHostSources(
+				m.Chats,
+				m.ToolContext.Project,
+				func() *bgprocess.Registry {
+					if m.Processes == nil {
+						return nil
+					}
+					return m.Processes.Background
+				},
+			)
+		}
 	}
+}
+
+// LoopbackProvenance returns the installed loopback provenance resolver.
+func (m *Host) LoopbackProvenance() LoopbackProvenanceResolver {
+	if m == nil {
+		return nil
+	}
+	return m.loopbackProv
 }
 
 // NewHost acquires the session domains and binds their shared resources.

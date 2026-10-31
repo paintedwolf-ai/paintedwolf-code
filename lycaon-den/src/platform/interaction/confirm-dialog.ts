@@ -4,6 +4,7 @@ export type ConfirmDestructiveRequest = {
   okLabel: string;
   cancelLabel?: string;
   destructive?: boolean;
+  onOpenRunning?: () => void;
 };
 
 export type ConfirmDestructivePresenter = (

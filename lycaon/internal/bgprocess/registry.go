@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/indexwatch"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -32,24 +33,30 @@ type StreamPublisher func(ctx context.Context, projectID, sessionID string, ev a
 
 // Config tunes per-session background process limits.
 type Config struct {
-	MaxBackground   int
-	MaxAwaited      int
-	MaxRecent       int
-	RingBufferBytes int
+	MaxBackground        int
+	MaxAwaited           int
+	MaxRecent            int
+	RingBufferBytes      int
+	ListenerObserver     ListenerObserver
+	SweepInterval        time.Duration
+	OutputCoalesceWindow time.Duration
 }
 
 func DefaultConfig() Config {
 	return Config{
-		MaxBackground:   DefaultMaxBackground,
-		MaxAwaited:      DefaultMaxAwaited,
-		MaxRecent:       DefaultMaxRecent,
-		RingBufferBytes: DefaultRingBufferBytes,
+		MaxBackground:        DefaultMaxBackground,
+		MaxAwaited:           DefaultMaxAwaited,
+		MaxRecent:            DefaultMaxRecent,
+		RingBufferBytes:      DefaultRingBufferBytes,
+		SweepInterval:        DefaultSweepInterval,
+		OutputCoalesceWindow: DefaultOutputCoalesceWindow,
 	}
 }
 
 // Registry composes session-scoped process services and launches pipelines.
 type Registry struct {
 	jobs            *processTable
+	sweeper         *listenerSweeper
 	ringBufferBytes int
 	Terminal        *Terminal
 	Output          *Output
@@ -58,17 +65,26 @@ type Registry struct {
 
 // processTable serializes admission, process state, and teardown across services.
 type processTable struct {
-	mu            sync.Mutex
-	sessions      map[string]map[string]*Process
-	closed        bool
-	maxBackground int
-	maxAwaited    int
-	maxRecent     int
+	mu               sync.Mutex
+	sessions         map[string]map[string]*Process
+	projectProcs     map[string]map[string]*Process
+	projectRevisions map[string]int64
+	workDirs         map[string]string
+	ports            map[string][]string
+	pids             map[string][]int
+	detachingRoots   map[string][]string
+	deletingProjects map[string]bool
+	deletingSessions map[string]bool
+	closed           bool
+	maxBackground    int
+	maxAwaited       int
+	maxRecent        int
 }
 
 // Terminal owns held PTY interaction and sealed captures.
 type Terminal struct {
 	jobs            *processTable
+	sweeper         *listenerSweeper
 	ringBufferBytes int
 	Output          *Output
 	Lifecycle       *ProcessLifecycle
@@ -77,15 +93,21 @@ type Terminal struct {
 // Output owns capture screening, projections, and observer publication.
 type Output struct {
 	jobs            *processTable
+	sweeper         *listenerSweeper
 	ringBufferBytes int
 	publish         StreamPublisher
+	publishProject  ProjectBackgroundPublisher
 	complete        CompletionPublisher
 	refused         RefusalPublisher
 	projector       *captureprojection.Projector
 }
 
 // ProcessLifecycle owns settlement, termination, and resource release.
-type ProcessLifecycle struct{ jobs *processTable }
+type ProcessLifecycle struct {
+	jobs    *processTable
+	sweeper *listenerSweeper
+	output  *Output
+}
 
 var ErrRegistryClosed = errors.New("background registry closed")
 
@@ -103,11 +125,40 @@ func NewRegistry(cfg Config, hooks Hooks) *Registry {
 	if cfg.MaxRecent <= 0 {
 		cfg.MaxRecent = DefaultMaxRecent
 	}
-	jobs := &processTable{sessions: make(map[string]map[string]*Process), maxBackground: cfg.MaxBackground, maxAwaited: cfg.MaxAwaited, maxRecent: cfg.MaxRecent}
-	output := &Output{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, publish: hooks.Publish, complete: hooks.Complete, refused: hooks.Refused}
-	lifecycle := &ProcessLifecycle{jobs: jobs}
-	terminal := &Terminal{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, Output: output, Lifecycle: lifecycle}
-	return &Registry{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, Terminal: terminal, Output: output, Lifecycle: lifecycle}
+	jobs := &processTable{
+		sessions:         make(map[string]map[string]*Process),
+		projectProcs:     make(map[string]map[string]*Process),
+		projectRevisions: make(map[string]int64),
+		workDirs:         make(map[string]string),
+		ports:            make(map[string][]string),
+		pids:             make(map[string][]int),
+		detachingRoots:   make(map[string][]string),
+		deletingProjects: make(map[string]bool),
+		deletingSessions: make(map[string]bool),
+		maxBackground:    cfg.MaxBackground,
+		maxAwaited:       cfg.MaxAwaited,
+		maxRecent:        cfg.MaxRecent,
+	}
+	sweeper := newListenerSweeper(jobs, cfg, hooks.PublishProject)
+	output := &Output{
+		jobs:            jobs,
+		sweeper:         sweeper,
+		ringBufferBytes: cfg.RingBufferBytes,
+		publish:         hooks.Publish,
+		publishProject:  hooks.PublishProject,
+		complete:        hooks.Complete,
+		refused:         hooks.Refused,
+	}
+	lifecycle := &ProcessLifecycle{jobs: jobs, sweeper: sweeper, output: output}
+	terminal := &Terminal{jobs: jobs, sweeper: sweeper, ringBufferBytes: cfg.RingBufferBytes, Output: output, Lifecycle: lifecycle}
+	return &Registry{
+		jobs:            jobs,
+		sweeper:         sweeper,
+		ringBufferBytes: cfg.RingBufferBytes,
+		Terminal:        terminal,
+		Output:          output,
+		Lifecycle:       lifecycle,
+	}
 }
 
 // SetCaptureProjector installs the process-output projection.
@@ -147,10 +198,15 @@ func (r *processTable) remove(sessionID, handle string) {
 		return
 	}
 	if proc := procs[handle]; proc != nil {
+		proc.discarded = true
 		proc.indexWatch.Release()
 		proc.indexWatch = indexwatch.Snapshot{}
+		r.unindexProjectProcessLocked(proc)
 	}
 	delete(procs, handle)
+	delete(r.workDirs, handle)
+	delete(r.ports, handle)
+	delete(r.pids, handle)
 	if len(procs) == 0 {
 		delete(r.sessions, sessionID)
 	}
@@ -190,12 +246,17 @@ func (r *processTable) pruneCompletedLocked(sessionID string) {
 	}
 	type completedJob struct {
 		handle     string
+		projectID  string
 		finishedAt time.Time
 	}
 	var completed []completedJob
 	for handle, proc := range procs {
 		if !proc.running && proc.hasExit {
-			completed = append(completed, completedJob{handle: handle, finishedAt: proc.finishedAt})
+			completed = append(completed, completedJob{
+				handle:     handle,
+				projectID:  proc.ProjectID,
+				finishedAt: proc.finishedAt,
+			})
 		}
 	}
 	if len(completed) <= r.maxRecent {
@@ -206,7 +267,57 @@ func (r *processTable) pruneCompletedLocked(sessionID string) {
 	})
 	for _, job := range completed[:len(completed)-r.maxRecent] {
 		delete(procs, job.handle)
+		r.cleanupHandleAuxLocked(sessionID, job.projectID, job.handle)
 	}
+}
+
+// ProcessesUnderRoot returns live background jobs in projectID or sessionIDs whose canonical working directory is within rootPath.
+func (r *Registry) ProcessesUnderRoot(projectID string, sessionIDs map[string]struct{}, rootPath string) []RootProcess {
+	if r == nil || r.jobs == nil {
+		return nil
+	}
+	projectID = trim(projectID)
+	rootPath = trim(rootPath)
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	var out []RootProcess
+	for sessionID, procs := range r.jobs.sessions {
+		for handle, proc := range procs {
+			if proc == nil || !proc.running || proc.silent {
+				continue
+			}
+			if !matchesProjectOrSessions(proc, sessionID, projectID, sessionIDs) {
+				continue
+			}
+			workDir := r.jobs.workDirs[handle]
+			if rootPath != "" && !projectroot.PathWithinRoot(rootPath, workDir) {
+				continue
+			}
+			out = append(out, RootProcess{
+				Handle:    handle,
+				SessionID: sessionID,
+				Cwd:       workDir,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SessionID == out[j].SessionID {
+			return out[i].Handle < out[j].Handle
+		}
+		return out[i].SessionID < out[j].SessionID
+	})
+	return out
+}
+
+func matchesProjectOrSessions(proc *Process, sessionID, projectID string, sessionIDs map[string]struct{}) bool {
+	if projectID != "" && proc.ProjectID == projectID {
+		return true
+	}
+	if len(sessionIDs) > 0 {
+		_, ok := sessionIDs[sessionID]
+		return ok
+	}
+	return projectID == ""
 }
 
 func (r *processTable) countRunningAwaitedLocked(sessionID string) int {

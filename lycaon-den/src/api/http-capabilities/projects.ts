@@ -23,6 +23,8 @@ import type {
   Project,
   ProjectListResponse,
   ArtifactListResponse,
+  ProjectBackgroundProcessListResponse,
+  BackgroundProcessStopResult,
 } from "../types.ts";
 
 export interface ProjectsClient {
@@ -78,6 +80,8 @@ export interface ProjectsClient {
     req?: LaunchBlueprintRequest,
   ): Promise<LaunchBlueprintResponse>;
   getProjectCostReport(projectId: string, query?: { limit?: number; cursor?: string; search?: string; sort?: "cost" | "tokens" | "activity" | "id" }): Promise<ProjectCostReport>;
+  listProjectBackgroundProcesses(projectId: string): Promise<ProjectBackgroundProcessListResponse>;
+  stopProjectBackgroundProcess(projectId: string, processId: string): Promise<BackgroundProcessStopResult>;
 }
 
 export function createProjectsClient(j: JsonRequester): ProjectsClient {
@@ -161,5 +165,12 @@ export function createProjectsClient(j: JsonRequester): ProjectsClient {
       if (opts?.sessionId) query.set("session_id", opts.sessionId);
       return j(`/v1/projects/${projectId}/agent-context?${query.toString()}`);
     },
+    listProjectBackgroundProcesses: (projectId) =>
+      j(`/v1/projects/${encodeURIComponent(projectId)}/background`),
+    stopProjectBackgroundProcess: (projectId, processId) =>
+      j(
+        `/v1/projects/${encodeURIComponent(projectId)}/background/${encodeURIComponent(processId)}/stop`,
+        { method: "POST" },
+      ),
   };
 }

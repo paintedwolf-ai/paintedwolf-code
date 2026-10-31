@@ -241,6 +241,7 @@ var factDecls = []factDecl{
 	{"syntax_check_overridden", oarcore.TypeBool, FactTierHost, ""},
 	{"source_analysis_unavailable", oarcore.TypeBool, FactTierHost, ""},
 	{"http_request_web_page", oarcore.TypeBool, FactTierHost, ""},
+	{"http_request_loopback_other_session", oarcore.TypeBool, FactTierHost, ""},
 }
 
 // observationFn is one parameterized observation function.

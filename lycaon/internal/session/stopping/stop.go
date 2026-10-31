@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -194,6 +195,12 @@ const stoppedTurnPoll = 10 * time.Millisecond
 func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember, preserveQueueSessionID string) error {
 	var errs []error
 	defer m.AcquireStoppedTurn(ctx, sess.ID)()
+	isWorkerChild := strings.TrimSpace(sess.ParentSessionID) != ""
+	fallback := bgprocess.TerminationStoppedByUser
+	if isWorkerChild {
+		fallback = bgprocess.TerminationWorkerCancelled
+	}
+	ctx = bgprocess.WithTerminationReason(ctx, fallback)
 	preserveQueue := sess.ID == preserveQueueSessionID
 	if m.store != nil {
 		if preserveQueue {
@@ -204,7 +211,11 @@ func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember,
 				m.store.InterruptPromptSubmissionsBySession(ctx, sess.ID))
 		}
 	}
-	errs = appendStopError(errs, "release runtime", sess.ID, m.chats.ReleaseRuntime(ctx, sess.ID))
+	if isWorkerChild {
+		errs = appendStopError(errs, "dispose runtime", sess.ID, m.chats.DisposeRuntime(ctx, sess.ID))
+	} else {
+		errs = appendStopError(errs, "release runtime", sess.ID, m.chats.ReleaseRuntime(ctx, sess.ID))
+	}
 	if m.queue != nil && !preserveQueue {
 		draft := m.queue.CancelAll(sess.ID)
 		m.drafts.Publish(ctx, sess.ID, draft.Revision)

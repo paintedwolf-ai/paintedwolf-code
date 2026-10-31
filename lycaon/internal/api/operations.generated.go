@@ -202,6 +202,7 @@ var (
 	operationListMcpProviders                   = generatedOperation{ID: "listMcpProviders", Method: "GET", Path: "/v1/mcp/providers"}
 	operationListMcpRecipes                     = generatedOperation{ID: "listMcpRecipes", Method: "GET", Path: "/v1/mcp/recipes"}
 	operationListProjectArtifacts               = generatedOperation{ID: "listProjectArtifacts", Method: "GET", Path: "/v1/projects/{id}/artifacts", Params: []string{"id"}}
+	operationListProjectBackgroundProcesses     = generatedOperation{ID: "listProjectBackgroundProcesses", Method: "GET", Path: "/v1/projects/{id}/background", Params: []string{"id"}}
 	operationListProjectFindingIgnores          = generatedOperation{ID: "listProjectFindingIgnores", Method: "GET", Path: "/v1/projects/{id}/findings/ignores", Params: []string{"id"}}
 	operationListProjectManagedSecretUses       = generatedOperation{ID: "listProjectManagedSecretUses", Method: "GET", Path: "/v1/projects/{id}/secrets/{secret_id}/uses", Params: []string{"id", "secret_id"}}
 	operationListProjectManagedSecrets          = generatedOperation{ID: "listProjectManagedSecrets", Method: "GET", Path: "/v1/projects/{id}/secrets", Params: []string{"id"}}
@@ -307,6 +308,7 @@ var (
 	operationStartWorkflowRun                   = generatedOperation{ID: "startWorkflowRun", Method: "POST", Path: "/v1/sessions/{id}/workflow-runs", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStashGit                           = generatedOperation{ID: "stashGit", Method: "POST", Path: "/v1/projects/{id}/git/repos/{repo_id}/stash", Params: []string{"id", "repo_id"}, RecordsPersonAction: true}
 	operationStopBackgroundProcess              = generatedOperation{ID: "stopBackgroundProcess", Method: "POST", Path: "/v1/sessions/{id}/background/{process_id}/stop", Params: []string{"id", "process_id"}, RecordsPersonAction: true}
+	operationStopProjectBackgroundProcess       = generatedOperation{ID: "stopProjectBackgroundProcess", Method: "POST", Path: "/v1/projects/{id}/background/{process_id}/stop", Params: []string{"id", "process_id"}, RecordsPersonAction: true}
 	operationStreamSession                      = generatedOperation{ID: "streamSession", Method: "GET", Path: "/v1/sessions/{id}/stream", Params: []string{"id"}}
 	operationSubmitEditorDocumentUpdate         = generatedOperation{ID: "submitEditorDocumentUpdate", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/updates", Params: []string{"id", "document_id"}}
 	operationSubscribeEvents                    = generatedOperation{ID: "subscribeEvents", Method: "GET", Path: "/v1/events"}
@@ -537,6 +539,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationListMcpProviders,
 	operationListMcpRecipes,
 	operationListProjectArtifacts,
+	operationListProjectBackgroundProcesses,
 	operationListProjectFindingIgnores,
 	operationListProjectManagedSecretUses,
 	operationListProjectManagedSecrets,
@@ -642,6 +645,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationStartWorkflowRun,
 	operationStashGit,
 	operationStopBackgroundProcess,
+	operationStopProjectBackgroundProcess,
 	operationStreamSession,
 	operationSubmitEditorDocumentUpdate,
 	operationSubscribeEvents,

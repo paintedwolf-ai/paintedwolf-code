@@ -43,6 +43,7 @@ export type StructuredToolSection =
       kind: "background_process";
       handle: string;
       running: boolean;
+      terminationReason?: import("../../api/types.ts").BackgroundProcessTerminationReason;
     };
 
 export type StructuredToolPresentation = {

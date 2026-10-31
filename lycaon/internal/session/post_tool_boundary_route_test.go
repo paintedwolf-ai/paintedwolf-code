@@ -203,7 +203,7 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 func TestSilentRefusalGuidanceUsesObservedTermination(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)
 	statuses := []struct{ reason, want string }{
-		{"timed_out", "The command reached its host deadline"}, {"stopped", "The command was stopped"},
+		{"timed_out", "The command reached its host deadline"}, {"stopped_by_user", "The command was stopped"},
 		{"exited", "The command exited unsuccessfully"}, {"", "The invocation did not finish successfully"},
 		{"future_reason", "The invocation did not finish successfully"},
 	}

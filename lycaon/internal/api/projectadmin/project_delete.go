@@ -41,12 +41,19 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool, repo
 		return err
 	}
 	if dependents.HasAny() && !force {
-		return &projectremoval.Failure{Code: wire.ApiErrorCodeRootBusy, Details: dependents.Details(), Message: "The project has in-flight dependents.", Documents: len(dependents.Documents), Sessions: len(dependents.Sessions), Workers: len(dependents.Workers), Overlays: len(dependents.Overlays)}
+		var bgProcs []wire.ProjectBackgroundProcess
+		if s.Sessions != nil && s.Sessions.ProjectControl != nil {
+			bgProcs, _ = s.Sessions.ProjectControl.RunningProjectBackground(ctx, id)
+		}
+		return &projectremoval.Failure{Code: wire.ApiErrorCodeRootBusy, Details: dependents.Details(), Message: "The project has in-flight dependents.", Documents: len(dependents.Documents), Sessions: len(dependents.Sessions), Workers: len(dependents.Workers), Overlays: len(dependents.Overlays), BackgroundProcesses: bgProcs}
 	}
 	if force && dependents.HasAny() {
 		if err := s.Sessions.ProjectControl.ForceCancelForProjectDelete(ctx, id, dependents); err != nil {
 			return err
 		}
+	}
+	if err := s.Sessions.ProjectControl.StopProjectBackground(ctx, id); err != nil {
+		return err
 	}
 	if force {
 		if err := waitForDrain(ctx); err != nil {

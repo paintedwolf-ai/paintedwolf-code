@@ -31,6 +31,10 @@ import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { exportSessionTranscript } from "../../settings/storage/data-backup-actions.ts";
 import { useNow } from "../../time/now.ts";
 import { formatRelativeTime } from "../../time/time-copy.ts";
+import {
+  backgroundRunningLabel,
+  sessionRunningBackgroundCount,
+} from "../../project/project-background-store.ts";
 import { sessionLifecycleMenuItems } from "../../session/session-lifecycle-menu.ts";
 import { requestFirstTimeTip } from "../../first-time-tips/first-time-tips-service.ts";
 import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
@@ -276,6 +280,8 @@ export function FocusedSessionList(props: Props) {
   const attentionFor = (row: SidebarChatRow) => props.attention?.get(row.sessionId);
   const noticeCountFor = (row: SidebarChatRow) =>
     props.noticeIndex ? countForSession(props.noticeIndex(), row.sessionId) : 0;
+  const backgroundRunningFor = (row: SidebarChatRow) =>
+    sessionRunningBackgroundCount(row.projectId, row.sessionId, row.backgroundRunning);
 
   const renderRow = (row: () => SidebarChatRow, index: () => number, rowGroup: Group) => (
     <li
@@ -362,6 +368,15 @@ export function FocusedSessionList(props: Props) {
             onPointerDown={(e) => startRowGesture(row(), rowGroup, e)}
           >
             <span class="focused-session-list__title">{row().title}</span>
+            <Show when={backgroundRunningFor(row()) > 0}>
+              <span
+                class="focused-session-list__background-running"
+                role="img"
+                aria-label={backgroundRunningLabel(backgroundRunningFor(row()))}
+                data-tip={backgroundRunningLabel(backgroundRunningFor(row()))}
+                data-testid="session-background-running"
+              />
+            </Show>
             <Show when={isSelected(row())}>
               <span class="sr-only">
                 {isActive(row())

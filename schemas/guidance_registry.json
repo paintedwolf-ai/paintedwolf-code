@@ -1222,6 +1222,12 @@
       "emit": "guard:http_request",
       "summary": "The HTTP destination was not authorized."
     },
+    "HTTP_REQUEST_LOOPBACK_OTHER_SESSION": {
+      "branch_instruction": "Do not stop, signal, or reconfigure the other listener yourself",
+      "category": "advisory",
+      "emit": "guard:http_request",
+      "summary": "http_request connected to {{ paintedwolf.destination }} on port {{ paintedwolf.port }}, where another listener is active."
+    },
     "HTTP_REQUEST_RESPONSE_PATH_DENIED": {
       "branch_instruction": "Recover evidence without duplicating the remote operation",
       "category": "recoverable",

@@ -80,11 +80,21 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	}
 	proc.Stages = hostcmd.StagePlaceholders(req.Stages)
 
+	workDir := projectDir
+	if c := trim(spec.Cwd); filepath.IsAbs(c) {
+		workDir = filepath.Clean(c)
+	}
+
 	r.jobs.mu.Lock()
 	if r.jobs.closed {
 		r.jobs.mu.Unlock()
 		cancel()
 		return "", ErrRegistryClosed
+	}
+	if _, ok := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, workDir); !ok {
+		r.jobs.mu.Unlock()
+		cancel()
+		return "", ErrTeardownInProgress
 	}
 	r.jobs.pruneCompletedLocked(sessionID)
 	duplicates, awaited := r.jobs.runningConflictsLocked(sessionID, runKey)
@@ -116,6 +126,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		r.jobs.sessions[sessionID] = make(map[string]*Process)
 	}
 	r.jobs.sessions[sessionID][handle] = proc
+	r.jobs.workDirs[handle] = workDir
 	r.jobs.mu.Unlock()
 
 	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.Output.publishStream}
@@ -131,6 +142,9 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		PathExtra:      req.PathExtra,
 		Stdin:          req.Stdin,
 		Redirect:       req.Redirect,
+		Started: func(pid int) {
+			r.jobs.recordStagePID(handle, pid)
+		},
 	}, stdout, stderr)
 	if err != nil {
 		cancel()
@@ -139,10 +153,22 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	}
 	r.jobs.mu.Lock()
 	proc.async = async
+	if reason, ok := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, workDir); !ok && !proc.stopped {
+		proc.stopped = true
+		proc.reason = reason
+	}
 	stopped := proc.stopped
+	startEv, emitStart := r.jobs.indexProjectProcessLocked(proc)
+	publishProject := r.Output.publishProject
 	r.jobs.mu.Unlock()
 	if stopped {
 		async.Kill()
+	}
+	if emitStart && publishProject != nil {
+		publishProject(baseCtx, startEv)
+	}
+	if !proc.silent && !stopped {
+		r.sweeper.onJobStarted()
 	}
 
 	r.Output.watchRefusals(baseCtx, proc)
@@ -186,16 +212,19 @@ func (r *Registry) waitProcess(ctx context.Context, proc *Process, stages []exec
 	proc.exitCode = exitCode
 	proc.failure = failure
 	proc.finishedAt = finishedAt
-	proc.reason = TerminationExited
 	if res != nil && res.TimedOut {
 		proc.reason = TerminationTimedOut
-	} else if proc.stopped {
-		proc.reason = TerminationStopped
+	} else if !proc.stopped || proc.reason == "" {
+		proc.reason = TerminationExited
 	}
 	r.jobs.pruneCompletedLocked(proc.SessionID)
+	delete(r.jobs.ports, proc.Handle)
+	delete(r.jobs.pids, proc.Handle)
+	r.jobs.pruneProjectCompletedLocked(proc.ProjectID)
 	r.jobs.mu.Unlock()
-	close(proc.done)
 	r.Output.publishTerminal(ctx, proc)
+	r.sweeper.onJobEnded()
+	close(proc.done)
 }
 
 var _ io.Writer = streamWriter{}
