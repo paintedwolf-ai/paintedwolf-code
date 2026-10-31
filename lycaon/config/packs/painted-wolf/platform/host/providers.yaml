@@ -533,6 +533,16 @@ providers:
     http_retry_profile: hosted-patient
     prompt_cache_profile: fireworks
 
+  - id: deepinfra
+    reasoning_wire: reasoning_content
+    kind: deepinfra
+    label: DeepInfra
+    base_url: https://api.deepinfra.com/v1/openai
+    api_key_env: DEEPINFRA_API_KEY
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: implicit
+
   - id: bedrock
     kind: bedrock
     label: Amazon Bedrock

@@ -37,6 +37,7 @@ func TestShippedReasoningWireDefaults(t *testing.T) {
 	testutil.FailErr(t, "load provider catalog", err)
 	wants := map[string]providerprofile.ReasoningWireStyle{
 		"cloudflare-workers-ai": providerprofile.ReasoningWireContent,
+		"deepinfra":             providerprofile.ReasoningWireContent,
 		"lmstudio":              providerprofile.ReasoningWireContent,
 		"omlx":                  providerprofile.ReasoningWireContent,
 		"openai-compatible":     providerprofile.ReasoningWireContent,
@@ -56,7 +57,7 @@ func TestShippedReasoningWireDefaults(t *testing.T) {
 }
 
 func TestReasoningWireConfiguresCompatibleProviderKinds(t *testing.T) {
-	for _, kind := range []string{"custom", "openai-compatible", "lmstudio", "omlx", "openrouter", "cloudflare-workers-ai"} {
+	for _, kind := range []string{"custom", "openai-compatible", "lmstudio", "omlx", "openrouter", "cloudflare-workers-ai", "deepinfra"} {
 		provider, err := newProviderForEntry(t.Context(), CatalogEntry{
 			ID: "instance", Kind: kind, BaseURL: "https://example.test/v1", ReasoningWire: providerprofile.ReasoningWireContent,
 		}, "fixture", providerretry.ProviderHTTPRetry{}, nil, nil)

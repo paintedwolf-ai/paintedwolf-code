@@ -225,6 +225,9 @@ func decodeDiscoveryOpenAIDataRecords(r io.Reader) ([]discoveryCatalogRecord, er
 		Data []struct {
 			ID            string `json:"id"`
 			ContextLength int    `json:"context_length"`
+			Metadata      struct {
+				ContextLength int `json:"context_length"`
+			} `json:"metadata"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(r).Decode(&listed); err != nil {
@@ -232,9 +235,13 @@ func decodeDiscoveryOpenAIDataRecords(r io.Reader) ([]discoveryCatalogRecord, er
 	}
 	out := make([]discoveryCatalogRecord, 0, len(listed.Data))
 	for _, item := range listed.Data {
+		ctxLen := item.ContextLength
+		if ctxLen <= 0 {
+			ctxLen = item.Metadata.ContextLength
+		}
 		out = append(out, discoveryCatalogRecord{
 			ID:            strings.TrimSpace(item.ID),
-			ContextLength: item.ContextLength,
+			ContextLength: ctxLen,
 		})
 	}
 	return out, nil

@@ -26,6 +26,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 	}{
 		{"ollama native", "ollama", "*ollama.Provider", providerprofile.DiscoveryOllama, modelinfo.ThinkStyleBooleanThink},
 		{"fireworks discovery", "fireworks", "*openaicompat.Provider", providerprofile.DiscoveryFireworks, modelinfo.ThinkStyleEffortLevels},
+		{"deepinfra discovery", "deepinfra", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 		{"together profile discovery", "together", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleReasoningToggle},
 		{"gemini native discovery", "gemini", "*openaicompat.Provider", providerprofile.DiscoveryGemini, modelinfo.ThinkStyleEffortLevels},
 		{"openrouter profile discovery", "openrouter", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleReasoningObject},
@@ -78,6 +79,14 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 				}
 				if !profile.DiscoveryProfile.RequirePositiveTokenPrice {
 					t.Fatal("unpriced models should be uncallable")
+				}
+			}
+			if tc.kind == "deepinfra" {
+				if profile.ReasoningWire != providerprofile.ReasoningWireContent {
+					t.Fatalf("deepinfra reasoning_wire = %q, want %q", profile.ReasoningWire, providerprofile.ReasoningWireContent)
+				}
+				if profile.ReasoningEffortOff != providerprofile.OpenAIReasoningEffortOff {
+					t.Fatalf("deepinfra reasoning_effort_off = %q, want %q", profile.ReasoningEffortOff, providerprofile.OpenAIReasoningEffortOff)
 				}
 			}
 		})

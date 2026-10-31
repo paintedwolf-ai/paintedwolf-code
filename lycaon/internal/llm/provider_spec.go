@@ -53,6 +53,7 @@ var providerKindSpecs = map[string]ProviderKindSpec{
 	"vertex":                {Kind: "vertex", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"vertex-express":        {Kind: "vertex-express", Protocol: ProtocolGeminiNative, ChatBaseURL: identityProviderBase},
 	"fireworks":             {Kind: "fireworks", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
+	"deepinfra":             {Kind: "deepinfra", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"together":              {Kind: "together", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"gemini":                {Kind: "gemini", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"openrouter":            {Kind: "openrouter", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},

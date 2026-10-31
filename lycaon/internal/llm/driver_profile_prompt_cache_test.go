@@ -38,6 +38,7 @@ func TestShippedPromptCachePolicyPerKind(t *testing.T) {
 		{"openai", providerprofile.PromptCacheAutomaticPrefix, 10 * time.Minute},
 		{"azure", providerprofile.PromptCacheAutomaticPrefix, 10 * time.Minute},
 		{"fireworks", providerprofile.PromptCacheAutomaticPrefix, 6 * time.Minute},
+		{"deepinfra", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"openrouter", providerprofile.PromptCacheAutomaticPrefix, 10 * time.Minute},
 		{"gemini", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"together", providerprofile.PromptCacheAutomaticPrefix, 0},

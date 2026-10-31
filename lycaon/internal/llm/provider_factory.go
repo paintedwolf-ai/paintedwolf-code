@@ -62,6 +62,10 @@ var driverFactories = catalogruntime.NewFactorySet(
 			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
 				WithProfile(providerprofile.Fireworks()), nil
 		},
+		"deepinfra": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+				WithProfile(providerprofile.DeepInfra()), nil
+		},
 		"together": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
 			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
 				WithProfile(providerprofile.Together()), nil

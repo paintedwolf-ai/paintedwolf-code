@@ -1,10 +1,33 @@
 package discovery
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 )
+
+func TestDecodeDiscoveryOpenAIDataRecordsMetadataContextLength(t *testing.T) {
+	records, err := decodeDiscoveryOpenAIDataRecords(strings.NewReader(`{
+		"object": "list",
+		"data": [
+			{"id": "deepseek-ai/DeepSeek-V3.2", "metadata": {"context_length": 163840}},
+			{"id": "top-level-win", "context_length": 65536, "metadata": {"context_length": 32768}}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("decodeDiscoveryOpenAIDataRecords: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("len(records) = %d, want 2", len(records))
+	}
+	if records[0].ID != "deepseek-ai/DeepSeek-V3.2" || records[0].ContextLength != 163840 {
+		t.Fatalf("records[0] = %+v", records[0])
+	}
+	if records[1].ID != "top-level-win" || records[1].ContextLength != 65536 {
+		t.Fatalf("records[1] = %+v", records[1])
+	}
+}
 
 func TestOpenRouterRequiresPositiveTextOutputMetadata(t *testing.T) {
 	profile := OpenRouterProfile()

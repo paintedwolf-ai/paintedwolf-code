@@ -120,7 +120,7 @@ func TestRefreshIgnoresCostTrackingSetting(t *testing.T) {
 func TestFixtureProviderKeysPresent(t *testing.T) {
 	doc := loadFixtureDoc(t)
 	want := []string{
-		"openai", "anthropic", "togetherai", "openrouter", "fireworks-ai",
+		"openai", "anthropic", "togetherai", "openrouter", "fireworks-ai", "deepinfra",
 		"amazon-bedrock", "google-vertex", "google", "azure", "cloudflare-workers-ai",
 	}
 	for _, key := range want {
