@@ -302,7 +302,7 @@ runs:
       run: ./task nix:check -- --prepare
 
     - name: Set up reference userland images
-      if: inputs.userlands == 'true'
+      if: inputs.lookup-only != 'true' && (inputs.userlands == 'true')
       uses: ./.github/actions/setup-reference-userlands
 
     - name: Save pinned frontend packages
