@@ -13,7 +13,7 @@ func TestComposedWorkflowStartLinksPlanDraft(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	run, err := mgr.Starts.StartHuman(context.Background(), sessionID, api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "mgr.StartHuman failed", err)
 	if run.BlueprintPath == "" {

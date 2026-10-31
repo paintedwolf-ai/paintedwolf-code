@@ -20,7 +20,7 @@ func (rejectingSessionAdmission) WithSessionTreeAdmission(context.Context, strin
 func TestStopSessionCancelsCatalogLineageAndRestoresAmbientRoot(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "start catalog workflow", err)
 
 	testutil.FailErr(t, "stop session workflows", mgr.Controls.StopSession(ctx, "sess-1", "user stopped"))
@@ -53,7 +53,7 @@ func TestStopSessionLeavesAmbientRootRunning(t *testing.T) {
 func TestWorkflowStartRejectsDuringSessionStopButStopRepairRestoresAmbient(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "start catalog workflow", err)
 	mgr.Starts.Barrier = rejectingSessionAdmission{}
 
