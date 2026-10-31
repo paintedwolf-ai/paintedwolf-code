@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -38,22 +39,20 @@ type fileMutation struct {
 	indexChanged bool
 }
 
-func readBoundedGitFile(path string, maxBytes int64) ([]byte, error) {
-	info, err := os.Stat(path)
+func readBoundedGitFile(root, rel string, maxBytes int64) ([]byte, error) {
+	file, err := fseffect.OpenRead(fseffect.Location{Root: root, Rel: rel})
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Size() > maxBytes {
-		return nil, fmt.Errorf("git metadata file exceeds size bound")
-	}
-	return os.ReadFile(path)
+	defer func() { _ = file.Close() }()
+	return io.ReadAll(io.LimitReader(file, maxBytes))
 }
 
 func currentIndexHash(repo gitrepo.Repo) string {
 	if shared, err := filepath.Glob(filepath.Join(repo.GitDir, "sharedindex.*")); err != nil || len(shared) > 0 {
 		return ""
 	}
-	raw, err := readBoundedGitFile(filepath.Join(repo.GitDir, "index"), 1<<20)
+	raw, err := readBoundedGitFile(repo.GitDir, "index", 1<<20)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "absent"

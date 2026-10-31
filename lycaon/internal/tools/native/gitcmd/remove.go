@@ -250,7 +250,7 @@ func (r *fileMutation) resolveHeadCommit() (string, error) {
 }
 
 func (r *fileMutation) headMetadataSnapshot() string {
-	headRaw, err := readBoundedGitFile(filepath.Join(r.repo.GitDir, "HEAD"), 64<<10)
+	headRaw, err := readBoundedGitFile(r.repo.GitDir, "HEAD", 64<<10)
 	if err != nil {
 		return ""
 	}
@@ -259,14 +259,14 @@ func (r *fileMutation) headMetadataSnapshot() string {
 	b.WriteByte(0)
 	if ref, ok := strings.CutPrefix(strings.TrimSpace(string(headRaw)), "ref:"); ok {
 		ref = strings.TrimSpace(ref)
-		if loose, err := readBoundedGitFile(filepath.Join(r.repo.CommonDir, filepath.FromSlash(ref)), 64<<10); err == nil {
+		if loose, err := readBoundedGitFile(r.repo.CommonDir, filepath.FromSlash(ref), 64<<10); err == nil {
 			b.Write(loose)
 		} else if !os.IsNotExist(err) {
 			return ""
 		}
 	}
 	b.WriteByte(0)
-	if packed, err := readBoundedGitFile(filepath.Join(r.repo.CommonDir, "packed-refs"), 1<<20); err == nil {
+	if packed, err := readBoundedGitFile(r.repo.CommonDir, "packed-refs", 1<<20); err == nil {
 		b.Write(packed)
 	} else if !os.IsNotExist(err) {
 		return ""

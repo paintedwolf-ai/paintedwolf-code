@@ -11,6 +11,7 @@ import (
 )
 
 func TestRestorePreconditionUsesTypedIdentity(t *testing.T) {
+	t.Parallel()
 	result, err := settleRestoreError(&git.OperationError{Reason: "repository_changed_during_review", Paths: []string{"file.txt"}}, io.Discard)
 	reject := toolrejection.AsToolReject(err)
 	if result.Terminal != toolcontract.ProducerRefused || reject == nil || reject.Code != "GIT_OPERATION_PRECONDITION" || reject.Data["reason"] != "repository_changed_during_review" {

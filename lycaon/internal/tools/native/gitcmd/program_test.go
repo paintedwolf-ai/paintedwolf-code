@@ -39,10 +39,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// TestProgramEntryRunsGitReadFormsThroughTheUmbrella: git subcommands,
-// including ones behind global -C, reach the Git owner from a program, run
-// as their catalog command's execution, and compose with native stages.
 func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
+	t.Parallel()
 	bin, err := gitengine.BinaryPath()
 	testutil.FailErr(t, "bundled git", err)
 	f := newProgramFixture(t)
@@ -98,7 +96,6 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 		t.Fatalf("host-reserved env ran: %s %v", reservedEnv, err)
 	}
 
-	t.Setenv("PATH", "")
 	refused, err := f.call(t, t.Context(), "git branch created")
 	if !strings.Contains(refused+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
 		t.Fatalf("write spelling ran: %s %v", refused, err)
@@ -110,6 +107,7 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 }
 
 func TestProgramEntryInitializesRepositoryAndCommits(t *testing.T) {
+	t.Parallel()
 	f := newProgramFixture(t)
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(f.dir, "a"), []byte("a\n"), 0o644))
 	owners, err := gitcmd.NewOwners(git.NewManager())
@@ -141,9 +139,8 @@ func TestProgramEntryInitializesRepositoryAndCommits(t *testing.T) {
 	}
 }
 
-// Global options before the subcommand, including identity and initial
-// branch overrides, run natively.
 func TestProgramEntryRunsGlobalConfigOverridesNatively(t *testing.T) {
+	t.Parallel()
 	f := newProgramFixture(t)
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(f.dir, "README.txt"), []byte("new\n"), 0o644))
 	testutil.FailErr(t, "fresh", os.Mkdir(filepath.Join(f.dir, "fresh"), 0o755))
@@ -202,8 +199,6 @@ type programFixture struct {
 	calls    int
 }
 
-// newProgramFixture composes the real registry, executor, SQL receipts and
-// supervisor around the command entry, as command's own entry tests do.
 func newProgramFixture(t *testing.T) *programFixture {
 	t.Helper()
 	dir, err := filepath.EvalSymlinks(t.TempDir())
@@ -259,11 +254,8 @@ func (f *programFixture) executions(t *testing.T) map[string]string {
 	return out
 }
 
-// TestProgramEntryAppliesHeredocPatchesThroughBothCommands: a model's
-// command call carrying heredoc patches reaches patch and git apply through
-// the command entry, publishes through the staged publication, and records
-// completed child receipts.
 func TestProgramEntryAppliesHeredocPatchesThroughBothCommands(t *testing.T) {
+	t.Parallel()
 	bin, err := gitengine.BinaryPath()
 	testutil.FailErr(t, "bundled git", err)
 	f := newProgramFixture(t)
@@ -346,9 +338,8 @@ func (f *programFixture) bindMutationOwners(t *testing.T) {
 	}
 }
 
-// TestGitGoldenProgramsRunThroughTheCommandEntry executes the catalog's Git
-// golden programs from their setup files and compares stdout and status.
 func TestGitGoldenProgramsRunThroughTheCommandEntry(t *testing.T) {
+	t.Parallel()
 	catalog, err := toolcontract.LanguageV1()
 	testutil.FailErr(t, "catalog", err)
 	var contract struct {
@@ -370,6 +361,7 @@ func TestGitGoldenProgramsRunThroughTheCommandEntry(t *testing.T) {
 		}
 		ran++
 		t.Run(golden.ID, func(t *testing.T) {
+			t.Parallel()
 			f := newProgramFixture(t)
 			for name, raw := range golden.Setup.Files {
 				var content string
@@ -400,10 +392,8 @@ func nestedCommand(dispatch commandprogram.Dispatch) commandprogram.NestedComman
 	return nested
 }
 
-// TestProgramEntryBisectRunDispatchesItsCheck: git bisect run hands its check
-// to the program's own dispatch, here the native git grep, and names the
-// first bad commit through the command entry.
 func TestProgramEntryBisectRunDispatchesItsCheck(t *testing.T) {
+	t.Parallel()
 	bin, err := gitengine.BinaryPath()
 	testutil.FailErr(t, "bundled git", err)
 	f := newProgramFixture(t)

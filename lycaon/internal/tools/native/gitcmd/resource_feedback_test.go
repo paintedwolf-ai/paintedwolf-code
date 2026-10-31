@@ -28,6 +28,7 @@ func (b *blobFeedbackBackend) BlobSize(context.Context, string, string) (int64, 
 }
 
 func TestGitEntryContentReportsOnlyMeasuredOverflow(t *testing.T) {
+	t.Parallel()
 	refused := errors.New("object metadata refused")
 	for _, tc := range []struct {
 		name    string
@@ -43,6 +44,7 @@ func TestGitEntryContentReportsOnlyMeasuredOverflow(t *testing.T) {
 		{name: "ordinary content", backend: blobFeedbackBackend{content: []byte("abc"), available: true}, success: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			backend := tc.backend
 			owners, err := NewOwners(&backend)
 			testutil.FailErr(t, "compose measured blob owner", err)
@@ -73,10 +75,11 @@ func TestGitEntryContentReportsOnlyMeasuredOverflow(t *testing.T) {
 }
 
 func TestGitGrepLimitFeedbackCarriesMeasuredBytes(t *testing.T) {
-	h := newHarness(t)
-	h.write("oversized.txt", strings.Repeat("x", 1024))
-	h.git("add", "oversized.txt")
-	h.owners.limitOverride = map[string]int64{"stream_bytes": 128}
+	t.Parallel()
+	base := newHarness(t)
+	base.write("oversized.txt", strings.Repeat("x", 1024))
+	base.git("add", "oversized.txt")
+	base.owners.limitOverride = map[string]int64{"stream_bytes": 128}
 	for _, tc := range []struct {
 		name     string
 		args     []string
@@ -86,6 +89,8 @@ func TestGitGrepLimitFeedbackCarriesMeasuredBytes(t *testing.T) {
 		{"worktree", []string{"git", "grep", "x", "--", "oversized.txt"}, 129},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := base.withT(t)
 			result := h.exec(tc.args...)
 			reject := toolrejection.AsToolReject(result.err)
 			if reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || reject.Data["resource_unit"] != "bytes" || reject.Data["observed"] != tc.observed || reject.Data["maximum"] != int64(128) || result.stdout != "" {

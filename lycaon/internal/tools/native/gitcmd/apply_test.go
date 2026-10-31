@@ -65,7 +65,6 @@ func (h *harness) absent(name string) bool {
 	return os.IsNotExist(err)
 }
 
-// apply runs git apply with stdin.
 func (h *harness) apply(stdin string, words ...string) run {
 	h.t.Helper()
 	h.stdin = stdin
@@ -73,8 +72,7 @@ func (h *harness) apply(stdin string, words ...string) run {
 	return h.exec(append([]string{"git", "apply"}, words...)...)
 }
 
-// sample changes a.txt, creates c.txt, deletes sub/b.txt and makes run.sh
-// executable, all against the committed tree.
+// sample modifies a.txt, creates c.txt, and deletes sub/b.txt against HEAD.
 const sample = `diff --git a/a.txt b/a.txt
 index 4cb29ea..e1c6e7d 100644
 --- a/a.txt
@@ -100,7 +98,6 @@ index 9f5d2bc..0000000
 -bee
 `
 
-// clean puts the work tree and index back at HEAD.
 func (h *harness) clean() {
 	h.t.Helper()
 	h.git("reset", "-q", "--hard")
@@ -108,6 +105,7 @@ func (h *harness) clean() {
 }
 
 func TestApplyReportsMatchBundledGit(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.write("rename-src/long/path/name.txt", strings.Repeat("line\n", 40))
 	h.write("tool.sh", "#!/bin/sh\n")
@@ -133,6 +131,7 @@ func TestApplyReportsMatchBundledGit(t *testing.T) {
 }
 
 func TestApplyWritesTheWorkTreeOnlyWhenEverySectionApplies(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.clean()
 	r := h.apply(sample)
@@ -160,6 +159,7 @@ func TestApplyWritesTheWorkTreeOnlyWhenEverySectionApplies(t *testing.T) {
 }
 
 func TestApplyCheckAndPatchDryRunReportTheSameHunks(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.clean()
 	h.write("a.txt", "one\ntwo\nTHREE\n")
@@ -205,6 +205,7 @@ func (h *harness) patch(stdin string, words ...string) run {
 }
 
 func TestApplyReverseUndoesTheApplication(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.clean()
 	if r := h.apply(sample); r.result.Status != 0 {
@@ -220,6 +221,7 @@ func TestApplyReverseUndoesTheApplication(t *testing.T) {
 }
 
 func TestApplyIndexStagesExactlyThePatchedPaths(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.git("checkout", "-q", "--", "a.txt")
 	r := h.apply(sample, "--index")
@@ -245,6 +247,7 @@ func TestApplyIndexStagesExactlyThePatchedPaths(t *testing.T) {
 }
 
 func TestApplyCachedChangesOnlyTheIndex(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	r := h.apply(sample, "--cached")
 	if r.err != nil || r.result.Status != 0 {
@@ -263,6 +266,7 @@ func TestApplyCachedChangesOnlyTheIndex(t *testing.T) {
 }
 
 func TestApplyThreeWayReportsConflictsAndTheIndexState(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.clean()
 	base := h.git("rev-parse", "HEAD:a.txt")
@@ -298,6 +302,7 @@ func TestApplyThreeWayReportsConflictsAndTheIndexState(t *testing.T) {
 }
 
 func TestApplyBinaryPatches(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.clean()
 	data := make([]byte, 2048)
@@ -331,6 +336,7 @@ func TestApplyBinaryPatches(t *testing.T) {
 }
 
 func TestApplyStaleWorkTreeFileRefusesWithTheRevisionCode(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.clean()
 	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
@@ -351,6 +357,7 @@ func TestApplyStaleWorkTreeFileRefusesWithTheRevisionCode(t *testing.T) {
 }
 
 func TestApplyOptionsAndDiagnosticsFollowGit(t *testing.T) {
+	t.Parallel()
 	trailing := "--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,3 @@\n one\n-two\n+two \n three\n"
 	cases := []struct {
 		name           string
@@ -377,6 +384,7 @@ func TestApplyOptionsAndDiagnosticsFollowGit(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			h.clean()
 			r := h.apply(tc.stdin, tc.words...)
