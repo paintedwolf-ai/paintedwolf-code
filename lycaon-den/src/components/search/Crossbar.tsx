@@ -1,39 +1,18 @@
-import { createCrossbarRequests, SEARCH_DEBOUNCE_MS } from "./crossbar-requests.ts";
-import { searchCoverageNote } from "../../search/search-status.ts";
-import { createSourceSearchRefresh } from "../../search/source-search-refresh.ts";
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
-import { For, Show, batch, createEffect, on, createMemo, createSignal, onCleanup } from "solid-js";
+import { For, Show, batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type {
+  ContributionCommand,
   ContributionSearchResult,
   ContributionSearchSource,
   ProjectRoot,
   SearchHit,
-  SearchResponse,
-  SourceIndexRootCoverage,
-  SourceRevisionComparison,
-  SourceSearchLocation,
-  SourceSearchOutside,
 } from "../../api/types.ts";
-import { looksLikeRevisionSpec, openRevisionDiffs, resolveRevisionComparisons } from "../../files/review/revision-diffs.ts";
+import { openRevisionDiffs } from "../../files/review/revision-diffs.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { openSourceLocation } from "../../platform/navigation/open-source.ts";
-import { basenameOfPath } from "../../api/project-path.ts";
 import { revealTypedPathInFileManager } from "../../platform/files/reveal-in-file-manager.ts";
-import { localPathDestinationLabel } from "../../platform/navigation/open-local-path.ts";
-import { hostSharesDevice } from "../../platform/connection/host-identity.ts";
-import { isTauriRuntime } from "../../platform/runtime.ts";
-import {
-  inventoryMru,
-  orderIdleInventory,
-  recordInventoryOpen,
-  watchIndexedFiles,
-  type InventoryFile,
-} from "../../files/tree/file-inventory.ts";
-import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
-import { fetchCachedSourceSymbols } from "../../files/source/source-symbols-cache.ts";
+import { recordInventoryOpen, type InventoryFile } from "../../files/tree/file-inventory.ts";
 import { createOverlayScopeFocusTrap, shellChromeInertTargets } from "../../platform/interaction/modal-focus-trap.ts";
-import { ATTENTION_CLASS_LABEL } from "../../attention/attention-model.ts";
-import { searchHitDisplay } from "../../search/search-hit-display.ts";
 import { searchQueryFreeText } from "../../search/search-query-model.ts";
 import { openSearchHit } from "../../search/search-hit-open.ts";
 import {
@@ -44,18 +23,13 @@ import {
 } from "../../search/search-history.ts";
 import { loadSearchMatchPrefs, saveSearchMatchPrefs, type SearchMatchPrefs } from "../../search/search-match-prefs.ts";
 import {
-  CROSSBAR_GOTO_KIND_LABEL,
   actionableCrossbarRows,
   buildCrossbarRows,
   canEscalateCrossbar,
   effectiveCrossbarMode,
   nextCrossbarIndex,
   crossbarArm,
-  crossbarAwaitsSymbolName,
-  crossbarHitStatus,
-  crossbarNoMatchLabel,
   type CrossbarGotoTarget,
-  type CrossbarLineTarget,
   type CrossbarRow,
   type CrossbarSymbolRow,
 } from "../../search/crossbar-model.ts";
@@ -71,7 +45,6 @@ import {
 } from "../../shortcuts/display-binding-for.ts";
 import { attachDispatcher, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
-import type { ContributionCommand } from "../../api/types.ts";
 import {
   contributionCommandEnabled,
   dispatchContributionCommand,
@@ -79,25 +52,12 @@ import {
   type CrossbarCommandState,
 } from "../../contributions/dispatch.ts";
 import { contributionFrame } from "../../contributions/contribution-store.ts";
-import {
-  EscalateArrowIcon,
-  GotoTargetIcon,
-  PaletteSlotIcon,
-  RecentQueryIcon,
-  SearchKindIcon,
-} from "./SearchIcons.tsx";
 import { ContributionCommandFlow } from "./ContributionCommandFlow.tsx";
-import { Scrollport } from "../primitives/Scrollport.tsx";
 import { createTablistKeyboard } from "../../platform/interaction/roving-focus.ts";
-import {
-  CrossbarActionRow,
-  actionStatusLabel,
-  ContributionSearchLane,
-  sourceDisabledLabel,
-  globIndicatorTitle,
-  renderMatchUnderline,
-} from "./CrossbarResults.tsx";
+import { sourceDisabledLabel, globIndicatorTitle } from "./CrossbarResults.tsx";
 import { handleCrossbarPanelKey } from "../../search/crossbar-panel-keys.ts";
+import { useCrossbarDataSources } from "./useCrossbarDataSources.ts";
+import { CrossbarRowList, outsideProjectFolder } from "./CrossbarRowList.tsx";
 
 export type CrossbarProps = {
   open: boolean;
@@ -125,54 +85,67 @@ export type CrossbarProps = {
   onOpenFolderAsProject?: (path: string) => void;
 };
 
-type IndexPage = { query: string; files: InventoryFile[]; location?: SourceSearchLocation; outside?: SourceSearchOutside };
-const EMPTY_INDEX_PAGE: IndexPage = { query: "", files: [] };
-
 export function Crossbar(props: CrossbarProps) {
   const [query, setQuery] = createSignal("");
   const [mode, setMode] = createSignal<CrossbarMode>("everything");
-  const [hits, setHits] = createSignal<SearchHit[]>([]);
-  const [searching, setSearching] = createSignal(false);
   const [activeIndex, setActiveIndex] = createSignal(0);
   const [recentQueries, setRecentQueries] = createSignal<string[]>([]);
   const [recentActionIds, setRecentActionIds] = createSignal<string[]>([]);
-  /** The newest file page and the query it answered. */
-  const [indexPage, setIndexPage] = createSignal<IndexPage>(EMPTY_INDEX_PAGE);
-  const [indexing, setIndexing] = createSignal(false);
-  const [indexError, setIndexError] = createSignal("");
-  const [indexCoverage, setIndexCoverage] = createSignal<SourceIndexRootCoverage[]>([]);
-  const [indexRevision, setIndexRevision] = createSignal(0);
-  const searchBusy = () => searching() || indexing();
-  const [symbolRows, setSymbolRows] = createSignal<CrossbarSymbolRow[]>([]);
   const [dialogEl, setDialogEl] = createSignal<HTMLDivElement | undefined>();
-  const [matchPrefs, setMatchPrefs] = createSignal<SearchMatchPrefs>(
-    loadSearchMatchPrefs(),
-  );
+  const [matchPrefs, setMatchPrefs] = createSignal<SearchMatchPrefs>(loadSearchMatchPrefs());
   const [flowCommand, setFlowCommand] = createSignal<ContributionCommand | null>(null);
   const [flowInitialAnswers, setFlowInitialAnswers] = createSignal<Record<string, unknown> | undefined>();
   const [flowAutoSubmit, setFlowAutoSubmit] = createSignal(false);
-  const [sourceResults, setSourceResults] = createSignal<ContributionSearchResult[]>([]);
-  const [sourceError, setSourceError] = createSignal("");
-  const [searchErrorNote, setSearchErrorNote] = createSignal("");
-  const [searchCoverage, setSearchCoverage] = createSignal<Pick<SearchResponse, "issues" | "exhaustive"> | null>(null);
-
-  const searchSources = () => contributionFrame()?.search_sources ?? [];
-  const activeSource = createMemo<ContributionSearchSource | null>(() => {
-    // Accept auto-capitalized source prefixes.
-    const prefix = query()
-      .trimStart()
-      .match(/^([a-z0-9]+(?:-[a-z0-9]+)*):/i)?.[1]
-      ?.toLowerCase();
-    return searchSources().find((source) => source.prefix === prefix) ?? null;
-  });
-  const activeSourceQuery = () => {
-    const raw = query().trimStart();
-    const separator = raw.indexOf(":");
-    return separator < 0 ? "" : raw.slice(separator + 1).trim();
-  };
+  const [awaitingActivation, setAwaitingActivation] = createSignal(false);
 
   /** The tab the query shows: a `>` or `#` prefix chooses Actions or Symbols. */
   const activeMode = () => effectiveCrossbarMode(query(), mode());
+
+  const {
+    projectId,
+    hits,
+    searchBusy,
+    indexPage,
+    symbolRows,
+    sourceResults,
+    sourceError,
+    searchSources,
+    activeSource,
+    activeSourceQuery,
+    inventoryFiles,
+    coverageNote,
+    lineTarget,
+    canRevealOutside,
+    revisions,
+    scheduleSearch,
+    cancelWhenClosed,
+    setSearching,
+    resetSearchState,
+  } = useCrossbarDataSources({
+    open: () => props.open,
+    originProjectId: () => props.originProjectId,
+    originSessionId: () => props.originSessionId,
+    query,
+    mode,
+    activeMode,
+    matchPrefs,
+  });
+
+  let seededForOpen = false;
+  let seededSerial: number | undefined;
+  let inputEl: HTMLInputElement | undefined;
+  let modesEl: HTMLDivElement | undefined;
+  let lastActiveRowId: string | undefined;
+  let restoreFocusOnClose = true;
+
+  const cancelAwaitingActivation = () => {
+    setAwaitingActivation(false);
+  };
+
+  const resetActiveSelection = () => {
+    lastActiveRowId = undefined;
+    setActiveIndex(0);
+  };
 
   const selectMode = (next: CrossbarMode) => {
     const arm = crossbarArm(query());
@@ -196,24 +169,6 @@ export function Crossbar(props: CrossbarProps) {
     scheduleSearch(query());
   };
 
-  const { runSearch, scheduleSearch, cancelWhenClosed, dispose: disposeSearchRequests } = createCrossbarRequests({
-    open: () => props.open, originProjectId: () => props.originProjectId, mode,
-    hasLocalFileArm: () => hasLocalFileArm(), activeSource, matchPrefs,
-    setHits, setSearchCoverage, setSearchErrorNote, setSearching,
-  });
-  let seededForOpen = false;
-  let seededSerial: number | undefined;
-  let inputEl: HTMLInputElement | undefined;
-  let modesEl: HTMLDivElement | undefined;
-  let lastActiveRowId: string | undefined;
-  let restoreFocusOnClose = true;
-  const [awaitingActivation, setAwaitingActivation] = createSignal(false);
-
-  const resetActiveSelection = () => {
-    lastActiveRowId = undefined;
-    setActiveIndex(0);
-  };
-
   createTablistKeyboard(() => modesEl);
 
   createEffect(() => {
@@ -228,237 +183,6 @@ export function Crossbar(props: CrossbarProps) {
       restoreFocus: () => restoreFocusOnClose,
     },
   );
-
-  const hasLocalFileArm = () => projectId().length > 0;
-
-  createSourceSearchRefresh(
-    () => props.open && !activeSource(),
-    async () => {
-      setIndexRevision(value => value + 1);
-      await runSearch(query(), "background");
-    },
-  );
-
-  const projectId = () => props.originProjectId?.trim() ?? "";
-  const sessionId = () => props.originSessionId?.trim() || undefined;
-
-  createEffect(on(projectId, () => {
-    if (props.open) {
-      setHits([]);
-      setSearchCoverage(null);
-      scheduleSearch(query());
-    }
-  }, { defer: true }));
-
-  createEffect(() => {
-    const source = activeSource();
-    const sourceQuery = activeSourceQuery();
-    const pid = projectId();
-    const client = getLycaonClient();
-    if (!props.open || !source) {
-      setSourceResults([]);
-      setSourceError("");
-      if (!props.open || !activeSource()) setSearching(false);
-      return;
-    }
-    if (!source.ready) { setSourceResults([]); setSourceError(sourceDisabledLabel(source)); setSearching(false); return; }
-    if (!pid || !client || sourceQuery.length < source.min_query_length) {
-      setSourceResults([]); setSourceError(""); setSearching(false); return;
-    }
-    const controller = new AbortController();
-    setSearching(false); setSourceError("");
-    const timer = setTimeout(() => {
-      const frame = contributionFrame();
-      if (!frame) return;
-      setSearching(true);
-      void client.searchContributionSource(pid, source.id, { frame_revision: frame.frame_revision, query: sourceQuery }, controller.signal)
-        .then((response) => { if (!controller.signal.aborted) setSourceResults(response.results); })
-        .catch((cause: unknown) => { if (!controller.signal.aborted) { setSourceResults([]); setSourceError(cause instanceof Error ? cause.message : String(cause)); } })
-        .finally(() => { if (!controller.signal.aborted) setSearching(false); });
-    }, SEARCH_DEBOUNCE_MS);
-    onCleanup(() => { clearTimeout(timer); controller.abort(); });
-  });
-
-  // The host ranks typed queries; only the idle list orders by local recency.
-  const inventoryFiles = createMemo((): InventoryFile[] => {
-    const pid = projectId();
-    if (!pid) return [];
-    const q = query().trim();
-    const page = indexPage();
-    if (crossbarArm(q).kind !== "search" || page.query !== q) return [];
-    const entries = page.files;
-    if (q) return entries;
-    const buffers = projectFilesState(pid);
-    const open = buffers.order.flatMap((key) => {
-      const buffer = buffers.byKey[key];
-      return buffer ? [{ rootId: buffer.rootId, path: buffer.path }] : [];
-    });
-    return orderIdleInventory(entries, { recent: inventoryMru(pid), open });
-  });
-
-  let inventoryQueryKey = "";
-  let inventoryScopeKey = "";
-  let inventoryHasResponse = false;
-  const showsInventory = () =>
-    projectId() && !activeSource() && crossbarArm(query()).kind === "search" &&
-    (activeMode() === "everything" || activeMode() === "files");
-  const coverageNote = () => {
-    const errors = [searchErrorNote(), showsInventory() ? indexError() : ""].filter(Boolean);
-    return [...new Set(errors)].join(" ") ||
-      searchCoverageNote(searchCoverage(), showsInventory() ? indexCoverage() : []);
-  };
-  createEffect(() => {
-    if (!props.open || activeSource() || (activeMode() !== "everything" && activeMode() !== "files")) return;
-    const pid = projectId();
-    if (!pid) {
-      inventoryQueryKey = "";
-      inventoryScopeKey = "";
-      inventoryHasResponse = false;
-      setIndexPage(EMPTY_INDEX_PAGE);
-      setIndexError("");
-      setIndexCoverage([]);
-      return;
-    }
-    const sourceQuery = query().trim();
-    const sid = sessionId();
-    const scopeKey = JSON.stringify([pid, sid]);
-    if (scopeKey !== inventoryScopeKey) {
-      inventoryScopeKey = scopeKey;
-      setIndexError("");
-      setIndexCoverage([]);
-    }
-    const key = JSON.stringify([pid, sid, sourceQuery]);
-    if (key !== inventoryQueryKey) {
-      inventoryQueryKey = key;
-      inventoryHasResponse = false;
-      setIndexPage(EMPTY_INDEX_PAGE);
-    }
-    indexRevision();
-    if (crossbarArm(sourceQuery).kind !== "search") {
-      setIndexPage(EMPTY_INDEX_PAGE);
-      return;
-    }
-    const client = getLycaonClient();
-    if (!client) return;
-    const controller = new AbortController();
-    setIndexing(false);
-    const timer = setTimeout(() => {
-      if (!inventoryHasResponse) setIndexing(true);
-      void watchIndexedFiles(client, pid, sourceQuery, (entries, page) => {
-        if (controller.signal.aborted) return;
-        inventoryHasResponse = true;
-        batch(() => {
-          setIndexPage({ query: sourceQuery, files: [...entries], location: page.location, outside: page.outside });
-          setIndexCoverage(page.coverage);
-          setIndexError(page.state === "failed" ? "The file index could not be loaded. Try again." : "");
-          setIndexing(false);
-        });
-      }, { sessionId: sid, signal: controller.signal }).catch(() => {
-        if (!controller.signal.aborted) {
-          setIndexError("File results could not refresh. Type to search again.");
-        }
-      }).finally(() => {
-        if (!controller.signal.aborted) setIndexing(false);
-      });
-    }, SEARCH_DEBOUNCE_MS);
-    onCleanup(() => {
-      controller.abort();
-      clearTimeout(timer);
-      setIndexing(false);
-    });
-  });
-
-  createEffect(() => {
-    if (crossbarArm(query()).kind !== "file-symbols") {
-      setSymbolRows([]);
-      return;
-    }
-    const pid = projectId();
-    if (!pid) {
-      setSymbolRows([]);
-      return;
-    }
-    const files = projectFilesState(pid);
-    const key = files.activeKey;
-    const buf = key ? files.byKey[key] : null;
-    if (!buf || buf.jobId) {
-      setSymbolRows([]);
-      return;
-    }
-    const client = getLycaonClient();
-    if (!client) {
-      setSymbolRows([]);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void fetchCachedSourceSymbols({
-        client,
-        projectId: pid,
-        sessionId: sessionId(),
-        rootId: buf.rootId,
-        path: buf.path,
-        sha256: buf.baseSha256,
-      }).then((symbols) => {
-        if (cancelled) return;
-        setSymbolRows(
-          symbols.map((s) => ({
-            name: s.name,
-            kind: s.kind,
-            line: s.line,
-            rootId: buf.rootId,
-            path: buf.path,
-            bufferKey: buf.key,
-          })),
-        );
-      });
-    }, SEARCH_DEBOUNCE_MS);
-    onCleanup(() => {
-      cancelled = true;
-      clearTimeout(timer);
-    });
-  });
-
-  // `:42` jumps within the file the editor shows.
-  const lineTarget = createMemo((): CrossbarLineTarget | null => {
-    const pid = projectId();
-    if (!pid) return null;
-    const files = projectFilesState(pid);
-    const buf = files.activeKey ? files.byKey[files.activeKey] : null;
-    if (!buf?.path) return null;
-    return { rootId: buf.rootId, path: buf.path, ...(buf.jobId ? { jobId: buf.jobId } : {}) };
-  });
-
-  const canRevealOutside = () => isTauriRuntime() && hostSharesDevice();
-
-  // A commit, branch, or range opens on the Diffs page; only host-resolved specs get a row.
-  const [revisions, setRevisions] = createSignal<{ query: string; comparisons: SourceRevisionComparison[] }>({ query: "", comparisons: [] });
-  createEffect(() => {
-    const q = query().trim();
-    const pid = projectId();
-    const client = getLycaonClient();
-    if (!props.open || activeSource() || !pid || !client || activeMode() !== "everything" ||
-      crossbarArm(q).kind !== "search" || !looksLikeRevisionSpec(q)) return;
-    const sid = sessionId();
-    const controller = new AbortController();
-    const timer = setTimeout(() => void (async () => {
-      let comparisons: SourceRevisionComparison[] = [];
-      try {
-        comparisons = await resolveRevisionComparisons(client, pid, q, { sessionId: sid, signal: controller.signal });
-      } catch {
-        // Not a revision here; other results still answer the query.
-      }
-      if (!controller.signal.aborted) setRevisions({ query: q, comparisons });
-    })(), SEARCH_DEBOUNCE_MS);
-    onCleanup(() => {
-      clearTimeout(timer);
-      controller.abort();
-    });
-  });
-
-  const cancelAwaitingActivation = () => {
-    setAwaitingActivation(false);
-  };
 
   createEffect(() => {
     if (!props.open) {
@@ -482,10 +206,7 @@ export function Crossbar(props: CrossbarProps) {
       resetActiveSelection();
       setQuery(props.seed?.trim() ?? "");
       setMode(props.initialMode ?? "everything");
-      setHits([]);
-      setSearchErrorNote("");
-      setSearchCoverage(null);
-      setSearching(false);
+      resetSearchState();
       setMatchPrefs(loadSearchMatchPrefs());
       setRecentQueries(listRecentQueries().map((r) => r.query));
       setRecentActionIds(listRecentActionIds());
@@ -527,8 +248,6 @@ export function Crossbar(props: CrossbarProps) {
     });
   });
 
-  onCleanup(disposeSearchRequests);
-
   const rows = createMemo(() =>
     buildCrossbarRows({
       query: query(),
@@ -564,108 +283,6 @@ export function Crossbar(props: CrossbarProps) {
     setActiveTo(nextCrossbarIndex(activeIndex(), selectionLength(), delta));
   };
 
-  // Escalate renders pinned below the list; everything else scrolls.
-  const listRows = createMemo(() =>
-    rows().filter(
-      (r): r is Exclude<CrossbarRow, { kind: "escalate" }> =>
-        r.kind !== "escalate",
-    ),
-  );
-
-  // End the visible list on a row boundary.
-  let listFrame: HTMLDivElement | undefined;
-  let listEl: HTMLDivElement | undefined;
-  let listContent: HTMLElement | undefined;
-  const [listEdges, setListEdges] = createSignal({ top: false, bottom: false });
-  const syncListEdges = () => {
-    const el = listEl;
-    if (!el) return;
-    const overflow = el.scrollHeight > el.clientHeight + 1;
-    const top = overflow && el.scrollTop > 1;
-    const bottom =
-      overflow && el.scrollTop + el.clientHeight < el.scrollHeight - 1;
-    setListEdges((prev) =>
-      prev.top === top && prev.bottom === bottom ? prev : { top, bottom },
-    );
-  };
-  const fitListRows = () => {
-    const frame = listFrame;
-    const el = listEl;
-    const content = listContent;
-    if (!frame || !el || !content) return;
-    frame.style.maxHeight = "";
-    const available = el.clientHeight;
-    if (el.scrollHeight > available + 1) {
-      const fit = wholeRowHeight(content, available);
-      if (fit != null) frame.style.maxHeight = `${fit}px`;
-    }
-    syncListEdges();
-  };
-  const mountList = (frame: HTMLDivElement) => {
-    listFrame = frame;
-    if (typeof ResizeObserver === "undefined") return;
-    // Refit when the dialog resizes; the frame is the wrap's only in-flow child.
-    const observer = new ResizeObserver(fitListRows);
-    observer.observe(frame);
-    onCleanup(() => {
-      observer.disconnect();
-      if (listFrame === frame) {
-        listFrame = undefined;
-        listEl = undefined;
-        listContent = undefined;
-      }
-    });
-  };
-  createEffect(() => {
-    listRows();
-    showHitStatusRow();
-    // Rows land before their geometry does.
-    const frame = requestAnimationFrame(fitListRows);
-    onCleanup(() => cancelAnimationFrame(frame));
-  });
-
-  const escalateRow = createMemo(() =>
-    rows().find((r): r is Extract<CrossbarRow, { kind: "escalate" }> => r.kind === "escalate"),
-  );
-
-  const hitStatus = createMemo(() =>
-    crossbarHitStatus({
-      query: query(),
-      mode: activeMode(),
-      searching: searchBusy(),
-      hitCount: hits().length,
-    }),
-  );
-
-  // Show status when escalation is the only result.
-  const showHitStatusRow = createMemo(() => {
-    const arm = crossbarArm(query()).kind;
-    if (arm === "file-symbols") return !rows().some((r) => r.kind === "symbol");
-    if (crossbarAwaitsSymbolName(query(), mode())) return true;
-    if (arm === "line") return !rows().some((r) => r.kind === "line");
-    const status = hitStatus();
-    if (status !== "searching" && status !== "empty") return false;
-    return !rows().some(
-      (r) =>
-        r.kind === "action" ||
-        r.kind === "hit" ||
-        r.kind === "goto" ||
-        r.kind === "inventory-file" ||
-        r.kind === "symbol" ||
-        r.kind === "revision" ||
-        r.kind === "outside",
-    );
-  });
-
-  const hitStatusLabel = createMemo(() => {
-    const arm = crossbarArm(query());
-    if (arm.kind === "file-symbols") return lineTarget() ? "No symbols in this file" : "Open a file to list its symbols";
-    if (crossbarAwaitsSymbolName(query(), mode())) return "Type a symbol name";
-    if (arm.kind === "line") return lineTarget() ? "Type a line number" : "Open a file to go to a line";
-    const status = hitStatus();
-    return coverageNote() || (status === "searching" ? "Searching…" : crossbarNoMatchLabel(activeMode()));
-  });
-
   const handoff = (navigate: () => void) => {
     restoreFocusOnClose = false;
     props.onClose();
@@ -694,17 +311,6 @@ export function Crossbar(props: CrossbarProps) {
       lastActiveRowId = undefined;
     }
     if (activeIndex() >= list.length) setActiveIndex(list.length - 1);
-  });
-
-  createEffect(() => {
-    const idx = activeIndex();
-    if (idx < 0) return;
-    queueMicrotask(() => {
-      const activeEl = (listEl ?? dialogEl())?.querySelector<HTMLElement>(
-        ".den-crossbar__row--active",
-      );
-      activeEl?.scrollIntoView({ block: "nearest" });
-    });
   });
 
   const escalateTo = (target: CrossbarMode) => {
@@ -871,13 +477,13 @@ export function Crossbar(props: CrossbarProps) {
       if (result) activateSourceResult(source, result);
       return;
     }
-    const rows = selectable();
+    const currentRows = selectable();
     // Enter waits for an active search result.
-    if (searchBusy() && rows.every((r) => r.kind === "escalate")) {
+    if (searchBusy() && currentRows.every((r) => r.kind === "escalate")) {
       setAwaitingActivation(true);
       return;
     }
-    const row = rows[activeIndex()];
+    const row = currentRows[activeIndex()];
     if (row) activateRow(row);
   };
 
@@ -901,7 +507,9 @@ export function Crossbar(props: CrossbarProps) {
       selectMode,
       toggleMatch: (key) => patchMatchPrefs({ [key]: !matchPrefs()[key] }),
       // A prefixed source query is meaningless in the depth view.
-      escalate: () => { if (!activeSource()) escalate(); },
+      escalate: () => {
+        if (!activeSource()) escalate();
+      },
     });
 
   const modeTooltip = (m: CrossbarMode): string => {
@@ -948,571 +556,216 @@ export function Crossbar(props: CrossbarProps) {
               </Show>
             }
           >
-          <div class="den-crossbar__search">
-            <ThemeIcon slot="search" size={17} />
-            <input
-              autofocus
-              class="den-crossbar__input"
-              data-testid="crossbar-input"
-              value={query()}
-              placeholder="Crossbar…"
-              autocomplete="off"
-              spellcheck={false}
-              ref={(el) => (inputEl = el)}
-              onInput={(e) => onQueryInput(e.currentTarget.value)}
-            />
-            <div
-              class="den-search-query__toggles"
-              role="group"
-              aria-label="Match options"
-              data-testid="crossbar-match-toggles"
-            >
-              <button
-                type="button"
-                class="den-search-query__toggle"
-                data-tip={`Match case (${bindingForHandler("search.toggleMatchCase")})`}
-                aria-label="Match case"
-                aria-keyshortcuts={ariaKeyShortcutsForHandler(
-                  "search.toggleMatchCase",
-                )}
-                aria-pressed={matchPrefs().caseSensitive}
-                data-testid="crossbar-toggle-case"
-                onClick={() =>
-                  patchMatchPrefs({
-                    caseSensitive: !matchPrefs().caseSensitive,
-                  })
-                }
-              >
-                Aa
-              </button>
-              <button
-                type="button"
-                class="den-search-query__toggle"
-                data-tip={`Whole word (${bindingForHandler("search.toggleWholeWord")})`}
-                aria-label="Whole word"
-                aria-keyshortcuts={ariaKeyShortcutsForHandler(
-                  "search.toggleWholeWord",
-                )}
-                aria-pressed={matchPrefs().wholeWord}
-                data-testid="crossbar-toggle-word"
-                onClick={() =>
-                  patchMatchPrefs({ wholeWord: !matchPrefs().wholeWord })
-                }
-              >
-                \b
-              </button>
-              <button
-                type="button"
-                class="den-search-query__toggle"
-                data-tip={`Regular expression (${bindingForHandler("search.toggleRegex")})`}
-                aria-label="Regular expression"
-                aria-keyshortcuts={ariaKeyShortcutsForHandler(
-                  "search.toggleRegex",
-                )}
-                aria-pressed={matchPrefs().regex}
-                data-testid="crossbar-toggle-regex"
-                onClick={() =>
-                  patchMatchPrefs({ regex: !matchPrefs().regex })
-                }
-              >
-                .*
-              </button>
-              {/* Active path filters narrow quick-search results. */}
-              <Show when={matchPrefs().include.trim() || matchPrefs().exclude.trim()}>
-                <button
-                  type="button"
-                  class="den-search-query__toggle den-search-query__toggle--globs"
-                  data-tip={globIndicatorTitle(matchPrefs())}
-                  aria-label="Clear path filters"
-                  data-testid="crossbar-glob-indicator"
-                  onClick={() => patchMatchPrefs({ include: "", exclude: "" })}
-                >
-                  Paths filtered ×
-                </button>
-              </Show>
-            </div>
-            <Show when={searchBusy()}>
-              <span
-                class="den-crossbar__spinner"
-                data-testid="crossbar-searching"
-                aria-hidden="true"
+            <div class="den-crossbar__search">
+              <ThemeIcon slot="search" size={17} />
+              <input
+                autofocus
+                class="den-crossbar__input"
+                data-testid="crossbar-input"
+                value={query()}
+                placeholder="Crossbar…"
+                autocomplete="off"
+                spellcheck={false}
+                ref={(el) => (inputEl = el)}
+                onInput={(e) => onQueryInput(e.currentTarget.value)}
               />
-            </Show>
-          </div>
-
-          <div
-            ref={modesEl}
-            class="den-crossbar__modes"
-            role="tablist"
-            aria-label="Search modes"
-            data-testid="crossbar-modes"
-          >
-            <For each={[...CROSSBAR_MODES]}>
-              {(m) => (
-                <button
-                  type="button"
-                  role="tab"
-                  class="den-crossbar__mode"
-                  classList={{ "den-crossbar__mode--active": !activeSource() && activeMode() === m }}
-                  aria-selected={!activeSource() && activeMode() === m}
-                  data-tip={modeTooltip(m)}
-                  data-testid={`crossbar-mode-${m}`}
-                  onClick={() => selectMode(m)}
-                >
-                  {CROSSBAR_MODE_LABEL[m]}
-                </button>
-              )}
-            </For>
-            <Show when={searchSources().length > 0}>
-              <span class="den-crossbar__source-label" aria-hidden="true">Sources</span>
-            </Show>
-            <For each={searchSources()}>
-              {(source) => (
-                <button
-                  type="button"
-                  role="tab"
-                  class="den-crossbar__mode"
-                  classList={{ "den-crossbar__mode--active": activeSource()?.id === source.id }}
-                  aria-selected={activeSource()?.id === source.id}
-                  data-tip={source.ready ? undefined : sourceDisabledLabel(source)}
-                  onClick={() => onQueryInput(`${source.prefix}: ${activeSource() ? activeSourceQuery() : query()}`)}
-                >
-                  {source.label}
-                </button>
-              )}
-            </For>
-          </div>
-
-          <Show when={!activeSource()} fallback={
-            <Show when={activeSource()} keyed>
-              {(source) => (
-                <ContributionSearchLane
-                  source={source}
-                  query={activeSourceQuery()}
-                  results={sourceResults()}
-                  error={sourceError()}
-                  searching={searchBusy()}
-                  activeIndex={activeIndex()}
-                  onHover={setActiveTo}
-                  onActivate={(result) => activateSourceResult(source, result)}
-                  onConfigure={() => {
-                    const settings = contributionFrame()?.commands.find((command) => command.handler_id === "settings.open");
-                    if (settings) runAction(settings);
-                  }}
-                />
-              )}
-            </Show>
-          }>
-          <div
-            class="den-crossbar__list-wrap"
-            data-fade-top={listEdges().top ? "" : undefined}
-            data-fade-bottom={listEdges().bottom ? "" : undefined}
-          >
-          <Scrollport
-            ref={mountList}
-            viewportRef={(el) => (listEl = el)}
-            contentRef={(el) => (listContent = el)}
-            class="den-crossbar__list"
-            contentAs="ul"
-            contentClass="den-crossbar__list-content"
-            data-testid="crossbar-list"
-            viewport={{ onScroll: syncListEdges }}
-          >
-            <Show when={actionStatusLabel(props.contributionActions, query(), mode())}>
-              {(label) => <li class="den-crossbar__status" role="status">{label()}</li>}
-            </Show>
-            <Show when={!showHitStatusRow() && coverageNote()}>
-              <li class="den-crossbar__status den-crossbar__coverage" role="status" data-testid="crossbar-coverage">
-                {coverageNote()}
-              </li>
-            </Show>
-            <Show when={showHitStatusRow()}>
-              <li
-                class="den-crossbar__status"
-                data-testid="crossbar-hit-status"
-                aria-live="polite"
+              <div
+                class="den-search-query__toggles"
+                role="group"
+                aria-label="Match options"
+                data-testid="crossbar-match-toggles"
               >
-                {hitStatusLabel()}
-              </li>
-            </Show>
-            <For each={listRows()}>
-              {(row) => {
-                if (row.kind === "section") {
-                  return (
-                    <li
-                      class="den-crossbar__section"
-                      data-testid={`crossbar-section-${row.id}`}
-                    >
-                      <span class="den-crossbar__section-label">{row.label}</span>
-                      <Show when={row.more} keyed>
-                        {(more) => (
-                          <button
-                            type="button"
-                            class="den-crossbar__section-more"
-                            data-testid={`crossbar-see-all-${more}`}
-                            aria-label={`See all ${CROSSBAR_MODE_LABEL[more].toLowerCase()} results`}
-                            tabIndex={-1}
-                            onClick={() => escalateTo(more)}
-                          >
-                            See all
-                          </button>
-                        )}
-                      </Show>
-                    </li>
-                  );
-                }
-                const selIdx = () =>
-                  selectable().findIndex((r) => r.id === row.id);
-                const active = () => selIdx() === activeIndex();
-                if (row.kind === "action") {
-                  return (
-                    <CrossbarActionRow command={row.command} active={active()}
-                      onHover={() => setActiveTo(selIdx())} onActivate={() => activateRow(row)} />
-                  );
-                }
-                if (row.kind === "recent") {
-                  return (
-                    <li>
-                      <button
-                        type="button"
-                        class="den-crossbar__row"
-                        classList={{ "den-crossbar__row--active": active() }}
-                        data-testid="crossbar-recent"
-                        onMouseEnter={() => setActiveTo(selIdx())}
-                        onClick={() => activateRow(row)}
-                      >
-                        <span class="den-crossbar__glyph" aria-hidden="true">
-                          <RecentQueryIcon />
-                        </span>
-                        <span class="den-crossbar__primary">{row.query}</span>
-                      </button>
-                    </li>
-                  );
-                }
-                if (row.kind === "goto") {
-                  const attention = () =>
-                    row.target.kind === "session" ? row.target.attention : undefined;
-                  return (
-                    <li>
-                      <button
-                        type="button"
-                        class="den-crossbar__row"
-                        classList={{ "den-crossbar__row--active": active() }}
-                        data-testid="crossbar-goto"
-                        data-goto-kind={row.target.kind}
-                        data-attention={attention()?.class}
-                        onMouseEnter={() => setActiveTo(selIdx())}
-                        onClick={() => activateRow(row)}
-                      >
-                        <span class="den-crossbar__glyph" aria-hidden="true">
-                          <GotoTargetIcon kind={row.target.kind} />
-                        </span>
-                        <span class="den-crossbar__primary">
-                          {row.target.label}
-                        </span>
-                        <Show when={row.target.context}>
-                          {(ctx) => (
-                            <span class="den-crossbar__secondary">{ctx()}</span>
-                          )}
-                        </Show>
-                        {/* Attention status replaces the generic target kind. */}
-                        <Show
-                          when={attention()}
-                          fallback={
-                            <span class="den-crossbar__chip">
-                              {CROSSBAR_GOTO_KIND_LABEL[row.target.kind]}
-                            </span>
-                          }
-                        >
-                          {(att) => (
-                            <span
-                              class="den-crossbar__chip den-attention-chip"
-                              data-attention-class={att().class}
-                            >
-                              <span class="den-attention-chip__dot" aria-hidden="true" />
-                              {ATTENTION_CLASS_LABEL[att().class]}
-                            </span>
-                          )}
-                        </Show>
-                      </button>
-                    </li>
-                  );
-                }
-                if (row.kind === "inventory-file") {
-                  const file = () => row.file;
-                  const dirPrefix = () => {
-                    const roots = props.projectRoots ?? [];
-                    if (roots.length < 2) return "";
-                    const label = roots.find((root) => root.id === file().rootId)?.label || file().rootId;
-                    return file().dir ? `@${label}/` : `@${label}`;
-                  };
-                  const dir = () => dirPrefix() + file().dir || ".";
-                  const dirIndexes = () => {
-                    const offset = dirPrefix().length;
-                    return file().matchIndexes.filter((index) => index < file().dir.length).map((index) => index + offset);
-                  };
-                  const baseIndexes = () => {
-                    const offset = file().path.length - file().basename.length;
-                    return file().matchIndexes.filter((index) => index >= offset).map((index) => index - offset);
-                  };
-                  return (
-                    <li>
-                      <button
-                        type="button"
-                        class="den-crossbar__row"
-                        classList={{ "den-crossbar__row--active": active() }}
-                        data-testid="crossbar-inventory-file"
-                        onMouseEnter={() => setActiveTo(selIdx())}
-                        onClick={() => activateRow(row)}
-                      >
-                        <span class="den-crossbar__glyph" aria-hidden="true">
-                          <SearchKindIcon kind="file" />
-                        </span>
-                        <span class="den-crossbar__primary">
-                          {renderMatchUnderline(file().basename, baseIndexes())}
-                        </span>
-                        <span class="den-crossbar__secondary">{renderMatchUnderline(dir(), dirIndexes())}</span>
-                        <span class="den-crossbar__chip">File</span>
-                      </button>
-                    </li>
-                  );
-                }
-                if (row.kind === "symbol") {
-                  const sym = () => row.symbol;
-                  return (
-                    <li>
-                      <button
-                        type="button"
-                        class="den-crossbar__row"
-                        classList={{ "den-crossbar__row--active": active() }}
-                        data-testid="crossbar-symbol"
-                        onMouseEnter={() => setActiveTo(selIdx())}
-                        onClick={() => activateRow(row)}
-                      >
-                        <span class="den-crossbar__glyph" aria-hidden="true">
-                          <SearchKindIcon kind="code" />
-                        </span>
-                        <span class="den-crossbar__primary">
-                          {renderMatchUnderline(sym().name, sym().matchIndexes ?? [])}
-                        </span>
-                        <span class="den-crossbar__secondary">:{sym().line}</span>
-                        <span class="den-crossbar__chip">{sym().kind}</span>
-                      </button>
-                    </li>
-                  );
-                }
-                if (row.kind === "line") {
-                  return (
-                    <li>
-                      <button
-                        type="button"
-                        class="den-crossbar__row"
-                        classList={{ "den-crossbar__row--active": active() }}
-                        data-testid="crossbar-line"
-                        onMouseEnter={() => setActiveTo(selIdx())}
-                        onClick={() => activateRow(row)}
-                      >
-                        <span class="den-crossbar__glyph" aria-hidden="true">
-                          <PaletteSlotIcon slot="goto-line" />
-                        </span>
-                        <span class="den-crossbar__primary">
-                          {row.column != null ? `Go to line ${row.line}, column ${row.column}` : `Go to line ${row.line}`}
-                        </span>
-                        <span class="den-crossbar__secondary">{row.target.path}</span>
-                      </button>
-                    </li>
-                  );
-                }
-                if (row.kind === "revision") {
-                  const root = () => (props.projectRoots ?? []).length > 1
-                    ? props.projectRoots?.find((r) => r.id === row.comparison.root_id)?.label
-                    : undefined;
-                  return (
-                    <li>
-                      <button
-                        type="button"
-                        class="den-crossbar__row"
-                        classList={{ "den-crossbar__row--active": active() }}
-                        data-testid="crossbar-revision"
-                        onMouseEnter={() => setActiveTo(selIdx())}
-                        onClick={() => activateRow(row)}
-                      >
-                        <span class="den-crossbar__glyph" aria-hidden="true">
-                          <PaletteSlotIcon slot="diff" />
-                        </span>
-                        <span class="den-crossbar__primary">{row.comparison.label}</span>
-                        <Show when={root()}>
-                          {(label) => <span class="den-crossbar__secondary">@{label()}</span>}
-                        </Show>
-                        <span class="den-crossbar__chip">
-                          {row.comparison.kind === "commit" ? "Commit" : row.comparison.kind === "branch" ? "Branch" : "Range"}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                }
-                if (row.kind === "outside") {
-                  const label = () => row.action === "reveal"
-                    ? `Reveal in ${localPathDestinationLabel("file-manager")}`
-                    : row.outside.kind === "directory"
-                      ? `Open ${basenameOfPath(row.outside.path)} as a project`
-                      : `Open ${basenameOfPath(outsideProjectFolder(row.outside))} as a project`;
-                  return (
-                    <li>
-                      <button
-                        type="button"
-                        class="den-crossbar__row"
-                        classList={{ "den-crossbar__row--active": active() }}
-                        data-testid={`crossbar-outside-${row.action}`}
-                        onMouseEnter={() => setActiveTo(selIdx())}
-                        onClick={() => activateRow(row)}
-                      >
-                        <span class="den-crossbar__glyph" aria-hidden="true">
-                          <PaletteSlotIcon slot={row.action === "reveal" ? "folder-open" : "open-folder"} />
-                        </span>
-                        <span class="den-crossbar__primary">{label()}</span>
-                        <span class="den-crossbar__secondary">{row.outside.path}</span>
-                      </button>
-                    </li>
-                  );
-                }
-                if (row.kind === "hit") {
-                  const display = () => searchHitDisplay(row.hit);
-                  const secondary = () =>
-                    display().context ?? row.hit.project_name?.trim();
-                  return (
-                    <li>
-                      <button
-                        type="button"
-                        class="den-crossbar__row"
-                        classList={{ "den-crossbar__row--active": active() }}
-                        data-testid="crossbar-hit"
-                        data-hit-kind={row.hit.hit_kind}
-                        onMouseEnter={() => setActiveTo(selIdx())}
-                        onClick={() => activateRow(row)}
-                      >
-                        <span class="den-crossbar__glyph" aria-hidden="true">
-                          <SearchKindIcon kind={row.hit.hit_kind} />
-                        </span>
-                        <span class="den-crossbar__primary">
-                          {renderMatchUnderline(display().title, display().titleMatches ?? [])}
-                        </span>
-                        <Show when={secondary()}>
-                          {(ctx) => (
-                            <span class="den-crossbar__secondary">{ctx()}</span>
-                          )}
-                        </Show>
-                        <span class="den-crossbar__chip">
-                          {display().kindLabel}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                }
-                return null;
-              }}
-            </For>
-            <Show when={rows().length === 0 && !showHitStatusRow() && !actionStatusLabel(props.contributionActions, query(), mode())}>
-              <li class="den-crossbar__empty" data-testid="crossbar-empty">
-                {query().trim()
-                  ? "No matching actions or results."
-                  : "Type to search or run an action."}
-              </li>
-            </Show>
-          </Scrollport>
-          <span
-            class="den-crossbar__list-edge den-crossbar__list-edge--top"
-            aria-hidden="true"
-          />
-          <span
-            class="den-crossbar__list-edge den-crossbar__list-edge--bottom"
-            aria-hidden="true"
-          />
-          </div>
-
-          {/* Keep escalation stationary while hits stream in. */}
-          <Show when={escalateRow()}>
-            {(row) => {
-              const selIdx = () =>
-                selectable().findIndex((r) => r.id === row().id);
-              const active = () => selIdx() === activeIndex();
-              return (
-                <div class="den-crossbar__escalate-slot">
+                <button
+                  type="button"
+                  class="den-search-query__toggle"
+                  data-tip={`Match case (${bindingForHandler("search.toggleMatchCase")})`}
+                  aria-label="Match case"
+                  aria-keyshortcuts={ariaKeyShortcutsForHandler("search.toggleMatchCase")}
+                  aria-pressed={matchPrefs().caseSensitive}
+                  data-testid="crossbar-toggle-case"
+                  onClick={() =>
+                    patchMatchPrefs({
+                      caseSensitive: !matchPrefs().caseSensitive,
+                    })
+                  }
+                >
+                  Aa
+                </button>
+                <button
+                  type="button"
+                  class="den-search-query__toggle"
+                  data-tip={`Whole word (${bindingForHandler("search.toggleWholeWord")})`}
+                  aria-label="Whole word"
+                  aria-keyshortcuts={ariaKeyShortcutsForHandler("search.toggleWholeWord")}
+                  aria-pressed={matchPrefs().wholeWord}
+                  data-testid="crossbar-toggle-word"
+                  onClick={() => patchMatchPrefs({ wholeWord: !matchPrefs().wholeWord })}
+                >
+                  \b
+                </button>
+                <button
+                  type="button"
+                  class="den-search-query__toggle"
+                  data-tip={`Regular expression (${bindingForHandler("search.toggleRegex")})`}
+                  aria-label="Regular expression"
+                  aria-keyshortcuts={ariaKeyShortcutsForHandler("search.toggleRegex")}
+                  aria-pressed={matchPrefs().regex}
+                  data-testid="crossbar-toggle-regex"
+                  onClick={() => patchMatchPrefs({ regex: !matchPrefs().regex })}
+                >
+                  .*
+                </button>
+                {/* Active path filters narrow quick-search results. */}
+                <Show when={matchPrefs().include.trim() || matchPrefs().exclude.trim()}>
                   <button
                     type="button"
-                    class="den-crossbar__row den-crossbar__row--escalate"
-                    classList={{ "den-crossbar__row--active": active() }}
-                    data-testid="crossbar-escalate"
-                    onMouseEnter={() => setActiveTo(selIdx())}
-                    onClick={() => activateRow(row())}
+                    class="den-search-query__toggle den-search-query__toggle--globs"
+                    data-tip={globIndicatorTitle(matchPrefs())}
+                    aria-label="Clear path filters"
+                    data-testid="crossbar-glob-indicator"
+                    onClick={() => patchMatchPrefs({ include: "", exclude: "" })}
                   >
-                    <span class="den-crossbar__glyph" aria-hidden="true">
-                      <EscalateArrowIcon />
-                    </span>
-                    <span class="den-crossbar__primary">Show all results</span>
-                    <span class="den-crossbar__chord">
-                      {bindingForHandler("search.escalate")}
-                    </span>
+                    Paths filtered ×
                   </button>
-                </div>
-              );
-            }}
-          </Show>
-          </Show>
+                </Show>
+              </div>
+              <Show when={searchBusy()}>
+                <span
+                  class="den-crossbar__spinner"
+                  data-testid="crossbar-searching"
+                  aria-hidden="true"
+                />
+              </Show>
+            </div>
 
-          <div class="den-crossbar__footer" data-testid="crossbar-footer">
-            <span class="den-crossbar__hint">
-              <kbd class="den-crossbar__key">↑</kbd>
-              <kbd class="den-crossbar__key">↓</kbd>
-              Navigate
-            </span>
-            <span class="den-crossbar__hint">
-              <kbd class="den-crossbar__key">
-                {bindingForHandler("list.confirm")}
-              </kbd>
-              Open
-            </span>
-            <span class="den-crossbar__hint">
-              <kbd class="den-crossbar__key">
-                {bindingForHandler("search.mode.next")}
-              </kbd>
-              Modes
-            </span>
-            <span class="den-crossbar__hint den-crossbar__hint--dismiss">
-              <kbd class="den-crossbar__key">
-                {bindingForHandler("overlay.dismiss")}
-              </kbd>
-              Close
-            </span>
-          </div>
+            <div
+              ref={modesEl}
+              class="den-crossbar__modes"
+              role="tablist"
+              aria-label="Search modes"
+              data-testid="crossbar-modes"
+            >
+              <For each={[...CROSSBAR_MODES]}>
+                {(m) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    class="den-crossbar__mode"
+                    classList={{ "den-crossbar__mode--active": !activeSource() && activeMode() === m }}
+                    aria-selected={!activeSource() && activeMode() === m}
+                    data-tip={modeTooltip(m)}
+                    data-testid={`crossbar-mode-${m}`}
+                    onClick={() => selectMode(m)}
+                  >
+                    {CROSSBAR_MODE_LABEL[m]}
+                  </button>
+                )}
+              </For>
+              <Show when={searchSources().length > 0}>
+                <span class="den-crossbar__source-label" aria-hidden="true">
+                  Sources
+                </span>
+              </Show>
+              <For each={searchSources()}>
+                {(source) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    class="den-crossbar__mode"
+                    classList={{ "den-crossbar__mode--active": activeSource()?.id === source.id }}
+                    aria-selected={activeSource()?.id === source.id}
+                    data-tip={source.ready ? undefined : sourceDisabledLabel(source)}
+                    onClick={() =>
+                      onQueryInput(`${source.prefix}: ${activeSource() ? activeSourceQuery() : query()}`)
+                    }
+                  >
+                    {source.label}
+                  </button>
+                )}
+              </For>
+            </div>
+
+            <CrossbarRowList
+              query={query()}
+              mode={mode()}
+              activeMode={activeMode()}
+              rows={rows()}
+              selectable={selectable()}
+              activeIndex={activeIndex()}
+              searchBusy={searchBusy()}
+              hitCount={hits().length}
+              coverageNote={coverageNote()}
+              lineTarget={lineTarget()}
+              projectRoots={props.projectRoots}
+              contributionActions={props.contributionActions}
+              activeSource={activeSource()}
+              activeSourceQuery={activeSourceQuery()}
+              sourceResults={sourceResults()}
+              sourceError={sourceError()}
+              dialogEl={dialogEl}
+              onSelectIndex={setActiveTo}
+              onActivateRow={activateRow}
+              onEscalateTo={escalateTo}
+              onActivateSourceResult={activateSourceResult}
+              onConfigureSource={() => {
+                const settings = contributionFrame()?.commands.find(
+                  (command) => command.handler_id === "settings.open",
+                );
+                if (settings) runAction(settings);
+              }}
+              renderStatusBanner={({ actionStatus, showHitStatus, coverageNote: note, hitStatusLabel }) => (
+                <>
+                  <Show when={actionStatus}>
+                    {(label) => (
+                      <li class="den-crossbar__status" role="status">
+                        {label()}
+                      </li>
+                    )}
+                  </Show>
+                  <Show when={!showHitStatus && note}>
+                    <li
+                      class="den-crossbar__status den-crossbar__coverage"
+                      role="status"
+                      data-testid="crossbar-coverage"
+                    >
+                      {note}
+                    </li>
+                  </Show>
+                  <Show when={showHitStatus}>
+                    <li
+                      class="den-crossbar__status"
+                      data-testid="crossbar-hit-status"
+                      aria-live="polite"
+                    >
+                      {hitStatusLabel}
+                    </li>
+                  </Show>
+                </>
+              )}
+            />
+
+            <div class="den-crossbar__footer" data-testid="crossbar-footer">
+              <span class="den-crossbar__hint">
+                <kbd class="den-crossbar__key">↑</kbd>
+                <kbd class="den-crossbar__key">↓</kbd>
+                Navigate
+              </span>
+              <span class="den-crossbar__hint">
+                <kbd class="den-crossbar__key">{bindingForHandler("list.confirm")}</kbd>
+                Open
+              </span>
+              <span class="den-crossbar__hint">
+                <kbd class="den-crossbar__key">{bindingForHandler("search.mode.next")}</kbd>
+                Modes
+              </span>
+              <span class="den-crossbar__hint den-crossbar__hint--dismiss">
+                <kbd class="den-crossbar__key">{bindingForHandler("overlay.dismiss")}</kbd>
+                Close
+              </span>
+            </div>
           </Show>
         </div>
       </div>
     </Show>
   );
-}
-
-/** Fits complete rows without leaving a section header last. */
-function wholeRowHeight(list: HTMLElement, available: number): number | null {
-  const listTop = list.getBoundingClientRect().top - list.scrollTop;
-  const paddingBottom = parseFloat(getComputedStyle(list).paddingBottom) || 0;
-  let fit: number | null = null;
-  let previous: number | null = null;
-  for (const child of list.children) {
-    // Only rows bound the fit.
-    if (!(child instanceof HTMLLIElement)) continue;
-    const bottom = child.getBoundingClientRect().bottom - listTop + paddingBottom;
-    if (bottom > available) break;
-    const isHeader = child.classList.contains("den-crossbar__section");
-    fit = isHeader ? previous : bottom;
-    previous = bottom;
-  }
-  return fit;
-}
-
-/** A directory opens as itself; a file opens its containing folder. */
-function outsideProjectFolder(outside: SourceSearchOutside): string {
-  if (outside.kind === "directory") return outside.path;
-  const cut = Math.max(outside.path.lastIndexOf("/"), outside.path.lastIndexOf("\\"));
-  return cut > 0 ? outside.path.slice(0, cut) : outside.path;
 }
