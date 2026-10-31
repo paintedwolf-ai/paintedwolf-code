@@ -135,26 +135,32 @@ func (c *SimpleCompactor) Compact(ctx context.Context, info SessionInfo, message
 
 func compactionReplacement(info SessionInfo, out, tail []ContextMessage, structured compactionSummary, summary string) []ContextMessage {
 	checkpoint := ContextMessage{
-		ID:                   uuid.NewString(),
-		Role:                 string(api.MessageRoleUser),
-		Content:              compactionCheckpointContent(),
-		Origin:               api.MessageOriginHost,
-		Authority:            api.ContentAuthorityNone,
-		TrustTier:            api.ContentTrustTierTrusted,
-		ContentParts:         compactionCheckpointParts(),
-		CompactionCheckpoint: true,
-		HostSecretRedaction:  compactedHostSecretRedaction(out, tail),
+		ID:           uuid.NewString(),
+		Role:         string(api.MessageRoleUser),
+		Content:      compactionCheckpointContent(),
+		ContentParts: compactionCheckpointParts(),
+		ContextMessageProvenance: ContextMessageProvenance{
+			Origin:              api.MessageOriginHost,
+			Authority:           api.ContentAuthorityNone,
+			TrustTier:           api.ContentTrustTierTrusted,
+			HostSecretRedaction: compactedHostSecretRedaction(out, tail),
+		},
+		ContextMessageCompaction: ContextMessageCompaction{
+			CompactionCheckpoint: true,
+		},
 	}
 	// The summary inherits the least-trusted tier of the removed content.
 	summaryTier := compactedTrustFloor(out, tail)
 	summaryMsg := ContextMessage{
-		SourceContext: sourceref.Mentioned(structured.SourceContext, summary),
-		ID:            uuid.NewString(),
-		Role:          string(api.MessageRoleAssistant),
-		Content:       summary,
-		Origin:        api.MessageOriginModel,
-		Authority:     api.ContentAuthorityNone,
-		TrustTier:     summaryTier,
+		ID:      uuid.NewString(),
+		Role:    string(api.MessageRoleAssistant),
+		Content: summary,
+		ContextMessageProvenance: ContextMessageProvenance{
+			SourceContext: sourceref.Mentioned(structured.SourceContext, summary),
+			Origin:        api.MessageOriginModel,
+			Authority:     api.ContentAuthorityNone,
+			TrustTier:     summaryTier,
+		},
 		ContentParts: []api.MessageContentPart{{
 			Content:   summary,
 			Origin:    api.MessageOriginModel,

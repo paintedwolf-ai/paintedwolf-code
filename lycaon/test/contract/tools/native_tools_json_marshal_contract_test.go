@@ -39,9 +39,6 @@ var surveyJSONMarshalExemptFile = map[string]string{
 	"lycaon/internal/scan/store_results.go":            "SQL persistence; payload never reaches LLM directly",
 	"lycaon/internal/scan/store_execution.go":          "SQL persistence of runtime policy and progress; payload never reaches LLM directly",
 	"lycaon/internal/scan/result_spill.go":             "oversized result_json spill file + SQLite stub; never LLM wire",
-	"lycaon/internal/webresearch/serper.go":            "provider HTTP request body; not LLM tool output",
-	"lycaon/internal/webresearch/tavily.go":            "provider HTTP request body; not LLM tool output",
-	"lycaon/internal/webresearch/microsoft_learn.go":   "provider HTTP request body; not LLM tool output",
 	"lycaon/internal/browser/filmstrip.go":             "zip manifest for Den asset pack; not tool_result JSON",
 }
 

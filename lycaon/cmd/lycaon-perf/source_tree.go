@@ -84,10 +84,10 @@ func (s *runState) measureSourceTree(ctx context.Context) error {
 		}
 	}
 	s.metrics.add("source.tree", elapsedMS(started))
-	return s.verifySourceTree(ctx, presPath, view)
+	return s.scenarios().verifySourceTree(ctx, presPath, view)
 }
 
-func (s *runState) verifySourceTree(ctx context.Context, presPath string, view api.SourceTreeView) error {
+func (s runScenarioRunner) verifySourceTree(ctx context.Context, presPath string, view api.SourceTreeView) error {
 	directories := make(map[string]bool)
 	for offset := int64(0); offset < view.Extent.Rows; {
 		var frame api.SourceTreeFrame

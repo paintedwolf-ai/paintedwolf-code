@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 )
 
-func (r *Registry) discoverModelsFresh(ctx context.Context, providerID string, profile providerprofile.Profile, baseURL, apiKey string) ([]modelinfo.Entry, error) {
+func (r *registryCore) discoverModelsFresh(ctx context.Context, providerID string, profile providerprofile.Profile, baseURL, apiKey string) ([]modelinfo.Entry, error) {
 	key := discoveryCacheKey(providerID, profile, baseURL, apiKey)
 	return r.discovery.Load(ctx, key, func(ctx context.Context) ([]modelinfo.Entry, error) {
 		return fetchDiscoveredModels(ctx, r.discoveryClient, profile, baseURL, apiKey)
