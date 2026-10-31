@@ -175,3 +175,32 @@ func TestVisualResolverReleasePreservesReplacement(t *testing.T) {
 		t.Fatal("released visual resolver still serves images")
 	}
 }
+
+func TestPerceptionFactAndToolImageCaptionCarryEvidenceHandle(t *testing.T) {
+	png := perceptionPNG(t)
+	withVisualResolver(t, func(string, string) ([]byte, string, bool) { return png, "image/png", true })
+
+	msg := storedVisualMessage("call-8", "art-8")
+	msg.EvidenceHandles = []string{"page#8"}
+
+	out := PrepareMessagesForVision([]api.Message{msg}, true, "sess-1")
+	if !strings.Contains(out[0].Content, `"evidence":"page#8"`) {
+		t.Fatalf("perception fact lacks evidence handle: %q", out[0].Content)
+	}
+	caption := ToolImageCaption(out[0], "call-8")
+	for _, want := range []string{`"tool_call_id":"call-8"`, `"tool":"capture_page"`, `"evidence":"page#8"`, `"artifact_id":"art-8"`} {
+		if !strings.Contains(caption, want) {
+			t.Fatalf("caption = %q, missing %s", caption, want)
+		}
+	}
+
+	visualFallback := storedVisualMessage("call-9", "art-9")
+	visualFallback.ToolResult.Visual.EvidenceHandle = "page#9"
+	outFallback := PrepareMessagesForVision([]api.Message{visualFallback}, true, "sess-1")
+	if !strings.Contains(outFallback[0].Content, `"evidence":"page#9"`) {
+		t.Fatalf("visual fallback fact lacks evidence handle: %q", outFallback[0].Content)
+	}
+	if got := ToolImageCaption(outFallback[0], ""); !strings.Contains(got, `"evidence":"page#9"`) {
+		t.Fatalf("visual fallback caption lacks evidence handle: %q", got)
+	}
+}

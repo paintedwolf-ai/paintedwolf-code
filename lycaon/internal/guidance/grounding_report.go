@@ -1,9 +1,11 @@
 package guidance
 
 import (
+	"cmp"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"slices"
 	"strings"
 )
 
@@ -55,6 +57,103 @@ func FormatOffenderReport(tokens []string) evidence.OffenderReport {
 		Sample:  strings.Join(display, ", "),
 		Omitted: omitted,
 	}
+}
+
+// groundingHintHandles orders ledger handles for rejection samples so recent
+// observations across kinds and offender-matching tools surface before older handles.
+func groundingHintHandles(offenders []string, ev evidence.Ledger) []string {
+	handles := evidence.HandlesSorted(ev)
+	if len(handles) <= 1 {
+		return handles
+	}
+	offenderKinds := offenderHandleKinds(offenders)
+	byGroup := make(map[string][]string)
+	ordinals := make(map[string]int, len(handles))
+	kinds := make(map[string]string, len(handles))
+	for _, h := range handles {
+		kind, ord := evidence.ParseHandleOrdinal(h)
+		kinds[h] = kind
+		ordinals[h] = ord
+		group := handleScopeGroup(h, kind)
+		byGroup[group] = append(byGroup[group], h)
+	}
+	rankInGroup := make(map[string]int, len(handles))
+	for _, groupHandles := range byGroup {
+		slices.SortFunc(groupHandles, func(a, b string) int {
+			if ordinals[a] != ordinals[b] {
+				return cmp.Compare(ordinals[b], ordinals[a])
+			}
+			return cmp.Compare(b, a)
+		})
+		for rank, h := range groupHandles {
+			rankInGroup[h] = rank
+		}
+	}
+	matchesOffender := func(h string, rec evidence.Record) bool {
+		if len(offenderKinds) == 0 {
+			return false
+		}
+		return offenderKinds[kinds[h]] || offenderKinds[rec.Kind] || offenderKinds[rec.SourceTool]
+	}
+	out := append([]string(nil), handles...)
+	slices.SortFunc(out, func(a, b string) int {
+		recA, recB := ev.Handles[a], ev.Handles[b]
+		if recA.IsGate() != recB.IsGate() {
+			if recA.IsGate() {
+				return 1
+			}
+			return -1
+		}
+		if matchA, matchB := matchesOffender(a, recA), matchesOffender(b, recB); matchA != matchB {
+			if matchA {
+				return -1
+			}
+			return 1
+		}
+		if supA, supB := recA.SupersededBy != "", recB.SupersededBy != ""; supA != supB {
+			if !supA {
+				return -1
+			}
+			return 1
+		}
+		if rankInGroup[a] != rankInGroup[b] {
+			return cmp.Compare(rankInGroup[a], rankInGroup[b])
+		}
+		if ordinals[a] != ordinals[b] {
+			return cmp.Compare(ordinals[b], ordinals[a])
+		}
+		return cmp.Compare(a, b)
+	})
+	return out
+}
+
+func offenderHandleKinds(offenders []string) map[string]bool {
+	var out map[string]bool
+	for _, raw := range offenders {
+		token := strings.TrimSpace(raw)
+		if i := strings.IndexAny(token, " \t("); i >= 0 {
+			token = token[:i]
+		}
+		if p, _, ok := evidence.SplitPathLineToken(token); ok && strings.Contains(p, "#") {
+			token = p
+		}
+		kind, ord := evidence.ParseHandleOrdinal(token)
+		if ord <= 0 || kind == "" {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]bool)
+		}
+		out[kind] = true
+	}
+	return out
+}
+
+func handleScopeGroup(handle, kind string) string {
+	if idx := strings.LastIndex(handle, ":"); idx >= 0 {
+		return handle[:idx+1] + kind
+	}
+	return kind
 }
 
 func addOffender(out *[]string, seen map[string]struct{}, token string) {

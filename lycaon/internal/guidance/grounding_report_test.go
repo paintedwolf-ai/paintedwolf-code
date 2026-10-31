@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 )
 
@@ -38,5 +39,22 @@ func TestFormatOffenderReport_many(t *testing.T) {
 	}
 	if len(r.Sample) > guidance.MaxOffenderSampleChars {
 		t.Fatalf("sample too long: %d", len(r.Sample))
+	}
+}
+
+func TestGroundingHintData_ordersNamespacedSupersededAndGateHandles(t *testing.T) {
+	ev := evidence.AssembleLedger([]evidence.Record{
+		{Handle: "leg-a:read#1", Kind: "read", SourceTool: "read", SupersededBy: "leg-a:read#2"},
+		{Handle: "leg-a:read#2", Kind: "read", SourceTool: "read"},
+		{Handle: "leg-b:command#1", Kind: "command", SourceTool: "command"},
+		{Handle: "dialed_host#a.example", Kind: "dialed_host"},
+		{Handle: "dialed_host#b.example", Kind: "dialed_host"},
+		{Handle: "gate#1", GateType: "review"},
+	})
+	data := guidance.GroundingHintData([]string{`leg-a:read#9:1 ("excerpt")`, "src/a.go:10"}, ev)
+	sample, _ := data["observed_handles_sample"].(string)
+	want := "leg-a:read#2, leg-a:read#1, leg-b:command#1, dialed_host#b.example, dialed_host#a.example, gate#1"
+	if sample != want {
+		t.Fatalf("sample = %q, want %q", sample, want)
 	}
 }
