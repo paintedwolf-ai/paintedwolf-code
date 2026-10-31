@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,28 +15,29 @@ import (
 // optionInjectionRepo builds a one-commit repository for the injection cases.
 func optionInjectionRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
+	return CloneFixtureRepo(t, "option-injection", func(dir string) {
+		initCmd := exec.CommandContext(context.Background(), "git", "init", dir)
+		initCmd.Env = lyexec.LocalGitEnv()
+		if out, err := initCmd.CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v %s", err, out)
 		}
-	}
-	testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("one\n"), 0o600))
-	run("add", "-A")
-	run("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-m", "seed")
-	return dir
+		run := func(args ...string) {
+			t.Helper()
+			cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
+			cmd.Env = lyexec.LocalGitEnv()
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v %s", args, err, out)
+			}
+		}
+		testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("one\n"), 0o600))
+		run("add", "-A")
+		run("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-m", "seed")
+	})
 }
 
 // Option-shaped refs are rejected and isolated from command options.
 func TestRefArgsCannotBecomeOptions(t *testing.T) {
+	t.Parallel()
 	dir := optionInjectionRepo(t)
 	mgr := NewManager()
 	sentinel := filepath.Join(t.TempDir(), "written-by-git")
@@ -91,6 +93,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 
 // Branch selection treats filenames as refs, preserving working changes.
 func TestCheckoutDoesNotRestorePaths(t *testing.T) {
+	t.Parallel()
 	dir := optionInjectionRepo(t)
 	mgr := NewManager()
 

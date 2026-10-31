@@ -15,27 +15,30 @@ import (
 
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		// Clear inherited Git variables so fixture commands target the scratch repository.
-		cmd.Env = lyexec.LocalGitEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
-			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
+	git.CloneFixtureInto(t, "fast-ref-base", dir, func(seed string) {
+		run := func(args ...string) {
+			t.Helper()
+			cmd := exec.Command("git", args...)
+			cmd.Dir = seed
+			// Clear inherited Git variables so fixture commands target the scratch repository.
+			cmd.Env = lyexec.LocalGitEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+				"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
 		}
-	}
-	run("init", "-b", "main")
-	run("config", "user.email", "t@t")
-	run("config", "user.name", "t")
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
-	run("add", "a.txt")
-	run("commit", "-m", "init")
+		run("init", "-b", "main")
+		run("config", "user.email", "t@t")
+		run("config", "user.name", "t")
+		testutil.FailErr(t, "write", os.WriteFile(filepath.Join(seed, "a.txt"), []byte("a"), 0o644))
+		run("add", "a.txt")
+		run("commit", "-m", "init")
+	})
 }
 
 func TestFastRead_HeadSHAAndBranchParity(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
@@ -70,6 +73,7 @@ func TestFastRead_HeadSHAAndBranchParity(t *testing.T) {
 }
 
 func TestFastRead_AheadBehindEqualTips(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 	// Simulate upstream pointing at same tip via a fake remote-tracking ref.
@@ -109,6 +113,7 @@ func linkedWorktree(t *testing.T, branch string) (main, worktree string) {
 
 // A linked worktree keeps HEAD beside itself and its branch tip in the shared directory.
 func TestFastRead_HeadSHAInLinkedWorktree(t *testing.T) {
+	t.Parallel()
 	main, worktree := linkedWorktree(t, "feature")
 
 	sha, err := git.ReadHeadSHA(worktree)
@@ -125,7 +130,7 @@ func TestFastRead_HeadSHAInLinkedWorktree(t *testing.T) {
 	if branch != "feature" {
 		t.Fatalf("worktree branch = %q, want feature", branch)
 	}
-	// HEAD is per-worktree: the main tree must still report its own.
+	// HEAD is per-worktree: the main tree still reports its own.
 	mainBranch, err := git.ReadBranch(main)
 	testutil.FailErr(t, "ReadBranch in the main worktree", err)
 	if mainBranch != "main" {
@@ -156,6 +161,7 @@ func TestFastRead_HeadSHAInLinkedWorktree(t *testing.T) {
 
 // The upstream a branch names lives in the shared config; a per-worktree git dir has none.
 func TestFastRead_AheadBehindInLinkedWorktree(t *testing.T) {
+	t.Parallel()
 	main, worktree := linkedWorktree(t, "feature")
 
 	// A remote-tracking tip in the shared refs, and an upstream in the shared config.
@@ -206,6 +212,7 @@ func TestFastRead_AheadBehindInLinkedWorktree(t *testing.T) {
 }
 
 func TestFastRead_LinkedWorktreeResolvesPackedRefs(t *testing.T) {
+	t.Parallel()
 	main, worktree := linkedWorktree(t, "feature")
 
 	loose := filepath.Join(main, ".git", "refs", "heads", "feature")

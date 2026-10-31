@@ -28,6 +28,7 @@ func landFixture(t *testing.T) (*Manager, WorktreeLandRequest) {
 }
 
 func TestLandWorktreeRevalidatesUnderRepositoryLease(t *testing.T) {
+	t.Parallel()
 	for _, change := range []string{"base_branch", "source_branch", "base_dirty", "worktree_dirty"} {
 		t.Run(change, func(t *testing.T) {
 			mgr, req := landFixture(t)
@@ -80,6 +81,7 @@ func TestLandWorktreeRevalidatesUnderRepositoryLease(t *testing.T) {
 }
 
 func TestLandWorktreeCountsExactSourceAndIsIdempotent(t *testing.T) {
+	t.Parallel()
 	mgr, req := landFixture(t)
 	count, err := mgr.LandWorktree(t.Context(), req)
 	testutil.FailErr(t, "first land", err)

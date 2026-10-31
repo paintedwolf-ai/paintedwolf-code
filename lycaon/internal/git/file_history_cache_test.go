@@ -23,6 +23,7 @@ func commitHistoryFile(t *testing.T, dir string, run func(...string) string, pat
 }
 
 func TestFileHistoryCachePinsHeadAndCopiesRows(t *testing.T) {
+	// Serial: replaces process-wide default slog logger.
 	var logs bytes.Buffer
 	prior := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
@@ -66,6 +67,7 @@ func TestFileHistoryCachePinsHeadAndCopiesRows(t *testing.T) {
 }
 
 func TestFileHistoryCacheSeparatesPagesAndBypassesShallowHistory(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	commitHistoryFile(t, dir, run, "a.txt", "one")
 	tip := commitHistoryFile(t, dir, run, "a.txt", "two")
@@ -93,6 +95,7 @@ func TestFileHistoryCacheSeparatesPagesAndBypassesShallowHistory(t *testing.T) {
 }
 
 func TestFileHistoryLiteralPathsAndEmptyPages(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	manager := NewManager()
 	for _, path := range []string{"a*.txt", "a1.txt", "[abc].txt", "tab\tnewline\n雪.txt", " leading and trailing "} {
@@ -116,6 +119,7 @@ func TestFileHistoryLiteralPathsAndEmptyPages(t *testing.T) {
 }
 
 func TestFileHistoryRetriesUnbornRepository(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	manager := NewManager()
 	_, err := manager.FileHistory(t.Context(), dir, GitFileHistoryOpts{Path: "a.txt"})
@@ -131,6 +135,7 @@ func TestFileHistoryRetriesUnbornRepository(t *testing.T) {
 }
 
 func TestFileHistoryCacheCanceledHitAndRepositoryIsolation(t *testing.T) {
+	t.Parallel()
 	manager := NewManager()
 	for _, subject := range []string{"first repository", "second repository"} {
 		dir, run := fileHistoryRepo(t)
@@ -150,6 +155,7 @@ func TestFileHistoryCacheCanceledHitAndRepositoryIsolation(t *testing.T) {
 }
 
 func TestFileHistoryDoesNotFollowReplacementObjects(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	first := commitHistoryFile(t, dir, run, "a.txt", "one")
 	tip := commitHistoryFile(t, dir, run, "a.txt", "two")
@@ -163,6 +169,7 @@ func TestFileHistoryDoesNotFollowReplacementObjects(t *testing.T) {
 }
 
 func TestParseFileHistoryPreservesObjectFormatsAndControlCharacters(t *testing.T) {
+	t.Parallel()
 	for _, width := range []int{40, 64} {
 		hash, oid := strings.Repeat("a", width), strings.Repeat("b", width)
 		subject, path := "subject\x1e\x1f", " file\tname\n "

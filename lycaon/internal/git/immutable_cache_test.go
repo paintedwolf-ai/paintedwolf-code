@@ -15,6 +15,7 @@ import (
 )
 
 func TestImmutableCacheCanceledWaiterDoesNotCancelSharedRead(t *testing.T) {
+	t.Parallel()
 	var cache immutableCache[string]
 	started, finish := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
@@ -64,6 +65,7 @@ func waitCacheWaiters(t *testing.T, cache *immutableCache[string], key string, w
 }
 
 func TestImmutableCacheLastWaiterCancelsAndCannotPublish(t *testing.T) {
+	t.Parallel()
 	var cache immutableCache[string]
 	started, canceled, finish := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	ctx, cancel := context.WithCancel(t.Context())
@@ -106,6 +108,7 @@ func TestImmutableCacheLastWaiterCancelsAndCannotPublish(t *testing.T) {
 }
 
 func TestImmutableCacheBoundsAndRetry(t *testing.T) {
+	t.Parallel()
 	var cache immutableCache[string]
 	for range 2 {
 		_, disposition, err := cache.load(t.Context(), "oversized", func(context.Context) (string, int, error) {
@@ -151,6 +154,7 @@ func TestImmutableCacheBoundsAndRetry(t *testing.T) {
 }
 
 func TestImmutableGitCachesResolveHeadAndCopyProjections(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	path := filepath.Join(dir, "a.txt")
 	testutil.FailErr(t, "write original", os.WriteFile(path, []byte("one\n"), 0o644))
@@ -206,6 +210,7 @@ func TestImmutableGitCachesResolveHeadAndCopyProjections(t *testing.T) {
 }
 
 func TestCommitReviewCacheStopsAtBudgetAndStreamsOversizedPages(t *testing.T) {
+	t.Parallel()
 	parser := newCommitReviewParser(CommitReviewOptions{Limit: 100000})
 	parser.bounded = true
 	metadata := []byte(":100644 100644 " + strings.Repeat("a", 40) + " " + strings.Repeat("b", 40) + " M")
@@ -232,6 +237,7 @@ func TestCommitReviewCacheStopsAtBudgetAndStreamsOversizedPages(t *testing.T) {
 }
 
 func TestImmutableCacheEntryLimitAndRecency(t *testing.T) {
+	t.Parallel()
 	var cache immutableCache[string]
 	read := func(context.Context) (string, int, error) { return "value", 1, nil }
 	for i := range 128 {
@@ -261,6 +267,7 @@ func TestImmutableCacheEntryLimitAndRecency(t *testing.T) {
 }
 
 func TestImmutableCachePanicSettlesAndAllowsRetry(t *testing.T) {
+	t.Parallel()
 	var cache immutableCache[string]
 	_, _, err := cache.load(t.Context(), "key", func(context.Context) (string, int, error) { panic("broken read") })
 	if err == nil {
