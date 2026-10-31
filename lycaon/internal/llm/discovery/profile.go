@@ -36,6 +36,9 @@ type Profile struct {
 	RequirePositiveTokenPrice bool
 	// PricingScale normalizes wire prices to per-1k USD.
 	PricingScale PricingScale
+	// ProbeProps queries GET /props (llama.cpp) for serving context window when
+	// model records do not declare one.
+	ProbeProps bool
 }
 
 // ResponseShape selects how a model list response is decoded.
@@ -64,6 +67,7 @@ type discoveryCatalogRecord struct {
 	ID                  string
 	WireType            string
 	ContextLength       int
+	ContextLengthSource string
 	InputPrice          *float64
 	OutputPrice         *float64
 	CacheReadPrice      *float64
@@ -191,10 +195,45 @@ func FromProfile(
 		}
 		if rec.ContextLength > 0 {
 			entry.ContextLength = rec.ContextLength
+			entry.ContextLengthSource = rec.ContextLengthSource
+			if entry.ContextLengthSource == "" {
+				entry.ContextLengthSource = "v1/models"
+			}
 		}
 		applyDiscoveryPricing(&entry, rec, profile.PricingScale)
 		applyDiscoveryVision(&entry, rec)
 		out = append(out, entry)
+	}
+	if profile.ProbeProps {
+		needProps := len(out) == 0
+		for i := range out {
+			if out[i].ContextLength <= 0 {
+				needProps = true
+				break
+			}
+		}
+		if needProps {
+			if nCtx, modelID := probeLlamaCppPropsDetail(ctx, base, apiKey, client); nCtx > 0 {
+				if len(out) == 0 {
+					if modelID == "" {
+						modelID = "*"
+					}
+					out = append(out, modelinfo.Entry{
+						ID:                  modelID,
+						ContextLength:       nCtx,
+						ContextLengthSource: LlamaCppSource,
+						Untyped:             ProfileUntyped(profile),
+					})
+				} else {
+					for i := range out {
+						if out[i].ContextLength <= 0 {
+							out[i].ContextLength = nCtx
+							out[i].ContextLengthSource = LlamaCppSource
+						}
+					}
+				}
+			}
+		}
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].ID < out[j].ID
@@ -223,8 +262,11 @@ func decodeDiscoveryCatalogRecords(r io.Reader, shape ResponseShape) ([]discover
 func decodeDiscoveryOpenAIDataRecords(r io.Reader) ([]discoveryCatalogRecord, error) {
 	var listed struct {
 		Data []struct {
-			ID            string `json:"id"`
-			ContextLength int    `json:"context_length"`
+			ID                  string `json:"id"`
+			LoadedContextLength int    `json:"loaded_context_length"`
+			MaxModelLen         int    `json:"max_model_len"`
+			ContextLength       int    `json:"context_length"`
+			MaxContextLength    int    `json:"max_context_length"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(r).Decode(&listed); err != nil {
@@ -232,12 +274,34 @@ func decodeDiscoveryOpenAIDataRecords(r io.Reader) ([]discoveryCatalogRecord, er
 	}
 	out := make([]discoveryCatalogRecord, 0, len(listed.Data))
 	for _, item := range listed.Data {
+		ctxLen, src := firstPositiveContextLength(
+			item.LoadedContextLength,
+			item.MaxModelLen,
+			item.ContextLength,
+			item.MaxContextLength,
+		)
 		out = append(out, discoveryCatalogRecord{
-			ID:            strings.TrimSpace(item.ID),
-			ContextLength: item.ContextLength,
+			ID:                  strings.TrimSpace(item.ID),
+			ContextLength:       ctxLen,
+			ContextLengthSource: src,
 		})
 	}
 	return out, nil
+}
+
+func firstPositiveContextLength(loaded, maxModelLen, contextLength, maxContextLength int) (int, string) {
+	switch {
+	case loaded > 0:
+		return loaded, "v1/models"
+	case maxModelLen > 0:
+		return maxModelLen, "v1/models"
+	case contextLength > 0:
+		return contextLength, "v1/models"
+	case maxContextLength > 0:
+		return maxContextLength, "v1/models"
+	default:
+		return 0, ""
+	}
 }
 
 type discoveryArrayModel struct {

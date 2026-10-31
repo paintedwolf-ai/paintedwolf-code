@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 )
 
@@ -67,6 +68,9 @@ func cachedReasoningFallback(providerID, model string) reasoningFallback {
 
 // nextReasoningFallback advances the declared retry ladder.
 func nextReasoningFallback(err error, current reasoningFallback, hasOffToken bool) (reasoningFallback, bool) {
+	if _, tooSmall := failure.AsProviderContextTooSmall(err); tooSmall {
+		return current, false
+	}
 	if !providerretry.IsRequestRejected(err) {
 		return current, false
 	}

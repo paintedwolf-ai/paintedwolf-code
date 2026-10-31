@@ -428,8 +428,7 @@ func (l *turnNudges) workerContextUsage(ctx context.Context, sess *api.Session, 
 		return nil
 	}
 	usage := &api.WorkerContextUsage{PromptTokens: promptTokens}
-	if l.Model.Deps.CompactionConfig != nil {
-		cc := l.Model.Deps.CompactionConfig(ctx, sess)
+	if cc, ok := l.Model.effectiveCompactionConfig(ctx, sess); ok {
 		usage.Window = cc.ModelContextWindow
 		usage.CompactionThreshold = cc.CompactionTriggerTokens()
 	}

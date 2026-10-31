@@ -28,6 +28,7 @@ import {
   providerDiscoveryFailure,
   providerStatusLabel,
   providerToolCallSupport,
+  providerContextWindowState,
   formatModelAssignmentLabel,
   modelTokenRatesLabel,
   shortModelId,
@@ -869,6 +870,22 @@ describe("providerToolCallSupport", () => {
         ],
       }),
     ).toBe("unknown");
+  });
+
+  it("reports whether listed models declare a context window", () => {
+    expect(providerContextWindowState({ ...base, models: [] })).toBe("unknown");
+    expect(
+      providerContextWindowState({
+        ...base,
+        models: [providerModel("local-model")],
+      }),
+    ).toBe("unknown");
+    expect(
+      providerContextWindowState({
+        ...base,
+        models: [providerModel("local-model", { context_length: 32768 })],
+      }),
+    ).toBe("known");
   });
 });
 
