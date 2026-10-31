@@ -49,6 +49,25 @@ func TestDefaultConfinementProtectsBundledKWalletStore(t *testing.T) {
 			t.Errorf("%s write subject = %s, want key material", name, got.Kind)
 		}
 	}
+	for _, rel := range []string{
+		filepath.Join("AppData", "Roaming", "Microsoft", "Credentials", "DFBE70A7E5CC19A398EBF1B96859CE5D"),
+		filepath.Join("AppData", "Local", "Microsoft", "Credentials", "DFBE70A7E5CC19A398EBF1B96859CE5D"),
+		filepath.Join("AppData", "Local", "Microsoft", "Vault", "4BF4C442-9B8A-41A0-B380-DD4A704DDB28", "Policy.vpol"),
+	} {
+		winPath := filepath.Join(home, rel)
+		writeFixtureFile(t, winPath)
+		for access, want := range map[confine.FilesystemAccess]confine.FloorVerdict{
+			confine.AccessRead:  {Layer: confine.FloorReadCredentialStore},
+			confine.AccessWrite: {Layer: confine.FloorProtected},
+		} {
+			if got := boundary.Filesystem.Verdict(access, winPath); got != want {
+				t.Errorf("%s %s = %+v, want %+v", access, rel, got, want)
+			}
+		}
+		if got := confine.ClassifyBlockedWrite(winPath); got.Kind != confine.WriteSubjectKeyMaterial {
+			t.Errorf("%s write subject = %s, want key material", rel, got.Kind)
+		}
+	}
 	if confine.KeyMaterialPath(sibling) {
 		t.Fatal("a sibling directory must not match the key-material floor")
 	}

@@ -86,6 +86,7 @@ const (
 	ConnectionLocalService     ConnectionMode = "local_service"
 	ConnectionDirectIP         ConnectionMode = "direct_ip"
 	ConnectionDynamic          ConnectionMode = "dynamic"
+	ConnectionCredentialStore  ConnectionMode = "credential_store"
 )
 
 // LocalServiceTransport is the substrate selected by one platform

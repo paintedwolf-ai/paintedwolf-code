@@ -25,7 +25,7 @@ components:
         prefer-another-route note.
     HostResourceConnectionMode:
       type: string
-      enum: [none, proxy, socks, baseline_loopback, local_service, direct_ip, dynamic]
+      enum: [none, proxy, socks, baseline_loopback, local_service, direct_ip, dynamic, credential_store]
     HostResourceLocalServiceTransport:
       type: string
       enum: [unix_socket, named_pipe]
