@@ -134,6 +134,13 @@ type JobSnapshot struct {
 	Stages     []hostcmd.StageResult
 }
 
+// RootProcess identifies one live background process running under a workspace root.
+type RootProcess struct {
+	Handle    string
+	SessionID string
+	Cwd       string
+}
+
 // StartConflict describes the live jobs that prevented a new command from starting.
 type StartConflict struct {
 	Kind    error

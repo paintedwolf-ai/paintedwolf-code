@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -20,13 +21,13 @@ func (m *Service) ReassignSessionsAfterRootDetach(ctx context.Context, projectID
 		return
 	}
 	if m.processes != nil {
-		if sessions, err := m.store.List(ctx); err == nil {
-			for _, sess := range sessions {
-				if sess == nil || sess.ProjectID != projectID {
-					continue
-				}
-				if len(after) == 0 || strings.TrimSpace(sess.WorkspaceRootID) == detachedRootID || m.processes.HasRunning(sess.ID) {
-					_ = m.processes.Lifecycle.DisposeSession(ctx, sess.ID, bgprocess.TerminationRootDetached)
+		sessionIDs := m.projectSessionIDs(ctx, projectID)
+		if len(after) == 0 {
+			_ = m.processes.Lifecycle.StopUnderRoot(ctx, projectID, sessionIDs, "", nil, bgprocess.TerminationRootDetached)
+		} else if m.projects != nil {
+			if p, err := m.projects.Get(ctx, projectID); err == nil && p != nil {
+				if detached, ok := projectroot.RootRefByID(project.RootRefsFrom(p), detachedRootID); ok && strings.TrimSpace(detached.Path) != "" {
+					_ = m.processes.Lifecycle.StopUnderRoot(ctx, projectID, sessionIDs, detached.Path, nil, bgprocess.TerminationRootDetached)
 				}
 			}
 		}

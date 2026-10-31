@@ -116,6 +116,11 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		r.jobs.sessions[sessionID] = make(map[string]*Process)
 	}
 	r.jobs.sessions[sessionID][handle] = proc
+	workDir := projectDir
+	if c := trim(spec.Cwd); filepath.IsAbs(c) {
+		workDir = filepath.Clean(c)
+	}
+	r.jobs.workDirs[handle] = workDir
 	r.jobs.mu.Unlock()
 
 	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.Output.publishStream}

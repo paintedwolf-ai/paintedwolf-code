@@ -259,7 +259,8 @@ func runCommandForeground(
 	}
 	registry.Lifecycle.WatchIndex(tctx.Identity.SessionID, handle, index)
 	networkLife := newCommandNetworkLifecycle(tctx, toolName, bound.lease, directIPApplied)
-	registry.Lifecycle.OnExit(tctx.Identity.SessionID, handle, func() { networkLife.complete(ctx) })
+	exitCtx := context.WithoutCancel(ctx)
+	registry.Lifecycle.OnExit(tctx.Identity.SessionID, handle, func() { networkLife.complete(exitCtx) })
 
 	finished, awaitErr := registry.Lifecycle.Await(ctx, tctx.Identity.SessionID, handle, budget)
 	if awaitErr != nil {
