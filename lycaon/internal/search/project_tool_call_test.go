@@ -196,9 +196,7 @@ func TestProjectToolMessageDoesNotInferToolIdentity(t *testing.T) {
 	}
 }
 
-// The handle a tool result minted in the evidence ledger is the row's handle,
-// so `handle:command#2` from a compaction banner resolves to this row and the
-// recorded body behind it.
+// Minted ledger handles key the projected tool rows.
 func TestProjectToolMessageIndexesLedgerHandles(t *testing.T) {
 	msg := api.Message{
 		ID:              "tool-9",
@@ -247,5 +245,71 @@ func TestToolResultPathUsesTheRecordedArgumentSnapshot(t *testing.T) {
 	rows = ProjectToolMessage("project", "session", msg, "read")
 	if len(rows) != 1 || rows[0].Path != "" {
 		t.Fatal("result text became path authority")
+	}
+}
+
+func TestProjectToolMessageIndexesEmbeddedChildHandles(t *testing.T) {
+	content := `[summarize#3]
+{"task":"inspect","anchors":[{"handle":"summarize#1","path":"./src/a.go","line":12,"excerpt":"func Route()"},{"handle":"summarize#2","path":"src/b.go","line":34,"excerpt":"func Serve()"}]}`
+	msg := api.Message{
+		ID:              "tool-sum",
+		Role:            api.MessageRoleTool,
+		Content:         content,
+		EvidenceHandles: []string{"summarize#3"},
+		ToolResult:      &api.ToolResult{Tool: "summarize", ToolCallID: "call-sum", Content: content},
+		CreatedAt:       time.Now().UTC(),
+	}
+	rows := ProjectToolMessage("proj-a", "sess-a", msg, "summarize")
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d, want 3 (parent + 2 anchors)", len(rows))
+	}
+	if rows[0].Handle != "summarize#3" || rows[1].Handle != "summarize#1" || rows[2].Handle != "summarize#2" {
+		t.Fatalf("handles = %q, %q, %q", rows[0].Handle, rows[1].Handle, rows[2].Handle)
+	}
+	if rows[1].Path != "src/a.go" || rows[1].Line != 12 || rows[1].Snippet != "func Route()" {
+		t.Fatalf("anchor 1 row = %+v", rows[1])
+	}
+	if rows[2].Path != "src/b.go" || rows[2].Line != 34 || rows[2].Snippet != "func Serve()" {
+		t.Fatalf("anchor 2 row = %+v", rows[2])
+	}
+}
+
+func TestSyncMessageWriteThroughEnrichesFromEvidenceRecords(t *testing.T) {
+	dir := t.TempDir()
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
+	ctx := context.Background()
+	projectID := testdbseed.DefaultProjectID
+	sessionID := "sess-enrich"
+	testdbseed.InsertSessionWithRoot(t, sqlDB, sessionID, projectID, dir)
+
+	_, err := sqlDB.ExecContext(ctx, `
+		INSERT INTO evidence_records (
+			session_id, project_id, handle, ordinal, kind, shape, fidelity, source_tool,
+			marks_untrusted, path, url, line_ranges, content_blob_sha256, truncated, survey
+		) VALUES (?, ?, 'grep#1', 1, 'grep', 'file_region', 'structured', 'grep', 0, './pkg/match.go', '', '{"v":1,"ranges":[{"Start":42,"End":42}]}', '', 0, 1)
+	`, sessionID, projectID)
+	testutil.FailErr(t, "insert evidence_record", err)
+
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	testutil.FailErr(t, "BeginTx", err)
+	msg := api.Message{
+		ID:              "tool-grep-1",
+		Role:            api.MessageRoleTool,
+		Content:         `[grep#1]{"matches":[{"path":"pkg/match.go","line":42,"content":"needle"}]}`,
+		EvidenceHandles: []string{"grep#1"},
+		ToolResult:      &api.ToolResult{Tool: "grep", ToolCallID: "call-grep-1"},
+		CreatedAt:       time.Now().UTC(),
+	}
+	testutil.FailErr(t, "SyncMessageWriteThrough", SyncMessageWriteThrough(ctx, tx, projectID, sessionID, msg))
+	testutil.FailErr(t, "Commit", tx.Commit())
+
+	var gotPath, gotKind, gotShape, gotTrust string
+	var gotLine int
+	testutil.FailErr(t, "query evidence_index", sqlDB.QueryRowContext(ctx, `
+		SELECT COALESCE(path, ''), COALESCE(line, 0), COALESCE(kind, ''), COALESCE(shape, ''), COALESCE(trust, '')
+		FROM evidence_index WHERE session_id = ? AND handle = 'grep#1' AND source = 'tool'
+	`, sessionID).Scan(&gotPath, &gotLine, &gotKind, &gotShape, &gotTrust))
+	if gotPath != "pkg/match.go" || gotLine != 42 || gotKind != "grep" || gotShape != "raw" || gotTrust != "structured" {
+		t.Fatalf("enriched row = path:%q line:%d kind:%q shape:%q trust:%q", gotPath, gotLine, gotKind, gotShape, gotTrust)
 	}
 }
