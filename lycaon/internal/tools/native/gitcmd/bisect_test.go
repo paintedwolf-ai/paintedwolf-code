@@ -13,35 +13,25 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
+var bisectTemplate = repoTemplate{name: "bisect"}
+
 // newBisectHarness builds twelve commits where commit 7 first records a bad
 // state, with check.sh as the untracked check Git itself can run.
 func newBisectHarness(t *testing.T) *harness {
-	h := newUninitializedHarness(t)
-	empty := ensureEmptyFixture(t, h.bin)
-	bisectFixtureOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "gitcmd-bisect-*")
-		testutil.FailErr(t, "bisect fixture dir", err)
-		copyFixtureDir(t, empty, dir)
-		tmpl, err := os.MkdirTemp("", "gitcmd-tmpl-*")
-		testutil.FailErr(t, "bisect template dir", err)
-		defer func() { _ = os.RemoveAll(tmpl) }()
-		seed := &harness{t: t, root: dir, bin: h.bin, template: tmpl}
+	return bisectTemplate.materialize(t, func(h *harness) {
+		seedEmptyRepo(h)
 		for i := 1; i <= 12; i++ {
 			state := "good\n"
 			if i >= 7 {
 				state = "bad\n"
 			}
-			seed.write("state", state)
-			seed.write("n", strings.Repeat("x", i)+"\n")
-			seed.git("add", "--", "state", "n")
-			seed.git("commit", "-q", "-m", "commit "+strings.Repeat("I", i))
+			h.write("state", state)
+			h.write("n", strings.Repeat("x", i)+"\n")
+			h.git("add", "--", "state", "n")
+			h.git("commit", "-q", "-m", "commit "+strings.Repeat("I", i))
 		}
-		seed.write("check.sh", "grep -q good state\n")
-		bisectFixtureDir = dir
+		h.write("check.sh", "grep -q good state\n")
 	})
-	copyFixtureDir(t, bisectFixtureDir, h.root)
-	h.git("update-index", "-q", "--refresh")
-	return h
 }
 
 // checkNested stands in for program dispatch: it answers each check from the

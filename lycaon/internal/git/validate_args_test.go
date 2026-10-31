@@ -3,35 +3,23 @@ package git
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func initScratchRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
-	for _, args := range [][]string{{"config", "user.email", "test@example.com"}, {"config", "user.name", "Test"}} {
-		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-	}
+	initGitRepo(t, dir)
 	return dir
 }
 
 // The path separator keeps dash-prefixed filenames out of option parsing.
 func TestCommitStagesDashPrefixedPathAsLiteral(t *testing.T) {
+	t.Parallel()
 	dir := initScratchRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "-dash.txt"), []byte("x"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
@@ -48,6 +36,7 @@ func TestCommitStagesDashPrefixedPathAsLiteral(t *testing.T) {
 }
 
 func TestDiffStatRejectsFlagLikeRef(t *testing.T) {
+	t.Parallel()
 	dir := initScratchRepo(t)
 	mgr := NewManager()
 	if _, err := mgr.DiffStat(context.Background(), dir, GitDiffOpts{BaseRef: "--output=/tmp/pwned"}); err == nil {
@@ -62,6 +51,7 @@ func TestDiffStatRejectsFlagLikeRef(t *testing.T) {
 }
 
 func TestValidateGitRefRejectsFlagLike(t *testing.T) {
+	t.Parallel()
 	for _, v := range []string{"", "   ", "-f", "--orphan", "-B"} {
 		if err := validateGitRef(v, "branch"); err == nil {
 			t.Fatalf("validateGitRef(%q) = nil, want error", v)
@@ -75,6 +65,7 @@ func TestValidateGitRefRejectsFlagLike(t *testing.T) {
 }
 
 func TestCloneRejectsExtTransportBeforeExec(t *testing.T) {
+	t.Parallel()
 	mgr := NewManager()
 	err := mgr.Clone(context.Background(), "ext::sh -c 'echo pwned'", t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "unsafe git transport") {
@@ -83,6 +74,7 @@ func TestCloneRejectsExtTransportBeforeExec(t *testing.T) {
 }
 
 func TestCheckoutRejectsFlagLikeBranch(t *testing.T) {
+	t.Parallel()
 	mgr := NewManager()
 	if err := mgr.Checkout(context.Background(), t.TempDir(), "--orphan"); err == nil {
 		t.Fatal("Checkout(--orphan) = nil, want error")

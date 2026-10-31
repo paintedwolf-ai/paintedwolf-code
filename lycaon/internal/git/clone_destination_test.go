@@ -11,6 +11,7 @@ import (
 )
 
 func TestConcurrentClonesPreserveWinner(t *testing.T) {
+	t.Parallel()
 	mgr, origin := initWorktreeRepo(t)
 	dest := filepath.Join(t.TempDir(), "clone")
 	const count = 8
@@ -45,6 +46,7 @@ func TestConcurrentClonesPreserveWinner(t *testing.T) {
 }
 
 func TestCloneRejectsEveryExistingDestination(t *testing.T) {
+	t.Parallel()
 	mgr, origin := initWorktreeRepo(t)
 	for _, kind := range []string{"empty_directory", "file", "symlink", "dangling_symlink"} {
 		t.Run(kind, func(t *testing.T) {
@@ -74,6 +76,7 @@ func TestCloneRejectsEveryExistingDestination(t *testing.T) {
 }
 
 func TestFailedCloneRemovesOnlyClaimedEmptyDestination(t *testing.T) {
+	t.Parallel()
 	mgr := NewManager()
 	parent := t.TempDir()
 	dest := filepath.Join(parent, "clone")
@@ -99,6 +102,7 @@ func TestFailedCloneRemovesOnlyClaimedEmptyDestination(t *testing.T) {
 }
 
 func TestCanceledCloneDoesNotCreateDestination(t *testing.T) {
+	t.Parallel()
 	mgr, origin := initWorktreeRepo(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
