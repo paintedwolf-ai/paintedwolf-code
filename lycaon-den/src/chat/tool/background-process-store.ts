@@ -1,5 +1,9 @@
 import type { LycaonClient } from "../../api/client.ts";
-import type { BackgroundProcessEvent, BackgroundProcessOutput } from "../../api/types.ts";
+import type {
+  BackgroundProcessEvent,
+  BackgroundProcessOutput,
+  BackgroundProcessTerminationReason,
+} from "../../api/types.ts";
 import { ByteCache } from "../../utils/byte-cache.ts";
 
 export type BackgroundProcessSnapshot = {
@@ -7,12 +11,14 @@ export type BackgroundProcessSnapshot = {
   sessionId: string;
   running: boolean;
   exitCode?: number;
+  terminationReason?: BackgroundProcessTerminationReason;
   truncated?: boolean;
   text: string;
 };
 type ProcessStatus = Omit<BackgroundProcessSnapshot, "text">;
 type Interest = { sessionId?: string; processId?: string; statusOnly?: boolean };
 const snapshots = new Map<string, ProcessStatus>();
+const recordedAppQuitReasons = new Map<string, BackgroundProcessTerminationReason>();
 const textCache = new ByteCache<string, string>(4 * 1024 * 1024, 512);
 const hydratedSessions = new Set<string>();
 const sessionRecency = new Map<string, true>();
@@ -43,6 +49,7 @@ function touchSession(sessionId: string): void {
 }
 function evictSession(sessionId: string): void {
   for (const id of preparing.keys()) if (id.startsWith(`${sessionId}:`)) preparing.delete(id);
+  for (const id of recordedAppQuitReasons.keys()) if (id.startsWith(`${sessionId}:`)) recordedAppQuitReasons.delete(id);
   for (const [id, snap] of snapshots) if (snap.sessionId === sessionId) { snapshots.delete(id); textCache.delete(id); }
   hydratedSessions.delete(sessionId); sessionRecency.delete(sessionId); refreshTokens.delete(sessionId);
 }
@@ -64,10 +71,26 @@ export function applyBackgroundProcessEvent(ev: BackgroundProcessEvent): void {
   const before = textCache.get(id) ?? "";
   const text = ev.stream === "exit" ? before : ev.reset ? ev.text ?? "" : before + (ev.text ?? "");
   rememberText(id, text);
-  snapshots.set(id, { processId, sessionId, running: ev.running, exitCode: ev.exit_code ?? prev?.exitCode,
-    truncated: text.length > MAX_BACKGROUND_TEXT_CHARS || ev.truncated || prev?.truncated });
+  const terminationReason = ev.running ? undefined : (ev.termination_reason ?? prev?.terminationReason);
+  if (ev.running) recordedAppQuitReasons.delete(id);
+  else if (terminationReason === "app_quit") recordedAppQuitReasons.set(id, terminationReason);
+  snapshots.set(id, {
+    processId,
+    sessionId,
+    running: ev.running,
+    exitCode: ev.exit_code ?? prev?.exitCode,
+    ...(terminationReason ? { terminationReason } : {}),
+    truncated: text.length > MAX_BACKGROUND_TEXT_CHARS || ev.truncated || prev?.truncated,
+  });
   touchSession(sessionId);
-  notify(sessionId, processId, !prev || prev.running !== ev.running || (ev.exit_code !== undefined && prev.exitCode !== ev.exit_code));
+  notify(
+    sessionId,
+    processId,
+    !prev ||
+      prev.running !== ev.running ||
+      (ev.exit_code !== undefined && prev.exitCode !== ev.exit_code) ||
+      prev.terminationReason !== terminationReason,
+  );
 }
 type BackgroundProcessSnapshotClient = Pick<LycaonClient, "listSessionBackgroundProcesses" | "getSessionBackgroundProcessOutput">;
 
@@ -81,9 +104,19 @@ export async function refreshBackgroundProcessSnapshots(client: BackgroundProces
       const processes = await client.listSessionBackgroundProcesses(sid);
       if (refreshTokens.get(sid) !== token) return;
       if (token.changed) continue;
-      applyBackgroundProcessOutputs(sid, processes.map(process => process.output ?? {
-        process_id: process.process_id, running: process.running, exit_code: process.exit_code, chunks: [],
-      }));
+      applyBackgroundProcessOutputs(
+        sid,
+        processes.map((process) => {
+          const base = process.output ?? {
+            process_id: process.process_id,
+            running: process.running,
+            exit_code: process.exit_code,
+            chunks: [],
+          };
+          const reason = base.termination_reason ?? process.termination_reason;
+          return reason ? { ...base, termination_reason: reason } : base;
+        }),
+      );
       return;
     }
   } finally { if (refreshTokens.get(sid) === token) refreshTokens.delete(sid); }
@@ -92,8 +125,17 @@ export async function refreshBackgroundProcessSnapshots(client: BackgroundProces
 function applyOutput(sessionId: string, output: BackgroundProcessOutput): void {
   const id = key(sessionId, output.process_id);
   const text = output.chunks.map(chunk => chunk.text).join("");
-  snapshots.set(id, { processId: output.process_id, sessionId, running: output.running, exitCode: output.exit_code,
-    truncated: output.truncated || text.length > MAX_BACKGROUND_TEXT_CHARS });
+  const terminationReason = output.running ? undefined : output.termination_reason;
+  if (output.running) recordedAppQuitReasons.delete(id);
+  else if (terminationReason === "app_quit") recordedAppQuitReasons.set(id, terminationReason);
+  snapshots.set(id, {
+    processId: output.process_id,
+    sessionId,
+    running: output.running,
+    exitCode: output.exit_code,
+    ...(terminationReason ? { terminationReason } : {}),
+    truncated: output.truncated || text.length > MAX_BACKGROUND_TEXT_CHARS,
+  });
   rememberText(id, text);
 }
 /** Replace a session's process mirror from its authoritative snapshot. */
@@ -121,6 +163,12 @@ export function getBackgroundProcessSnapshot(sessionId: string, processId: strin
   const id = key(sessionId, processId); const status = snapshots.get(id);
   return status ? { ...status, text: textCache.get(id) ?? "" } : undefined;
 }
+export function getRecordedBackgroundTerminationReason(
+  sessionId: string,
+  processId: string,
+): BackgroundProcessTerminationReason | undefined {
+  return recordedAppQuitReasons.get(key(sessionId.trim(), processId.trim()));
+}
 export function hasHydratedBackgroundProcesses(sessionId: string): boolean { return hydratedSessions.has(sessionId.trim()); }
 export function subscribeBackgroundProcessStore(listener: () => void, interest?: () => Interest): () => void {
   listeners.set(listener, interest); return () => { listeners.delete(listener); };
@@ -130,5 +178,5 @@ export function forgetBackgroundProcessSession(sessionId: string): void {
   evictSession(sid); notify(sid);
 }
 export function resetBackgroundProcessStoreForTests(): void {
-  snapshots.clear(); textCache.clear(); hydratedSessions.clear(); sessionRecency.clear(); refreshTokens.clear(); preparing.clear(); listeners.clear();
+  snapshots.clear(); recordedAppQuitReasons.clear(); textCache.clear(); hydratedSessions.clear(); sessionRecency.clear(); refreshTokens.clear(); preparing.clear(); listeners.clear();
 }

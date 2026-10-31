@@ -1,5 +1,7 @@
 /** Routes in-app links (such as loopback holder attribution and folder-removal errors) to the Running context stage. */
 
+import { listenHostEvent } from "../windows/window-channel.ts";
+
 export type OpenRunningRequest = {
   projectId?: string;
 };
@@ -18,7 +20,19 @@ export function registerOpenRunningStageSink(next: OpenRunningSink): () => void 
     hasPending = false;
     next(req);
   }
+  let disposed = false;
+  let stopHostListener: (() => void) | undefined;
+  void listenHostEvent<string>("app-exit-open-running", ({ payload }) => {
+    const projectId =
+      typeof payload === "string" && payload.trim() ? payload.trim() : undefined;
+    openRunningStage(projectId ? { projectId } : undefined);
+  }).then((unlisten) => {
+    if (disposed) unlisten();
+    else stopHostListener = unlisten;
+  });
   return () => {
+    disposed = true;
+    stopHostListener?.();
     if (sink === next) sink = null;
   };
 }
