@@ -7,7 +7,7 @@ import re
 
 from .environment import DESKTOPS, query
 from ..installed_cases.records import CaseUnavailable
-from ..support_variants import variants
+from ..support_matrix import variants
 
 
 def requirements(catalog: dict, environment_id: str, capability: str) -> list[dict]:

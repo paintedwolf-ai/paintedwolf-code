@@ -9,7 +9,7 @@ import sys
 import time
 import urllib.error
 from progress import save
-from grading_state import report_lease, select_report
+from grading_identity import report_lease, select_report
 from snapshot import file_hash
 
 MAX_INFRASTRUCTURE_ATTEMPTS = 8

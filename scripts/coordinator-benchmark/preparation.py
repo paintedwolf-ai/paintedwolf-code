@@ -10,8 +10,8 @@ from application_environment import require_launcher_runtime
 from snapshot import freeze, read_source, file_hash, identity
 from built_runtime import seal_application, verify_application, require_unadmitted, build_manifest, application_identity
 from capture_storage import clone_file, RUNTIME_EXECUTABLES
-from dispatch_graph import waves, dependency_check_id
-from workflow_evidence import validate_receipts
+from orchestration_evidence import waves, dependency_check_id
+from verification_evidence import validate_receipts
 
 
 @contextmanager

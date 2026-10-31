@@ -12,7 +12,7 @@ import tempfile
 import uuid
 
 from .openpgp import ephemeral
-from .pacman_installation import PACKAGE, install
+from .repository_remote import PACKAGE, install
 from .pacman_repository import assemble
 from .pacman_validation import admit
 from .pacman_publication import publish

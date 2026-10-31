@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import focused_outcomes
 import candidate_process
-import oracle_process
+import grade as oracle_process
 from grade import GradingUnavailable
 
 

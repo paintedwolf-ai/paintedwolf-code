@@ -5,7 +5,7 @@ import pathlib
 import shutil
 import tempfile
 
-import source_revision
+import target_selection as source_revision
 from snapshot import identity, source_entry, read_source
 from progress import save
 

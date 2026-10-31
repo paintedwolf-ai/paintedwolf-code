@@ -5,7 +5,7 @@ import json
 import pathlib
 import unittest
 from test_workflow_evidence import WorkflowFixtureCase, OPERATIONS
-from workflow_evidence import validate_receipts
+from verification_evidence import validate_receipts
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 

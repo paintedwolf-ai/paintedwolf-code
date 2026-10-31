@@ -1,8 +1,59 @@
+import json
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
+import venv
+from unittest.mock import patch
 import completion
+import prepare
+import python_runtime
 from progress import save
+from snapshot import file_hash, identity
+
+
+class PythonRuntimeTests(unittest.TestCase):
+    def test_identity_survives_venv_handoffs_and_changes_with_requirements(self):
+        with tempfile.TemporaryDirectory() as directory:
+            environment = pathlib.Path(directory) / 'runtime'
+            venv.EnvBuilder(with_pip=False).create(environment)
+            script = 'import python_runtime; print(python_runtime.runtime_identity(b"requirements"))'
+            result = subprocess.run([str(environment/'bin/python3'), '-c', script],
+                                    cwd=pathlib.Path(python_runtime.__file__).parent, check=True, capture_output=True, text=True)
+            self.assertEqual(result.stdout.strip(), python_runtime.runtime_identity(b'requirements'))
+            self.assertNotEqual(python_runtime.runtime_identity(b'requirements'), python_runtime.runtime_identity(b'changed'))
+            with patch.object(sys, 'executable', '/different/invoking/venv/bin/python3'):
+                self.assertEqual(result.stdout.strip(), python_runtime.runtime_identity(b'requirements'))
+
+
+class PreparedReceiptTests(unittest.TestCase):
+    def test_import_rejects_nonrelative_receipts_before_copying(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary) / 'prepared'
+            source = root / 'source'
+            source.mkdir(parents=True)
+            (source / 'evaluation.json').write_text('{}')
+            receipt = root / 'preflight' / 'validation.json'
+            receipt.parent.mkdir()
+            receipt.write_text(json.dumps({'cases': ['one']}))
+            marker = {
+                'version': 1, 'application': {}, 'evaluation': {}, 'cases': ['one'],
+                'implementation_sha256': identity({}),
+                'preflight': {'receipt': 'preflight/validation.json', 'sha256': file_hash(receipt)},
+            }
+            with patch.object(prepare, 'verify_application', return_value={}), \
+                 patch.object(prepare, 'implementation_files', return_value={}):
+                (root / 'prepared.json').write_text(json.dumps(marker))
+                self.assertEqual(prepare.verify_prepared(root), marker)
+                for path in (str(receipt), '../prepared/preflight/validation.json',
+                             'preflight/../preflight/validation.json', 'validation.json'):
+                    marker['preflight']['receipt'] = path
+                    (root / 'prepared.json').write_text(json.dumps(marker))
+                    with self.subTest(path=path), patch.object(prepare.shutil, 'copytree') as copy:
+                        with self.assertRaisesRegex(ValueError, 'relative path'):
+                            prepare.import_prepared(root, pathlib.Path(temporary) / 'imported')
+                        copy.assert_not_called()
 
 
 class CompletionTests(unittest.TestCase):
@@ -28,7 +79,6 @@ class CompletionTests(unittest.TestCase):
             self.assertFalse((root / 'public.json').exists())
 
     def test_grading_receipt_excludes_previous_revision_results_and_detects_changed_report(self):
-        from snapshot import file_hash
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             item = {'index': 0, 'case': 'repair', 'repeat': 0, 'model': 'cloud'}

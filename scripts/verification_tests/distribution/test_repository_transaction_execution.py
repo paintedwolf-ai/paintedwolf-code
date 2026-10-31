@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release import repository_native as native
+from scripts.linux_release import repository_transaction as native
 from scripts.linux_release import repository_transaction as transaction
 from scripts.verification_tests.distribution.native_repository_fixtures import generation, trust
 
@@ -46,7 +46,8 @@ class RepositoryTransactionTests(unittest.TestCase):
         def observed_replace(path, data):
             self.assert_locked()
             replace(path, data)
-            events.append('pointer')
+            if path.name == 'current.json':
+                events.append('pointer')
         def observed_fsync(descriptor):
             if events and events[-1] == 'pointer':
                 self.assert_locked()

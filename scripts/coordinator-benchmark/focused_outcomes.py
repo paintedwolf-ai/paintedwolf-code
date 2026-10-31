@@ -5,7 +5,7 @@ import json
 import pathlib
 import subprocess
 import tempfile
-from oracle_process import capture, remove_container
+from grade import capture, remove_container
 
 ORIGINAL = {'current-verification', 'workspace-conflict', 'worker-complete', 'worker-partial',
             'changed-intent', 'fresh-service', 'permission-approved', 'permission-denied'}
