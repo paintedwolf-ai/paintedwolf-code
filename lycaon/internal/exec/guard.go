@@ -16,6 +16,8 @@ type runGuard interface {
 	// Cancel hook on a context-free command at Start.
 	configure(*exec.Cmd)
 	onStarted(*exec.Cmd) error
+	// wait snapshots surviving session members before reaping the leader.
+	wait(*exec.Cmd) error
 	// terminate asks the whole tree to exit and kills whatever remains after
 	// TerminateGrace.
 	terminate(*exec.Cmd)

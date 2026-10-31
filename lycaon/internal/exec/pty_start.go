@@ -37,6 +37,7 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		return nil, err
 	}
 	cmd.Env = applyDefaultTERM(cmd.Env, opts.Env, opts.InlineEnv)
+	guard.configure(cmd)
 
 	// The controlling terminal also creates the child process group.
 
@@ -50,7 +51,7 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		_ = main.Close()
 		guard.kill(cmd)
 		// Reap the child after guard setup fails.
-		_ = cmd.Wait()
+		_ = guard.wait(cmd)
 		cleanup()
 		guard.release()
 		return nil, fmt.Errorf("pty guard onStarted: %w", err)
