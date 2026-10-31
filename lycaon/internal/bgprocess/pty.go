@@ -206,8 +206,7 @@ func (r *Terminal) startPTY(
 	})
 	if err != nil {
 		cancel()
-		r.jobs.failStart(proc)
-		return "", err
+		return "", r.jobs.failStart(proc, err)
 	}
 	r.jobs.mu.Lock()
 	proc.pty = session

@@ -46,6 +46,13 @@ const (
 	labelInset = 6
 )
 
+const (
+	maxFilmstripEntryBytes  = 32 << 20
+	maxFilmstripFrames      = 64
+	maxFilmstripFramePixels = 4096 * 4096
+	maxFilmstripTotalPixels = 64 * 1024 * 1024
+)
+
 var (
 	sheetBackground = color.RGBA{R: 24, G: 26, B: 31, A: 255}
 	labelInk        = color.RGBA{R: 236, G: 238, B: 242, A: 255}
@@ -172,10 +179,11 @@ func FilmstripPoster(archive []byte, maxEdge int) ([]byte, error) {
 	if err := json.Unmarshal(manRaw, &man); err != nil {
 		return nil, fmt.Errorf("decode filmstrip manifest: %w", err)
 	}
-	if len(man.Frames) == 0 {
-		return nil, fmt.Errorf("filmstrip archive has no frames")
+	if len(man.Frames) == 0 || len(man.Frames) > maxFilmstripFrames {
+		return nil, fmt.Errorf("filmstrip frame count is outside its bound")
 	}
 	cells := make([]Cell, 0, len(man.Frames))
+	remainingPixels := int64(maxFilmstripTotalPixels)
 	for _, fr := range man.Frames {
 		ff, ok := files[fr.File]
 		if !ok {
@@ -184,6 +192,14 @@ func FilmstripPoster(archive []byte, maxEdge int) ([]byte, error) {
 		raw, err := readZipEntry(ff)
 		if err != nil {
 			return nil, err
+		}
+		cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
+		if err != nil {
+			return nil, fmt.Errorf("read filmstrip frame dimensions %q: %w", fr.File, err)
+		}
+		remainingPixels, err = reserveFilmstripPixels(cfg, remainingPixels)
+		if err != nil {
+			return nil, fmt.Errorf("filmstrip frame %q: %w", fr.File, err)
 		}
 		img, _, err := image.Decode(bytes.NewReader(raw))
 		if err != nil {
@@ -201,10 +217,31 @@ func FilmstripPoster(archive []byte, maxEdge int) ([]byte, error) {
 }
 
 func readZipEntry(f *zip.File) ([]byte, error) {
+	if f.UncompressedSize64 > maxFilmstripEntryBytes {
+		return nil, fmt.Errorf("filmstrip entry %q exceeds its byte bound", f.Name)
+	}
 	r, err := f.Open()
 	if err != nil {
 		return nil, err
 	}
 	defer r.Close()
-	return io.ReadAll(r)
+	raw, err := io.ReadAll(io.LimitReader(r, maxFilmstripEntryBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > maxFilmstripEntryBytes {
+		return nil, fmt.Errorf("filmstrip entry %q exceeds its byte bound", f.Name)
+	}
+	return raw, nil
+}
+
+func reserveFilmstripPixels(cfg image.Config, remaining int64) (int64, error) {
+	if cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width) > int64(maxFilmstripFramePixels)/int64(cfg.Height) {
+		return remaining, fmt.Errorf("dimensions exceed frame pixel bound")
+	}
+	pixels := int64(cfg.Width) * int64(cfg.Height)
+	if pixels > remaining {
+		return remaining, fmt.Errorf("frames exceed total pixel bound")
+	}
+	return remaining - pixels, nil
 }

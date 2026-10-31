@@ -63,3 +63,40 @@ func TestTeardownRetainsReasonAndCustodyWithoutPublishingRetiredJobs(t *testing.
 		})
 	}
 }
+
+func TestFailedAdmissionPreservesCauseAndSettlesEveryTeardown(t *testing.T) {
+	for _, reason := range []TerminationReason{"", TerminationStoppedByAgent, TerminationStoppedByUser, TerminationTimedOut, TerminationExited, TerminationChatDeleted, TerminationProjectDeleted, TerminationRootDetached, TerminationWorkerCompleted, TerminationWorkerCancelled, TerminationAppQuit} {
+		t.Run(string(reason), func(t *testing.T) {
+			for _, hidden := range []bool{false, true} {
+				registry := NewRegistry(Config{}, Hooks{})
+				proc := &Process{Handle: "admitted", SessionID: "session", running: true,
+					processRuntimeState: processRuntimeState{reason: reason, done: make(chan struct{})}}
+				registry.jobs.sessions[proc.SessionID] = map[string]*Process{proc.Handle: proc}
+				if hidden {
+					registry.jobs.mu.Lock()
+					registry.jobs.beginDrainLocked(proc.SessionID)
+					registry.jobs.mu.Unlock()
+				}
+				cause := errors.New("launch failed")
+				err := registry.jobs.failStart(proc, cause)
+				if !errors.Is(err, cause) {
+					t.Fatalf("lost launch cause: %v", err)
+				}
+				wantClosed := reason == TerminationAppQuit
+				wantTeardown := reason == TerminationChatDeleted || reason == TerminationProjectDeleted || reason == TerminationRootDetached || reason == TerminationWorkerCompleted || reason == TerminationWorkerCancelled
+				if errors.Is(err, ErrRegistryClosed) != wantClosed || errors.Is(err, ErrTeardownInProgress) != wantTeardown {
+					t.Fatalf("wrong admission cause for %q: %v", reason, err)
+				}
+				select {
+				case <-proc.done:
+				default:
+					t.Fatal("failed launch retained physical completion")
+				}
+				if proc.running || !proc.hasExit || proc.exitCode != -1 || proc.reason != reason {
+					t.Fatalf("failed launch state = %+v", proc)
+				}
+				testutil.FailErr(t, "join failed launch", registry.Lifecycle.Close(t.Context()))
+			}
+		})
+	}
+}

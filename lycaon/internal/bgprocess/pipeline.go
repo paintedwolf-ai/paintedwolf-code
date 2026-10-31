@@ -156,8 +156,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	}, stdout, stderr)
 	if err != nil {
 		cancel()
-		r.jobs.failStart(proc)
-		return "", err
+		return "", r.jobs.failStart(proc, err)
 	}
 	r.jobs.mu.Lock()
 	proc.async = async

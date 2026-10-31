@@ -148,7 +148,10 @@ func ScopeIncludesLinkedCheckout(projectDir string, paths []string) bool {
 	if projectDir == "" {
 		return false
 	}
-	root := filepath.Clean(projectDir)
+	root := CanonicalDir(projectDir)
+	if root == "" {
+		return false
+	}
 	if len(paths) == 0 {
 		paths = []string{"."}
 	}
@@ -174,7 +177,8 @@ func scopePathIncludesLinkedCheckout(root, raw string) bool {
 			target = filepath.Clean(filepath.Join(root, prefix))
 		}
 	}
-	if target != root && !strings.HasPrefix(target, root+string(filepath.Separator)) {
+	relative, err := filepath.Rel(root, target)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return false
 	}
 	for cur := target; ; {
@@ -204,7 +208,9 @@ func scopePathIncludesLinkedCheckout(root, raw string) bool {
 func literalScopePrefix(raw string) string {
 	slash := filepath.ToSlash(strings.TrimSpace(raw))
 	slash = strings.TrimPrefix(slash, "./")
-	slash = strings.TrimPrefix(slash, "/")
+	volume := filepath.VolumeName(raw)
+	absolute := filepath.IsAbs(raw)
+	slash = strings.TrimPrefix(slash, filepath.ToSlash(volume))
 	if slash == "" || slash == "." {
 		return "."
 	}
@@ -219,9 +225,16 @@ func literalScopePrefix(raw string) string {
 		kept = append(kept, part)
 	}
 	if len(kept) == 0 {
+		if absolute {
+			return volume + string(filepath.Separator)
+		}
 		return "."
 	}
-	return filepath.Join(kept...)
+	prefix := filepath.Join(kept...)
+	if absolute {
+		return volume + string(filepath.Separator) + prefix
+	}
+	return prefix
 }
 
 func dirContainsGitlink(dir string) bool {

@@ -2,6 +2,7 @@ package bgprocess
 
 import (
 	"context"
+	"errors"
 )
 
 // sessionDrain retains the physical jobs after their public handles disappear.
@@ -136,8 +137,9 @@ func (r *ProcessLifecycle) settleDrains(ctx context.Context, drains []*sessionDr
 
 // failStart settles an admitted job that never acquired a child. A concurrent
 // teardown may already have hidden it, so it still owes physical completion.
-func (r *processTable) failStart(proc *Process) {
+func (r *processTable) failStart(proc *Process, cause error) error {
 	r.mu.Lock()
+	reason := proc.reason
 	proc.running, proc.hasExit, proc.exitCode = false, true, -1
 	close(proc.done)
 	r.mu.Unlock()
@@ -145,4 +147,13 @@ func (r *processTable) failStart(proc *Process) {
 		proc.screen.Close()
 	}
 	r.remove(proc.SessionID, proc.Handle)
+	switch reason {
+	case TerminationAppQuit:
+		return errors.Join(ErrRegistryClosed, cause)
+	case TerminationChatDeleted, TerminationProjectDeleted, TerminationRootDetached,
+		TerminationWorkerCompleted, TerminationWorkerCancelled:
+		return errors.Join(ErrTeardownInProgress, cause)
+	default:
+		return cause
+	}
 }

@@ -248,6 +248,24 @@ func TestScopeIncludesLinkedCheckout(t *testing.T) {
 	testutil.FailErr(t, "write sub .git", os.WriteFile(filepath.Join(sub, ".git"), []byte("gitdir: ../../.git/modules/vendor/sub\n"), 0o644))
 	testutil.FailErr(t, "write plain file", os.WriteFile(filepath.Join(plain, "a.go"), []byte("package pkg\n"), 0o644))
 
+	for _, scope := range []struct {
+		path string
+		want bool
+	}{
+		{"worktrees/feature/cmd/main.go", true},
+		{"worktrees/feature/**", true},
+		{"vendor/sub/**", true},
+		{"pkg/a.go", false},
+		{"pkg/*", false},
+		{"../outside/**", false},
+	} {
+		for _, path := range []string{scope.path, filepath.Join(root, scope.path)} {
+			if got := gitrepo.ScopeIncludesLinkedCheckout(root, []string{path}); got != scope.want {
+				t.Errorf("scope %q: linked=%t, want %t", path, got, scope.want)
+			}
+		}
+	}
+
 	if !gitrepo.ScopeIncludesLinkedCheckout(root, []string{"worktrees/feature/cmd/main.go"}) {
 		t.Fatal("expected write scope inside linked worktree to report true")
 	}

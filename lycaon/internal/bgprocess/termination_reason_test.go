@@ -127,7 +127,7 @@ func TestStopOnSettledProcessPreservesExitedAndTimedOutReasons(t *testing.T) {
 		want    bgprocess.TerminationReason
 	}{
 		{name: "exited", stage: exec.Stage{Name: "true"}, want: bgprocess.TerminationExited},
-		{name: "timed_out", timeout: 40 * time.Millisecond, stage: exec.Stage{Name: "sleep", Args: []string{"30"}}, want: bgprocess.TerminationTimedOut},
+		{name: "timed_out", timeout: 5 * time.Second, stage: exec.Stage{Name: "sleep", Args: []string{"30"}}, want: bgprocess.TerminationTimedOut},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			completed := make(chan bgprocess.Completion, 4)
@@ -147,7 +147,11 @@ func TestStopOnSettledProcessPreservesExitedAndTimedOutReasons(t *testing.T) {
 			testutil.FailErr(t, "start", err)
 			_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 10*time.Second)
 			testutil.FailErr(t, "await", err)
-			<-completed
+			select {
+			case <-completed:
+			default:
+				t.Fatal("physical completion preceded terminal publication")
+			}
 
 			stopRes, err := reg.Lifecycle.Stop("sess-1", handle, bgprocess.TerminationStoppedByUser)
 			testutil.FailErr(t, "stop after settle", err)
