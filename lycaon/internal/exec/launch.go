@@ -117,6 +117,28 @@ func AgentLaunch(kind LaunchKind, subject string, confinement *confine.Confineme
 	return plan
 }
 
+// withoutConfinedGitFsmonitor disables Git's fsmonitor daemon inside a
+// confined process unless the caller already supplied a Git config override.
+func withoutConfinedGitFsmonitor(env []string, confinement confine.Confinement) []string {
+	if confinement.HostExecution {
+		return env
+	}
+	for _, entry := range env {
+		key, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		if strings.EqualFold(key, "GIT_CONFIG_COUNT") || strings.EqualFold(key, "GIT_CONFIG_PARAMETERS") {
+			return env
+		}
+	}
+	return append(env,
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=core.fsmonitor",
+		"GIT_CONFIG_VALUE_0=false",
+	)
+}
+
 func (p LaunchPlan) validate() error {
 	if p.Kind == "" {
 		return fmt.Errorf("process launch plan is required")

@@ -243,6 +243,8 @@ func routeOperation(rules FilesystemRules, operation, target string) SandboxRefu
 	switch {
 	case operation == "network-outbound" && strings.HasPrefix(target, "/") && isSessionDBusSocketTarget(target):
 		r.Recovery, r.Grant = RecoverCredentialStore, target
+	case operation == "network-outbound" && isBenignSocketProbe(target):
+		r.Recovery = RecoverNone
 	case operation == "network-outbound" && strings.HasPrefix(target, "/"):
 		r.Recovery, r.Grant = RecoverSocketPath, target
 	case operation == "network-outbound":
@@ -275,6 +277,15 @@ func routeFilesystemRefusal(rules FilesystemRules, r SandboxRefusal, access File
 	r.Recovery = RefusalRecovery(recovery.Capability)
 	r.Grant = recovery.GrantPath(r.Target, rules.roots...)
 	return r
+}
+
+// isBenignSocketProbe identifies local sockets that confined processes probe
+// opportunistically (system DNS resolver and Git's fsmonitor daemon) and that
+// cannot be opened via socket_paths.
+func isBenignSocketProbe(target string) bool {
+	return slices.Contains(systemResolverSocketPaths, target) ||
+		target == "fsmonitor--daemon.ipc" ||
+		strings.HasSuffix(target, "/fsmonitor--daemon.ipc")
 }
 
 // operationAccess classifies the kernel's filesystem operations; empty for

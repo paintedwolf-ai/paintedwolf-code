@@ -84,6 +84,7 @@ func FinalProcessEnvironment(opts ExecOpts, stageEnv map[string]string) ([]strin
 		return nil, err
 	}
 	env = confine.ProcessEnvironment(env, boundary)
+	env = withoutConfinedGitFsmonitor(env, boundary)
 	if boundary.Network != confine.NetworkDeny {
 		if self, err := os.Executable(); err == nil {
 			env = overlayProcessEnv(env, confine.GitSSHEnv(boundary, self, confine.SSHKnownHostsPath(boundary)))
