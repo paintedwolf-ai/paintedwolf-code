@@ -129,11 +129,14 @@ def bench(args):
     metadata = {"backend": args.backend, "source_pins": PINS, "command": command,
                 "artifact_identity": args.artifact_identity, "platform": platform.platform(),
                 "machine": platform.machine(), "ple": args.ple, "input": str(input_path),
+                "load_average_before": os.getloadavg(),
+                "cache_condition": "uncontrolled OS page cache; warmup is not a cold-storage guarantee",
                 "scope": "isolated synthetic throughput; not application or minimum-hardware qualification"}
     (destination / "run.json").write_text(json.dumps(metadata, indent=2) + "\n")
     with (destination / "stdout.log").open("w") as stdout, (destination / "stderr.log").open("w") as stderr:
         result = subprocess.run(command, env=environment, stdout=stdout, stderr=stderr)
     metadata["exit_code"] = result.returncode
+    metadata["load_average_after"] = os.getloadavg()
     (destination / "run.json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(destination)
     if result.returncode:

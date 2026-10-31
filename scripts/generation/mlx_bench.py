@@ -15,6 +15,7 @@ from mapped_ple import replace_ple
 def measure(model, prompt, generated):
     cache = make_prompt_cache(model)
     mx.reset_peak_memory()
+    usage_before = resource.getrusage(resource.RUSAGE_SELF)
     start = time.perf_counter()
     for offset in range(0, len(prompt) - 1, 256):
         model(mx.array([prompt[offset:min(offset + 256, len(prompt) - 1)]]), cache=cache)
@@ -32,11 +33,15 @@ def measure(model, prompt, generated):
         token = mx.argmax(logits[:, -1, :], axis=-1)
         mx.eval(token, [c.state for c in cache])
     decoding = time.perf_counter() - start
+    usage_after = resource.getrusage(resource.RUSAGE_SELF)
     return {"prefill_seconds": prefilling, "decode_seconds": decoding,
             "prompt_tps": len(prompt) / prefilling, "generation_tps": generated / decoding,
             "peak_mlx_bytes": mx.get_peak_memory(), "live_mlx_bytes": mx.get_active_memory(),
             "retained_mlx_bytes": mx.get_cache_memory(),
-            "process_peak_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            "process_peak_rss_bytes": usage_after.ru_maxrss,
+            "major_faults": usage_after.ru_majflt - usage_before.ru_majflt,
+            "minor_faults": usage_after.ru_minflt - usage_before.ru_minflt,
+            "block_inputs": usage_after.ru_inblock - usage_before.ru_inblock,
             "tokens": tokens}
 
 

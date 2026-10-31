@@ -46,6 +46,8 @@ static llama_token greedy(llama_context * ctx, int vocabulary) {
 
 static json measure(llama_context * ctx, const std::vector<llama_token> & prompt, int generated) {
     llama_memory_clear(llama_get_memory(ctx), true);
+    struct rusage before {};
+    getrusage(RUSAGE_SELF, &before);
     auto start = clock_type::now();
     for (int offset = 0; offset < static_cast<int>(prompt.size()); offset += 256) {
         const int count = std::min(256, static_cast<int>(prompt.size()) - offset);
@@ -73,6 +75,9 @@ static json measure(llama_context * ctx, const std::vector<llama_token> & prompt
     return {{"prefill_seconds", prefill}, {"decode_seconds", generation},
             {"prompt_tps", prompt.size() / prefill}, {"generation_tps", generated / generation},
             {"process_peak_rss_bytes", peak}, {"tokens", output},
+            {"major_faults", usage.ru_majflt - before.ru_majflt},
+            {"minor_faults", usage.ru_minflt - before.ru_minflt},
+            {"block_inputs", usage.ru_inblock - before.ru_inblock},
             {"backend_sampling", llama_get_sampled_token_ith(ctx, -1) != LLAMA_TOKEN_NULL}};
 }
 
