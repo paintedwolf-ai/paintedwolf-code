@@ -478,6 +478,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 			}
 		}
 		if c.CredentialStore {
+			allow = mergeSortedStrings(allow, linuxCredentialStoreReadRoots())
 			literals = mergeSortedStrings(literals, darwinLoginKeychainLiterals())
 		}
 		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(allow, ""), literalMatches(literals, "")...)})

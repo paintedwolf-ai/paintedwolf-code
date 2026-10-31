@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -184,6 +185,13 @@ func networkPlan(c Confinement) linuxsandbox.Network {
 	}
 	for _, g := range c.SocketGrants {
 		n.SocketPaths = append(n.SocketPaths, g.ResolvedPath)
+	}
+	if c.CredentialStore {
+		for _, p := range credentialStoreDBusSocketPaths() {
+			if !slices.Contains(n.SocketPaths, p) {
+				n.SocketPaths = append(n.SocketPaths, p)
+			}
+		}
 	}
 	if c.Network == NetworkDirectIP {
 		if conf, err := os.ReadFile("/etc/resolv.conf"); err == nil {
