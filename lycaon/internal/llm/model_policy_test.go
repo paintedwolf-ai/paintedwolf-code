@@ -9,6 +9,9 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -590,8 +593,45 @@ func TestIncludedProviderCannotBeRemoved(t *testing.T) {
 		t.Fatalf("IncludedProviderEntry().Models = %+v", entry.Models)
 	}
 
+	testutil.FailErr(t, "InstallIncludedProvider", cat.InstallIncludedProvider(""))
+	installed, ok := cat.Get(IncludedProviderID)
+	if !ok || installed.Label != IncludedProviderLabel || len(installed.Models) != 1 || installed.Models[0].ID != IncludedModelID {
+		t.Fatalf("installed entry = %+v, ok=%v", installed, ok)
+	}
+
 	removed, err := cat.Remove(IncludedProviderID)
 	if err != ErrCannotRemoveIncludedProvider || removed {
 		t.Fatalf("Remove(%q) = (%v, %v), want (false, %v)", IncludedProviderID, removed, err, ErrCannotRemoveIncludedProvider)
+	}
+}
+
+func TestServiceStartupConnectsIncludedProviderAndLocalDefaultRouter(t *testing.T) {
+	if !PlatformsSupportedHere(IncludedProviderEntry().Platforms) {
+		t.Skip("included provider is only supported on darwin/arm64")
+	}
+	t.Setenv(configdir.EnvConfigDir, t.TempDir())
+	configtest.Overlay(t, map[config.Rel]string{config.ModelPolicy: emptyModelPolicyYAML})
+	t.Setenv("LYCAON_NATIVEGEN_MODEL_DIR", t.TempDir())
+
+	svc, err := NewService(t.Context(), nil)
+	testutil.FailErr(t, "NewService", err)
+	defer func() { _ = svc.Close(t.Context()) }()
+
+	if !svc.Registry.IsConfigured(IncludedProviderID) {
+		t.Fatal("expected nativegen to be configured on startup when local model dir is available")
+	}
+	coordSel, err := svc.Router.Coordinator(t.Context())
+	testutil.FailErr(t, "svc.Router.Coordinator", err)
+	if coordSel.ProviderID != IncludedProviderID || coordSel.Model != IncludedModelID {
+		t.Fatalf("startup Router.Coordinator = %+v, want %s/%s", coordSel, IncludedProviderID, IncludedModelID)
+	}
+	liteSel, err := svc.Router.Lite(t.Context())
+	testutil.FailErr(t, "svc.Router.Lite", err)
+	if liteSel.ProviderID != IncludedProviderID || liteSel.Model != IncludedModelID {
+		t.Fatalf("startup Router.Lite = %+v, want %s/%s", liteSel, IncludedProviderID, IncludedModelID)
+	}
+	window, source := ResolveTrueWindow(ModelPolicy{}, svc.Registry, modelinfo.ModelContextWindows{}, compaction.CompactionConfig{})
+	if window != IncludedContextWindowTokens || source != WindowResolveModelEntry {
+		t.Fatalf("ResolveTrueWindow = (%d, %q), want (%d, %q)", window, source, IncludedContextWindowTokens, WindowResolveModelEntry)
 	}
 }

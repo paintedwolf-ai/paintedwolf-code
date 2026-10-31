@@ -76,21 +76,30 @@ func TestTodayLine(t *testing.T) {
 
 // captureProvider records the last CompletionRequest for prompt assertions.
 type captureProvider struct {
-	id   string
-	last modelcall.CompletionRequest
+	id       string
+	response string
+	last     modelcall.CompletionRequest
 }
 
 func (c *captureProvider) ID() string { return c.id }
 
 func (c *captureProvider) Complete(_ context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	c.last = req
-	return &modelcall.Completion{Content: "ok"}, nil
+	out := c.response
+	if out == "" {
+		out = "ok"
+	}
+	return &modelcall.Completion{Content: out}, nil
 }
 
-func (c *captureProvider) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+func (c *captureProvider) Stream(_ context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
 	ch := make(chan modelcall.StreamChunk, 1)
 	c.last = req
-	ch <- modelcall.StreamChunk{Content: "ok", Done: true}
+	out := c.response
+	if out == "" {
+		out = "ok"
+	}
+	ch <- modelcall.StreamChunk{Content: out, Done: true}
 	close(ch)
 	return ch, nil
 }

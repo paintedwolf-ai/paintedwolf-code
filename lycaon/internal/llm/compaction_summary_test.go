@@ -106,3 +106,55 @@ func TestCompactionPromptPlacesCoveredSourceBeforeInstructions(t *testing.T) {
 		t.Fatalf("expected Covered source page (%d) < Summary instructions (%d) < Output schema (%d)", coveredIdx, instrIdx, schemaIdx)
 	}
 }
+
+func TestSimpleCompactorAttachesSharedPrefixInProductionCompaction(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	summaryJSON, err := (compaction.MockSummarizer{Text: "Compacted session state."}).Summarize(
+		compaction.WithSummaryFormat(t.Context()), "", "", 0,
+	)
+	testutil.FailErr(t, "encode mock summary", err)
+
+	coordProvider := &captureProvider{id: "anthropic", response: summaryJSON}
+	localProvider := &captureProvider{id: IncludedProviderID, response: summaryJSON}
+	reg := newTestRegistry()
+	testutil.FailErr(t, "Register anthropic", reg.Register(coordProvider))
+	testutil.FailErr(t, "Register nativegen", reg.Register(localProvider))
+
+	policy := NewInMemoryPolicyStore(ModelPolicy{
+		Coordinator: ModelRef{ProviderID: "anthropic", Model: "claude-sonnet-4-6"},
+	})
+	summarizer := &RegistrySummarizer{
+		Registry: reg,
+		Policy:   policy,
+		Purpose:  "compaction_turn",
+		Scope:    SettingsScopeGlobal,
+	}
+
+	cfg := testCompactionConfig()
+	cfg.ChunkTokenThreshold = 1000000
+	cfg.KeepRecentMessages = 1
+	compactor := compaction.NewSimpleCompactor(cfg, summarizer)
+
+	messages := []compaction.ContextMessage{
+		{ID: "m1", Ord: 1, Role: "user", Content: strings.Repeat("inspect modelstore lease pins ", 120)},
+		{ID: "m2", Ord: 2, Role: "assistant", Content: strings.Repeat("verified supplementary artifacts ", 120)},
+		{ID: "m3", Ord: 3, Role: "user", Content: "continue with router wiring"},
+	}
+	_, report, err := compactor.Compact(t.Context(), compaction.SessionInfo{ID: "sess-1"}, messages, 120)
+	testutil.FailErr(t, "compactor.Compact", err)
+	if !report.SessionCompacted {
+		t.Fatalf("expected session compaction, got report=%+v", report)
+	}
+	if localProvider.last.Model != IncludedModelID {
+		t.Fatalf("local model = %q, want %q", localProvider.last.Model, IncludedModelID)
+	}
+	// Shared prefix messages (system authority notice + m1 + m2) precede the trailing summary instruction user turn.
+	if len(localProvider.last.Messages) < 3 {
+		t.Fatalf("expected shared prefix + trailing instruction in provider messages, got %d messages: %+v",
+			len(localProvider.last.Messages), localProvider.last.Messages)
+	}
+	tail := localProvider.last.Messages[len(localProvider.last.Messages)-1]
+	if tail.Role != api.MessageRoleUser || !strings.Contains(tail.Content, "## Covered source page") {
+		t.Fatalf("trailing summary instruction message = %+v", tail)
+	}
+}

@@ -27,6 +27,14 @@ func (r *StaticModelRouter) WithLocalDefault(localAvailable bool) *StaticModelRo
 	return &cp
 }
 
+// SetLocalDefault updates whether unset coordinator and lite roles fall back to the bundled local model.
+func (r *StaticModelRouter) SetLocalDefault(localAvailable bool) {
+	if r == nil {
+		return
+	}
+	r.localDefault = localAvailable
+}
+
 // NewStaticModelRouter constructs a router bound to the policy store.
 func NewStaticModelRouter(policy *PolicyStore) *StaticModelRouter {
 	p, _ := policy.Get(SettingsScopeGlobal, "")
@@ -34,10 +42,11 @@ func NewStaticModelRouter(policy *PolicyStore) *StaticModelRouter {
 	pool := NewPoolSelector(p)
 	pools.Store(string(SettingsScopeGlobal)+"\x00", pool)
 	return &StaticModelRouter{
-		policy: policy,
-		pool:   pool,
-		pools:  pools,
-		scope:  SettingsScopeGlobal,
+		policy:       policy,
+		pool:         pool,
+		pools:        pools,
+		scope:        SettingsScopeGlobal,
+		localDefault: IncludedProviderAvailable(),
 	}
 }
 

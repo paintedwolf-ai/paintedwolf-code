@@ -52,7 +52,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error)
 	if ProviderUtilityCallsEnabled() {
 		refreshCancel, refreshDone = startModelFeedRefresh(ctx, feed)
 	}
-	router := NewStaticModelRouter(policy)
+	router := NewStaticModelRouter(policy).WithLocalDefault(registry.IsConfigured(IncludedProviderID))
 
 	svc := &Service{
 		modelFeedRefreshCancel: refreshCancel,

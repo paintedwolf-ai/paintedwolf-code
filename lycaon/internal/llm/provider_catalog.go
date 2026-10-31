@@ -59,6 +59,23 @@ func IncludedProviderEntry() ProviderEntry {
 	}
 }
 
+// IncludedProviderAvailable reports whether the bundled local provider is available on this host.
+func IncludedProviderAvailable() bool {
+	entry := IncludedProviderEntry()
+	if !PlatformsSupportedHere(entry.Platforms) {
+		return false
+	}
+	if strings.TrimSpace(os.Getenv("LYCAON_NATIVEGEN_BIN")) != "" || strings.TrimSpace(os.Getenv("LYCAON_NATIVEGEN_MODEL_DIR")) != "" {
+		return true
+	}
+	if root := strings.TrimSpace(os.Getenv("LYCAON_MODELSTORE_ROOT")); root != "" {
+		if info, err := os.Stat(filepath.Join(root, "active.json")); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
 // CatalogEntry is a live AI provider instance (from providers.local.yaml).
 type CatalogEntry struct {
 	ID                     string
@@ -239,9 +256,22 @@ func (c *ProviderCatalog) Reload() error {
 
 	shipByKind := preferredProviderTemplates(templates)
 
-	items := make([]catalogruntime.Item[CatalogEntry], 0, len(local.Providers))
+	items := make([]catalogruntime.Item[CatalogEntry], 0, len(local.Providers)+1)
+	hasIncluded := false
 	for _, p := range local.Providers {
+		if IsIncludedProvider(p.ID) {
+			hasIncluded = true
+		}
 		entry, err := resolveLocalEntry(p, shipByKind)
+		if err != nil {
+			return err
+		}
+		items = append(items, catalogruntime.Item[CatalogEntry]{
+			ID: entry.ID, Spec: entry,
+		})
+	}
+	if !hasIncluded && IncludedProviderAvailable() {
+		entry, err := resolveLocalEntry(IncludedProviderEntry(), shipByKind)
 		if err != nil {
 			return err
 		}
@@ -288,6 +318,28 @@ func (c *ProviderCatalog) Reload() error {
 
 // resolveLocalEntry projects one stored instance onto its kind template.
 func resolveLocalEntry(p ProviderEntry, shipByKind map[string]ProviderEntry) (CatalogEntry, error) {
+	if IsIncludedProvider(p.ID) || IsIncludedProvider(p.Kind) {
+		included := IncludedProviderEntry()
+		if p.Kind == "" {
+			p.Kind = included.Kind
+		}
+		if p.Label == "" {
+			p.Label = included.Label
+		}
+		if p.EndpointStyle == "" {
+			p.EndpointStyle = included.EndpointStyle
+		}
+		if p.RequiresAPIKey == nil {
+			p.RequiresAPIKey = included.RequiresAPIKey
+		}
+		if len(p.Platforms) == 0 {
+			p.Platforms = append([]string(nil), included.Platforms...)
+		}
+		if len(p.Models) == 0 {
+			p.Models = modelinfo.CloneEntries(included.Models)
+		}
+		p.LocalFree = true
+	}
 	if !p.EndpointStyle.Validate() {
 		return CatalogEntry{}, fmt.Errorf("local providers: %q: unsupported endpoint_style %q", p.ID, p.EndpointStyle)
 	}
@@ -648,6 +700,18 @@ func (c *ProviderCatalog) Put(entry ProviderEntry) error {
 		return err
 	}
 	return replacePrivateConfig(c.localPath, data)
+}
+
+// InstallIncludedProvider persists and reloads the bundled local provider definition.
+func (c *ProviderCatalog) InstallIncludedProvider(baseURL string) error {
+	entry := IncludedProviderEntry()
+	if trimmed := strings.TrimSpace(baseURL); trimmed != "" {
+		entry.BaseURL = trimmed
+	}
+	if err := c.Put(entry); err != nil {
+		return err
+	}
+	return c.Reload()
 }
 
 func providerEntryKind(entry ProviderEntry) string {
