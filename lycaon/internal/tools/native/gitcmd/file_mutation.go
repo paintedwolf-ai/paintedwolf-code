@@ -38,11 +38,22 @@ type fileMutation struct {
 	indexChanged bool
 }
 
+func readBoundedGitFile(path string, maxBytes int64) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxBytes {
+		return nil, fmt.Errorf("git metadata file exceeds size bound")
+	}
+	return os.ReadFile(path)
+}
+
 func currentIndexHash(repo gitrepo.Repo) string {
 	if shared, err := filepath.Glob(filepath.Join(repo.GitDir, "sharedindex.*")); err != nil || len(shared) > 0 {
 		return ""
 	}
-	raw, err := os.ReadFile(filepath.Join(repo.GitDir, "index"))
+	raw, err := readBoundedGitFile(filepath.Join(repo.GitDir, "index"), 1<<20)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "absent"

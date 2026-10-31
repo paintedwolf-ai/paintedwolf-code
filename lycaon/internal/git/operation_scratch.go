@@ -284,11 +284,9 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 }
 
 func writeScratchRef(scratch, ref, value string) error {
-	target := filepath.Join(scratch, ".git", filepath.FromSlash(ref))
-	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(target, []byte(value+"\n"), 0o600)
+	rel := filepath.Join(".git", filepath.FromSlash(ref))
+	_, err := fseffect.Replace(fseffect.ReplaceRequest{Location: fseffect.Location{Root: scratch, Rel: rel}, Source: strings.NewReader(value + "\n"), Mode: 0o600, DirMode: 0o700})
+	return err
 }
 
 func hasOperationAttributes(repo gitrepo.Repo, scratch string, paths []string, before, after operationIndex) bool {
