@@ -161,7 +161,7 @@ func (c *ChunkCompactor) compactSpillIndex(ctx context.Context, chunk ContentChu
 		}
 		retained += "; full observation at " + spill.SpillPath
 	}
-	banner := hostmarker.CompactionBanner(fmt.Sprintf("%s — original ~%d tokens%s", chunk.Kind, originalTokens, retained)) + "\n"
+	banner := hostmarker.CompactionBanner(fmt.Sprintf("%s — original ~%d tokens, %d lines%s", chunk.Kind, originalTokens, toolkit.CountLines(content), retained)) + "\n"
 	index := toolOutputIndex(ctx, content, c.chunkTargetBytes()/4)
 	prefix := banner + index + "\n" + hostmarker.VerbatimHeadTail + "\n"
 	remaining := (c.chunkTargetBytes() - len(prefix)) / tokenest.DefaultDivisor

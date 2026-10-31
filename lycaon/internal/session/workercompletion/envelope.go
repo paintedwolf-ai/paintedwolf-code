@@ -85,7 +85,7 @@ func marshalEnvelopeJSON(v any) string {
 	if v == nil {
 		return ""
 	}
-	raw, err := json.Marshal(v)
+	raw, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return ""
 	}
