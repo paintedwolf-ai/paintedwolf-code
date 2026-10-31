@@ -249,3 +249,21 @@ func TestToolResultPathUsesTheRecordedArgumentSnapshot(t *testing.T) {
 		t.Fatal("result text became path authority")
 	}
 }
+
+func TestProjectToolMessageIndexesEmbeddedChildHandles(t *testing.T) {
+	msg := api.Message{
+		ID:              "tool-summarize",
+		Role:            api.MessageRoleTool,
+		Content:         "[summarize#3]\n{\"anchors\":[{\"handle\":\"summarize#1\",\"path\":\"a.go\",\"line\":1,\"excerpt\":\"func A()\"},{\"handle\":\"summarize#2\",\"path\":\"b.go\",\"line\":2,\"excerpt\":\"func B()\"}]}",
+		EvidenceHandles: []string{"summarize#3"},
+		ToolResult:      &api.ToolResult{Tool: "summarize", ToolCallID: "call-sum"},
+		CreatedAt:       time.Now().UTC(),
+	}
+	rows := ProjectToolMessage("proj-a", "sess-a", msg, "summarize")
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d, want 3 (parent + 2 anchor handles)", len(rows))
+	}
+	if rows[0].Handle != "summarize#3" || rows[1].Handle != "summarize#1" || rows[2].Handle != "summarize#2" {
+		t.Fatalf("handles = %q, %q, %q", rows[0].Handle, rows[1].Handle, rows[2].Handle)
+	}
+}

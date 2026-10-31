@@ -43,18 +43,18 @@ type ParkedProgramResult struct {
 
 // programEvaluation is one bound program handed from its call to evaluation.
 type programEvaluation struct {
-	ctx          context.Context
-	run          *programRun
-	call         *programCall
-	park         *programPark
-	plan         commandsurface.ProgramSnapshot
-	ports        commandprogram.EvaluationPorts
-	dispatcher   *ProgramDispatcher
-	stdout       *programStream
-	stderr       *programStream
-	outputs      *invocation.ProgramOutputRetention
-	scope        captureprojection.Scope
-	documents    *programDocuments
+	ctx            context.Context
+	run            *programRun
+	call           *programCall
+	park           *programPark
+	plan           commandsurface.ProgramSnapshot
+	ports          commandprogram.EvaluationPorts
+	dispatcher     *ProgramDispatcher
+	stdout         *programStream
+	stderr         *programStream
+	outputs        *invocation.ProgramOutputRetention
+	scope          captureprojection.Scope
+	documents      *programDocuments
 	paths          *projectpaths.ProgramPaths
 	verification   func() commandSourceIdentity
 	failureAttempt *commandFailureAttempt
@@ -97,6 +97,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		if e.run.tc.Effects.Out.ExternalAccess != nil {
 			out.ExternalAccess = e.run.tc.Effects.Out.ExternalAccess
 		}
+		out.SourceDeliveryHandles = append([]string(nil), e.run.tc.Effects.Out.SourceDeliveryHandles...)
 	}
 	return ending.result, ending.err
 }
