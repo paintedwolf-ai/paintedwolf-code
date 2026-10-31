@@ -38,6 +38,7 @@ func TestForbiddenToolUseKeepsDefinitionsAndSendsNoCallChoice(t *testing.T) {
 func TestForbiddenToolUseOmitsDefinitionsOnLocalInferenceProfiles(t *testing.T) {
 	for name, profile := range map[string]providerprofile.Profile{
 		"openai-compatible": providerprofile.LocalInference(providerprofile.OpenAI()),
+		"fireworks":         providerprofile.Fireworks(),
 		"lmstudio":          providerprofile.Lmstudio(),
 		"omlx":              providerprofile.Omlx(),
 		"litellm":           providerprofile.Litellm(),

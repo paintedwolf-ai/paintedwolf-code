@@ -372,6 +372,16 @@ func (l *modelTurn) completeStream(
 	}
 	if proseFinish {
 		kept := retainOfferedToolCalls(nil, "", completion.ToolCalls, workerProseOfferedTools(sess))
+		if len(kept) == 0 && len(completion.ToolCalls) > 0 && strings.TrimSpace(completion.Content) == "" && allBookkeepingToolCalls(completion.ToolCalls) {
+			if retryComp, retryTokens, ok := l.retryProseFinishAfterBookkeeping(ctx, sess, client, req, onProgress, llmCallID, providerID, model); ok {
+				retryComp.SourceContext = sourceRequest.ForCompletion(retryComp)
+				if st != nil {
+					st.output.sourceContext = retryComp.SourceContext
+				}
+				completion = retryComp
+				tokens = retryTokens
+			}
+		}
 		// Calls the final turn will not run are the model's miss, not a silent provider.
 		if len(kept) == 0 && len(completion.ToolCalls) > 0 && strings.TrimSpace(completion.Content) == "" {
 			return nil, nil, &ProseTurnToolCallError{ProviderID: providerID, Model: model, Tools: proseTurnToolNames(completion.ToolCalls), CloseoutReason: st.closeoutCauseTextOrEmpty()}
