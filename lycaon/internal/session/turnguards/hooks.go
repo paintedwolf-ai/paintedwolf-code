@@ -118,7 +118,7 @@ func (m *Service) BeforeFinish(
 		}
 	}
 	if invokeAllowed {
-		var batchTurn guard.BatchTurnGuardState
+		var batchTurn guard.BatchTurnGuard
 		if m.Batch != nil {
 			batchTurn = m.Batch.TurnGuard(sess.ID)
 		}

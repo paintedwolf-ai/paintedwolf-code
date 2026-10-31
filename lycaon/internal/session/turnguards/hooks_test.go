@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -103,7 +102,7 @@ func TestBeforeFinishSkipsHostNoToolTurnWhenInvokeDisallowed(t *testing.T) {
 	rs, err := loader.LoadEffectivePolicy()
 	testutil.FailErr(t, "oar.LoadEffectivePolicy", err)
 	pipeline := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
-	pipeline.EnableAnchor(oar.AnchorCoordinatorPreCloseout)
+	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 
 	policy := policyfacts.New(stubProfiles{})
 	policy.SetSources(nil, nil, stubFeedback{}, nil)
@@ -114,7 +113,7 @@ func TestBeforeFinishSkipsHostNoToolTurnWhenInvokeDisallowed(t *testing.T) {
 	svc := New(stubSessions{sess: sess}, policy, nil, nil, state, nil, nil, nil, nil, closeouts.New(stubSessions{sess: sess}), nil, nil)
 
 	reject, blocked := svc.BeforeFinish(
-		t.Context(), sess, nil, "", "Final summary.", spawn.SurfaceImplementCycle, false, nil, false,
+		t.Context(), sess, nil, "", "Final summary.", surface.SurfaceImplementDispatch, false, nil, false,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("BeforeFinish with invokeAllowed=false blocked: blocked=%v reject=%v", blocked, reject)
@@ -128,7 +127,7 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	rs, err := loader.LoadEffectivePolicy()
 	testutil.FailErr(t, "oar.LoadEffectivePolicy", err)
 	pipeline := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
-	pipeline.EnableAnchor(oar.AnchorCoordinatorPreCloseout)
+	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 
 	policy := policyfacts.New(stubProfiles{})
 	policy.SetSources(nil, nil, stubFeedback{}, nil)
@@ -138,7 +137,6 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	store := stubSessions{sess: sess}
 	state := stubState{state: surface.ImplementSessionState{
 		ProgressOpenCount: 1,
-		WorkersCompleted:  1,
 	}}
 	svc := New(store, policy, nil, nil, state, nil, nil, nil, nil, closeouts.New(store), nil, nil)
 	svc.SetProgress(stubProgress{content: "- [x] Done\n- [ ] Pending item\n"})
@@ -149,14 +147,14 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	}
 	for i := 0; i < synthesisDelayMaxPerPrompt; i++ {
 		reject, blocked := svc.BeforeFinish(
-			t.Context(), sess, history, "", "Final summary.", spawn.SurfaceImplementCycle, true, nil, true,
+			t.Context(), sess, history, "", "Final summary.", "implement_routing", true, nil, true,
 		)
 		if !blocked || reject == nil || reject.Code() != progressOpenBeforeCloseoutCode {
 			t.Fatalf("attempt %d: got blocked=%v reject=%v, want %s", i+1, blocked, reject, progressOpenBeforeCloseoutCode)
 		}
 	}
 	reject, blocked := svc.BeforeFinish(
-		t.Context(), sess, history, "", "Final summary.", spawn.SurfaceImplementCycle, true, nil, true,
+		t.Context(), sess, history, "", "Final summary.", "implement_routing", true, nil, true,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("after %d retries: got blocked=%v reject=%v, want waiver", synthesisDelayMaxPerPrompt, blocked, reject)
