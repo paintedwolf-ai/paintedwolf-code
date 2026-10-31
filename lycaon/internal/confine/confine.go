@@ -76,9 +76,10 @@ const (
 )
 
 type Boundary struct {
-	ProcessControl bool
-	HostExecution  bool
-	Applied        bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
+	Applied         bool
 	Network        NetworkMode
 	// EgressOff is why Network is NetworkDeny. Meaningless for any other mode.
 	EgressOff EgressOffCause
@@ -111,8 +112,9 @@ func BoundaryOf(c *Confinement) Boundary {
 		return Boundary{}
 	}
 	return Boundary{
-		ProcessControl: c.ProcessControl,
-		Filesystem:     filesystem,
+		ProcessControl:  c.ProcessControl,
+		CredentialStore: c.CredentialStore,
+		Filesystem:      filesystem,
 		Applied:        true, Network: c.Network, EgressOff: c.EgressOff,
 		SocksProxyEnv:   c.SocksProxyEnv && c.Network == NetworkProxyOnly && c.SocksProxyAddr != "",
 		WriteRoots:      writeRoots,
@@ -128,8 +130,9 @@ func (b Boundary) DeniesDirectSockets() bool {
 
 // Confinement describes the box for one command.
 type Confinement struct {
-	ProcessControl bool
-	HostExecution  bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
 	// ProjectID routes project-scoped grants.
 	ProjectID string
 	// Roots are attached write locations.
@@ -202,6 +205,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 	}
 	c := &Confinement{
 		ProcessControl:              req.ProcessControl,
+		CredentialStore:             req.CredentialStore,
 		ProjectID:                   req.ProjectID,
 		Roots:                       prepared.Roots,
 		GrantedWriteRoots:           append([]string(nil), prepared.GrantedWriteRoots...),
@@ -473,10 +477,17 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 				literals = append(literals, g.ResolvedPath)
 			}
 		}
+		if c.CredentialStore {
+			allow = mergeSortedStrings(allow, linuxCredentialStoreReadRoots())
+			literals = mergeSortedStrings(literals, darwinLoginKeychainLiterals())
+		}
 		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(allow, ""), literalMatches(literals, "")...)})
 		// Ancestor metadata permits traversal into allowed descendants.
 		if len(allow) > 0 || len(literals) > 0 {
 			ancestors := traversalAncestors(matchPaths(deny), append(append([]string(nil), allow...), literals...))
+			if c.CredentialStore {
+				ancestors = mergeSortedStrings(ancestors, darwinLoginKeychainMetadataDirs())
+			}
 			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(ancestors, "")})
 		}
 	}

@@ -385,6 +385,7 @@ execution_capabilities:
     - socket
     - direct_ip
     - process_control
+    - credential_store
     - host_execution
     - local_listen
     - loopback_connect
@@ -397,6 +398,7 @@ execution_capabilities:
     - socket
     - direct_ip
     - process_control
+    - credential_store
     - host_execution
     - local_listen
     - loopback_connect

@@ -16,16 +16,16 @@ import (
 
 // ToolContext copies share one permit, consumed at the launch boundary.
 type executionPermit struct {
-	mu                            sync.Mutex
-	session, call                 string
-	boundary                      string
-	arguments                     string
-	processControl, hostExecution bool
-	consumed                      bool
+	mu                                             sync.Mutex
+	session, call                                  string
+	boundary                                       string
+	arguments                                      string
+	processControl, credentialStore, hostExecution bool
+	consumed                                       bool
 }
 
 func finalizeExecutionCapability(tc ToolContext, req confine.Request) *toolrejection.ToolReject {
-	if !req.HostExecution && !req.ProcessControl {
+	if !req.HostExecution && !req.ProcessControl && !req.CredentialStore {
 		return nil
 	}
 	permit := tc.Execution.executionPermit
@@ -34,7 +34,7 @@ func finalizeExecutionCapability(tc ToolContext, req confine.Request) *toolrejec
 	}
 	permit.mu.Lock()
 	defer permit.mu.Unlock()
-	if permit.arguments != executionArgumentsDigest(tc.Effects.CanonicalArgs) || permit.boundary != ExecutionBoundaryDigest(req) || permit.consumed || permit.session != tc.Identity.SessionID || permit.call != tc.Identity.ToolCallID || permit.hostExecution != req.HostExecution || permit.processControl != req.ProcessControl {
+	if permit.arguments != executionArgumentsDigest(tc.Effects.CanonicalArgs) || permit.boundary != ExecutionBoundaryDigest(req) || permit.consumed || permit.session != tc.Identity.SessionID || permit.call != tc.Identity.ToolCallID || permit.hostExecution != req.HostExecution || permit.processControl != req.ProcessControl || permit.credentialStore != req.CredentialStore {
 		return &toolrejection.ToolReject{Code: isolation.CodeExecutionAuthorizationChanged}
 	}
 	permit.consumed = true
@@ -87,7 +87,7 @@ func executionBoundarySet[T comparable](values []T) []T {
 
 // StampExecutionApproval binds reviewed authority to this call and launch boundary.
 func (tc *ToolContext) StampExecutionApproval(args map[string]any, reviewed hitl.ProposedAction) {
-	tc.Execution.executionPermit = &executionPermit{session: tc.Identity.SessionID, call: tc.Identity.ToolCallID, processControl: tc.Execution.ProcessControl, hostExecution: tc.Execution.HostExecution, boundary: reviewed.Execution.ExecutionBoundaryDigest, arguments: executionArgumentsDigest(args)}
+	tc.Execution.executionPermit = &executionPermit{session: tc.Identity.SessionID, call: tc.Identity.ToolCallID, processControl: tc.Execution.ProcessControl, credentialStore: tc.Execution.CredentialStore, hostExecution: tc.Execution.HostExecution, boundary: reviewed.Execution.ExecutionBoundaryDigest, arguments: executionArgumentsDigest(args)}
 }
 
 // HasExecutionApproval reports whether this invocation reached capability review.
