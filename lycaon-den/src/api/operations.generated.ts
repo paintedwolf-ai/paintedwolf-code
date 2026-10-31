@@ -192,6 +192,7 @@ export const API_OPERATIONS = {
   listMcpProviders: { method: "GET", path: "/v1/mcp/providers" },
   listMcpRecipes: { method: "GET", path: "/v1/mcp/recipes" },
   listProjectArtifacts: { method: "GET", path: "/v1/projects/{id}/artifacts" },
+  listProjectBackgroundProcesses: { method: "GET", path: "/v1/projects/{id}/background" },
   listProjectFindingIgnores: { method: "GET", path: "/v1/projects/{id}/findings/ignores" },
   listProjectManagedSecretUses: { method: "GET", path: "/v1/projects/{id}/secrets/{secret_id}/uses" },
   listProjectManagedSecrets: { method: "GET", path: "/v1/projects/{id}/secrets" },
@@ -297,6 +298,7 @@ export const API_OPERATIONS = {
   startWorkflowRun: { method: "POST", path: "/v1/sessions/{id}/workflow-runs" },
   stashGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/stash" },
   stopBackgroundProcess: { method: "POST", path: "/v1/sessions/{id}/background/{process_id}/stop" },
+  stopProjectBackgroundProcess: { method: "POST", path: "/v1/projects/{id}/background/{process_id}/stop" },
   streamSession: { method: "GET", path: "/v1/sessions/{id}/stream" },
   submitEditorDocumentUpdate: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/updates" },
   subscribeEvents: { method: "GET", path: "/v1/events" },
@@ -534,6 +536,7 @@ export type OperationPathParameters = {
   listMcpProviders: Record<string, never>;
   listMcpRecipes: Record<string, never>;
   listProjectArtifacts: { id: string | number; };
+  listProjectBackgroundProcesses: { id: string | number; };
   listProjectFindingIgnores: { id: string | number; };
   listProjectManagedSecretUses: { id: string | number; secret_id: string | number; };
   listProjectManagedSecrets: { id: string | number; };
@@ -639,6 +642,7 @@ export type OperationPathParameters = {
   startWorkflowRun: { id: string | number; };
   stashGit: { id: string | number; repo_id: string | number; };
   stopBackgroundProcess: { id: string | number; process_id: string | number; };
+  stopProjectBackgroundProcess: { id: string | number; process_id: string | number; };
   streamSession: { id: string | number; };
   submitEditorDocumentUpdate: { id: string | number; document_id: string | number; };
   subscribeEvents: Record<string, never>;

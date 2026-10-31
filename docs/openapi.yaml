@@ -2908,6 +2908,77 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
+  /v1/projects/{id}/background:
+    get:
+      tags:
+        - projects
+      operationId: listProjectBackgroundProcesses
+      summary: List active and recently ended background commands for a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Active and recently ended background commands in the project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectBackgroundProcessListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/background/{process_id}/stop:
+    post:
+      tags:
+        - projects
+      operationId: stopProjectBackgroundProcess
+      summary: Request termination of a background command in a project
+      x-person-action: record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: process_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]+$
+      responses:
+        '200':
+          description: Stop request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackgroundProcessStopResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/projects/{id}/source/operations:
     get:
       tags:
@@ -15287,6 +15358,7 @@ components:
         - progress
         - queue
         - project
+        - project_background
         - process
         - preview
         - attention
@@ -15325,6 +15397,7 @@ components:
         - $ref: '#/components/schemas/EventEnvelopeProgress'
         - $ref: '#/components/schemas/EventEnvelopeQueue'
         - $ref: '#/components/schemas/EventEnvelopeProject'
+        - $ref: '#/components/schemas/EventEnvelopeProjectBackground'
         - $ref: '#/components/schemas/EventEnvelopeProcess'
         - $ref: '#/components/schemas/EventEnvelopePreview'
         - $ref: '#/components/schemas/EventEnvelopeAttention'
@@ -15363,6 +15436,7 @@ components:
           progress: '#/components/schemas/EventEnvelopeProgress'
           queue: '#/components/schemas/EventEnvelopeQueue'
           project: '#/components/schemas/EventEnvelopeProject'
+          project_background: '#/components/schemas/EventEnvelopeProjectBackground'
           process: '#/components/schemas/EventEnvelopeProcess'
           preview: '#/components/schemas/EventEnvelopePreview'
           attention: '#/components/schemas/EventEnvelopeAttention'
@@ -15881,6 +15955,123 @@ components:
           type: integer
         termination_reason:
           $ref: '#/components/schemas/BackgroundProcessTerminationReason'
+    ProjectBackgroundProcess:
+      x-go-generate: true
+      type: object
+      required:
+        - process_id
+        - session_id
+        - session_archived
+        - command
+        - working_dir
+        - ports
+        - started_at
+        - running
+      additionalProperties: false
+      description: One running or recently ended background command in a project, with live session metadata and attributed listening endpoints.
+      properties:
+        process_id:
+          type: string
+          pattern: ^[A-Za-z0-9_-]+$
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        session_title:
+          type: string
+        session_archived:
+          type: boolean
+        command:
+          type: string
+        root_id:
+          type: string
+          format: uuid
+        working_dir:
+          type: string
+          description: Working directory relative to the matched project root.
+        ports:
+          type: array
+          items:
+            type: string
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        running:
+          type: boolean
+        exit_code:
+          x-go-pointer: true
+          type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
+    ProjectBackgroundProcessListResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - processes
+        - revision
+      additionalProperties: false
+      properties:
+        processes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectBackgroundProcess'
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monotonic per-project background command revision.
+    ProjectBackgroundEvent:
+      x-go-generate: true
+      type: object
+      required:
+        - project_id
+        - process_id
+        - session_id
+        - action
+        - revision
+        - running
+      additionalProperties: false
+      description: Project-scoped background command lifecycle or listening port change.
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        process_id:
+          type: string
+          pattern: ^[A-Za-z0-9_-]+$
+        session_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum:
+            - started
+            - ports_changed
+            - ended
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        running:
+          type: boolean
+        ports:
+          type: array
+          items:
+            type: string
+        exit_code:
+          x-go-pointer: true
+          type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
+        process:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ProjectBackgroundProcess'
     ProviderEvent:
       x-go-generate: true
       type: object
@@ -20354,6 +20545,10 @@ components:
         message_count:
           type: integer
           minimum: 0
+        background_running:
+          type: integer
+          minimum: 0
+          description: Count of live background commands (JobModeBackground) attributed to this session; omitted when 0.
         created_at:
           type: string
           format: date-time
@@ -29982,6 +30177,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectRemovalExtension'
+        background_processes:
+          type: array
+          description: Active background commands running in this project that removing the project will terminate.
+          items:
+            $ref: '#/components/schemas/ProjectBackgroundProcess'
     ProjectRemovalRequest:
       x-go-generate: true
       type: object
@@ -40835,6 +41035,18 @@ components:
               const: project
             data:
               $ref: '#/components/schemas/ProjectEvent'
+    EventEnvelopeProjectBackground:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelopeBase'
+        - type: object
+          required:
+            - topic
+            - data
+          properties:
+            topic:
+              const: project_background
+            data:
+              $ref: '#/components/schemas/ProjectBackgroundEvent'
     EventEnvelopeProcess:
       allOf:
         - $ref: '#/components/schemas/EventEnvelopeBase'

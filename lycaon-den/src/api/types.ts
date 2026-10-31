@@ -1216,6 +1216,40 @@ export interface paths {
         patch: operations["updateProjectRoot"];
         trace?: never;
     };
+    "/v1/projects/{id}/background": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List active and recently ended background commands for a project */
+        get: operations["listProjectBackgroundProcesses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/background/{process_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request termination of a background command in a project */
+        post: operations["stopProjectBackgroundProcess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/source/operations": {
         parameters: {
             query?: never;
@@ -5730,9 +5764,9 @@ export interface components {
             actions?: components["schemas"]["NoticeAction"][];
         };
         /** @enum {string} */
-        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "delegation" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
+        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "delegation" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
         /** @description Topic-discriminated EventHub SSE envelope. */
-        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeDelegation"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
+        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeDelegation"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
         /** @description One transcript row change. message is always the full post-write row: apply it as a whole-row snapshot ordered by seq, never a field merge onto a cached row — an absent field means the row no longer has it. */
         MessageEvent: {
             /** Format: uuid */
@@ -5955,6 +5989,54 @@ export interface components {
             running: boolean;
             exit_code?: number;
             termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
+        };
+        /** @description One running or recently ended background command in a project, with live session metadata and attributed listening endpoints. */
+        ProjectBackgroundProcess: {
+            process_id: string;
+            /** Format: uuid */
+            project_id?: string;
+            /** Format: uuid */
+            session_id: string;
+            session_title?: string;
+            session_archived: boolean;
+            command: string;
+            /** Format: uuid */
+            root_id?: string;
+            /** @description Working directory relative to the matched project root. */
+            working_dir: string;
+            ports: string[];
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at?: string;
+            running: boolean;
+            exit_code?: number;
+            termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
+        };
+        ProjectBackgroundProcessListResponse: {
+            processes: components["schemas"]["ProjectBackgroundProcess"][];
+            /**
+             * Format: int64
+             * @description Monotonic per-project background command revision.
+             */
+            revision: number;
+        };
+        /** @description Project-scoped background command lifecycle or listening port change. */
+        ProjectBackgroundEvent: {
+            /** Format: uuid */
+            project_id: string;
+            process_id: string;
+            /** Format: uuid */
+            session_id: string;
+            /** @enum {string} */
+            action: "started" | "ports_changed" | "ended";
+            /** Format: int64 */
+            revision: number;
+            running: boolean;
+            ports?: string[];
+            exit_code?: number;
+            termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
+            process?: components["schemas"]["ProjectBackgroundProcess"];
         };
         ProviderEvent: {
             provider_id: string;
@@ -7794,6 +7876,8 @@ export interface components {
             /** @description Order among the project's pinned chats, lowest first; omitted when unpinned */
             pin_rank?: number;
             message_count: number;
+            /** @description Count of live background commands (JobModeBackground) attributed to this session; omitted when 0. */
+            background_running?: number;
             /** Format: date-time */
             created_at: string;
             /**
@@ -11725,6 +11809,8 @@ export interface components {
             complete: boolean;
             checks: components["schemas"]["ProjectRemovalCheck"][];
             extensions: components["schemas"]["ProjectRemovalExtension"][];
+            /** @description Active background commands running in this project that removing the project will terminate. */
+            background_processes?: components["schemas"]["ProjectBackgroundProcess"][];
         };
         ProjectRemovalRequest: {
             /** Format: uuid */
@@ -16447,6 +16533,17 @@ export interface components {
              */
             topic: "project";
         };
+        EventEnvelopeProjectBackground: components["schemas"]["EventEnvelopeBase"] & {
+            /** @constant */
+            topic: "project_background";
+            data: components["schemas"]["ProjectBackgroundEvent"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            topic: "project_background";
+        };
         EventEnvelopeProcess: components["schemas"]["EventEnvelopeBase"] & {
             /** @constant */
             topic: "process";
@@ -19523,6 +19620,63 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listProjectBackgroundProcesses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active and recently ended background commands in the project */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBackgroundProcessListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    stopProjectBackgroundProcess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                process_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stop request accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackgroundProcessStopResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
             default: components["responses"]["Error"];
         };
@@ -29450,6 +29604,9 @@ export type PreviewEvent = components["schemas"]["PreviewEvent"];
 export type PreviewWatchRequest = components["schemas"]["PreviewWatchRequest"];
 export type PreviewWatchResult = components["schemas"]["PreviewWatchResult"];
 export type BackgroundProcessStopResult = components["schemas"]["BackgroundProcessStopResult"];
+export type ProjectBackgroundProcess = components["schemas"]["ProjectBackgroundProcess"];
+export type ProjectBackgroundProcessListResponse = components["schemas"]["ProjectBackgroundProcessListResponse"];
+export type ProjectBackgroundEvent = components["schemas"]["ProjectBackgroundEvent"];
 export type ProviderEvent = components["schemas"]["ProviderEvent"];
 export type ModelPolicyEvent = components["schemas"]["ModelPolicyEvent"];
 export type SettingsEvent = components["schemas"]["SettingsEvent"];
@@ -30464,6 +30621,7 @@ export type EventEnvelopeFindings = components["schemas"]["EventEnvelopeFindings
 export type EventEnvelopeProgress = components["schemas"]["EventEnvelopeProgress"];
 export type EventEnvelopeQueue = components["schemas"]["EventEnvelopeQueue"];
 export type EventEnvelopeProject = components["schemas"]["EventEnvelopeProject"];
+export type EventEnvelopeProjectBackground = components["schemas"]["EventEnvelopeProjectBackground"];
 export type EventEnvelopeProcess = components["schemas"]["EventEnvelopeProcess"];
 export type PreviewEventOp = components["schemas"]["PreviewEventOp"];
 export type PreviewActionOverlay = components["schemas"]["PreviewActionOverlay"];

@@ -265,6 +265,41 @@ func PathWithinRoot(rootPath, candidatePath string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
+// MatchRoot resolves candidatePath against the project's roots after symlink
+// evaluation and returns the most specific matching root and slash-normalized
+// relative path.
+func MatchRoot(roots []RootRef, candidatePath string) (RootRef, string, bool) {
+	canonCandidate, ok := canonicalizePath(candidatePath)
+	if !ok {
+		return RootRef{}, "", false
+	}
+	var match RootRef
+	var bestRel string
+	found := false
+	for _, r := range roots {
+		canonRoot, ok := canonicalizePath(r.Path)
+		if !ok {
+			continue
+		}
+		rel, err := filepath.Rel(canonRoot, canonCandidate)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		if !found || len(rel) < len(bestRel) {
+			match = r
+			bestRel = rel
+			found = true
+		}
+	}
+	if !found {
+		return RootRef{}, "", false
+	}
+	if bestRel == "" {
+		bestRel = "."
+	}
+	return match, filepath.ToSlash(bestRel), true
+}
+
 func canonicalizePath(p string) (string, bool) {
 	p = strings.TrimSpace(p)
 	if p == "" {

@@ -28,8 +28,46 @@ func (r *Output) Promote(ctx context.Context, sessionID, handle string) error {
 		return nil
 	}
 	proc.silent = false
-	running := proc.running
+	workDir := r.jobs.workDirs[proc.Handle]
+	teardownReason, admitted := r.jobs.checkAdmissionLocked(proc.ProjectID, proc.SessionID, proc.RootSessionID, workDir)
+	var (
+		killAsync  *exec.AsyncPipeline
+		killPTY    exec.PTY
+		killScreen *ptyScreen
+		killCancel context.CancelFunc
+	)
+	if !admitted && proc.running && !proc.hasExit && !proc.stopped {
+		proc.stopped = true
+		proc.reason = teardownReason
+		killAsync = proc.async
+		killPTY = proc.pty
+		killScreen = proc.screen
+		killCancel = proc.cancel
+	}
+	running := proc.running && admitted
+	startEv, emitStart := r.jobs.indexProjectProcessLocked(proc)
+	publishProject := r.publishProject
 	r.jobs.mu.Unlock()
+	if !admitted {
+		if killAsync != nil {
+			killAsync.Kill()
+		}
+		if killPTY != nil {
+			_ = killPTY.Close()
+		}
+		if killScreen != nil {
+			killScreen.Close()
+		}
+		if killCancel != nil {
+			killCancel()
+		}
+	}
+	if emitStart && publishProject != nil {
+		publishProject(ctx, startEv)
+	}
+	if running {
+		r.sweeper.onJobStarted()
+	}
 	if r.publish != nil {
 		proc.publishMu.Lock()
 		projection := r.projectWindow(ctx, proc)
@@ -103,6 +141,7 @@ func (r *ProcessLifecycle) Stop(sessionID, handle string, reason TerminationReas
 		return nil, err
 	}
 	r.killProcess(proc, reason)
+	r.sweeper.onJobEnded()
 	running, hasExit, exitCode, settledReason := r.jobs.exitState(proc)
 	out := &api.BackgroundProcessStopResult{
 		ProcessID:         handle,
@@ -161,8 +200,15 @@ func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string,
 	}
 	sessionID = trim(sessionID)
 	r.jobs.mu.Lock()
+	r.jobs.deletingSessions[sessionID] = true
+	defer func() {
+		r.jobs.mu.Lock()
+		delete(r.jobs.deletingSessions, sessionID)
+		r.jobs.mu.Unlock()
+	}()
 	procs := r.jobs.sessions[sessionID]
-	for handle := range procs {
+	for handle, proc := range procs {
+		r.jobs.unindexProjectProcessLocked(proc)
 		delete(r.jobs.workDirs, handle)
 	}
 	delete(r.jobs.sessions, sessionID)
@@ -176,6 +222,7 @@ func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string,
 		}
 		r.releaseIndexWatch(proc)
 	}
+	r.sweeper.onJobEnded()
 	return nil
 }
 
@@ -198,6 +245,7 @@ func (r *ProcessLifecycle) DisposeAwaitedSession(ctx context.Context, sessionID 
 		}
 		proc.discarded = true
 		awaited = append(awaited, proc)
+		r.jobs.unindexProjectProcessLocked(proc)
 		delete(sessionProcs, handle)
 		delete(r.jobs.workDirs, handle)
 	}
@@ -236,18 +284,35 @@ func (r *ProcessLifecycle) StopUnderRoot(
 	rootPath = trim(rootPath)
 	seen := make(map[string]*Process)
 	r.jobs.mu.Lock()
+	if projectID != "" {
+		r.jobs.detachingRoots[projectID] = append(r.jobs.detachingRoots[projectID], rootPath)
+		defer func() {
+			r.jobs.mu.Lock()
+			roots := r.jobs.detachingRoots[projectID]
+			for i, candidate := range roots {
+				if candidate == rootPath {
+					r.jobs.detachingRoots[projectID] = append(roots[:i], roots[i+1:]...)
+					break
+				}
+			}
+			if len(r.jobs.detachingRoots[projectID]) == 0 {
+				delete(r.jobs.detachingRoots, projectID)
+			}
+			r.jobs.mu.Unlock()
+		}()
+	}
 	for _, item := range handles {
 		sid := trim(item.SessionID)
 		hid := trim(item.Handle)
 		if procs := r.jobs.sessions[sid]; procs != nil {
-			if proc := procs[hid]; proc != nil && proc.running && !proc.silent {
+			if proc := procs[hid]; proc != nil && proc.running {
 				seen[sid+"/"+hid] = proc
 			}
 		}
 	}
 	for sessionID, procs := range r.jobs.sessions {
 		for handle, proc := range procs {
-			if proc == nil || !proc.running || proc.silent {
+			if proc == nil || !proc.running {
 				continue
 			}
 			if !matchesProjectOrSessions(proc, sessionID, projectID, sessionIDs) {
@@ -308,12 +373,17 @@ func (r *ProcessLifecycle) Close(ctx context.Context) error {
 	r.jobs.closed = true
 	var procs []*Process
 	for sessionID, sessionProcs := range r.jobs.sessions {
-		for _, proc := range sessionProcs {
+		for handle, proc := range sessionProcs {
 			procs = append(procs, proc)
+			delete(r.jobs.workDirs, handle)
+			delete(r.jobs.ports, handle)
+			delete(r.jobs.pids, handle)
 		}
 		delete(r.jobs.sessions, sessionID)
 	}
+	clear(r.jobs.projectProcs)
 	r.jobs.mu.Unlock()
+	r.sweeper.close()
 
 	for _, proc := range procs {
 		r.killProcess(proc, TerminationAppQuit)
@@ -353,6 +423,8 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		return
 	}
 	proc.terminalPublished = true
+	endEv, emitEnd := r.jobs.finishProjectProcessLocked(proc)
+	publishProject := r.publishProject
 	completion := Completion{
 		IsCheck:        proc.isCheck,
 		SourceRevision: proc.sourceRevision, SourceRootDigest: proc.sourceRootDigest, Cwd: proc.cwd,
@@ -372,6 +444,9 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	publish := r.publish
 	complete := r.complete
 	r.jobs.mu.Unlock()
+	if emitEnd && publishProject != nil {
+		publishProject(ctx, endEv)
+	}
 	body, _, screening := r.safeOutput(ctx, proc)
 	completion.Tail = screenedOrSuppressed(CutTail(body, r.ringBufferBytes), screening)
 	stamped := confine.StampRefusal(originTool, sessionID, boundary, confine.RefusalContext{

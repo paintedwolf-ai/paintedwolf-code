@@ -52,6 +52,12 @@ func (m *Service) ListProjectSessions(ctx context.Context, q store.SummaryQuery)
 		Sessions: result.Sessions,
 		Total:    result.Total,
 	}
+	if m.processes != nil && len(page.Sessions) > 0 {
+		counts := m.processes.SessionBackgroundRunningCounts(q.ProjectID)
+		for i := range page.Sessions {
+			page.Sessions[i].BackgroundRunning = counts[page.Sessions[i].ID]
+		}
+	}
 	if result.Next != nil {
 		page.NextCursor, err = sessionListPages.Encode(sessionListScope(q), *result.Next)
 		if err != nil {

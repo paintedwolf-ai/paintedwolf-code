@@ -95,8 +95,9 @@ var (
 
 // Hooks are the registry's only outward lifecycle ports.
 type Hooks struct {
-	Publish  StreamPublisher
-	Complete CompletionPublisher
+	Publish        StreamPublisher
+	PublishProject ProjectBackgroundPublisher
+	Complete       CompletionPublisher
 	// Refused hears refusals the kernel made to a running visible job.
 	Refused RefusalPublisher
 }

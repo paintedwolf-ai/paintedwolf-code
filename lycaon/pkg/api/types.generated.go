@@ -4591,6 +4591,46 @@ type ProjectAgentContext struct {
 	Skills              []AgentContextSkill       `json:"skills"`
 }
 
+// ProjectBackgroundEvent Project-scoped background command lifecycle or listening port change.
+type ProjectBackgroundEvent struct {
+	ProjectID         string                             `json:"project_id"`
+	ProcessID         string                             `json:"process_id"`
+	SessionID         string                             `json:"session_id"`
+	Action            string                             `json:"action"`
+	Revision          int64                              `json:"revision"`
+	Running           bool                               `json:"running"`
+	Ports             []string                           `json:"ports,omitempty"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
+	Process           *ProjectBackgroundProcess          `json:"process,omitempty"`
+}
+
+// ProjectBackgroundProcess One running or recently ended background command in a project, with live session metadata and attributed listening endpoints.
+type ProjectBackgroundProcess struct {
+	ProcessID       string `json:"process_id"`
+	ProjectID       string `json:"project_id,omitempty"`
+	SessionID       string `json:"session_id"`
+	SessionTitle    string `json:"session_title,omitempty"`
+	SessionArchived bool   `json:"session_archived"`
+	Command         string `json:"command"`
+	RootID          string `json:"root_id,omitempty"`
+	// Working directory relative to the matched project root.
+	WorkingDir        string                             `json:"working_dir"`
+	Ports             []string                           `json:"ports"`
+	StartedAt         time.Time                          `json:"started_at"`
+	EndedAt           *time.Time                         `json:"ended_at,omitempty"`
+	Running           bool                               `json:"running"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
+}
+
+// ProjectBackgroundProcessListResponse
+type ProjectBackgroundProcessListResponse struct {
+	Processes []ProjectBackgroundProcess `json:"processes"`
+	// Monotonic per-project background command revision.
+	Revision int64 `json:"revision"`
+}
+
 // ProjectCostReport
 type ProjectCostReport struct {
 	Total                int         `json:"total"`
@@ -4646,6 +4686,8 @@ type ProjectRemovalAssessment struct {
 	Complete          bool                      `json:"complete"`
 	Checks            []ProjectRemovalCheck     `json:"checks"`
 	Extensions        []ProjectRemovalExtension `json:"extensions"`
+	// Active background commands running in this project that removing the project will terminate.
+	BackgroundProcesses []ProjectBackgroundProcess `json:"background_processes,omitempty"`
 }
 
 // ProjectRemovalCheck
@@ -6244,9 +6286,11 @@ type SessionSummary struct {
 	Status        SessionStatus  `json:"status"`
 	ArchivedAt    *time.Time     `json:"archived_at,omitempty"`
 	// Order among the project's pinned chats, lowest first; omitted when unpinned
-	PinRank      *int      `json:"pin_rank,omitempty"`
-	MessageCount int       `json:"message_count"`
-	CreatedAt    time.Time `json:"created_at"`
+	PinRank      *int `json:"pin_rank,omitempty"`
+	MessageCount int  `json:"message_count"`
+	// Count of live background commands (JobModeBackground) attributed to this session; omitted when 0.
+	BackgroundRunning int       `json:"background_running,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
 	// When the transcript last gained a visible message, or the creation time before that
 	ActivityAt time.Time `json:"activity_at"`
 }

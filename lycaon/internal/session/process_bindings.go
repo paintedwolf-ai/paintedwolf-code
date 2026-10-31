@@ -11,6 +11,7 @@ func (m *Host) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	m.Processes.Background = reg
 	m.Runner.Execution.SetProcesses(reg)
 	m.Chats.Protection.SetJobs(reg)
+	m.Chats.SetProcesses(reg)
 	m.ProjectControl.SetProcesses(reg)
 	_ = m.Resources.RegisterCleanup("awaited-processes", 20, func(ctx context.Context, id string) error {
 		return reg.Lifecycle.DisposeAwaitedSession(ctx, id, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationStoppedByUser))

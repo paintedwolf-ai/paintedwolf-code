@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/queue"
 	"github.com/lycaon/lycaon/internal/resourcelifecycle"
@@ -64,16 +65,18 @@ type Service struct {
 	scratch      *scratch.Folders
 	loopbackProv Loopback
 	events       *events.Publisher
+	processes    *bgprocess.Registry
 }
 
 func New(store Store, policy Policy, prompt *promptstate.MutexRegistry, queue *queue.Store, resources *resourcelifecycle.Registry, l Lifecycle) *Service {
 	return &Service{store: store, policy: policy, prompt: prompt, queue: queue, resources: resources, Gate: l.Gate, Captures: l.Captures, Naming: l.Naming, Research: l.Research, Protection: l.Protection, Recovery: l.Recovery, Rewinds: l.Rewinds, Drafts: l.Drafts}
 }
 
-func (m *Service) SetWorkers(workers Workers)            { m.workers = workers }
-func (m *Service) SetScratch(scratch *scratch.Folders)   { m.scratch = scratch }
-func (m *Service) SetLoopback(loopback Loopback)         { m.loopbackProv = loopback }
-func (m *Service) SetPublisher(events *events.Publisher) { m.events = events }
+func (m *Service) SetWorkers(workers Workers)                  { m.workers = workers }
+func (m *Service) SetScratch(scratch *scratch.Folders)         { m.scratch = scratch }
+func (m *Service) SetLoopback(loopback Loopback)               { m.loopbackProv = loopback }
+func (m *Service) SetPublisher(events *events.Publisher)       { m.events = events }
+func (m *Service) SetProcesses(processes *bgprocess.Registry) { m.processes = processes }
 func (m *Service) removeScratch(ctx context.Context, ids []string) {
 	if m.scratch == nil || len(ids) == 0 {
 		return
