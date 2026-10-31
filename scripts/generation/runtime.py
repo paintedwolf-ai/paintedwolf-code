@@ -1,0 +1,163 @@
+"""Build and measure native generation candidates through the task scheduler."""
+
+import argparse
+import datetime
+import json
+import os
+from pathlib import Path
+import platform
+import shutil
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+from artifact_paths import artifact_root, bin_dir, compiler_cache_dir
+from sources import ensure_source
+
+PINS = json.loads(Path(__file__).with_name("sources.json").read_text())
+
+
+def paths(backend):
+    if backend == "reference-llama":
+        pin = PINS["llama.cpp"]
+        source = bin_dir(ROOT) / "generation-sources" / pin["sha256"]
+        build = compiler_cache_dir(ROOT) / "generation" / pin["revision"] / platform.system()
+        return source, build
+    return ROOT / "lycaon/internal/generation/native", compiler_cache_dir(ROOT) / "generation-rust"
+
+
+def run(command, **kwargs):
+    subprocess.run([str(part) for part in command], check=True, **kwargs)
+
+
+def prepare(args):
+    if args.backend == "reference-llama":
+        print(ensure_source(PINS["llama.cpp"], bin_dir(ROOT) / "generation-sources"))
+    elif args.backend == "reference-mlx":
+        if sys.platform != "darwin" or platform.machine() != "arm64":
+            raise ValueError("the MLX comparison requires Apple silicon")
+        project = Path(__file__).parent
+        if args.model:
+            if not args.output or not args.artifact_identity:
+                raise ValueError("conversion requires --output and --artifact-identity (source SHA256)")
+            run(["uv", "run", "--frozen", "--no-sync", "--project", project, "python",
+                 project / "convert_mlx.py", "--source", args.model, "--output", args.output,
+                 "--source-sha256", args.artifact_identity], env=python_environment())
+            return
+        if args.refresh_lock:
+            run(["uv", "lock", "--project", project])
+            retained = artifact_root(ROOT) / "generation" / "uv.lock"
+            retained.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(project / "uv.lock", retained)
+            print(f"Generated dependency lock: {retained}", flush=True)
+        run(["uv", "sync", "--frozen", "--project", project], env=python_environment())
+    else:
+        source, _ = paths(args.backend)
+        run(["cargo", "fetch", "--locked", "--manifest-path", source / "Cargo.toml"])
+
+
+def python_environment():
+    environment = dict(os.environ)
+    environment["UV_PROJECT_ENVIRONMENT"] = str(compiler_cache_dir(ROOT) / "generation-python")
+    return environment
+
+
+def build(args):
+    source, output = paths(args.backend)
+    workers = os.environ.get("PW_TEST_WORKERS", "1")
+    if args.backend == "reference-llama":
+        if not (source / ".source-sha256").is_file():
+            raise ValueError("run generation:prepare for this candidate first")
+        options = ["-DCMAKE_BUILD_TYPE=Release", "-DBUILD_SHARED_LIBS=OFF",
+                   "-DLLAMA_BUILD_COMMON=OFF", "-DLLAMA_BUILD_TOOLS=OFF",
+                   "-DLLAMA_BUILD_TESTS=OFF", "-DLLAMA_BUILD_EXAMPLES=OFF",
+                   "-DGGML_NATIVE=OFF"]
+        if sys.platform == "darwin":
+            options += ["-DGGML_METAL=ON", "-DGGML_METAL_EMBED_LIBRARY=ON"]
+        elif sys.platform == "linux":
+            options += ["-DGGML_VULKAN=ON"]
+        else:
+            raise ValueError("generation requires macOS or Linux")
+        run(["cmake", "-S", Path(__file__).parent / "llama-reference", "-B", output,
+             "-DLLAMA_SOURCE_DIR=" + str(source), *options])
+        run(["cmake", "--build", output, "--parallel", workers, "--target", "generation-reference"])
+    elif args.backend == "native":
+        run(["cargo", "build", "--locked", "--release", "--manifest-path", source / "Cargo.toml"],
+            env={**os.environ, "CARGO_TARGET_DIR": str(output)})
+    else:
+        raise ValueError("the Python reference is prepared rather than compiled")
+
+
+def test(args):
+    if args.backend == "reference-mlx":
+        run(["uv", "run", "--frozen", "--no-sync", "--project", Path(__file__).parent,
+             "python", "-m", "unittest", "discover", "-s", Path(__file__).parent,
+             "-p", "test_*.py"], env=python_environment())
+        return
+    source, output = paths("native")
+    run(["cargo", "test", "--locked", "--manifest-path", source / "Cargo.toml"],
+        env={**os.environ, "CARGO_TARGET_DIR": str(output)})
+
+
+def bench(args):
+    if not args.model or not args.model.exists():
+        raise ValueError("benchmark requires an existing local --model")
+    if not args.artifact_identity:
+        raise ValueError("benchmark requires a recorded --artifact-identity")
+    destination = artifact_root(ROOT) / "generation-bench" / datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    destination.mkdir(parents=True)
+    state, prompt = 0, [2]
+    for _ in range(args.prompt - 1):
+        state = (1664525 * state + 1013904223) & 0xffffffff
+        prompt.append(256 + state % (262144 - 256))
+    specification = {"prompt_tokens": prompt, "generation_tokens": args.tokens,
+                     "trials": args.trials, "ple": args.ple}
+    input_path = destination / "input.json"
+    input_path.write_text(json.dumps(specification) + "\n")
+    if args.backend == "reference-llama":
+        _, build = paths(args.backend)
+        command = [str(build / "generation-reference"), str(args.model.resolve()), str(input_path)]
+        environment = os.environ
+    elif args.backend == "reference-mlx":
+        command = ["uv", "run", "--frozen", "--no-sync", "--project", str(Path(__file__).parent),
+                   "python", str(Path(__file__).with_name("mlx_bench.py")),
+                   "--model", str(args.model.resolve()), "--input", str(input_path)]
+        environment = python_environment()
+    else:
+        raise ValueError("the native candidate needs its backend implementation before benchmarking")
+    metadata = {"backend": args.backend, "source_pins": PINS, "command": command,
+                "artifact_identity": args.artifact_identity, "platform": platform.platform(),
+                "machine": platform.machine(), "ple": args.ple, "input": str(input_path),
+                "scope": "isolated synthetic throughput; not application or minimum-hardware qualification"}
+    (destination / "run.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    with (destination / "stdout.log").open("w") as stdout, (destination / "stderr.log").open("w") as stderr:
+        result = subprocess.run(command, env=environment, stdout=stdout, stderr=stderr)
+    metadata["exit_code"] = result.returncode
+    (destination / "run.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    print(destination)
+    if result.returncode:
+        raise RuntimeError("benchmark failed; inspect its retained logs")
+    print((destination / "stdout.log").read_text())
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=["prepare", "build", "test", "bench"])
+    parser.add_argument("--backend", choices=["native", "reference-llama", "reference-mlx"], default="native")
+    parser.add_argument("--refresh-lock", action="store_true")
+    parser.add_argument("--model", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--artifact-identity")
+    parser.add_argument("--prompt", type=int, default=512)
+    parser.add_argument("--tokens", type=int, default=128)
+    parser.add_argument("--trials", type=int, default=3)
+    parser.add_argument("--ple", choices=["resident", "mapped"], default="mapped")
+    args = parser.parse_args()
+    if not 1 <= args.prompt or not 1 <= args.tokens <= 4096 or args.prompt + args.tokens > 65536 or not 1 <= args.trials <= 20:
+        parser.error("benchmark dimensions exceed their bounds")
+    {"prepare": prepare, "build": build, "test": test, "bench": bench}[args.action](args)
+
+
+if __name__ == "__main__":
+    main()
