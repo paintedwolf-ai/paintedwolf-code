@@ -117,6 +117,7 @@ export function MarkdownBody(props: Props) {
 
   // Add copy controls after sanitization.
   createEffect(() => {
+    if (props.inline) return;
     html();
     const root = rootRef;
     if (!root) return;

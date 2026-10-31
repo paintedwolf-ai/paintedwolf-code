@@ -131,6 +131,32 @@ describe("ToolPartShell open-state persistence", () => {
       false,
     );
   });
+
+  it("defers background process output preparation until expanded", () => {
+    const item = part("tc-bg-lazy");
+    item.process = { handle: "proc-lazy-1", running: true };
+    let fetched = 0;
+    const client = {
+      getSessionBackgroundProcessOutput: async () => {
+        fetched += 1;
+        return { process_id: "proc-lazy-1", running: true, chunks: [] };
+      },
+    } as unknown as import("../../api/client.ts").LycaonClient;
+    const { container } = render(() => (
+      <TranscriptViewportProvider value={controller}>
+        <ToolPartShell part={item} layout="chat" sessionId="s1" client={client}>
+          body
+        </ToolPartShell>
+      </TranscriptViewportProvider>
+    ));
+    const card = container.querySelector<HTMLElement>("[data-transcript-disclosure]")!;
+    expect(isDisclosureOpen(card)).toBe(false);
+    expect(fetched).toBe(0);
+
+    fireEvent.click(disclosureToggle(card));
+    expect(isDisclosureOpen(card)).toBe(true);
+    expect(fetched).toBe(1);
+  });
 });
 
 describe("ToolPartShell under the WebKitGTK AT-SPI workaround", () => {

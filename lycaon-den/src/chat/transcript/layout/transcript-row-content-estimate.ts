@@ -2,7 +2,11 @@ import { projectUserMessageParts } from "../content/user-message-parts.ts";
 import { attachmentRailHeight } from "./user-message-height-estimate.ts";
 import { DEFAULT_TRANSCRIPT_SPACING, type TranscriptSpacing } from "./transcript-spacing.ts";
 import type { TranscriptItem } from "../projection/transcript-item-model.ts";
-import { markdownHeightEstimate } from "./markdown-height-estimate.ts";
+import {
+  PROPORTIONAL_GLYPH_EM,
+  estimateLineEmWidth,
+  markdownHeightEstimate,
+} from "./markdown-height-estimate.ts";
 import { progressChangesToSteps, progressUpdateSummaryLabel } from "../../progress/progress-model.ts";
 
 export type TranscriptRowMetrics = {
@@ -19,8 +23,6 @@ export type PresentedVisual =
   | { kind: "unsized" }
   | { kind: "reference" };
 
-/** Average glyph width remains an estimate; box dimensions come from layout. */
-const AVERAGE_GLYPH_EM = 0.5;
 const MIN_CHARS_PER_LINE = 16;
 const PARAGRAPH_GAP_LINES = 0.5;
 const VISUAL_FRAME_BORDER_PX = 2;
@@ -30,14 +32,15 @@ const REFERENCE_CHIP_PX = 28;
 export function proseHeight(text: string, widthPx: number, bodyPx: number, lineHeight = DEFAULT_TRANSCRIPT_SPACING.proseLineHeight): number {
   const trimmed = text.trim();
   if (!trimmed || widthPx <= 0 || bodyPx <= 0) return 0;
-  const perLine = Math.max(
-    MIN_CHARS_PER_LINE,
-    Math.floor(widthPx / (bodyPx * AVERAGE_GLYPH_EM)),
+  const perLineEm = Math.max(
+    MIN_CHARS_PER_LINE * PROPORTIONAL_GLYPH_EM,
+    Math.floor(widthPx / (bodyPx * PROPORTIONAL_GLYPH_EM)) * PROPORTIONAL_GLYPH_EM,
   );
   let lines = 0;
   for (const paragraph of trimmed.split("\n")) {
-    const length = paragraph.trim().length;
-    lines += length > 0 ? Math.ceil(length / perLine) : PARAGRAPH_GAP_LINES;
+    const line = paragraph.trim();
+    const em = estimateLineEmWidth(line);
+    lines += em > 0 ? Math.ceil(em / perLineEm) : PARAGRAPH_GAP_LINES;
   }
   return lines * bodyPx * lineHeight;
 }

@@ -356,15 +356,22 @@ export function refreshTailWindow(
   return rollTailOverflowIntoPages(installed);
 }
 
+type EvictablePageVictim = {
+  key: string;
+  edge: "older" | "newer";
+};
+
 /** Find the older page nearest the live tail, deferring eviction while it overlaps `keepOrds` under the hard cap. */
 function tailAdjacentEvictablePageKey(
   pages: Record<string, Message[]>,
   policy?: TranscriptResidencyPolicy,
-): string | undefined {
+): EvictablePageVictim | undefined {
   const entries = Object.entries(pages);
   let bestKey: string | undefined;
   let bestRows: Message[] | undefined;
   let bestOrd = -Infinity;
+  let fallbackKey: string | undefined;
+  let fallbackOrd = Infinity;
   for (const [key, rows] of entries) {
     const ord = rows[0]?.ord ?? 0;
     if (ord > bestOrd) {
@@ -372,26 +379,33 @@ function tailAdjacentEvictablePageKey(
       bestKey = key;
       bestRows = rows;
     }
+    if (!pageTouchesSpan(rows, policy?.keepOrds) && ord < fallbackOrd) {
+      fallbackOrd = ord;
+      fallbackKey = key;
+    }
   }
-  if (
-    bestRows &&
-    entries.length <= TRANSCRIPT_PAGE_HARD_CAP &&
-    pageTouchesSpan(bestRows, policy?.keepOrds)
-  ) {
-    return undefined;
+  if (bestRows && pageTouchesSpan(bestRows, policy?.keepOrds)) {
+    if (entries.length <= TRANSCRIPT_PAGE_HARD_CAP) {
+      return undefined;
+    }
+    if (fallbackKey) {
+      return { key: fallbackKey, edge: "older" };
+    }
   }
-  return bestKey;
+  return bestKey ? { key: bestKey, edge: "newer" } : undefined;
 }
 
 /** Find the page furthest from the live tail, deferring eviction while it overlaps `keepOrds` under the hard cap. */
 function oldestEvictablePageKey(
   pages: Record<string, Message[]>,
   policy?: TranscriptResidencyPolicy,
-): string | undefined {
+): EvictablePageVictim | undefined {
   const entries = Object.entries(pages);
   let bestKey: string | undefined;
   let bestRows: Message[] | undefined;
   let bestOrd = Infinity;
+  let fallbackKey: string | undefined;
+  let fallbackOrd = -Infinity;
   for (const [key, rows] of entries) {
     const ord = rows[0]?.ord ?? 0;
     if (ord < bestOrd) {
@@ -399,15 +413,20 @@ function oldestEvictablePageKey(
       bestKey = key;
       bestRows = rows;
     }
+    if (!pageTouchesSpan(rows, policy?.keepOrds) && ord > fallbackOrd) {
+      fallbackOrd = ord;
+      fallbackKey = key;
+    }
   }
-  if (
-    bestRows &&
-    entries.length <= TRANSCRIPT_PAGE_HARD_CAP &&
-    pageTouchesSpan(bestRows, policy?.keepOrds)
-  ) {
-    return undefined;
+  if (bestRows && pageTouchesSpan(bestRows, policy?.keepOrds)) {
+    if (entries.length <= TRANSCRIPT_PAGE_HARD_CAP) {
+      return undefined;
+    }
+    if (fallbackKey) {
+      return { key: fallbackKey, edge: "newer" };
+    }
   }
-  return bestKey;
+  return bestKey ? { key: bestKey, edge: "older" } : undefined;
 }
 
 /** Load an older page and preserve one contiguous older range. */
@@ -429,18 +448,20 @@ export function loadOlderWindow(
   }
   const pages = { ...tw.pages, [key]: rows };
   let hasTailGap = tw.hasTailGap;
+  let hasMoreBefore = page.hasMoreBefore;
   // Evict beside the tail to keep retained pages contiguous.
   while (Object.keys(pages).length > TRANSCRIPT_PAGE_BUDGET) {
     const evict = tailAdjacentEvictablePageKey(pages, policy);
     if (!evict) break;
-    delete pages[evict];
-    hasTailGap = true;
+    delete pages[evict.key];
+    if (evict.edge === "older") hasMoreBefore = true;
+    else hasTailGap = true;
   }
   return {
     ...tw,
     pages,
     hasTailGap,
-    hasMoreBefore: page.hasMoreBefore,
+    hasMoreBefore,
     ...(bounds ? { bounds } : {}),
   };
 }
@@ -496,13 +517,15 @@ function rollTailOverflowIntoPages(
   if (!rolledKey || tw.hasTailGap) return { ...tw, tail: tw.tail.slice(overflowCount) };
   const pages = { ...tw.pages, [rolledKey]: overflow };
   let hasMoreBefore = tw.hasMoreBefore;
+  let hasTailGap: boolean = tw.hasTailGap;
   while (Object.keys(pages).length > TRANSCRIPT_PAGE_BUDGET) {
     const evict = oldestEvictablePageKey(pages, policy);
     if (!evict) break;
-    delete pages[evict];
-    hasMoreBefore = true;
+    delete pages[evict.key];
+    if (evict.edge === "newer") hasTailGap = true;
+    else hasMoreBefore = true;
   }
-  return { ...tw, tail: tw.tail.slice(overflowCount), pages, hasMoreBefore };
+  return { ...tw, tail: tw.tail.slice(overflowCount), pages, hasMoreBefore, hasTailGap };
 }
 
 /** Evict oldest pages above the budget once they leave `policy.keepOrds`. */
@@ -513,15 +536,17 @@ export function trimOldestPages(
   if (Object.keys(tw.pages).length <= TRANSCRIPT_PAGE_BUDGET) return tw;
   const pages = { ...tw.pages };
   let hasMoreBefore = tw.hasMoreBefore;
+  let hasTailGap = tw.hasTailGap;
   let changed = false;
   while (Object.keys(pages).length > TRANSCRIPT_PAGE_BUDGET) {
     const evict = oldestEvictablePageKey(pages, policy);
     if (!evict) break;
-    delete pages[evict];
-    hasMoreBefore = true;
+    delete pages[evict.key];
+    if (evict.edge === "newer") hasTailGap = true;
+    else hasMoreBefore = true;
     changed = true;
   }
-  return changed ? { ...tw, pages, hasMoreBefore } : tw;
+  return changed ? { ...tw, pages, hasMoreBefore, hasTailGap } : tw;
 }
 
 /** Which end of the resident range a page extends. */
@@ -615,18 +640,20 @@ function loadNewerWindow(
   const key = pageKey(rows);
   if (key) pages[key] = rows;
   let hasMoreBefore = tw.hasMoreBefore;
+  let evictedNewer = false;
   // Evict away from the reader, who is reading toward the tail.
   while (Object.keys(pages).length > TRANSCRIPT_PAGE_BUDGET) {
     const evict = oldestEvictablePageKey(pages, policy);
     if (!evict) break;
-    delete pages[evict];
-    hasMoreBefore = true;
+    delete pages[evict.key];
+    if (evict.edge === "newer") evictedNewer = true;
+    else hasMoreBefore = true;
   }
   return {
     ...tw,
     pages,
     hasMoreBefore,
-    hasTailGap: tw.hasTailGap && !reachedTail,
+    hasTailGap: (tw.hasTailGap && !reachedTail) || evictedNewer,
     ...(bounds ? { bounds } : {}),
   };
 }
