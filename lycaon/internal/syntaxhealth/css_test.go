@@ -67,8 +67,8 @@ func TestCSSMutationMustPreserveSyntax(t *testing.T) {
 			if change.Transition != TransitionBrokeClean {
 				t.Fatalf("change = %+v, want %s", change, TransitionBrokeClean)
 			}
-			if FeedbackFor(change) == "" {
-				t.Fatalf("expected syntax feedback for broken CSS mutation %q", tc.name)
+			if len(change.After.Diagnostics) == 0 {
+				t.Fatalf("expected syntax diagnostics for broken CSS mutation %q", tc.name)
 			}
 		})
 	}

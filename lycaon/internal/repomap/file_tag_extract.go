@@ -29,7 +29,7 @@ func definitionTags(rel, langName string, raw []gotreesitter.Tag, src []byte) []
 		line := int(t.NameRange.StartPoint.Row) + 1
 		out = append(out, Tag{
 			Kind:      strings.TrimPrefix(t.Kind, "definition."),
-			Name:      cleanTagName(t.Name),
+			Name:      cleanTagName(langName, t.Name),
 			File:      rel,
 			Line:      line,
 			Language:  langName,
@@ -41,8 +41,8 @@ func definitionTags(rel, langName string, raw []gotreesitter.Tag, src []byte) []
 	return out
 }
 
-func cleanTagName(name string) string {
-	if !strings.ContainsAny(name, "\r\n") {
+func cleanTagName(langName, name string) string {
+	if langName != "css" || !strings.ContainsAny(name, "\r\n") {
 		return name
 	}
 	return strings.Join(strings.Fields(name), " ")
@@ -106,7 +106,7 @@ func definitionSpans(raw []gotreesitter.Tag) []DefinitionSpan {
 		}
 		out = append(out, DefinitionSpan{
 			Kind:      strings.TrimPrefix(tag.Kind, "definition."),
-			Name:      cleanTagName(tag.Name),
+			Name:      tag.Name,
 			StartByte: int(tag.Range.StartByte),
 			EndByte:   int(tag.Range.EndByte),
 			StartRow:  int(tag.Range.StartPoint.Row),
