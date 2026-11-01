@@ -173,11 +173,11 @@ class VerificationPythonInputsTest(unittest.TestCase):
 
 
 class RepositoryToolsInputsTest(unittest.TestCase):
-    def run_profile(self, system, *arguments):
+    def run_profile(self, system, *arguments, architecture="x86_64"):
         with tempfile.TemporaryDirectory() as directory:
             tools = Path(directory)
             commands = {
-                "uname": "import os; print(os.environ['FIXTURE_SYSTEM'])",
+                "uname": "import os,sys; print(os.environ['FIXTURE_ARCH' if sys.argv[1:] == ['-m'] else 'FIXTURE_SYSTEM'])",
                 "sudo": "import json,sys; print(json.dumps({'argv':sys.argv[1:]}))",
                 "nix": "import json,sys; print(json.dumps({'argv':['nix',*sys.argv[1:]]}))",
                 "brew": "import json,os,sys; print(json.dumps({'argv':['brew',*sys.argv[1:]],'auto':os.environ.get('HOMEBREW_NO_AUTO_UPDATE')}))",
@@ -186,7 +186,8 @@ class RepositoryToolsInputsTest(unittest.TestCase):
                 command = tools / name
                 command.write_text(f"#!{sys.executable}\n{body}\n")
                 command.chmod(0o755)
-            environment = {**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"], "FIXTURE_SYSTEM": system}
+            environment = {**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+                           "FIXTURE_SYSTEM": system, "FIXTURE_ARCH": architecture}
             result = subprocess.run(["bash", str(runner_tests.SCRIPTS / "ci_policy/provision.sh"),
                                      "repository-tools", *arguments], env=environment, capture_output=True, text=True)
             return result, [json.loads(line) for line in result.stdout.splitlines()]
@@ -222,8 +223,19 @@ class RepositoryToolsInputsTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls, [{"argv": ["nix", "--extra-experimental-features", "nix-command flakes", "build", "--inputs-from", str(runner_tests.SCRIPTS.parent),
             "--no-write-lock-file", "--impure", "--expr",
-            'let pkgs = (builtins.getFlake "nixpkgs").legacyPackages.${builtins.currentSystem}; in pkgs.python3.withPackages (p: [ p.pip ])',
+            'let pkgs = (builtins.getFlake "nixpkgs").legacyPackages.x86_64-linux; in pkgs.python3.withPackages (p: [ p.pip ])',
             "--out-link", "/fixture/python with spaces"]}])
+
+    def test_python_package_set_matches_the_measured_host_platform(self):
+        for system, architecture, target in [("Linux", "aarch64", "aarch64-linux"),
+                                              ("Darwin", "x86_64", "x86_64-darwin"), ("Darwin", "arm64", "aarch64-darwin")]:
+            with self.subTest(system=system, architecture=architecture):
+                result, calls = self.run_profile(system, "--python", "/fixture/python", architecture=architecture)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"legacyPackages.{target};", calls[0]["argv"][-3])
+        result, calls = self.run_profile("Linux", "--python", "/fixture/python", architecture="unknown")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":
