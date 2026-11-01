@@ -67,7 +67,17 @@ func (s *EventStream) reserve(n int64) (func(), error) {
 		return nil, err
 	}
 	if s.memory != nil {
-		return s.memory.Reserve(s.ctx, n)
+		release, err := s.memory.Reserve(s.ctx, n)
+		if err != nil {
+			if release != nil {
+				release()
+			}
+			return nil, err
+		}
+		if release == nil {
+			return nil, fmt.Errorf("JSON decoding requires retained admission")
+		}
+		return release, nil
 	}
 	return func() {}, nil
 }

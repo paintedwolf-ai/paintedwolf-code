@@ -129,3 +129,19 @@ func TestJSONDecoderPreservesTerminalReaderErrors(t *testing.T) {
 type failingJSONReader struct{ failure error }
 
 func (r failingJSONReader) Read([]byte) (int, error) { return 0, r.failure }
+
+func TestJSONDecodersRequireRetainedAdmission(t *testing.T) {
+	stream := NewEventStream(t.Context(), strings.NewReader("[1]"), EventLimits{128, 1024}, missingEventLease{})
+	if _, err := stream.Decode(); err == nil {
+		t.Fatal("decoded without admission")
+	}
+	if stream.InputLine() != 0 {
+		t.Fatal("unread input has a line position")
+	}
+	stream.Close()
+	stream.Close()
+}
+
+type missingEventLease struct{}
+
+func (missingEventLease) Reserve(context.Context, int64) (func(), error) { return nil, nil }
