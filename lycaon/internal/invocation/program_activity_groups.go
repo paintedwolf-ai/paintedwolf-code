@@ -3,7 +3,6 @@ package invocation
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -14,20 +13,19 @@ type activityCounts struct {
 	total, running, waiting, failed, interrupted, refused, uncertain, effects int
 }
 
+type activityKey struct {
+	node, operation, scope, launch string
+}
+
 type activityGroup struct {
 	input       activityInput
-	key, parent string
+	key, parent activityKey
 	ordinal     int64
 	counts      activityCounts
 }
 
-func activityGroupKey(node, operation, scope string) string {
-	value, _ := json.Marshal([]string{node, operation, scope})
-	return string(value)
-}
-
 // Repetitions are counted in SQL; only the first execution's inputs are decoded.
-func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]activityGroup, error) {
+func readActivityCounts(ctx context.Context, tx *sql.Tx, program string) (groups []activityGroup, err error) {
 	rows, err := tx.QueryContext(ctx, `SELECT min(ordinal),count(*),
  sum(state IN ('prepared','running')),sum(state='waiting'),
  sum(state='failed' OR (state='completed' AND COALESCE(status_code,0)<>0)),
@@ -38,20 +36,20 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 	if err != nil {
 		return nil, err
 	}
-	var groups []activityGroup
+	defer func() { err = errors.Join(err, rows.Close()) }()
 	for rows.Next() {
 		var g activityGroup
 		c := &g.counts
 		if err := rows.Scan(&g.ordinal, &c.total, &c.running, &c.waiting, &c.failed, &c.interrupted, &c.refused, &c.uncertain, &c.effects); err != nil {
-			_ = rows.Close()
 			return nil, err
 		}
 		groups = append(groups, g)
 	}
-	err = rows.Err()
-	if closeErr := rows.Close(); err == nil {
-		err = closeErr
-	}
+	return groups, rows.Err()
+}
+
+func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]activityGroup, error) {
+	groups, err := readActivityCounts(ctx, tx, program)
 	if err != nil {
 		return nil, err
 	}
@@ -68,9 +66,9 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 		if err != nil {
 			return nil, err
 		}
-		g.key = activityGroupKey(receipts[0].NodeID, g.input.operation, g.input.scope)
+		g.key = activityKey{node: receipts[0].NodeID, operation: g.input.operation, scope: g.input.scope}
 		if g.input.operation == "program &" {
-			g.key = receipts[0].ID
+			g.key = activityKey{launch: receipts[0].ID}
 		}
 		var node, operation, scope string
 		err = tx.QueryRowContext(ctx, `SELECT node_id,operation_id,scope_json FROM invocation_program_executions WHERE program_id=? AND id=?`, program, receipts[0].ParentExecutionID).Scan(&node, &operation, &scope)
@@ -78,9 +76,9 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 			return nil, err
 		}
 		if err == nil {
-			g.parent = activityGroupKey(node, operation, scope)
+			g.parent = activityKey{node: node, operation: operation, scope: scope}
 			if operation == "program &" {
-				g.parent = receipts[0].ParentExecutionID
+				g.parent = activityKey{launch: receipts[0].ParentExecutionID}
 			}
 		}
 	}
@@ -128,7 +126,7 @@ func appendActivityStep(a *api.CommandActivity, g activityGroup) {
 
 // Supporting steps follow recorded ancestry, independent of execution start order.
 func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandActivity {
-	byKey := make(map[string]int, len(groups))
+	byKey := make(map[activityKey]int, len(groups))
 	for i, g := range groups {
 		byKey[g.key] = i
 	}
@@ -149,8 +147,8 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 			continue
 		}
 		parent := g.parent
-		seen := map[string]bool{g.key: true}
-		for parent != "" && !seen[parent] {
+		seen := map[activityKey]bool{g.key: true}
+		for parent != (activityKey{}) && !seen[parent] {
 			seen[parent] = true
 			p, ok := byKey[parent]
 			if !ok {
@@ -220,9 +218,9 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	return result
 }
 
-func groupDescendsFrom(g activityGroup, parent string, groups []activityGroup, byKey map[string]int) bool {
-	seen := map[string]bool{g.key: true}
-	for g.parent != "" && !seen[g.parent] {
+func groupDescendsFrom(g activityGroup, parent activityKey, groups []activityGroup, byKey map[activityKey]int) bool {
+	seen := map[activityKey]bool{g.key: true}
+	for g.parent != (activityKey{}) && !seen[g.parent] {
 		if g.parent == parent {
 			return true
 		}
