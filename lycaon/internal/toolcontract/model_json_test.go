@@ -33,3 +33,20 @@ func TestModelJSONRefusesInvalidValuesWithoutRetention(t *testing.T) {
 		}
 	}
 }
+
+func TestModelJSONReleasesEveryRefusedAdmission(t *testing.T) {
+	value := map[string]any{"array": []any{nil, true, false, 12.5, "escaped\n"}, "strings": []string{"one", "two"}, "object": map[string]any{"x": "y"}}
+	reference := &codecFaultMemory{}
+	_, release, err := CaptureModelJSON(t.Context(), reference, value)
+	if err != nil {
+		t.Fatalf("reference model: %v", err)
+	}
+	release()
+	for at := 1; at <= reference.calls; at++ {
+		memory := &codecFaultMemory{failAt: at}
+		_, close, err := CaptureModelJSON(t.Context(), memory, value)
+		if err == nil || close != nil || memory.held != 0 {
+			t.Fatalf("model admission %d: %v held %d", at, err, memory.held)
+		}
+	}
+}
