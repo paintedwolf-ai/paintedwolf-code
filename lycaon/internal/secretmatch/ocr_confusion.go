@@ -138,25 +138,32 @@ func detectWindowOCR(ctx context.Context, m *Matcher, d *detect.Detector, rawWin
 	return hits
 }
 
-// normalizeBoundarySlashes replaces single '/' characters at token boundaries
-// with '7' so word-boundary regexes match when '7' at the edge of a token is
-// misread as '/'. Byte and rune offsets remain 1:1 with the input.
+// normalizeBoundarySlashes replaces single '/', '|', or '!' characters at token
+// boundaries with their canonical digits ('7' or '1') so word-boundary regexes
+// match when a boundary digit or vertical stroke is misread. Byte and rune
+// offsets remain 1:1 with the input.
 func normalizeBoundarySlashes(s string) (string, bool) {
-	if !strings.ContainsRune(s, '/') {
+	if !strings.ContainsAny(s, "/|!") {
 		return s, false
 	}
 	buf := []byte(s)
 	changed := false
 	for i := 0; i < len(buf); i++ {
-		if buf[i] != '/' {
+		var rep byte
+		switch buf[i] {
+		case '/':
+			rep = '7'
+		case '|', '!':
+			rep = '1'
+		default:
 			continue
 		}
 		prevAlnum := i > 0 && isASCIIAlnum(buf[i-1])
 		nextAlnum := i+1 < len(buf) && isASCIIAlnum(buf[i+1])
-		prevSlash := i > 0 && (buf[i-1] == '/' || buf[i-1] == ':')
-		nextSlash := i+1 < len(buf) && buf[i+1] == '/'
-		if (prevAlnum && !nextAlnum && !nextSlash) || (!prevAlnum && !prevSlash && nextAlnum) {
-			buf[i] = '7'
+		prevPunct := i > 0 && (buf[i-1] == '/' || buf[i-1] == ':' || buf[i-1] == '|' || buf[i-1] == '!')
+		nextPunct := i+1 < len(buf) && (buf[i+1] == '/' || buf[i+1] == '|' || buf[i+1] == '!')
+		if (prevAlnum && !nextAlnum && !nextPunct) || (!prevAlnum && !prevPunct && nextAlnum) {
+			buf[i] = rep
 			changed = true
 		}
 	}
