@@ -87,7 +87,7 @@ func (m *Service) BuildPreparation(ctx context.Context, id string) (contextprepa
 	return contextpreparation.Candidate{Key: hex.EncodeToString(digest[:]), Run: func(ctx context.Context) bool {
 		started := time.Now()
 		result, err := service.Registry.PrepareContext(ctx, selection, req)
-		slog.DebugContext(ctx, "context preparation completed", "session_id", id, "provider", selection.ProviderID, "prepared_tokens", result.PreparedTokens, "reused_tokens", result.ReusedTokens, "elapsed_ms", time.Since(started).Milliseconds(), "error", err)
+		slog.DebugContext(ctx, "context preparation completed", "session_id", id, "provider", selection.ProviderID, "prepared_count", result.PreparedTokens, "reused_count", result.ReusedTokens, "elapsed_ms", time.Since(started).Milliseconds(), "error", err)
 		return err == nil && result.PreparedTokens > 0
 	}}, nil
 }
