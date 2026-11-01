@@ -33,6 +33,10 @@ LAUNCH_PACKAGE = "./internal/launchguard"
 LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes", "check:coverage"}
 
 
+def supplemental(lane):
+    return "platform" in lane or lane["suite"] == "performance" and "integration" in lane["profiles"]
+
+
 def lanes():
     from ci_policy.quarantine import entries
     entries()
@@ -51,6 +55,10 @@ def lanes():
         if 'runtime_engines' in lane and (lane['runtime_engines'] is not False
                 or lane['targets'] != ['den:test:rust', 'decide:test']):
             raise ValueError(f"CI lane {name} requires runtime engines for host checks")
+        if supplemental(lane) and "platform" not in lane:
+            if (lane["targets"] != ["test:stress"] or not lane.get("arguments")
+                    or not {"integration", "nightly", "release"}.issubset(lane["profiles"])):
+                raise ValueError(f"CI lane {name} requires explicit scale scope and complete qualification profiles")
         compilation = lane.get('compile_targets', {})
         if (name == 'ready' or 'compile_targets' in lane) and (name != 'ready' or not isinstance(compilation, dict)
                 or not set(compilation).issubset({'den:test:rust', 'decide:test'})
@@ -116,7 +124,7 @@ def lanes():
     if not fast or extra or max(fast.values()) > 1:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
     expected = Counter(stage["name"] for stage in expand([GATE]) if stage["name"] != "build:cross")
-    actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and "platform" not in lane
+    actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and not supplemental(lane)
                      for stage in expand(lane["targets"]))
     if actual != expected:
         raise ValueError(f"integration partition differs from check minus cross compilation: {expected - actual}, {actual - expected}")
@@ -125,8 +133,14 @@ def lanes():
     if repeated:
         raise ValueError(f"platform lanes repeat {GATE} stages: {sorted(repeated)}")
     for name, lane in values.items():
-        if ("check" in lane["profiles"] or "release" in lane["profiles"] and "platform" in lane) and "nightly" not in lane["profiles"]:
+        if ("check" in lane["profiles"] or "release" in lane["profiles"] and supplemental(lane)) and "nightly" not in lane["profiles"]:
             raise ValueError(f"nightly must include qualification lane {name}")
+    stress = Counter(package for lane in values.values()
+                     if "nightly" in lane["profiles"] and lane["targets"] == ["test:stress"]
+                     for package in lane.get("arguments", catalog()["go"]["test:stress"]["packages"]))
+    expected_stress = Counter(catalog()["go"]["test:stress"]["packages"])
+    if stress != expected_stress:
+        raise ValueError(f"nightly stress partition differs: {expected_stress - stress}, {stress - expected_stress}")
     return values
 
 
@@ -163,21 +177,12 @@ def analysis_set(targets):
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
 
 
-def scripts_python_in_scope(scope):
-    """Whether changed-scripts coverage may run a Python suite: only when scripts Python changed under a bounded scope.
-
-    Without a scope the target resolves its own change base and may run every suite, so the plan provisions for all of them."""
-    if scope is None or scope["full"]:
-        return True
-    return any(path.startswith("scripts/") and path.endswith(".py") for path in scope["paths"])
-
-
 def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     """A profile's lanes; `platform` keeps only its platform lanes, for a run whose other lanes another gate covers."""
     if profile not in PROFILES or suite not in SUITES or profile != "nightly" and suite != "all":
         raise ValueError(f"unsupported CI selection: {profile}/{suite}")
     values = lanes()
-    selected = {name for name, lane in values.items() if "platform" in lane} if platform else set(values)
+    selected = {name for name, lane in values.items() if supplemental(lane)} if platform else set(values)
     # A broad change runs the whole check gate and every platform lane of the merge queue.
     broad = profile == "integration" and scope is not None and scope["full"]
     if profile == "integration" and scope is not None and not broad:
@@ -187,7 +192,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     for name, lane in values.items():
         if name not in selected:
             continue
-        tier = GATE if broad and "platform" not in lane else profile
+        tier = GATE if broad and not supplemental(lane) else profile
         if tier not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
             continue
         if profile == "nightly" and suite != "all" and lane["suite"] == "all" and GATE in lane["profiles"]:
