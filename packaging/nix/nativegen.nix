@@ -33,7 +33,7 @@ let
     cmakeFlags = [
       "-DLLAMA_SOURCE_DIR=${llama}" "-DBUILD_SHARED_LIBS=OFF"
       "-DGGML_VULKAN=ON" "-DGGML_NATIVE=OFF"
-      "-DVulkan_GLSLC_EXECUTABLE=${shaderc}/bin/glslc"
+      "-DVulkan_GLSLC_EXECUTABLE=${lib.getBin shaderc}/bin/glslc"
     ];
     ninjaFlags = [ "nativegen_vulkan" ];
     installPhase = ''
