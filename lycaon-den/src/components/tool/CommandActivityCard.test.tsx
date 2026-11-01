@@ -94,6 +94,7 @@ it("pages additional operations without changing the activity identity", async (
  const row=view.container.querySelector('[data-testid="tool-part-card"]');
  fireEvent.click(disclosureToggle(row));
  await waitFor(()=>expect(get).toHaveBeenLastCalledWith("activity-card-test", "program", {limit:6,cursor:undefined,activity_id:"test"}));
+ await waitFor(()=>expect(view.getByRole("button",{name:"Next records"})).toBeTruthy());
  fireEvent.click(view.getByRole("button",{name:"Next records"}));
  await waitFor(()=>expect(get).toHaveBeenLastCalledWith("activity-card-test", "program", {limit:6,cursor:"next",activity_id:"test"}));
  expect(view.container.querySelector('[data-testid="tool-part-card"]')).toBe(row);
