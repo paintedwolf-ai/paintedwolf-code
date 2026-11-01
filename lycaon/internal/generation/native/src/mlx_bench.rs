@@ -1,5 +1,5 @@
 use mlx_rs::{memory, ops::indexing::*};
-use nativegen::mlx_engine::{Cache, Model, Result};
+use nativegen::mlx_engine::{Cache, Logits, Model, Result};
 use serde::Deserialize;
 use serde_json::json;
 use std::path::Path;
@@ -13,6 +13,81 @@ struct Specification {
     ple: String,
     prefill_chunk: usize,
     kv_bits: u8,
+    #[serde(default)]
+    verify_last_logits: bool,
+}
+
+fn compare_logits(model: &Model, spec: &Specification) -> Result<()> {
+    let mut full_cache = Cache::default();
+    let mut last_cache = Cache::default();
+    for (index, chunk) in spec.prompt_tokens.chunks(spec.prefill_chunk).enumerate() {
+        let full = model.forward(chunk, &mut full_cache, Logits::All)?;
+        let last = model.forward(chunk, &mut last_cache, Logits::Last)?;
+        let full = full.index((0, -1, ..)).as_dtype(mlx_rs::Dtype::Float32)?;
+        let last = last.index((0, -1, ..)).as_dtype(mlx_rs::Dtype::Float32)?;
+        full_cache.evaluate_with(&[&full])?;
+        last_cache.evaluate_with(&[&last])?;
+        let mut maximum = 0_f32;
+        for (&a, &b) in full.as_slice::<f32>().iter().zip(last.as_slice::<f32>()) {
+            if !a.is_finite() || !b.is_finite() {
+                return Err("non-finite parity logits".into());
+            }
+            maximum = maximum.max((a - b).abs());
+        }
+        let full_token = argmax(&full, None)?.try_item_cast::<i32>()?;
+        let last_token = argmax(&last, None)?.try_item_cast::<i32>()?;
+        let (variation, divergence) =
+            distribution_distance(full.as_slice::<f32>(), last.as_slice::<f32>());
+        println!(
+            "{}",
+            json!({"parity_chunk": index, "tokens": chunk.len(),
+            "max_absolute_logit_difference": maximum, "full_token": full_token,
+            "last_token": last_token, "cache_bytes": last_cache.bytes(),
+            "distribution_total_variation": variation, "kl_divergence_nats": divergence})
+        );
+        if full_token != last_token || full_cache.bytes() != last_cache.bytes() {
+            return Err("last-row projection changed greedy output or cache storage".into());
+        }
+    }
+    Ok(())
+}
+
+fn distribution_distance(full: &[f32], last: &[f32]) -> (f64, f64) {
+    let probabilities = |logits: &[f32]| {
+        let maximum = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let weights: Vec<f64> = logits
+            .iter()
+            .map(|value| f64::from(*value - maximum).exp())
+            .collect();
+        let total: f64 = weights.iter().sum();
+        weights
+            .into_iter()
+            .map(|weight| weight / total)
+            .collect::<Vec<_>>()
+    };
+    probabilities(full)
+        .into_iter()
+        .zip(probabilities(last))
+        .fold((0.0, 0.0), |(variation, divergence), (p, q)| {
+            (
+                variation + (p - q).abs() / 2.0,
+                divergence + p * (p / q).ln(),
+            )
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn distribution_comparison_is_invariant_to_logit_offsets() {
+        let (variation, divergence) = distribution_distance(&[1.0, 2.0, 3.0], &[2.0, 3.0, 4.0]);
+        assert_eq!((variation, divergence), (0.0, 0.0));
+        let (variation, divergence) = distribution_distance(&[0.0, 0.0], &[0.0, 3_f32.ln()]);
+        assert!((variation - 0.25).abs() < 1e-7);
+        assert!((divergence - (4_f64 / 3.0).ln() / 2.0).abs() < 1e-7);
+    }
 }
 
 fn usage() -> libc::rusage {
@@ -32,7 +107,7 @@ fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
     let mut prefill_step: f64 = 0.0;
     for chunk in spec.prompt_tokens[..spec.prompt_tokens.len() - 1].chunks(spec.prefill_chunk) {
         let step = Instant::now();
-        let _ = model.forward(chunk, &mut cache)?;
+        let _ = model.forward(chunk, &mut cache, Logits::All)?;
         cache.evaluate()?;
         prefill_step = prefill_step.max(step.elapsed().as_secs_f64());
     }
@@ -40,6 +115,7 @@ fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
     let logits = model.forward(
         &spec.prompt_tokens[spec.prompt_tokens.len() - 1..],
         &mut cache,
+        Logits::All,
     )?;
     cache.evaluate_with(&[&logits])?;
     prefill_step = prefill_step.max(step.elapsed().as_secs_f64());
@@ -53,7 +129,7 @@ fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
         let step = Instant::now();
         let next = token.try_item_cast::<i32>()?;
         tokens.push(next);
-        let logits = model.forward(&[next], &mut cache)?;
+        let logits = model.forward(&[next], &mut cache, Logits::All)?;
         token = argmax(logits.index((0, -1, ..)), None)?;
         cache.evaluate_with(&[&token])?;
         decode_step = decode_step.max(step.elapsed().as_secs_f64());
@@ -98,6 +174,10 @@ fn run() -> Result<()> {
     let loading = started.elapsed().as_secs_f64();
     let loading_peak = memory::peak_memory()?;
     let loading_rss = usage().ru_maxrss;
+    if spec.verify_last_logits {
+        compare_logits(&model, &spec)?;
+        memory::clear_cache()?;
+    }
     for trial in 0..=spec.trials {
         let mut result = measure(&model, &spec)?;
         result["load_seconds"] = json!(loading);
