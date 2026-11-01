@@ -211,6 +211,8 @@ A deliberate breaking change updates Den in the same release. `./task openapi:di
 
 Responses remain additive-friendly: Den ignores unknown properties. Request object schemas are closed so unknown fields cannot silently change intent. Do not create multi-version adapters between co-shipped components.
 
+The Linux launch broker's descriptor-slot layout is co-shipped native `bundle` wire, not persisted state or agent vocabulary. Its optional layout preserves explicitly closed inherited slots across descriptor transport; an omitted layout keeps all supplied slots open. The engine relay and broker move together, with validation and actual-child descriptor invariants covering both sides. No store migration or OpenAPI consumer changes are involved.
+
 Health reports product, store, and schema revisions as distinct facts. Product SemVer does not stand in for the database schema version, and the Den cache revision does not stand in for either.
 
 ## User-repository overlays
