@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/curationctx"
@@ -58,6 +59,7 @@ func (r *Registry) PrepareContext(ctx context.Context, selection *ModelSelection
 	}
 	allowed, err := screen.ScreenPreparation(ctx, req)
 	if err != nil || !allowed {
+		slog.DebugContext(ctx, "context preparation screening skipped", "provider", id, "error", err)
 		return modelcall.ContextPreparation{}, err
 	}
 	return preparer.PrepareContext(ctx, req)
