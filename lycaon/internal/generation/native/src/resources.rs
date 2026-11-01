@@ -29,12 +29,9 @@ impl Plan {
         {
             return Err(Error::Capacity("invalid E4B resource dimensions".into()));
         }
-        let prefix = (context - 1) as u64;
         let context = (context as u64).div_ceil(256) * 256;
-        let prefix = prefix.div_ceil(256) * 256;
         // Four global and twenty sliding KV sources; keys and values use F16.
-        let global_tokens = if unified { context } else { context + prefix };
-        let global = global_tokens * 4 * 2 * 2 * 512 * 2;
+        let global = context * 4 * 2 * 2 * 512 * 2;
         let sliding_tokens = if unified {
             2 * (512 + chunk as u64)
         } else {
@@ -83,7 +80,7 @@ mod tests {
 
     #[test]
     fn vulkan_sliding_capacity_includes_padded_active_and_retained_windows() {
-        let global = (8192 + 8192) * 4 * 2 * 2 * 512 * 2;
+        let global = 8192 * 4 * 2 * 2 * 512 * 2;
         for chunk in [1, 16, 128, 256] {
             let plan = Plan::e4b(3 << 30, 2 << 30, 8192, chunk, false).unwrap();
             assert_eq!(plan.kv_capacity_bytes - global, 1280 * 20 * 2 * 2 * 256 * 2);
@@ -94,13 +91,10 @@ mod tests {
     fn accounts_for_backend_cache_residency_without_charging_the_entire_mapping() {
         let linux = Plan::e4b(3 << 30, 2 << 30, 65536, 256, false).unwrap();
         let mac = Plan::e4b(3 << 30, 2 << 30, 65536, 256, true).unwrap();
+        assert_eq!(mac.kv_capacity_bytes - linux.kv_capacity_bytes, 10 << 20);
         assert_eq!(
-            linux.kv_capacity_bytes - mac.kv_capacity_bytes,
-            (1 << 30) - (10 << 20)
-        );
-        assert_eq!(
-            linux.device_reservation_bytes - mac.device_reservation_bytes,
-            (896 << 20) - (10 << 20)
+            mac.device_reservation_bytes - linux.device_reservation_bytes,
+            138 << 20
         );
         assert!(linux.host_reservation_bytes < linux.mapped_ple_bytes);
         assert!(linux.device_reservation_bytes < 6 << 30);
