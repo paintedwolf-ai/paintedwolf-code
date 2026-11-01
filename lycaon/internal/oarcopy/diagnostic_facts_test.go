@@ -24,16 +24,34 @@ func TestDiagnosticKnowledgeRequiresIntegralProducerObservations(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data := map[string]any{}
-			for _, key := range []string{"maximum", "observed", "max", "background_limit", "count", "max_awaited"} {
+			for _, key := range []string{"maximum", "observed", "background_limit", "count", "max_awaited"} {
 				data[key] = tc.value
 			}
 			facts := map[string]any{}
 			PublishDiagnosticKnowledge(facts, data)
-			for _, key := range []string{"limit_observation_known", "glob_limit_known", "background_limit_known", "awaited_capacity_known", "failure_count_known"} {
+			for _, key := range []string{"limit_observation_known", "background_limit_known", "awaited_capacity_known", "failure_count_known"} {
 				if facts["paintedwolf."+key] != tc.known {
 					t.Errorf("%s = %v, want %t", key, facts["paintedwolf."+key], tc.known)
 				}
 			}
 		})
+	}
+}
+
+func TestGlobKnowledgeUsesTheDeclaredDecimalBound(t *testing.T) {
+	for _, tc := range []struct {
+		value any
+		known bool
+	}{
+		{"0", true}, {"1000", true}, {0, true}, {int64(1000), true},
+		{nil, false}, {true, false}, {"", false}, {"01", false}, {"+1", false},
+		{" 1", false}, {"-1", false}, {"1.0", false}, {"NaN", false},
+		{"9223372036854775808", false},
+	} {
+		facts := map[string]any{}
+		PublishDiagnosticKnowledge(facts, map[string]any{"max": tc.value})
+		if facts["paintedwolf.glob_limit_known"] != tc.known {
+			t.Errorf("bound %#v: known = %v, want %t", tc.value, facts["paintedwolf.glob_limit_known"], tc.known)
+		}
 	}
 }

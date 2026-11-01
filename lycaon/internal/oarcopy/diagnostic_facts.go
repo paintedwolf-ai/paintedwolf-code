@@ -3,6 +3,7 @@ package oarcopy
 import (
 	"encoding/json"
 	"math"
+	"strconv"
 )
 
 // PublishDiagnosticKnowledge distinguishes measured zeroes from unreported values.
@@ -11,10 +12,23 @@ func PublishDiagnosticKnowledge(facts, data map[string]any) {
 	observed, _ := data["observed_revision"].(string)
 	facts["paintedwolf.revision_change_observed"] = expected != "" && observed != "" && expected != observed
 	facts["paintedwolf.limit_observation_known"] = observedCount(data, "maximum") && observedCount(data, "observed")
-	facts["paintedwolf.glob_limit_known"] = observedCount(data, "max")
+	facts["paintedwolf.glob_limit_known"] = globMaximumKnown(data["max"])
 	facts["paintedwolf.background_limit_known"] = observedCount(data, "background_limit")
 	facts["paintedwolf.awaited_capacity_known"] = observedCount(data, "count") && observedCount(data, "max_awaited")
 	facts["paintedwolf.failure_count_known"] = observedCount(data, "count")
+}
+
+// The glob bound's declared presentation type is a decimal string.
+func globMaximumKnown(value any) bool {
+	if _, known := CountObservation(value); known {
+		return true
+	}
+	decimal, ok := value.(string)
+	if !ok {
+		return false
+	}
+	n, err := strconv.ParseInt(decimal, 10, 64)
+	return err == nil && n >= 0 && strconv.FormatInt(n, 10) == decimal
 }
 
 func observedCount(data map[string]any, key string) bool {
