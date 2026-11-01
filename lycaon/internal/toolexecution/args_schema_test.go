@@ -480,7 +480,7 @@ func TestValidateCallArgumentsIntrospectionMultipleMisnestedFields(t *testing.T)
 	args := map[string]any{
 		"command":        "colima start",
 		"host_resources": []any{"colima"},
-		"direct_ip":      true,
+		"direct_ip":      map[string]any{},
 	}
 	reject := tools.ValidateCallArguments("command", args, meta.ArgsSchema, tools.ToolContext{})
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
@@ -500,8 +500,8 @@ func TestValidateCallArgumentsIntrospectionMultipleMisnestedFields(t *testing.T)
 	if !ok {
 		t.Fatalf("replacement_args missing capability_request map: %#v", rep)
 	}
-	if capReq["direct_ip"] != true {
-		t.Errorf("capability_request.direct_ip = %v, want true", capReq["direct_ip"])
+	if direct, ok := capReq["direct_ip"].(map[string]any); !ok || len(direct) != 0 {
+		t.Errorf("capability_request.direct_ip = %#v, want the supplied empty object", capReq["direct_ip"])
 	}
 	res, ok := capReq["host_resources"].([]any)
 	if !ok || len(res) != 1 || res[0] != "colima" {
