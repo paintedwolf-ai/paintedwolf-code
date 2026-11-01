@@ -113,8 +113,8 @@ phases:
 func firstCoordinatorPromptRequest(t *testing.T, fix coordinatorPromptFixture, prompt string) modelcall.CompletionRequest {
 	t.Helper()
 	before := len(fix.rec.AllRequests())
-	_, err := fix.mgr.Submissions.Prompt(t.Context(), fix.sess.ID, prompt)
-	requireWorkflowCloseoutRejection(t, err)
+	resp, err := fix.mgr.Submissions.Prompt(t.Context(), fix.sess.ID, prompt)
+	requireWorkflowCloseoutRejection(t, resp, err)
 	requests := fix.rec.AllRequests()
 	if len(requests) <= before {
 		t.Fatal("coordinator prompt made no model request")

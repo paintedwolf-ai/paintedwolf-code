@@ -28,4 +28,20 @@ func TestOfferedToolsAreNotPersisted(t *testing.T) {
 	if missing.OfferedToolNames() != nil {
 		t.Fatal("missing result offers tools")
 	}
+	if missing.IsCloseoutBlocked() {
+		t.Fatal("missing result is closeout blocked")
+	}
+	blocked := &Result{
+		MessageID: "m2",
+		Outcome:   TurnOutcomeCloseoutBlocked,
+		CloseoutBlocked: &CloseoutBlocked{
+			Code:           "WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT",
+			Phase:          "implement",
+			OpenGateLeaves: []string{"test"},
+			Notice:         "Workflow phase implement is waiting on open gate(s): test (WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT). Send a message or resolve the open gate to continue.",
+		},
+	}
+	if !blocked.IsCloseoutBlocked() {
+		t.Fatal("expected closeout blocked outcome")
+	}
 }
