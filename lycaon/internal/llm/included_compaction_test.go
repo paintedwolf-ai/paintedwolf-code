@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ func TestRegistrySummarizerSharedPrefixAndLocalDefault(t *testing.T) {
 	reg := newTestRegistry()
 	testutil.FailErr(t, "Register anthropic", reg.Register(coordProvider))
 	testutil.FailErr(t, "Register nativegen", reg.Register(localProvider))
+	publishIncludedModelFixture(t, reg, localProvider)
 
 	// An unset Lite role uses the included model.
 	policy := NewInMemoryPolicyStore(ModelPolicy{
@@ -42,8 +44,8 @@ func TestRegistrySummarizerSharedPrefixAndLocalDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Summarize: %v", err)
 	}
-	if localProvider.last.Model != IncludedModelID {
-		t.Fatalf("local model = %q, want %q", localProvider.last.Model, IncludedModelID)
+	if localProvider.last.Model != nativegen.DefaultModelID {
+		t.Fatalf("local model = %q, want %q", localProvider.last.Model, nativegen.DefaultModelID)
 	}
 	if coordProvider.last.Model != "" {
 		t.Fatalf("coordinator should not be called when local default is available, got model %q", coordProvider.last.Model)
@@ -101,6 +103,7 @@ func TestSimpleCompactorAttachesSharedPrefixInProductionCompaction(t *testing.T)
 	reg := newTestRegistry()
 	testutil.FailErr(t, "Register anthropic", reg.Register(coordProvider))
 	testutil.FailErr(t, "Register nativegen", reg.Register(localProvider))
+	publishIncludedModelFixture(t, reg, localProvider)
 
 	policy := NewInMemoryPolicyStore(ModelPolicy{
 		Coordinator: ModelRef{ProviderID: "anthropic", Model: "claude-sonnet-4-6"},
@@ -127,8 +130,8 @@ func TestSimpleCompactorAttachesSharedPrefixInProductionCompaction(t *testing.T)
 	if !report.SessionCompacted {
 		t.Fatalf("expected session compaction, got report=%+v", report)
 	}
-	if localProvider.last.Model != IncludedModelID {
-		t.Fatalf("local model = %q, want %q", localProvider.last.Model, IncludedModelID)
+	if localProvider.last.Model != nativegen.DefaultModelID {
+		t.Fatalf("local model = %q, want %q", localProvider.last.Model, nativegen.DefaultModelID)
 	}
 	// The retained prefix precedes the summary request.
 	if len(localProvider.last.Messages) < 3 {

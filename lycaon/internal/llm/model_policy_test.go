@@ -2,6 +2,7 @@ package llm
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +11,6 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
-	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -527,7 +526,7 @@ func TestRouterOverlayRootsUsesProjectPolicy(t *testing.T) {
 
 func TestLocalDefaultRoleResolution(t *testing.T) {
 	localRef := DefaultLocalModelRef()
-	if localRef.ProviderID != IncludedProviderID || localRef.Model != IncludedModelID {
+	if localRef.ProviderID != IncludedProviderID || localRef.Model != nativegen.DefaultModelID {
 		t.Fatalf("DefaultLocalModelRef() = %+v", localRef)
 	}
 
@@ -568,7 +567,7 @@ func TestLocalDefaultRoleResolution(t *testing.T) {
 
 	// StaticModelRouter.WithLocalDefault routes unset slots to the bundled local model.
 	store := NewInMemoryPolicyStore(hybridPolicy)
-	router := NewStaticModelRouter(store).WithLocalDefault(true)
+	router := NewStaticModelRouter(store).WithLocalDefault(func() bool { return true })
 	coordSel, err := router.Coordinator(t.Context())
 	testutil.FailErr(t, "router coordinator", err)
 	if coordSel.ProviderID != remoteCoord.ProviderID || coordSel.Model != remoteCoord.Model {
@@ -589,13 +588,14 @@ func TestIncludedProviderCannotBeRemoved(t *testing.T) {
 	if !IsIncludedProvider(entry.ID) || entry.Label != IncludedProviderLabel {
 		t.Fatalf("IncludedProviderEntry() = %+v", entry)
 	}
-	if len(entry.Models) != 1 || entry.Models[0].ID != IncludedModelID || entry.Models[0].ContextLength != IncludedContextWindowTokens {
+	if len(entry.Models) != 0 {
 		t.Fatalf("IncludedProviderEntry().Models = %+v", entry.Models)
 	}
 
-	testutil.FailErr(t, "InstallIncludedProvider", cat.InstallIncludedProvider(""))
+	testutil.FailErr(t, "put included provider", cat.Put(entry))
+	testutil.FailErr(t, "reload included provider", cat.Reload())
 	installed, ok := cat.Get(IncludedProviderID)
-	if !ok || installed.Label != IncludedProviderLabel || len(installed.Models) != 1 || installed.Models[0].ID != IncludedModelID {
+	if !ok || installed.Label != IncludedProviderLabel || len(installed.Models) != 0 {
 		t.Fatalf("installed entry = %+v, ok=%v", installed, ok)
 	}
 
@@ -605,33 +605,24 @@ func TestIncludedProviderCannotBeRemoved(t *testing.T) {
 	}
 }
 
-func TestServiceStartupConnectsIncludedProviderAndLocalDefaultRouter(t *testing.T) {
-	if !PlatformsSupportedHere(IncludedProviderEntry().Platforms) {
-		t.Skip("included provider is only supported on darwin/arm64")
-	}
+func TestServiceStartupRequiresAdmittedIncludedModel(t *testing.T) {
+	t.Setenv("LYCAON_TEST", "1")
+	defer SetHostProductPlatformForTest(PlatformLinux)()
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
 	configtest.Overlay(t, map[config.Rel]string{config.ModelPolicy: emptyModelPolicyYAML})
 	t.Setenv("LYCAON_NATIVEGEN_MODEL_DIR", t.TempDir())
-
-	svc, err := NewService(t.Context(), nil)
-	testutil.FailErr(t, "NewService", err)
-	defer func() { _ = svc.Close(t.Context()) }()
-
-	if !svc.Registry.IsConfigured(IncludedProviderID) {
-		t.Fatal("expected nativegen to be configured on startup when local model dir is available")
+	svc, err := NewService(t.Context(), nil, nil)
+	testutil.FailErr(t, "create service", err)
+	t.Cleanup(func() { _ = svc.Close(t.Context()) })
+	if _, ok := svc.Catalog.Get(IncludedProviderID); !ok {
+		t.Fatal("bundled provider missing from supported host catalog")
 	}
-	coordSel, err := svc.Router.Coordinator(t.Context())
-	testutil.FailErr(t, "svc.Router.Coordinator", err)
-	if coordSel.ProviderID != IncludedProviderID || coordSel.Model != IncludedModelID {
-		t.Fatalf("startup Router.Coordinator = %+v, want %s/%s", coordSel, IncludedProviderID, IncludedModelID)
+	if svc.Registry.IncludedModelAvailable() {
+		t.Fatal("environment path substituted for an admitted runtime")
 	}
-	liteSel, err := svc.Router.Lite(t.Context())
-	testutil.FailErr(t, "svc.Router.Lite", err)
-	if liteSel.ProviderID != IncludedProviderID || liteSel.Model != IncludedModelID {
-		t.Fatalf("startup Router.Lite = %+v, want %s/%s", liteSel, IncludedProviderID, IncludedModelID)
-	}
-	window, source := ResolveTrueWindow(ModelPolicy{}, svc.Registry, modelinfo.ModelContextWindows{}, compaction.CompactionConfig{})
-	if window != IncludedContextWindowTokens || source != WindowResolveModelEntry {
-		t.Fatalf("ResolveTrueWindow = (%d, %q), want (%d, %q)", window, source, IncludedContextWindowTokens, WindowResolveModelEntry)
+	selection, err := svc.Router.Coordinator(t.Context())
+	testutil.FailErr(t, "resolve unset coordinator", err)
+	if selection != nil && selection.ProviderID == IncludedProviderID {
+		t.Fatal("unavailable local model selected as the coordinator")
 	}
 }

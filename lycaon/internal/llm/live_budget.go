@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -55,7 +56,7 @@ func ResolveTrueWindow(policy ModelPolicy, lookup ContextLengthLookup, windows m
 		return cfg.ModelContextWindow, WindowResolveExplicit
 	}
 
-	localAvailable := lookup != nil && lookup.ContextLength(IncludedProviderID, IncludedModelID) > 0
+	localAvailable := lookup != nil && lookup.ContextLength(IncludedProviderID, nativegen.DefaultModelID) > 0
 	coord := CoordinatorRefWithLocalDefault(policy, localAvailable)
 	provider := strings.TrimSpace(coord.ProviderID)
 	model := strings.TrimSpace(coord.Model)

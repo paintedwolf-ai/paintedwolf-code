@@ -204,7 +204,7 @@ providers:
 	shipYAML, err := os.ReadFile(catalogPath)
 	testutil.FailErr(t, "read ship", err)
 	writeProvidersLocal(t, localPath, shipYAML)
-	cat, err := NewProviderCatalog()
+	cat, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "catalog", err)
 	creds, err := providercredentials.New()
 	testutil.FailErr(t, "creds", err)

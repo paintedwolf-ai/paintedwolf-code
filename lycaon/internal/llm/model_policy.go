@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"os"
 	"path/filepath"
 	"slices"
@@ -215,7 +216,7 @@ func mergePolicy(base, overlay ModelPolicy) ModelPolicy {
 func DefaultLocalModelRef() ModelRef {
 	return ModelRef{
 		ProviderID: IncludedProviderID,
-		Model:      IncludedModelID,
+		Model:      nativegen.DefaultModelID,
 	}
 }
 
