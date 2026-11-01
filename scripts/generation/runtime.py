@@ -36,6 +36,12 @@ def run(command, **kwargs):
 
 
 def prepare(args):
+    if args.install_build_tools:
+        if args.backend != "reference-llama" or sys.platform != "linux":
+            raise ValueError("system build tools are only prepared for the Linux Vulkan candidate")
+        run(["sudo", "-n", "apt-get", "update"])
+        run(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends",
+             "cmake", "ninja-build", "libvulkan-dev", "glslc", "glslang-tools"])
     if args.backend == "reference-swift":
         source, build = paths(args.backend)
         compiler = swift_toolchain.prepare(bin_dir(ROOT))
@@ -209,6 +215,7 @@ def main():
     parser.add_argument("action", choices=["prepare", "build", "test", "bench"])
     parser.add_argument("--backend", choices=["native", "reference-llama", "reference-mlx", "reference-swift"], default="native")
     parser.add_argument("--refresh-lock", action="store_true")
+    parser.add_argument("--install-build-tools", action="store_true")
     parser.add_argument("--model", type=Path)
     parser.add_argument("--messages", type=Path)
     parser.add_argument("--output", type=Path)
