@@ -131,7 +131,7 @@ func TestPromotedForegroundCommandSurvivesTurnCancelAndRetainsOutput(t *testing.
 		"command": "printf 'phase-1\\n'; sleep 0.3; printf 'phase-2\\n'; sleep 10",
 		"wait_ms": float64(50),
 	}
-	foreground := command.ConfinedForeground{Background: reg, Runner: tool.Runner, Boundary: tool.Boundary, ToolName: command.VerifyToolName}
+	foreground := command.ConfinedForeground{Background: reg, Runner: tool.Runner, Boundary: tool.Boundary, ToolName: "command"}
 	_, outcome, err := foreground.Run(turnCtx, args, ctx)
 	testutil.FailErr(t, "run confined foreground command", err)
 	if outcome.Finished {
