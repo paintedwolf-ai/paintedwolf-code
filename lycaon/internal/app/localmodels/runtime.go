@@ -65,7 +65,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	}
 	store := modelstore.New(options.StoreRoot, authority)
 	if store.Status(nativegen.DefaultModelID, inventory.Backend).State == modelstore.StateAbsent {
-		if err := store.ImportBundle(ctx, options.Seed); err != nil {
+		if err := store.ImportBundle(ctx, options.Seed, modelstore.Slot{Model: nativegen.DefaultModelID, Device: inventory.Backend}); err != nil {
 			resources.Close()
 			return nil, err
 		}
