@@ -36,6 +36,8 @@ const (
 type SocketGrant struct {
 	ApprovedPath string
 	ResolvedPath string
+	RelayPath    string
+	Listener     SocketListenerIdentity
 }
 
 // SocketGrantDropReason is a stable machine reason a grant was not applied.
@@ -239,7 +241,7 @@ func normalizeSocketGrantList(in []SocketGrant) ([]SocketGrant, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
-	byApproved := map[string]string{}
+	byApproved := map[string]SocketGrant{}
 	order := make([]string, 0, len(in))
 	for _, g := range in {
 		approved := strings.TrimSpace(g.ApprovedPath)
@@ -248,20 +250,36 @@ func normalizeSocketGrantList(in []SocketGrant) ([]SocketGrant, error) {
 			continue
 		}
 		if prev, ok := byApproved[approved]; ok {
-			if prev != resolved {
+			if prev.ResolvedPath != resolved {
 				return nil, fmt.Errorf("%w: %q", ErrSocketGrantConflict, approved)
 			}
 			continue
 		}
-		byApproved[approved] = resolved
+		byApproved[approved] = SocketGrant{ApprovedPath: approved, ResolvedPath: resolved, RelayPath: strings.TrimSpace(g.RelayPath), Listener: g.Listener}
 		order = append(order, approved)
 	}
 	sort.Strings(order)
 	out := make([]SocketGrant, 0, len(order))
 	for _, approved := range order {
-		out = append(out, SocketGrant{ApprovedPath: approved, ResolvedPath: byApproved[approved]})
+		out = append(out, byApproved[approved])
 	}
 	return out, nil
+}
+
+func socketPathSyntaxReason(p string) SocketGrantDropReason {
+	if p == "" || !filepath.IsAbs(p) {
+		return SocketDropNotAbsolute
+	}
+	if strings.ContainsRune(p, 0) {
+		return SocketDropNUL
+	}
+	if !utf8.ValidString(p) {
+		return SocketDropInvalidUTF8
+	}
+	if len(p) > maxSocketPathBytes {
+		return SocketDropTooLong
+	}
+	return ""
 }
 
 func validateSocketGrants(grants []SocketGrant) ([]SocketGrant, []SocketGrantDrop, error) {
@@ -279,12 +297,17 @@ func validateSocketGrants(grants []SocketGrant) ([]SocketGrant, []SocketGrantDro
 			dropped = append(dropped, SocketGrantDrop{Grant: g, Reason: reason})
 			continue
 		}
+		if g.RelayPath != "" && socketPathSyntaxReason(g.RelayPath) == "" {
+			applied = append(applied, SocketGrant{ApprovedPath: g.ApprovedPath, ResolvedPath: g.ResolvedPath, RelayPath: g.RelayPath, Listener: effectiveSocketListener(g)})
+			continue
+		}
 		now := fspath.CanonicalPath(g.ApprovedPath)
 		if now == "" {
 			dropped = append(dropped, SocketGrantDrop{Grant: g, Reason: SocketDropResolveFailed})
 			continue
 		}
 		if now != g.ResolvedPath {
+			recordSocketRelayRefusal(g, &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath})
 			dropped = append(dropped, SocketGrantDrop{Grant: g, Reason: SocketDropRepointed})
 			continue
 		}
@@ -293,28 +316,17 @@ func validateSocketGrants(grants []SocketGrant) ([]SocketGrant, []SocketGrantDro
 			dropped = append(dropped, SocketGrantDrop{Grant: g, Reason: SocketDropNotSocket})
 			continue
 		}
-		applied = append(applied, SocketGrant{ApprovedPath: g.ApprovedPath, ResolvedPath: now})
+		if err := RevalidateSocketGrant(g); err != nil {
+			recordSocketRelayRefusal(g, &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: err})
+			dropped = append(dropped, SocketGrantDrop{Grant: g, Reason: SocketDropRepointed})
+			continue
+		}
+		applied = append(applied, SocketGrant{ApprovedPath: g.ApprovedPath, ResolvedPath: now, RelayPath: g.RelayPath, Listener: effectiveSocketListener(g)})
 	}
 	if len(applied) > MaxSocketGrants {
 		return nil, nil, fmt.Errorf("%w: %d > %d", ErrSocketGrantCap, len(applied), MaxSocketGrants)
 	}
 	return applied, dropped, nil
-}
-
-func socketPathSyntaxReason(p string) SocketGrantDropReason {
-	if p == "" || !filepath.IsAbs(p) {
-		return SocketDropNotAbsolute
-	}
-	if strings.ContainsRune(p, 0) {
-		return SocketDropNUL
-	}
-	if !utf8.ValidString(p) {
-		return SocketDropInvalidUTF8
-	}
-	if len(p) > maxSocketPathBytes {
-		return SocketDropTooLong
-	}
-	return ""
 }
 
 // SocketPathsDigest is a redaction-safe digest of applied approved/resolved pairs.

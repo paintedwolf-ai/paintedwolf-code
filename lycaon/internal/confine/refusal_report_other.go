@@ -9,4 +9,4 @@ import "os"
 func supervisedRefusalReports() bool { return false }
 
 // refusalReport has no pipe where the kernel's own stream carries refusals.
-func refusalReport(Confinement) (*os.File, func()) { return nil, func() {} }
+func refusalReport(c Confinement) (*os.File, func()) { return nil, claimCommandSocketRelays(c) }

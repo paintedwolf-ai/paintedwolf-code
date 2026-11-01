@@ -128,6 +128,10 @@ func writeSocketGrantRules(b *strings.Builder, grants []SocketGrant) {
 	}
 	b.WriteString("; exact AF_UNIX socket grants\n")
 	for _, g := range grants {
-		b.WriteString("(allow network-outbound (literal " + sbplString(g.ResolvedPath) + "))\n")
+		path := g.RelayPath
+		if path == "" {
+			path = g.ResolvedPath
+		}
+		b.WriteString("(allow network-outbound (literal " + sbplString(path) + "))\n")
 	}
 }

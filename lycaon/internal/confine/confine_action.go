@@ -24,6 +24,7 @@ type ActionLease struct {
 	refusalTag string
 	refusals   *refusalFeed
 	settleOnce sync.Once
+	relays     *socketRelayLease
 }
 
 // BindAction binds a confinement to one action before it runs. Every confined
@@ -38,11 +39,18 @@ func BindAction(c *Confinement, cmd EgressCommand) (*ActionLease, error) {
 		// Rebinding would detach the existing action's descendants.
 		return nil, fmt.Errorf("confinement is already bound to an action")
 	}
+	relays, err := openActionSocketRelays(c, cmd.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	lease.relays = relays
 	lease.watchRefusals(c)
+	relays.bindFeed(lease.refusals)
 	if !lineage.Supported() {
 		// Mediated egress requires descendant attribution.
 		if c.Network == NetworkProxyOnly {
 			lease.unwatchRefusals(c)
+			relays.close()
 			return nil, fmt.Errorf("mediated egress requires descendant observation on this platform")
 		}
 		return lease, nil
@@ -50,6 +58,7 @@ func BindAction(c *Confinement, cmd EgressCommand) (*ActionLease, error) {
 	line, err := lineage.Open(actionSubject(cmd), cmd.SessionID)
 	if err != nil {
 		lease.unwatchRefusals(c)
+		relays.close()
 		return nil, fmt.Errorf("open action lineage: %w", err)
 	}
 	lease.line = line
@@ -65,6 +74,7 @@ func BindAction(c *Confinement, cmd EgressCommand) (*ActionLease, error) {
 		_ = line.Close()
 		c.lineage, c.LineageID = nil, ""
 		lease.unwatchRefusals(c)
+		relays.close()
 		return nil, err
 	}
 	egressBroker.mu.Lock()
@@ -190,12 +200,21 @@ func (l *ActionLease) Survivors() ([]int, error) {
 	return l.line.Survivors()
 }
 
+// SocketRefusal returns the first structured socket-relay rejection recorded for this action.
+func (l *ActionLease) SocketRefusal() *SocketResolveError {
+	if l == nil {
+		return nil
+	}
+	return l.relays.refusal()
+}
+
 // Close releases the action's leases and retains its final observations.
 func (l *ActionLease) Close(ctx context.Context) []EgressHost {
 	if l == nil {
 		return nil
 	}
 	l.once.Do(func() {
+		l.relays.close()
 		if l.refusals != nil {
 			l.settleRefusals(ctx)
 		}

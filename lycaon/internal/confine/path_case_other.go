@@ -71,3 +71,24 @@ func flipASCIICase(name string) string {
 	}
 	return name
 }
+
+func socketHardLinked(os.FileInfo) bool { return false }
+
+func inspectSocketListener(string, string, os.FileInfo) (SocketListenerIdentity, error) {
+	return SocketListenerIdentity{}, nil
+}
+
+func revalidateSocketListener(_ string, _ string, _ os.FileInfo, pinned SocketListenerIdentity) (SocketListenerIdentity, error) {
+	return pinned, nil
+}
+
+type socketRelayLease struct{}
+
+func (*socketRelayLease) bindFeed(*refusalFeed)          {}
+func (*socketRelayLease) close()                         {}
+func (*socketRelayLease) refusal() *SocketResolveError   { return nil }
+func ForgetSocketSession(string)                         {}
+func claimCommandSocketRelays(Confinement) func()        { return func() {} }
+func openActionSocketRelays(*Confinement, string) (*socketRelayLease, error) {
+	return nil, nil
+}

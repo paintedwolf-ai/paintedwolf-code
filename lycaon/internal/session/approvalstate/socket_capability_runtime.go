@@ -288,6 +288,7 @@ func (r *SocketCapabilityRuntime) ForgetSession(rootSessionID string) {
 	if r == nil {
 		return
 	}
+	confine.ForgetSocketSession(rootSessionID)
 	r.guard.forgetSession(rootSessionID)
 	r.mu.Lock()
 	defer r.mu.Unlock()

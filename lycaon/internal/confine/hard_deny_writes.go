@@ -3,6 +3,7 @@ package confine
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -81,6 +82,13 @@ func HardDenyWriteSpecs(c Confinement) ([]HardDenyWriteSpec, error) {
 	}
 
 	out = append(out, agentPolicySpecs(c.Roots)...)
+	for _, g := range c.SocketGrants {
+		if r := strings.TrimSpace(g.RelayPath); r != "" {
+			if dir := fspath.CanonicalPath(filepath.Dir(r)); dir != "" {
+				out = append(out, HardDenyWriteSpec{Layer: FloorControlPlane, Subpath: dir})
+			}
+		}
+	}
 
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Layer != out[j].Layer {
