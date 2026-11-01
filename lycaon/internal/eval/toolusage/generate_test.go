@@ -108,7 +108,7 @@ func TestRunGenerateRecordsEveryTaskAndContinuesPastATimeout(t *testing.T) {
 	var manifest bytes.Buffer
 	err := RunGenerate(t.Context(), GenerateOptions{
 		BaseURL: server.URL, Token: "fixture", ProjectDir: "/work/flask", ProjectName: "flask", Tasks: tasks,
-		Timeout: 300 * time.Millisecond, Manifest: &manifest,
+		Timeout: testutil.Timeout(300 * time.Millisecond), Manifest: &manifest,
 		Unattended: UnattendedPolicy{ApprovalGuidance: "Continue without it.", Answer: "Use your best judgment.", MaxInterventions: 3},
 	})
 	testutil.FailErr(t, "run generate", err)
