@@ -88,3 +88,24 @@ func TestPrepareRenderRefusesIncompleteHistoryAndUnknownFormats(t *testing.T) {
 		t.Fatal("schema aliases caller memory")
 	}
 }
+
+func TestRequestBudgetUsesRuntimeWindowAndNativeOutputReserve(t *testing.T) {
+	runtime := NewRuntime(RuntimeConfig{ContextLimit: 8192})
+	t.Cleanup(func() { _ = runtime.Close() })
+	provider := New("local", Options{Runtime: runtime})
+	for _, requested := range []int{0, 1024, 99999} {
+		req := modelcall.CompletionRequest{MaxTokens: requested}
+		budget := provider.RequestBudget(t.Context(), req)
+		want := DefaultOutputReserveTokens
+		if requested > 0 {
+			want = min(requested, MaxOutputReserveTokens)
+		}
+		if budget.Window != 8192 || budget.Output != want {
+			t.Fatalf("request %d budget = %+v", requested, budget)
+		}
+	}
+	entry, ok := provider.ModelEntry(DefaultModelID)
+	if !ok || entry.ContextLength != 8192 || DefaultModelEntry().ContextLength != 65536 {
+		t.Fatalf("runtime window changed artifact metadata: %+v", entry)
+	}
+}

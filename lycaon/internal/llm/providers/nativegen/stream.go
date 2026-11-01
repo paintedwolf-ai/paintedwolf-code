@@ -57,7 +57,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		release()
 		return nil, err
 	}
-	maximum := modelcall.CompletionTokenLimit(req, MaxOutputReserveTokens, DefaultOutputReserveTokens, modelcall.ThinkOff, false)
+	maximum := outputLimit(req)
 	if maximum <= 0 || maximum >= p.runtime.config.ContextLimit {
 		release()
 		return nil, ErrContextCapacityExceeded
