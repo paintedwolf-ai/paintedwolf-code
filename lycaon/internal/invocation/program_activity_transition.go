@@ -15,7 +15,10 @@ func (r *SQLRecorder) ActivityTransition(ctx context.Context, execution string) 
 	if err != nil {
 		return "", err
 	}
-	data, _ := json.Marshal([]any{node, operation, scope, state, status, code, hostCode})
+	data, err := json.Marshal([]any{node, operation, scope, state, status, code, hostCode})
+	if err != nil {
+		return "", err
+	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:]), nil
 }
