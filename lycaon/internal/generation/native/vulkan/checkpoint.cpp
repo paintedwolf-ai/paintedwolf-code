@@ -183,8 +183,6 @@ void pw_checkpoint::restore(llama_memory_i * memory) {
     if (lseek(fd, 0, SEEK_SET) < 0) throw std::runtime_error("checkpoint seek failed");
     stream input(fd);
     auto * cache = e4b_cache(memory);
-    // Restored rows must not inherit unused tensor contents from another request.
-    memory->clear(true);
     // Physical row placement preserves the attention reduction order.
     cache->get_base()->state_read_sinfo(input, 1, 0, nullptr, &global_layout);
     cache->get_swa()->state_read_sinfo(input, 1, 0, nullptr, &sliding_layout);
@@ -192,11 +190,16 @@ void pw_checkpoint::restore(llama_memory_i * memory) {
     cache->get_base()->set_allocation_head(0, global_head);
     cache->get_swa()->set_allocation_head(0, sliding_head);
     if (const auto debug = std::getenv("LLAMA_KV_CACHE_DEBUG"); debug && std::atoi(debug) > 0) {
-        if (lseek(fd, 0, SEEK_SET) < 0) throw std::runtime_error("checkpoint verification seek failed");
-        comparison verified(fd);
-        cache->get_base()->state_write(verified, 1, 0);
-        cache->get_swa()->state_write(verified, 1, 0);
+        verify(memory);
     }
     if (posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED) != 0)
         throw std::runtime_error("checkpoint page eviction failed");
+}
+
+void pw_checkpoint::verify(llama_memory_i * memory) {
+    if (lseek(fd, 0, SEEK_SET) < 0) throw std::runtime_error("checkpoint verification seek failed");
+    comparison verified(fd);
+    auto * cache = e4b_cache(memory);
+    cache->get_base()->state_write(verified, 1, 0);
+    cache->get_swa()->state_write(verified, 1, 0);
 }
