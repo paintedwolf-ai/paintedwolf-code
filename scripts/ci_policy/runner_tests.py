@@ -16,7 +16,7 @@ def main(argv=None):
         packages = python_tools.prepared(SCRIPTS / "workflow_lint" / "requirements.txt")
     except ValueError as error:
         raise SystemExit(f"{error}; run ./task setup-dev -- --ci-inputs analysis") from error
-    sys.path.insert(0, str(packages))
+    sys.path[:0] = [str(packages), str(SCRIPTS.parent), str(SCRIPTS)]
     args = sys.argv[1:] if argv is None else argv
     unittest.main(module=None, argv=["unittest", "discover", "-s", str(SCRIPTS), "-p", "test_*execution.py", *args])
 

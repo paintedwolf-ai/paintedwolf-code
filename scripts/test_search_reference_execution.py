@@ -144,7 +144,7 @@ class VerificationPythonInputsTest(unittest.TestCase):
     def test_discovery_loads_pinned_yaml_and_preserves_selection(self):
         with mock.patch.object(runner_tests.python_tools, "prepared", return_value=Path("/fixture/packages")), mock.patch.object(runner_tests.unittest, "main") as run, mock.patch.object(runner_tests.sys, "path", []):
             runner_tests.main(["-k", "chosen case"])
-            self.assertEqual(runner_tests.sys.path[0], "/fixture/packages")
+            self.assertEqual(runner_tests.sys.path[:3], ["/fixture/packages", str(runner_tests.SCRIPTS.parent), str(runner_tests.SCRIPTS)])
         self.assertEqual(run.call_args.kwargs["argv"][-2:], ["-k", "chosen case"])
         self.assertEqual(run.call_args.kwargs["module"], None)
 
