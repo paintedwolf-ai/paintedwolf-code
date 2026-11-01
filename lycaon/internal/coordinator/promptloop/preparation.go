@@ -10,11 +10,15 @@ import (
 
 // ProjectPreparation compiles callable schemas and their standing procedures without opening a turn.
 func (l *PromptLoop) ProjectPreparation(ctx context.Context, sess *api.Session, history, messages []api.Message, frame inject.CoordinatorTurnFrame) (modelcall.CompletionRequest, error) {
-	metas, _, _, err := l.Context.coordinatorToolsForTurn(ctx, sess, frame.Machine.ProfileID, history, "", 0, 0, frame, nil)
+	profileID := frame.Machine.ProfileID
+	metas, _, surfaceID, err := l.Context.coordinatorToolsForTurn(ctx, sess, profileID, history, "", 0, 0, frame, nil)
 	if err != nil {
 		return modelcall.CompletionRequest{}, err
 	}
-	messages, err = l.Tools.appendToolProcedures(ctx, sess, frame.Machine.ProfileID, messages, metas)
+	if surfaceID != "" {
+		profileID = surfaceID
+	}
+	messages, err = l.Tools.appendToolProcedures(ctx, sess, profileID, messages, metas)
 	if err != nil {
 		return modelcall.CompletionRequest{}, err
 	}
