@@ -34,23 +34,20 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
   const activity = props.activity;
   const content = useToolContent();
   const [callPage, setCallPage] = createSignal(0);
-  const [wholeCommand, setWholeCommand] = createSignal(false);
-  const [receiptCursors, setReceiptCursors] = createSignal<string[]>([]);
   createEffect(() => {
     const target = content?.revealedCallId?.();
     if (!target) return;
     const index = activity().calls.findIndex(call => call.toolCallId === target);
     if (index >= 0) setCallPage(Math.floor(index / CALL_PAGE));
   });
-  const receiptCursor = () => receiptCursors().at(-1);
   const calls = createMemo(() => activity().calls.slice(callPage() * CALL_PAGE, (callPage() + 1) * CALL_PAGE));
   const snapshot = createMemo(() => {
     const client = props.client ?? getLycaonClient();
     if (!client || !props.sessionId) return undefined;
     const requests = [...new Map(calls().flatMap(call => call.commandProgram ? [[call.commandProgram.id, call.commandProgram] as const] : [])).values()];
-    const cursor = receiptCursor();
+    const cursor = undefined;
     const limit = 6;
-    const activityId = !wholeCommand() && activity().fact.execution_ids.length ? activity().fact.id : undefined;
+    const activityId = activity().fact.execution_ids.length ? activity().fact.id : undefined;
     const key = JSON.stringify([requests.map(program => [program.id, program.state, program.settled_at]), activity().fact.state, activity().fact.execution_count, activity().fact.failed_count, activityId, cursor, limit]);
     return { client, sessionId: props.sessionId, requests, cursor, limit, activityId, key };
   }, undefined, { equals: (a,b) => a?.client === b?.client && a?.sessionId === b?.sessionId && a?.key === b?.key });
@@ -64,13 +61,13 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
   });
   const facts = createMemo(() => {
     const feedback = activity().fact.execution_ids.length === 0 ? props.part.feedback : props.part.feedback?.filter(entry => executions().some(row => row.stop_code === entry.code || row.host_stop_code === entry.code));
-    const result = commandActivityFacts(activity(), wholeCommand() ? [] : executions(), feedback);
+    const result = commandActivityFacts(activity(), executions(), feedback);
     const stop = loaded()[0]?.program.stop_code;
     if (activity().fact.execution_ids.length === 0 && stop && !result.some(fact => fact.value === stop)) result.push({ label: "Code", value: stop });
     return result;
   });
   const stepsLabel = createMemo(() => (activity().fact.steps?.length ?? 0) > 3 ? `All ${activity().fact.steps?.length ?? 0} steps` : "Step details");
-  const summary = createMemo(() => commandActivityFacts(activity(), wholeCommand() ? [] : executions(), undefined).filter(fact => ["Outcome", "Launch outcome", "Effects", "Command stop", "Enclosing command"].includes(fact.label)));
+  const summary = createMemo(() => commandActivityFacts(activity(), executions(), undefined).filter(fact => ["Outcome", "Launch outcome", "Effects", "Command stop", "Enclosing command"].includes(fact.label)));
   return <div class="den-tool-part-card-structured den-command-activity-details" data-testid="command-activity-details">
     <section class="den-tool-part-card-section" aria-label="Outcome">
       <dl class="den-tool-part-card-facts"><Index each={summary()}>{fact => <div><dt>{fact().label}</dt><dd data-tip={fact().value} data-tip-when-clipped="">{fact().value}</dd></div>}</Index></dl>
@@ -88,15 +85,7 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
     <Show when={executions().length > 0}>
       <section class="den-tool-part-card-section" aria-label="Execution records">
         <h4 class="den-tool-part-card-section-label">Execution records</h4>
-        <Show when={activity().fact.execution_ids.length}><div class="den-command-activity-paging" role="group" aria-label="Receipt scope">
-          <button type="button" class="den-chat-content-link" aria-pressed={!wholeCommand()} onClick={() => {setWholeCommand(false);setReceiptCursors([]);}}>This activity</button>
-          <button type="button" class="den-chat-content-link" aria-pressed={wholeCommand()} onClick={() => {setWholeCommand(true);setReceiptCursors([]);}}>Whole command</button>
-        </div></Show>
-        <Show when={receiptCursors().length > 0 || loaded()[0]?.executions_omitted}><div class="den-command-activity-paging" role="group" aria-label="Execution pages">
-          <button type="button" class="den-chat-content-link" disabled={receiptCursors().length === 0} onClick={() => setReceiptCursors(value => value.slice(0,-1))}>Previous records</button>
-          <button type="button" class="den-chat-content-link" disabled={!loaded()[0]?.executions_omitted} onClick={() => { const next = loaded()[0]?.next_cursor; if (next) setReceiptCursors(value => [...value,next]); }}>Next records</button>
-        </div></Show>
-        <ToolContentLink pane={`activity:${activity().fact.id}:receipts`} label="Execution receipts and diagnostics" content={{ kind: "inline", text: JSON.stringify({ activities: activity().members, facts: facts(), receipts: loaded(), feedback: props.part.feedback }, null, 2) }} projectId={props.projectId} />
+        <ToolContentLink pane={`activity:${activity().fact.id}:receipts`} label="Execution receipts and diagnostics" content={{ kind: "command_receipts", programs: (snapshot()?.requests ?? []).map(program => ({ id: program.id, activityId: snapshot()?.activityId })), context: JSON.stringify({ activities: activity().members, facts: facts(), feedback: props.part.feedback }) }} projectId={props.projectId} />
       </section>
     </Show>
     <CommandActivitySources activity={activity()} calls={calls()} offset={callPage() * CALL_PAGE} projectId={props.projectId}

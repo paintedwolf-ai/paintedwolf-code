@@ -137,7 +137,8 @@ Repetitions update counts and outcomes in place. Group titles retain their first
 activity's description. Decision-engine receipts belong in host-decision details,
 not in the count of actions performed. Expanded details show whole-activity
 results and at most three structural steps. Files links expose all steps,
-execution receipts, diagnostics, output and exact input.
+execution receipts, diagnostics, output and exact input. Execution records load
+on demand in Files; activity details contain no record paging controls.
 Receipt-page changes do not redefine the activity's result. Retained transcripts
 resolve host activity summaries before mounting rows when their stored snapshot
 has no structural steps. Failed detail reads preserve the recorded command.

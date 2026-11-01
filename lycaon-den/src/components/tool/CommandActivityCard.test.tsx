@@ -87,19 +87,19 @@ it("preserves uncertain effects, approvals and unpublished changes in compact de
  expect(view.container.querySelectorAll('[data-testid="tool-part-card"]')).toHaveLength(1);
 });
 
-it("pages additional operations without changing the activity identity", async () => {
- const value=part();
- const get=vi.fn(async (_session:string,_program:string,opts?:{cursor?:string})=>({ program,executions:[{...receipt(),command:opts?.cursor==="next"?"second operation":"first operation"}],nodes:[],executions_omitted:opts?.cursor==="next"?0:1,next_cursor:opts?.cursor==="next"?undefined:"next",nodes_omitted:0 }));
- const view=render(()=><CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" client={stubClient({getCommandProgramReceipt:get})}/>);
- const row=view.container.querySelector('[data-testid="tool-part-card"]');
- fireEvent.click(disclosureToggle(row));
- await waitFor(()=>expect(get).toHaveBeenLastCalledWith("activity-card-test", "program", {limit:6,cursor:undefined,activity_id:"test"}));
- await waitFor(()=>expect(view.getByRole("button",{name:"Next records"})).toBeTruthy());
- fireEvent.click(view.getByRole("button",{name:"Next records"}));
- await waitFor(()=>expect(get).toHaveBeenLastCalledWith("activity-card-test", "program", {limit:6,cursor:"next",activity_id:"test"}));
- expect(view.container.querySelector('[data-testid="tool-part-card"]')).toBe(row);
- fireEvent.click(view.getByRole("button",{name:"Previous records"}));
- await waitFor(()=>expect(get).toHaveBeenLastCalledWith("activity-card-test", "program", {limit:6,cursor:undefined,activity_id:"test"}));
+it("opens the complete activity records in Files without record controls", async () => {
+ const { registerOpenFilesSurfaceSink, resetOpenFilesSurfaceForTests } = await import("../../platform/navigation/open-files-surface.ts");
+ const { onTestFinished } = await import("vitest");
+ onTestFinished(resetOpenFilesSurfaceForTests);
+ const sink = vi.fn(); registerOpenFilesSurfaceSink(sink);
+ const get = vi.fn().mockResolvedValue({ program, executions: [receipt()], nodes: [], executions_omitted: 10704, next_cursor: "next", nodes_omitted: 0 });
+ const view = render(() => <CommandActivityCard part={part()} layout="chat" sessionId="activity-card-test" projectId="project" client={stubClient({getCommandProgramReceipt:get})} />);
+ fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
+ await waitFor(() => expect(view.getByRole("button", {name:/Execution receipts/})).toBeTruthy());
+ expect(view.queryByRole("button", {name:/Previous records|Next records|Whole command|This activity/})).toBeNull();
+ fireEvent.click(view.getByRole("button", {name:/Execution receipts/}));
+ expect(sink.mock.calls.at(-1)?.[0].document.content).toMatchObject({kind:"command_receipts",programs:[{id:"program",activityId:"test"}]});
+ expect(get).toHaveBeenCalledOnce();
 });
 
 it("reveals a folded call on a later detail page through Find", async () => {
@@ -141,8 +141,8 @@ it("retains each program's receipt scope when read activities combine calls", as
  fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
  await waitFor(()=>expect(view.container.textContent).toContain("Execution receipts and diagnostics"));
  fireEvent.click(view.getByRole("button",{name:/Execution receipts/}));
- const content=JSON.parse(sink.mock.calls.at(-1)?.[0].document.content.text);
- expect(content.receipts.map((page:{program:CommandProgramReceipt})=>page.program.id)).toEqual(["program","other-program"]);
+ const content=sink.mock.calls.at(-1)?.[0].document.content;
+ expect(content.programs.map((program:{id:string})=>program.id)).toEqual(["program","other-program"]);
 });
 
 it("bounds the detail summary and opens every structural step in Files", async () => {

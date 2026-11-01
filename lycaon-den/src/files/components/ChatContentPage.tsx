@@ -21,6 +21,7 @@ import { resolveEditorIdentity } from "../documents/editor-identity.ts";
 import { indentChipLabel } from "../../components/source/editor/indent-detect.ts";
 import { DocumentWindows } from "./DocumentWindows.tsx";
 import { useResidentInteractive } from "../../ui/resident-presence-context.tsx";
+import { useCommandReceiptDocument } from "../documents/command-receipt-document.ts";
 import { reportSurfaceFailure } from "../../notices/surface-failure.ts";
 
 const contentFailure = {
@@ -43,6 +44,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   onCleanup(() => copyAbort.abort());
   const reportError = (cause: unknown) => reportSurfaceFailure(contentFailure, cause, props.projectId);
   const reportCopyError = (cause: unknown) => reportSurfaceFailure(copyFailure, cause, props.projectId);
+  const receipts = useCommandReceiptDocument(() => props.document, () => props.client, reportError);
   const retainedSource = createMemo<Parameters<typeof createChatContentAccess>[0] | undefined>(() => {
     const content = props.document.content;
     if (props.document.kind !== "tool" || content.kind !== "retained" || !props.client) return undefined;
@@ -122,6 +124,10 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   };
   const copy = () => {
     const content=access();
+    if (props.document.content.kind === "command_receipts" && !receipts().ready) {
+      reportCopyError(new Error("Wait for the complete execution records before copying."));
+      return;
+    }
     if (props.document.content.kind === "retained" && !content) {
       reportCopyError(new Error("Reconnect to copy the complete document."));
       return;
@@ -138,14 +144,14 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
         cursor:cursor(),language:"Plain text",indent:{label:indentChipLabel(editorDisplayPrefs().indent),tip:"Editor indentation display"},
         details:<span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span>,
       }}>
-    <Show when={access()} fallback={<InlineChatContent document={props.document} client={props.client} onError={reportError} onEditor={setInlineEditor} />}>
+    <Show when={access()} fallback={<InlineChatContent receiptText={receipts().text} document={props.document} client={props.client} onError={reportError} onEditor={setInlineEditor} />}>
       <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={setEditorHost} /></div>
     </Show>
     </ReadonlyFilesDocument>
   </section>;
 }
 
-function InlineChatContent(props: { document: ChatContentDocument; client: LycaonClient | null; onError: (cause: unknown) => void; onEditor: (editor: EditorView | undefined) => void }) {
+function InlineChatContent(props: { receiptText: string; document: ChatContentDocument; client: LycaonClient | null; onError: (cause: unknown) => void; onEditor: (editor: EditorView | undefined) => void }) {
   const [revision,setRevision]=createSignal(0);
   const [parent,setParent]=createSignal<HTMLDivElement>();
   const handle=()=>props.document.content.kind==="process" ? props.document.content.handle : "";
@@ -157,6 +163,7 @@ function InlineChatContent(props: { document: ChatContentDocument; client: Lycao
   const text=()=>{
     const content=props.document.content;
     if(content.kind==="inline") return content.text;
+    if(content.kind==="command_receipts") return props.receiptText;
     if(content.kind === "retained") return (content.reference.preview_rows ?? []).map(row => row.text).join("");
     revision(); return content.kind==="process" ? getBackgroundProcessSnapshot(props.document.sessionId,content.handle)?.text ?? "" : "";
   };
