@@ -26,7 +26,7 @@ func TestModelAssignmentDiscoveryFailure(t *testing.T) {
     api_key_env: ""
     models: []
 `+MinimalShipHTTPRetryYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

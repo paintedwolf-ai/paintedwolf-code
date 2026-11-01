@@ -56,7 +56,7 @@ func TestOllamaKindAttachesShippedToolCallRejections(t *testing.T) {
 	}
 	entry, err := resolveLocalEntry(ProviderEntry{ID: "desktop", Kind: "ollama", BaseURL: "http://localhost:11434/v1"}, map[string]ProviderEntry{"ollama": *ollama})
 	testutil.FailErr(t, "resolve local ollama", err)
-	p, err := newProviderForEntry(context.Background(), entry, "", entry.HTTPRetry, nil, nil)
+	p, err := newProviderForEntry(context.Background(), entry, "", entry.HTTPRetry, nil, nil, nil)
 	testutil.FailErr(t, "build ollama driver", err)
 	cause := failure.ErrProviderToolCallUnparsed
 	if typed := p.Profile().ToolCallRejections.Classify("desktop", "m", "unexpected end of JSON input", true, cause); typed == cause { //nolint:errorlint // identity: an unclassified cause is returned itself

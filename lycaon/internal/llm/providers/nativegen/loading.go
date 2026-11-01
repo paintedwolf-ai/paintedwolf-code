@@ -50,7 +50,7 @@ func (p *Runtime) ensureLoaded(ctx context.Context, model string) error {
 		lease.Release()
 		return err
 	}
-	child, err := startProcess(processSpec{binary: runtime.BinaryPath, directory: lease.CheckpointDir(), artifact: artifact, metallib: runtime.MetalLibrary, pci: runtime.PhysicalDevice.Address}, lease, device, "local-generation", p.generation)
+	child, err := startProcess(ctx, processSpec{binary: runtime.BinaryPath, directory: lease.CheckpointDir(), artifact: artifact, metallib: runtime.MetalLibrary, pci: runtime.PhysicalDevice.Address}, lease, device, "local-generation", p.generation)
 	if err != nil {
 		reservation.Release()
 		return err

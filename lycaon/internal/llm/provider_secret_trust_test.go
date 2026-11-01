@@ -38,7 +38,7 @@ const trustTestShipYAML = `providers:
 func trustTestRegistry(t *testing.T) (*ProviderCatalog, *Registry, *destinationCapturingScreen) {
 	t.Helper()
 	catalog := mustCatalogCloneShipToLocal(t, trustTestShipYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

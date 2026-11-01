@@ -67,7 +67,7 @@ func fixtureProcess(t *testing.T) (*rpcProcess, *inference.Device, *inference.Me
 	device, _ := inference.NewDevice(4)
 	budget, _ := inference.NewMemoryBudget(100)
 	reservation, _ := budget.Reserve(100)
-	child, err := startProcess(processSpec{binary: binary, directory: t.TempDir(), artifact: "fixture"}, nil, device, "fixture", 1)
+	child, err := startProcess(t.Context(), processSpec{binary: binary, directory: t.TempDir(), artifact: "fixture"}, nil, device, "fixture", 1)
 	if err != nil {
 		reservation.Release()
 		t.Fatal(err)

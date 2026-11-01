@@ -56,7 +56,7 @@ providers:
 	testutil.FailErr(t, "creds", err)
 	testutil.FailErr(t, "set key", creds.Set("openai", "sk-test"))
 
-	reg, err := NewRegistry(t.Context(), cat, creds)
+	reg, err := NewRegistry(t.Context(), cat, creds, nil)
 
 	if err == nil {
 

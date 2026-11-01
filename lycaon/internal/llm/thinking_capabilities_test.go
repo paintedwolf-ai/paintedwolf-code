@@ -259,7 +259,7 @@ func TestOllamaDiscoveryToThinkingWireAndOverrideAdmission(t *testing.T) {
 	testutil.FailErr(t, "discover local Ollama models", err)
 	merged := mergeAssignableModels("ollama", nil, discovered, nil, nil, "", false)
 	entry := CatalogEntry{ID: "ollama-1", Kind: "ollama", BaseURL: server.URL + "/v1"}
-	p, err := newProviderForEntry(t.Context(), entry, "", providerretry.ProviderHTTPRetry{}, nil, server.Client())
+	p, err := newProviderForEntry(t.Context(), entry, "", providerretry.ProviderHTTPRetry{}, nil, server.Client(), nil)
 	testutil.FailErr(t, "construct native adapter", err)
 	p = hydrateProviderModels(p, merged.Models)
 	reg := newTestRegistry()

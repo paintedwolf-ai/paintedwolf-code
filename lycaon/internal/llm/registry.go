@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/modelfeed"
@@ -26,6 +27,7 @@ import (
 
 // Registry implements ProviderRegistry with catalog + credentials.
 type Registry struct {
+	localRuntime    *nativegen.Runtime
 	thinkingPolicy  atomic.Pointer[PolicyStore]
 	rateGate        *providerretry.ProviderRateGate
 	mutationMu      sync.Mutex
@@ -253,7 +255,7 @@ func (r *Registry) RenderRequest(ctx context.Context, providerID, model string, 
 	if !ok {
 		return "", nil, fmt.Errorf("render request: provider %q is not configured", providerID)
 	}
-	driver, err := driverFactories.Build(ctx, entry.Kind, providerBuild{entry: entry, resolved: ResolveProvider(entry, "")})
+	driver, err := driverFactories.Build(ctx, entry.Kind, providerBuild{localRuntime: r.localRuntime, entry: entry, resolved: ResolveProvider(entry, "")})
 	if err != nil {
 		return entry.Kind, nil, fmt.Errorf("render request for %s: %w", entry.ID, err)
 	}

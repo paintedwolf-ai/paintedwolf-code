@@ -50,7 +50,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 			}
 			reg, err := NewRegistry(t.Context(),
 				mustTestProviderCatalog(t, entry),
-				providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")),
+				providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil,
 			)
 			if err == nil {
 				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
@@ -58,7 +58,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewRegistry: %v", err)
 			}
-			p, err := newProviderForEntry(context.Background(), entry, "key", reg.providerRetryPolicy(entry), reg.cloudflareUsage, reg.discoveryClient)
+			p, err := newProviderForEntry(context.Background(), entry, "key", reg.providerRetryPolicy(entry), reg.cloudflareUsage, reg.discoveryClient, nil)
 			if err != nil {
 				t.Fatalf("newProviderForEntry: %v", err)
 			}

@@ -28,7 +28,7 @@ func testRoutingWithGates(t *testing.T, p modelcall.Provider, capacity *Capacity
 	tmp := t.TempDir()
 	catalog, err := NewProviderCatalogAt(filepath.Join(tmp, "providers.local.yaml"))
 	testutil.FailErr(t, "NewProviderCatalogAt", err)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

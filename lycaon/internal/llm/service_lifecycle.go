@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerhttp"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/modelfeed"
 	"os"
@@ -18,7 +19,7 @@ import (
 )
 
 // NewService loads catalog, credentials, policy, registry, and router.
-func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error) {
+func NewService(ctx context.Context, mock modelcall.LLMClient, localRuntime *nativegen.Runtime) (*Service, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -34,7 +35,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error)
 	if err != nil {
 		return nil, err
 	}
-	registry, err := NewRegistry(ctx, catalog, credentials)
+	registry, err := NewRegistry(ctx, catalog, credentials, localRuntime)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +106,7 @@ func (s *Service) Close(ctx context.Context) error {
 }
 
 // NewRegistry builds providers from catalog and stored credentials.
-func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store) (*Registry, error) {
+func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store, localRuntime *nativegen.Runtime) (*Registry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -118,6 +119,7 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 		return nil, fmt.Errorf("shared provider rate state requires an absolute directory in the isolated harness")
 	}
 	r := &Registry{
+		localRuntime:    localRuntime,
 		rateGate:        providerretry.NewProviderRateGate(rateDirectory),
 		catalog:         catalog,
 		credentials:     credentials,

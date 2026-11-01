@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/modelstore"
 )
@@ -17,6 +18,7 @@ type processSpec struct{ binary, directory, artifact, metallib, pci string }
 
 type rpcProcess struct {
 	cmd          *exec.Cmd
+	cleanup      func()
 	input        io.WriteCloser
 	output       io.ReadCloser
 	done         chan struct{}
@@ -31,7 +33,7 @@ type rpcProcess struct {
 	reservations []*inference.Reservation
 }
 
-func startProcess(spec processSpec, lease *modelstore.Lease, device *inference.Device, owner string, generation uint64) (*rpcProcess, error) {
+func startProcess(ctx context.Context, spec processSpec, lease *modelstore.Lease, device *inference.Device, owner string, generation uint64) (*rpcProcess, error) {
 	args := []string{"--model", spec.directory, "--artifact-id", spec.artifact}
 	if spec.metallib != "" {
 		args = append(args, "--metallib", spec.metallib)
@@ -39,33 +41,42 @@ func startProcess(spec processSpec, lease *modelstore.Lease, device *inference.D
 	if spec.pci != "" {
 		args = append(args, "--device-pci", spec.pci)
 	}
-	cmd := exec.Command(spec.binary, args...)
+	cmd, cleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), spec.binary, args, execpkg.ExecOpts{Launch: execpkg.HostLaunch("generation_engine"), NoTimeout: true})
+	if err != nil {
+		lease.Release()
+		return nil, err
+	}
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Stderr = io.Discard
 	input, err := cmd.StdinPipe()
 	if err != nil {
+		cleanup()
 		lease.Release()
 		return nil, err
 	}
 	output, err := cmd.StdoutPipe()
 	if err != nil {
+		cleanup()
 		input.Close()
 		lease.Release()
 		return nil, err
 	}
 	if err = cmd.Start(); err != nil {
+		cleanup()
 		input.Close()
 		output.Close()
 		lease.Release()
 		return nil, err
 	}
-	child := &rpcProcess{cmd: cmd, input: input, output: output, done: make(chan struct{}), device: device, owner: owner, generation: generation, lease: lease}
+	untrack := execpkg.TrackProcess(cmd.Process.Pid)
+	child := &rpcProcess{cleanup: func() { untrack(); cleanup() }, cmd: cmd, input: input, output: output, done: make(chan struct{}), device: device, owner: owner, generation: generation, lease: lease}
 	go child.reap()
 	return child, nil
 }
 
 func (p *rpcProcess) reap() {
 	_ = p.cmd.Wait()
+	p.cleanup()
 	_ = p.input.Close()
 	_ = p.output.Close()
 	p.mu.Lock()

@@ -39,7 +39,7 @@ func TestRegistryTestConnectivityAzureProbesDataPlaneKey(t *testing.T) {
 		catalog := mustTestProviderCatalog(t, entry)
 		credentials := providercredentials.NewAt(t.TempDir() + "/credential-vault.age")
 		testutil.FailErr(t, "store Azure key", credentials.Set("azure", key))
-		registry, err := NewRegistry(t.Context(), catalog, credentials)
+		registry, err := NewRegistry(t.Context(), catalog, credentials, nil)
 		if err == nil {
 			registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 		}

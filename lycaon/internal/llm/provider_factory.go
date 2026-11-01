@@ -106,9 +106,9 @@ var driverFactories = catalogruntime.NewFactorySet(
 	},
 )
 
-func newProviderForEntry(ctx context.Context, entry CatalogEntry, apiKey string, retry providerretry.ProviderHTTPRetry, usage *openaicompat.CloudflareUsageCache, discoveryClient *http.Client) (modelcall.Provider, error) {
+func newProviderForEntry(ctx context.Context, entry CatalogEntry, apiKey string, retry providerretry.ProviderHTTPRetry, usage *openaicompat.CloudflareUsageCache, discoveryClient *http.Client, localRuntime *nativegenprovider.Runtime) (modelcall.Provider, error) {
 	resolved := ResolveProvider(entry, apiKey)
-	p, err := driverFactories.Build(ctx, entry.Kind, providerBuild{cloudflareUsage: usage, discoveryClient: discoveryClient, entry: entry, apiKey: apiKey, resolved: resolved})
+	p, err := driverFactories.Build(ctx, entry.Kind, providerBuild{localRuntime: localRuntime, cloudflareUsage: usage, discoveryClient: discoveryClient, entry: entry, apiKey: apiKey, resolved: resolved})
 	if err != nil {
 		return nil, err
 	}
