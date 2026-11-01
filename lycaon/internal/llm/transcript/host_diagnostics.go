@@ -18,9 +18,8 @@ const (
 
 // Order preserves effect certainty, identities and parser locations before
 // larger inventories.
-// Examples and partial calls are deliberately absent. The only replacement is
-// a validated exact byte span (toolcontract.ProgramRepair) for explicit
-// submission; it is never presented as an equivalent executed repair.
+// Whole replacement observations remain data for explicit submission.
+// Diagnostic projection never invents executable source.
 var diagnosticFields = []string{
 	"program_completed_effects", "program_uncertain_effects", "program_replay_available", "program_effect_details_omitted",
 	"program_executed_children", "program_executed_reads", "native_operation", "native_command",
