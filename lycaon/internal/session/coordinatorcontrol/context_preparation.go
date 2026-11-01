@@ -68,7 +68,7 @@ func (m *Service) BuildPreparation(ctx context.Context, id string) (contextprepa
 	if err != nil {
 		return empty, err
 	}
-	metas, err := m.Assembly.ProjectPromptTools(ctx, sess, frame.Machine)
+	metas, err := m.Runtime.ProjectPreparationTools(ctx, sess, rows, frame)
 	if err != nil {
 		return empty, err
 	}
