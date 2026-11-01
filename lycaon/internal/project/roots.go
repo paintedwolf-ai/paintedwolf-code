@@ -80,6 +80,43 @@ func RootRefsFrom(p *Project) []projectroot.RootRef {
 	return out
 }
 
+// IsSingleRootForPath reports whether resolved is p's only attached root.
+func IsSingleRootForPath(p *Project, resolved string) bool {
+	resolved = strings.TrimSpace(resolved)
+	if p == nil || p.IsDraft || resolved == "" || len(p.Roots) != 1 {
+		return false
+	}
+	return p.Roots[0].Kind != RootKindDraft && p.Roots[0].Path == resolved
+}
+
+// FindAllByRootPath returns projects containing resolved as a root, with single-root
+// projects before multi-root projects and registry order preserved within each group.
+func FindAllByRootPath(list []Project, resolved string) []Project {
+	resolved = strings.TrimSpace(resolved)
+	if resolved == "" {
+		return nil
+	}
+	var single, multi []Project
+	for i := range list {
+		matched := false
+		for _, r := range list[i].Roots {
+			if r.Path == resolved {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		if IsSingleRootForPath(&list[i], resolved) {
+			single = append(single, list[i])
+		} else {
+			multi = append(multi, list[i])
+		}
+	}
+	return append(single, multi...)
+}
+
 func rootRefFrom(r Root) projectroot.RootRef {
 	return projectroot.RootRef{
 		ID:        r.ID,

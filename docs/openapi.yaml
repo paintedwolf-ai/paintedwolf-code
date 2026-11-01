@@ -1856,7 +1856,7 @@ paths:
       operationId: detectFolder
       summary: Project identity and extension suggestions for a folder
       description: |
-        Returns path, project_id when the folder is already a root, and project extension suggestions allowed by its trust settings.
+        Returns path, matching projects that already include the folder as a root, and project extension suggestions allowed by its trust settings.
       parameters:
         - name: path
           in: query
@@ -30669,6 +30669,33 @@ components:
         name:
           type: string
           description: Folder name for the clone; derived from the url when omitted.
+    FolderDetectProject:
+      x-go-generate: true
+      type: object
+      required:
+        - id
+        - name
+        - roots
+        - is_single_root
+        - last_opened_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Display name for the project (explicit name or primary folder basename).
+        roots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectRoot'
+        is_single_root:
+          type: boolean
+          description: True when the detected folder is the project's only attached root.
+        last_opened_at:
+          type: string
+          format: date-time
     ExtensionSuggestionStatus:
       type: string
       enum:
@@ -30737,7 +30764,12 @@ components:
         project_id:
           type: string
           format: uuid
-          description: The project that already holds this folder as a root, when there is one. Absent for a folder no project covers. Opening a folder that carries this reopens that project; minting a second one over the same tree would lose its trust state.
+          description: The most recently opened single-root project for this folder, when one exists. Absent when no project covers this folder or when matching projects include additional attached folders.
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/FolderDetectProject'
+          description: Existing projects that include this folder as a root, ordered with single-root matches before multi-root matches and most recently opened first within each group.
         extension_suggestions:
           x-go-pointer: true
           $ref: '#/components/schemas/ExtensionSuggestionsResponse'

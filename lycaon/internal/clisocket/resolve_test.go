@@ -150,7 +150,7 @@ func TestResolvePathDuplicateRootsPickMostRecentlyOpened(t *testing.T) {
 	}
 }
 
-func TestResolvePathMatchesSecondaryRoot(t *testing.T) {
+func TestResolvePathSecondaryRootInMultiFolderProjectProposesCreate(t *testing.T) {
 	primary := t.TempDir()
 	secondary := t.TempDir()
 	projects := []project.Project{
@@ -159,8 +159,26 @@ func TestResolvePathMatchesSecondaryRoot(t *testing.T) {
 
 	ev := ResolvePath(projects, secondary)
 
-	if ev.ProjectID == nil || *ev.ProjectID != "p1" {
-		t.Fatalf("project = %v, want p1 via secondary root", ev.ProjectID)
+	if ev.Action != api.CLIOpenActionCreate || ev.ProjectID != nil {
+		t.Fatalf("ev = %+v, want create when folder is only a secondary root of a multi-folder project", ev)
+	}
+}
+
+func TestResolvePathPrefersSingleRootOverMultiRootAndSecondaryRoot(t *testing.T) {
+	primary := t.TempDir()
+	secondary := t.TempDir()
+	now := time.Now()
+	projects := []project.Project{
+		proj("multi", "workspace", now, root(primary), root(secondary)),
+		proj("single-secondary", "secondary", now.Add(-time.Hour), root(secondary)),
+		proj("single-primary", "primary", now.Add(-time.Hour), root(primary)),
+	}
+
+	if ev := ResolvePath(projects, secondary); ev.ProjectID == nil || *ev.ProjectID != "single-secondary" {
+		t.Fatalf("secondary resolved to %v, want single-secondary", ev.ProjectID)
+	}
+	if ev := ResolvePath(projects, primary); ev.ProjectID == nil || *ev.ProjectID != "single-primary" {
+		t.Fatalf("primary resolved to %v, want single-primary over multi-root", ev.ProjectID)
 	}
 }
 

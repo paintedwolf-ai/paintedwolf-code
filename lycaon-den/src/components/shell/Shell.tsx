@@ -470,7 +470,7 @@ export function Shell(props: ShellProps) {
           return;
         }
         if (ev.action === "create") {
-          void proposeFolderAsProject(ev.path);
+          void proposeFolderAsProject(ev.path, { forceNew: true });
         }
       }),
     );

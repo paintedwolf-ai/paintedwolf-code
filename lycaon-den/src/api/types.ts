@@ -843,7 +843,7 @@ export interface paths {
         };
         /**
          * Project identity and extension suggestions for a folder
-         * @description Returns path, project_id when the folder is already a root, and project extension suggestions allowed by its trust settings.
+         * @description Returns path, matching projects that already include the folder as a root, and project extension suggestions allowed by its trust settings.
          */
         get: operations["detectFolder"];
         put?: never;
@@ -11994,6 +11994,17 @@ export interface components {
             /** @description Folder name for the clone; derived from the url when omitted. */
             name?: string;
         };
+        FolderDetectProject: {
+            /** Format: uuid */
+            id: string;
+            /** @description Display name for the project (explicit name or primary folder basename). */
+            name: string;
+            roots: components["schemas"]["ProjectRoot"][];
+            /** @description True when the detected folder is the project's only attached root. */
+            is_single_root: boolean;
+            /** Format: date-time */
+            last_opened_at: string;
+        };
         /** @enum {string} */
         ExtensionSuggestionStatus: "available" | "installed" | "declined" | "version_mismatch";
         ExtensionSuggestion: {
@@ -12022,9 +12033,11 @@ export interface components {
             path: string;
             /**
              * Format: uuid
-             * @description The project that already holds this folder as a root, when there is one. Absent for a folder no project covers. Opening a folder that carries this reopens that project; minting a second one over the same tree would lose its trust state.
+             * @description The most recently opened single-root project for this folder, when one exists. Absent when no project covers this folder or when matching projects include additional attached folders.
              */
             project_id?: string;
+            /** @description Existing projects that include this folder as a root, ordered with single-root matches before multi-root matches and most recently opened first within each group. */
+            projects?: components["schemas"]["FolderDetectProject"][];
             /** @description Install choices available before opening the project. */
             extension_suggestions?: components["schemas"]["ExtensionSuggestionsResponse"];
         };
@@ -30471,6 +30484,7 @@ export type LockVaultResponse = components["schemas"]["LockVaultResponse"];
 export type ProjectPromotion = components["schemas"]["ProjectPromotion"];
 export type ProjectListResponse = components["schemas"]["ProjectListResponse"];
 export type CloneProjectRequest = components["schemas"]["CloneProjectRequest"];
+export type FolderDetectProject = components["schemas"]["FolderDetectProject"];
 export type ExtensionSuggestionStatus = components["schemas"]["ExtensionSuggestionStatus"];
 export type ExtensionSuggestion = components["schemas"]["ExtensionSuggestion"];
 export type ExtensionSuggestionsResponse = components["schemas"]["ExtensionSuggestionsResponse"];
