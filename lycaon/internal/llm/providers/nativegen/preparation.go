@@ -55,9 +55,6 @@ func (p *Provider) PrepareContext(ctx context.Context, req modelcall.CompletionR
 	if err != nil || measured.CheckpointTokens == 0 {
 		return modelcall.ContextPreparation{}, err
 	}
-	if measured.CheckpointTokens >= p.runtime.ContextWindow() {
-		return modelcall.ContextPreparation{}, ErrContextCapacityExceeded
-	}
 	checkpoint := measured.CheckpointTokens
 	if standingMessages != render.KnownPrefixMessages {
 		checkpoint = 0
@@ -73,7 +70,15 @@ func (p *Provider) PrepareContext(ctx context.Context, req modelcall.CompletionR
 			checkpoint = standing.CheckpointTokens
 		}
 	}
-	return p.runtime.prefill(ctx, measured.PromptTokens[:measured.CheckpointTokens], checkpoint)
+	known := measured.CheckpointTokens
+	if known >= p.runtime.ContextWindow() {
+		if checkpoint == 0 || checkpoint >= p.runtime.ContextWindow() {
+			return modelcall.ContextPreparation{}, ErrContextCapacityExceeded
+		}
+		// Final request fitting may discard history while keeping standing instructions.
+		known = checkpoint
+	}
+	return p.runtime.prefill(ctx, measured.PromptTokens[:known], checkpoint)
 }
 
 func (p *Runtime) prefill(ctx context.Context, tokens []uint32, checkpoint int) (modelcall.ContextPreparation, error) {
