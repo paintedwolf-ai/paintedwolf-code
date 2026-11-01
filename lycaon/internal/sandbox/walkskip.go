@@ -20,11 +20,6 @@ func IsVCSDirBaseName(baseName string) bool {
 	return baseName == vcsDirName
 }
 
-// IsGitlinkFile reports whether absPath is a regular .git file whose first line starts with "gitdir:".
-func IsGitlinkFile(absPath string) bool {
-	return gitrepo.IsGitlinkFile(absPath)
-}
-
 // IsGitlinkDirEntry reports whether entry is a regular .git file whose first line starts with "gitdir:".
 func IsGitlinkDirEntry(baseName, absPath string, entry fs.DirEntry) bool {
 	if !IsVCSDirBaseName(baseName) || entry == nil || entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 {
