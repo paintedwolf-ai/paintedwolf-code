@@ -181,7 +181,7 @@ def build(args):
 def test(args):
     if args.backend == "reference-llama":
         run([sys.executable, "-m", "unittest", "test_vulkan_tools", "test_provenance",
-             "test_swift_toolchain", "test_native_bench"], cwd=Path(__file__).parent)
+             "test_swift_toolchain", "test_native_bench", "test_sources"], cwd=Path(__file__).parent)
         return
     if args.backend == "reference-swift":
         source, output = paths(args.backend)
@@ -204,7 +204,7 @@ def test(args):
     source, output = paths("native")
     if sys.platform == "linux":
         build(argparse.Namespace(backend="reference-llama"))
-    run([sys.executable, "-m", "unittest", "test_native_bench", "test_sources"], cwd=Path(__file__).parent)
+    run([sys.executable, "-m", "unittest", "test_native_bench", "test_sources", "test_provenance"], cwd=Path(__file__).parent)
     environment, feature = native_environment(output)
     run(["cargo", "test", "--locked", "--release", "--features", feature,
          "--jobs", os.environ.get("PW_TEST_WORKERS", "1"), "--manifest-path", source / "Cargo.toml"],
