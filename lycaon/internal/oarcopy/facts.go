@@ -57,10 +57,9 @@ func FactsFromData(data map[string]any) map[string]any {
 		out[publishKey(key)] = value
 	}
 	publishParserFacts(out)
-	if tool, ok := data["tool"].(string); ok && tool != "" {
-		args, _ := data["tool_args"].(map[string]any)
-		PublishInvocationRecovery(out, tool, args)
-	}
+	tool, _ := data["tool"].(string)
+	args, _ := data["tool_args"].(map[string]any)
+	PublishInvocationRecovery(out, tool, args)
 	reason, _ := out["paintedwolf.rejection_reason"].(string)
 	if reason == "" {
 		if raw, ok := data["reason"]; ok {

@@ -92,7 +92,7 @@ func TestArgumentRepairCannotCrossReceivingToolIdentity(t *testing.T) {
 			"argument_schema_matches_tool": true,
 		}
 		text := oarcore.RenderCopy(hints.HintCodes["TOOL_ARGS_INVALID"].Fix, activation(gc))
-		if strings.Contains(text, `"path"`) != (schemaTool == "command") {
+		if strings.Contains(text, `"command"`) != (schemaTool == "command") {
 			t.Fatalf("schema %q crossed command identity: %s", schemaTool, text)
 		}
 	}

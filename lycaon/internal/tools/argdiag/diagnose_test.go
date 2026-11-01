@@ -75,6 +75,9 @@ func rejectArgs(t *testing.T, schema, args map[string]any) map[string]any {
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("expected TOOL_ARGS_INVALID, got %#v", reject)
 	}
+	if reject.Data["argument_schema_tool"] != "submit_verdict" {
+		t.Fatalf("schema diagnostic lost its validator identity: %#v", reject.Data)
+	}
 	return reject.Data
 }
 

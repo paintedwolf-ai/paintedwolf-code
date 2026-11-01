@@ -29,8 +29,8 @@ func TestFactsFromDataPublishesReasonFieldAndPath(t *testing.T) {
 	if got["paintedwolf.worker_leg"] != true {
 		t.Fatalf("worker_leg = %#v", got["paintedwolf.worker_leg"])
 	}
-	if _, present := got["paintedwolf.capability_request_fields"]; present {
-		t.Fatal("copy facts invented capabilities absent from the invocation")
+	if fields, _ := got["paintedwolf.capability_request_fields"].([]string); len(fields) != 0 || got["paintedwolf.capability_contract_known"] != false {
+		t.Fatal("copy facts invented a capability contract for an unknown invocation")
 	}
 }
 

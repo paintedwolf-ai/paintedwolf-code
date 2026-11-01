@@ -17,8 +17,7 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 	p := NewGuardPipeline(rs, l, NewCounterStore())
 	p.EnableAnchor(AnchorToolRejected)
 
-	// Each branch must carry the identifiers the caller needs to repair the
-	// call: the field, where it was written, and where it belongs.
+	// Repairs retain field identity and the schema of the receiving tool.
 	cases := []struct {
 		name      string
 		tool      string
@@ -55,14 +54,12 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 			wantFix:   "`capability_request`",
 		},
 		{
-			name: "did you mean typo",
+			name: "unknown spelling has no repair",
 			data: map[string]any{
 				"field":        "timeout",
 				"did_you_mean": "timeout_ms",
 			},
-			wantWhat:  "`timeout_ms`",
-			wantCause: "`timeout`",
-			wantFix:   "`timeout_ms`",
+			wantWhat: "`timeout`", wantCause: "`timeout`", wantFix: "",
 		},
 		{
 			name: "encoded JSON string",
@@ -110,7 +107,7 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 			},
 			wantWhat:  "operations, start_line",
 			wantCause: "mutual exclusivity",
-			wantFix:   "Correct the field type, required value, or structure",
+			wantFix:   "Supply only one of",
 		},
 		{
 			name: "replacement args json",
@@ -134,6 +131,7 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 			}
 			gc.ObservedRejectCode = "TOOL_ARGS_INVALID"
 			gc.Invocation.ArgValidationErrors = []string{"TOOL_ARGS_INVALID"}
+			tc.data["argument_schema_tool"] = gc.Invocation.Tool
 			gc.PutRejectData("TOOL_ARGS_INVALID", tc.data)
 
 			res, err := p.EvaluateBlock(context.Background(), AnchorToolRejected, gc)
@@ -157,7 +155,7 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 				t.Errorf("copy.cause = %q, want to contain %q", cause, tc.wantCause)
 			}
 			fix := copyObj["fix"]
-			if !strings.Contains(fix, tc.wantFix) {
+			if (tc.wantFix == "" && fix != "") || !strings.Contains(fix, tc.wantFix) {
 				t.Errorf("copy.fix = %q, want to contain %q", fix, tc.wantFix)
 			}
 		})

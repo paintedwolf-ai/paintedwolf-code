@@ -38,21 +38,21 @@ copy:
     else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{%
     if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif
     %}'
-  cause: '{% if paintedwolf.json_malformed %}{% if paintedwolf.json_open_paths %}The text ends with `{{ paintedwolf.json_open_paths }}` still open{% else %}{% if
-    paintedwolf.json_unterminated_string_at %}The string starting at byte {{ paintedwolf.json_unterminated_string_at }} is never closed{% else %}{% if paintedwolf.json_trailing_text_at
-    %}{% if paintedwolf.json_trailing_members %}`{{ paintedwolf.rejection_field }}` closes at byte {{ paintedwolf.json_trailing_text_at }}; the text continues with
-    `{{ paintedwolf.json_trailing_members }}`, which the schema declares under {% if paintedwolf.json_trailing_belongs_under %}`{{ paintedwolf.json_trailing_belongs_under
-    }}`{% else %}the top level{% endif %}{% else %}Text continues after the complete value, at byte {{ paintedwolf.json_trailing_text_at }}{% endif %}{% else %}Parsing
-    stops at byte {{ paintedwolf.json_unexpected_token_at }} on a token JSON does not allow there{% endif %}{% endif %}{% endif %}.{% if paintedwolf.misplaced_fields
-    %} As written, `{{ paintedwolf.misplaced_fields }}` sit inside {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif
-    %}; the schema declares them under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}.{% endif %}{% else %}{%
-    if paintedwolf.json_encoded %}The tool schema expects a structured JSON {{ paintedwolf.expected_type }}, but received a string literal containing escaped JSON.{%
-    if paintedwolf.misplaced_fields %} The schema also declares `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under
-    }}`{% else %}the top level{% endif %}, not {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}.{% endif %}{% else
-    %}{% if paintedwolf.misplaced_fields %}The schema declares `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under
-    }}`{% else %}the top level{% endif %} and does not accept them under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{%
-    endif %}.{% else %}{% if paintedwolf.conflict_keys %}The supplied arguments violate mutual exclusivity.{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field
-    %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}'
+  cause: '{% if paintedwolf.json_malformed %}{% if paintedwolf.json_open_paths %}The JSON value has unclosed containers{% else %}{% if paintedwolf.json_unterminated_string_at
+    %}The string starting at byte {{ paintedwolf.json_unterminated_string_at }} is never closed{% else %}{% if paintedwolf.json_trailing_text_at %}{% if paintedwolf.json_trailing_members
+    %}`{{ paintedwolf.rejection_field }}` closes at byte {{ paintedwolf.json_trailing_text_at }}; the text continues with `{{ paintedwolf.json_trailing_members }}`,
+    which the schema declares under {% if paintedwolf.json_trailing_belongs_under %}`{{ paintedwolf.json_trailing_belongs_under }}`{% else %}the top level{% endif
+    %}{% else %}Text continues after the complete value, at byte {{ paintedwolf.json_trailing_text_at }}{% endif %}{% else %}Parsing stops at byte {{ paintedwolf.json_unexpected_token_at
+    }} on a token JSON does not allow there{% endif %}{% endif %}{% endif %}.{% if paintedwolf.misplaced_fields %} As written, `{{ paintedwolf.misplaced_fields }}`
+    sit inside {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; the schema declares them under {% if paintedwolf.belongs_under
+    %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}.{% endif %}{% else %}{% if paintedwolf.json_encoded %}The tool schema expects a structured
+    JSON {{ paintedwolf.expected_type }}, but received a string literal containing escaped JSON.{% if paintedwolf.misplaced_fields %} The schema also declares `{{
+    paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}, not {% if paintedwolf.found_under
+    %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}.{% endif %}{% else %}{% if paintedwolf.misplaced_fields %}The schema declares `{{ paintedwolf.misplaced_fields
+    }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %} and does not accept them under {% if paintedwolf.found_under
+    %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}.{% else %}{% if paintedwolf.conflict_keys %}The supplied arguments violate mutual exclusivity.{%
+    else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason
+    }}{% endif %}{% endif %}{% endif %}{% endif %}'
   why: The published tool schema defines field names, types, required values, and structure. Intrinsic diagnostics identify the violated field, misplaced nesting,
     or conflicting parameters.
   fix: '{% if paintedwolf.argument_schema_matches_tool %}{% if paintedwolf.missing_required_arguments %}Required argument observations: {{ paintedwolf.missing_required_arguments
@@ -81,8 +81,8 @@ copy:
     resend `{{ paintedwolf.rejection_field }}` as a native {{ paintedwolf.expected_type }}.{% else %}Resend `{{ paintedwolf.rejection_field }}` as one complete native
     {{ paintedwolf.expected_type }}.{% endif %}{% endif %}{% endif %}{% else %}{% if paintedwolf.json_encoded %}Resend `{{ paintedwolf.rejection_field }}` as a native
     {{ paintedwolf.expected_type }}, not a string.{% else %}{% if paintedwolf.misplaced_fields %}Move `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under
-    %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %} and submit only the remaining operation.{% else %}{% endif %}{% endif %}{% endif %}{% endif
-    %}{% endif %}
+    %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %} and submit only the remaining operation.{% else %}{% if paintedwolf.conflict_keys %}Supply
+    only one of {{ paintedwolf.conflict_keys }}.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}
 
     {% endif %}'
   instead: ''
