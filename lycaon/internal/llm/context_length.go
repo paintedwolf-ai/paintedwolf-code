@@ -147,7 +147,7 @@ func (r *Registry) RequestBudget(ctx context.Context, providerID string, req mod
 		}
 	}
 	budget.MinimumOutput = max(budget.MinimumOutput, modelcall.MinimumCompletionOutput(req))
-	if limit := r.ContextLength(providerID, req.Model); limit > 0 && (budget.Window <= 0 || limit < budget.Window) {
+	if limit := r.ContextLength(providerID, req.Model); limit > 0 && (budget.Window <= 0 || limit < budget.Window) { //nolint:contextcheck // synchronous lookup
 		budget.Window = limit
 	}
 	return budget
