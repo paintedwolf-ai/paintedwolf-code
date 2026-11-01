@@ -37,6 +37,12 @@ func TestMeasurementValidatesCountTokensAndOversizeBound(t *testing.T) {
 	if err := valid.validate(); err != nil {
 		t.Fatalf("validate complete measurement: %v", err)
 	}
+	for _, count := range []int{8193, DefaultContextWindowTokens} {
+		large := measuredResult{InputTokens: count, renderedResult: renderedResult{PromptTokens: make([]uint32, count), CheckpointTokens: count - 1}}
+		if err := large.validate(); err != nil {
+			t.Fatalf("validate full-prefix measurement: %v", err)
+		}
+	}
 	oversized := measuredResult{InputTokens: 70000}
 	if err := oversized.validate(); err != nil {
 		t.Fatalf("validate oversized count: %v", err)
