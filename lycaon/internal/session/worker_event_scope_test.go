@@ -400,30 +400,7 @@ func TestStopAndDeleteLifecycleForBackgroundAndAwaitedCommands(t *testing.T) {
 	})
 	testutil.FailErr(t, "start background server", err)
 
-	var listenURL string
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		raw, err := reg.Output.ReadRawOutput(parent.ID, serverHandle, 0)
-		testutil.FailErr(t, "read server startup output", err)
-		var b strings.Builder
-		for _, ch := range raw.Output.Chunks {
-			b.WriteString(ch.Text)
-		}
-		sc := bufio.NewScanner(strings.NewReader(b.String()))
-		for sc.Scan() {
-			if after, ok := strings.CutPrefix(sc.Text(), "LISTENING="); ok {
-				listenURL = strings.TrimSpace(after)
-				break
-			}
-		}
-		if listenURL != "" {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if listenURL == "" {
-		t.Fatal("background HTTP server did not report listening address")
-	}
+	listenURL := awaitFixtureHTTPServer(t, reg, parent.ID, serverHandle)
 
 	// Simulate a subsequent turn with an unpromoted awaited command, then abort the turn.
 	testutil.FailErr(t, "mark parent busy", st.SetSessionStatus(ctx, parent.ID, api.SessionStatusBusy))
@@ -532,4 +509,34 @@ func TestStopAndDeleteLifecycleForBackgroundAndAwaitedCommands(t *testing.T) {
 		t.Fatalf("retired session process published a new completion: %+v", completion)
 	default:
 	}
+}
+
+func awaitFixtureHTTPServer(t *testing.T, reg *bgprocess.Registry, sessionID, handle string) string {
+	t.Helper()
+	var listenURL string
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		raw, err := reg.Output.ReadRawOutput(sessionID, handle, 0)
+		testutil.FailErr(t, "read server startup output", err)
+		var b strings.Builder
+		for _, ch := range raw.Output.Chunks {
+			b.WriteString(ch.Text)
+		}
+		sc := bufio.NewScanner(strings.NewReader(b.String()))
+		for sc.Scan() {
+			if after, ok := strings.CutPrefix(sc.Text(), "LISTENING="); ok {
+				listenURL = strings.TrimSpace(after)
+				break
+			}
+		}
+		if listenURL != "" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if listenURL == "" {
+		t.Fatal("background HTTP server did not report listening address")
+	}
+
+	return listenURL
 }

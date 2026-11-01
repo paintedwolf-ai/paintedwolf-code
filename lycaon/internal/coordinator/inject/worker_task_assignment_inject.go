@@ -101,19 +101,19 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 		verdicts[i].Fields = fields
 	}
 	data := WorkerTaskAssignmentData{
-		AgentType:     strings.TrimSpace(in.AgentType),
-		WorkerJobID:   strings.TrimSpace(in.WorkerJobID),
-		Goal:          strings.TrimSpace(in.Charter.Goal),
-		SharedContext: in.Charter.SharedContext,
-		KnownFacts:    charter("known facts", in.Charter.KnownFacts),
-		Constraints:   charter("constraints", in.Charter.Constraints),
-		DoneWhen:      charter("done-when criteria", in.Charter.DoneWhen),
+		AgentType:      strings.TrimSpace(in.AgentType),
+		WorkerJobID:    strings.TrimSpace(in.WorkerJobID),
+		Goal:           strings.TrimSpace(in.Charter.Goal),
+		SharedContext:  in.Charter.SharedContext,
+		KnownFacts:     charter("known facts", in.Charter.KnownFacts),
+		Constraints:    charter("constraints", in.Charter.Constraints),
+		DoneWhen:       charter("done-when criteria", in.Charter.DoneWhen),
 		ContextRefs:    charter("context refs", in.Charter.ContextRefs),
 		ScopeMode:      string(norm.Mode),
 		ScopePaths:     paths,
 		LinkedCheckout: norm.Mode == api.TaskScopeModeWrite && gitrepo.ScopeIncludesLinkedCheckout(in.ProjectDir, norm.Paths),
 		MaxToolLoops:   in.MaxToolLoops,
-		Attachments:   attachments,
+		Attachments:    attachments,
 
 		RecordedVerdicts: verdicts,
 		ScanInventory:    in.ScanInventory,

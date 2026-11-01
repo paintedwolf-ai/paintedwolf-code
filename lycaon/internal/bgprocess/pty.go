@@ -104,7 +104,6 @@ func (r *Terminal) startPTY(
 	}
 
 	handle := uuid.NewString()
-	// The terminal keeps request values without request cancellation.
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	size := winsize
@@ -210,11 +209,7 @@ func (r *Terminal) startPTY(
 	}
 	r.jobs.mu.Lock()
 	proc.pty = session
-	if reason, admitted := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, projectDir); !admitted && !proc.stopped {
-		proc.stopped = true
-		proc.reason = reason
-	}
-	stopped := proc.stopped
+	stopped := r.jobs.revalidateStartedProcessLocked(proc, projectDir)
 	startEvent, publish := r.jobs.indexProjectProcessLocked(proc)
 	r.jobs.mu.Unlock()
 	if stopped {

@@ -36,13 +36,13 @@ import (
 )
 
 type projectBackgroundTestEnv struct {
-	srv       *Server
-	bgReg     *bgprocess.Registry
-	hub       *events.MemoryHub
-	store     session.Store
-	projects  project.Registry
-	sessions  *session.Host
-	setPorts  func(handle string, addrs ...netip.AddrPort)
+	srv      *Server
+	bgReg    *bgprocess.Registry
+	hub      *events.MemoryHub
+	store    session.Store
+	projects project.Registry
+	sessions *session.Host
+	setPorts func(handle string, addrs ...netip.AddrPort)
 }
 
 func newProjectBackgroundTestEnv(t *testing.T) *projectBackgroundTestEnv {
@@ -128,6 +128,21 @@ func newProjectBackgroundTestEnv(t *testing.T) *projectBackgroundTestEnv {
 			portMu.Unlock()
 		},
 	}
+}
+
+func (env *projectBackgroundTestEnv) listBackground(t *testing.T, projectID string) wire.ProjectBackgroundProcessListResponse {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	env.srv.ServeHTTP(recorder, newAuthedRequest(http.MethodGet, "/v1/projects/"+projectID+"/background", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("background list status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response wire.ProjectBackgroundProcessListResponse
+	testutil.FailErr(t, "decode background list", json.Unmarshal(recorder.Body.Bytes(), &response))
+	if response.Revision <= 0 {
+		t.Fatalf("expected positive background revision, got %d", response.Revision)
+	}
+	return response
 }
 
 func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
@@ -254,17 +269,7 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 	})
 	testutil.FailErr(t, "start hOther", err)
 
-	// Call GET /v1/projects/{proj1.ID}/background
-	listRec := httptest.NewRecorder()
-	env.srv.ServeHTTP(listRec, newAuthedRequest(http.MethodGet, "/v1/projects/"+proj1.ID+"/background", nil))
-	if listRec.Code != http.StatusOK {
-		t.Fatalf("list status = %d body=%s", listRec.Code, listRec.Body.String())
-	}
-	var listResp wire.ProjectBackgroundProcessListResponse
-	testutil.FailErr(t, "decode list response", json.Unmarshal(listRec.Body.Bytes(), &listResp))
-	if listResp.Revision <= 0 {
-		t.Fatalf("expected positive revision, got %d", listResp.Revision)
-	}
+	listResp := env.listBackground(t, proj1.ID)
 	if len(listResp.Processes) != 3 {
 		t.Fatalf("expected 3 processes (h1, h2, hEnded), got %d: %+v", len(listResp.Processes), listResp.Processes)
 	}
@@ -323,13 +328,7 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 		s.ArchivedAt = &now
 	}))
 
-	listRec2 := httptest.NewRecorder()
-	env.srv.ServeHTTP(listRec2, newAuthedRequest(http.MethodGet, "/v1/projects/"+proj1.ID+"/background", nil))
-	if listRec2.Code != http.StatusOK {
-		t.Fatalf("list2 status = %d", listRec2.Code)
-	}
-	var listResp2 wire.ProjectBackgroundProcessListResponse
-	testutil.FailErr(t, "decode list2 response", json.Unmarshal(listRec2.Body.Bytes(), &listResp2))
+	listResp2 := env.listBackground(t, proj1.ID)
 	for _, p := range listResp2.Processes {
 		if p.ProcessID == h1 {
 			if p.SessionTitle != "Renamed Live Title" || !p.SessionArchived {
@@ -624,7 +623,7 @@ func TestProjectBackgroundEventsAndReconnectReplay(t *testing.T) {
 				continue
 			}
 			var envEvent struct {
-				Topic   wire.EventTopic            `json:"topic"`
+				Topic   wire.EventTopic             `json:"topic"`
 				Payload wire.ProjectBackgroundEvent `json:"payload"`
 			}
 			testutil.FailErr(t, "decode SSE envelope", json.Unmarshal([]byte(strings.TrimSpace(data)), &envEvent))

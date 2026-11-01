@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -205,5 +206,46 @@ func TestProgramSocketDatagramsReachTheirRetainedService(t *testing.T) {
 	testutil.FailErr(t, "observe all service datagrams", <-finished)
 	if result := decodeOutcome(t, out); result.Status != 0 {
 		t.Fatalf("bound datagram launch failed: %s", out)
+	}
+}
+
+func TestProgramSocketEndpointSupportsAnEmptyRealSSHAgent(t *testing.T) {
+	root, err := os.MkdirTemp("/tmp", "pw-program-agent-") //nolint:usetesting // Unix socket addresses have a kernel byte limit.
+	testutil.FailErr(t, "create isolated SSH agent fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), "state"))
+	path := filepath.Join(root, "agent")
+	agent := exec.CommandContext(t.Context(), "/usr/bin/ssh-agent", "-D", "-a", path)
+	agent.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + root, "LC_ALL=C"}
+	testutil.FailErr(t, "start owned empty SSH agent", agent.Start())
+	t.Cleanup(func() { _ = agent.Process.Kill(); _ = agent.Wait() })
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSocket != 0 {
+			break
+		}
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			t.Fatal("owned SSH agent did not create its fixture socket")
+		case <-t.Context().Done():
+			t.Fatal("SSH agent fixture canceled before readiness")
+		}
+	}
+	f := newProgramFixture(t)
+	runtime := approvalstate.NewSocketCapabilityRuntime()
+	t.Cleanup(runtime.Close)
+	f.Runtime.Executor.Capabilities.SetSocketCapabilityRuntime(runtime)
+	f.Runtime.Executor.Capabilities.SetApprovalsDisabled(func(string) bool { return true })
+	reference := "{{paintedwolf-socket:" + url.PathEscape(path) + "}}"
+	program := "LC_ALL=C SSH_AUTH_SOCK=" + strconv.Quote(reference) + " external -- /usr/bin/ssh-add -l"
+	out, err := f.CallArgs(t, t.Context(), socketProgramArgs(program, path))
+	testutil.FailErr(t, "list owned empty SSH agent through prepared launch", err)
+	result := decodeOutcome(t, out)
+	if result.Status != 1 || !strings.Contains(result.Stdout, "The agent has no identities.") {
+		t.Fatalf("explicit SSH_AUTH_SOCK did not preserve agent access: %s", out)
 	}
 }

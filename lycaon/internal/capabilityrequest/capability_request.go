@@ -109,7 +109,7 @@ type CapabilityRequest struct {
 	CredentialStore bool
 	HostExecution   bool
 	HostResources   []string
-	SocketPaths    []string
+	SocketPaths     []string
 	// DirectIP preserves an explicit request, including an empty object.
 	DirectIP *DirectIPRequest
 	// LocalListen is non-nil when the model asked for listener authority (including {}).
