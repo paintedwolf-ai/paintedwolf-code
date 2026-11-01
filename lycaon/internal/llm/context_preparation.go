@@ -4,10 +4,12 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
@@ -62,7 +64,10 @@ func (r *Registry) PrepareContext(ctx context.Context, selection *ModelSelection
 		slog.DebugContext(ctx, "context preparation screening skipped", "provider", id, "error", err)
 		return modelcall.ContextPreparation{}, err
 	}
-	return preparer.PrepareContext(ctx, req)
+	started := time.Now()
+	result, err := preparer.PrepareContext(ctx, req)
+	observability.LogLLMPreparation(id, req.Model, req.Debug.SessionID, req.Messages, captureTools(req.Tools), time.Since(started), errString(err))
+	return result, err
 }
 
 // ScreenPreparation skips candidates needing a protected-value decision.
