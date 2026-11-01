@@ -48,6 +48,7 @@ func TestDiscoveryKeepSetCoversKnownStrategies(t *testing.T) {
 	want := []providerprofile.DiscoveryStrategy{
 		providerprofile.DiscoveryConfigured,
 		providerprofile.DiscoveryNone,
+		providerprofile.DiscoveryNativeGeneration,
 		providerprofile.DiscoveryOllama,
 		providerprofile.DiscoveryLMStudio,
 		providerprofile.DiscoveryOMLX,

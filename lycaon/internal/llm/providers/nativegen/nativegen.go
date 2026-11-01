@@ -97,7 +97,7 @@ func (p *Provider) Profile() providerprofile.Profile {
 	profile := providerprofile.LocalInference(providerprofile.Profile{
 		ToolCalls:     providerprofile.ToolCallsNative,
 		Streaming:     providerprofile.StreamNative,
-		Discovery:     providerprofile.DiscoveryConfigured,
+		Discovery:     providerprofile.DiscoveryNativeGeneration,
 		ReasoningWire: providerprofile.ReasoningWireNone,
 	})
 	return profile

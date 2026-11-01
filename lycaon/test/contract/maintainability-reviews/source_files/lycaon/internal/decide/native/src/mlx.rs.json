@@ -4,9 +4,9 @@
   "kind": "algorithm",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the 373-line ModernBERT graph and decision-head evaluation together. Embedded fixtures enforce half-precision activation dtypes and CPU/MLX output parity on shared checkpoints, masks, and heads. Typed activation constants prevent unintentional float32 graph promotion. The 64 MiB free-buffer cache limits idle retention; host admission separately bounds batches and both model processes. Checkpoint decoding, tokenization, batching, and protocol handling remain separate modules.",
-  "reviewed_commit": "0a4f3924641a89f28290e19ca5a4fd73cc5bd8ef",
-  "ceiling": 373,
+  "reason": "Retain the 407-line ModernBERT graph and decision-head evaluation together. Embedded fixtures enforce half-precision activation dtypes and CPU/MLX output parity on shared checkpoints, masks, and heads. Typed activation constants prevent unintentional float32 graph promotion. The 64 MiB free-buffer cache limits idle retention; host admission separately bounds batches and both model processes. Checkpoint decoding, tokenization, batching, and protocol handling remain separate modules.",
+  "reviewed_commit": "34044ff4470ce9cdc100f087ca154fea2e9a9c6a",
+  "ceiling": 407,
   "boundaries": {
     "lycaon/internal/decide/native/src/mlx.rs": "a7e3d5974158b4aa60db2dd3bfae46338a03d71e935ad3c29c3ac2141fc13fd3"
   }
