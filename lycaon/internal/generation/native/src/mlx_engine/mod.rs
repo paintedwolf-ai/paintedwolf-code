@@ -1,4 +1,4 @@
-use mlx_rs::{Array, fast, ops, ops::indexing::*};
+use mlx_rs::{fast, ops, ops::indexing::*, Array};
 use std::path::Path;
 
 mod activation;
@@ -17,6 +17,7 @@ use weights::{Linear, Weights};
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 pub enum Logits {
+    None,
     All,
     Last,
 }
@@ -231,7 +232,7 @@ impl Model {
         })
     }
 
-    pub fn forward(&self, ids: &[i32], cache: &mut Cache, output: Logits) -> Result<Array> {
+    pub fn forward(&self, ids: &[i32], cache: &mut Cache, output: Logits) -> Result<Option<Array>> {
         if ids.is_empty()
             || ids.len() > 256
             || ids.iter().any(|id| !(0..262144).contains(id))
@@ -259,6 +260,9 @@ impl Model {
         });
         let last_mask = mask.as_ref().map(|mask| mask.index((count - 1..count, ..)));
         for (i, layer) in self.layers.iter().enumerate() {
+            if i == 24 && matches!(output, Logits::None) {
+                break;
+            }
             let last_only = i >= 24 && matches!(output, Logits::Last);
             if i == 24 && last_only {
                 // Shared-KV layers need only the query whose logits will be sampled.
@@ -282,9 +286,12 @@ impl Model {
             h = layer.forward(&h, &layer_ple, cache, &step, &self.activation)?;
         }
         cache.offset += count;
+        if matches!(output, Logits::None) {
+            return Ok(None);
+        }
         let logits = self.embedding.forward(&norm(&h, &self.final_norm)?)?;
         let cap = Array::from_f32(30.0).as_dtype(logits.dtype())?;
-        Ok(ops::tanh(logits.divide(&cap)?)?.multiply(&cap)?)
+        Ok(Some(ops::tanh(logits.divide(&cap)?)?.multiply(&cap)?))
     }
 }
 
