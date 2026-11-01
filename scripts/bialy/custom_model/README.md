@@ -173,6 +173,39 @@ or a binary filename alone does not prove build provenance.
 These parity checks do not establish production behavior. Qualify the actual
 quantized artifact on held-out tasks and target hardware before promotion.
 
+## Signed application bundles
+
+The application consumes an authenticated bundle per backend: `mlx` or `vulkan`.
+Its unsigned manifest contains `model`, `revision`, `device`, one primary
+`artifact`, and supplementary `files`. Each payload entry has an explicit flat
+`name`, lowercase SHA-256 `digest`, `format`, and exact `bytes`. Include the
+weights, tokenizer, template, generation settings, architecture/quantization
+configuration and conversion provenance that the runtime reads. The model
+identity is `gemma4-e4b-paintedwolf`; revision names identify immutable exports.
+Keep the export manifest separate from the bundle's signed `manifest.json`.
+
+The `model-bundle` release tool signs an export using an explicitly supplied
+PEM PKCS#8 Ed25519 key. The key ID and public key must already be present in the
+release authority registry. It audits every declared payload against the export
+manifest before emitting the signed manifest to stdout. It does not generate
+keys, change payloads, install models or publish a release. Keep private keys
+outside model and application resources.
+
+```sh
+model-bundle sign -bundle /release/model -manifest /release/export.json \
+  -authority /release/release-keys.json -key-id RELEASE_KEY_ID \
+  -private-key /private/release-key.pem > /release/model/manifest.json
+model-bundle -bundle /release/model -authority /release/release-keys.json \
+  -model gemma4-e4b-paintedwolf -device mlx
+```
+
+The authority registry is `{ "format": 1, "keys": [{ "id": "RELEASE_KEY_ID",
+"public_key": "BASE64_RAW_ED25519_PUBLIC_KEY" }] }`. Package that registry as a
+trusted application resource, independently of downloaded model bytes. Packaging
+must reverify the copied payloads with that authority. A signature establishes
+artifact identity and release authority; the trained model and precision recipe
+still require separate behavioral and hardware qualification.
+
 ## Offline contracts
 
 ```sh
