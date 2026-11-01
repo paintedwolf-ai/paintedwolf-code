@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/tools/native/literal",
+  "kind": "module",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain the 29 source members adapting literal content and metadata utilities to their shared path, revision and stream ports. Exact revision membership is private invocation bookkeeping; small fixed-capacity pages grow proportionally and release with that invocation. Utility evidence, checksum-manifest deduplication and wide-membership contracts support this member set.",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
+  "ceiling": 29,
+  "boundaries": {
+    "lycaon/internal/tools/native/literal/evidence_test.go": "a15999ada9968f0a1bf99686cbec698a28b4888b55ccc5e6a0bf77152584cb03",
+    "lycaon/internal/tools/native/literal/manifest_stream_test.go": "49aa5699cab4f555b3d2ec04ce23a98dcbdb490d282f2410f2f2a1b239a2fcb9",
+    "lycaon/internal/tools/native/literal/revision_index_scale_test.go": "4c20dfb7834cc795447e5e94ed07f27648ce86da4d6e3d98e1ab915a10f371f5"
+  },
+  "reviewed_shape": "9fc335c2df0a32c1a6c890bdcf8fbc4ae506e4a3c8d22b4bca66161ac44f4ab5"
+}

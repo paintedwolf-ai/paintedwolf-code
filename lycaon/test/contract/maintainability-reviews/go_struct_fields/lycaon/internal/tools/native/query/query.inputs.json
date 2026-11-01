@@ -5,7 +5,7 @@
   "workstream": "large-query-inputs",
   "disposition": "retain",
   "reason": "Retain the shared input cursor at 393 receiver lines and 24 fields. Top-level iteration and input builtins advance the same reached operand, source pin, decoder and location. The JSON cursor shares lexical rules between event and value decoding; raw records and YAML documents keep their grammar state. Slurp transfers leases through evaluation. Value ceilings count encoded bytes while the ledger admits container storage independently. Differential, location, failure and aggregate-bound contracts support this shape. Decoder reservations retain a typed diagnostic phase on the existing ledger.",
-  "reviewed_commit": "0c75a8e9da48ca7732b11a3d875a0a10d4208506",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
   "ceiling": 24,
   "boundaries": {
     "lycaon/internal/tools/native/query/event_scale_test.go": "a3dbdecd32f56ea5e521d73afb05b771af72f28563d93c232a9d6ce912ed5187",
