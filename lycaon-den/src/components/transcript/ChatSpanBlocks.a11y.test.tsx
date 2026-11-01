@@ -1,8 +1,12 @@
 import { createSignal } from "solid-js";
 import { render } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { Message } from "../../api/types.ts";
+import {
+  clearTranscriptAnnouncementMemory,
+  noteTranscriptAnnouncementBaseline,
+} from "../../chat/transcript/presentation/transcript-live-announcement.ts";
 import type { ChatSpanBlock } from "../../chat/workflow/workflow-spans.ts";
 import type { RawTranscriptItem } from "../../chat/transcript/projection/transcript-item-model.ts";
 import { ChatSpanBlocks } from "./transcript-viewport-test-harness.tsx";
@@ -54,6 +58,10 @@ function blocks(messages: Message[]): ChatSpanBlock[] {
 }
 
 describe("ChatSpanBlocks live log", () => {
+  afterEach(() => {
+    clearTranscriptAnnouncementMemory();
+  });
+
   it("keeps virtual windows non-live and announces a completed turn once", async () => {
     const [messages, setMessages] = createSignal<Message[]>([user("u1", "Hi")]);
     const { getByTestId } = render(() => (
@@ -109,5 +117,40 @@ describe("ChatSpanBlocks live log", () => {
     expect(log.getAttribute("aria-live")).toBe("off");
     setActive(true);
     expect(log.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("keeps the live region silent when a restored session reconciles an existing assistant reply", async () => {
+    const initialHistory = [user("u1", "Prompt before reload")];
+    noteTranscriptAnnouncementBaseline("s1", initialHistory);
+    const [messages, setMessages] = createSignal<Message[]>(initialHistory);
+    const { getByTestId } = render(() => (
+      <ChatSpanBlocks
+        blocks={blocks(messages())}
+        messages={messages()}
+        sessionId="s1"
+        workers={[]}
+        visibleTurnActive={false}
+      />
+    ));
+
+    expect(getByTestId("transcript-live-announcement").textContent).toBe("");
+
+    const reconciled = [
+      user("u1", "Prompt before reload"),
+      assistant("a1", "Restored reply", "complete"),
+    ];
+    noteTranscriptAnnouncementBaseline("s1", reconciled);
+    setMessages(reconciled);
+    await Promise.resolve();
+    expect(getByTestId("transcript-live-announcement").textContent).toBe("");
+
+    setMessages([
+      ...reconciled,
+      assistant("a2", "New live reply", "complete"),
+    ]);
+    await Promise.resolve();
+    expect(getByTestId("transcript-live-announcement").textContent).toBe(
+      "Assistant: New live reply",
+    );
   });
 });
