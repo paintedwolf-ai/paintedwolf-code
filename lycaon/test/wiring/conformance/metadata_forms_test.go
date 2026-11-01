@@ -40,7 +40,9 @@ func verifyTreeForms(t *testing.T, obs runtimeObservation) {
 	testutil.FailErr(t, "decode tree", json.Unmarshal([]byte(obs.Outcome.Stdout), &roots))
 	if len(roots) != 1 || roots[0].Type != "directory" || roots[0].Name != "sub" || !slices.ContainsFunc(roots[0].Contents, func(entry struct {
 		Name string `json:"name"`
-	}) bool { return entry.Name == "a.txt" }) {
+	}) bool {
+		return entry.Name == "a.txt"
+	}) {
 		t.Fatalf("tree = %s", obs.Outcome.Stdout)
 	}
 }
