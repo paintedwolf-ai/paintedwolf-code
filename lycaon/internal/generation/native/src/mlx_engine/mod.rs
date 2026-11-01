@@ -238,9 +238,7 @@ impl Model {
         }
         cache.offset += count;
         let logits = self.embedding.forward(&norm(&h, &self.final_norm)?)?;
-        Ok(logits
-            .divide(Array::from_f32(30.0))?
-            .tanh()?
+        Ok(ops::tanh(logits.divide(Array::from_f32(30.0))?)?
             .multiply(Array::from_f32(30.0))?)
     }
 }

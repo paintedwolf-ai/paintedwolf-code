@@ -52,7 +52,8 @@ def build_identity(backend, directory, binary):
         else:
             identity["toolchain"] = {name: subprocess.check_output([name, "--version"], text=True).strip()
                                      for name in ("rustc", "cargo")}
-            identity["sdk"] = subprocess.check_output(["xcrun", "--show-sdk-version"], text=True).strip()
+            identity["sdk"] = {name: subprocess.check_output(["xcrun", "--sdk", "macosx", flag], text=True).strip()
+                               for name, flag in (("version", "--show-sdk-version"), ("path", "--show-sdk-path"))}
     return identity
 
 

@@ -173,7 +173,8 @@ def test(args):
         return
     if args.backend == "reference-rust":
         source, output = paths(args.backend)
-        run(["cargo", "test", "--locked", "--features", "mlx", "--manifest-path", source / "Cargo.toml"],
+        run(["cargo", "test", "--locked", "--release", "--features", "mlx",
+             "--jobs", os.environ.get("PW_TEST_WORKERS", "1"), "--manifest-path", source / "Cargo.toml"],
             env=rust_environment(output))
         return
     source, output = paths("native")
