@@ -680,6 +680,13 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `upgrade:corpus:prepare` / `upgrade:corpus:boot` | `prepare` writes an immutable fixture under `lycaon/testdata/upgrade-corpus/<VERSION>/` that you **review and commit with the candidate**; the release workflow uploads that reviewed tree rather than minting evidence after the tag. `boot` proves the committed fixtures locally |
 | `openapi:diff` | Report wire differences against the committed baseline, or `-- --baseline-ref <commit>` for a pinned stable release. Release CI retains the report automatically; permitted bundle differences succeed and tool failures block release |
 
+The `budgets` artifact directory also contains `reports/native-requests/*.json`.
+These complete static request fixtures use the existing rendered coordinator
+cases, coordinator injection blocks and all tools available on each surface.
+They contain no captured conversation history and are not a normal turn's
+selected tool set. Use them for explicitly authorized native-runner prompt
+measurements; record native token counts separately from budget estimates.
+
 ### Protected Linux desktop component
 
 `./task test:confine:linux -- launch` tests the real launcher with its reporting
