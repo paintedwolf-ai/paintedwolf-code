@@ -23,7 +23,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 
 	start := func() wire.WorkflowRun {
 		t.Helper()
-		req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", workflowStartBody(t, srv, sess.ID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.0", "request": "Plan the fixture change"}))
+		req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", workflowStartBody(t, srv, sess.ID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.1", "request": "Plan the fixture change"}))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)

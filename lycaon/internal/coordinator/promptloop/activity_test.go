@@ -102,9 +102,9 @@ func TestCommandActivityEdgesBypassCounterCoalescing(t *testing.T) {
 	if !commandActivityEdge(initial, next) {
 		t.Fatal("terminal activity was delayed")
 	}
-	next.CommandProgram.ActivitiesOmitted = 3
+	next.CommandProgram.Activities[0].FailedCount = 3
 	if !commandActivityEdge(initial, next) {
-		t.Fatal("first overflow indication was delayed")
+		t.Fatal("supporting failure was delayed")
 	}
 	if commandActivityEdge(nil, nil) {
 		t.Fatal("missing progress created an edge")

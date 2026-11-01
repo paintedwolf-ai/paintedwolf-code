@@ -2,13 +2,16 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/toolcontract",
   "kind": "module",
-  "workstream": "approval-authority-lifecycle",
+  "workstream": "large-command-review",
   "disposition": "retain",
-  "reason": "The tool contract package defines shared operation values, catalog facts and admitted native representations. Native encoding, restore grammar and storage bounds are one codec boundary used by operation review and authority persistence. Keep their domain checks and resource admission together; they introduce no permission owner. Freeze this reviewed member set.",
-  "reviewed_commit": "1493abb5c9439ab1a69df28b974f2ca011b18475",
-  "ceiling": 31,
+  "reason": "Retain the 32 source members defining shared operation values, catalog facts, the program ledger and admitted representations. Lossless native values and model JSON share one bounded canonical writer; direct restore grammar belongs beside that representation. These codecs carry no permission authority. Exact durable bytes, fault cleanup and wide-value contracts support this member set. Both canonical grammars require cleanup under refusal at every allocation boundary.",
+  "reviewed_commit": "3168a8b56581cde85b59910c8ad834587cd211ab",
+  "ceiling": 32,
   "boundaries": {
-    "lycaon/internal/toolcontract/reviewed_inputs_test.go": "64b1ddc723117d9ae3ec74570b1dcf71ce04286de7f1b76973a6236c8f60ec46"
+    "lycaon/internal/toolcontract/reviewed_inputs_test.go": "64b1ddc723117d9ae3ec74570b1dcf71ce04286de7f1b76973a6236c8f60ec46",
+    "lycaon/internal/toolcontract/native_value_fault_test.go": "b4c9cdf80390e1f2a6784575f97b87d59b71c24817cb0694dabe33e2243e0140",
+    "lycaon/internal/toolcontract/native_value_scale_test.go": "275f843d419c539ceeefa355e6a28e43efe11135932014c4dd209b1a050d7d2e",
+    "lycaon/internal/toolcontract/model_json_test.go": "2184309a5ac34e68484e3a72edb65c34fe0d8f69711486f2566ce99408288a33"
   },
-  "reviewed_shape": "d6d2874a038cabf66a8dfac97aceb5bf534a59f3f3466bd57ffe1cd1ac4a859c"
+  "reviewed_shape": "ed962446f5cf0496e7ef5de34e2ef7dfe996c91e7df14d374d1bbe00d758edd0"
 }

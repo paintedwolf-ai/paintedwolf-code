@@ -41,6 +41,7 @@ type invocation struct {
 	releases         []func()
 	pins             []toolcontract.ExecutionRevision
 	flushedPins      int
+	pinReleases      []func()
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -164,40 +165,6 @@ func patternRejection(err error) error {
 		}})
 	}
 	return err
-}
-
-const searchPinBatchSize = 1024
-
-// recordPin retains every capture of this execution before its bytes are used.
-func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error {
-	execution := inv.request.Invocation.Identity.ExecutionID
-	if inv.owners.Pins == nil || execution == "" {
-		return fmt.Errorf("search reads require a program execution and pin recorder")
-	}
-	if err := revision.Validate(); err != nil {
-		return err
-	}
-	inv.pins = append(inv.pins, revision)
-	if len(inv.pins)%searchPinBatchSize == 0 || len(inv.pins)-inv.flushedPins >= searchPinBatchSize {
-		return inv.flushPins()
-	}
-	return nil
-}
-
-func (inv *invocation) flushPins() error {
-	if len(inv.pins) <= inv.flushedPins {
-		return nil
-	}
-	execution := inv.request.Invocation.Identity.ExecutionID
-	if inv.owners.Pins == nil || execution == "" {
-		return fmt.Errorf("search reads require a program execution and pin recorder")
-	}
-	first := inv.flushedPins
-	if err := inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, first, inv.pins[first:]); err != nil {
-		return err
-	}
-	inv.flushedPins = len(inv.pins)
-	return nil
 }
 
 // capture pins one file operand's exact bytes before any are searched.

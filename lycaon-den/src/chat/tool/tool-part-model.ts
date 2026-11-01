@@ -214,6 +214,11 @@ export function toolPartDisplayStatus(
   sessionId?: string,
 ): ToolPartStatus {
   if (part.status === "error") return part.status;
+  const job = part.commandActivity?.fact.job_handle;
+  if (job && sessionId) {
+    const snapshot = getBackgroundProcessSnapshot(sessionId, job);
+    if (snapshot) return snapshot.running ? "running" : (snapshot.exitCode ?? 0) !== 0 ? "error" : "completed";
+  }
   const live = liveToolProcess(part);
   if (!live) return part.status;
   const sid = sessionId?.trim();
@@ -386,13 +391,18 @@ export function toolSummaryFields(
 
 export function toolCompletionLabel(part: ToolPartView, sessionId?: string): string | undefined {
   if (part.commandActivity) {
+    const job = part.commandActivity.fact.job_handle;
+    const snapshot = job && sessionId ? getBackgroundProcessSnapshot(sessionId, job) : undefined;
+    if (snapshot?.running) return "Running";
+    if (snapshot?.exitCode !== undefined) return `Exited ${snapshot.exitCode}`;
     if (part.process && part.status !== "error") {
       const process = sessionId ? getBackgroundProcessSnapshot(sessionId, part.process.handle) : undefined;
       if (toolPartDisplayStatus(part, sessionId) === "running") return "Running";
       if (process?.exitCode !== undefined) return `Exited ${process.exitCode}`;
       return "Completed";
     }
-    return part.commandActivity.fact.outcome;
+    const fact = part.commandActivity.fact;
+    return `${fact.outcome}${(fact.repetitions ?? 0) > 1 ? ` · ${fact.repetitions!.toLocaleString()} runs` : ""}`;
   }
   const completion = part.completion;
   const operation = completion?.operation.trim().replaceAll("_", " ");

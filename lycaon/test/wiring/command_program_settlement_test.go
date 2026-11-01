@@ -6,15 +6,29 @@ import (
 	"testing"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func settledCommandProgramOutcome(t *testing.T, s *commandProgramSession) (command.ProgramOutcome, bool) {
 	t.Helper()
-	result := s.result(t)
-	_, body, _ := strings.Cut(result, "{")
-	body = "{" + body
+	messages, err := s.h.Store.GetMessages(t.Context(), s.session)
+	testutil.FailErr(t, "read returned program", err)
+	var result string
+	for _, raw := range messages {
+		msg := messageview.RedactMessage(raw)
+		if msg.Role == wire.MessageRoleTool && msg.ToolResult != nil && msg.ToolResult.ToolCallID == "program-1" {
+			result = msg.ToolResult.Content
+			break
+		}
+	}
+	_, body, _, ok := hostmarker.SplitToolJSONBody(result)
+	if !ok {
+		t.Fatalf("returned program has no JSON body: %q", result)
+	}
 	var outcome command.ProgramOutcome
 	testutil.FailErr(t, "decode returned program", json.NewDecoder(strings.NewReader(body)).Decode(&outcome))
 	wasParked := outcome.State == "parked"

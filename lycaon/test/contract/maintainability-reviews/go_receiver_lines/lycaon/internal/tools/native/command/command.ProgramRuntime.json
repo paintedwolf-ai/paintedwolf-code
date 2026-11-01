@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/tools/native/command/command.ProgramRuntime",
+  "kind": "runtime_service",
+  "workstream": "large-command-review",
+  "disposition": "retain",
+  "reason": "Retain the command runtime composition and execution lifetime at 1044 receiver lines. It supplies the common program ledger and catalog-derived capture bounds while existing dispatch, review and native owners retain operation authority. The bounded change aligns projection input and node ceilings with admitted program inputs; a second runtime controller would obscure that shared lifetime.",
+  "reviewed_commit": "99d8b089601dbd10107851c6e0900ad7bbcd3dcd",
+  "ceiling": 1044,
+  "boundaries": {
+    "lycaon/internal/toolhost/command_review_scale_test.go": "76cc3d3ca9a003ea84416039669bb1c96c0f8d4c178818c2db0181c40a684f92",
+    "lycaon/internal/captureprojection/value_scale_test.go": "2823644af528cbb95abda234c271557bd327d7e7abbbe41da8fed30e520d78fa"
+  },
+  "reviewed_shape": "d71ee76b96c581558b27bf715448bee7f6fce9fa3fab17a11db55ef2f2e0f89b"
+}

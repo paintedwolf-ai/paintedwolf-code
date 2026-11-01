@@ -31,6 +31,23 @@ inspect Git repositories. This downloads and verifies the pinned Git bundle.
 Verification copies the staged bundle into its captured tree; it does not
 provision a missing bundle.
 
+Script verification uses Python 3.11 or newer and the pinned workflow Python
+packages prepared by `./task setup-dev -- --ci-inputs analysis`. The runner
+loads those packages directly rather than inheriting a global Python install.
+Prepare repository signing/package tools with
+`./task setup-dev -- --ci-inputs repository-tools` on macOS or apt-based Linux.
+For the signer alone, `./task setup-dev -- --ci-inputs repository-tools --signer
+<directory>` builds it from the repository's locked Nix input; prepend that
+directory's `bin` to `PATH` for verification.
+`--python <directory>` prepares the locked Python interpreter with pip for
+the pinned Python-package preparation when the host interpreter is unsuitable.
+
+Native search differential tests use the pinned ripgrep 15 reference. Prepare it
+with `./task setup-dev -- --ci-inputs search-reference <directory>` and prepend
+that directory to `PATH` for the verification request. This uses the same
+archive pins and verification as hosted setup; an arbitrary installed version
+can have different JSON semantics.
+
 Hosted shell preparation uses `./task setup-dev -- --shell-resources` to write
 qualified notices into the build checkout. `licenses:notices` is the isolated
 verification check; its snapshot outputs do not prepare a subsequent invocation.
