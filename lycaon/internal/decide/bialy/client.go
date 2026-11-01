@@ -153,24 +153,6 @@ func (c *Client) Warm(ctx context.Context) error {
 	return err
 }
 
-// Decide answers every question over state in one engine call of head.
-func (c *Client) Decide(ctx context.Context, head decide.Head, state any, questions map[string]decide.Question) (decide.Result, error) {
-	if len(questions) == 0 {
-		return decide.Result{Engine: c.Engine()}, nil
-	}
-	started := time.Now()
-	resp, err := c.call(ctx, request{Method: methodDecide, Head: head, State: state, Questions: questions})
-	if err != nil {
-		return decide.Result{}, err
-	}
-	for id := range questions {
-		if _, ok := resp.Answers[id]; !ok {
-			return decide.Result{}, fmt.Errorf("%w: no answer for %q", decide.ErrEngine, id)
-		}
-	}
-	return decide.Result{Answers: resp.Answers, Engine: c.Engine(), Elapsed: time.Since(started)}, nil
-}
-
 // Close stops the engine process.
 func (c *Client) Close() error {
 	if c == nil {
@@ -192,17 +174,6 @@ func (c *Client) Close() error {
 		<-starting
 	}
 	return nil
-}
-
-func (c *Client) call(ctx context.Context, req request) (response, error) {
-	if err := ctx.Err(); err != nil {
-		return response{}, err
-	}
-	proc, err := c.ensure(ctx)
-	if err != nil {
-		return response{}, err
-	}
-	return c.exchange(ctx, proc, req)
 }
 
 func (c *Client) exchange(ctx context.Context, proc *process, req request) (response, error) {
