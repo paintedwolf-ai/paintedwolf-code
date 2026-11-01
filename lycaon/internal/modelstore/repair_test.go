@@ -68,6 +68,9 @@ func TestFailedRepairKeepsExistingDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat original: %v", err)
 	}
+	if err := os.Remove(filepath.Join(s.root, s.artifactRel(m.Artifact.Digest))); err != nil {
+		t.Fatalf("remove content-addressed payload: %v", err)
+	}
 	err = s.Repair(context.Background(), SignedManifest{Manifest: m}, func(context.Context, Artifact) (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewBufferString("invalid")), nil
 	})
@@ -83,4 +86,36 @@ func TestFailedRepairKeepsExistingDirectory(t *testing.T) {
 		t.Fatalf("failed repair retained an exclusive lease: %v", err)
 	}
 	lease.Release()
+}
+
+func TestRepairReusesVerifiedPayloadForMissingRevisionLink(t *testing.T) {
+	s := newStore(t)
+	m := publish(t, s, "r1", "weights")
+	payload := filepath.Join(s.root, s.artifactRel(m.Artifact.Digest))
+	before, err := os.Stat(payload)
+	if err != nil {
+		t.Fatalf("stat payload: %v", err)
+	}
+	if err := os.Remove(filepath.Join(s.RevisionDir(m), "model.safetensors")); err != nil {
+		t.Fatalf("remove revision link: %v", err)
+	}
+	err = s.Repair(t.Context(), SignedManifest{Manifest: m}, func(context.Context, Artifact) (io.ReadCloser, error) {
+		t.Fatal("repair requested an already verified payload")
+		return nil, errors.New("unexpected source read")
+	})
+	if err != nil {
+		t.Fatalf("repair missing link: %v", err)
+	}
+	after, err := os.Stat(filepath.Join(s.RevisionDir(m), "model.safetensors"))
+	if err != nil || !os.SameFile(before, after) {
+		t.Fatalf("repair did not reuse verified inode: %v", err)
+	}
+	lease, err := s.AcquireLease("e4b", "mlx", "runner", 2)
+	if err != nil {
+		t.Fatalf("lease repaired revision: %v", err)
+	}
+	defer lease.Release()
+	if err := lease.Audit(t.Context()); err != nil {
+		t.Fatalf("audit repaired revision: %v", err)
+	}
 }
