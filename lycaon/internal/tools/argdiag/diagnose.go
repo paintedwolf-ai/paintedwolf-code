@@ -66,7 +66,7 @@ func Diagnose(schema, args map[string]any, validate func(schema, args map[string
 		return d
 	}
 	repaired := jsonvalue.CloneMap(args)
-	w := &argsWalker{diag: &d}
+	w := &argsWalker{diag: &d, validate: validate}
 	w.object(objectNode{schema: schema, value: repaired})
 	d.Misplaced = w.top.groups()
 	d.ConflictKeys = detectCombinatorConflicts(schema, args)
@@ -98,9 +98,10 @@ type objectNode struct {
 }
 
 type argsWalker struct {
-	diag    *Diagnosis
-	top     misplacementSet
-	repairs []func()
+	diag     *Diagnosis
+	validate func(schema, args map[string]any) error
+	top      misplacementSet
+	repairs  []func()
 }
 
 // misplacementSet groups moves by source and destination object.
@@ -353,7 +354,11 @@ func (w *argsWalker) relocate(n objectNode, key string, declared map[string]map[
 			value = parsed
 		}
 	}
-	value = coerceRelocatedValue(value, dest.schema)
+	// Relocation preserves a value that already satisfies its destination.
+	wrapper := map[string]any{"type": "object", "properties": map[string]any{"value": dest.schema}}
+	if w.validate(wrapper, map[string]any{"value": value}) != nil {
+		value = coerceRelocatedValue(value, dest.schema)
+	}
 	source := n.value
 	w.repairs = append(w.repairs, func() {
 		delete(source, key)
