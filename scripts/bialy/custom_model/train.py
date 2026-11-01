@@ -13,6 +13,7 @@ from data import assert_disjoint, encode, load_split
 from checkpoint import atomic_json, ReferenceCache, sync_directory, exclusive_run
 from training_loop import run_loop
 from terminal import execute
+from rendering import configure_training_renderer
 
 
 def train(args):
@@ -37,7 +38,6 @@ def train_owned(args):
         raise ValueError("SFT does not use a reference")
     source = inventory(args.model)
     reference_source = inventory(args.reference) if args.reference else None
-    # Start DPO at the SFT reference; a separate base is an explicit future ablation.
     if reference_source is not None and source != reference_source:
         raise ValueError("DPO policy must start from the frozen SFT reference")
     train_rows, validation_rows = load_split(args.train, "train"), load_split(args.validation, "validation")
@@ -51,6 +51,7 @@ def train_owned(args):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     tokenizer = AutoTokenizer.from_pretrained(args.model, local_files_only=True, trust_remote_code=False)
+    rendering_profile = configure_training_renderer(tokenizer, args.model)
     if not tokenizer.chat_template:
         raise ValueError("checkpoint has no pinned chat template")
     def prepare(rows):
@@ -61,6 +62,7 @@ def train_owned(args):
     config = {k:str(v) if isinstance(v, Path) else v for k,v in config.items()}
     manifest = {"schema":"pw-custom-training/1", "config":config, "model":source,
                 "reference":reference_source, "template_sha256":digest(tokenizer.chat_template),
+                "rendering_profile":rendering_profile,
                 "train_sha256":file_digest(args.train), "validation_sha256":file_digest(args.validation),
                 "holdout_sha256":file_digest(args.holdout),
                 "packages":{k:importlib.metadata.version(k) for k in ("torch", "transformers", "peft", "safetensors")},

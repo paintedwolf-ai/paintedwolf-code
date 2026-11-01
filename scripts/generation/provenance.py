@@ -22,6 +22,8 @@ def source_identity(backend):
         native = ROOT.parents[1] / "lycaon/internal/generation/native"
         paths = sorted(native.glob("src/**/*.rs")) + sorted(native.glob("vulkan/*")) + [native / "Cargo.toml", native / "Cargo.lock", native / "build.rs"]
         sources = {str(path.relative_to(native)): file_digest(path) for path in paths}
+        for path in sorted((native.parent / "templates").glob("*.jinja")):
+            sources["templates/" + path.name] = file_digest(path)
         sources["mlx_pin"] = file_digest(ROOT.parents[1] / "third_party/mlx/pin.json")
         vendor = ROOT.parents[1] / "lycaon/internal/decide/native/vendor/mlx-sys"
         for path in sorted(vendor.rglob("*")):

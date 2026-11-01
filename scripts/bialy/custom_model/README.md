@@ -175,9 +175,31 @@ quantized artifact on held-out tasks and target hardware before promotion.
 
 ## Offline contracts
 
+E4B preparation and training select `gemma4-code-v1` for the 42-layer,
+2,560-wide architecture with 18 shared KV layers. The template lives in
+`lycaon/internal/generation/templates/`; its identity is recorded in the
+training inputs and saved tokenizer. Merge and export preserve that tokenizer.
+The native runner verifies the named template byte for byte before using it.
+This is versioned model-bundle metadata. Unknown formats are refused without
+rewriting installed artifacts; it changes no database or device configuration.
+
+This profile keeps tool results in transcript order, including results separated
+from their calls by user events and results whose calls were compacted away.
+Training resolves omitted tool names by exact call ID without moving messages
+or changing the captured evidence. A result without either a supplied name or
+an identifiable call is rejected. Python/Jinja and Rust/MiniJinja consume the
+same conversation fixtures; saved-tokenizer tests also check the completion
+prefix used by the loss mask.
+
+The profile is a new training recipe, not a template replacement for existing
+weights. Existing prototype artifacts retain their own tokenizer and template.
+Their canonical format rejects histories it cannot represent without losing
+tool results. Model quality under the new profile requires a trained artifact
+and held-out evaluation; format parity alone does not establish it.
+
 ```sh
-uv run --project scripts/bialy/custom_model --locked python -m unittest discover \
-  -s scripts/bialy/custom_model -p 'test_*.py'
+./task scripts:coverage:changes
+./task generation:test -- --backend native
 ```
 
 The fixtures use SQLite, a tiny randomly initialized local model, and fake export
