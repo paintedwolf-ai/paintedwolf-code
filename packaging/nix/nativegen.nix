@@ -12,6 +12,7 @@ let
     meta.license = lib.licenses.mit;
     dontConfigure = true;
     dontBuild = true;
+    dontFixup = true;
     installPhase = ''mkdir -p "$out"; cp -R . "$out/"'';
   };
   sourcePath = /. + builtins.unsafeDiscardStringContext (toString source);
@@ -29,7 +30,7 @@ let
     src = componentSource;
     nativeBuildInputs = [ cmake ninja shaderc ];
     buildInputs = [ vulkan-headers vulkan-loader ];
-    cmakeDir = "scripts/generation/llama-reference";
+    cmakeDir = "../scripts/generation/llama-reference";
     cmakeFlags = [
       "-DLLAMA_SOURCE_DIR=${llama}" "-DBUILD_SHARED_LIBS=OFF"
       "-DGGML_VULKAN=ON" "-DGGML_NATIVE=OFF"
