@@ -68,14 +68,14 @@ func (m *Service) BuildPreparation(ctx context.Context, id string) (contextprepa
 	if err != nil {
 		return empty, err
 	}
-	metas, err := m.Runtime.ProjectPreparationTools(ctx, sess, rows, frame)
+	req, err := m.Runtime.ProjectPreparation(ctx, sess, rows, messages, frame)
 	if err != nil {
 		return empty, err
 	}
-	req := modelcall.CompletionRequest{Messages: messages, Tools: metas, Debug: modelcall.RequestDebug{
+	req.Debug = modelcall.RequestDebug{
 		SessionID: id, ProjectID: sess.ProjectID, ProjectDir: sess.WorkspacePath,
 		RootSessionID: id, AgentType: sess.AgentType, ProfileID: profile,
-	}}
+	}
 	payload, err := json.Marshal(struct {
 		Selection any
 		Request   modelcall.CompletionRequest
