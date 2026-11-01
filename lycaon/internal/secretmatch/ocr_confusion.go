@@ -61,8 +61,14 @@ func screenOCRRaw(ctx context.Context, m *Matcher, s string) []Match {
 	hits := catalogMatchesOCR(ctx, m, mask.text)
 	hits = append(hits, harvestMatchesOCR(ctx, m, mask.text)...)
 	hits = mask.outside(hits)
-	propagateNonDisclosable(hits)
-	return m.dropIgnored(ctx, mergeContainerEvidence(hits))
+	if err := propagateNonDisclosable(hits, ctx.Err); err != nil {
+		return nil
+	}
+	hits, err := mergeContainerEvidence(hits, ctx.Err)
+	if err != nil {
+		return nil
+	}
+	return m.dropIgnored(ctx, hits)
 }
 
 func catalogMatchesOCR(ctx context.Context, m *Matcher, s string) []Match {
