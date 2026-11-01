@@ -138,6 +138,8 @@ std::unique_ptr<pw_checkpoint> pw_checkpoint::save(llama_memory_i * memory) {
     auto * cache = e4b_cache(memory);
     file->global_layout = layout(cache->get_base());
     file->sliding_layout = layout(cache->get_swa());
+    file->global_head = cache->get_base()->get_allocation_head(0);
+    file->sliding_head = cache->get_swa()->get_allocation_head(0);
     stream output(file->fd);
     cache->get_base()->state_write(output, 1, 0);
     cache->get_swa()->state_write(output, 1, 0);
@@ -153,6 +155,9 @@ void pw_checkpoint::restore(llama_memory_i * memory) {
     // Physical row placement preserves the attention reduction order.
     cache->get_base()->state_read_sinfo(input, 1, 0, nullptr, &global_layout);
     cache->get_swa()->state_read_sinfo(input, 1, 0, nullptr, &sliding_layout);
+    // Continue allocating rows from the checkpoint's original cursor.
+    cache->get_base()->set_allocation_head(0, global_head);
+    cache->get_swa()->set_allocation_head(0, sliding_head);
     if (posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED) != 0)
         throw std::runtime_error("checkpoint page eviction failed");
 }

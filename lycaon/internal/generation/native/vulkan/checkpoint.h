@@ -7,6 +7,8 @@ class pw_checkpoint {
     int fd;
     llama_kv_cache::slot_info_vec_t global_layout;
     llama_kv_cache::slot_info_vec_t sliding_layout;
+    uint32_t global_head = 0;
+    uint32_t sliding_head = 0;
     explicit pw_checkpoint(int descriptor) : fd(descriptor) {}
 public:
     ~pw_checkpoint();
