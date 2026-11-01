@@ -47,7 +47,7 @@ func Prepare(root string) ([]string, func(), error) {
 	if err != nil {
 		return nil, noop, err
 	}
-	libraries, err := nvidiaLibraries(version)
+	libraries, err := nvidiaLibraries(version, "/", 0)
 	if err != nil {
 		return nil, noop, err
 	}
@@ -66,7 +66,7 @@ func loadedVersion(raw []byte) (string, error) {
 	return version, nil
 }
 
-func nvidiaLibraries(version string) ([]string, error) {
+func nvidiaLibraries(version, root string, uid uint32) ([]string, error) {
 	var directories []string
 	switch runtime.GOARCH {
 	case "amd64":
@@ -84,7 +84,7 @@ func nvidiaLibraries(version string) ([]string, error) {
 		leaf := name + ".so." + version
 		var selected string
 		for _, directory := range directories {
-			path, err := filepath.EvalSymlinks(filepath.Join(directory, leaf))
+			path, err := filepath.EvalSymlinks(filepath.Join(root, strings.TrimPrefix(directory, "/"), leaf))
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -94,7 +94,7 @@ func nvidiaLibraries(version string) ([]string, error) {
 			if filepath.Base(path) != leaf {
 				return nil, fmt.Errorf("NVIDIA library version differs from loaded driver")
 			}
-			if err := trustedLibrary(path); err != nil {
+			if err := trustedLibrary(path, root, uid); err != nil {
 				return nil, err
 			}
 			selected = path
@@ -108,18 +108,22 @@ func nvidiaLibraries(version string) ([]string, error) {
 	return paths, nil
 }
 
-func trustedLibrary(path string) error {
+func trustedLibrary(path, root string, uid uint32) error {
+	relative, err := filepath.Rel(root, path)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("NVIDIA library escapes its system root")
+	}
 	for current := path; ; current = filepath.Dir(current) {
 		info, err := os.Lstat(current)
 		if err != nil {
 			return err
 		}
 		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || stat.Uid != 0 || info.Mode().Perm()&0o022 != 0 ||
+		if !ok || stat.Uid != uid || info.Mode().Perm()&0o022 != 0 ||
 			(current == path && !info.Mode().IsRegular()) || (current != path && !info.IsDir()) {
 			return fmt.Errorf("NVIDIA library path is not system-owned: %s", current)
 		}
-		if current == "/" {
+		if current == root {
 			break
 		}
 	}
