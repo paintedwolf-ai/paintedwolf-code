@@ -89,6 +89,9 @@ func (s *EventStream) Close() {
 	}
 }
 func (s *EventStream) InputLine() int {
+	if s.input == nil {
+		return s.line
+	}
 	buffered, _ := s.input.Peek(s.input.Buffered())
 	if bytes.IndexByte(buffered, '\n') >= 0 {
 		return s.line + 1
@@ -195,7 +198,7 @@ func (s *EventStream) Decode() (value any, failure error) {
 		b, err := s.space()
 		if err != nil {
 			if err == io.EOF && len(s.frames) > 0 {
-				return nil, io.ErrUnexpectedEOF
+				return nil, unexpectedJSONEnd(err)
 			}
 			return nil, err
 		}
@@ -242,7 +245,7 @@ func (s *EventStream) Decode() (value any, failure error) {
 				f.key, f.release = key, release
 				b, err = s.space()
 				if err != nil {
-					return nil, io.ErrUnexpectedEOF
+					return nil, unexpectedJSONEnd(err)
 				}
 				if b != ':' {
 					return nil, s.syntax()
@@ -250,7 +253,7 @@ func (s *EventStream) Decode() (value any, failure error) {
 				_, _ = s.read()
 				b, err = s.space()
 				if err != nil {
-					return nil, io.ErrUnexpectedEOF
+					return nil, unexpectedJSONEnd(err)
 				}
 			}
 			f.mustValue = false
@@ -301,4 +304,11 @@ func (s *EventStream) finish() (any, error) {
 		empty = gojq.NewObject(0)
 	}
 	return []any{path, empty}, nil
+}
+
+func unexpectedJSONEnd(err error) error {
+	if err == io.EOF {
+		return io.ErrUnexpectedEOF
+	}
+	return err
 }

@@ -91,3 +91,41 @@ func TestJSONDecoderBoundsAndCancellationPrecedeGrowth(t *testing.T) {
 		t.Fatalf("cancellation: %v", err)
 	}
 }
+
+func TestJSONDecoderPreservesTerminalReaderErrors(t *testing.T) {
+	for _, source := range []string{`{"x"`, `{"x":`, `[1,`} {
+		for _, events := range []bool{false, true} {
+			failure := errors.New("source unavailable")
+			input := io.MultiReader(strings.NewReader(source), failingJSONReader{failure})
+			memory := &eventMemoryFixture{maximum: 1 << 20}
+			var decoder interface {
+				Decode() (any, error)
+				Close()
+			}
+			if events {
+				decoder = NewEventStream(t.Context(), input, EventLimits{128, 1024}, memory)
+			} else {
+				decoder = NewBoundedValueStream(t.Context(), input, EventLimits{128, 1024}, memory, 1<<20)
+			}
+			var err error
+			for err == nil {
+				_, err = decoder.Decode()
+			}
+			if !errors.Is(err, failure) {
+				t.Fatalf("source %s events %v: %v", source, events, err)
+			}
+			_, again := decoder.Decode()
+			if !errors.Is(again, failure) {
+				t.Fatalf("terminal error changed: %v", again)
+			}
+			decoder.Close()
+			if memory.held != 0 {
+				t.Fatalf("terminal read retained %+v", memory)
+			}
+		}
+	}
+}
+
+type failingJSONReader struct{ failure error }
+
+func (r failingJSONReader) Read([]byte) (int, error) { return 0, r.failure }

@@ -7,7 +7,7 @@ import (
 
 func TestModelJSONRetainsExactCanonicalBytes(t *testing.T) {
 	memory := &reviewMemory{maximum: 8 << 20}
-	args := map[string]any{"z": []any{"\b\f\u2028<", json.Number("9007199254740993")}, "a": true, "b": []string{"two"}}
+	args := map[string]any{"z": []any{"\b\f\u2028<", json.Number("9007199254740993")}, "a": true, "b": []string{"two"}, "nil_array": []any(nil), "nil_strings": []string(nil), "nil_object": map[string]any(nil)}
 	got, release, err := CaptureModelJSON(t.Context(), memory, args)
 	if err != nil {
 		t.Fatalf("capture model: %v", err)

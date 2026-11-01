@@ -91,6 +91,9 @@ func (s *nativeArguments) clone(ctx context.Context, memory *toolcontract.Progra
 		}
 		return result, nil
 	case []any:
+		if value == nil {
+			return value, nil
+		}
 		result := make([]any, len(value))
 		for i, child := range value {
 			cloned, err := s.clone(ctx, memory, child, depth+1)

@@ -61,6 +61,7 @@ func (s *BoundedValueStream) Decode() (any, error) {
 	}
 	value, err := s.value(0)
 	if err != nil {
+		s.parser.failure = err
 		s.release()
 	}
 	return value, err
@@ -121,7 +122,7 @@ func (s *BoundedValueStream) separator(end byte, first bool) (bool, error) {
 	_, _ = s.parser.read()
 	b, err = s.parser.space()
 	if err != nil {
-		return false, io.ErrUnexpectedEOF
+		return false, unexpectedJSONEnd(err)
 	}
 	if b == end {
 		return false, s.parser.syntax()
@@ -168,7 +169,7 @@ func (s *BoundedValueStream) object(depth int) (any, error) {
 		first = false
 		b, err := s.parser.space()
 		if err != nil {
-			return nil, io.ErrUnexpectedEOF
+			return nil, unexpectedJSONEnd(err)
 		}
 		if b != '"' {
 			return nil, s.parser.syntax()
@@ -187,7 +188,7 @@ func (s *BoundedValueStream) object(depth int) (any, error) {
 		}
 		b, err = s.parser.space()
 		if err != nil {
-			return nil, io.ErrUnexpectedEOF
+			return nil, unexpectedJSONEnd(err)
 		}
 		if b != ':' {
 			return nil, s.parser.syntax()
