@@ -40,12 +40,13 @@ llguidance = { version = "=1.9.1", default-features = false, features = ["lark",
 
 [target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
 mlx-rs = { version = "0.32", optional = true }
+mlx-sys = { version = "0.6", optional = true }
 
 [features]
 default = []
 vulkan = []
 # Apple silicon acceleration.
-mlx = ["dep:mlx-rs"]
+mlx = ["dep:mlx-rs", "dep:mlx-sys"]
 
 [profile.release]
 opt-level = 3
