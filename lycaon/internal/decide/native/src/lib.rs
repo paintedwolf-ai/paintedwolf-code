@@ -12,6 +12,7 @@ pub mod device;
 pub mod engine;
 pub mod error;
 pub mod heads;
+pub mod pci;
 pub mod protocol;
 pub mod pyjson;
 pub mod question;

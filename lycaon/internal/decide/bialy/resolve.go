@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/inference"
 )
 
 const (
@@ -42,7 +41,7 @@ const (
 
 // Config selects the engine process and what it loads.
 type Config struct {
-	Devices *inference.Devices
+	Resources *Resources
 	// Binary is an explicit executable path; empty resolves the bundled sibling.
 	Binary string
 	// Device is passed to the engine when set.
@@ -174,7 +173,9 @@ func (c Config) Args() []string {
 	if c.ModelID != "" {
 		args = append(args, "--model-id", c.ModelID)
 	}
-	if c.Device != "" {
+	if c.Resources != nil {
+		args = append(args, "--device", c.Resources.deviceArgument())
+	} else if c.Device != "" {
 		args = append(args, "--device", c.Device)
 	}
 	if c.HeadMaxLen > 0 {

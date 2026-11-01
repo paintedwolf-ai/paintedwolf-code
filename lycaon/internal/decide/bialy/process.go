@@ -35,6 +35,7 @@ type process struct {
 	generation uint64
 	lifetime   context.Context
 	reaped     context.CancelFunc
+	startup    *startupGrant
 }
 
 var processSequence atomic.Uint64
@@ -69,7 +70,7 @@ type response struct {
 	PhysicalDevice inference.PhysicalDevice `json:"physical_device"`
 }
 
-func startProcess(ctx context.Context, bin string, args []string) (*process, error) {
+func startProcess(ctx context.Context, bin string, args []string, grant *startupGrant) (*process, error) {
 	opts := execpkg.ExecOpts{
 		Launch:    execpkg.HostLaunch("decide_engine"),
 		NoTimeout: true,
@@ -106,6 +107,10 @@ func startProcess(ctx context.Context, bin string, args []string) (*process, err
 		admitted: make(chan struct{}, 1),
 		pending:  make(map[int64]*pendingRequest),
 		done:     make(chan struct{}),
+	}
+	proc.startup = grant
+	if grant != nil {
+		proc.generation = grant.generation
 	}
 	go proc.read(stdout)
 	return proc, nil
@@ -146,6 +151,7 @@ func (p *process) read(stdout io.Reader) {
 		p.exitCode = p.cmd.ProcessState.ExitCode()
 	}
 	p.reaped()
+	p.startup.release()
 	p.pendingMu.Lock()
 	for id, ch := range p.pending {
 		delete(p.pending, id)
