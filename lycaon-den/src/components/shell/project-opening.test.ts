@@ -26,7 +26,12 @@ function setup(detectFolder: () => Promise<FolderDetect>, overrides: ClientStubs
     const shell = createShellStore("connected");
     const startSession = vi.fn(async () => true);
     const reportError = vi.fn();
-    const projects = { byId: () => project, summary: () => undefined, upsert: (_project: Project) => { } };
+    const known = new Map<string, Project>([[project.id, project]]);
+    const projects = {
+      byId: (id: string) => known.get(id),
+      summary: () => undefined,
+      upsert: (next: Project) => { known.set(next.id, next); },
+    };
     const opening = createProjectOpening({
       shell, projects, startSession, reportError,
       formatError: String, showProjects: vi.fn(),
@@ -143,19 +148,23 @@ describe("project opening lifecycle", () => {
 
   it("cancelling the open-folder dialog from proposeFolderAsProject aborts without switching projects", async () => {
     const existing = wireProject("/repo", "p1");
-    const opening = setup(async () => ({
-      path: "/repo",
-      project_id: "p1",
-      projects: [
-        {
-          id: "p1",
-          name: "repo",
-          roots: existing.roots,
-          is_single_root: true,
-          last_opened_at: "2026-10-31T00:00:00Z",
-        },
-      ],
-    }));
+    const getProject = vi.fn(async () => existing);
+    const opening = setup(
+      async () => ({
+        path: "/repo",
+        project_id: "p1",
+        projects: [
+          {
+            id: "p1",
+            name: "repo",
+            roots: existing.roots,
+            is_single_root: true,
+            last_opened_at: "2026-10-31T00:00:00Z",
+          },
+        ],
+      }),
+      { getProject },
+    );
 
     await opening.proposeFolderAsProject("/repo");
     expect(opening.openFolderPath()).toBe("/repo");
@@ -164,7 +173,7 @@ describe("project opening lifecycle", () => {
     expect(opening.openFolderPath()).toBeNull();
     expect(opening.openFolderDetect()).toBeNull();
     expect(opening.startSession).not.toHaveBeenCalled();
-    expect(opening.client.getProject).not.toHaveBeenCalled();
+    expect(getProject).not.toHaveBeenCalled();
     expect(opening.client.createProject).not.toHaveBeenCalled();
   });
 
