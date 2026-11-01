@@ -151,15 +151,16 @@ it("bounds the detail summary and opens every structural step in Files", async (
  onTestFinished(resetOpenFilesSurfaceForTests);
  const sink = vi.fn(); registerOpenFilesSurfaceSink(sink);
  const value = part();
- value.commandActivity!.fact = { ...fact, steps: Array.from({ length: 1000 }, (_, index) => ({ id: String(index), command: `operation ${index}`, count: 10705, running: 0, waiting: 0, failed: 0, refused: 0, interrupted: 0, state: "completed", outcome: "Finished" })) };
+ value.commandActivity!.fact = { ...fact, steps: Array.from({ length: 1000 }, (_, index) => ({ id: String(index), command: `operation ${index} ${"long-input".repeat(100)}`, count: 10705, running: 0, waiting: 0, failed: 0, refused: 0, interrupted: 0, state: "completed", outcome: "Finished" })) };
  const get = vi.fn().mockResolvedValue({ program, executions: [receipt()], nodes: [], executions_omitted: 0, nodes_omitted: 0 });
  const view = render(() => <CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" projectId="project" client={stubClient({ getCommandProgramReceipt: get })} />);
  fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
  expect(view.container.querySelectorAll(".den-command-activity-step")).toHaveLength(3);
+ for (const code of view.container.querySelectorAll(".den-command-activity-step code")) expect(code.textContent!.length).toBeLessThanOrEqual(81);
  expect(view.container.querySelector("pre")).toBeNull();
  fireEvent.click(view.getByRole("button", { name: /All 1000 steps/ }));
  const opened = sink.mock.calls.at(-1)?.[0];
  expect(opened.kind).toBe("chat-content");
- expect(opened.document.content.text).toContain("operation 999");
+ expect(opened.document.content.text).toContain(`operation 999 ${"long-input".repeat(100)}`);
  expect(opened.document.content.text.split("\n")).toHaveLength(1000);
 });
