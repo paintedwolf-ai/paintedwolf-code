@@ -58,7 +58,6 @@ fn run(args: Args) -> nativegen::Result<()> {
     let pci = args
         .device_pci
         .ok_or_else(|| Error::Protocol("Vulkan PCI device is required".into()))?;
-    Vulkan::probe(&pci)?;
     let identity = Identity {
         artifact_id: args.artifact_id,
         backend: "vulkan",
