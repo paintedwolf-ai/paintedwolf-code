@@ -173,7 +173,7 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 	}
 	readCall := func(id string) *modelcall.Completion {
 		return &modelcall.Completion{
-			ToolCalls: []api.ToolCall{{ID: id, Name: "read", Args: map[string]any{"path": "a.txt"}}},
+			ToolCalls: []api.ToolCall{{ID: id, Name: "command", Args: map[string]any{"command": "cat a.txt"}}},
 		}
 	}
 	textReply := func(text string) *modelcall.Completion {
@@ -212,7 +212,7 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 		testutil.FailErr(t, "begin turn", err)
 
 		registry := tools.NewStubRegistry()
-		testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		testutil.FailErr(t, "register read", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 			return "file contents", nil
 		}))
 		client := &scriptedStepLLM{steps: steps}
@@ -269,6 +269,13 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 
 	assertStrictlyIncreasingIterations := func(t *testing.T, h *attemptHarness, wantCount int) {
 		t.Helper()
+		rows, err := h.messages.GetMessages(t.Context(), h.sess.ID)
+		testutil.FailErr(t, "read settled fixture transcript", err)
+		for _, row := range rows {
+			if row.ToolResult != nil && row.ToolResult.Outcome == api.ToolResultOutcomeRejected {
+				t.Fatalf("scripted acting turn never reached its tool: %+v", row.ToolResult)
+			}
+		}
 		got := *h.settledIterations
 		if len(got) != wantCount {
 			t.Fatalf("settled iterations = %v (len %d), want %d settled outputs", got, len(got), wantCount)
@@ -395,7 +402,7 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 			{completion: textReply("Final report after gate repair.")},
 		})
 		readCount := 0
-		testutil.FailErr(t, "override read tool", h.deps.Context.Tools.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		testutil.FailErr(t, "override read tool", h.deps.Context.Tools.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 			readCount++
 			return "evidence", nil
 		}))
