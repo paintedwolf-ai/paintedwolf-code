@@ -4,6 +4,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,7 +65,7 @@ func TestProtectedLaunchRefusesWithoutTheBootstrapsBroker(t *testing.T) {
 }
 
 func TestRelayedSupervisorsStaySupervised(t *testing.T) {
-	supervised := &exec.Cmd{Args: []string{"/opt/painted-wolf-code/bin/pw", supervisorCommand, "0", "normal", "/usr/bin/git", "git"}}
+	supervised := &exec.Cmd{Args: []string{"/opt/painted-wolf-code/bin/pw", supervisorCommand, "", "normal", "/usr/bin/git", "git"}}
 	relayed := &exec.Cmd{Args: append([]string{"/opt/painted-wolf-code/bin/pw", relayCommand}, supervised.Args[1:]...)}
 	if !commandSupervisor(supervised) || !commandSupervisor(relayed) || relayedCommand(supervised) || !relayedCommand(relayed) {
 		t.Fatal("relay and supervisor commands are not recognised")
@@ -106,14 +107,14 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 	} {
 		lifetime, status, err := os.Pipe()
 		testutil.FailErr(t, "pipe", err)
-		cmd := &exec.Cmd{Path: "/opt/painted-wolf-code/bin/pw", Args: append([]string{"/opt/painted-wolf-code/bin/pw", supervisorCommand, "0", "normal"}, target...), ExtraFiles: []*os.File{lifetime, status}}
+		cmd := &exec.Cmd{Path: "/opt/painted-wolf-code/bin/pw", Args: append([]string{"/opt/painted-wolf-code/bin/pw", supervisorCommand, "", "normal"}, target...), ExtraFiles: []*os.File{lifetime, status}}
 		testutil.FailErr(t, "relay "+name, relayThrough(cmd, state))
 		if !relayedCommand(cmd) || cmd.Args[2] != supervisorCommand || cmd.ExtraFiles[len(cmd.ExtraFiles)-1] != broker {
 			t.Fatalf("%s launch not relayed with the broker last: %q", name, cmd.Args)
 		}
 		extras, argv, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", cmd.Args[2:])
-		if !ok || extras != 2 || len(argv) < 2 || argv[1] != supervisorCommand {
-			t.Fatalf("%s supervisor relay target = (%d, %q, %v)", name, extras, argv, ok)
+		if !ok || extras != "11" || len(argv) < 2 || argv[1] != supervisorCommand {
+			t.Fatalf("%s supervisor relay target = (%q, %q, %v)", name, extras, argv, ok)
 		}
 		_ = lifetime.Close()
 		_ = status.Close()
@@ -131,8 +132,8 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 		t.Fatalf("prepared command not relayed with broker last: %q", prepared.Args)
 	}
 	extras, argv, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", prepared.Args[2:])
-	if !ok || extras != 1 || !slices.Equal(argv, []string{"/opt/painted-wolf-code/bin/pw", "--confine-helper", "-profile-fd", "3", "--", "/usr/bin/git", "status"}) {
-		t.Fatalf("prepared relay target = (%d, %q, %v)", extras, argv, ok)
+	if !ok || extras != "1" || !slices.Equal(argv, []string{"/opt/painted-wolf-code/bin/pw", "--confine-helper", "-profile-fd", "3", "--", "/usr/bin/git", "status"}) {
+		t.Fatalf("prepared relay target = (%q, %q, %v)", extras, argv, ok)
 	}
 	unrelayCommand(prepared)
 	if relayedCommand(prepared) || prepared.Path != "/opt/painted-wolf-code/bin/pw" || len(prepared.ExtraFiles) != 1 || prepared.ExtraFiles[0] != profileRead {
@@ -204,7 +205,7 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 
 func TestBrokerRelaySubprocess(t *testing.T) {
 	if os.Getenv("PW_TEST_BROKER_RELAY_SUBPROCESS") == "1" {
-		if code := runBrokerRelay([]string{"1", "/bin/true", "true"}); code != 9 {
+		if code := runBrokerRelay([]string{"0", "/bin/true", "true"}); code != 9 {
 			t.Fatalf("runBrokerRelay = %d, want 9", code)
 		}
 		return
@@ -226,13 +227,18 @@ func TestBrokerRelaySubprocess(t *testing.T) {
 			done <- err
 			return
 		}
-		_, fds, err := launchbroker.Decode(payload[:n], control[:oobn])
+		request, fds, err := launchbroker.Decode(payload[:n], control[:oobn])
 		if err != nil {
 			done <- err
 			return
 		}
 		for _, fd := range fds[1:] {
 			_ = unix.Close(fd)
+		}
+		if request.ExtraFileLayout != "0" {
+			done <- fmt.Errorf("relay changed closed-slot layout to %q", request.ExtraFileLayout)
+			_ = unix.Close(fds[0])
+			return
 		}
 		launchbroker.SendEvent(fds[0], launchbroker.Event{Started: os.Getpid()})
 		launchbroker.SendEvent(fds[0], launchbroker.Event{Exited: true, Code: 9})

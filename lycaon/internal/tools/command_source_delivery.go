@@ -103,5 +103,4 @@ func RememberCommandSourceDelivery(ctx context.Context, tc ToolContext, memory *
 	line := 1 + bytes.Count(raw[:first], []byte{'\n'})
 	endLine := line + bytes.Count(bytes.TrimSuffix(raw[first:last], []byte{'\n'}), []byte{'\n'})
 	documents.RememberAgentReadSpans(tc.Identity.ProjectID, tc.Identity.SessionID, doc, []documentcore.LineSpan{{StartLine: line, EndLine: endLine}})
-	return
 }

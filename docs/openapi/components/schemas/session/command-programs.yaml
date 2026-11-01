@@ -229,8 +229,18 @@ components:
         outcome: {type: string}
         state: {type: string, enum: [running, waiting, completed, refused, failed, interrupted, unknown]}
         status_code: {type: integer, x-go-pointer: true}
-        merge_key: {type: string, description: Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate.}
+        repetitions: {type: integer, description: Number of executions of the primary structural operation.}
+        execution_count: {type: integer, description: All executions represented by this activity.}
+        failed_count: {type: integer, description: Executions reporting failure, refusal or interruption, independent of the enclosing outcome.}
+        waiting_count: {type: integer}
+        uncertain_effects: {type: integer}
+        completed_effects: {type: integer}
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandActivityStep'
         execution_ids:
+          description: First execution of each structural step; use activity_id to page all member receipts.
           x-go-name: ExecutionIDs
           type: array
           items: {type: string}
@@ -257,3 +267,19 @@ components:
         state: {type: string, enum: [running, waiting, completed, refused, failed, interrupted, unknown]}
         outcome: {type: string}
         status_code: {type: integer, x-go-pointer: true}
+    CommandActivityStep:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, command, count, running, waiting, failed, refused, interrupted, state, outcome]
+      properties:
+        id: {type: string}
+        command: {type: string}
+        count: {type: integer}
+        running: {type: integer}
+        waiting: {type: integer}
+        failed: {type: integer}
+        refused: {type: integer}
+        interrupted: {type: integer}
+        state: {type: string}
+        outcome: {type: string}

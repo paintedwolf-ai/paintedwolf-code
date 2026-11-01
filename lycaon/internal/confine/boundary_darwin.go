@@ -19,6 +19,9 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 	if err := attestConfined(); err != nil {
 		return err
 	}
+	if err := applyProcessAttributes(helperProcessAttributes); err != nil {
+		return err
+	}
 	if helperPinnedReadyFDArg >= 0 {
 		return execNativeTarget(resolved, target)
 	}

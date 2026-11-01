@@ -2,9 +2,7 @@ package invocation
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -36,13 +34,6 @@ func readActivityInput(ctx context.Context, tx *sql.Tx, receipt api.CommandExecu
 		}
 		input.arguments = arguments
 	}
-	if receipt.Lifecycle == "read_only" && activityPresentation(input).label == "Read source" {
-		identity := stringArgument(input.arguments, "activity_path_identity")
-		if identity != "" {
-			sum := sha256.Sum256([]byte(input.scope + "|" + identity))
-			input.mergeKey = hex.EncodeToString(sum[:])
-		}
-	}
 	return input, err
 }
 
@@ -73,10 +64,6 @@ func activityArguments(ctx context.Context, body []byte, digest string) (map[str
 	defer releaseArguments()
 	// Keep only bounded presentation fields after releasing the inspection value.
 	result := map[string]any{}
-	if paths := activityPaths(arguments, "read"); len(paths) == 1 {
-		sum := sha256.Sum256([]byte(paths[0]))
-		result["activity_path_identity"] = hex.EncodeToString(sum[:])
-	}
 	for _, name := range []string{"command", "cwd", "path", "pattern", "query", "url", "message"} {
 		if value := stringArgument(arguments, name); value != "" {
 			result[name] = boundedActivityText(value)

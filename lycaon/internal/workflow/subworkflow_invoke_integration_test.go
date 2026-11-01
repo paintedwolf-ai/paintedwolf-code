@@ -39,7 +39,7 @@ func TestPlanImplementPhaseInvokesImplementChild(t *testing.T) {
 	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
 
-	parent, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request"})
+	parent, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request"})
 	testutil.FailErr(t, "Start plan", err)
 	parent = completePlanIntakeT(ctx, t, mgr, parent)
 	seedValidPlanContent(t, blueprintMgr, parent.BlueprintPath)
@@ -135,7 +135,7 @@ func TestInvokeChildRejectsGrandchildDepth(t *testing.T) {
 	childID := "child-run"
 	pid := parentID
 	runParent := api.WorkflowRun{
-		ID: parentID, SessionID: sess.ID, WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		ID: parentID, SessionID: sess.ID, WorkflowID: "plan", WorkflowVersion: "1.0.1",
 		Status: api.WorkflowRunStatusRunning, CurrentPhase: "execute",
 	}
 	runChild := api.WorkflowRun{
@@ -163,7 +163,7 @@ func TestChildCompleteAutoFinishesParentPlan(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, deps)
 	ctx := context.Background()
 
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
@@ -216,7 +216,7 @@ func TestExitChildRunResumesParent(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 	ctx := context.Background()
 
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
@@ -258,7 +258,7 @@ func TestExitCatalogRunSpawnsAmbientImplement(t *testing.T) {
 	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
 
-	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request"})
+	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request"})
 	if err != nil {
 		testutil.FailErr(t, "Start plan", err)
 	}

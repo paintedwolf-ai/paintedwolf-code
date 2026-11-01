@@ -139,7 +139,7 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 	e := &evaluation{ports: ports, limits: limits, programName: plan.SourceName}
 	ctx, cancelWait := context.WithCancelCause(ctx)
 	defer cancelWait(nil)
-	e.waits = newExecutionWaits(e.clock(), ports.Waits, cancelWait)
+	e.waits = newExecutionWaits(ctx, e.clock(), ports.Waits, cancelWait)
 	e.expander, err = NewWordExpander(ExpanderPorts{Substitutions: e, Files: ports.Files, Memory: ports.Memory})
 	if err != nil {
 		return ProgramOutcome{}, err

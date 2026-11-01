@@ -10,6 +10,7 @@ import (
 )
 
 func TestCommandGitFirstCommitMatchesGit(t *testing.T) {
+	t.Parallel()
 	h := newUninitializedHarness(t)
 	reference := newUninitializedHarness(t)
 	gotInit := h.exec("git", "init", "-q", "-b", "main")
@@ -49,6 +50,7 @@ func TestCommandGitFirstCommitMatchesGit(t *testing.T) {
 }
 
 func TestCommandGitInitDirectoryAndFlagsMatchGit(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -59,6 +61,7 @@ func TestCommandGitInitDirectoryAndFlagsMatchGit(t *testing.T) {
 		{"invalid-branch", []string{"init", "-b", "bad..name", "nested"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newUninitializedHarness(t)
 			reference := newUninitializedHarness(t)
 			words := append([]string{"git"}, tc.args...)
@@ -89,6 +92,7 @@ func TestCommandGitInitDirectoryAndFlagsMatchGit(t *testing.T) {
 }
 
 func TestCommandGitNamedAddIgnoresNestedRepository(t *testing.T) {
+	t.Parallel()
 	native := newEmptyHarness(t)
 	reference := newEmptyHarness(t)
 	for _, h := range []*harness{native, reference} {
@@ -113,6 +117,7 @@ func TestCommandGitNamedAddIgnoresNestedRepository(t *testing.T) {
 }
 
 func TestCommandGitDirectoryAddPreservesUnchangedTrackedFiles(t *testing.T) {
+	t.Parallel()
 	native := newEmptyHarness(t)
 	reference := newEmptyHarness(t)
 	for _, h := range []*harness{native, reference} {
@@ -139,8 +144,10 @@ func TestCommandGitDirectoryAddPreservesUnchangedTrackedFiles(t *testing.T) {
 }
 
 func TestCommandGitAllAddsNestedRepositoryLikeGit(t *testing.T) {
+	t.Parallel()
 	for _, args := range [][]string{{"-A"}, {"."}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Parallel()
 			native := newEmptyHarness(t)
 			reference := newEmptyHarness(t)
 			for _, h := range []*harness{native, reference} {
@@ -168,6 +175,7 @@ func TestCommandGitAllAddsNestedRepositoryLikeGit(t *testing.T) {
 }
 
 func TestCommandGitAllWithUnbornNestedRepoMatchesGitFailure(t *testing.T) {
+	t.Parallel()
 	native := newEmptyHarness(t)
 	reference := newEmptyHarness(t)
 	for _, h := range []*harness{native, reference} {

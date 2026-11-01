@@ -15,7 +15,6 @@ import (
 )
 
 func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
-	t.Parallel()
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "load tool profiles", err)
@@ -165,7 +164,6 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 }
 
 func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
-	t.Parallel()
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	for _, tc := range []struct {
 		name              string

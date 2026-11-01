@@ -113,11 +113,3 @@ func (r *ProcessLifecycle) Wait(ctx context.Context, sessionID, handle string) (
 	defer r.jobs.mu.Unlock()
 	return proc.exitCode, proc.stopped, nil
 }
-
-// releaseCompletionResources reclaims an untransferred completion's resources.
-func (r *ProcessLifecycle) releaseCompletionResources(proc *Process) {
-	r.jobs.mu.Lock()
-	owned := proc.resources.take()
-	r.jobs.mu.Unlock()
-	owned.release()
-}

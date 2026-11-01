@@ -107,12 +107,12 @@ func TestSurfaceGatedInvokeAllowsOnSurfaceDeniesOff(t *testing.T) {
 		surface, tool string
 		want          bool
 	}{
-		{"implement_investigate", "read", true},
+		{"implement_investigate", "read", false},
 		{"implement_investigate", "command", true}, // command is on-surface on investigate
-		{"implement_investigate", "write", true},   // product write is on-surface on investigate
+		{"implement_investigate", "edit", true},    // product edit is on-surface on investigate
 		{"implement_dispatch", "task", true},
 		{"implement_dispatch", "command", false}, // off-surface command denied on orchestrate
-		{"implement_dispatch", "write", false},   // off-surface write denied on orchestrate
+		{"implement_dispatch", "edit", false},    // off-surface edit denied on orchestrate
 	}
 	for _, c := range cases {
 		plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: c.surface}, 1)

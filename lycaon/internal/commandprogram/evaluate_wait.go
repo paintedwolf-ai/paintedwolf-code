@@ -11,6 +11,7 @@ import (
 // A nil state is runnable; an empty state waits on another activity's stream.
 type executionWaits struct {
 	mu         sync.Mutex
+	ctx        context.Context
 	clock      Clock
 	port       ProgramWaits
 	live       map[*ExecutionWait]*blockedActivity
@@ -34,8 +35,8 @@ type ExecutionWait struct {
 	job string
 }
 
-func newExecutionWaits(clock Clock, port ProgramWaits, cancel context.CancelCauseFunc) *executionWaits {
-	return &executionWaits{clock: clock, port: port, live: map[*ExecutionWait]*blockedActivity{}, deadlines: map[*ExecutionWait]WaitState{}, cancel: cancel}
+func newExecutionWaits(ctx context.Context, clock Clock, port ProgramWaits, cancel context.CancelCauseFunc) *executionWaits {
+	return &executionWaits{ctx: ctx, clock: clock, port: port, live: map[*ExecutionWait]*blockedActivity{}, deadlines: map[*ExecutionWait]WaitState{}, cancel: cancel}
 }
 
 func (w *executionWaits) start() *ExecutionWait {
@@ -67,7 +68,7 @@ func (a *ExecutionWait) finish() {
 	delete(w.live, a)
 	delete(w.deadlines, a)
 	w.clear()
-	if err := w.publish(context.Background()); err != nil {
+	if err := w.publish(w.ctx); err != nil {
 		w.err = err
 		w.cancel(err)
 	}

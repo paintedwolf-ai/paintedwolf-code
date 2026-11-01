@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -203,6 +205,16 @@ func TestSupervisedPTYInterruptReachesOnlyTheProgram(t *testing.T) {
 }
 
 func TestSupervisedCommandSeesOnlyItsIntendedDescriptors(t *testing.T) {
+	for fd := 3; fd < 64; fd++ {
+		flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0)
+		if err != nil || flags&unix.FD_CLOEXEC != 0 {
+			continue
+		}
+		_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFD, flags|unix.FD_CLOEXEC)
+		t.Cleanup(func() {
+			_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFD, flags)
+		})
+	}
 	python, err := exec.LookPath("python3")
 	testutil.FailErr(t, "locate descriptor fixture runtime", err)
 	// fstat probes descriptors without opening one, unlike listing /proc/self/fd.
@@ -220,20 +232,22 @@ print(" ".join(open_fds))`
 			cmd, cleanup, err := PrepareCommand(t.Context(), python, []string{"-c", probe}, ExecOpts{Launch: HostLaunch("descriptor inheritance regression")})
 			testutil.FailErr(t, "prepare descriptor probe", err)
 			defer cleanup()
+			baseline, baselineCleanup, err := PrepareCommand(t.Context(), python, []string{"-c", probe}, ExecOpts{Launch: HostLaunch("descriptor inheritance regression")})
+			testutil.FailErr(t, "prepare direct descriptor probe", err)
+			defer baselineCleanup()
 			if extra > 0 {
 				read, write, err := os.Pipe()
 				testutil.FailErr(t, "open intended descriptor", err)
 				defer func() { _ = read.Close(); _ = write.Close() }()
-				cmd.ExtraFiles = []*os.File{write}
+				cmd.ExtraFiles = append(cmd.ExtraFiles, write)
+				baseline.ExtraFiles = append(baseline.ExtraFiles, write)
 			}
 			// Managed runners intentionally inherit lineage and confinement descriptors.
 			// Compare the supervised launch with the same direct launch to detect leaks.
-			baseline := exec.CommandContext(t.Context(), python, "-c", probe)
-			baseline.Env = cmd.Env
-			baseline.ExtraFiles = cmd.ExtraFiles
-			wantBytes, err := baseline.Output()
-			testutil.FailErr(t, "run direct descriptor probe", err)
-			want := strings.TrimSpace(string(wantBytes))
+			var wantOut strings.Builder
+			baseline.Stdout = &wantOut
+			testutil.FailErr(t, "run direct descriptor probe", RunPrepared(t.Context(), baseline))
+			want := strings.TrimSpace(wantOut.String())
 			var out strings.Builder
 			cmd.Stdout = &out
 			testutil.FailErr(t, "run supervised descriptor probe", RunInOwnGroup(t.Context(), cmd))

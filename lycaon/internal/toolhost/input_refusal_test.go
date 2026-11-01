@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -36,17 +37,13 @@ func TestCommandInputResourceRefusalPreservesActualStopAndPriorEffects(t *testin
 		t.Run(account, func(t *testing.T) {
 			env := newPipeSemanticsEnv(t)
 			hints, err := guidance.LoadHintConfigStock()
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
 			env.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 			if err := os.WriteFile(filepath.Join(env.Dir, "input"), []byte("unread bytes\n"), 0600); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "write file", err)
 			}
 			limits, err := toolcontract.CatalogProgramMemoryLimits()
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "toolcontract.CatalogProgramMemoryLimits failed", err)
 			var observed *toolrejection.ToolReject
 			var original *toolcontract.ProgramMemoryLimitError
 			var memory *toolcontract.ProgramMemory
@@ -83,9 +80,7 @@ func TestCommandInputResourceRefusalPreservesActualStopAndPriorEffects(t *testin
 			}
 			const source = "printf before > kept\ncat < input\nprintf after > never"
 			raw, err := env.Call(t, t.Context(), source)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "env.Call failed", err)
 			result := decodePipeOutcome(t, raw)
 			if observed == nil || original == nil || original.Account != account || observed.Code != "COMMAND_LIMIT_EXCEEDED" || observed.ArgumentValidation {
 				t.Fatalf("original capture failure lost: %+v %+v", observed, original)
@@ -140,14 +135,10 @@ func TestCommandInputResourceRefusalPreservesActualStopAndPriorEffects(t *testin
 func TestCommandProgramLimitRefusalKeepsTypedRuntimeFacts(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	hints, err := guidance.LoadHintConfigStock()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
 	env.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 	raw, err := env.Call(t, t.Context(), "printf before > kept\nf() { f; }\nf\nprintf after > never")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result := decodePipeOutcome(t, raw)
 	if result.Refusal == nil || result.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" || result.StopCode != result.Refusal.Code || result.Status == 0 || result.CompletedEffects != 1 || result.UncertainEffects != 0 {
 		t.Fatalf("program limit lost actual stop: %+v", result)

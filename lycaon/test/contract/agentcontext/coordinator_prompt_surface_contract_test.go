@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -209,8 +210,19 @@ func TestCoordinatorSurfaceInvariants_workersExpandCapabilityBeyondCoordinatorWi
 	if !ok {
 		t.Fatal("missing explore_readonly profile")
 	}
-	if !impl.Tools["write"] {
-		t.Fatal("implementer profile must grant write")
+	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	contractcheck.FailErr(t, "declare worker mutation effect", err)
+	if !impl.Tools["command"] || !impl.CommandEffects.Allows(mutation) {
+		t.Fatal("implementer profile must grant command mutation capability")
+	}
+	catalog, err := surfacecatalog.Load()
+	contractcheck.FailErr(t, "load synthesis effect boundary", err)
+	row, err := catalog.Surface(surfaceImplementSynthesis)
+	contractcheck.FailErr(t, "load synthesis declaration", err)
+	effects, err := toolcontract.NewCommandEffects(row.CommandEffects...)
+	contractcheck.FailErr(t, "compile synthesis effects", err)
+	if effects.Allows(mutation) {
+		t.Fatal("synthesis command must not admit worker mutation effects")
 	}
 	if contractcheck.ContainsString(synthesis, "write") {
 		t.Fatal("implement_synthesis wire must not expose write — delegate to implementer via task()")
@@ -222,8 +234,8 @@ func TestCoordinatorSurfaceInvariants_workersExpandCapabilityBeyondCoordinatorWi
 	if explore.Tools["write"] {
 		t.Fatal("explore_readonly profile must not grant write")
 	}
-	if !explore.Tools["git_diff"] {
-		t.Fatal("explore_readonly profile must grant git_diff for VCS survey")
+	if explore.Tools["git_diff"] || impl.Tools["write"] {
+		t.Fatal("retired RPC operations must not return as public profile tools")
 	}
 	// Coordinator grants command; the turn surface gates it.
 	if !coord.Tools["command"] {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -56,7 +57,7 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 		output, err := programs.Call(t, turnCtx, "sh serve.sh "+strconv.Quote(pidFile))
 		turnDone <- commandTurnResult{output: output, err: err}
 	}()
-	job := waitForJobPID(t, pidFile)
+	job := waitForJobPID(t, sess.ID, pidFile)
 
 	testutil.FailErr(t, "abort", mgr.Stops.Abort(ctx, sess.ID, "user stopped"))
 	var turn commandTurnResult
@@ -108,7 +109,7 @@ func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 	})
 }
 
-func waitForJobPID(t *testing.T, path string) int {
+func waitForJobPID(t *testing.T, sessionID, path string) int {
 	t.Helper()
 	var pid int
 	testutil.WaitFor(t, func() bool {
@@ -119,6 +120,15 @@ func waitForJobPID(t *testing.T, path string) int {
 		pid, err = strconv.Atoi(strings.TrimSpace(string(raw)))
 		return err == nil && pid > 0
 	})
+	if members, err := lineage.SessionMembers(sessionID); err == nil && len(members) > 0 {
+		if _, ok := members[pid]; !ok {
+			for member := range members {
+				if member > pid {
+					pid = member
+				}
+			}
+		}
+	}
 	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
 	return pid
 }

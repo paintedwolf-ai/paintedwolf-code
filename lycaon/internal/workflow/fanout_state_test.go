@@ -17,7 +17,7 @@ import (
 
 func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 	mgr, sessions, _, dir := testManagerWithRegistry(t)
-	run, err := startRun(t.Context(), mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(t.Context(), mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "start run", err)
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register state tools", workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessions}))

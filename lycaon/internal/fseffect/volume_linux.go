@@ -22,8 +22,10 @@ func VolumeOf(file *os.File, path string) (Volume, error) {
 	if err := unix.Fstat(int(file.Fd()), &stat); err != nil {
 		return Volume{}, err
 	}
-	size := uint64(st.Frsize)
-	if size == 0 {
+	var size uint64
+	if st.Frsize > 0 {
+		size = uint64(st.Frsize)
+	} else if st.Bsize > 0 {
 		size = uint64(st.Bsize)
 	}
 	vol := Volume{BlockSize: size, Blocks: st.Blocks, Free: st.Bfree, Available: st.Bavail, Files: st.Files, FreeFiles: st.Ffree, Source: "-", Target: "-"}

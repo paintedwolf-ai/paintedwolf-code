@@ -223,11 +223,7 @@ func (s *Store) operationPerson(ctx context.Context, in RecordInput) (string, er
 	return person.ID, nil
 }
 
-// recordEffect lands one effect and reports the file and version it produced.
-func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID string, in preparedRecord, recorded *TrackedFile) error {
-	return s.recordEffectWithCache(ctx, q, operationID, in, recorded, nil)
-}
-
+// recordEffectWithCache lands one effect and reports the file and version it produced.
 func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operationID string, in preparedRecord, recorded *TrackedFile, cache *TxBatchCache) error {
 	if recovery := in.NativeRecovery; recovery != nil && recovery.Restore && recovery.Key != "" {
 		fileID, err := q.GetSourceRecoveryFile(ctx, db.GetSourceRecoveryFileParams{ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, OperationKey: recovery.Key})
@@ -389,15 +385,6 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 	}
 
 	return nil
-}
-
-func updateLineAttribution(
-	ctx context.Context,
-	q *db.Queries,
-	in RecordInput,
-	fileID, effectID string,
-) error {
-	return updateLineAttributionWithState(ctx, q, in, fileID, effectID, false)
 }
 
 func updateLineAttributionWithState(

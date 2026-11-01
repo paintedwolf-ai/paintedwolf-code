@@ -152,16 +152,14 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 				continue
 			}
 			tools.RememberCommandSourceDelivery(ctx, run.tc, run.memory, local, deliveredSlice)
-			if observer != nil && r.Recorder != nil {
-				_, _ = r.Recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{
-					SessionID:       run.tc.Identity.SessionID,
-					ProgramID:       programID,
-					OutputReference: ref,
-					OutputStartByte: streamStart,
-					OutputEndByte:   streamEnd,
-					Observation:     obs,
-				}, observer, r.sessionResources(run.tc.Identity.SessionID))
-			}
+			_, _ = r.Recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{
+				SessionID:       run.tc.Identity.SessionID,
+				ProgramID:       programID,
+				OutputReference: ref,
+				OutputStartByte: streamStart,
+				OutputEndByte:   streamEnd,
+				Observation:     obs,
+			}, observer, r.sessionResources(run.tc.Identity.SessionID))
 			release()
 		}
 		_ = proj.Close()
@@ -175,52 +173,55 @@ func (r *ProgramRuntime) loadCapturedSourceForPin(ctx context.Context, run *prog
 		return "", nil, nil, false
 	}
 	rest := strings.TrimPrefix(pin.SourceID, "disk:")
+	var rootPath, relPath string
 	for _, root := range run.tc.Source.Roots {
 		prefix := root.ID + "/"
 		if !strings.HasPrefix(rest, prefix) {
 			continue
 		}
-		relPath := strings.TrimPrefix(rest, prefix)
-		if relPath == "" {
-			continue
+		if candidate := strings.TrimPrefix(rest, prefix); candidate != "" {
+			rootPath, relPath = root.Path, candidate
+			break
 		}
-		file, err := fseffect.OpenRead(fseffect.Location{Root: root.Path, Rel: filepath.FromSlash(relPath)})
-		if err != nil {
-			return "", nil, nil, false
-		}
-		defer file.Close()
-		info, err := file.Stat()
-		overhead := int64(deliveredBytes)*32 + (64 << 10)
-		if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > (math.MaxInt64-overhead)/8-1 {
-			return "", nil, nil, false
-		}
-		size := info.Size()
-		release, err := run.memory.Reserve(ctx, 8*(size+1)+overhead)
-		if err != nil {
-			return "", nil, nil, false
-		}
-		keep := false
-		defer func() {
-			if !keep {
-				release()
-			}
-		}()
-		raw := make([]byte, size+1)
-		n, err := io.ReadFull(io.LimitReader(file, size+1), raw)
-		if int64(n) != size || (!errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF)) {
-			return "", nil, nil, false
-		}
-		raw = raw[:n]
-		if pin.Representation == toolcontract.OriginalEncodedBytes {
-			keep = true
-			return relPath, raw, release, true
-		}
-		text, _, err := textfile.Decode(raw, textfile.LimitsForRaw(max(size, 1)))
-		if err != nil {
-			return "", nil, nil, false
-		}
-		keep = true
-		return relPath, []byte(text), release, true
 	}
-	return "", nil, nil, false
+	if relPath == "" {
+		return "", nil, nil, false
+	}
+	file, err := fseffect.OpenRead(fseffect.Location{Root: rootPath, Rel: filepath.FromSlash(relPath)})
+	if err != nil {
+		return "", nil, nil, false
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	overhead := int64(deliveredBytes)*32 + (64 << 10)
+	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > (math.MaxInt64-overhead)/8-1 {
+		return "", nil, nil, false
+	}
+	size := info.Size()
+	release, err := run.memory.Reserve(ctx, 8*(size+1)+overhead)
+	if err != nil {
+		return "", nil, nil, false
+	}
+	keep := false
+	defer func() {
+		if !keep {
+			release()
+		}
+	}()
+	raw := make([]byte, size+1)
+	n, err := io.ReadFull(io.LimitReader(file, size+1), raw)
+	if int64(n) != size || (!errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF)) {
+		return "", nil, nil, false
+	}
+	raw = raw[:n]
+	if pin.Representation == toolcontract.OriginalEncodedBytes {
+		keep = true
+		return relPath, raw, release, true
+	}
+	text, _, err := textfile.Decode(raw, textfile.LimitsForRaw(max(size, 1)))
+	if err != nil {
+		return "", nil, nil, false
+	}
+	keep = true
+	return relPath, []byte(text), release, true
 }

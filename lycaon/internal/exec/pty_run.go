@@ -35,6 +35,9 @@ func RunPTY(ctx context.Context, name string, args []string, opts PTYOpts) ([]by
 
 	session, err := StartPTY(runCtx, name, args, opts)
 	if err != nil {
+		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			return nil, -1, fmt.Errorf("%w after %v", ErrTimeout, timeout)
+		}
 		return nil, -1, err
 	}
 	defer func() { _ = session.Close() }()

@@ -17,8 +17,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// TestPathExplorerChildSchemaIsCommandFree checks the survey tool boundary.
-func TestPathExplorerChildSchemaIsCommandFree(t *testing.T) {
+// TestPathExplorerChildSchemaUsesNativeCommandSurvey checks the survey tool boundary.
+func TestPathExplorerChildSchemaUsesNativeCommandSurvey(t *testing.T) {
 	h := BuildForTest(t)
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -36,20 +36,20 @@ func TestPathExplorerChildSchemaIsCommandFree(t *testing.T) {
 	for _, meta := range policy.ListForPrompt(ctx, child, prof.ToolProfile) {
 		schema = append(schema, meta.Name)
 	}
-	for _, forbidden := range []string{"write", "replace_lines", "delete", "mkdir", "copy", "move"} {
+	for _, forbidden := range []string{"edit", "replace_lines", "code_rewrite", "restore_version", "chmod", "chown", "read", "find", "grep"} {
 		if containsString(schema, forbidden) {
-			t.Fatalf("path-explorer schema must not include mutation tool %q: %v", forbidden, schema)
+			t.Fatalf("path-explorer schema must not include unavailable tool %q: %v", forbidden, schema)
 		}
 	}
-	for _, want := range []string{"command", "find", "grep", "read"} {
+	for _, want := range []string{"command", "survey_repo", "complete_leg"} {
 		if !containsString(schema, want) {
 			t.Fatalf("path-explorer schema missing %q: %v", want, schema)
 		}
 	}
 }
 
-// TestPathExplorerSurveyWithFindAndGrepOnly exercises native survey tools.
-func TestPathExplorerSurveyWithFindAndGrepOnly(t *testing.T) {
+// TestPathExplorerSurveyUsesNativeFindAndGrep exercises native survey tools.
+func TestPathExplorerSurveyUsesNativeFindAndGrep(t *testing.T) {
 	surveyMock := &pathExplorerSurveyMock{}
 	h := BuildForTest(t, WithLLMClient(surveyMock))
 
@@ -81,33 +81,25 @@ func TestPathExplorerSurveyWithFindAndGrepOnly(t *testing.T) {
 	result, err := exec.Execute(ctx, *claimed, worker.RunContextForTask(*claimed, dir))
 	testutil.FailErr(t, "worker Execute", err)
 	if result.Status != string(api.WorkerStatusComplete) {
-		stored, _ := h.Delegations.Queue.Get(task.ID)
-		var messages []api.Message
-		if stored != nil {
-			messages, _ = h.Store.GetWorkerJobMessages(ctx, stored.ChildSessionID, task.ID)
-		}
-		t.Fatalf("worker result = %+v want complete; task=%+v messages=%+v", result, stored, messages)
+		t.Fatalf("worker status=%s hint=%s report=%+v", result.Status, result.HintCode, result.CompletionReport)
 	}
 
 	invoked := surveyMock.invokedTools()
-	for _, name := range invoked {
-		if name == "command" {
-			t.Fatal("path-explorer survey must not invoke command")
+	if len(invoked) != 3 || invoked[0] != "command" || invoked[1] != "command" || invoked[2] != "complete_leg" {
+		t.Fatalf("survey calls=%v", invoked)
+	}
+	stored, ok := h.Delegations.Queue.Get(task.ID)
+	if !ok || stored == nil || stored.ChildSessionID == "" {
+		t.Fatal("worker child session missing")
+	}
+	for _, operation := range []string{"find", "grep"} {
+		var count int
+		testutil.FailErr(t, "read native survey receipt", h.DB.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=? AND e.operation_id=? AND e.state='completed' AND e.owner_started=1`, stored.ChildSessionID, operation).Scan(&count))
+		if count != 1 {
+			t.Fatalf("native %s completed receipts=%d", operation, count)
 		}
 	}
-	foundFind := false
-	foundGrep := false
-	for _, name := range invoked {
-		switch name {
-		case "find":
-			foundFind = true
-		case "grep":
-			foundGrep = true
-		}
-	}
-	if !foundFind || !foundGrep {
-		t.Fatalf("expected find and grep tool calls; find=%v grep=%v invoked=%v", foundFind, foundGrep, invoked)
-	}
+
 }
 
 type pathExplorerSurveyMock struct {
@@ -130,20 +122,20 @@ func (m *pathExplorerSurveyMock) invokedTools() []string {
 }
 
 func (m *pathExplorerSurveyMock) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	if schemaHasTool(req.Tools, "find") && !schemaHasTool(req.Tools, "task") {
+	if schemaHasTool(req.Tools, "command") && !schemaHasTool(req.Tools, "task") {
 		n := m.workerTurn.Add(1)
 		switch n {
 		case 1:
-			m.recordInvoke("find")
+			m.recordInvoke("command")
 			return &modelcall.Completion{ToolCalls: []api.ToolCall{{
-				ID: "f1", Name: "find",
-				Args: map[string]any{"path": ".", "name_glob": "**/*.go"},
+				ID: "f1", Name: "command",
+				Args: map[string]any{"command": "find . -name '*.go' -type f"},
 			}}}, nil
 		case 2:
-			m.recordInvoke("grep")
+			m.recordInvoke("command")
 			return &modelcall.Completion{ToolCalls: []api.ToolCall{{
-				ID: "g1", Name: "grep",
-				Args: map[string]any{"pattern": "package main", "path": "."},
+				ID: "g1", Name: "command",
+				Args: map[string]any{"command": "grep -n 'package main' main.go"},
 			}}}, nil
 		case 3:
 			m.recordInvoke("complete_leg")

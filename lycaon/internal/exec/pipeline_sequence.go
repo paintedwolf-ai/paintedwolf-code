@@ -83,6 +83,10 @@ func (s *sequenceRun) drive(ctx context.Context) {
 			continue
 		}
 		if err := s.startGroup(ctx, group); err != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				s.timeout = commandTimeout(ctx, s.started)
+				return
+			}
 			// Launch failure leaves remaining stages unrun and records exit -1.
 			if !errors.Is(err, context.Canceled) {
 				s.recordLaunchFailure(group, err)

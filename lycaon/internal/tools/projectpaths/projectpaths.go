@@ -533,10 +533,3 @@ func sessionRelOfAbs(dir, raw string) (string, bool) {
 	}
 	return filepath.ToSlash(rel), true
 }
-
-func sessionScratchUnavailableReject(path string) error {
-	return &toolrejection.ToolReject{
-		Code: tools.SessionScratchUnavailableCode,
-		Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))},
-	}
-}

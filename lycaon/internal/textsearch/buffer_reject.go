@@ -111,8 +111,5 @@ func (r *bufferRejector) rejects(ctx context.Context, block []byte, separator by
 			return false
 		}
 	}
-	if ctx.Err() != nil {
-		return false
-	}
-	return true
+	return ctx.Err() == nil
 }

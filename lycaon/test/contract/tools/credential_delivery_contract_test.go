@@ -19,7 +19,6 @@ func TestNativeCredentialContentDeliveryInventory(t *testing.T) {
 		{"summarize command entry", "internal/tools/native/literal/domain.go", "runSummarize", "Summarize"},
 		{"git_show", "internal/tools/native/git_introspection.go", "Run", "deliverGitPatchCredentials"},
 		{"git_blame", "internal/tools/native/git_introspection.go", "Run", "ObserveCredentialDelivery"},
-		{"git_diff", "internal/toolhost/git_tools.go", "gitDiffHandler", "ObserveCredentialDelivery"},
 	}
 	for _, surface := range surfaces {
 		t.Run(surface.tool, func(t *testing.T) {

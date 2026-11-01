@@ -116,14 +116,14 @@ func ReadContentCappedFromRoot(tool string, access Access, root *fseffect.ReadRo
 			return nil, readErr
 		}
 		rest, rerr := io.ReadAll(io.LimitReader(f, maxBytes+1-int64(n)))
-		body := append(buf[:n], rest...)
-		if int64(len(body)) > maxBytes {
-			return nil, access.SizeReject(tool, displayPath, int64(len(body)), maxBytes)
+		buf = append(buf[:n], rest...)
+		if int64(len(buf)) > maxBytes {
+			return nil, access.SizeReject(tool, displayPath, int64(len(buf)), maxBytes)
 		}
 		if rerr != nil {
 			return nil, rerr
 		}
-		return body, nil
+		return buf, nil
 	}
 	return readPlainContentCapped(tool, access, f, displayPath, maxBytes)
 }

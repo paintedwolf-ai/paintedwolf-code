@@ -20,7 +20,7 @@ func TestApprovalHITLSSEPendingAndResolved(t *testing.T) {
 	defer unsub()
 
 	done := h.runPrompt(t)
-	decisionID := h.waitPending(t)
+	decisionID := h.waitPending(t, done)
 	assertCheckpointSSE(t, ch, decisionID, wire.CheckpointStatusPending)
 
 	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID,

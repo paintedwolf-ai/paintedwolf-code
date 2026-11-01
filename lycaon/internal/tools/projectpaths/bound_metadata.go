@@ -221,7 +221,7 @@ func (p BoundPath) ReadDir() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer dir.Close()
+	defer func() { _ = dir.Close() }()
 	return dir.Names(DirectoryNames{IncludeHidden: true})
 }
 

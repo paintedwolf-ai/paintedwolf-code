@@ -50,7 +50,7 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 		Gate:   primaryGate, Cited: cited, GrantDelta: req.GrantDelta,
 		ConsequenceBand: string(req.ConsequenceBand), ConsequenceCode: string(req.ConsequenceCode),
 		Detection:     req.Detection,
-		ApprovalRules: append([]ApprovalRuleMatch(nil), req.ApprovalMatches...),
+		ApprovalRules: text.rules,
 	}
 	if req.Explanation != nil {
 		presentation.Impact = text.explanation.What

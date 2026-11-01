@@ -16,18 +16,28 @@ import (
 // newBisectHarness builds twelve commits where commit 7 first records a bad
 // state, with check.sh as the untracked check Git itself can run.
 func newBisectHarness(t *testing.T) *harness {
-	h := newEmptyHarness(t)
-	for i := 1; i <= 12; i++ {
-		state := "good\n"
-		if i >= 7 {
-			state = "bad\n"
+	h := newUninitializedHarness(t)
+	empty := ensureEmptyFixture(t, h.bin)
+	bisectFixtureOnce.Do(func() {
+		dir, err := mkdirSharedFixture("gitcmd-bisect-*")
+		testutil.FailErr(t, "bisect fixture dir", err)
+		copyFixtureDir(t, empty, dir)
+		seed := &harness{t: t, root: dir, bin: h.bin, template: t.TempDir()}
+		for i := 1; i <= 12; i++ {
+			state := "good\n"
+			if i >= 7 {
+				state = "bad\n"
+			}
+			seed.write("state", state)
+			seed.write("n", strings.Repeat("x", i)+"\n")
+			seed.git("add", "--", "state", "n")
+			seed.git("commit", "-q", "-m", "commit "+strings.Repeat("I", i))
 		}
-		h.write("state", state)
-		h.write("n", strings.Repeat("x", i)+"\n")
-		h.git("add", "--", "state", "n")
-		h.git("commit", "-q", "-m", "commit "+strings.Repeat("I", i))
-	}
-	h.write("check.sh", "grep -q good state\n")
+		seed.write("check.sh", "grep -q good state\n")
+		bisectFixtureDir = dir
+	})
+	copyFixtureDir(t, bisectFixtureDir, h.root)
+	h.git("update-index", "-q", "--refresh")
 	return h
 }
 
@@ -70,6 +80,7 @@ func (h *harness) bisectFile(name string) (string, bool) {
 }
 
 func TestBisectRunNamesTheFirstBadCommitAndMatchesGit(t *testing.T) {
+	t.Parallel()
 	h := newBisectHarness(t)
 	reference := newBisectHarness(t)
 	h.nested = &checkNested{root: h.root}
@@ -113,6 +124,7 @@ func TestBisectRunNamesTheFirstBadCommitAndMatchesGit(t *testing.T) {
 }
 
 func TestBisectRunSkipsStatus125(t *testing.T) {
+	t.Parallel()
 	h := newBisectHarness(t)
 	check := &checkNested{root: h.root, verdict: func(state, n string) int {
 		if len(n) == 9 {
@@ -135,6 +147,7 @@ func TestBisectRunSkipsStatus125(t *testing.T) {
 }
 
 func TestBisectRefusesADirtyTreeAndRunsInAWorktree(t *testing.T) {
+	t.Parallel()
 	h := newBisectHarness(t)
 	h.write("state", "edited\n")
 	h.exec("git", "bisect", "start", "HEAD", "HEAD~11").refused(t, "dirty start", "GIT_BISECT_DIRTY_TREE")
@@ -160,6 +173,7 @@ func TestBisectRefusesADirtyTreeAndRunsInAWorktree(t *testing.T) {
 }
 
 func TestBisectRunInterruptionLeavesARecordedSession(t *testing.T) {
+	t.Parallel()
 	h := newBisectHarness(t)
 	h.nested = &checkNested{root: h.root, stopAt: 2}
 	testutil.FailErr(t, "start", h.exec("git", "bisect", "start", "HEAD", "HEAD~11").err)
@@ -180,6 +194,7 @@ func TestBisectRunInterruptionLeavesARecordedSession(t *testing.T) {
 // TestBisectManualStepsMatchGit drives custom terms, verdicts, terms and the
 // one-line view through both implementations on identical repositories.
 func TestBisectManualStepsMatchGit(t *testing.T) {
+	t.Parallel()
 	h := newBisectHarness(t)
 	reference := newBisectHarness(t)
 	for _, line := range []string{
@@ -212,6 +227,7 @@ func TestBisectManualStepsMatchGit(t *testing.T) {
 }
 
 func TestBisectRefusesUnsupportedForms(t *testing.T) {
+	t.Parallel()
 	h := newBisectHarness(t)
 	for _, c := range []struct {
 		argv []string

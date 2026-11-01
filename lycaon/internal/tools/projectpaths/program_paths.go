@@ -181,6 +181,10 @@ func (p *ProgramPaths) Rebind(ctx context.Context, tc tools.ToolContext) (*Progr
 	// descriptors keep those addresses, while new child file access uses the
 	// newly admitted context held by frame.
 	frame.adoptDirectories(p)
+	frame.cwd = frame.bindAuthority(ctx, frame.cwd, false)
+	if frame.hasPrevious {
+		frame.previous = frame.bindAuthority(ctx, frame.previous, false)
+	}
 	return frame, nil
 }
 
@@ -254,8 +258,13 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	if err != nil {
 		return BoundPath{}, err
 	}
-	canonicalRoot := fspath.CanonicalPath(resolved.Root.Path)
 	bound := BoundPath{Resolved: resolved, rootIdentity: identity, rootInfo: rootInfo, exactRelative: relative}
+	return p.bindAuthority(ctx, bound, write), nil
+}
+
+func (p *ProgramPaths) bindAuthority(ctx context.Context, bound BoundPath, write bool) BoundPath {
+	resolved := bound.Resolved
+	canonicalRoot := fspath.CanonicalPath(resolved.Root.Path)
 	bound.attached = func() error { return currentRootReject(p.context, resolved.Root, resolved.Abs) }
 	bound.admitRead = func(actual string) error {
 		if err := ctx.Err(); err != nil {
@@ -305,7 +314,7 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 			return resolveMutationScope(ctx, p.boundary, p.context, authority)
 		}
 	}
-	return bound, nil
+	return bound
 }
 
 // Cwd reports both the addressed root and native directory without a global cwd.

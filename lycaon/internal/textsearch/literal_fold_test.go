@@ -132,7 +132,7 @@ func TestFoldedLiteralChecksWorkAndCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, _, err := m.Select(ctx, []byte("AAAA")); err != context.Canceled {
+	if _, _, err := m.Select(ctx, []byte("AAAA")); !errors.Is(err, context.Canceled) {
 		t.Fatalf("folded cancellation = %v", err)
 	}
 }

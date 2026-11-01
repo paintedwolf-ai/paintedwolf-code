@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
+	"github.com/lycaon/lycaon/internal/session/policyfacts"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -62,9 +63,19 @@ func TestToolResultsWithoutSessionOrRuntimePreserveProducerFacts(t *testing.T) {
 		{nil, &api.Session{ID: "session"}},
 		{&ToolResults{}, nil},
 	} {
-		output, got := tc.results.EnrichTool(t.Context(), tc.session, "task", nil, "producer output", facts, 0)
+		output, got := tc.results.EnrichTool(t.Context(), tc.session, "task", nil, "producer output", facts, nil, 0)
 		if output != "producer output" || !reflect.DeepEqual(got, facts) {
 			t.Fatalf("unavailable enrichment changed producer result: %q %+v", output, got)
 		}
+	}
+}
+
+func TestParkedToolResultKeepsPostPolicyFactsWithoutCompletionEnrichment(t *testing.T) {
+	results := &ToolResults{Policy: &policyfacts.Service{}, Enricher: &guidance.ToolOutputEnricher{}}
+	facts := guidance.ToolResultFacts{}.WithCode("PRODUCER_FACT")
+	completion := &api.ToolCompletion{Operation: "command", State: "parked", ResourceKind: "wait", ResourceID: "lease-1"}
+	output, got := results.EnrichTool(t.Context(), &api.Session{ID: "session"}, "command", nil, "waiting for program", facts, completion, 0)
+	if output != "waiting for program" || !reflect.DeepEqual(got, facts) {
+		t.Fatalf("parked result changed: %q %+v", output, got)
 	}
 }

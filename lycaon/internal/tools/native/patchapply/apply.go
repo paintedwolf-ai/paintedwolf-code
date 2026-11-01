@@ -188,6 +188,7 @@ func Reverse(f File) (File, error) {
 				line.Op = gitdiff.OpDelete
 			case gitdiff.OpDelete:
 				line.Op = gitdiff.OpAdd
+			case gitdiff.OpContext:
 			}
 			rev.Lines[j] = line
 		}
