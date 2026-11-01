@@ -326,4 +326,3 @@ func TestEvaluateWorkerCitationsReportsURLOffendersAlongsidePathOffenders(t *tes
 		t.Fatalf("eval.UnobservedURLs = %v want [https://example.com/unobserved]", eval.UnobservedURLs)
 	}
 }
-

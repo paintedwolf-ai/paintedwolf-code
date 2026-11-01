@@ -306,4 +306,3 @@ func severitySourceRank(src string) int {
 		return 5
 	}
 }
-

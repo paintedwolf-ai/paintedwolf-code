@@ -13,17 +13,17 @@ import (
 func TestDetectionOnlyCardFacesTaskAcknowledgement(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-RootSessionID: "chat-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "aws s3 rb s3://x --force",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "aws s3 rb s3://x --force",
+		},
+	}
 	decision := &gate.Decision{
 		Primary:   api.GateAuthorityMisuse,
 		ReasonKey: "authority_misuse:aws-cli/s3-remove-bucket",
@@ -82,16 +82,16 @@ Command: "aws s3 rb s3://x --force",
 func TestDetectionAcknowledgementDoesNotFaceCoFiringGate(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "rm -rf /etc/example",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "chat-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "rm -rf /etc/example",
+		},
+	}
 	decision := &gate.Decision{
 		Primary: api.GateAuthorityMisuse,
 		Also:    []api.ApprovalGate{api.GateOutsideRootsWrite},
@@ -129,17 +129,17 @@ Command: "rm -rf /etc/example",
 func TestQuietOptionCopyIsDurationPlusSubject(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-RootSessionID: "chat-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "aws s3 rb s3://x --force",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "aws s3 rb s3://x --force",
+		},
+	}
 	decision := &gate.Decision{
 		Primary:   api.GateAuthorityMisuse,
 		ReasonKey: "authority_misuse:aws-cli/s3-remove-bucket",
@@ -160,17 +160,17 @@ Command: "aws s3 rb s3://x --force",
 func TestQuietInstallsMatchingGrant(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-RootSessionID: "chat-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "curl https://example.com",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "curl https://example.com",
+		},
+	}
 	decision := &gate.Decision{
 		Primary:   api.GateUnobservedChannel,
 		ReasonKey: "unobserved_channel:direct_ip",
@@ -263,17 +263,17 @@ Command: "curl https://example.com",
 func TestQuietNeverCarriesDurableAuthority(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "read",
-Files: []string{"/etc/hosts"},
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-RootSessionID: "chat-1",
-ProjectID: "proj-1",
-ProjectDir: "/proj",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:  "read",
+			Files: []string{"/etc/hosts"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+			ProjectID:     "proj-1",
+			ProjectDir:    "/proj",
+		},
+	}
 	decision := &gate.Decision{
 		Primary:   api.GateSensitiveLocation,
 		ReasonKey: "sensitive_location:hosts",
@@ -333,17 +333,17 @@ ProjectDir: "/proj",
 func TestQuietCarryingDurableGrantIsRejected(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-RootSessionID: "chat-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "curl https://example.com",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "curl https://example.com",
+		},
+	}
 	durable := hitl.ApprovalGrant{
 		ID: "grant_device", Scope: hitl.ApprovalGrantScopeDevice, Title: hitl.TitleAllowOnThisDevice,
 	}
@@ -405,17 +405,17 @@ func quietCarriesAskQuiet(opt hitl.ApprovalOption) bool {
 func TestDiscretionaryGatesCarryAQuietRung(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-RootSessionID: "chat-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "curl https://example.com",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "curl https://example.com",
+		},
+	}
 	for _, g := range gate.All() {
 		decision := &gate.Decision{
 			Primary:   g,
@@ -537,19 +537,19 @@ func TestOrdinaryCardHasNoOptionNote(t *testing.T) {
 		Cited:     []gate.Fact{{Gate: api.GateUnobservedChannel, Key: "k", Value: "v", Source: "t"}},
 	}
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-RootSessionID: "chat-1",
-ProjectID: "proj-1",
-ProjectDir: "/tmp/proj",
-},
-Presentation: hitl.ActionPresentation{
-Command: "curl https://example.com",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+			ProjectID:     "proj-1",
+			ProjectDir:    "/tmp/proj",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "curl https://example.com",
+		},
+	}
 	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{
 		SessionID: "chat-1", Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &action, Decision: decision,

@@ -72,17 +72,17 @@ func TestInstallFailureLeavesCheckpointPending(t *testing.T) {
 		t.Fatalf("gate fixture verdict = %v", verdict)
 	}
 	resp, err := mgr.RequestCheckpoint(ctx, CheckpointRequest{
-		SessionID:      "sess-1",
-		Kind:           api.CheckpointKindToolApproval,
-		Decision:       decision,
+		SessionID: "sess-1",
+		Kind:      api.CheckpointKindToolApproval,
+		Decision:  decision,
 		ProposedAction: &ProposedAction{
-Invocation: ActionInvocation{
-Tool: "write",
-},
-Scope: ActionScope{
-SessionID: "sess-1",
-},
-},
+			Invocation: ActionInvocation{
+				Tool: "write",
+			},
+			Scope: ActionScope{
+				SessionID: "sess-1",
+			},
+		},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 

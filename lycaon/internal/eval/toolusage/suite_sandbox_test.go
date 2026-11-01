@@ -226,4 +226,3 @@ func TestSandboxPreparationCleansUpOnFailure(t *testing.T) {
 		t.Fatal("created Documents under a non-directory home")
 	}
 }
-

@@ -78,4 +78,3 @@ func TestEnsureCurrentFormatUpgradesWhenIgnoresExist(t *testing.T) {
 		}
 	})
 }
-

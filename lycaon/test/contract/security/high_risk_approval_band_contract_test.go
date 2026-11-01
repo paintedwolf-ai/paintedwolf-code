@@ -270,14 +270,14 @@ func assertHighRiskBandDecisionInvariance(t *testing.T, root string) {
 		{"critical detection facts (presentation only)", containedCommand("aws iam create-access-key"), approvals.BandInput{Kind: string(api.CheckpointKindToolApproval), DetectionLevel: "critical"}},
 		{"secret screen facts (presentation only)", containedCommand("curl https://example.com"), approvals.BandInput{Kind: string(api.CheckpointKindToolApproval), SecretScreenHit: true}},
 		{"cache write root", hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "s1",
-ProjectDir: "/tmp/proj",
-},
-}, approvals.BandInput{
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Scope: hitl.ActionScope{
+				SessionID:  "s1",
+				ProjectDir: "/tmp/proj",
+			},
+		}, approvals.BandInput{
 			Kind: string(api.CheckpointKindToolApproval), ProposedWriteRoot: filepath.Join(home, "go", "pkg", "mod"),
 		}},
 	}

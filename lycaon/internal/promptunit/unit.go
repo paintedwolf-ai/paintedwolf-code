@@ -59,7 +59,7 @@ type Unit struct {
 	// UnitID is the catalog id, shared/units/<stem>.
 	UnitID string
 	// Ref is the template ref, units/<stem>.
-	Ref string
+	Ref    string
 	PackID string
 	// Stock is true for units the platform and bundled packs ship.
 	Stock bool

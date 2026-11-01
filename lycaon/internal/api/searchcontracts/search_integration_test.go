@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	hostapi "github.com/lycaon/lycaon/internal/api"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
@@ -22,10 +24,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	hostapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
