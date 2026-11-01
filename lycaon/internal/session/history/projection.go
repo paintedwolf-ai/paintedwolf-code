@@ -21,7 +21,11 @@ func (m *Service) Project(ctx context.Context, sess *api.Session) ([]api.Message
 		copy := *sess
 		sess = &copy
 	}
-	return m.project(ctx, sess, false)
+	rows, err := m.project(ctx, sess, false)
+	if err != nil {
+		return nil, err
+	}
+	return m.ApplyView(ctx, sess, rows), nil
 }
 
 func (m *Service) project(ctx context.Context, sess *api.Session, refresh bool) ([]api.Message, error) {
