@@ -364,7 +364,7 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 		return err
 	}
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
-	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
+	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: invocation.MaximumProgramInputBytes, OutputBytes: invocation.MaximumProgramInputBytes, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
 		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, screening)
 		if err != nil {
@@ -376,7 +376,16 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 		}
 		return nil
 	}
-	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
+	maximumNodes := 0
+	for _, limit := range run.catalog.Language.Limits {
+		if limit.ID == "expanded_fields" {
+			maximumNodes = 4 * int(limit.Maximum)
+		}
+	}
+	if maximumNodes == 0 {
+		return fmt.Errorf("command catalog has no expanded-field bound")
+	}
+	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: maximumNodes, MaximumDepth: 64}
 	return nil
 }
 

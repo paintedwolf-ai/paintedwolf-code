@@ -12,6 +12,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
+// MaximumProgramInputBytes bounds one retained operation input body.
+const MaximumProgramInputBytes = 8 << 20
+
 // ProgramInputCapture screens inspection bytes within the host capture scope.
 type ProgramInputCapture struct {
 	// State charges the program; Outputs charges the session retention lifetime.
@@ -96,8 +99,7 @@ func (p ProgramInputCapture) retain(ctx context.Context, execution string, revie
 		return reference, nil
 	}
 	// Bound each screened body independently of the program trace.
-	const maximumInputBodyBytes = 8 << 20
-	err = p.Outputs.retainInput(ctx, execution, reference, canonical, maximumInputBodyBytes, metadata.RedactedCount > 0, attach)
+	err = p.Outputs.retainInput(ctx, execution, reference, canonical, MaximumProgramInputBytes, metadata.RedactedCount > 0, attach)
 	if err != nil {
 		return "", err
 	}
