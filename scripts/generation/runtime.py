@@ -155,7 +155,7 @@ def bench(args):
         state = (1664525 * state + 1013904223) & 0xffffffff
         prompt.append(256 + state % (262144 - 256))
     specification = {"prompt_tokens": prompt, "generation_tokens": args.tokens,
-                     "trials": args.trials, "ple": args.ple}
+                     "trials": args.trials, "ple": args.ple, "prefill_chunk": args.prefill_chunk}
     input_path = destination / "input.json"
     input_path.write_text(json.dumps(specification) + "\n")
     build_receipt = None
@@ -205,10 +205,11 @@ def main():
     parser.add_argument("--precision", type=Path)
     parser.add_argument("--prompt", type=int, default=512)
     parser.add_argument("--tokens", type=int, default=128)
+    parser.add_argument("--prefill-chunk", type=int, default=256)
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--ple", choices=["resident", "mapped"], default="mapped")
     args = parser.parse_args()
-    if not 1 <= args.prompt or not 1 <= args.tokens <= 4096 or args.prompt + args.tokens > 65536 or not 1 <= args.trials <= 20:
+    if not 1 <= args.prefill_chunk <= 256 or not 1 <= args.prompt or not 1 <= args.tokens <= 4096 or args.prompt + args.tokens > 65536 or not 1 <= args.trials <= 20:
         parser.error("benchmark dimensions exceed their bounds")
     {"prepare": prepare, "build": build, "test": test, "bench": bench}[args.action](args)
 

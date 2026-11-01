@@ -44,14 +44,17 @@ static llama_token greedy(llama_context * ctx, int vocabulary) {
     return static_cast<llama_token>(std::max_element(logits, logits + vocabulary) - logits);
 }
 
-static json measure(llama_context * ctx, const std::vector<llama_token> & prompt, int generated) {
+static json measure(llama_context * ctx, const std::vector<llama_token> & prompt, int generated, int chunk_size) {
     llama_memory_clear(llama_get_memory(ctx), true);
     struct rusage before {};
     getrusage(RUSAGE_SELF, &before);
     auto start = clock_type::now();
-    for (int offset = 0; offset < static_cast<int>(prompt.size()); offset += 256) {
-        const int count = std::min(256, static_cast<int>(prompt.size()) - offset);
+    double prefill_step_max = 0;
+    for (int offset = 0; offset < static_cast<int>(prompt.size()); offset += chunk_size) {
+        const auto step = clock_type::now();
+        const int count = std::min(chunk_size, static_cast<int>(prompt.size()) - offset);
         decode(ctx, prompt, offset, count, offset + count == static_cast<int>(prompt.size()));
+        prefill_step_max = std::max(prefill_step_max, seconds(step));
     }
     const double prefill = seconds(start);
     std::vector<llama_token> all = prompt;
@@ -59,11 +62,14 @@ static json measure(llama_context * ctx, const std::vector<llama_token> & prompt
     const int vocabulary = llama_vocab_n_tokens(llama_model_get_vocab(llama_get_model(ctx)));
     auto token = greedy(ctx, vocabulary);
     start = clock_type::now();
+    double decode_step_max = 0;
     for (int i = 0; i < generated; ++i) {
+        const auto step = clock_type::now();
         output.push_back(token);
         all.push_back(token);
         decode(ctx, all, static_cast<int>(all.size()) - 1, 1, true);
         token = greedy(ctx, vocabulary);
+        decode_step_max = std::max(decode_step_max, seconds(step));
     }
     const double generation = seconds(start);
     struct rusage usage {};
@@ -72,7 +78,8 @@ static json measure(llama_context * ctx, const std::vector<llama_token> & prompt
 #ifndef __APPLE__
     peak *= 1024;
 #endif
-    return {{"prefill_seconds", prefill}, {"decode_seconds", generation},
+    return {{"prefill_step_max_seconds", prefill_step_max}, {"decode_step_max_seconds", decode_step_max},
+            {"prefill_seconds", prefill}, {"decode_seconds", generation},
             {"prompt_tps", prompt.size() / prefill}, {"generation_tps", generated / generation},
             {"process_peak_rss_bytes", peak}, {"tokens", output},
             {"major_faults", usage.ru_majflt - before.ru_majflt},
@@ -89,7 +96,8 @@ int main(int argc, char ** argv) {
         const auto prompt = spec.at("prompt_tokens").get<std::vector<llama_token>>();
         const int generated = spec.at("generation_tokens");
         const int trials = spec.at("trials");
-        if (prompt.empty() || prompt.size() + generated > 65536 || generated < 1 || generated > 4096 || trials < 1 || trials > 20) {
+        const int chunk_size = spec.at("prefill_chunk");
+        if (chunk_size < 1 || chunk_size > 256 || prompt.empty() || prompt.size() + generated > 65536 || generated < 1 || generated > 4096 || trials < 1 || trials > 20) {
             throw std::runtime_error("benchmark dimensions exceed their bounds");
         }
         ggml_backend_load_all();
@@ -121,7 +129,7 @@ int main(int argc, char ** argv) {
         const char * worker_limit = std::getenv("PW_TEST_WORKERS");
         cp.n_threads = cp.n_threads_batch = worker_limit ? std::max(1, std::atoi(worker_limit)) : 1;
         cp.n_ctx = prompt.size() + generated + 1;
-        cp.n_batch = cp.n_ubatch = 256;
+        cp.n_batch = cp.n_ubatch = chunk_size;
         cp.n_seq_max = 1;
         cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
         cp.swa_full = false;
@@ -131,7 +139,7 @@ int main(int argc, char ** argv) {
             llama_init_from_model(model.get(), cp), llama_free);
         if (!ctx) { throw std::runtime_error("context allocation failed"); }
         for (int trial = 0; trial <= trials; ++trial) {
-            auto result = measure(ctx.get(), prompt, generated);
+            auto result = measure(ctx.get(), prompt, generated, chunk_size);
             result["trial"] = trial;
             result["warmup"] = trial == 0;
             result["ple"] = spec.at("ple");
