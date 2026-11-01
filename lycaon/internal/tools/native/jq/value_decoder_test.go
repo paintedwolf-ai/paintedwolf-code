@@ -22,10 +22,10 @@ func (m *eventMemoryFixture) Reserve(ctx context.Context, n int64) (func(), erro
 	return func() { m.held -= n }, nil
 }
 
-func TestJSONEventMemoryFollowsCurrentPathAndScalar(t *testing.T) {
+func TestJSONDecodeMemoryFollowsCurrentPathAndScalar(t *testing.T) {
 	for _, count := range []int{1000, 100000} {
 		memory := &eventMemoryFixture{maximum: 128 << 10}
-		stream := NewEventStream(t.Context(), strings.NewReader("["+strings.Repeat("1,", count-1)+"2]"), EventLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, memory)
+		stream := NewEventStream(t.Context(), strings.NewReader("["+strings.Repeat("1,", count-1)+"2]"), DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, memory)
 		events := 0
 		for {
 			_, err := stream.Decode()
@@ -47,7 +47,7 @@ func TestJSONEventMemoryFollowsCurrentPathAndScalar(t *testing.T) {
 func TestBoundedJSONValuesMatchCanonicalInput(t *testing.T) {
 	for _, source := range []string{`{"a":{"x":1},"a":{"y":2}}`, `[1.0,2.50,1e3,-0,true,null]`, `{"b":[],"a":{}}`, `1 2 3`} {
 		memory := &eventMemoryFixture{maximum: 1 << 20}
-		bounded := NewBoundedValueStream(t.Context(), strings.NewReader(source), EventLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, memory, 1<<20)
+		bounded := NewBoundedValueStream(t.Context(), strings.NewReader(source), DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, memory, 1<<20)
 		plain := NewValueStream(strings.NewReader(source))
 		for {
 			got, e := bounded.Decode()
@@ -74,17 +74,17 @@ func TestBoundedJSONValuesMatchCanonicalInput(t *testing.T) {
 func TestJSONDecoderBoundsAndCancellationPrecedeGrowth(t *testing.T) {
 	for _, source := range []string{strings.Repeat("[", 129), `"` + strings.Repeat("x", 1025) + `"`} {
 		memory := &eventMemoryFixture{maximum: 1 << 20}
-		stream := NewEventStream(t.Context(), strings.NewReader(source), EventLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, memory)
+		stream := NewEventStream(t.Context(), strings.NewReader(source), DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, memory)
 		_, err := stream.Decode()
 		stream.Close()
-		var limit *EventLimitError
+		var limit *DecodeLimitError
 		if !errors.As(err, &limit) || memory.held != 0 {
 			t.Fatalf("bounded decode: %v memory %+v", err, memory)
 		}
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	stream := NewEventStream(ctx, strings.NewReader("[1]"), EventLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, nil)
+	stream := NewEventStream(ctx, strings.NewReader("[1]"), DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, nil)
 	_, err := stream.Decode()
 	stream.Close()
 	if !errors.Is(err, context.Canceled) {
@@ -103,9 +103,9 @@ func TestJSONDecoderPreservesTerminalReaderErrors(t *testing.T) {
 				Close()
 			}
 			if events {
-				decoder = NewEventStream(t.Context(), input, EventLimits{128, 1024}, memory)
+				decoder = NewEventStream(t.Context(), input, DecodeLimits{128, 1024}, memory)
 			} else {
-				decoder = NewBoundedValueStream(t.Context(), input, EventLimits{128, 1024}, memory, 1<<20)
+				decoder = NewBoundedValueStream(t.Context(), input, DecodeLimits{128, 1024}, memory, 1<<20)
 			}
 			var err error
 			for err == nil {
@@ -131,7 +131,7 @@ type failingJSONReader struct{ failure error }
 func (r failingJSONReader) Read([]byte) (int, error) { return 0, r.failure }
 
 func TestJSONDecodersRequireRetainedAdmission(t *testing.T) {
-	stream := NewEventStream(t.Context(), strings.NewReader("[1]"), EventLimits{128, 1024}, missingEventLease{})
+	stream := NewEventStream(t.Context(), strings.NewReader("[1]"), DecodeLimits{128, 1024}, missingEventLease{})
 	if _, err := stream.Decode(); err == nil {
 		t.Fatal("decoded without admission")
 	}
@@ -154,7 +154,7 @@ func TestJSONDecodersReleaseEveryRefusedAdmission(t *testing.T) {
 				Decode() (any, error)
 				Close()
 			}
-			limits := EventLimits{128, 1024}
+			limits := DecodeLimits{128, 1024}
 			if events {
 				decoder = NewEventStream(t.Context(), strings.NewReader(source), limits, memory)
 			} else {
@@ -200,7 +200,7 @@ func (m *eventFaultMemory) Reserve(_ context.Context, n int64) (func(), error) {
 func TestBoundedJSONValueBytesExcludeStorageAndWhitespace(t *testing.T) {
 	for _, source := range []string{`[1,2,3]`, " \n[ 1 , 2 , 3 ] \n"} {
 		memory := &eventMemoryFixture{maximum: 1 << 20}
-		stream := NewBoundedValueStream(t.Context(), strings.NewReader(source), EventLimits{128, 1024}, memory, 7)
+		stream := NewBoundedValueStream(t.Context(), strings.NewReader(source), DecodeLimits{128, 1024}, memory, 7)
 		value, err := stream.Decode()
 		if err != nil {
 			t.Fatalf("seven-byte value: %v", err)
@@ -214,10 +214,10 @@ func TestBoundedJSONValueBytesExcludeStorageAndWhitespace(t *testing.T) {
 			t.Fatalf("retained %+v", memory)
 		}
 	}
-	stream := NewBoundedValueStream(t.Context(), strings.NewReader(`[1,2,3,4]`), EventLimits{128, 1024}, nil, 7)
+	stream := NewBoundedValueStream(t.Context(), strings.NewReader(`[1,2,3,4]`), DecodeLimits{128, 1024}, nil, 7)
 	_, err := stream.Decode()
 	stream.Close()
-	var limit *EventLimitError
+	var limit *DecodeLimitError
 	if !errors.As(err, &limit) || limit.Maximum != 7 || limit.Observed != 8 {
 		t.Fatalf("value bound: %v", err)
 	}

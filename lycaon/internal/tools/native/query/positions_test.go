@@ -30,7 +30,7 @@ func TestQueryReadRefusalCannotBecomeSuccessfulBufferedValue(t *testing.T) {
 	in := &inputs{inv: &invocation{ctx: context.Background(), owners: h.owners}, limit: 1024, label: "input"}
 	defer in.close()
 	refused := &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED"}
-	in.stream = nativejq.NewBoundedValueStream(t.Context(), queryInputReader{input: &queryBytesWithFailure{err: refused}, owner: in}, nativejq.EventLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, nil, 1<<20)
+	in.stream = nativejq.NewBoundedValueStream(t.Context(), queryInputReader{input: &queryBytesWithFailure{err: refused}, owner: in}, nativejq.DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, nil, 1<<20)
 	if _, ok := in.nextValue(); ok || !errors.Is(in.stop, refused) {
 		t.Fatalf("buffered value escaped refusal: ok %v stop %v", ok, in.stop)
 	}

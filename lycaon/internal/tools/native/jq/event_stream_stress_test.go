@@ -14,7 +14,7 @@ func TestStressJSONEventsBeyondWholeDocumentCapacity(t *testing.T) {
 	block := strings.Repeat(`"`+strings.Repeat("x", 4096)+`",`, scalars)
 	input := io.MultiReader(strings.NewReader("["), &repeatedJSONBlock{block: block, remaining: blocks}, strings.NewReader("0]"))
 	memory := &eventMemoryFixture{maximum: 128 << 10}
-	stream := NewEventStream(t.Context(), input, EventLimits{MaximumDepth: 128, MaximumScalarBytes: 8192}, memory)
+	stream := NewEventStream(t.Context(), input, DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 8192}, memory)
 	defer stream.Close()
 	events := 0
 	for {

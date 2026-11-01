@@ -1,32 +1,12 @@
 package jq
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"strings"
 
 	"github.com/itchyny/gojq"
 )
-
-// EventLimits bound parser nesting and one encoded scalar.
-type EventLimits struct {
-	MaximumDepth       int
-	MaximumScalarBytes int64
-}
-type EventMemory interface {
-	Reserve(context.Context, int64) (func(), error)
-}
-type EventLimitError struct {
-	Limit             string
-	Maximum, Observed int64
-}
-
-func (e *EventLimitError) Error() string {
-	return fmt.Sprintf("%s exceeded: %d > %d", e.Limit, e.Observed, e.Maximum)
-}
 
 type eventFrame struct {
 	kind                        byte
@@ -38,51 +18,27 @@ type eventFrame struct {
 
 // EventStream retains the current scalar and open container path.
 type EventStream struct {
-	ctx                   context.Context
-	input                 *bufio.Reader
-	limits                EventLimits
-	memory                EventMemory
-	frames                []eventFrame
-	offset                int64
-	line, column          int
-	release, eventRelease func()
-	failure               error
+	*jsonCursor
+	frames                     []eventFrame
+	frameRelease, eventRelease func()
 }
 
-func NewEventStream(ctx context.Context, input io.Reader, limits EventLimits, memory EventMemory) *EventStream {
-	s := &EventStream{ctx: ctx, limits: limits, memory: memory}
-	if ctx == nil || input == nil || limits.MaximumDepth < 1 || limits.MaximumScalarBytes < 1 {
-		s.failure = fmt.Errorf("JSON events require a context, input and positive bounds")
+func NewEventStream(ctx context.Context, input io.Reader, limits DecodeLimits, memory DecodeMemory) *EventStream {
+	s := &EventStream{jsonCursor: newJSONCursor(ctx, input, limits, memory)}
+	if s.failure != nil {
 		return s
 	}
-	s.release, s.failure = s.reserve(4096 + int64(limits.MaximumDepth)*128)
-	if s.failure == nil {
-		s.input = bufio.NewReaderSize(input, 4096)
-		s.frames = make([]eventFrame, 0, limits.MaximumDepth)
+	s.frameRelease, s.failure = s.reserve(int64(limits.MaximumDepth) * 128)
+	if s.failure != nil {
+		failure := s.failure
+		s.jsonCursor.Close()
+		s.failure = failure
+		return s
 	}
+	s.frames = make([]eventFrame, 0, limits.MaximumDepth)
 	return s
 }
-func (s *EventStream) reserve(n int64) (func(), error) {
-	if err := s.ctx.Err(); err != nil {
-		return nil, err
-	}
-	if s.memory != nil {
-		release, err := s.memory.Reserve(s.ctx, n)
-		if err != nil {
-			if release != nil {
-				release()
-			}
-			return nil, err
-		}
-		if release == nil {
-			return nil, fmt.Errorf("JSON decoding requires retained admission")
-		}
-		return release, nil
-	}
-	return func() {}, nil
-}
 func (s *EventStream) Close() {
-	s.failure = io.ErrClosedPipe
 	if s.eventRelease != nil {
 		s.eventRelease()
 		s.eventRelease = nil
@@ -93,24 +49,12 @@ func (s *EventStream) Close() {
 		}
 	}
 	s.frames = nil
-	if s.release != nil {
-		s.release()
-		s.release = nil
+	if s.frameRelease != nil {
+		s.frameRelease()
+		s.frameRelease = nil
 	}
+	s.jsonCursor.Close()
 }
-func (s *EventStream) InputLine() int {
-	if s.input == nil {
-		return s.line
-	}
-	buffered, _ := s.input.Peek(s.input.Buffered())
-	if bytes.IndexByte(buffered, '\n') >= 0 {
-		return s.line + 1
-	}
-	return s.line
-}
-
-func (s *EventStream) Position() (int, int) { return s.line + 1, s.column }
-
 func (s *EventStream) Retain() func() {
 	release := s.eventRelease
 	s.eventRelease = nil
@@ -120,43 +64,6 @@ func (s *EventStream) Retain() func() {
 	return release
 }
 
-func (s *EventStream) InputOffset() int64 { return s.offset }
-func (s *EventStream) peek() (byte, error) {
-	if err := s.ctx.Err(); err != nil {
-		return 0, err
-	}
-	p, err := s.input.Peek(1)
-	if err != nil {
-		return 0, err
-	}
-	return p[0], nil
-}
-func (s *EventStream) read() (byte, error) {
-	b, err := s.input.ReadByte()
-	if err == nil {
-		s.offset++
-		if b == '\n' {
-			s.line++
-			s.column = 0
-		} else {
-			s.column++
-		}
-	}
-	return b, err
-}
-func (s *EventStream) space() (byte, error) {
-	for {
-		b, err := s.peek()
-		if err != nil {
-			return 0, err
-		}
-		if b != ' ' && b != '\n' && b != '\r' && b != '\t' {
-			return b, nil
-		}
-		_, _ = s.read()
-	}
-}
-func (s *EventStream) syntax() error { return fmt.Errorf("invalid JSON at byte %d", s.offset+1) }
 func (s *EventStream) complete() {
 	if len(s.frames) > 0 {
 		f := &s.frames[len(s.frames)-1]
@@ -270,7 +177,7 @@ func (s *EventStream) Decode() (value any, failure error) {
 		}
 		if b == '[' || b == '{' {
 			if len(s.frames) >= s.limits.MaximumDepth {
-				return nil, &EventLimitError{Limit: "query_depth", Maximum: int64(s.limits.MaximumDepth), Observed: int64(len(s.frames) + 1)}
+				return nil, &DecodeLimitError{Limit: "query_depth", Maximum: int64(s.limits.MaximumDepth), Observed: int64(len(s.frames) + 1)}
 			}
 			_, _ = s.read()
 			s.frames = append(s.frames, eventFrame{kind: b})

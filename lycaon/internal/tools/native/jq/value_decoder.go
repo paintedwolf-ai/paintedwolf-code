@@ -11,14 +11,14 @@ import (
 
 // BoundedValueStream admits one decoded document and releases it on the next read.
 type BoundedValueStream struct {
-	parser   *EventStream
+	parser   *jsonCursor
 	releases []func()
 	bytes    int64
 	maximum  int64
 }
 
-func NewBoundedValueStream(ctx context.Context, input io.Reader, limits EventLimits, memory EventMemory, maximum int64) *BoundedValueStream {
-	return &BoundedValueStream{parser: NewEventStream(ctx, input, limits, memory), maximum: maximum}
+func NewBoundedValueStream(ctx context.Context, input io.Reader, limits DecodeLimits, memory DecodeMemory, maximum int64) *BoundedValueStream {
+	return &BoundedValueStream{parser: newJSONCursor(ctx, input, limits, memory), maximum: maximum}
 }
 func (s *BoundedValueStream) Close() { s.release(); s.parser.Close() }
 func (s *BoundedValueStream) release() {
@@ -81,7 +81,7 @@ func (s *BoundedValueStream) value(depth int) (any, error) {
 		return s.scalar()
 	}
 	if depth >= p.limits.MaximumDepth {
-		return nil, &EventLimitError{Limit: "query_depth", Maximum: int64(p.limits.MaximumDepth), Observed: int64(depth + 1)}
+		return nil, &DecodeLimitError{Limit: "query_depth", Maximum: int64(p.limits.MaximumDepth), Observed: int64(depth + 1)}
 	}
 	if err := s.admit(64); err != nil {
 		return nil, err
@@ -206,7 +206,7 @@ func (s *BoundedValueStream) object(depth int) (any, error) {
 
 func (s *BoundedValueStream) count(n int64) error {
 	if n > s.maximum-s.bytes {
-		return &EventLimitError{Limit: "query_value_bytes", Maximum: s.maximum, Observed: s.bytes + n}
+		return &DecodeLimitError{Limit: "query_value_bytes", Maximum: s.maximum, Observed: s.bytes + n}
 	}
 	s.bytes += n
 	return nil
@@ -216,9 +216,9 @@ func (s *BoundedValueStream) scalar() (any, error) {
 	remaining := s.maximum - s.bytes
 	value, release, err := s.parser.scalar(min(s.parser.limits.MaximumScalarBytes, remaining))
 	if err != nil {
-		var limit *EventLimitError
+		var limit *DecodeLimitError
 		if errors.As(err, &limit) && limit.Limit == "query_value_bytes" && limit.Maximum == remaining {
-			return nil, &EventLimitError{Limit: limit.Limit, Maximum: s.maximum, Observed: s.bytes + limit.Observed}
+			return nil, &DecodeLimitError{Limit: limit.Limit, Maximum: s.maximum, Observed: s.bytes + limit.Observed}
 		}
 		return nil, err
 	}
