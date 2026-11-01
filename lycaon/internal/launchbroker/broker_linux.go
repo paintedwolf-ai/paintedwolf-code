@@ -58,6 +58,9 @@ type Request struct {
 	Detach bool `json:"detach,omitempty"`
 	// ExtraFiles counts the descriptors after the standard streams.
 	ExtraFiles int `json:"extra_files,omitempty"`
+	// ExtraFileLayout marks inherited slots as open (1) or closed (0).
+	// An omitted layout keeps every supplied slot open.
+	ExtraFileLayout string `json:"extra_file_layout,omitempty"`
 }
 
 // Event is one report on a call channel.
@@ -85,6 +88,11 @@ func (r Request) Validate() error {
 	}
 	if r.ExtraFiles < 0 || r.ExtraFiles > MaxExtraFiles {
 		return fmt.Errorf("broker request carries %d extra descriptors, at most %d", r.ExtraFiles, MaxExtraFiles)
+	}
+	if r.ExtraFileLayout != "" {
+		if len(r.ExtraFileLayout) != r.ExtraFiles || strings.Trim(r.ExtraFileLayout, "01") != "" {
+			return errors.New("broker descriptor layout must name every extra slot as open or closed")
+		}
 	}
 	for _, value := range append(append([]string{r.Dir}, r.Argv...), r.Environment...) {
 		if strings.ContainsRune(value, 0) {
