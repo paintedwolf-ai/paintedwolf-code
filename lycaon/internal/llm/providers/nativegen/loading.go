@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/modelstore"
 )
 
-const startupHostBytes = 768 << 20
+const startupHostBytes = 512 << 20
 
 func (p *Runtime) ensureLoaded(ctx context.Context, model string) error {
 	if err := p.validate(); err != nil {

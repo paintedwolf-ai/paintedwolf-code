@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/inference"
 )
 
 func TestLoadAuditsContentBeforeStartingProcess(t *testing.T) {
@@ -33,5 +35,37 @@ func TestLoadAuditsContentBeforeStartingProcess(t *testing.T) {
 	}
 	if runtime.loaded != nil || runtime.config.HostMemory.Snapshot().ReservedBytes != 0 || runtime.config.DeviceMemory.Snapshot().ReservedBytes != 0 {
 		t.Fatal("failed audit retained a process or memory")
+	}
+}
+
+func TestLoadRespectsTheRuntimeHostReservation(t *testing.T) {
+	for _, small := range []bool{false, true} {
+		name, capacity := "full", uint64(768 << 20)
+		if small {
+			name, capacity = "compact", 512 << 20
+		}
+		t.Run(name, func(t *testing.T) {
+			_, runtime := fixtureProvider(t)
+			if small {
+				t.Setenv("PW_NATIVEGEN_SMALL_HOST_PLAN", "1")
+			}
+			var err error
+			runtime.config.HostMemory, err = inference.NewMemoryBudget(capacity)
+			if err != nil {
+				t.Fatalf("host budget: %v", err)
+			}
+			if err := runtime.Warm(t.Context(), DefaultModelID); err != nil {
+				t.Fatalf("warm within declared capacity: %v", err)
+			}
+			if runtime.config.HostMemory.Snapshot().ReservedBytes != capacity {
+				t.Fatal("runtime did not reserve its complete host plan")
+			}
+			if err := runtime.Close(); err != nil {
+				t.Fatalf("close: %v", err)
+			}
+			if runtime.config.HostMemory.Snapshot().ReservedBytes != 0 {
+				t.Fatal("closed runtime retained host memory")
+			}
+		})
 	}
 }

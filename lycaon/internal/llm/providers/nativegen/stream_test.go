@@ -56,7 +56,7 @@ func TestProviderStreamOwnsLeaseAndReservationsUntilClose(t *testing.T) {
 			t.Fatalf("completion = %+v, %v", completion, err)
 		}
 	}
-	if runtime.generation != 1 || runtime.config.HostMemory.Snapshot().ReservedBytes != startupHostBytes || runtime.config.DeviceMemory.Snapshot().ReservedBytes != 256<<20 {
+	if runtime.generation != 1 || runtime.config.HostMemory.Snapshot().ReservedBytes != 768<<20 || runtime.config.DeviceMemory.Snapshot().ReservedBytes != 256<<20 {
 		t.Fatal("loaded model did not retain its process and admitted memory")
 	}
 	child := runtime.loaded.process
@@ -143,7 +143,7 @@ func TestProviderActivationReplacesProcessBetweenRequests(t *testing.T) {
 	default:
 		t.Fatal("replaced the revision without reaping its process")
 	}
-	if runtime.config.HostMemory.Snapshot().ReservedBytes != startupHostBytes || runtime.config.DeviceMemory.Snapshot().ReservedBytes != 256<<20 {
+	if runtime.config.HostMemory.Snapshot().ReservedBytes != 768<<20 || runtime.config.DeviceMemory.Snapshot().ReservedBytes != 256<<20 {
 		t.Fatal("replacement retained both revisions' reservations")
 	}
 }
