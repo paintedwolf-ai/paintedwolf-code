@@ -183,6 +183,8 @@ void pw_checkpoint::restore(llama_memory_i * memory) {
     if (lseek(fd, 0, SEEK_SET) < 0) throw std::runtime_error("checkpoint seek failed");
     stream input(fd);
     auto * cache = e4b_cache(memory);
+    // Restored rows must not inherit unused tensor contents from another request.
+    memory->clear(true);
     // Physical row placement preserves the attention reduction order.
     cache->get_base()->state_read_sinfo(input, 1, 0, nullptr, &global_layout);
     cache->get_swa()->state_read_sinfo(input, 1, 0, nullptr, &sliding_layout);
