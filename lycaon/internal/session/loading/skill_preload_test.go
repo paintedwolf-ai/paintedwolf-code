@@ -92,7 +92,7 @@ func TestSelectSkillPreloadGatesStockSkillsByTurnOfferedTools(t *testing.T) {
 	spec := turnload.Catalog{Turn: turnload.TurnSpec{DeadlineMS: 500, Skills: turnload.SkillPreloadSpec{PreloadAt: 3.4, Margin: 0.3}}}
 	sess := &api.Session{ID: "s1"}
 
-	// When required tools are absent from floor + active + decision.Tools, the stock skill is filtered out.
+	// Absent required tools exclude the stock skill.
 	m := &Service{
 		Ledger:  turnload.NewLedger(),
 		decider: &decidetest.Fake{Scores: []float64{3.8}},
@@ -113,7 +113,7 @@ func TestSelectSkillPreloadGatesStockSkillsByTurnOfferedTools(t *testing.T) {
 		t.Fatalf("stock skill with unoffered required tools was preloaded: %+v", decision.skill)
 	}
 
-	// When non-optional tools are offered (via floor, ledger.Active, or decision.Tools), the stock skill is eligible even if optional tools are absent.
+	// Offered required tools admit the stock skill even when optional tools are absent.
 	m.Ledger.Activate(sess.ID, []string{"measure_page"}, "measure page geometry")
 	decision = &Decision{
 		catalog:  spec,

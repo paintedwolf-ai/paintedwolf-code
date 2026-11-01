@@ -35,7 +35,7 @@ func TestReadSkillForToolGatesStockSkillsByOfferedToolsAndCopiesResources(t *tes
 		return sk.Body, nil
 	})
 
-	// Turn 1: `page_open` is called, but required `measure_page` is not in the turn's offered tools.
+	// Turn 1: required `measure_page` is not offered on the turn.
 	ledger.BeginTurn(sess.ID, turnload.TurnOpening{
 		OpeningMessageID: "m1",
 		Request:          "Open the web page",
@@ -52,7 +52,7 @@ func TestReadSkillForToolGatesStockSkillsByOfferedToolsAndCopiesResources(t *tes
 		t.Fatalf("pointed to stock skill without required tool: %+v", ptr)
 	}
 
-	// Turn 2: both `page_open` and `measure_page` are offered (while optional `capture_page` is absent).
+	// Turn 2: required tools are offered while optional `capture_page` is absent.
 	ledger.BeginTurn(sess.ID, turnload.TurnOpening{
 		OpeningMessageID: "m2",
 		Request:          "Audit the web page accessibility",
