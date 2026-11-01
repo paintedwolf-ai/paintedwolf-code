@@ -49,7 +49,7 @@ func TestReviewEvidenceUnitsUseCapabilitiesAndRespectOmissions(t *testing.T) {
 				PhaseCoordinatorSurface: "review_adjudicate",
 				AllowedAgents:           []string{"skeptic", "web-researcher"},
 			}}
-			out, _, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
+			out, profile, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
 				map[string]any{"root_count": 1, "project_dir": sess.WorkspacePath})
 			testutil.FailErr(t, "render review evidence units", err)
 			if profile.SurfaceID != "review_adjudicate" {
@@ -80,7 +80,7 @@ func TestCoordinatorUnitsKeepLoadedToolsAndWebGate(t *testing.T) {
 		})
 		sess := &api.Session{ID: "loaded", AgentType: "coordinator", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
 		frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{PhaseCoordinatorSurface: "implement_investigate"}}
-		out, _, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
+		out, profile, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
 			map[string]any{"root_count": 1, "project_dir": sess.WorkspacePath})
 		testutil.FailErr(t, "render loaded tool guidance", err)
 		if !strings.Contains(out, "For new random material use `secret_generate`") {

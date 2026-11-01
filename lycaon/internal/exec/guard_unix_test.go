@@ -106,7 +106,7 @@ func TestReapedSessionReuseNeverSignalsStandInProcess(t *testing.T) {
 		cmd, cleanup, err := PrepareCommand(context.Background(), "true", nil, ExecOpts{Launch: HostLaunch("exec test")})
 		testutil.FailErr(t, "PrepareCommand", err)
 		defer cleanup()
-		testutil.FailErr(t, "RunInOwnGroup", RunInOwnGroup(cmd))
+		testutil.FailErr(t, "RunInOwnGroup", RunInOwnGroup(t.Context(), cmd))
 		if !bystanderInc.Alive() {
 			t.Fatal("bystander died after RunInOwnGroup")
 		}

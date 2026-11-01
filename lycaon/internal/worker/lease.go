@@ -143,7 +143,9 @@ func isJobCancellationRequested(ctx context.Context, queue WorkerQueue, jobID st
 		if q == nil || q.store == nil {
 			return false
 		}
-		queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sqlQueueGetTimeout)
+		fenceCtx, cancelFence := cancellationFenceContext(ctx)
+		defer cancelFence()
+		queryCtx, cancel := context.WithTimeout(fenceCtx, sqlQueueGetTimeout)
 		defer cancel()
 		row, err := q.store.queries.GetWorkerJob(queryCtx, jobID)
 		if err != nil {

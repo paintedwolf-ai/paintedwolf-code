@@ -83,11 +83,11 @@ func TestStartPTYRejectsMissingLaunchPlan(t *testing.T) {
 func TestConfinedCommandEnvDisablesGitFsmonitorByDefault(t *testing.T) {
 	cmd := &exec.Cmd{}
 	confinement := &confine.Confinement{Network: confine.NetworkDeny}
-	if err := configureCmdEnv(cmd, ExecOpts{
+	if err := configureStageCmdEnv(cmd, ExecOpts{
 		Launch: AgentLaunch(LaunchAgentCommand, "git status", confinement),
 		Env:    []string{"PATH=/usr/bin"},
-	}); err != nil {
-		t.Fatalf("configureCmdEnv: %v", err)
+	}, nil); err != nil {
+		t.Fatalf("configureStageCmdEnv: %v", err)
 	}
 	for _, want := range []string{
 		"GIT_CONFIG_COUNT=1",
@@ -101,11 +101,11 @@ func TestConfinedCommandEnvDisablesGitFsmonitorByDefault(t *testing.T) {
 
 	hostCmd := &exec.Cmd{}
 	hostConfinement := &confine.Confinement{Network: confine.NetworkDeny, HostExecution: true}
-	if err := configureCmdEnv(hostCmd, ExecOpts{
+	if err := configureStageCmdEnv(hostCmd, ExecOpts{
 		Launch: AgentLaunch(LaunchAgentCommand, "git status", hostConfinement),
 		Env:    []string{"PATH=/usr/bin"},
-	}); err != nil {
-		t.Fatalf("configureCmdEnv host execution: %v", err)
+	}, nil); err != nil {
+		t.Fatalf("configureStageCmdEnv host execution: %v", err)
 	}
 	if slices.Contains(hostCmd.Env, "GIT_CONFIG_COUNT=1") {
 		t.Fatalf("host-execution env unexpectedly set GIT_CONFIG_COUNT: %v", hostCmd.Env)
@@ -116,12 +116,12 @@ func TestConfinedCommandEnvDisablesGitFsmonitorByDefault(t *testing.T) {
 		"GIT_CONFIG_PARAMETERS='core.fsmonitor=true'",
 	} {
 		customCmd := &exec.Cmd{}
-		if err := configureCmdEnv(customCmd, ExecOpts{
+		if err := configureStageCmdEnv(customCmd, ExecOpts{
 			Launch:    AgentLaunch(LaunchAgentCommand, "git status", confinement),
 			Env:       []string{"PATH=/usr/bin"},
 			AppendEnv: []string{existing},
-		}); err != nil {
-			t.Fatalf("configureCmdEnv with %s: %v", existing, err)
+		}, nil); err != nil {
+			t.Fatalf("configureStageCmdEnv with %s: %v", existing, err)
 		}
 		if slices.Contains(customCmd.Env, "GIT_CONFIG_KEY_0=core.fsmonitor") {
 			t.Fatalf("caller override %q was clobbered: %v", existing, customCmd.Env)
