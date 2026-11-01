@@ -99,6 +99,9 @@ func activityPaths(arguments map[string]any, role string) []string {
 }
 
 func activitySubject(input activityInput) string {
+	if input.operation == "program &" {
+		return ""
+	}
 	if query := stringArgument(input.arguments, "query"); query != "" {
 		return boundedActivityText(query)
 	}
