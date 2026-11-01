@@ -67,7 +67,7 @@ type Props = GitCheckoutActions & {
   /** Fast-forward only. */
   onPull: () => void;
   /** Requests grouped commits from the coordinator. */
-  onGroupCommit: () => void;
+  onGroupCommit?: () => void;
 };
 
 function statusLabel(code: string): string {
@@ -658,17 +658,26 @@ export function GitStrip(props: Props) {
                   >
                     {drafting() ? "…" : "✨ AI summary"}
                   </button>
-                  <Show when={scope().kind === "repo" || !showScope()}>
-                    <button
-                      type="button"
-                      class="git-strip__ai"
-                      data-testid="git-group-commit"
-                      disabled={busy()}
-                      data-tip="Let the agent commit all changes in logical groups"
-                      onClick={() => props.onGroupCommit()}
-                    >
-                      ✨ AI auto-commit
-                    </button>
+                  <Show
+                    when={
+                      scope().kind === "repo" || !showScope()
+                        ? props.onGroupCommit
+                        : undefined
+                    }
+                    keyed
+                  >
+                    {(onGroupCommit) => (
+                      <button
+                        type="button"
+                        class="git-strip__ai"
+                        data-testid="git-group-commit"
+                        disabled={busy()}
+                        data-tip="Let the agent commit all changes in logical groups"
+                        onClick={() => onGroupCommit()}
+                      >
+                        ✨ AI auto-commit
+                      </button>
+                    )}
                   </Show>
                 </div>
                 <button

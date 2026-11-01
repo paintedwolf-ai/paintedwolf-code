@@ -772,6 +772,42 @@ describe("GitStrip", () => {
     expect(screen.queryByTestId("git-group-commit")).toBeNull();
   });
 
+  it("keeps compose controls grouped and usable at narrow chat widths with one or both AI actions", () => {
+    const viewBoth = render(() => (
+      <div style={{ width: "340px" }}>
+        <GitStrip
+          {...base}
+          status={loaded(dirty)}
+          repos={[alpha, beta]}
+          activeRepoId="ra"
+        />
+      </div>
+    ));
+    const aiGroupBoth = viewBoth.container.querySelector(".git-strip__ai-group");
+    expect(aiGroupBoth).toBeTruthy();
+    expect(aiGroupBoth?.querySelectorAll(".git-strip__ai")).toHaveLength(2);
+    expect(screen.getByTestId("git-ai").textContent).toBe("✨ AI summary");
+    expect(screen.getByTestId("git-group-commit").textContent).toBe(
+      "✨ AI auto-commit",
+    );
+    expect(screen.getByTestId("git-commit").textContent).toBe("Stage & commit");
+    viewBoth.unmount();
+
+    const { onGroupCommit: _omit, ...singleActionBase } = base;
+    const viewSingle = render(() => (
+      <div style={{ width: "340px" }}>
+        <GitStrip {...singleActionBase} status={loaded(dirty)} />
+      </div>
+    ));
+    const aiGroupSingle = viewSingle.container.querySelector(".git-strip__ai-group");
+    expect(aiGroupSingle).toBeTruthy();
+    expect(aiGroupSingle?.querySelectorAll(".git-strip__ai")).toHaveLength(1);
+    expect(screen.getByTestId("git-ai").textContent).toBe("✨ AI summary");
+    expect(screen.queryByTestId("git-group-commit")).toBeNull();
+    expect(screen.getByTestId("git-commit").textContent).toBe("Stage & commit");
+    viewSingle.unmount();
+  });
+
   describe("checkout flow", () => {
     async function openBranchMenu() {
       const button = screen.getByTestId("git-branch");
