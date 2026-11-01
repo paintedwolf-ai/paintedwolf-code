@@ -121,3 +121,45 @@ func TestCommandProjectionRetainsStreamLineEndingsAndWhitespace(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandProjectionLeavesUnknownPayloadShapesIntact(t *testing.T) {
+	for _, change := range []func(map[string]any){
+		func(m map[string]any) { m["program_id"] = "other" },
+		func(m map[string]any) { m["state"] = "unknown" },
+		func(m map[string]any) { delete(m, "status") },
+		func(m map[string]any) { m["status"] = 0 },
+		func(m map[string]any) { m["stdout"] = 42 },
+		func(m map[string]any) { m["refusal"] = "not an object" },
+		func(m map[string]any) { m["refusal"].(map[string]any)["code"] = "OTHER" },
+	} {
+		message := commandResultMessage(t)
+		var body map[string]any
+		testutil.FailErr(t, "decode result", json.Unmarshal([]byte(message.Content), &body))
+		change(body)
+		raw, err := json.Marshal(body)
+		testutil.FailErr(t, "encode unsupported result", err)
+		message.Content = string(raw)
+		parts := api.MessageTextParts(message)
+		got := projectCommandResult(message, parts)
+		a, _ := json.Marshal(got)
+		b, _ := json.Marshal(parts)
+		if string(a) != string(b) {
+			t.Fatalf("unknown result was reinterpreted: %s", a)
+		}
+	}
+}
+
+func TestCommandProjectionKeepsRuntimeFailuresAsNativeOutput(t *testing.T) {
+	message := commandResultMessage(t)
+	status := 1
+	message.ToolResult.CommandProgram.State = "completed"
+	message.ToolResult.CommandProgram.StatusCode = &status
+	message.ToolResult.CommandProgram.StopCode = ""
+	body, err := json.Marshal(map[string]any{"program_id": "program", "state": "completed", "status": 1, "stdout": "", "stderr": "EOFError: EOF when reading a line\n"})
+	testutil.FailErr(t, "encode native failure", err)
+	message.Content = string(body)
+	parts := projectCommandResult(message, api.MessageTextParts(message))
+	if len(parts) != 2 || parts[0].Source != "command_metadata" || parts[1].Source != "command_stderr" || !strings.Contains(parts[1].Content, "EOFError") {
+		t.Fatalf("runtime output became a host refusal: %+v", parts)
+	}
+}
