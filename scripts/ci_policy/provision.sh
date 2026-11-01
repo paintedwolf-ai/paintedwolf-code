@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Populate pinned compiler/generator inputs before the offline lane starts.
+# Populate pinned verification inputs before the offline lane starts.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+if [[ "${1:-}" == search-reference ]]; then
+  [[ $# -eq 2 ]] || { echo "error: expected a search-reference destination" >&2; exit 2; }
+  exec python3 "$ROOT/scripts/ci_policy/search_reference.py" "$2"
+fi
 case "${1:-verification}" in
   verification|analysis) ;;
   *) echo "error: unknown CI input profile: $1" >&2; exit 2 ;;
