@@ -11,14 +11,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-var exploreAgentsCommandFree = []string{
+var exploreAgents = []string{
 	orchestration.ProfilePathExplorer,
 	orchestration.ProfileRepoResearcher,
 	orchestration.ProfileCodeReviewer,
 	orchestration.ProfileSecurityReviewer,
 }
 
-func TestExploreLegToolsSubsetHasNoCommand(t *testing.T) {
+func TestExploreLegToolsMatchExploreProfile(t *testing.T) {
 	h := BuildForTest(t)
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -27,7 +27,7 @@ func TestExploreLegToolsSubsetHasNoCommand(t *testing.T) {
 	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
 	builder := compositeWorkerWithPolicy(h.AgentRegistry, policy)
 
-	for _, agentType := range exploreAgentsCommandFree {
+	for _, agentType := range exploreAgents {
 		t.Run(agentType, func(t *testing.T) {
 			child, err := h.Sessions.Manager.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 				AgentType: agentType,
@@ -44,18 +44,15 @@ func TestExploreLegToolsSubsetHasNoCommand(t *testing.T) {
 			if !reflect.DeepEqual(got, schema) {
 				t.Fatalf("LegTools %v != schema %v", got, schema)
 			}
-			for _, forbidden := range []string{"write", "replace_lines", "delete", "mkdir", "copy", "move"} {
+			for _, forbidden := range []string{"edit", "replace_lines", "code_rewrite", "restore_version", "chmod", "chown", "read", "find", "grep", "git_diff"} {
 				if legToolsContains(got, forbidden) {
-					t.Fatalf("%s LegTools must not include mutation tool %q: %v", agentType, forbidden, got)
+					t.Fatalf("%s LegTools must not include unavailable tool %q: %v", agentType, forbidden, got)
 				}
 			}
-			for _, want := range []string{"command", "find", "grep", "read"} {
+			for _, want := range []string{"command", "survey_repo", "complete_leg"} {
 				if !legToolsContains(got, want) {
 					t.Fatalf("%s LegTools missing %q: %v", agentType, want, got)
 				}
-			}
-			if agentType == orchestration.ProfileCodeReviewer && !legToolsContains(got, "git_diff") {
-				t.Fatalf("%s LegTools missing git_diff: %v", agentType, got)
 			}
 		})
 	}

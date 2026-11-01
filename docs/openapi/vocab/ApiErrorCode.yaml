@@ -429,6 +429,10 @@ values:
     status: 404
     comment: >-
       session message id not found
+  - id: command_program_not_found
+    status: 404
+    comment: >-
+      command program receipt is not retained for this chat
   - id: not_found
     status: 404
     comment: >-
