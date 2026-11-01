@@ -145,7 +145,7 @@ func TestRootDetachDirectAPIStopsIdleAndArchivedBackgroundCommandsUnderDetachedR
 	rootAID := project.Roots[0].ID
 
 	attachReq := authedRequest(t, http.MethodPost, "/v1/projects/"+project.ID+"/roots",
-		strings.NewReader(`{"path":`+ strconvQuote(rootBDir) +`,"label":"secondary"}`))
+		strings.NewReader(`{"path":`+strconvQuote(rootBDir)+`,"label":"secondary"}`))
 	attachReq.Header.Set("Content-Type", "application/json")
 	attachW := httptest.NewRecorder()
 	h.Server.ServeHTTP(attachW, attachReq)

@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/evidence"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
+	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
@@ -18,9 +21,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
-	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 )
 
 func TestCurationFocusCacheKeyExcludesTask(t *testing.T) {

@@ -304,16 +304,23 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 		s.ArchivedAt = &now
 	}))
 
-	listResp2 := env.listBackground(t, proj1.ID)
-	for _, p := range listResp2.Processes {
-		if p.ProcessID == h1 {
-			if p.SessionTitle != "Renamed Live Title" || !p.SessionArchived {
-				t.Fatalf("live hydration did not reflect updated session title/archived state: %+v", p)
-			}
-		}
-	}
+	env.assertBackgroundSessionMetadata(t, proj1.ID, h1, "Renamed Live Title", true)
 
 	env.assertBackgroundCountsAcrossSurfaces(t, proj1.ID, 3)
+}
+
+func (env *projectBackgroundTestEnv) assertBackgroundSessionMetadata(t *testing.T, projectID, handle, title string, archived bool) {
+	t.Helper()
+	for _, process := range env.listBackground(t, projectID).Processes {
+		if process.ProcessID != handle {
+			continue
+		}
+		if process.SessionTitle != title || process.SessionArchived != archived {
+			t.Fatalf("live hydration did not reflect updated session title/archived state: %+v", process)
+		}
+		return
+	}
+	t.Fatalf("live hydration lost background process %s", handle)
 }
 
 func (env *projectBackgroundTestEnv) startLongLivedBackground(t *testing.T, sess *wire.Session, dir, command string) string {

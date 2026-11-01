@@ -122,7 +122,7 @@ var gnuDirectives = map[string]statDirective{
 		}
 		return statTime(e.st.BirthTime)
 	}),
-	"W": statDirective{render: func(e statEntry) (string, bool) {
+	"W": {render: func(e statEntry) (string, bool) {
 		if e.st.BirthTime.IsZero() {
 			return "0", true
 		}
