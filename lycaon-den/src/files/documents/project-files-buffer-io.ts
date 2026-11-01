@@ -11,8 +11,19 @@ import { flushFilesDraftSyncFor, cancelFilesDraftSyncFor } from "./files-draft-s
 import { getFilesEditorViewDoc, invalidateFilesEditorViewDoc } from "../editor/files-editor-host.ts";
 import { retainEditorDocument, editorReplica } from "./editor-document.ts";
 import type { EditorEditingBlock } from "./editor-draft.ts";
-import { type FileBuffer, filesBufferNeedsBody, projectFilesState, setFilesStore } from "./files-buffer-state.ts";
-import { filesBufferBase, filesBufferText, settleBufferPresentation } from "./project-files-buffers.ts";
+import {
+  type FileBuffer,
+  type LoadedDocumentText,
+  filesBufferBase,
+  filesBufferNeedsBody,
+  filesBufferText,
+  markFilesDocumentUnavailable,
+  projectFilesState,
+  setFilesStore,
+  settleBufferPresentation,
+} from "./files-buffer-state.ts";
+
+export { type LoadedDocumentText, markFilesDocumentUnavailable };
 
 type EditorDocumentStatus = {
   resolving?: boolean;
@@ -82,9 +93,6 @@ export function applyFilesBufferRefresh(
   applyFilesBufferLoad(projectId, key, res);
   return true;
 }
-
-/** Text an open response carried inside its editor document, with the host's line-ending facts. */
-export type LoadedDocumentText = { text: string; eol: EolKind; mixed: boolean; dirty: boolean; absent?: boolean };
 
 export function applyFilesBufferLoad(
   projectId: string, key: FileBufferKey, res: ProjectSourceReadResponse, document?: LoadedDocumentText,
@@ -392,14 +400,5 @@ export function setFilesBufferCapacityError(projectId: string, key: string, mess
     buffer.editorEditingBlock = "capacity";
     buffer.loadError = message;
     buffer.loading = false;
-  }));
-}
-
-export function markFilesDocumentUnavailable(projectId: string, documentId: string): void {
-  setFilesStore(projectId, produce(state => {
-    for (const buffer of Object.values(state.byKey)) {
-      if (buffer.documentId !== documentId || !filesBufferNeedsBody(buffer)) continue;
-      buffer.loadError = "This document is no longer available from the host. Preserved edits remain in local storage.";
-    }
   }));
 }
