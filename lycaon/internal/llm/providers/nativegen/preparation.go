@@ -2,8 +2,8 @@ package nativegen
 
 import (
 	"context"
-	"log/slog"
 	"errors"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -82,6 +82,11 @@ func (p *Provider) PrepareContext(ctx context.Context, req modelcall.CompletionR
 		}
 		// Final request fitting may discard history while keeping standing instructions.
 		known = checkpoint
+	}
+	// Leave the incomplete history chunk for the final request's prefill layout.
+	known = checkpoint + (known-checkpoint)/p.runtime.config.PrefillChunk*p.runtime.config.PrefillChunk
+	if known == 0 {
+		return modelcall.ContextPreparation{}, nil
 	}
 	return p.runtime.prefill(ctx, measured.PromptTokens[:known], checkpoint)
 }
