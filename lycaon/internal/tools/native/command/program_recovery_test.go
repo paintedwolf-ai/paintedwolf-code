@@ -26,11 +26,12 @@ func TestCommandRecoveryPreservesUnitAndPriorEffects(t *testing.T) {
 		})
 	}
 	f := newProgramFixture(t)
+	testutil.FailErr(t, "set write progress", f.SetProgress("- [ ] Retain the write before inspecting source admission"))
 	out, err := f.call(t, t.Context(), `printf before > retained; eval 'if'`)
 	testutil.FailErr(t, "run captured invalid source", err)
 	got := decodeOutcome(t, out)
 	if got.Refusal == nil || got.Refusal.Details["diagnostic_top_level"] != false || got.Refusal.Details["command_execution"] != "observed" || strings.Contains(got.Refusal.Feedback, "Nothing executed") {
-		t.Fatalf("captured refusal lost prior effects: %+v", got)
+		t.Fatalf("captured refusal lost prior effects: %+v / %+v", got, got.Refusal)
 	}
 	retained, err := os.ReadFile(filepath.Join(f.Dir, "retained"))
 	testutil.FailErr(t, "read retained effect", err)
@@ -39,5 +40,21 @@ func TestCommandRecoveryPreservesUnitAndPriorEffects(t *testing.T) {
 	}
 	if !strings.Contains(got.Stderr, "if") || strings.Contains(got.Stderr, "encoding") {
 		t.Fatalf("shell diagnostic did not name parse problem: %q", got.Stderr)
+	}
+}
+
+func TestCommandRecoveryKeepsNestedSourceIdentitiesDistinct(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), `eval 'eval "if"'`)
+	testutil.FailErr(t, "run nested invalid source", err)
+	got := decodeOutcome(t, out)
+	if got.Refusal == nil {
+		t.Fatalf("missing refusal: %+v", got)
+	}
+	facts := got.Refusal.Details
+	primary, _ := facts["source_unit_id"].(string)
+	enclosing, _ := facts["operation_source_unit_id"].(string)
+	if primary == "" || enclosing == "" || primary == enclosing || enclosing == "submitted" || facts["diagnostic_top_level"] != false {
+		t.Fatalf("nested source provenance collapsed: %#v", facts)
 	}
 }

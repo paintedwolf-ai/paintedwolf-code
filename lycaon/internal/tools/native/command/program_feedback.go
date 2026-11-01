@@ -29,16 +29,29 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		if errors.As(evalErr, &evaluationRefusal) {
 			span := evaluationRefusal.Node.Span
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": evaluationRefusal.Expected, "expected_form": evaluationRefusal.Expected, "reason": evaluationRefusal.Expected}
+			data["diagnostic_stage"] = string(toolcontract.EvaluationDiagnosticStage)
+			if evaluationRefusal.SourceUnitID != "" {
+				data["source_unit_id"] = evaluationRefusal.SourceUnitID
+			}
 			var expansion *commandprogram.ExpansionError
-			if errors.As(evaluationRefusal.Cause, &expansion) && expansion.Limit != "" {
+			if errors.As(evaluationRefusal.Cause, &expansion) {
+				data["diagnostic_stage"] = string(toolcontract.ExpansionDiagnosticStage)
+			}
+			if expansion != nil && expansion.Limit != "" {
 				data["limit_id"], data["maximum"], data["observed"] = expansion.Limit, expansion.Maximum, expansion.ObservedValue()
 			}
 			if evaluationRefusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = evaluationRefusal.Command, evaluationRefusal.Option, evaluationRefusal.Form
+				if evaluationRefusal.Code == "COMMAND_OPTION_UNSUPPORTED" {
+					data["diagnostic_stage"] = string(toolcontract.OptionDiagnosticStage)
+				}
 			}
 			if syntax := toolcommand.ProgramSyntaxObservation("command", evaluationRefusal.Cause); syntax != nil {
 				for key, value := range syntax.Data {
 					data[key] = value
+				}
+				if evaluationRefusal.SourceUnitID != "" {
+					data["operation_source_unit_id"] = evaluationRefusal.SourceUnitID
 				}
 				data["operation_source_start_byte"], data["operation_source_end_byte"] = span.StartByte, span.EndByte
 				data["operation_source_line"], data["operation_source_column"] = span.Line, span.Column
@@ -78,7 +91,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 	failedDelivery := func(cause error) (*ProgramRefusal, func(), error) {
 		var capacity *toolcontract.ProgramMemoryLimitError
 		if !errors.As(cause, &capacity) && !errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
-			return nil, nil, errors.Join(rejection.cause, cause, run.recorder)
+			return nil, nil, errors.Join(rejection.cause, cause)
 		}
 		delivery, err := run.executor.Rejections.RenderProgramRefusal(ctx, run.frame, run.memory, run.capture, run.tc, rejection.cause, cause, run.recorder)
 		if err != nil {

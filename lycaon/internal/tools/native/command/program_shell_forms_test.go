@@ -115,9 +115,11 @@ func TestProgramEntryEvalSyntaxRefusalWritesShellLine(t *testing.T) {
 	out, err := f.call(t, t.Context(), `printf 'before\n'; eval 'if'`)
 	testutil.FailErr(t, "run invalid eval source", err)
 	got := decodeOutcome(t, out)
-	const stderr = "eval: line 1: The complete submitted or captured syntax unit is malformed or has an unsupported source encoding [COMMAND_SYNTAX_INVALID]\n"
-	if got.Refusal == nil || got.Refusal.Code != "COMMAND_SYNTAX_INVALID" || got.Status != 2 || got.Stdout != "before\n" || got.Stderr != stderr {
-		t.Fatalf("eval refusal outcome: %+v, want stderr %q", got, stderr)
+	if got.Refusal == nil || got.Refusal.Code != "COMMAND_SYNTAX_INVALID" || got.Status != 2 || got.Stdout != "before\n" {
+		t.Fatalf("eval refusal outcome: %+v", got)
+	}
+	if !strings.HasPrefix(got.Stderr, "eval: line 1: ") || !strings.HasSuffix(got.Stderr, " [COMMAND_SYNTAX_INVALID]\n") || !strings.Contains(got.Stderr, "if") || strings.Contains(got.Stderr, "encoding") {
+		t.Fatalf("shell parser diagnostic lost attribution or cause: %q", got.Stderr)
 	}
 }
 

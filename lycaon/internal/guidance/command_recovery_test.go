@@ -4,10 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestCommandRecoveryStateDoesNotComeFromDiagnosticProse(t *testing.T) {
+	SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	for _, text := range []string{"Nothing executed. No files changed.", "completed_effects=0", "COMMAND_SYNTAX_INVALID", "exit status 0"} {
 		if view := commandRecoveryView(map[string]any{"reason": text, "stderr": text, "command": text}); view != nil {
 			t.Fatalf("prose selected execution state: %#v", view)
@@ -29,7 +31,7 @@ func TestCommandRecoveryStateDoesNotComeFromDiagnosticProse(t *testing.T) {
 		if state == "observed" && (!strings.Contains(got, "Completed effects: 1") || !strings.Contains(got, "Uncertain effects: 1")) {
 			t.Fatalf("lost certainty: %s", got)
 		}
-		if state == "active" && !strings.Contains(got, "Background work is still active") {
+		if state == "active" && !strings.Contains(got, "Program is not finished") {
 			t.Fatalf("lost active work: %s", got)
 		}
 	}
@@ -37,15 +39,15 @@ func TestCommandRecoveryStateDoesNotComeFromDiagnosticProse(t *testing.T) {
 
 func TestCommandRecoveryRejectsContradictoryOrUnknownCounts(t *testing.T) {
 	for _, count := range []any{-1, 1.5, "0", nil} {
-		data := map[string]any{"command_execution": "observed", "program_completed_effects": count, "program_uncertain_effects": 0, "program_executed_children": 1}
+		data := map[string]any{"tool": "command", "command_execution": "observed", "program_completed_effects": count, "program_uncertain_effects": 0, "program_executed_children": 1}
 		if view := commandRecoveryView(data); view != nil {
 			t.Fatalf("invalid count selected state: %#v", view)
 		}
 	}
-	if view := commandRecoveryView(map[string]any{"command_execution": "not_started", "program_executed_children": 1}); view != nil {
+	if view := commandRecoveryView(map[string]any{"tool": "command", "command_execution": "not_started", "program_executed_children": 1}); view != nil {
 		t.Fatalf("executed operation erased: %#v", view)
 	}
-	if view := commandRecoveryView(map[string]any{"command_execution": "not_started"}); view != nil {
+	if view := commandRecoveryView(map[string]any{"tool": "command", "command_execution": "not_started"}); view != nil {
 		t.Fatalf("missing observation became nonexecution: %#v", view)
 	}
 }

@@ -103,7 +103,9 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_SYNTAX_UNSUPPORTED", EffectCertainty: toolcontract.NoEffect}, err)
 		var refusal *EvaluationRefusal
 		errors.As(err, &refusal)
-		return f.refuse(refusal.Node, refusal.Code, refusal.Expected, nil)
+		rejected := f.refuse(refusal.Node, refusal.Code, refusal.Expected, nil)
+		rejected.SourceUnitID = captured.Pin.SourceID
+		return rejected
 	}
 	if registrar, ok := f.e.ports.Executions.(SourceUnitRegistrar); ok {
 		if err := registrar.RegisterSourceUnit(ctx, run.inv, captured, lease.Plan); err != nil {

@@ -15,6 +15,7 @@ requires:
   - paintedwolf.limit_id
   - paintedwolf.maximum
   - paintedwolf.observed
+  - paintedwolf.diagnostic_top_level
 when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
 effect: block
 copy:
@@ -22,9 +23,7 @@ copy:
   cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}The command stopped at the recorded boundary.{% endif %}'
   fix: >-
     {% if paintedwolf.diagnostic_top_level %}Reduce the size or complexity of the submitted shell source, then resubmit it.
-    {% elif paintedwolf.limit_id == "regex_work_steps" %}Reduce the searched input or simplify the regular expression. Preserve earlier results.
-    {% elif paintedwolf.resource_unit == "bytes" %}Reduce the data held or emitted by the remaining work; use bounded input or output ranges.
-    {% else %}Reduce usage of the named resource in the remaining work. Preserve completed results.{% endif %}
+    {% else %}Reduce usage of {{ paintedwolf.limit_id }} in the remaining work to fit the reported bound. Preserve completed results.{% endif %}
   instead: Check the recorded results before retrying the remaining work.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect

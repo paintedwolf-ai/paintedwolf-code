@@ -101,10 +101,11 @@ func (o ProgramOutcome) Settlement(detailReference string) toolcontract.ProgramS
 // EvaluationRefusal is a typed host refusal at a reached or statically present
 // node. Effects settled before it remain recorded; nothing after it is admitted.
 type EvaluationRefusal struct {
-	Code     string
-	Node     commandsurface.SyntaxLocation
-	Expected string
-	Cause    error
+	SourceUnitID string
+	Code         string
+	Node         commandsurface.SyntaxLocation
+	Expected     string
+	Cause        error
 	// Command, Option and Form name a refused native form: the command, the
 	// refused word and the command's supported form.
 	Command, Option, Form string

@@ -7,10 +7,11 @@ import (
 
 // commandRecoveryView exposes consistent producer-stated execution observations.
 func commandRecoveryView(data map[string]any) map[string]any {
-	state, _ := data["command_execution"].(string)
-	if state == "active" {
-		return map[string]any{"active": true}
+	tool, _ := data["tool"].(string)
+	if tool != "command" && tool != "verify" {
+		return nil
 	}
+	state, _ := data["command_execution"].(string)
 	counts := map[string]int64{}
 	present := false
 	for _, key := range []string{"program_completed_effects", "program_uncertain_effects", "program_executed_children"} {
@@ -37,9 +38,9 @@ func commandRecoveryView(data map[string]any) map[string]any {
 		if (top && stage == "syntax") || (present && len(counts) == 3) {
 			return map[string]any{"not_started": true}
 		}
-	case "observed":
+	case "observed", "active":
 		if len(counts) == 3 {
-			return map[string]any{"observed": true, "completed": counts["program_completed_effects"], "uncertain": counts["program_uncertain_effects"], "started": counts["program_executed_children"]}
+			return map[string]any{"observed": state == "observed", "active": state == "active", "completed": counts["program_completed_effects"], "uncertain": counts["program_uncertain_effects"], "started": counts["program_executed_children"]}
 		}
 	}
 	return nil

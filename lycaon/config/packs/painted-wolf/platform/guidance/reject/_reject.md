@@ -3,7 +3,7 @@
 {% else %}Rejected: {{ what }}
 {% endif %}
 {% if execution.not_started %}State: Nothing executed. No files changed.
-{% elif execution.active %}State: Background work is still active. Inspect it before submitting replacement work.
+{% elif execution.active %}State: Program is not finished. Operations started: {{ execution.started }}. Completed effects: {{ execution.completed }}. Uncertain effects: {{ execution.uncertain }}. Inspect its jobs before starting replacement work.
 {% elif execution.observed %}State: Operations started: {{ execution.started }}. Completed effects: {{ execution.completed }}. Uncertain effects: {{ execution.uncertain }}.
 {% endif %}
 {% if cause and cause != what %}Cause: {{ cause }}

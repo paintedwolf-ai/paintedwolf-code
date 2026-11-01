@@ -1,6 +1,6 @@
 ## command{% if is_coordinator %} (coordinator){% endif %}
 
-{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}Utilities run natively with GNU and BSD flags; use `CMD --help`. Shell state lasts for this program only.
+{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}Utilities run natively with GNU and BSD flags; use `CMD --help`. Shell state lasts for this program only. Stdin is empty unless supplied by a pipe, redirect, or heredoc.{% if profile_has_terminal_open and profile_has_terminal_send %} Use `terminal_open` and `terminal_send` for a program that needs live input.{% endif %}
 
 {% if workspace_roots %}Programs start in {{ project_dir }}; `pwd`, `$PWD` and `$OLDPWD` are absolute.{% if root_count > 1 %} `cd` moves between folders by absolute path or `@label`.{% endif %} Unquoted `@label/...` and `@scratch/...` expand in arguments and redirects (quote to pass literally):
 {% for r in workspace_roots %}- `@{{ r.label }}` → {{ r.path }}{% if r.is_primary %} (primary){% endif %}
