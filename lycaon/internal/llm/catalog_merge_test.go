@@ -368,9 +368,10 @@ func TestMergeScalewayCatalogAndDedicatedOverrides(t *testing.T) {
 	discovered := []modelinfo.Entry{
 		{ID: "qwen3-235b-a22b-instruct-2507", Untyped: true},
 		{ID: "qwen3-embedding-8b", Untyped: true},
+		{ID: "custom-dedicated-deployment"},
 	}
 	localOverrides := []modelinfo.Entry{
-		{ID: "custom-dedicated-deployment", ContextLength: 65536},
+		{ID: "qwen3-235b-a22b-instruct-2507", ContextLength: 65536},
 	}
 	merged := mergeAssignableModels(
 		"scaleway",
@@ -388,11 +389,15 @@ func TestMergeScalewayCatalogAndDedicatedOverrides(t *testing.T) {
 	for _, m := range merged.Models {
 		ids[m.ID] = m
 	}
-	if _, ok := ids["qwen3-235b-a22b-instruct-2507"]; !ok {
+	chat, ok := ids["qwen3-235b-a22b-instruct-2507"]
+	if !ok {
 		t.Fatalf("expected serverless chat model in merged set, got %v", ids)
 	}
+	if chat.ContextLength != 65536 {
+		t.Fatalf("ContextLength = %d, want 65536 local cap", chat.ContextLength)
+	}
 	if _, ok := ids["custom-dedicated-deployment"]; !ok {
-		t.Fatalf("expected dedicated local override model in merged set, got %v", ids)
+		t.Fatalf("expected typed dedicated deployment model in merged set, got %v", ids)
 	}
 	if _, ok := ids["qwen3-embedding-8b"]; ok {
 		t.Fatalf("embedding model must not appear in merged set: %v", ids)
