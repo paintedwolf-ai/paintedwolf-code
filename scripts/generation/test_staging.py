@@ -80,7 +80,7 @@ class StagingTests(unittest.TestCase):
 
     def test_release_requires_explicit_trust_inputs_before_building(self):
         import importlib.util
-        spec = importlib.util.spec_from_file_location("stage_generation", Path(__file__).parents[1] / "stage-generation.py")
+        spec = importlib.util.spec_from_file_location("stage_generation", Path(__file__).with_name("stage.py"))
         command = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(command)
         with patch.object(command.runtime, "build") as build:

@@ -12,7 +12,7 @@ trap digest_release_lock EXIT
 ACTION="${1:?generation action required}"
 shift
 if [[ "${ACTION}" == stage ]]; then
-  python3 "${ROOT}/scripts/stage-generation.py" "$@"
+  python3 "${ROOT}/scripts/generation/stage.py" "$@"
 else
   python3 "${ROOT}/scripts/generation/runtime.py" "${ACTION}" "$@"
 fi
