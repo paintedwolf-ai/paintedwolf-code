@@ -123,6 +123,7 @@ func TestFixtureProviderKeysPresent(t *testing.T) {
 		"openai", "anthropic", "togetherai", "openrouter", "fireworks-ai", "deepinfra",
 		"amazon-bedrock", "google-vertex", "google", "azure", "cloudflare-workers-ai",
 		"scaleway",
+		"mistral",
 	}
 	for _, key := range want {
 		if _, ok := doc.Providers[key]; !ok {
@@ -136,5 +137,42 @@ func TestFixtureProviderKeysPresent(t *testing.T) {
 	}
 	if len(root) != len(want) {
 		t.Fatalf("fixture providers = %d, want %d", len(root), len(want))
+	}
+}
+
+func TestMistralRecordsFilterNonConversationModels(t *testing.T) {
+	doc := loadFixtureDoc(t)
+	feedKey, ok := FeedKeyForKind("mistral")
+	if !ok || feedKey != "mistral" {
+		t.Fatalf("FeedKeyForKind(mistral) = %q, %v", feedKey, ok)
+	}
+	models := doc.EligibleModels(feedKey)
+	if len(models) == 0 {
+		t.Fatal("EligibleModels(mistral) returned 0 models")
+	}
+	byID := make(map[string]Model, len(models))
+	for _, m := range models {
+		byID[m.ID] = m
+	}
+	if _, exists := byID["mistral-embed"]; exists {
+		t.Fatal("mistral-embed should be excluded from conversation models")
+	}
+	large, ok := byID["mistral-large-latest"]
+	if !ok {
+		t.Fatal("missing mistral-large-latest")
+	}
+	if large.Limit == nil || large.Limit.Context != 131072 || large.Limit.Output != 32768 {
+		t.Fatalf("mistral-large-latest limit = %+v", large.Limit)
+	}
+	if large.ToolCall == nil || !*large.ToolCall {
+		t.Fatalf("mistral-large-latest tool_call = %v", large.ToolCall)
+	}
+	magistral, ok := byID["magistral-medium-latest"]
+	if !ok || magistral.Reasoning == nil || !*magistral.Reasoning {
+		t.Fatalf("magistral-medium-latest reasoning = %+v", magistral)
+	}
+	pixtral, ok := byID["pixtral-large-latest"]
+	if !ok || !pixtral.Attachment {
+		t.Fatalf("pixtral-large-latest should report attachment support: %+v", pixtral)
 	}
 }

@@ -615,3 +615,11 @@ providers:
     models: []
     http_retry_profile: hosted-standard
     prompt_cache_profile: implicit
+  - id: mistral
+    kind: mistral
+    label: Mistral
+    base_url: https://api.mistral.ai/v1
+    api_key_env: MISTRAL_API_KEY
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: none

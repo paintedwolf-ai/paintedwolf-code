@@ -52,6 +52,7 @@ func TestShippedPromptCachePolicyPerKind(t *testing.T) {
 		{"lmstudio", providerprofile.PromptCacheLocalKV, 0},
 		{"omlx", providerprofile.PromptCacheLocalKV, 0},
 		{"openai-compatible", providerprofile.PromptCacheLocalKV, 0},
+		{"mistral", providerprofile.PromptCacheNone, 0},
 	}
 	if len(cases) != len(policies) {
 		t.Fatalf("catalog has %d provider kinds, test covers %d", len(policies), len(cases))

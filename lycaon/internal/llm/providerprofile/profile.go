@@ -145,6 +145,8 @@ const (
 	ToolCallIDHost ToolCallIDStyle = ""
 	// ToolCallIDWireRoundTrip replays the emitted wire identity.
 	ToolCallIDWireRoundTrip ToolCallIDStyle = "wire_round_trip"
+	// ToolCallIDAlphanumeric9 normalizes wire tool-call identities to 9 ASCII alphanumeric characters.
+	ToolCallIDAlphanumeric9 ToolCallIDStyle = "alphanumeric_9"
 )
 
 // RoundTripsToolCallID reports whether wire identities are replayed.

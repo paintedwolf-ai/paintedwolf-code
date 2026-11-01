@@ -31,6 +31,7 @@ export const PROVIDER_ONBOARDING_MODEL_HINTS = {
     "Prefer large Workers AI models with tools; small ones struggle.",
   scaleway:
     "Prefer Qwen3 235B or Llama 3.3 70B, or another strong model with tools.",
+  mistral: "Mistral Large or Magistral Medium with tool calling work well.",
 } as const satisfies Record<string, string>;
 
 export type ProviderOnboardingKind = keyof typeof PROVIDER_ONBOARDING_MODEL_HINTS;

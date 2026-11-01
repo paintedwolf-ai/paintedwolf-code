@@ -18,6 +18,7 @@ var feedProviderKeyByKind = map[string]string{
 	"azure":                 "azure",
 	"cloudflare-workers-ai": "cloudflare-workers-ai",
 	"scaleway":              "scaleway",
+	"mistral":               "mistral",
 }
 
 // Shared feed keys use an explicit canonical kind to avoid map-order choices.
