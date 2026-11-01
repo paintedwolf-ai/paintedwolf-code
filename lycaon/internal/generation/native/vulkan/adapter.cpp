@@ -159,7 +159,13 @@ extern "C" int pw_generation_forward(pw_generation * engine, const uint32_t * to
             if (tokens[i] >= 262144) throw std::runtime_error("invalid input token");
         *sampled = UINT32_MAX;
         if (output && engine->greedy != (output == 2)) {
-            llama_set_sampler(engine->context.get(), 0, output == 2 ? engine->sampler.get() : nullptr);
+            if (output == 2) {
+                // Backend sampler chains can only be initialized once.
+                engine->sampler.reset(llama_sampler_chain_init(llama_sampler_chain_default_params()));
+                llama_sampler_chain_add(engine->sampler.get(), llama_sampler_init_greedy());
+            }
+            if (!llama_set_sampler(engine->context.get(), 0, output == 2 ? engine->sampler.get() : nullptr))
+                throw std::runtime_error("sampler transition failed");
             engine->greedy = output == 2;
         }
         auto batch = llama_batch_init(static_cast<int32_t>(count), 0, 1);
