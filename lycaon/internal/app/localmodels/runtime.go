@@ -65,7 +65,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	}
 	store := modelstore.New(options.StoreRoot, authority)
 	if store.Status(nativegen.DefaultModelID, inventory.Backend).State == modelstore.StateAbsent {
-		if err := store.ImportBundle(ctx, options.Seed); err != nil {
+		if err := store.ImportBundle(ctx, options.Seed, modelstore.Slot{Model: nativegen.DefaultModelID, Device: inventory.Backend}); err != nil {
 			resources.Close()
 			return nil, err
 		}
@@ -79,7 +79,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 			Backend: inventory.Backend, PhysicalDevice: device.PhysicalDevice,
 			Devices: resources.Devices, HostMemory: resources.GenerationHost,
 			DeviceMemory: resources.GenerationDevice, UnifiedMemory: device.UnifiedMemory,
-			ModelStore: store, SharedWorkspaceBytes: resources.SharedWorkspaceBytes,
+			ModelStore: store, SeedDirectory: options.Seed, SharedWorkspaceBytes: resources.SharedWorkspaceBytes,
 		}),
 	}, nil
 }

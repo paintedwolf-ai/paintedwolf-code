@@ -69,3 +69,27 @@ func TestLoadRespectsTheRuntimeHostReservation(t *testing.T) {
 		})
 	}
 }
+
+func TestWarmRecoversFromConcurrentProcessExit(t *testing.T) {
+	_, runtime := fixtureProvider(t)
+	for range 8 {
+		if err := runtime.Warm(t.Context(), DefaultModelID); err != nil {
+			t.Fatalf("warm before exit: %v", err)
+		}
+		previous := runtime.loaded.process
+		go previous.close()
+		if err := runtime.Warm(t.Context(), DefaultModelID); err != nil {
+			t.Fatalf("warm during exit: %v", err)
+		}
+		<-previous.done
+		if err := runtime.Warm(t.Context(), DefaultModelID); err != nil {
+			t.Fatalf("warm after exit: %v", err)
+		}
+		if runtime.loaded.process == previous {
+			t.Fatal("retained an exited process")
+		}
+		if runtime.config.HostMemory.Snapshot().ReservedBytes != 768<<20 || runtime.config.DeviceMemory.Snapshot().ReservedBytes != 256<<20 {
+			t.Fatal("restart did not replace memory reservations")
+		}
+	}
+}

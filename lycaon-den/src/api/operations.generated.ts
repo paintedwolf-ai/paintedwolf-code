@@ -255,6 +255,7 @@ export const API_OPERATIONS = {
   reloadEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/reload" },
   reloadExtensionPack: { method: "POST", path: "/v1/extensions/packs/{pack_id}/reload" },
   renameProjectSource: { method: "POST", path: "/v1/projects/{id}/source/rename" },
+  repairLocalGeneration: { method: "POST", path: "/v1/providers/{provider_id}/repair" },
   replaceEditorDocument: { method: "PUT", path: "/v1/projects/{id}/editor-documents/{document_id}" },
   replaceEditorDocumentRetention: { method: "PUT", path: "/v1/projects/{id}/editor-documents/retention" },
   replaceProjectManagedSecretValue: { method: "PUT", path: "/v1/projects/{id}/secrets/{secret_id}/value" },
@@ -600,6 +601,7 @@ export type OperationPathParameters = {
   reloadEditorDocument: { id: string | number; document_id: string | number; };
   reloadExtensionPack: { pack_id: string | number; };
   renameProjectSource: { id: string | number; };
+  repairLocalGeneration: { provider_id: string | number; };
   replaceEditorDocument: { id: string | number; document_id: string | number; };
   replaceEditorDocumentRetention: { id: string | number; };
   replaceProjectManagedSecretValue: { id: string | number; secret_id: string | number; };

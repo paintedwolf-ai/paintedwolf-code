@@ -52,14 +52,14 @@ func writeBundleManifest(t *testing.T, dir string, signed SignedManifest) {
 
 func TestBundleImportAndRepair(t *testing.T) {
 	s, dir, signed := bundleFixture(t)
-	if err := s.ImportBundle(context.Background(), dir); err != nil {
+	if err := s.ImportBundle(context.Background(), dir, Slot{Model: "e4b", Device: "mlx"}); err != nil {
 		t.Fatalf("import bundle: %v", err)
 	}
 	lease, err := s.AcquireLease("e4b", "mlx", "fixture", 1)
 	if err != nil {
 		t.Fatalf("lease imported bundle: %v", err)
 	}
-	if err := s.RepairBundle(context.Background(), dir); !errors.Is(err, ErrRevisionInUse) {
+	if err := s.RepairBundle(context.Background(), dir, Slot{Model: "e4b", Device: "mlx"}); !errors.Is(err, ErrRevisionInUse) {
 		t.Fatalf("repair leased bundle: %v", err)
 	}
 	lease.Release()
@@ -67,7 +67,7 @@ func TestBundleImportAndRepair(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatalf("remove fixture payload: %v", err)
 	}
-	if err := s.RepairBundle(context.Background(), dir); err != nil {
+	if err := s.RepairBundle(context.Background(), dir, Slot{Model: "e4b", Device: "mlx"}); err != nil {
 		t.Fatalf("repair bundle: %v", err)
 	}
 	if got := s.Status("e4b", "mlx"); got.State != StateReady {
@@ -82,7 +82,7 @@ func TestBundleRejectsUntrustedManifestBeforeMutation(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, signed.Manifest.Artifact.Name)); err != nil {
 		t.Fatalf("remove untrusted payload: %v", err)
 	}
-	if err := s.ImportBundle(context.Background(), dir); err == nil || !strings.Contains(err.Error(), "unknown signing key") {
+	if err := s.ImportBundle(context.Background(), dir, Slot{Model: "e4b", Device: "mlx"}); err == nil || !strings.Contains(err.Error(), "unknown signing key") {
 		t.Fatalf("untrusted import: %v", err)
 	}
 	if _, err := os.Stat(s.Root()); !os.IsNotExist(err) {
@@ -118,7 +118,7 @@ func TestBundleManifestBounds(t *testing.T) {
 					t.Fatalf("write bound fixture: %v", err)
 				}
 			}
-			if err := s.ImportBundle(context.Background(), dir); err == nil {
+			if err := s.ImportBundle(context.Background(), dir, Slot{Model: "e4b", Device: "mlx"}); err == nil {
 				t.Fatal("invalid bundle manifest accepted")
 			}
 			if _, err := os.Stat(s.Root()); !os.IsNotExist(err) {
@@ -149,12 +149,32 @@ func TestBundleRejectsPayloadDamageAndLinks(t *testing.T) {
 			if err != nil {
 				t.Fatalf("change payload fixture: %v", err)
 			}
-			if err := s.ImportBundle(context.Background(), dir); err == nil {
+			if err := s.ImportBundle(context.Background(), dir, Slot{Model: "e4b", Device: "mlx"}); err == nil {
 				t.Fatal("invalid bundle payload accepted")
 			}
 			if got := s.Status("e4b", "mlx"); got.State != StateAbsent {
 				t.Fatalf("invalid bundle activated: %+v", got)
 			}
 		})
+	}
+}
+
+func TestBundleRejectsWrongTargetBeforeMutation(t *testing.T) {
+	for _, target := range []Slot{{}, {Model: "other", Device: "mlx"}, {Model: "e4b", Device: "vulkan"}} {
+		for _, repair := range []bool{false, true} {
+			s, dir, _ := bundleFixture(t)
+			var err error
+			if repair {
+				err = s.RepairBundle(context.Background(), dir, target)
+			} else {
+				err = s.ImportBundle(context.Background(), dir, target)
+			}
+			if err == nil {
+				t.Fatalf("accepted target %+v (repair=%t)", target, repair)
+			}
+			if _, err := os.Stat(s.Root()); !os.IsNotExist(err) {
+				t.Fatalf("wrong target mutated store: %v", err)
+			}
+		}
 	}
 }

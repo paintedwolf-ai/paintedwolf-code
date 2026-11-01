@@ -11,17 +11,22 @@ import (
 
 const maxBundleManifestBytes = 128 << 10
 
+type Slot struct {
+	Model  string
+	Device string
+}
+
 // ImportBundle authenticates manifest.json before opening its named payloads.
-func (s *Store) ImportBundle(ctx context.Context, directory string) error {
-	return s.importBundle(ctx, directory, false)
+func (s *Store) ImportBundle(ctx context.Context, directory string, target Slot) error {
+	return s.importBundle(ctx, directory, target, false)
 }
 
 // RepairBundle retains the active revision until its replacement is complete.
-func (s *Store) RepairBundle(ctx context.Context, directory string) error {
-	return s.importBundle(ctx, directory, true)
+func (s *Store) RepairBundle(ctx context.Context, directory string, target Slot) error {
+	return s.importBundle(ctx, directory, target, true)
 }
 
-func (s *Store) importBundle(ctx context.Context, directory string, repair bool) error {
+func (s *Store) importBundle(ctx context.Context, directory string, target Slot, repair bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -33,6 +38,9 @@ func (s *Store) importBundle(ctx context.Context, directory string, repair bool)
 	signed, err := readBundleManifest(root)
 	if err != nil {
 		return err
+	}
+	if signed.Manifest.Model != target.Model || signed.Manifest.Device != target.Device {
+		return fmt.Errorf("modelstore: bundle does not match target slot %q/%q", target.Model, target.Device)
 	}
 	return s.importRevision(ctx, signed, func(_ context.Context, a Artifact) (io.ReadCloser, error) {
 		return openBundleFile(root, a.Name, a.Bytes)
