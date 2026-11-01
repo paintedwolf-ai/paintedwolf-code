@@ -266,6 +266,14 @@ func TestSandboxRefusalsGrants(t *testing.T) {
 		want     []string
 	}{
 		{
+			name:   "credential capability is not an ordinary read-path grant",
+			access: AccessRead,
+			refusals: []SandboxRefusal{
+				{Operation: "file-read-data", Target: loginDB, Layer: FloorReadCredentialStore, Recovery: RecoverCredentialStore, Grant: loginDB},
+			},
+			want: []string{},
+		},
+		{
 			name:   "keychain traversal metadata on ancestor drops ancestor grant",
 			access: AccessRead,
 			refusals: []SandboxRefusal{

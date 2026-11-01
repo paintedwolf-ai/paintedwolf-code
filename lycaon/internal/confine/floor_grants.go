@@ -28,7 +28,8 @@ func loaderTreeGrant(path string, roots []string) string {
 	return top
 }
 
-// Grants returns the distinct recovery grants for refused access paths.
+// Grants returns filesystem-path recovery grants. Credential-store access
+// uses its separate capability rather than an ordinary path grant.
 // Read metadata refusals on ancestor directories are satisfied by granting a
 // refused descendant, and directory grants cover descendants only within the
 // same floor layer.
@@ -36,7 +37,7 @@ func (s SandboxRefusals) Grants(access FilesystemAccess) []string {
 	paths := s.Paths(access)
 	candidates := make([]BoundaryPath, 0, len(paths))
 	for i, path := range paths {
-		if path.Grant == "" {
+		if path.Grant == "" || path.Layer.Recovery() == RecoverCredentialStore {
 			continue
 		}
 		if access == AccessRead && metadataOnly(path.Operations) && hasGrantableDescendant(paths, i) {
