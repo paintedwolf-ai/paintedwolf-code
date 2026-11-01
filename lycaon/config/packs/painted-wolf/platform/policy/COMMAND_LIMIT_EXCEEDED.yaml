@@ -58,3 +58,4 @@ x-paintedwolf-scenarios:
     observed: 20971521
   expect_contains:
   - streaming query
+  - query_value_bytes
