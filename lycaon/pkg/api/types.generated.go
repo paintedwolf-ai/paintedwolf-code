@@ -3187,10 +3187,23 @@ type FireWorkflowTransitionRequest struct {
 // FolderDetect
 type FolderDetect struct {
 	Path string `json:"path"`
-	// The project that already holds this folder as a root, when there is one. Absent for a folder no project covers. Opening a folder that carries this reopens that project; minting a second one over the same tree would lose its trust state.
+	// The most recently opened single-root project for this folder, when one exists. Absent when no project covers this folder or when matching projects include additional attached folders.
 	ProjectID string `json:"project_id,omitempty"`
+	// Existing projects that include this folder as a root, ordered with single-root matches before multi-root matches and most recently opened first within each group.
+	Projects []FolderDetectProject `json:"projects,omitempty"`
 	// Install choices available before opening the project.
 	ExtensionSuggestions *ExtensionSuggestionsResponse `json:"extension_suggestions,omitempty"`
+}
+
+// FolderDetectProject
+type FolderDetectProject struct {
+	ID string `json:"id"`
+	// Display name for the project (explicit name or primary folder basename).
+	Name  string        `json:"name"`
+	Roots []ProjectRoot `json:"roots"`
+	// True when the detected folder is the project's only attached root.
+	IsSingleRoot bool      `json:"is_single_root"`
+	LastOpenedAt time.Time `json:"last_opened_at"`
 }
 
 // FullScanRequest A complete pass of every admitted file by the named scanners, or by every selected scanner when none are named. The only way a full pass starts; automatic scanning is incremental.

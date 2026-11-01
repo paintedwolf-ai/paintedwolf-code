@@ -180,20 +180,19 @@ func PrimaryRootPath(p *Project) string {
 	return ""
 }
 
-// FindByRootPath returns the most recently opened project containing a resolved root.
+// FindByRootPath returns the most recently opened project containing a resolved root,
+// preferring single-root matches over multi-root matches.
 func FindByRootPath(list []Project, resolved string) *Project {
-	resolved = strings.TrimSpace(resolved)
-	if resolved == "" {
+	matches := FindAllByRootPath(list, resolved)
+	if len(matches) == 0 {
 		return nil
 	}
 	for i := range list {
-		for _, r := range list[i].Roots {
-			if r.Path == resolved {
-				return &list[i]
-			}
+		if list[i].ID == matches[0].ID {
+			return &list[i]
 		}
 	}
-	return nil
+	return &matches[0]
 }
 
 // MemoryRegistry is an in-memory project registry for tests.

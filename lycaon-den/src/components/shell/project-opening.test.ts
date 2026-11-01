@@ -38,16 +38,15 @@ function setup(detectFolder: () => Promise<FolderDetect>, overrides: ClientStubs
 }
 
 describe("project opening lifecycle", () => {
-  it.each([false, true])("covers the outgoing workspace before requesting a folder project (known: %s)", async (known) => {
+  it("covers the outgoing workspace before requesting a new folder project", async () => {
     const pending = deferred<Project>();
     const observed: boolean[] = [];
     const requestProject = vi.fn(() => {
       observed.push(opening.shell.state.opening !== null);
       return pending.promise;
     });
-    const opening = setup(async () => ({ path: "/repo", ...(known ? { project_id: "p1" } : {}) }), {
+    const opening = setup(async () => ({ path: "/repo" }), {
       createProject: requestProject,
-      getProject: requestProject,
     });
     opening.shell.beginStageSwitch({ projectId: "outgoing", kind: "cross-project" });
 
@@ -61,6 +60,182 @@ describe("project opening lifecycle", () => {
     await request;
     expect(opening.startSession).toHaveBeenCalledWith(
       { kind: "new-session", projectId: "p1" },
+      { switchKind: "cross-project" },
+    );
+  });
+
+  it("prompts when a folder already belongs to a single-root project and supports both reopen and create-new", async () => {
+    const existing = wireProject("/repo", "p1");
+    const created = wireProject("/repo", "p-new");
+    const getProject = vi.fn(async () => existing);
+    const createProject = vi.fn(async () => created);
+    const opening = setup(
+      async () => ({
+        path: "/repo",
+        project_id: "p1",
+        projects: [
+          {
+            id: "p1",
+            name: "repo",
+            roots: existing.roots,
+            is_single_root: true,
+            last_opened_at: "2026-10-31T00:00:00Z",
+          },
+        ],
+      }),
+      { getProject, createProject },
+    );
+
+    await opening.proposeFolderAsProject("/repo");
+    expect(opening.openFolderPath()).toBe("/repo");
+    expect(getProject).not.toHaveBeenCalled();
+    expect(createProject).not.toHaveBeenCalled();
+
+    // Default confirmation reopens the single-root project.
+    await opening.confirmOpenFolder({ installIds: [] });
+    expect(getProject).toHaveBeenCalledWith("p1");
+    expect(createProject).not.toHaveBeenCalled();
+    expect(opening.openFolderPath()).toBeNull();
+
+    // Choosing projectId: null creates a fresh single-folder project.
+    await opening.proposeFolderAsProject("/repo");
+    expect(opening.openFolderPath()).toBe("/repo");
+    await opening.confirmOpenFolder({ installIds: [], projectId: null });
+    expect(createProject).toHaveBeenCalledWith({ roots: [{ path: "/repo" }] });
+  });
+
+  it("defaults to creating a new single-folder project when a folder only appears in a multi-root project", async () => {
+    const multi = wireProject("/main", "multi-1");
+    const created = wireProject("/shared", "single-new");
+    const getProject = vi.fn(async () => multi);
+    const createProject = vi.fn(async () => created);
+    const opening = setup(
+      async () => ({
+        path: "/shared",
+        projects: [
+          {
+            id: "multi-1",
+            name: "Main Workspace",
+            roots: multi.roots,
+            is_single_root: false,
+            last_opened_at: "2026-10-31T00:00:00Z",
+          },
+        ],
+      }),
+      { getProject, createProject },
+    );
+
+    await opening.proposeFolderAsProject("/shared");
+    expect(opening.openFolderPath()).toBe("/shared");
+    expect(getProject).not.toHaveBeenCalled();
+    expect(createProject).not.toHaveBeenCalled();
+
+    // Default confirmation creates a fresh single-root project instead of hijacking into multi-1.
+    await opening.confirmOpenFolder({ installIds: [] });
+    expect(createProject).toHaveBeenCalledWith({ roots: [{ path: "/shared" }] });
+    expect(getProject).not.toHaveBeenCalled();
+
+    // Explicitly selecting multi-1 opens the existing multi-root project.
+    await opening.proposeFolderAsProject("/shared");
+    await opening.confirmOpenFolder({ installIds: [], projectId: "multi-1" });
+    expect(getProject).toHaveBeenCalledWith("multi-1");
+  });
+
+  it("cancelling the open-folder dialog from proposeFolderAsProject aborts without switching projects", async () => {
+    const existing = wireProject("/repo", "p1");
+    const opening = setup(async () => ({
+      path: "/repo",
+      project_id: "p1",
+      projects: [
+        {
+          id: "p1",
+          name: "repo",
+          roots: existing.roots,
+          is_single_root: true,
+          last_opened_at: "2026-10-31T00:00:00Z",
+        },
+      ],
+    }));
+
+    await opening.proposeFolderAsProject("/repo");
+    expect(opening.openFolderPath()).toBe("/repo");
+
+    opening.closeOpenFolder();
+    expect(opening.openFolderPath()).toBeNull();
+    expect(opening.openFolderDetect()).toBeNull();
+    expect(opening.startSession).not.toHaveBeenCalled();
+    expect(opening.client.getProject).not.toHaveBeenCalled();
+    expect(opening.client.createProject).not.toHaveBeenCalled();
+  });
+
+  it("always creates a new single-folder project when forceNew is set", async () => {
+    const existing = wireProject("/repo", "p1");
+    const created = wireProject("/repo", "p-fresh");
+    const getProject = vi.fn(async () => existing);
+    const createProject = vi.fn(async () => created);
+    const opening = setup(
+      async () => ({
+        path: "/repo",
+        project_id: "p1",
+        projects: [
+          {
+            id: "p1",
+            name: "repo",
+            roots: existing.roots,
+            is_single_root: true,
+            last_opened_at: "2026-10-31T00:00:00Z",
+          },
+        ],
+      }),
+      { getProject, createProject },
+    );
+
+    await opening.proposeFolderAsProject("/repo", { forceNew: true });
+    expect(opening.openFolderPath()).toBeNull();
+    expect(createProject).toHaveBeenCalledWith({ roots: [{ path: "/repo" }] });
+    expect(getProject).not.toHaveBeenCalled();
+  });
+
+  it("still opens a newly cloned project when extension setup is dismissed or confirmed", async () => {
+    const cloned = wireProject("/repo", "p-cloned");
+    const cloneProject = vi.fn(async () => cloned);
+    const getProject = vi.fn(async () => cloned);
+    const opening = setup(
+      async () => ({
+        path: "/repo",
+        project_id: "p-cloned",
+        extension_suggestions: {
+          project_id: "p-cloned",
+          suggestion_revision: "rev-1",
+          suggestions: [
+            {
+              id: "acme/pack",
+              source: "https://example.com/acme/pack.git",
+              status: "available",
+            },
+          ],
+        },
+      }),
+      { cloneProject, getProject },
+    );
+
+    await opening.submitClone({ url: "https://example.com/repo.git", parentDir: "/projects" });
+    expect(opening.openFolderPath()).toBe("/repo");
+    expect(opening.startSession).not.toHaveBeenCalled();
+
+    opening.closeOpenFolder();
+    expect(opening.openFolderPath()).toBeNull();
+    expect(opening.startSession).toHaveBeenCalledWith(
+      { kind: "new-session", projectId: "p-cloned" },
+      { switchKind: "cross-project" },
+    );
+
+    opening.startSession.mockClear();
+    await opening.submitClone({ url: "https://example.com/repo.git", parentDir: "/projects" });
+    await opening.confirmOpenFolder({ installIds: [] });
+    expect(getProject).toHaveBeenCalledWith("p-cloned");
+    expect(opening.startSession).toHaveBeenCalledWith(
+      { kind: "new-session", projectId: "p-cloned" },
       { switchKind: "cross-project" },
     );
   });
