@@ -382,7 +382,9 @@ func TestDriversRecoverFromMidStreamResetAcrossProviders(t *testing.T) {
 					inner.ID(): {ID: inner.ID(), HTTPRetry: retryInterruptedOncePolicy()},
 				},
 			})
-			decorated := (&Registry{outboundSecretScreen: NewModelSecretScreen(nil, nil)}).decorateProvider(snapshot, inner)
+			registry := &Registry{}
+			registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+			decorated := registry.decorateProvider(snapshot, inner)
 
 			var progressSnapshots []string
 			stream, err := decorated.Stream(t.Context(), req)
