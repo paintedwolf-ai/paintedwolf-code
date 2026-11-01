@@ -85,8 +85,8 @@ func (r *SQLRecorder) readProgramPage(ctx context.Context, sessionID, programID,
 	if err != nil {
 		return out, err
 	}
-	args := append([]any{programID, next.Execution}, selection.args...)
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions e WHERE e.program_id=? AND e.ordinal>? `+selection.sql, args...).Scan(&out.ExecutionsOmitted); err != nil {
+	const countQuery = `SELECT count(*) FROM invocation_program_executions e WHERE e.program_id=? AND e.ordinal>? ` + activityExecutionFilter
+	if err := tx.QueryRowContext(ctx, countQuery, programID, next.Execution, selection.ids, selection.ids).Scan(&out.ExecutionsOmitted); err != nil {
 		return out, err
 	}
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_nodes WHERE program_id=? AND node_id>?`, programID, next.Node).Scan(&out.NodesOmitted); err != nil {
