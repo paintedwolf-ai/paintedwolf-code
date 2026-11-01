@@ -2,7 +2,6 @@ package assembly
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync/atomic"
 
@@ -205,28 +204,8 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 
 	turn := e.cache.LoadTurn(sess.ID)
 
-	templateRef, err := prompt.resolveSystemPromptRef(ctx, sess)
-	if err != nil {
-		return nil, err
-	}
-	vars := map[string]any{"project_dir": sess.WorkspacePath}
-	if roots, count, activePath, ok := prompt.workspaceRootsForTurn(ctx, sess, turn); ok {
-		vars["root_count"] = count
-		vars["workspace_roots"] = roots
-		if activePath != "" {
-			vars["project_dir"] = activePath
-		}
-	}
-
 	coordinator := surface.IsCoordinatorSession(sess)
-	if coordinator {
-		// Coordinator rosters use a top-level heading.
-		vars["skills_heading"] = "##"
-	}
-	prompt.applyToolBudgetVars(ctx, sess, coordinator, vars)
-	if deps.ModelVision != nil {
-		prompts.MergeModelCapabilityVars(deps.ModelVision(ctx, sess), vars)
-	}
+	var err error
 	frame := inject.CoordinatorTurnFrame{}
 	if turnFrame != nil {
 		frame = *turnFrame
@@ -249,32 +228,13 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	if turnFrame != nil {
 		*turnFrame = frame
 	}
-	if !coordinatorSurface {
-		prompt.mergeVisibleTools(ctx, sess, frame, vars)
-		prompt.mergeVisibleToolCapabilityVars(vars)
-	}
-	prompt.mergeEffectivePromptSurface(ctx, sess, frame, vars)
-
 	var pendingKickIDs []string
 	if turn != nil {
 		pendingKickIDs = turn.PendingKickIDs
 	}
-
-	pe, promptRevision, err := prompt.projectPromptsSnapshot(ctx, sess)
+	rendered, err := prompt.renderSystemPrefix(ctx, sess, frame, history, turn, deps.ModelVision)
 	if err != nil {
 		return nil, err
-	}
-	var rendered string
-	if coordinatorSurface {
-		rendered, err = prompt.renderCoordinatorStablePrompt(ctx, pe, promptRevision, sess, frame, history, turn, vars)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		rendered, err = prompt.renderSystemPromptWithEngine(ctx, pe, sess, templateRef, vars)
-		if err != nil {
-			return nil, fmt.Errorf("system prompt %q: %w", templateRef, err)
-		}
 	}
 
 	out := []api.Message{{Role: api.MessageRoleSystem, Content: rendered, ContextPinned: true}}
