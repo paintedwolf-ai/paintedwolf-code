@@ -48,7 +48,9 @@ fn run(args: Args) -> nativegen::Result<()> {
     let mut runner = Runner::new(
         args.model.expect("required by CLI"),
         identity,
-        |path: &std::path::Path, _, _, budget| Mlx::load(path, budget as usize),
+        |path: &std::path::Path, context, chunk, budget| {
+            Mlx::load(path, context, chunk, budget as usize)
+        },
     )?;
     runner.serve(std::io::stdin().lock(), std::io::stdout().lock())
 }

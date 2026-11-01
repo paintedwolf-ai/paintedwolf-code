@@ -54,6 +54,7 @@ pub enum Command {
 pub enum Output {
     Hello {
         protocol: u32,
+        quiescent_memory: bool,
         backend: &'static str,
         artifact_id: String,
         physical_device: PhysicalDevice,

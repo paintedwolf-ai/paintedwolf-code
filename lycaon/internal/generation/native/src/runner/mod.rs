@@ -51,6 +51,7 @@ impl<B: Backend, F: FnMut(&Path, usize, usize, u64) -> Result<B>> Runner<B, F> {
         match command {
             Command::Hello {} => Ok(Output::Hello {
                 protocol: wire::VERSION,
+                quiescent_memory: self.identity.backend == "mlx",
                 backend: self.identity.backend,
                 artifact_id: self.identity.artifact_id.clone(),
                 physical_device: self.identity.physical_device.clone(),
