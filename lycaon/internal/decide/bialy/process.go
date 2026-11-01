@@ -94,6 +94,7 @@ var errEngineExited = errors.New("decide: engine exited")
 func (p *process) read(stdout io.Reader) {
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64<<10), 16<<20)
+	var protocolErr error
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -101,8 +102,8 @@ func (p *process) read(stdout io.Reader) {
 		}
 		var resp response
 		if err := json.Unmarshal([]byte(line), &resp); err != nil {
-			log.Warn("decision engine wrote an unreadable line", "error", err)
-			continue
+			protocolErr = fmt.Errorf("decide: invalid engine response: %w", err)
+			break
 		}
 		p.pendingMu.Lock()
 		ch := p.pending[resp.ID]
@@ -113,7 +114,9 @@ func (p *process) read(stdout io.Reader) {
 			ch <- resp
 		}
 	}
-	p.exitErr = errors.Join(errEngineExited, scanner.Err())
+	p.exitErr = errors.Join(errEngineExited, protocolErr, scanner.Err())
+	// A closed response pipe cannot acknowledge outstanding physical work.
+	p.kill()
 	// Reaped before done closes, so a waiter on done reads the exit status.
 	_ = p.cmd.Wait()
 	if p.cmd.ProcessState != nil {
@@ -163,7 +166,9 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 	raw = append(raw, '\n')
 	_, err = p.stdin.Write(raw)
 	if err != nil {
-		p.drop(req.ID)
+		// A partial write may already have submitted work.
+		p.kill()
+		<-p.done
 		return response{}, errors.Join(errEngineExited, err)
 	}
 	select {
@@ -202,10 +207,14 @@ func (p *process) stop() {
 		return
 	case <-time.After(2 * time.Second):
 	}
+	p.kill()
+	<-p.done
+}
+
+func (p *process) kill() {
 	if p.cmd.Process != nil {
 		_ = p.cmd.Process.Kill()
 	}
-	<-p.done
 }
 
 // stderrLogger forwards engine diagnostics line by line.
