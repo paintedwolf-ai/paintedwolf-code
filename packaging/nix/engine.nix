@@ -20,7 +20,7 @@ assert lib.assertMsg
   inherit version;
   src = source;
   modRoot = "lycaon";
-  vendorHash = "sha256-CiQwCiZ+2Fp67G0Fnjbs2hiPrDeTOwz3RIjkPWpBEFc=";
+  vendorHash = import ./go-vendor-hash.nix;
   subPackages = [ "cmd/lycaon" "cmd/pw-logs" "cmd/pw-vault-identity" ];
   env.CGO_ENABLED = "0";
   tags = [ "paintedwolf_release" ];
