@@ -120,8 +120,8 @@ func assertOfferedRunnerProcedures(t *testing.T, offered []string, block string)
 		return false
 	}
 	for marker, want := range map[string]bool{
-		"command(verification: true)":                        has("command"),
-		"VERIFY_UNVERIFIABLE":                                has("verify"),
+		"command(verification: true)":                       has("command"),
+		"VERIFY_UNVERIFIABLE":                               has("verify"),
 		"Static `capture_page` in `project_dir` mode needs": (has("command") || has("terminal_open") || has("verify")) && has("capture_page"),
 	} {
 		if strings.Contains(block, marker) != want {
@@ -129,8 +129,8 @@ func assertOfferedRunnerProcedures(t *testing.T, offered []string, block string)
 		}
 	}
 	for marker, capability := range map[string]toolcontract.Capability{
-		"`local_listen`":                            toolcontract.CapabilityLocalListen,
-		"`socket_paths`":                            toolcontract.CapabilitySocket,
+		"`local_listen`": toolcontract.CapabilityLocalListen,
+		"`socket_paths`": toolcontract.CapabilitySocket,
 		"Do not combine `direct_ip` with `socks_proxy`": toolcontract.CapabilityDirectIP,
 	} {
 		want := false
