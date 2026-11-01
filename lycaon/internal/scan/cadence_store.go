@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -33,6 +34,10 @@ type SeriesRow struct {
 	LastSuccessfulScanID            string
 	LastCoveredSnapshotID           string
 	LastCoveredExecutionFingerprint string
+	ConsecutiveFailures             int
+	UnavailableReason               scancatalog.ConfigFaultReason
+	UnavailableDetail               string
+	UnavailableContractIdentity     string
 	UpdatedAt                       time.Time
 }
 
@@ -115,18 +120,18 @@ func (s *sqlRunStore) GetSeries(ctx context.Context, canonicalPath, scannerID st
 	if err != nil {
 		return nil, err
 	}
-	out := seriesFromRow(row)
+	out := seriesFromDB(s, row)
 	return &out, nil
 }
 
-func (s *sqlCore) ListSeriesForPath(ctx context.Context, canonicalPath string) ([]SeriesRow, error) {
+func (s *sqlRunStore) ListSeriesForPath(ctx context.Context, canonicalPath string) ([]SeriesRow, error) {
 	rows, err := s.queries.ListScanSeriesForPath(ctx, canonicalPath)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]SeriesRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, seriesFromRow(row))
+		out = append(out, seriesFromDB(s, row))
 	}
 	return out, nil
 }
@@ -140,7 +145,7 @@ func (s *sqlRunStore) ListDueSeries(ctx context.Context, now time.Time) ([]Serie
 	}
 	out := make([]SeriesRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, seriesFromRow(row))
+		out = append(out, seriesFromDB(s, row))
 	}
 	return out, nil
 }
@@ -152,7 +157,7 @@ func (s *sqlRunStore) ListActiveSeries(ctx context.Context) ([]SeriesRow, error)
 	}
 	out := make([]SeriesRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, seriesFromRow(row))
+		out = append(out, seriesFromDB(s, row))
 	}
 	return out, nil
 }
@@ -165,7 +170,7 @@ func (s *sqlRunStore) SeriesByActiveScan(ctx context.Context, scanID string) (*S
 	if err != nil {
 		return nil, err
 	}
-	out := seriesFromRow(row)
+	out := seriesFromDB(s, row)
 	return &out, nil
 }
 
@@ -182,9 +187,10 @@ func (s *sqlRunStore) HeartbeatClaim(ctx context.Context, row SeriesRow, at time
 }
 
 func (s *sqlRunStore) DeleteSeries(ctx context.Context, canonicalPath, scannerID string) error {
-	return s.queries.DeleteScanSeries(ctx, db.DeleteScanSeriesParams{
+	err := s.queries.DeleteScanSeries(ctx, db.DeleteScanSeriesParams{
 		CanonicalPath: canonicalPath, ScannerID: scannerID,
 	})
+	return finishDeleteSeries(s, canonicalPath, scannerID, err)
 }
 
 func (s *sqlRunStore) UpsertSeries(ctx context.Context, row SeriesRow) error {
@@ -206,10 +212,7 @@ func (s *sqlRunStore) UpsertSeries(ctx context.Context, row SeriesRow) error {
 		LastCoveredSnapshotID:           row.LastCoveredSnapshotID,
 		LastCoveredExecutionFingerprint: row.LastCoveredExecutionFingerprint, UpdatedAt: formatCadenceTime(row.UpdatedAt),
 	})
-	if err == nil {
-		s.SeriesChanged.Notify()
-	}
-	return err
+	return finishUpsertSeries(s, row, err)
 }
 
 // DispatchClaimTTL bounds a persisted dispatch lease without a heartbeat.

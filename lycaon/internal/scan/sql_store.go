@@ -41,6 +41,7 @@ type sqlFindingStore struct {
 
 type sqlRunStore struct {
 	*sqlCore
+	seriesRuntimeStates sync.Map
 }
 
 type sqlIgnoreStore struct {
