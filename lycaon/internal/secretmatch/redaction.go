@@ -43,6 +43,12 @@ type redactionInterval struct {
 	reference  string
 }
 
+// RedactMatches replaces every matched span in s with its redaction marker.
+func RedactMatches(s string, hits []Match) string {
+	out, _ := redactMatches(s, hits)
+	return out
+}
+
 // redactMatches merges overlaps and splits replacements at line breaks.
 func redactMatches(s string, hits []Match) (string, []RedactionSpan) {
 	out, written := rewriteMatches(s, hits, false)

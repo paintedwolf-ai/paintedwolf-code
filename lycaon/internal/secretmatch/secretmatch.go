@@ -81,6 +81,8 @@ type Matcher struct {
 	catalogVersion string
 	// placeholders are documented example values a shape rule never reports.
 	placeholders placeholderCatalog
+	// ocr holds the OCR confusion catalog and lazily compiled OCR detector.
+	ocr *ocrState
 }
 
 // CatalogVersion is empty when no vendor catalog is loaded.
@@ -226,6 +228,11 @@ func (m *Matcher) runCatalog(ctx context.Context, s string) []Match {
 		hits = append(hits, m.screenWindow(ctx, s[w.start:w.end], w.runeOffset)...)
 	}
 	return hits
+}
+
+// DedupeAndSort ranks one winner per overlapping span.
+func DedupeAndSort(hits []Match) []Match {
+	return dedupeAndSort(hits)
 }
 
 // dedupeAndSort ranks one winner per overlapping span.

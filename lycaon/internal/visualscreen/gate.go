@@ -10,6 +10,7 @@ import (
 	"image/draw"
 	"image/png"
 	"sort"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -91,10 +92,7 @@ func (g *Gate) Screen(ctx context.Context, in VisualScreenInput) (*VisualScreenO
 	if g.matcher == nil || g.matcher.Inert() {
 		return outcome, nil
 	}
-	var matches []secretmatch.Match
-	if scanned.ExtractedText != "" {
-		matches = g.matcher.ScreenContext(ctx, scanned.ExtractedText)
-	}
+	matches := g.screenVisual(ctx, scanned)
 	if len(matches) == 0 && scanned.Gap == "" {
 		return outcome, nil
 	}
@@ -120,6 +118,62 @@ func (g *Gate) scan(ctx context.Context, in VisualScreenInput) (*ScannedVisual, 
 		scanner = NewScanner(nil)
 	}
 	return scanner.Scan(ctx, in.Mime, in.RawBytes)
+}
+
+func (g *Gate) screenVisual(ctx context.Context, scanned *ScannedVisual) []secretmatch.Match {
+	if scanned == nil {
+		return nil
+	}
+	var matches []secretmatch.Match
+	if scanned.ExtractedText != "" {
+		matches = g.matcher.ScreenContext(ctx, scanned.ExtractedText)
+	}
+	runes := []rune(scanned.ExtractedText)
+	for _, seg := range scanned.segments {
+		if !seg.ocr && seg.kind != segmentOCR {
+			continue
+		}
+		var segHits []secretmatch.Match
+		segLen := seg.end - seg.start
+		if seg.start >= 0 && segLen > 0 && seg.end <= len(runes) {
+			segText := string(runes[seg.start:seg.end])
+			for _, m := range g.matcher.ScreenOCRContext(ctx, segText) {
+				m.Start += seg.start
+				m.End += seg.start
+				segHits = append(segHits, m)
+			}
+		}
+		for _, cand := range seg.candidates {
+			trimmed := strings.TrimSpace(cand)
+			if trimmed == "" {
+				continue
+			}
+			candRunes := len([]rune(trimmed))
+			for _, m := range g.matcher.ScreenOCRContext(ctx, trimmed) {
+				if segLen > 0 && candRunes == segLen && m.Start >= 0 && m.End <= segLen && m.End > m.Start {
+					m.Start += seg.start
+					m.End += seg.start
+				} else if segLen > 0 {
+					m.Start = seg.start
+					m.End = seg.end
+				}
+				if !overlapsAnyMatch(segHits, m) {
+					segHits = append(segHits, m)
+				}
+			}
+		}
+		matches = append(matches, segHits...)
+	}
+	return secretmatch.DedupeAndSort(matches)
+}
+
+func overlapsAnyMatch(hits []secretmatch.Match, m secretmatch.Match) bool {
+	for _, h := range hits {
+		if h.Start < m.End && m.Start < h.End {
+			return true
+		}
+	}
+	return false
 }
 
 func visualAlert(in VisualScreenInput, matches []secretmatch.Match, gap secretmatch.ScreeningGap) secretmatch.Alert {
@@ -164,7 +218,7 @@ func visualAlert(in VisualScreenInput, matches []secretmatch.Match, gap secretma
 // redact removes every match from the perceived bytes, or withholds the pixels
 // when any match cannot be located in them.
 func (g *Gate) redact(ctx context.Context, in VisualScreenInput, scanned *ScannedVisual, matches []secretmatch.Match, outcome *VisualScreenOutcome) {
-	outcome.ExtractedText = g.matcher.RedactString(ctx, scanned.ExtractedText)
+	outcome.ExtractedText = secretmatch.RedactMatches(scanned.ExtractedText, matches)
 	withhold := func() {
 		outcome.Perception = PerceptionWithheld
 		outcome.PerceiveBytes = nil

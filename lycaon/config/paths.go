@@ -103,6 +103,9 @@ const (
 	// SecretPlaceholders lists documented example credentials the outbound
 	// screen never treats as a secret.
 	SecretPlaceholders = SecurityHost + "/secret-placeholders.yaml"
+	// SecretOCRConfusions lists character equivalence classes tolerated when
+	// screening OCR-recognized text for secrets.
+	SecretOCRConfusions = SecurityHost + "/secret-ocr-confusions.yaml"
 
 	// Web-research pack.
 	WebResearchHost      = StockPacks + "/web-research/host"
@@ -212,6 +215,7 @@ var consumedPackYAMLFiles = map[Rel]struct{}{
 	PackageExecutionManagers: {},
 	PackageRegistries:        {},
 	SecretPlaceholders:       {},
+	SecretOCRConfusions:      {},
 	WebResearchProviders:     {},
 	WebResearchLimits:        {},
 	ImplementDefaultSpawn:    {},
