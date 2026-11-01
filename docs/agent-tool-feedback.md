@@ -45,6 +45,12 @@ effects remain unknown. Permission failures name the approval boundary; runtime
 failures preserve native status and stderr. A corrected invocation still crosses
 normal admission and authorization.
 
+Recovery copy states only what its occurrence proves. A missing fact is not a
+negative observation, a successful status does not disprove a refused effect,
+and an errno does not identify a repair. Unknown remedies omit Fix and Next.
+Concrete suggestions require the producer's typed cause and the recipient's
+current schema or offered-tool facts. Earlier effects never become a replay recipe.
+
 ## Command result presentation
 
 Model delivery separates a command refusal's explanation and native stream text
