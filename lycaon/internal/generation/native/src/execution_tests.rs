@@ -182,3 +182,18 @@ fn full_admitted_prefix_reuses_only_identical_tokens() {
     changed.prompt_tokens[6000] = 8;
     assert_eq!(runner.begin(changed, None).unwrap(), 0);
 }
+
+#[test]
+fn unretained_request_preserves_the_conversation_checkpoint() {
+    let mut runner = executor();
+    runner.begin(request(1), None).unwrap();
+    while runner.advance(1).unwrap().stop_reason.is_none() {}
+    let mut utility = request(2);
+    utility.prompt_tokens = vec![2, 12, 13];
+    utility.checkpoint_tokens = 0;
+    assert_eq!(runner.begin(utility, None).unwrap(), 0);
+    while runner.advance(2).unwrap().stop_reason.is_none() {}
+    assert_eq!(runner.backend.prefix, [2, 5, 6]);
+    assert_eq!(runner.begin(request(3), None).unwrap(), 3);
+    assert_eq!(runner.backend.tokens, [2, 5, 6]);
+}

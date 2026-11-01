@@ -77,3 +77,19 @@ func TestBudgetReportsPreparationFailureWithoutEstimateFallback(t *testing.T) {
 		t.Fatalf("budget and dispatch disagree: %v, %v", budget.Err, err)
 	}
 }
+
+func TestUtilityDispatchPreservesConversationCheckpointPolicy(t *testing.T) {
+	t.Setenv("PW_NATIVEGEN_CONVERSATION_CACHE", "1")
+	provider, runtime := fixtureProvider(t)
+	req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Question"}}, MaxTokens: 2}
+	for _, composition := range []modelcall.RequestComposition{modelcall.CompositionConversation, modelcall.CompositionHostUtility, modelcall.CompositionConversation} {
+		req.Composition = composition
+		result, err := provider.Complete(t.Context(), req)
+		if err != nil || result.Content != "4" {
+			t.Fatalf("complete %q: %+v, %v", composition, result, err)
+		}
+		if runtime.prepared.measurement.CheckpointTokens != 1 {
+			t.Fatal("dispatch changed the cached native measurement")
+		}
+	}
+}
