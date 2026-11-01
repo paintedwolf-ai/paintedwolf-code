@@ -23,6 +23,9 @@ func TestLaunchLookupRetainsTheExecutorSelectedPath(t *testing.T) {
 		defer cancel()
 		cmd := osexec.CommandContext(ctx, self, "-test.run=^TestLaunchLookupRetainsTheExecutorSelectedPath$")
 		cmd.Env = append(os.Environ(), "PW_TEST_SELECTED_LAUNCH_PATH=1")
+		if coverDir := os.Getenv("PW_GO_CHILD_COVERDIR"); coverDir != "" {
+			cmd.Env = append(cmd.Env, "GOCOVERDIR="+coverDir)
+		}
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("executor-selected lookup fixture: %v\n%s", err, output)
 		}
