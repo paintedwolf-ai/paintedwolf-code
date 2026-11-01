@@ -31,6 +31,9 @@ func TestContextPreparationUsesOnlyConfiguredLocalProvider(t *testing.T) {
 				Entries:    map[string]CatalogEntry{"p": {ID: "p", Kind: kind}},
 				Configured: map[string]bool{"p": true},
 			}))
+			if registry.CanPrepareContext("p") != (kind == "nativegen") || registry.CanPrepareContext("missing") {
+				t.Fatal("preparation eligibility did not match configured local capability")
+			}
 			registry.SetOutboundSecretScreen(NewModelSecretScreen(modelScreenMatcher(t), nil))
 			result, err := registry.PrepareContext(t.Context(), &ModelSelection{ProviderID: "p", Model: "m"}, modelcall.CompletionRequest{
 				Messages: []api.Message{{Role: api.MessageRoleSystem, Content: "Instructions", PromptCacheBreakpoint: api.PromptCacheTierStanding}},
@@ -83,5 +86,12 @@ func TestPreparationScreenRefreshFailureSkipsCandidate(t *testing.T) {
 	allowed, err := screen.ScreenPreparation(t.Context(), modelSecretRequest())
 	if allowed || !errors.Is(err, failure) {
 		t.Fatalf("evidence failure: allowed=%v error=%v", allowed, err)
+	}
+}
+
+func TestContextPreparationEligibilityWithoutConfiguration(t *testing.T) {
+	var absent *Registry
+	if absent.CanPrepareContext("nativegen") || newTestRegistry().CanPrepareContext("nativegen") {
+		t.Fatal("unconfigured runtime admitted preparation")
 	}
 }
