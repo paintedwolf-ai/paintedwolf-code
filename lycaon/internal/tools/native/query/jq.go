@@ -90,7 +90,7 @@ func runJqProgram(inv *invocation, dialect jqDialect) error {
 	stream := &inputs{inv: inv, operands: args.files, raw: inv.flag("-R"), yaml: dialect.yamlInput || inv.flag("--yaml-input"), limit: safecmd.JQCaps().InputBytes, captured: dialect.captured}
 	defer stream.close()
 	stream.eventMode = inv.flag("--stream")
-	if !stream.raw && !stream.yaml {
+	if !stream.yaml {
 		stream.limit = inv.owners.limit("stream_throughput_bytes")
 	}
 	if stream.eventMode && (stream.raw || stream.yaml) {

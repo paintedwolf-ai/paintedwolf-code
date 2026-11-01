@@ -48,3 +48,9 @@ func TestSlurpOwnsRetainedInputsAndRefusesOversizedAggregate(t *testing.T) {
 		t.Fatalf("slurp retained memory %+v", memory.InUse())
 	}
 }
+
+func TestQueryInputPositionsSurviveEndOfStream(t *testing.T) {
+	h := newHarness(t, nil)
+	h.exec("1\n2\n", "jq", "-n", "[inputs] | input_line_number").expect(t, "completed input position", "2\n", 0)
+	h.exec("a\nb", "jq", "-R", "input_line_number").expect(t, "raw record position", "1\n2\n", 0)
+}
