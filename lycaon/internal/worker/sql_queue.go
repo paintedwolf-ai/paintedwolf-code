@@ -26,6 +26,7 @@ type sqlQueueConfig struct {
 	maxRunning       int
 	defaultTarget    api.ExecutionTarget
 	onRunningCancel  func(ctx context.Context, jobID string) error
+	activeExecution  func(jobID string) bool
 	workerWorkspace  WorkerWorkspaceManager
 	projects         ProjectStore
 	events           *events.Publisher

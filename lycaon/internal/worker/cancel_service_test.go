@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -95,5 +97,146 @@ func TestCancelServiceRejectsForeignSession(t *testing.T) {
 	svc := &CancelService{Queue: queue}
 	if _, err := svc.CancelForSession(ctx, "sess-a", jobID, ""); err == nil {
 		t.Fatal("expected session mismatch error")
+	}
+}
+
+type slowUnwindingExecutor struct {
+	started      chan struct{}
+	release      chan struct{}
+	abortedCount atomic.Int32
+}
+
+func (e *slowUnwindingExecutor) Execute(ctx context.Context, _ api.WorkerTask, _ WorkerRunContext) (api.WorkerResult, error) {
+	close(e.started)
+	<-ctx.Done()
+	<-e.release
+	return api.WorkerResult{Status: "complete", Summary: "late completion after cancel"}, nil
+}
+
+func (e *slowUnwindingExecutor) AbortWorkerRuntime(context.Context, api.WorkerTask) error {
+	e.abortedCount.Add(1)
+	return nil
+}
+
+type recordingOutcomeRecorder struct {
+	completed atomic.Int32
+	delivered atomic.Int32
+}
+
+func (r *recordingOutcomeRecorder) OnWorkerComplete(_ context.Context, _ string, res api.WorkerResult) error {
+	if res.Status == "canceled" {
+		r.completed.Add(1)
+	}
+	return nil
+}
+
+func (r *recordingOutcomeRecorder) OnWorkerFailed(context.Context, string, error) error {
+	return nil
+}
+
+func (r *recordingOutcomeRecorder) OnOutcomeDelivered(context.Context, api.WorkerTask) {
+	r.delivered.Add(1)
+}
+
+func TestAbortAllWorkersBoundsSlowWorkerAndPollerSettlesLateExit(t *testing.T) {
+	for _, backend := range []string{"memory", "sql"} {
+		t.Run(backend, func(t *testing.T) {
+			q := cancellationQueue(t, backend)
+			exec := &slowUnwindingExecutor{
+				started: make(chan struct{}),
+				release: make(chan struct{}),
+			}
+			outcomes := &recordingOutcomeRecorder{}
+			poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), outcomes)
+			q.(interface {
+				SetRunningCancel(func(context.Context, string) error)
+			}).SetRunningCancel(poller.Abort)
+
+			id := enqueueCancellationWorker(t, q)
+			poller.claimAvailable(t.Context())
+			<-exec.started
+
+			stopCtx, cancelStop := context.WithTimeout(t.Context(), 30*time.Millisecond)
+			defer cancelStop()
+			svc := &CancelService{Queue: q}
+			testutil.FailErr(t, "AbortAllWorkers with release timeout", svc.AbortAllWorkers(stopCtx, "parent", testdbseed.DefaultProjectID, "user stopped"))
+
+			// A second sweep after timeout returns immediately without blocking or finalizing early.
+			testutil.FailErr(t, "repeat AbortAllWorkers after timeout", svc.AbortAllWorkers(t.Context(), "parent", testdbseed.DefaultProjectID, "user stopped"))
+
+			// While the worker goroutine is still unwinding, the job remains running with
+			// cancellation requested and maintenance does not block or double-settle it.
+			during, ok := q.Get(id)
+			if !ok || during.Status != api.WorkerStatusRunning || !isJobCancellationRequested(q, id) {
+				t.Fatalf("worker during slow unwind = %+v, want running with cancellation requested", during)
+			}
+			expireCancellationClaim(t, q, id)
+			testutil.FailErr(t, "maintain while worker still active", poller.maintain(t.Context()))
+			if got := exec.abortedCount.Load(); got != 0 {
+				t.Fatalf("AbortWorkerRuntime called %d times before execution exited", got)
+			}
+
+			close(exec.release)
+			poller.inflight.Wait()
+
+			after, ok := q.Get(id)
+			if !ok || after.Status != api.WorkerStatusCanceled {
+				t.Fatalf("worker after late exit = %+v, want canceled", after)
+			}
+			if got := exec.abortedCount.Load(); got != 1 {
+				t.Fatalf("AbortWorkerRuntime calls = %d, want 1", got)
+			}
+			if got := outcomes.completed.Load(); got != 1 {
+				t.Fatalf("canceled outcomes projected = %d, want 1", got)
+			}
+			if got := outcomes.delivered.Load(); got != 1 {
+				t.Fatalf("outcomes delivered = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestRunStopServiceBoundsSlowWorkflowWorkerAndPollerSettlesLateExit(t *testing.T) {
+	q := NewInMemoryQueue(1)
+	q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
+	exec := &slowUnwindingExecutor{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	outcomes := &recordingOutcomeRecorder{}
+	poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), outcomes)
+	q.SetRunningCancel(poller.Abort)
+
+	id, err := q.Enqueue(t.Context(), api.WorkerTask{
+		ParentSessionID: "parent",
+		ProjectID:       testdbseed.DefaultProjectID,
+		WorkflowRunID:   "run-slow",
+		AgentType:       "implementer",
+		Prompt:          "fixture",
+		Brief:           "fixture",
+		ExecutionTarget: api.ExecutionTargetLocal,
+	})
+	testutil.FailErr(t, "enqueue workflow worker", err)
+	poller.claimAvailable(t.Context())
+	<-exec.started
+
+	svc := &RunStopService{Queue: q, ReleaseTimeout: 30 * time.Millisecond}
+	testutil.FailErr(t, "CancelWorkersByRunID with release timeout", svc.CancelWorkersByRunID(t.Context(), "run-slow", "workflow stopped"))
+	testutil.FailErr(t, "SettleWorkerCancellationsByRunID after timeout", svc.SettleWorkerCancellationsByRunID(t.Context(), "run-slow", "workflow stopped"))
+
+	during, ok := q.Get(id)
+	if !ok || during.Status != api.WorkerStatusRunning || !isJobCancellationRequested(q, id) {
+		t.Fatalf("workflow worker during slow unwind = %+v, want running with cancellation requested", during)
+	}
+
+	close(exec.release)
+	poller.inflight.Wait()
+
+	after, ok := q.Get(id)
+	if !ok || after.Status != api.WorkerStatusCanceled {
+		t.Fatalf("workflow worker after late exit = %+v, want canceled", after)
+	}
+	if got := outcomes.completed.Load(); got != 1 {
+		t.Fatalf("canceled outcomes projected = %d, want 1", got)
 	}
 }

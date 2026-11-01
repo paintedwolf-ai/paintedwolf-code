@@ -54,9 +54,81 @@ type LocalWorkerPoller struct {
 }
 
 type pollerExecution struct {
-	claimToken string
-	cancel     context.CancelCauseFunc
-	done       chan struct{}
+	claimToken    string
+	cancel        context.CancelCauseFunc
+	done          chan struct{}
+	mu            sync.Mutex
+	exited        bool
+	inlineWaiters int
+	inlineJoined  bool
+	timedOut      bool
+}
+
+var errWorkerReleaseTimeout = fmt.Errorf("%w: worker execution did not exit before release deadline", context.DeadlineExceeded)
+
+func (e *pollerExecution) join(ctx context.Context) error {
+	e.cancel(context.Canceled)
+	select {
+	case <-e.done:
+		return nil
+	default:
+	}
+	e.mu.Lock()
+	if err := e.joinWaitErrLocked(ctx); err != nil {
+		e.mu.Unlock()
+		return err
+	}
+	if e.exited {
+		e.mu.Unlock()
+		<-e.done
+		return nil
+	}
+	e.inlineWaiters++
+	e.mu.Unlock()
+
+	select {
+	case <-e.done:
+		return nil
+	case <-ctx.Done():
+		e.mu.Lock()
+		if !e.exited {
+			e.inlineWaiters--
+			err := e.recordReleaseErrLocked(ctx.Err())
+			e.mu.Unlock()
+			return err
+		}
+		e.mu.Unlock()
+		<-e.done
+		return nil
+	}
+}
+
+func (e *pollerExecution) joinWaitErrLocked(ctx context.Context) error {
+	if e.timedOut {
+		return errWorkerReleaseTimeout
+	}
+	if err := ctx.Err(); err != nil {
+		return e.recordReleaseErrLocked(err)
+	}
+	return nil
+}
+
+func (e *pollerExecution) recordReleaseErrLocked(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		e.timedOut = true
+		return errWorkerReleaseTimeout
+	}
+	return err
+}
+
+func (e *pollerExecution) claimInlineJoin() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.exited = true
+	if e.inlineWaiters > 0 {
+		e.inlineJoined = true
+	}
+	return e.inlineJoined
 }
 
 // NewLocalWorkerPoller builds a poller with bounded concurrency.
@@ -66,7 +138,7 @@ func NewLocalWorkerPoller(queue WorkerQueue, executor WorkerExecutor, cfg Worker
 		n = 4
 	}
 	interval := cfg.MaintenanceInterval()
-	return &LocalWorkerPoller{
+	poller := &LocalWorkerPoller{
 		Queue:               queue,
 		Executor:            executor,
 		Outcomes:            outcomes,
@@ -76,6 +148,8 @@ func NewLocalWorkerPoller(queue WorkerQueue, executor WorkerExecutor, cfg Worker
 		capacityWake:        make(chan struct{}, 1),
 		cancels:             make(map[string]*pollerExecution),
 	}
+	setQueueActiveExecution(queue, poller.HasActiveExecution)
+	return poller
 }
 
 // Run claims signaled work and repairs missed notifications.
@@ -186,20 +260,51 @@ func (p *LocalWorkerPoller) Abort(ctx context.Context, taskID string) error {
 	execution := p.cancels[key]
 	p.cancelMu.Unlock()
 	if execution != nil {
-		execution.cancel(context.Canceled)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-execution.done:
+		if err := execution.join(ctx); err != nil {
+			return err
 		}
 	}
 	if task, found := p.Queue.Get(taskID); found {
 		if p.Executor == nil {
 			return fmt.Errorf("worker executor not configured")
 		}
-		return p.Executor.AbortWorkerRuntime(ctx, *task)
+		return p.Executor.AbortWorkerRuntime(context.WithoutCancel(ctx), *task)
 	}
 	return nil
+}
+
+// HasActiveExecution reports whether a local worker goroutine is still active for taskID.
+func (p *LocalWorkerPoller) HasActiveExecution(taskID string) bool {
+	if p == nil {
+		return false
+	}
+	p.cancelMu.Lock()
+	execution := p.cancels[strings.TrimSpace(taskID)]
+	p.cancelMu.Unlock()
+	if execution == nil {
+		return false
+	}
+	if isJobCancellationRequested(p.Queue, taskID) {
+		execution.cancel(context.Canceled)
+	}
+	return true
+}
+
+func (p *LocalWorkerPoller) activeExecutionForClaim(taskID, claimToken string) *pollerExecution {
+	p.cancelMu.Lock()
+	defer p.cancelMu.Unlock()
+	execution := p.cancels[strings.TrimSpace(taskID)]
+	if execution == nil || execution.claimToken != claimToken {
+		return nil
+	}
+	return execution
+}
+
+func (p *LocalWorkerPoller) isCancellationRequested(task *api.WorkerTask) bool {
+	if p == nil || task == nil {
+		return false
+	}
+	return isJobCancellationRequested(p.Queue, task.ID)
 }
 
 func (p *LocalWorkerPoller) registerExecution(parent context.Context, task *api.WorkerTask) (context.Context, *pollerExecution) {
@@ -229,7 +334,11 @@ func (p *LocalWorkerPoller) renewActiveClaims(ctx context.Context) {
 	for _, claim := range claims {
 		renewed, err := p.Queue.RenewClaim(ctx, claim.id, claim.token)
 		if err != nil || !renewed {
-			claim.execution.cancel(ErrClaimLost)
+			if isJobCancellationRequested(p.Queue, claim.id) {
+				claim.execution.cancel(context.Canceled)
+			} else {
+				claim.execution.cancel(ErrClaimLost)
+			}
 		}
 	}
 }
@@ -265,7 +374,10 @@ func (p *LocalWorkerPoller) execute(parentCtx context.Context, task *api.WorkerT
 	}
 	renewed, err := p.Queue.RenewClaim(parentCtx, task.ID, task.ClaimToken)
 	if err != nil || !renewed {
-		if cur, ok := p.Queue.Get(task.ID); ok && cur.Status == api.WorkerStatusCanceled {
+		if p.isCancellationRequested(task) {
+			settleCtx, cancel := terminalOutcomeContext(parentCtx)
+			defer cancel()
+			p.settleCancellation(settleCtx, task, nil)
 			return
 		}
 		if err == nil {
@@ -297,11 +409,11 @@ func (p *LocalWorkerPoller) execute(parentCtx context.Context, task *api.WorkerT
 	if cause := context.Cause(execCtx); errors.Is(cause, ErrClaimLost) || errors.Is(cause, context.Canceled) || errors.Is(cause, lifecycle.ErrStopping) {
 		err = cause
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, lifecycle.ErrStopping) || (err == nil && result.Status == "canceled") {
+	if errors.Is(err, context.Canceled) || errors.Is(err, lifecycle.ErrStopping) || (err == nil && result.Status == "canceled") || p.isCancellationRequested(task) {
 		settleCtx, cancel := terminalOutcomeContext(parentCtx)
 		defer cancel()
 		var report *api.WorkerResult
-		if err == nil {
+		if err == nil && result.Status == "canceled" {
 			report = &result
 		}
 		p.settleCancellation(settleCtx, task, report)
@@ -324,7 +436,7 @@ func (p *LocalWorkerPoller) execute(parentCtx context.Context, task *api.WorkerT
 	}
 	if strings.TrimSpace(result.Status) == "waiting" {
 		if won, parkErr := p.Queue.Park(parentCtx, task); parkErr != nil || !won {
-			if errors.Is(parkErr, lifecycle.ErrStopping) {
+			if errors.Is(parkErr, lifecycle.ErrStopping) || p.isCancellationRequested(task) {
 				settleCtx, cancel := terminalOutcomeContext(parentCtx)
 				defer cancel()
 				p.settleCancellation(settleCtx, task, nil)
@@ -380,9 +492,13 @@ func (p *LocalWorkerPoller) settleCancellation(ctx context.Context, task *api.Wo
 		abortReason = bgprocess.TerminationWorkerCancelled
 	}
 	ctx = bgprocess.WithTerminationReason(ctx, abortReason)
+	// An active Abort call that is still waiting on this execution owns inline runtime release and settlement.
+	if execution := p.activeExecutionForClaim(task.ID, task.ClaimToken); execution != nil && execution.claimInlineJoin() && p.isCancellationRequested(task) {
+		return
+	}
 	// Only the current cancellation owner releases runtime and records the result.
 	if won, _ := p.commitTerminal(ctx, task, "cancellation intent", func() (bool, error) {
-		return p.Queue.RequestClaimCancellation(ctx, task)
+		return p.claimCancellationSettlement(ctx, task)
 	}); !won {
 		return
 	}
@@ -402,6 +518,18 @@ func (p *LocalWorkerPoller) settleCancellation(ctx context.Context, task *api.Wo
 	}
 }
 
+func (p *LocalWorkerPoller) claimCancellationSettlement(ctx context.Context, task *api.WorkerTask) (bool, error) {
+	won, err := p.Queue.RequestClaimCancellation(ctx, task)
+	if err != nil || won {
+		return won, err
+	}
+	cur, ok := p.Queue.Get(task.ID)
+	if !ok || cur == nil {
+		return false, nil
+	}
+	return cur.Status == api.WorkerStatusRunning && cur.ClaimToken == task.ClaimToken && isJobCancellationRequested(p.Queue, task.ID), nil
+}
+
 func (p *LocalWorkerPoller) commitTerminal(
 	ctx context.Context,
 	task *api.WorkerTask,
@@ -417,6 +545,9 @@ func (p *LocalWorkerPoller) commitTerminal(
 			return false, err
 		}
 		if err == nil {
+			if !won && action != "cancellation intent" && action != "cancellation" && p.isCancellationRequested(task) {
+				p.settleCancellation(ctx, task, nil)
+			}
 			return won, nil
 		}
 		lastErr = err
@@ -462,7 +593,11 @@ func (p *LocalWorkerPoller) workerClaimContext(parent context.Context, task *api
 			case <-ticker.C:
 				renewed, err := p.Queue.RenewClaim(ctx, task.ID, task.ClaimToken)
 				if err != nil || !renewed {
-					cancel(ErrClaimLost)
+					if p.isCancellationRequested(task) {
+						cancel(context.Canceled)
+					} else {
+						cancel(ErrClaimLost)
+					}
 					return
 				}
 			}
@@ -489,6 +624,10 @@ func (p *LocalWorkerPoller) recoverExecute(ctx context.Context, task *api.Worker
 	)
 	settleCtx, cancel := terminalOutcomeContext(ctx)
 	defer cancel()
+	if p.isCancellationRequested(task) {
+		p.settleCancellation(settleCtx, task, nil)
+		return
+	}
 	if cur, ok := p.Queue.Get(task.ID); !ok || cur.Status == api.WorkerStatusRunning {
 		if won, _ := p.commitTerminal(settleCtx, task, "failure", func() (bool, error) {
 			return p.Queue.Fail(settleCtx, task, err)

@@ -32,6 +32,7 @@ type memoryQueueConfig struct {
 	maxRunning       int
 	defaultTarget    api.ExecutionTarget
 	onRunningCancel  func(ctx context.Context, jobID string) error
+	activeExecution  func(jobID string) bool
 	events           *events.Publisher
 	workflowRuns     *WorkflowDomains
 	sessionAdmission func(ctx context.Context, sessionID string, fn func() error) error
@@ -201,7 +202,7 @@ func (q *memoryQueueClaims) Cancel(ctx context.Context, jobID string, result *ap
 
 // StopExecution retains the workspace until runtime has released it.
 func (q *memoryQueueClaims) StopExecution(ctx context.Context, jobID string) error {
-	requested, err := q.RequestCancellation(ctx, jobID)
+	requested, err := q.RequestCancellation(context.WithoutCancel(ctx), jobID)
 	if err != nil || !requested {
 		return err
 	}
