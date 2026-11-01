@@ -7,14 +7,20 @@
 void pw_generation::reset_active() {
     auto memory = llama_get_memory(context.get());
     if (!prefix_position) memory->clear(true);
-    else if (!llama_memory_seq_rm(memory, 0, -1, -1))
-        throw std::runtime_error("active cache reset failed");
+    else clear_sequence(0);
     position = 0;
 }
 
+void pw_generation::clear_sequence(int32_t sequence) {
+    auto * cache = dynamic_cast<llama_kv_cache_iswa *>(llama_get_memory(context.get()));
+    if (!cache) throw std::runtime_error("E4B requires separate global and sliding caches");
+    // Attention can read freed cells; clear their tensors as well as metadata.
+    cache->get_base()->state_clear(sequence);
+    cache->get_swa()->state_clear(sequence);
+}
+
 void pw_generation::clear_prefix() {
-    if (!llama_memory_seq_rm(llama_get_memory(context.get()), 1, -1, -1))
-        throw std::runtime_error("prefix reset failed");
+    clear_sequence(1);
     checkpoint.reset();
     diagnostic_prefix.reset();
     prefix_position = 0;
@@ -45,8 +51,7 @@ void pw_generation::spill_prefix() {
         clear_prefix();
         return;
     }
-    if (!llama_memory_seq_rm(memory, 1, -1, -1))
-        throw std::runtime_error("spilled prefix reset failed");
+    memory->clear(true);
 }
 
 bool pw_generation::restore_prefix() {
