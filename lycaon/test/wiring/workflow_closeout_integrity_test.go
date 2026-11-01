@@ -87,8 +87,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 				case event := <-eventsCh:
 					raw, marshalErr := json.Marshal(event.Data)
 					testutil.FailErr(t, "read settlement event", marshalErr)
-					switch event.Topic {
-					case api.EventTopicWorkflow:
+					if event.Topic == api.EventTopicWorkflow {
 						var wfEvent api.WorkflowEvent
 						if json.Unmarshal(raw, &wfEvent) == nil &&
 							wfEvent.Event == api.WorkflowEventKindGatePending &&
@@ -97,7 +96,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 							wfEvent.BranchInstruction == resp.CloseoutBlocked.Notice {
 							sawGatePending = true
 						}
-					case api.EventTopicSession:
+					} else if event.Topic == api.EventTopicSession {
 						var status api.SessionEvent
 						if json.Unmarshal(raw, &status) != nil || status.Status != api.SessionStatusIdle || status.IdleDisposition == "" {
 							continue
