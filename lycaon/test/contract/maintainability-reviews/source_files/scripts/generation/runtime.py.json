@@ -4,11 +4,11 @@
   "kind": "construction",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the measured 314-line task orchestration module. It selects pinned backends and records reproducible builds and measurements; framed exchange, source provenance, conversion and toolchain setup remain separate implementations. Four focused protocol/accounting/CLI fixtures passed, including full-context checkpoint bounds. Backend-specific context validation remains in the runner.",
-  "reviewed_commit": "63ada06f6fbe167580e101ed3436af2d7e3d8382",
-  "ceiling": 314,
+  "reason": "Retain the measured 318-line task orchestration module. Backend selection, captured-source build paths and native test preparation belong to the same build lifecycle. Framed transport, provenance and toolchain preparation remain separate implementations. Six focused fixtures passed, including source-location cache separation and building the matching Vulkan adapter before test linking. The fresh Linux adapter build and 40 Rust fixtures also passed.",
+  "reviewed_commit": "d6e4823279bce05a37d92d63ad245b086fe838f3",
+  "ceiling": 318,
   "boundaries": {
-    "scripts/generation/test_native_bench.py": "275e94fbd419048bc4f51d20d296b14c04a583140ce34b5cdb5f5a43c4a2e63e",
-    "scripts/generation/provenance.py": "f8230f6aa35c2eaeb54177238a515da695736dc31bc24362ce3bde336b553b9a"
+    "scripts/generation/test_native_bench.py": "4b5bcc67dd9bf36b56f24f51be22a7014c075f6b2c86ee7851f6cc3b9e2dee9f",
+    "scripts/generation/provenance.py": "fb233cd6bd0639e5d66494cf7d176ab0caf2f43bb3c9b536a7d15b7514758402"
   }
 }
