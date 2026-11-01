@@ -72,3 +72,40 @@ func TestCanceledRepairLeavesCurrentProcessIntact(t *testing.T) {
 		t.Fatal("canceled repair replaced current process")
 	}
 }
+
+func TestMissingSeedDoesNotHideHealthyProcess(t *testing.T) {
+	runtime := repairFixture(t)
+	previous := runtime.loaded.process
+	runtime.config.SeedDirectory = ""
+	if err := runtime.Repair(t.Context()); err == nil {
+		t.Fatal("repaired without a seed")
+	}
+	if runtime.loaded.process != previous || runtime.Readiness().State != "ready" {
+		t.Fatal("rejected repair changed the healthy runtime")
+	}
+}
+
+func TestFirstLoadImportsSeedAndRetriesFailedInstallation(t *testing.T) {
+	for _, damaged := range []bool{false, true} {
+		t.Run(map[bool]string{false: "valid", true: "retry"}[damaged], func(t *testing.T) {
+			runtime := repairFixture(t)
+			runtime.unload()
+			runtime.config.ModelStore = modelstore.New(t.TempDir(), fixtureAuthority{})
+			payload := filepath.Join(runtime.config.SeedDirectory, "model.gguf")
+			if damaged {
+				testutil.FailErr(t, "damage initial seed", os.WriteFile(payload, []byte("damaged"), 0o600))
+				if err := runtime.Warm(t.Context(), DefaultModelID); err == nil {
+					t.Fatal("loaded damaged seed")
+				}
+				if runtime.Readiness().State != "repair_required" || runtime.loaded != nil || runtime.config.HostMemory.Snapshot().ReservedBytes != 0 {
+					t.Fatal("initial import failure retained resources or lost repair state")
+				}
+				testutil.FailErr(t, "restore initial seed", os.WriteFile(payload, []byte("fixture weights"), 0o600))
+			}
+			testutil.FailErr(t, "load initial seed", runtime.Warm(t.Context(), DefaultModelID))
+			if runtime.Readiness().State != "ready" || runtime.config.ModelStore.Status(DefaultModelID, "vulkan").State != modelstore.StateReady {
+				t.Fatal("first load did not install and admit the seed")
+			}
+		})
+	}
+}
