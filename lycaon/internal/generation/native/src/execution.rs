@@ -137,7 +137,6 @@ impl<B: Backend> Executor<B> {
                 .len()
                 .saturating_add(request.max_new_tokens)
                 > self.context
-            || request.checkpoint_tokens > 4096
             || request.checkpoint_tokens >= request.prompt_tokens.len()
             || request
                 .prompt_tokens

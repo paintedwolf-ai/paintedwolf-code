@@ -73,7 +73,7 @@ func (p *Runtime) measure(ctx context.Context, render renderRequest) (measuredRe
 }
 
 func (m *measuredResult) validate() error {
-	if m.InputTokens < 1 || m.InputTokens > 4<<20 || m.CheckpointTokens < 0 || m.CheckpointTokens > 4096 || m.CheckpointTokens >= m.InputTokens {
+	if m.InputTokens < 1 || m.InputTokens > 4<<20 || m.CheckpointTokens < 0 || m.CheckpointTokens >= DefaultContextWindowTokens || m.CheckpointTokens >= m.InputTokens {
 		return errors.New("native generation: invalid measured context")
 	}
 	if m.InputTokens > DefaultContextWindowTokens {
