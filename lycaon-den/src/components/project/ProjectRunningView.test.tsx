@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_APP_STATE_V1 } from "../../../shared/app-state-types.ts";
-import type { LycaonClient } from "../../api/client.ts";
+import { stubClient } from "../../test/client-fixture.ts";
 import type {
   BackgroundProcessStopResult,
   ProjectBackgroundProcess,
@@ -187,14 +187,14 @@ describe("ProjectRunningView", () => {
     });
 
     let resolveStop!: (res: BackgroundProcessStopResult) => void;
-    const client = {
+    const client = stubClient({
       stopProjectBackgroundProcess: vi.fn(
         () =>
           new Promise<BackgroundProcessStopResult>((resolve) => {
             resolveStop = resolve;
           }),
       ),
-    } as unknown as LycaonClient;
+    });
 
     render(() => (
       <ProjectRunningView
@@ -285,9 +285,9 @@ describe("ProjectRunningView", () => {
         stop_requested: true,
         running: true,
       });
-    const client = {
+    const client = stubClient({
       stopProjectBackgroundProcess: stopFn,
-    } as unknown as LycaonClient;
+    });
 
     render(() => (
       <ProjectRunningView
@@ -316,6 +316,22 @@ describe("ProjectRunningView", () => {
     expect(stopFn).toHaveBeenCalledTimes(2);
     expect(screen.queryByTestId("project-running-stop-error-bg_1")).toBeNull();
     expect(stopBtn.textContent).toBe("Stopping…");
+  });
+
+  it("retains focused controls across updates to the same running process", () => {
+    const appStore = createAppStore();
+    appStore.actions.setSidecarStatus("connected");
+    applyProjectBackgroundSnapshot("proj_1", { revision: 1, processes: [makeProcess()] });
+    render(() => <ProjectRunningView projectId="proj_1" appStore={appStore} onOpenSession={() => undefined} />);
+    const control = screen.getByTestId("project-running-open-chat-bg_1");
+    control.focus();
+    for (let revision = 2; revision <= 8; revision += 1) {
+      const command = `watch revision ${revision}`;
+      applyProjectBackgroundSnapshot("proj_1", { revision, processes: [makeProcess({ command })] });
+      expect(screen.getByTestId("project-running-command-bg_1").textContent).toBe(command);
+      expect(screen.getByTestId("project-running-open-chat-bg_1")).toBe(control);
+      expect(document.activeElement).toBe(control);
+    }
   });
 
   it("updates the Running nav badge as commands start and end", () => {

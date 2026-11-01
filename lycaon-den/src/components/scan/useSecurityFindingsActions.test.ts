@@ -1,6 +1,6 @@
 import { createRoot, createSignal } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { LycaonClient } from "../../api/client.ts";
+import { stubClient } from "../../test/client-fixture.ts";
 import type { CodeScan, FindingLedgerEntry, ProjectRoot, SecurityFinding } from "../../api/types.ts";
 import type { FindingLedgerModel } from "./create-finding-ledger.ts";
 import { useSecurityFindingsActions } from "./useSecurityFindingsActions.ts";
@@ -73,7 +73,7 @@ describe("useSecurityFindingsActions", () => {
     const onBackToLedger = vi.fn();
     const clearSelection = vi.fn();
 
-    const client = {
+    const client = stubClient({
       exportCodeScanSARIF: vi.fn(async () => ({
         blob: new Blob(["sarif"]),
         filename: "scan-1.sarif",
@@ -82,7 +82,7 @@ describe("useSecurityFindingsActions", () => {
         blob: new Blob(["ledger"]),
         filename: "ledger.sarif",
       })),
-    } as unknown as LycaonClient;
+    });
 
     const ledger = {
       totalMatch: () => 1,

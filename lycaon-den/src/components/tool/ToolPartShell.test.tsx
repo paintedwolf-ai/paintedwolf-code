@@ -1,3 +1,4 @@
+import { stubClient } from "../../test/client-fixture.ts";
 import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, fireEvent } from "@solidjs/testing-library";
@@ -136,12 +137,12 @@ describe("ToolPartShell open-state persistence", () => {
     const item = part("tc-bg-lazy");
     item.process = { handle: "proc-lazy-1", running: true };
     let fetched = 0;
-    const client = {
+    const client = stubClient({
       getSessionBackgroundProcessOutput: async () => {
         fetched += 1;
         return { process_id: "proc-lazy-1", running: true, chunks: [] };
       },
-    } as unknown as import("../../api/client.ts").LycaonClient;
+    });
     const { container } = render(() => (
       <TranscriptViewportProvider value={controller}>
         <ToolPartShell part={item} layout="chat" sessionId="s1" client={client}>

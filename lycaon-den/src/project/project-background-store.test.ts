@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { LycaonClient } from "../api/client.ts";
+import { stubClient } from "../test/client-fixture.ts";
 import type {
   BackgroundProcessStopResult,
   BackgroundProcessTerminationReason,
@@ -139,14 +139,14 @@ describe("project-background-store", () => {
     });
 
     let resolveStop!: (info: BackgroundProcessStopResult) => void;
-    const client = {
+    const client = stubClient({
       stopProjectBackgroundProcess: vi.fn(
         () =>
           new Promise<BackgroundProcessStopResult>((resolve) => {
             resolveStop = resolve;
           }),
       ),
-    } as unknown as LycaonClient;
+    });
 
     const stopPromise = stopProjectBackgroundCommand(client, "proj_1", "bg_1");
     expect(projectBackgroundFor("proj_1").stoppingIds.has("bg_1")).toBe(true);
@@ -206,9 +206,9 @@ describe("project-background-store", () => {
         stop_requested: true,
         running: true,
       });
-    const client = {
+    const client = stubClient({
       stopProjectBackgroundProcess: stopFn,
-    } as unknown as LycaonClient;
+    });
 
     const ok1 = await stopProjectBackgroundCommand(client, "proj_1", "bg_1");
     expect(ok1).toBe(false);
@@ -226,7 +226,7 @@ describe("project-background-store", () => {
 
   it("discards late responses for a previous project when switching projects", async () => {
     let resolveProj1!: (res: ProjectBackgroundProcessListResponse) => void;
-    const client = {
+    const client = stubClient({
       listProjectBackgroundProcesses: vi.fn((projectId: string) => {
         if (projectId === "proj_1") {
           return new Promise<ProjectBackgroundProcessListResponse>(
@@ -248,7 +248,7 @@ describe("project-background-store", () => {
           ],
         });
       }),
-    } as unknown as LycaonClient;
+    });
 
     const p1 = resyncProjectBackground(client, "proj_1");
     retainProjectBackgroundProject("proj_2");

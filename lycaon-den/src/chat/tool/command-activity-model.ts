@@ -138,7 +138,12 @@ export function createCommandActivityProjection() {
     }
     const key = (entry: ActivitySpanEntry) => entry.kind === "tool" ? entry.part.id : entry.key;
     for (const entry of result) if (!positions.has(key(entry))) positions.set(key(entry), nextPosition++);
-    result.sort((a, b) => positions.get(key(a))! - positions.get(key(b))!);
+    result.sort((a, b) => {
+      const left = positions.get(key(a));
+      const right = positions.get(key(b));
+      if (left === undefined || right === undefined) throw new Error("Activity row has no assigned position");
+      return left - right;
+    });
     const activeCalls = new Set(entries.flatMap(entry => entry.kind === "tool" ? [entry.part.toolCallId] : []));
     const activePartIds = new Set(entries.flatMap(entry => entry.kind === "tool" ? [entry.part.id] : []));
     for (const id of outputAssignments.keys()) if (!activePartIds.has(id)) outputAssignments.delete(id);

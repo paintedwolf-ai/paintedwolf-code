@@ -13,6 +13,7 @@ import type { AppStore } from "../../store/app-state-model.ts";
 import { formatRelativeTime } from "../../time/time-copy.ts";
 import { BrowseStagePanel } from "../browse/BrowseStagePanel.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
+import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import type { StageBack } from "../shell/StageBackChip.tsx";
 
 type Props = {
@@ -174,7 +175,7 @@ export function ProjectRunningView(props: Props) {
                           {(processId) => {
                             const proc = () => processById(processId);
                             return (
-                              <Show when={proc()}>
+                              <ShowLatest when={proc()}>
                                 {(item) => (
                                   <li
                                     class="project-running-row flex flex-col gap-den-1-5 rounded-den-sm border border-den-line p-den-2-5"
@@ -256,8 +257,8 @@ export function ProjectRunningView(props: Props) {
                                     </Show>
                                   </li>
                                 )}
-                              </Show>
-                            );
+                              </ShowLatest>
+                      );
                           }}
                         </For>
                       </ul>
@@ -293,7 +294,7 @@ export function ProjectRunningView(props: Props) {
                     {(processId) => {
                       const proc = () => endedProcessById(processId);
                       return (
-                        <Show when={proc()}>
+                        <ShowLatest when={proc()}>
                           {(item) => (
                             <li
                               class="project-running-ended__row flex flex-col gap-den-1 rounded-den-sm border border-den-line bg-den-bg-surface p-den-2-5"
@@ -354,7 +355,7 @@ export function ProjectRunningView(props: Props) {
                               </div>
                             </li>
                           )}
-                        </Show>
+                        </ShowLatest>
                       );
                     }}
                   </For>
