@@ -4,6 +4,7 @@ package nativegen
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/inference"
@@ -57,15 +58,18 @@ type loadedProcess struct {
 
 // Runtime retains one model process across provider snapshots and roles.
 type Runtime struct {
-	config     RuntimeConfig
-	lifetime   context.Context
-	cancel     context.CancelFunc
-	gate       chan struct{}
-	loaded     *loadedProcess
-	prepared   *preparedPrompt
-	generation uint64
-	window     atomic.Int64
-	readiness  atomic.Pointer[Readiness]
+	config            RuntimeConfig
+	lifetime          context.Context
+	cancel            context.CancelFunc
+	gate              chan struct{}
+	admissionMu       sync.Mutex
+	foreground        int
+	preparationCancel context.CancelFunc
+	loaded            *loadedProcess
+	prepared          *preparedPrompt
+	generation        uint64
+	window            atomic.Int64
+	readiness         atomic.Pointer[Readiness]
 }
 
 func NewRuntime(config RuntimeConfig) *Runtime {
@@ -107,24 +111,6 @@ func (p *Provider) Profile() providerprofile.Profile {
 		ReasoningWire: providerprofile.ReasoningWireNone,
 	})
 	return profile
-}
-
-func (p *Runtime) acquire(ctx context.Context) (context.Context, func(), error) {
-	ctx, cancel := context.WithCancel(ctx)
-	stop := context.AfterFunc(p.lifetime, cancel)
-	release := func() { stop(); cancel(); p.gate <- struct{}{} }
-	select {
-	case <-ctx.Done():
-		stop()
-		cancel()
-		return nil, nil, ctx.Err()
-	case <-p.gate:
-		if p.lifetime.Err() != nil || ctx.Err() != nil {
-			release()
-			return nil, nil, context.Canceled
-		}
-		return ctx, release, nil
-	}
 }
 
 func (p *Runtime) Close() error {

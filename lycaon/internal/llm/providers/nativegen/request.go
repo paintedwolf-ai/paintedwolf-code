@@ -11,8 +11,9 @@ import (
 )
 
 type renderRequest struct {
-	Messages []renderMessage `json:"messages"`
-	Tools    []renderTool    `json:"tools"`
+	CheckpointMessages int             `json:"checkpoint_messages"`
+	Messages           []renderMessage `json:"messages"`
+	Tools              []renderTool    `json:"tools"`
 }
 
 type renderMessage struct {
@@ -94,6 +95,9 @@ func prepareRender(req modelcall.CompletionRequest) (renderRequest, error) {
 			return renderRequest{}, fmt.Errorf("native generation: unsupported message role %q", message.Role)
 		}
 		result.Messages = append(result.Messages, wire)
+		if message.PromptCacheBreakpoint == api.PromptCacheTierStanding {
+			result.CheckpointMessages = len(result.Messages)
+		}
 	}
 	if len(result.Messages) == 0 {
 		return renderRequest{}, errors.New("native generation: empty conversation")

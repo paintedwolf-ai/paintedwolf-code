@@ -147,7 +147,8 @@ func (p *rpcProcess) call(ctx context.Context, request command, kind string, pri
 	if err != nil {
 		return err
 	}
-	stop := p.watchCancellation(ctx, request.Method == "advance")
+	step := request.Method == "advance" || request.Method == "advance_preparation" || request.Method == "prepare" || request.Method == "measure"
+	stop := p.watchCancellation(ctx, step)
 	defer stop()
 	if err = writeProtocolFrame(p.input, payload); err != nil {
 		p.close()
@@ -187,7 +188,7 @@ func (p *rpcProcess) call(ctx context.Context, request command, kind string, pri
 		}
 	}
 	if ctx.Err() != nil {
-		if request.Method != "advance" {
+		if !step {
 			p.close()
 		}
 		return ctx.Err()
