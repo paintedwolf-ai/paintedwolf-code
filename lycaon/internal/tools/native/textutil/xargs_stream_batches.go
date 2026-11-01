@@ -2,11 +2,11 @@ package textutil
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // xargsBatcher retains only the current argv, not the complete input plan.
