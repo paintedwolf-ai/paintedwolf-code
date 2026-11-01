@@ -129,3 +129,70 @@ func TestJSONDecoderPreservesTerminalReaderErrors(t *testing.T) {
 type failingJSONReader struct{ failure error }
 
 func (r failingJSONReader) Read([]byte) (int, error) { return 0, r.failure }
+
+func TestJSONDecodersRequireRetainedAdmission(t *testing.T) {
+	stream := NewEventStream(t.Context(), strings.NewReader("[1]"), EventLimits{128, 1024}, missingEventLease{})
+	if _, err := stream.Decode(); err == nil {
+		t.Fatal("decoded without admission")
+	}
+	if stream.InputLine() != 0 {
+		t.Fatal("unread input has a line position")
+	}
+	stream.Close()
+	stream.Close()
+}
+
+type missingEventLease struct{}
+
+func (missingEventLease) Reserve(context.Context, int64) (func(), error) { return nil, nil }
+
+func TestJSONDecodersReleaseEveryRefusedAdmission(t *testing.T) {
+	const source = `{"items":[1,"two",{},[],false,null],"nested":{"x":"escaped\n"}}`
+	for _, events := range []bool{false, true} {
+		run := func(memory *eventFaultMemory) error {
+			var decoder interface {
+				Decode() (any, error)
+				Close()
+			}
+			limits := EventLimits{128, 1024}
+			if events {
+				decoder = NewEventStream(t.Context(), strings.NewReader(source), limits, memory)
+			} else {
+				decoder = NewBoundedValueStream(t.Context(), strings.NewReader(source), limits, memory, 1<<20)
+			}
+			defer decoder.Close()
+			for {
+				_, err := decoder.Decode()
+				if err != nil {
+					return err
+				}
+			}
+		}
+		reference := &eventFaultMemory{}
+		if err := run(reference); err != io.EOF || reference.held != 0 {
+			t.Fatalf("reference decode: %v memory %+v", err, reference)
+		}
+		for at := 1; at <= reference.calls; at++ {
+			memory := &eventFaultMemory{failAt: at}
+			if err := run(memory); !errors.Is(err, errEventAdmission) || memory.held != 0 {
+				t.Fatalf("events %v admission %d: %v memory %+v", events, at, err, memory)
+			}
+		}
+	}
+}
+
+var errEventAdmission = errors.New("fixture admission refused")
+
+type eventFaultMemory struct {
+	held          int64
+	calls, failAt int
+}
+
+func (m *eventFaultMemory) Reserve(_ context.Context, n int64) (func(), error) {
+	m.calls++
+	if m.calls == m.failAt {
+		return nil, errEventAdmission
+	}
+	m.held += n
+	return func() { m.held -= n }, nil
+}
