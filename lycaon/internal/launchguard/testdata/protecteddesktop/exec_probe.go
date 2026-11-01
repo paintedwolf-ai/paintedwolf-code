@@ -62,15 +62,19 @@ func execProbe(scratch string) ExecProbe {
 	probe.HostOutput, probe.HostCode = string(out), code
 	probe.HostError = launchError(err, hostStderr)
 	fmt.Fprintln(os.Stderr, "protected_exec_probe=host_execution")
+	hostExecution := exec.AgentLaunch(exec.LaunchAgentCommand, "protected launch probe", &confine.Confinement{HostExecution: true})
+	hostExecution.PathAuthority = confine.NativeLaunchPaths(scratch)
 	out, hostStderr, code, err = exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{
-		Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "protected launch probe", &confine.Confinement{HostExecution: true}),
+		Launch: hostExecution, Dir: scratch,
 	})
 	probe.HostExecOutput, probe.HostExecCode = string(out), code
 	probe.HostExecError = launchError(err, hostStderr)
 	fmt.Fprintln(os.Stderr, "protected_exec_probe=confined")
 	confinement := &confine.Confinement{Roots: []string{scratch}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
+	confined := exec.AgentLaunch(exec.LaunchAgentCommand, "protected launch probe", confinement)
+	confined.PathAuthority = confine.NativeLaunchPaths(scratch)
 	out, stderr, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{
-		Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "protected launch probe", confinement),
+		Launch: confined, Dir: scratch,
 	})
 	probe.ConfinedOutput, probe.ConfinedCode, probe.ConfinedStderr = string(out), code, string(stderr)
 	if err != nil {
