@@ -4,6 +4,7 @@ package nativegen
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -60,6 +61,7 @@ type Runtime struct {
 	gate       chan struct{}
 	loaded     *loadedProcess
 	generation uint64
+	window     atomic.Int64
 }
 
 func NewRuntime(config RuntimeConfig) *Runtime {
@@ -71,8 +73,22 @@ func NewRuntime(config RuntimeConfig) *Runtime {
 	}
 	lifetime, cancel := context.WithCancel(context.Background())
 	runtime := &Runtime{config: config, lifetime: lifetime, cancel: cancel, gate: make(chan struct{}, 1)}
+	runtime.window.Store(int64(config.ContextLimit))
 	runtime.gate <- struct{}{}
 	return runtime
+}
+
+// ContextWindow reports the admitted window once the runtime has warmed.
+func (p *Runtime) ContextWindow() int { return int(p.window.Load()) }
+
+// Warm establishes the model process and its admitted context before role selection.
+func (p *Runtime) Warm(ctx context.Context, model string) error {
+	ctx, release, err := p.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return p.ensureLoaded(ctx, model)
 }
 
 func (p *Provider) ID() string { return p.id }

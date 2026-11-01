@@ -93,27 +93,18 @@ func (p *Runtime) initialize(ctx context.Context, child *rpcProcess, artifact st
 	if err != nil || actual != child.device {
 		return loadedResult{}, errors.New("native generation: physical device mismatch")
 	}
-	var resources resourceResult
-	limits := command{Method: "inspect", ContextTokens: p.config.ContextLimit, PrefillChunk: p.config.PrefillChunk}
-	if err := child.call(ctx, limits, "resources", inference.Foreground, false, &resources); err != nil {
+	limits, err := p.admitContext(ctx, child)
+	if err != nil {
 		return loadedResult{}, err
 	}
-	plan := resources.Plan
-	if plan.HostReservationBytes < startupHostBytes {
-		return loadedResult{}, errors.New("native generation: runtime omitted its startup reservation")
-	}
-	if err := reserveLoaded(child, runtime, plan); err != nil {
-		return loadedResult{}, err
-	}
-	limits.Method = "load"
-	limits.DeviceBudgetBytes, limits.HostBudgetBytes = plan.DeviceReservationBytes, plan.HostReservationBytes
 	var loaded loadedResult
 	if err := child.call(ctx, limits, "loaded", inference.Foreground, true, &loaded); err != nil {
 		return loadedResult{}, err
 	}
-	if loaded.ContextTokens != p.config.ContextLimit || loaded.PrefillChunk != p.config.PrefillChunk || math.IsNaN(float64(loaded.Sampling.Temperature)) || math.IsInf(float64(loaded.Sampling.Temperature), 0) || loaded.Sampling.Temperature < 0 || !(loaded.Sampling.TopP > 0 && loaded.Sampling.TopP <= 1) || loaded.Sampling.TopK > 262144 {
+	if loaded.ContextTokens != limits.ContextTokens || loaded.PrefillChunk != p.config.PrefillChunk || math.IsNaN(float64(loaded.Sampling.Temperature)) || math.IsInf(float64(loaded.Sampling.Temperature), 0) || loaded.Sampling.Temperature < 0 || !(loaded.Sampling.TopP > 0 && loaded.Sampling.TopP <= 1) || loaded.Sampling.TopK > 262144 {
 		return loadedResult{}, errors.New("native generation: runtime execution settings mismatch")
 	}
+	p.window.Store(int64(loaded.ContextTokens))
 	return loaded, nil
 }
 

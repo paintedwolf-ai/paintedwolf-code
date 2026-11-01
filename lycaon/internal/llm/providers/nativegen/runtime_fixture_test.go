@@ -31,7 +31,12 @@ func runtimeFixture() {
 		case "hello":
 			result = map[string]any{"kind": "hello", "protocol": 1, "artifact_id": artifact, "backend": "vulkan", "physical_device": map[string]string{"kind": "pci", "address": "0000:03:00.0"}}
 		case "inspect":
-			result = map[string]any{"kind": "resources", "plan": resourcePlan{ResidentWeightsBytes: 128 << 20, MappedPLEBytes: 2 << 30, KVCapacityBytes: 64 << 20, WorkspaceBytes: 64 << 20, DeviceReservationBytes: 256 << 20, HostReservationBytes: startupHostBytes}}
+			plan := resourcePlan{ResidentWeightsBytes: 128 << 20, MappedPLEBytes: 2 << 30, KVCapacityBytes: 64 << 20, WorkspaceBytes: 64 << 20, DeviceReservationBytes: 256 << 20, HostReservationBytes: startupHostBytes}
+			if os.Getenv("PW_NATIVEGEN_CONTEXT_PLAN") == "1" {
+				plan.KVCapacityBytes = uint64(request.Command.ContextTokens) * (16 << 10)
+				plan.DeviceReservationBytes = plan.ResidentWeightsBytes + plan.WorkspaceBytes + plan.KVCapacityBytes
+			}
+			result = map[string]any{"kind": "resources", "plan": plan}
 		case "load":
 			result = map[string]any{"kind": "loaded", "context_tokens": request.Command.ContextTokens, "prefill_chunk": request.Command.PrefillChunk, "sampling": samplingDefaults{Temperature: 0, TopP: 1}}
 		case "render":

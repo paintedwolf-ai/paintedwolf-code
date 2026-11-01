@@ -42,7 +42,7 @@ func DefaultModelEntry() modelinfo.Entry {
 func (p *Provider) ModelEntry(model string) (modelinfo.Entry, bool) {
 	entry, ok := p.Catalog.ModelEntry(model)
 	if ok && p.runtime != nil {
-		window := p.runtime.config.ContextLimit
+		window := p.runtime.ContextWindow()
 		if entry.ContextLength <= 0 || entry.ContextLength > window {
 			entry.ContextLength = window
 		}
