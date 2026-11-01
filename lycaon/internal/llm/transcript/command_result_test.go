@@ -22,7 +22,7 @@ func TestCommandResultProjectionPreservesTextAndCanonicalHistory(t *testing.T) {
 	before, err := json.Marshal(message)
 	testutil.FailErr(t, "capture canonical result", err)
 	parts := projectCommandResult(message, api.MessageTextParts(message))
-	if len(parts) != 4 || !strings.Contains(parts[0].Content, "missing quote\nFix:") || !strings.Contains(parts[1].Content, `"completed_effects":1`) || strings.Contains(parts[1].Content, `"feedback"`) || !strings.Contains(parts[1].Content, `"result_message_id":"message"`) || parts[2].Content != "Command stderr:\nnative\nerror\n" || parts[3].Content != "Command stdout:\nearlier\noutput\n" {
+	if len(parts) != 4 || !strings.Contains(parts[0].Content, "missing quote\nFix:") || !strings.Contains(parts[1].Content, `"completed_effects":1`) || strings.Contains(parts[1].Content, `"feedback"`) || !strings.Contains(parts[1].Content, `"result_message_id":"message"`) || !strings.Contains(parts[2].Content, "\nnative\nerror\n\n") || !strings.Contains(parts[3].Content, "\nearlier\noutput\n\n") {
 		t.Fatalf("command text or facts changed: %+v", parts)
 	}
 	for _, part := range parts {
@@ -68,6 +68,56 @@ func TestCommandResultProjectionRequiresMatchingHostReceipts(t *testing.T) {
 		b, _ := json.Marshal(parts)
 		if string(a) != string(b) {
 			t.Fatalf("unbound content was projected: %s", a)
+		}
+	}
+}
+
+func TestCommandProjectionPreservesLiteralAndActualNewlines(t *testing.T) {
+	message := commandResultMessage(t)
+	var body map[string]any
+	testutil.FailErr(t, "decode fixture", json.Unmarshal([]byte(message.Content), &body))
+	literal := "literal\\n and real\nline"
+	body["stdout"] = literal
+	encoded, err := json.Marshal(body)
+	testutil.FailErr(t, "encode literal output", err)
+	message.Content = string(encoded)
+	parts := projectCommandResult(message, api.MessageTextParts(message))
+	if len(parts) != 4 || !strings.Contains(parts[3].Content, "\n"+literal+"\n") {
+		t.Fatalf("stream bytes were decoded twice: %+v", parts)
+	}
+}
+
+func TestCommandProvenanceSnapshotsAreDetached(t *testing.T) {
+	message := commandResultMessage(t)
+	message.ToolResult.Invocation.Failure = &api.InvocationFailure{Code: "original"}
+	captured := CommandProvenance(message.ToolResult)
+	*message.ToolResult.CommandProgram.StatusCode = 0
+	message.ToolResult.Invocation.Failure.Code = "changed"
+	restored := &api.ToolResult{Tool: "command", ToolCallID: "call"}
+	captured.Restore(restored)
+	if *restored.CommandProgram.StatusCode != 2 || restored.Invocation.Failure.Code != "original" {
+		t.Fatalf("caller changed captured facts: %+v", restored)
+	}
+	restored.Invocation.Failure.Code = "modified first restore"
+	captured.Restore(restored)
+	if restored.Invocation.Failure.Code != "original" {
+		t.Fatal("restored facts mutated provenance")
+	}
+}
+
+func TestCommandProjectionRetainsStreamLineEndingsAndWhitespace(t *testing.T) {
+	for _, text := range []string{"  leading and trailing  ", "first\r\nsecond\r\n", "literal\\n", "```~~~\n  "} {
+		message := commandResultMessage(t)
+		var body map[string]any
+		testutil.FailErr(t, "decode fixture", json.Unmarshal([]byte(message.Content), &body))
+		body["stdout"] = text
+		raw, err := json.Marshal(body)
+		testutil.FailErr(t, "encode stream fixture", err)
+		message.Content = string(raw)
+		projected := Project([]api.Message{message})
+		want := "⟦D⟧" + strings.ReplaceAll(text, "\n", "\n⟦D⟧")
+		if !strings.Contains(projected[len(projected)-1].Content, want) {
+			t.Fatalf("stream bytes changed: %q / %q", text, projected[len(projected)-1].Content)
 		}
 	}
 }

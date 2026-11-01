@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,6 +28,7 @@ type ContextMessage struct {
 
 // ContextMessageProvenance holds origin, trust, and replay metadata for a context row.
 type ContextMessageProvenance struct {
+	CommandResult       *transcript.CommandResultProvenance `json:"-"`
 	Seq                 int64
 	Origin              api.MessageOrigin
 	Authority           api.ContentAuthority
@@ -90,6 +92,7 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 		},
 	}
 	if m.ToolResult != nil {
+		out.CommandResult = transcript.CommandProvenance(m.ToolResult)
 		if out.Content == "" {
 			out.Content = m.ToolResult.Content
 		}
@@ -148,6 +151,7 @@ func ContextMessageToAPI(m ContextMessage) api.Message {
 	if m.Role == string(api.MessageRoleTool) {
 		out.ToolResult = &api.ToolResult{ToolCallID: m.ToolCallID, Tool: m.ToolName, Content: m.Content,
 			CheckpointDecision: m.CheckpointDecision, Feedback: append([]api.ToolFeedback(nil), m.ToolFeedback...)}
+		m.CommandResult.Restore(out.ToolResult)
 	}
 	if m.WorkerSummary != nil {
 		cp := *m.WorkerSummary

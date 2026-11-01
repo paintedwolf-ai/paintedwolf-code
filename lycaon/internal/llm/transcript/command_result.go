@@ -20,11 +20,10 @@ func projectCommandResult(message api.Message, parts []api.MessageContentPart) [
 	if part.Origin != api.MessageOriginTool || part.Authority != api.ContentAuthorityNone || result.Tool != "command" || len(part.Content) > maxCommandProjectionBytes {
 		return parts
 	}
-	receipt := result.CommandProgram
-	invocation := result.Invocation
-	if receipt == nil || invocation == nil || receipt.ID == "" || invocation.ID == "" || receipt.ParentReceiptID != invocation.ID || invocation.Tool != "command" || invocation.ToolCallID == "" || invocation.ToolCallID != result.ToolCallID || !invocation.Invoked {
+	if !commandReceiptBound(result) {
 		return parts
 	}
+	receipt := result.CommandProgram
 	handles, body := resultHandles(message, part.Content)
 	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(body)
 	if !ok || prefix != "" {
@@ -98,8 +97,15 @@ func projectCommandResult(message api.Message, parts []api.MessageContentPart) [
 	}
 	appendText("command_refusal", "Command refusal:\n", feedback)
 	appendText("command_metadata", "Command result metadata:\n", strings.Join(append(handles, string(encoded)), "\n"))
-	appendText("command_stderr", "Command stderr:\n", state.Stderr)
-	appendText("command_stdout", "Command stdout:\n", state.Stdout)
+	appendStream := func(source, label, text string) {
+		if text == "" {
+			return
+		}
+		fence := sourceFence(text)
+		appendText(source, label+"\n"+fence+"\n", text+"\n"+fence)
+	}
+	appendStream("command_stderr", "Command stderr:", state.Stderr)
+	appendStream("command_stdout", "Command stdout:", state.Stdout)
 	appendText("result_suffix", "", suffix)
 	return out
 }
