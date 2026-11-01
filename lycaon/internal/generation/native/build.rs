@@ -7,5 +7,6 @@ fn main() {
         println!("cargo:rustc-link-search=native={directory}");
         println!("cargo:rustc-link-lib=dylib=nativegen_vulkan");
         println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+        println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../engine-root/generation");
     }
 }

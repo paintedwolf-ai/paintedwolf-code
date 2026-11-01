@@ -52,6 +52,7 @@ let
     crates = "lycaon-den/src-tauri";
     document-crates = "lycaon/internal/documentcore/native";
     decide-crates = "lycaon/internal/decide/native";
+    generation-crates = "lycaon/internal/generation/native";
   };
   crateVendors = lib.mapAttrs (_: path: rust.importCargoLock {
     lockFile = source + "/${path}/Cargo.lock";
@@ -80,7 +81,7 @@ let
           cd ${path}
           cargo-about generate --frozen --fail --format json \
             --config ${source}/lycaon-den/src-tauri/about.toml \
-            ${lib.optionalString (name == "decide-crates") ''--features mlx,vulkan''} \
+            ${lib.optionalString (name == "decide-crates" || name == "generation-crates") ''--features mlx,vulkan''} \
             -o "$out/${name}.json"
         )
       '') cratePaths)}
@@ -106,6 +107,7 @@ in stdenvNoCC.mkDerivation {
       --crates-json ${rustInventory}/crates.json \
       --document-crates-json ${rustInventory}/document-crates.json \
       --decide-crates-json ${rustInventory}/decide-crates.json \
+      --generation-crates-json ${rustInventory}/generation-crates.json \
       --opengrep-artifact ${inputs.scannerOriginal}/artifact \
       --out "$out/THIRD-PARTY-NOTICES.md"
   '';

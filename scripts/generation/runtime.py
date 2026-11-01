@@ -179,7 +179,7 @@ def build(args):
 def test(args):
     if args.backend == "reference-llama":
         run([sys.executable, "-m", "unittest", "test_vulkan_tools", "test_provenance",
-             "test_swift_toolchain", "test_native_bench"], cwd=Path(__file__).parent)
+             "test_swift_toolchain", "test_native_bench", "test_staging"], cwd=Path(__file__).parent)
         return
     if args.backend == "reference-swift":
         source, output = paths(args.backend)

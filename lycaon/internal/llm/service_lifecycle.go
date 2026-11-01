@@ -19,7 +19,7 @@ import (
 )
 
 // NewService loads catalog, credentials, policy, registry, and router.
-func NewService(ctx context.Context, mock modelcall.LLMClient, localRuntime *nativegen.Runtime) (*Service, error) {
+func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.Availability) (*Service, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient, localRuntime *nat
 	if err != nil {
 		return nil, err
 	}
-	registry, err := NewRegistry(ctx, catalog, credentials, localRuntime)
+	registry, err := NewRegistry(ctx, catalog, credentials, local)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (s *Service) Close(ctx context.Context) error {
 }
 
 // NewRegistry builds providers from catalog and stored credentials.
-func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store, localRuntime *nativegen.Runtime) (*Registry, error) {
+func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store, local *nativegen.Availability) (*Registry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -119,7 +119,10 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 		return nil, fmt.Errorf("shared provider rate state requires an absolute directory in the isolated harness")
 	}
 	r := &Registry{}
-	r.localRuntime = localRuntime
+	if local != nil {
+		r.localRuntime = local.Runtime
+		r.localStartup = local.Initial
+	}
 	r.rateGate = providerretry.NewProviderRateGate(rateDirectory)
 	r.catalog = catalog
 	r.credentials = credentials

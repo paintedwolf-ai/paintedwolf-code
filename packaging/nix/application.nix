@@ -1,6 +1,6 @@
 { lib, stdenvNoCC, callPackage, python3, makeShellWrapper, wrapGAppsHook3, gtk3, apparmor-parser, apparmor-profiles, mesa
 , gsettings-desktop-schemas, glib-networking, nix, source, shell, engine
-, bialy, document-core, resources
+, bialy, nativegen, document-core, resources
 , desktopSettings ? callPackage ./desktop-settings.nix { inherit source; }
 , scannerTools ? callPackage ./scanner-tools.nix { inherit source; }
 }:
@@ -33,6 +33,9 @@ stdenvNoCC.mkDerivation {
       install -m755 ${engine}/bin/$executable "$root/bin/$executable"
     done
     install -m755 ${bialy}/bin/bialy "$root/bin/bialy"
+    install -m755 ${nativegen}/bin/nativegen "$root/bin/nativegen"
+    mkdir -p "$root/engine-root/generation"
+    install -m644 ${nativegen}/lib/libnativegen_vulkan.so "$root/engine-root/generation/"
     install -m755 ${document-core}/bin/pw-document-core "$root/bin/pw-document-core"
     # Outside NixOS no driver environment is selected by the system configuration, and
     # host-installed drivers are foreign to the generation, so the closure's Mesa is the

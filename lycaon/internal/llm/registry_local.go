@@ -9,6 +9,9 @@ import (
 
 func (r *registryCore) LocalGenerationStatus() api.LocalGenerationStatus {
 	status := r.localRuntime.Readiness()
+	if r.localRuntime == nil && r.localStartup.State != "" {
+		status = r.localStartup
+	}
 	return api.LocalGenerationStatus{
 		State: string(status.State), RecoveryAction: string(status.Action), Detail: status.Detail,
 		Revision: status.Revision, ContextTokens: status.ContextTokens,

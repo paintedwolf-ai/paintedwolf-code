@@ -39,7 +39,7 @@
           noticesOutputsValid = import ./packaging/nix/closure-notices-check.nix {
             inherit pkgs runtimeEdges;
             nixpkgsRevision = nixpkgs.rev;
-            roots = [ application shell bound-engine bialy document-core resources frontend ]
+            roots = [ application shell bound-engine bialy nativegen document-core resources frontend ]
               ++ application.noticeRuntimeInputs;
           };
           converter = bun2nix.packages.${system}.default;
@@ -48,6 +48,7 @@
             bun2nix = converter;
           };
           resources = pkgs.callPackage ./packaging/nix/resources.nix { source = self; inherit frontend; };
+          nativegen = pkgs.callPackage ./packaging/nix/nativegen.nix { source = self; };
           bialy = pkgs.callPackage ./packaging/nix/bialy.nix { source = self; };
           document-core = pkgs.callPackage ./packaging/nix/document-core.nix { source = self; };
           shell = pkgs.callPackage ./packaging/nix/shell.nix { source = self; inherit frontend; };
@@ -61,13 +62,13 @@
             source = self;
             engine = bound-engine;
             desktopSettings = desktop-settings-observer;
-            inherit shell bialy document-core resources;
+            inherit shell bialy nativegen document-core resources;
           };
         in assert noticesOutputsValid; {
           engine = pkgs.callPackage ./packaging/nix/engine.nix {
             source = self;
           };
-          inherit frontend resources shell bialy document-core bound-engine desktop-settings-observer;
+          inherit frontend resources shell bialy nativegen document-core bound-engine desktop-settings-observer;
           desktop-shell-check = shell.overrideAttrs (_: {
             doCheck = true;
             cargoCheckType = "release";
@@ -106,7 +107,7 @@
           closure-notices = pkgs.callPackage ./packaging/nix/closure-notices.nix {
             source = self;
             inherit application runtimeEdges;
-            components = [ shell bound-engine bialy document-core desktop-settings-observer resources frontend ];
+            components = [ shell bound-engine bialy nativegen document-core desktop-settings-observer resources frontend ];
             nixpkgsRevision = nixpkgs.rev;
           };
           browser = resources.inputs.browser;
