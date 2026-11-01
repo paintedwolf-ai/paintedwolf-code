@@ -11,8 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 )
 
-// DefaultParkThreshold is how long after it starts a command call keeps its
-// turn while its program waits. A call whose next wake falls later parks.
+// DefaultParkThreshold bounds a known inline wait or the initial job-only wait.
 const DefaultParkThreshold = 10 * time.Second
 
 // programBound is a call's outer deadline: its timeout_ms, or the catalog's
