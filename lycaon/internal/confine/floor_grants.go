@@ -37,7 +37,7 @@ func (s SandboxRefusals) Grants(access FilesystemAccess) []string {
 	paths := s.Paths(access)
 	candidates := make([]BoundaryPath, 0, len(paths))
 	for i, path := range paths {
-		if path.Grant == "" || path.Layer.Recovery() == RecoverCredentialStore {
+		if path.Grant == "" || path.Layer == FloorReadCredentialStore {
 			continue
 		}
 		if access == AccessRead && metadataOnly(path.Operations) && hasGrantableDescendant(paths, i) {
