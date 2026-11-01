@@ -45,7 +45,7 @@ func TestHTTPRequestLoopbackListenerAttributionOtherSessionAndReplacement(t *tes
 
 	for _, scenario := range []struct {
 		name string
-		run  func(*testing.T, *tools.Registry, string)
+		run  func(*testing.T, *tools.DefaultRegistry, string)
 	}{
 		{"other_session_holder_raises_guidance_code", assertOtherSessionListenerGuidance},
 		{"listener_replaced_between_pre_and_post_is_marked_ambiguous", assertReplacedListenerAmbiguity},
@@ -55,7 +55,7 @@ func TestHTTPRequestLoopbackListenerAttributionOtherSessionAndReplacement(t *tes
 	}
 }
 
-func assertOtherSessionListenerGuidance(t *testing.T, registry *tools.Registry, serverURL string) {
+func assertOtherSessionListenerGuidance(t *testing.T, registry *tools.DefaultRegistry, serverURL string) {
 	t.Helper()
 	obs := &stubLoopbackObserver{
 		facts: []*api.LoopbackListenerFact{
@@ -121,7 +121,7 @@ func assertOtherSessionListenerGuidance(t *testing.T, registry *tools.Registry, 
 	}
 }
 
-func assertReplacedListenerAmbiguity(t *testing.T, registry *tools.Registry, serverURL string) {
+func assertReplacedListenerAmbiguity(t *testing.T, registry *tools.DefaultRegistry, serverURL string) {
 	t.Helper()
 	obs := &stubLoopbackObserver{
 		facts: []*api.LoopbackListenerFact{
@@ -171,7 +171,7 @@ func assertReplacedListenerAmbiguity(t *testing.T, registry *tools.Registry, ser
 	}
 }
 
-func assertContainerMismatchGuidance(t *testing.T, registry *tools.Registry, serverURL string) {
+func assertContainerMismatchGuidance(t *testing.T, registry *tools.DefaultRegistry, serverURL string) {
 	t.Helper()
 	obs := &stubLoopbackObserver{
 		facts: []*api.LoopbackListenerFact{
