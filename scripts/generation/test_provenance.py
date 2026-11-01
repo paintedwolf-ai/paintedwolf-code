@@ -20,7 +20,7 @@ class ProvenanceTests(unittest.TestCase):
             (root / "sources.json").write_text("{}")
             binary = root / "generation-reference"
             binary.write_bytes(b"original executable")
-            with patch.object(provenance, "ROOT", root):
+            with patch.object(provenance, "ROOT", root), patch.object(provenance, "swift_identity", return_value={"version": "fixture"}):
                 provenance.record_build("reference-llama", root, binary)
                 receipt = provenance.verified_build("reference-llama", root, binary)
                 self.assertEqual(receipt["binary_sha256"], provenance.file_digest(binary))
@@ -42,9 +42,12 @@ class ProvenanceTests(unittest.TestCase):
             shader.write_bytes(b"shader")
             binary = root / "runner"
             binary.write_bytes(b"executable")
-            with patch.object(provenance, "ROOT", root):
+            with patch.object(provenance, "ROOT", root), patch.object(provenance, "swift_identity", return_value={"version": "fixture"}):
                 provenance.record_build("reference-swift", root, binary)
                 provenance.verified_build("reference-swift", root, binary)
+                with patch.object(provenance, "swift_identity", return_value={"version": "different"}):
+                    with self.assertRaisesRegex(ValueError, "rebuild"):
+                        provenance.verified_build("reference-swift", root, binary)
                 shader.write_bytes(b"changed shader")
                 with self.assertRaisesRegex(ValueError, "rebuild"):
                     provenance.verified_build("reference-swift", root, binary)

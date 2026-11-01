@@ -24,9 +24,16 @@ def source_identity(backend):
     return hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()
 
 
+def swift_identity():
+    from artifact_paths import bin_dir
+    import swift_toolchain
+    return swift_toolchain.identity(bin_dir(ROOT.parents[1]))
+
+
 def build_identity(backend, directory, binary):
     identity = {"source_identity": source_identity(backend), "binary_sha256": file_digest(binary)}
     if backend == "reference-swift":
+        identity["toolchain"] = swift_identity()
         identity["metallib_sha256"] = file_digest(directory / "metal/mlx.metallib")
     return identity
 

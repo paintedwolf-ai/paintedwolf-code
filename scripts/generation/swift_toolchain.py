@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -13,11 +14,28 @@ EXPECTED_SHA256 = "ee82e57774d6650f94aa06302435d6f44a055b9411698db8ecb85d9a3bcc9
 URL = "https://download.swift.org/swift-6.3.3-release/xcode/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE-osx.pkg"
 
 
+def configured_executable():
+    value = os.environ.get("PW_GENERATION_SWIFT")
+    if value is None:
+        return None
+    path = Path(value)
+    if not path.is_absolute() or not path.is_file() or not os.access(path, os.X_OK):
+        raise ValueError("PW_GENERATION_SWIFT must name an absolute executable path")
+    return path
+
+
 def executable(cache):
+    selected = configured_executable()
+    if selected is not None:
+        return selected
     return cache / ("swift-" + VERSION) / "usr/bin/swift"
 
 
 def prepare(cache):
+    selected = configured_executable()
+    if selected is not None:
+        subprocess.run([str(selected), "--version"], check=True)
+        return selected
     destination = executable(cache).parents[2]
     if executable(cache).is_file():
         record = json.loads((destination / "source.json").read_text())
@@ -50,3 +68,13 @@ def prepare(cache):
                                                                "package_bytes": size}, indent=2) + "\n")
         candidates[0].rename(destination)
     return executable(cache)
+
+
+def identity(cache):
+    compiler = executable(cache)
+    return {
+        "executable": str(compiler),
+        "version": subprocess.check_output([str(compiler), "--version"], text=True).strip(),
+        "sdk": subprocess.check_output(["xcrun", "--show-sdk-path"], text=True).strip(),
+        "sdk_version": subprocess.check_output(["xcrun", "--show-sdk-version"], text=True).strip(),
+    }

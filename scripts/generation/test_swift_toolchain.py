@@ -16,6 +16,10 @@ class SwiftToolchainTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.cache = Path(self.temporary.name)
+        environment = patch.dict(swift_toolchain.os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        swift_toolchain.os.environ.pop("PW_GENERATION_SWIFT", None)
         digest = patch.object(swift_toolchain, "EXPECTED_SHA256", hashlib.sha256(b"package").hexdigest())
         digest.start()
         self.addCleanup(digest.stop)
@@ -46,3 +50,17 @@ class SwiftToolchainTests(unittest.TestCase):
         self.assertEqual(first.read_bytes(), b"verified compiler")
         self.assertTrue((first.parents[2] / "source.json").is_file())
         self.assertEqual(download.call_count, 1)
+
+    def test_explicit_compiler_requires_absolute_executable(self):
+        for value in ("swift", str(self.cache / "absent")):
+            with patch.dict(swift_toolchain.os.environ, {"PW_GENERATION_SWIFT": value}):
+                with self.assertRaisesRegex(ValueError, "absolute executable"):
+                    swift_toolchain.executable(self.cache)
+        compiler = self.cache / "swift"
+        compiler.write_text("compiler")
+        compiler.chmod(0o755)
+        with patch.dict(swift_toolchain.os.environ, {"PW_GENERATION_SWIFT": str(compiler)}), \
+             patch.object(swift_toolchain.subprocess, "run") as run:
+            self.assertEqual(swift_toolchain.prepare(self.cache), compiler)
+            self.assertEqual(swift_toolchain.executable(self.cache), compiler)
+            run.assert_called_once_with([str(compiler), "--version"], check=True)
