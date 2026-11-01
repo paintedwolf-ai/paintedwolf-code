@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	brtypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	"github.com/aws/smithy-go"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -83,6 +84,22 @@ func (p *Provider) WithHTTPRetry(policy providerretry.ProviderHTTPRetry) *Provid
 // WithPromptCache sets the provider's prompt-cache policy.
 func (p *Provider) WithPromptCache(policy providerprofile.PromptCachePolicy) *Provider {
 	p.profile.PromptCache = policy
+	return p
+}
+
+// WithEndpoint configures a custom endpoint and static credentials for testing.
+func (p *Provider) WithEndpoint(endpoint string) *Provider {
+	p.apiKey = ""
+	p.region = "us-east-1"
+	p.loadConfig = func(context.Context, string) (aws.Config, error) {
+		return aws.Config{
+			Region: "us-east-1",
+			Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+				return aws.Credentials{AccessKeyID: "fixture", SecretAccessKey: "fixture"}, nil
+			}),
+			BaseEndpoint: aws.String(endpoint),
+		}, nil
+	}
 	return p
 }
 
@@ -155,6 +172,12 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 			}
 		}
 		lastErr = err
+		if refusal := bedrockModelRefusal(p.id, model, err); refusal != nil {
+			return nil, refusal
+		}
+		if bedrockInterruptedResponse(err) {
+			return nil, failure.InterruptedResponse(ctx, p.id, model, err)
+		}
 		var sent bool
 		fault, sent = classifyConverse(ctx, readObs(), time.Since(started), err)
 		if fault.Kind == providerretry.FaultCanceled {
@@ -162,9 +185,6 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 		}
 		if !sent {
 			return nil, fmt.Errorf("bedrock: converse: %w", err)
-		}
-		if refusal := bedrockModelRefusal(p.id, model, err); refusal != nil {
-			return nil, refusal
 		}
 		if fault.Kind == providerretry.FaultRateLimited && admission != nil {
 			if err := admission.Limited(ctx, nil, p.httpRetry); err != nil {
@@ -212,6 +232,18 @@ func classifyConverse(ctx context.Context, obs httpclient.RequestObservation, el
 // bedrockAnswered reports whether the service sent an HTTP response.
 func bedrockAnswered(err error) bool {
 	return bedrockAnsweredStatus(err) != 0
+}
+
+func bedrockInterruptedResponse(err error) bool {
+	if bedrockRetryStatus(err) != 0 {
+		return false
+	}
+	status := bedrockResponseStatus(err)
+	if status >= http.StatusOK && status < http.StatusMultipleChoices {
+		return true
+	}
+	var deserErr *smithy.DeserializationError
+	return status == 0 && errors.As(err, &deserErr)
 }
 
 // bedrockAnsweredStatus maps an answered fault onto the status the retry policy

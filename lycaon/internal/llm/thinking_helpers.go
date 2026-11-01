@@ -9,10 +9,10 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/pkg/api"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"math"
 	"slices"
 	"strings"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func thinkingOverridesToDTO(overrides []modelcall.ThinkingOverride) []api.ThinkingOverride {
@@ -169,6 +169,11 @@ func (c *reasoningCapture) append(text string) {
 		return
 	}
 	c.text.WriteString(text)
+}
+
+func (c *reasoningCapture) reset() {
+	c.bytes = 0
+	c.text.Reset()
 }
 
 func (c *reasoningCapture) summarize(summary *observability.LLMCompletionCapture, err error) *observability.LLMCompletionCapture {

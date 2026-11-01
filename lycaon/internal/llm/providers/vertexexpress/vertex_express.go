@@ -6,9 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -127,7 +125,7 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 	defer func() { _ = resp.Body.Close() }()
 	respBody, err := providerhttp.ReadCompletionResponse("vertex express", resp)
 	if err != nil {
-		return nil, err
+		return nil, failure.InterruptedResponse(ctx, p.id, model, err)
 	}
 	var wire vertexExpressResponse
 	if err := json.Unmarshal(respBody, &wire); err != nil {
@@ -265,22 +263,8 @@ func (p *Provider) streamFromResponse(ctx context.Context, req modelcall.Complet
 				}
 			}
 		}
-		if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Done: true})
-			return
-		}
-		if !sawTerminal {
-			if !sawOutput {
-				retryable := promptBlockReason == ""
-				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: &failure.ProviderEmptyCompletionError{
-					ProviderID: p.id,
-					Model:      model,
-					Retryable:  retryable,
-					Reason:     promptBlockReason,
-				}, Usage: usage, Done: true})
-				return
-			}
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: fmt.Errorf("vertex express: stream ended before a terminal finishReason"), Usage: usage, Done: true})
+		if err := failure.ClassifyStreamEnd(ctx, p.id, model, scanner.Err(), sawTerminal, sawOutput || len(toolCalls) > 0, promptBlockReason, promptBlockReason == ""); err != nil {
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Usage: usage, Done: true})
 			return
 		}
 		// Preserve the finish reason for an empty filtered stream.

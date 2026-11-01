@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -504,8 +505,40 @@ func AsProviderResponseInterrupted(err error) (*ProviderResponseInterruptedError
 }
 
 func InterruptedResponse(ctx context.Context, providerID, model string, err error) error {
-	if ctx.Err() != nil {
+	if ctx != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
+	if existing, ok := AsProviderResponseInterrupted(err); ok {
+		out := *existing
+		if out.ProviderID == "" {
+			out.ProviderID = providerID
+		}
+		if out.Model == "" {
+			out.Model = model
+		}
+		return &out
+	}
 	return &ProviderResponseInterruptedError{ProviderID: providerID, Model: model, Cause: err}
+}
+
+// ClassifyStreamEnd classifies the end of a response stream after headers arrived.
+func ClassifyStreamEnd(ctx context.Context, providerID, model string, scanErr error, sawTerminal, sawOutput bool, emptyReason string, emptyRetryable bool) error {
+	if scanErr != nil && !errors.Is(scanErr, io.EOF) {
+		return InterruptedResponse(ctx, providerID, model, scanErr)
+	}
+	if sawTerminal {
+		return nil
+	}
+	if sawOutput {
+		return InterruptedResponse(ctx, providerID, model, io.ErrUnexpectedEOF)
+	}
+	if ctx != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return &ProviderEmptyCompletionError{
+		ProviderID: providerID,
+		Model:      model,
+		Retryable:  emptyRetryable,
+		Reason:     emptyReason,
+	}
 }

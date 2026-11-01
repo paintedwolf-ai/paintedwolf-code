@@ -418,7 +418,7 @@ http_retry_profiles:
         max_retries: 1
         max_wait_ms: 5000
         backoff_ms: [500]
-        faults: [unreachable, empty_completion]
+        faults: [unreachable, empty_completion, interrupted]
   sdk-managed:
     service_class: sdk_managed
     http_retry:
