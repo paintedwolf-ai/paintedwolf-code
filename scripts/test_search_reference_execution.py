@@ -179,6 +179,7 @@ class RepositoryToolsInputsTest(unittest.TestCase):
             commands = {
                 "uname": "import os; print(os.environ['FIXTURE_SYSTEM'])",
                 "sudo": "import json,sys; print(json.dumps({'argv':sys.argv[1:]}))",
+                "nix": "import json,sys; print(json.dumps({'argv':['nix',*sys.argv[1:]]}))",
                 "brew": "import json,os,sys; print(json.dumps({'argv':['brew',*sys.argv[1:]],'auto':os.environ.get('HOMEBREW_NO_AUTO_UPDATE')}))",
             }
             for name, body in commands.items():
@@ -209,6 +210,12 @@ class RepositoryToolsInputsTest(unittest.TestCase):
                 result, calls = self.run_profile(system, *arguments)
                 self.assertEqual(result.returncode, 2)
                 self.assertEqual(calls, [])
+
+    def test_signer_preparation_uses_the_repository_locked_nix_inputs(self):
+        result, calls = self.run_profile("Linux", "--signer", "/fixture/signer with spaces")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, [{"argv": ["nix", "build", "--inputs-from", str(runner_tests.SCRIPTS.parent),
+                                          "--no-write-lock-file", "nixpkgs#minisign", "--out-link", "/fixture/signer with spaces"]}])
 
 
 if __name__ == "__main__":

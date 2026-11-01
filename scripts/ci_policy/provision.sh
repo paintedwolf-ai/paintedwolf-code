@@ -7,6 +7,9 @@ if [[ "${1:-}" == search-reference ]]; then
   exec python3 "$ROOT/scripts/ci_policy/search_reference.py" "$2"
 fi
 if [[ "${1:-}" == repository-tools ]]; then
+  if [[ $# -eq 3 && "$2" == --signer ]]; then
+    exec nix build --inputs-from "$ROOT" --no-write-lock-file nixpkgs#minisign --out-link "$3"
+  fi
   [[ $# -eq 1 ]] || { echo "error: repository-tools takes no arguments" >&2; exit 2; }
   case "$(uname -s)" in
     Linux)

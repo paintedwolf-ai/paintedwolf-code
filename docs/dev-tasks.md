@@ -36,6 +36,9 @@ packages prepared by `./task setup-dev -- --ci-inputs analysis`. The runner
 loads those packages directly rather than inheriting a global Python install.
 Prepare repository signing/package tools with
 `./task setup-dev -- --ci-inputs repository-tools` on macOS or apt-based Linux.
+For the signer alone, `./task setup-dev -- --ci-inputs repository-tools --signer
+<directory>` builds it from the repository's locked Nix input; prepend that
+directory's `bin` to `PATH` for verification.
 
 Native search differential tests use the pinned ripgrep 15 reference. Prepare it
 with `./task setup-dev -- --ci-inputs search-reference <directory>` and prepend
