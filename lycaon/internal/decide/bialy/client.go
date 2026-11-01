@@ -171,21 +171,6 @@ func (c *Client) Decide(ctx context.Context, head decide.Head, state any, questi
 	return decide.Result{Answers: resp.Answers, Engine: c.Engine(), Elapsed: time.Since(started)}, nil
 }
 
-// Rank scores candidates against task with the named head.
-func (c *Client) Rank(ctx context.Context, head decide.Head, task string, candidates []string) ([]float64, decide.Engine, error) {
-	if len(candidates) == 0 {
-		return nil, c.Engine(), nil
-	}
-	resp, err := c.call(ctx, request{Method: methodRank, Head: head, Task: task, Candidates: candidates})
-	if err != nil {
-		return nil, decide.Engine{}, err
-	}
-	if len(resp.Scores) != len(candidates) {
-		return nil, decide.Engine{}, fmt.Errorf("%w: %d scores for %d candidates", decide.ErrEngine, len(resp.Scores), len(candidates))
-	}
-	return resp.Scores, c.Engine(), nil
-}
-
 // Close stops the engine process.
 func (c *Client) Close() error {
 	if c == nil {
@@ -217,6 +202,10 @@ func (c *Client) call(ctx context.Context, req request) (response, error) {
 	if err != nil {
 		return response{}, err
 	}
+	return c.exchange(ctx, proc, req)
+}
+
+func (c *Client) exchange(ctx context.Context, proc *process, req request) (response, error) {
 	req.ID = c.seq.Add(1)
 	resp, err := proc.roundTrip(ctx, req)
 	if err != nil {
