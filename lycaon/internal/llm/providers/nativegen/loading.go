@@ -13,7 +13,13 @@ import (
 
 const startupHostBytes = 512 << 20
 
-func (p *Runtime) ensureLoaded(ctx context.Context, model string) error {
+func (p *Runtime) ensureLoaded(ctx context.Context, model string) (err error) {
+	p.publishReadiness("loading", "none")
+	defer func() { p.settleReadiness(err) }()
+	return p.loadModel(ctx, model)
+}
+
+func (p *Runtime) loadModel(ctx context.Context, model string) error {
 	if err := p.validate(); err != nil {
 		return err
 	}

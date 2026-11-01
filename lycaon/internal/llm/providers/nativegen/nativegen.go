@@ -65,6 +65,7 @@ type Runtime struct {
 	prepared   *preparedPrompt
 	generation uint64
 	window     atomic.Int64
+	readiness  atomic.Pointer[Readiness]
 }
 
 func NewRuntime(config RuntimeConfig) *Runtime {
