@@ -1,4 +1,5 @@
 #include "adapter.h"
+#include "engine.h"
 #include "artifact.h"
 #include "llama-ext.h"
 #include "llama-kv-cache-iswa.h"
@@ -12,25 +13,6 @@
 #include <string>
 #include <vector>
 
-struct pw_generation {
-    std::unique_ptr<llama_model, decltype(&llama_model_free)> model{nullptr, llama_model_free};
-    std::unique_ptr<llama_sampler, decltype(&llama_sampler_free)> sampler{nullptr, llama_sampler_free};
-    bool greedy = true;
-    std::unique_ptr<llama_context, decltype(&llama_free)> context{nullptr, llama_free};
-    uint32_t position = 0;
-    uint32_t prefix_position = 0;
-    uint32_t limit = 0;
-    uint32_t chunk = 0;
-    uint32_t prefix_limit = 0;
-    uint64_t budget = 0;
-    void check_memory() const {
-        uint64_t used = 0;
-        for (const auto & [type, bytes] : llama_get_memory_breakdown(context.get())) {
-            if (!ggml_backend_buft_is_host(type)) used += bytes.model + bytes.context + bytes.compute;
-        }
-        if (used > budget) throw std::runtime_error("execution exceeded its memory reservation");
-    }
-};
 
 namespace {
 template<class F> int guarded(char * error, size_t capacity, F operation) noexcept {
@@ -83,7 +65,7 @@ void warm(pw_generation * engine) {
     for (const int output : {2, 2, 1}) {
         if (pw_generation_forward(engine, tokens.data(), 1, output, logits.data(), &sampled,
                                   error, sizeof(error)) != 0 ||
-            pw_generation_cache(engine, 0, error, sizeof(error)) != 0)
+            pw_generation_cache(engine, 0, nullptr, error, sizeof(error)) != 0)
             throw std::runtime_error(error);
     }
     llama_sampler_reset(engine->sampler.get());
@@ -135,7 +117,7 @@ extern "C" int pw_generation_load(const char * path, const char * pci, uint32_t 
         auto cp = llama_context_default_params();
         cp.samplers = &sampler_config;
         cp.n_samplers = 1;
-        cp.n_ctx = context + prefix;
+        cp.n_ctx = context;
         cp.n_batch = cp.n_ubatch = chunk;
         cp.n_seq_max = 2;
         cp.n_threads = cp.n_threads_batch = 1;
@@ -163,6 +145,7 @@ extern "C" int pw_generation_forward(pw_generation * engine, const uint32_t * to
             throw std::runtime_error("forward exceeds execution limits");
         for (size_t i = 0; i < count; ++i)
             if (tokens[i] >= 262144) throw std::runtime_error("invalid input token");
+        if (engine->position == 0) engine->spill_prefix();
         *sampled = UINT32_MAX;
         if (output && engine->greedy != (output == 2)) {
             if (output == 2) {
@@ -202,38 +185,18 @@ extern "C" int pw_generation_forward(pw_generation * engine, const uint32_t * to
     });
 }
 
-extern "C" int pw_generation_cache(pw_generation * engine, int operation,
+extern "C" int pw_generation_cache(pw_generation * engine, int operation, int * restored,
                                     char * error, size_t capacity) {
+    if (restored) *restored = 0;
     return guarded(error, capacity, [&] {
-        auto memory = llama_get_memory(engine->context.get());
         switch (operation) {
-        case 0:
-            if (!llama_memory_seq_rm(memory, 0, -1, -1)) throw std::runtime_error("active cache reset failed");
-            engine->position = 0;
-            break;
-        case 1:
-            if (!engine->position || engine->position > engine->prefix_limit)
-                throw std::runtime_error("prefix exceeds its allocation");
-            if (!llama_memory_seq_rm(memory, 1, -1, -1)) throw std::runtime_error("prefix reset failed");
-            {
-                auto * cache = dynamic_cast<llama_kv_cache_iswa *>(memory);
-                if (!cache) throw std::runtime_error("E4B requires separate global and sliding caches");
-                cache->get_base()->seq_cp(0, 1, -1, -1);
-                // Only live sliding rows may be pinned by the retained prefix.
-                cache->get_swa()->seq_cp(0, 1, std::max(0, static_cast<int>(engine->position) - 512), -1);
-            }
-            engine->prefix_position = engine->position;
-            break;
+        case 0: engine->reset_active(); break;
+        case 1: engine->save_prefix(); break;
         case 2:
-            if (!engine->prefix_position) throw std::runtime_error("missing prefix checkpoint");
-            if (!llama_memory_seq_rm(memory, 0, -1, -1)) throw std::runtime_error("active cache reset failed");
-            llama_memory_seq_cp(memory, 1, 0, -1, -1);
-            engine->position = engine->prefix_position;
+            if (!restored) throw std::runtime_error("missing checkpoint result");
+            *restored = engine->restore_prefix() ? 1 : 0;
             break;
-        case 3:
-            if (!llama_memory_seq_rm(memory, 1, -1, -1)) throw std::runtime_error("prefix reset failed");
-            engine->prefix_position = 0;
-            break;
+        case 3: engine->clear_prefix(); break;
         default: throw std::runtime_error("invalid cache operation");
         }
     });

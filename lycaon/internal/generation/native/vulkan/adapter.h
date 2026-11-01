@@ -17,7 +17,7 @@ int pw_generation_load(const char * model, const char * pci, uint32_t context,
                        char * error, size_t capacity);
 int pw_generation_forward(struct pw_generation *, const uint32_t * tokens, size_t count,
                           int output, float * logits, uint32_t * sampled, char * error, size_t capacity);
-int pw_generation_cache(struct pw_generation *, int operation, char * error, size_t capacity);
+int pw_generation_cache(struct pw_generation *, int operation, int * restored, char * error, size_t capacity);
 void pw_generation_free(struct pw_generation *);
 #ifdef __cplusplus
 }

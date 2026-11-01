@@ -2,6 +2,7 @@ package nativegen
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -91,5 +92,23 @@ func TestUtilityDispatchPreservesConversationCheckpointPolicy(t *testing.T) {
 		if runtime.prepared.measurement.CheckpointTokens != 1 {
 			t.Fatal("dispatch changed the cached native measurement")
 		}
+	}
+}
+
+func TestDispatchValidatesContinuationReuseWithinTheCompletePrompt(t *testing.T) {
+	for _, reused := range []int{-1, 0, 1, 2, 3, 4} {
+		t.Run(strconv.Itoa(reused), func(t *testing.T) {
+			t.Setenv("PW_NATIVEGEN_REUSED_TOKENS", strconv.Itoa(reused))
+			provider, _ := fixtureProvider(t)
+			req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Question"}}, MaxTokens: 2}
+			result, err := provider.Complete(t.Context(), req)
+			if reused < 0 || reused >= 3 {
+				if err == nil {
+					t.Fatalf("accepted invalid reused token count %d", reused)
+				}
+			} else if err != nil || result.Content != "4" || result.Usage.PromptTokens != 3 {
+				t.Fatalf("complete with %d reused tokens: %+v, %v", reused, result, err)
+			}
+		})
 	}
 }
