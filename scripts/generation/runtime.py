@@ -154,6 +154,16 @@ def bench(args):
     for _ in range(args.prompt - 1):
         state = (1664525 * state + 1013904223) & 0xffffffff
         prompt.append(256 + state % (262144 - 256))
+    if args.messages:
+        rendered = destination / "rendered-prompt.json"
+        run(["uv", "run", "--frozen", "--no-sync", "--project", Path(__file__).parent,
+             "python", Path(__file__).with_name("prompt.py"), args.model, args.messages, rendered],
+            env=python_environment())
+        prompt = json.loads(rendered.read_text())["prompt_tokens"]
+        if (not prompt or len(prompt) + args.tokens > 65536 or
+                any(type(token) is not int or not 0 <= token < 262144 for token in prompt)):
+            raise ValueError("rendered prompt exceeds its bounds")
+        shutil.copyfile(args.messages, destination / "messages.json")
     specification = {"prompt_tokens": prompt, "generation_tokens": args.tokens,
                      "trials": args.trials, "ple": args.ple, "prefill_chunk": args.prefill_chunk}
     input_path = destination / "input.json"
@@ -176,7 +186,7 @@ def bench(args):
                 "build_receipt": build_receipt,
                 "orchestrator_sha256": file_digest(Path(__file__)),
                 "python_sources": {name: file_digest(Path(__file__).with_name(name))
-                                   for name in ("mlx_bench.py", "mapped_ple.py", "pyproject.toml", "uv.lock")},
+                                   for name in ("mlx_bench.py", "mapped_ple.py", "prompt.py", "pyproject.toml", "uv.lock")},
                 "artifact_identity": args.artifact_identity, "platform": platform.platform(),
                 "machine": platform.machine(), "ple": args.ple, "input": str(input_path),
                 "load_average_before": os.getloadavg(),
@@ -200,6 +210,7 @@ def main():
     parser.add_argument("--backend", choices=["native", "reference-llama", "reference-mlx", "reference-swift"], default="native")
     parser.add_argument("--refresh-lock", action="store_true")
     parser.add_argument("--model", type=Path)
+    parser.add_argument("--messages", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--artifact-identity")
     parser.add_argument("--precision", type=Path)

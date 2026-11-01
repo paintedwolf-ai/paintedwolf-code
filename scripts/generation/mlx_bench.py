@@ -28,7 +28,12 @@ def measure(model, prompt, generated, chunk_size):
     mx.eval(logits, [c.state for c in cache])
     prefill_step_max = max(prefill_step_max, time.perf_counter() - step)
     prefilling = time.perf_counter() - start
-    token = mx.argmax(logits[:, -1, :], axis=-1)
+    last_logits = logits[:, -1, :]
+    if not mx.all(mx.isfinite(last_logits)).item():
+        raise ValueError("non-finite prefill logits")
+    diagnostic = {"prefill_logits_min": mx.min(last_logits).item(),
+                  "prefill_logits_max": mx.max(last_logits).item()}
+    token = mx.argmax(last_logits, axis=-1)
     mx.eval(token)
     start = time.perf_counter()
     tokens = []
@@ -42,7 +47,7 @@ def measure(model, prompt, generated, chunk_size):
         decode_step_max = max(decode_step_max, time.perf_counter() - step)
     decoding = time.perf_counter() - start
     usage_after = resource.getrusage(resource.RUSAGE_SELF)
-    return {"prefill_step_max_seconds": prefill_step_max, "decode_step_max_seconds": decode_step_max,
+    return {**diagnostic, "prefill_step_max_seconds": prefill_step_max, "decode_step_max_seconds": decode_step_max,
             "prefill_seconds": prefilling, "decode_seconds": decoding,
             "prompt_tps": len(prompt) / prefilling, "generation_tps": generated / decoding,
             "peak_mlx_bytes": mx.get_peak_memory(), "live_mlx_bytes": mx.get_active_memory(),
