@@ -2,6 +2,8 @@ package bialy
 
 import (
 	"context"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/inference"
 )
 
@@ -13,9 +15,11 @@ func (p *process) acquireDevice(ctx context.Context) (*inference.Permit, error) 
 	defer cancel()
 	stop := context.AfterFunc(p.lifetime, cancel)
 	defer stop()
+	started := time.Now()
 	permit, err := p.device.Acquire(waiting, inference.Work{
 		Owner: "bialy", Generation: p.generation, Priority: inference.Decision,
 	})
+	log.Debug("decision device admission", "wait_ms", time.Since(started).Milliseconds(), "admitted", err == nil)
 	if err != nil && p.lifetime.Err() != nil {
 		return nil, errEngineExited
 	}
