@@ -34,7 +34,7 @@ copy:
     {% else %}{% if paintedwolf.terminal_capture %}A captured call runs one executable with literal arguments. Its result supplies `exit_code`; shell sequences are
     not part of this capture.
 
-    {% else %}{% if paintedwolf.use_env_param %}This tool accepts literal environment values in its `env` object; supply the executable as the command.
+    {% else %}{% if paintedwolf.use_env_param %}This tool accepts literal environment values in its `env` object; supply the executable in its `command` argument.
 
     {% else %}{% if paintedwolf.use_pipeline_array %}This tool accepts a `pipeline` array for its stages; follow its declared argument schema.
 
