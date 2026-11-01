@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 
 VERSION = "1.4.335.0"
+CACHE_NAME = "vulkan-tools-" + VERSION + "-cmake"
 SHA256 = "ccab8047f33ef848e3928c7fdd19987b35da3085ad20178f473acc230fa3c5f2"
 URL = f"https://sdk.lunarg.com/sdk/download/{VERSION}/linux/vulkan_sdk.tar.xz"
 
@@ -23,7 +24,8 @@ def unpack(archive, destination):
             if len(name.parts) < 4 or name.parts[:2] != (VERSION, "x86_64"):
                 continue
             relative = Path(*name.parts[2:])
-            selected = str(relative) == "bin/glslc" or name.parts[2] == "include"
+            selected = (str(relative) == "bin/glslc" or name.parts[2] == "include"
+                        or relative.parts[:2] in {("share", "cmake"), ("lib", "cmake")})
             if not selected or member.isdir():
                 continue
             if not member.isfile():
@@ -42,7 +44,7 @@ def unpack(archive, destination):
 
 def prepare(cache):
     cache.mkdir(parents=True, exist_ok=True)
-    destination = cache / ("vulkan-tools-" + VERSION)
+    destination = cache / CACHE_NAME
     with (cache / ("vulkan-tools-" + VERSION + ".lock")).open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         identity = destination / ".sha256"

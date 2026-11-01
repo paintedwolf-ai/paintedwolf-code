@@ -120,11 +120,11 @@ def build(args):
         if sys.platform == "darwin":
             options += ["-DGGML_METAL=ON", "-DGGML_METAL_EMBED_LIBRARY=ON"]
         elif sys.platform == "linux":
-            sdk = bin_dir(ROOT) / ("vulkan-tools-" + vulkan_tools.VERSION)
+            sdk = bin_dir(ROOT) / vulkan_tools.CACHE_NAME
             if not (sdk / "bin/glslc").is_file():
                 raise ValueError("prepare the Linux Vulkan tools before building")
             options += ["-DGGML_VULKAN=ON", "-DVulkan_GLSLC_EXECUTABLE=" + str(sdk / "bin/glslc"),
-                        "-DVulkan_INCLUDE_DIR=" + str(sdk / "include")]
+                        "-DVulkan_INCLUDE_DIR=" + str(sdk / "include"), "-DCMAKE_PREFIX_PATH=" + str(sdk)]
         else:
             raise ValueError("generation requires macOS or Linux")
         run(["cmake", "-S", Path(__file__).parent / "llama-reference", "-B", output,
