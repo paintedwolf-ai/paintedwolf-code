@@ -4,6 +4,9 @@ use crate::error::{Error, Result};
 use crate::protocol::StopReason;
 use crate::sampler::Rng;
 
+mod cache;
+pub mod preparation;
+
 pub struct Sampling {
     pub temperature: f32,
     pub top_p: f32,
@@ -98,6 +101,7 @@ pub struct Executor<B> {
     prefix: Vec<u32>,
     evaluated: Vec<u32>,
     active: Option<Generation>,
+    preparing: Option<preparation::Preparation>,
     last_request: u64,
 }
 
@@ -119,6 +123,7 @@ impl<B: Backend> Executor<B> {
             prefix: Vec::new(),
             evaluated: Vec::new(),
             active: None,
+            preparing: None,
             last_request: 0,
         })
     }
@@ -128,7 +133,7 @@ impl<B: Backend> Executor<B> {
         request: Begin,
         constraint: Option<llguidance::Matcher>,
     ) -> Result<usize> {
-        if self.active.is_some() {
+        if self.active.is_some() || self.preparing.is_some() {
             return Err(Error::Protocol("a request is active".into()));
         }
         if request.request_id <= self.last_request
@@ -154,28 +159,7 @@ impl<B: Backend> Executor<B> {
         {
             return Err(Error::Protocol("invalid generation request".into()));
         }
-        let matching = !self.prefix.is_empty()
-            && self.prefix.len() < request.prompt_tokens.len()
-            && request.prompt_tokens.starts_with(&self.prefix)
-            && request.checkpoint_tokens == self.prefix.len();
-        let continuation = !self.evaluated.is_empty()
-            && self.evaluated.len() < request.prompt_tokens.len()
-            && request.prompt_tokens.starts_with(&self.evaluated);
-        if !continuation {
-            self.evaluated.clear();
-        }
-        let reused = if continuation {
-            self.evaluated.len()
-        } else if matching && self.backend.restore_prefix()? {
-            self.evaluated.clone_from(&self.prefix);
-            self.prefix.len()
-        } else {
-            if matching {
-                self.prefix.clear();
-            }
-            self.backend.reset()?;
-            0
-        };
+        let reused = self.resume_prefix(&request.prompt_tokens, false)?;
         self.last_request = request.request_id;
         let sampling = Sampling {
             temperature: request.temperature,
@@ -314,7 +298,7 @@ impl<B: Backend> Executor<B> {
     }
 
     pub fn clear_prefix(&mut self) -> Result<()> {
-        if self.active.is_some() {
+        if self.active.is_some() || self.preparing.is_some() {
             return Err(Error::Protocol("a request is active".into()));
         }
         self.evaluated.clear();
