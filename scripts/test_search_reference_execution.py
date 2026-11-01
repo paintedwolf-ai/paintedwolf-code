@@ -141,6 +141,13 @@ class SearchReferenceInputsTest(unittest.TestCase):
 
 
 class VerificationPythonInputsTest(unittest.TestCase):
+    def test_discovery_and_coverage_share_one_suite_declaration(self):
+        suite = {"start": "scripts/fixture", "pattern": "contract_*.py"}
+        with mock.patch.object(runner_tests.coverage_policy, "python_suites", return_value={"test:runner": suite}):
+            arguments = runner_tests.discovery_arguments(["-k", "chosen"])
+        self.assertEqual(arguments, ["unittest", "discover", "-s", str(runner_tests.SCRIPTS / "fixture"),
+                                     "-p", "contract_*.py", "-k", "chosen"])
+
     def test_discovery_loads_pinned_yaml_and_preserves_selection(self):
         with mock.patch.object(runner_tests.python_tools, "prepared", return_value=Path("/fixture/packages")), mock.patch.object(runner_tests.unittest, "main") as run, mock.patch.object(runner_tests.sys, "path", []):
             runner_tests.main(["-k", "chosen case"])
