@@ -243,10 +243,19 @@ impl Model {
         let count = ids.len() as i32;
         let indices = Array::from_slice(ids, &[1, count]);
         let mut h = scale(&self.embedding.embedding(&indices)?, 2560_f32.sqrt())?;
-        let projected = scale(&self.projection.forward(&h)?, 1.0 / 2560_f32.sqrt())?
-            .reshape(&[1, count, 42, 256])?;
+        let layers = if matches!(output, Logits::None) {
+            24
+        } else {
+            42
+        };
+        let projected = scale(
+            &self.projection.forward_prefix(&h, layers * 256)?,
+            1.0 / 2560_f32.sqrt(),
+        )?
+        .reshape(&[1, count, layers, 256])?;
         let ple = scale(
-            &norm(&projected, &self.projection_norm)?.add(scale(&self.ple.gather(ids)?, 16.0)?)?,
+            &norm(&projected, &self.projection_norm)?
+                .add(scale(&self.ple.gather(ids, layers as usize)?, 16.0)?)?,
             std::f32::consts::FRAC_1_SQRT_2,
         )?;
         let old = cache.offset.min(511);

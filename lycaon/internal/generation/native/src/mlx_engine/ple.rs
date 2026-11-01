@@ -4,7 +4,7 @@ use std::path::Path;
 
 use half::f16;
 use memmap2::{Mmap, MmapOptions};
-use mlx_rs::{Array, ops};
+use mlx_rs::{ops, Array};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -79,20 +79,25 @@ impl MappedPLE {
         })
     }
 
-    pub fn gather(&self, ids: &[i32]) -> Result<Array> {
-        if ids.is_empty() || ids.len() > 256 || ids.iter().any(|id| !(0..262144).contains(id)) {
+    pub fn gather(&self, ids: &[i32], layers: usize) -> Result<Array> {
+        if ids.is_empty()
+            || ids.len() > 256
+            || ids.iter().any(|id| !(0..262144).contains(id))
+            || !(1..=42).contains(&layers)
+        {
             return Err("PLE row gather exceeds its bounds".into());
         }
         let mut arrays = Vec::new();
         for (index, tensor) in self.tensors.iter().enumerate() {
             let width = tensor.shape[1];
             let stride = width * if index == 0 { 4 } else { 2 };
-            let mut bytes = Vec::with_capacity(ids.len() * stride);
+            let selected = stride / 42 * layers;
+            let mut bytes = Vec::with_capacity(ids.len() * selected);
             for &id in ids {
                 let begin = self.start + tensor.data_offsets[0] + id as usize * stride;
-                bytes.extend_from_slice(&self.mapped[begin..begin + stride]);
+                bytes.extend_from_slice(&self.mapped[begin..begin + selected]);
             }
-            let shape = [ids.len() as i32, width as i32];
+            let shape = [ids.len() as i32, (width / 42 * layers) as i32];
             arrays.push(if index == 0 {
                 Array::from_slice(
                     &bytes
@@ -115,7 +120,7 @@ impl MappedPLE {
             ops::dequantize(&arrays[0], &arrays[1], &arrays[2], 64, self.bits)?.reshape(&[
                 1,
                 ids.len() as i32,
-                42,
+                layers as i32,
                 256,
             ])?,
         )
@@ -186,7 +191,7 @@ mod tests {
         let fixture = fixture(false);
         let ple = MappedPLE::open(&fixture.0, 4).unwrap();
         let output = ple
-            .gather(&[7, 0, 7])
+            .gather(&[7, 0, 7], 42)
             .unwrap()
             .as_dtype(mlx_rs::Dtype::Float32)
             .unwrap();
@@ -196,8 +201,26 @@ mod tests {
         assert!(values[..10752].iter().all(|v| *v == 2.0));
         assert!(values[10752..21504].iter().all(|v| *v == 0.0));
         assert!(values[21504..].iter().all(|v| *v == 2.0));
+        for layers in [1, 24, 42] {
+            let selected = ple
+                .gather(&[7, 0, 7], layers)
+                .unwrap()
+                .as_dtype(mlx_rs::Dtype::Float32)
+                .unwrap();
+            selected.eval().unwrap();
+            assert_eq!(selected.nbytes(), 3 * layers * 256 * 4);
+            for (row, value) in [2.0, 0.0, 2.0].iter().enumerate() {
+                assert!(
+                    selected.as_slice::<f32>()[row * layers * 256..(row + 1) * layers * 256]
+                        .iter()
+                        .all(|v| v == value)
+                );
+            }
+        }
+        assert!(ple.gather(&[7], 0).is_err());
+        assert!(ple.gather(&[7], 43).is_err());
         for ids in [vec![], vec![-1], vec![262144], vec![0; 257]] {
-            assert!(ple.gather(&ids).is_err());
+            assert!(ple.gather(&ids, 42).is_err());
         }
     }
 

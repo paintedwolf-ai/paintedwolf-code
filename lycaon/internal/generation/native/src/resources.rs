@@ -34,7 +34,12 @@ impl Plan {
         let prefix = prefix.div_ceil(256) * 256;
         // Four global and twenty sliding KV sources; keys and values use F16.
         let global = (context + prefix) * 4 * 2 * 2 * 512 * 2;
-        let sliding = 2 * (512 + chunk as u64) * 20 * 2 * 2 * 256 * 2;
+        let sliding_tokens = if unified {
+            2 * (512 + chunk as u64)
+        } else {
+            (1024 + chunk as u64).div_ceil(256) * 256
+        };
+        let sliding = sliding_tokens * 20 * 2 * 2 * 256 * 2;
         let kv_capacity_bytes = global + sliding;
         // MLX can overlap old and replacement global buffers during growth.
         let growth = if unified {
@@ -75,19 +80,30 @@ mod tests {
         assert_eq!(small.workspace_bytes, 512 << 20);
         assert_eq!(large.workspace_bytes, 896 << 20);
         assert_eq!(small.host_reservation_bytes, 512 << 20);
-        assert!(small.device_reservation_bytes + small.host_reservation_bytes + (2 << 30) < 6 << 30);
+        assert!(
+            small.device_reservation_bytes + small.host_reservation_bytes + (2 << 30) < 6 << 30
+        );
         let tiny = Plan::e4b(2787934208, 2290089984, 8192, 1, true).unwrap();
         assert_eq!(tiny.workspace_bytes, small.workspace_bytes);
+    }
+
+    #[test]
+    fn vulkan_sliding_capacity_includes_padded_active_and_retained_windows() {
+        let global = (8192 + 4096) * 4 * 2 * 2 * 512 * 2;
+        for chunk in [1, 16, 128, 256] {
+            let plan = Plan::e4b(3 << 30, 2 << 30, 8192, chunk, false).unwrap();
+            assert_eq!(plan.kv_capacity_bytes - global, 1280 * 20 * 2 * 2 * 256 * 2);
+        }
     }
 
     #[test]
     fn accounts_for_prefix_and_growth_without_charging_the_entire_mapping() {
         let linux = Plan::e4b(3 << 30, 2 << 30, 65536, 256, false).unwrap();
         let mac = Plan::e4b(3 << 30, 2 << 30, 65536, 256, true).unwrap();
-        assert_eq!(mac.kv_capacity_bytes, linux.kv_capacity_bytes);
+        assert_eq!(mac.kv_capacity_bytes - linux.kv_capacity_bytes, 10 << 20);
         assert_eq!(
             mac.device_reservation_bytes - linux.device_reservation_bytes,
-            (1 << 30) + (128 << 20)
+            (1 << 30) + (128 << 20) + (10 << 20)
         );
         assert!(linux.host_reservation_bytes < linux.mapped_ple_bytes);
         assert!(linux.device_reservation_bytes < 5 << 30);
