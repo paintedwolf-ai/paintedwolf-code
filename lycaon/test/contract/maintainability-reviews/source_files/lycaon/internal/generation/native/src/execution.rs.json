@@ -4,10 +4,10 @@
   "kind": "runtime_service",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "The executor keeps request identity, prefill/decode transitions, exact checkpoint retention and cancellation in one state machine. Retain the measured 302-line unit. Separate transition fixtures cover full admitted prefixes, exact misses, failed advances, stale requests, cancellation and preservation across unretained requests; all passed on the Mac native build. Splitting transitions would obscure the shared backend/cache lifetime.",
-  "reviewed_commit": "dbbe72f7cf50ab131e70a13ff0822d1bdb12f99c",
-  "ceiling": 302,
+  "reason": "Retain the 304-line executor as one request state machine: identity, bounded prefill/decode, prefix reuse and cancellation share backend lifetime. An unavailable checkpoint now restarts complete prefill without reporting reused tokens. Focused transition fixtures cover that fallback, full admitted prefixes, exact misses, failed advances, stale requests, cancellation and unretained interleaving; all passed in the 55-test Mac native suite. Separating these transitions would obscure their shared state.",
+  "reviewed_commit": "f7b64b36a42501f006c440298b2fc2c8a49ea033",
+  "ceiling": 304,
   "boundaries": {
-    "lycaon/internal/generation/native/src/execution_tests.rs": "5223019bcabb11594b667a5d8e599d1b8a180074dded6557cfe6f519bc765ee6"
+    "lycaon/internal/generation/native/src/execution_tests.rs": "00665e412bd7f85826324122d1daddd33f759281f911c16ab7d86200cceb86a5"
   }
 }
