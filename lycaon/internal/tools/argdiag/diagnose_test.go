@@ -325,3 +325,30 @@ func TestDiagnoseSuggestsNestedCapabilityPropertyForNearMissesAndSynonyms(t *tes
 		})
 	}
 }
+
+func TestRelocationPreservesSchemaAcceptedValues(t *testing.T) {
+	for _, value := range []any{true, false, []any{"udp://example.test:123"}, map[string]any{}} {
+		encoded, _ := json.Marshal(value)
+		t.Run(string(encoded), func(t *testing.T) {
+			union := map[string]any{"oneOf": []any{
+				map[string]any{"type": "boolean"},
+				map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				map[string]any{"type": "object", "additionalProperties": false},
+			}}
+			schema := map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
+				"access": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"network": union}},
+			}}
+			args := map[string]any{"network": value}
+			data := rejectArgs(t, schema, args)
+			replacement, ok := data["replacement_args"].(map[string]any)
+			if !ok {
+				t.Fatalf("missing validated replacement: %#v", data)
+			}
+			got, _ := json.Marshal(replacement["access"].(map[string]any)["network"])
+			original, _ := json.Marshal(args["network"])
+			if string(got) != string(encoded) || string(original) != string(encoded) {
+				t.Fatalf("relocation changed the value: got %s, input %s, want %s", got, original, encoded)
+			}
+		})
+	}
+}
