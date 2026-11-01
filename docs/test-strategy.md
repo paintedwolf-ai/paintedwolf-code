@@ -1263,6 +1263,16 @@ valid verification is a failure, not an improvement.
    required aggregate verdict over the complete inventory; unknown or changed
    inputs rerun, and absent receipts never qualify. An earlier green head or
    compiler cache hit cannot substitute for landing qualification.
+7. Generate platform test selections from the canonical verification plan and
+   declared test-group inventories. Preserve explicit architecture/resource
+   requirements and the no-empty, dead-name and complete-inventory contracts.
+   A renamed or added supervisor test should enter its declared platform scope
+   without a second hand-maintained shell regex drifting behind it.
+8. Compare collecting independent cheap preflight failures in one attempt with
+   stopping that preflight at its first failed package. Measure extra preflight
+   work against repeated setup and verification after serial repairs. Expensive
+   phases still require a clean preflight; preserve protected-queue fail-fast
+   behavior and do not turn diagnostic aggregation into assertion retries.
 
 Failure-frontier rotation improves time to a known failure while still running
 all required work on a successful candidate. Importer deduplication removes
