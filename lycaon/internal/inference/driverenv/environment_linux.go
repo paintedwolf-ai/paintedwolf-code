@@ -33,7 +33,7 @@ func Prepare(root string) ([]string, func(), error) {
 	}
 	file, err := os.Open("/sys/module/nvidia/version")
 	if os.IsNotExist(err) {
-		return environment(*config, nil)
+		return environment(*config, nil, "")
 	}
 	if err != nil {
 		return nil, noop, err
@@ -51,7 +51,11 @@ func Prepare(root string) ([]string, func(), error) {
 	if err != nil {
 		return nil, noop, err
 	}
-	return environment(*config, libraries)
+	apiVersion, err := nvidiaAPIVersion("/", 0)
+	if err != nil {
+		return nil, noop, err
+	}
+	return environment(*config, libraries, apiVersion)
 }
 
 func loadedVersion(raw []byte) (string, error) {
@@ -109,6 +113,28 @@ func nvidiaLibraries(version, root string, uid uint32) ([]string, error) {
 }
 
 func trustedLibrary(path, root string, uid uint32) error {
+	if strings.ContainsAny(path, ": \t\n\r") {
+		return fmt.Errorf("NVIDIA library path cannot be represented in the loader environment")
+	}
+	if err := systemOwnedFile(path, root, uid); err != nil {
+		return err
+	}
+	library, err := elf.Open(path)
+	if err != nil {
+		return err
+	}
+	defer library.Close()
+	machine := elf.EM_X86_64
+	if runtime.GOARCH == "arm64" {
+		machine = elf.EM_AARCH64
+	}
+	if library.Class != elf.ELFCLASS64 || library.Machine != machine || library.Type != elf.ET_DYN {
+		return fmt.Errorf("NVIDIA library has an incompatible ELF architecture")
+	}
+	return nil
+}
+
+func systemOwnedFile(path, root string, uid uint32) error {
 	relative, err := filepath.Rel(root, path)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("NVIDIA library escapes its system root")
@@ -126,18 +152,6 @@ func trustedLibrary(path, root string, uid uint32) error {
 		if current == root {
 			break
 		}
-	}
-	library, err := elf.Open(path)
-	if err != nil {
-		return err
-	}
-	defer library.Close()
-	machine := elf.EM_X86_64
-	if runtime.GOARCH == "arm64" {
-		machine = elf.EM_AARCH64
-	}
-	if library.Class != elf.ELFCLASS64 || library.Machine != machine || library.Type != elf.ET_DYN {
-		return fmt.Errorf("NVIDIA library has an incompatible ELF architecture")
 	}
 	return nil
 }
