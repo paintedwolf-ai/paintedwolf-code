@@ -22,3 +22,11 @@ it("reports partial effects without calling unknown effects completed", () => {
  expect(commandActivityFacts(view,rows)).toContainEqual({label:"Effects",value:"Partial effects; unknown outcome"});
  expect(commandActivityFacts(view,[]).some(fact=>fact.label==="Effects")).toBe(false);
 });
+
+it("keeps whole-activity outcomes when the selected receipt page has no failures", () => {
+ const summary={...view,fact:{...view.fact,execution_count:10705,failed_count:1,uncertain_effects:2,completed_effects:1}};
+ const facts=commandActivityFacts(summary,[]);
+ expect(facts).toContainEqual({label:"Executions",value:"10,705"});
+ expect(facts).toContainEqual({label:"Reported failures",value:"1"});
+ expect(facts).toContainEqual({label:"Effects",value:"Partial effects; unknown outcome"});
+});

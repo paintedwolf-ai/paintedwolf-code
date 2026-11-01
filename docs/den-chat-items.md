@@ -116,25 +116,30 @@ A large set of file folds may receive a manifest group. That is presentation ove
 
 ## Command activities
 
-Command activities describe executed work rather than model-call boundaries. A
-command may contribute several activities; adjacent reads may share an activity only when the host supplies the same
-reviewed target and execution scope identity. Each captured revision remains
-separate evidence within that activity.
-The command program, dynamic executions and transcript calls retain their own
-identities beneath that presentation.
+Command activities describe structural operations over the host execution ledger.
+A parser node, operation identity and execution scope identify repeated work;
+its first execution anchors the activity. Background launches retain individual
+job identities. Supporting stream operations follow recorded execution ancestry.
+A later producer can expose its activity without first mounting provisional
+rows for consumers that happened to start earlier.
 
-The host composes bounded receipt pages from operation definitions, screened
-expanded inputs, parser spans and execution parentage. Context operations and
-stream processing remain attached to the work they support. External programs
-remain processes: their names and output never establish a verification verdict.
-Refusals, approvals, mutations and uncertain effects retain individual outcomes.
-Activity starts publish as soon as their durable host facts are available; the UI
-does not hold work to predict later calls. Identities also travel with the command
-result. Loading detailed receipts never changes row membership. Existing rows
-never merge, reorder or change their labels. Related work stays in the same group; its title may follow the active work without creating another
-group. An incoming observation may join a compatible established row when it
-arrives. Status, outcomes and counts update in place.
-Missing inputs or receipts use a neutral operation presentation.
+The host computes counts over the whole program before execution pagination.
+Only representative screened inputs are decoded, so thousands of repetitions
+produce counts and a bounded set of structural steps rather than thousands of
+activity rows. Activity-specific cursors page every member execution without
+changing membership, labels or row keys. Mutations, refusals, approvals and
+uncertain effects remain inspectable. The primary outcome, supporting failures
+and enclosing program outcome are distinct facts; exit zero never proves an
+external program's purpose succeeded.
+
+Den fixes each row's key, label, subject and initial position when it appears.
+Repetitions update counts and outcomes in place. Group titles retain their first
+activity's description. Decision-engine receipts belong in host-decision details,
+not in the count of actions performed. Expanded details show whole-activity
+results, structural steps, paged execution records, output and exact input.
+Receipt-page changes do not redefine the activity's result. Retained transcripts
+resolve host activity summaries before mounting rows when their stored snapshot
+has no structural steps. Failed detail reads preserve the recorded command.
 
 Den keeps the existing group, single-line activity and expanded-detail structure.
 Activity grouping does not add a disclosure level.
