@@ -8,6 +8,7 @@ fn preparation_is_chunked_without_sampling_and_reusable_by_generation() {
     assert_eq!(
         runner
             .prepare(Prepare {
+                checkpoint_tokens: 0,
                 request_id: 1,
                 prompt_tokens: tokens.clone()
             })
@@ -42,6 +43,7 @@ fn cancellation_preserves_the_previous_completed_checkpoint() {
     runner.cancel(1).unwrap();
     runner
         .prepare(Prepare {
+            checkpoint_tokens: 0,
             request_id: 2,
             prompt_tokens: vec![2, 30, 31, 32],
         })
@@ -62,6 +64,7 @@ fn identical_preparation_performs_no_forward_work() {
     for id in 1..=2 {
         let reused = runner
             .prepare(Prepare {
+                checkpoint_tokens: 0,
                 request_id: id,
                 prompt_tokens: vec![2, 5],
             })
@@ -86,6 +89,7 @@ fn preparation_rejects_invalid_and_overlapping_requests_without_effects() {
         assert!(
             runner
                 .prepare(Prepare {
+                    checkpoint_tokens: 0,
                     request_id: id,
                     prompt_tokens: tokens
                 })
@@ -95,6 +99,7 @@ fn preparation_rejects_invalid_and_overlapping_requests_without_effects() {
     assert!(runner.backend.calls.is_empty());
     runner
         .prepare(Prepare {
+            checkpoint_tokens: 0,
             request_id: 1,
             prompt_tokens: vec![2, 5],
         })
@@ -102,6 +107,7 @@ fn preparation_rejects_invalid_and_overlapping_requests_without_effects() {
     assert!(
         runner
             .prepare(Prepare {
+                checkpoint_tokens: 0,
                 request_id: 2,
                 prompt_tokens: vec![2, 5]
             })
@@ -113,6 +119,7 @@ fn preparation_rejects_invalid_and_overlapping_requests_without_effects() {
     assert!(
         runner
             .prepare(Prepare {
+                checkpoint_tokens: 0,
                 request_id: 1,
                 prompt_tokens: vec![2]
             })
@@ -122,6 +129,7 @@ fn preparation_rejects_invalid_and_overlapping_requests_without_effects() {
     assert!(
         runner
             .prepare(Prepare {
+                checkpoint_tokens: 0,
                 request_id: 3,
                 prompt_tokens: vec![2]
             })
@@ -134,6 +142,7 @@ fn failed_preparation_discards_partial_device_state() {
     let mut runner = executor();
     runner
         .prepare(Prepare {
+            checkpoint_tokens: 0,
             request_id: 1,
             prompt_tokens: vec![2, 5, 6],
         })
@@ -154,6 +163,7 @@ fn unrelated_work_restores_only_an_available_matching_checkpoint() {
         let mut runner = executor();
         runner
             .prepare(Prepare {
+                checkpoint_tokens: 0,
                 request_id: 1,
                 prompt_tokens: vec![2, 5, 6, 7],
             })
@@ -183,6 +193,7 @@ fn prepared_history_keeps_the_standing_checkpoint_for_changed_history() {
     assert_eq!(
         runner
             .prepare(Prepare {
+                checkpoint_tokens: 0,
                 request_id: 2,
                 prompt_tokens: vec![2, 5, 6, 7, 8],
             })
@@ -207,6 +218,7 @@ fn prepared_history_reuses_the_longer_active_state() {
     runner.cancel(1).unwrap();
     runner
         .prepare(Prepare {
+            checkpoint_tokens: 0,
             request_id: 2,
             prompt_tokens: vec![2, 5, 6, 7, 8],
         })
@@ -214,4 +226,45 @@ fn prepared_history_reuses_the_longer_active_state() {
     assert!(runner.advance_preparation(2).unwrap().complete);
     assert_eq!(runner.begin(request(3), None).unwrap(), 5);
     assert_eq!(runner.backend.prefix, [2, 5, 6]);
+}
+
+#[test]
+fn cold_preparation_captures_the_declared_standing_boundary() {
+    let mut runner = executor();
+    runner
+        .prepare(Prepare {
+            request_id: 1,
+            prompt_tokens: vec![2, 5, 6, 7, 8],
+            checkpoint_tokens: 3,
+        })
+        .unwrap();
+    for expected in [2, 3, 5] {
+        assert_eq!(
+            runner
+                .advance_preparation(1)
+                .unwrap()
+                .processed_prompt_tokens,
+            expected
+        );
+    }
+    assert_eq!(runner.backend.calls, [vec![2, 5], vec![6], vec![7, 8]]);
+    assert_eq!(runner.backend.prefix, [2, 5, 6]);
+    let mut changed = request(2);
+    changed.prompt_tokens[3] = 30;
+    assert_eq!(runner.begin(changed, None).unwrap(), 3);
+}
+
+#[test]
+fn preparation_rejects_a_checkpoint_outside_its_prefix() {
+    let mut runner = executor();
+    assert!(
+        runner
+            .prepare(Prepare {
+                request_id: 1,
+                prompt_tokens: vec![2, 5],
+                checkpoint_tokens: 3,
+            })
+            .is_err()
+    );
+    assert!(runner.backend.calls.is_empty());
 }

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 pub struct Prepare {
     pub request_id: u64,
     pub prompt_tokens: Vec<u32>,
+    #[serde(default)]
+    pub checkpoint_tokens: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -30,6 +32,7 @@ impl<B: Backend> Executor<B> {
         }
         if request.request_id <= self.last_request
             || request.prompt_tokens.is_empty()
+            || request.checkpoint_tokens > request.prompt_tokens.len()
             || request.prompt_tokens.len() >= self.context
             || request.prompt_tokens.iter().any(|id| *id >= 262144)
         {
@@ -73,7 +76,11 @@ impl<B: Backend> Executor<B> {
 
     fn prefill(&mut self, preparation: &mut Preparation) -> Result<PreparationProgress> {
         let tokens = &preparation.request.prompt_tokens;
-        let end = (preparation.processed + self.chunk).min(tokens.len());
+        let checkpoint = preparation.request.checkpoint_tokens;
+        let mut end = (preparation.processed + self.chunk).min(tokens.len());
+        if preparation.processed < checkpoint {
+            end = end.min(checkpoint);
+        }
         if preparation.processed < end {
             if self
                 .backend
@@ -85,6 +92,10 @@ impl<B: Backend> Executor<B> {
             self.evaluated
                 .extend_from_slice(&tokens[preparation.processed..end]);
             preparation.processed = end;
+        }
+        if checkpoint > 0 && end == checkpoint && self.prefix != tokens[..checkpoint] {
+            self.backend.save_prefix()?;
+            self.prefix = tokens[..checkpoint].to_vec();
         }
         let complete = end == tokens.len();
         // Keep the shorter checkpoint when history can still change before submission.
