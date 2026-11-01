@@ -8,8 +8,11 @@ func referenceCache(_ model: Gemma4TextModel, bits: Int) throws -> [any KVCache]
 
 func configureReferenceCache(_ caches: [any KVCache], bits: Int) throws -> [any KVCache] {
     guard [8, 16].contains(bits), caches.count == 24,
-          caches.filter({ $0 is RotatingKVCache }).count == 20,
-          caches.filter({ $0 is KVCacheSimple }).count == 4 else {
+          caches.enumerated().allSatisfy({ index, cache in
+              cache.offset == 0 && (index % 6 == 5
+                  ? cache is KVCacheSimple
+                  : cache is RotatingKVCache && cache.maxSize == 512)
+          }) else {
         throw ReferenceFailure("Expected E4B's twenty sliding and four global caches")
     }
     return try caches.map { cache in

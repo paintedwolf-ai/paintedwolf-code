@@ -24,5 +24,11 @@ final class CacheTests: XCTestCase {
     func testUnsupportedCacheLayoutIsRejected() {
         XCTAssertThrowsError(try configureReferenceCache([], bits: 8))
         XCTAssertThrowsError(try configureReferenceCache(caches(), bits: 4))
+        var reordered = caches()
+        reordered.swapAt(0, 5)
+        XCTAssertThrowsError(try configureReferenceCache(reordered, bits: 8))
+        var oversized = caches()
+        oversized[0] = RotatingKVCache(maxSize: 1024)
+        XCTAssertThrowsError(try configureReferenceCache(oversized, bits: 16))
     }
 }
