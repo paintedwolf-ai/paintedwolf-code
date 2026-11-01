@@ -88,3 +88,25 @@ func TestPreparationPassesStandingBoundaryInsideKnownHistory(t *testing.T) {
 		t.Fatalf("prepared tokens = %d, want 2", result.PreparedTokens)
 	}
 }
+
+func TestPreparationRetainsStandingWhenHistoryExceedsContext(t *testing.T) {
+	t.Setenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES", "1")
+	t.Setenv("PW_NATIVEGEN_PREPARATION_STANDING_ONLY", "1")
+	provider, runtime := fixtureProvider(t)
+	testutil.FailErr(t, "warm model", runtime.Warm(t.Context(), DefaultModelID))
+	runtime.window.Store(2)
+	request := modelcall.CompletionRequest{Messages: []api.Message{
+		{Role: api.MessageRoleSystem, Content: "Instructions", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+		{Role: api.MessageRoleUser, Content: "Known history", PromptCacheBreakpoint: api.PromptCacheTierHistory},
+	}}
+	result, err := provider.PrepareContext(t.Context(), request)
+	testutil.FailErr(t, "prepare standing before history fitting", err)
+	if result.PreparedTokens != 1 {
+		t.Fatalf("prepared tokens = %d, want 1", result.PreparedTokens)
+	}
+	runtime.window.Store(1)
+	_, err = provider.PrepareContext(t.Context(), request)
+	if !errors.Is(err, ErrContextCapacityExceeded) {
+		t.Fatalf("oversized standing prefix: %v", err)
+	}
+}

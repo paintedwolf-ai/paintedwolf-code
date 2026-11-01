@@ -70,7 +70,11 @@ func runtimeFixture() {
 			if err != nil || json.Unmarshal(raw, &prefix) != nil {
 				os.Exit(6)
 			}
-			if os.Getenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES") == "1" && (prefix.CheckpointTokens != 1 || len(prefix.PromptTokens) != 2) {
+			expectedKnown := 2
+			if os.Getenv("PW_NATIVEGEN_PREPARATION_STANDING_ONLY") == "1" {
+				expectedKnown = 1
+			}
+			if os.Getenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES") == "1" && (prefix.CheckpointTokens != 1 || len(prefix.PromptTokens) != expectedKnown) {
 				os.Exit(7)
 			}
 			prefixProcessed = 0
