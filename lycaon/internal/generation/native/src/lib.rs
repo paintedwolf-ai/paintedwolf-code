@@ -8,6 +8,7 @@ pub mod protocol;
 pub mod sampler;
 pub mod service;
 pub mod rendering;
+pub mod execution;
 
 pub use cache::Cache;
 pub use decoder::Decoder;

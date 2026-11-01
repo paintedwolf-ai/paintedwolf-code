@@ -1,11 +1,13 @@
 use super::Result;
 use mlx_rs::{Array, Dtype, ops, ops::indexing::*};
 
+#[derive(Clone)]
 pub struct KV {
     pub keys: Array,
     pub values: Array,
 }
 
+#[derive(Clone)]
 pub struct Cache {
     pub offset: i32,
     layers: Vec<Option<KV>>,
@@ -124,6 +126,46 @@ impl Cache {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retained_prefix_is_unchanged_by_active_cache_extension() {
+        let mut active = Cache::default();
+        let keys = Array::ones::<f32>(&[1, 2, 3, 512])
+            .unwrap()
+            .as_dtype(Dtype::Float16)
+            .unwrap();
+        active.update(5, keys.clone(), keys).unwrap();
+        active.offset = 3;
+        active.evaluate().unwrap();
+        let prefix = active.clone();
+        let next = Array::ones::<f32>(&[1, 2, 2, 512])
+            .unwrap()
+            .multiply(Array::from_f32(2.0))
+            .unwrap()
+            .as_dtype(Dtype::Float16)
+            .unwrap();
+        active.update(5, next.clone(), next).unwrap();
+        active.offset = 5;
+        active.evaluate().unwrap();
+        let old = prefix.layers[5]
+            .as_ref()
+            .unwrap()
+            .keys
+            .index((.., .., 3..5, ..))
+            .as_dtype(Dtype::Float32)
+            .unwrap();
+        let new = active.layers[5]
+            .as_ref()
+            .unwrap()
+            .keys
+            .index((.., .., 3..5, ..))
+            .as_dtype(Dtype::Float32)
+            .unwrap();
+        mlx_rs::transforms::eval([&old, &new]).unwrap();
+        assert!(old.as_slice::<f32>().iter().all(|v| *v == 0.0));
+        assert!(new.as_slice::<f32>().iter().all(|v| *v == 2.0));
+        assert_eq!(prefix.offset, 3);
+    }
 
     #[test]
     fn rejects_precision_drift_and_malformed_cache_shapes() {

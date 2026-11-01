@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::path::Path;
 
 mod activation;
+pub mod backend;
 mod cache;
 mod config;
 mod ple;
