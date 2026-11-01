@@ -104,7 +104,7 @@ func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json
 	if err := child.call(ctx, command{Method: "begin", Request: request}, "begun", inference.Foreground, true, &begun); err != nil {
 		return nil, err
 	}
-	if begun.RequestID != request.RequestID || begun.ReusedPrefixTokens != 0 && begun.ReusedPrefixTokens != rendered.CheckpointTokens {
+	if begun.RequestID != request.RequestID || begun.ReusedPrefixTokens < 0 || begun.ReusedPrefixTokens >= len(rendered.PromptTokens) {
 		child.close()
 		return nil, errors.New("native generation: invalid prefix acknowledgement")
 	}
