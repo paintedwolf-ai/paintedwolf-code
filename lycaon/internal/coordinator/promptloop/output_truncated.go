@@ -44,6 +44,63 @@ func (l *modelTurn) modelEntryForTurn(ctx context.Context, providerID, model str
 	return modelinfo.Entry{}
 }
 
+func emptyOrTruncatedCompletionError(
+	ctx context.Context,
+	l *modelTurn,
+	req modelcall.CompletionRequest,
+	providerID, model string,
+	completion *modelcall.Completion,
+) error {
+	finishReason := ""
+	var usage modelcall.TokenUsage
+	var calls []api.ToolCall
+	if completion != nil {
+		finishReason = completion.FinishReason
+		usage = completion.Usage
+		calls = completion.ToolCalls
+	}
+	return modelcall.EmptyOrTruncatedOutputError(providerID, model, finishReason, false, finishReason != "", usage, req.MaxTokens, l.modelEntryForTurn(ctx, providerID, model), calls)
+}
+
+func handleStreamCollectError(
+	ctx context.Context,
+	l *modelTurn,
+	req modelcall.CompletionRequest,
+	collected promptStreamCollection,
+	collectErr error,
+	recoverUnparsed func() (*modelcall.Completion, error),
+	callFailed func(),
+) (*modelcall.Completion, error) {
+	var truncated *failure.ProviderOutputTruncatedError
+	if errors.As(collectErr, &truncated) {
+		return collected.completion, modelcall.EnrichOutputTruncatedError(truncated, req, l.modelEntryForTurn(ctx, collected.providerID, collected.model), collected.completion)
+	}
+	recovered, err := recoverUnparsed()
+	if err == nil {
+		callFailed()
+	}
+	return recovered, err
+}
+
+func truncatedCompletionFault(
+	ctx context.Context,
+	l *modelTurn,
+	sess *api.Session,
+	llmCallID string,
+	req modelcall.CompletionRequest,
+	providerID, model string,
+	completion *modelcall.Completion,
+) error {
+	if completion == nil || !failure.IsOutputLimitFinishReason(completion.FinishReason) {
+		return nil
+	}
+	if modelcall.CompletionHasUsablePayload(completion) && !modelcall.HasTruncatedToolCall(completion.ToolCalls) {
+		return nil
+	}
+	l.recordAbandonedTurnUsage(ctx, sess, llmCallID, providerID, model, req, completion)
+	return modelcall.NewOutputTruncatedError(providerID, model, completion.FinishReason, completion.Usage, req.MaxTokens, l.modelEntryForTurn(ctx, providerID, model), completion.ToolCalls)
+}
+
 func (l *turnNudges) handleStreamTurnError(
 	ctx context.Context,
 	sess *api.Session,
