@@ -111,27 +111,9 @@ export function WorkerTranscriptList(props: WorkerTranscriptListProps) {
                 data-seam={props.seamForItem(item().key)}
               >
                 <TranscriptItemRow
+                  {...props}
                   item={item}
-                  taskMatches={props.taskMatches}
-                  workers={props.workers}
-                  messages={props.messages}
-                  messageById={props.messageById}
-                  reviewTurns={props.reviewTurns}
-                  workerTranscripts={props.workerTranscripts}
-                  onOpenWorker={props.onOpenWorker}
                   layout="worker"
-                  sessionId={props.sessionId}
-                  checkpointClient={props.checkpointClient}
-                  checkpointAppStore={props.checkpointAppStore}
-                  projectId={props.projectId}
-                  rootRefs={props.rootRefs}
-                  branchJobId={props.branchJobId}
-                  projectDir={props.projectDir}
-                  exploreContext={props.exploreContext}
-                  onExploreInSearch={props.onExploreInSearch}
-                  activePendingPhaseId={props.activePendingPhaseId}
-                  visibleTurnActive={props.visibleTurnActive}
-                  recovery={props.recovery}
                 />
               </div>
             )}
