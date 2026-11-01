@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
