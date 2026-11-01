@@ -30,7 +30,7 @@ type OutputTruncatedOutcome struct {
 
 // Result identifies the assistant message a prompt turn produced.
 type Result struct {
-	MessageID string  `json:"message_id,omitempty"`
+	MessageID string
 	Outcome   Outcome `json:"outcome,omitempty"`
 	// OutputTruncated describes the output-limit termination when Outcome is
 	// OutcomeOutputTruncated.
