@@ -3,6 +3,7 @@ package nativegen
 import (
 	"context"
 	"errors"
+
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 )
@@ -24,6 +25,7 @@ var ErrContextCapacityExceeded = errors.New("native generation: request exceeds 
 // DefaultModelEntry returns the catalog descriptor for the bundled Gemma 4 E4B model.
 func DefaultModelEntry() modelinfo.Entry {
 	return modelinfo.Entry{
+		Thinking:      &modelinfo.ThinkingCapabilities{State: "unsupported", Source: "nativegen"},
 		ID:            DefaultModelID,
 		ContextLength: DefaultContextWindowTokens,
 		MaxTokens:     MaxOutputReserveTokens,
@@ -35,6 +37,7 @@ func DefaultModelEntry() modelinfo.Entry {
 			StructuredOutput: modelinfo.Evidence(modelinfo.CapabilitySupported, "nativegen"),
 			PromptCaching:    modelinfo.Evidence(modelinfo.CapabilitySupported, "nativegen"),
 			Vision:           modelinfo.Evidence(modelinfo.CapabilityUnsupported, "nativegen"),
+			Reasoning:        modelinfo.Evidence(modelinfo.CapabilityUnsupported, "nativegen"),
 		},
 	}
 }

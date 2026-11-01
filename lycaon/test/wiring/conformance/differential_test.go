@@ -67,11 +67,8 @@ func TestCatalogCoverageInConformanceCorpus(t *testing.T) {
 			}
 		}
 	}
-	if len(missingCommands) > 0 {
-		t.Fatalf("conformance corpus is missing %d catalog commands/aliases: %v", len(missingCommands), missingCommands)
-	}
-	if len(missingForms) > 0 {
-		t.Fatalf("conformance corpus is missing %d catalog option forms: %v", len(missingForms), missingForms)
+	if len(missingCommands) > 0 || len(missingForms) > 0 {
+		t.Fatalf("conformance corpus missing commands=%v; forms=%v", missingCommands, missingForms)
 	}
 }
 
@@ -109,6 +106,6 @@ func assertMatchesReference(t *testing.T, c commandconformance.Case, obs runtime
 		t.Fatalf("case %s did not complete: state=%s stdout=%q stderr=%q", c.ID, obs.Outcome.State, obs.Outcome.Stdout, obs.Outcome.Stderr)
 	}
 	if matched, diffs := commandconformance.Match(obs.streams(), refs); matched == "" {
-		t.Fatalf("case %s matches none of %v; receipts=%v%s", c.ID, slices.Sorted(slices.Values(c.References)), obs.ChildReceipts, commandconformance.FormatDiffs(diffs))
+		t.Fatalf("case %s matches none of %v; receipts=%v stdout=%q stderr=%q%s", c.ID, slices.Sorted(slices.Values(c.References)), obs.ChildReceipts, obs.Outcome.Stdout, obs.Outcome.Stderr, commandconformance.FormatDiffs(diffs))
 	}
 }

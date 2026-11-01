@@ -19,6 +19,8 @@ func TestBundledOCRConfusionCatalogValidation(t *testing.T) {
 		{'0', 'O'},
 		{'1', 'I'},
 		{'1', 'l'},
+		{'1', '|'},
+		{'1', '!'},
 		{'I', 'l'},
 		{'5', 'S'},
 		{'7', '/'},

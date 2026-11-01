@@ -160,11 +160,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	}
 	r.jobs.mu.Lock()
 	proc.async = async
-	if reason, ok := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, workDir); !ok && !proc.stopped {
-		proc.stopped = true
-		proc.reason = reason
-	}
-	stopped := proc.stopped
+	stopped := r.jobs.revalidateStartedProcessLocked(proc, workDir)
 	startEv, emitStart := r.jobs.indexProjectProcessLocked(proc)
 	publishProject := r.Output.publishProject
 	r.jobs.mu.Unlock()

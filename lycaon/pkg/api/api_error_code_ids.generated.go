@@ -304,6 +304,9 @@ const (
 	ApiErrorCodeInvalidWorkflowReplacementTarget ApiErrorCode = "invalid_workflow_replacement_target"
 	// ApiErrorCodeMessageNotFound session message id not found
 	ApiErrorCodeMessageNotFound ApiErrorCode = "message_not_found"
+	// ApiErrorCodeCommandProgramNotFound command program receipt is not retained
+	// for this chat
+	ApiErrorCodeCommandProgramNotFound ApiErrorCode = "command_program_not_found"
 	// ApiErrorCodeNotFound no route matches the request path; resources use
 	// <resource>_not_found
 	ApiErrorCodeNotFound ApiErrorCode = "not_found"
@@ -1059,6 +1062,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeInvalidWorkflowRevision,
 	ApiErrorCodeInvalidWorkflowReplacementTarget,
 	ApiErrorCodeMessageNotFound,
+	ApiErrorCodeCommandProgramNotFound,
 	ApiErrorCodeNotFound,
 	ApiErrorCodePathNotFound,
 	ApiErrorCodePersistNotConfirmed,
@@ -1403,6 +1407,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeChoiceSourceNotFound,
 		ApiErrorCodeSearchSourceNotFound,
 		ApiErrorCodeMessageNotFound,
+		ApiErrorCodeCommandProgramNotFound,
 		ApiErrorCodeNotFound,
 		ApiErrorCodePathNotFound,
 		ApiErrorCodeBlueprintNotFound,

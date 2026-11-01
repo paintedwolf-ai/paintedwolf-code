@@ -99,12 +99,18 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 	}
 	reader := w.work.reader
 
-	listing, err := reader.ReadDirectory(w.inv.ctx, dir.bound.Resolved.ScopeRel, maximum, nil)
+	listing, err := reader.ReadDirectory(w.inv.ctx, dir.bound.Resolved.ScopeRel, maximum, opened)
 	if listing.Prepared {
 		w.work.prepared++
 	}
 	if err != nil {
-		return nil, false, w.inv.ctx.Err()
+		if contextErr := w.inv.ctx.Err(); contextErr != nil {
+			return nil, false, contextErr
+		}
+		if resetErr := opened.ResetListing(); resetErr != nil {
+			return nil, true, resetErr
+		}
+		return nil, false, nil
 	}
 	if listing.Reused {
 		w.work.reused++

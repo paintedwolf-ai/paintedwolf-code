@@ -16,7 +16,7 @@ func (r *registryCore) LocalGenerationStatus() api.LocalGenerationStatus {
 }
 
 // projectLocalRuntime overlays live admission on cached catalog metadata.
-func (r *registryCore) projectLocalRuntime(in []api.ProviderMeta) []api.ProviderMeta {
+func (r *registryCatalog) projectLocalRuntime(in []api.ProviderMeta) []api.ProviderMeta {
 	out := cloneProviderMetaList(in)
 	for i := range out {
 		if out[i].Kind != "nativegen" {

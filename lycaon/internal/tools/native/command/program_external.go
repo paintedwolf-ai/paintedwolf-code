@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
@@ -137,6 +138,11 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	}
 	if run == nil {
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, waitErr
+	}
+	var socketErr *confine.SocketResolveError
+	if errors.As(waitErr, &socketErr) {
+		reject := capabilityrequest.SocketResolveReject(socketErr)
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, StopCode: reject.Code, EffectCertainty: toolcontract.EffectAttempted}, reject
 	}
 	status := run.ExitCode
 	if len(run.Stages) == 1 {
@@ -270,6 +276,10 @@ func nonNilWriter(w io.Writer) io.Writer {
 }
 
 func externalLaunchFailure(err error, fallback toolcontract.ProducerResult) toolcontract.ProducerResult {
+	var socketErr *confine.SocketResolveError
+	if errors.As(err, &socketErr) {
+		return refusedResult(capabilityrequest.SocketResolveReject(socketErr).Code)
+	}
 	if rejection := toolrejection.AsToolReject(err); rejection != nil {
 		return refusedResult(rejection.Code)
 	}

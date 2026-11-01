@@ -276,4 +276,3 @@ func TestCompletionDeliveryRespectsTerminationReasonRouting(t *testing.T) {
 		t.Fatalf("live session completions emitted = %d, want 4", len(f.emitted))
 	}
 }
-

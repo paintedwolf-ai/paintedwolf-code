@@ -214,6 +214,9 @@ func (p *nativePresentationFixture) ProjectOperationInputs(ctx context.Context, 
 		changes := fields["file_changes"].([]any)
 		changes[0].(map[string]any)["before"] = "screened preview"
 	}
+	if _, ok := fields["rule_commands"]; ok {
+		fields["rule_commands"] = []string{"screened rule command"}
+	}
 	return fields, release, nil
 }
 
@@ -241,12 +244,15 @@ func TestNativeApprovalProjectsDisplayFieldsWithoutChangingAuthority(t *testing.
 		return value
 	})
 	defer releaseRedactor()
-	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{ProposedAction: &action, Decision: decision})
+	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{ProposedAction: &action, Decision: decision, ApprovalMatches: []hitl.ApprovalRuleMatch{{Command: "raw rule command"}}})
 	if err != nil {
 		testutil.FailErr(t, "compile projected write approval", err)
 	}
 	if projection.calls != 2 || legacyRawCalls != 0 || plan.Presentation.Command != "screened command" || plan.Presentation.FileChanges[0].Before != "screened preview" {
 		t.Fatal("native display bypassed the bounded raw-value projections")
+	}
+	if len(plan.Presentation.ApprovalRules) != 1 || plan.Presentation.ApprovalRules[0].Command != "screened rule command" {
+		t.Fatal("native rule command bypassed the bounded display projection")
 	}
 	if plan.ActionDigest != key || action.Presentation.Command != "raw command" || action.Mutations.FileChanges[0].Before != "raw preview" || plan.Presentation.FileChanges[0].BeforeSHA256 != "original-hash" || plan.Presentation.FileChanges[0].BeforeBytes != 11 {
 		t.Fatal("display projection changed original authority or exact preview evidence")

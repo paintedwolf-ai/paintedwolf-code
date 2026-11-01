@@ -150,8 +150,11 @@ func relayThrough(cmd *exec.Cmd, state protectedLaunch) error {
 	}
 	resolveRelayedProgram(cmd, state)
 	self, _ := os.Executable()
-	count := len(cmd.ExtraFiles)
-	cmd.Args = append([]string{self, relayCommand, strconv.Itoa(count), cmd.Path}, cmd.Args...)
+	layout := inheritedFileLayout(cmd.ExtraFiles)
+	if !validFileLayout(layout) {
+		return fmt.Errorf("prepared command descriptor layout exceeds its transport bound")
+	}
+	cmd.Args = append([]string{self, relayCommand, layout, cmd.Path}, cmd.Args...)
 	cmd.Path = self
 	cmd.ExtraFiles = append(cmd.ExtraFiles, state.broker)
 	return nil
@@ -163,13 +166,41 @@ func unrelayCommand(cmd *exec.Cmd) {
 	if !relayedCommand(cmd) || commandSupervisor(cmd) || len(cmd.Args) < 5 {
 		return
 	}
-	count, err := strconv.Atoi(cmd.Args[2])
-	if err != nil || count < 0 || len(cmd.ExtraFiles) <= count {
+	layout := cmd.Args[2]
+	count := len(layout)
+	if !validFileLayout(layout) || len(cmd.ExtraFiles) <= count {
 		return
 	}
 	cmd.Path = cmd.Args[3]
 	cmd.Args = cmd.Args[4:]
 	cmd.ExtraFiles = append(cmd.ExtraFiles[:count], cmd.ExtraFiles[count+1:]...)
+}
+
+// Layout records the parent's actual slots; a hole may already name an unrelated
+// runtime descriptor in the new process and must never be rediscovered by probe.
+func inheritedFileLayout(files []*os.File) string {
+	var layout strings.Builder
+	layout.Grow(len(files))
+	for _, file := range files {
+		if file == nil {
+			layout.WriteByte('0')
+		} else {
+			layout.WriteByte('1')
+		}
+	}
+	return layout.String()
+}
+
+func validFileLayout(layout string) bool {
+	if len(layout) > launchbroker.MaxExtraFiles {
+		return false
+	}
+	for i := range layout {
+		if layout[i] != '0' && layout[i] != '1' {
+			return false
+		}
+	}
+	return true
 }
 
 // relayedExecutable checks a program the broker will start. Inside the

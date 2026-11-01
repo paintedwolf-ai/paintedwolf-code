@@ -3,12 +3,14 @@ package toolexecution
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolapproval"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -26,6 +28,7 @@ func (e *Approvals) awaitApproval(
 		},
 		Invocation: hitl.ActionInvocation{
 			NativeInputs:       tc.Invocation.NativeInputs,
+			BoundStages:        toolcontract.CloneExecutionStages(tc.Invocation.NativeStages),
 			Tool:               tool,
 			Args:               args,
 			Files:              append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
@@ -67,7 +70,9 @@ func (e *Approvals) awaitApproval(
 		action.Resources.ApprovalCategory = meta.ApprovalCategory
 		action.Resources.ApprovalSubject = meta.ApprovalSubject
 	}
-	if tool == "command" || tool == "verify" || tool == "terminal_open" {
+	if action.Invocation.BoundStages != nil {
+		action.Presentation.Command = strings.Join(action.Invocation.BoundCommands(), " | ")
+	} else if tool == "command" || tool == "verify" || tool == "terminal_open" {
 		action.Presentation.Command = commandsurface.PrimaryCommandLine(args, nil)
 	}
 	if tool == "command_stop" && e.backgroundCommand != nil {

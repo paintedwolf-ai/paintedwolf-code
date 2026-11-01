@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -44,23 +45,35 @@ func TestBuildProfileExactSocketLiterals(t *testing.T) {
 	dir := shortTempDir(t)
 	sock := socketGrant(t, filepath.Join(dir, "svc.sock"))
 	wild := socketGrant(t, filepath.Join(dir, "star*.sock"))
-	sock.Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
-	wild.Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
-
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
+	c := confine.Confinement{
 		Roots:        []string{dir},
 		Network:      confine.NetworkDeny,
 		SocketGrants: []confine.SocketGrant{sock, wild},
-	})
+	}
+	wantPath := sock.ResolvedPath
+	if runtime.GOOS == "darwin" {
+		lease, err := confine.BindAction(&c, confine.EgressCommand{ToolCallID: t.Name()})
+		testutil.FailErr(t, "bind profile socket endpoints", err)
+		defer lease.Close(t.Context())
+		args, _, err := confine.ResolveSocketArguments(&c, []string{"{{paintedwolf-socket:" + sock.ApprovedPath + "}}"}, nil)
+		testutil.FailErr(t, "resolve profile socket endpoint", err)
+		wantPath, err = filepath.EvalSymlinks(args[0])
+		testutil.FailErr(t, "resolve protected endpoint literal", err)
+	} else {
+		for i := range c.SocketGrants {
+			c.SocketGrants[i].Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
+		}
+	}
+	p, err := confine.BuildSeatbeltProfile(c)
 	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	if !strings.Contains(p, "; exact AF_UNIX socket grants") {
 		t.Fatalf("socket block marker missing:\n%s", p)
 	}
-	wantLit := `(allow network-outbound (literal "` + sock.ResolvedPath + `"))`
+	wantLit := `(allow network-outbound (literal "` + wantPath + `"))`
 	if !strings.Contains(p, wantLit) {
 		t.Fatalf("missing exact literal:\n%s", p)
 	}
-	if !strings.Contains(p, `star*.sock`) {
+	if runtime.GOOS != "darwin" && !strings.Contains(p, `star*.sock`) {
 		t.Fatalf("wildcard filename must appear as literal path:\n%s", p)
 	}
 	if strings.Contains(p, "(allow network*)") {

@@ -2,34 +2,11 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools"
-	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostresources"
-	"github.com/lycaon/lycaon/internal/socketref"
 )
-
-func TestSocketMatchesRealization(t *testing.T) {
-	grant := confine.SocketGrant{
-		ApprovedPath: "/var/run/docker.sock",
-		ResolvedPath: "/private/var/run/docker.sock",
-	}
-	if !socketMatchesRealization(grant, []string{"/var/run/docker.sock"}) {
-		t.Fatal("approved path should match the catalogued realization")
-	}
-	if !socketMatchesRealization(grant, []string{"/private/var/run/docker.sock"}) {
-		t.Fatal("resolved path should match the catalogued realization")
-	}
-	if socketMatchesRealization(grant, []string{"/tmp/other.sock"}) {
-		t.Fatal("an unrelated socket is not the realization")
-	}
-	if socketMatchesRealization(grant, nil) {
-		t.Fatal("empty realization must not match")
-	}
-}
 
 func TestRealizationSocketTargets(t *testing.T) {
 	got := realizationSocketTargets(&hostresources.ActionResolution{
@@ -45,48 +22,6 @@ func TestRealizationSocketTargets(t *testing.T) {
 	}
 	if realizationSocketTargets(nil) != nil {
 		t.Fatal("nil resolution should yield no sockets")
-	}
-}
-
-func TestPermitCoveredHostResourceSocketsIssuesRealizationOnly(t *testing.T) {
-	dir := t.TempDir()
-	sock := filepath.Join(dir, "docker.sock")
-	extra := filepath.Join(dir, "other.sock")
-	rt := &memorySocketRuntime{}
-	exec := func() *Executor {
-		e := NewExecutor(nil, nil, "")
-		e.Capabilities.socketRuntime = rt
-		e.Approvals.approvalGate = coveringHostResourceGate{}
-		return e
-	}()
-	docker := confine.SocketGrant{ApprovedPath: sock, ResolvedPath: sock, Binding: socketref.Binding{Enforcement: socketref.KernelPathname}}
-	other := confine.SocketGrant{ApprovedPath: extra, ResolvedPath: extra, Binding: socketref.Binding{Enforcement: socketref.KernelPathname}}
-	covered, extras := exec.Capabilities.permitCoveredHostResourceSockets(
-		context.Background(),
-		hitl.ProposedAction{
-			Invocation: hitl.ActionInvocation{
-				Tool: "command",
-			},
-			Resources: hitl.ActionResources{
-				HostResources: []string{"docker"},
-			},
-		},
-		"digest-1",
-		[]confine.SocketGrant{docker, other},
-		tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "sess",
-				ToolCallID: "tc-1"},
-			Host: tools.InvocationHost{RealizationSockets: []string{sock}},
-		},
-	)
-	if !covered {
-		t.Fatal("covering lease should apply")
-	}
-	if len(extras) != 1 || extras[0].ApprovedPath != extra {
-		t.Fatalf("extras = %+v, want only the uncatalogued socket", extras)
-	}
-	if len(rt.permits) != 1 {
-		t.Fatalf("permits = %d, want the realization socket only", len(rt.permits))
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 type workerJobLedgerReader struct {
 	source      guidance.EvidenceLedgerReader
 	handles     map[string]struct{}
+	responses   map[string]struct{}
 	transcripts workerJobMessagesReader
 	workerJobID string
 }
@@ -24,7 +25,7 @@ func LedgerForMessages(source guidance.EvidenceLedgerReader, messages []api.Mess
 	if source == nil {
 		return nil
 	}
-	return workerJobLedgerReader{source: source, handles: evidenceHandlesForMessages(messages)}
+	return workerJobLedgerReader{source: source, handles: evidenceHandlesForMessages(messages), responses: sourceResponseIDsForMessages(messages)}
 }
 
 func ledgerReaderForWorkerJob(
@@ -47,15 +48,16 @@ func (reader workerJobLedgerReader) LoadLedger(ctx context.Context, sessionID st
 	if err != nil {
 		return evidence.Ledger{}, err
 	}
-	handles := reader.handles
+	handles, responses := reader.handles, reader.responses
 	if reader.transcripts != nil {
 		messages, err := reader.transcripts.GetWorkerJobMessages(ctx, sessionID, reader.workerJobID)
 		if err != nil {
 			return evidence.Ledger{}, err
 		}
 		handles = evidenceHandlesForMessages(messages)
+		responses = sourceResponseIDsForMessages(messages)
 	}
-	return filterEvidenceLedger(ledger, handles), nil
+	return filterEvidenceLedger(ledger, handles, responses), nil
 }
 
 func evidenceHandlesForMessages(messages []api.Message) map[string]struct{} {
@@ -106,12 +108,34 @@ func messagePayloadContent(message api.Message) string {
 	return ""
 }
 
-func filterEvidenceLedger(ledger evidence.Ledger, handles map[string]struct{}) evidence.Ledger {
+// Source deliveries retain their actual command response identity even when
+// their handle was committed separately from the transcript message.
+func sourceResponseIDsForMessages(messages []api.Message) map[string]struct{} {
+	responses := make(map[string]struct{})
+	for _, message := range messages {
+		result := message.ToolResult
+		if message.Role != api.MessageRoleTool || result == nil || (result.Tool != "command" && result.Tool != "command_output") {
+			continue
+		}
+		receipt := result.Invocation
+		if receipt != nil && receipt.Invoked && receipt.ID != "" && result.ToolCallID != "" && receipt.Tool == result.Tool && receipt.ToolCallID == result.ToolCallID {
+			responses[receipt.ID] = struct{}{}
+		}
+	}
+	return responses
+}
+
+func filterEvidenceLedger(ledger evidence.Ledger, handles, responses map[string]struct{}) evidence.Ledger {
 	records := make([]evidence.Record, 0, len(handles))
-	for handle := range handles {
-		if record, ok := ledger.Handles[handle]; ok {
+	for handle, record := range ledger.Handles {
+		_, included := handles[handle]
+		if !included && record.SourceTool == "command" && record.Kind == "read" && record.SourceDelivery != nil {
+			_, included = responses[record.SourceDelivery.ResponseID]
+		}
+		if included {
 			records = append(records, record)
 		}
 	}
+
 	return evidence.AssembleLedger(records)
 }

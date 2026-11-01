@@ -2,18 +2,21 @@ package wiring
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,7 +46,7 @@ func batchTaskAndReadMock() *llm.MockProvider {
 			Pattern: "^BATCH_TASK_AND_READ",
 			ToolCalls: []llm.MockToolCall{
 				{ID: "tc1", Name: "task", Args: TaskToolArgs("path-explorer", "List top-level paths under src/.")},
-				{ID: "tc2", Name: "read", Args: map[string]any{"path": "README.md"}},
+				{ID: "tc2", Name: "command", Args: map[string]any{"command": "cat README.md"}},
 			},
 			FollowUpText: "The task is dispatched and the file is read.",
 		},
@@ -154,9 +157,26 @@ func TestCoordinatorBatchTaskAndReadFollowUpE2E(t *testing.T) {
 	if countTaskEnqueuedToolMessages(msgs) != 1 {
 		t.Fatalf("expected one enqueued task(), got %d enqueued messages", countTaskEnqueuedToolMessages(msgs))
 	}
-	if !messageContains(msgs, "README") && !messageContains(msgs, "readme") {
-		t.Fatalf("expected read tool result for README.md in messages")
+	readCompleted := false
+	for _, msg := range msgs {
+		if msg.ToolResult == nil || msg.ToolResult.Tool != "command" || msg.ToolResult.ToolCallID != "tc2" {
+			continue
+		}
+		_, body, _, ok := hostmarker.SplitToolJSONBody(msg.ToolResult.Content)
+		if !ok {
+			t.Fatalf("command read has no outcome: %s", msg.Content)
+		}
+		var outcome command.ProgramOutcome
+		testutil.FailErr(t, "decode command read", json.Unmarshal([]byte(body), &outcome))
+		if outcome.Status != 0 || outcome.CompletedEffects != 0 || outcome.UncertainEffects != 0 || outcome.Stdout != "# batch read fixture\n" {
+			t.Fatalf("command read = %+v", outcome)
+		}
+		readCompleted = true
 	}
+	if !readCompleted {
+		t.Fatal("expected completed command read in the batch")
+	}
+
 	if len(rec.AllRequests()) != 2 {
 		t.Fatalf("LLM requests = %d want 2 (batch and follow-up)", len(rec.AllRequests()))
 	}

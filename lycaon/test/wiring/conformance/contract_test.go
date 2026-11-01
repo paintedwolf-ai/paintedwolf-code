@@ -22,9 +22,13 @@ type contractCase struct {
 	Validate func(*testing.T, runtimeObservation)
 	// External allows the program to launch an installed binary.
 	External bool
+	// Prepare supplies local services and their captured input files.
+	Prepare func(*testing.T, commandconformance.Case) commandconformance.Case
 }
 
-var contractCases = []contractCase{
+var contractCases = slices.Concat(baseContractCases, textFormContracts, pathFormContracts, metadataFormContracts, shellFormContracts, archiveFormContracts, gitReadFormContracts, gitMutationFormContracts, httpFormContracts)
+
+var baseContractCases = []contractCase{
 	{
 		Case: commandconformance.Case{
 			ID:          "run3-native-discovery",
@@ -147,7 +151,11 @@ func TestCommandLanguageContracts(t *testing.T) {
 	runner := newConformanceRunner(t, gate.PostureLight, true)
 	for _, c := range contractCases {
 		t.Run(c.ID, func(t *testing.T) {
-			verifyContract(t, c, runner.runCase(t, c.Case))
+			input := c.Case
+			if c.Prepare != nil {
+				input = c.Prepare(t, input)
+			}
+			verifyContract(t, c, runner.runCase(t, input))
 		})
 	}
 }
