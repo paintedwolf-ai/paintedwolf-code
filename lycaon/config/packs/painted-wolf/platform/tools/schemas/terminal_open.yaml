@@ -94,7 +94,9 @@ schema:
           description: >-
             Exact AF_UNIX service paths. For an external program, use a whole
             `{{paintedwolf-socket:/absolute/path}}` reference as an argv or
-            environment value. Inside code or configuration, read that environment
+            environment value. Clients needing a Unix URL use
+            `{{paintedwolf-socket:unix-url:/absolute/path}}`.
+            Inside code or configuration, read that environment
             variable. macOS datagrams use
             `{{paintedwolf-socket:unixgram:/absolute/path}}`; Linux confinement
             refuses Unix datagrams. Native socket arguments take the ordinary path.

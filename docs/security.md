@@ -465,7 +465,9 @@ perform or delegate its own work; this is not visibility into its internals.
 
 External programs receive `{{paintedwolf-socket:/absolute/path}}` references as
 complete argv or environment values. The host resolves only those explicit
-references. A client reading a path from code or configuration uses its declared
+references. The `unix-url:` selector formats a bound stream endpoint as a
+`unix://` value for client configuration interfaces such as `DOCKER_HOST`.
+It uses the same reviewed service binding. A client reading a path from code or configuration uses its declared
 environment or endpoint interface; unrelated file operands are preserved. A
 relay exposes the engine as the connecting client, so a service that requires a
 particular client PID or audit identity needs an appropriate native integration;

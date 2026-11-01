@@ -848,6 +848,12 @@ Unix datagram sockets. Native operations such as `http_request` keep their ordin
 `unix_socket` argument; the host handles their connection. See
 [local sockets and daemon authority](security.md#local-sockets-and-daemon-authority).
 
+Clients expecting a Unix socket URL use the whole
+`{{paintedwolf-socket:unix-url:/absolute/path}}` reference. For example,
+`export DOCKER_HOST='{{paintedwolf-socket:unix-url:/tmp/docker.sock}}'; external -- docker version`
+supplies Docker's ordinary `unix://` configuration value for the bound endpoint.
+The service path must also be declared in `capability_request.socket_paths`.
+
 A native Go handler suits a first-party operation. Confined MCP suits an external server whose invocation, transport, and result handling the host can still bound. A bespoke native subsystem owner is for operations that need host database state, journals, project identity, approval-plan construction, or another coupled lifecycle; do not hide those dependencies behind a generic command. Authoring details: [Adding a tool](adding-tools.md).
 
 ---

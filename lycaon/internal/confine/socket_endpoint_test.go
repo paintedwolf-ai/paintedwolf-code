@@ -30,23 +30,26 @@ func TestSocketReferencesDoNotRewriteOrdinaryArgumentsOrEnvironment(t *testing.T
 	grant := SocketGrant{ApprovedPath: path, ResolvedPath: path, Binding: owner.Binding()}
 	boundary := &Confinement{SocketGrants: []SocketGrant{grant}, socketEndpoints: map[string]string{socketEndpointKey(grant.Binding, "unix"): "/bound/endpoint", socketEndpointKey(grant.Binding, "unixgram"): "/bound/datagrams"}}
 	reference := socketReferencePrefix + url.PathEscape(path) + "}}"
-	args := []string{"/bin/rm", path, reference, "--socket=" + path}
-	env := []string{"PATH=/usr/bin:/bin", "ORIGINAL=" + path, "SERVICE=" + reference}
+	urlReference := socketReferencePrefix + "unix-url:" + url.PathEscape(path) + "}}"
+	args := []string{"/bin/rm", path, reference, "--socket=" + path, "unix://" + path, urlReference}
+	env := []string{"PATH=/usr/bin:/bin", "ORIGINAL=" + path, "SERVICE=" + reference, "SERVICE_URL=" + urlReference}
 	originalArgs, originalEnv := append([]string(nil), args...), append([]string(nil), env...)
 	resolved, environment, err := ResolveSocketArguments(boundary, args, env)
 	testutil.FailErr(t, "resolve explicitly bound endpoint", err)
-	if !reflect.DeepEqual(resolved, []string{"/bin/rm", path, "/bound/endpoint", "--socket=" + path}) {
+	if !reflect.DeepEqual(resolved, []string{"/bin/rm", path, "/bound/endpoint", "--socket=" + path, "unix://" + path, "unix:///bound/endpoint"}) {
 		t.Fatalf("argument meanings changed: %#v", resolved)
 	}
-	if !reflect.DeepEqual(environment, []string{"PATH=/usr/bin:/bin", "ORIGINAL=" + path, "SERVICE=/bound/endpoint"}) {
+	if !reflect.DeepEqual(environment, []string{"PATH=/usr/bin:/bin", "ORIGINAL=" + path, "SERVICE=/bound/endpoint", "SERVICE_URL=unix:///bound/endpoint"}) {
 		t.Fatalf("environment meanings changed: %#v", environment)
 	}
 	if !reflect.DeepEqual(args, originalArgs) || !reflect.DeepEqual(env, originalEnv) {
 		t.Fatal("endpoint resolution mutated caller inputs")
 	}
 	owner.Close()
-	if _, _, err := ResolveSocketArguments(boundary, []string{reference}, nil); err == nil {
-		t.Fatal("released authority supplied an endpoint")
+	for _, value := range []string{reference, urlReference} {
+		if _, _, err := ResolveSocketArguments(boundary, []string{value}, nil); err == nil {
+			t.Fatal("released authority supplied an endpoint")
+		}
 	}
 }
 
@@ -57,6 +60,8 @@ func TestSocketReferencesRequireExactLiveReviewedAuthority(t *testing.T) {
 		code        string
 	}{
 		{"missing authority", "{{paintedwolf-socket:/tmp/service}}", nil, string(SocketResolveChanged)},
+		{"missing URL authority", "{{paintedwolf-socket:unix-url:/tmp/service}}", nil, string(SocketResolveChanged)},
+		{"embedded URL", "unix://{{paintedwolf-socket:/tmp/service}}", nil, string(SocketResolveInvalid)},
 		{"embedded source", "s.connect('{{paintedwolf-socket:/tmp/service}}')", nil, string(SocketResolveInvalid)},
 		{"invalid encoding", "{{paintedwolf-socket:/tmp/%xx}}", nil, string(SocketResolveInvalid)},
 		{"relative target", "{{paintedwolf-socket:relative}}", nil, string(SocketResolveInvalid)},

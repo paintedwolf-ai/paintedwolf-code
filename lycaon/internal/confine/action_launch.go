@@ -139,7 +139,10 @@ func ResolveSocketArguments(c *Confinement, args, environment []string) ([]strin
 		}
 		encoded := strings.TrimSuffix(strings.TrimPrefix(value, socketReferencePrefix), "}}")
 		network := "unix"
-		if rest, datagram := strings.CutPrefix(encoded, "unixgram:"); datagram {
+		prefix := ""
+		if rest, unixURL := strings.CutPrefix(encoded, "unix-url:"); unixURL {
+			encoded, prefix = rest, "unix://"
+		} else if rest, datagram := strings.CutPrefix(encoded, "unixgram:"); datagram {
 			network, encoded = "unixgram", rest
 		}
 		path, err := url.PathUnescape(encoded)
@@ -155,7 +158,7 @@ func ResolveSocketArguments(c *Confinement, args, environment []string) ([]strin
 					return "", err
 				}
 				if endpoint := c.socketEndpoints[socketEndpointKey(grant.Binding, network)]; endpoint != "" {
-					return endpoint, nil
+					return prefix + endpoint, nil
 				}
 			}
 		}

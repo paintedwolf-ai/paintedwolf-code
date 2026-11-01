@@ -21,23 +21,25 @@ import (
 	"testing"
 	"time"
 
+	dockerclient "github.com/moby/moby/client"
+
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func socketProgramFixture(t *testing.T) (*programFixture, string, *atomic.Int32) {
+func socketProgramFixture(t *testing.T, response string) (*programFixture, string, *atomic.Int32) {
 	t.Helper()
 	root, err := os.MkdirTemp("/tmp", "pw-program-socket-") //nolint:usetesting // Unix socket addresses have a kernel byte limit.
 	testutil.FailErr(t, "create program socket fixture", err)
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), strings.Repeat("long-state-", 15)))
-	path := filepath.Join(root, "service")
+	path := filepath.Join(root, "service %}")
 	listener, err := net.Listen("unix", path)
 	testutil.FailErr(t, "listen for program socket fixture", err)
 	count := &atomic.Int32{}
 	server := &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		count.Add(1)
-		_, _ = io.WriteString(w, "fixture-response")
+		_, _ = io.WriteString(w, response)
 	})}
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(listener) }()
@@ -54,8 +56,38 @@ func socketProgramArgs(program, path string) map[string]any {
 	return map[string]any{"command": program, "capability_request": map[string]any{"socket_paths": []any{path}}}
 }
 
+func TestProgramDockerSocketURLFixture(t *testing.T) {
+	if os.Getenv("PW_SOCKET_DOCKER_FIXTURE") != "1" {
+		return
+	}
+	client, err := dockerclient.New(dockerclient.WithHost(os.Getenv("DOCKER_HOST")), dockerclient.WithAPIVersion(dockerclient.MaxAPIVersion))
+	testutil.FailErr(t, "configure the Docker client with its explicit endpoint", err)
+	t.Cleanup(func() { _ = client.Close() })
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	version, err := client.ServerVersion(ctx, dockerclient.ServerVersionOptions{})
+	testutil.FailErr(t, "read the owned service through the Docker protocol client", err)
+	if version.Version != "fixture-daemon" {
+		t.Fatalf("Docker client reached an unexpected service: %+v", version)
+	}
+}
+
+func TestProgramSocketURLReferenceSupportsDockerClientConfiguration(t *testing.T) {
+	response := fmt.Sprintf(`{"Version":"fixture-daemon","ApiVersion":%q}`, dockerclient.MaxAPIVersion)
+	f, path, count := socketProgramFixture(t, response)
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate the isolated Docker protocol client", err)
+	reference := "{{paintedwolf-socket:unix-url:" + url.PathEscape(path) + "}}"
+	program := fmt.Sprintf("PW_SOCKET_DOCKER_FIXTURE=1 DOCKER_HOST=%s external -- %s -test.run=^TestProgramDockerSocketURLFixture$", strconv.Quote(reference), strconv.Quote(self))
+	out, err := f.CallArgs(t, t.Context(), socketProgramArgs(program, path))
+	testutil.FailErr(t, "launch a real Docker protocol client with the bound URL", err)
+	if result := decodeOutcome(t, out); result.Status != 0 || count.Load() != 1 {
+		t.Fatalf("bound Docker client failed or changed its request count: requests=%d outcome=%s", count.Load(), out)
+	}
+}
+
 func TestProgramExternalSocketReferencesUseThePreparedLaunchDoor(t *testing.T) {
-	f, path, count := socketProgramFixture(t)
+	f, path, count := socketProgramFixture(t, "fixture-response")
 	reference := "{{paintedwolf-socket:" + url.PathEscape(path) + "}}"
 	curl, err := exec.LookPath("curl")
 	testutil.FailErr(t, "locate real socket client", err)
@@ -124,7 +156,7 @@ func TestProgramSocketBackgroundFixture(t *testing.T) {
 }
 
 func TestProgramSocketEndpointOutlivesTheForegroundCall(t *testing.T) {
-	f, path, count := socketProgramFixture(t)
+	f, path, count := socketProgramFixture(t, "fixture-response")
 	fifo := filepath.Join(f.Dir, "connection-gate")
 	testutil.FailErr(t, "create controlled background gate", syscall.Mkfifo(fifo, 0600))
 	gate, err := os.OpenFile(fifo, os.O_RDWR|syscall.O_NONBLOCK, 0600)
