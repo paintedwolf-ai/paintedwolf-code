@@ -64,12 +64,11 @@ func PlanMemory(c Config, backend string, rows int) (MemoryPlan, error) {
 	switch backend {
 	case "mlx":
 		plan.HostBytes = 384 << 20
-		plan.WorkspaceBytes = 1 << 30
-		plan.DeviceBytes = weights + heads + (64 << 20) + plan.WorkspaceBytes
+		plan.WorkspaceBytes = 512 << 20
 		if rows == 8 {
-			plan.DeviceBytes += 1536 << 20
-			plan.WorkspaceBytes += 1536 << 20
+			plan.WorkspaceBytes = 2560 << 20
 		}
+		plan.DeviceBytes = weights + heads + (64 << 20) + plan.WorkspaceBytes
 	case "vulkan":
 		plan.HostBytes = 1 << 30
 		plan.DeviceBytes = weights + heads + (2304 << 20)
