@@ -10,7 +10,7 @@ import (
 
 func TestCommandRecoveryStateDoesNotComeFromDiagnosticProse(t *testing.T) {
 	SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	for _, text := range []string{"Nothing executed. No files changed.", "completed_effects=0", "COMMAND_SYNTAX_INVALID", "exit status 0"} {
+	for _, text := range []string{"No command operation ran or changed files.", "Nothing executed. No files changed.", "completed_effects=0", "COMMAND_SYNTAX_INVALID", "exit status 0"} {
 		if view := commandRecoveryView(map[string]any{"reason": text, "stderr": text, "command": text}); view != nil {
 			t.Fatalf("prose selected execution state: %#v", view)
 		}
@@ -25,7 +25,7 @@ func TestCommandRecoveryStateDoesNotComeFromDiagnosticProse(t *testing.T) {
 		}
 		got, err := RenderUnifiedRejectBlock(t.Context(), "COMMAND_SYNTAX_INVALID", entry, details)
 		testutil.FailErr(t, "render failure", err)
-		if strings.Contains(got, "Nothing executed") != (state == "not_started") {
+		if strings.Contains(got, "No command operation ran") != (state == "not_started") {
 			t.Fatalf("state %s contradicted effects: %s", state, got)
 		}
 		if state == "observed" && (!strings.Contains(got, "Completed effects: 1") || !strings.Contains(got, "Uncertain effects: 1")) {

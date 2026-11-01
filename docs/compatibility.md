@@ -80,6 +80,13 @@ operation, repair source, or establish replay eligibility. Execution and effect
 claims remain projections of the invocation recorder. This work changes no
 persisted schema or command language version.
 
+Recovery availability and diagnostic-knowledge facts are additive host facts in
+the `paintedwolf` namespace. They distinguish missing observations from the
+standard typed zero values without changing OAR defaults. Structural argument
+repairs carry the validating tool identity; unrelated operation schemas do not
+authorize a replacement outer call. Unproven name guesses and remedies are not
+part of the recovery contract. Canonical rejection identities remain readable.
+
 
 The compiled catalog freezes the language, operation definitions and limits for each invocation. The model call owns the aggregate receipt; child identities are host operations. Persistence and wire consumers follow the classifications below.
 

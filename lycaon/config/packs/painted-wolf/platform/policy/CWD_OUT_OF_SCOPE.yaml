@@ -16,10 +16,10 @@ requires:
 when: paintedwolf.rejection_code == "CWD_OUT_OF_SCOPE"
 effect: block
 copy:
-  what: The requested working directory {{ paintedwolf.cwd }} is outside this invocation's project read scope.
-  cause: Working directory must resolve within attached project roots and read scope.
-  why: Per-call cwd is validated like any path op — out-of-scope paths are rejected before the command runs.
-  fix: Use an existing directory inside the attached project scope; `@label/sub/path` identifies an attached non-primary root.
+  what: The requested working directory {{ paintedwolf.cwd }} is outside this invocation's permitted directory scope.
+  cause: The working directory must resolve within the permitted directory scope.
+  why: The requested directory is outside the allowed scope.
+  fix: Use an existing directory within this invocation's permitted scope.
   instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool
@@ -33,4 +33,4 @@ x-paintedwolf-scenarios:
     expect_contains:
       - 'Rejected:'
       - 'Code: CWD_OUT_OF_SCOPE'
-      - read scope
+      - permitted directory scope

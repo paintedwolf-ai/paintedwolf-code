@@ -14,10 +14,12 @@ requires:
   - paintedwolf.pattern
   - paintedwolf.glob_limit
   - paintedwolf.max
+  - paintedwolf.glob_limit_known
 when: paintedwolf.rejection_code == "COMMAND_GLOB_BUDGET_EXCEEDED"
 effect: block
 copy:
-  what: The glob `{{ paintedwolf.pattern }}` expands past {{ paintedwolf.max }} {{ paintedwolf.glob_limit }}.
+  what: 'Glob expansion exceeded its bound{% if paintedwolf.pattern %} for `{{ paintedwolf.pattern }}`{% endif %}.{% if paintedwolf.glob_limit_known %} Maximum: {{
+    paintedwolf.max }}{% if paintedwolf.glob_limit %} {{ paintedwolf.glob_limit }}{% endif %}.{% endif %}'
   cause: Glob expansion stopped at the reported bound; the host did not truncate the match set.
   why: ''
   fix: ''

@@ -219,12 +219,6 @@ func CopyOnlyEmit(emit string) bool {
 func validateHintEntry(code string, entry HintEntry) error {
 	copyOnly := CopyOnlyEmit(entry.Emit)
 	view := NormalizeRejectCodeView(code, entry)
-	if strings.TrimSpace(entry.What) == "" && strings.TrimSpace(entry.Message) == "" {
-		return fmt.Errorf("%s: what or message required", code)
-	}
-	if strings.TrimSpace(view.What) == "" && strings.TrimSpace(view.Cause) == "" {
-		return fmt.Errorf("%s: what required", code)
-	}
 	if len(scenarioRows(entry)) == 0 && !copyOnly && entry.Severity != "warning" {
 		return fmt.Errorf("%s: scenarios required (>=1)", code)
 	}
@@ -286,6 +280,9 @@ func NormalizeRejectCodeView(code string, entry HintEntry) RejectCodeView {
 	msg := strings.TrimSpace(entry.Message)
 	if view.What == "" {
 		view.What = msg
+	}
+	if view.What == "" {
+		view.What = view.ID
 	}
 	return view
 }

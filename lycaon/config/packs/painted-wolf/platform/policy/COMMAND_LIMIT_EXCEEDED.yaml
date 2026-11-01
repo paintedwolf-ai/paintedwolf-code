@@ -16,10 +16,12 @@ requires:
   - paintedwolf.maximum
   - paintedwolf.observed
   - paintedwolf.diagnostic_top_level
+  - paintedwolf.limit_observation_known
 when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
 effect: block
 copy:
-  what: 'Command limit reached: {{ paintedwolf.limit_id }}. Observed {{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }}.'
+  what: 'A command resource limit was reached{% if paintedwolf.limit_id %}: {{ paintedwolf.limit_id }}{% endif %}.{% if paintedwolf.limit_observation_known %} Observed
+    {{ paintedwolf.observed }}{% if paintedwolf.resource_unit %} {{ paintedwolf.resource_unit }}{% endif %}; maximum {{ paintedwolf.maximum }}.{% endif %}'
   cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}The command stopped at the recorded boundary.{% endif
     %}'
   fix: '{% if paintedwolf.diagnostic_top_level %}Reduce the size or complexity of the submitted shell source before resubmitting it.{% endif %}'

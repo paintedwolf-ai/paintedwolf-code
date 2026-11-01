@@ -39,7 +39,7 @@ var diagnosticFields = []string{
 	"program_completed_details_retained_omitted", "program_unknown_details_retained_omitted", "program_stopped_details_omitted",
 	"program_stopped_details", "program_completed_details", "program_unknown_details",
 	"action", "work_id", "question_id", "revision", "workflow_phase", "agent",
-	"field", "field_path", "path", "expected_type", "json_malformed", "json_encoded",
+	"env_var", "field", "field_path", "path", "expected_type", "json_malformed", "json_encoded",
 	"json_unexpected_token_at", "json_unterminated_string_at", "json_trailing_text_at",
 	"found_under", "belongs_under", "close_before", "did_you_mean", "reason", "text_base_changed",
 	"index", "type", "locators", "locators_truncated", "interactive_truncated", "timeout",

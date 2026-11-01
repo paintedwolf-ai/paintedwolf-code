@@ -806,6 +806,28 @@ host_facts:
    type: bool
  - name: paintedwolf.missing_capability_read_path
    type: bool
+ - name: paintedwolf.expected_revision
+   type: string
+ - name: paintedwolf.observed_revision
+   type: string
+ - name: paintedwolf.revision_change_observed
+   type: bool
+ - name: paintedwolf.limit_observation_known
+   type: bool
+ - name: paintedwolf.glob_limit_known
+   type: bool
+ - name: paintedwolf.background_limit_known
+   type: bool
+ - name: paintedwolf.awaited_capacity_known
+   type: bool
+ - name: paintedwolf.failure_count_known
+   type: bool
+ - name: paintedwolf.use_env_param
+   type: bool
+ - name: paintedwolf.use_cwd_param
+   type: bool
+ - name: paintedwolf.env_var
+   type: string
  - name: paintedwolf.argument_schema_tool
    type: string
  - name: paintedwolf.argument_schema_matches_tool

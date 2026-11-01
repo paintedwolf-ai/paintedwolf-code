@@ -36,7 +36,7 @@ func TestCommandRecoveryPreservesUnitAndPriorEffects(t *testing.T) {
 	out, err := f.call(t, t.Context(), `printf before | tee retained; eval 'if'`)
 	testutil.FailErr(t, "run captured invalid source", err)
 	got := decodeOutcome(t, out)
-	if got.Refusal == nil || got.Refusal.Details["diagnostic_top_level"] != false || got.Refusal.Details["command_execution"] != "observed" || strings.Contains(got.Refusal.Feedback, "Nothing executed") {
+	if got.Refusal == nil || got.Refusal.Details["diagnostic_top_level"] != false || got.Refusal.Details["command_execution"] != "observed" || strings.Contains(got.Refusal.Feedback, "No command operation ran") {
 		t.Fatalf("captured refusal lost prior effects: %+v / %+v", got, got.Refusal)
 	}
 	retained, err := os.ReadFile(filepath.Join(f.Dir, "retained"))
@@ -111,7 +111,7 @@ func TestReachedRecoveryTravelsFromLedgerToModel(t *testing.T) {
 			t.Fatalf("reached recovery lost %q: %s", want, text)
 		}
 	}
-	if strings.Contains(text, "Nothing executed") || strings.Contains(text, `"feedback"`) || message.Content != body {
+	if strings.Contains(text, "No command operation ran") || strings.Contains(text, `"feedback"`) || message.Content != body {
 		t.Fatalf("recovery contradicted or rewrote retained results: %s", text)
 	}
 }

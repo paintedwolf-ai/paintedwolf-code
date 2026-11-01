@@ -45,6 +45,7 @@ func activation(gc *GuardContext) map[string]any {
 		}
 		out["paintedwolf.operation"] = operation
 		oarcopy.PublishInvocationRecovery(out, gc.Invocation.Tool, gc.Invocation.ToolArgs)
+		oarcopy.PublishDiagnosticKnowledge(out, gc.ObservationData)
 
 		out["fire_count"], out["breaker_count"], out["anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
 	}

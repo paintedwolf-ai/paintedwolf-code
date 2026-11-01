@@ -15,11 +15,10 @@ requires:
 when: paintedwolf.rejection_code == "ENV_KEY_INVALID"
 effect: block
 copy:
-  what: Inline env key rejected — {{ paintedwolf.rejection_reason }}
+  what: 'An environment variable name was refused{% if paintedwolf.rejection_reason %}: {{ paintedwolf.rejection_reason }}{% endif %}.'
   cause: Environment names must match [A-Za-z_][A-Za-z0-9_]*. Scrub-critical names and prefixes remain blocked case-insensitively.
   why: ''
-  fix: Correct an invalid identifier without changing the intended variable’s meaning, or remove a blocked override. Changing a blocked name’s case cannot grant access.
-    Never include a secret value in recovery text.
+  fix: ''
   instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_env_input

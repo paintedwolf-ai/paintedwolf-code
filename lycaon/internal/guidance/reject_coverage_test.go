@@ -233,7 +233,7 @@ func TestInapplicableArgumentRecoveryUsesHostFacts(t *testing.T) {
 	for _, fields := range [][]string{nil, {"workflow_work_id"}, {"first", "second"}} {
 		block, err := guidance.RenderUnifiedRejectBlock(t.Context(), "TOOL_ARGS_INVALID", entry, map[string]any{
 			"tool": "task", "field": "workflow_work_id", "reason": "not_a_planned_fanout_phase",
-			"inapplicable_fields": fields,
+			"inapplicable_fields": fields, "argument_schema_tool": "task",
 		})
 		testutil.FailErr(t, "render argument recovery", err)
 		if !strings.Contains(block, "at `workflow_work_id`") || strings.Contains(block, "Omit `") != (len(fields) > 0) {

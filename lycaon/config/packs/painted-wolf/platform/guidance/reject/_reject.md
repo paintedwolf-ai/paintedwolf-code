@@ -2,7 +2,7 @@
 {{ what }}
 {% else %}Rejected: {{ what }}
 {% endif %}
-{% if execution.not_started %}State: Nothing executed. No files changed.
+{% if execution.not_started %}State: No command operation ran or changed files.
 {% elif execution.active %}State: Program is not finished. Operations started: {{ execution.started }}. Completed effects: {{ execution.completed }}. Uncertain effects: {{ execution.uncertain }}. Inspect its jobs before starting replacement work.
 {% elif execution.observed %}State: Operations started: {{ execution.started }}. Completed effects: {{ execution.completed }}. Uncertain effects: {{ execution.uncertain }}.
 {% endif %}

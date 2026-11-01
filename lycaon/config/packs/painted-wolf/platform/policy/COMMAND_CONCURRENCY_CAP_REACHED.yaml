@@ -16,10 +16,12 @@ requires:
   - paintedwolf.live_command_handles
   - paintedwolf.can_command_output
   - paintedwolf.can_command_stop
+  - paintedwolf.awaited_capacity_known
 when: paintedwolf.rejection_code == "COMMAND_CONCURRENCY_CAP_REACHED"
 effect: block
 copy:
-  what: At admission, this session had {{ paintedwolf.count }} live awaited command jobs; the configured limit is {{ paintedwolf.max_awaited }}.
+  what: 'This session''s awaited-command capacity is full.{% if paintedwolf.awaited_capacity_known %} Live jobs at admission: {{ paintedwolf.count }}; configured
+    limit: {{ paintedwolf.max_awaited }}.{% endif %}'
   cause: Explicit awaited concurrency is bounded independently from background servers and watches.
   why: More overlapping foreground work would make completion order and resource coordination unreliable.
   fix: '{% if paintedwolf.can_command_output %}Use command_output to inspect an existing handle from {{ paintedwolf.live_command_handles }}.{% endif %}{% if paintedwolf.can_command_stop

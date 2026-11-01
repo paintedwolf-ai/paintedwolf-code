@@ -17,7 +17,7 @@ copy:
   what: Command programs are turned off on this host, so this program did not start.
   cause: This host currently admits no new command programs.
   why: ''
-  fix: '{% if paintedwolf.can_command_output %}Existing retained output remains readable with command_output.{% endif %}'
+  fix: ''
   instead: ''
 x-paintedwolf-category: blocked
 x-paintedwolf-emit: guard:tool

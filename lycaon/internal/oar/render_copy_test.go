@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
@@ -32,5 +33,35 @@ func TestRendererFrozenCopyKeepsAdvisoryDisposition(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHostPresentationPreservesOmittedAndEmptyCopyMembers(t *testing.T) {
+	setupAuthorCheckRenderer(t)
+	for _, copy := range []map[string]string{nil, {}, {"what": "", "fix": ""}} {
+		before := maps.Clone(copy)
+		decision := &Decision{Code: "FIXTURE", Effect: EffectBlock, Copy: copy}
+		rendered, err := NewRenderer(nil, nil).Render(t.Context(), StagePostTool, decision)
+		testutil.FailErr(t, "render code-only outcome", err)
+		if len(rendered) != 1 || (!maps.Equal(decision.Copy, before) || (decision.Copy == nil) != (before == nil)) {
+			t.Fatalf("host presentation altered canonical copy: %#v", decision.Copy)
+		}
+		if strings.Contains(rendered[0].Text, "Fix:") || strings.Contains(rendered[0].Text, "Next:") || (copy != nil && !strings.Contains(rendered[0].Text, "FIXTURE")) {
+			t.Fatalf("code-only outcome acquired a remedy: %s", rendered[0].Text)
+		}
+	}
+}
+
+func TestEvaluatedRuleWithoutCopyDoesNotConsultFallbackCatalog(t *testing.T) {
+	setupAuthorCheckRenderer(t)
+	rule := &Rule{ID: "FIXTURE", Effect: EffectBlock}
+	decision := decisionFromRule(rule, NewGuardContext(), nil)
+	if decision.Copy == nil || len(decision.Copy) != 0 {
+		t.Fatalf("omitted rule copy was not frozen: %#v", decision.Copy)
+	}
+	rendered, err := NewRenderer(stubFmt{}, stubFmt{}).Render(t.Context(), StagePostTool, &decision)
+	testutil.FailErr(t, "render omitted rule copy", err)
+	if len(rendered) != 1 || !strings.Contains(rendered[0].Text, "Code: FIXTURE") || strings.Contains(rendered[0].Text, "Fix:") {
+		t.Fatalf("unexpected code-only presentation: %#v", rendered)
 	}
 }

@@ -1,9 +1,6 @@
 package guidance
 
-import (
-	"encoding/json"
-	"math"
-)
+import "github.com/lycaon/lycaon/internal/oarcopy"
 
 // commandRecoveryView exposes consistent producer-stated execution observations.
 func commandRecoveryView(data map[string]any) map[string]any {
@@ -19,7 +16,7 @@ func commandRecoveryView(data map[string]any) map[string]any {
 		if !found {
 			continue
 		}
-		n, ok := recoveryCount(value)
+		n, ok := oarcopy.CountObservation(value)
 		if !ok {
 			return nil
 		}
@@ -44,21 +41,4 @@ func commandRecoveryView(data map[string]any) map[string]any {
 		}
 	}
 	return nil
-}
-
-func recoveryCount(value any) (int64, bool) {
-	switch n := value.(type) {
-	case int:
-		return int64(n), n >= 0
-	case int64:
-		return n, n >= 0
-	case float64:
-		if n >= 0 && n < math.Exp2(63) && math.Trunc(n) == n {
-			return int64(n), true
-		}
-	case json.Number:
-		parsed, err := n.Int64()
-		return parsed, err == nil && parsed >= 0
-	}
-	return 0, false
 }

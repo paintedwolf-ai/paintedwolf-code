@@ -8,18 +8,15 @@ selector:
     - verify
 requires:
   profiles:
-    - tool
+  - tool
   facts:
-    - paintedwolf.rejection_code
-    - paintedwolf.command
-    - paintedwolf.resolvable
+  - paintedwolf.rejection_code
+  - paintedwolf.command
 when: paintedwolf.rejection_code == "COMMAND_NOT_FOUND"
 effect: block
 copy:
-  what: '{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}` is not on PATH for this confined run.{% else %}An executable named in the command line
-    is not on PATH for this confined run.{% endif %}'
-  cause: 'The process launcher could not resolve this executable before starting it.{% if paintedwolf.resolvable %} Other resolvable names: {{ paintedwolf.resolvable
-    }}. Their presence does not establish an equivalent operation.{% endif %}'
+  what: '{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}`{% else %}An executable{% endif %} could not be resolved for this invocation.'
+  cause: The launcher did not start this executable.
   why: The requested executable did not start. Earlier operations may have run.
   fix: ''
   instead: ''

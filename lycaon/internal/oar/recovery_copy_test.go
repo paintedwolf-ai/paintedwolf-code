@@ -60,7 +60,7 @@ func TestUnknownRecoveryHasNoInventedRemedy(t *testing.T) {
 	setupAuthorCheckRenderer(t)
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load recovery catalog", err)
-	for _, code := range []string{"COMMAND_EXEC_DENIED", "COMMAND_NOT_FOUND", "COMMAND_NATIVE_FORM_UNSUPPORTED", "COMMAND_PLATFORM_UNAVAILABLE", "COMMAND_LIMIT_EXCEEDED", "COMMAND_OPERAND_INVALID", "TOOL_OWNER_FAILED", "TOOL_OWNER_INTERRUPTED", "TOOL_ARGS_INVALID", "SANDBOX_REFUSAL_REPORT_SILENT", "SANDBOX_BOUNDARY_REFUSED"} {
+	for _, code := range []string{"COMMAND_EXEC_DENIED", "COMMAND_NOT_FOUND", "COMMAND_NATIVE_FORM_UNSUPPORTED", "COMMAND_PLATFORM_UNAVAILABLE", "COMMAND_LIMIT_EXCEEDED", "COMMAND_OPERAND_INVALID", "TOOL_OWNER_FAILED", "TOOL_OWNER_INTERRUPTED", "TOOL_ARGS_INVALID", "SANDBOX_REFUSAL_REPORT_SILENT", "SANDBOX_BOUNDARY_REFUSED", "COMMAND_REVISION_CONFLICT", "VERIFY_UNVERIFIABLE", "HOST_RESOURCE_POLICY_DENIED", "REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED", "DESKTOP_CAPTURE_DISALLOWED"} {
 		t.Run(code, func(t *testing.T) {
 			gc := NewGuardContext()
 			gc.ObserveToolCall("command", map[string]any{})
@@ -94,6 +94,44 @@ func TestArgumentRepairCannotCrossReceivingToolIdentity(t *testing.T) {
 		text := oarcore.RenderCopy(hints.HintCodes["TOOL_ARGS_INVALID"].Fix, activation(gc))
 		if strings.Contains(text, `"command"`) != (schemaTool == "command") {
 			t.Fatalf("schema %q crossed command identity: %s", schemaTool, text)
+		}
+	}
+}
+
+func TestRevisionRecoveryRequiresAnObservedIdentityChange(t *testing.T) {
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load recovery catalog", err)
+	for _, revisions := range [][2]string{{"", ""}, {"before", ""}, {"", "after"}, {"same", "same"}, {"before", "after"}} {
+		gc := NewGuardContext()
+		gc.ObserveToolCall("command", map[string]any{})
+		gc.ObservationData = map[string]any{"path": "input", "expected_revision": revisions[0], "observed_revision": revisions[1], "revision_change_observed": true}
+		fix := strings.TrimSpace(oarcore.RenderCopy(hints.HintCodes["COMMAND_REVISION_CONFLICT"].Fix, activation(gc)))
+		known := revisions[0] != "" && revisions[1] != "" && revisions[0] != revisions[1]
+		if (fix != "") != known {
+			t.Fatalf("revisions %v acquired the wrong recovery: %s", revisions, fix)
+		}
+	}
+}
+
+func TestResourceFeedbackDistinguishesUnknownFromMeasuredZero(t *testing.T) {
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load recovery catalog", err)
+	for _, values := range []map[string]any{nil, {"maximum": 0}, {"maximum": 0, "observed": 0}, {"maximum": 8, "observed": 9}, {"maximum": "8", "observed": 9}} {
+		gc := NewGuardContext()
+		gc.ObserveToolCall("command", map[string]any{})
+		gc.ObservationData = maps.Clone(values)
+		if gc.ObservationData == nil {
+			gc.ObservationData = map[string]any{}
+		}
+		gc.ObservationData["limit_observation_known"] = true
+		text := oarcore.RenderCopy(hints.HintCodes["COMMAND_LIMIT_EXCEEDED"].What, activation(gc))
+		_, maxKnown := values["maximum"].(int)
+		_, observedKnown := values["observed"].(int)
+		if strings.Contains(text, "Observed") != (maxKnown && observedKnown) {
+			t.Fatalf("values %v became fabricated observations: %s", values, text)
+		}
+		if maxKnown && observedKnown && values["maximum"] == 0 && !strings.Contains(text, "Observed 0; maximum 0") {
+			t.Fatalf("measured zero was lost: %s", text)
 		}
 	}
 }

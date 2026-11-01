@@ -60,6 +60,7 @@ func FactsFromData(data map[string]any) map[string]any {
 	tool, _ := data["tool"].(string)
 	args, _ := data["tool_args"].(map[string]any)
 	PublishInvocationRecovery(out, tool, args)
+	PublishDiagnosticKnowledge(out, data)
 	reason, _ := out["paintedwolf.rejection_reason"].(string)
 	if reason == "" {
 		if raw, ok := data["reason"]; ok {
