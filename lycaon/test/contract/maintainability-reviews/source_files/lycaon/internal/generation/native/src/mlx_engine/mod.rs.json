@@ -4,12 +4,12 @@
   "kind": "algorithm",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "The E4B tensor graph keeps attention, residual/PLE composition, and the shared-KV tail specialization together. Retain the measured 302-line graph. Cache storage, sparse PLE, tensor loading, layout validation, and activation are separate domain boundaries. Rotary/precision fixtures and independent full-row versus last-query measurements support this shape.",
-  "reviewed_commit": "cc64526ee43de3514e9616558f074da1b6a0c2cd",
-  "ceiling": 302,
+  "reason": "The 309-line E4B graph keeps attention, residual/PLE composition, and shared-KV output selection together. Cache-only prefill is the same graph dependency boundary: layers after the last KV producer cannot change retained state. Keep cache storage, sparse PLE, tensor loading, layout validation, and activation separate. M4 full-cache versus cache-only prefill produced exactly equal subsequent logits across sliding-window rollover; rotary and precision fixtures passed. Matched timing showed no material speedup, so this retention makes no throughput claim.",
+  "reviewed_commit": "ba94126c995198277c9797c4a90a6fb993181194",
+  "ceiling": 309,
   "boundaries": {
-    "lycaon/internal/generation/native/src/mlx_engine/mod.rs": "fd3836f2851d383bf7f5eb71a012e65937c142999ca69018e4bf1357e0c9b5df",
+    "lycaon/internal/generation/native/src/mlx_engine/mod.rs": "367940806f026ca7fc7422ae8021abf498d72fdaf990870d914c039ac2e70011",
     "lycaon/internal/generation/native/src/mlx_engine/cache.rs": "b7aef82d644332c5fe34fc8f5ddd4663b8e1347ef9c4a2aa49d101b3adb9377e",
-    "lycaon/internal/generation/native/src/mlx_bench.rs": "89fdb097853422877807af82658d48863408b8094189802605cbefa452b68044"
+    "lycaon/internal/generation/native/src/mlx_bench.rs": "81bc3f1324c3f33309033150c8e166eb0e55421d054c5573f5c76ebf7f05ec8e"
   }
 }
