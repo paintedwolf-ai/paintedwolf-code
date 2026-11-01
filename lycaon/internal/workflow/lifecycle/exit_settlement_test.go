@@ -26,11 +26,12 @@ func TestRootWorkflowExitReleasesVisibleTurn(t *testing.T) {
 				mgr.Controls.SessionExit = runtime.Stops
 				var run *api.WorkflowRun
 				var err error
-				if workflowID == "implement" {
+				switch workflowID {
+				case "implement":
 					run, err = mgr.Ambient.StartAmbient(ctx, "sess-1", workflowID, "1.0.0")
-				} else if workflowID == "plan" {
+				case "plan":
 					run, err = startRun(ctx, mgr, "sess-1", workflowID, "1.0.1")
-				} else {
+				default:
 					run, err = startRun(ctx, mgr, "sess-1", workflowID, "1.0.0")
 				}
 				testutil.FailErr(t, "start workflow", err)

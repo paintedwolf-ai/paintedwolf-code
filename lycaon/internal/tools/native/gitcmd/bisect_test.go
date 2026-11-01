@@ -19,13 +19,10 @@ func newBisectHarness(t *testing.T) *harness {
 	h := newUninitializedHarness(t)
 	empty := ensureEmptyFixture(t, h.bin)
 	bisectFixtureOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "gitcmd-bisect-*")
+		dir, err := mkdirSharedFixture("gitcmd-bisect-*")
 		testutil.FailErr(t, "bisect fixture dir", err)
 		copyFixtureDir(t, empty, dir)
-		tmpl, err := os.MkdirTemp("", "gitcmd-tmpl-*")
-		testutil.FailErr(t, "bisect template dir", err)
-		defer func() { _ = os.RemoveAll(tmpl) }()
-		seed := &harness{t: t, root: dir, bin: h.bin, template: tmpl}
+		seed := &harness{t: t, root: dir, bin: h.bin, template: t.TempDir()}
 		for i := 1; i <= 12; i++ {
 			state := "good\n"
 			if i >= 7 {
