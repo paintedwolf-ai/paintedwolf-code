@@ -797,21 +797,27 @@
     "build:lycaon-dev": {
       "locks": [
         "dev-engine",
-        "scanners"
+        "scanners",
+        "generation-runtime",
+        "rust"
       ],
       "workers": "shared"
     },
     "upgrade:corpus:seed": {
       "locks": [
         "dev-engine",
-        "scanners"
+        "scanners",
+        "generation-runtime",
+        "rust"
       ],
       "workers": "shared"
     },
     "upgrade:corpus:boot": {
       "locks": [
         "dev-engine",
-        "scanners"
+        "scanners",
+        "generation-runtime",
+        "rust"
       ],
       "workers": "shared"
     },
@@ -1013,7 +1019,9 @@
       "SSL_CERT_DIR",
       "DOCKER_HOST",
       "DOCKER_CONTEXT",
-      "DOCKER_CONFIG"
+      "DOCKER_CONFIG",
+      "BIALY_GENERATION_BUNDLE",
+      "BIALY_GENERATION_AUTHORITY"
     ],
     "prefixes": [
       "LC_",
