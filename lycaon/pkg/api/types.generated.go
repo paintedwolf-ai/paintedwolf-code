@@ -1292,7 +1292,7 @@ type CommandActivity struct {
 	Repetitions int `json:"repetitions,omitempty"`
 	// All executions represented by this activity.
 	ExecutionCount int `json:"execution_count,omitempty"`
-	// Executions reporting failure
+	// Executions reporting failure, refusal or interruption, independent of the enclosing outcome.
 	FailedCount      int                   `json:"failed_count,omitempty"`
 	WaitingCount     int                   `json:"waiting_count,omitempty"`
 	UncertainEffects int                   `json:"uncertain_effects,omitempty"`

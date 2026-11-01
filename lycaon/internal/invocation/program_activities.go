@@ -57,7 +57,7 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandP
 			state = "refused"
 		}
 		normalized, outcome := activityOutcome(api.CommandExecutionReceipt{State: state, StatusCode: program.StatusCode})
-		activities = []api.CommandActivity{{ID: program.ID + ":result", Group: "Running commands", Label: "Run command", Subject: program.StopCode, State: normalized, Outcome: outcome, StatusCode: program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Steps: []api.CommandActivityStep{}}}
+		activities = []api.CommandActivity{{ID: program.ID, Group: "Running commands", Label: "Run command", Subject: program.StopCode, State: normalized, Outcome: outcome, StatusCode: program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Steps: []api.CommandActivityStep{}}}
 	}
 	return activities, nil
 }

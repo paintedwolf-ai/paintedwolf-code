@@ -586,6 +586,7 @@ paths:
           description: Restrict execution receipts to a host activity, including all repetitions.
           schema:
             type: string
+            format: uuid
         - name: cursor
           in: query
           schema:
@@ -26396,6 +26397,7 @@ components:
       properties:
         id:
           type: string
+          format: uuid
         command:
           type: string
         count:
@@ -26445,6 +26447,7 @@ components:
       properties:
         id:
           type: string
+          format: uuid
         group:
           type: string
         label:
@@ -26479,9 +26482,7 @@ components:
           description: All executions represented by this activity.
         failed_count:
           type: integer
-          description: Executions reporting failure
-          refusal or interruption: null
-          independent of the enclosing outcome.: null
+          description: Executions reporting failure, refusal or interruption, independent of the enclosing outcome.
         waiting_count:
           type: integer
         uncertain_effects:
