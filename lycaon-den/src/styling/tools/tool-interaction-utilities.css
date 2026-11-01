@@ -370,17 +370,6 @@
   color: var(--den-text-muted);
   font-size: var(--text-den-hint);
 }
-.den-command-activity-command {
-  margin: 0 0 6px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-size: var(--text-den-hint);
-  color: var(--den-text-muted);
-}
-.den-command-activity-command mark {
-  color: var(--den-text);
-  background: var(--den-tint-2);
-}
 .den-command-activity-details .den-tool-part-card-facts dd {
   flex: 1 1 0;
   overflow-wrap: anywhere;
@@ -394,13 +383,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.den-command-activity-command,
-.den-command-activity-details .den-command-activity-output-preview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 5;
-  overflow: hidden;
 }
 .den-command-activity-details .den-tool-part-card-facts dd {
   display: -webkit-box;

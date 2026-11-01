@@ -98,7 +98,7 @@ export function createCommandActivityProjection() {
     }
     const key = (entry: ActivitySpanEntry) => entry.kind === "tool" ? entry.part.id : entry.key;
     for (const entry of result) if (!positions.has(key(entry))) positions.set(key(entry), nextPosition++);
-    result.sort((a, b) => positions.get(key(a))! - positions.get(key(b))!);
+    result.sort((a, b) => (positions.get(key(a)) ?? 0) - (positions.get(key(b)) ?? 0));
     const activeCalls = new Set(entries.flatMap(entry => entry.kind === "tool" ? [entry.part.toolCallId] : []));
     const activePartIds = new Set(entries.flatMap(entry => entry.kind === "tool" ? [entry.part.id] : []));
     for (const id of outputAssignments.keys()) if (!activePartIds.has(id)) outputAssignments.delete(id);

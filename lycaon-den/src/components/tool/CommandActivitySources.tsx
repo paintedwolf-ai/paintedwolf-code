@@ -68,6 +68,6 @@ export function CommandActivitySources(props: {
         <button type="button" class="den-chat-content-link" disabled={props.offset + props.calls.length >= props.activity.calls.length} onClick={props.onNext}>Next calls</button>
       </div>
     </Show>
-    <Show when={copyState()}><p class="den-tool-part-card-note" role="status">{copyState()}</p></Show>
+    <p class="den-tool-part-card-note" role="status" hidden={!copyState()}>{copyState()}</p>
   </section>;
 }
