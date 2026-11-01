@@ -155,3 +155,30 @@ fn failed_step_discards_partial_state_and_checkpoint() {
     runner.backend.fail = false;
     assert_eq!(runner.begin(request(2), None).unwrap(), 0);
 }
+
+#[test]
+fn full_admitted_prefix_reuses_only_identical_tokens() {
+    let mut runner = Executor::new(Fake::default(), 16384, 256, vec![1]).unwrap();
+    let make = |id| {
+        let mut request = request(id);
+        request.prompt_tokens = vec![2; 8193];
+        request.checkpoint_tokens = 8192;
+        request.max_new_tokens = 1;
+        request
+    };
+    runner.begin(make(1), None).unwrap();
+    while runner.advance(1).unwrap().stop_reason.is_none() {}
+    assert_eq!(runner.backend.prefix.len(), 8192);
+    let calls = runner.backend.calls.len();
+    let mut second = make(2);
+    second.prompt_tokens[8192] = 7;
+    assert_eq!(runner.begin(second, None).unwrap(), 8192);
+    assert_eq!(
+        runner.advance(2).unwrap().stop_reason,
+        Some(StopReason::MaxTokens)
+    );
+    assert_eq!(runner.backend.calls.len(), calls + 1);
+    let mut changed = make(3);
+    changed.prompt_tokens[6000] = 8;
+    assert_eq!(runner.begin(changed, None).unwrap(), 0);
+}

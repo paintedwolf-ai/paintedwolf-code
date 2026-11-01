@@ -48,6 +48,9 @@ func TestRepairReapsReaderBeforeReplacingDamagedRevision(t *testing.T) {
 
 func TestRepairFailureCanBeRetriedWithoutRestartingHost(t *testing.T) {
 	runtime := repairFixture(t)
+	installed := filepath.Join(runtime.loaded.process.lease.Dir, "model.gguf")
+	testutil.FailErr(t, "make installed fixture writable", os.Chmod(installed, 0o600))
+	testutil.FailErr(t, "damage installed payload", os.WriteFile(installed, []byte("invalid weights"), 0o600))
 	payload := filepath.Join(runtime.config.SeedDirectory, "model.gguf")
 	testutil.FailErr(t, "damage seed payload", os.WriteFile(payload, []byte("invalid weights"), 0o600))
 	if err := runtime.Repair(t.Context()); err == nil {
@@ -108,4 +111,20 @@ func TestFirstLoadImportsSeedAndRetriesFailedInstallation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRepairReusesVerifiedPayloadWhenSeedPayloadIsDamaged(t *testing.T) {
+	runtime := repairFixture(t)
+	installed := filepath.Join(runtime.loaded.process.lease.Dir, "model.gguf")
+	before, err := os.Stat(installed)
+	testutil.FailErr(t, "stat installed payload", err)
+	seed := filepath.Join(runtime.config.SeedDirectory, "model.gguf")
+	testutil.FailErr(t, "damage redundant seed", os.WriteFile(seed, []byte("invalid weights"), 0o600))
+	testutil.FailErr(t, "repair with verified payload", runtime.Repair(t.Context()))
+	after, err := os.Stat(filepath.Join(runtime.loaded.process.lease.Dir, "model.gguf"))
+	testutil.FailErr(t, "stat repaired payload", err)
+	if !os.SameFile(before, after) || runtime.Readiness().State != "ready" {
+		t.Fatal("repair replaced verified bytes or lost readiness")
+	}
+	testutil.FailErr(t, "audit reused payload", runtime.loaded.process.lease.Audit(t.Context()))
 }

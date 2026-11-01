@@ -109,7 +109,7 @@ extern "C" int pw_generation_load(const char * path, const char * pci, uint32_t 
                                    char * error, size_t capacity) {
     *result = nullptr;
     return guarded(error, capacity, [&] {
-        if (context < 2 || context > 65536 || !chunk || chunk > 256 || prefix > 4096 || prefix >= context)
+        if (context < 2 || context > 65536 || !chunk || chunk > 256 || prefix >= context)
             throw std::runtime_error("invalid execution limits");
         inspect_e4b(path);
         auto engine = std::make_unique<pw_generation>();

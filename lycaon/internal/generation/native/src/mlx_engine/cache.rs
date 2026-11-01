@@ -11,25 +11,33 @@ pub struct KV {
 pub struct Cache {
     pub offset: i32,
     layers: Vec<Option<KV>>,
-}
-
-impl Default for Cache {
-    fn default() -> Self {
-        Self {
-            offset: 0,
-            layers: (0..24).map(|_| None).collect(),
-        }
-    }
+    capacity: i32,
 }
 
 impl Cache {
+    pub fn new(capacity: usize) -> Result<Self> {
+        if !(2..=65536).contains(&capacity) {
+            return Err("KV capacity exceeds E4B bounds".into());
+        }
+        Ok(Self {
+            offset: 0,
+            layers: (0..24).map(|_| None).collect(),
+            capacity: capacity as i32,
+        })
+    }
+
+    pub fn clear(&mut self) {
+        self.offset = 0;
+        self.layers.fill(None);
+    }
+
     pub fn update(&mut self, layer: usize, keys: Array, values: Array) -> Result<KV> {
         let shape = keys.shape();
         let count = shape.get(2).copied().unwrap_or(0);
         let dimension = if layer % 6 == 5 { 512 } else { 256 };
         if layer >= 24
             || !(1..=256).contains(&count)
-            || !(0..=65536 - count).contains(&self.offset)
+            || !(0..=self.capacity - count).contains(&self.offset)
             || shape != [1, 2, count, dimension]
             || values.shape() != shape
             || keys.dtype() != Dtype::Float16
@@ -56,17 +64,10 @@ impl Cache {
             let mut storage = match previous {
                 Some(kv) => kv,
                 None => KV {
-                    keys: Array::zeros::<f32>(&[1, 2, 0, 512])?.as_dtype(Dtype::Float16)?,
-                    values: Array::zeros::<f32>(&[1, 2, 0, 512])?.as_dtype(Dtype::Float16)?,
+                    keys: Array::zeros::<half::f16>(&[1, 2, self.capacity, 512])?,
+                    values: Array::zeros::<half::f16>(&[1, 2, self.capacity, 512])?,
                 },
             };
-            let capacity = storage.keys.shape()[2];
-            if self.offset + count > capacity {
-                let growth = ((self.offset + count + 255) / 256) * 256 - capacity;
-                let zeros = Array::zeros::<f32>(&[1, 2, growth, 512])?.as_dtype(Dtype::Float16)?;
-                storage.keys = ops::concatenate(&[storage.keys, zeros.clone()], 2)?;
-                storage.values = ops::concatenate(&[storage.values, zeros], 2)?;
-            }
             storage
                 .keys
                 .index_mut((.., .., self.offset..self.offset + count, ..), keys);
@@ -80,7 +81,9 @@ impl Cache {
     }
 
     pub fn get(&self, layer: usize, count: i32) -> Result<KV> {
-        if layer >= 24 || !(1..=256).contains(&count) || !(0..=65536 - count).contains(&self.offset)
+        if layer >= 24
+            || !(1..=256).contains(&count)
+            || !(0..=self.capacity - count).contains(&self.offset)
         {
             return Err("KV read exceeds E4B bounds".into());
         }
@@ -129,7 +132,7 @@ mod tests {
 
     #[test]
     fn retained_prefix_is_unchanged_by_active_cache_extension() {
-        let mut active = Cache::default();
+        let mut active = Cache::new(1024).unwrap();
         let keys = Array::ones::<f32>(&[1, 2, 3, 512])
             .unwrap()
             .as_dtype(Dtype::Float16)
@@ -169,7 +172,7 @@ mod tests {
 
     #[test]
     fn rejects_precision_drift_and_malformed_cache_shapes() {
-        let mut cache = Cache::default();
+        let mut cache = Cache::new(1024).unwrap();
         for shape in [&[1, 2, 1, 256][..], &[1][..]] {
             let keys = Array::zeros::<f32>(shape).unwrap();
             assert!(cache.update(0, keys.clone(), keys).is_err());
@@ -179,8 +182,8 @@ mod tests {
     }
 
     #[test]
-    fn global_capacity_grows_in_bounded_blocks() {
-        let mut cache = Cache::default();
+    fn global_capacity_is_reserved_once_and_bounds_updates() {
+        let mut cache = Cache::new(1024).unwrap();
         for count in [1, 256] {
             let keys = Array::ones::<f32>(&[1, 2, count, 512])
                 .unwrap()
@@ -190,16 +193,38 @@ mod tests {
             assert_eq!(kv.keys.shape()[2], cache.offset + count);
             cache.offset += count;
             cache.evaluate().unwrap();
+            assert_eq!(cache.bytes(), 2 * 2 * 1024 * 512 * 2);
         }
-        assert_eq!(cache.bytes(), 2 * 2 * 512 * 512 * 2);
-        cache.offset = 65536;
+        assert_eq!(cache.bytes(), 2 * 2 * 1024 * 512 * 2);
+        cache.offset = 1024;
         let keys = Array::zeros::<f32>(&[1, 2, 1, 512]).unwrap();
         assert!(cache.update(5, keys.clone(), keys).is_err());
     }
 
     #[test]
+    fn clear_preserves_the_admitted_capacity() {
+        for capacity in [0, 1, 65537, usize::MAX] {
+            assert!(Cache::new(capacity).is_err());
+        }
+        let mut cache = Cache::new(2).unwrap();
+        let keys = Array::ones::<half::f16>(&[1, 2, 2, 512]).unwrap();
+        cache.update(5, keys.clone(), keys).unwrap();
+        cache.offset = 2;
+        cache.evaluate().unwrap();
+        cache.clear();
+        assert_eq!(cache.offset, 0);
+        assert_eq!(cache.bytes(), 0);
+        let keys = Array::ones::<half::f16>(&[1, 2, 3, 512]).unwrap();
+        assert!(cache.update(5, keys.clone(), keys).is_err());
+        let keys = Array::ones::<half::f16>(&[1, 2, 2, 512]).unwrap();
+        cache.update(5, keys.clone(), keys).unwrap();
+        cache.evaluate().unwrap();
+        assert_eq!(cache.bytes(), 2 * 2 * 2 * 512 * 2);
+    }
+
+    #[test]
     fn sliding_state_retains_only_the_window_and_current_chunk() {
-        let mut cache = Cache::default();
+        let mut cache = Cache::new(1024).unwrap();
         for _ in 0..4 {
             let keys = Array::ones::<f32>(&[1, 2, 256, 256])
                 .unwrap()
