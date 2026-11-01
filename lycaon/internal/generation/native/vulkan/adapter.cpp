@@ -47,6 +47,7 @@ ggml_backend_dev_t device(const char * pci) {
 }
 
 void warm(pw_generation * engine) {
+    engine->reset_active();
     const auto vocab = llama_model_get_vocab(engine->model.get());
     const auto bos = llama_vocab_bos(vocab);
     std::vector<uint32_t> tokens(std::min(engine->chunk, engine->limit),

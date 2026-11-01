@@ -5,7 +5,9 @@
 #include <cstdlib>
 
 void pw_generation::reset_active() {
-    if (!llama_memory_seq_rm(llama_get_memory(context.get()), 0, -1, -1))
+    auto memory = llama_get_memory(context.get());
+    if (!prefix_position) memory->clear(true);
+    else if (!llama_memory_seq_rm(memory, 0, -1, -1))
         throw std::runtime_error("active cache reset failed");
     position = 0;
 }
