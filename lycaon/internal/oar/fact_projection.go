@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // activation publishes occurrence facts under their rule-visible names.
@@ -45,18 +44,12 @@ func activation(gc *GuardContext) map[string]any {
 			operation = gc.Invocation.Tool
 		}
 		out["paintedwolf.operation"] = operation
+		oarcopy.PublishInvocationRecovery(out, gc.Invocation.Tool, gc.Invocation.ToolArgs)
+		oarcopy.PublishDiagnosticKnowledge(out, gc.ObservationData)
 
 		out["fire_count"], out["breaker_count"], out["anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
 	}
 	return out
-}
-
-func occurrenceToolContract(gc *GuardContext) toolcontract.Contract {
-	if gc == nil {
-		return toolcontract.Contract{}
-	}
-	contract, _ := toolcontract.Lookup(gc.Invocation.Tool)
-	return contract
 }
 
 func bareActivation(gc *GuardContext) map[string]any {
@@ -107,9 +100,6 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"pattern_parse_ok":                    gc.Invocation.PatternParseOK,
 		"arg_validation_errors":               strList(gc.Invocation.ArgValidationErrors),
 		"worker_leg":                          gc.Session.WorkerLeg,
-		"capability_request_fields":           occurrenceToolContract(gc).CapabilityRequestFields(),
-		"supports_local_listen":               occurrenceToolContract(gc).Supports(toolcontract.CapabilityLocalListen),
-		"supports_loopback_connect":           occurrenceToolContract(gc).Supports(toolcontract.CapabilityLoopbackConnect),
 		"action_host_resources":               strList(gc.Access.ActionHostResources),
 		"action_host_resource_denials":        strList(gc.Access.ActionHostResourceDenials),
 		"confine_applied":                     gc.Execution.ConfineApplied,

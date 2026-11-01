@@ -110,7 +110,7 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 	}
 	body := ""
 	if feedback != nil {
-		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy)
+		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy, feedback.Details)
 		if err != nil {
 			return "", fmt.Errorf("render frozen worker policy feedback: %w", err)
 		}

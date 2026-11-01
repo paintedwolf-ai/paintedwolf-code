@@ -204,7 +204,7 @@ func (f *frame) refuseLimit(loc commandsurface.SyntaxLocation, limit string, obs
 
 func (f *frame) refuse(loc commandsurface.SyntaxLocation, code, expected string, cause error) *EvaluationRefusal {
 	_ = f.state.latch.Record(uuid.NewString(), toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, true)
-	return &EvaluationRefusal{Code: code, Node: loc, Expected: expected, Cause: cause}
+	return &EvaluationRefusal{SourceUnitID: f.parent.SourceUnitID, Code: code, Node: loc, Expected: expected, Cause: cause}
 }
 
 // interrupt latches cancellation observed between statements.

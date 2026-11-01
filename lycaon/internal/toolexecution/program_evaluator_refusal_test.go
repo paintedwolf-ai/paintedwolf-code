@@ -41,7 +41,7 @@ func TestProgramEvaluatorRefusalRetainsActualCauseAndDelivery(t *testing.T) {
 	executor := NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
 	executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(moduleHintConfig(t)))
 	executor.Rejections.SetBlockPlane(stockBlockPlane(t))
-	delivery, err := executor.Rejections.RenderProgramRefusal(t.Context(), frame, memory, evaluatorScreen(t, memory), tc, cause, nil)
+	delivery, err := executor.Rejections.RenderProgramRefusal(t.Context(), frame, memory, evaluatorScreen(t, memory), tc, cause, nil, nil)
 	testutil.FailErr(t, "render actual evaluator refusal", err)
 	defer delivery.Close()
 	rendered, ok := guidance.RefusalFromError(delivery.Feedback)
@@ -102,7 +102,7 @@ func TestProgramEvaluatorRefusalRejectsChangedFrameAndCleansAdmission(t *testing
 
 			}
 			before := memory.InUse()
-			delivery, err := (&Rejections{}).RenderProgramRefusal(ctx, frame, memory, screen, tc, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "program_state_bytes"}}, nil)
+			delivery, err := (&Rejections{}).RenderProgramRefusal(ctx, frame, memory, screen, tc, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "program_state_bytes"}}, nil, nil)
 			if delivery != nil || err == nil || memory.InUse() != before {
 				t.Fatalf("invalid frame retained feedback: delivery=%+v err=%v usage=%+v before=%+v", delivery, err, memory.InUse(), before)
 			}
@@ -129,7 +129,7 @@ func TestProgramEvaluatorRefusalReleasesIncompleteScreen(t *testing.T) {
 		frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "cat < input"}}, memory)
 		testutil.FailErr(t, "freeze frame", err)
 		baseline := memory.InUse()
-		delivery, err := (&Rejections{}).RenderProgramRefusal(t.Context(), frame, memory, incompleteRefusalScreen{empty}, tc, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "program_state_bytes"}}, nil)
+		delivery, err := (&Rejections{}).RenderProgramRefusal(t.Context(), frame, memory, incompleteRefusalScreen{empty}, tc, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "program_state_bytes"}}, nil, nil)
 		if delivery == nil || err != nil || delivery.Failure == nil || delivery.Failure.Kind != "unavailable" || delivery.Feedback != nil || delivery.Details != nil || memory.InUse() != baseline {
 			t.Fatalf("incomplete screen delivery: %+v %v %+v", delivery, err, memory.InUse())
 		}
@@ -161,7 +161,7 @@ func TestProgramEvaluatorRefusalPrepaidFailureKeepsValidFrameAndCause(t *testing
 			}
 			before := memory.InUse()
 			cause := &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"secret": "fixture-evaluator-protected-value"}}
-			delivery, err := (&Rejections{}).RenderProgramRefusal(ctx, frame, memory, evaluatorScreen(t, memory), tc, cause, nil)
+			delivery, err := (&Rejections{}).RenderProgramRefusal(ctx, frame, memory, evaluatorScreen(t, memory), tc, cause, nil, nil)
 			testutil.FailErr(t, "retain failed delivery beneath valid frame", err)
 			if delivery == nil || delivery.Code != cause.Code || delivery.Failure == nil || delivery.Failure.Kind != mode || delivery.Feedback != nil || delivery.Details != nil || memory.InUse() != before {
 				t.Fatalf("prepaid failure %+v usage %+v", delivery, memory.InUse())
@@ -172,7 +172,7 @@ func TestProgramEvaluatorRefusalPrepaidFailureKeepsValidFrameAndCause(t *testing
 					t.Fatalf("capacity facts %+v actual %+v", delivery.Failure, actual)
 				}
 			}
-			repeated, err := (&Rejections{}).RenderProgramRefusal(ctx, frame, memory, evaluatorScreen(t, memory), tc, cause, nil)
+			repeated, err := (&Rejections{}).RenderProgramRefusal(ctx, frame, memory, evaluatorScreen(t, memory), tc, cause, nil, nil)
 			if err != nil || repeated != delivery || memory.InUse() != before {
 				t.Fatalf("repeated failed delivery multiplied state: %+v %v", repeated, err)
 			}
@@ -198,7 +198,7 @@ func TestProgramEvaluatorRefusalDoesNotMaskUnknownPreparationFailure(t *testing.
 	before := memory.InUse()
 	original := errors.Join(&toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED"}, &toolcontract.ProgramMemoryLimitError{Account: "state", Maximum: 123, Observed: 124})
 	provenance := errors.New("fixture ledger attribution mismatch")
-	delivery, err := (&Rejections{}).RenderProgramRefusal(t.Context(), frame, memory, evaluatorScreen(t, memory), tc, original, provenance)
+	delivery, err := (&Rejections{}).RenderProgramRefusal(t.Context(), frame, memory, evaluatorScreen(t, memory), tc, original, provenance, nil)
 	if delivery != nil || !errors.Is(err, provenance) || memory.InUse() != before {
 		t.Fatalf("provenance failure became capacity delivery: %+v %v", delivery, err)
 	}

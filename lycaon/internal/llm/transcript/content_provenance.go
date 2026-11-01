@@ -120,6 +120,7 @@ func Project(messages []api.Message) []api.Message {
 			parts = api.MessageTextParts(msg)
 		}
 		parts = projectSourceText(msg, parts)
+		parts = projectCommandResult(msg, parts)
 		if decision := checkpointDecisionParts(msg); len(decision) > 0 {
 			parts = append(append([]api.MessageContentPart(nil), parts...), decision...)
 		}
@@ -280,7 +281,7 @@ func contentPartIsInstruction(authority api.ContentAuthority) bool {
 }
 
 func dataMarkLines(content string) string {
-	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	lines := strings.Split(content, "\n")
 	for i := range lines {
 		lines[i] = "⟦D⟧" + lines[i]
 	}

@@ -1,0 +1,24 @@
+package oarcopy
+
+import (
+	"slices"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
+)
+
+// PublishInvocationRecovery binds remedies to actual tool identity and arguments.
+func PublishInvocationRecovery(facts map[string]any, tool string, args map[string]any) {
+	schemaTool, _ := facts["paintedwolf.argument_schema_tool"].(string)
+	facts["paintedwolf.argument_schema_matches_tool"] = schemaTool != "" && schemaTool == tool
+	contract, known := toolcontract.Lookup(tool)
+	fields := contract.CapabilityRequestFields()
+	facts["paintedwolf.capability_contract_known"] = known
+	facts["paintedwolf.capability_request_fields"] = append([]string{}, fields...)
+	request, _ := args["capability_request"].(map[string]any)
+	for _, field := range toolcontract.CapabilityRequestFields() {
+		supported := known && slices.Contains(fields, field)
+		facts["paintedwolf.supports_"+field] = supported
+		_, requested := request[field]
+		facts["paintedwolf.missing_capability_"+field] = supported && args != nil && !requested
+	}
+}

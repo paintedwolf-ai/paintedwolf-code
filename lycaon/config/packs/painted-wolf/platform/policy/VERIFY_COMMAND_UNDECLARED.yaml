@@ -14,20 +14,19 @@ requires:
 when: tool == "verify" && !paintedwolf.verify_has_command && !paintedwolf.verify_declared
 effect: block
 copy:
-  what: '`verify()` was called with no command and this project has no declared verify command'
-  cause: verify never invents a command, so a bare call with nothing declared has nothing to run
-  why: Running a guessed command would launder an unverified guess into a host gate verdict
-  fix: 'Pass the check explicitly — `verify(command: "...")` — or declare the project test command in Settings → Tests so a bare `verify()` runs it and is host-scored.'
-  instead: 'Run `verify(command: "…")` now, or declare the test command in Settings → Tests'
+  what: No verification command was supplied, and this project has no declared check.
+  cause: There is no selected check for verify to execute.
+  why: ''
+  fix: Pass the intended project check explicitly in `command`.
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: '`verify()` has no command to run'
 x-paintedwolf-scenarios:
-  - id: default
-    vars:
-      profile: coordinator
-      tool: verify
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: VERIFY_COMMAND_UNDECLARED'
-      - verify(
+- id: default
+  vars:
+    profile: coordinator
+    tool: verify
+  expect_contains:
+  - 'Code: VERIFY_COMMAND_UNDECLARED'
+  - command
