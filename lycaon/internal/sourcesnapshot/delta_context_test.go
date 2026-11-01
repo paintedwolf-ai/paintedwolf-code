@@ -101,14 +101,14 @@ func TestCanceledDeltaAdmissionRequiresResurvey(t *testing.T) {
 			if timing == "before admission" {
 				cancel()
 			}
-			tracker.admit = func(eventCtx context.Context, _, _ string) bool {
+			tracker.admit = func(eventCtx context.Context, _ string) func(string) bool {
 				if eventCtx != ctx {
 					t.Fatal("admission lost event context")
 				}
 				if timing == "during admission" {
 					cancel()
 				}
-				return false
+				return func(string) bool { return false }
 			}
 			tracker.observe(ctx, repochange.Event{
 				Kind: repochange.WorktreeChanged, ProjectDir: root, Paths: []string{"main.go"},

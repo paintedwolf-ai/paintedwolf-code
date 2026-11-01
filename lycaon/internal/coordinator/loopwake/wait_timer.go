@@ -43,6 +43,7 @@ func (l *Waits) enterSleep(ctx context.Context, sessionID string, arm sleepArm) 
 	st.processHandles = normalizeProcessHandles(arm.processHandles)
 	st.workerHandles = normalizeProcessHandles(arm.workerHandles)
 	st.mover = arm.mover
+	st.caller = arm.caller
 	opened := openWaitLeaseLocked(st, sessionID, arm.mover)
 	loopLogSleep(sessionID, "arm", arm.reason, st.until)
 	l.armSleepTimerLocked(st, wakeCtx, sessionID, arm.reason)
@@ -90,6 +91,8 @@ func (l *Waits) armSleepTimerLocked(st *sessionSleep, wakeCtx context.Context, s
 		// The deadline also retires the activity lease.
 		expired, hadLease := closeWaitLeaseLocked(st, sessionID)
 		st.mu.Unlock()
+		// A parked program past its own bound stops; this wake's turn receives its result.
+		l.Subscriptions.interruptParkedProgram(wakeCtx, sessionID, true)
 		if store := l.Subscriptions.durableWaitStore(); store != nil {
 			winner := awaitstore.Condition{Kind: "timer", Outcome: "timed_out"}
 			if lease, active, _ := store.ForSession(wakeCtx, sessionID); active {

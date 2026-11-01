@@ -21,7 +21,7 @@ func (r *Registry) ActiveDirectIPJobs(sessionID string) []ActiveDirectIPJob {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	var out []ActiveDirectIPJob
-	for _, proc := range r.jobs.sessions[trim(sessionID)] {
+	for _, proc := range r.jobs.ownedProcessesLocked(trim(sessionID)) {
 		status, ok := proc.directIPProtectionStatusLocked()
 		if !ok {
 			continue

@@ -40,7 +40,7 @@ type egressRaise struct {
 	matches   []hitl.ApprovalRuleMatch
 }
 
-type egressGatherKey struct{ chat, toolCallID string }
+type egressGatherKey struct{ chat, toolCallID, actionID string }
 
 // egressGather is one command's open window. Members join until the window
 // closes; the first member past the window raises the card for all of them.
@@ -106,7 +106,7 @@ func (e *Network) gatherEgress(ctx context.Context, raise egressRaise) (allowed,
 	if toolCallID == "" || raise.detection != nil || raise.subject.Declared != nil {
 		return false, false
 	}
-	key := egressGatherKey{chat: raise.action.ChatSession(), toolCallID: toolCallID}
+	key := egressGatherKey{chat: raise.action.ChatSession(), toolCallID: toolCallID, actionID: raise.cmd.EffectActionID()}
 	gather, _ := e.gathers().join(key, raise)
 	select {
 	case <-gather.ready:
@@ -142,7 +142,7 @@ func (e *Network) settleEgressMember(ctx context.Context, raise egressRaise, all
 		e.recordHostVisit(ctx, raise.action.ChatSession(), raise.ep.Host)
 		return
 	}
-	e.Rejections.rememberCapabilityDenial(raise.cmd.SessionID, raise.cmd.ToolCallID, final)
+	e.Rejections.rememberCapabilityDenial(raise.cmd.SessionID, raise.cmd.ToolCallID, raise.cmd.EffectActionID(), final)
 }
 
 // Posture and the reviewed boundary determine widening offers.
@@ -246,10 +246,10 @@ func (e *Network) raiseEgressSetCard(ctx context.Context, members []egressRaise)
 	noun := strconv.Itoa(count) + " hosts"
 
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: networkEgressTool,
-Args: map[string]any{"hosts": labels, "host_count": count, "observed_hosts_digest": digest},
-},
+		Invocation: hitl.ActionInvocation{
+			Tool: networkEgressTool,
+			Args: map[string]any{"hosts": labels, "host_count": count, "observed_hosts_digest": digest},
+		},
 		Presentation: hitl.ActionPresentation{
 			PresentationTool: lead.action.Presentation.PresentationTool,
 			Command:          lead.action.Presentation.Command,

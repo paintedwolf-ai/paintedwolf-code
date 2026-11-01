@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -20,8 +22,10 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providers/anthropic"
 	"github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -265,6 +269,238 @@ func TestDroppedToolCallNeedsItsPolicyDecision(t *testing.T) {
 		got, err := turn.recoverUnparsedToolCall(t.Context(), &api.Session{ID: "s"}, st, req, nil, &modelcall.Completion{Content: "partial"}, cause, false)
 		if got != nil || !errors.Is(err, tc.want) || st.output.rejection != nil || st.output.droppedToolCallStreak != 0 {
 			t.Fatalf("decision %v: recovered=%v err=%v state=%+v", tc.decision, got, err, st.output)
+		}
+	}
+}
+
+func TestPolicyBindingUsesTheFinalFittedRequest(t *testing.T) {
+	var delivered []api.Message
+	prepared := false
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}}},
+			BuildMessages: func(_ context.Context, _ *api.Session, rows []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return append([]api.Message{{ID: "candidate-policy", Role: api.MessageRoleSystem, Content: "candidate"}}, rows...), nil
+			},
+			ContextSurfaceDeps: ContextSurfaceDeps{
+				PrepareAgentPolicy: func(_ context.Context, _ *api.Session, messages []api.Message) (tools.AgentPolicyBinding, error) {
+					if len(messages) == 0 || messages[0].ID != "candidate-policy" {
+						t.Fatal("policy candidates were not captured before fitting")
+					}
+					prepared = true
+					return func(final []api.Message) tools.AgentPolicyCheck {
+						delivered = append([]api.Message(nil), final...)
+						return func(context.Context, []agentpolicy.Target) error { return nil }
+					}, nil
+				},
+			},
+		},
+		Model: ModelDeps{FitRequest: func(_ context.Context, _ *api.Session, _ []api.Message, request modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
+			if !prepared {
+				t.Fatal("request fitting started before policy binding preparation")
+			}
+			request.Messages = []api.Message{{ID: "fitted-policy", Role: api.MessageRoleSystem, Content: "fitted"}}
+			return request, nil
+		}},
+	})
+	sess := &api.Session{ID: "policy-request", AgentType: prompts.CoordinatorProfileID, Posture: api.SessionPostureBuild}
+	state := &promptLoopTurnState{}
+	request, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "inspect"}}, prompts.CoordinatorProfileID, "inspect", 0, 20, false, state)
+	testutil.FailErr(t, "build policy request", err)
+	if len(delivered) != 1 || delivered[0].ID != "fitted-policy" || delivered[0].Content != request.Req.Messages[0].Content || state.output.policyCheck == nil {
+		t.Fatalf("delivered policy = %+v", delivered)
+	}
+}
+
+type selectedProviderClient struct {
+	modelcall.LLMClient
+	providerID string
+	model      string
+	think      modelcall.ThinkLevel
+}
+
+func (c *selectedProviderClient) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	req.Model = c.model
+	req.Think = c.think
+	ch, err := c.LLMClient.Stream(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan modelcall.StreamChunk)
+	go func() {
+		defer close(out)
+		for chunk := range ch {
+			chunk.ProviderID = c.providerID
+			chunk.Model = c.model
+			if !modelcall.SendChunk(ctx, out, chunk) {
+				modelcall.DrainStream(ch)
+				return
+			}
+		}
+	}()
+	return out, nil
+}
+
+func TestLoopAnthropicOmittedThinkingMultiTurnToolContinuation(t *testing.T) {
+	catalog, err := llm.LoadProviderConfig()
+	testutil.FailErr(t, "load provider catalog", err)
+	modelinfo.SetThinkingRules(catalog.ModelThinking)
+	t.Cleanup(func() { modelinfo.SetThinkingRules(nil) })
+
+	var turnCount atomic.Int32
+	var sawReplayedThinking atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			http.NotFound(w, r)
+			return
+		}
+		var payload struct {
+			Messages []struct {
+				Role    string            `json:"role"`
+				Content []json.RawMessage `json:"content"`
+			} `json:"messages"`
+		}
+		testutil.FailErr(t, "decode request", json.NewDecoder(r.Body).Decode(&payload))
+		for mIdx, msg := range payload.Messages {
+			for bIdx, rawBlock := range msg.Content {
+				var fields map[string]json.RawMessage
+				testutil.FailErr(t, "decode block", json.Unmarshal(rawBlock, &fields))
+				var blockType string
+				_ = json.Unmarshal(fields["type"], &blockType)
+				if blockType == "thinking" {
+					rawThinking, ok := fields["thinking"]
+					if !ok {
+						w.WriteHeader(http.StatusBadRequest)
+						_ = json.NewEncoder(w).Encode(map[string]any{
+							"type": "error",
+							"error": map[string]any{
+								"type":    "invalid_request_error",
+								"message": "messages.1.content.0.thinking.thinking: Field required",
+								"msg_idx": mIdx,
+								"blk_idx": bIdx,
+							},
+						})
+						return
+					}
+					var thinkingText, sig string
+					_ = json.Unmarshal(rawThinking, &thinkingText)
+					_ = json.Unmarshal(fields["signature"], &sig)
+					if thinkingText == "" && sig == "sig-omitted-turn-1" {
+						sawReplayedThinking.Store(true)
+					}
+				}
+			}
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		if turnCount.Add(1) == 1 {
+			_, _ = io.WriteString(w, strings.Join([]string{
+				`data: {"type":"message_start","message":{"usage":{"input_tokens":12}}}`,
+				`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+				`data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-omitted-turn-1"}}`,
+				`data: {"type":"content_block_stop","index":0}`,
+				`data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"read"}}`,
+				`data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\":\"README.md\"}"}}`,
+				`data: {"type":"content_block_stop","index":1}`,
+				`data: {"type":"message_delta","usage":{"output_tokens":6}}`,
+				`data: {"type":"message_stop"}`,
+				"",
+			}, "\n\n"))
+			return
+		}
+		_, _ = io.WriteString(w, strings.Join([]string{
+			`data: {"type":"message_start","message":{"usage":{"input_tokens":20}}}`,
+			`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+			`data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-omitted-turn-2"}}`,
+			`data: {"type":"content_block_stop","index":0}`,
+			`data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`,
+			`data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"completed after omitted thinking"}}`,
+			`data: {"type":"content_block_stop","index":1}`,
+			`data: {"type":"message_delta","usage":{"output_tokens":8}}`,
+			`data: {"type":"message_stop"}`,
+			"",
+		}, "\n\n"))
+	}))
+	defer srv.Close()
+
+	reg := tools.NewStubRegistry()
+	executed := 0
+	testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		executed++
+		return "readme-contents", nil
+	}))
+	provider := &selectedProviderClient{
+		LLMClient: anthropic.New("anthropic", srv.URL+"/v1", "test-key", []modelinfo.Entry{{
+			ID:            "claude-opus-4-7",
+			ContextLength: 200000,
+			MaxTokens:     16384,
+			ThinkStyle:    string(modelinfo.ThinkStyleAdaptive),
+		}}),
+		providerID: "anthropic",
+		model:      "claude-opus-4-7",
+		think:      modelcall.ThinkHigh,
+	}
+	deps := PromptLoopDeps{
+		Context: ContextDeps{
+			Tools:  reg,
+			Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+			BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return h, nil
+			},
+		},
+		Model: ModelDeps{LLM: provider},
+		Projection: ProjectionDeps{
+			AppendMessages: func(context.Context, string, ...api.Message) error { return nil },
+			UpdateMessage:  func(context.Context, string, string, api.Message) error { return nil },
+		},
+	}
+	sess := &api.Session{ID: t.Name(), Posture: api.SessionPostureBuild}
+	result, err := NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
+		SessionID: sess.ID,
+		Session:   sess,
+		History:   []api.Message{{Role: api.MessageRoleUser, Content: "Read README"}},
+		ProfileID: "explore_readonly",
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
+	})
+	testutil.FailErr(t, "run multi-turn anthropic loop", err)
+	if executed != 1 || turnCount.Load() != 2 || !sawReplayedThinking.Load() || result.LastAssistantContent != "completed after omitted thinking" {
+		t.Fatalf("executed=%d turns=%d replayed=%v content=%q", executed, turnCount.Load(), sawReplayedThinking.Load(), result.LastAssistantContent)
+	}
+}
+
+func TestRequestPolicyRequiresStateOnlyForApplicableBinding(t *testing.T) {
+	for _, mode := range []string{"absent", "no applicable policy", "applicable policy"} {
+		for _, hasState := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/state=%t", mode, hasState), func(t *testing.T) {
+				var prepare func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
+				bound := false
+				if mode != "absent" {
+					prepare = func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error) {
+						if mode == "no applicable policy" {
+							return nil, nil
+						}
+						return func([]api.Message) tools.AgentPolicyCheck {
+							bound = true
+							return func(context.Context, []agentpolicy.Target) error { return nil }
+						}, nil
+					}
+				}
+				loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{
+					BuildMessages: func(_ context.Context, _ *api.Session, rows []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+						return rows, nil
+					},
+					ContextSurfaceDeps: ContextSurfaceDeps{PrepareAgentPolicy: prepare},
+				}})
+				var state *promptLoopTurnState
+				if hasState {
+					state = &promptLoopTurnState{}
+				}
+				sess := &api.Session{ID: "policy-state", AgentType: prompts.CoordinatorProfileID}
+				_, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, nil, prompts.CoordinatorProfileID, "inspect", 0, 20, false, state)
+				wantError := mode == "applicable policy" && !hasState
+				if (err != nil) != wantError || bound != (mode == "applicable policy" && hasState) {
+					t.Fatalf("policy state: err=%v bound=%t", err, bound)
+				}
+			})
 		}
 	}
 }

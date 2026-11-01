@@ -211,8 +211,28 @@ func mergePolicy(base, overlay ModelPolicy) ModelPolicy {
 	return normalizePolicy(out)
 }
 
+// DefaultLocalModelRef returns the bundled local model reference.
+func DefaultLocalModelRef() ModelRef {
+	return ModelRef{
+		ProviderID: IncludedProviderID,
+		Model:      IncludedModelID,
+	}
+}
+
 // CoordinatorRef returns the coordinator assignment.
 func CoordinatorRef(p ModelPolicy) ModelRef { return p.Coordinator }
+
+// CoordinatorRefWithLocalDefault returns the coordinator assignment, falling back to
+// the bundled local model when unset and localAvailable is true.
+func CoordinatorRefWithLocalDefault(p ModelPolicy, localAvailable bool) ModelRef {
+	if modelRefSet(p.Coordinator) {
+		return p.Coordinator
+	}
+	if localAvailable {
+		return DefaultLocalModelRef()
+	}
+	return p.Coordinator
+}
 
 // SummarizerRef returns the lite override when set, otherwise the coordinator default.
 func SummarizerRef(p ModelPolicy) ModelRef {
@@ -222,10 +242,32 @@ func SummarizerRef(p ModelPolicy) ModelRef {
 	return p.Coordinator
 }
 
+// SummarizerRefWithLocalDefault returns the lite override when set, falling back to
+// the bundled local model when localAvailable is true, or the coordinator default otherwise.
+func SummarizerRefWithLocalDefault(p ModelPolicy, localAvailable bool) ModelRef {
+	if ref := p.Lite; ref.ProviderID != "" && ref.Model != "" {
+		return ref
+	}
+	if localAvailable {
+		return DefaultLocalModelRef()
+	}
+	return SummarizerRef(p)
+}
+
 // SummarizerSharesCoordinator detects shared provider capacity.
 func SummarizerSharesCoordinator(p ModelPolicy) bool {
 	sum := SummarizerRef(p)
 	coord := p.Coordinator
+	if sum.ProviderID == "" || coord.ProviderID == "" {
+		return true
+	}
+	return sum.ProviderID == coord.ProviderID
+}
+
+// SummarizerSharesCoordinatorWithLocalDefault detects shared provider capacity after local-default resolution.
+func SummarizerSharesCoordinatorWithLocalDefault(p ModelPolicy, localAvailable bool) bool {
+	sum := SummarizerRefWithLocalDefault(p, localAvailable)
+	coord := CoordinatorRefWithLocalDefault(p, localAvailable)
 	if sum.ProviderID == "" || coord.ProviderID == "" {
 		return true
 	}

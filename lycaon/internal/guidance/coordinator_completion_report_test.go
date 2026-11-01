@@ -266,4 +266,3 @@ func TestReadCloseoutReport_StructureAndVacuousFields(t *testing.T) {
 		}
 	})
 }
-

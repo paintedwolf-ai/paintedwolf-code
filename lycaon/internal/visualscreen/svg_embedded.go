@@ -175,7 +175,7 @@ func (s *Scanner) screenEmbeddedRaster(ctx context.Context, raw []byte, b *textB
 		out.noteGap(gap, detail)
 	}
 	for _, span := range spans {
-		addEmbeddedLines(b, span.Text)
+		addEmbeddedOCRLines(b, span)
 	}
 }
 
@@ -183,6 +183,19 @@ func (s *Scanner) screenEmbeddedRaster(ctx context.Context, raw []byte, b *textB
 func addEmbeddedLines(b *textBuilder, text string) {
 	for _, line := range strings.Split(text, "\n") {
 		b.add(segment{kind: segmentEmbedded, rawStart: -1, span: -1}, line)
+	}
+}
+
+// addEmbeddedOCRLines records OCR text from an embedded raster with OCR provenance.
+func addEmbeddedOCRLines(b *textBuilder, span TextSpan) {
+	for _, line := range strings.Split(span.Text, "\n") {
+		b.add(segment{
+			kind:       segmentEmbedded,
+			rawStart:   -1,
+			span:       -1,
+			ocr:        true,
+			candidates: span.Candidates,
+		}, line)
 	}
 }
 

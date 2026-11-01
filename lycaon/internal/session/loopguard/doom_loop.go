@@ -28,6 +28,7 @@ type DoomLoopGuard interface {
 	FruitlessSearchRun(sessionID, tool string, args map[string]any) int
 	SetPageTargetResolver(func(sessionID, pageID string) string)
 	SetReviewIntentResolver(func(context.Context, string) (string, error))
+	SetProgressPrerequisiteResolver(func(context.Context, string) (progress.PrerequisiteState, error))
 }
 
 // doomLoopQuestionArgs identifies a search question independently of scope and pagination.
@@ -88,17 +89,26 @@ func doomLoopFingerprintArgs(tool string, args map[string]any) map[string]any {
 	}
 }
 
-// doomLoopUpdateProgressArgs groups all-terminal checklists so rewording closed
-// items cannot reset repetition tracking.
+// Progress fingerprints ignore revision bookkeeping and normalize closed labels.
 func doomLoopUpdateProgressArgs(args map[string]any) map[string]any {
 	if args == nil {
 		return map[string]any{}
 	}
 	content, _ := args["content"].(string)
 	if progress.AllTerminal(content) {
-		return map[string]any{"all_terminal": true}
+		fingerprint := map[string]any{"all_terminal": true}
+		if token, _ := args["reconciliation_token"].(string); token != "" {
+			fingerprint["reconciliation_token"] = token
+		}
+		return fingerprint
 	}
-	return args
+	fingerprint := make(map[string]any, len(args))
+	for key, value := range args {
+		if key != "expected_revision" {
+			fingerprint[key] = value
+		}
+	}
+	return fingerprint
 }
 
 // doomLoopPageTargetArg groups reopened pages by target, using ids for unresolved handles.

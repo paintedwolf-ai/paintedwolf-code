@@ -50,6 +50,7 @@ const CONNECTION_LABEL: Record<HostResourceConnectionMode, string> = {
   local_service: "Local service",
   direct_ip: "Direct IP",
   dynamic: "Resolved when used",
+  credential_store: "OS credential store",
 };
 
 const TRANSPORT_LABEL: Record<HostResourceLocalServiceTransport, string> = {

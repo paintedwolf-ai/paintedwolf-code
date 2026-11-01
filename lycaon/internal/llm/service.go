@@ -96,6 +96,9 @@ func (s *Service) ResetPlanes() {
 	if s == nil {
 		return
 	}
+	if s.Router != nil && s.Registry != nil {
+		s.Router.SetLocalDefault(s.Registry.IsConfigured(IncludedProviderID))
+	}
 	if s.Utility != nil {
 		s.Utility.Reset()
 	}
@@ -106,6 +109,15 @@ func (s *Service) ResetPlanes() {
 		}
 		s.Capacity.Reset()
 	}
+}
+
+// InstallIncludedProvider registers the bundled local provider in the catalog and runtime registry.
+func (s *Service) InstallIncludedProvider(ctx context.Context, baseURL string) error {
+	entry := IncludedProviderEntry()
+	if trimmed := strings.TrimSpace(baseURL); trimmed != "" {
+		entry.BaseURL = trimmed
+	}
+	return s.PutProvider(ctx, entry)
 }
 
 // PutProvider replaces one provider atomically.

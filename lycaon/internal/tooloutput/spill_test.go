@@ -13,7 +13,7 @@ import (
 func TestWireSpillToolOutputWritesInJailFile(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Repeat("x", 200)
-	out := WireSpillToolOutput(dir, Screened(content), 50, 0)
+	out := WireSpillToolOutput(t.Context(), dir, Screened(content), 50, 0)
 	if !out.Truncated || out.SpillPath == "" {
 		t.Fatalf("preview=%q spill=%q truncated=%v", out.Preview, out.SpillPath, out.Truncated)
 	}
@@ -31,7 +31,7 @@ func TestWireSpillToolOutputWritesInJailFile(t *testing.T) {
 
 func TestWireSpillToolOutputRefusesWithoutRecoveryStorage(t *testing.T) {
 	content := strings.Repeat("y", 200)
-	out := WireSpillToolOutput("", Screened(content), 50, 0)
+	out := WireSpillToolOutput(t.Context(), "", Screened(content), 50, 0)
 	if out.RejectCode != ToolOutputSpillUnavailableCode || out.SpillPath != "" || out.Preview != "" {
 		t.Fatalf("unrecoverable output was delivered: %+v", out)
 	}
@@ -41,7 +41,7 @@ func TestWireSpillToolOutputRefusesWithoutRecoveryStorage(t *testing.T) {
 func TestWireSpillToolOutputCutsPreviewFromTheSpilledBody(t *testing.T) {
 	dir := t.TempDir()
 	durable := "token=[REDACTED]\n" + strings.Repeat("x", 100)
-	out := WireSpillToolOutput(dir, Screened(durable), 50, 0)
+	out := WireSpillToolOutput(t.Context(), dir, Screened(durable), 50, 0)
 	if strings.Contains(out.Preview, "raw-secret") {
 		t.Fatalf("preview = %q want screened bytes only", out.Preview)
 	}

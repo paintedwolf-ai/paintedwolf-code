@@ -57,8 +57,6 @@ func (denialInvariantProvenance) IsSessionOwned(context.Context, string, string,
 func (denialInvariantProvenance) HeldByOther(context.Context, string, string, uint16) bool {
 	return false
 }
-func (denialInvariantProvenance) RecordSessionContainer(string, string, string) {}
-func (denialInvariantProvenance) ForgetSession(string)                          {}
 
 // denialInvariantStores holds every capability store a sandbox broker writes.
 type denialInvariantStores struct {
@@ -141,8 +139,7 @@ func denialInvariantCases(t *testing.T) []denialInvariantCase {
 	ports := []uint16{8000}
 	return []denialInvariantCase{
 		{name: "ListenCheckpointBroker.Await", request: func(ctx context.Context, s *denialInvariantStores, call string) (denialInvariantOutcome, error) {
-			b := &ListenCheckpointBroker{Checkpoints: s.checkpoints, Store: s.store, Runtime: s.listen, Loopback: s.loopback,
-				Provenance: denialInvariantProvenance{}, Posture: strict}
+			b := &ListenCheckpointBroker{Checkpoints: s.checkpoints, Store: s.store, Runtime: s.listen, Posture: strict}
 			res, err := b.Await(ctx, tools.LocalListenAsk{SessionID: s.invokingSession, ToolCallID: call, ProjectDir: projectDir, Ports: ports})
 			return denialInvariantOutcome{res.Raised, res.Authorized, res.Denied}, err
 		}},

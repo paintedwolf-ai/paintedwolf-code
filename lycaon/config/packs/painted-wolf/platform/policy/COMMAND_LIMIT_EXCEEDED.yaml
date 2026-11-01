@@ -1,0 +1,40 @@
+oar: '1.0'
+id: COMMAND_LIMIT_EXCEEDED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.resource_unit
+  - paintedwolf.limit_id
+  - paintedwolf.maximum
+  - paintedwolf.observed
+when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
+effect: block
+copy:
+  what: 'This command reached its {{ paintedwolf.limit_id }} limit ({{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }}).'
+  cause: 'The command stopped at this statement. Earlier completed steps and their results remain recorded.'
+  why: 'The host cannot run another step once the limit is reached.'
+  fix: 'Check the completed steps, then process the remaining items in fewer, larger steps or write intermediate results to a file.'
+  instead: 'Check the recorded results before retrying the remaining work.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command reached a resource limit
+x-paintedwolf-scenarios:
+- id: captured_unit
+  vars:
+    tool: command
+    limit_id: ast_nodes
+    resource_unit: nodes
+    maximum: 8192
+    observed: 8193
+  expect_contains:
+  - 'Code: COMMAND_LIMIT_EXCEEDED'
+  - ast_nodes
+  - Check the recorded results

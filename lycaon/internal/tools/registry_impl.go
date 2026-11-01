@@ -16,10 +16,13 @@ import (
 )
 
 // DefaultRegistry is a thread-safe ToolRegistry backed by registered handlers.
+// It also holds command operations: contracts command programs bind that have
+// no model-callable handler and never appear among the tools.
 type DefaultRegistry struct {
 	mu          sync.RWMutex
 	dynamicMu   sync.RWMutex
 	definitions map[string]Definition
+	operations  map[string]Definition
 	catalog     map[string]ToolMeta
 }
 
@@ -27,6 +30,7 @@ type DefaultRegistry struct {
 func NewDefaultRegistry() *DefaultRegistry {
 	return &DefaultRegistry{
 		definitions: make(map[string]Definition),
+		operations:  make(map[string]Definition),
 	}
 }
 
@@ -47,6 +51,7 @@ func NewCatalogRegistry(catalog *toolschema.Config) (*DefaultRegistry, error) {
 	}
 	return &DefaultRegistry{
 		definitions: make(map[string]Definition),
+		operations:  make(map[string]Definition),
 		catalog:     metadata,
 	}, nil
 }
@@ -69,6 +74,39 @@ func (r *DefaultRegistry) Register(name string, handler ToolHandler) error {
 		Meta:     meta,
 		Contract: contract, Handler: handler,
 	})
+}
+
+// RegisterOperation publishes a command operation: its catalog metadata and
+// contract, with no handler. Run, Definition and List never see it.
+func (r *DefaultRegistry) RegisterOperation(name string) error {
+	if !toolcontract.IsCommandOperation(name) {
+		return fmt.Errorf("tool %q is not a command operation", name)
+	}
+	contract, ok := toolcontract.Lookup(name)
+	if !ok {
+		return fmt.Errorf("tool %q has no invocation contract", name)
+	}
+	meta := ToolMeta{Name: name, Description: name + " operation", ArgsSchema: map[string]any{"type": "object"}}
+	if r.catalog != nil {
+		declared, found := r.catalog[name]
+		if !found {
+			return fmt.Errorf("tool %q has no metadata declaration", name)
+		}
+		meta = declared
+	}
+	def, err := validateOperation(Definition{Meta: meta, Contract: contract})
+	if err != nil {
+		return err
+	}
+	def.Meta = cloneToolMeta(def.Meta)
+	def.Contract = def.Contract.Clone()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, taken := r.definitions[name]; taken {
+		return fmt.Errorf("tool %q is registered as a tool", name)
+	}
+	r.operations[name] = def
+	return nil
 }
 
 // RegisterDerived publishes metadata computed by a runtime source.
@@ -96,20 +134,27 @@ func (r *DefaultRegistry) RegisterDefinition(def Definition) error {
 	def.Contract = def.Contract.Clone()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, taken := r.operations[name]; taken {
+		return fmt.Errorf("tool %q is registered as a command operation", name)
+	}
 	r.definitions[name] = def
 	return nil
 }
 
 func validateDefinition(def Definition) (Definition, error) {
+	if def.Handler == nil {
+		return Definition{}, fmt.Errorf("tool %q handler is required", strings.TrimSpace(def.Meta.Name))
+	}
+	return validateOperation(def)
+}
+
+func validateOperation(def Definition) (Definition, error) {
 	name := strings.TrimSpace(def.Meta.Name)
 	if name == "" {
 		return Definition{}, fmt.Errorf("tool name is required")
 	}
 	if def.Meta.Name != name || name != strings.ToLower(name) {
 		return Definition{}, fmt.Errorf("tool name %q is not canonical", def.Meta.Name)
-	}
-	if def.Handler == nil {
-		return Definition{}, fmt.Errorf("tool %q handler is required", name)
 	}
 	owner := strings.TrimSpace(def.Contract.Owner)
 	if owner == "" {
@@ -134,12 +179,29 @@ func validateDefinition(def Definition) (Definition, error) {
 	return def, nil
 }
 
-// Meta returns metadata for a registered tool.
+// Meta returns metadata for a registered tool or command operation.
 func (r *DefaultRegistry) Meta(name string) (ToolMeta, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	def, ok := r.definitions[name]
+	if !ok {
+		def, ok = r.operations[name]
+	}
 	return cloneToolMeta(def.Meta), ok
+}
+
+// Operation returns the definition a command program binds: a registered
+// tool's or a command operation's.
+func (r *DefaultRegistry) Operation(name string) (Definition, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	def, ok := r.definitions[name]
+	if !ok {
+		def, ok = r.operations[name]
+	}
+	def.Meta = cloneToolMeta(def.Meta)
+	def.Contract = def.Contract.Clone()
+	return def, ok
 }
 
 // Definition returns one immutable registry snapshot.

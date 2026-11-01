@@ -38,6 +38,8 @@ const (
 	FloorReadConfigured FloorLayer = "read_configured"
 	// FloorReadKeyMaterial holds the key-material read floor.
 	FloorReadKeyMaterial FloorLayer = "read_key_material"
+	// FloorReadCredentialStore holds the host OS credential store read floor.
+	FloorReadCredentialStore FloorLayer = "os_credential_store"
 	// FloorReadControlPlane holds the host state tree's read floor.
 	FloorReadControlPlane FloorLayer = "read_control_plane"
 )
@@ -76,7 +78,7 @@ func (r FloorRecovery) Terminal() bool { return r.Capability == "" }
 func FloorLayers() []FloorLayer {
 	return []FloorLayer{
 		FloorOutsideWriteRoots, FloorBaseline, FloorProtected, FloorAgentPolicy, FloorControlPlane,
-		FloorReadConfigured, FloorReadKeyMaterial, FloorReadControlPlane,
+		FloorReadConfigured, FloorReadKeyMaterial, FloorReadCredentialStore, FloorReadControlPlane,
 	}
 }
 
@@ -93,6 +95,8 @@ func (l FloorLayer) Recovery() FloorRecovery {
 		return FloorRecovery{Capability: "write_root", Grant: GrantLoaderTree}
 	case FloorReadConfigured, FloorReadKeyMaterial:
 		return FloorRecovery{Capability: "read_path", Grant: GrantExactPath}
+	case FloorReadCredentialStore:
+		return FloorRecovery{Capability: "credential_store", Grant: GrantExactPath}
 	default:
 		return FloorRecovery{}
 	}

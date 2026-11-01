@@ -50,7 +50,7 @@ func TestSpillCommandOutputWritesTheWholeScreenedBody(t *testing.T) {
 	full := "stdout: " + strings.Repeat("row\n", 50)
 	snap := bgprocess.Snapshot{Tail: full[len(full)-32:], Output: full, OutputScreened: true}
 
-	rel := spillCommandOutput(tctx, snap)
+	rel := spillCommandOutput(t.Context(), tctx, snap)
 	if rel == "" || !tooloutput.IsAgentWireSpillRel(rel) {
 		t.Fatalf("spill path = %q", rel)
 	}
@@ -62,18 +62,18 @@ func TestSpillCommandOutputWritesTheWholeScreenedBody(t *testing.T) {
 		t.Fatal("spill must hold the exact screened output")
 	}
 
-	if spillCommandOutput(tctx, bgprocess.Snapshot{Tail: full, Output: full, OutputScreened: true}) != "" {
+	if spillCommandOutput(t.Context(), tctx, bgprocess.Snapshot{Tail: full, Output: full, OutputScreened: true}) != "" {
 		t.Fatal("a complete tail needs no spill")
 	}
-	if spillCommandOutput(tctx, bgprocess.Snapshot{Tail: "x", Output: full, OutputScreened: false}) != "" {
+	if spillCommandOutput(t.Context(), tctx, bgprocess.Snapshot{Tail: "x", Output: full, OutputScreened: false}) != "" {
 		t.Fatal("unscreened output must never leave the process")
 	}
 	tctx.Host.MaxToolSpillBytes = len(full) - 1
-	if spillCommandOutput(tctx, snap) != "" {
+	if spillCommandOutput(t.Context(), tctx, snap) != "" {
 		t.Fatal("output beyond the retention bound must not advertise whole-output recovery")
 	}
 	tctx.Host.MaxToolSpillBytes = len(full)
-	if spillCommandOutput(tctx, snap) != rel {
+	if spillCommandOutput(t.Context(), tctx, snap) != rel {
 		t.Fatal("output at the retention bound lost its recovery reference")
 	}
 }

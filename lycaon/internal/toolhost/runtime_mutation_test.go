@@ -2,7 +2,6 @@ package toolhost_test
 
 import (
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -10,16 +9,16 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 )
 
-func TestRuntimeRegistersChmodAndDelete(t *testing.T) {
+func TestRuntimeKeepsChmodCallableAndDeleteAsCommandOperation(t *testing.T) {
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configlayout.FindModuleRoot(), Catalog: extpackstest.StockCatalog(t)})
-	testutil.FailErr(t, "toolhost.NewRuntime failed", err)
-	names := make([]string, 0, 2)
-	for _, meta := range rt.Registry.List() {
-		if meta.Name == "chmod" || meta.Name == "delete" {
-			names = append(names, meta.Name)
-		}
+	testutil.FailErr(t, "build native runtime", err)
+	if definition, found := rt.Registry.Definition("chmod"); !found || definition.Handler == nil {
+		t.Fatal("chmod domain tool is unavailable")
 	}
-	if !strings.Contains(strings.Join(names, ","), "chmod") || !strings.Contains(strings.Join(names, ","), "delete") {
-		t.Fatalf("registry tools = %v want chmod and delete", names)
+	if _, found := rt.Registry.Definition("delete"); found {
+		t.Fatal("command-only delete operation is callable")
+	}
+	if definition, found := rt.Registry.Operation("delete"); !found || definition.Handler != nil || definition.Contract.Owner != "filesystem" {
+		t.Fatalf("delete operation=%+v found=%v", definition, found)
 	}
 }

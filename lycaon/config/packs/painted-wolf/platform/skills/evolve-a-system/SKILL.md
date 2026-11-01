@@ -2,23 +2,30 @@
 name: evolve-a-system
 description: Review failure, retry, and idempotency policies; design state machines and concurrency; evolve APIs or fix systemic defects.
 optional_tools:
-  - http_request
 metadata:
   paintedwolf.template_resources: references/finish_a_surface.md|references/raise_the_fix_altitude.md|references/evolve_an_api_contract.md|references/design_a_state_machine.md|references/review_failure_and_retry_semantics.md|references/design_concurrent_code.md|references/find_a_concurrency_bug.md
 ---
 
 # Evolve a system
 
-Use the request and observed project/environment to choose the matching procedure below. Read that procedure before acting; load only the variants needed for this task. Resource paths are relative to this skill directory.
+## Rules for every change
 
-- [Finish a surface](references/finish_a_surface.md) — You must use this skill when designing production or otherwise important systems.
-- [Raise the fix altitude](references/raise_the_fix_altitude.md) — Test whether a list of findings is one underlying defect before fixing them one at a time when a review, audit, or bug hunt returns several related issues.
-- [Evolve an API contract](references/evolve_an_api_contract.md) — You must use this skill when working with an API that is in active use.
-- [Design a state machine](references/design_a_state_machine.md) — Model async jobs, retries, approvals, protocols, or UI flows as explicit states, events, guards, effects, and terminal outcomes before coding.
-- [Review failure and retry semantics](references/review_failure_and_retry_semantics.md) — Review timeouts, retries, duplicate delivery, idempotency, and ambiguous outcomes before shipping an API, queue, worker, workflow, payment flow, or other integration.
-- [Design concurrent code](references/design_concurrent_code.md) — Design concurrent code with explicit mutation responsibility, synchronization, cancellation, backpressure, and shutdown before adding parallel workers or queues.
-- [Find a concurrency bug](references/find_a_concurrency_bug.md) — Track down a data race, deadlock, or leaked goroutine or thread when behaviour is intermittent, a process hangs, or a test fails only under -race or high parallelism.
+1. **Name the surface and its consumers before designing.** List the callers, generated clients, persisted data, and external APIs that read the shape. Resolve maturity from what the project declares (agent guidance, compatibility policy, changelog), not from caution: durable consumers get additive or versioned change, internal ones get redesign in place.
+2. **Give every fact one authority.** A cache, replica, or projection that can disagree with the authority and win is a second source of truth, and that is the bug.
+3. **Make invalid states unrepresentable** with an enum, a type, a constraint, or an atomic transition, rather than flags and caller checks.
+4. **A timeout is not proof nothing happened.** Classify each failure point as known-failure, known-success, or ambiguous, and make retried effects idempotent under a stable request identity.
+5. **Bound concurrency with a reason**, and give every mutable resource exactly one owner responsible for its mutation, cancellation, and shutdown.
+6. **Finish in one arc.** Update callers, schemas, registrations, tests, and docs together; delete superseded paths, flags, and forwarders.
+7. **Prove the class, not the instance.** Add an invariant, property, or contract test that fails for similar mistakes, and watch it fail once.
 
-## Boundaries
+## Procedures
 
-Follow project policy and the user’s requested scope. A procedure does not grant permission or imply that every listed toolchain is installed. Use only available host resources and tools; delegate or report a missing capability. Preserve original evidence, identify its source, and report verification limits.
+Open the one that matches the work:
+
+- [Finish a surface](references/finish_a_surface.md): deliver a coherent surface rather than a patch, choosing the evolution class from declared maturity.
+- [Raise the fix altitude](references/raise_the_fix_altitude.md): several related findings may be one missing invariant or boundary.
+- [Evolve an API contract](references/evolve_an_api_contract.md): an API consumed outside the module. Follow the spec-to-codegen chain, keep changes compatible, and prove the wire shape.
+- [Design a state machine](references/design_a_state_machine.md): async jobs, retries, approvals, protocols, or UI flows whose behavior depends on history.
+- [Review failure and retry semantics](references/review_failure_and_retry_semantics.md): timeouts, duplicate delivery, idempotency, and ambiguous outcomes before shipping an integration.
+- [Design concurrent code](references/design_concurrent_code.md): parallel workers or queues, with ownership, cancellation, backpressure, and shutdown.
+- [Find a concurrency bug](references/find_a_concurrency_bug.md): a data race, deadlock, or leaked goroutine or thread behind intermittent failures.

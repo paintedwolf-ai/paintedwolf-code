@@ -227,4 +227,3 @@ func ClearProjectRefsOfKindTx(ctx context.Context, qtx *db.Queries, projectID st
 		Kind:      string(kind),
 	})
 }
-

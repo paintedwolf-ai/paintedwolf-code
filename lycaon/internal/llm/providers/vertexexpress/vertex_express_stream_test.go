@@ -2,12 +2,16 @@ package vertexexpress
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -230,4 +234,84 @@ func TestVertexExpressStreamRejectsUnparseableFrame(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "malformed SSE payload") {
 		t.Fatalf("CollectStream error = %v, want malformed SSE payload", err)
 	}
+}
+
+func abortVertexExpressResponseMidBody(t *testing.T, w http.ResponseWriter, contentType, partial string) {
+	t.Helper()
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", "4096")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(partial))
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	if hijacker, ok := w.(http.Hijacker); ok {
+		if conn, _, err := hijacker.Hijack(); err == nil {
+			if tcp, ok := conn.(*net.TCPConn); ok {
+				_ = tcp.SetLinger(0)
+			}
+			_ = conn.Close()
+		}
+	}
+}
+
+func TestVertexExpressHTTPServerInterruptedAndEmptyResponses(t *testing.T) {
+	req := modelcall.CompletionRequest{
+		Model:    "gemini-2.5-pro",
+		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hello"}},
+	}
+
+	t.Run("mid-stream connection reset", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			abortVertexExpressResponseMidBody(t, w, "text/event-stream", "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"half\"}]}}]}\n\n")
+		}))
+		defer srv.Close()
+
+		p := New("vertex-express", srv.URL+"/v1", "test-key", []modelinfo.Entry{{ID: "gemini-2.5-pro"}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || interrupted.ProviderID != "vertex-express" || interrupted.Model != "gemini-2.5-pro" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+		}
+	})
+
+	t.Run("stream closes after output without terminal event", func(t *testing.T) {
+		p := vertexExpressStreamProvider(t, []string{
+			`{"candidates":[{"content":{"role":"model","parts":[{"text":"half"}]}}]}`,
+		})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || !errors.Is(err, io.ErrUnexpectedEOF) || interrupted.ProviderID != "test" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError wrapping unexpected EOF", err)
+		}
+	})
+
+	t.Run("stream closes before any output", func(t *testing.T) {
+		p := vertexExpressStreamProvider(t, nil)
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		empty, ok := failure.AsProviderEmptyCompletion(err)
+		if !ok || !empty.Retryable || empty.ProviderID != "test" {
+			t.Fatalf("err = %v, want retryable ProviderEmptyCompletionError", err)
+		}
+	})
+
+	t.Run("non-streaming complete body breaks after headers", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			abortVertexExpressResponseMidBody(t, w, "application/json", `{"candidates":[{"content":{"role":"model","parts":[{"text":"half`)
+		}))
+		defer srv.Close()
+
+		p := New("vertex-express", srv.URL+"/v1", "test-key", []modelinfo.Entry{{ID: "gemini-2.5-pro"}})
+		_, err := p.Complete(t.Context(), req)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || interrupted.ProviderID != "vertex-express" || interrupted.Model != "gemini-2.5-pro" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+		}
+	})
 }

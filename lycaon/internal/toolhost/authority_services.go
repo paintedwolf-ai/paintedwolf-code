@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -70,10 +69,10 @@ func (r *AuthorityServices) SetEgressDetectionSource(src confine.EgressDetection
 }
 
 func (r *AuthorityServices) ApprovalPosture(projectDir string) gate.Posture {
-	if r == nil || r.approvals == nil {
+	if r == nil {
 		return gate.DefaultPosture
 	}
-	return effectiveEgressApprovalConfig(r.approvals, confine.EgressCommand{ProjectDir: projectDir}).Posture
+	return r.approvals.EffectivePosture(settings.ProjectRef{Dir: projectDir})
 }
 
 func (r *AuthorityServices) ApprovalsDisabled(projectDir string) bool {
@@ -191,7 +190,7 @@ func (r *AuthorityServices) ApplyGuidanceRejects(formatter *guidance.StaticRejec
 	}
 	r.rejectFmt = formatter
 	approvalPolicy := toolexecution.NewApprovalPolicyEngine(r.profilePolicy, r.approvalGate)
-	r.metadata.SetPolicy(toolprofiles.NewGuidanceRejectPolicy(approvalPolicy))
+	r.metadata.SetPolicy(approvalPolicy)
 	r.rejections.SetRejectFormatter(formatter)
 }
 
@@ -266,13 +265,7 @@ func wireEgressPolicy(runtime *AuthorityServices, store *settings.ApprovalStore)
 }
 
 func effectiveEgressApprovalConfig(store *settings.ApprovalStore, cmd confine.EgressCommand) settings.ApprovalConfig {
-	if store == nil {
-		return settings.ApprovalConfig{Posture: gate.DefaultPosture}
-	}
-	if projectDir := filepath.Clean(cmd.ProjectDir); cmd.ProjectDir != "" && projectDir != "." {
-		return store.Get(llm.SettingsScopeProject, settings.ProjectRef{ID: cmd.ProjectID, Dir: projectDir})
-	}
-	return store.Get(llm.SettingsScopeGlobal, settings.ProjectRef{})
+	return store.EffectiveConfig(settings.ProjectRef{ID: cmd.ProjectID, Dir: cmd.ProjectDir})
 }
 
 // ReleaseEgressPolicy detaches this host's process policy callback.

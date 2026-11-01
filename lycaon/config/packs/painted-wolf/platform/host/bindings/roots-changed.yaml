@@ -8,7 +8,7 @@ tier: builtin
 invariants:
   trigger_class: host_api
   fires_in:
-  - POST /projects/{id}/roots when a project crosses from one folder to two or more
+  - Root attach, detach or patch that adds, removes, moves, renames or changes the primary folder
   required:
   - folder
   forbidden:

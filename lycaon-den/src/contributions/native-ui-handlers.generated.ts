@@ -117,6 +117,7 @@ export const NATIVE_UI_HANDLER_IDS: readonly string[] = [
   "go.context.cost",
   "go.context.extensions",
   "go.context.files",
+  "go.context.running",
   "go.context.search",
   "go.context.security",
   "go.files",

@@ -1,4 +1,5 @@
 import { type ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
+import { beginSourceNavigation } from "../../platform/navigation/source-navigation-intent.ts";
 import { createStore, produce } from "solid-js/store";
 import type { ProjectSourceReadResponse, SourceEncoding } from "../../api/types.ts";
 import { type IndentInfo } from "../../components/source/editor/indent-detect.ts";
@@ -216,3 +217,90 @@ export function applyFilesBufferDocumentStatus(projectId: string, document: impo
 }
 
 export function nextBufferPayloadGeneration(): number { return ++payloadGeneration; }
+
+/** Text an open response carried inside its editor document, with the host's line-ending facts. */
+export type LoadedDocumentText = { text: string; eol: EolKind; mixed: boolean; dirty: boolean; absent?: boolean };
+
+type ReplicaSnapshot = { currentText: string; baseText: string; dirty: boolean };
+let replicaReader: ((documentId: string | null | undefined) => ReplicaSnapshot | undefined) | undefined;
+
+export function registerFilesBufferReplicaReader(
+  reader: (documentId: string | null | undefined) => ReplicaSnapshot | undefined,
+): void {
+  replicaReader = reader;
+}
+
+/** Text materialization is deferred until read. */
+export function filesBufferText(buffer: Pick<FileBuffer, "content" | "documentId" | "editRevision">): string {
+  void buffer.editRevision;
+  if (buffer.content.state === "source") return buffer.content.text;
+  return replicaReader?.(buffer.documentId)?.currentText ?? "";
+}
+
+export function filesBufferBase(buffer: Pick<FileBuffer, "content" | "documentId">): string {
+  if (buffer.content.state === "source") return buffer.content.base;
+  return replicaReader?.(buffer.documentId)?.baseText ?? "";
+}
+
+export function bufferKeyAtAddress(
+  state: ProjectFilesState, rootId: string, path: string, jobId?: string,
+): FileBufferKey | null {
+  const wantedJob = jobId?.trim() ?? "";
+  const matches = (candidate: FileBufferKey) => {
+    const buffer = state.byKey[candidate];
+    return buffer != null && buffer.rootId === rootId && buffer.path === path && (buffer.jobId ?? "") === wantedJob;
+  };
+  // Pending navigation takes precedence over the displayed buffer.
+  const aimed = state.pendingKey ?? state.activeKey;
+  if (aimed && matches(aimed)) return aimed;
+  for (let index = state.order.length - 1; index >= 0; index -= 1) {
+    const candidate = state.order[index];
+    if (candidate && matches(candidate)) return candidate;
+  }
+  return null;
+}
+
+export function filesBufferKeyAtAddress(
+  projectId: string, rootId: string, path: string, jobId?: string,
+): FileBufferKey | null {
+  return bufferKeyAtAddress(projectFilesState(projectId), rootId, path, jobId);
+}
+
+/** Aim the editor at `key`, presenting it once it has content. */
+export function focusBuffer(state: ProjectFilesState, key: FileBufferKey, origin: AimOrigin): void {
+  const aimedKey = state.pendingKey ?? state.activeKey;
+  const aimed = aimedKey ? state.byKey[aimedKey] : undefined;
+  // Pending reader navigation takes precedence over presentation changes.
+  if (origin === "presentation" && state.aimOrigin === "reader" && aimed?.loading && aimedKey !== key) return;
+  if (origin === "reader") beginSourceNavigation();
+  state.aimRevision++;
+  const target = state.byKey[key];
+  if (target?.content.state === "suspended") { target.loading = true; target.loadError = null; }
+  const presenting = state.activeKey ? state.byKey[state.activeKey] : undefined;
+  // A presentation that is itself loading holds nothing on screen.
+  const retaining = presenting != null && !presenting.loading;
+  // Re-aiming the reader's own file keeps the reader's claim on it.
+  if (aimedKey !== key || origin === "reader") state.aimOrigin = origin;
+  if (!target || !target.loading || !retaining) {
+    state.activeKey = key;
+    state.pendingKey = null;
+    return;
+  }
+  state.pendingKey = key;
+}
+
+/** Present a buffer that finished loading, successfully or not. */
+export function settleBufferPresentation(state: ProjectFilesState, key: FileBufferKey): void {
+  if (state.pendingKey !== key) return;
+  state.activeKey = key;
+  state.pendingKey = null;
+}
+
+export function markFilesDocumentUnavailable(projectId: string, documentId: string): void {
+  setFilesStore(projectId, produce(state => {
+    for (const buffer of Object.values(state.byKey)) {
+      if (buffer.documentId !== documentId || !filesBufferNeedsBody(buffer)) continue;
+      buffer.loadError = "This document is no longer available from the host. Preserved edits remain in local storage.";
+    }
+  }));
+}

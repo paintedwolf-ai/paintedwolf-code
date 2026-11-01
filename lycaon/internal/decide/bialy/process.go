@@ -10,10 +10,12 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/decide"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/inference"
 )
 
 // process is one running engine: requests go out on stdin as lines, replies
@@ -24,11 +26,29 @@ type process struct {
 	stdin    io.WriteCloser
 	admitted chan struct{}
 
-	pendingMu sync.Mutex
-	pending   map[int64]chan response
-	done      chan struct{}
-	exitErr   error
-	exitCode  int
+	pendingMu  sync.Mutex
+	pending    map[int64]*pendingRequest
+	done       chan struct{}
+	exitErr    error
+	exitCode   int
+	device     *inference.Device
+	generation uint64
+	lifetime   context.Context
+	reaped     context.CancelFunc
+	startup    *startupGrant
+}
+
+var processSequence atomic.Uint64
+
+type pendingRequest struct {
+	response chan response
+	permit   *inference.Permit
+}
+
+func (p *pendingRequest) complete() {
+	if p.permit != nil {
+		p.permit.Complete()
+	}
 }
 
 type request struct {
@@ -42,14 +62,15 @@ type request struct {
 }
 
 type response struct {
-	ID      int64          `json:"id"`
-	Answers decide.Answers `json:"answers,omitempty"`
-	Scores  []float64      `json:"scores,omitempty"`
-	Engine  *decide.Engine `json:"engine,omitempty"`
-	Error   string         `json:"error,omitempty"`
+	ID             int64                    `json:"id"`
+	Answers        decide.Answers           `json:"answers,omitempty"`
+	Scores         []float64                `json:"scores,omitempty"`
+	Engine         *decide.Engine           `json:"engine,omitempty"`
+	Error          string                   `json:"error,omitempty"`
+	PhysicalDevice inference.PhysicalDevice `json:"physical_device"`
 }
 
-func startProcess(ctx context.Context, bin string, args []string) (*process, error) {
+func startProcess(ctx context.Context, bin string, args []string, grant *startupGrant) (*process, error) {
 	opts := execpkg.ExecOpts{
 		Launch:    execpkg.HostLaunch("decide_engine"),
 		NoTimeout: true,
@@ -69,21 +90,25 @@ func startProcess(ctx context.Context, bin string, args []string) (*process, err
 		return nil, fmt.Errorf("decide: engine stdout: %w", err)
 	}
 	cmd.Stderr = stderrLogger{}
-	if err := cmd.Start(); err != nil {
+	if err := execpkg.StartPrepared(ctx, cmd); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("decide: start engine: %w", err)
 	}
-	untrack := execpkg.TrackProcess(cmd.Process.Pid)
+	lifetime, reaped := context.WithCancel(context.Background())
 	proc := &process{
+		lifetime: lifetime, reaped: reaped, generation: processSequence.Add(1),
 		cmd: cmd,
 		cleanup: func() {
-			untrack()
 			cleanup()
 		},
 		stdin:    stdin,
 		admitted: make(chan struct{}, 1),
-		pending:  make(map[int64]chan response),
+		pending:  make(map[int64]*pendingRequest),
 		done:     make(chan struct{}),
+	}
+	proc.startup = grant
+	if grant != nil {
+		proc.generation = grant.generation
 	}
 	go proc.read(stdout)
 	return proc, nil
@@ -94,6 +119,7 @@ var errEngineExited = errors.New("decide: engine exited")
 func (p *process) read(stdout io.Reader) {
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64<<10), 16<<20)
+	var protocolErr error
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -101,8 +127,8 @@ func (p *process) read(stdout io.Reader) {
 		}
 		var resp response
 		if err := json.Unmarshal([]byte(line), &resp); err != nil {
-			log.Warn("decision engine wrote an unreadable line", "error", err)
-			continue
+			protocolErr = fmt.Errorf("decide: invalid engine response: %w", err)
+			break
 		}
 		p.pendingMu.Lock()
 		ch := p.pending[resp.ID]
@@ -110,21 +136,27 @@ func (p *process) read(stdout io.Reader) {
 		p.pendingMu.Unlock()
 		if ch != nil {
 			<-p.admitted
-			ch <- resp
+			ch.complete()
+			ch.response <- resp
 		}
 	}
-	p.exitErr = errors.Join(errEngineExited, scanner.Err())
+	p.exitErr = errors.Join(errEngineExited, protocolErr, scanner.Err())
+	// A closed response pipe cannot acknowledge outstanding physical work.
+	p.kill()
 	// Reaped before done closes, so a waiter on done reads the exit status.
 	_ = p.cmd.Wait()
 	if p.cmd.ProcessState != nil {
 		p.exitCode = p.cmd.ProcessState.ExitCode()
 	}
-	close(p.done)
+	p.reaped()
+	p.startup.release()
 	p.pendingMu.Lock()
 	for id, ch := range p.pending {
 		delete(p.pending, id)
-		close(ch)
+		ch.complete()
+		close(ch.response)
 	}
+	close(p.done)
 	p.pendingMu.Unlock()
 	p.cleanup()
 }
@@ -151,9 +183,24 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 		return response{}, p.exitErr
 	default:
 	}
+	permit, err := p.acquireDevice(ctx)
+	if err != nil {
+		<-p.admitted
+		return response{}, err
+	}
 	ch := make(chan response, 1)
 	p.pendingMu.Lock()
-	p.pending[req.ID] = ch
+	select {
+	case <-p.done:
+		p.pendingMu.Unlock()
+		if permit != nil {
+			permit.Complete()
+		}
+		<-p.admitted
+		return response{}, p.exitErr
+	default:
+	}
+	p.pending[req.ID] = &pendingRequest{response: ch, permit: permit}
 	p.pendingMu.Unlock()
 	raw, err := json.Marshal(req)
 	if err != nil {
@@ -163,7 +210,9 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 	raw = append(raw, '\n')
 	_, err = p.stdin.Write(raw)
 	if err != nil {
-		p.drop(req.ID)
+		// A partial write may already have submitted work.
+		p.kill()
+		<-p.done
 		return response{}, errors.Join(errEngineExited, err)
 	}
 	select {
@@ -188,7 +237,8 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 
 func (p *process) drop(id int64) {
 	p.pendingMu.Lock()
-	if _, ok := p.pending[id]; ok {
+	if pending, ok := p.pending[id]; ok {
+		pending.complete()
 		delete(p.pending, id)
 		<-p.admitted
 	}
@@ -202,10 +252,14 @@ func (p *process) stop() {
 		return
 	case <-time.After(2 * time.Second):
 	}
+	p.kill()
+	<-p.done
+}
+
+func (p *process) kill() {
 	if p.cmd.Process != nil {
 		_ = p.cmd.Process.Kill()
 	}
-	<-p.done
 }
 
 // stderrLogger forwards engine diagnostics line by line.

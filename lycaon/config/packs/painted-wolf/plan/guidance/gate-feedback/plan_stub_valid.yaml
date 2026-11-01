@@ -13,7 +13,7 @@ satisfy_auto:
   - "REQUIRED frontmatter: title: a short name (not the host placeholder blueprint/plan)."
   - "REQUIRED frontmatter: research_depth: none | light | thorough — one of those three words, not a sentence."
   - "REQUIRED exact ## headings (write these titles literally): ## Goal, ## Assumptions, ## Plan implementation scope (include **Size:**), ## Plan breaking changes, ## Approach."
-  - "Fold intake answers and research facts into those sections in one `write`/`edit` of the bound `${overlay_dir}/blueprints/` file."
+  - "Fold intake answers and research facts into those sections in one command redirect or `edit` of the bound `${overlay_dir}/blueprints/` file."
 satisfy:
   - "REQUIRED frontmatter: title: a short name (not blueprint or plan)."
   - "REQUIRED frontmatter: research_depth: none | light | thorough."

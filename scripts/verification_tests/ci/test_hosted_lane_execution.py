@@ -314,3 +314,29 @@ class HostedExecutionTests(unittest.TestCase):
                 patch.object(ci.subprocess, 'call', return_value=0) as command:
             ci.run_lane('limits')
         self.assertEqual(command.call_args.kwargs['env']['PW_CHANGE_BASE'], 'b' * 40)
+
+    def test_rotated_preflight_stops_after_first_wave_failure_and_records_phases(self):
+        scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
+        history = json.dumps({'contract_failures': ['./test/contract/persistence']}, separators=(',', ':'))
+        for first_wave_code in (1, 0):
+            with self.subTest(first_wave_code=first_wave_code), tempfile.TemporaryDirectory() as directory, \
+                    patch('ci_policy.impact.change', return_value=scope), \
+                    patch('ci_policy.native_admission.commands', return_value=[]), \
+                    patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=history), \
+                    patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                    patch.object(ci.subprocess, 'call', side_effect=[first_wave_code, 0, 0]) as run:
+                self.assertEqual(ci.run_lane('ready'), first_wave_code)
+                record = json.loads((Path(directory) / 'ci/run.json').read_text())
+                self.assertEqual(record['preflight']['exit_code'], first_wave_code)
+                self.assertEqual(len(record['preflight']['phases']), 1 if first_wave_code else 2)
+                self.assertEqual(record['preflight']['phases'][0]['command'][3], './test/contract/persistence')
+                self.assertEqual(run.call_count, 1 if first_wave_code else 3)
+        for malformed in ('{bad', '[]', '{"failed_targets": 123}'):
+            with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as directory, \
+                    patch('ci_policy.impact.change', return_value=scope), \
+                    patch('ci_policy.native_admission.commands', return_value=[]), \
+                    patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=malformed), \
+                    patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                    patch.object(ci.subprocess, 'call', return_value=0) as run:
+                self.assertEqual(ci.run_lane('ready'), 0)
+                self.assertEqual(run.call_args_list[0].args[0], ['./task', *hosted_plan.lanes()['ready']['preflight']])

@@ -26,7 +26,7 @@ struct LoadArgs {
     #[arg(long, default_value = "")]
     model_id: String,
 
-    /// Where to run: auto, cpu, mlx, vulkan or vulkan:N.
+    /// Where to run: auto, cpu, mlx, vulkan:N or vulkan-pci:ADDRESS.
     #[arg(long, default_value = "auto")]
     device: String,
 

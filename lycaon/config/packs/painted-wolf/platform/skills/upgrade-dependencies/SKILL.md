@@ -8,17 +8,28 @@ metadata:
 
 # Upgrade dependencies
 
-Use the request and observed project/environment to choose the matching procedure below. Read that procedure before acting; load only the variants needed for this task. Resource paths are relative to this skill directory.
+Run the project's own package manager in `command` and declare its id in `capability_request.host_resources` on that call.
 
-- [Upgrade dotnet dependencies](references/upgrade_dotnet_dependencies.md) — Upgrade NuGet packages in a .NET project deliberately, including transitive vulnerabilities when bumping a package, clearing an advisory, or resolving a version conflict.
-- [Upgrade go dependencies](references/upgrade_go_dependencies.md) — Upgrade Go module dependencies with targeted go get moves when bumping a module, clearing a vulnerability, or untangling go.mod conflicts.
-- [Upgrade jvm dependencies](references/upgrade_jvm_dependencies.md) — Upgrade Maven or Gradle dependencies deliberately, resolving the version the build actually picks when bumping a library, clearing a CVE, or untangling a JVM version conflict.
-- [Upgrade node dependencies](references/upgrade_node_dependencies.md) — Upgrade JavaScript and TypeScript dependencies in npm, pnpm, yarn, or bun projects when bumping packages, fixing audit findings, or unsticking a lockfile.
-- [Upgrade php dependencies](references/upgrade_php_dependencies.md) — Upgrade Composer dependencies deliberately, without letting an install rewrite the lockfile when bumping a package, clearing an advisory, or resolving a PHP platform conflict.
-- [Upgrade python dependencies](references/upgrade_python_dependencies.md) — Upgrade Python dependencies in uv, pip, or requirements-file projects when bumping packages, resolving conflicts, or fixing vulnerable pins.
-- [Upgrade ruby dependencies](references/upgrade_ruby_dependencies.md) — Upgrade Bundler gems deliberately, keeping the lockfile's platforms intact when bumping a gem, clearing an advisory, or fixing a bundle that resolves differently in CI.
-- [Upgrade rust dependencies](references/upgrade_rust_dependencies.md) — Upgrade Cargo dependencies deliberately, distinguishing a lockfile move from a manifest change when bumping a crate, clearing an advisory, or resolving a version conflict.
+## Rules for every ecosystem
 
-## Boundaries
+1. **Use the manager the project already uses**, identified from its lockfile or manifest. Never switch managers, add a second lockfile, or install into a system interpreter.
+2. **Read what actually resolves before changing anything**: the resolved tree or the outdated and vulnerable lists, including transitive packages. The declared version is not necessarily the one you get.
+3. **Upgrade one package, or one tightly coupled group, at a time** to an explicit version. A blanket update buries the change that breaks the build.
+4. **Know whether you are moving the lock or the requirement.** An update inside the allowed range moves the lock; a new major changes the manifest constraint. Prefer fixing the source of a transitive version over forcing or pinning over it.
+5. **Let the tool write the lockfile, then review its diff.** New transitive packages, changed registries, install hooks, and very fresh or maintainer-changed releases are supply-chain signals to report before going further.
+6. **Read release notes between versions** and state breaking changes first.
+7. **Verify each move with the project's build and test gate** before the next one. Red means fix or revert this move. Confirm an advisory fix with the ecosystem's audit tool when it is already installed; do not install tools to get one.
+8. **Report** each package with from and to versions, the reason, breaking changes, the lockfile diff summary, gate results, and any advisory still open.
 
-Follow project policy and the user’s requested scope. A procedure does not grant permission or imply that every listed toolchain is installed. Use only available host resources and tools; delegate or report a missing capability. Preserve original evidence, identify its source, and report verification limits.
+## Ecosystems
+
+Open the one the project uses:
+
+- [.NET (NuGet)](references/upgrade_dotnet_dependencies.md): ranges resolve to the lowest version; command forms differ by SDK major.
+- [Go modules](references/upgrade_go_dependencies.md): `go get mod@version`, major-version import paths, `go mod tidy`, `govulncheck`.
+- [JVM (Maven, Gradle)](references/upgrade_jvm_dependencies.md): resolved trees, BOMs, constraints, and `dependencyInsight`.
+- [Node (npm, pnpm, yarn, bun)](references/upgrade_node_dependencies.md): lockfile-driven installs and `--ignore-scripts`.
+- [PHP (Composer)](references/upgrade_php_dependencies.md): `install` versus `update`, and `-w`/`-W` widening.
+- [Python (uv, pip)](references/upgrade_python_dependencies.md): project virtual environments and tool-driven pins.
+- [Ruby (Bundler)](references/upgrade_ruby_dependencies.md): `--conservative` and lockfile platforms.
+- [Rust (Cargo)](references/upgrade_rust_dependencies.md): requirement versus lock and expected duplicate majors.

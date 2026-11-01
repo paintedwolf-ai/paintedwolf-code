@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerhttp"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/modelfeed"
 	"os"
@@ -18,7 +19,7 @@ import (
 )
 
 // NewService loads catalog, credentials, policy, registry, and router.
-func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error) {
+func NewService(ctx context.Context, mock modelcall.LLMClient, localRuntime *nativegen.Runtime) (*Service, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -34,7 +35,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error)
 	if err != nil {
 		return nil, err
 	}
-	registry, err := NewRegistry(ctx, catalog, credentials)
+	registry, err := NewRegistry(ctx, catalog, credentials, localRuntime)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +53,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error)
 	if ProviderUtilityCallsEnabled() {
 		refreshCancel, refreshDone = startModelFeedRefresh(ctx, feed)
 	}
-	router := NewStaticModelRouter(policy)
+	router := NewStaticModelRouter(policy).WithLocalDefault(registry.IsConfigured(IncludedProviderID))
 
 	svc := &Service{
 		modelFeedRefreshCancel: refreshCancel,
@@ -105,7 +106,7 @@ func (s *Service) Close(ctx context.Context) error {
 }
 
 // NewRegistry builds providers from catalog and stored credentials.
-func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store) (*Registry, error) {
+func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store, localRuntime *nativegen.Runtime) (*Registry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -117,16 +118,16 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 	if rateDirectory != "" && (!configdir.IsHarnessChannel() || !filepath.IsAbs(rateDirectory)) {
 		return nil, fmt.Errorf("shared provider rate state requires an absolute directory in the isolated harness")
 	}
-	r := &Registry{
-		rateGate:        providerretry.NewProviderRateGate(rateDirectory),
-		catalog:         catalog,
-		credentials:     credentials,
-		discovery:       discovery.NewCache(nil),
-		cloudflareUsage: openaicompat.NewCloudflareUsageCache(),
-		discoveryClient: providerhttp.DiscoveryClient(discoverModelsTimeout),
-		roleExclusions:  roleExclusions,
-		listCache:       catalogruntime.NewSnapshotCache(providerListCacheTTL, cloneProviderMetaList),
-	}
+	r := &Registry{}
+	r.localRuntime = localRuntime
+	r.rateGate = providerretry.NewProviderRateGate(rateDirectory)
+	r.catalog = catalog
+	r.credentials = credentials
+	r.discovery = discovery.NewCache(nil)
+	r.cloudflareUsage = openaicompat.NewCloudflareUsageCache()
+	r.discoveryClient = providerhttp.DiscoveryClient(discoverModelsTimeout)
+	r.roleExclusions = roleExclusions
+	r.listCache = catalogruntime.NewSnapshotCache(providerListCacheTTL, cloneProviderMetaList)
 	// Initial discovery belongs to the allocating startup.
 	if err := r.rebuild(ctx); err != nil {
 		return nil, errors.Join(err, r.discovery.Close(context.WithoutCancel(ctx)))
@@ -138,7 +139,7 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 }
 
 // SetModelFeed sets the shared model feed.
-func (r *Registry) SetModelFeed(ctx context.Context, feed *modelfeed.Feed) {
+func (r *registryDiscovery) SetModelFeed(ctx context.Context, feed *modelfeed.Feed) {
 	r.modelFeed.Store(feed)
 	r.InvalidateListCache()
 	if feed == nil {

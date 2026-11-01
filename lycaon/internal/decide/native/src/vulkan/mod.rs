@@ -31,6 +31,7 @@ pub(crate) struct Gpu {
     /// The part, its kernel target, and its bus address: a new card, driver target, or slot is
     /// new hardware to measure.
     pub key: String,
+    pub pci_address: Option<String>,
     device: Device,
 }
 
@@ -62,15 +63,19 @@ fn enumerate(include_software: bool) -> Result<Vec<Gpu>> {
         if identity.physical.is_none() && !include_software {
             continue;
         }
+        let pci_address =
+            identity.physical.as_ref().and_then(|p| p.pci_address.as_ref()).map(|a| a.to_string());
         let address = identity
             .physical
-            .and_then(|p| p.pci_address)
+            .as_ref()
+            .and_then(|p| p.pci_address.as_ref())
             .map(|a| format!("{a:?}"))
             .unwrap_or_default();
         gpus.push(Gpu {
             index: gpus.len(),
             key: format!("{} {} {address}", identity.name, identity.fingerprint),
             name: identity.name,
+            pci_address,
             device,
         });
     }

@@ -3,9 +3,10 @@ notification: { tier: non_catastrophic, scope: app }
 context_schema:
   optional:
     - field
+    - recovery
 title: "Socket changed"
 message: "The socket changed while it was being checked."
-suggested_action: "Try again once the service is running steadily."
+suggested_action: "Request fresh approval once the intended service is running. Saved intent and credentials remain available."
 scenarios:
   - id: default
     vars: {}

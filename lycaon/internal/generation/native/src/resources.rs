@@ -1,0 +1,81 @@
+use crate::error::{Error, Result};
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub struct Plan {
+    pub resident_weights_bytes: u64,
+    pub mapped_ple_bytes: u64,
+    pub kv_capacity_bytes: u64,
+    pub workspace_bytes: u64,
+    pub allocator_cache_bytes: u64,
+    pub device_reservation_bytes: u64,
+    pub host_reservation_bytes: u64,
+}
+
+impl Plan {
+    pub fn e4b(
+        weights: u64,
+        mapped: u64,
+        context: usize,
+        chunk: usize,
+        unified: bool,
+    ) -> Result<Self> {
+        if !(2..=65536).contains(&context)
+            || !(1..=256).contains(&chunk)
+            || weights == 0
+            || weights > 8 << 30
+            || mapped == 0
+            || mapped > 4 << 30
+        {
+            return Err(Error::Capacity("invalid E4B resource dimensions".into()));
+        }
+        let prefix = 4096.min(context - 1) as u64;
+        let context = (context as u64).div_ceil(256) * 256;
+        let prefix = prefix.div_ceil(256) * 256;
+        // Four global and twenty sliding KV sources; keys and values use F16.
+        let global = (context + prefix) * 4 * 2 * 2 * 512 * 2;
+        let sliding = 2 * (512 + chunk as u64) * 20 * 2 * 2 * 256 * 2;
+        let kv_capacity_bytes = global + sliding;
+        // MLX can overlap old and replacement global buffers during growth.
+        let growth = if unified {
+            context * 4 * 2 * 2 * 512 * 2
+        } else {
+            0
+        };
+        let workspace_bytes = (768 << 20) + growth;
+        let allocator_cache_bytes = if unified { 128 << 20 } else { 0 };
+        let device_reservation_bytes =
+            weights + kv_capacity_bytes + workspace_bytes + allocator_cache_bytes;
+        // Tokenizer, grammar compilation, IPC and mapped rows share host memory.
+        let host_reservation_bytes = 768 << 20;
+        Ok(Self {
+            resident_weights_bytes: weights,
+            mapped_ple_bytes: mapped,
+            kv_capacity_bytes,
+            workspace_bytes,
+            allocator_cache_bytes,
+            device_reservation_bytes,
+            host_reservation_bytes,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn accounts_for_prefix_and_growth_without_charging_the_entire_mapping() {
+        let linux = Plan::e4b(3 << 30, 2 << 30, 65536, 256, false).unwrap();
+        let mac = Plan::e4b(3 << 30, 2 << 30, 65536, 256, true).unwrap();
+        assert_eq!(mac.kv_capacity_bytes, linux.kv_capacity_bytes);
+        assert_eq!(
+            mac.device_reservation_bytes - linux.device_reservation_bytes,
+            (1 << 30) + (128 << 20)
+        );
+        assert!(linux.host_reservation_bytes < linux.mapped_ple_bytes);
+        assert!(linux.device_reservation_bytes < 5 << 30);
+        for (context, chunk) in [(0, 1), (65537, 1), (2, 0), (2, 257)] {
+            assert!(Plan::e4b(3 << 30, 2 << 30, context, chunk, false).is_err());
+        }
+    }
+}

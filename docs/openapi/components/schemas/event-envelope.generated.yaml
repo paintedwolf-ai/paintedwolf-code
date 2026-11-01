@@ -25,6 +25,7 @@ components:
       - $ref: '#/components/schemas/EventEnvelopeProgress'
       - $ref: '#/components/schemas/EventEnvelopeQueue'
       - $ref: '#/components/schemas/EventEnvelopeProject'
+      - $ref: '#/components/schemas/EventEnvelopeProjectBackground'
       - $ref: '#/components/schemas/EventEnvelopeProcess'
       - $ref: '#/components/schemas/EventEnvelopePreview'
       - $ref: '#/components/schemas/EventEnvelopeAttention'
@@ -63,6 +64,7 @@ components:
           progress: '#/components/schemas/EventEnvelopeProgress'
           queue: '#/components/schemas/EventEnvelopeQueue'
           project: '#/components/schemas/EventEnvelopeProject'
+          project_background: '#/components/schemas/EventEnvelopeProjectBackground'
           process: '#/components/schemas/EventEnvelopeProcess'
           preview: '#/components/schemas/EventEnvelopePreview'
           attention: '#/components/schemas/EventEnvelopeAttention'
@@ -318,6 +320,18 @@ components:
             const: project
           data:
             $ref: 'project/identity.yaml#/components/schemas/ProjectEvent'
+    EventEnvelopeProjectBackground:
+      allOf:
+      - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'
+      - type: object
+        required:
+        - topic
+        - data
+        properties:
+          topic:
+            const: project_background
+          data:
+            $ref: 'events.yaml#/components/schemas/ProjectBackgroundEvent'
     EventEnvelopeProcess:
       allOf:
       - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'

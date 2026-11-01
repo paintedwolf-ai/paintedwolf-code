@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -41,6 +42,10 @@ func TestRevalidateSocketGrantChanged(t *testing.T) {
 
 	grant, err := confine.ResolveSocketRequest(sockPath)
 	testutil.FailErr(t, "ResolveSocketRequest", err)
+	ctx, scope := socketref.WithScope(t.Context())
+	defer scope.Close()
+	grant, err = confine.CaptureSocketGrant(ctx, grant)
+	testutil.FailErr(t, "capture reviewed command socket", err)
 	testutil.FailErr(t, "RevalidateSocketGrant", confine.RevalidateSocketGrant(grant))
 
 	_ = ln.Close()

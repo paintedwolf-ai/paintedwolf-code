@@ -24,7 +24,7 @@ func TestReconcileOrphanedRunEmitsInterruptedBoundary(t *testing.T) {
 
 	run := &api.WorkflowRun{
 		ID: "run-int", SessionID: sess.ID, WorkflowID: "plan",
-		WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning, CurrentPhase: "boot",
+		WorkflowVersion: "1.0.1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "boot",
 	}
 	testutil.FailErr(t, "create run", mgr.Store.State.CreateState(ctx, run, projectDir, nil))
 	testutil.FailErr(t, "reconcile", mgr.Recovery.ReconcileOrphanedRuns(ctx, sess.ID))
@@ -155,7 +155,7 @@ func TestReconcileOrphanedRunsSkipsSessionsActiveSinceBoot(t *testing.T) {
 
 	run := &api.WorkflowRun{
 		ID: "run-resumed", SessionID: sess.ID, WorkflowID: "plan",
-		WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review",
+		WorkflowVersion: "1.0.1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review",
 	}
 	testutil.FailErr(t, "create run", mgr.Store.State.CreateState(ctx, run, sess.WorkspacePath, nil))
 
@@ -192,7 +192,7 @@ func TestReconcileOrphanedRunsInterruptsRunsOfSessionsOnlyTouchedSinceBoot(t *te
 
 	run := &api.WorkflowRun{
 		ID: "run-crashed", SessionID: sess.ID, WorkflowID: "plan",
-		WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review",
+		WorkflowVersion: "1.0.1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review",
 	}
 	testutil.FailErr(t, "create run", mgr.Store.State.CreateState(ctx, run, sess.WorkspacePath, nil))
 
@@ -223,7 +223,7 @@ func TestReconcileOrphanedRunsInterruptsUntouchedPreBootRuns(t *testing.T) {
 
 	run := &api.WorkflowRun{
 		ID: "run-dead", SessionID: sess.ID, WorkflowID: "plan",
-		WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review",
+		WorkflowVersion: "1.0.1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review",
 	}
 	testutil.FailErr(t, "create run", mgr.Store.State.CreateState(ctx, run, sess.WorkspacePath, nil))
 
@@ -247,7 +247,7 @@ func TestReconcileOrphanedRunsPreservesPendingUserInput(t *testing.T) {
 
 	run := &api.WorkflowRun{
 		ID: "run-awaiting-user", SessionID: sess.ID, WorkflowID: "plan",
-		WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review",
+		WorkflowVersion: "1.0.1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review",
 	}
 	testutil.FailErr(t, "create run", mgr.Store.State.CreateState(ctx, run, projectDir, nil))
 	testutil.FailErr(t, "persist pending user input", mgr.Store.State.UpdateVars(
@@ -277,7 +277,7 @@ func TestReconcileOrphanedRunsPreservesHumanApproval(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	testutil.FailErr(t, "start plan", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)

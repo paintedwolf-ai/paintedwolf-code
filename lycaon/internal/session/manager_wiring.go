@@ -27,6 +27,9 @@ func (m *Host) SetDoomLoopGuard(g loopguard.DoomLoopGuard) {
 	m.Coordinator.Nudging.DoomLoop = g
 
 	m.ToolPolicy.SetDoomLoopGuard(g)
+	if g != nil {
+		g.SetProgressPrerequisiteResolver(m.Coordinator.Guards.ProgramProgressState)
+	}
 	if g != nil && m.Coordinator.Context.Pages != nil {
 		g.SetPageTargetResolver(m.Coordinator.Context.Pages.TargetURL)
 	}

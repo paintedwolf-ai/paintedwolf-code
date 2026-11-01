@@ -13,6 +13,28 @@ type ContextLengthLookup interface {
 	ContextLength(provider, model string) int
 }
 
+// LocalProviderLookup optionally reports whether a provider ID represents a
+// local inference endpoint.
+type LocalProviderLookup interface {
+	IsLocalProvider(provider string) bool
+}
+
+func isLocalProvider(provider string, lookup ContextLengthLookup) bool {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return false
+	}
+	if lookup != nil {
+		if r, ok := lookup.(*Registry); ok {
+			return isLocalRegistryProvider(r, provider)
+		}
+		if lp, ok := lookup.(LocalProviderLookup); ok {
+			return lp.IsLocalProvider(provider)
+		}
+	}
+	return false
+}
+
 // Resolve source labels for ResolveTrueWindow.
 const (
 	WindowResolveExplicit   = "explicit"
@@ -33,12 +55,21 @@ func ResolveTrueWindow(policy ModelPolicy, lookup ContextLengthLookup, windows m
 		return cfg.ModelContextWindow, WindowResolveExplicit
 	}
 
-	provider := strings.TrimSpace(policy.Coordinator.ProviderID)
-	model := strings.TrimSpace(policy.Coordinator.Model)
+	localAvailable := lookup != nil && lookup.ContextLength(IncludedProviderID, IncludedModelID) > 0
+	coord := CoordinatorRefWithLocalDefault(policy, localAvailable)
+	provider := strings.TrimSpace(coord.ProviderID)
+	model := strings.TrimSpace(coord.Model)
 	if lookup != nil && model != "" {
 		if n := lookup.ContextLength(provider, model); n > 0 {
 			return n, WindowResolveModelEntry
 		}
+	}
+	if isLocalProvider(provider, lookup) {
+		fb := windows.LocalFallbackTrueWindow
+		if fb < 1 {
+			fb = modelinfo.DefaultLocalFallbackTrueWindow
+		}
+		return fb, WindowResolveFallback
 	}
 	if n, ok := windows.Lookup(model); ok && n > 0 {
 		return n, WindowResolveMatchTable

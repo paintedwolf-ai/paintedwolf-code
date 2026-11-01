@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -186,6 +188,7 @@ func TestSocketPathDeviceGrantIsCrossProject(t *testing.T) {
 	global, _, _ := testSettingsPaths(t)
 	store, err := settings.NewApprovalStoreAt(global)
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
+	defer store.Close()
 
 	dir, err := os.MkdirTemp("", "skd") //nolint:usetesting // Short socket path.
 	testutil.FailErr(t, "MkdirTemp", err)
@@ -207,6 +210,11 @@ func TestSocketPathDeviceGrantIsCrossProject(t *testing.T) {
 		GrantedAt: time.Now().UTC(), ExpiresWhen: "when revoked", ReaskWhen: "target changes",
 		Witness: witness, ApprovedPath: sockPath, ResolvedPath: resolved, Source: "settings",
 	}
+	ctx, scope := socketref.WithScope(t.Context())
+	defer scope.Close()
+	target, err := confine.CaptureSocketGrant(ctx, confine.SocketGrant{ApprovedPath: sockPath, ResolvedPath: resolved})
+	testutil.FailErr(t, "capture command socket", err)
+	grant.Binding = target.Binding
 	_, err = store.UpsertGlobalGrant(grant)
 	testutil.FailErr(t, "UpsertGlobalGrant", err)
 
@@ -223,6 +231,7 @@ func TestSocketPathProjectGrantStaysInProject(t *testing.T) {
 	global, _, _ := testSettingsPaths(t)
 	store, err := settings.NewApprovalStoreAt(global)
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
+	defer store.Close()
 
 	dir, err := os.MkdirTemp("", "skp") //nolint:usetesting // Short socket path.
 	testutil.FailErr(t, "MkdirTemp", err)
@@ -244,6 +253,11 @@ func TestSocketPathProjectGrantStaysInProject(t *testing.T) {
 		GrantedAt: time.Now().UTC(), ExpiresWhen: "when revoked", ReaskWhen: "target changes",
 		Witness: witness, ApprovedPath: sockPath, ResolvedPath: resolved, Source: "settings",
 	}
+	ctx, scope := socketref.WithScope(t.Context())
+	defer scope.Close()
+	target, err := confine.CaptureSocketGrant(ctx, confine.SocketGrant{ApprovedPath: sockPath, ResolvedPath: resolved})
+	testutil.FailErr(t, "capture command socket", err)
+	grant.Binding = target.Binding
 	_, err = store.UpsertGlobalGrant(grant)
 	testutil.FailErr(t, "UpsertGlobalGrant", err)
 

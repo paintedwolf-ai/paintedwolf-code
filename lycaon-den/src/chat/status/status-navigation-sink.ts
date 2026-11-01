@@ -1,7 +1,7 @@
 /** Shell destinations for links inside session status chips. */
 export type StatusChipNavigationTarget =
   | { kind: "settings"; section: "providers" | "approvals" }
-  | { kind: "project-context"; stage: "cost" | "security" }
+  | { kind: "project-context"; stage: "cost" | "security" | "running" }
   | { kind: "project-configuration"; section: "trust" | "secrets" | "approvals" };
 
 let navigate: ((target: StatusChipNavigationTarget) => void) | null = null;

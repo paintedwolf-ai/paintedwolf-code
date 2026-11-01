@@ -162,7 +162,14 @@ func (w *argsWalker) objectInto(n objectNode, sink *misplacementSet) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	if match, field := findClosestPropertyMatch(unplaced, names); match != "" {
+	match, field := findClosestPropertyMatch(unplaced, names)
+	if match == "" {
+		if nestedMatch, nestedField := findClosestNestedPropertyMatch(unplaced, declared); nestedMatch != "" {
+			match = joinArgPath(n.path, nestedMatch)
+			field = nestedField
+		}
+	}
+	if match != "" {
 		w.diag.DidYouMean = &NearMiss{Path: joinArgPath(n.path, field), DidYouMean: match}
 	}
 }
@@ -346,6 +353,7 @@ func (w *argsWalker) relocate(n objectNode, key string, declared map[string]map[
 			value = parsed
 		}
 	}
+	value = coerceRelocatedValue(value, dest.schema)
 	source := n.value
 	w.repairs = append(w.repairs, func() {
 		delete(source, key)

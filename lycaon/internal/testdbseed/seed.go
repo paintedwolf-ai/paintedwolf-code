@@ -28,7 +28,7 @@ func formatTime(t time.Time) string {
 }
 
 // InsertProject inserts a minimal projects row for FK-backed tests.
-func InsertProject(t *testing.T, sqlDB store, projectID string) {
+func InsertProject(t testing.TB, sqlDB store, projectID string) {
 	t.Helper()
 	now := formatTime(time.Now().UTC())
 	_, err := sqlDB.ExecContext(t.Context(), `
@@ -107,7 +107,7 @@ func OrchestrationWorkspace(t *testing.T, store interface {
 	return dir
 }
 
-func InsertSession(t *testing.T, sqlDB store, sessionID, projectID string) {
+func InsertSession(t testing.TB, sqlDB store, sessionID, projectID string) {
 	t.Helper()
 	InsertProject(t, sqlDB, projectID)
 	now := formatTime(time.Now().UTC())

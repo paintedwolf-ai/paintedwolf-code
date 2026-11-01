@@ -148,8 +148,9 @@ func (n *Navigation) Entry(ctx context.Context, rel string) (Entry, error) {
 
 func (n *Navigation) entryOf(item pagedview.RangeItem[TreeItem]) Entry {
 	rel := item.Value.Path
+	isDir := directoryOrderKind(item.Key)
 	return Entry{RootID: n.root.ID, Path: rel, Parent: normalizeDir(path.Dir(rel)), Name: path.Base(rel), Depth: pathDepth(rel),
-		IsDir: directoryOrderKind(item.Key), IsSymlink: item.Value.Symlink, Boundary: n.pin.store.policy.boundaryDir(rel) != ""}
+		IsDir: isDir, IsSymlink: item.Value.Symlink, Boundary: isDir && n.pin.store.policy.boundaryDir(rel) != ""}
 }
 
 func (n *Navigation) Child(ctx context.Context, dir string, rank int64, recursive bool) (Entry, int64, error) {

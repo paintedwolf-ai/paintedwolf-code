@@ -3,13 +3,14 @@ id: EDIT_OLD_STRING_NOT_FOUND
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - edit
 requires:
   profiles:
   - filesystem
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.old_string_chars
   - paintedwolf.path

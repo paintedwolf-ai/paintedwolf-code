@@ -345,7 +345,7 @@ func (g *RuleApprovalGate) ApplyGrant(grant hitl.ApprovalGrant) (bool, error) {
 		Coverage: grant.Coverage, GrantedAt: grant.GrantedAt, ExpiresAt: grant.ExpiresAt,
 		ExpiresWhen: grant.ExpiresWhen, ReaskWhen: grant.ReaskWhen, Witness: grant.Witness,
 		GrantedPath:  grant.GrantedPath,
-		ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Source: grant.Source,
+		ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding, Unavailable: grant.Unavailable, Source: grant.Source,
 		OwnerOperationID:    grant.OwnerOperationID,
 		GrantedByPersonID:   grant.GrantedByPersonID,
 		GrantedByPolicy:     grant.GrantedByPolicy,
@@ -362,11 +362,7 @@ func (g *RuleApprovalGate) ApplyGrant(grant hitl.ApprovalGrant) (bool, error) {
 // approvalScopeRef resolves the settings layer an action is evaluated against.
 // An action carrying either project identity reads the project layer.
 func approvalScopeRef(action hitl.ProposedAction) (llm.SettingsScope, ProjectRef) {
-	ref := ProjectRef{ID: action.Scope.ProjectID, Dir: action.Scope.ProjectDir}
-	if ref.Dir != "" || ref.ID != "" {
-		return llm.SettingsScopeProject, ref
-	}
-	return llm.SettingsScopeGlobal, ref
+	return ScopeForProjectRef(ProjectRef{ID: action.Scope.ProjectID, Dir: action.Scope.ProjectDir})
 }
 
 // effectiveConfig is the merged device-and-project approval policy for one action.
@@ -374,7 +370,7 @@ func (g *RuleApprovalGate) effectiveConfig(action hitl.ProposedAction) ApprovalC
 	if g == nil || g.store == nil {
 		return ApprovalConfig{}
 	}
-	return g.store.Get(approvalScopeRef(action))
+	return g.store.EffectiveConfig(ProjectRef{ID: action.Scope.ProjectID, Dir: action.Scope.ProjectDir})
 }
 
 func (g *RuleApprovalGate) GrantCovers(action hitl.ProposedAction) bool {
@@ -426,7 +422,7 @@ func (grant ApprovalGrant) ToDomain() hitl.ApprovalGrant {
 		ProjectID: grant.ProjectID, ProjectDir: grant.ProjectDir, Title: grant.Title, Coverage: grant.Coverage,
 		GrantedAt: grant.GrantedAt, ExpiresAt: grant.ExpiresAt, ExpiresWhen: grant.ExpiresWhen,
 		ReaskWhen: grant.ReaskWhen, Witness: grant.Witness, GrantedPath: grant.GrantedPath,
-		ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Source: grant.Source,
+		ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding, Unavailable: grant.Unavailable, Source: grant.Source,
 		OwnerOperationID:    grant.OwnerOperationID,
 		GrantedByPersonID:   grant.GrantedByPersonID,
 		GrantedByPolicy:     grant.GrantedByPolicy,

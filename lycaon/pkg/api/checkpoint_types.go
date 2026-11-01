@@ -59,6 +59,7 @@ const (
 	ApprovalSubjectKindReadPathSet     ApprovalSubjectKind = "read_path_set"
 	ApprovalSubjectKindSecret          ApprovalSubjectKind = "secret"
 	ApprovalSubjectKindPackageSet      ApprovalSubjectKind = "package_set"
+	ApprovalSubjectKindCredentialStore ApprovalSubjectKind = "credential_store"
 )
 
 type ApprovalSecretOriginKind string

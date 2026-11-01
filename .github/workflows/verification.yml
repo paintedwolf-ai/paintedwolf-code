@@ -149,6 +149,7 @@ jobs:
           linux-launch: ${{ matrix.linux_launch }}
           repository-tools: ${{ matrix.repository_tools }}
           nix: ${{ matrix.nix }}
+          userlands: ${{ matrix.userlands }}
 
       # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy

@@ -130,17 +130,19 @@ func isConfinementType(expr ast.Expr) bool {
 
 // confinementProducerInventory records each root producer and provenance.
 var confinementProducerInventory = map[string]string{
+	"internal/tools/native/command/program_external.go":   "programEnvironment — DefaultConfinement from ActionConfineInputsForContext; host-derived roots and grants for the shared launch environment",
 	"internal/tools/native/command/command_exec.go":       "commandConfineRoots(tctx, extraWriteRoots) — host-selected root + attached roots + approved chat write-root overlay",
 	"internal/tools/native/command/background_tools.go":   "commandConfineRoots(tctx, extraWriteRoots) — same union as foreground command",
 	"internal/tools/native/terminal/session_open.go":      "tools.ConfineRootsForAction(tctx) — host provenance only",
 	"internal/tools/safecmd/safecmd.go":                   "Confine(roots) wrapper; callers supply session roots (see internal/mcp/connector.go)",
 	"internal/mcp/connector.go":                           "stdioConfinement(roots) — server spawn roots from the session, never from tool args",
 	"internal/scan/bundled_confinement.go":                "BundledScannerConfinement(projectDir, outputDir) — bundled OpenGrep: project read-only plus exact host output root, network denied, mandatory application",
-	"internal/confine/confine.go":                         "DefaultConfinement / BuildProfile themselves",
+	"internal/confine/confine.go":                         "DefaultConfinement / BuildSeatbeltProfile themselves",
 	"internal/hitl/contained.go":                          "ContainedForRequest projection — reads the same union the executor applies",
 	"internal/toolexecution/command_operand_expansion.go": "globReadable(confReq) — pre-grant read boundaries for glob expansion",
 	"internal/documentcore/process.go":                    "DefaultConfinement(host MkdirTemp scratch) — native document core: only its own scratch root, network denied, mandatory application",
 	"internal/visualscreen/ocr_tesseract.go":              "DefaultConfinement(host MkdirTemp scratch) — bundled OCR engine: only its own per-image scratch root, network denied, mandatory application",
+	"internal/exec/prepared.go":                           "Confinement{HostExecution: true} — no roots; the explicit host disposition when a launch plan carries no agent boundary, never replacing one it does carry",
 }
 
 // The producer inventory matches the syntax tree.

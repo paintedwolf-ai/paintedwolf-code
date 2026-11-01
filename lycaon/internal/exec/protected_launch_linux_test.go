@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -163,7 +164,7 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 	if err := relayThrough(&exec.Cmd{Args: []string{"pw", supervisorCommand}}, missing); !errors.Is(err, ErrLaunchBrokerUnavailable) {
 		t.Fatalf("a launch without the broker = %v, want refusal", err)
 	}
-	if _, _, err := StartInOwnGroup(&exec.Cmd{Path: "/nonexistent/binary", Args: []string{"binary"}}); err == nil {
+	if _, err := StartInOwnGroup(t.Context(), &exec.Cmd{Path: "/nonexistent/binary", Args: []string{"binary"}}); err == nil {
 		t.Fatal("StartInOwnGroup with missing binary succeeded")
 	}
 
@@ -248,6 +249,32 @@ func TestBrokerRelaySubprocess(t *testing.T) {
 	cmd.ExtraFiles = []*os.File{nil, brokerChild}
 	testutil.FailErr(t, "run broker relay subprocess", cmd.Run())
 	testutil.FailErr(t, "serve broker relay request", <-done)
+}
+
+func TestPreparedInputsSurviveBrokerAndSupervisorPrefixes(t *testing.T) {
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "create broker pair", err)
+	broker := os.NewFile(uintptr(pair[0]), "broker")
+	defer func() { _ = broker.Close(); _ = unix.Close(pair[1]) }()
+	cmd, release, err := prepareNativeCommand(t.Context(), "/bin/true", nil, ExecOpts{Launch: HostLaunch("broker binding fixture")}, nil, false)
+	testutil.FailErr(t, "prepare bound input", err)
+	defer release()
+	prefix := slices.Clone(cmd.ExtraFiles)
+	state := protectedLaunch{protected: true, broker: broker}
+	testutil.FailErr(t, "relay prepared input", relayThrough(cmd, state))
+	testutil.FailErr(t, "validate relayed input", confine.ValidateProcessInputs(t.Context(), cmd))
+	cmd, cleanup, err := superviseCommand(cmd, func() {}, ProcessPriorityNormal)
+	testutil.FailErr(t, "supervise relayed input", err)
+	defer cleanup()
+	supervisorBroker := protectedState().broker
+	if !relayedCommand(cmd) {
+		testutil.FailErr(t, "relay supervised input", relayThrough(cmd, state))
+		supervisorBroker = broker
+	}
+	if !relayedCommand(cmd) || !commandSupervisor(cmd) || len(cmd.ExtraFiles) != len(prefix)+3 || !slices.Equal(cmd.ExtraFiles[:len(prefix)], prefix) || cmd.ExtraFiles[len(cmd.ExtraFiles)-1] != supervisorBroker {
+		t.Fatalf("supervisor relay changed descriptor prefix: args=%q files=%d", cmd.Args, len(cmd.ExtraFiles))
+	}
+	testutil.FailErr(t, "validate supervised relayed input", confine.ValidateProcessInputs(t.Context(), cmd))
 }
 
 // Inside the module view the caller's programs are not executable by the

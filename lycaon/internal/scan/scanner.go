@@ -68,19 +68,31 @@ func SelectedScannerContract(ctx context.Context, registry CodeScannerRegistry, 
 		id = selected[0].ID
 	}
 	if id == "" {
-		return scancatalog.ScannerContract{}, fmt.Errorf("scanner contract: scanner id required for %d selected scanners", len(selected))
+		return scancatalog.ScannerContract{}, scancatalog.NewConfigFaultError(
+			"", scancatalog.ConfigFaultInvalidContract,
+			fmt.Sprintf("scanner contract: scanner id required for %d selected scanners", len(selected)), nil,
+		)
 	}
 	for _, meta := range selected {
 		if meta.ID != id {
 			continue
 		}
 		if !meta.Contract.Valid() {
-			return scancatalog.ScannerContract{}, fmt.Errorf("scanner contract: %q has no valid contract", id)
+			return scancatalog.ScannerContract{}, scancatalog.NewConfigFaultError(
+				id, scancatalog.ConfigFaultInvalidContract,
+				fmt.Sprintf("scanner contract: %q has no valid contract", id), nil,
+			)
 		}
 		if meta.Contract.ScannerID != meta.ID {
-			return scancatalog.ScannerContract{}, fmt.Errorf("scanner contract: id %q does not match registry id %q", meta.Contract.ScannerID, meta.ID)
+			return scancatalog.ScannerContract{}, scancatalog.NewConfigFaultError(
+				id, scancatalog.ConfigFaultInvalidContract,
+				fmt.Sprintf("scanner contract: id %q does not match registry id %q", meta.Contract.ScannerID, meta.ID), nil,
+			)
 		}
 		return meta.Contract, nil
 	}
-	return scancatalog.ScannerContract{}, fmt.Errorf("scanner contract: %q is not selected", id)
+	return scancatalog.ScannerContract{}, scancatalog.NewConfigFaultError(
+		id, scancatalog.ConfigFaultScannerNotSelected,
+		fmt.Sprintf("scanner contract: %q is not selected", id), nil,
+	)
 }

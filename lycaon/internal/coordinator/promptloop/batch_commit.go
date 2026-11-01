@@ -281,6 +281,14 @@ func (l *toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string,
 			msg.ToolResult.Content = stamped
 		}
 	}
+	if msg.ToolResult != nil && msg.ToolResult.CommandProgram != nil {
+		// Portable command observations come only from confirmed source deliveries.
+		if len(msg.EvidenceHandles) > 0 {
+			msg.Content = prependEvidenceHandles(msg.Content, msg.EvidenceHandles)
+			msg.ToolResult.Content = prependEvidenceHandles(msg.ToolResult.Content, msg.EvidenceHandles)
+		}
+		return nil
+	}
 	if !eligible {
 		return nil
 	}

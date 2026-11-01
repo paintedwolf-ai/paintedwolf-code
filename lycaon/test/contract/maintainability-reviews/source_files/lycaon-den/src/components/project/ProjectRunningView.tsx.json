@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/components/project/ProjectRunningView.tsx",
+  "kind": "projection",
+  "workstream": "project-background-processes",
+  "disposition": "retain",
+  "reason": "The running-command projection renders grouped live and recently ended rows from host facts. Keep the cohesive view at a 350-line ceiling; process state and stop settlement remain in the existing store. ShowLatest preserves control identity and focus across updates to a process while the host owns lifecycle. Focused view and store contracts cover hydration, live updates, stop acceptance versus physical end, failures and focus retention.",
+  "reviewed_commit": "61375343c6cdf39eeb83203d2f4279203dec2d64",
+  "ceiling": 350,
+  "boundaries": {
+    "lycaon-den/src/components/project/ProjectRunningView.test.tsx": "738b0774ab12ba4f3c7817690f121eccd9716bc28889f381e7dacff23366c64e",
+    "lycaon-den/src/project/project-background-store.test.ts": "baafa059d1ba39f08012ccd5c68e6e6fd22347c7d4b49a77802d4d13870b042c"
+  }
+}

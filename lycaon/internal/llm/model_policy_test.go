@@ -9,6 +9,9 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -519,5 +522,116 @@ func TestRouterOverlayRootsUsesProjectPolicy(t *testing.T) {
 	testutil.FailErr(t, "project coordinator", err)
 	if projectSel.Model != "gpt-project" {
 		t.Fatalf("overlay model = %s want gpt-project", projectSel.Model)
+	}
+}
+
+func TestLocalDefaultRoleResolution(t *testing.T) {
+	localRef := DefaultLocalModelRef()
+	if localRef.ProviderID != IncludedProviderID || localRef.Model != IncludedModelID {
+		t.Fatalf("DefaultLocalModelRef() = %+v", localRef)
+	}
+
+	// Both unset: both Coordinator and Lite bind to the bundled local model when available.
+	unsetPolicy := ModelPolicy{}
+	if got := CoordinatorRefWithLocalDefault(unsetPolicy, true); got != localRef {
+		t.Fatalf("unset coordinator with local default = %+v, want %+v", got, localRef)
+	}
+	if got := SummarizerRefWithLocalDefault(unsetPolicy, true); got != localRef {
+		t.Fatalf("unset summarizer with local default = %+v, want %+v", got, localRef)
+	}
+	if !SummarizerSharesCoordinatorWithLocalDefault(unsetPolicy, true) {
+		t.Fatal("unset roles should share the bundled local provider")
+	}
+
+	// Remote coordinator + unset summarizer: summarizer resolves to local default while coordinator stays remote.
+	remoteCoord := ModelRef{ProviderID: "anthropic", Model: "claude-sonnet-4-6"}
+	hybridPolicy := ModelPolicy{Coordinator: remoteCoord}
+	if got := CoordinatorRefWithLocalDefault(hybridPolicy, true); got != remoteCoord {
+		t.Fatalf("remote coordinator = %+v, want %+v", got, remoteCoord)
+	}
+	if got := SummarizerRefWithLocalDefault(hybridPolicy, true); got != localRef {
+		t.Fatalf("unset summarizer with remote coordinator = %+v, want %+v", got, localRef)
+	}
+	if SummarizerSharesCoordinatorWithLocalDefault(hybridPolicy, true) {
+		t.Fatal("remote coordinator and local default summarizer do not share provider capacity")
+	}
+
+	// Explicit role selections survive when local model is unavailable.
+	explicitLite := ModelRef{ProviderID: "openai", Model: "gpt-5-mini"}
+	explicitPolicy := ModelPolicy{Coordinator: remoteCoord, Lite: explicitLite}
+	if got := CoordinatorRefWithLocalDefault(explicitPolicy, false); got != remoteCoord {
+		t.Fatalf("explicit coordinator without local model = %+v, want %+v", got, remoteCoord)
+	}
+	if got := SummarizerRefWithLocalDefault(explicitPolicy, false); got != explicitLite {
+		t.Fatalf("explicit summarizer without local model = %+v, want %+v", got, explicitLite)
+	}
+
+	// StaticModelRouter.WithLocalDefault routes unset slots to the bundled local model.
+	store := NewInMemoryPolicyStore(hybridPolicy)
+	router := NewStaticModelRouter(store).WithLocalDefault(true)
+	coordSel, err := router.Coordinator(t.Context())
+	testutil.FailErr(t, "router coordinator", err)
+	if coordSel.ProviderID != remoteCoord.ProviderID || coordSel.Model != remoteCoord.Model {
+		t.Fatalf("router coordinator = %+v, want %+v", coordSel, remoteCoord)
+	}
+	liteSel, err := router.Lite(t.Context())
+	testutil.FailErr(t, "router lite", err)
+	if liteSel.ProviderID != localRef.ProviderID || liteSel.Model != localRef.Model {
+		t.Fatalf("router lite = %+v, want %+v", liteSel, localRef)
+	}
+}
+
+func TestIncludedProviderCannotBeRemoved(t *testing.T) {
+	cat, err := NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
+	testutil.FailErr(t, "NewProviderCatalogAt", err)
+
+	entry := IncludedProviderEntry()
+	if !IsIncludedProvider(entry.ID) || entry.Label != IncludedProviderLabel {
+		t.Fatalf("IncludedProviderEntry() = %+v", entry)
+	}
+	if len(entry.Models) != 1 || entry.Models[0].ID != IncludedModelID || entry.Models[0].ContextLength != IncludedContextWindowTokens {
+		t.Fatalf("IncludedProviderEntry().Models = %+v", entry.Models)
+	}
+
+	testutil.FailErr(t, "InstallIncludedProvider", cat.InstallIncludedProvider(""))
+	installed, ok := cat.Get(IncludedProviderID)
+	if !ok || installed.Label != IncludedProviderLabel || len(installed.Models) != 1 || installed.Models[0].ID != IncludedModelID {
+		t.Fatalf("installed entry = %+v, ok=%v", installed, ok)
+	}
+
+	removed, err := cat.Remove(IncludedProviderID)
+	if err != ErrCannotRemoveIncludedProvider || removed {
+		t.Fatalf("Remove(%q) = (%v, %v), want (false, %v)", IncludedProviderID, removed, err, ErrCannotRemoveIncludedProvider)
+	}
+}
+
+func TestServiceStartupConnectsIncludedProviderAndLocalDefaultRouter(t *testing.T) {
+	if !PlatformsSupportedHere(IncludedProviderEntry().Platforms) {
+		t.Skip("included provider is only supported on darwin/arm64")
+	}
+	t.Setenv(configdir.EnvConfigDir, t.TempDir())
+	configtest.Overlay(t, map[config.Rel]string{config.ModelPolicy: emptyModelPolicyYAML})
+	t.Setenv("LYCAON_NATIVEGEN_MODEL_DIR", t.TempDir())
+
+	svc, err := NewService(t.Context(), nil)
+	testutil.FailErr(t, "NewService", err)
+	defer func() { _ = svc.Close(t.Context()) }()
+
+	if !svc.Registry.IsConfigured(IncludedProviderID) {
+		t.Fatal("expected nativegen to be configured on startup when local model dir is available")
+	}
+	coordSel, err := svc.Router.Coordinator(t.Context())
+	testutil.FailErr(t, "svc.Router.Coordinator", err)
+	if coordSel.ProviderID != IncludedProviderID || coordSel.Model != IncludedModelID {
+		t.Fatalf("startup Router.Coordinator = %+v, want %s/%s", coordSel, IncludedProviderID, IncludedModelID)
+	}
+	liteSel, err := svc.Router.Lite(t.Context())
+	testutil.FailErr(t, "svc.Router.Lite", err)
+	if liteSel.ProviderID != IncludedProviderID || liteSel.Model != IncludedModelID {
+		t.Fatalf("startup Router.Lite = %+v, want %s/%s", liteSel, IncludedProviderID, IncludedModelID)
+	}
+	window, source := ResolveTrueWindow(ModelPolicy{}, svc.Registry, modelinfo.ModelContextWindows{}, compaction.CompactionConfig{})
+	if window != IncludedContextWindowTokens || source != WindowResolveModelEntry {
+		t.Fatalf("ResolveTrueWindow = (%d, %q), want (%d, %q)", window, source, IncludedContextWindowTokens, WindowResolveModelEntry)
 	}
 }

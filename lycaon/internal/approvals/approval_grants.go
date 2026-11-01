@@ -25,7 +25,7 @@ func ApprovalGrants(grants []hitl.ApprovalGrant) []wire.ApprovalGrant {
 			Title: grant.Title, Coverage: grant.Coverage, GrantedAt: grantedAt,
 			ExpiresWhen: grant.ExpiresWhen, ReaskWhen: grant.ReaskWhen,
 			ProjectID: grant.ProjectID, ProjectDir: grant.ProjectDir, ChatSessionID: grant.ChatSessionID,
-			Source: grant.Source,
+			Source: grant.Source, Unavailable: grant.Unavailable,
 		}
 		if grant.ExpiresAt != nil {
 			expires := grant.ExpiresAt.UTC()
@@ -91,7 +91,7 @@ func annotateSocketGrant(row *wire.ApprovalGrant, grant hitl.ApprovalGrant) {
 		row.Unavailable = true
 		return
 	}
-	g := confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved}
+	g := confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved, Binding: grant.Binding}
 	if err := confine.RevalidateSocketGrant(g); err == nil {
 		return
 	}

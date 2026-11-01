@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/observability"
 )
 
@@ -52,8 +53,9 @@ type Client struct {
 	started bool
 	engine  decide.Engine
 	// starting is closed when the start in flight finishes; nil when none is.
-	starting chan struct{}
-	startErr error
+	starting    chan struct{}
+	startCancel context.CancelFunc
+	startErr    error
 	// generation advances on Close, so a start that finishes after it stops its
 	// own process instead of installing it.
 	generation int
@@ -190,13 +192,20 @@ func (c *Client) Close() error {
 		return nil
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.proc != nil {
-		c.proc.stop()
-		c.proc = nil
-	}
+	proc, starting, cancel := c.proc, c.starting, c.startCancel
+	c.proc = nil
 	c.started = false
 	c.generation++
+	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if proc != nil {
+		proc.stop()
+	}
+	if starting != nil {
+		<-starting
+	}
 	return nil
 }
 
@@ -266,7 +275,12 @@ func (c *Client) ensure(ctx context.Context) (*process, error) {
 			return nil, fmt.Errorf("%w: checkpoint not installed at %q", decide.ErrUnavailable, c.cfg.ModelDir)
 		}
 		c.starting = make(chan struct{})
-		go c.start(context.WithoutCancel(ctx), bin, c.starting, c.generation)
+		startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), startTimeout)
+		c.startCancel = cancel
+		go func(done chan struct{}, generation int) {
+			defer cancel()
+			c.start(startCtx, bin, done, generation)
+		}(c.starting, c.generation)
 	}
 	starting := c.starting
 	c.mu.Unlock()
@@ -295,6 +309,7 @@ func (c *Client) start(ctx context.Context, bin string, done chan struct{}, gene
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.starting = nil
+	c.startCancel = nil
 	if generation != c.generation {
 		if proc != nil {
 			proc.stop()
@@ -323,8 +338,13 @@ func (c *Client) start(ctx context.Context, bin string, done chan struct{}, gene
 }
 
 func (c *Client) handshake(ctx context.Context, bin string) (*process, decide.Engine, error) {
-	proc, err := startProcess(ctx, bin, c.cfg.Args())
+	grant, err := c.cfg.Resources.acquire(ctx)
 	if err != nil {
+		return nil, decide.Engine{}, err
+	}
+	proc, err := startProcess(ctx, bin, c.cfg.Args(), grant)
+	if err != nil {
+		grant.release()
 		return nil, decide.Engine{}, err
 	}
 	helloCtx, cancel := context.WithTimeout(ctx, startTimeout)
@@ -343,6 +363,15 @@ func (c *Client) handshake(ctx context.Context, bin string) (*process, decide.En
 	if hello.Engine == nil {
 		proc.stop()
 		return nil, decide.Engine{}, fmt.Errorf("%w: handshake carried no engine identity", decide.ErrEngine)
+	}
+	if grant != nil {
+		device, err := c.cfg.Resources.Devices.Bind(hello.PhysicalDevice)
+		if err != nil || device != grant.device {
+			proc.stop()
+			return nil, decide.Engine{}, fmt.Errorf("decide: runtime physical device mismatch: %w", inference.ErrIdentity)
+		}
+		proc.device = device
+		grant.permit.Complete()
 	}
 	return proc, *hello.Engine, nil
 }

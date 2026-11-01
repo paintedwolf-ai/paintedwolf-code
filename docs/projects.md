@@ -127,6 +127,95 @@ The check runs in both path directions, so a candidate that merely *contains* a 
 
 Outside-root access is handled by explicit granted paths and write-root authority. It does not mutate the attached-root list.
 
+### Paths in command programs
+
+The portable command path binding (`tools/projectpaths.ProgramPaths`) keeps a
+separate working directory for each program and each forked frame (subshell,
+pipeline stage, substitution, job); it never changes the host process cwd and
+nothing carries to the next program, which starts in the session's folder
+(the primary root unless the session was reassigned).
+
+Real absolute paths are first-class. `pwd`, `$PWD` and `$OLDPWD` hold native
+absolute paths, and `cd` moves between attached folders by absolute path or
+`@label`, so `cd /abs/web && go test ./...` works as it would in a shell. `cd`
+is logical by default: `..` applies to the directory text, as POSIX `cd -L`
+does, and `cd -P` and `pwd -P` follow the physical directory. `cd -` returns to
+`$OLDPWD`. Relative operands, redirect targets and an external program's
+launch directory all resolve from the statement's current directory. A missing
+or non-directory `cd` target fails in the shell's own words with status 1; a
+path outside every folder is a host refusal.
+
+`@label/...`, `@scratch/...` and the saved output address `@output/...` are
+conveniences. Unquoted at the start of a word or assignment value, the prefix
+expands to the folder's absolute path in every argv, including an external
+program's; quoted, it stays literal. A label no folder carries stays literal too,
+so `npm install @types/node` reaches npm unchanged. Native path operands keep
+remaining relative names literal as well. Neither the
+expansion nor `native_path` grants anything: the operation or launch that uses
+the path checks authority exactly as for the absolute spelling, so a relative
+operand that leaves its folder (`../notes.txt`) reaches the same decision as
+its absolute form. `native_path -- PATH ...` stays available for explicit
+conversion of a computed path.
+
+Native absolute operands retain their OS component order, including symlinks
+followed by `..`; the confined descriptor walk checks the actual reached
+identity before exposing file bytes or metadata. Root replacement invalidates a
+prior binding. Path helpers emit bounded chunks through the supplied writer and
+meter byte ceilings before ingress; a later utility or writer failure retains
+any delivered prefix as incomplete and never establishes redirect publication
+eligibility.
+
+`native_path -0 -- PATH ...` emits exact NUL-delimited path bytes, including
+newlines and non-Unicode Linux names. Darwin and Windows explicitly refuse
+non-Unicode native operands rather than replacing bytes. Scalar conversion
+requires UTF-8 and refuses terminal LF, which command substitution would strip;
+scalar substitution's separate NUL refusal belongs to the evaluator.
+Windows-shaped validation refuses ambiguous drive-relative and reserved-device
+spellings; actual Windows adapter qualification is tracked separately.
+`/dev/null` (and exact `NUL` on Windows) is a typed null operand, never an argv
+rewrite.
+
+`TMPDIR`, `TMP`, `TEMP` and `SCRATCH_DIR` name the same real session scratch
+directory for native utilities (`echo $TMPDIR`, `cd $TMPDIR`) and for external
+processes, and `mktemp` creates there, so a file passes between them under one
+absolute path. Literal `/tmp` keeps its OS identity and normal authorization.
+Individual temporary file creation and mutation publication retain their
+existing operation authority and write-door responsibilities.
+
+### Root changes during a session
+
+People add, remove, rename, move and reorder folders while a session is open.
+Every attach, detach and patch records the before and after root sets in the
+engine's root history (`projectroot.History`) and advances its generation; a
+label change counts, because it retires an `@label` spelling. Root identity is
+the root id: a new id is added, a missing id is removed, and a kept id with a
+new path or label is moved or renamed.
+
+- The command guidance lists each folder's label and absolute path and the
+  scratch path from the effective project view for that model call; the stable
+  prompt is keyed by every rendered label and path, so a stale list never
+  survives a change.
+- Each open session of the project receives one host notice at its next turn
+  boundary naming the change, for example `Folders changed: added api →
+  /abs/api; removed web (was /abs/web); moved docs → /abs/new-docs (was
+  /abs/docs).`, followed by the current folders.
+- A path or `@label` that named a removed, moved or renamed folder refuses with
+  `ROOT_NOT_ATTACHED`, naming the old spelling, what happened to the folder and
+  the folders attached now. The decision comes from the recorded root facts,
+  never from path text, and a stale path never falls into grant or approval
+  review as if it were an arbitrary host path.
+- A program, job or launch admitted before a removal or move refuses further
+  effects under the old root at the effect or launch door, through the same
+  check; effects already settled keep their facts. A rename leaves the path,
+  so effects under it continue.
+- When the primary root is removed or replaced, sessions on it are reassigned
+  to the new primary root, and the next program starts there.
+
+The history is engine memory, bounded per project, and does not survive a
+restart; after a restart an old path is judged like any other path outside the
+attached folders.
+
+
 ---
 
 ## Project naming

@@ -7,6 +7,7 @@ type ProcessStopResult struct {
 	// StopRequested acknowledges the request; it does not assert exit.
 	StopRequested bool `json:"stop_requested"`
 	// Running stays true until the host observes terminal process state.
-	Running  bool `json:"running"`
-	ExitCode *int `json:"exit_code,omitempty"`
+	Running           bool   `json:"running"`
+	ExitCode          *int   `json:"exit_code,omitempty"`
+	TerminationReason string `json:"termination_reason,omitempty"`
 }

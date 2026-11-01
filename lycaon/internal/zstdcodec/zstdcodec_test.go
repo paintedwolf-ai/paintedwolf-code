@@ -3,7 +3,10 @@ package zstdcodec_test
 import (
 	"bytes"
 	"errors"
+	"io"
+	"math/rand/v2"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
@@ -11,6 +14,39 @@ import (
 
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
+
+func TestStreamingCompressionPreservesIncompressibleBinaryAndWriteFailures(t *testing.T) {
+	want := make([]byte, 2<<20)
+	random := rand.New(rand.NewPCG(1, 2))
+	for i := range want {
+		want[i] = byte(random.Uint32())
+	}
+	var encoded bytes.Buffer
+	observed := &boundedWriteProbe{writer: &encoded}
+	testutil.FailErr(t, "stream compressed binary", zstdcodec.CompressTo(observed, bytes.NewReader(want)))
+	got, err := zstdcodec.Decompress(encoded.Bytes())
+	testutil.FailErr(t, "decode streaming frame", err)
+	if !bytes.Equal(got, want) || observed.largest > 128<<10 {
+		t.Fatalf("binary changed or output writes unbounded: largest=%d", observed.largest)
+	}
+	if err := zstdcodec.CompressTo(storageFull{}, bytes.NewReader(want)); !errors.Is(err, syscall.ENOSPC) {
+		t.Fatalf("storage failure concealed: %v", err)
+	}
+}
+
+type boundedWriteProbe struct {
+	writer  io.Writer
+	largest int
+}
+
+func (w *boundedWriteProbe) Write(b []byte) (int, error) {
+	w.largest = max(w.largest, len(b))
+	return w.writer.Write(b)
+}
+
+type storageFull struct{}
+
+func (storageFull) Write([]byte) (int, error) { return 0, syscall.ENOSPC }
 
 func TestCompressDecompressRoundTripsAtDefaultLevel(t *testing.T) {
 	want := strings.Repeat("hello zstdcodec ", 1000)

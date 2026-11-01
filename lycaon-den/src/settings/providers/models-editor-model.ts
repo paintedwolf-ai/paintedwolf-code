@@ -205,8 +205,20 @@ export function isIncludedProvider(
   return id === INCLUDED_PROVIDER_ID || kind === INCLUDED_PROVIDER_ID;
 }
 
+const LOCAL_PROVIDER_KINDS = new Set([
+  INCLUDED_PROVIDER_ID,
+  "ollama",
+  "lmstudio",
+  "omlx",
+  "litellm-proxy",
+]);
+
 export function providerKindIsCustom(kind: string): boolean {
   return CUSTOM_PROVIDER_KINDS.has(kind);
+}
+
+export function providerKindIsLocal(kind: string): boolean {
+  return LOCAL_PROVIDER_KINDS.has(kind);
 }
 
 /** Empty platforms and unknown hosts allow the provider. */
@@ -230,6 +242,9 @@ export function providerPickerGroupForKind(
   if (providerKindIsCustom(kind)) {
     return "custom";
   }
+  if (providerKindIsLocal(kind)) {
+    return "local";
+  }
   return deploymentGroupFromEndpoint(requiresApiKey, baseUrl);
 }
 
@@ -247,13 +262,11 @@ function deploymentGroupFromEndpoint(
   requiresApiKey: boolean,
   baseUrl: string,
 ): ProviderPickerGroup {
-  const trimmed = baseUrl.trim();
-  const lower = trimmed.toLowerCase();
-  if (lower.includes("localhost") || lower.includes("127.0.0.1")) {
+  if (providerEndpointIsLoopback(baseUrl)) {
     return "local";
   }
   // Keyless HTTP endpoints are local; derived endpoints stay hosted.
-  if (!requiresApiKey && /^https?:\/\//i.test(trimmed)) {
+  if (!requiresApiKey && /^https?:\/\//i.test(baseUrl.trim())) {
     return "local";
   }
   return "cloud";
@@ -384,7 +397,9 @@ export function modelAssignmentOptionGroupsForPicker(
   }
   const orphan = orphanModelAssignmentOption(value);
   const provider = providers.find((p) => p.id === value.provider_id);
-  const group = provider ? providerPickerGroup(provider) : "cloud";
+  const group = provider
+    ? providerPickerGroup(provider)
+    : providerPickerGroupForKind(value.provider_id, true, "");
   const label = providerPickerGroupLabel(group);
   const existing = base.find((entry) => entry.group === group);
   if (existing) {
@@ -569,6 +584,21 @@ export function providerToolCallSupport(
     if (state !== "unsupported") allUnsupported = false;
   }
   return allUnsupported ? "unsupported" : "unknown";
+}
+
+export type ProviderContextWindowState = "known" | "unknown";
+
+/** Reports whether the provider's listed models declare a positive context window. */
+export function providerContextWindowState(
+  provider: ProviderMeta,
+): ProviderContextWindowState {
+  if (provider.models.length === 0) return "unknown";
+  for (const model of provider.models) {
+    if (!model.context_length || model.context_length <= 0) {
+      return "unknown";
+    }
+  }
+  return "known";
 }
 
 export type ProviderKindTemplateGroup = {

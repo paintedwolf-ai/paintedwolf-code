@@ -38,6 +38,13 @@ func activation(gc *GuardContext) map[string]any {
 		for name, value := range gc.Published {
 			out[name] = value
 		}
+		// The operation is the reached native operation beneath command, otherwise
+		// the actual tool. Selectors name it without impersonating a tool call.
+		operation, _ := out["paintedwolf.native_operation"].(string)
+		if operation == "" {
+			operation = gc.Invocation.Tool
+		}
+		out["paintedwolf.operation"] = operation
 
 		out["fire_count"], out["breaker_count"], out["anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
 	}
@@ -96,7 +103,6 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"pending_user_input":              gc.Session.PendingUserInput,
 		"stub_valid":                      gc.Session.StubValid,
 		"tool_allowed_for_profile":        gc.Invocation.ToolAllowedForProfile,
-		"habit_redirect_match":            gc.Invocation.HabitRedirectMatch,
 		"write_roots":                     strList(gc.Access.WriteRoots),
 		"pattern_parse_ok":                gc.Invocation.PatternParseOK,
 		"arg_validation_errors":           strList(gc.Invocation.ArgValidationErrors),
@@ -122,6 +128,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"refused_write_grants":            strList(gc.Refusals.RefusedWriteGrants),
 		"refused_read_paths":              strList(gc.Refusals.RefusedReadPaths),
 		"refused_read_grants":             strList(gc.Refusals.RefusedReadGrants),
+		"refused_credential_store_paths":  strList(gc.Refusals.RefusedCredentialStorePaths),
 		"receiving_tool_summarize":        gc.Invocation.Tool == "summarize",
 		"refused_terminal_read_paths":     strList(gc.Refusals.RefusedTerminalReadPaths),
 		"refused_terminal_write_paths":    strList(gc.Refusals.RefusedTerminalWritePaths),
@@ -203,8 +210,9 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"mcp_schema_matched":              gc.MCP.MCPSchemaMatched,
 		"editorconfig_mismatch":           gc.Source.EditorConfigMismatch,
 		"syntax_check_overridden":         gc.Source.SyntaxCheckOverridden,
-		"source_analysis_unavailable":     gc.Source.SourceAnalysisUnavailable,
-		"http_request_web_page":           gc.Invocation.HTTPRequestWebPage,
+		"source_analysis_unavailable":             gc.Source.SourceAnalysisUnavailable,
+		"http_request_web_page":                   gc.Invocation.HTTPRequestWebPage,
+		"http_request_loopback_other_session":     gc.Invocation.HTTPRequestLoopbackOtherSession,
 	}
 	maps.Copy(out, rejectObservationActivation(gc))
 	maps.Copy(out, standardActivation(gc))

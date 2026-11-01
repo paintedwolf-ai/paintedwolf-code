@@ -1,0 +1,130 @@
+{
+  ".git": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/COMMIT_EDITMSG": {
+    "mode": "-rw-r--r--",
+    "data": "initial fixture commit\n"
+  },
+  ".git/HEAD": {
+    "mode": "-rw-r--r--",
+    "data": "ref: refs/heads/main\n"
+  },
+  ".git/branches": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/config": {
+    "mode": "-rw-r--r--",
+    "data": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[user]\n\tname = Painted Wolf test\n\temail = test@paintedwolf.dev\n"
+  },
+  ".git/description": {
+    "mode": "-rw-r--r--",
+    "data": "Unnamed repository; edit this file 'description' to name the repository.\n"
+  },
+  ".git/index": {
+    "mode": "-rw-r--r--",
+    "data": {
+      "base64": "RElSQwAAAAIAAAADauGIaRpMuH9ndIWAAAAAAAAAAC4AOE1/AACBpAAAA+gAAAPoAAAANyjaGwKq9JrkrXWbQLYvqkD/VHkLAAlub3Rlcy50eHQAauGIaRpMuH9ndIWAAAAAAAAAAC4AOE2DAACBpAAAA+gAAAPoAAAADWalLueh2APcV4WcPpWsnc3IfAFkAAlzdWIvYS50eHQAauGIaRpMuH9ndIWAAAAAAAAAAC4AOE2EAACBpAAAA+gAAAPoAAAADB7/sQKAafUxRRCkajHqEh+40KlTAAlzdWIvYi50eHQAVFJFRQAAADUAMyAxCpxCKsIgBtneOOkVE93xcSHeTRWNc3ViADIgMApUo8MQKKr+eVFlw2cOeQZVrCHLY0UU3SH9nVL3rYtb7XaIuttD82Hz"
+    }
+  },
+  ".git/info": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/info/exclude": {
+    "mode": "-rw-r--r--",
+    "data": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n"
+  },
+  ".git/logs": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/logs/HEAD": {
+    "mode": "-rw-r--r--",
+    "data": "0000000000000000000000000000000000000000 1152b280f8cb7246b812eea61bb43426bdb9fd0d Painted Wolf test <test@paintedwolf.dev> 1735689600 +0000\tcommit (initial): initial fixture commit\n"
+  },
+  ".git/logs/refs": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/logs/refs/heads": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/logs/refs/heads/main": {
+    "mode": "-rw-r--r--",
+    "data": "0000000000000000000000000000000000000000 1152b280f8cb7246b812eea61bb43426bdb9fd0d Painted Wolf test <test@paintedwolf.dev> 1735689600 +0000\tcommit (initial): initial fixture commit\n"
+  },
+  ".git/objects": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/objects/11": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/objects/11/52b280f8cb7246b812eea61bb43426bdb9fd0d": {
+    "mode": "-r--r--r--",
+    "data": {
+      "base64": "eAGljT0OAiEQRq05xfQmhoGFhcQYj2BnTZghkuyPwVn1+K7uEfyKV7zifXkexypgtN1JY4aYO2NSNkZrT5HYBo7o0BIV7NEgcUfoAqm0yG1ucEl1Eia4zkMB4YfA8cvzffOvVR+InyfA3jofotca9nqdyr9n4X8aqk5Vahqg1LcsjWGLqg8E00PM"
+    }
+  },
+  ".git/objects/1e": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/objects/1e/ffb1028069f5314510a46a31ea121fb8d0a953": {
+    "mode": "-r--r--r--",
+    "data": {
+      "base64": "eAFLyslPUjA0YkjLLCou4SrJyCxK4QIAQ+cGeg=="
+    }
+  },
+  ".git/objects/28": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/objects/28/da1b02aaf49ae4ad759b40b62faa40ff54790b": {
+    "mode": "-r--r--r--",
+    "data": {
+      "base64": "eAFLyslPUjA1ZUjMKchIVMjJzEtVMORKSi2Bso24uJBkTLjSE3NzEznLM0syOEsSk4q5AHYXE84="
+    }
+  },
+  ".git/objects/54": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/objects/54/a3c31028aafe795165c3670e790655ac21cb63": {
+    "mode": "-r--r--r--",
+    "data": {
+      "base64": "eAErKUpNVTAzYzA0MDAzMVFI1CupKGFIW6r3fOEN5jvhrXPspq6Ze/ZEDWMKVEESWIHc/41MDZlfDV0FlmQZvhKS33FhZTAA3/ccTg=="
+    }
+  },
+  ".git/objects/66": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/objects/66/a52ee7a1d803dc57859c3e95ac9dcdc87c0164": {
+    "mode": "-r--r--r--",
+    "data": {
+      "base64": "eAFLyslPUjA0ZkjLLCou4SpOTc7PS+ECAEsJBtw="
+    }
+  },
+  ".git/objects/9c": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/objects/9c/422ac22006d9de38e91513ddf17121de4d158d": {
+    "mode": "-r--r--r--",
+    "data": {
+      "base64": "eAErKUpNVTAzZzA0MDAzMVHIyy9JLdYrqShh0LglzbTqy6wna0tnO2zTX+XwP6SS28QACBSKS5MYQhYfFtBY9a8yMPVwOl8lW+gaxdPJAPRdHFA="
+    }
+  },
+  ".git/objects/info": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/objects/pack": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/refs": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/refs/heads": {
+    "mode": "drwxr-xr-x"
+  },
+  ".git/refs/heads/main": {
+    "mode": "-rw-r--r--",
+    "data": "1152b280f8cb7246b812eea61bb43426bdb9fd0d\n"
+  },
+  ".git/refs/tags": {
+    "mode": "drwxr-xr-x"
+  }
+}

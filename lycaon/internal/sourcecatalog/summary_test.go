@@ -19,6 +19,7 @@ import (
 func treeTestCatalog(t *testing.T) *Catalog {
 	t.Helper()
 	c := New()
+	c.Literals.cache.versionOf = fixtureFileVersion
 	c.Trees.treeDir = t.TempDir()
 	t.Cleanup(func() { testutil.FailErr(t, "drain tree indexing", c.Drain(context.Background())) })
 	return c

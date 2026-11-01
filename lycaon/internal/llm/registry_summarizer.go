@@ -120,13 +120,27 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 	if err != nil {
 		return "", err
 	}
-	req := modelcall.CompletionRequest{
-		Model: model,
-		Messages: transcript.Project([]api.Message{
+	var rawMessages []api.Message
+	if prefix := compaction.SharedPrefixMessages(ctx); len(prefix) > 0 {
+		rawMessages = make([]api.Message, 0, len(prefix)+1)
+		rawMessages = append(rawMessages, prefix...)
+		rawMessages = append(rawMessages, api.Message{
+			Role:      api.MessageRoleUser,
+			Content:   today + "\n\n" + systemPrompt + "\n\n" + userPrompt,
+			Origin:    api.MessageOriginHost,
+			Authority: api.ContentAuthoritySystem,
+			TrustTier: api.ContentTrustTierTrusted,
+		})
+	} else {
+		rawMessages = []api.Message{
 			{Role: api.MessageRoleSystem, Content: today + "\n\n" + systemPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
 			{Role: api.MessageRoleUser, Content: userPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
-		}),
-		Debug: modelcall.RequestDebug{Purpose: r.Purpose},
+		}
+	}
+	req := modelcall.CompletionRequest{
+		Model:    model,
+		Messages: transcript.Project(rawMessages),
+		Debug:    modelcall.RequestDebug{Purpose: r.Purpose},
 		// Short utility outputs use the configured no-reasoning mode.
 		Think:     modelcall.ThinkOff,
 		MaxTokens: maxTokens,
@@ -149,12 +163,20 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 	return resp.Content, nil
 }
 
+func (r *RegistrySummarizer) localDefaultAvailable() bool {
+	return r != nil && r.Registry != nil && r.Registry.IsConfigured(IncludedProviderID)
+}
+
 func (r *RegistrySummarizer) coordinatorProvider() (modelcall.Provider, string, error) {
-	return r.slotProvider(CoordinatorRef, "coordinator model not configured")
+	return r.slotProvider(func(p ModelPolicy) ModelRef {
+		return CoordinatorRefWithLocalDefault(p, r.localDefaultAvailable())
+	}, "coordinator model not configured")
 }
 
 func (r *RegistrySummarizer) liteProvider() (modelcall.Provider, string, error) {
-	return r.slotProvider(SummarizerRef, "lite model not configured")
+	return r.slotProvider(func(p ModelPolicy) ModelRef {
+		return SummarizerRefWithLocalDefault(p, r.localDefaultAvailable())
+	}, "lite model not configured")
 }
 
 // slotProvider advances past standing model refusals.

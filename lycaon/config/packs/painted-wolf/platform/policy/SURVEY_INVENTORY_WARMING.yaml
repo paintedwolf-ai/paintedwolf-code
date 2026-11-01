@@ -3,7 +3,7 @@ id: SURVEY_INVENTORY_WARMING
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - grep
     - find
     - wc
@@ -11,6 +11,7 @@ requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.timeout_ms
 when: paintedwolf.rejection_code == "SURVEY_INVENTORY_WARMING"

@@ -175,4 +175,3 @@ func TestDiscoveryPreservesRankedOrderAcrossPages(t *testing.T) {
 		t.Fatalf("page 2 lost rank order: %+v", page2.Entries)
 	}
 }
-
