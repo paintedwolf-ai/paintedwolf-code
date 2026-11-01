@@ -24,6 +24,7 @@ type Props = {
 };
 
 const CALL_PAGE = 2;
+const STEP_CHARS = 80;
 
 export function CommandActivityCard(props: Props) {
   return <ToolPartShell {...props}><CommandActivityDetails {...props} /><TurnLoadFootLine part={props.part} /></ToolPartShell>;
@@ -78,9 +79,9 @@ function CommandActivityDetails(props: Props) {
       <section class="den-tool-part-card-section" aria-label="Activity steps">
         <h4 class="den-tool-part-card-section-label">Steps</h4>
         <KeyedIndex each={(activity().fact.steps ?? []).slice(0, 3)} keyOf={step => step.id}>{step => <div class="den-command-activity-step">
-          <code>{step().command}</code><span>{step().count > 1 ? `${step().count.toLocaleString()} executions · ` : ""}{commandActivityStepOutcome(step())}</span>
+          <code>{step().command.slice(0, STEP_CHARS)}{step().command.length > STEP_CHARS ? "…" : ""}</code><span>{step().count > 1 ? `${step().count.toLocaleString()} executions · ` : ""}{commandActivityStepOutcome(step())}</span>
         </div>}</KeyedIndex>
-        <Show when={(activity().fact.steps?.length ?? 0) > 3}><ToolContentLink pane={`activity:${activity().fact.id}:steps`} label={`All ${activity().fact.steps!.length} steps`} content={{ kind: "inline", text: (activity().fact.steps ?? []).map(step => `${step.command} · ${step.count.toLocaleString()} executions · ${commandActivityStepOutcome(step)}`).join("\n") }} projectId={props.projectId} /></Show>
+        <Show when={(activity().fact.steps?.length ?? 0) > 3 || activity().fact.steps?.some(step => step.command.length > STEP_CHARS)}><ToolContentLink pane={`activity:${activity().fact.id}:steps`} label={activity().fact.steps!.length > 3 ? `All ${activity().fact.steps!.length} steps` : "Step details"} content={{ kind: "inline", text: (activity().fact.steps ?? []).map(step => `${step.command} · ${step.count.toLocaleString()} executions · ${commandActivityStepOutcome(step)}`).join("\n") }} projectId={props.projectId} /></Show>
       </section>
     </Show>
     <Show when={executions().length > 0}>
