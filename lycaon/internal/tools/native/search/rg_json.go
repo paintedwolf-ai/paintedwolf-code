@@ -112,6 +112,7 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 		return err
 	}
 	file.searched = int64(len(content))
+	// EOF accounts for the full input when the requested context is not exhausted.
 	if r.scan.MaxSelected > 0 && n >= r.scan.MaxSelected && trailingLines >= r.scan.After {
 		file.searched = int64(lastSelectedEnd)
 	}

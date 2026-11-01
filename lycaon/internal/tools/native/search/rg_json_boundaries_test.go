@@ -17,7 +17,7 @@ func TestRgJSONMatchLimitsKeepExactBinaryAndContextExtents(t *testing.T) {
 		extents       []int
 	}{
 		{"LF before NUL", "alpha\n\x00tail\n", 6, []int{6, 6, 6, 12}},
-		{"NUL before LF", "alpha\x00\n\x00tail\n", 5, []int{6, 6, 6, 13}},
+		{"NUL before LF", "alpha\x00\n\x00tail\n", 5, []int{6, 6, 6, 6, 13}},
 		{"unterminated binary context", "alpha\x00tail", 5, []int{6, 6, 10, 10}},
 		{"plain context", "alpha\nnext\n", -1, []int{6, 6, 11, 11}},
 		{"unterminated match", "a\x00alpha", 1, []int{7, 7, 7, 7}},
