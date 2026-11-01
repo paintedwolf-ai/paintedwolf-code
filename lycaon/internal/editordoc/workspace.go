@@ -240,4 +240,3 @@ func validateEditableSource(read *projectsource.SourceReadResult) error {
 	}
 	return nil
 }
-

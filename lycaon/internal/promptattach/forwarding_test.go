@@ -143,4 +143,3 @@ func TestForwardedAttachmentExternalFolderUsesStampedPath(t *testing.T) {
 		t.Fatalf("hint = %q", attachment.Hint())
 	}
 }
-

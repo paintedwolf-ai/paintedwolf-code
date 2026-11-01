@@ -52,27 +52,27 @@ func TestApprovalNoiseCorpusThroughProductionAdapter(t *testing.T) {
 			}
 			seen[tc.ID] = struct{}{}
 			hit, matched := source.MatchAction(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tc.Tool,
-Args: tc.Args,
-Files: tc.TargetFiles,
-ActionID: tc.ID,
-},
-Resources: hitl.ActionResources{
-ApprovalCategory: tc.ApprovalCategory,
-ApprovalSubject: tc.ApprovalSubject,
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/project",
-SessionID: "noise-corpus",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{
-					FSJailed: true, Egress: hitl.ContainedEgressProxy,
-					Roots: []string{"/project"}, WriteRoots: []string{"/project"},
+				Invocation: hitl.ActionInvocation{
+					Tool:     tc.Tool,
+					Args:     tc.Args,
+					Files:    tc.TargetFiles,
+					ActionID: tc.ID,
 				},
-},
-}, tc.Posture)
+				Resources: hitl.ActionResources{
+					ApprovalCategory: tc.ApprovalCategory,
+					ApprovalSubject:  tc.ApprovalSubject,
+				},
+				Scope: hitl.ActionScope{
+					ProjectDir: "/project",
+					SessionID:  "noise-corpus",
+				},
+				Execution: hitl.ActionExecution{
+					Contained: hitl.Contained{
+						FSJailed: true, Egress: hitl.ContainedEgressProxy,
+						Roots: []string{"/project"}, WriteRoots: []string{"/project"},
+					},
+				},
+			}, tc.Posture)
 			if tc.Want == "silent" {
 				if matched {
 					t.Fatalf("unexpected %s/%s (%s)", hit.PackID, hit.RuleTitle, hit.Level)

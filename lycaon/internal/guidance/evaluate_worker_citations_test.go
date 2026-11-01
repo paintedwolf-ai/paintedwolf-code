@@ -363,5 +363,3 @@ func TestGroundingHintData_prefersRecentHandlesAndOffenderTool(t *testing.T) {
 		t.Fatalf("targeted observed_handles_sample = %q, want page#8 first for capture_page#8 offender", targetedSample)
 	}
 }
-
-

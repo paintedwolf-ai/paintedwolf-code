@@ -204,4 +204,3 @@ func (o documentOpener) changed(ctx context.Context, d *Document, contentChanged
 		s.onChange(ctx, Change{Document: s.withParticipants(d), ContentChanged: contentChanged})
 	}
 }
-
