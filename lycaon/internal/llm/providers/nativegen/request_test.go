@@ -116,18 +116,18 @@ func TestPrepareRenderUsesAssemblyBoundaryAfterProjection(t *testing.T) {
 		{Role: api.MessageRoleUser, Content: "Question", PromptCacheBreakpoint: api.PromptCacheTierHistory},
 	}}
 	rendered, err := prepareRender(req)
-	if err != nil || rendered.CheckpointMessages != 1 {
+	if err != nil || rendered.CheckpointMessages != 1 || rendered.KnownPrefixMessages != 2 {
 		t.Fatalf("merged standing boundary: %+v, %v", rendered, err)
 	}
 	req.Messages[1].PromptCacheBreakpoint = api.PromptCacheTierNone
 	req.Messages[2].PromptCacheBreakpoint = api.PromptCacheTierStanding
 	rendered, err = prepareRender(req)
-	if err != nil || rendered.CheckpointMessages != 2 {
+	if err != nil || rendered.CheckpointMessages != 2 || rendered.KnownPrefixMessages != 2 {
 		t.Fatalf("moved standing boundary: %+v, %v", rendered, err)
 	}
 	req.Messages[2].PromptCacheBreakpoint = api.PromptCacheTierNone
 	rendered, err = prepareRender(req)
-	if err != nil || rendered.CheckpointMessages != 0 {
+	if err != nil || rendered.CheckpointMessages != 0 || rendered.KnownPrefixMessages != 0 {
 		t.Fatalf("invented unmarked boundary: %+v, %v", rendered, err)
 	}
 }

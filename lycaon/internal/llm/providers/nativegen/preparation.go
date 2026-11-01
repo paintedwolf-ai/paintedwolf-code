@@ -25,15 +25,16 @@ type preparationResult struct {
 	} `json:"progress"`
 }
 
-// PrepareContext evaluates the assembler's declared standing prefix while idle.
+// PrepareContext evaluates the assembler's declared known prefix while idle.
 func (p *Provider) PrepareContext(ctx context.Context, req modelcall.CompletionRequest) (modelcall.ContextPreparation, error) {
 	if p.runtime == nil {
 		return modelcall.ContextPreparation{}, nil
 	}
 	render, err := prepareRender(req)
-	if err != nil || render.CheckpointMessages == 0 {
+	if err != nil || render.KnownPrefixMessages == 0 {
 		return modelcall.ContextPreparation{}, err
 	}
+	render.CheckpointMessages = render.KnownPrefixMessages
 	model := p.ResolveModel(req)
 	if _, ok := p.ModelEntry(model); !ok {
 		return modelcall.ContextPreparation{}, errors.New("native generation: model is not configured")

@@ -11,9 +11,10 @@ import (
 )
 
 type renderRequest struct {
-	CheckpointMessages int             `json:"checkpoint_messages"`
-	Messages           []renderMessage `json:"messages"`
-	Tools              []renderTool    `json:"tools"`
+	KnownPrefixMessages int             `json:"-"`
+	CheckpointMessages  int             `json:"checkpoint_messages"`
+	Messages            []renderMessage `json:"messages"`
+	Tools               []renderTool    `json:"tools"`
 }
 
 type renderMessage struct {
@@ -95,6 +96,9 @@ func prepareRender(req modelcall.CompletionRequest) (renderRequest, error) {
 			return renderRequest{}, fmt.Errorf("native generation: unsupported message role %q", message.Role)
 		}
 		result.Messages = append(result.Messages, wire)
+		if message.PromptCacheBreakpoint == api.PromptCacheTierStanding || message.PromptCacheBreakpoint == api.PromptCacheTierHistory {
+			result.KnownPrefixMessages = len(result.Messages)
+		}
 		if message.PromptCacheBreakpoint == api.PromptCacheTierStanding {
 			result.CheckpointMessages = len(result.Messages)
 		}
