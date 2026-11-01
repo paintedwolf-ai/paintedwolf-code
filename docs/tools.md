@@ -841,9 +841,10 @@ external -- client --socket "$SERVICE_SOCKET"` supplies a bound endpoint without
 changing the meaning of ordinary path operands. Percent-encode reserved URI-path
 characters in a reference. Code and configuration can read the declared variable;
 do not embed the reference inside source text. A terminal receives such variables
-when it is opened. A Unix datagram client uses
+when it is opened. On macOS, a Unix datagram client uses
 `{{paintedwolf-socket:unixgram:/absolute/path}}`; datagram boundaries and replies
-are preserved within the same reviewed socket authority. Native operations such as `http_request` keep their ordinary
+are preserved within the same reviewed socket authority. Linux confinement refuses
+Unix datagram sockets. Native operations such as `http_request` keep their ordinary
 `unix_socket` argument; the host handles their connection. See
 [local sockets and daemon authority](security.md#local-sockets-and-daemon-authority).
 
