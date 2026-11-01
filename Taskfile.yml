@@ -680,6 +680,11 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/generation/run.sh bench {{.CLI_ARGS}}
 
+  decide:prepare:
+    desc: Fetch pinned Bialy dependencies or refresh its workspace lockfile
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/decide_prepare.py {{.CLI_ARGS}}
+
   decide:test:
     desc: Decision engine (bialy) Rust tests
     dir: lycaon/internal/decide/native
