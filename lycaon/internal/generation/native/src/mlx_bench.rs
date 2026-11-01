@@ -20,9 +20,21 @@ struct Specification {
 fn compare_logits(model: &Model, spec: &Specification) -> Result<()> {
     let mut full_cache = Cache::default();
     let mut last_cache = Cache::default();
+    let mut prefill_cache = Cache::default();
     for (index, chunk) in spec.prompt_tokens.chunks(spec.prefill_chunk).enumerate() {
-        let full = model.forward(chunk, &mut full_cache, Logits::All)?;
-        let last = model.forward(chunk, &mut last_cache, Logits::Last)?;
+        let full = model
+            .forward(chunk, &mut full_cache, Logits::All)?
+            .ok_or("missing full logits")?;
+        let last = model
+            .forward(chunk, &mut last_cache, Logits::Last)?
+            .ok_or("missing last logits")?;
+        if model
+            .forward(chunk, &mut prefill_cache, Logits::None)?
+            .is_some()
+        {
+            return Err("cache-only prefill returned logits".into());
+        }
+        prefill_cache.evaluate()?;
         let full = full.index((0, -1, ..)).as_dtype(mlx_rs::Dtype::Float32)?;
         let last = last.index((0, -1, ..)).as_dtype(mlx_rs::Dtype::Float32)?;
         full_cache.evaluate_with(&[&full])?;
@@ -45,9 +57,32 @@ fn compare_logits(model: &Model, spec: &Specification) -> Result<()> {
             "last_token": last_token, "cache_bytes": last_cache.bytes(),
             "distribution_total_variation": variation, "kl_divergence_nats": divergence})
         );
-        if full_token != last_token || full_cache.bytes() != last_cache.bytes() {
+        if full_token != last_token
+            || full_cache.bytes() != last_cache.bytes()
+            || full_cache.bytes() != prefill_cache.bytes()
+        {
             return Err("last-row projection changed greedy output or cache storage".into());
         }
+    }
+    let mut token = *spec.prompt_tokens.last().ok_or("empty parity input")?;
+    for step in 0..spec.generation_tokens.min(4) {
+        let full = model
+            .forward(&[token], &mut full_cache, Logits::Last)?
+            .ok_or("missing full-cache logits")?;
+        let pruned = model
+            .forward(&[token], &mut prefill_cache, Logits::Last)?
+            .ok_or("missing pruned-cache logits")?;
+        full_cache.evaluate_with(&[&full])?;
+        prefill_cache.evaluate_with(&[&pruned])?;
+        let equal = full.equal(&pruned)?.all(None)?;
+        if !equal.try_item_exact::<bool>()? || full_cache.bytes() != prefill_cache.bytes() {
+            return Err("cache-only prefill changed subsequent logits or cache storage".into());
+        }
+        token = argmax(full.index((0, -1, ..)), None)?.try_item_cast::<i32>()?;
+        println!(
+            "{}",
+            json!({"cache_only_parity_step":step,"exact_logits":true,"token":token})
+        );
     }
     Ok(())
 }
@@ -107,16 +142,18 @@ fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
     let mut prefill_step: f64 = 0.0;
     for chunk in spec.prompt_tokens[..spec.prompt_tokens.len() - 1].chunks(spec.prefill_chunk) {
         let step = Instant::now();
-        let _ = model.forward(chunk, &mut cache, Logits::All)?;
+        let _ = model.forward(chunk, &mut cache, Logits::None)?;
         cache.evaluate()?;
         prefill_step = prefill_step.max(step.elapsed().as_secs_f64());
     }
     let step = Instant::now();
-    let logits = model.forward(
-        &spec.prompt_tokens[spec.prompt_tokens.len() - 1..],
-        &mut cache,
-        Logits::All,
-    )?;
+    let logits = model
+        .forward(
+            &spec.prompt_tokens[spec.prompt_tokens.len() - 1..],
+            &mut cache,
+            Logits::Last,
+        )?
+        .ok_or("missing prompt logits")?;
     cache.evaluate_with(&[&logits])?;
     prefill_step = prefill_step.max(step.elapsed().as_secs_f64());
     let prefill = started.elapsed().as_secs_f64();
@@ -129,7 +166,9 @@ fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
         let step = Instant::now();
         let next = token.try_item_cast::<i32>()?;
         tokens.push(next);
-        let logits = model.forward(&[next], &mut cache, Logits::All)?;
+        let logits = model
+            .forward(&[next], &mut cache, Logits::Last)?
+            .ok_or("missing decode logits")?;
         token = argmax(logits.index((0, -1, ..)), None)?;
         cache.evaluate_with(&[&token])?;
         decode_step = decode_step.max(step.elapsed().as_secs_f64());
