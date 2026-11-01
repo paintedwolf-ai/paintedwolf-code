@@ -45,6 +45,7 @@ type registryRouting struct {
 type registryCore struct {
 	registryState
 	localRuntime    *nativegen.Runtime
+	localStartup    nativegen.Readiness
 	discovery       *discovery.Cache
 	cloudflareUsage *openaicompat.CloudflareUsageCache
 	discoveryClient *http.Client

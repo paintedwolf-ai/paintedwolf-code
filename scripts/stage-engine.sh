@@ -194,6 +194,14 @@ if [[ -f "$(dirname "${DECIDE_BIN}")/mlx.metallib" ]]; then
   cp "$(dirname "${DECIDE_BIN}")/mlx.metallib" "${ENGINE_ROOT}/decide/mlx.metallib"
 fi
 
+if [[ "${HOST_KIND}" == "darwin" || "${HOST_KIND}" == "linux" ]]; then
+  GENERATION_ARGS=(--output "${BINARIES_DIR}/nativegen-${TARGET}" --resources "${ENGINE_ROOT}/generation")
+  if [[ "${RELEASE_BUILD}" == "1" ]]; then
+    GENERATION_ARGS+=(--release)
+  fi
+  bash "${ROOT}/scripts/generation/run.sh" stage "${GENERATION_ARGS[@]}"
+fi
+
 if [[ "${HOST_KIND}" == "darwin" ]]; then
   HOST_ARGS=(--binary "${SIDECAR_BIN}" --output "${TAURI_DIR}/host-bundle" --version "${APP_VERSION}")
   if [[ "${RELEASE_BUILD}" == "1" ]]; then

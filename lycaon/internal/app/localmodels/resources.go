@@ -20,7 +20,10 @@ type Resources struct {
 
 // AllocateResources leaves physical memory for the application and operating system.
 func AllocateResources(ram uint64, device inference.DeviceFacts, decision bialy.MemoryPlan) (*Resources, error) {
-	if ram < 8<<30 || device.RecommendedBytes == 0 || device.RecommendedBytes > device.TotalBytes || decision.HostBytes == 0 || decision.DeviceBytes == 0 || decision.MaxRows != 2 {
+	if ram < 8<<30 {
+		return nil, inference.ErrCapacity
+	}
+	if device.RecommendedBytes == 0 || device.RecommendedBytes > device.TotalBytes || decision.HostBytes == 0 || decision.DeviceBytes == 0 || decision.MaxRows != 2 {
 		return nil, errors.New("local models: unsupported resource plan")
 	}
 	if decision.WorkspaceBytes > 0 && (device.PhysicalDevice.Kind != "apple_silicon" || decision.WorkspaceBytes >= decision.DeviceBytes) {
