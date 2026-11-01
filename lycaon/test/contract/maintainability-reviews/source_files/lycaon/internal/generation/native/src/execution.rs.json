@@ -4,10 +4,10 @@
   "kind": "runtime_service",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the 304-line executor as one request state machine: identity, bounded prefill/decode, prefix reuse and cancellation share backend lifetime. An unavailable checkpoint now restarts complete prefill without reporting reused tokens. Focused transition fixtures cover that fallback, full admitted prefixes, exact misses, failed advances, stale requests, cancellation and unretained interleaving; all passed in the 55-test Mac native suite. Separating these transitions would obscure their shared state.",
-  "reviewed_commit": "f7b64b36a42501f006c440298b2fc2c8a49ea033",
-  "ceiling": 304,
+  "reason": "Retain the 320-line executor as one request state machine. Exact evaluated continuation, stable checkpoint fallback, bounded steps and cancellation share backend position and lifetime. Continuation retains only bounded token metadata and the existing active cache; moving its transitions elsewhere would split cache identity from execution. The 57-test Mac native suite covers continuation, changed-token fallback, failed steps, unavailable checkpoints, cancellation and clearing. An actual rendered follow-up matched complete replay token for token.",
+  "reviewed_commit": "a93a617117f6f054abf33c9689792817df53acb8",
+  "ceiling": 320,
   "boundaries": {
-    "lycaon/internal/generation/native/src/execution_tests.rs": "00665e412bd7f85826324122d1daddd33f759281f911c16ab7d86200cceb86a5"
+    "lycaon/internal/generation/native/src/execution_tests.rs": "bff772ef93605406986d0b27f0d6582c282b2a2abd9c090a8384dbf4c8a222bc"
   }
 }
