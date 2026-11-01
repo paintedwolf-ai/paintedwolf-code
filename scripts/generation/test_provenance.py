@@ -21,6 +21,7 @@ class ProvenanceTests(unittest.TestCase):
                       "scripts/generation/runtime.py", "scripts/generation/provenance.py",
                       "scripts/generation/sources.json", "scripts/generation/llama-reference/CMakeLists.txt",
                       "lycaon/internal/generation/native/build.rs",
+                      "lycaon/internal/generation/templates/gemma4-code-v1.jinja",
                       "lycaon/internal/generation/native/vulkan/inventory.cpp",
                       "lycaon/internal/decide/native/vendor/mlx-sys/src/mlx-c/mlx/c/device.cpp"]
             for name in inputs:
