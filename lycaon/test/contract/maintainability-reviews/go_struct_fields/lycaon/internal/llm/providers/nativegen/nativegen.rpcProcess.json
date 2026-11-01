@@ -4,9 +4,9 @@
   "kind": "runtime_service",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the 14 fields governing one native reader and its IPC. The process keeps its lease, reservations and device identity until reap; splitting those resources would separate cleanup from the event that makes release safe. Process-failure and cancellation fixtures cover acknowledgement and reap ordering.",
-  "reviewed_commit": "7a48b783d843c4ec420d7fce2bf8e074cefd4ae6",
-  "reviewed_shape": "3b183694aa801511ba1acdf28a91fdbed1069089bcfe563c66fc97cd7841aabd",
+  "reason": "Retain the 14 fields governing one native process and its IPC. The child owns command and driver cleanup through reap, alongside its model lease and memory reservations. Splitting those resources would detach release from process completion. Failure and cancellation fixtures cover acknowledgement and reap ordering.",
+  "reviewed_commit": "5b75a91ad3c99d993e4769db7627acfa1f4fdb16",
+  "reviewed_shape": "7fcb3ee072dcf7d6cff7bc206d28fe8f8927d71ac4ed08672156d3958e1c06e7",
   "ceiling": 14,
   "boundaries": {
     "lycaon/internal/llm/providers/nativegen/process_test.go": "6ea305fdd26d9cf34f265a08590f9ea77993601b57d5beb6a8fde586a21190a3",
