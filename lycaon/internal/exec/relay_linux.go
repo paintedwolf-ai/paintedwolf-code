@@ -71,10 +71,11 @@ func runBrokerRelay(args []string) int {
 	}
 	_, termErr := unix.IoctlGetTermios(0, unix.TCGETS)
 	request := launchbroker.Request{
-		Argv:        argv,
-		Environment: os.Environ(),
-		Dir:         dir,
-		Terminal:    termErr == nil,
+		Argv:            argv,
+		Environment:     os.Environ(),
+		Dir:             dir,
+		Terminal:        termErr == nil,
+		ExtraFileLayout: layout,
 	}
 	channel, err := launchbroker.Send(
 		broker,
@@ -107,8 +108,8 @@ func relayDescriptorFiles(layout string) ([]*os.File, error) {
 			files[i] = os.NewFile(uintptr(3+i), "supervisor-descriptor")
 			continue
 		}
-		// SCM_RIGHTS needs a real descriptor in each transport slot. The target
-		// still sees a closed slot from the explicit supervisor layout.
+		// SCM_RIGHTS needs a real descriptor in each transport slot. The broker
+		// restores the declared closed slots before executing the target.
 		file, err := os.Open(os.DevNull)
 		if err != nil {
 			for _, opened := range files {
