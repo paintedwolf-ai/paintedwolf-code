@@ -1,3 +1,4 @@
+use super::cache::checkpoint::Checkpoint;
 use super::{Cache, Logits, Model};
 use crate::{
     error::{Error, Result},
@@ -13,9 +14,14 @@ fn device_error(error: impl std::fmt::Display) -> Error {
 pub struct Mlx {
     model: Model,
     cache: Cache,
-    prefix: Option<Cache>,
+    prefix: Option<Prefix>,
     budget: usize,
     idle_budget: usize,
+}
+
+enum Prefix {
+    Resident(Cache),
+    Disk(Checkpoint),
 }
 
 impl Mlx {
@@ -64,7 +70,6 @@ impl Mlx {
         if tokens.iter().any(|token| *token >= 262144) {
             return Err(device_error("invalid input token"));
         }
-        memory::reset_peak_memory().map_err(device_error)?;
         let ids: Vec<_> = tokens.iter().map(|token| *token as i32).collect();
         let output = if sampling.is_some() {
             Logits::Last
@@ -116,10 +121,27 @@ impl Mlx {
     }
 
     pub fn cache_bytes(&self) -> usize {
-        self.prefix.as_ref().map_or_else(
-            || self.cache.bytes(),
-            |prefix| self.cache.resident_bytes_with(prefix),
-        )
+        match &self.prefix {
+            Some(Prefix::Resident(prefix)) => self.cache.resident_bytes_with(prefix),
+            Some(Prefix::Disk(prefix)) => self.cache.bytes() + prefix.resident_bytes(),
+            None => self.cache.bytes(),
+        }
+    }
+
+    fn spill_before_unrelated_prefill(&mut self) {
+        if self.cache.offset != 0 {
+            return;
+        }
+        self.prefix = match self.prefix.take() {
+            Some(Prefix::Resident(prefix)) => match Checkpoint::save(&prefix) {
+                Ok(checkpoint) => Some(Prefix::Disk(checkpoint)),
+                Err(error) => {
+                    eprintln!("nativegen: prefix checkpoint unavailable: {error}");
+                    None
+                }
+            },
+            other => other,
+        };
     }
 }
 
@@ -144,6 +166,8 @@ impl Backend for Mlx {
         crate::resources::Plan::e4b(weights, mapped, context, chunk, true)
     }
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
+        memory::reset_peak_memory().map_err(device_error)?;
+        self.spill_before_unrelated_prefill();
         let token = self.evaluate_step(tokens, sampling)?;
         self.quiescent()?;
         Ok(token)
@@ -156,17 +180,30 @@ impl Backend for Mlx {
 
     fn save_prefix(&mut self) -> Result<()> {
         self.cache.evaluate().map_err(device_error)?;
-        self.prefix = Some(self.cache.clone());
+        self.prefix = Some(Prefix::Resident(self.cache.clone()));
         Ok(())
     }
 
-    fn restore_prefix(&mut self) -> Result<()> {
-        self.cache = self
-            .prefix
-            .as_ref()
-            .ok_or_else(|| device_error("missing prefix checkpoint"))?
-            .clone();
-        Ok(())
+    fn restore_prefix(&mut self) -> Result<bool> {
+        memory::reset_peak_memory().map_err(device_error)?;
+        self.cache.clear();
+        let cache = match self.prefix.take() {
+            Some(Prefix::Resident(cache)) => cache,
+            Some(Prefix::Disk(mut checkpoint)) => match checkpoint.restore() {
+                Ok(cache) => cache,
+                Err(error) => {
+                    eprintln!("nativegen: prefix restore unavailable: {error}");
+                    self.quiescent()?;
+                    return Ok(false);
+                }
+            },
+            None => return Ok(false),
+        };
+        self.prefix = Some(Prefix::Resident(cache.clone()));
+        self.cache = cache;
+        self.completed(None)?;
+        self.quiescent()?;
+        Ok(true)
     }
 
     fn release(self) -> Result<()> {

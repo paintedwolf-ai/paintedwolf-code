@@ -43,7 +43,7 @@ pub trait Backend {
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>>;
     fn reset(&mut self) -> Result<()>;
     fn save_prefix(&mut self) -> Result<()>;
-    fn restore_prefix(&mut self) -> Result<()>;
+    fn restore_prefix(&mut self) -> Result<bool>;
     fn clear_prefix(&mut self) -> Result<()>;
     fn release(self) -> Result<()>
     where
@@ -152,14 +152,16 @@ impl<B: Backend> Executor<B> {
         {
             return Err(Error::Protocol("invalid generation request".into()));
         }
-        let reused = if !self.prefix.is_empty()
+        let matching = !self.prefix.is_empty()
             && self.prefix.len() < request.prompt_tokens.len()
             && request.prompt_tokens.starts_with(&self.prefix)
-            && request.checkpoint_tokens == self.prefix.len()
-        {
-            self.backend.restore_prefix()?;
+            && request.checkpoint_tokens == self.prefix.len();
+        let reused = if matching && self.backend.restore_prefix()? {
             self.prefix.len()
         } else {
+            if matching {
+                self.prefix.clear();
+            }
             self.backend.reset()?;
             0
         };

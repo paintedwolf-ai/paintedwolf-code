@@ -8,6 +8,7 @@ struct Fake {
     calls: Vec<Vec<u32>>,
     samples: VecDeque<u32>,
     fail: bool,
+    missing_prefix: bool,
 }
 
 impl Backend for Fake {
@@ -30,14 +31,30 @@ impl Backend for Fake {
         self.prefix = self.tokens.clone();
         Ok(())
     }
-    fn restore_prefix(&mut self) -> Result<()> {
+    fn restore_prefix(&mut self) -> Result<bool> {
+        if self.missing_prefix {
+            return Ok(false);
+        }
         self.tokens = self.prefix.clone();
-        Ok(())
+        Ok(true)
     }
     fn clear_prefix(&mut self) -> Result<()> {
         self.prefix.clear();
         Ok(())
     }
+}
+
+#[test]
+fn unavailable_checkpoint_recomputes_the_complete_prompt() {
+    let mut runner = executor();
+    runner.begin(request(1), None).unwrap();
+    while runner.advance(1).unwrap().stop_reason.is_none() {}
+    runner.backend.missing_prefix = true;
+    runner.backend.calls.clear();
+    assert_eq!(runner.begin(request(2), None).unwrap(), 0);
+    while runner.advance(2).unwrap().stop_reason.is_none() {}
+    assert_eq!(runner.backend.calls[0], [2, 5]);
+    assert_eq!(runner.backend.prefix, [2, 5, 6]);
 }
 
 fn request(id: u64) -> Begin {
