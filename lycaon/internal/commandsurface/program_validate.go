@@ -1,6 +1,7 @@
 package commandsurface
 
 import (
+	"errors"
 	"math"
 	"strings"
 
@@ -244,7 +245,8 @@ func (c *programCompiler) validateTrap(call *syntax.CallExpr) {
 	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{Pool: c.pool})).Parse(strings.NewReader(handler), "trap")
 	if err != nil {
 		diag := parserDiagnostic(err, len(handler))
-		if sd, ok := diag.(*SyntaxDiagnostic); ok {
+		var sd *SyntaxDiagnostic
+		if errors.As(diag, &sd) {
 			sd.Span = span
 		}
 		c.err = diag

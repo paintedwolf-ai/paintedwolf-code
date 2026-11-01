@@ -72,7 +72,7 @@ func TestArgvShapeRejectConflict(t *testing.T) {
 }
 
 func TestProgramSyntaxObservationKeepsTypedLocationWithoutRepair(t *testing.T) {
-	_, err := commandsurface.ParseProgram([]byte("printf changed > ./output; if false; then eval dangerous; fi"), commandsurface.ParseOptions{})
+	_, err := commandsurface.ParseProgram([]byte("printf changed > ./output; if false; then trap dangerous; fi"), commandsurface.ParseOptions{})
 	tr := ArgvShapeObservation("command", err)
 	if tr == nil || tr.Code != "COMMAND_SYNTAX_UNSUPPORTED" || tr.Data["source_start_byte"] != 42 {
 		t.Fatalf("typed syntax observation = %#v", tr)

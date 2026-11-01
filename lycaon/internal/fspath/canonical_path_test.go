@@ -110,6 +110,7 @@ func TestCanonicalPathLeavesRelativeNamesRelative(t *testing.T) {
 
 // TestCanonicalPathFollowsASymlinkToASocket covers an unopened socket leaf.
 func TestCanonicalPathFollowsASymlinkToASocket(t *testing.T) {
+	//nolint:usetesting // Short prefix keeps the unix domain socket path within Darwin's SUN_LEN bound.
 	dir, err := os.MkdirTemp("", "pw-sock-")
 	testutil.FailErr(t, "create socket directory", err)
 	t.Cleanup(func() { testutil.FailErr(t, "remove socket directory", os.RemoveAll(dir)) })

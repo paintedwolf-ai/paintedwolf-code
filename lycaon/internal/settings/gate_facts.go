@@ -367,8 +367,8 @@ func detectionFact(m hitl.DetectionMatch) *gate.Match {
 
 // askPolicyRuleFor returns the primary ask rule for an action.
 func askPolicyRuleFor(rules []ApprovalRule, action hitl.ProposedAction, actionLeased, hostCovered bool) (ApprovalRule, string, bool) {
-	units := commandUnitsFromArgs(action.Invocation.Args)
-	if !actionLeased && IsCommandToolName(action.Invocation.Tool) && len(units) > 0 {
+	units := commandUnitsForAction(action)
+	if !actionLeased && len(units) > 0 {
 		if rule, matched, ok := matchCommandRules(rules, units); ok && rule.Effect == ApprovalEffectAsk {
 			return rule, matched, true
 		}
@@ -391,12 +391,12 @@ func askPolicyRuleFor(rules []ApprovalRule, action hitl.ProposedAction, actionLe
 
 func effectiveDenyRulesForLayer(rules []ApprovalRule, action hitl.ProposedAction) []ApprovalRule {
 	var matches []ApprovalRule
-	units := commandUnitsFromArgs(action.Invocation.Args)
+	units := commandUnitsForAction(action)
 	if rule, ok := matchHostResourceRules(rules, action.Resources.HostResources, action.Resources.HostResourceFamilies); ok &&
 		rule.Effect == ApprovalEffectDeny {
 		matches = append(matches, rule)
 	}
-	if IsCommandToolName(action.Invocation.Tool) && len(units) > 0 {
+	if len(units) > 0 {
 		if rule, _, ok := matchCommandRules(rules, units); ok && rule.Effect == ApprovalEffectDeny {
 			return append(matches, rule)
 		}

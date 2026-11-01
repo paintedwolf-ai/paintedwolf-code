@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -20,9 +21,7 @@ func TestInputRedirectProjectsCaptureAdmissionBeforeDeliveringBytes(t *testing.T
 		t.Run(test.name, func(t *testing.T) {
 			h := newHarness(t, map[string]string{"in.txt": "original bytes\n"})
 			memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: test.working, State: test.state})
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 			h.owners.Revisions.Memory = memory
 			inv := h.invocation()
 			span := toolcontract.SourceSpan{StartByte: 10, EndByte: 16, Line: 1, Column: 11}

@@ -324,7 +324,7 @@ func TestLinuxTrashSameMountSubvolumeRelocation(t *testing.T) {
 	prev := relocateGuarded
 	relocateGuarded = func(_, to fseffect.Location, _ string) error {
 		if dir := filepath.Dir(to.Rel); dir != "." {
-			_ = fseffect.MkdirAll(fseffect.Location{Root: to.Root, Rel: dir}, 0o700)
+			_, _ = fseffect.MkdirAll(fseffect.Location{Root: to.Root, Rel: dir}, 0o700)
 		}
 		return unix.EXDEV
 	}

@@ -44,9 +44,7 @@ func TestHostExecutionSelectsExplicitUnconfinedCommand(t *testing.T) {
 	if report.Confined || !report.HostExecution {
 		t.Fatalf("misleading report: %+v", report)
 	}
-	self, err := os.Executable()
-	testutil.FailErr(t, "host launch helper", err)
-	command, cleanup, err := confine.Command(t.Context(), self, "/usr/bin/true", nil, *c)
+	command, cleanup, err := confine.Command(t.Context(), "not-the-helper", "/usr/bin/true", nil, *c)
 	testutil.FailErr(t, "build host command", err)
 	defer cleanup()
 	wantArgs := []string{"not-the-helper", "__confine-exec", "--profile-fd", "3", "--launch-host-execution", "--", "/usr/bin/true"}

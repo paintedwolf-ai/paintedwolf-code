@@ -17,6 +17,7 @@ import (
 )
 
 func TestRemoveTrackedFiles(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name     string
 		args     []string
@@ -33,6 +34,7 @@ func TestRemoveTrackedFiles(t *testing.T) {
 		{"unmatched", []string{"rm", "--ignore-unmatch", "--", "absent"}, 0, true, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			before := h.git("ls-files", "--stage")
 			got := h.exec(append([]string{"git"}, test.args...)...)
@@ -62,6 +64,7 @@ func TestRemoveTrackedFiles(t *testing.T) {
 }
 
 func TestRemoveSafety(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name   string
 		staged bool
@@ -75,6 +78,7 @@ func TestRemoveSafety(t *testing.T) {
 		{"cached-both", true, "work\n", true, "staged content different from both the\nfile and the HEAD"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			if test.staged {
 				h.write("a.txt", "index\n")
@@ -99,6 +103,7 @@ func TestRemoveSafety(t *testing.T) {
 }
 
 func TestMoveTracksIndexContentAndSession(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	got := h.exec("git", "mv", "-v", "--", "a.txt", "renamed.txt")
 	testutil.FailErr(t, "move", got.err)
@@ -118,6 +123,7 @@ func TestMoveTracksIndexContentAndSession(t *testing.T) {
 }
 
 func TestMoveDirectoryAndSkip(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.write("sub/untracked", "keep\n")
 	testutil.FailErr(t, "destination", os.Mkdir(filepath.Join(h.root, "destination"), 0755))
@@ -132,9 +138,11 @@ func TestMoveDirectoryAndSkip(t *testing.T) {
 }
 
 func TestFileMutationDenialAndLaterIndexFailure(t *testing.T) {
+	t.Parallel()
 	for _, command := range []string{"rm", "mv"} {
 		for _, later := range []bool{false, true} {
 			t.Run(command+map[bool]string{false: "-denied", true: "-index-failure"}[later], func(t *testing.T) {
+				t.Parallel()
 				h := newApplyHarness(t)
 				original := h.git("ls-files", "--stage")
 				h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
@@ -164,6 +172,7 @@ func TestFileMutationDenialAndLaterIndexFailure(t *testing.T) {
 }
 
 func TestFileMutationDryRunAndPathRefusals(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	original := h.git("ls-files", "--stage")
 	got := h.exec("git", "mv", "-n", "--", "sub/b.txt", "next.txt")
@@ -180,6 +189,7 @@ func TestFileMutationDryRunAndPathRefusals(t *testing.T) {
 }
 
 func TestMoveForceAndSymbolicLink(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.write("destination", "replaced\n")
 	got := h.exec("git", "mv", "-f", "--", "sub/b.txt", "destination")
@@ -211,6 +221,7 @@ func TestMoveForceAndSymbolicLink(t *testing.T) {
 }
 
 func TestRemoveMissingAndGroupedSafety(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	testutil.FailErr(t, "remove saved file", os.Remove(filepath.Join(h.root, "sub/b.txt")))
 	got := h.exec("git", "rm", "--", "sub/b.txt")
@@ -231,8 +242,10 @@ func TestRemoveMissingAndGroupedSafety(t *testing.T) {
 }
 
 func TestSelectedMutationPreservesUnrelatedConflict(t *testing.T) {
+	t.Parallel()
 	for _, command := range []string{"rm", "mv"} {
 		t.Run(command, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			_, err := h.owners.Git.Operate(t.Context(), h.root, git.OperationRequest{Kind: "stage", Entries: []git.IndexEntry{{Path: "a.txt", Mode: "100644", Stages: &[3][]byte{[]byte("base\n"), []byte("ours\n"), []byte("theirs\n")}}}})
 			testutil.FailErr(t, "seed unrelated conflict", err)
@@ -251,6 +264,7 @@ func TestSelectedMutationPreservesUnrelatedConflict(t *testing.T) {
 }
 
 func TestCachedRemovalRechecksSavedContentAtIndexReview(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.write("a.txt", "staged\n")
 	h.git("add", "a.txt")
@@ -268,8 +282,10 @@ func TestCachedRemovalRechecksSavedContentAtIndexReview(t *testing.T) {
 }
 
 func TestFileMutationDefaultCommitLeavesUnrelatedStaging(t *testing.T) {
+	t.Parallel()
 	for _, command := range []string{"rm", "mv"} {
 		t.Run(command, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			args := []string{"git", command, "--", "sub/b.txt"}
 			if command == "mv" {
@@ -306,6 +322,7 @@ func (b *metadataMoveBackend) BlobContent(context.Context, string, string, int) 
 }
 
 func TestMoveReusesIndexBlobBeyondStreamLimit(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	h.write("large", strings.Repeat("x", 4096))
 	h.git("add", "large")
@@ -331,6 +348,7 @@ func (b stageResultBackend) Operate(context.Context, string, git.OperationReques
 }
 
 func TestIndexAttemptCertaintyUsesObservedState(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name                         string
 		attempted, observed, changed bool
@@ -342,6 +360,7 @@ func TestIndexAttemptCertaintyUsesObservedState(t *testing.T) {
 		{"observed-changed", true, true, true, toolcontract.EffectCompleted},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			result := git.OperationResult{Attempted: test.attempted, AfterObserved: test.observed, Status: "failed", Before: git.RepositoryState{Index: "before"}, After: git.RepositoryState{Index: "before"}}
 			if test.changed {
@@ -357,6 +376,7 @@ func TestIndexAttemptCertaintyUsesObservedState(t *testing.T) {
 }
 
 func TestMoveRefusesDestinationCreatedDuringReview(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	before := h.git("ls-files", "--stage")
 	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
@@ -372,8 +392,10 @@ func TestMoveRefusesDestinationCreatedDuringReview(t *testing.T) {
 }
 
 func TestMoveDirectoryVerboseAndDryRun(t *testing.T) {
+	t.Parallel()
 	for _, flag := range []string{"-v", "-n"} {
 		t.Run(flag, func(t *testing.T) {
+			t.Parallel()
 			h := newApplyHarness(t)
 			got := h.exec("git", "mv", flag, "--", "sub", "renamed")
 			testutil.FailErr(t, "directory move", got.err)
@@ -389,6 +411,7 @@ func TestMoveDirectoryVerboseAndDryRun(t *testing.T) {
 }
 
 func TestRemoveSelectedConflict(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	_, err := h.owners.Git.Operate(t.Context(), h.root, git.OperationRequest{Kind: "stage", Entries: []git.IndexEntry{{Path: "a.txt", Mode: "100644", Stages: &[3][]byte{[]byte("base\n"), []byte("ours\n"), []byte("theirs\n")}}}})
 	testutil.FailErr(t, "seed conflict", err)
@@ -400,6 +423,7 @@ func TestRemoveSelectedConflict(t *testing.T) {
 }
 
 func TestRemovePrunesEmptiedDirectoriesUpToTheWorkingDirectory(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	for _, name := range []string{"deep/a/b/leaf", "deep/a/kept/other", "cwd/inner/leaf", "cwd/sibling"} {
 		h.write(name, name+"\n")
@@ -425,6 +449,7 @@ func TestRemovePrunesEmptiedDirectoriesUpToTheWorkingDirectory(t *testing.T) {
 }
 
 func TestCachedRemovalAndMoveKeepParentDirectories(t *testing.T) {
+	t.Parallel()
 	h := newApplyHarness(t)
 	got := h.exec("git", "rm", "-q", "--cached", "--", "sub/b.txt")
 	testutil.FailErr(t, "cached removal", got.err)

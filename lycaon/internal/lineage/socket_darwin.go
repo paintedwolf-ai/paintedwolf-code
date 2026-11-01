@@ -22,7 +22,13 @@ func SocketsOf(pid int) ([]SocketObservation, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tcpOnly(sockets), nil
+	out := sockets[:0]
+	for _, socket := range sockets {
+		if socket.Protocol == ProtocolTCP {
+			out = append(out, socket)
+		}
+	}
+	return out, nil
 }
 
 // observeSockets reads every TCP and UDP socket one current incarnation holds.

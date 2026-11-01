@@ -18,6 +18,19 @@ func resolveCommit(ctx context.Context, dir, ref string) (string, error) {
 	if err := validateGitRef(ref, "ref"); err != nil {
 		return "", err
 	}
+	if ctx.Err() == nil {
+		if validObjectID(ref) {
+			if kind, _, ok := readLooseGitObject(dir, ref); ok && kind == "commit" {
+				return ref, nil
+			}
+		} else if ref == "HEAD" {
+			if state, err := readRepositoryMetadata(ctx, dir); err == nil && validObjectID(state.Head) {
+				if kind, _, ok := readLooseGitObject(dir, state.Head); ok && kind == "commit" {
+					return state.Head, nil
+				}
+			}
+		}
+	}
 	out, err := restoreGit(ctx, dir, hermeticOpts(0), "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
 	if err != nil {
 		return "", err

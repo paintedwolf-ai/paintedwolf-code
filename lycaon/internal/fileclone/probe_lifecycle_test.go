@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestCloneProbeOwnsLifetimeAcrossPrimitiveOutcomes(t *testing.T) {
@@ -27,7 +29,7 @@ func TestCloneProbeOwnsLifetimeAcrossPrimitiveOutcomes(t *testing.T) {
 						got, err := probeSourceClone(ctx, "source", root, func(_, destination string) (bool, error) {
 							// A platform primitive may leave a result even when it reports failure.
 							if err := os.WriteFile(destination, []byte("partial clone"), 0600); err != nil {
-								t.Fatal(err)
+								testutil.FailErr(t, "write file", err)
 							}
 							if cancelled {
 								cancel(canceled)

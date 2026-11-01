@@ -3,20 +3,18 @@ package migrations
 import (
 	"math"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSorterStorageAccountsRecordsRunsAndOversizedWindows(t *testing.T) {
 	small, err := sorterStorageBytes(8<<20, 100000, 128, 4096)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "sorterStorageBytes failed", err)
 	if small < 8<<20+18*100000+64<<20 {
 		t.Fatalf("sorter bound omits framing: %d", small)
 	}
 	huge, err := sorterStorageBytes(8<<20, 100000, 4<<20, 4096)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "sorterStorageBytes failed", err)
 	if huge <= small {
 		t.Fatalf("large record did not increase merge windows: %d <= %d", huge, small)
 	}

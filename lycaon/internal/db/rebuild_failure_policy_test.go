@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRebuildFallbackRequiresEveryCauseToBeIntegrityDamage(t *testing.T) {
@@ -45,35 +46,31 @@ func sqliteDamageForPolicy(t *testing.T, notDatabase bool) error {
 	path := filepath.Join(t.TempDir(), "source.db")
 	if notDatabase {
 		if err := os.WriteFile(path, []byte("not a database"), 0600); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 	} else {
 		database, err := sql.Open("sqlite", path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "sql.Open failed", err)
 		if _, err := database.Exec("CREATE TABLE data(value TEXT); INSERT INTO data VALUES('kept')"); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "database.Exec failed", err)
 		}
 		var page, size int64
 		if err := database.QueryRow("SELECT rootpage FROM sqlite_schema WHERE name='data'").Scan(&page); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "database.QueryRow failed", err)
 		}
 		if err := database.QueryRow("PRAGMA page_size").Scan(&size); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "database.QueryRow failed", err)
 		}
 		if err := database.Close(); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "database.Close failed", err)
 		}
 		file, err := os.OpenFile(path, os.O_RDWR, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "os.OpenFile failed", err)
 		if _, err := file.WriteAt(make([]byte, size), (page-1)*size); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "file.WriteAt failed", err)
 		}
 		if err := file.Close(); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "file.Close failed", err)
 		}
 	}
 	database, err := sql.Open("sqlite", fileDSN(path, "mode=ro"))
@@ -96,20 +93,18 @@ func sqliteDamageForPolicy(t *testing.T, notDatabase bool) error {
 func sqliteFullForPolicy(t *testing.T) error {
 	t.Helper()
 	database, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "sql.Open failed", err)
 	defer database.Close()
 	database.SetMaxOpenConns(1)
 	if _, err := database.Exec("CREATE TABLE data(value BLOB)"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "database.Exec failed", err)
 	}
 	var pages uint64
 	if err := database.QueryRow("PRAGMA page_count").Scan(&pages); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "database.QueryRow failed", err)
 	}
 	if _, err := database.Exec(fmt.Sprintf("PRAGMA max_page_count=%d", pages)); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "database.Exec failed", err)
 	}
 	_, err = database.Exec("INSERT INTO data VALUES(zeroblob(1048576))")
 	if err == nil {

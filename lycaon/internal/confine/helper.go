@@ -59,6 +59,7 @@ var helperPinnedExecutableFDArg = -1
 var helperPinnedReleaseFDArg = -1
 var helperPinnedFinal bool
 var helperPinnedHostExecution bool
+var helperProcessAttributes ProcessAttributes
 
 // runHelper applies an inherited profile before replacing the process.
 func runHelper(args []string) error {
@@ -70,6 +71,7 @@ func runHelper(args []string) error {
 	helperPinnedReleaseFDArg = -1
 	helperPinnedFinal = false
 	helperPinnedHostExecution = false
+	helperProcessAttributes = ProcessAttributes{}
 	var target []string
 	var attributes ProcessAttributes
 	for i := 0; i < len(args); i++ {
@@ -143,6 +145,9 @@ func runHelper(args []string) error {
 				return err
 			}
 		}
+		if err := applyProcessAttributes(attributes); err != nil {
+			return err
+		}
 		return execNativeTarget(helperPinnedEntryArg, target)
 	}
 	if profileFD < 0 || len(target) == 0 {
@@ -196,10 +201,11 @@ func runHelper(args []string) error {
 		}
 		resolved = p
 	}
-	if err := applyProcessAttributes(attributes); err != nil {
-		return err
-	}
+	helperProcessAttributes = attributes
 	if helperPinnedHostExecution {
+		if err := applyProcessAttributes(attributes); err != nil {
+			return err
+		}
 		// The host selected explicit host execution before constructing this helper.
 		// This never removes an inherited confinement boundary.
 		return execNativeTarget(resolved, target)

@@ -33,9 +33,6 @@ func (d *descriptorFrame) setWriter(fd int, w io.Writer) {
 		d.generations[fd]++
 	}
 }
-func (d *descriptorFrame) setInput(r io.ReadCloser) { d.setReader(0, r) }
-func (d *descriptorFrame) setOutput(w io.Writer)    { d.setWriter(1, w) }
-func (d *descriptorFrame) setError(w io.Writer)     { d.setWriter(2, w) }
 func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 	streams := d.streams
 	if d.scope == nil {

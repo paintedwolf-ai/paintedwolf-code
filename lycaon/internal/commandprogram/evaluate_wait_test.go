@@ -29,8 +29,8 @@ func (o *waitObservations) Block(_ context.Context, state WaitState) (func(), er
 func newWaitActivities(t *testing.T) (*executionWaits, *ExecutionWait, *waitObservations) {
 	t.Helper()
 	observed := &waitObservations{}
-	_, cancel := context.WithCancelCause(t.Context())
-	w := newExecutionWaits(newManualClock(), observed, cancel)
+	ctx, cancel := context.WithCancelCause(t.Context())
+	w := newExecutionWaits(ctx, newManualClock(), observed, cancel)
 	root := w.start()
 	w.foreground = root
 	t.Cleanup(root.finish)
@@ -250,7 +250,9 @@ func TestZeroTimeReadinessIncludesEOFAndDoesNotConsumeBytes(t *testing.T) {
 	wrote := make(chan error, 1)
 	go func() { _, err := pipe.Write([]byte("ready")); wrote <- err }()
 	awaitPipeState(t, pipe.stream, func(p *pipeRendezvous) bool { return len(p.data) > 0 })
-	if !inputReady(input) || !inputReady(input) {
+	firstReady := inputReady(input)
+	secondReady := inputReady(input)
+	if !firstReady || !secondReady {
 		t.Fatal("pending bytes are not ready")
 	}
 	got := make([]byte, 5)

@@ -21,9 +21,6 @@ func Command(
 		return nil, func() {}, ErrNestedHelper
 	}
 	extra := c.Process.arguments()
-	if c.HostExecution && c.lineage == nil && len(extra) == 0 {
-		return exec.CommandContext(ctx, name, args...), func() {}, nil
-	}
 	var profile string
 	var err error
 	if !c.HostExecution {

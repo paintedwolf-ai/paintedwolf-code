@@ -176,10 +176,6 @@ func upsertSourceHeadWithCache(ctx context.Context, q *db.Queries, head db.Sourc
 }
 
 // A directory transition changes one edge; descendants retain their file and content identities.
-func transitionDirectory(ctx context.Context, q *db.Queries, in RecordInput, ordinal int64) error {
-	return transitionDirectoryWithCache(ctx, q, in, ordinal, nil)
-}
-
 func transitionDirectoryWithCache(ctx context.Context, q *db.Queries, in RecordInput, ordinal int64, cache *TxBatchCache) error {
 	if in.EntryKind != EntryKindDirectory {
 		return nil

@@ -180,3 +180,14 @@ func TestCompareVersionRejectsGarbage(t *testing.T) {
 		t.Fatal("expected an error for an unparseable version")
 	}
 }
+
+func TestExecRunnerRunsCommand(t *testing.T) {
+	stdout, _, err := execRunner{}.Run(t.Context(), "echo", "bundle-ok")
+	testutil.FailErr(t, "run bundle inspection helper", err)
+	if len(stdout) == 0 {
+		t.Fatal("expected stdout from execRunner")
+	}
+	if _, _, err := (execRunner{}).Run(t.Context(), "echo; invalid"); err == nil {
+		t.Fatal("expected invalid command name rejection")
+	}
+}

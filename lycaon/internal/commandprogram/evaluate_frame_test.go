@@ -25,7 +25,7 @@ func TestIsolatedFrameRefusesPrefixAdmissionBeforeDispatchFork(t *testing.T) {
 			testutil.FailErr(t, "create prefix admission memory", err)
 			fixture.ports.Memory = memory
 			evaluation := &evaluation{ports: fixture.ports, programName: "prefix"}
-			evaluation.waits = newExecutionWaits(SystemClock(), nil, func(error) {})
+			evaluation.waits = newExecutionWaits(t.Context(), SystemClock(), nil, func(error) {})
 			parent, closeParent, err := evaluation.rootFrame(t.Context())
 			testutil.FailErr(t, "create parent frame", err)
 			defer closeParent()
@@ -75,7 +75,7 @@ func TestRecordedSettlementKeepsAdmissionMetadataAfterCancellation(t *testing.T)
 	type operationKey struct{}
 	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), operationKey{}, "admitted-operation"))
 	defer cancel()
-	evaluation.waits = newExecutionWaits(SystemClock(), nil, func(error) {})
+	evaluation.waits = newExecutionWaits(ctx, SystemClock(), nil, func(error) {})
 	frame, release, err := evaluation.rootFrame(ctx)
 	testutil.FailErr(t, "create recorded frame", err)
 	defer release()

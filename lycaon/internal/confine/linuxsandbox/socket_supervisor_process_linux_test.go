@@ -98,6 +98,12 @@ func TestLinuxSocketSupervisorProcess(t *testing.T) {
 	if os.Getenv("PW_SOCKET_SUPERVISOR_PROCESS") != "1" {
 		return
 	}
+	runSocketSupervisorProcess(t)
+	os.Exit(0)
+}
+
+func runSocketSupervisorProcess(t *testing.T) {
+	t.Helper()
 	profileFile := os.NewFile(3, "actual command profile")
 	profile, err := io.ReadAll(profileFile)
 	_ = profileFile.Close()

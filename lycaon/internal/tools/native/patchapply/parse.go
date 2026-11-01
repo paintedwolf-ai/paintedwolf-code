@@ -15,6 +15,12 @@ import (
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
+// Git patch protocol delimiters terminate the file-name header.
+const (
+	gitSectionPrefix     = "diff --git "
+	gitBinaryPatchHeader = "GIT binary patch"
+)
+
 // File is one file section of a patch.
 type File struct {
 	*gitdiff.File
@@ -71,7 +77,7 @@ func splitGitSections(data []byte) [][]byte {
 	parts := [][]byte{}
 	start := 0
 	for offset := 0; offset < len(data); {
-		if bytes.HasPrefix(data[offset:], []byte("diff --git ")) {
+		if bytes.HasPrefix(data[offset:], []byte(gitSectionPrefix)) {
 			parts = append(parts, data[start:offset])
 			start = offset
 		}
@@ -90,7 +96,7 @@ func rawGitNames(section []byte) (string, string) {
 	lines := strings.Split(string(section), "\n")
 	var old, new string
 	for _, line := range lines[1:] {
-		if strings.HasPrefix(line, "@@ ") || strings.HasPrefix(line, "GIT binary patch") || strings.HasPrefix(line, "diff --git ") {
+		if strings.HasPrefix(line, "@@ ") || strings.HasPrefix(line, gitBinaryPatchHeader) || strings.HasPrefix(line, gitSectionPrefix) {
 			break
 		}
 		if name, ok := strings.CutPrefix(line, "--- "); ok {
@@ -102,7 +108,7 @@ func rawGitNames(section []byte) (string, string) {
 	if old != "" || new != "" {
 		return old, new
 	}
-	header := strings.TrimPrefix(lines[0], "diff --git ")
+	header := strings.TrimPrefix(lines[0], gitSectionPrefix)
 	if len(header)%2 == 1 && header[len(header)/2] == ' ' && trimComponents(header[:len(header)/2], 1) == trimComponents(header[len(header)/2+1:], 1) {
 		return header[:len(header)/2], header[len(header)/2+1:]
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 )
@@ -17,9 +18,7 @@ func TestQueryElapsedBudgetSurvivesInputBoundariesAndPreservesOutput(t *testing.
 	inv := &invocation{ctx: t.Context(), owners: h.owners}
 	inv.out = &output{ctx: inv.ctx, w: &stdout}
 	program, err := nativejq.CompileProgram(".", nativejq.ProgramOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "nativejq.CompileProgram failed", err)
 	run := &jqRun{inv: inv, program: program, emitter: &emitter{inv: inv}}
 	if more, err := run.evaluate(1, true); !more || err != nil || stdout.String() != "1\n" || run.elapsed <= 0 {
 		t.Fatalf("first evaluation %t %v output %q elapsed %v", more, err, stdout.String(), run.elapsed)
@@ -47,9 +46,7 @@ func TestQueryElapsedBudgetKeepsCallerCancellation(t *testing.T) {
 	inv := &invocation{ctx: ctx, owners: h.owners}
 	inv.out = &output{ctx: ctx, w: &stdout}
 	program, err := nativejq.CompileProgram(".", nativejq.ProgramOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "nativejq.CompileProgram failed", err)
 	run := &jqRun{inv: inv, program: program, emitter: &emitter{inv: inv}}
 	_, err = run.evaluate(1, true)
 	if !errors.Is(err, context.Canceled) || toolrejection.AsToolReject(err) != nil || stdout.Len() != 0 {

@@ -47,15 +47,23 @@ func TestProgramBackgroundReadTransfersUndeliveredDraftNotice(t *testing.T) {
 				cat := owners.Natives["cat"]
 				prepare := cat.Prepare
 				cat.Prepare = func(ctx context.Context, paths *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-					calls++
-					if !initialRead || calls == 2 {
-						select {
-						case <-gate:
-						case <-ctx.Done():
-							return command.NativePrepared{}, ctx.Err()
-						}
+					prepared, err := prepare(ctx, paths, dispatch, request)
+					if err != nil {
+						return prepared, err
 					}
-					return prepare(ctx, paths, dispatch, request)
+					invoke := prepared.Invoke
+					prepared.Invoke = func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+						calls++
+						if !initialRead || calls == 2 {
+							select {
+							case <-gate:
+							case <-ctx.Done():
+								return toolcontract.ProducerResult{}, ctx.Err()
+							}
+						}
+						return invoke(ctx, tc, streams)
+					}
+					return prepared, nil
 				}
 				owners.Natives["cat"] = cat
 				return owners, err

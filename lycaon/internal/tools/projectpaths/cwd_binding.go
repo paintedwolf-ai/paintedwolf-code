@@ -45,7 +45,7 @@ func (p *ProgramPaths) OpenCwd(ctx context.Context) (*os.File, error) {
 	if p.cwd.Resolved.Abs == "" {
 		return nil, invalidOperand("", "invocation cwd is not bound")
 	}
-	file, err := p.cwd.OpenLaunchMetadata(true)
+	file, err := p.bindAuthority(ctx, p.cwd, false).OpenLaunchMetadata(true)
 	if err != nil {
 		return nil, err
 	}

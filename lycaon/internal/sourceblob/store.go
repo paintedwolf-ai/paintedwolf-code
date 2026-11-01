@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/contextio"
@@ -43,8 +42,7 @@ const stagingDirName = ".staging"
 
 // Store is the content-addressed object root.
 type Store struct {
-	root        string
-	rootCreated atomic.Bool
+	root string
 	// mu orders object removal against readers and writers of one object.
 	mu sync.RWMutex
 	// Captures hold lifecycle through reference commit; maintenance only tries the lock.

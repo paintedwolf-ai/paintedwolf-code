@@ -79,9 +79,12 @@ func linuxProcessStats(fields []string, started uint64) ProcessStats {
 	if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
 		return ProcessStats{}
 	}
+	pageSize := uint64(max(os.Getpagesize(), 0))
+	//nolint:gosec // Linux procfs jiffies fit within signed duration arithmetic.
 	stats := ProcessStats{Available: true, State: fields[0], TTY: "?", VirtualBytes: virtual,
-		ResidentBytes: resident * uint64(os.Getpagesize()), CPUTime: time.Duration(user+system) * time.Second / 100}
+		ResidentBytes: resident * pageSize, CPUTime: time.Duration(user+system) * time.Second / 100}
 	if boot := linuxBootTime(); !boot.IsZero() {
+		//nolint:gosec // Linux procfs start time jiffies fit within signed duration arithmetic.
 		stats.Started = boot.Add(time.Duration(started) * time.Second / 100)
 	}
 	if tty, err := strconv.ParseUint(fields[4], 10, 64); err == nil && tty != 0 {

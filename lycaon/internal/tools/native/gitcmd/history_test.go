@@ -57,10 +57,9 @@ func newHistoryHarness(t *testing.T) *harness {
 	return h
 }
 
-// TestHistoryQueriesMatchBundledGit runs each read form natively and through
-// the bundled binary from the same directory and compares bytes and status.
 func TestHistoryQueriesMatchBundledGit(t *testing.T) {
-	h := newHistoryHarness(t)
+	t.Parallel()
+	base := newHistoryHarness(t)
 	for _, line := range []string{
 		"git describe --tags --always",
 		"git describe --always",
@@ -86,6 +85,8 @@ func TestHistoryQueriesMatchBundledGit(t *testing.T) {
 		"git for-each-ref --format=%(objecttype) %(refname) refs/tags",
 	} {
 		t.Run(line, func(t *testing.T) {
+			t.Parallel()
+			h := base.withT(t)
 			r := h.exec(strings.Fields(line)...)
 			testutil.FailErr(t, line, r.err)
 			stdout, stderr, status := h.direct(h.root, strings.Fields(line)[1:]...)
@@ -100,6 +101,7 @@ func TestHistoryQueriesMatchBundledGit(t *testing.T) {
 }
 
 func TestHistoryQueryRequiredFacts(t *testing.T) {
+	t.Parallel()
 	h := newHistoryHarness(t)
 	if got := h.exec("git", "describe", "--tags", "--dirty").stdout; strings.Contains(got, "dirty") || !strings.HasPrefix(got, "v1.1-light-1-g") {
 		t.Fatalf("clean describe %q", got)
@@ -133,6 +135,7 @@ func TestHistoryQueryRequiredFacts(t *testing.T) {
 }
 
 func TestHistoryQueriesRefuseWritesAndUncataloguedForms(t *testing.T) {
+	t.Parallel()
 	h := newHistoryHarness(t)
 	reflog := h.git("reflog")
 	for _, c := range []struct {
@@ -158,14 +161,13 @@ func TestHistoryQueriesRefuseWritesAndUncataloguedForms(t *testing.T) {
 	}
 }
 
-// TestGrepMatchesBundledGit compares native search with the bundled binary,
-// whose own grep is the reference for layout, ordering and status.
 func TestGrepMatchesBundledGit(t *testing.T) {
-	h := newHistoryHarness(t)
-	h.write("src/main.go", "package main\n\nfunc entry() {}\n// Entry point\n")
-	h.write("docs/guide.md", "entry staged\n")
-	h.git("add", "--", "docs/guide.md")
-	h.write("docs/guide.md", "entry working\n")
+	t.Parallel()
+	base := newHistoryHarness(t)
+	base.write("src/main.go", "package main\n\nfunc entry() {}\n// Entry point\n")
+	base.write("docs/guide.md", "entry staged\n")
+	base.git("add", "--", "docs/guide.md")
+	base.write("docs/guide.md", "entry working\n")
 	for _, c := range []struct{ dir, line string }{
 		{"", "git grep entry"},
 		{"", "git grep -n entry HEAD"},
@@ -190,6 +192,8 @@ func TestGrepMatchesBundledGit(t *testing.T) {
 		{"src", "git grep -n entry"},
 	} {
 		t.Run(c.dir+" "+c.line, func(t *testing.T) {
+			t.Parallel()
+			h := base.withT(t)
 			words := strings.Fields(c.line)
 			if c.dir != "" {
 				words = append([]string{"git", "-C", c.dir}, words[1:]...)
@@ -205,6 +209,7 @@ func TestGrepMatchesBundledGit(t *testing.T) {
 }
 
 func TestGrepFindsLinesOnlyAtTheRevision(t *testing.T) {
+	t.Parallel()
 	h := newHistoryHarness(t)
 	r := h.exec("git", "grep", "-n", "legacyEntry", "HEAD~3", "--", "src/")
 	testutil.FailErr(t, "grep", r.err)
