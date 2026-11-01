@@ -18,6 +18,7 @@ type revisionIndex struct {
 type revisionPage struct {
 	entries  map[toolcontract.ExecutionRevision]struct{}
 	next     *revisionPage
+	capacity int
 	releases []func()
 }
 
@@ -46,16 +47,20 @@ func (r *revisionIndex) remember(ctx context.Context, memory *toolcontract.Progr
 			return true, nil
 		}
 	}
-	if page == nil || len(page.entries) == revisionPageEntries {
+	if page == nil || len(page.entries) == page.capacity {
+		capacity := 4
+		if page != nil {
+			capacity = min(revisionPageEntries, 2*page.capacity)
+		}
 		release := func() {}
 		if memory != nil {
 			var err error
-			release, err = memory.ReserveProgramState(ctx, revisionPageEntries*512)
+			release, err = memory.ReserveProgramState(ctx, int64(capacity)*512)
 			if err != nil {
 				return false, err
 			}
 		}
-		page = &revisionPage{entries: make(map[toolcontract.ExecutionRevision]struct{}, revisionPageEntries), next: page, releases: []func(){release}}
+		page = &revisionPage{entries: make(map[toolcontract.ExecutionRevision]struct{}, capacity), next: page, capacity: capacity, releases: []func(){release}}
 		r.buckets[index] = page
 	}
 	size := int64(len(revision.Role) + len(revision.Mode) + len(revision.Basis) + len(revision.RootID) + len(revision.Path) + len(revision.DocumentID) + len(revision.DiskSHA256) + len(revision.Representation) + len(revision.ContentSHA256))
