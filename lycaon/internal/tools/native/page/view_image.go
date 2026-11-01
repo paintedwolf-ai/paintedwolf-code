@@ -109,14 +109,18 @@ func handleViewImageByHandle(ctx context.Context, deps ViewImageDeps, tctx tools
 	case strings.EqualFold(strings.TrimSpace(mime), browser.FilmstripMime):
 		poster, err := browser.FilmstripPoster(raw)
 		if err != nil {
-			return "", &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: map[string]any{"path": in.Handle, "handle": in.Handle, "format": "png"}}
+			return "", &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: map[string]any{
+				"path": in.Handle, "handle": in.Handle, "format": "png", "rejection_reason": err.Error(),
+			}}
 		}
 		raw = poster
 		mime = "image/png"
 	case strings.EqualFold(strings.TrimSpace(mime), timelinearchive.Mime):
 		poster, err := timelinearchive.Poster(raw)
 		if err != nil {
-			return "", &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: map[string]any{"path": in.Handle, "handle": in.Handle, "format": "png"}}
+			return "", &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: map[string]any{
+				"path": in.Handle, "handle": in.Handle, "format": "png", "rejection_reason": err.Error(),
+			}}
 		}
 		raw = poster
 		mime = "image/png"
