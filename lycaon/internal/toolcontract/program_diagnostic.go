@@ -8,8 +8,8 @@ import (
 )
 
 // ProgramDiagnosticStage names where language admission or evaluation refused.
-// Only the syntax stage precedes every program effect; later stages refuse a
-// reached command whose earlier effects the receipt ledger reports separately.
+// A syntax refusal precedes evaluation of its source unit. The ledger reports
+// effects of enclosing units separately.
 type ProgramDiagnosticStage string
 
 const (
@@ -35,6 +35,7 @@ type ProgramDiagnostic struct {
 	Span              SourceSpan
 	Limit, Unit       string
 	Maximum, Observed int64
+	Parser            *ParserDiagnostic
 }
 
 func (d ProgramDiagnostic) validate() error {
@@ -104,6 +105,9 @@ func (d ProgramDiagnostic) Feedback() (map[string]any, error) {
 	}
 	if d.Limit != "" {
 		facts["limit"], facts["limit_unit"], facts["limit_maximum"], facts["limit_observed"] = d.Limit, d.Unit, d.Maximum, d.Observed
+	}
+	if d.Parser != nil {
+		d.Parser.addFacts(facts)
 	}
 	return facts, nil
 }
