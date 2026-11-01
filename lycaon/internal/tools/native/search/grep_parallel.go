@@ -63,6 +63,7 @@ func newGrepFiles(r *grepRun, workers int) (*grepFiles, error) {
 	ctx, cancel := context.WithCancel(r.inv.ctx)
 	p := &grepFiles{run: r, template: *r, invocation: *r.inv, maximum: r.inv.out.maximum, mapped: r.inv.out.mappings != nil, ctx: ctx, cancel: cancel, jobs: make(chan *grepFileJob, workers), window: workers * 2}
 	p.invocation.out, p.invocation.stderr, p.invocation.releases, p.invocation.pins = nil, nil, nil, nil
+	p.invocation.pinReleases = nil
 	p.template.inv, p.template.walker, p.template.files = nil, nil, nil
 	if r.json != nil {
 		p.template.json = &rgJSON{started: r.json.started}
@@ -199,6 +200,9 @@ func (p *grepFiles) discard(job *grepFileJob) {
 				return
 			}
 			p.buffers.put(event.bytes)
+			if event.release != nil {
+				event.release()
+			}
 		default:
 			return
 		}
@@ -242,14 +246,20 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 		inv.out.mappings = nil
 	}
 	inv.out.beforeWrite = func() error {
-		if len(inv.pins) == inv.flushedPins {
+		if len(inv.pins) == 0 {
 			return nil
 		}
-		pins := append([]toolcontract.ExecutionRevision(nil), inv.pins[inv.flushedPins:]...)
-		if err := writer.send(grepFileEvent{pins: pins}); err != nil {
+		pins, releases := inv.pins, inv.pinReleases
+		inv.pins, inv.pinReleases = nil, nil
+		release := func() {
+			for _, close := range releases {
+				close()
+			}
+		}
+		if err := writer.send(grepFileEvent{pins: pins, release: release}); err != nil {
+			release()
 			return err
 		}
-		inv.flushedPins = len(inv.pins)
 		return nil
 	}
 	local := p.template
