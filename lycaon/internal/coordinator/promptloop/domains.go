@@ -119,19 +119,20 @@ type CloseoutTrackingDeps struct {
 }
 
 type ProjectionDeps struct {
-	Events                   *events.Publisher
-	RedactMessageForStorage  func(ctx context.Context, msg api.Message) (api.Message, bool)
-	AppendMessages           func(ctx context.Context, sessionID string, msgs ...api.Message) error
-	Streams                  MessageStreams
-	OnToolReject             func(ctx context.Context, sessionID, toolCallID, code, content string, facts guidance.ToolResultFacts)
-	AnnouncePendingToolAsk   func(ctx context.Context, sessionID string)
-	UpdateMessage            func(ctx context.Context, sessionID, messageID string, msg api.Message) error
-	AdmitModelResponse       func(ctx context.Context, sessionID, attemptID string) error
-	SettleModelOutput        func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
-	MarkModelOutputProjected func(ctx context.Context, outputID string) error
-	CheckpointTurn           func(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
-	AppendDraftVersion       func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
-	CountDraftVersions       func(ctx context.Context, sessionID, slotID string) (int, error)
+	Events                      *events.Publisher
+	RedactMessageForStorage     func(ctx context.Context, msg api.Message) (api.Message, bool)
+	AppendMessages              func(ctx context.Context, sessionID string, msgs ...api.Message) error
+	Streams                     MessageStreams
+	OnToolReject                func(ctx context.Context, sessionID, toolCallID, code, content string, facts guidance.ToolResultFacts)
+	AnnouncePendingToolAsk      func(ctx context.Context, sessionID string)
+	UpdateMessage               func(ctx context.Context, sessionID, messageID string, msg api.Message) error
+	AdmitModelResponse          func(ctx context.Context, sessionID, attemptID string) error
+	SettledModelOutputIteration func(ctx context.Context, attemptID string) (int, error)
+	SettleModelOutput           func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
+	MarkModelOutputProjected    func(ctx context.Context, outputID string) error
+	CheckpointTurn              func(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
+	AppendDraftVersion          func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
+	CountDraftVersions          func(ctx context.Context, sessionID, slotID string) (int, error)
 }
 
 type NudgesDeps struct {

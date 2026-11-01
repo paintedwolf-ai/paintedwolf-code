@@ -11,6 +11,7 @@ import (
 type modelOutputState struct {
 	policyCheck           tools.AgentPolicyCheck
 	id                    string
+	iteration             int
 	sourceContext         *api.SourceContext
 	rejection             *guidance.Refusal
 	droppedToolCallStreak int

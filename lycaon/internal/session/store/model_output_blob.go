@@ -159,7 +159,7 @@ func settleModelOutputMemory(ctx context.Context, s *memoryCore, out ModelOutput
 	}
 	for _, existing := range s.modelOutputs {
 		if existing.TurnAttemptID == out.TurnAttemptID && existing.Iteration == out.Iteration {
-			return ModelOutput{}, fmt.Errorf("model iteration already settled")
+			return ModelOutput{}, &ModelOutputIterationCollisionError{TurnAttemptID: out.TurnAttemptID, Iteration: out.Iteration}
 		}
 	}
 	s.modelOutputs[out.ID] = out
@@ -248,4 +248,19 @@ func (t *memoryTurns) MarkModelOutputProjected(ctx context.Context, outputID str
 		}
 	}
 	return fmt.Errorf("model output projection not found: %s", outputID)
+}
+
+func memorySettledModelOutputIteration(ctx context.Context, s *Memory, attemptID string) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	maxIteration := 0
+	for _, output := range s.modelOutputs {
+		if output.TurnAttemptID == attemptID && output.Iteration > maxIteration {
+			maxIteration = output.Iteration
+		}
+	}
+	return maxIteration, nil
 }

@@ -276,8 +276,7 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 	}
 	closeoutState.proseFinish = true
 	closeoutState.closeoutCauseText = cause.Text()
-	iterIndex := closeoutState.turnsRanThisRun
-	assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, iterIndex, maxIter, in.HostTurn)
+	assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, 0, maxIter, in.HostTurn)
 	if err != nil {
 		return history, "", "", err
 	}

@@ -323,6 +323,9 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 			history: in.History, machine: in.Machine, turnID: in.TurnID, attemptID: in.AttemptID,
 		},
 	}
+	if err := l.Projection.seedModelIteration(ctx, in.AttemptID, setup.state); err != nil {
+		return nil, err
+	}
 	if guard.IsCoordinatorProfile(setup.profileID) && l.Closeout.Deps.CloseoutStallState != nil {
 		retained := l.Closeout.Deps.CloseoutStallState(ctx, setup.sessionID)
 		setup.state.closeoutRetry = closeoutRetryState{

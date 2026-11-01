@@ -66,6 +66,9 @@ func StoreDeps(st *store.Memory) PromptLoopDeps {
 			},
 			AppendDraftVersion: st.AppendDraftVersion,
 			CountDraftVersions: st.CountDraftVersions,
+			SettledModelOutputIteration: func(ctx context.Context, attemptID string) (int, error) {
+				return store.SettledModelOutputIteration(ctx, st, attemptID)
+			},
 		},
 	}
 }

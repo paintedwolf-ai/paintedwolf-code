@@ -108,7 +108,7 @@ func (l *modelTurn) buildTurnRequest(
 			ProfileID:        profileID,
 			HostTurn:         hostTurn,
 			Surface:          surfaceID,
-			Iteration:        iterIndex + 1,
+			Iteration:        currentModelIteration(st, iterIndex),
 			MaxIterations:    maxIter,
 			WorkflowRevision: frameValue.WorkflowRevision,
 			CommandGuidance:  l.buildCommandGuidanceDebug(ctx, sess, profileID, surfaceID, frameValue, turnTools),
