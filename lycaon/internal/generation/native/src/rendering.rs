@@ -24,6 +24,13 @@ pub struct Rendered {
     pub checkpoint_tokens: usize,
 }
 
+#[derive(Serialize)]
+pub struct Measurement {
+    pub input_tokens: usize,
+    #[serde(flatten)]
+    pub rendered: Rendered,
+}
+
 pub struct Renderer {
     environment: Environment<'static>,
     tokenizer: Tokenizer,
@@ -126,16 +133,36 @@ impl Renderer {
     }
 
     pub fn render(&self, request: &RenderRequest, maximum_tokens: usize) -> Result<Rendered> {
-        if request.messages.is_empty()
-            || request.messages.len() > 2048
-            || request.tools.len() > 512
-            || !(1..=65536).contains(&maximum_tokens)
+        if !(1..=65536).contains(&maximum_tokens) {
+            return Err(Error::Protocol("token budget exceeds its bound".into()));
+        }
+        let measured = self.measure(request)?;
+        if measured.input_tokens > maximum_tokens {
+            return Err(Error::Capacity(
+                "rendered prompt exceeds its token budget".into(),
+            ));
+        }
+        Ok(measured.rendered)
+    }
+
+    pub fn measure(&self, request: &RenderRequest) -> Result<Measurement> {
+        if request.messages.is_empty() || request.messages.len() > 2048 || request.tools.len() > 512
         {
             return Err(Error::Protocol(
                 "prompt dimensions exceed their bounds".into(),
             ));
         }
-        let prompt_tokens = self.tokenize(&self.render_text(request, true)?, maximum_tokens)?;
+        let prompt_tokens = self.encode(&self.render_text(request, true)?)?;
+        let input_tokens = prompt_tokens.len();
+        if input_tokens > 65536 {
+            return Ok(Measurement {
+                input_tokens,
+                rendered: Rendered {
+                    prompt_tokens: Vec::new(),
+                    checkpoint_tokens: 0,
+                },
+            });
+        }
         let first = &request.messages[0];
         let system = matches!(first["role"].as_str(), Some("system" | "developer"));
         let mut checkpoint_tokens = 0;
@@ -161,9 +188,12 @@ impl Renderer {
                 }
             }
         }
-        Ok(Rendered {
-            prompt_tokens,
-            checkpoint_tokens,
+        Ok(Measurement {
+            input_tokens,
+            rendered: Rendered {
+                prompt_tokens,
+                checkpoint_tokens,
+            },
         })
     }
 
@@ -182,7 +212,20 @@ impl Renderer {
     }
 
     pub fn tokenize(&self, text: &str, maximum_tokens: usize) -> Result<Vec<u32>> {
-        if text.len() > MAX_TEXT_BYTES || !(1..=65536).contains(&maximum_tokens) {
+        if !(1..=65536).contains(&maximum_tokens) {
+            return Err(Error::Protocol("token budget exceeds its bound".into()));
+        }
+        let ids = self.encode(text)?;
+        if ids.len() > maximum_tokens {
+            return Err(Error::Capacity(
+                "rendered prompt exceeds its token budget".into(),
+            ));
+        }
+        Ok(ids)
+    }
+
+    fn encode(&self, text: &str) -> Result<Vec<u32>> {
+        if text.len() > MAX_TEXT_BYTES {
             return Err(Error::Protocol("tokenizer input exceeds its bounds".into()));
         }
         let encoding = self
@@ -190,10 +233,8 @@ impl Renderer {
             .encode(text, false)
             .map_err(tokenizer_error)?;
         let ids = encoding.get_ids();
-        if ids.is_empty() || ids.len() > maximum_tokens || ids.iter().any(|id| *id >= 262144) {
-            return Err(Error::Capacity(
-                "rendered prompt exceeds its token budget".into(),
-            ));
+        if ids.is_empty() || ids.iter().any(|id| *id >= 262144) {
+            return Err(Error::Tokenizer("invalid rendered token sequence".into()));
         }
         Ok(ids.to_vec())
     }
@@ -237,6 +278,21 @@ mod tests {
             ],
             tools: vec![],
         };
+        let measured = renderer.measure(&request).unwrap();
+        assert_eq!(measured.input_tokens, 4);
+        assert_eq!(measured.rendered.prompt_tokens, [2, 3, 4, 5]);
+        let oversized = RenderRequest {
+            messages: vec![serde_json::json!({"role":"user","content":"user ".repeat(65536)})],
+            tools: vec![],
+        };
+        let measured = renderer.measure(&oversized).unwrap();
+        assert_eq!(measured.input_tokens, 65538);
+        assert!(measured.rendered.prompt_tokens.is_empty());
+        assert_eq!(measured.rendered.checkpoint_tokens, 0);
+        assert!(matches!(
+            renderer.render(&oversized, 65536),
+            Err(Error::Capacity(_))
+        ));
         let rendered = renderer.render(&request, 100).unwrap();
         assert_eq!(rendered.prompt_tokens, [2, 3, 4, 5]);
         assert_eq!(rendered.checkpoint_tokens, 2);
