@@ -1,19 +1,12 @@
-//! Native local generation service for Gemma 4 E4B.
-
-pub mod cache;
-pub mod checkpoint;
-pub mod decoder;
 pub mod error;
-pub mod protocol;
-pub mod sampler;
-pub mod service;
-pub mod rendering;
 pub mod execution;
+pub mod protocol;
+pub mod rendering;
+pub mod rendering_stream;
+pub mod runner;
+pub mod sampler;
 
-pub use cache::Cache;
-pub use decoder::Decoder;
 pub use error::{Error, Result};
-pub use service::Service;
 
-#[cfg(feature = "mlx")]
+#[cfg(all(feature = "mlx", target_os = "macos", target_arch = "aarch64"))]
 pub mod mlx_engine;

@@ -44,7 +44,11 @@ pub fn sample(logits: &[f32], temperature: f32, top_p: f32, rng: &mut Rng) -> Re
     if logits.is_empty() || logits.len() > 262144 {
         return Err(Error::Capacity("logit count exceeds its bounds".into()));
     }
-    if !temperature.is_finite() || temperature < 0.0 || !top_p.is_finite() || !(0.0 < top_p && top_p <= 1.0) {
+    if !temperature.is_finite()
+        || temperature < 0.0
+        || !top_p.is_finite()
+        || !(0.0 < top_p && top_p <= 1.0)
+    {
         return Err(Error::Protocol("invalid sampling parameters".into()));
     }
     if logits.iter().any(|l| l.is_nan() || *l == f32::INFINITY)
@@ -122,13 +126,27 @@ mod tests {
     #[test]
     fn refuses_invalid_distributions_and_parameters() {
         let mut rng = Rng::new(7);
-        for logits in [vec![], vec![f32::NAN], vec![f32::INFINITY], vec![f32::NEG_INFINITY]] {
+        for logits in [
+            vec![],
+            vec![f32::NAN],
+            vec![f32::INFINITY],
+            vec![f32::NEG_INFINITY],
+        ] {
             assert!(sample(&logits, 1.0, 1.0, &mut rng).is_err());
         }
-        for (temperature, top_p) in [(f32::NAN, 1.0), (-1.0, 1.0), (1.0, 0.0), (1.0, 1.1), (1.0, f32::NAN)] {
+        for (temperature, top_p) in [
+            (f32::NAN, 1.0),
+            (-1.0, 1.0),
+            (1.0, 0.0),
+            (1.0, 1.1),
+            (1.0, f32::NAN),
+        ] {
             assert!(sample(&[1.0], temperature, top_p, &mut rng).is_err());
         }
-        assert_eq!(sample(&[f32::NEG_INFINITY, 2.0], 1.0, 1.0, &mut rng).unwrap(), 1);
+        assert_eq!(
+            sample(&[f32::NEG_INFINITY, 2.0], 1.0, 1.0, &mut rng).unwrap(),
+            1
+        );
     }
 
     #[test]
@@ -148,6 +166,8 @@ mod tests {
     fn draws(seed: u64) -> Vec<u32> {
         let mut rng = Rng::new(seed);
         let logits: Vec<f32> = (0..64).map(|i| (i % 7) as f32 * 0.25).collect();
-        (0..16).map(|_| sample(&logits, 1.0, 0.9, &mut rng).unwrap()).collect()
+        (0..16)
+            .map(|_| sample(&logits, 1.0, 0.9, &mut rng).unwrap())
+            .collect()
     }
 }

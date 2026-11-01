@@ -1,26 +1,59 @@
-//! `nativegen`: serve local generation to the host over stdio.
-
 use clap::Parser;
+use std::path::PathBuf;
 
-/// Serve local generation to the host over stdio.
 #[derive(Parser)]
-#[command(name = "nativegen", version, about = "Painted Wolf Code local generation service")]
+#[command(
+    name = "nativegen",
+    version,
+    about = "Painted Wolf Code local generation service"
+)]
 struct Args {
-    /// Model directory with config.json and model.safetensors.
     #[arg(long)]
-    model: String,
-    /// Device: cpu or mlx.
-    #[arg(long, default_value = "cpu")]
-    device: String,
+    model: PathBuf,
+    #[arg(long)]
+    artifact_id: String,
+    #[arg(long)]
+    metallib: Option<PathBuf>,
+}
+
+#[cfg(all(feature = "mlx", target_os = "macos", target_arch = "aarch64"))]
+fn run(args: Args) -> nativegen::Result<()> {
+    use nativegen::{
+        error::Error,
+        mlx_engine::backend::Mlx,
+        runner::{Identity, Runner, wire::PhysicalDevice},
+    };
+    let shader = args
+        .metallib
+        .ok_or_else(|| Error::Protocol("Metal library path is required".into()))?;
+    if !shader.is_absolute() || !shader.is_file() {
+        return Err(Error::Protocol(
+            "Metal library path must name an absolute file".into(),
+        ));
+    }
+    mlx_rs::metal::set_metallib_path(shader.to_string_lossy())
+        .map_err(|e| Error::Device(e.to_string()))?;
+    let identity = Identity {
+        artifact_id: args.artifact_id,
+        backend: "mlx",
+        physical_device: PhysicalDevice::AppleSilicon,
+    };
+    let mut runner = Runner::new(args.model, identity, |path: &std::path::Path, _, _| {
+        Mlx::load(path)
+    })?;
+    runner.serve(std::io::stdin().lock(), std::io::stdout().lock())
+}
+
+#[cfg(not(all(feature = "mlx", target_os = "macos", target_arch = "aarch64")))]
+fn run(_args: Args) -> nativegen::Result<()> {
+    Err(nativegen::Error::Device(
+        "no generation adapter was built for this platform".into(),
+    ))
 }
 
 fn main() {
-    let args = Args::parse();
-    // Owned handles (not the thread-local std locks) so the reader thread can take stdin.
-    if let Err(e) = nativegen::service::serve(std::io::stdin(), std::io::stdout()) {
-        // Stdout is protocol-only after serve starts; the error goes to stderr and exits 1.
-        eprintln!("nativegen: {e}");
+    if let Err(error) = run(Args::parse()) {
+        eprintln!("nativegen: {error}");
         std::process::exit(1);
     }
-    let _ = args;
 }
