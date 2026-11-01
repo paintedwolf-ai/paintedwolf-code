@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 )
@@ -48,6 +49,25 @@ func TestParserDiagnosticsDescribeStateAcrossSourceUnits(t *testing.T) {
 					t.Fatalf("%q: location %#v, want %d:%d", source, span, line, column)
 				}
 			}
+		}
+	}
+}
+
+func TestParserContextPreservesBoundedOriginalBytes(t *testing.T) {
+	for _, prefix := range []string{"", "# prior line\n", strings.Repeat("é", 200)} {
+		source := prefix + "\nprintf '%s' 'open"
+		_, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		var d *commandsurface.SyntaxDiagnostic
+		if !errors.As(err, &d) || d.Parser == nil {
+			t.Fatalf("missing diagnostic: %v", err)
+		}
+		context := d.Parser
+		span := context.ExcerptAt
+		if span.StartByte < 0 || span.EndByte > len(source) || span.EndByte-span.StartByte > 160 || span.StartByte > span.EndByte || !utf8.ValidString(context.Excerpt) || context.Excerpt != source[span.StartByte:span.EndByte] {
+			t.Fatalf("context changed original bytes: %#v", context)
+		}
+		if span.Line != strings.Count(source[:span.StartByte], "\n")+1 || span.Column != span.StartByte-strings.LastIndex(source[:span.StartByte], "\n") {
+			t.Fatalf("context coordinates changed: %#v", context)
 		}
 	}
 }
