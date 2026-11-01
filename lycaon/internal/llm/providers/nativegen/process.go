@@ -118,6 +118,8 @@ func (p *rpcProcess) call(ctx context.Context, request command, kind string, pri
 		}
 		defer permit.Complete()
 	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 	p.sequence++
 	payload, err := json.Marshal(struct {
 		Version uint32  `json:"version"`
@@ -160,6 +162,9 @@ func (p *rpcProcess) call(ctx context.Context, request command, kind string, pri
 			}{}
 		}
 		err = decodeStrict(result, target)
+		if checked, ok := target.(interface{ validate() error }); err == nil && ok {
+			err = checked.validate()
+		}
 	}
 	if err != nil {
 		var service *ServiceError

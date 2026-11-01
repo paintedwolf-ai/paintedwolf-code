@@ -102,6 +102,7 @@ type begunResult struct {
 }
 
 type progressResult struct {
+	expected *progressCursor
 	Kind     string `json:"kind"`
 	Text     string `json:"text"`
 	Progress struct {

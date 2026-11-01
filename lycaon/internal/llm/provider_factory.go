@@ -15,10 +15,10 @@ import (
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
-	"github.com/lycaon/lycaon/internal/modelstore"
 )
 
 type providerBuild struct {
+	localRuntime    *nativegenprovider.Runtime
 	cloudflareUsage *openaicompat.CloudflareUsageCache
 	discoveryClient *http.Client
 	entry           CatalogEntry
@@ -30,15 +30,9 @@ type providerBuild struct {
 var driverFactories = catalogruntime.NewFactorySet(
 	map[string]catalogruntime.Factory[providerBuild, modelcall.Provider]{
 		"nativegen": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			store := modelstore.New(modelstore.DefaultRoot(), nil)
-			device := "cpu"
-			modelDir, _ := nativegenprovider.ResolveModelDir(store, build.entry.Models, device)
 			return nativegenprovider.New(build.entry.ID, nativegenprovider.Options{
-				BinaryPath: build.entry.BaseURL,
-				ModelDir:   modelDir,
-				ModelStore: store,
-				Device:     device,
-				Models:     build.entry.Models,
+				Runtime: build.localRuntime,
+				Models:  build.entry.Models,
 			}), nil
 		},
 		"ollama": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
