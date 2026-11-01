@@ -616,6 +616,8 @@ The local-inference column is longer because loading a model into memory is a re
 <a id="local-inference-profile"></a>
 Provider kind selects that service class; the host does not guess from a URL or process name. Five kinds select the local-inference profile: `ollama`, `lmstudio`, `omlx`, `litellm-proxy`, and `openai-compatible`. That one profile sets both header bounds, both utility-call budgets, and single-flight behavior together, so a driver cannot be half local.
 
+Settings and model pickers use the same kind authority: `ollama`, `lmstudio`, `omlx`, and `litellm-proxy` group under local providers (`openai-compatible` stays under `Custom`) regardless of whether an instance points at loopback, a LAN host, or an internet-accessible server, or whether it requires an API key. For a self-hosted gateway such as `litellm-proxy`, local placement describes the gateway instance the user operates, not where each upstream model runs: one gateway can route to both self-hosted runners and paid cloud APIs, and unknown upstream inference location stays unknown. Provider grouping is separate from pricing (`local_free` is set only on runner kinds with no per-token billing, while `litellm-proxy` uses discovered or catalog model rates) and from outbound secret trust (`secret_screen_trusted` is an explicit per-instance decision and endpoint loopback is evaluated from `base_url` alone).
+
 ## Capacity and concurrency
 
 Provider capacity is separate from workflow concurrency. An adapter can advertise or enforce in-flight limits, but the coordinator still schedules task waves and the utility lane enforces single-flight behavior.
