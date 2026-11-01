@@ -69,6 +69,7 @@ function CommandActivityDetails(props: Props) {
     if (activity().fact.execution_ids.length === 0 && stop && !result.some(fact => fact.value === stop)) result.push({ label: "Code", value: stop });
     return result;
   });
+  const stepsLabel = createMemo(() => (activity().fact.steps?.length ?? 0) > 3 ? `All ${activity().fact.steps!.length} steps` : "Step details");
   const summary = createMemo(() => commandActivityFacts(activity(), wholeCommand() ? [] : executions(), undefined).filter(fact => ["Outcome", "Launch outcome", "Effects", "Command stop", "Enclosing command"].includes(fact.label)));
   return <div class="den-tool-part-card-structured den-command-activity-details" data-testid="command-activity-details">
     <section class="den-tool-part-card-section" aria-label="Outcome">
@@ -81,7 +82,7 @@ function CommandActivityDetails(props: Props) {
         <KeyedIndex each={(activity().fact.steps ?? []).slice(0, 3)} keyOf={step => step.id}>{step => <div class="den-command-activity-step">
           <code>{step().command.slice(0, STEP_CHARS)}{step().command.length > STEP_CHARS ? "…" : ""}</code><span>{step().count > 1 ? `${step().count.toLocaleString()} executions · ` : ""}{commandActivityStepOutcome(step())}</span>
         </div>}</KeyedIndex>
-        <Show when={(activity().fact.steps?.length ?? 0) > 3 || activity().fact.steps?.some(step => step.command.length > STEP_CHARS)}><ToolContentLink pane={`activity:${activity().fact.id}:steps`} label={activity().fact.steps!.length > 3 ? `All ${activity().fact.steps!.length} steps` : "Step details"} content={{ kind: "inline", text: (activity().fact.steps ?? []).map(step => `${step.command} · ${step.count.toLocaleString()} executions · ${commandActivityStepOutcome(step)}`).join("\n") }} projectId={props.projectId} /></Show>
+        <Show when={(activity().fact.steps?.length ?? 0) > 3 || activity().fact.steps?.some(step => step.command.length > STEP_CHARS)}><ToolContentLink pane={`activity:${activity().fact.id}:steps`} label={stepsLabel()} content={{ kind: "inline", text: (activity().fact.steps ?? []).map(step => `${step.command} · ${step.count.toLocaleString()} executions · ${commandActivityStepOutcome(step)}`).join("\n") }} projectId={props.projectId} /></Show>
       </section>
     </Show>
     <Show when={executions().length > 0}>
