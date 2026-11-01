@@ -12,15 +12,16 @@ func commandActivityEdge(previous, next *api.ToolProgress) bool {
 	}
 	before := previous.CommandProgram
 	after := next.CommandProgram
-	if before.ActivitiesOmitted == 0 && after.ActivitiesOmitted > 0 {
-		return true
+	type edge struct {
+		state           string
+		failed, waiting int
 	}
-	states := make(map[string]string, len(before.Activities))
+	states := make(map[string]edge, len(before.Activities))
 	for _, activity := range before.Activities {
-		states[activity.ID] = activity.State + "|" + activity.Outcome
+		states[activity.ID] = edge{activity.State, activity.FailedCount, activity.WaitingCount}
 	}
 	for _, activity := range after.Activities {
-		if states[activity.ID] != activity.State+"|"+activity.Outcome {
+		if states[activity.ID] != (edge{activity.State, activity.FailedCount, activity.WaitingCount}) {
 			return true
 		}
 	}

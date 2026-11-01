@@ -287,6 +287,7 @@ export function createSessionsClient(j: JsonRequester, connection: BackendConnec
         `/v1/sessions/${sessionId}/program-receipts/${encodeURIComponent(programId)}${formatQuery({
           limit: opts?.limit,
           cursor: opts?.cursor,
+          activity_id: opts?.activity_id,
         })}`,
       ),
     createSessionArtifact: (sessionId, recording, meta) =>

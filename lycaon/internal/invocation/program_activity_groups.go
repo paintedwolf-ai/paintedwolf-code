@@ -33,7 +33,7 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
  sum(state='interrupted'),sum(state='refused'),
  sum(effect_certainty IN ('unknown','attempted')),sum(effect_certainty='completed')
  FROM invocation_program_executions WHERE program_id=?
- GROUP BY node_id,operation_id,scope_json ORDER BY min(ordinal)`, program)
+ GROUP BY node_id,operation_id,scope_json,CASE WHEN operation_id='program &' THEN id ELSE '' END ORDER BY min(ordinal)`, program)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +68,9 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 			return nil, err
 		}
 		g.key = activityGroupKey(receipts[0].NodeID, g.input.operation, g.input.scope)
+		if g.input.operation == "program &" {
+			g.key = receipts[0].ID
+		}
 		var node, operation, scope string
 		err = tx.QueryRowContext(ctx, `SELECT node_id,operation_id,scope_json FROM invocation_program_executions WHERE program_id=? AND id=?`, program, receipts[0].ParentExecutionID).Scan(&node, &operation, &scope)
 		if err != nil && err != sql.ErrNoRows {
@@ -75,6 +78,9 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 		}
 		if err == nil {
 			g.parent = activityGroupKey(node, operation, scope)
+			if operation == "program &" {
+				g.parent = receipts[0].ParentExecutionID
+			}
 		}
 	}
 	return groups, nil
@@ -95,6 +101,9 @@ func groupActivity(g activityGroup) api.CommandActivity {
 		state, outcome = "failed", "Failed"
 	} else {
 		state, outcome = "completed", "Finished"
+	}
+	if g.input.operation == "program &" && state == "completed" {
+		outcome = "Started"
 	}
 	return api.CommandActivity{ID: g.input.receipt.ID, Group: rule.group, Label: rule.label, Subject: activitySubject(g.input), Directory: stringArgument(g.input.arguments, "cwd"), JobHandle: g.input.receipt.JobHandle, State: state, Outcome: outcome, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Repetitions: g.counts.total, Steps: []api.CommandActivityStep{}}
 }
@@ -165,6 +174,18 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 				break
 			}
 			parent = groups[p].parent
+		}
+	}
+	for i, g := range groups {
+		if _, assigned := assignments[i]; assigned {
+			continue
+		}
+		if activityPresentation(g.input).role == "container" {
+			continue
+		}
+		if g.counts.failed+g.counts.refused+g.counts.interrupted+g.counts.waiting > 0 && (g.parent == "" || g.parent == "root") {
+			primary[i] = true
+			assignments[i] = i
 		}
 	}
 	var result []api.CommandActivity
