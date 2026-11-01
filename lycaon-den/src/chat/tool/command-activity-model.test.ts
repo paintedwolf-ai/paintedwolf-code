@@ -19,19 +19,20 @@ describe("command activity composition", () => {
   const rows = parts(project([entry("call", [fact("build"), fact("test")])]));
   expect(rows.map(row => row.id)).toEqual(["call", "call:activity:test"]);
  });
- it("appends a new observation directly to its established row", () => {
+ it("keeps distinct host activities separate even when they share a target", () => {
   const project = createCommandActivityProjection();
-  const first = entry("a", [fact("read-a", { merge_key: "scope:path" })]);
+  const first = entry("a", [fact("read-a")]);
   const before = parts(project([first]));
-  const after = parts(project([first, entry("b", [fact("read-b", { merge_key: "scope:path" })])]));
-  expect(after.map(row => row.id)).toEqual(before.map(row => row.id));
-  expect(after[0]!.commandActivity!.members).toHaveLength(2);
+  const after = parts(project([first, entry("b", [fact("read-b")])]));
+  expect(after.map(row => row.id)).toEqual([before[0]!.id, "b"]);
  });
- it("never merges visible rows when late metadata supplies matching keys", () => {
+ it("updates repeated work in one row without retaining individual executions", () => {
   const project = createCommandActivityProjection();
-  const before = parts(project([entry("a", [fact("a")]), entry("b", [fact("b")])]));
-  const after = parts(project([entry("a", [fact("a", { merge_key: "same" })]), entry("b", [fact("b", { merge_key: "same" })])]));
+  const before = parts(project([entry("a", [fact("find", { execution_count: 1 })])]));
+  const after = parts(project([entry("a", [fact("find", { execution_count: 10705, failed_count: 1 })])]));
   expect(after.map(row => row.id)).toEqual(before.map(row => row.id));
+  expect(after[0]!.commandActivity!.fact.execution_count).toBe(10705);
+  expect(after[0]!.commandActivity!.fact.failed_count).toBe(1);
  });
  it("keeps labels, targets and positions stable while outcomes change", () => {
   const project = createCommandActivityProjection();
@@ -43,7 +44,7 @@ describe("command activity composition", () => {
  });
  it("does not fold across a mutation or other transcript boundary", () => {
   const project = createCommandActivityProjection();
-  const rows = project([entry("a", [fact("a", { merge_key: "same" })]), entry("edit", [fact("edit", { label: "Change files" })]), entry("b", [fact("b", { merge_key: "same" })])]);
+  const rows = project([entry("a", [fact("a", {})]), entry("edit", [fact("edit", { label: "Change files" })]), entry("b", [fact("b", {})])]);
   expect(rows).toHaveLength(3);
  });
  it("uses live facts before the canonical result arrives", () => {
@@ -80,18 +81,6 @@ it("appends late starts after visible rows instead of inserting above them", () 
  project([a,b]);
  const rows = parts(project([entry("a", [fact("a"),fact("late")]),b]));
  expect(rows.map(row=>row.id)).toEqual(["a","b","a:activity:late"]);
-});
-
-it("keeps an established row when later host composition connects its execution elsewhere", () => {
- const project = createCommandActivityProjection();
- const initial = entry("call", [fact("filter", { label: "Process output", state: "waiting" })]);
- project([initial]);
- const update = entry("call", [fact("producer", { label: "Run process", execution_ids: ["producer","filter"] })]);
- if (update.kind === "tool") update.part.commandProgram!.activity_executions = [{ id: "filter", state: "completed", outcome: "Exited 0", status_code: 0 }];
- const rows = parts(project([update]));
- expect(rows).toHaveLength(2);
- expect(rows[0]!.commandActivity!.fact.label).toBe("Process output");
- expect(rows[0]!.commandActivity!.fact.outcome).toBe("Exited 0");
 });
 
 it("updates an established job activity with output reads", () => {
@@ -143,14 +132,14 @@ it("retains live activity rows when the terminal receipt has no presentation sna
 });
 
 
-it("lets the group title follow active work without splitting its rows", () => {
+it("anchors the group title while active work changes", () => {
  const project = createCommandActivityProjection();
  const reads=entry("read",[fact("read")]);
  expect(commandActivityHeadline(project([reads]),"Running commands")).toBe("Exploring project files");
  const build=entry("build",[fact("build",{group:"Running programs",state:"running"})]);
  const rows=project([reads,build]);
  expect(rows).toHaveLength(2);
- expect(commandActivityHeadline(rows,"Running commands")).toBe("Running programs");
+ expect(commandActivityHeadline(rows,"Running commands")).toBe("Exploring project files");
  expect(commandActivityHeadline([],"Inspecting changes")).toBe("Inspecting changes");
 });
 

@@ -86,16 +86,16 @@ it("preserves uncertain effects, approvals and unpublished changes in compact de
 });
 
 it("pages additional operations without changing the activity identity", async () => {
- const value=part();value.commandActivity!.continuation={cursor:"start"};
+ const value=part();
  const get=vi.fn(async (_session:string,_program:string,opts?:{cursor?:string})=>({ program,executions:[{...receipt(),command:opts?.cursor==="next"?"second operation":"first operation"}],nodes:[],executions_omitted:opts?.cursor==="next"?0:1,next_cursor:opts?.cursor==="next"?undefined:"next",nodes_omitted:0 }));
  const view=render(()=><CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" client={stubClient({getCommandProgramReceipt:get})}/>);
  const row=view.container.querySelector('[data-testid="tool-part-card"]');
  fireEvent.click(disclosureToggle(row));
  await waitFor(()=>expect(view.container.textContent).toContain("first operation"));
- fireEvent.click(view.getByRole("button",{name:"Next operations"}));
+ fireEvent.click(view.getByRole("button",{name:"Next records"}));
  await waitFor(()=>expect(view.container.textContent).toContain("second operation"));
  expect(view.container.querySelector('[data-testid="tool-part-card"]')).toBe(row);
- fireEvent.click(view.getByRole("button",{name:"Previous operations"}));
+ fireEvent.click(view.getByRole("button",{name:"Previous records"}));
  await waitFor(()=>expect(view.container.textContent).toContain("first operation"));
 });
 
