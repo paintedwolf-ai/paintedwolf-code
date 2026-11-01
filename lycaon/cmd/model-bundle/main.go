@@ -1,4 +1,4 @@
-// model-bundle verifies a release seed before packaging.
+// model-bundle authenticates model exports and verifies packaged seeds.
 package main
 
 import (
@@ -16,6 +16,9 @@ import (
 )
 
 func run(ctx context.Context, args []string, output, diagnostics io.Writer) error {
+	if len(args) > 0 && args[0] == "sign" {
+		return sign(ctx, args[1:], output, diagnostics)
+	}
 	flags := flag.NewFlagSet("model-bundle", flag.ContinueOnError)
 	flags.SetOutput(diagnostics)
 	directory := flags.String("bundle", "", "packaged model directory")
