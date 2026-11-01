@@ -27,7 +27,7 @@ func TestContextPreparationUsesOnlyConfiguredLocalProvider(t *testing.T) {
 			capture := &preparationCapture{}
 			registry := newTestRegistry()
 			registry.snapshot.Store(newProviderRegistrySnapshot(providerRegistrySnapshotInput{
-				Providers:  map[string]modelcall.Provider{"p": capture},
+				Providers:  map[string]modelcall.Provider{"p": &loggingProvider{inner: capture}},
 				Entries:    map[string]CatalogEntry{"p": {ID: "p", Kind: kind}},
 				Configured: map[string]bool{"p": true},
 			}))
