@@ -4,7 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/linuxbus"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/socketref"
@@ -149,4 +153,131 @@ func validateSocketRealization(grants []SocketGrant, mode socketref.Enforcement)
 		}
 	}
 	return nil
+}
+
+// ResolveCredentialStoreDBusSocket selects a filesystem session-bus endpoint
+// only after applying the command's protected-path and runtime-root floors.
+func ResolveCredentialStoreDBusSocket(lookupEnv func(string) (string, bool), uid int) (string, bool) {
+	if lookupEnv == nil {
+		lookupEnv = os.LookupEnv
+	}
+	if uid < 0 {
+		return "", false
+	}
+	session, err := linuxbus.SelectSession(lookupEnv, uid)
+	if err != nil {
+		return "", false
+	}
+	for _, address := range session.Addresses {
+		if !address.Abstract {
+			if path, ok := validateCredentialStoreDBusSocket(address.Path, uid); ok {
+				return path, true
+			}
+		}
+	}
+	return "", false
+}
+
+func isSessionDBusSocketTarget(target string) bool {
+	clean := filepath.Clean(strings.TrimSpace(target))
+	if clean == "" || !filepath.IsAbs(clean) {
+		return false
+	}
+	if address, ok := os.LookupEnv("DBUS_SESSION_BUS_ADDRESS"); ok && strings.TrimSpace(address) != "" {
+		if candidates, err := linuxbus.ParseAddresses(address); err == nil {
+			for _, candidate := range candidates {
+				if !candidate.Abstract && PathEqual(clean, candidate.Path) {
+					return true
+				}
+			}
+		}
+	}
+	if runtimeDir, ok := os.LookupEnv("XDG_RUNTIME_DIR"); ok && filepath.IsAbs(strings.TrimSpace(runtimeDir)) {
+		if PathEqual(clean, filepath.Join(strings.TrimSpace(runtimeDir), "bus")) {
+			return true
+		}
+	}
+	for _, prefix := range []string{"/run/user/", "/var/run/user/", "/private/var/run/user/"} {
+		if rest, ok := strings.CutPrefix(clean, prefix); ok {
+			uidStr, tail, ok := strings.Cut(rest, "/")
+			if ok && tail == "bus" && uidStr != "" {
+				if _, err := strconv.Atoi(uidStr); err == nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func validateCredentialStoreDBusSocket(candidate string, uid int) (string, bool) {
+	if socketPathSyntaxReason(candidate) != "" {
+		return "", false
+	}
+	cleanCandidate := filepath.Clean(candidate)
+	resolved := fspath.CanonicalPath(cleanCandidate)
+	if resolved == "" || socketPathSyntaxReason(resolved) != "" {
+		return "", false
+	}
+	checkPaths := []string{cleanCandidate, resolved}
+	if linkTarget, err := os.Readlink(cleanCandidate); err == nil && linkTarget != "" {
+		if !filepath.IsAbs(linkTarget) {
+			linkTarget = filepath.Join(filepath.Dir(cleanCandidate), linkTarget)
+		}
+		checkPaths = append(checkPaths, filepath.Clean(linkTarget))
+	}
+	for _, root := range resolveEach(controlPlaneReadDenyRoots()) {
+		for _, p := range checkPaths {
+			if PathAtOrUnder(p, root) {
+				return "", false
+			}
+		}
+	}
+	for _, root := range KeyMaterialReadDenyPaths() {
+		for _, p := range checkPaths {
+			if PathAtOrUnder(p, root) {
+				return "", false
+			}
+		}
+	}
+	for _, systemBusRoot := range []string{"/run/dbus", "/var/run/dbus", "/private/var/run/dbus"} {
+		for _, p := range checkPaths {
+			if PathAtOrUnder(p, systemBusRoot) {
+				return "", false
+			}
+		}
+	}
+	if !underAllowedDBusRuntimeRoot(resolved, uid) {
+		return "", false
+	}
+	fi, err := os.Lstat(resolved)
+	if err != nil || fi.Mode()&os.ModeSocket == 0 {
+		return "", false
+	}
+	return resolved, true
+}
+
+func underAllowedDBusRuntimeRoot(resolved string, uid int) bool {
+	var allowed []string
+	if uid >= 0 {
+		u := strconv.Itoa(uid)
+		allowed = append(allowed,
+			filepath.Join("/run/user", u),
+			filepath.Join("/var/run/user", u),
+			filepath.Join("/private/var/run/user", u),
+		)
+	}
+	allowed = append(allowed, "/tmp", "/private/tmp")
+	if tmp := strings.TrimSpace(os.TempDir()); filepath.IsAbs(tmp) {
+		allowed = append(allowed, filepath.Clean(tmp))
+		if canonTmp := fspath.CanonicalPath(tmp); canonTmp != "" {
+			allowed = append(allowed, canonTmp)
+		}
+	}
+	for _, root := range allowed {
+		if PathAtOrUnder(resolved, root) {
+			return true
+		}
+	}
+	return false
 }

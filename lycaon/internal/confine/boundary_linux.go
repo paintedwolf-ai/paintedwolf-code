@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/linuxbus"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/socketref"
 )
@@ -159,6 +160,16 @@ func renderProfile(c Confinement) (string, error) {
 		Attest:         linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
 		Filesystem:     fs,
 		Network:        networkPlan(c),
+	}
+	for _, grant := range plan.Network.SocketGrants {
+		if grant.CredentialRead {
+			policy, err := linuxbus.LoadCredentialReadPolicy()
+			if err != nil {
+				return "", err
+			}
+			plan.Network.CredentialReadPolicy = &policy
+			break
+		}
 	}
 	if err := plan.Validate(); err != nil {
 		return "", err

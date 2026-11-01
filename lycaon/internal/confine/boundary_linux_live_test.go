@@ -796,9 +796,10 @@ func TestLinuxCredentialStoreAdmitsDBusAndKeyringsReadOnly(t *testing.T) {
 		t.Fatalf("unix probe with credential_store: exit %d: %s", status.ExitStatus(), out)
 	}
 	for _, want := range []string{
-		"unix connect " + busSock + ": ok",
-		"unix bind " + busSock + ": EACCES",
-		"unix connect " + otherSock + ": EACCES",
+		"unix 1 " + busSock + ": ok",
+		"unix 2 " + busSock + ": EACCES",
+		"unix 5 " + busSock + ": EACCES",
+		"unix 1 " + otherSock + ": EACCES",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("unix probe missing %q:\n%s", want, out)

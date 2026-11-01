@@ -1,10 +1,13 @@
 package confine_test
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -45,10 +48,10 @@ func TestCredentialStoreSeatbeltProfileAndVerdicts(t *testing.T) {
 	withCred.CredentialStore = true
 	profile, err := confine.BuildSeatbeltProfile(withCred)
 	testutil.FailErr(t, "credential_store profile", err)
-	if !strings.Contains(profile, `(literal `+ sbplQuote(loginDB) +`)`) {
+	if !strings.Contains(profile, `(literal `+sbplQuote(loginDB)+`)`) {
 		t.Fatalf("profile missing literal login.keychain-db:\n%s", profile)
 	}
-	if !strings.Contains(profile, "(allow file-read-metadata\n") || !strings.Contains(profile, `(literal `+ sbplQuote(keychainsDir) +`)`) {
+	if !strings.Contains(profile, "(allow file-read-metadata\n") || !strings.Contains(profile, `(literal `+sbplQuote(keychainsDir)+`)`) {
 		t.Fatalf("profile missing file-read-metadata for Keychains dir:\n%s", profile)
 	}
 	if strings.Contains(profile, sshKey) {
@@ -129,4 +132,57 @@ func TestCredentialStoreSeatbeltLiveLoginKeychainReadOnly(t *testing.T) {
 
 func sbplQuote(s string) string {
 	return `"` + strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), `"`, `\"`) + `"`
+}
+
+// Exercise Security.framework through its shipped CLI against a private store.
+// Creating a login-named keychain can change the account's search list, so the
+// fixture is created under a private name and moved only after population.
+func TestCredentialStoreSeatbeltKeychainAPIReadDoesNotPermitMutation(t *testing.T) {
+	self := requireSeatbelt(t)
+	home := fspath.CanonicalPath(t.TempDir())
+	t.Setenv("HOME", home)
+	directory := filepath.Join(home, "Library", "Keychains")
+	testutil.FailErr(t, "create private keychain directory", os.MkdirAll(directory, 0o700))
+	private := filepath.Join(directory, "fixture.keychain")
+	const password = "paintedwolf-fixture-password"
+	const value = "paintedwolf-fixture-value"
+	run := func(args ...string) string {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
+		output, err := exec.CommandContext(ctx, "/usr/bin/security", args...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("fixture keychain command %s: %v: %s", args[0], err, output)
+		}
+		return string(output)
+	}
+	run("create-keychain", "-p", password, private)
+	run("add-generic-password", "-A", "-a", "fixture-account", "-s", "fixture-service", "-w", value, private)
+	run("lock-keychain", private)
+	login := filepath.Join(directory, "login.keychain-db")
+	testutil.FailErr(t, "move closed fixture database", os.Rename(private+"-db", login))
+	run("unlock-keychain", "-p", password, login)
+	base := confine.Confinement{Roots: []string{fspath.CanonicalPath(t.TempDir())}, Network: confine.NetworkDeny}
+	read := []string{"find-generic-password", "-a", "fixture-account", "-s", "fixture-service", "-w", login}
+	if code := confinedExit(t, self, base, "/usr/bin/security", read...); code == 0 {
+		t.Fatal("ordinary confinement retrieved a protected keychain item")
+	}
+	granted := base
+	granted.CredentialStore = true
+	code, stdout, stderr := confinedStdout(t, self, granted, "/usr/bin/security", read...)
+	if code != 0 || strings.TrimSpace(stdout) != value {
+		t.Fatalf("credential read failed: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	for _, args := range [][]string{
+		{"add-generic-password", "-A", "-a", "new-account", "-s", "fixture-service", "-w", "new-value", login},
+		{"add-generic-password", "-U", "-a", "fixture-account", "-s", "fixture-service", "-w", "changed-value", login},
+		{"delete-generic-password", "-a", "fixture-account", "-s", "fixture-service", login},
+	} {
+		if code := confinedExit(t, self, granted, "/usr/bin/security", args...); code == 0 {
+			t.Fatalf("read grant admitted credential mutation: %s", args[0])
+		}
+	}
+	if got := strings.TrimSpace(run(read...)); got != value {
+		t.Fatalf("read grant changed fixture credential: %q", got)
+	}
 }

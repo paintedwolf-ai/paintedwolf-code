@@ -35,9 +35,10 @@ const (
 
 // SocketGrant is one host-approved exact AF_UNIX connect literal.
 type SocketGrant struct {
-	ApprovedPath string
-	ResolvedPath string
-	Binding      socketref.Binding `json:"socket_binding,omitempty,omitzero"`
+	ApprovedPath   string
+	ResolvedPath   string
+	Binding        socketref.Binding `json:"socket_binding,omitempty,omitzero"`
+	credentialRead bool
 }
 
 // SocketGrantDropReason is a stable machine reason a grant was not applied.

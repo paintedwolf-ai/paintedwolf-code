@@ -231,8 +231,8 @@ func TestLinuxCredentialStorePlanAdmitsDBusSocketAndKeyringsReadOnly(t *testing.
 	testutil.FailErr(t, "render base plan", err)
 	planBase, err := linuxsandbox.DecodePlan([]byte(rawBase))
 	testutil.FailErr(t, "decode base plan", err)
-	if containsPath(planBase.Network.SocketPaths, busSock) {
-		t.Fatalf("base plan admitted session D-Bus socket: %v", planBase.Network.SocketPaths)
+	if len(planBase.Network.SocketGrants) != 0 || planBase.Network.CredentialReadPolicy != nil {
+		t.Fatalf("base plan admitted credential IPC: %+v", planBase.Network)
 	}
 	for _, dir := range []string{keyringsDir, kwalletDir, sshDir} {
 		if !containsPath(planBase.Filesystem.Hidden, dir) {
@@ -242,20 +242,22 @@ func TestLinuxCredentialStorePlanAdmitsDBusSocketAndKeyringsReadOnly(t *testing.
 
 	withCred := base
 	withCred.CredentialStore = true
-	withCred.GrantedWriteRoots = []string{home}
+	withCred, release, err := prepareCredentialSocket(withCred)
+	testutil.FailErr(t, "retain credential bus", err)
+	defer release()
 	rawCred, err := renderProfile(withCred)
 	testutil.FailErr(t, "render credential_store plan", err)
 	planCred, err := linuxsandbox.DecodePlan([]byte(rawCred))
 	testutil.FailErr(t, "decode credential_store plan", err)
-	if !containsPath(planCred.Network.SocketPaths, busSock) {
-		t.Fatalf("credential_store plan missing session D-Bus socket %s: %v", busSock, planCred.Network.SocketPaths)
+	if len(planCred.Network.SocketGrants) != 1 || planCred.Network.SocketGrants[0].Path != busSock || !planCred.Network.SocketGrants[0].CredentialRead || planCred.Network.CredentialReadPolicy == nil {
+		t.Fatalf("credential_store plan lacks retained read mediation: %+v", planCred.Network)
 	}
 	for _, dir := range []string{keyringsDir, kwalletDir} {
 		if containsPath(planCred.Filesystem.Hidden, dir) {
 			t.Fatalf("credential_store plan still hid %s: %v", dir, planCred.Filesystem.Hidden)
 		}
-		if !containsPath(planCred.Filesystem.ReadOnly, dir) {
-			t.Fatalf("credential_store plan did not seal %s read-only under home write grant: %v", dir, planCred.Filesystem.ReadOnly)
+		if verdict := BoundaryOf(&withCred).Filesystem.Verdict(AccessWrite, filepath.Join(dir, "fixture")); verdict.Allowed {
+			t.Fatalf("credential_store boundary admitted a credential write below %s", dir)
 		}
 	}
 	if !containsPath(planCred.Filesystem.Hidden, sshDir) {
