@@ -76,6 +76,7 @@ func TestPreparationAdvancesAcrossBoundedChunks(t *testing.T) {
 func TestPreparationPassesStandingBoundaryInsideKnownHistory(t *testing.T) {
 	t.Setenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES", "1")
 	provider, runtime := fixtureProvider(t)
+	runtime.config.PrefillChunk = 1
 	testutil.FailErr(t, "warm model", runtime.Warm(t.Context(), DefaultModelID))
 	request := modelcall.CompletionRequest{Messages: []api.Message{
 		{Role: api.MessageRoleSystem, Content: "Instructions", PromptCacheBreakpoint: api.PromptCacheTierStanding},
@@ -86,6 +87,22 @@ func TestPreparationPassesStandingBoundaryInsideKnownHistory(t *testing.T) {
 	testutil.FailErr(t, "prepare known history with standing checkpoint", err)
 	if result.PreparedTokens != 2 {
 		t.Fatalf("prepared tokens = %d, want 2", result.PreparedTokens)
+	}
+}
+
+func TestPreparationLeavesAnIncompleteHistoryChunkForForeground(t *testing.T) {
+	t.Setenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES", "1")
+	t.Setenv("PW_NATIVEGEN_PREPARATION_STANDING_ONLY", "1")
+	provider, runtime := fixtureProvider(t)
+	testutil.FailErr(t, "warm model", runtime.Warm(t.Context(), DefaultModelID))
+	request := modelcall.CompletionRequest{Messages: []api.Message{
+		{Role: api.MessageRoleSystem, Content: "Instructions", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+		{Role: api.MessageRoleUser, Content: "Known history", PromptCacheBreakpoint: api.PromptCacheTierHistory},
+	}}
+	result, err := provider.PrepareContext(t.Context(), request)
+	testutil.FailErr(t, "prepare aligned prefix", err)
+	if result.PreparedTokens != 1 {
+		t.Fatalf("prepared tokens = %d, want standing boundary before partial history chunk", result.PreparedTokens)
 	}
 }
 
