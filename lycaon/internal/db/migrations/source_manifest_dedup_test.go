@@ -264,6 +264,7 @@ VALUES (?, 'rk', ?, ?, 0, 'exact', '2026-10-20T00:00:00Z')`, spec.id, spec.id, s
 		}
 	}
 
+	*trace = manifestMigrationTrace{}
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin manifest migration", err)
 	defer func() { _ = tx.Rollback() }()
@@ -327,6 +328,7 @@ VALUES (?, 'rk', ?, ?, 0, 'exact', '2026-10-20T00:00:00Z')`, spec.id, spec.id, s
 
 func TestManifestMigrationEmptyStoreCreatesDeferredIndexes(t *testing.T) {
 	database, trace := newLegacyMigrationDatabase(t)
+	*trace = manifestMigrationTrace{}
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin empty manifest migration", err)
 	defer func() { _ = tx.Rollback() }()
