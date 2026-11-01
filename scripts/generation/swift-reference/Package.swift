@@ -16,5 +16,6 @@ let package = Package(
         .product(name: "MLXNN", package: "mlx-swift"),
     ]), .testTarget(name: "GenerationReferenceTests", dependencies: [
         "GenerationReference", .product(name: "MLX", package: "mlx-swift"),
+        .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
     ])]
 )
