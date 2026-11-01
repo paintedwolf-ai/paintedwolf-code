@@ -1217,6 +1217,17 @@ These proposed experiments build on the failure-frontier and Git fixture work.
 They do not change admission, required checks, or the existing capacity envelope.
 Retain run-specific measurements and source revisions in each experiment's PR.
 
+The performance target is under 60 minutes for the complete CI path from a ready,
+stable candidate through its qualified main landing, including both fast and
+protected integration gates, setup, evidence publication and capacity waits.
+Measure ordinary affected changes and broad/full-scope candidates, with cold and
+warm inputs. Keep failed or superseded attempts and explicit external holds
+visible alongside successful-path latency. A per-job timeout is not this target.
+Execution deadlines are separate stuck-run protections and retain headroom for
+valid work. Never turn the one-hour performance target into an execution cutoff.
+An optimization reduces measured work or the critical path; timing out otherwise
+valid verification is a failure, not an improvement.
+
 1. Separate preparation, compiler execution, queue admission wait, test execution,
    and evidence publication in the latency report. A parent task's elapsed time
    can include a nested request's wait; do not attribute all of it to its tests.
@@ -1224,19 +1235,44 @@ Retain run-specific measurements and source revisions in each experiment's PR.
    test-binary counts and instrumented package sets.
 2. Measure cold and warm native compilation with the existing pinned toolchains,
    locked dependencies, features and target inventory. Improve compiler artifact
-   reuse where the current keys or publication leave work cold. Preserve every
-   required compile target and keep test-result reuse subject to complete input
+   reuse where the current keys or publication leave work cold. Derive native
+   invalidation from the complete declared input closure, including manifests,
+   lockfiles, build scripts, generated inputs, toolchains and features. Keep
+   unknown inputs conservative. Preserve every required compile target and keep test-result reuse subject to complete input
    accounting; a compiler cache hit is not a test receipt.
 3. Compare bounded job layouts for language coverage and affected native
    compilation against the single ready job. Include duplicated setup and cache
    transfer in runner cost, and preserve the admission reservation. Every shard
    must finish on the same source before the aggregate check can pass; failure,
-   missing evidence or interruption must continue to block admission.
+   missing evidence or interruption must continue to block admission. Coverage
+   shards must retain the test-binary inventory and instrumented statement union;
+   compare the critical path and total work, including duplicated preparation.
 4. Re-measure Git fixture construction and test execution after
    fixture cloning and parallelization land. Use the resulting profile
    to select the next expensive fixture or algorithm, preserving behavior and
    machine-independent work/resource assertions. Do not duplicate that
    work or introduce wall-clock test gates.
+5. Evaluate trusted, cheap commit-metadata validation before expensive work.
+   Check the actual pinned DCO trailer policy after provenance is added, and
+   retain complete original-commit certification. Preserve the trusted bot
+   workflow-run route and prove that CI and DCO cannot wait on each other.
+6. Design any reuse between fast and protected integration around complete
+   input evidence, including source and history inputs, toolchain, environment,
+   options, fixtures, native artifacts, and coverage base/instrumentation. This
+   requires a separate reviewed design. The exact landing still needs its own
+   required aggregate verdict over the complete inventory; unknown or changed
+   inputs rerun, and absent receipts never qualify. An earlier green head or
+   compiler cache hit cannot substitute for landing qualification.
+7. Generate platform test selections from the canonical verification plan and
+   declared test-group inventories. Preserve explicit architecture/resource
+   requirements and the no-empty, dead-name and complete-inventory contracts.
+   A renamed or added supervisor test should enter its declared platform scope
+   without a second hand-maintained shell regex drifting behind it.
+8. Compare collecting independent cheap preflight failures in one attempt with
+   stopping that preflight at its first failed package. Measure extra preflight
+   work against repeated setup and verification after serial repairs. Expensive
+   phases still require a clean preflight; preserve protected-queue fail-fast
+   behavior and do not turn diagnostic aggregation into assertion retries.
 
 Failure-frontier rotation improves time to a known failure while still running
 all required work on a successful candidate. Importer deduplication removes
