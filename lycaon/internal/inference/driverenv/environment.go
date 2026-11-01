@@ -59,7 +59,7 @@ func readConfiguration(root string) (*configuration, error) {
 	return &config, nil
 }
 
-func environment(config configuration, libraries []string) ([]string, func(), error) {
+func environment(config configuration, libraries []string, apiVersion string) ([]string, func(), error) {
 	noop := func() {}
 	drivers := strings.Join(config.MesaICDs, ":")
 	if len(libraries) == 0 {
@@ -78,7 +78,7 @@ func environment(config configuration, libraries []string) ([]string, func(), er
 	}
 	payload, _ := json.Marshal(map[string]any{
 		"file_format_version": "1.0.0",
-		"ICD":                 map[string]string{"library_path": libraries[len(libraries)-1], "api_version": "1.3.0"},
+		"ICD":                 map[string]string{"library_path": libraries[len(libraries)-1], "api_version": apiVersion},
 	})
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{
 		Location: fseffect.Location{Root: resolved, Rel: "nvidia.json"}, Source: bytes.NewReader(payload), Mode: 0o600,
