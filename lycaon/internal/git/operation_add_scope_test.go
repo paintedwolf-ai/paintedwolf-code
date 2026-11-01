@@ -44,7 +44,7 @@ func TestNamedAddPreparationVisitsDoNotGrowWithUnrelatedTree(t *testing.T) {
 			prepared, err := prepareOperation(ctx, repo, OperationRequest{Kind: "add", Paths: []string{"README.txt"}})
 			testutil.FailErr(t, "prepare named add", err)
 			defer prepared.close()
-			if tc.tracked && visitedEntries != 5 || !tc.tracked && visitedEntries != 3 {
+			if tc.tracked && visitedEntries != 4 || !tc.tracked && visitedEntries != 3 {
 				t.Fatalf("named add visited %d preparation entries with %d unrelated files", visitedEntries, tc.unrelated)
 			}
 		})
