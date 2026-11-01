@@ -31,20 +31,18 @@ type Work struct {
 
 // Device admits one physical step at a time. Cancellation never releases active work.
 type Device struct {
-	mu       sync.Mutex
-	limit    int
-	closed   bool
-	active   *Permit
-	waiters  []*ticket
-	capacity uint64
-	reserved uint64
+	mu      sync.Mutex
+	limit   int
+	closed  bool
+	active  *Permit
+	waiters []*ticket
 }
 
-func NewDevice(queueLimit int, memoryBytes uint64) (*Device, error) {
-	if queueLimit < 1 || memoryBytes == 0 {
-		return nil, errors.New("inference: device limits must be positive")
+func NewDevice(queueLimit int) (*Device, error) {
+	if queueLimit < 1 {
+		return nil, errors.New("inference: queue limit must be positive")
 	}
-	return &Device{limit: queueLimit, capacity: memoryBytes}, nil
+	return &Device{limit: queueLimit}, nil
 }
 
 type ticket struct {
@@ -169,17 +167,15 @@ func (d *Device) Close() {
 }
 
 type Snapshot struct {
-	Active        *Work
-	Queued        int
-	ReservedBytes uint64
-	CapacityBytes uint64
-	Closed        bool
+	Active *Work
+	Queued int
+	Closed bool
 }
 
 func (d *Device) Snapshot() Snapshot {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	s := Snapshot{Queued: len(d.waiters), ReservedBytes: d.reserved, CapacityBytes: d.capacity, Closed: d.closed}
+	s := Snapshot{Queued: len(d.waiters), Closed: d.closed}
 	if d.active != nil {
 		work := d.active.work
 		s.Active = &work

@@ -3,13 +3,12 @@ package inference
 import (
 	"context"
 	"errors"
-	"math"
 	"testing"
 )
 
 func device(t *testing.T, queue int) *Device {
 	t.Helper()
-	d, err := NewDevice(queue, 100)
+	d, err := NewDevice(queue)
 	if err != nil {
 		t.Fatalf("new device: %v", err)
 	}
@@ -96,66 +95,30 @@ func TestCanceledWaiterReclaimsQueueCapacity(t *testing.T) {
 	next.permit.Complete()
 }
 
-func TestClosePreservesActiveWorkAndMemory(t *testing.T) {
+func TestClosePreservesActiveWork(t *testing.T) {
 	d := device(t, 1)
 	active := submit(t, d, "active", Foreground)
 	waiting := submit(t, d, "waiting", Decision)
-	reservation, err := d.Reserve(90)
-	if err != nil {
-		t.Fatalf("reserve resident model: %v", err)
-	}
 	d.Close()
 	<-waiting.ready
 	if !errors.Is(waiting.err, ErrClosed) {
 		t.Fatalf("closed waiter: %v", waiting.err)
 	}
-	if got := d.Snapshot(); got.Active == nil || got.ReservedBytes != 90 || !got.Closed {
-		t.Fatalf("close released physical resources: %+v", got)
+	if got := d.Snapshot(); got.Active == nil || !got.Closed {
+		t.Fatalf("close released physical work: %+v", got)
 	}
 	if _, err := d.Acquire(context.Background(), work("late", Decision)); !errors.Is(err, ErrClosed) {
 		t.Fatalf("closed acquisition: %v", err)
 	}
-	if _, err := d.Reserve(1); !errors.Is(err, ErrClosed) {
-		t.Fatalf("closed reservation: %v", err)
-	}
 	active.permit.Complete()
-	reservation.Release()
-	reservation.Release()
-	if got := d.Snapshot(); got.Active != nil || got.ReservedBytes != 0 {
-		t.Fatalf("completed resources retained: %+v", got)
-	}
-}
-
-func TestMemoryReservationBounds(t *testing.T) {
-	d := device(t, 1)
-	first, err := d.Reserve(60)
-	if err != nil {
-		t.Fatalf("reserve decision model: %v", err)
-	}
-	defer first.Release()
-	for _, size := range []uint64{0, 41, math.MaxUint64} {
-		if _, err := d.Reserve(size); !errors.Is(err, ErrCapacity) {
-			t.Fatalf("reservation %d: %v", size, err)
-		}
-	}
-	second, err := d.Reserve(40)
-	if err != nil {
-		t.Fatalf("reserve remaining capacity: %v", err)
-	}
-	defer second.Release()
-	first.Release()
-	first.Release()
-	if got := d.Snapshot(); got.ReservedBytes != 40 {
-		t.Fatalf("reservation accounting: %+v", got)
+	if got := d.Snapshot(); got.Active != nil {
+		t.Fatalf("completed work retained: %+v", got)
 	}
 }
 
 func TestAdmissionRejectsInvalidWork(t *testing.T) {
-	for _, limits := range []struct {
-		queue  int
-		memory uint64
-	}{{0, 1}, {-1, 1}, {1, 0}} {
-		if _, err := NewDevice(limits.queue, limits.memory); err == nil {
+	for _, limits := range []int{0, -1} {
+		if _, err := NewDevice(limits); err == nil {
 			t.Fatalf("accepted limits: %+v", limits)
 		}
 	}
