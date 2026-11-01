@@ -192,7 +192,7 @@ keys, the current scalar and one delivered event. Ordinary mode admits one
 complete value before evaluation; its lease lasts until the next input unless
 an aggregate explicitly retains it. Slurp holds those input leases through the
 aggregate evaluation and admits its own result container. Scalar size, nesting,
-resident memory, total throughput and aggregate value size have separate bounds.
+working memory, total throughput and aggregate value size have separate bounds.
 Input positions come from the parser cursor rather than a growing copy or index
 of the consumed stream. Raw lines retain their record bounds; YAML and explicit
 whole-input operations retain their materialization contracts. Query event
@@ -205,8 +205,10 @@ Batch-producing commands plan child argument bytes and fields against the
 remaining program resources and declared parallelism. Explicit item, line and
 exact-size constraints retain their command semantics. A resource refusal stops
 admission before effects; it never triggers replay of an attempted child.
-Input revision membership uses independently admitted buckets so a large file
-set does not require a second complete membership table during growth.
+Input revision membership uses independently admitted fixed-capacity pages so a
+large file set does not require a second complete membership table during growth.
+Search releases completed pin pages after durable recording. Parallel pin events
+retain their leases until ordered reduction or cancellation discards them.
 
 ### Complete byte streams
 
