@@ -16,6 +16,15 @@ type ParserDiagnostic struct {
 
 func (d ParserDiagnostic) addFacts(facts map[string]any) {
 	facts["parser_kind"] = d.Kind
+	facts["parser_unclosed_quote"] = d.Kind == "unclosed_quote"
+	facts["parser_unclosed_heredoc"] = d.Kind == "unclosed_heredoc"
+	facts["parser_expected_closer"] = d.Kind == "expected_closer"
+	facts["parser_expected_following"] = d.Kind == "expected_following"
+	facts["parser_utf8_bom"] = d.Kind == "utf8_bom"
+	facts["parser_nul_byte"] = d.Kind == "nul_byte"
+	facts["parser_invalid_utf8"] = d.Kind == "invalid_utf8"
+	facts["parser_single_quote"] = d.Expected == "'"
+
 	facts["parser_incomplete"] = d.Incomplete
 	if d.Detected.Line > 0 {
 		facts["parser_detected_line"], facts["parser_detected_column"] = d.Detected.Line, d.Detected.Column
