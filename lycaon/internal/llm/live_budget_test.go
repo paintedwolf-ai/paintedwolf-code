@@ -146,6 +146,14 @@ func TestDeclaredContextLengthWinsOverDiscoveredProps(t *testing.T) {
 	if !ok || entry.ContextLength != 16384 || entry.ContextLengthSource != "config" {
 		t.Fatalf("ContextEntry = %+v, ok=%v; want 16384 from config", entry, ok)
 	}
+	RecordContextWindow(reg, "openai-compatible", "qwen", 8192, "exceed_context_size_error", true)
+	entryAfterOverflow, ok := ContextEntry(reg, "openai-compatible", "qwen")
+	if !ok || entryAfterOverflow.ContextLength != 8192 {
+		t.Fatalf("ContextEntry after lower overflow = %+v, ok=%v; want 8192", entryAfterOverflow, ok)
+	}
+	if !isLocalRegistryProvider(reg, "openai-compatible") || isLocalRegistryProvider(nil, "ollama") || isLocalRegistryProvider(reg, "") {
+		t.Fatal("provider locality did not require configured profile facts")
+	}
 }
 
 func TestServingWindowRefreshesWhenEndpointIdentityChanges(t *testing.T) {
@@ -194,6 +202,10 @@ func TestServingWindowRefreshesWhenEndpointIdentityChanges(t *testing.T) {
 	testutil.FailErr(t, "reg.Reload failed", reg.Reload(t.Context()))
 	if got := reg.ContextLength("openai-compatible", "local-model"); got != 32768 {
 		t.Fatalf("refreshed ContextLength after endpoint change = %d want 32768", got)
+	}
+	RecordContextWindow(reg, "openai-compatible", "local-model", 12288, "exceed_context_size_error", true)
+	if got := reg.ContextLength("openai-compatible", "local-model"); got != 12288 {
+		t.Fatalf("ContextLength after RecordContextWindow = %d want 12288", got)
 	}
 }
 

@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
@@ -368,8 +367,17 @@ func TestContextOverflow400RetryFailsTurnAfterSingleRetry(t *testing.T) {
 
 	loop := NewPromptLoop(PromptLoopDeps{
 		Model: ModelDeps{
-			LLM:              provider,
-			CompactionConfig: func(context.Context, *api.Session) compaction.CompactionConfig { return compaction.DefaultCompactionConfig() },
+			LLM: provider,
+		},
+		Tools: ToolsDeps{
+			CompactOversizedToolResults: func(context.Context, string, *api.Session) error { return nil },
+			ReloadHistory: func(context.Context, string, *api.Session, string) ([]api.Message, error) {
+				return []api.Message{
+					{ID: "m1", Role: api.MessageRoleUser, Content: "first"},
+					{ID: "m2", Role: api.MessageRoleAssistant, Content: "second"},
+					{ID: "m3", Role: api.MessageRoleUser, Content: "third"},
+				}, nil
+			},
 		},
 		Context: ContextDeps{
 			Policy: &recordingToolPolicy{},
@@ -384,9 +392,13 @@ func TestContextOverflow400RetryFailsTurnAfterSingleRetry(t *testing.T) {
 		context.Background(),
 		sess,
 		sess.ID,
-		[]api.Message{{ID: "m1", Role: api.MessageRoleUser, Content: "hello"}},
+		[]api.Message{
+			{ID: "m1", Role: api.MessageRoleUser, Content: "first"},
+			{ID: "m2", Role: api.MessageRoleAssistant, Content: "second"},
+			{ID: "m3", Role: api.MessageRoleUser, Content: "third"},
+		},
 		"coordinator",
-		"hello",
+		"third",
 		0,
 		4,
 		false,

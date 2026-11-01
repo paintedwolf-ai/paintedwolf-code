@@ -38,6 +38,19 @@ func TestLlamaCppPropsContextDiscovery(t *testing.T) {
 	if budget.Window != 32768 {
 		t.Fatalf("RequestBudget.Window = %d want 32768", budget.Window)
 	}
+
+	p.RecordContextWindow("qwen2.5-coder", 16384, "exceed_context_size_error", true)
+	if limit := p.ContextLimit(context.Background(), "qwen2.5-coder"); limit != 16384 {
+		t.Fatalf("ContextLimit after overflow lowering = %d want 16384", limit)
+	}
+	hydrated := p.WithEffectiveModels([]modelinfo.Entry{{ID: "qwen2.5-coder"}})
+	if limit := hydrated.ContextLimit(context.Background(), "qwen2.5-coder"); limit != 16384 {
+		t.Fatalf("hydrated ContextLimit = %d want 16384", limit)
+	}
+	p.WithEndpoint(srv.URL+"/v1", "new-key")
+	if limit := p.ContextLimit(context.Background(), "qwen2.5-coder"); limit != 32768 {
+		t.Fatalf("ContextLimit after endpoint identity change = %d want 32768", limit)
+	}
 }
 
 func TestReportedContextWindowsRemainBoundToTheirModelAndEndpoint(t *testing.T) {

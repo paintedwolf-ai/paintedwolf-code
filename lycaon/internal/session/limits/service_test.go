@@ -118,4 +118,15 @@ agent_pool:
 	if got := mgr.Compaction(t.Context(), &api.Session{ProviderID: "fw", Model: "accounts/fireworks/models/kimi-k2p7-code"}); got.ModelContextWindow != 196608 {
 		t.Fatalf("session model compaction window = %d want 196608", got.ModelContextWindow)
 	}
+	mgr.LowerSessionLiveWindow("s1", 16384)
+	mgr.LowerSessionLiveWindow("s1", 32768)
+	if w, ok := mgr.SessionLiveWindow("s1"); !ok || w != 16384 {
+		t.Fatalf("SessionLiveWindow = (%d, %v) want (16384, true)", w, ok)
+	}
+	if _, ok := mgr.SessionLiveWindow(""); ok {
+		t.Fatal("empty session ID should not report a live window")
+	}
+	if got := mgr.Compaction(t.Context(), &api.Session{ID: "s1", ProviderID: "fw", Model: "accounts/fireworks/models/kimi-k2p7-code"}); got.ModelContextWindow != 16384 {
+		t.Fatalf("lowered session compaction window = %d want 16384", got.ModelContextWindow)
+	}
 }
