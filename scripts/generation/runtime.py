@@ -139,6 +139,10 @@ def build(args):
 
 
 def test(args):
+    if args.backend == "reference-llama":
+        run([sys.executable, "-m", "unittest", "test_vulkan_tools", "test_provenance",
+             "test_swift_toolchain"], cwd=Path(__file__).parent)
+        return
     if args.backend == "reference-swift":
         source, output = paths(args.backend)
         swift_shaders(output)
