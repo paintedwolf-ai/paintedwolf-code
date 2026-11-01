@@ -1,8 +1,10 @@
+import argparse
 import contextlib
 import io
 import json
 import subprocess
 import sys
+from pathlib import Path
 import unittest
 from unittest import mock
 
@@ -84,3 +86,26 @@ sys.stdout.buffer.flush()
                     runtime.main()
                 self.assertEqual(error.exception.code, 2)
                 bench.assert_not_called()
+
+
+class NativeBuildTests(unittest.TestCase):
+    def test_cmake_cache_is_bound_to_its_configured_source_location(self):
+        with mock.patch.object(runtime, "compiler_cache_dir", return_value=Path("/cache")), \
+                mock.patch.object(runtime, "bin_dir", return_value=Path("/tools")):
+            with mock.patch.object(runtime, "ROOT", Path("/checkout")):
+                original = runtime.paths("reference-llama")
+                self.assertEqual(original, runtime.paths("reference-llama"))
+            with mock.patch.object(runtime, "ROOT", Path("/snapshot")):
+                captured = runtime.paths("reference-llama")
+            self.assertEqual(original[0], captured[0])
+            self.assertNotEqual(original[1], captured[1])
+
+    def test_linux_native_tests_build_the_matching_adapter_before_linking(self):
+        calls = []
+        with mock.patch.object(runtime.sys, "platform", "linux"), \
+                mock.patch.object(runtime, "paths", return_value=(Path("/source"), Path("/output"))), \
+                mock.patch.object(runtime, "native_environment", return_value=({}, "vulkan")), \
+                mock.patch.object(runtime, "build", side_effect=lambda args: calls.append(args.backend)), \
+                mock.patch.object(runtime, "run", side_effect=lambda command, **kwargs: calls.append(command[0])):
+            runtime.test(argparse.Namespace(backend="native"))
+        self.assertEqual(calls, ["reference-llama", sys.executable, "cargo"])

@@ -53,6 +53,7 @@ unsafe extern "C" {
     fn pw_generation_cache(
         engine: *mut c_void,
         operation: c_int,
+        restored: *mut c_int,
         error: *mut c_char,
         capacity: usize,
     ) -> c_int;
@@ -118,10 +119,12 @@ impl Vulkan {
         })
     }
 
-    fn cache(&mut self, operation: c_int) -> Result<()> {
+    fn cache(&mut self, operation: c_int) -> Result<bool> {
+        let mut restored = 0;
         checked(|error, capacity| unsafe {
-            pw_generation_cache(self.engine.as_ptr(), operation, error, capacity)
-        })
+            pw_generation_cache(self.engine.as_ptr(), operation, &mut restored, error, capacity)
+        })?;
+        Ok(restored != 0)
     }
 }
 
@@ -165,17 +168,16 @@ impl Backend for Vulkan {
     }
 
     fn reset(&mut self) -> Result<()> {
-        self.cache(0)
+        self.cache(0).map(|_| ())
     }
     fn save_prefix(&mut self) -> Result<()> {
-        self.cache(1)
+        self.cache(1).map(|_| ())
     }
     fn restore_prefix(&mut self) -> Result<bool> {
-        self.cache(2)?;
-        Ok(true)
+        self.cache(2)
     }
     fn clear_prefix(&mut self) -> Result<()> {
-        self.cache(3)
+        self.cache(3).map(|_| ())
     }
 }
 
