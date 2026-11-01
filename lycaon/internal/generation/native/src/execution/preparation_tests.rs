@@ -53,7 +53,7 @@ fn cancellation_preserves_the_previous_completed_checkpoint() {
     assert!(canceled.canceled);
     assert!(!canceled.complete);
     assert_eq!(canceled.processed_prompt_tokens, 2);
-    assert!(runner.evaluated.is_empty());
+    assert_eq!(runner.evaluated, [2, 30]);
     assert_eq!(runner.backend.prefix, [2, 5, 6]);
     assert_eq!(runner.begin(request(3), None).unwrap(), 3);
 }
@@ -267,4 +267,38 @@ fn preparation_rejects_a_checkpoint_outside_its_prefix() {
             .is_err()
     );
     assert!(runner.backend.calls.is_empty());
+}
+
+#[test]
+fn foreground_reuses_completed_preparation_chunks_before_the_checkpoint() {
+    let mut runner = executor();
+    runner
+        .prepare(Prepare {
+            request_id: 1,
+            prompt_tokens: vec![2, 5, 6, 7],
+            checkpoint_tokens: 3,
+        })
+        .unwrap();
+    runner.advance_preparation(1).unwrap();
+    runner.cancel_preparation(1).unwrap();
+    assert!(runner.backend.prefix.is_empty());
+    assert_eq!(runner.begin(request(2), None).unwrap(), 2);
+    assert_eq!(runner.backend.calls, [vec![2, 5]]);
+    runner.advance(2).unwrap();
+    assert_eq!(runner.backend.prefix, [2, 5, 6]);
+}
+
+#[test]
+fn changed_foreground_tokens_reject_partial_preparation() {
+    let mut runner = executor();
+    runner
+        .prepare(Prepare {
+            request_id: 1,
+            prompt_tokens: vec![2, 30, 31, 32],
+            checkpoint_tokens: 3,
+        })
+        .unwrap();
+    runner.advance_preparation(1).unwrap();
+    runner.cancel_preparation(1).unwrap();
+    assert_eq!(runner.begin(request(2), None).unwrap(), 0);
 }

@@ -122,8 +122,7 @@ impl<B: Backend> Executor<B> {
             return Err(Error::Protocol("preparation is not active".into()));
         }
         let preparation = self.preparing.take().unwrap();
-        self.evaluated.clear();
-        self.backend.reset()?;
+        // Completed chunks remain eligible for exact-token reuse.
         Ok(PreparationProgress {
             request_id,
             processed_prompt_tokens: preparation.processed,
