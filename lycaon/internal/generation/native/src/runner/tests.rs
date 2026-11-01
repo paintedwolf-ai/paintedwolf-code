@@ -125,3 +125,18 @@ fn resource_inspection_and_rejection_precede_model_loading() {
         serde_json::from_slice(&protocol::read_frame(&mut output).unwrap().unwrap()).unwrap();
     assert_eq!(rejection["code"], "capacity");
 }
+
+#[test]
+fn preparation_wire_is_bounded_to_tokens_and_explicit_lifecycle() {
+    let valid = json!({"method":"prepare","request":{"request_id":1,"prompt_tokens":[2,5]}});
+    assert!(serde_json::from_value::<Command>(valid.clone()).is_ok());
+    for field in ["max_new_tokens", "temperature", "output_schema"] {
+        let mut invalid = valid.clone();
+        invalid["request"][field] = json!(1);
+        assert!(serde_json::from_value::<Command>(invalid).is_err());
+    }
+    for method in ["advance_preparation", "cancel_preparation"] {
+        assert!(serde_json::from_value::<Command>(json!({"method":method,"request_id":1})).is_ok());
+        assert!(serde_json::from_value::<Command>(json!({"method":method})).is_err());
+    }
+}

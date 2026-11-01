@@ -126,6 +126,20 @@ impl<B: Backend, F: FnMut(&Path, usize, usize, u64) -> Result<B>> Runner<B, F> {
                     } => Ok(Output::Rendered {
                         rendered: loaded.renderer.render(&request, max_prompt_tokens)?,
                     }),
+                    Command::Prepare { request } => {
+                        let request_id = request.request_id;
+                        let reused_prefix_tokens = loaded.executor.prepare(request)?;
+                        Ok(Output::Begun {
+                            request_id,
+                            reused_prefix_tokens,
+                        })
+                    }
+                    Command::AdvancePreparation { request_id } => Ok(Output::PreparationProgress {
+                        progress: loaded.executor.advance_preparation(request_id)?,
+                    }),
+                    Command::CancelPreparation { request_id } => Ok(Output::PreparationProgress {
+                        progress: loaded.executor.cancel_preparation(request_id)?,
+                    }),
                     Command::Begin { request } => {
                         let request_id = request.request_id;
                         let constraint = if let Some(schema) = &request.output_schema {
