@@ -1294,6 +1294,40 @@ host_facts:
    type: int
  - name: paintedwolf.expected_form
    type: string
+ - name: paintedwolf.source_excerpt
+   type: string
+ - name: paintedwolf.source_excerpt_start_byte
+   type: int
+ - name: paintedwolf.source_excerpt_end_byte
+   type: int
+ - name: paintedwolf.source_excerpt_line
+   type: int
+ - name: paintedwolf.source_excerpt_column
+   type: int
+ - name: paintedwolf.diagnostic_stage
+   type: string
+ - name: paintedwolf.diagnostic_pre_evaluation
+   type: bool
+ - name: paintedwolf.diagnostic_top_level
+   type: bool
+ - name: paintedwolf.parser_kind
+   type: string
+ - name: paintedwolf.parser_message
+   type: string
+ - name: paintedwolf.parser_expected
+   type: string
+ - name: paintedwolf.parser_found
+   type: string
+ - name: paintedwolf.parser_detected_line
+   type: int
+ - name: paintedwolf.parser_detected_column
+   type: int
+ - name: paintedwolf.parser_incomplete
+   type: bool
+ - name: paintedwolf.parser_details_omitted
+   type: bool
+ - name: paintedwolf.source_unit_id_omitted
+   type: bool
  - name: paintedwolf.resource_unit
    type: string
  - name: paintedwolf.limit_id
