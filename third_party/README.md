@@ -383,11 +383,12 @@ matching the pre-replacement Cargo lock entry. Source commit and archive pins ar
 recorded in `mlx/pin.json`; upstream source notices and both Rust crate licences
 remain in its directory.
 
-`mlx/mlx-sys.patch` records the build-script change: Cargo tracks repository
+`mlx/mlx-sys.patch` records the build and native binding changes. Cargo tracks repository
 inputs, and CMake source/toolchain files live in the crate's persistent output
 directory. Unchanged files retain their timestamps; stale entries are removed
 only inside that owned staging tree. The shared CMake policy verifies the
-current archives and version before FetchContent can run. No crate API or
-version changes. Update the crate copy, patch, pin, notices and its Cargo lockfile
+current archives and version before FetchContent can run. The gather binding
+supplies an absent optional global scale to MLX 0.32.4. The Rust crate API and
+version stay fixed. Update the crate copy, patch, pin, notices and its Cargo lockfile
 together; verify offline builds, fresh-snapshot object reuse and warmed-cache
 mismatched-pin refusal through the existing task targets.
