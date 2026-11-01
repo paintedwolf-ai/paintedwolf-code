@@ -520,9 +520,13 @@ func runPipeline(ctx context.Context, stages []Stage, opts ExecOpts, waitDelay t
 	call := newCallStreams(opts, capture, errCapture, redirect)
 	run := newSequenceRun(stages, opts, call, stdinReader, waitDelay)
 	if err := run.start(runCtx); err != nil {
-		return nil, err
+		if !errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			return nil, err
+		}
+		run.timeout = commandTimeout(runCtx, run.started)
+	} else {
+		run.drive(runCtx)
 	}
-	run.drive(runCtx)
 
 	res, err := run.finalize(capture.Bytes(), capture.Truncated(), maxOut)
 	if res != nil && opts.SeparateStderr {
