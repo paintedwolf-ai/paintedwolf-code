@@ -68,6 +68,11 @@ func (s *BoundedValueStream) Decode() (any, error) {
 }
 func (s *BoundedValueStream) value(depth int) (any, error) {
 	p := s.parser
+	frame, err := p.reserve(512)
+	if err != nil {
+		return nil, err
+	}
+	defer frame()
 	b, err := p.space()
 	if err != nil {
 		if err == io.EOF && depth > 0 {
