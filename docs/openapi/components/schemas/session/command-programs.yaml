@@ -213,7 +213,7 @@ components:
       additionalProperties: false
       required: [id, group, label, subject, outcome, state, execution_ids, spans]
       properties:
-        id: {type: string}
+        id: {type: string, format: uuid}
         group: {type: string}
         label: {type: string}
         subject: {type: string}
@@ -224,7 +224,7 @@ components:
         status_code: {type: integer, x-go-pointer: true}
         repetitions: {type: integer, description: Number of executions of the primary structural operation.}
         execution_count: {type: integer, description: All executions represented by this activity.}
-        failed_count: {type: integer, description: Executions reporting failure, refusal or interruption, independent of the enclosing outcome.}
+        failed_count: {type: integer, description: "Executions reporting failure, refusal or interruption, independent of the enclosing outcome."}
         waiting_count: {type: integer}
         uncertain_effects: {type: integer}
         completed_effects: {type: integer}
@@ -256,7 +256,7 @@ components:
       additionalProperties: false
       required: [id, command, count, running, waiting, failed, refused, interrupted, state, outcome]
       properties:
-        id: {type: string}
+        id: {type: string, format: uuid}
         command: {type: string}
         count: {type: integer}
         running: {type: integer}
