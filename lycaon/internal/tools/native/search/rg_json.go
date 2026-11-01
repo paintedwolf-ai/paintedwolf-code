@@ -45,7 +45,10 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 		return inv.out.text(line, "\n")
 	}
 	lastSelectedEnd := 0
-	binaryOffset := bytes.IndexByte(content, 0)
+	binaryOffset := -1
+	if !r.scan.NullData && r.binaryMode != "text" {
+		binaryOffset = bytes.IndexByte(content, 0)
+	}
 	var reader io.Reader = bytes.NewReader(content)
 	if binaryOffset >= 0 {
 		reader = binaryRecordReader{r: reader}
@@ -58,12 +61,16 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 			}
 		}
 		end := line.End
-		if end < len(content) && content[end] == '\n' {
+		terminator := byte('\n')
+		if r.scan.NullData {
+			terminator = 0
+		}
+		if end < len(content) && content[end] == terminator {
 			end++
 		}
 		record := content[line.Start:line.End]
 		encodedLine := content[line.Start:end]
-		if end < len(content) && content[end] == 0 {
+		if binaryOffset >= 0 && end < len(content) && content[end] == 0 {
 			converted := &grepRecord{inv: inv}
 			defer converted.close()
 			if err := converted.data(record); err != nil {
