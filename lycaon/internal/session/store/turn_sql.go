@@ -312,9 +312,8 @@ func SettledModelOutputIteration(ctx context.Context, st any, attemptID string) 
 	}
 	switch s := st.(type) {
 	case *SQL:
-		var maxIteration int
-		err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(iteration), 0) FROM model_outputs WHERE turn_attempt_id = ?`, attemptID).Scan(&maxIteration)
-		return maxIteration, err
+		maxIteration, err := s.queries.MaxSettledModelOutputIteration(ctx, attemptID)
+		return int(maxIteration), err
 	case *Memory:
 		return memorySettledModelOutputIteration(ctx, s, attemptID)
 	default:
