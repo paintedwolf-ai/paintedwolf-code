@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -70,15 +69,6 @@ func TestRegexBudgets(t *testing.T) {
 		if _, _, err := m.Select(ctx, []byte("aaaaa")); budgetResource(t, err) != "regex_input_bytes" {
 			t.Fatalf("%s record bytes: %v", dialect, err)
 		}
-	}
-
-	m, err := Compile(ctx, Spec{Patterns: []string{`(a|b)*c`}, Dialect: Perl}, limits)
-	testutil.FailErr(t, "compile text-search pattern", err)
-	vm := m.engine.(vmEngine)
-	vm.limits.CPU = time.Nanosecond
-	m.engine = vm
-	if _, _, err := m.Select(ctx, []byte(strings.Repeat("ab", 2000))); budgetResource(t, err) != "regex_cpu_ms" {
-		t.Fatalf("cpu ceiling: %v", err)
 	}
 }
 

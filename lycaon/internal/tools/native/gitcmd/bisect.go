@@ -66,7 +66,7 @@ func runBisect(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitre
 		return settleGitError(err, stderr, toolcontract.NoEffect)
 	}
 	operands := p.Argv.Operands().Values()
-	status := 0
+	var status int
 	switch p.command.spec.Name {
 	case "git bisect start":
 		status, err = b.start()

@@ -71,6 +71,7 @@ func pruneSourceHistoryRecoveryQuotaTx(ctx context.Context, tx *sql.Tx, projectI
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	var total int64
 	var evict []string
 	newest := true
@@ -78,7 +79,6 @@ func pruneSourceHistoryRecoveryQuotaTx(ctx context.Context, tx *sql.Tx, projectI
 		var id string
 		var undo, redo historyRecoveryUsage
 		if err := rows.Scan(&id, &undo.id, &undo.bytes, &redo.id, &redo.bytes); err != nil {
-			_ = rows.Close()
 			return err
 		}
 		size := retainedRecoveryBytes(undo, redo)
@@ -257,16 +257,15 @@ func reclaimDiscardedMutationSlots(ctx context.Context, database db.Handle, reco
 	if err != nil {
 		return err
 	}
+	defer func() { _ = mutRows.Close() }()
 	var discards []mutationDiscardRow
 	for mutRows.Next() {
 		var id, planJSON string
 		if err := mutRows.Scan(&id, &planJSON); err != nil {
-			_ = mutRows.Close()
 			return err
 		}
 		var plan sourceMutationPlan
 		if err := json.Unmarshal([]byte(planJSON), &plan); err != nil {
-			_ = mutRows.Close()
 			return err
 		}
 		discards = append(discards, mutationDiscardRow{id: id, plan: plan})
@@ -318,20 +317,18 @@ func loadHistoryReclaimEntries(ctx context.Context, history *SourceHistory) ([]*
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	var entries []*historyReclaimEntry
 	for rows.Next() {
 		var e historyReclaimEntry
 		var undoJSON, redoJSON string
 		if err := rows.Scan(&e.seq, &e.id, &e.projectID, &e.state, &e.availability, &undoJSON, &redoJSON); err != nil {
-			_ = rows.Close()
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(undoJSON), &e.undoPlan); err != nil {
-			_ = rows.Close()
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(redoJSON), &e.redoPlan); err != nil {
-			_ = rows.Close()
 			return nil, err
 		}
 		entries = append(entries, &e)
@@ -451,10 +448,10 @@ func reclaimMovedAsideRecovery(ctx context.Context, s *SourceMutationService) er
 	if err != nil {
 		return err
 	}
+	defer func() { _ = pendingRows.Close() }()
 	for pendingRows.Next() {
 		var id, planJSON string
 		if err := pendingRows.Scan(&id, &planJSON); err != nil {
-			_ = pendingRows.Close()
 			return err
 		}
 		var plan sourceMutationPlan

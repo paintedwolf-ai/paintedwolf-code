@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -62,7 +63,7 @@ func authorityKnownType(t reflect.Type) bool {
 		reflect.TypeFor[ApprovalOption](), reflect.TypeFor[ApprovalOptionKind](), reflect.TypeFor[ApprovalOptionRung](), reflect.TypeFor[ApprovalOptionDecision](),
 		reflect.TypeFor[ApprovalGrantScope](), reflect.TypeFor[ApprovalAuthorityDelta](), reflect.TypeFor[AuthorityDeltaKind](),
 		reflect.TypeFor[ApprovalGrant](), reflect.TypeFor[ApprovalGrantPredicate](), reflect.TypeFor[ApprovalGrantWitness](),
-		reflect.TypeFor[ApprovalSocketTarget](), reflect.TypeFor[DirectIPLease](), reflect.TypeFor[GrantedPathDelta](), reflect.TypeFor[AskQuietDelta](), reflect.TypeFor[TrustDestinationDelta](),
+		reflect.TypeFor[ApprovalSocketTarget](), reflect.TypeFor[socketref.Binding](), reflect.TypeFor[socketref.Enforcement](), reflect.TypeFor[DirectIPLease](), reflect.TypeFor[GrantedPathDelta](), reflect.TypeFor[AskQuietDelta](), reflect.TypeFor[TrustDestinationDelta](),
 		reflect.TypeFor[authzledger.PolicyIdentity](), reflect.TypeFor[secretmatch.Recipient](), reflect.TypeFor[secretmatch.ScreenSurface](), reflect.TypeFor[secretmatch.DestinationKind](), reflect.TypeFor[api.ElevatedAccessEffect]():
 		return true
 	default:

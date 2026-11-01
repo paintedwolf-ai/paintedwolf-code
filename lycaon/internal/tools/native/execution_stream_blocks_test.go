@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -22,13 +23,9 @@ func TestExecutionStreamProvesBytesAcrossRestoredMetadataAndTailSeek(t *testing.
 	f := newPinnedDiskFixture(t, map[string]string{"source": string(original)})
 	path := filepath.Join(f.dir, "source")
 	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "stat path", err)
 	stream, err := f.revisions.OpenStream(t.Context(), f.tctx, "source", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.revisions.OpenStream failed", err)
 	defer stream.Reader.Close()
 	if stream.Revision.ContentSHA256 != textfile.SHA256(original) {
 		t.Fatal("wrong full pin")
@@ -38,16 +35,14 @@ func TestExecutionStreamProvesBytesAcrossRestoredMetadataAndTailSeek(t *testing.
 		t.Fatalf("first block %v", err)
 	}
 	file, err := os.OpenFile(path, os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.OpenFile failed", err)
 	_, err = file.WriteAt([]byte("changed"), sourceBlockBytes+3)
 	_ = file.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = os.Chtimes(path, info.ModTime(), info.ModTime()); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chtimes failed", err)
 	}
 	after, _ := os.Stat(path)
 	if !os.SameFile(info, after) || info.Size() != after.Size() || !info.ModTime().Equal(after.ModTime()) {
@@ -60,14 +55,14 @@ func TestExecutionStreamProvesBytesAcrossRestoredMetadataAndTailSeek(t *testing.
 	}
 	seeker := stream.Reader.(io.Seeker)
 	if _, err = seeker.Seek(-17, io.SeekEnd); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "seeker.Seek failed", err)
 	}
 	body, err = io.ReadAll(stream.Reader)
 	if err != nil || !bytes.Equal(body, original[len(original)-17:]) {
 		t.Fatalf("unchanged tail %q %v", body, err)
 	}
 	if _, err = seeker.Seek(sourceBlockBytes+3, io.SeekStart); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "seeker.Seek failed", err)
 	}
 	if n, err := stream.Reader.Read(make([]byte, 3)); n != 0 || !errors.As(err, &conflict) {
 		t.Fatalf("seek into changed block %d %v", n, err)
@@ -80,9 +75,7 @@ func TestExecutionStreamRefusesTruncationGrowthAndPartialLastBlockChange(t *test
 			body := bytes.Repeat([]byte{'b'}, sourceBlockBytes+7)
 			f := newPinnedDiskFixture(t, map[string]string{"source": string(body)})
 			stream, err := f.revisions.OpenStream(t.Context(), f.tctx, "source", 0)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "f.revisions.OpenStream failed", err)
 			defer stream.Reader.Close()
 			path := filepath.Join(f.dir, "source")
 			switch kind {
@@ -98,9 +91,7 @@ func TestExecutionStreamRefusesTruncationGrowthAndPartialLastBlockChange(t *test
 				t.Fatal(err)
 			}
 			_, err = stream.Reader.(io.Seeker).Seek(-7, io.SeekEnd)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "stream.Reader. failed", err)
 			actual, err := io.ReadAll(stream.Reader)
 			var conflict *ExecutionRevisionConflict
 			if len(actual) != 0 || !errors.As(err, &conflict) {
@@ -114,9 +105,7 @@ func TestExecutionStreamBlockAdmissionCancellationAndRelease(t *testing.T) {
 	for _, limits := range []toolcontract.ProgramMemoryLimits{{Working: sourceBlockBytes - 1, State: 1024}, {Working: sourceBlockBytes, State: 255}, {Working: sourceBlockBytes, State: 700}} {
 		f := newPinnedDiskFixture(t, map[string]string{"source": string(bytes.Repeat([]byte{'x'}, 9*sourceBlockBytes))})
 		memory, err := toolcontract.NewProgramMemory(limits)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 		f.revisions.Memory = memory
 		_, err = f.revisions.OpenStream(t.Context(), f.tctx, "source", 0)
 		var limit *toolcontract.ProgramMemoryLimitError
@@ -126,15 +115,11 @@ func TestExecutionStreamBlockAdmissionCancellationAndRelease(t *testing.T) {
 	}
 	f := newPinnedDiskFixture(t, map[string]string{"source": "binary\x00data"})
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: sourceBlockBytes, State: 1024})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 	f.revisions.Memory = memory
 	ctx, cancel := context.WithCancel(t.Context())
 	stream, err := f.revisions.OpenStream(ctx, f.tctx, "source", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.revisions.OpenStream failed", err)
 	if use := memory.InUse(); use.Working != sourceBlockBytes || use.State != 256 {
 		t.Fatalf("missing live admission %+v", use)
 	}
@@ -157,16 +142,12 @@ func TestExecutionStreamBlockAdmissionCancellationAndRelease(t *testing.T) {
 func TestExecutionStreamInitialCapturePinsOrderedBlocks(t *testing.T) {
 	f := newPinnedDiskFixture(t, map[string]string{"source": ""})
 	resolved, err := projectpaths.ResolveRead(t.Context(), f.revisions.Boundary, f.tctx, "source")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "projectpaths.ResolveRead failed", err)
 	first := bytes.Repeat([]byte{'a'}, sourceBlockBytes)
 	second := bytes.Repeat([]byte{'b'}, 17)
 	input := &captureRewriteReader{first: first, second: second}
 	captured, err := f.revisions.scanSource(t.Context(), resolved, input, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.revisions.scanSource failed", err)
 	defer captured.Close()
 	original := append(bytes.Repeat([]byte{'a'}, sourceBlockBytes), second...)
 	if captured.revision.ContentSHA256 != textfile.SHA256(original) || captured.blocks[0] == captured.blocks[1] {
@@ -202,31 +183,23 @@ func (r *captureRewriteReader) Read(p []byte) (int, error) {
 func TestExecutionStreamCompressedProofsPreserveBytesAndRelease(t *testing.T) {
 	original := bytes.Repeat([]byte("a\x00\xff"), sourceBlockBytes)
 	compressed, err := zstdcodec.Compress(bytes.NewReader(original))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "zstdcodec.Compress failed", err)
 	for _, mutate := range []bool{false, true} {
 		t.Run(fmt.Sprint(mutate), func(t *testing.T) {
 			f := newPinnedDiskFixture(t, map[string]string{"source": string(compressed)})
 			memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 64 << 20, State: 4096})
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 			f.revisions.Memory = memory
 			resolved, err := projectpaths.ResolveRead(t.Context(), f.revisions.Boundary, f.tctx, "source")
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "projectpaths.ResolveRead failed", err)
 			stream, err := f.revisions.openCompressedStream(t.Context(), f.tctx, resolved)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "f.revisions.openCompressedStream failed", err)
 			if stream.Revision.ContentSHA256 != textfile.SHA256(original) || stream.FirstNullOffset != 1 {
 				t.Fatal("wrong decoded pin")
 			}
 			if mutate {
 				if err = os.Truncate(filepath.Join(f.dir, "source"), 1); err != nil {
-					t.Fatal(err)
+					testutil.FailErr(t, "os.Truncate failed", err)
 				}
 			}
 			got, err := io.ReadAll(stream.Reader)
@@ -252,30 +225,24 @@ func TestExecutionStreamCompressedProofsPreserveBytesAndRelease(t *testing.T) {
 func TestExecutionStreamRetainedHeapIsProofSizedFor100MB(t *testing.T) {
 	f := newPinnedDiskFixture(t, nil)
 	file, err := os.Create(filepath.Join(f.dir, "source"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Create failed", err)
 	chunk := bytes.Repeat([]byte{'x'}, 100_000)
 	for range 1000 {
 		if _, err = file.Write(chunk); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "file.Write failed", err)
 		}
 	}
 	if err = file.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "file.Close failed", err)
 	}
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 64 << 20, State: 64 << 20})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 	f.revisions.Memory = memory
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	stream, err := f.revisions.OpenStream(t.Context(), f.tctx, "source", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.revisions.OpenStream failed", err)
 	runtime.GC()
 	runtime.ReadMemStats(&after)
 	if after.HeapAlloc > before.HeapAlloc+(4<<20) || memory.Peak().State > 1<<20 || memory.Peak().Working > sourceBlockBytes {

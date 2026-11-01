@@ -22,15 +22,15 @@ import (
 
 func TestDirectAgentsMDWriteRequiresApproval(t *testing.T) {
 	for _, fixture := range []struct {
-		tool string
+		name string
 		args map[string]any
 		kind wire.CheckpointKind
 	}{
-		{"write", map[string]any{"path": "AGENTS.md", "content": "# Agent draft\n"}, wire.CheckpointKindContentApply},
-		{"copy", map[string]any{"copies": []any{map[string]any{"from": "draft.md", "to": "AGENTS.md"}}}, wire.CheckpointKindToolApproval},
+		{"redirect", map[string]any{"command": "printf '# Agent draft\\n' > AGENTS.md"}, wire.CheckpointKindContentApply},
+		{"copy", map[string]any{"command": "cp draft.md AGENTS.md"}, wire.CheckpointKindToolApproval},
 	} {
-		t.Run(fixture.tool, func(t *testing.T) {
-			runAgentsMDWriteApproval(t, llm.MockToolCall{ID: "w1", Name: fixture.tool, Args: fixture.args}, fixture.kind)
+		t.Run(fixture.name, func(t *testing.T) {
+			runAgentsMDWriteApproval(t, llm.MockToolCall{ID: "w1", Name: "command", Args: fixture.args}, fixture.kind)
 		})
 	}
 }

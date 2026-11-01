@@ -59,11 +59,11 @@ func TestRun3NativeJobPIDAndPsAux(t *testing.T) {
 	runner := newConformanceRunner(t, gate.PostureLight, true)
 	obs := runner.runCase(t, c)
 	if obs.TopLevelReject != "" || obs.Outcome.Refusal != nil || obs.Outcome.Status != 0 {
-		t.Fatalf("native job inspection = %+v", obs)
+		t.Fatalf("native job inspection = %+v; refusal=%+v", obs, obs.Outcome.Refusal)
 	}
 	lines := strings.Split(strings.TrimSpace(obs.Outcome.Stdout), "\n")
 	if len(lines) < 6 || !strings.HasPrefix(lines[0], "pid:") || lines[len(lines)-1] != "wait:143" || lines[len(lines)-3] != "psstatus:0" {
-		t.Fatalf("job and ps output = %q", obs.Outcome.Stdout)
+		t.Fatalf("job and ps output = %q; observation=%+v", obs.Outcome.Stdout, obs)
 	}
 	pid := strings.TrimPrefix(lines[0], "pid:")
 	if n, err := strconv.Atoi(pid); err != nil || n <= 0 {

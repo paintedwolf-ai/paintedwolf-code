@@ -24,20 +24,6 @@ type batchPreparationRecorder interface {
 	PrepareMany(context.Context, [][]sourceledger.RecordInput) ([]sourceledger.PreparedRecording, error)
 }
 
-// commitRows settles individually journaled effects in one attribution
-// transaction. Content preparation precedes the writer transaction.
-func (s *sourceSettlement) commitRows(ctx context.Context, rows []*sourceMutationRow) error {
-	deliveries, err := s.commitRowsOnce(ctx, rows)
-	if err != nil {
-		return err
-	}
-	for i, row := range rows {
-		deliveries[i].DeliverCommitted()
-		notifySourceMutation(ctx, row.Plan)
-	}
-	return nil
-}
-
 func (s *sourceSettlement) commitRowsOnce(ctx context.Context, rows []*sourceMutationRow) ([]*sourcefeed.StagedDelivery, error) {
 	prepared, err := s.prepareRows(ctx, rows)
 	if err != nil {

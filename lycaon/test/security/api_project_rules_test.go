@@ -24,7 +24,7 @@ import (
 
 func TestProjectRuleBlocksToolInProductionWiring(t *testing.T) {
 	mock := newScriptedLLM().on("project_rule_write",
-		toolStep("", call("write-denied", "write", map[string]any{"path": "out.txt", "content": "x"})),
+		toolStep("", call("write-denied", "edit", map[string]any{"path": "out.txt", "old_string": "before", "new_string": "x"})),
 		textStep("The project rule blocked the write."),
 	)
 	recording := llm.NewRecordingClient(mock)
@@ -82,14 +82,14 @@ rules:
 	messages, err := h.Sessions.Manager.Runner.Transcript.GetMessages(t.Context(), child.ID)
 	testutil.FailErr(t, "read denied tool result", err)
 	for _, tool := range recording.LastRequest().Tools {
-		if tool.Name == "write" {
+		if tool.Name == "edit" {
 			t.Fatal("project-denied write was advertised to the implementer")
 		}
 	}
 	seenRejection := false
 	for _, message := range messages {
 		if result := message.ToolResult; result != nil && result.ToolCallID == "write-denied" {
-			if result.Tool != "write" || result.Outcome != wire.ToolResultOutcomeRejected || !slices.Contains(result.Codes, "PROJECT_DENY_WRITE") {
+			if result.Tool != "edit" || result.Outcome != wire.ToolResultOutcomeRejected || !slices.Contains(result.Codes, "PROJECT_DENY_WRITE") {
 				t.Fatalf("project-denied write result = %+v", result)
 			}
 			seenRejection = true

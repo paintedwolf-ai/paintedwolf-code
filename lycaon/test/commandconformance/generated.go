@@ -83,6 +83,7 @@ func (f generatedFragment) source(index int) string {
 	q, n := shellLiteral(f.text), f.number
 	switch f.kind {
 	case 0:
+		//nolint:gocritic // Literal shell quotes wrap escaped shell text.
 		return fmt.Sprintf("printf '%%s|%%s\\n' %s \"%s\"", q, strings.NewReplacer("\\", "\\\\", "\"", "\\\"", "$", "\\$", "`", "\\`").Replace(f.text))
 	case 1:
 		return fmt.Sprintf("v=%s; printf '%%s|%%s|%%s\\n' \"${v:-fallback}\" \"${v:+set}\" \"${#v}\"", q)

@@ -48,7 +48,7 @@ func TestReadOnlyPostureSurfacesCarryNoMutatingTool(t *testing.T) {
 			row, err := catalog.Surface(id)
 			contractcheck.FailErr(t, "load surface "+id, err)
 			for _, tool := range surfaceTools(row) {
-				if reason := forbiddenReadOnlyTool(tool); reason != "" {
+				if reason := forbiddenReadOnlyTool(row, tool); reason != "" {
 					t.Errorf("posture %q reaches surface %q, which offers %q (%s)", posture, id, tool, reason)
 				}
 			}
@@ -134,12 +134,20 @@ func verifyReadOnlyProgramSurface(t *testing.T, filter platform.ToolFilter) {
 }
 
 // forbiddenReadOnlyTool names why a tool cannot sit on a read-only surface.
-func forbiddenReadOnlyTool(tool string) string {
+func forbiddenReadOnlyTool(row surfacecatalog.Surface, tool string) string {
 	switch {
 	case settings.IsPathMutatingTool(tool):
 		return "mutates a path its arguments declare"
 	case settings.IsCommandToolName(tool):
-		return "runs a program the model chooses"
+		readOnly, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+		if err != nil {
+			return err.Error()
+		}
+		effects, err := toolcontract.NewCommandEffects(row.CommandEffects...)
+		if err != nil || effects != readOnly {
+			return "runs a program with non-read-only command effects"
+		}
+		return ""
 	default:
 		return ""
 	}

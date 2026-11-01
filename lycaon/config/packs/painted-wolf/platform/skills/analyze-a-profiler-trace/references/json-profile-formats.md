@@ -37,7 +37,7 @@ Exclude the pseudo-frames `(idle)`, `(program)`, `(root)`, and `(garbage collect
 
 ## Gecko / Firefox Profiler
 
-Times are **milliseconds**; sampling interval is `meta.interval`. Often gzipped: decompress with Python's `gzip` module in the script; `jq` cannot read it.
+Times are **milliseconds**; sampling interval is `meta.interval`. Often gzipped: decompress with Python's `gzip` module in the script; the `jq FILTER FILE` command cannot read compressed input.
 
 The format is column-oriented: every "table" is an object of parallel arrays plus a `length`. Resolving one frame means three hops.
 

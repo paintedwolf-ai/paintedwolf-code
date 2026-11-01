@@ -35,18 +35,17 @@ func suspendLinkTableViews(ctx context.Context, tx *sql.Tx) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	type view struct{ name, definition string }
 	var views []view
 	for rows.Next() {
 		var item view
 		if err := rows.Scan(&item.name, &item.definition); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		views = append(views, item)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
 		return nil, err
 	}
 	if err := rows.Close(); err != nil {
@@ -67,18 +66,17 @@ func suspendLinkTableTriggers(ctx context.Context, tx *sql.Tx) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	type trigger struct{ name, definition string }
 	var triggers []trigger
 	for rows.Next() {
 		var item trigger
 		if err := rows.Scan(&item.name, &item.definition); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		triggers = append(triggers, item)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
 		return nil, err
 	}
 	if err := rows.Close(); err != nil {
@@ -130,17 +128,16 @@ func rebuildLinkTable(ctx context.Context, tx *sql.Tx, table string) error {
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	var definitions []string
 	for rows.Next() {
 		var definition string
 		if err := rows.Scan(&definition); err != nil {
-			rows.Close()
 			return err
 		}
 		definitions = append(definitions, definition)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
 		return err
 	}
 	if err := rows.Close(); err != nil {

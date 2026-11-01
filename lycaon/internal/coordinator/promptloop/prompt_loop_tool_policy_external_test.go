@@ -186,11 +186,11 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	limits.MaxToolResultBytes = 20
 	store := store.NewMemory()
 	reg := tools.NewStubRegistry()
-	_ = reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
+	_ = reg.Register("command", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return strings.Repeat("x", 100), nil
 	})
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
-		{Pattern: ".*", ToolCalls: []llm.MockToolCall{{ID: "tc1", Name: "read", Args: map[string]any{"path": "x"}}}},
+		{Pattern: ".*", ToolCalls: []llm.MockToolCall{{ID: "tc1", Name: "command", Args: map[string]any{"command": "cat x"}}}},
 		{Pattern: ".*", Text: "done"},
 	}})
 	deps := promptloop.StoreDeps(store)

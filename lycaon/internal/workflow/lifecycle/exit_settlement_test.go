@@ -26,9 +26,12 @@ func TestRootWorkflowExitReleasesVisibleTurn(t *testing.T) {
 				mgr.Controls.SessionExit = runtime.Stops
 				var run *api.WorkflowRun
 				var err error
-				if workflowID == "implement" {
+				switch workflowID {
+				case "implement":
 					run, err = mgr.Ambient.StartAmbient(ctx, "sess-1", workflowID, "1.0.0")
-				} else {
+				case "plan":
+					run, err = startRun(ctx, mgr, "sess-1", workflowID, "1.0.1")
+				default:
 					run, err = startRun(ctx, mgr, "sess-1", workflowID, "1.0.0")
 				}
 				testutil.FailErr(t, "start workflow", err)
@@ -61,7 +64,7 @@ func TestRootWorkflowExitReleasesVisibleTurn(t *testing.T) {
 				} else if active == nil || !runstate.IsAmbientRun(active) {
 					t.Fatalf("active workflow = %+v, want ambient", active)
 				}
-				_, err = startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+				_, err = startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 				testutil.FailErr(t, "start next workflow", err)
 			})
 		}

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -140,21 +141,38 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 		plans = r.promptAnsweringApprovals(t, projectID, sess.ID, c.ID, expectedCards)
 	}
 
-	receipts := r.queryChildReceipts(t, sess.ID)
-	obs := runtimeObservation{
-		Files:         trackedFiles(t, dir, c.Tracked),
-		ChildReceipts: receipts.Children,
-		NativeGaps:    receipts.Gaps,
-		ApprovalPlans: plans,
-		Roots:         workspaceRoots(dir),
-	}
+	obs := runtimeObservation{ApprovalPlans: plans, Roots: workspaceRoots(dir)}
 	content := r.toolResult(t, sess.ID, "call-"+c.ID)
 	if strings.Contains(content, `"program_id"`) {
-		dec := json.NewDecoder(strings.NewReader(content[strings.Index(content, "{"):]))
+		_, body, _ := strings.Cut(content, "{")
+		body = "{" + body
+		dec := json.NewDecoder(strings.NewReader(body))
 		testutil.FailErr(t, "decode program outcome", dec.Decode(&obs.Outcome))
+		if obs.Outcome.State == "parked" {
+			var parked command.ParkedProgramResult
+			testutil.FailErr(t, "decode parked program", json.NewDecoder(strings.NewReader(body)).Decode(&parked))
+			var winner awaitstore.Condition
+			testutil.WaitFor(t, func() bool {
+				var raw string
+				testutil.FailErr(t, "read program settlement", r.h.DB.QueryRowContext(t.Context(), `SELECT coalesce(winner_json,'') FROM wait_leases WHERE id=?`, parked.LeaseID).Scan(&raw))
+				if raw == "" {
+					return false
+				}
+				testutil.FailErr(t, "decode settlement", json.Unmarshal([]byte(raw), &winner))
+				return true
+			})
+			if winner.ProgramID != parked.ProgramID || winner.Kind != "program_done" {
+				t.Fatalf("wrong program settlement: %+v", winner)
+			}
+			testutil.FailErr(t, "decode settled program", json.Unmarshal([]byte(winner.Report), &obs.Outcome))
+		}
 	} else {
 		obs.TopLevelReject = content
 	}
+	receipts := r.queryChildReceipts(t, sess.ID)
+	obs.Files = trackedFiles(t, dir, c.Tracked)
+	obs.ChildReceipts, obs.NativeGaps = receipts.Children, receipts.Gaps
+
 	return obs
 }
 

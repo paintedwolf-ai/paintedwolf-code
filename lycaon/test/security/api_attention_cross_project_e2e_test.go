@@ -23,7 +23,7 @@ func TestAttentionCrossProjectE2E(t *testing.T) {
 	defer unsub()
 
 	done := h.runPrompt(t)
-	decisionID := h.waitPending(t)
+	decisionID := h.waitPending(t, done)
 
 	row := waitNeedsYouAttentionRow(t, ch, h.sess.ID)
 	if row.Reason != wire.AttentionReasonCheckpoint {

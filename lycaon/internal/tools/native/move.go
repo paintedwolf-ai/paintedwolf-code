@@ -61,7 +61,7 @@ func (t *MoveTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		resp.Moved = append(resp.Moved, moveResult(pair))
 	}
 	for _, pair := range result.DestinationCopied {
-		resp.DestinationCopied = append(resp.DestinationCopied, moveResult{From: pair.From, To: pair.To})
+		resp.DestinationCopied = append(resp.DestinationCopied, moveResult(pair))
 	}
 	if err != nil {
 		if len(resp.Moved)+len(resp.DestinationCopied) > 0 {

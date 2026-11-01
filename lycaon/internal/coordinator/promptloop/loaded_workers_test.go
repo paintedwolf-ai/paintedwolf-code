@@ -5,7 +5,7 @@ package promptloop_test
 // loadable coordinator surfaces.
 func workersLoaded(string) map[string]bool {
 	out := map[string]bool{}
-	for _, name := range []string{"task", "pack_board", "worker_cancel", "answer_decision", "extend_worker_budget", "read"} {
+	for _, name := range []string{"task", "pack_board", "worker_cancel", "answer_decision", "extend_worker_budget", "command", "edit", "read"} {
 		out[name] = true
 	}
 	return out

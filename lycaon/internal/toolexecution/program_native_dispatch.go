@@ -70,6 +70,8 @@ type NativeEffect struct {
 // InvokeNative is reached-effect admission, not an interpreter or JSON tool call.
 // The introducing entry validates the complete syntax/progress envelope first.
 // A held review keeps the same child identity; a fresh invocation uses a new one.
+//
+//nolint:funlen // Linear reached-effect admission, review, and receipt settlement pipeline.
 func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
 	end, err := frame.beginUse()
 	if err != nil {
@@ -286,9 +288,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 }
 
 func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, bound toolcontract.BoundOperation) error {
-	// Publication reaches the write door after its output is staged. Its
-	// destination, including scratch or output, decides the checklist gate.
-	if bound.Publication() != toolcontract.NoPublication {
+	// Redirect publication reaches the write door after its output is staged.
+	// Its destination, including scratch or output, decides the checklist gate.
+	if bound.Publication() == toolcontract.RedirectPublication {
 		return nil
 	}
 	if provider == nil {

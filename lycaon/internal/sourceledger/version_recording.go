@@ -102,10 +102,6 @@ func (s *Store) insertVersionWithCache(ctx context.Context, q *db.Queries, spec 
 	return id, nil
 }
 
-func (s *Store) preserveObservedPreimage(ctx context.Context, q *db.Queries, in preparedRecord, tracked TrackedFile, head *db.SourceBranchHeads) (string, error) {
-	return s.preserveObservedPreimageWithCache(ctx, q, in, tracked, head, nil)
-}
-
 func (s *Store) preserveObservedPreimageWithCache(ctx context.Context, q *db.Queries, in preparedRecord, tracked TrackedFile, head *db.SourceBranchHeads, cache *TxBatchCache) (string, error) {
 	// Preserve the observed pre-image when it differs from the tracked head.
 	preSHA, preSize, preRoot, prePath := in.BeforeSHA256, in.BeforeSize, in.RootID, in.Path

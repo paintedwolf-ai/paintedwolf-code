@@ -344,6 +344,7 @@ func runExitTrap(ctx context.Context, f *frame, bodyErr error) error {
 		return nil
 	}
 	if _, stopped := f.state.latch.Stop(); stopped || bodyErr != nil {
+		//nolint:nilerr // Trap bodies do not run when the program body already failed with a host or syntax error.
 		return nil
 	}
 	savedStatus := f.state.control.Status()

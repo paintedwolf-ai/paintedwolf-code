@@ -35,7 +35,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	}
 	specSession, err := specFix.Store.Get(t.Context(), specFix.Sess.ID)
 	testutil.FailErr(t, "read spec workflow posture", err)
-	if specSession.Posture != api.SessionPostureSpec || !hasTool(rec.LastRequest().Tools, "read") {
+	if specSession.Posture != api.SessionPostureSpec || !hasTool(rec.LastRequest().Tools, "command") {
 		t.Fatalf("spec workflow lost its reading posture: posture=%s tools=%v", specSession.Posture, toolNames(rec.LastRequest().Tools))
 	}
 	for _, tool := range rec.LastRequest().Tools {

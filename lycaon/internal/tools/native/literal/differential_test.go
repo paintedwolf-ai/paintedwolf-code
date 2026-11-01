@@ -117,7 +117,7 @@ func TestDifferentialAgainstReferenceUtilities(t *testing.T) {
 			cmd := exec.Command(binary, argv[1:]...)
 			cmd.Args[0] = argv[0]
 			cmd.Dir = h.root
-			cmd.Env = []string{"TZ=UTC", "LC_ALL=C.UTF-8", "PATH=" + os.Getenv("PATH")}
+			cmd.Env = []string{"TZ=UTC", "LANG=C.UTF-8", "LC_CTYPE=C.UTF-8", "LC_COLLATE=C", "LC_MESSAGES=C", "LC_NUMERIC=C", "LC_TIME=C", "PATH=" + os.Getenv("PATH")}
 			cmd.Stdin = strings.NewReader(c.stdin)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &stdout, &stderr

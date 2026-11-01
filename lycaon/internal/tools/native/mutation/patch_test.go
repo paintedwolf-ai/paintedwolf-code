@@ -163,7 +163,8 @@ func TestPatchReverseUndoesTheAppliedPatchExactly(t *testing.T) {
 }
 
 func TestPatchRefusesAFileChangedAfterCapture(t *testing.T) {
-	h := newHarness(t, map[string]string{"f.txt": tenLines, "g.txt": "one\ntwo\nthree\n", "fix.diff": strings.Replace(twoHunkDiff, "@@ -8,3 +8,3 @@\n eight\n-nine\n+NINE\n ten\n", "", 1) + strings.ReplaceAll(twoHunkDiff[:strings.Index(twoHunkDiff, "@@ -8")], "f.txt", "g.txt")})
+	firstHunk, _, _ := strings.Cut(twoHunkDiff, "@@ -8")
+	h := newHarness(t, map[string]string{"f.txt": tenLines, "g.txt": "one\ntwo\nthree\n", "fix.diff": strings.Replace(twoHunkDiff, "@@ -8,3 +8,3 @@\n eight\n-nine\n+NINE\n ten\n", "", 1) + strings.ReplaceAll(firstHunk, "f.txt", "g.txt")})
 	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, change := range changes {
 			if strings.HasSuffix(change.Path, "g.txt") {
@@ -187,7 +188,8 @@ func TestPatchRefusesAFileChangedAfterCapture(t *testing.T) {
 
 func TestPatchRefusesBinaryAndUnsupportedForms(t *testing.T) {
 	binary := "diff --git a/b.bin b/b.bin\nnew file mode 100644\nindex 0000000000000000000000000000000000000000..eaf36c1daccfdf325514461cd1a2ffbc139b5464\nGIT binary patch\nliteral 4\nLcmZQzWMT#Y01f~L\n\nliteral 0\nHcmV?d00001\n\n"
-	h := newHarness(t, map[string]string{"a.txt": "one\ntwo\nthree\n", "fix.diff": threeFiles[:strings.Index(threeFiles, "diff --git a/new")] + binary})
+	prefix, _, _ := strings.Cut(threeFiles, "diff --git a/new")
+	h := newHarness(t, map[string]string{"a.txt": "one\ntwo\nthree\n", "fix.diff": prefix + binary})
 	r := h.run("", "patch", "-p1", "-i", "fix.diff")
 	if reject := toolrejection.AsToolReject(r.err); reject == nil || reject.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" || r.result.EffectCertainty != toolcontract.NoEffect {
 		t.Fatalf("binary = %+v %v", r.result, r.err)
@@ -210,7 +212,8 @@ func TestPatchRefusesPathsOutsideTheAttachedFolders(t *testing.T) {
 	testutil.FailErr(t, "create outside fixture dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(outside) })
 	h := newHarness(t, map[string]string{"a.txt": "one\ntwo\nthree\n"})
-	diff := threeFiles[:strings.Index(threeFiles, "diff --git a/new")] + "--- /dev/null\n+++ " + outside + "/x.txt\n@@ -0,0 +1 @@\n+escape\n"
+	prefix, _, _ := strings.Cut(threeFiles, "diff --git a/new")
+	diff := prefix + "--- /dev/null\n+++ " + outside + "/x.txt\n@@ -0,0 +1 @@\n+escape\n"
 	r := h.run(diff, "patch", "-p0")
 	if reject := toolrejection.AsToolReject(r.err); reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" || r.result.Terminal != toolcontract.ProducerRefused {
 		t.Fatalf("outside path = %+v %v", r.result, r.err)
@@ -254,7 +257,7 @@ func TestPatchOptionsFollowGNU(t *testing.T) {
 		{name: "patchfile operand", files: map[string]string{"f.txt": tenLines, "fix.diff": twoHunkDiff}, words: []string{"-u", "--no-backup-if-mismatch", "-p1", "f.txt", "fix.diff"},
 			stdout: "patching file f.txt\n", want: map[string]string{"f.txt": applied}},
 		{name: "fuzz", files: map[string]string{"f.txt": strings.Replace(tenLines, "one", "ONE", 1)}, stdin: twoHunkDiff, words: []string{"-p1"},
-			stdout: "patching file f.txt\nHunk #1 succeeded at 1 with fuzz 1.\n", want: map[string]string{"f.txt": strings.Replace(strings.Replace(applied, "one", "ONE", 1), "", "", 0)}},
+			stdout: "patching file f.txt\nHunk #1 succeeded at 1 with fuzz 1.\n", want: map[string]string{"f.txt": strings.Replace(applied, "one", "ONE", 1)}},
 		{name: "remove empty files", files: map[string]string{"e.txt": "only\n"}, stdin: "--- a/e.txt\n+++ b/e.txt\n@@ -1 +0,0 @@\n-only\n", words: []string{"-E", "-p1"},
 			stdout: "patching file e.txt\n", absent: []string{"e.txt"}},
 		{name: "empty result kept without -E", files: map[string]string{"e.txt": "only\n"}, stdin: "--- a/e.txt\n+++ b/e.txt\n@@ -1 +0,0 @@\n-only\n", words: []string{"-p1"},

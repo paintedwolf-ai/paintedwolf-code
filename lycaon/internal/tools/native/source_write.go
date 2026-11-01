@@ -485,7 +485,7 @@ func captureRemovedEntry(ctx context.Context, loc fseffect.Location, memory *too
 		if openErr != nil {
 			return agentFileEvidence{}, openErr
 		}
-		defer root.Close()
+		defer func() { _ = root.Close() }()
 		target, readErr := root.Readlink(loc.Rel)
 		if readErr != nil {
 			return agentFileEvidence{}, readErr

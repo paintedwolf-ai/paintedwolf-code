@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -27,7 +28,95 @@ import (
 
 func TestMain(m *testing.M) {
 	gittestsetup.Enable()
-	os.Exit(m.Run())
+	code := m.Run()
+	cleanupFixtureTemplates()
+	os.Exit(code)
+}
+
+var (
+	emptyFixtureOnce  sync.Once
+	emptyFixtureDir   string
+	seededFixtureOnce sync.Once
+	seededFixtureDir  string
+	bisectFixtureOnce sync.Once
+	bisectFixtureDir  string
+)
+
+func cleanupFixtureTemplates() {
+	for _, dir := range []string{emptyFixtureDir, seededFixtureDir, bisectFixtureDir} {
+		if dir != "" {
+			_ = os.RemoveAll(dir)
+		}
+	}
+}
+
+func copyFixtureDir(t *testing.T, src, dst string) {
+	t.Helper()
+	err := filepath.WalkDir(src, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil || rel == "." {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, raw, info.Mode().Perm()); err != nil {
+			return err
+		}
+		return os.Chtimes(target, info.ModTime(), info.ModTime())
+	})
+	testutil.FailErr(t, "copy fixture", err)
+}
+
+func mkdirSharedFixture(prefix string) (string, error) {
+	return os.MkdirTemp("", prefix)
+}
+
+func ensureEmptyFixture(t *testing.T, bin string) string {
+	t.Helper()
+	emptyFixtureOnce.Do(func() {
+		dir, err := mkdirSharedFixture("gitcmd-empty-*")
+		testutil.FailErr(t, "empty fixture dir", err)
+		h := &harness{t: t, root: dir, bin: bin, template: t.TempDir()}
+		h.git("init", "-q", "-b", "main")
+		h.git("config", "user.name", "Ann Author")
+		h.git("config", "user.email", "ann@example.test")
+		emptyFixtureDir = dir
+	})
+	return emptyFixtureDir
+}
+
+func ensureSeededFixture(t *testing.T, bin string) string {
+	t.Helper()
+	empty := ensureEmptyFixture(t, bin)
+	seededFixtureOnce.Do(func() {
+		dir, err := mkdirSharedFixture("gitcmd-seeded-*")
+		testutil.FailErr(t, "seeded fixture dir", err)
+		copyFixtureDir(t, empty, dir)
+		h := &harness{t: t, root: dir, bin: bin, template: t.TempDir()}
+		h.write("a.txt", "one\ntwo\n")
+		h.write("sub/b.txt", "bee\n")
+		h.git("add", ".")
+		h.git("commit", "-q", "-m", "first commit")
+		h.git("tag", "v1")
+		h.write("a.txt", "one\ntwo\nthree\n")
+		h.git("commit", "-q", "-am", "second commit")
+		h.git("branch", "topic")
+		seededFixtureDir = dir
+	})
+	return seededFixtureDir
 }
 
 // fixtureEnv pins identities and dates so every repository is reproducible.
@@ -55,27 +144,19 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) *harness {
-	h := newEmptyHarness(t)
-	h.write("a.txt", "one\ntwo\n")
+	h := newUninitializedHarness(t)
+	copyFixtureDir(t, ensureSeededFixture(t, h.bin), h.root)
 	h.write("sub/b.txt", "bee\n")
-	h.git("add", ".")
-	h.git("commit", "-q", "-m", "first commit")
-	h.git("tag", "v1")
-	h.write("a.txt", "one\ntwo\nthree\n")
-	h.git("commit", "-q", "-am", "second commit")
-	h.git("branch", "topic")
 	h.write("a.txt", "one\nTWO\nthree\n")
 	h.write("staged.txt", "s\n")
-	h.git("add", "staged.txt")
+	h.git("add", "sub/b.txt", "staged.txt")
 	h.write("new.txt", "untracked\n")
 	return h
 }
 
 func newEmptyHarness(t *testing.T) *harness {
 	h := newUninitializedHarness(t)
-	h.git("init", "-q", "-b", "main")
-	h.git("config", "user.name", "Ann Author")
-	h.git("config", "user.email", "ann@example.test")
+	copyFixtureDir(t, ensureEmptyFixture(t, h.bin), h.root)
 	return h
 }
 
@@ -94,6 +175,12 @@ func newUninitializedHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "program paths", err)
 	h := &harness{t: t, root: root, bin: bin, template: t.TempDir(), owners: owners, paths: paths, tc: tc}
 	return h
+}
+
+func (h *harness) withT(t *testing.T) *harness {
+	clone := *h
+	clone.t = t
+	return &clone
 }
 
 func (h *harness) write(name, content string) {
@@ -206,11 +293,13 @@ var readCases = []string{
 	"git log --oneline nope", "git show nope",
 }
 
-// TestReadFormsMatchBundledGit: every read form is Git's own output and status.
 func TestReadFormsMatchBundledGit(t *testing.T) {
-	h := newHarness(t)
+	t.Parallel()
+	base := newHarness(t)
 	for _, line := range readCases {
 		t.Run(line, func(t *testing.T) {
+			t.Parallel()
+			h := base.withT(t)
 			words := strings.Fields(line)
 			r := h.exec(words...)
 			if r.err != nil {
@@ -243,8 +332,8 @@ func TestReadFormsMatchBundledGit(t *testing.T) {
 	}
 }
 
-// TestEverydayFormsGolden pins the output of the forms agents use most.
 func TestEverydayFormsGolden(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	head := strings.TrimSpace(h.git("rev-parse", "--short", "HEAD"))
 	first := strings.TrimSpace(h.git("rev-parse", "--short", "HEAD~1"))
@@ -274,9 +363,8 @@ func TestEverydayFormsGolden(t *testing.T) {
 	}
 }
 
-// TestReadFormsRefuseWritesAndUncataloguedForms: a read spelling that would
-// write, reach the network or run a program refuses before Git runs.
 func TestReadFormsRefuseWritesAndUncataloguedForms(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	before := h.git("for-each-ref")
 	config := h.git("config", "--local", "--list")
@@ -327,9 +415,8 @@ func TestReadFormsRefuseWritesAndUncataloguedForms(t *testing.T) {
 	}
 }
 
-// TestGitDirectoryFailuresAreGitsOwn: a missing -C directory or a directory
-// outside any repository reports Git's fatal message and status 128.
 func TestGitDirectoryFailuresAreGitsOwn(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	missing := h.exec("git", "-C", "nope", "status")
 	if missing.err != nil || missing.result.Status != 128 || missing.stderr != "fatal: cannot change to 'nope': No such file or directory\n" {
@@ -343,9 +430,8 @@ func TestGitDirectoryFailuresAreGitsOwn(t *testing.T) {
 	}
 }
 
-// TestResolveSkipsGlobalOptions: the umbrella resolves the longest
-// catalogued subcommand after global options.
 func TestResolveSkipsGlobalOptions(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	for argv, want := range map[string]string{
 		"git status": "git status", "git -C sub -c color.ui=false stash list": "git stash list", "git --no-pager worktree list": "git worktree list",
@@ -362,8 +448,8 @@ func TestResolveSkipsGlobalOptions(t *testing.T) {
 	}
 }
 
-// TestStreamBoundRefuses: output past stream_bytes is a typed refusal.
 func TestStreamBoundRefuses(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.owners.limitOverride = map[string]int64{"stream_bytes": 8}
 	h.exec("git", "log").refused(t, "stream bound", "COMMAND_LIMIT_EXCEEDED")

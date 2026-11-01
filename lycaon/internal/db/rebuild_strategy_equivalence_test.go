@@ -110,6 +110,7 @@ func strategyStoreImage(t *testing.T, path string) map[string]strategyRows {
 	}
 	tables, err := database.QueryContext(t.Context(), `SELECT name,type,wr FROM pragma_table_list WHERE schema='main' AND name!='sqlite_schema' ORDER BY name`)
 	testutil.FailErr(t, "enumerate logical and shadow tables", err)
+	defer func() { _ = tables.Close() }()
 	var names []string
 	rowIDs := map[string]bool{}
 	shadows := 0
@@ -131,7 +132,6 @@ func strategyStoreImage(t *testing.T, path string) map[string]strategyRows {
 		}
 	}
 	testutil.FailErr(t, "finish strategy table inventory", tables.Err())
-	testutil.FailErr(t, "close strategy table inventory", tables.Close())
 	if shadows == 0 {
 		t.Fatal("equivalence fixture omitted FTS shadow state")
 	}
@@ -146,6 +146,7 @@ func strategyStoreImage(t *testing.T, path string) map[string]strategyRows {
 	}
 	indexes, err := database.QueryContext(t.Context(), "SELECT name FROM sqlite_schema WHERE type='index'")
 	testutil.FailErr(t, "enumerate strategy indexes", err)
+	defer func() { _ = indexes.Close() }()
 	var indexNames []string
 	for indexes.Next() {
 		var name string
@@ -153,7 +154,6 @@ func strategyStoreImage(t *testing.T, path string) map[string]strategyRows {
 		indexNames = append(indexNames, name)
 	}
 	testutil.FailErr(t, "finish strategy indexes", indexes.Err())
-	testutil.FailErr(t, "close strategy indexes", indexes.Close())
 	for _, name := range indexNames {
 		out["index keys/"+name] = strategyQueryRows(t, database, false, "SELECT * FROM pragma_index_xinfo(?)", name)
 	}

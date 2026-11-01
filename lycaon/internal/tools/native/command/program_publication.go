@@ -44,6 +44,7 @@ func (d *ProgramDispatcher) publishDocuments(ctx context.Context, parent toolcon
 		return err
 	}
 	if err := d.run.surface.ValidateOperation(bound); err != nil {
+		//nolint:nilerr // Surfaces without write authority skip accepted-document publication.
 		return nil
 	}
 	seen := map[string]bool{}

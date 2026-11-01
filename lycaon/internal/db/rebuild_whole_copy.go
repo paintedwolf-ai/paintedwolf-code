@@ -30,7 +30,7 @@ func copyWholeRetainedStore(ctx context.Context, source, destination string, pla
 	if err != nil {
 		return result, false, err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	if err := checkUpgradeTempStorage(ctx, reader, plan.ScratchBytes()); err != nil {
 		return result, true, err
 	}
@@ -55,7 +55,7 @@ func copyWholeRetainedStore(ctx context.Context, source, destination string, pla
 		return result, true, err
 	}
 	if !cloned {
-		info, err := os.Stat(source)
+		info, err := os.Stat(source) // #nosec G703
 		if err != nil {
 			return result, true, err
 		}
@@ -63,7 +63,11 @@ func copyWholeRetainedStore(ctx context.Context, source, destination string, pla
 		if err != nil {
 			return result, true, err
 		}
-		needed, err := storageSum(uint64(info.Size()), plan.ScratchBytes(), 64<<20)
+		var sourceSize uint64
+		if sz := info.Size(); sz > 0 {
+			sourceSize = uint64(sz)
+		}
+		needed, err := storageSum(sourceSize, plan.ScratchBytes(), 64<<20)
 		if err != nil {
 			return result, true, err
 		}
@@ -83,7 +87,7 @@ func copyWholeRetainedStore(ctx context.Context, source, destination string, pla
 	if rebuildIntegrityFailure(err) {
 		// Confirmed damage encountered while preparing the image can use primary
 		// reconstruction. Operational failures never trigger an expensive retry.
-		return retainedCopyResult{}, false, os.Remove(destination)
+		return retainedCopyResult{}, false, os.Remove(destination) // #nosec G703
 	}
 	if err != nil {
 		return result, true, err
@@ -142,7 +146,7 @@ func prepareWholeRetainedStore(ctx context.Context, path string, plan migrations
 	}
 	defer func() { err = errors.Join(err, restore()) }()
 	for _, statement := range plan.CopyPlan().After {
-		if _, err := writer.ExecContext(ctx, statement); err != nil {
+		if _, err := writer.ExecContext(ctx, statement); err != nil { // #nosec G701
 			return err
 		}
 	}
@@ -157,6 +161,7 @@ func prepareWholeRetainedStore(ctx context.Context, path string, plan migrations
 }
 
 func rebuildIntegrityFailure(err error) bool {
+	//nolint:errorlint // Recursive unwrap requires every branch of a joined error to be an integrity failure.
 	switch cause := err.(type) {
 	case *StoreIncompatibleError:
 		return cause.Reason == RecoveryReasonIntegrityFailed
@@ -176,6 +181,7 @@ func rebuildIntegrityFailure(err error) bool {
 	case interface{ Unwrap() error }:
 		return rebuildIntegrityFailure(cause.Unwrap())
 	default:
+		//nolint:errorlint // Exact leaf check after explicit unwrap above.
 		return err == migrations.ErrIntegrity
 	}
 }

@@ -1,6 +1,7 @@
 package search
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -64,7 +65,7 @@ func (w *closedAfterLine) Write(p []byte) (int, error) {
 	if w.closed {
 		return 0, io.ErrClosedPipe
 	}
-	if end := strings.IndexByte(string(p), '\n'); end >= 0 {
+	if end := bytes.IndexByte(p, '\n'); end >= 0 {
 		count := end + 1
 		w.output += string(p[:count])
 		w.closed = true

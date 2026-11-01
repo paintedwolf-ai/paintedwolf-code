@@ -48,7 +48,7 @@ func (s *Service) PortHolders(ctx context.Context, session string, query lineage
 			// A holder that exited or whose PID was reused since the socket
 			// observation is unknown, never the process now at that PID.
 			process, err := inspect(holder.PID)
-			if err != nil || process.StartOrder != uint64(holder.Started) {
+			if err != nil || holder.Started < 0 || process.StartOrder != uint64(holder.Started) {
 				continue
 			}
 			if _, process.Owned = owned[holder.PID]; process.Owned {

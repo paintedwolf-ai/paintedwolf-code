@@ -6,18 +6,16 @@ import (
 	"regexp"
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRE2ValidatedVMKeepsCaptureAndScalarSemantics(t *testing.T) {
 	for _, pattern := range []string{`(a|ab)`, `(a+?)(a*)`, `(?i)(k+)`, `(?m)^(a*)$`, `\b(a+)\b`, `(?:a?)*`, `(a{1,3}?)(a*)`, string(rune(0x10fff4)) + `(a?)`} {
 		reference, err := regexp.Compile(pattern)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "regexp.Compile failed", err)
 		matcher, err := Compile(t.Context(), Spec{Patterns: []string{pattern}, Dialect: RE2}, catalogLimits(t))
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "Compile failed", err)
 		for _, input := range []string{"", "ab aaa", "aa\na", "Kk K", "éaaaé", string(rune(0x10fff4)) + "a"} {
 			want := reference.FindAllStringSubmatchIndex(input, -1)
 			want = slices.DeleteFunc(want, func(g []int) bool { return g[0] == g[1] })
@@ -31,9 +29,7 @@ func TestRE2ValidatedVMKeepsCaptureAndScalarSemantics(t *testing.T) {
 	marker := string(rune(0x10fff4))
 	for _, word := range []bool{false, true} {
 		matcher, err := Compile(t.Context(), Spec{Patterns: []string{marker}, Dialect: RE2, Word: word}, catalogLimits(t))
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "Compile failed", err)
 		span, ok, err := matcher.Select(t.Context(), []byte(" "+marker+" "))
 		if err != nil || !ok || span != (Span{1, 1 + len(marker)}) {
 			t.Fatalf("word %v literal marker span %v %v %v", word, span, ok, err)
@@ -46,9 +42,7 @@ func TestRE2ValidatedVMKeepsCaptureAndScalarSemantics(t *testing.T) {
 func TestRegexDialectsCancelAndReleaseSessionAdmission(t *testing.T) {
 	for _, dialect := range []Dialect{Basic, Extended, RE2, Perl} {
 		matcher, err := Compile(t.Context(), Spec{Patterns: []string{`a+`}, Dialect: dialect}, catalogLimits(t))
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "Compile failed", err)
 		program := matcher.engine.(vmEngine).program
 		ctx, cancel := context.WithCancel(t.Context())
 		var held int64
@@ -68,7 +62,7 @@ func TestRegexDialectsCancelAndReleaseSessionAdmission(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err = session.ReserveMemory(1024); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "session.ReserveMemory failed", err)
 		}
 		_, err = session.Find([]rune("aaaa"), 0, false)
 		session.Close()
@@ -81,9 +75,7 @@ func TestRegexDialectsCancelAndReleaseSessionAdmission(t *testing.T) {
 
 func TestRecordDecodeAdmissionPrecedesAllocation(t *testing.T) {
 	matcher, err := Compile(t.Context(), Spec{Patterns: []string{"a"}, Dialect: RE2}, catalogLimits(t))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "Compile failed", err)
 	vm := matcher.engine.(vmEngine)
 	vm.limits.MemoryBytes = 1024
 	_, _, err = vm.first(t.Context(), make([]byte, 1024))

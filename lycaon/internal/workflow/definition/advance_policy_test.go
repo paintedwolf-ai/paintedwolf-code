@@ -66,6 +66,7 @@ func TestEffectiveAdvancePolicyShippedManifestParity(t *testing.T) {
 
 	hostWorkflows := map[string]struct{}{
 		"implement@1.0.0":       {},
+		"plan@1.0.1":            {},
 		"plan@1.0.0":            {},
 		"recon-pack@1.0.0":      {},
 		"security-survey@2.0.0": {},

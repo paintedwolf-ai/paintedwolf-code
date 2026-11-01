@@ -277,11 +277,11 @@ func partialEffectsWriteEffect(boundary *sandbox.Boundary, database db.Handle, w
 			if err != nil {
 				return toolcontract.ProducerResult{}, err
 			}
-			if err = applyAgentFile(ctx, actual, resolvedMutationTarget(target), content, nil, ""); err != nil {
+			if err := applyAgentFile(ctx, actual, resolvedMutationTarget(target), content, nil, ""); err != nil {
 				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, err
 			}
 			var journal string
-			if err = database.QueryRowContext(ctx, `SELECT id FROM source_effects WHERE project_id='p1' AND path='new.txt'`).Scan(&journal); err != nil {
+			if err := database.QueryRowContext(ctx, `SELECT id FROM source_effects WHERE project_id='p1' AND path='new.txt'`).Scan(&journal); err != nil {
 				return toolcontract.ProducerResult{}, err
 			}
 			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "journal", OwnerRef: journal, RecoveryRef: journal}}, nil

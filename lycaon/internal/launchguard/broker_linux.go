@@ -49,8 +49,12 @@ func startBrokered(request launchbroker.Request, fds []int) (int, error) {
 		return 0, errors.New("broker program path must be absolute and clean")
 	}
 	files := make([]uintptr, 0, len(fds)-1)
-	for _, fd := range fds[1:] {
-		files = append(files, uintptr(fd))
+	for i, fd := range fds[1:] {
+		if i >= 3 && request.ExtraFileLayout != "" && request.ExtraFileLayout[i-3] == '0' {
+			files = append(files, ^uintptr(0))
+		} else {
+			files = append(files, uintptr(fd))
+		}
 	}
 	attributes := &syscall.ProcAttr{
 		Dir:   request.Dir,

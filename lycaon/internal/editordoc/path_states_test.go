@@ -58,6 +58,7 @@ func TestUnsavedExactPathUsesCompleteIdentityLookup(t *testing.T) {
 			details = append(details, detail)
 		}
 		testutil.FailErr(t, "finish query plan", rows.Err())
+		//nolint:sqlclosecheck // Closed at the end of each path iteration.
 		testutil.FailErr(t, "close query plan", rows.Close())
 		plan := strings.Join(details, "\n")
 		if !strings.Contains(plan, "project_id=? AND branch_id=? AND root_id=? AND path=?") || strings.Contains(plan, "TEMP B-TREE") {

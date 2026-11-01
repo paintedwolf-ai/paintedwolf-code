@@ -5,29 +5,27 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSourceCloneProbeLeavesSourceAndTargetUntouched(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "source")
 	body := bytes.Repeat([]byte("immutable source\n"), 1024)
 	if err := os.WriteFile(source, body, 0400); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	target := t.TempDir()
 	if _, err := SupportedFrom(t.Context(), source, target); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "SupportedFrom failed", err)
 	}
 	after, err := os.ReadFile(source)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "read file", err)
 	if !bytes.Equal(body, after) {
 		t.Fatal("clone capability probe changed source")
 	}
 	entries, err := os.ReadDir(target)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "read directory entries", err)
 	if len(entries) != 0 {
 		t.Fatalf("capability probe leaked files: %v", entries)
 	}
@@ -43,7 +41,7 @@ func TestSourceCloneProbeLeavesSourceAndTargetUntouched(t *testing.T) {
 func TestVolumeCloneProbeOwnsItsTemporaryFiles(t *testing.T) {
 	root := t.TempDir()
 	if _, err := SupportedAt(root); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "SupportedAt failed", err)
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil || len(entries) != 0 {

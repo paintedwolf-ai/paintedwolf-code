@@ -185,10 +185,14 @@ func resolveLaunchEntry(name, cwd string, environment []string) (string, error) 
 		if !filepath.IsAbs(path) {
 			path = cwd + string(filepath.Separator) + path
 		}
-		if _, err := exec.LookPath(path); err != nil {
+		found, err := lookExecutable(path)
+		if err != nil {
 			return "", err
 		}
-		return name, nil
+		if filepath.IsAbs(name) {
+			return found, nil
+		}
+		return strings.TrimPrefix(found, cwd+string(filepath.Separator)), nil
 	}
 	var path string
 	for _, entry := range environment {

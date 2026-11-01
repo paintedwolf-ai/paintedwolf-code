@@ -36,6 +36,7 @@ func runDate(inv *invocation) error {
 		if err != nil {
 			fmt.Fprintf(&inv.errors, "%s: Cannot apply date adjustment\n", option.Values[0].Value)
 			inv.status = 1
+			//nolint:nilerr // Invalid date adjustment reports status 1 on stderr.
 			return nil
 		}
 		at = adjusted
@@ -132,6 +133,7 @@ func (inv *invocation) dateInstant(now time.Time, input *commandprogram.Field) (
 		if err != nil {
 			fmt.Fprintf(&inv.errors, "date: invalid date '%s'\n", option.Values[0].Value)
 			inv.status = 1
+			//nolint:nilerr // Invalid -d operand reports status 1 on stderr.
 			return now, false, nil
 		}
 		return at, true, nil
@@ -145,6 +147,7 @@ func (inv *invocation) dateInstant(now time.Time, input *commandprogram.Field) (
 		if err != nil {
 			fmt.Fprintf(&inv.errors, "Failed conversion of ``%s'' using format ``%s''\ndate: illegal time format\n", input.Value, format)
 			inv.status = 1
+			//nolint:nilerr // Invalid -f conversion reports status 1 on stderr.
 			return now, false, nil
 		}
 		if rest != "" {

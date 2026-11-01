@@ -133,7 +133,7 @@ func TestPlanResearchObligationsInInject(t *testing.T) {
 	frameLoader := &workflowruntime.CoordinatorFrames{Runs: wfMgr.Store.Runs, Resolver: &wfMgr.Resolver, Snapshots: wfMgr.Snapshots, Policy: wfMgr.Policy, Obligations: wfMgr.Obligations}
 
 	run, err := wfMgr.Starts.StartHuman(ctx, "sess-posture", wire.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	contractcheck.FailErr(t, "StartHuman plan", err)
 	if run.CurrentPhase != "research" {

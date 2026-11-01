@@ -278,7 +278,7 @@ func linkRevision(resolved projectpaths.Resolved, revision toolcontract.Executio
 	if err != nil {
 		return toolcontract.ExecutionRevision{}, false, err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	info, err := root.Lstat(filepath.FromSlash(resolved.ScopeRel))
 	if errors.Is(err, os.ErrNotExist) {
 		return toolcontract.ExecutionRevision{}, false, nil

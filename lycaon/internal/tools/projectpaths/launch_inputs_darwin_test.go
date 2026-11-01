@@ -39,7 +39,7 @@ func TestActualLaunchUsesCheckedProgramPathHandles(t *testing.T) {
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	if err := hostexec.RunInOwnGroup(t.Context(), cmd); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "hostexec.RunInOwnGroup failed", err)
 	}
 	if output.String() != "literal argument\n" {
 		t.Fatalf("actual output %q", output.String())

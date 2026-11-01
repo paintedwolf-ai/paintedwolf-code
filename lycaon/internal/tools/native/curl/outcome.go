@@ -86,7 +86,7 @@ func classify(err error) *curlFailure {
 	case dial:
 		return &curlFailure{code: 7, message: "Failed to connect", certainty: unsent, cause: err}
 	case errors.As(cause, &tlsFault):
-		return &curlFailure{code: 35, message: "TLS connect error: " + tlsFault.Reason, certainty: unsent, cause: err}
+		return &curlFailure{code: 60, message: "SSL certificate problem: " + tlsFault.Reason, certainty: unsent, cause: err}
 	case errors.As(cause, &redirect) && redirect.LimitExceeded:
 		return &curlFailure{code: 47, message: "Maximum redirects followed", certainty: afterSend, cause: err}
 	case errors.As(cause, &oversized):
