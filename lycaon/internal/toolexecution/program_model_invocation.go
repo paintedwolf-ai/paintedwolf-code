@@ -7,7 +7,6 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -96,12 +95,13 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		lifetime.close()
 		return nil, fmt.Errorf("submitted model arguments require valid JSON text strings")
 	}
-	canonical, err := jsonvalue.CanonicalJSON(snapshot.values)
+	canonical, releaseCanonical, err := toolcontract.CaptureModelJSON(ctx, admission, snapshot.values)
 	if err != nil {
 		lifetime.close()
 		return nil, err
 	}
-	lifetime.model = ProgramModelObservation{ToolName: model.ToolName, ToolCallID: tc.Identity.ToolCallID, CanonicalArguments: string(canonical)}
+	lifetime.releases = append(lifetime.releases, releaseCanonical)
+	lifetime.model = ProgramModelObservation{ToolName: model.ToolName, ToolCallID: tc.Identity.ToolCallID, CanonicalArguments: canonical}
 	return lifetime, nil
 }
 

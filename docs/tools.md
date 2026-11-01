@@ -182,7 +182,8 @@ Transient codec frames follow nesting depth. Retained containers, payloads and
 screened projections follow their actual capacities and lifetimes. Secret
 screening and execution keep separate values; inspection never becomes execution
 authority. Retained input bodies have the invocation store's 8 MiB bound, and
-native review node admission derives from the catalog's expanded-field ceiling.
+native review node admission covers each option's structured fields and derives
+from the catalog's expanded-field ceiling.
 
 ### Complete byte streams
 

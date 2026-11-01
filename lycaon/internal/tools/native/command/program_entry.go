@@ -379,7 +379,7 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 	maximumNodes := 0
 	for _, limit := range run.catalog.Language.Limits {
 		if limit.ID == "expanded_fields" {
-			maximumNodes = 4 * int(limit.Maximum)
+			maximumNodes = 10*int(limit.Maximum) + 64
 		}
 	}
 	if maximumNodes == 0 {

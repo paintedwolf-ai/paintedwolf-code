@@ -34,6 +34,24 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission *t
 	if admission == nil {
 		return nil, nil, fmt.Errorf("program observation requires state admission")
 	}
+	end, err := frame.beginUse()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if end != nil {
+			end()
+		}
+	}()
+	end, err := frame.beginUse()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if end != nil {
+			end()
+		}
+	}()
 	model, err := frame.ModelInvocation(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -48,7 +66,9 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission *t
 	if err != nil {
 		return nil, nil, err
 	}
-	return snapshot.values, snapshot.close, nil
+	finish := end
+	end = nil
+	return snapshot.values, func() { snapshot.close(); finish() }, nil
 }
 
 func (p *programPolicyObservation) evaluate(ctx context.Context, bp *toolfeedback.BlockPlane, anchor, profile string) error {
