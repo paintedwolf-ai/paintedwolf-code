@@ -887,6 +887,9 @@ cost to affected PRs; it does not claim a full native build is inexpensive.
 The merge queue repeats changed coverage on the landing commit and runs the complete affected integration
 selection. Its `limits` and `lint` lanes start first, and the group stops at its
 first failure. The PR's pass does not replace verification of the landing commit.
+The `limits` lane has the same two-hour ceiling as admission: broad Go changes
+run both changed-package and importer coverage passes before Den and scripts
+coverage. This accommodates broad changes without reducing the coverage selection.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on twenty

@@ -1037,7 +1037,7 @@
         "den:coverage:changes",
         "scripts:coverage:changes"
       ],
-      "minutes": 45,
+      "minutes": 120,
       "profiles": [
         "check",
         "integration",
