@@ -183,7 +183,8 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 		if activityPresentation(g.input).role == "container" {
 			continue
 		}
-		if g.counts.failed+g.counts.refused+g.counts.interrupted+g.counts.waiting > 0 && (g.parent == "" || g.parent == "root") {
+		_, hasParent := byKey[g.parent]
+		if g.counts.failed+g.counts.refused+g.counts.interrupted+g.counts.waiting > 0 && !hasParent {
 			primary[i] = true
 			assignments[i] = i
 		}
