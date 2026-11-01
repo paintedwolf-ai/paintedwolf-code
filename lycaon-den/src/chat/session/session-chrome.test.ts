@@ -145,7 +145,14 @@ describe("ensureSessionChrome", () => {
       workers: [],
       checkpoints: [],
       background_outputs: [],
-      previews: [],
+      previews: [
+        {
+          session_id: session.id,
+          page_id: "page-1",
+          assistant_message_id: "msg-1",
+          tool_call_id: "call-1",
+        },
+      ],
     };
     applySessionBootstrapChrome(store, bootstrap);
     const getSessionProgress = vi.fn();

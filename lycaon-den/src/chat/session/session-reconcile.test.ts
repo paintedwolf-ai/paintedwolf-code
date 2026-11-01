@@ -713,11 +713,10 @@ describe("reconcileActiveScope", () => {
     );
     const client = stubClient({
       getSessionBootstrap: vi.fn(async () => snap),
-      getActiveWorkflowRun: vi.fn(async () => undefined),
-      listSessionWorkflowRuns: vi.fn(async () => ({ runs: [] })),
-      getWorkflowRun: vi.fn(async () => {
+      getActiveWorkflowRun: vi.fn(async () => {
         throw new Error("workflow lookup failed");
       }),
+      listSessionWorkflowRuns: vi.fn(async () => ({ runs: [] })),
       listWorkflows: vi.fn(async () => []),
       listBlueprints: vi.fn(async () => []),
     });

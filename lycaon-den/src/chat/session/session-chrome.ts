@@ -14,7 +14,7 @@ import {
 import type { AppStore } from "../../store/app-state-model.ts";
 import type { Session, SessionBootstrap } from "../../api/types.ts";
 import { noticeReporterFor } from "../../platform/connection/app-connection.ts";
-import { APP_SCOPE, projectScope, sessionScope } from "../../notices/notice-scope.ts";
+import { sessionScope } from "../../notices/notice-scope.ts";
 
 type SessionChromeHydration = {
   epoch: number;
@@ -58,15 +58,7 @@ function hydrationFor(appStore: AppStore, sessionId: string): SessionChromeHydra
 }
 
 function reportAuxiliaryChromeError(session: Session, err: unknown): void {
-  const sessionId = session.id?.trim();
-  const projectId = session.project_id?.trim();
-  const scope =
-    projectId && sessionId
-      ? sessionScope(projectId, sessionId)
-      : projectId
-        ? projectScope(projectId)
-        : APP_SCOPE;
-  noticeReporterFor(scope).reportError(err);
+  noticeReporterFor(sessionScope(session.project_id, session.id)).reportError(err);
 }
 
 /** Install store-backed bootstrap slices and return the resulting view epoch. */
@@ -99,12 +91,7 @@ export function applySessionBootstrapAuxiliaryChrome(
   }
   try {
     for (const preview of bootstrap.previews ?? []) {
-      try {
-        applyPreviewAttachment(preview);
-      } catch (err) {
-        ok = false;
-        reportAuxiliaryChromeError(session, err);
-      }
+      applyPreviewAttachment(preview);
     }
   } catch (err) {
     ok = false;

@@ -436,11 +436,10 @@ describe("resumeChatSession cache", () => {
         workers: [],
         checkpoints: [],
       })),
-      getActiveWorkflowRun: vi.fn(async () => undefined),
-      listSessionWorkflowRuns: vi.fn(async () => ({ runs: [] })),
-      getWorkflowRun: vi.fn(async () => {
+      getActiveWorkflowRun: vi.fn(async () => {
         throw new Error("reconcile failed");
       }),
+      listSessionWorkflowRuns: vi.fn(async () => ({ runs: [] })),
       listWorkflows: vi.fn(async () => []),
       listBlueprints: vi.fn(async () => []),
     });
