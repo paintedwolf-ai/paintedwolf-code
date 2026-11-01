@@ -26,5 +26,5 @@ it("preserves group and row elements and expansion while later work arrives", as
   expect(group.querySelector('[data-testid="tool-part-card"]')).toBe(row);
   expect(isDisclosureOpen(row)).toBe(true);
   expect(group.getAttribute("data-status")).toBe("running");
-  expect(group.querySelector(".den-activity-span-name")?.textContent).toBe("Running programs");
+  expect(group.querySelector(".den-activity-span-name")?.textContent).toBe("Exploring project files");
 });

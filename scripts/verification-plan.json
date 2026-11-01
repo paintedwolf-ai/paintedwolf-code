@@ -144,7 +144,9 @@
         "./internal/sourcecatalog",
         "./internal/sourceledger",
         "./internal/session/store",
-        "./internal/sourcecomparison"
+        "./internal/sourcecomparison",
+        "./internal/toolhost",
+        "./internal/tools/native/jq"
       ],
       "flags": [
         "-p=1",

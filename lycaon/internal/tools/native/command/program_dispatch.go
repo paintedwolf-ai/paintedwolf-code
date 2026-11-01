@@ -641,7 +641,7 @@ func (d *ProgramDispatcher) prepareChildFailure(streams commandprogram.Streams, 
 			case "session_output_state":
 				limitID = "session_output_state_bytes"
 			}
-			cause = toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"command": command, "limit_id": limitID, "resource_unit": "bytes", "maximum": limit.Maximum, "observed": limit.Observed})
+			cause = toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"command": command, "limit_id": limitID, "resource_unit": "bytes", "maximum": limit.Maximum, "observed": limit.Observed, "held_bytes": limit.Held, "requested_bytes": limit.Requested, "resource_phase": string(limit.Phase)})
 			reject = toolrejection.AsToolReject(cause)
 		}
 	}

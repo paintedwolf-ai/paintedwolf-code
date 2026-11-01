@@ -317,6 +317,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
 	}
 	inv := newInvocation(ctx, p, tc, streams)
+	defer inv.closePins()
 	defer func() {
 		for _, release := range inv.releases {
 			release()

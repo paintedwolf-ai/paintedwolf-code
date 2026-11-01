@@ -19,11 +19,12 @@ requires:
 when: paintedwolf.rejection_code == "COMMAND_OPTION_UNSUPPORTED"
 effect: block
 copy:
-  what: '{{ paintedwolf.command }} cannot use {% if paintedwolf.word %}{{ paintedwolf.word }}{% else %}that option{% endif %}{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.'
-  cause: 'Supported form: {{ paintedwolf.expected_form }}.'
-  why: No available {{ paintedwolf.command }} accepts that option here.
-  fix: Use the supported form below, or another command that reaches the same result. Earlier output and changes remain in this result.
-  instead: 'Use {{ paintedwolf.expected_form }}.'
+  what: '{% if paintedwolf.command %}{{ paintedwolf.command }}{% else %}This command{% endif %} cannot use {% if paintedwolf.word %}{{ paintedwolf.word }}{% else
+    %}the supplied option{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}.'
+  cause: '{% if paintedwolf.expected_form %}Supported form: {{ paintedwolf.expected_form }}.{% endif %}'
+  why: This command form does not accept the supplied option.
+  fix: '{% if paintedwolf.expected_form %}Use the supported form for this operation; preserve its other operands and earlier effects.{% endif %}'
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: native command option is unsupported

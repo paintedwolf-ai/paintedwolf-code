@@ -41,13 +41,13 @@ def run(arguments, check=True, **kwargs):
 def certificates(work: Path) -> tuple[Path, Path, Path]:
     root, certificate, key = work / "root.pem", work / "server.pem", work / "server.key"
     ca_config = work / "root.cnf"
-    ca_config.write_text("[req]\ndistinguished_name=dn\nx509_extensions=ca\n[dn]\n[ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n")
+    ca_config.write_text("[req]\ndistinguished_name=dn\nx509_extensions=ca\n[dn]\n[ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n")
     run(["openssl", "req", "-config", str(ca_config), "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
          "-subj", f"/CN=Upgrade rehearsal {uuid.uuid4()}", "-keyout", str(work / "root.key"), "-out", str(root)])
     run(["openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes", "-subj", f"/CN={HOST}",
          "-keyout", str(key), "-out", str(work / "server.csr")])
     extensions = work / "server.ext"
-    extensions.write_text(f"subjectAltName=DNS:{HOST}\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\n")
+    extensions.write_text(f"subjectAltName=DNS:{HOST}\nextendedKeyUsage=serverAuth\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n")
     run(["openssl", "x509", "-req", "-in", str(work / "server.csr"), "-CA", str(root),
          "-CAkey", str(work / "root.key"), "-CAcreateserial", "-days", "1", "-extfile", str(extensions),
          "-out", str(certificate)])

@@ -133,7 +133,7 @@ func testWorkflowCommandIdempotency(t *testing.T, h *wiring.Harness, base, proje
 				`{"project_id":"`+projectID+`","posture":"spec"}`, http.StatusAccepted)
 			run := journeyPostJSON[wire.WorkflowRun](t, base,
 				"/v1/sessions/"+sess.ID+"/workflow-runs",
-				workflowStartJSON(t, base, sess.ID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.0"}), http.StatusCreated)
+				workflowStartJSON(t, base, sess.ID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.1"}), http.StatusCreated)
 			if tc.seedPlan {
 				seedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
 			}
@@ -375,7 +375,7 @@ func TestOperationIDConflictSweepE2E(t *testing.T) {
 		op := uuid.NewString()
 		start := func(blueprintTitle string) string {
 			return workflowStartJSON(t, base, workflowSession.ID, map[string]any{
-				"operation_id": op, "workflow_id": "plan", "workflow_version": "1.0.0", "blueprint_title": blueprintTitle,
+				"operation_id": op, "workflow_id": "plan", "workflow_version": "1.0.1", "blueprint_title": blueprintTitle,
 			})
 		}
 		assertOperationConflict(t, base, http.MethodPost,

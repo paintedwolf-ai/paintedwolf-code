@@ -37,3 +37,21 @@ func TestResourceRejectionPreservesActualProgramLimit(t *testing.T) {
 		t.Fatalf("program limit cause %v reject %+v", err, reject)
 	}
 }
+
+func TestMemoryRefusalPreservesReservationPhaseAndAmounts(t *testing.T) {
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 100, State: 100})
+	if err != nil {
+		t.Fatalf("memory: %v", err)
+	}
+	release, err := memory.ReserveProgramState(t.Context(), 60)
+	if err != nil {
+		t.Fatalf("held state: %v", err)
+	}
+	defer release()
+	ctx := toolcontract.WithMemoryPhase(t.Context(), toolcontract.ReviewEncoding)
+	_, err = memory.ReserveProgramState(ctx, 50)
+	rejection := toolrejection.AsToolReject(CommandResourceRejection(err))
+	if rejection == nil || rejection.Data["held_bytes"] != int64(60) || rejection.Data["requested_bytes"] != int64(50) || rejection.Data["resource_phase"] != "review_encoding" {
+		t.Fatalf("reservation details: %+v", rejection)
+	}
+}

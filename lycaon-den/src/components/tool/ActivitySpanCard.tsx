@@ -320,5 +320,5 @@ function commandActivityDirectory(entries: readonly ActivitySpanEntry[]): string
  const tools = entries.filter(entry => entry.kind === "tool");
  if (tools.some(entry => entry.kind === "tool" && !entry.part.commandActivity?.fact.directory)) return "";
  const directories = [...new Set(tools.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity?.fact.directory ? [entry.part.commandActivity.fact.directory] : []))];
- return directories.length === 1 ? directories[0]! : "";
+ return directories.length === 1 ? directories[0] ?? "" : "";
 }

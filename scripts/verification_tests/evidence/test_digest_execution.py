@@ -8,13 +8,55 @@ import unittest
 
 
 class GoDigestTests(unittest.TestCase):
-    def digest(self, events, directory, process_code=0):
+    def digest(self, events, directory, process_code=0, lines=None):
+        options = [] if lines is None else ["--lines", str(lines)]
         return subprocess.run(
-            [sys.executable, str(Path(__file__).resolve().parents[2].joinpath("test-digest.py")), "--process-rc", str(process_code)],
+            [sys.executable, str(Path(__file__).resolve().parents[2].joinpath("test-digest.py")), "--process-rc", str(process_code), *options],
             input="\n".join(json.dumps(event) for event in events),
             text=True, capture_output=True,
             env={**os.environ, "LAST_RUN_DIR": directory}, check=False,
         )
+
+    def test_long_failures_keep_assertion_context_and_final_cleanup_error(self):
+        for names in (("TestMount",), ("TestMount/child",), ("TestMount/one", "TestMount/two")):
+            with self.subTest(names=names), tempfile.TemporaryDirectory() as directory:
+                events = []
+                for name in names:
+                    text = [f"{name} assertion context", *(f"{name} observation {i}" for i in range(20)),
+                            f"{name} cleanup: device or resource busy"]
+                    events.extend({"Package": "fixture/mount", "Test": name, "Action": "output", "Output": line + "\n"}
+                                  for line in text)
+                    events.append({"Package": "fixture/mount", "Test": name, "Action": "fail"})
+                events.append({"Package": "fixture/mount", "Action": "fail"})
+                result = self.digest(events, directory)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                for name in names:
+                    self.assertIn(f"{name} assertion context", result.stdout)
+                    self.assertIn(f"{name} cleanup: device or resource busy", result.stdout)
+                    self.assertNotIn(f"{name} observation 10\n", result.stdout)
+                diagnostic = [line for line in result.stdout.splitlines()
+                              if "assertion context" in line or " observation " in line
+                              or "cleanup:" in line or "lines omitted" in line]
+                self.assertEqual(len(diagnostic), 12 * len(names))
+
+    def test_small_failure_line_budgets_remain_bounded_and_keep_final_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for count in (2, 8):
+                text = ["assertion context", *(f"observation {i}" for i in range(count - 2)), "cleanup error"]
+                events = [{"Package": "fixture/mount", "Test": "TestMount", "Action": "output", "Output": line + "\n"}
+                          for line in text]
+                events += [{"Package": "fixture/mount", "Test": "TestMount", "Action": "fail"},
+                           {"Package": "fixture/mount", "Action": "fail"}]
+                for limit in (0, 1, 2, 3, 12):
+                    with self.subTest(count=count, limit=limit):
+                        result = self.digest(events, directory, lines=limit)
+                        self.assertEqual(result.returncode, 1, result.stderr)
+                        shown = [line.strip() for line in result.stdout.splitlines()
+                                 if line.strip() in text or "lines omitted" in line]
+                        self.assertLessEqual(len(shown), limit)
+                        self.assertEqual("cleanup error" in shown, limit > 0)
+                        if count <= limit:
+                            self.assertEqual(shown, text)
 
     def test_empty_malformed_and_incomplete_captures_never_pass(self):
         cases = [[], [[]], [{"Package": [], "Action": "pass"}],
