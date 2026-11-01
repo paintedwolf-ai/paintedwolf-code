@@ -1296,6 +1296,22 @@ host_facts:
    type: string
  - name: paintedwolf.expected_form
    type: string
+ - name: paintedwolf.parser_unclosed_quote
+   type: bool
+ - name: paintedwolf.parser_unclosed_heredoc
+   type: bool
+ - name: paintedwolf.parser_expected_closer
+   type: bool
+ - name: paintedwolf.parser_expected_following
+   type: bool
+ - name: paintedwolf.parser_utf8_bom
+   type: bool
+ - name: paintedwolf.parser_nul_byte
+   type: bool
+ - name: paintedwolf.parser_invalid_utf8
+   type: bool
+ - name: paintedwolf.parser_single_quote
+   type: bool
  - name: paintedwolf.source_excerpt
    type: string
  - name: paintedwolf.source_excerpt_start_byte
