@@ -113,12 +113,12 @@ func TestMLXWorkspaceRemainsReservedAcrossBothRuntimeLifetimes(t *testing.T) {
 
 func TestEightGiBMacAdmitsSixHeadsAndSixteenKGenerationContext(t *testing.T) {
 	facts := inference.DeviceFacts{PhysicalDevice: inference.PhysicalDevice{Kind: "apple_silicon"}, TotalBytes: 8 << 30, RecommendedBytes: (16 << 30) / 3, UnifiedMemory: true}
-	decision := bialy.MemoryPlan{HostBytes: 384 << 20, DeviceBytes: 643835514 + 6*59881676 + (64 << 20) + (1 << 30), WorkspaceBytes: 1 << 30, MaxRows: 2}
+	decision := bialy.MemoryPlan{HostBytes: 384 << 20, DeviceBytes: 643835514 + 6*59881676 + (64 << 20) + (512 << 20), WorkspaceBytes: 512 << 20, MaxRows: 2}
 	resources, err := localmodels.AllocateResources(8<<30, facts, decision)
 	testutil.FailErr(t, "allocate minimum Mac", err)
 	defer resources.Close()
 	// Pinned prototype inspection at 16,384 context tokens and 128-token prefill chunks.
-	const generationPeak, generationWorkspace, generationHost = 3981213696, 671088640, 536870912
+	const generationPeak, generationWorkspace, generationHost = 3914104832, 402653184, 536870912
 	resident, err := inference.ReserveMemory(resources.GenerationHost, resources.GenerationDevice, generationHost, generationPeak-min(generationWorkspace, resources.SharedWorkspaceBytes), true)
 	testutil.FailErr(t, "admit prototype context", err)
 	defer func() {
