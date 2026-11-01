@@ -78,37 +78,37 @@ pub fn sample(
     for p in &mut probs {
         p.1 = p.1.exp();
     }
-    let total: f32 = probs.iter().map(|p| p.1).sum();
-    for p in &mut probs {
-        p.1 /= total;
-    }
+    let mut total: f64 = probs.iter().map(|p| f64::from(p.1)).sum();
     if top_p < 1.0 {
         probs.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
-        // Keep the smallest prefix whose cumulative mass reaches top_p.
+        let threshold = f64::from(top_p) * total;
         let mut acc = 0.0;
         let cutoff = probs
             .iter()
             .position(|p| {
-                acc += p.1;
-                acc >= top_p
+                acc += f64::from(p.1);
+                acc >= threshold
             })
             .map_or(probs.len(), |i| i + 1);
         probs.truncate(cutoff);
-        let rest: f32 = probs.iter().map(|p| p.1).sum();
-        for p in &mut probs {
-            p.1 /= rest;
-        }
+        total = probs.iter().map(|p| f64::from(p.1)).sum();
     }
 
-    let pick = rng.next_f32();
+    let pick = f64::from(rng.next_f32()) * total;
     let mut acc = 0.0;
+    let mut last_supported = 0;
     for (token, p) in &probs {
-        acc += p;
+        if *p == 0.0 {
+            continue;
+        }
+        last_supported = *token;
+        acc += f64::from(*p);
         if pick < acc {
             return Ok(*token);
         }
     }
-    Ok(probs.last().map(|p| p.0).unwrap_or(0))
+    // Rounding must never select a masked or underflowed token.
+    Ok(last_supported)
 }
 
 fn argmax(logits: &[f32]) -> u32 {
@@ -174,6 +174,19 @@ mod tests {
                 sample(&[0.0, 3.0, 4.0, 2.0], 1.0, 0.95, 2, &mut rng).unwrap(),
                 1 | 2
             ));
+        }
+    }
+
+    #[test]
+    fn final_draw_stays_inside_distribution_support() {
+        for top_p in [1.0, 0.9999] {
+            let mut logits = vec![0.0; 1000];
+            logits.extend([f32::NEG_INFINITY, -1000.0]);
+            // The first draw is the largest possible value below one.
+            let mut rng = Rng {
+                s: [0, 0x4fc7_1c71_c71c_71c7, 0, 0],
+            };
+            assert_eq!(sample(&logits, 1.0, top_p, 0, &mut rng).unwrap(), 999);
         }
     }
 
