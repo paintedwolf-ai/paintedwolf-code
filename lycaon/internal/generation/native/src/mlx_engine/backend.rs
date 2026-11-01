@@ -1,4 +1,4 @@
-use super::{Cache, Model};
+use super::{Cache, Logits, Model};
 use crate::{
     error::{Error, Result},
     execution::{Backend, Sampling},
@@ -55,6 +55,11 @@ impl Backend for Mlx {
     fn plan(directory: &Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
         let config =
             super::config::read(directory).map_err(|e| Error::Checkpoint(e.to_string()))?;
+        super::layout::validate(
+            &directory.join("model.safetensors"),
+            &config["quantization"],
+        )
+        .map_err(|e| Error::Checkpoint(e.to_string()))?;
         let bits = super::weights::quantization_bits(
             &config["quantization"],
             "model.embed_tokens_per_layer",
@@ -74,7 +79,7 @@ impl Backend for Mlx {
         let ids: Vec<_> = tokens.iter().map(|token| *token as i32).collect();
         let logits = self
             .model
-            .forward(&ids, &mut self.cache)
+            .forward(&ids, &mut self.cache, Logits::Last)
             .map_err(device_error)?;
         let Some(sampling) = sampling else {
             self.cache.evaluate().map_err(device_error)?;

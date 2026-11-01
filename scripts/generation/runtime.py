@@ -237,7 +237,8 @@ def bench(args):
             raise ValueError("rendered prompt exceeds its bounds")
         shutil.copyfile(args.prompt_file, destination / "rendered-prompt.json")
     specification = {"prompt_tokens": prompt, "generation_tokens": args.tokens,
-                     "trials": args.trials, "ple": args.ple, "prefill_chunk": args.prefill_chunk, "kv_bits": args.kv_bits}
+                     "trials": args.trials, "ple": args.ple, "prefill_chunk": args.prefill_chunk, "kv_bits": args.kv_bits,
+                     "verify_last_logits": args.verify_last_logits}
     input_path = destination / "input.json"
     input_path.write_text(json.dumps(specification) + "\n")
     build_receipt = None
@@ -292,7 +293,12 @@ def bench(args):
     print(destination)
     if result.returncode:
         raise RuntimeError("benchmark failed; inspect its retained logs")
-    print((destination / "stdout.log").read_text())
+    if args.backend == "native":
+        for line in (destination / "stdout.log").read_text().splitlines():
+            record = json.loads(line)
+            print(json.dumps({key: value for key, value in record.items() if key not in {"steps", "tokens"}}))
+    else:
+        print((destination / "stdout.log").read_text())
 
 
 def main():
@@ -309,6 +315,7 @@ def main():
     parser.add_argument("--artifact-identity")
     parser.add_argument("--device-pci")
     parser.add_argument("--checkpoint-tokens", type=int, default=0)
+    parser.add_argument("--verify-last-logits", action="store_true")
     parser.add_argument("--precision", type=Path)
     parser.add_argument("--prompt", type=int, default=512)
     parser.add_argument("--tokens", type=int, default=128)
@@ -325,6 +332,8 @@ def main():
         parser.error("prefix checkpoints require the native backend and at most 4096 tokens")
     if args.backend == "native" and args.ple != "mapped":
         parser.error("the production runner uses mapped PLE")
+    if args.verify_last_logits and args.backend != "reference-rust":
+        parser.error("last-row logit comparison requires the Rust reference backend")
     if not 1 <= args.prefill_chunk <= 256 or not 1 <= args.prompt or not 1 <= args.tokens <= 4096 or args.prompt + args.tokens > 65536 or not 1 <= args.trials <= 20:
         parser.error("benchmark dimensions exceed their bounds")
     {"prepare": prepare, "build": build, "test": test, "bench": bench}[args.action](args)
