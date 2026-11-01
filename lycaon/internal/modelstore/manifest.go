@@ -5,14 +5,8 @@ import (
 )
 
 func validate(m Manifest) error {
-	if !nameShape.MatchString(m.Model) {
-		return fmt.Errorf("modelstore: model name %q is not a safe identity", m.Model)
-	}
-	if !nameShape.MatchString(m.Revision) {
-		return fmt.Errorf("modelstore: revision %q is not a safe identity", m.Revision)
-	}
-	if !nameShape.MatchString(m.Device) {
-		return fmt.Errorf("modelstore: device %q is not a safe identity", m.Device)
+	if err := validateIdentity(m); err != nil {
+		return err
 	}
 	if err := validateArtifact(m.Artifact); err != nil {
 		return err
@@ -35,6 +29,19 @@ func validate(m Manifest) error {
 			return fmt.Errorf("modelstore: duplicate artifact filename %s", name)
 		}
 		names[name] = true
+	}
+	return nil
+}
+
+func validateIdentity(m Manifest) error {
+	if !nameShape.MatchString(m.Model) {
+		return fmt.Errorf("modelstore: model name %q is not a safe identity", m.Model)
+	}
+	if !nameShape.MatchString(m.Revision) {
+		return fmt.Errorf("modelstore: revision %q is not a safe identity", m.Revision)
+	}
+	if !nameShape.MatchString(m.Device) {
+		return fmt.Errorf("modelstore: device %q is not a safe identity", m.Device)
 	}
 	return nil
 }

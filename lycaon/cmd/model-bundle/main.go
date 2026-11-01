@@ -16,8 +16,13 @@ import (
 )
 
 func run(ctx context.Context, args []string, output, diagnostics io.Writer) error {
-	if len(args) > 0 && args[0] == "sign" {
-		return sign(ctx, args[1:], output, diagnostics)
+	if len(args) > 0 {
+		switch args[0] {
+		case "sign":
+			return sign(ctx, args[1:], output, diagnostics)
+		case "prepare":
+			return prepare(ctx, args[1:], output, diagnostics)
+		}
 	}
 	flags := flag.NewFlagSet("model-bundle", flag.ContinueOnError)
 	flags.SetOutput(diagnostics)

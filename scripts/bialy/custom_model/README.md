@@ -184,6 +184,24 @@ configuration and conversion provenance that the runtime reads. The model
 identity is `gemma4-e4b-paintedwolf`; revision names identify immutable exports.
 Keep the export manifest separate from the bundle's signed `manifest.json`.
 
+Use `model-bundle prepare` to compute exact sizes and hashes for explicitly named
+payloads. It emits the unsigned manifest to stdout without copying, converting
+or signing weights. Unlisted files are excluded. Supply an immutable revision
+and add each required runtime/provenance file explicitly; preparation does not
+establish model compatibility or behavioral quality.
+
+```sh
+model-bundle prepare -bundle /release/model -model gemma4-e4b-paintedwolf \
+  -revision RELEASE_REVISION -device mlx -artifact model.safetensors:safetensors \
+  -file config.json:config -file tokenizer.json:tokenizer \
+  -file tokenizer_config.json:tokenizer_config -file chat_template.jinja:chat_template \
+  -file generation_config.json:generation_config > /release/export.json
+```
+
+For Vulkan, select `-device vulkan -artifact model.gguf:gguf` and name the
+corresponding runtime and provenance files. Signing audits the prepared hashes
+again, so changed exports require fresh preparation.
+
 The `model-bundle` release tool signs an export using an explicitly supplied
 PEM PKCS#8 Ed25519 key. The key ID and public key must already be present in the
 release authority registry. It audits every declared payload against the export
