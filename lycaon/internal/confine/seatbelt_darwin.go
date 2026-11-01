@@ -79,9 +79,11 @@ static void confine_fill_signing_from_code(SecCodeRef guest, confine_socket_peer
         return;
     }
     SecStaticCodeRef staticCode = NULL;
-    if (SecCodeCopyStaticCode(guest, kSecCSDefaultFlags, &staticCode) == errSecSuccess && staticCode != NULL) {
+    OSStatus st = SecCodeCopyStaticCode(guest, kSecCSDefaultFlags, &staticCode);
+    if (st == errSecSuccess && staticCode != NULL) {
         CFDictionaryRef info = NULL;
-        if (SecCodeCopySigningInformation(staticCode, kSecCSSigningInformation, &info) == errSecSuccess && info != NULL) {
+        st = SecCodeCopySigningInformation(staticCode, kSecCSSigningInformation, &info);
+        if (st == errSecSuccess && info != NULL) {
             CFStringRef ident = (CFStringRef)CFDictionaryGetValue(info, kSecCodeInfoIdentifier);
             if (ident != NULL && CFGetTypeID(ident) == CFStringGetTypeID()) {
                 confine_cfstring_copy(ident, out->signing_id, sizeof(out->signing_id));
@@ -113,7 +115,8 @@ static void confine_pid_signing_info(pid_t pid, confine_socket_peer_t *out) {
         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     if (attrs != NULL) {
         SecCodeRef guest = NULL;
-        if (SecCodeCopyGuestWithAttributes(NULL, attrs, kSecCSDefaultFlags, &guest) == errSecSuccess && guest != NULL) {
+        OSStatus st = SecCodeCopyGuestWithAttributes(NULL, attrs, kSecCSDefaultFlags, &guest);
+        if (st == errSecSuccess && guest != NULL) {
             confine_fill_signing_from_code(guest, out);
             CFRelease(guest);
         }
@@ -142,7 +145,8 @@ static int confine_connected_socket_peer(int fd, confine_socket_peer_t *out) {
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
         if (attrs != NULL) {
             SecCodeRef guest = NULL;
-            if (SecCodeCopyGuestWithAttributes(NULL, attrs, kSecCSDefaultFlags, &guest) == errSecSuccess && guest != NULL) {
+            OSStatus st = SecCodeCopyGuestWithAttributes(NULL, attrs, kSecCSDefaultFlags, &guest);
+            if (st == errSecSuccess && guest != NULL) {
                 confine_fill_signing_from_code(guest, out);
                 CFRelease(guest);
             }
