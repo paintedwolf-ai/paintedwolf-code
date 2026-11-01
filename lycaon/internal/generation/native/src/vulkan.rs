@@ -17,6 +17,13 @@ pub struct DeviceInfo {
 }
 
 unsafe extern "C" {
+    fn pw_generation_inspect(
+        model: *const c_char,
+        resident: *mut u64,
+        mapped: *mut u64,
+        error: *mut c_char,
+        capacity: usize,
+    ) -> c_int;
     fn pw_generation_probe(
         pci: *const c_char,
         info: *mut DeviceInfo,
@@ -29,6 +36,7 @@ unsafe extern "C" {
         context: u32,
         chunk: u32,
         prefix: u32,
+        budget: u64,
         engine: *mut *mut c_void,
         error: *mut c_char,
         capacity: usize,
@@ -80,7 +88,13 @@ impl Vulkan {
         Ok(info)
     }
 
-    pub fn load(directory: &Path, pci: &str, context: usize, chunk: usize) -> Result<Self> {
+    pub fn load(
+        directory: &Path,
+        pci: &str,
+        context: usize,
+        chunk: usize,
+        budget: u64,
+    ) -> Result<Self> {
         use std::os::unix::ffi::OsStrExt;
         let path = string(directory.join("model.gguf").as_os_str().as_bytes())?;
         let pci = string(pci.as_bytes())?;
@@ -92,6 +106,7 @@ impl Vulkan {
                 context as u32,
                 chunk as u32,
                 4096.min(context.saturating_sub(1)) as u32,
+                budget,
                 &mut engine,
                 error,
                 capacity,
@@ -112,6 +127,15 @@ impl Vulkan {
 }
 
 impl Backend for Vulkan {
+    fn plan(directory: &Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
+        use std::os::unix::ffi::OsStrExt;
+        let path = string(directory.join("model.gguf").as_os_str().as_bytes())?;
+        let (mut weights, mut mapped) = (0, 0);
+        checked(|error, capacity| unsafe {
+            pw_generation_inspect(path.as_ptr(), &mut weights, &mut mapped, error, capacity)
+        })?;
+        crate::resources::Plan::e4b(weights, mapped, context, chunk, false)
+    }
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
         let mut sampled = u32::MAX;
         let mode = sampling

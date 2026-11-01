@@ -12,6 +12,11 @@ pub struct Sampling {
 }
 
 pub trait Backend {
+    fn plan(
+        directory: &std::path::Path,
+        context: usize,
+        chunk: usize,
+    ) -> Result<crate::resources::Plan>;
     // Return only after the submitted device work completes.
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>>;
     fn reset(&mut self) -> Result<()>;

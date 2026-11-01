@@ -40,9 +40,11 @@ fn run(args: Args) -> nativegen::Result<()> {
         backend: "mlx",
         physical_device: PhysicalDevice::AppleSilicon,
     };
-    let mut runner = Runner::new(args.model, identity, |path: &std::path::Path, _, _| {
-        Mlx::load(path)
-    })?;
+    let mut runner = Runner::new(
+        args.model,
+        identity,
+        |path: &std::path::Path, _, _, budget| Mlx::load(path, budget as usize),
+    )?;
     runner.serve(std::io::stdin().lock(), std::io::stdout().lock())
 }
 
@@ -67,7 +69,9 @@ fn run(args: Args) -> nativegen::Result<()> {
     let mut runner = Runner::new(
         args.model,
         identity,
-        move |path: &std::path::Path, context, chunk| Vulkan::load(path, &pci, context, chunk),
+        move |path: &std::path::Path, context, chunk, budget| {
+            Vulkan::load(path, &pci, context, chunk, budget)
+        },
     )?;
     runner.serve(std::io::stdin().lock(), std::io::stdout().lock())
 }

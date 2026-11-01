@@ -15,16 +15,31 @@ pub struct Mlx {
     model: Model,
     cache: Cache,
     prefix: Option<Cache>,
+    budget: usize,
 }
 
 impl Mlx {
-    pub fn load(directory: &Path) -> Result<Self> {
+    pub fn load(directory: &Path, budget: usize) -> Result<Self> {
+        memory::set_memory_limit(budget).map_err(device_error)?;
         memory::set_cache_limit(128 << 20).map_err(device_error)?;
-        Ok(Self {
+        memory::reset_peak_memory().map_err(device_error)?;
+        let engine = Self {
             model: Model::load(directory).map_err(device_error)?,
             cache: Cache::default(),
             prefix: None,
-        })
+            budget,
+        };
+        engine.completed(None)?;
+        Ok(engine)
+    }
+
+    fn completed(&self, token: Option<u32>) -> Result<Option<u32>> {
+        if self.allocated_bytes()? > self.budget
+            || memory::peak_memory().map_err(device_error)? > self.budget
+        {
+            return Err(device_error("execution exceeded its memory reservation"));
+        }
+        Ok(token)
     }
 
     pub fn allocated_bytes(&self) -> Result<usize> {
@@ -38,10 +53,25 @@ impl Mlx {
 }
 
 impl Backend for Mlx {
+    fn plan(directory: &Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
+        let config =
+            super::config::read(directory).map_err(|e| Error::Checkpoint(e.to_string()))?;
+        let bits = super::weights::quantization_bits(
+            &config["quantization"],
+            "model.embed_tokens_per_layer",
+        )
+        .map_err(|e| Error::Checkpoint(e.to_string()))?;
+        super::ple::MappedPLE::open(&directory.join("model.safetensors"), bits)
+            .map_err(|e| Error::Checkpoint(e.to_string()))?;
+        let (weights, mapped) =
+            crate::tensor_inventory::safetensors(&directory.join("model.safetensors"))?;
+        crate::resources::Plan::e4b(weights, mapped, context, chunk, true)
+    }
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
         if tokens.iter().any(|token| *token >= 262144) {
             return Err(device_error("invalid input token"));
         }
+        memory::reset_peak_memory().map_err(device_error)?;
         let ids: Vec<_> = tokens.iter().map(|token| *token as i32).collect();
         let logits = self
             .model
@@ -49,7 +79,7 @@ impl Backend for Mlx {
             .map_err(device_error)?;
         let Some(sampling) = sampling else {
             self.cache.evaluate().map_err(device_error)?;
-            return Ok(None);
+            return self.completed(None);
         };
         let logits = logits.index((0, -1, ..));
         if sampling.temperature == 0.0 {
@@ -64,11 +94,11 @@ impl Backend for Mlx {
             if !finite.try_item_exact::<bool>().map_err(device_error)? {
                 return Err(device_error("non-finite model logits"));
             }
-            Ok(Some(token.try_item_cast::<u32>().map_err(device_error)?))
+            self.completed(Some(token.try_item_cast::<u32>().map_err(device_error)?))
         } else {
             let logits = logits.as_dtype(Dtype::Float32).map_err(device_error)?;
             self.cache.evaluate_with(&[&logits]).map_err(device_error)?;
-            Ok(Some(sampler::sample(
+            self.completed(Some(sampler::sample(
                 logits.as_slice::<f32>(),
                 sampling.temperature,
                 sampling.top_p,

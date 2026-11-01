@@ -18,9 +18,15 @@ pub struct Envelope {
 #[serde(tag = "method", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
     Hello {},
+    Inspect {
+        context_tokens: usize,
+        prefill_chunk: usize,
+    },
     Load {
         context_tokens: usize,
         prefill_chunk: usize,
+        device_budget_bytes: u64,
+        host_budget_bytes: u64,
     },
     Render {
         request: RenderRequest,
@@ -49,13 +55,17 @@ pub enum Output {
         artifact_id: String,
         physical_device: PhysicalDevice,
     },
+    Resources {
+        plan: crate::resources::Plan,
+    },
     Loaded {
         context_tokens: usize,
         prefill_chunk: usize,
         sampling: super::settings::SamplingDefaults,
     },
     Rendered {
-        prompt_tokens: Vec<u32>,
+        #[serde(flatten)]
+        rendered: crate::rendering::Rendered,
     },
     Begun {
         request_id: u64,

@@ -16,6 +16,8 @@ target_include_directories(generation-reference PRIVATE "${LLAMA_SOURCE_DIR}/ven
 target_link_libraries(generation-reference PRIVATE llama)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  add_library(nativegen_vulkan SHARED ../../../lycaon/internal/generation/native/vulkan/adapter.cpp)
+  add_library(nativegen_vulkan SHARED ../../../lycaon/internal/generation/native/vulkan/adapter.cpp
+    ../../../lycaon/internal/generation/native/vulkan/artifact.cpp)
+  target_include_directories(nativegen_vulkan PRIVATE "${LLAMA_SOURCE_DIR}/src")
   target_link_libraries(nativegen_vulkan PRIVATE llama)
 endif()

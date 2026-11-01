@@ -5,6 +5,9 @@ use std::io::Cursor;
 
 struct NoDevice;
 impl Backend for NoDevice {
+    fn plan(_: &std::path::Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
+        crate::resources::Plan::e4b(3 << 30, 2 << 30, context, chunk, false)
+    }
     fn forward(&mut self, _: &[u32], _: Option<&mut Sampling>) -> Result<Option<u32>> {
         panic!("unexpected device work")
     }
@@ -43,7 +46,7 @@ fn hello_and_shutdown_do_not_load_or_probe_the_model() {
     let mut runner = Runner::new(
         PathBuf::new(),
         identity(),
-        |_: &Path, _, _| -> Result<NoDevice> { panic!("unexpected load") },
+        |_: &Path, _, _, _| -> Result<NoDevice> { panic!("unexpected load") },
     )
     .unwrap();
     let input = frames(&[
@@ -76,7 +79,7 @@ fn malformed_version_sequence_and_fields_close_the_connection() {
         json!({"version":1,"id":1,"command":{"method":"hello"},"extra":true}),
     ] {
         let mut runner =
-            Runner::new(PathBuf::new(), identity(), |_: &Path, _, _| Ok(NoDevice)).unwrap();
+            Runner::new(PathBuf::new(), identity(), |_: &Path, _, _, _| Ok(NoDevice)).unwrap();
         assert!(
             runner
                 .serve(Cursor::new(frames(&[envelope])), Vec::new())
@@ -85,7 +88,7 @@ fn malformed_version_sequence_and_fields_close_the_connection() {
     }
     let duplicate = json!({"version":1,"id":1,"command":{"method":"hello"}});
     let mut runner =
-        Runner::new(PathBuf::new(), identity(), |_: &Path, _, _| Ok(NoDevice)).unwrap();
+        Runner::new(PathBuf::new(), identity(), |_: &Path, _, _, _| Ok(NoDevice)).unwrap();
     assert!(
         runner
             .serve(
@@ -94,4 +97,31 @@ fn malformed_version_sequence_and_fields_close_the_connection() {
             )
             .is_err()
     );
+}
+
+#[test]
+fn resource_inspection_and_rejection_precede_model_loading() {
+    let mut runner = Runner::new(
+        PathBuf::new(),
+        identity(),
+        |_: &Path, _, _, _| -> Result<NoDevice> { panic!("unreserved model load") },
+    )
+    .unwrap();
+    let mut output = Vec::new();
+    runner.serve(Cursor::new(frames(&[
+        json!({"version":1,"id":1,"command":{"method":"inspect","context_tokens":4096,"prefill_chunk":128}}),
+        json!({"version":1,"id":2,"command":{"method":"load","context_tokens":4096,"prefill_chunk":128,"device_budget_bytes":1,"host_budget_bytes":1}}),
+    ])), &mut output).unwrap();
+    let mut output = Cursor::new(output);
+    let plan: Value =
+        serde_json::from_slice(&protocol::read_frame(&mut output).unwrap().unwrap()).unwrap();
+    assert!(
+        plan["result"]["plan"]["device_reservation_bytes"]
+            .as_u64()
+            .unwrap()
+            > 3 << 30
+    );
+    let rejection: Value =
+        serde_json::from_slice(&protocol::read_frame(&mut output).unwrap().unwrap()).unwrap();
+    assert_eq!(rejection["code"], "capacity");
 }

@@ -12,8 +12,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let request: RenderRequest = serde_json::from_reader(file)?;
     let renderer = Renderer::load(Path::new(&args[1]))?;
-    let tokens = renderer.render(&request, 65536)?;
-    println!("{}", serde_json::json!({"prompt_tokens": tokens}));
+    let rendered = renderer.render(&request, 65536)?;
+    println!("{}", serde_json::to_string(&rendered)?);
     Ok(())
 }
 

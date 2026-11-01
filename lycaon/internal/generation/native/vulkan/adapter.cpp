@@ -1,4 +1,6 @@
 #include "adapter.h"
+#include "artifact.h"
+#include "llama-ext.h"
 #include "llama.h"
 #include "ggml-backend.h"
 #include <algorithm>
@@ -18,6 +20,14 @@ struct pw_generation {
     uint32_t limit = 0;
     uint32_t chunk = 0;
     uint32_t prefix_limit = 0;
+    uint64_t budget = 0;
+    void check_memory() const {
+        uint64_t used = 0;
+        for (const auto & [type, bytes] : llama_get_memory_breakdown(context.get())) {
+            if (!ggml_backend_buft_is_host(type)) used += bytes.model + bytes.context + bytes.compute;
+        }
+        if (used > budget) throw std::runtime_error("execution exceeded its memory reservation");
+    }
 };
 
 namespace {
@@ -53,6 +63,15 @@ ggml_backend_dev_t device(const char * pci) {
 }
 }
 
+extern "C" int pw_generation_inspect(const char * model, uint64_t * resident, uint64_t * mapped,
+                                      char * error, size_t capacity) {
+    return guarded(error, capacity, [&] {
+        const auto inventory = inspect_e4b(model);
+        *resident = inventory.resident;
+        *mapped = inventory.mapped;
+    });
+}
+
 extern "C" int pw_generation_probe(const char * pci, pw_device_info * info,
                                     char * error, size_t capacity) {
     return guarded(error, capacity, [&] {
@@ -64,12 +83,13 @@ extern "C" int pw_generation_probe(const char * pci, pw_device_info * info,
 }
 
 extern "C" int pw_generation_load(const char * path, const char * pci, uint32_t context,
-                                   uint32_t chunk, uint32_t prefix, pw_generation ** result,
+                                   uint32_t chunk, uint32_t prefix, uint64_t budget, pw_generation ** result,
                                    char * error, size_t capacity) {
     *result = nullptr;
     return guarded(error, capacity, [&] {
         if (context < 2 || context > 65536 || !chunk || chunk > 256 || prefix > 4096 || prefix >= context)
             throw std::runtime_error("invalid execution limits");
+        inspect_e4b(path);
         auto engine = std::make_unique<pw_generation>();
         ggml_backend_dev_t devices[] = {device(pci), nullptr};
         auto mp = llama_model_default_params();
@@ -97,6 +117,8 @@ extern "C" int pw_generation_load(const char * path, const char * pci, uint32_t 
         cp.type_k = cp.type_v = GGML_TYPE_F16;
         engine->context.reset(llama_init_from_model(engine->model.get(), cp));
         if (!engine->context) throw std::runtime_error("context allocation failed");
+        engine->budget = budget;
+        engine->check_memory();
         engine->limit = context;
         engine->chunk = chunk;
         engine->prefix_limit = prefix;
@@ -130,6 +152,7 @@ extern "C" int pw_generation_forward(pw_generation * engine, const uint32_t * to
         llama_batch_free(batch);
         llama_synchronize(engine->context.get());
         if (status) throw std::runtime_error("Vulkan decode failed: " + std::to_string(status));
+        engine->check_memory();
         engine->position += count;
         if (output) {
             const auto token = llama_get_sampled_token_ith(engine->context.get(), -1);

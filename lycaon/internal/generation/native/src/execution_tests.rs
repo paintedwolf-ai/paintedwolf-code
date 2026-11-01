@@ -11,6 +11,9 @@ struct Fake {
 }
 
 impl Backend for Fake {
+    fn plan(_: &std::path::Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
+        crate::resources::Plan::e4b(3 << 30, 2 << 30, context, chunk, false)
+    }
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
         self.calls.push(tokens.to_vec());
         self.tokens.extend(tokens);

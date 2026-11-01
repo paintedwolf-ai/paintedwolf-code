@@ -1,5 +1,4 @@
 use mlx_rs::{Array, fast, ops, ops::indexing::*};
-use serde_json::Value;
 use std::path::Path;
 
 mod activation;
@@ -200,8 +199,7 @@ pub struct Model {
 
 impl Model {
     pub fn load(directory: &Path) -> Result<Self> {
-        let config: Value = serde_json::from_slice(&std::fs::read(directory.join("config.json"))?)?;
-        config::validate(&config)?;
+        let config = config::read(directory)?;
         let quantization = config["quantization"].clone();
         let bits = weights::quantization_bits(&quantization, "model.embed_tokens_per_layer")?;
         let path = directory.join("model.safetensors");

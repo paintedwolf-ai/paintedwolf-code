@@ -1,6 +1,17 @@
 use super::Result;
 use serde_json::Value;
 
+pub fn read(directory: &std::path::Path) -> Result<Value> {
+    use std::io::Read;
+    let file = std::fs::File::open(directory.join("config.json"))?;
+    if !file.metadata()?.is_file() || file.metadata()?.len() > 4 << 20 {
+        return Err("Model configuration exceeds its bound".into());
+    }
+    let value = serde_json::from_reader(file.take((4 << 20) + 1))?;
+    validate(&value)?;
+    Ok(value)
+}
+
 pub fn validate(config: &Value) -> Result<()> {
     let text = &config["text_config"];
     for (name, value) in [

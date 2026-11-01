@@ -18,6 +18,12 @@ pub struct RenderRequest {
     pub tools: Vec<Value>,
 }
 
+#[derive(Serialize)]
+pub struct Rendered {
+    pub prompt_tokens: Vec<u32>,
+    pub checkpoint_tokens: usize,
+}
+
 pub struct Renderer {
     environment: Environment<'static>,
     tokenizer: Tokenizer,
@@ -94,6 +100,19 @@ impl Renderer {
         if tokenizer.token_to_id(&bos) != Some(2) || tokenizer.get_vocab_size(true) != 262144 {
             return Err(tokenizer_error("unsupported E4B vocabulary"));
         }
+        for (marker, id) in [
+            ("<|tool_call>", 48),
+            ("<tool_call|>", 49),
+            ("<|\"|>", 52),
+            ("<|channel>", 100),
+            ("<channel|>", 101),
+            ("<|turn>", 105),
+            ("<turn|>", 106),
+        ] {
+            if tokenizer.token_to_id(marker) != Some(id) {
+                return Err(tokenizer_error("unsupported E4B control tokens"));
+            }
+        }
         let template = String::from_utf8(read_bounded(
             &directory.join("chat_template.jinja"),
             1 << 20,
@@ -106,31 +125,65 @@ impl Renderer {
         })
     }
 
-    pub fn render(&self, request: &RenderRequest, maximum_tokens: usize) -> Result<Vec<u32>> {
+    pub fn render(&self, request: &RenderRequest, maximum_tokens: usize) -> Result<Rendered> {
         if request.messages.is_empty()
             || request.messages.len() > 2048
             || request.tools.len() > 512
             || !(1..=65536).contains(&maximum_tokens)
         {
-            return Err(tokenizer_error("prompt dimensions exceed their bounds"));
+            return Err(Error::Protocol(
+                "prompt dimensions exceed their bounds".into(),
+            ));
         }
+        let prompt_tokens = self.tokenize(&self.render_text(request, true)?, maximum_tokens)?;
+        let first = &request.messages[0];
+        let system = matches!(first["role"].as_str(), Some("system" | "developer"));
+        let mut checkpoint_tokens = 0;
+        if system || !request.tools.is_empty() {
+            let prefix = RenderRequest {
+                messages: if system {
+                    vec![first.clone()]
+                } else {
+                    Vec::new()
+                },
+                tools: request.tools.clone(),
+            };
+            if let Ok(tokens) = self
+                .render_text(&prefix, false)
+                .and_then(|text| self.tokenize(&text, 65536))
+            {
+                let count = tokens
+                    .len()
+                    .min(4096)
+                    .min(prompt_tokens.len().saturating_sub(1));
+                if prompt_tokens.starts_with(&tokens[..count]) {
+                    checkpoint_tokens = count;
+                }
+            }
+        }
+        Ok(Rendered {
+            prompt_tokens,
+            checkpoint_tokens,
+        })
+    }
+
+    fn render_text(&self, request: &RenderRequest, generation_prompt: bool) -> Result<String> {
         let context = serde_json::json!({
             "messages": request.messages, "tools": request.tools, "bos_token": self.bos,
-            "add_generation_prompt": true, "enable_thinking": false, "preserve_thinking": false,
+            "add_generation_prompt": generation_prompt, "enable_thinking": false, "preserve_thinking": false,
         });
         let mut output = BoundedText(Vec::new());
         self.environment
             .get_template("chat")
             .map_err(tokenizer_error)?
             .render_captured_to(context, &mut output)
-            .map_err(tokenizer_error)?;
-        let text = String::from_utf8(output.0).map_err(tokenizer_error)?;
-        self.tokenize(&text, maximum_tokens)
+            .map_err(|error| Error::Protocol(error.to_string()))?;
+        String::from_utf8(output.0).map_err(tokenizer_error)
     }
 
     pub fn tokenize(&self, text: &str, maximum_tokens: usize) -> Result<Vec<u32>> {
         if text.len() > MAX_TEXT_BYTES || !(1..=65536).contains(&maximum_tokens) {
-            return Err(tokenizer_error("tokenizer input exceeds its bounds"));
+            return Err(Error::Protocol("tokenizer input exceeds its bounds".into()));
         }
         let encoding = self
             .tokenizer
@@ -153,6 +206,47 @@ impl Renderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checkpoint_uses_only_a_matching_rendered_system_prefix() {
+        use tokenizers::{
+            models::wordlevel::WordLevel, pre_tokenizers::whitespace::WhitespaceSplit,
+        };
+        let model = WordLevel::builder()
+            .vocab(
+                [
+                    ("?".into(), 0),
+                    ("bos".into(), 2),
+                    ("system".into(), 3),
+                    ("user".into(), 4),
+                    ("assistant".into(), 5),
+                ]
+                .into_iter()
+                .collect(),
+            )
+            .unk_token("?".into())
+            .build()
+            .unwrap();
+        let mut tokenizer = Tokenizer::new(model);
+        tokenizer.with_pre_tokenizer(Some(WhitespaceSplit));
+        let mut renderer = Renderer { tokenizer, bos:"bos".into(), environment: environment("{{ bos_token }} {% for m in messages %}{{ m.content }} {% endfor %}{% if add_generation_prompt %}assistant{% endif %}".into()).unwrap() };
+        let request = RenderRequest {
+            messages: vec![
+                serde_json::json!({"role":"system","content":"system"}),
+                serde_json::json!({"role":"user","content":"user"}),
+            ],
+            tools: vec![],
+        };
+        let rendered = renderer.render(&request, 100).unwrap();
+        assert_eq!(rendered.prompt_tokens, [2, 3, 4, 5]);
+        assert_eq!(rendered.checkpoint_tokens, 2);
+        renderer.environment = environment(
+            "{% if add_generation_prompt %}bos system user assistant{% else %}assistant{% endif %}"
+                .into(),
+        )
+        .unwrap();
+        assert_eq!(renderer.render(&request, 100).unwrap().checkpoint_tokens, 0);
+    }
 
     #[test]
     fn template_supports_python_methods_namespaces_and_nested_arguments() {

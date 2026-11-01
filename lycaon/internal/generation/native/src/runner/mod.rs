@@ -31,7 +31,7 @@ pub struct Runner<B, F> {
     loaded: Option<Loaded<B>>,
 }
 
-impl<B: Backend, F: FnMut(&Path, usize, usize) -> Result<B>> Runner<B, F> {
+impl<B: Backend, F: FnMut(&Path, usize, usize, u64) -> Result<B>> Runner<B, F> {
     pub fn new(directory: PathBuf, identity: Identity, factory: F) -> Result<Self> {
         if identity.artifact_id.len() != 64
             || !identity.artifact_id.bytes().all(|b| b.is_ascii_hexdigit())
@@ -54,9 +54,17 @@ impl<B: Backend, F: FnMut(&Path, usize, usize) -> Result<B>> Runner<B, F> {
                 artifact_id: self.identity.artifact_id.clone(),
                 physical_device: self.identity.physical_device.clone(),
             }),
+            Command::Inspect {
+                context_tokens,
+                prefill_chunk,
+            } => Ok(Output::Resources {
+                plan: B::plan(&self.directory, context_tokens, prefill_chunk)?,
+            }),
             Command::Load {
                 context_tokens,
                 prefill_chunk,
+                device_budget_bytes,
+                host_budget_bytes,
             } => {
                 if self.loaded.is_some() {
                     return Err(Error::Protocol("model is loaded".into()));
@@ -64,9 +72,22 @@ impl<B: Backend, F: FnMut(&Path, usize, usize) -> Result<B>> Runner<B, F> {
                 if !(2..=65536).contains(&context_tokens) || !(1..=256).contains(&prefill_chunk) {
                     return Err(Error::Capacity("invalid execution limits".into()));
                 }
+                let plan = B::plan(&self.directory, context_tokens, prefill_chunk)?;
+                if device_budget_bytes < plan.device_reservation_bytes
+                    || host_budget_bytes < plan.host_reservation_bytes
+                {
+                    return Err(Error::Capacity(
+                        "load exceeds its memory reservation".into(),
+                    ));
+                }
                 let settings = settings::Settings::load(&self.directory)?;
                 let renderer = Renderer::load(&self.directory)?;
-                let backend = (self.factory)(&self.directory, context_tokens, prefill_chunk)?;
+                let backend = (self.factory)(
+                    &self.directory,
+                    context_tokens,
+                    prefill_chunk,
+                    device_budget_bytes,
+                )?;
                 let executor = Executor::new(backend, context_tokens, prefill_chunk, settings.eos)?;
                 self.loaded = Some(Loaded {
                     executor,
@@ -97,7 +118,7 @@ impl<B: Backend, F: FnMut(&Path, usize, usize) -> Result<B>> Runner<B, F> {
                         request,
                         max_prompt_tokens,
                     } => Ok(Output::Rendered {
-                        prompt_tokens: loaded.renderer.render(&request, max_prompt_tokens)?,
+                        rendered: loaded.renderer.render(&request, max_prompt_tokens)?,
                     }),
                     Command::Begin { request } => {
                         let request_id = request.request_id;
