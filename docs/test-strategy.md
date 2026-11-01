@@ -1223,8 +1223,10 @@ protected integration gates, setup, evidence publication and capacity waits.
 Measure ordinary affected changes and broad/full-scope candidates, with cold and
 warm inputs. Keep failed or superseded attempts and explicit external holds
 visible alongside successful-path latency. A per-job timeout is not this target.
-Current larger completion ceilings remain until replacement execution has been
-qualified; shortening a deadline does not make incomplete verification pass.
+Execution deadlines are separate stuck-run protections and retain headroom for
+valid work. Never turn the one-hour performance target into an execution cutoff.
+An optimization reduces measured work or the critical path; timing out otherwise
+valid verification is a failure, not an improvement.
 
 1. Separate preparation, compiler execution, queue admission wait, test execution,
    and evidence publication in the latency report. A parent task's elapsed time
