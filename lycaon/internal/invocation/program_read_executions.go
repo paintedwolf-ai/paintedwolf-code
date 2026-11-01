@@ -9,9 +9,8 @@ import (
 )
 
 func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64, limit int, selection executionSelection) ([]api.CommandExecutionReceipt, int64, error) {
-	args := append([]any{program, after}, selection.args...)
-	args = append(args, limit)
-	rows, err := tx.QueryContext(ctx, `SELECT e.id,e.program_id,e.node_id,e.parent_execution_id,d.owner,d.lifecycle,e.definition_digest,e.arguments_representation,e.arguments_digest,e.reviewed_arguments_representation,e.reviewed_arguments_digest,e.reviewed_arguments_ref,e.native_command,e.effect_mode,e.effect_classes_json,e.arguments_ref,e.canonical,e.state,e.owner_started,e.owner_invoked,e.status_code,e.stop_code,e.host_stop_code,e.complete,e.publication_eligible,e.output_publishable,e.effect_certainty,e.evidence_kind,e.evidence_ref,e.owner_ref,e.recovery_ref,e.held_version_id,e.accepted_revision,e.published_revision,e.detail_ref,e.approval_ref,e.job_handle,e.conflict_path,e.conflict_expected_revision,e.conflict_observed_revision,e.ordinal FROM invocation_program_executions e JOIN invocation_program_definitions d ON d.program_id=e.program_id AND d.definition_digest=e.definition_digest WHERE e.program_id=? AND e.ordinal>? `+selection.sql+` ORDER BY e.ordinal LIMIT ?`, args...)
+	const query = `SELECT e.id,e.program_id,e.node_id,e.parent_execution_id,d.owner,d.lifecycle,e.definition_digest,e.arguments_representation,e.arguments_digest,e.reviewed_arguments_representation,e.reviewed_arguments_digest,e.reviewed_arguments_ref,e.native_command,e.effect_mode,e.effect_classes_json,e.arguments_ref,e.canonical,e.state,e.owner_started,e.owner_invoked,e.status_code,e.stop_code,e.host_stop_code,e.complete,e.publication_eligible,e.output_publishable,e.effect_certainty,e.evidence_kind,e.evidence_ref,e.owner_ref,e.recovery_ref,e.held_version_id,e.accepted_revision,e.published_revision,e.detail_ref,e.approval_ref,e.job_handle,e.conflict_path,e.conflict_expected_revision,e.conflict_observed_revision,e.ordinal FROM invocation_program_executions e JOIN invocation_program_definitions d ON d.program_id=e.program_id AND d.definition_digest=e.definition_digest WHERE e.program_id=? AND e.ordinal>? ` + activityExecutionFilter + ` ORDER BY e.ordinal LIMIT ?`
+	rows, err := tx.QueryContext(ctx, query, program, after, selection.ids, selection.ids, limit)
 	if err != nil {
 		return nil, after, err
 	}

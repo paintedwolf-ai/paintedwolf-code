@@ -18,7 +18,7 @@ func activityFixture(id, parent, operation, command string, start int) activityI
 func activityGroups(inputs ...activityInput) []activityGroup {
 	var groups []activityGroup
 	for i, input := range inputs {
-		groups = append(groups, activityGroup{input: input, key: input.receipt.ID, parent: input.receipt.ParentExecutionID, ordinal: int64(i + 1), counts: activityCounts{total: 1}})
+		groups = append(groups, activityGroup{input: input, key: activityKey{node: input.receipt.ID}, parent: activityKey{node: input.receipt.ParentExecutionID}, ordinal: int64(i + 1), counts: activityCounts{total: 1}})
 	}
 	return groups
 }
