@@ -196,3 +196,29 @@ func (m *eventFaultMemory) Reserve(_ context.Context, n int64) (func(), error) {
 	m.held += n
 	return func() { m.held -= n }, nil
 }
+
+func TestBoundedJSONValueBytesExcludeStorageAndWhitespace(t *testing.T) {
+	for _, source := range []string{`[1,2,3]`, " \n[ 1 , 2 , 3 ] \n"} {
+		memory := &eventMemoryFixture{maximum: 1 << 20}
+		stream := NewBoundedValueStream(t.Context(), strings.NewReader(source), EventLimits{128, 1024}, memory, 7)
+		value, err := stream.Decode()
+		if err != nil {
+			t.Fatalf("seven-byte value: %v", err)
+		}
+		raw, _ := EncodeJSON(value, false)
+		if string(raw) != "[1,2,3]" {
+			t.Fatalf("value %s", raw)
+		}
+		stream.Close()
+		if memory.held != 0 {
+			t.Fatalf("retained %+v", memory)
+		}
+	}
+	stream := NewBoundedValueStream(t.Context(), strings.NewReader(`[1,2,3,4]`), EventLimits{128, 1024}, nil, 7)
+	_, err := stream.Decode()
+	stream.Close()
+	var limit *EventLimitError
+	if !errors.As(err, &limit) || limit.Maximum != 7 || limit.Observed != 8 {
+		t.Fatalf("value bound: %v", err)
+	}
+}

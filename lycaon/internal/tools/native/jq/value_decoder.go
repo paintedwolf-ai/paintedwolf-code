@@ -2,6 +2,7 @@ package jq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -43,15 +44,11 @@ func (s *BoundedValueStream) Retain() func() {
 
 func (s *BoundedValueStream) InputOffset() int64 { return s.parser.InputOffset() }
 func (s *BoundedValueStream) admit(n int64) error {
-	if n > s.maximum-s.bytes {
-		return &EventLimitError{Limit: "query_value_bytes", Maximum: s.maximum, Observed: s.bytes + n}
-	}
 	release, err := s.parser.reserve(n + 128)
 	if err != nil {
 		return err
 	}
 	s.releases = append(s.releases, release)
-	s.bytes += n
 	return nil
 }
 func (s *BoundedValueStream) Decode() (any, error) {
@@ -81,23 +78,15 @@ func (s *BoundedValueStream) value(depth int) (any, error) {
 		return nil, err
 	}
 	if b != '[' && b != '{' {
-		start := p.offset
-		value, release, err := p.scalar()
-		if err != nil {
-			return nil, err
-		}
-		s.releases = append(s.releases, release)
-		size := p.offset - start
-		if size > s.maximum-s.bytes {
-			return nil, &EventLimitError{Limit: "query_value_bytes", Maximum: s.maximum, Observed: s.bytes + size}
-		}
-		s.bytes += size
-		return value, nil
+		return s.scalar()
 	}
 	if depth >= p.limits.MaximumDepth {
 		return nil, &EventLimitError{Limit: "query_depth", Maximum: int64(p.limits.MaximumDepth), Observed: int64(depth + 1)}
 	}
 	if err := s.admit(64); err != nil {
+		return nil, err
+	}
+	if err := s.count(1); err != nil {
 		return nil, err
 	}
 	_, _ = p.read()
@@ -115,6 +104,9 @@ func (s *BoundedValueStream) separator(end byte, first bool) (bool, error) {
 		return false, err
 	}
 	if b == end {
+		if err := s.count(1); err != nil {
+			return false, err
+		}
 		_, _ = s.parser.read()
 		return true, nil
 	}
@@ -123,6 +115,9 @@ func (s *BoundedValueStream) separator(end byte, first bool) (bool, error) {
 	}
 	if b != ',' {
 		return false, s.parser.syntax()
+	}
+	if err := s.count(1); err != nil {
+		return false, err
 	}
 	_, _ = s.parser.read()
 	b, err = s.parser.space()
@@ -179,11 +174,10 @@ func (s *BoundedValueStream) object(depth int) (any, error) {
 		if b != '"' {
 			return nil, s.parser.syntax()
 		}
-		key, release, err := s.parser.scalar()
+		key, err := s.scalar()
 		if err != nil {
 			return nil, err
 		}
-		s.releases = append(s.releases, release)
 		name, ok := key.(string)
 		if !ok {
 			return nil, fmt.Errorf("JSON object key is not a string")
@@ -198,6 +192,9 @@ func (s *BoundedValueStream) object(depth int) (any, error) {
 		if b != ':' {
 			return nil, s.parser.syntax()
 		}
+		if err := s.count(1); err != nil {
+			return nil, err
+		}
 		_, _ = s.parser.read()
 		value, err := s.value(depth + 1)
 		if err != nil {
@@ -205,4 +202,27 @@ func (s *BoundedValueStream) object(depth int) (any, error) {
 		}
 		result.Set(name, value)
 	}
+}
+
+func (s *BoundedValueStream) count(n int64) error {
+	if n > s.maximum-s.bytes {
+		return &EventLimitError{Limit: "query_value_bytes", Maximum: s.maximum, Observed: s.bytes + n}
+	}
+	s.bytes += n
+	return nil
+}
+func (s *BoundedValueStream) scalar() (any, error) {
+	start := s.parser.offset
+	remaining := s.maximum - s.bytes
+	value, release, err := s.parser.scalar(min(s.parser.limits.MaximumScalarBytes, remaining))
+	if err != nil {
+		var limit *EventLimitError
+		if errors.As(err, &limit) && limit.Limit == "query_value_bytes" && limit.Maximum == remaining {
+			return nil, &EventLimitError{Limit: limit.Limit, Maximum: s.maximum, Observed: s.bytes + limit.Observed}
+		}
+		return nil, err
+	}
+	s.releases = append(s.releases, release)
+	s.bytes += s.parser.offset - start
+	return value, nil
 }

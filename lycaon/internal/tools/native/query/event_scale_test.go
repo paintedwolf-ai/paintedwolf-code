@@ -39,7 +39,8 @@ func TestSlurpOwnsRetainedInputsAndRefusesOversizedAggregate(t *testing.T) {
 	h.owners.Revisions.Memory = memory
 	h.exec("1 2 3", "jq", "-cs", ".").expect(t, "slurp", "[1,2,3]\n", 0)
 	h.owners.limitOverride = map[string]int64{"query_value_bytes": 256}
-	result := h.exec(strings.Repeat("1 ", 100), "jq", "-s", ".")
+	h.exec(strings.Repeat("1 ", 100), "jq", "-cs", "length").expect(t, "compact aggregate within value bound", "100\n", 0)
+	result := h.exec(strings.Repeat("1 ", 200), "jq", "-s", ".")
 	reject := toolrejection.AsToolReject(result.err)
 	if reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || reject.Data["limit_id"] != "query_value_bytes" {
 		t.Fatalf("aggregate refusal: %v", result.err)

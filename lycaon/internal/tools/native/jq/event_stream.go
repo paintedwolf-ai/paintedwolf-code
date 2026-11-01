@@ -240,7 +240,7 @@ func (s *EventStream) Decode() (value any, failure error) {
 				if b != '"' {
 					return nil, s.syntax()
 				}
-				value, release, err := s.scalar()
+				value, release, err := s.scalar(s.limits.MaximumScalarBytes)
 				if err != nil {
 					return nil, err
 				}
@@ -276,7 +276,7 @@ func (s *EventStream) Decode() (value any, failure error) {
 			s.frames = append(s.frames, eventFrame{kind: b})
 			continue
 		}
-		value, release, err := s.scalar()
+		value, release, err := s.scalar(s.limits.MaximumScalarBytes)
 		if err != nil {
 			return nil, err
 		}
