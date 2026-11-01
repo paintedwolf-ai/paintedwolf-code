@@ -2,6 +2,8 @@ package query
 
 import (
 	"encoding/json"
+	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
+	"math"
 
 	"github.com/itchyny/gojq"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -26,22 +28,38 @@ func (r *jqRun) slurpInputs() ([]any, func(), error) {
 		work.Close()
 	}
 	maximum := r.inv.owners.limit("query_value_bytes")
-	var size, borrowed int64
+	size, borrowed := int64(2), int64(0)
+	overhead := 512*r.inv.owners.limit("query_depth") + 256
+	if err := work.resize(overhead); err != nil {
+		return nil, nil, err
+	}
+	if size > maximum {
+		close()
+		return nil, nil, tools.CommandLimitExceeded("query_value_bytes", maximum, size)
+	}
 	for value, ok := r.stream.Next(); ok; value, ok = r.stream.Next() {
-		next := valueStorageBytes(value, maximum-size)
-		if next > maximum-size {
-			close()
-			return nil, nil, tools.CommandLimitExceeded("query_value_bytes", maximum, size+next)
+		comma := int64(0)
+		if len(values) > 0 {
+			comma = 1
 		}
-		size += next
+		next, err := nativejq.JSONSize(r.inv.ctx, value, max(0, maximum-size-comma))
+		if err != nil {
+			close()
+			return nil, nil, err
+		}
+		if next > maximum-size-comma {
+			close()
+			return nil, nil, tools.CommandLimitExceeded("query_value_bytes", maximum, size+comma+next)
+		}
+		size += comma + next
 		if retained := r.stream.retainCurrent(); retained != nil {
 			leases = append(leases, retained)
 		} else {
-			borrowed += next
+			borrowed += valueStorageBytes(value, math.MaxInt64)
 		}
 		if len(values) == cap(values) {
 			capacity := max(4, 2*cap(values))
-			if err := work.resize(borrowed + int64(cap(values)+capacity)*16); err != nil {
+			if err := work.resize(overhead + borrowed + int64(cap(values)+capacity)*16); err != nil {
 				close()
 				return nil, nil, err
 			}
@@ -49,7 +67,7 @@ func (r *jqRun) slurpInputs() ([]any, func(), error) {
 			copy(grown, values)
 			values = grown
 		}
-		if err := work.resize(borrowed + int64(cap(values))*16); err != nil {
+		if err := work.resize(overhead + borrowed + int64(cap(values))*16); err != nil {
 			close()
 			return nil, nil, err
 		}
