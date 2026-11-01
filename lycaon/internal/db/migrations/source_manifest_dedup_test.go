@@ -23,7 +23,7 @@ type manifestMigrationTrace struct {
 	entryInsertBatches  int
 	rootInserts         int
 	createdIndexes      []string
-	insertsAfterIndexes int
+	indexesAfterInserts int
 }
 
 type manifestMigrationTraceDriver struct{ trace *manifestMigrationTrace }
@@ -104,28 +104,22 @@ func (t *manifestMigrationTrace) recordExec(query string) {
 	} {
 		if strings.Contains(trimmed, "CREATE INDEX IF NOT EXISTS "+indexName) {
 			t.createdIndexes = append(t.createdIndexes, indexName)
+			if t.manifestInserts+t.layoutInserts+t.chunkInserts+t.entryInsertBatches+t.rootInserts > 0 {
+				t.indexesAfterInserts++
+			}
 		}
 	}
-	isBulkInsert := false
 	switch {
 	case strings.HasPrefix(trimmed, "INSERT INTO source_manifests "):
 		t.manifestInserts++
-		isBulkInsert = true
 	case strings.HasPrefix(trimmed, "INSERT INTO source_manifest_layout "):
 		t.layoutInserts++
-		isBulkInsert = true
 	case strings.HasPrefix(trimmed, "INSERT INTO source_manifest_chunks "):
 		t.chunkInserts++
-		isBulkInsert = true
 	case strings.HasPrefix(trimmed, "INSERT INTO source_manifest_entries"):
 		t.entryInsertBatches++
-		isBulkInsert = true
 	case strings.HasPrefix(trimmed, "INSERT INTO source_snapshot_roots "):
 		t.rootInserts++
-		isBulkInsert = true
-	}
-	if isBulkInsert && len(t.createdIndexes) > 0 {
-		t.insertsAfterIndexes++
 	}
 }
 
@@ -212,7 +206,7 @@ END;`)
 	return database, trace
 }
 
-func TestManifestMigrationDeduplicatesSharedChunksAndDefersSecondaryIndexes(t *testing.T) {
+func TestManifestMigrationDeduplicatesSharedChunksWithoutAmplifiedIndexSorts(t *testing.T) {
 	database, trace := newLegacyMigrationDatabase(t)
 	exec := func(query string, args ...any) {
 		t.Helper()
@@ -284,8 +278,8 @@ VALUES (?, 'rk', ?, ?, 0, 'exact', '2026-10-20T00:00:00Z')`, spec.id, spec.id, s
 	if trace.rootInserts != 7 {
 		t.Fatalf("snapshot root inserts = %d, want 7", trace.rootInserts)
 	}
-	if trace.insertsAfterIndexes != 0 {
-		t.Fatalf("bulk inserts executed after secondary index creation = %d, want 0", trace.insertsAfterIndexes)
+	if trace.indexesAfterInserts != 0 {
+		t.Fatalf("indexes built over amplified target rows = %d, want 0", trace.indexesAfterInserts)
 	}
 	wantIndexes := []string{
 		"idx_source_snapshot_roots_manifest",
@@ -293,7 +287,7 @@ VALUES (?, 'rk', ?, ?, 0, 'exact', '2026-10-20T00:00:00Z')`, spec.id, spec.id, s
 		"idx_source_manifest_entries_sha",
 	}
 	if !reflect.DeepEqual(trace.createdIndexes, wantIndexes) {
-		t.Fatalf("deferred index creation order = %v, want %v", trace.createdIndexes, wantIndexes)
+		t.Fatalf("empty-target index creation order = %v, want %v", trace.createdIndexes, wantIndexes)
 	}
 
 	rows, err := database.Query(`SELECT snapshot_id, root_path, manifest_id FROM source_snapshot_roots ORDER BY snapshot_id, ordinal`)
@@ -326,7 +320,7 @@ VALUES (?, 'rk', ?, ?, 0, 'exact', '2026-10-20T00:00:00Z')`, spec.id, spec.id, s
 	}
 }
 
-func TestManifestMigrationEmptyStoreCreatesDeferredIndexes(t *testing.T) {
+func TestManifestMigrationEmptyStoreCreatesTargetIndexes(t *testing.T) {
 	database, trace := newLegacyMigrationDatabase(t)
 	*trace = manifestMigrationTrace{}
 	tx, err := database.BeginTx(t.Context(), nil)

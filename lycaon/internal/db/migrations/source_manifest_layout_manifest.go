@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -14,8 +15,8 @@ var manifestLayoutSource = Baseline{Revision: 4, Shape: "c0280798481d97c01e3ddf3
 // content-defined manifests and drops the unreferenced bucket chunks.
 func SourceManifestLayout(target Baseline) Step {
 	return Step{
-		ID: "source-manifest-layout", Source: append(append([]byte{}, manifestLayoutImplementation...), manifestLayoutSchema...),
-		Checksum: "0813eedef7e1f3baccf602df155e94338fa9e4c209dc60b7f0b1b9829f13b76f",
+		ID: "source-manifest-layout", Source: bytes.Join([][]byte{manifestLayoutImplementation, manifestLayoutSchema, manifestLayoutConverterImplementation, manifestLayoutMemoImplementation}, nil),
+		Checksum: "8ecdf662e38522ecefe931cf89178ac90e4f9e972cde88ef4c1d820e7fce0225",
 		From:     manifestLayoutSource, To: target, Apply: migrateManifestLayout, Validate: validateManifestLayout,
 		Writes:       manifestLayoutWrites,
 		RetainedCopy: retainedManifestCopy(),

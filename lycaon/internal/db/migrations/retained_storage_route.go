@@ -17,8 +17,10 @@ func (p Plan) reviewedRetainedRoute() bool {
 	if p.Source != manifestLayoutSource || p.CopyPlan() == nil {
 		return false
 	}
+	// The current manifest writer bounds its re-derivable memos and maintains
+	// target indexes during insertion, preserving the source-sized sorter proof.
 	reviewed := [][2]string{
-		{"source-manifest-layout", "3af0f1899c7ec5e85633c260f16d75af8ed506f0cd888e60fd096dcfc54e91d3"},
+		{"source-manifest-layout", "8ecdf662e38522ecefe931cf89178ac90e4f9e972cde88ef4c1d820e7fce0225"},
 		{"vault-unlock-away", "13094df267f14b2a7cda143ef5ac6466bc242fb65f5f5452c6e3554e285d2676"},
 		{"native-child-once-authority", "417303ae6c704fdd6909312f57a37c41428182ced025d74d2c0cd4123fc89f95"},
 		{"portable-program-receipts", "bde8b3115696ead32e21b55f520fff50c94e04da79604a0a71a6e7889370ef40"},
