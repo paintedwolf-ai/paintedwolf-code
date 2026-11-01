@@ -179,7 +179,7 @@ def build(args):
 def test(args):
     if args.backend == "reference-llama":
         run([sys.executable, "-m", "unittest", "test_vulkan_tools", "test_provenance",
-             "test_swift_toolchain"], cwd=Path(__file__).parent)
+             "test_swift_toolchain", "test_native_bench"], cwd=Path(__file__).parent)
         return
     if args.backend == "reference-swift":
         source, output = paths(args.backend)
@@ -200,6 +200,7 @@ def test(args):
             env=rust_environment(output))
         return
     source, output = paths("native")
+    run([sys.executable, "-m", "unittest", "test_native_bench"], cwd=Path(__file__).parent)
     environment, feature = native_environment(output)
     run(["cargo", "test", "--locked", "--release", "--features", feature,
          "--jobs", os.environ.get("PW_TEST_WORKERS", "1"), "--manifest-path", source / "Cargo.toml"],
@@ -258,12 +259,25 @@ def bench(args):
                    "--model", str(args.model.resolve()), "--input", str(input_path)]
         environment = python_environment()
     else:
-        raise ValueError("the native candidate needs its backend implementation before benchmarking")
+        _, build = paths(args.backend)
+        binary = build / "release/nativegen"
+        build_receipt = verified_build(args.backend, build, binary)
+        command = [sys.executable, str(Path(__file__).with_name("native_bench.py")),
+                   "--binary", str(binary), "--model", str(args.model.resolve()),
+                   "--input", str(input_path), "--artifact-identity", args.artifact_identity,
+                   "--checkpoint-tokens", str(args.checkpoint_tokens)]
+        if sys.platform == "darwin":
+            command += ["--metallib", str(build / "metal/mlx.metallib")]
+        elif args.device_pci:
+            command += ["--device-pci", args.device_pci]
+        else:
+            raise ValueError("native Vulkan benchmark requires --device-pci")
+        environment = os.environ
     metadata = {"backend": args.backend, "source_pins": PINS, "command": command,
                 "build_receipt": build_receipt,
                 "orchestrator_sha256": file_digest(Path(__file__)),
                 "python_sources": {name: file_digest(Path(__file__).with_name(name))
-                                   for name in ("mlx_bench.py", "mapped_ple.py", "prompt.py", "pyproject.toml", "uv.lock")},
+                                   for name in ("native_bench.py", "mlx_bench.py", "mapped_ple.py", "prompt.py", "pyproject.toml", "uv.lock")},
                 "artifact_identity": args.artifact_identity, "platform": platform.platform(),
                 "machine": platform.machine(), "ple": args.ple, "input": str(input_path),
                 "load_average_before": os.getloadavg(),
@@ -293,6 +307,8 @@ def main():
     prompts.add_argument("--prompt-file", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--artifact-identity")
+    parser.add_argument("--device-pci")
+    parser.add_argument("--checkpoint-tokens", type=int, default=0)
     parser.add_argument("--precision", type=Path)
     parser.add_argument("--prompt", type=int, default=512)
     parser.add_argument("--tokens", type=int, default=128)
@@ -305,6 +321,10 @@ def main():
         parser.error("the Rust MLX candidate requires Apple silicon")
     if args.kv_bits != 16 and args.backend != "reference-swift":
         parser.error("quantized global KV is currently measured only by the Swift MLX candidate")
+    if not 0 <= args.checkpoint_tokens <= 4096 or (args.checkpoint_tokens and args.backend != "native"):
+        parser.error("prefix checkpoints require the native backend and at most 4096 tokens")
+    if args.backend == "native" and args.ple != "mapped":
+        parser.error("the production runner uses mapped PLE")
     if not 1 <= args.prefill_chunk <= 256 or not 1 <= args.prompt or not 1 <= args.tokens <= 4096 or args.prompt + args.tokens > 65536 or not 1 <= args.trials <= 20:
         parser.error("benchmark dimensions exceed their bounds")
     {"prepare": prepare, "build": build, "test": test, "bench": bench}[args.action](args)
