@@ -23,7 +23,7 @@ impl Rng {
     }
 
     fn next_u64(&mut self) -> u64 {
-        let r = self.s[0].wrapping_mul(5).wrapping_add(7);
+        let r = self.s[1].wrapping_mul(5).rotate_left(7).wrapping_mul(9);
         let t = self.s[1] << 17;
         self.s[2] ^= self.s[0];
         self.s[3] ^= self.s[1];
@@ -40,11 +40,29 @@ impl Rng {
 }
 
 /// Sample one token from logits. `top_p == 1.0` means plain temperature sampling.
-pub fn sample(logits: &[f32], temperature: f32, top_p: f32, rng: &mut Rng) -> Result<u32> {
-    if logits.is_empty() {
-        return Err(Error::Capacity("empty logits".into()));
+pub fn sample(
+    logits: &[f32],
+    temperature: f32,
+    top_p: f32,
+    top_k: usize,
+    rng: &mut Rng,
+) -> Result<u32> {
+    if logits.is_empty() || logits.len() > 262144 || top_k > 262144 {
+        return Err(Error::Capacity("logit count exceeds its bounds".into()));
     }
-    if temperature <= 0.0 {
+    if !temperature.is_finite()
+        || temperature < 0.0
+        || !top_p.is_finite()
+        || !(0.0 < top_p && top_p <= 1.0)
+    {
+        return Err(Error::Protocol("invalid sampling parameters".into()));
+    }
+    if logits.iter().any(|l| l.is_nan() || *l == f32::INFINITY)
+        || !logits.iter().any(|l| l.is_finite())
+    {
+        return Err(Error::Device("invalid model logits".into()));
+    }
+    if temperature == 0.0 {
         return Ok(argmax(logits));
     }
     let max = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
@@ -53,6 +71,10 @@ pub fn sample(logits: &[f32], temperature: f32, top_p: f32, rng: &mut Rng) -> Re
         .enumerate()
         .map(|(i, &l)| (i as u32, (l - max) / temperature))
         .collect();
+    if top_k > 0 && top_k < probs.len() {
+        probs.select_nth_unstable_by(top_k - 1, |a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        probs.truncate(top_k);
+    }
     for p in &mut probs {
         p.1 = p.1.exp();
     }
@@ -60,9 +82,8 @@ pub fn sample(logits: &[f32], temperature: f32, top_p: f32, rng: &mut Rng) -> Re
     for p in &mut probs {
         p.1 /= total;
     }
-    probs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
     if top_p < 1.0 {
+        probs.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
         // Keep the smallest prefix whose cumulative mass reaches top_p.
         let mut acc = 0.0;
         let cutoff = probs
@@ -105,9 +126,55 @@ mod tests {
     use super::*;
 
     #[test]
+    fn xoshiro_reference_state_sequence() {
+        let mut rng = Rng { s: [1, 2, 3, 4] };
+        assert_eq!(rng.next_u64(), 11520);
+        assert_eq!(rng.next_u64(), 0);
+        assert_eq!(rng.next_u64(), 1509978240);
+    }
+
+    #[test]
+    fn refuses_invalid_distributions_and_parameters() {
+        let mut rng = Rng::new(7);
+        for logits in [
+            vec![],
+            vec![f32::NAN],
+            vec![f32::INFINITY],
+            vec![f32::NEG_INFINITY],
+        ] {
+            assert!(sample(&logits, 1.0, 1.0, 0, &mut rng).is_err());
+        }
+        for (temperature, top_p) in [
+            (f32::NAN, 1.0),
+            (-1.0, 1.0),
+            (1.0, 0.0),
+            (1.0, 1.1),
+            (1.0, f32::NAN),
+        ] {
+            assert!(sample(&[1.0], temperature, top_p, 0, &mut rng).is_err());
+        }
+        assert_eq!(
+            sample(&[f32::NEG_INFINITY, 2.0], 1.0, 1.0, 0, &mut rng).unwrap(),
+            1
+        );
+    }
+
+    #[test]
     fn zero_temperature_is_greedy() {
         let mut rng = Rng::new(7);
-        assert_eq!(sample(&[0.1, 5.0, 0.2], 0.0, 1.0, &mut rng).unwrap(), 1);
+        assert_eq!(sample(&[0.1, 5.0, 0.2], 0.0, 1.0, 0, &mut rng).unwrap(), 1);
+    }
+
+    #[test]
+    fn top_k_excludes_lower_logits_and_breaks_ties_by_token() {
+        let mut rng = Rng::new(4);
+        for _ in 0..100 {
+            assert_eq!(sample(&[3.0, 3.0, 2.0], 1.0, 1.0, 1, &mut rng).unwrap(), 0);
+            assert!(matches!(
+                sample(&[0.0, 3.0, 4.0, 2.0], 1.0, 0.95, 2, &mut rng).unwrap(),
+                1 | 2
+            ));
+        }
     }
 
     #[test]
@@ -121,6 +188,8 @@ mod tests {
     fn draws(seed: u64) -> Vec<u32> {
         let mut rng = Rng::new(seed);
         let logits: Vec<f32> = (0..64).map(|i| (i % 7) as f32 * 0.25).collect();
-        (0..16).map(|_| sample(&logits, 1.0, 0.9, &mut rng).unwrap()).collect()
+        (0..16)
+            .map(|_| sample(&logits, 1.0, 0.9, 0, &mut rng).unwrap())
+            .collect()
     }
 }

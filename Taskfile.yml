@@ -651,6 +651,26 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/ci_policy/native_verify.py den {{.CLI_ARGS}}
 
+  generation:prepare:
+    desc: Prepare pinned generation runtime dependencies or prototype artifacts
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/generation/runtime.py prepare {{.CLI_ARGS}}
+
+  generation:build:
+    desc: Build a native generation runtime candidate
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/generation/runtime.py build {{.CLI_ARGS}}
+
+  generation:test:
+    desc: Run fixture-only generation runtime tests
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/generation/runtime.py test {{.CLI_ARGS}}
+
+  generation:bench:
+    desc: Measure an explicitly selected local prototype model
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/generation/runtime.py bench {{.CLI_ARGS}}
+
   decide:test:
     desc: Decision engine (bialy) Rust tests
     dir: lycaon/internal/decide/native

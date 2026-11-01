@@ -246,6 +246,18 @@
     }
   },
   "tasks": {
+    "generation:prepare": [
+      "generation:prepare"
+    ],
+    "generation:build": [
+      "generation:build"
+    ],
+    "generation:test": [
+      "generation:test"
+    ],
+    "generation:bench": [
+      "generation:bench"
+    ],
     "den:harness:test": [
       "den:harness:test"
     ],
@@ -456,6 +468,10 @@
     "seatbelt:scanstress"
   ],
   "selection": {
+    "generation:prepare": "passthrough",
+    "generation:build": "passthrough",
+    "generation:test": "passthrough",
+    "generation:bench": "passthrough",
     "test:runner": "unittest",
     "test:digest": "go",
     "test:oar": "go",
@@ -492,6 +508,32 @@
     "release:rehearse:pacman-construction": "passthrough"
   },
   "resources": {
+    "generation:prepare": {
+      "locks": [
+        "generation-runtime"
+      ],
+      "workers": "shared"
+    },
+    "generation:build": {
+      "locks": [
+        "generation-runtime",
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "generation:test": {
+      "locks": [
+        "generation-runtime",
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "generation:bench": {
+      "locks": [
+        "generation-runtime"
+      ],
+      "workers": "shared"
+    },
     "den:harness:test": {
       "locks": [
         "harness",
