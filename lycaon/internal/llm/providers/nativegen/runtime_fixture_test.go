@@ -13,6 +13,8 @@ func runtimeFixture() {
 			artifact = os.Args[i+1]
 		}
 	}
+	var prefix prefixRequest
+	prefixProcessed, chunk := 0, 1
 	var active beginRequest
 	generated := 0
 	measured := 0
@@ -45,6 +47,7 @@ func runtimeFixture() {
 			}
 			result = map[string]any{"kind": "resources", "plan": plan}
 		case "load":
+			chunk = request.Command.PrefillChunk
 			result = map[string]any{"kind": "loaded", "context_tokens": request.Command.ContextTokens, "prefill_chunk": request.Command.PrefillChunk, "sampling": samplingDefaults{Temperature: 0, TopP: 1}}
 		case "measure":
 			measured++
@@ -54,6 +57,22 @@ func runtimeFixture() {
 			result = map[string]any{"kind": "measured", "input_tokens": 3, "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
 		case "render":
 			result = map[string]any{"kind": "rendered", "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
+		case "prepare":
+			raw, err := json.Marshal(request.Command.Request)
+			if err != nil || json.Unmarshal(raw, &prefix) != nil {
+				os.Exit(6)
+			}
+			prefixProcessed = 0
+			result = map[string]any{"kind": "begun", "request_id": prefix.RequestID, "reused_prefix_tokens": 0}
+		case "advance_preparation", "cancel_preparation":
+			canceled := request.Command.Method == "cancel_preparation"
+			if !canceled {
+				prefixProcessed = min(prefixProcessed+chunk, len(prefix.PromptTokens))
+			}
+			result = map[string]any{"kind": "preparation_progress", "progress": map[string]any{
+				"request_id": prefix.RequestID, "processed_prompt_tokens": prefixProcessed,
+				"reused_prefix_tokens": 0, "complete": !canceled && prefixProcessed == len(prefix.PromptTokens), "canceled": canceled,
+			}}
 		case "begin":
 			raw, err := json.Marshal(request.Command.Request)
 			if err != nil || json.Unmarshal(raw, &active) != nil {

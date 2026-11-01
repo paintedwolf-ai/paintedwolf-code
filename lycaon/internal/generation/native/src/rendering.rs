@@ -17,6 +17,8 @@ pub struct RenderRequest {
     pub messages: Vec<Value>,
     #[serde(default)]
     pub tools: Vec<Value>,
+    #[serde(default)]
+    pub checkpoint_messages: usize,
 }
 
 #[derive(Serialize)]
@@ -150,7 +152,10 @@ impl Renderer {
     }
 
     pub fn measure(&self, request: &RenderRequest) -> Result<Measurement> {
-        if request.messages.is_empty() || request.messages.len() > 2048 || request.tools.len() > 512
+        if request.messages.is_empty()
+            || request.messages.len() > 2048
+            || request.tools.len() > 512
+            || request.checkpoint_messages > request.messages.len()
         {
             return Err(Error::Protocol(
                 "prompt dimensions exceed their bounds".into(),
@@ -168,17 +173,12 @@ impl Renderer {
                 },
             });
         }
-        let first = &request.messages[0];
-        let system = matches!(first["role"].as_str(), Some("system" | "developer"));
         let mut checkpoint_tokens = 0;
-        if system || !request.tools.is_empty() {
+        if request.checkpoint_messages > 0 {
             let prefix = RenderRequest {
-                messages: if system {
-                    vec![first.clone()]
-                } else {
-                    Vec::new()
-                },
+                messages: request.messages[..request.checkpoint_messages].to_vec(),
                 tools: request.tools.clone(),
+                checkpoint_messages: 0,
             };
             if let Ok(tokens) = self
                 .render_text(&prefix, false)
