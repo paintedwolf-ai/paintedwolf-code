@@ -55,7 +55,7 @@ func configFixture(t *testing.T, body string) string {
 func TestVendorEnvironmentHasPrivateICDAndExplicitLifetime(t *testing.T) {
 	config := configuration{FormatVersion: 1, MesaICDs: []string{"/nix/mesa.json"}}
 	libraries := []string{"/usr/lib/libnvidia-glsi.so.580.178.04", "/usr/lib/libEGL_nvidia.so.580.178.04"}
-	values, cleanup, err := environment(config, libraries)
+	values, cleanup, err := environment(config, libraries, "1.4.312")
 	testutil.FailErr(t, "prepare vendor environment", err)
 	defer cleanup()
 	if len(values) != 2 || values[1] != "LD_PRELOAD="+strings.Join(libraries, ":") {
@@ -71,10 +71,11 @@ func TestVendorEnvironmentHasPrivateICDAndExplicitLifetime(t *testing.T) {
 	var manifest struct {
 		ICD struct {
 			Library string `json:"library_path"`
+			API     string `json:"api_version"`
 		} `json:"ICD"`
 	}
 	testutil.FailErr(t, "decode ICD", json.Unmarshal(data, &manifest))
-	if manifest.ICD.Library != libraries[1] {
+	if manifest.ICD.Library != libraries[1] || manifest.ICD.API != "1.4.312" {
 		t.Fatalf("ICD selected %q", manifest.ICD.Library)
 	}
 	info, err := os.Stat(filepath.Dir(path))
@@ -87,7 +88,7 @@ func TestVendorEnvironmentHasPrivateICDAndExplicitLifetime(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(path)); !os.IsNotExist(err) {
 		t.Fatalf("driver directory survived cleanup: %v", err)
 	}
-	values, cleanup, err = environment(config, nil)
+	values, cleanup, err = environment(config, nil, "")
 	testutil.FailErr(t, "prepare Mesa environment", err)
 	cleanup()
 	if !slices.Equal(values, []string{"VK_DRIVER_FILES=/nix/mesa.json"}) {
@@ -97,7 +98,7 @@ func TestVendorEnvironmentHasPrivateICDAndExplicitLifetime(t *testing.T) {
 
 func TestVendorPreparationFailureReturnsSafeCleanup(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "absent"))
-	values, cleanup, err := environment(configuration{MesaICDs: []string{"/nix/a"}}, []string{"/usr/lib/driver"})
+	values, cleanup, err := environment(configuration{MesaICDs: []string{"/nix/a"}}, []string{"/usr/lib/driver"}, "1.4.312")
 	if err == nil || len(values) != 0 {
 		t.Fatalf("preparation = %v, %v", values, err)
 	}
