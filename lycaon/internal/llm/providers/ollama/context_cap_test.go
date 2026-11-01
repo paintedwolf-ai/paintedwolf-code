@@ -67,7 +67,6 @@ func TestOllamaCanceledContextDiscoveryCannotPoisonLaterRequests(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if duringProbe && calls.Add(1) == 1 {
 					cancel()
-					<-r.Context().Done()
 					return
 				}
 				_, _ = io.WriteString(w, `{"model_info":{"fixture.context_length":32768}}`)
