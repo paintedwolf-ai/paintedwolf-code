@@ -357,13 +357,22 @@ as unavailable and requires a fresh approval. An unknown enforcement mode refuse
 loading without mutating the saved data. Reading saved intent never recaptures a
 pathname.
 
-Existing macOS command grants retain their kernel pathname-at-connect contract;
-an absent mode means that contract on macOS. They cannot establish authority for
-host-native socket dials. Linux grants and host-native dials on both platforms
-require the retained-object mode and a live instance ID. Mode and instance enter
-permission keys, action digests and grant IDs, so a new approval after a service
-or engine restart cannot accidentally reuse an unexpired stale grant. Changing
-the realization never silently broadens the earlier approval.
+Saved macOS kernel-pathname grants keep that interpretation, including an absent
+mode, and remain visible as unavailable intent. They cannot authorize a new
+confined launch or native dial. Fresh socket approval requires retained-object
+mode and a live instance ID on both Linux and macOS. There is no automatic
+recapture or migration of saved path intent into live authority. Mode and
+instance enter permission keys, action digests and grant IDs, so service or
+engine restart cannot reuse an unexpired stale approval.
+
+`{{paintedwolf-socket:/absolute/path}}` is additive agent-visible launch
+vocabulary. Its URI path is percent-encoded when necessary. The reference must
+occupy a complete argument or environment value and requires the invocation's
+reviewed live socket binding. Expansion occurs after command-language evaluation
+and before the final exec vectors are captured. Ordinary path operands, embedded
+source, executable selection and environment keys are never rewritten. Native
+socket arguments retain their ordinary path shape and their host-mediated dial.
+No database or wire fields change, and ephemeral endpoints are not backup data.
 
 Native exact Unix-socket requests on a platform reporting no retained-object realization are refused with the existing structured socket-path refusal and an approved service-endpoint recovery route. This is the Windows socket contract and changes the previous native pathname-dial behavior. Existing saved socket intent and credential/token data remain; there is no pathname fallback, implicit rebinding or new durable wire shape. The unavailable realization and recovery are structured refusal facts rather than inferred error prose.
 

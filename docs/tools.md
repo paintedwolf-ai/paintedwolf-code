@@ -833,6 +833,18 @@ For command behavior native tools cannot express, declare `capability_request.pr
 
 The safe-command envelope is the common contract for bounded capabilities that do not need live host coupling: structured argument and project-path validation; filesystem roots and, for spawned MCP servers, process and network confinement; time, byte, item, traversal, and process bounds; stable structured reject codes; and evidence with bounded output projection.
 
+For a launched program that needs an exact Unix service, declare
+`capability_request.socket_paths` and pass a whole
+`{{paintedwolf-socket:/absolute/path}}` reference as the socket argument or an
+environment value. For example, `SERVICE_SOCKET='{{paintedwolf-socket:/tmp/service.sock}}'
+external -- client --socket "$SERVICE_SOCKET"` supplies a bound endpoint without
+changing the meaning of ordinary path operands. Percent-encode reserved URI-path
+characters in a reference. Code and configuration can read the declared variable;
+do not embed the reference inside source text. A terminal receives such variables
+when it is opened. Native operations such as `http_request` keep their ordinary
+`unix_socket` argument; the host handles their connection. See
+[local sockets and daemon authority](security.md#local-sockets-and-daemon-authority).
+
 A native Go handler suits a first-party operation. Confined MCP suits an external server whose invocation, transport, and result handling the host can still bound. A bespoke native subsystem owner is for operations that need host database state, journals, project identity, approval-plan construction, or another coupled lifecycle; do not hide those dependencies behind a generic command. Authoring details: [Adding a tool](adding-tools.md).
 
 ---

@@ -5,6 +5,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 func writeNetworkRules(b *strings.Builder, c Confinement) error {
@@ -31,7 +33,7 @@ func writeNetworkRules(b *strings.Builder, c Confinement) error {
 	case NetworkDeny:
 		// Exact local socket grants are rendered below.
 	}
-	writeSocketGrantRules(b, c.SocketGrants)
+	writeSocketGrantRules(b, c)
 	return nil
 }
 
@@ -122,13 +124,17 @@ func writeSystemResolverRule(b *strings.Builder) {
 	}
 }
 
-func writeSocketGrantRules(b *strings.Builder, grants []SocketGrant) {
-	if len(grants) == 0 {
+func writeSocketGrantRules(b *strings.Builder, c Confinement) {
+	if len(c.SocketGrants) == 0 {
 		return
 	}
 	b.WriteString("; exact AF_UNIX socket grants\n")
-	for _, g := range grants {
-		b.WriteString("(allow network-outbound (literal " + sbplString(g.ResolvedPath) + "))\n")
+	for _, g := range c.SocketGrants {
+		path := g.ResolvedPath
+		if endpoint := c.socketEndpoints[g.Binding.Key()]; endpoint != "" {
+			path = fspath.CanonicalPath(endpoint)
+		}
+		b.WriteString("(allow network-outbound (literal " + sbplString(path) + "))\n")
 	}
 }
 

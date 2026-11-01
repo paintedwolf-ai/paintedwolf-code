@@ -79,7 +79,7 @@ func ResolveSocketRequest(path string) (SocketGrant, error) {
 	if fi.Mode()&os.ModeSocket == 0 {
 		return SocketGrant{}, &SocketResolveError{Code: SocketResolveNotSocket, Path: path}
 	}
-	return SocketGrant{ApprovedPath: path, ResolvedPath: resolved}, nil
+	return SocketGrant{ApprovedPath: path, ResolvedPath: resolved, Binding: socketref.Binding{Enforcement: socketref.Platform().Command}}, nil
 }
 
 // RevalidateSocketGrant re-resolves ApprovedPath and requires it still equal ResolvedPath.
@@ -95,7 +95,7 @@ func RevalidateSocketGrant(g SocketGrant) error {
 			return &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnsupported}
 		}
 	case socketref.KernelPathname:
-		if g.Binding.Mode() != socketref.KernelPathname {
+		if adapter.Command != socketref.KernelPathname || g.Binding.Mode() != socketref.KernelPathname {
 			return &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnsupported}
 		}
 	case socketref.RetainedObject:
@@ -125,10 +125,16 @@ func RevalidateSocketGrant(g SocketGrant) error {
 // CaptureSocketGrant retains the destination for an invocation before review.
 // Inspection alone, including settings reads, never creates a reference.
 func CaptureSocketGrant(ctx context.Context, g SocketGrant) (SocketGrant, error) {
+	if g.Binding.Enforcement == "" && g.Binding.ID == "" {
+		g.Binding.Enforcement = socketref.Platform().Command
+	}
 	if g.Binding.Mode() == socketref.NoRealization {
 		return SocketGrant{}, &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnsupported}
 	}
 	if g.Binding.Mode() == socketref.KernelPathname {
+		if socketref.Platform().Command != socketref.KernelPathname {
+			return SocketGrant{}, &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: socketref.ErrUnbound}
+		}
 		return g, nil
 	}
 	if g.Binding.Mode() != socketref.RetainedObject {
