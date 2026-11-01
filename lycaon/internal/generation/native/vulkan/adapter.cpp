@@ -72,10 +72,16 @@ void warm(pw_generation * engine) {
     std::vector<float> logits(262144);
     char error[1024]{};
     uint32_t sampled;
-    // Compile prefill, GPU sampling and host-logit paths before serving requests.
-    for (const int output : {0, 2, 1}) {
-        const auto count = output ? 1 : tokens.size();
-        if (pw_generation_forward(engine, tokens.data(), count, output, logits.data(), &sampled,
+    // Warm growing attention state before admitting requests.
+    const auto boundary = std::min(engine->limit - 1, 4096u);
+    while (engine->position < boundary) {
+        const auto count = std::min(engine->chunk, boundary - engine->position);
+        if (pw_generation_forward(engine, tokens.data(), count, 0, logits.data(), &sampled,
+                                  error, sizeof(error)) != 0)
+            throw std::runtime_error(error);
+    }
+    for (const int output : {2, 2, 1}) {
+        if (pw_generation_forward(engine, tokens.data(), 1, output, logits.data(), &sampled,
                                   error, sizeof(error)) != 0 ||
             pw_generation_cache(engine, 0, error, sizeof(error)) != 0)
             throw std::runtime_error(error);
