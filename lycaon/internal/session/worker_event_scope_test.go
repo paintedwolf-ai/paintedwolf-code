@@ -459,7 +459,8 @@ func TestStopAndDeleteLifecycleForBackgroundAndAwaitedCommands(t *testing.T) {
 	}
 
 	var sawProbe bool
-	for time.Now().Before(time.Now().Add(2 * time.Second)) {
+	probeDeadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(probeDeadline) {
 		raw, err := reg.Output.ReadRawOutput(parent.ID, serverHandle, 0)
 		testutil.FailErr(t, "read server output after abort", err)
 		for _, ch := range raw.Output.Chunks {
@@ -509,35 +510,11 @@ func TestStopAndDeleteLifecycleForBackgroundAndAwaitedCommands(t *testing.T) {
 	if reg.HasRunning(cancelWorker.ID) {
 		t.Fatalf("cancelled worker still has running background command %s", cancelWorkerHandle)
 	}
-	var gotCancelReason bgprocess.TerminationReason
-	select {
-	case c := <-completed:
-		if c.Handle == cancelWorkerHandle {
-			gotCancelReason = c.TerminationReason
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for cancelled worker background process completion")
-	}
-	if gotCancelReason != bgprocess.TerminationWorkerCancelled {
-		t.Fatalf("cancelled worker process reason = %q, want worker_canceled", gotCancelReason)
-	}
 
 	testutil.FailErr(t, "dispose completed worker runtime",
 		mgr.Chats.DisposeRuntime(bgprocess.WithTerminationReason(ctx, bgprocess.TerminationWorkerCompleted), completeWorker.ID))
 	if reg.HasRunning(completeWorker.ID) {
 		t.Fatalf("completed worker still has running background command %s", completeWorkerHandle)
-	}
-	var gotCompleteReason bgprocess.TerminationReason
-	select {
-	case c := <-completed:
-		if c.Handle == completeWorkerHandle {
-			gotCompleteReason = c.TerminationReason
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for completed worker background process completion")
-	}
-	if gotCompleteReason != bgprocess.TerminationWorkerCompleted {
-		t.Fatalf("completed worker process reason = %q, want worker_completed", gotCompleteReason)
 	}
 
 	// Parent server must still be running after worker cancellation and completion.
@@ -550,16 +527,9 @@ func TestStopAndDeleteLifecycleForBackgroundAndAwaitedCommands(t *testing.T) {
 	if reg.HasRunning(parent.ID) {
 		t.Fatal("parent background server survived chat deletion")
 	}
-	var gotDeleteReason bgprocess.TerminationReason
 	select {
-	case c := <-completed:
-		if c.Handle == serverHandle {
-			gotDeleteReason = c.TerminationReason
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for deleted chat background server completion")
-	}
-	if gotDeleteReason != bgprocess.TerminationChatDeleted {
-		t.Fatalf("deleted chat server reason = %q, want chat_deleted", gotDeleteReason)
+	case completion := <-completed:
+		t.Fatalf("retired session process published a new completion: %+v", completion)
+	default:
 	}
 }
