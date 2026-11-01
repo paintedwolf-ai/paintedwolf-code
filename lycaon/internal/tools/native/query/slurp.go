@@ -8,11 +8,8 @@ import (
 )
 
 func (in *inputs) retainCurrent() func() {
-	if in.events != nil {
-		return in.events.Retain()
-	}
-	if retained, ok := in.stream.(interface{ Retain() func() }); ok {
-		return retained.Retain()
+	if in.stream != nil {
+		return in.stream.Retain()
 	}
 	return nil
 }

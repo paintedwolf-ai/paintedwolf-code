@@ -3,29 +3,25 @@ package query
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/lycaon/lycaon/internal/tools"
 	"io"
-	"strings"
 
 	"github.com/itchyny/gojq"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
-	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
-// inputs yields every complete input value in operand order, decoding each
-// file only when the query reaches it. It backs both the top-level loop and
-// gojq's input/inputs builtins, so they share one position. A malformed
-// input stops the stream after the values before it (jq's status 5); stop is
-// a typed refusal (budget, authority) that ends the run.
 type inputDecoder interface {
 	Decode() (any, error)
 	InputOffset() int64
+	Position() (int, int)
+	InputLine() int
+	Retain() func()
+	Close()
 }
 
+// inputs shares one cursor between top-level values and the input builtins.
 type inputs struct {
 	inv      *invocation
 	operands commandprogram.Fields
@@ -35,26 +31,22 @@ type inputs struct {
 	yaml      bool
 	yamlDoc   int
 	roundtrip *nativejq.YAMLRoundtrip
-	// events turns each value into its --stream events; nil passes values.
-	events        *nativejq.EventStream
-	eventMode     bool
-	eventProgram  *nativejq.Program
-	eventIterator gojq.Iter
-	pending       []any
-	stream        inputDecoder
-	rawReader     *bufio.Reader
-	rawWork       *queryWorking
-	rawOffset     int64
-	// data holds the current operand's bytes read so far, for positions.
-	data      *bytes.Buffer
-	label     string
-	limit     int64
-	readBytes int64
-	stop      error
-	broken    bool
+	// Raw and YAML values use the compiled event iterator.
+	eventMode          bool
+	eventProgram       *nativejq.Program
+	eventIterator      gojq.Iter
+	pending            []any
+	stream             inputDecoder
+	rawReader          *bufio.Reader
+	rawWork            *queryWorking
+	rawLines, lastLine int
+	label              string
+	limit              int64
+	readBytes          int64
+	stop               error
+	broken             bool
 	// openErrors records an operand that could not be read (jq's status 2).
 	openErrors    bool
-	positions     *inputPositions
 	currentCloser io.Closer
 	text          string
 	captured      *source
@@ -119,27 +111,6 @@ func (in *inputs) nextValue() (any, bool) {
 			}
 			return line, true
 		}
-		if in.events != nil {
-			value, err := in.events.Decode()
-			if in.stop != nil {
-				return nil, false
-			}
-			if err == io.EOF {
-				in.events.Close()
-				in.events = nil
-				continue
-			}
-			if err != nil {
-				in.parseFailure(err)
-				return nil, false
-			}
-
-			if err := in.inv.step(); err != nil {
-				in.stop = err
-				return nil, false
-			}
-			return value, true
-		}
 		if in.stream != nil {
 			v, err := in.stream.Decode()
 			if in.stop != nil {
@@ -147,19 +118,15 @@ func (in *inputs) nextValue() (any, bool) {
 			}
 			switch {
 			case errors.Is(err, io.EOF):
-				if closer, ok := in.stream.(interface{ Close() }); ok {
-					closer.Close()
-				}
+				in.lastLine = in.stream.InputLine()
+				in.stream.Close()
 				in.stream = nil
 				continue
 			case err != nil:
 				in.parseFailure(err)
 				return nil, false
 			}
-			if in.stream.InputOffset() > in.limit {
-				in.stop = safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": in.limit, "bytes": in.stream.InputOffset()})
-				return nil, false
-			}
+
 			if !in.admit(v) {
 				return nil, false
 			}
@@ -177,213 +144,6 @@ func (in *inputs) nextValue() (any, bool) {
 		in.open(operand)
 	}
 	return nil, false
-}
-
-// open starts one operand: stdin streams; a file is captured and pinned.
-func (in *inputs) open(operand commandprogram.Field) {
-	in.close()
-	in.label = operand.Value
-	in.text = ""
-	in.data = nil
-	if !in.yaml {
-		in.openStream(operand)
-		return
-	}
-	in.data = &bytes.Buffer{}
-	var data io.Reader
-	if operand.Value == "-" {
-		in.label = "<stdin>"
-		data = io.TeeReader(io.LimitReader(in.inv.input, in.limit+1), in.data)
-	} else {
-		captured := in.captured
-		var err error
-		if captured == nil {
-			captured, err = in.inv.capture(operand)
-		}
-		if err != nil {
-			in.stop = err
-			return
-		}
-		if captured == nil {
-			in.openErrors = true
-			return
-		}
-		in.data = nil
-		in.text = captured.text
-		data = strings.NewReader(captured.text)
-	}
-
-	text, err := in.readAll(data, operand.Value == "-")
-	if err != nil {
-		in.stop = err
-		return
-	}
-	if in.raw {
-		in.pending = append(in.pending, rawLines(text)...)
-		return
-	}
-	if strings.TrimSpace(text) == "" {
-		return
-	}
-	values, _, err := nativejq.DecodeDocuments([]byte(text), "yaml")
-	if err != nil {
-		_, _ = fmt.Fprintf(in.inv.stderr, "%s: error: %s (while parsing %s)\n", in.inv.name(), err, in.label)
-		in.broken = true
-		return
-	}
-	for _, v := range values {
-		if !in.admit(v) {
-			return
-		}
-	}
-	if in.inv.flag("-Y") {
-		if in.roundtrip == nil {
-			in.roundtrip = &nativejq.YAMLRoundtrip{}
-		}
-		in.roundtrip.Add(text)
-	}
-	in.pending = append(in.pending, values...)
-}
-
-// readAll reads one operand whole within the input bound.
-func (in *inputs) readAll(data io.Reader, stdin bool) (string, error) {
-	if !stdin {
-		return in.text, nil
-	}
-	if _, err := io.Copy(io.Discard, data); err != nil {
-		return "", err
-	}
-	if int64(in.data.Len()) > in.limit {
-		return "", safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": in.limit})
-	}
-	return in.data.String(), nil
-}
-
-// rawLines is -R's input: each line without its newline; a final line
-// without one still counts.
-func rawLines(text string) []any {
-	var out []any
-	for text != "" {
-		line, rest, found := strings.Cut(text, "\n")
-		out = append(out, line)
-		if !found {
-			break
-		}
-		text = rest
-	}
-	return out
-}
-
-// malformed reports an input that is not JSON as jq does and stops reading.
-func (in *inputs) malformed(err error) {
-	offset := int64(0)
-	if in.events != nil {
-		offset = in.events.InputOffset()
-	} else if in.stream != nil {
-		offset = in.stream.InputOffset()
-	}
-	message := err.Error()
-	var syntax *json.SyntaxError
-	switch {
-	case errors.Is(err, io.ErrUnexpectedEOF):
-		message = "Unfinished JSON term at EOF"
-		if in.events != nil {
-			offset = in.events.InputOffset()
-		} else if in.positions != nil {
-			offset = in.positions.read
-		} else if in.data != nil {
-			offset = int64(in.data.Len())
-		}
-	case errors.As(err, &syntax):
-		offset = syntax.Offset
-	}
-	var line, column int
-	if in.events != nil {
-		line, column = in.events.Position()
-	} else if position, ok := in.stream.(interface{ Position() (int, int) }); ok {
-		line, column = position.Position()
-	} else if in.positions != nil {
-		line, column = in.positions.lineColumn(offset)
-	} else {
-		line, column = lineColumn(in.data.Bytes(), offset)
-	}
-	_, _ = fmt.Fprintf(in.inv.stderr, "jq: parse error: %s at line %d, column %d\n", message, line, column)
-	in.broken = true
-}
-
-// position is jq's "(at FILE:LINE)" for the value last read: jq reads input
-// a line at a time, so LINE counts every newline through the line where
-// the value ended. In python yq, jq reads one JSON document per line from
-// its stdin pipe, so positions are "<stdin>:DOC".
-func (in *inputs) position() string {
-	if in.label == "" {
-		return "<unknown>"
-	}
-	if in.inv.pythonYq() {
-		return fmt.Sprintf("<stdin>:%d", in.yamlDoc)
-	}
-	_, line := in.current()
-	return fmt.Sprintf("%s:%d", in.label, line)
-}
-
-// current is input_filename and input_line_number: the file being read
-// ("<stdin>" for stdin; null when no input has been read) and the lines
-// read from it so far. In python yq, jq sees "<stdin>" and the 1-based YAML
-// document index.
-func (in *inputs) current() (any, int) {
-	if in.label == "" {
-		return nil, 0
-	}
-	if in.inv.pythonYq() {
-		return "<stdin>", in.yamlDoc
-	}
-	end := int64(len(in.text))
-	if in.positions != nil {
-		end = in.positions.read
-	} else if in.data != nil {
-		end = int64(in.data.Len())
-	}
-	if in.events != nil {
-		end = in.events.InputOffset()
-	} else if in.stream != nil {
-		end = in.stream.InputOffset()
-	} else if in.rawReader != nil {
-		end = in.rawOffset
-	}
-	if in.events != nil {
-		return in.label, in.events.InputLine()
-	}
-	var name any = in.label
-	if in.label == "<stdin>" {
-		name = nil
-	}
-	if position, ok := in.stream.(interface{ InputLine() int }); ok {
-		return name, position.InputLine()
-	}
-	return name, in.lineAt(end)
-}
-
-func (in *inputs) lineAt(offset int64) int {
-	if in.positions != nil {
-		return in.positions.lineAt(offset)
-	}
-	if in.data == nil {
-		offset = min(max(offset, 0), int64(len(in.text)))
-		if i := strings.IndexByte(in.text[offset:], '\n'); i >= 0 {
-			offset += int64(i) + 1
-		} else {
-			offset = int64(len(in.text))
-		}
-		return strings.Count(in.text[:offset], "\n")
-	}
-	data := in.data.Bytes()
-	offset = min(max(offset, 0), int64(len(data)))
-	if i := bytes.IndexByte(data[offset:], '\n'); i >= 0 {
-		offset += int64(i) + 1
-	} else {
-		offset = int64(len(data))
-	}
-	return bytes.Count(data[:offset], []byte{'\n'})
 }
 
 // lineColumn is jq's parse error location: 1-based line, 0-based column.

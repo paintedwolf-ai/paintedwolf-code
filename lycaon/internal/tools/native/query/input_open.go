@@ -12,13 +12,9 @@ import (
 )
 
 func (in *inputs) close() {
-	if closer, ok := in.stream.(interface{ Close() }); ok {
-		closer.Close()
+	if in.stream != nil {
+		in.stream.Close()
 		in.stream = nil
-	}
-	if in.events != nil {
-		in.events.Close()
-		in.events = nil
 	}
 	if in.rawWork != nil {
 		in.rawWork.Close()
@@ -27,10 +23,6 @@ func (in *inputs) close() {
 	if in.currentCloser != nil {
 		_ = in.currentCloser.Close()
 		in.currentCloser = nil
-	}
-	if in.positions != nil {
-		in.positions.close()
-		in.positions = nil
 	}
 }
 
@@ -69,17 +61,7 @@ func (in *inputs) openStream(operand commandprogram.Field) {
 			reader = stream.Reader
 		}
 	}
-	var positions *inputPositions
-	var err error
-	in.readBytes = 0
-	if in.raw {
-		positions, err = newInputPositions(in.inv, in.limit, in.label)
-	}
-	if err != nil {
-		in.stop = err
-		return
-	}
-	in.positions = positions
+	in.lastLine = 0
 	var memory nativejq.EventMemory
 	if in.inv.owners.Revisions.Memory != nil {
 		memory = in.inv.owners.Revisions.Memory
@@ -87,10 +69,10 @@ func (in *inputs) openStream(operand commandprogram.Field) {
 	tracked := queryInputReader{input: reader, owner: in}
 	if in.raw {
 		in.rawReader = bufio.NewReader(tracked)
-		in.rawOffset = 0
+		in.rawLines = 0
 	} else {
 		if in.eventMode {
-			in.events = nativejq.NewEventStream(in.inv.ctx, tracked, nativejq.EventLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory)
+			in.stream = nativejq.NewEventStream(in.inv.ctx, tracked, nativejq.EventLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory)
 		} else {
 			in.stream = nativejq.NewBoundedValueStream(in.inv.ctx, tracked, nativejq.EventLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory, in.inv.owners.limit("query_value_bytes"))
 		}
@@ -118,9 +100,7 @@ func (r queryInputReader) Read(p []byte) (int, error) {
 	if n > 0 {
 		r.owner.readBytes += int64(n)
 		var failure error
-		if r.owner.positions != nil {
-			_, failure = r.owner.positions.Write(p[:n])
-		} else if r.owner.readBytes > r.owner.limit {
+		if r.owner.readBytes > r.owner.limit {
 			failure = tools.CommandLimitExceeded("stream_throughput_bytes", r.owner.limit, r.owner.readBytes)
 		}
 		if failure != nil {

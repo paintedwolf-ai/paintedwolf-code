@@ -178,7 +178,12 @@ func (s *EventStream) path(length int) ([]any, error) {
 }
 
 // Decode returns one leaf or container-end event before reading the next.
-func (s *EventStream) Decode() (any, error) {
+func (s *EventStream) Decode() (value any, failure error) {
+	defer func() {
+		if failure != nil {
+			s.failure = failure
+		}
+	}()
 	if s.failure != nil {
 		return nil, s.failure
 	}
