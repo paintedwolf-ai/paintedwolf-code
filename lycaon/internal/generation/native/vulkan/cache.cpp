@@ -36,6 +36,9 @@ void pw_generation::save_prefix() {
     // Only live sliding rows may be pinned by the retained prefix.
     cache->get_swa()->seq_cp(0, 1, std::max(0, static_cast<int>(position) - 511), -1);
     prefix_position = position;
+    // Cold and reused tails start from the same live window and row layout.
+    clear_sequence(0);
+    llama_memory_seq_cp(llama_get_memory(context.get()), 1, 0, -1, -1);
     if (const auto debug = std::getenv("LLAMA_KV_CACHE_DEBUG"); debug && std::atoi(debug) > 0)
         diagnostic_prefix = pw_checkpoint::save(llama_get_memory(context.get()));
 }
