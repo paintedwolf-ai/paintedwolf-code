@@ -7,6 +7,7 @@ struct Fake {
     prefix: Vec<u32>,
     calls: Vec<Vec<u32>>,
     samples: VecDeque<u32>,
+    sampling_calls: usize,
     fail: bool,
     missing_prefix: bool,
 }
@@ -21,7 +22,10 @@ impl Backend for Fake {
         if self.fail {
             return Err(Error::Device("fixture".into()));
         }
-        Ok(sampling.map(|_| self.samples.pop_front().unwrap_or(20)))
+        Ok(sampling.map(|_| {
+            self.sampling_calls += 1;
+            self.samples.pop_front().unwrap_or(20)
+        }))
     }
     fn reset(&mut self) -> Result<()> {
         self.tokens.clear();
@@ -245,3 +249,6 @@ fn changed_continuation_replays_from_the_stable_checkpoint() {
     assert!(runner.backend.tokens.is_empty());
     assert_eq!(runner.begin(request(3), None).unwrap(), 0);
 }
+
+#[path = "execution/preparation_tests.rs"]
+mod preparation;

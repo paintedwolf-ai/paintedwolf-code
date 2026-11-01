@@ -1,5 +1,8 @@
 use crate::{
-    execution::{Begin, Progress},
+    execution::{
+        Begin, Progress,
+        preparation::{Prepare, PreparationProgress},
+    },
     rendering::RenderRequest,
 };
 use serde::{Deserialize, Serialize};
@@ -34,6 +37,15 @@ pub enum Command {
     Render {
         request: RenderRequest,
         max_prompt_tokens: usize,
+    },
+    Prepare {
+        request: Prepare,
+    },
+    AdvancePreparation {
+        request_id: u64,
+    },
+    CancelPreparation {
+        request_id: u64,
     },
     Begin {
         request: Begin,
@@ -78,6 +90,9 @@ pub enum Output {
     Begun {
         request_id: u64,
         reused_prefix_tokens: usize,
+    },
+    PreparationProgress {
+        progress: PreparationProgress,
     },
     Progress {
         progress: Progress,
