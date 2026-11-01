@@ -38,11 +38,14 @@ def run(command, **kwargs):
 
 def prepare(args):
     if args.install_build_tools:
-        if args.backend != "reference-llama" or sys.platform != "linux":
-            raise ValueError("system build tools are only prepared for the Linux Vulkan candidate")
-        run(["sudo", "-n", "apt-get", "update"])
-        run(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends",
-             "cmake", "ninja-build", "libvulkan-dev"])
+        if args.backend == "reference-swift" and sys.platform == "darwin":
+            run(["xcodebuild", "-downloadComponent", "MetalToolchain"])
+        elif args.backend == "reference-llama" and sys.platform == "linux":
+            run(["sudo", "-n", "apt-get", "update"])
+            run(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends",
+                 "cmake", "ninja-build", "libvulkan-dev"])
+        else:
+            raise ValueError("build tool preparation requires Swift/macOS or Vulkan/Linux")
     if args.backend == "reference-swift":
         source, build = paths(args.backend)
         compiler = swift_toolchain.prepare(bin_dir(ROOT))
