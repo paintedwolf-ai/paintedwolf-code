@@ -1,3 +1,4 @@
+import { localGenerationView } from "./local-generation-model.ts";
 import type {
   ModelPolicy,
   ModelPolicyPatch,
@@ -134,6 +135,7 @@ export function providerEndpointIsLoopback(url: string | undefined): boolean {
 
 /** Describe setup and assignment from the host's status axes. */
 export function providerStatusLabel(provider: ProviderMeta): string {
+  if (isIncludedProvider(provider)) return localGenerationView(provider).label;
   if (providerIsReady(provider)) return MODELS_SETTINGS_COPY.statusReady;
   if (providerNeedsApiKey(provider)) {
     return MODELS_SETTINGS_COPY.statusNeedsApiKey;
@@ -194,8 +196,6 @@ export type ProviderPickerGroup = (typeof PROVIDER_PICKER_GROUP_ORDER)[number];
 const CUSTOM_PROVIDER_KINDS = new Set(["openai-compatible"]);
 
 export const INCLUDED_PROVIDER_ID = "nativegen";
-export const INCLUDED_MODEL_ID = "gemma4-e4b-paintedwolf";
-export const INCLUDED_CONTEXT_WINDOW_TOKENS = 65536;
 
 export function isIncludedProvider(
   provider: Pick<ProviderMeta, "id" | "kind">,

@@ -2,7 +2,6 @@ import { For, Show, type Accessor, type JSX } from "solid-js";
 import type { ProviderKindTemplate, ProviderMeta } from "../../../api/types.ts";
 import { providerEndpointError } from "../../../settings/providers/cloudflare-endpoint.ts";
 import {
-  isIncludedProvider,
   providerDiscoveryFailure,
   providerContextWindowState,
   providerDisplayName,
@@ -20,10 +19,10 @@ import {
 } from "../../../settings/providers/provider-credential-modes.ts";
 import { InlineRenameInput } from "../../inline-rename/InlineRenameInput.tsx";
 import { DenButton } from "../../primitives/DenButton.tsx";
-import { DenCheckbox } from "../../primitives/DenCheckbox.tsx";
 import { DenField } from "../../primitives/DenField.tsx";
 import { DenInput } from "../../primitives/DenInput.tsx";
 import { DenRadio } from "../../primitives/DenRadio.tsx";
+import { ProviderSecretTrust } from "./ProviderSecretTrust.tsx";
 import { CloudflareAccountField } from "./CloudflareAccountField.tsx";
 import {
   PROVIDER_LABEL_MAX,
@@ -31,7 +30,6 @@ import {
   endpointLabel,
   endpointStyle,
   providerFeedStatusHints,
-  secretScreenTrustEndpointNote,
   toolCallStateCopy,
   type ProviderCardDraft,
 } from "./provider-form-model.ts";
@@ -73,11 +71,6 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
     >
       <header class="den-settings-provider-head">
         <div class="den-settings-provider-title">
-          <Show when={!isIncludedProvider(provider())} fallback={
-            <span class="den-settings-provider-name" data-testid={`provider-name-${provider().id}`}>
-              {providerDisplayName(provider())}
-            </span>
-          }>
           <Show
             when={!props.renaming()}
             fallback={
@@ -106,7 +99,6 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
               {providerDisplayName(provider())}
             </button>
           </Show>
-          </Show>
           <code
             class="den-settings-provider-id"
             data-testid={`provider-id-${provider().id}`}
@@ -120,7 +112,6 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
         >
           {providerStatusLabel(provider())}
         </span>
-        <Show when={!isIncludedProvider(provider())}>
         <DenButton
           variant="link"
           class="den-settings-provider-remove"
@@ -129,25 +120,10 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
         >
           {MODELS_SETTINGS_COPY.removeProvider}
         </DenButton>
-        </Show>
       </header>
-      <Show when={!isIncludedProvider(provider())}>
       <p class="den-settings-provider-label-hint">
         {MODELS_SETTINGS_COPY.providerLabelRenameHint}
       </p>
-      </Show>
-
-      <Show when={isIncludedProvider(provider())}>
-        <div class="den-activity-span" data-testid={`provider-included-summary-${provider().id}`}>
-          <div class="den-activity-span-chicklet">
-            <span class="den-activity-span-chip">
-              <span class="den-activity-span-name">{MODELS_SETTINGS_COPY.includedProviderModelSummary}</span>
-            </span>
-            <span class="den-activity-span-count">{MODELS_SETTINGS_COPY.includedProviderBadge}</span>
-            <span class="den-activity-span-hint">{MODELS_SETTINGS_COPY.includedProviderHint}</span>
-          </div>
-        </div>
-      </Show>
 
       <Show when={providerFeedStatusHints(provider()).length > 0}>
         <p
@@ -402,25 +378,11 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
         </div>
       </Show>
 
-      <DenCheckbox
-        data-testid={`provider-secret-trust-${provider().id}`}
-        checked={provider().secret_screen_trusted ?? false}
-        disabled={props.card(provider().id).savingSecretTrust}
-        onChange={(e) =>
-          props.onSetSecretScreenTrust(provider(), e.currentTarget.checked)
-        }
-      >
-        {MODELS_SETTINGS_COPY.secretScreenTrustLabel}
-      </DenCheckbox>
-      <p
-        class="den-settings-hint"
-        data-testid={`provider-secret-trust-hint-${provider().id}`}
-      >
-        {MODELS_SETTINGS_COPY.secretScreenTrustHint}
-        <Show when={secretScreenTrustEndpointNote(provider())}>
-          {(note) => <> {note()}</>}
-        </Show>
-      </p>
+      <ProviderSecretTrust
+        provider={provider}
+        saving={() => props.card(provider().id).savingSecretTrust}
+        onChange={props.onSetSecretScreenTrust}
+      />
 
       <Show when={provider().models.length > 0}>
         <p class="den-settings-hint">
