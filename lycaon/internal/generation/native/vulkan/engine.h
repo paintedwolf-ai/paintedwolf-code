@@ -18,7 +18,9 @@ struct pw_generation {
     uint32_t prefix_limit = 0;
     uint64_t budget = 0;
     std::unique_ptr<pw_checkpoint> checkpoint;
+    std::unique_ptr<pw_checkpoint> diagnostic_prefix;
     void reset_active();
+    void clear_sequence(int32_t sequence);
     void save_prefix();
     bool restore_prefix();
     void clear_prefix();

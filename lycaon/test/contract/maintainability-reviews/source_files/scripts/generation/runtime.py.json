@@ -4,12 +4,14 @@
   "kind": "construction",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the measured 314-line task orchestration module. It selects pinned backends and records reproducible builds and measurements; framed exchange, source provenance, conversion and toolchain setup remain separate implementations. Four focused protocol/accounting/CLI fixtures passed, including full-context checkpoint bounds. Backend-specific context validation remains in the runner.",
-  "reviewed_commit": "63ada06f6fbe167580e101ed3436af2d7e3d8382",
-  "ceiling": 314,
+  "reason": "Retain the measured 318-line task orchestration module. Backend selection, content-addressed source preparation and native test linking belong to the build lifecycle. Source patch validation, transport and provenance remain separate implementations. Thirteen Python fixtures and forty Rust fixtures passed with the freshly compiled Vulkan adapter, covering source-cache separation, failed patch publication and executable provenance.",
+  "reviewed_commit": "aadd2abe26f3a50d43fc6f925524ef15a0d32a23",
+  "ceiling": 318,
   "boundaries": {
-    "scripts/generation/test_native_bench.py": "275e94fbd419048bc4f51d20d296b14c04a583140ce34b5cdb5f5a43c4a2e63e",
-    "scripts/generation/test_provenance.py": "6228708e7e5203bfa218f6b92ac43115945281290b47d27b81ad6dbfe3b36f86",
-    "scripts/generation/test_staging.py": "45183d8e5cfc4a3271425b1e8fb7c565a723b3962f1a7fb56eb40fc1a3dd951d"
+    "scripts/generation/test_native_bench.py": "4b5bcc67dd9bf36b56f24f51be22a7014c075f6b2c86ee7851f6cc3b9e2dee9f",
+    "scripts/generation/test_sources.py": "1af0871547a344c6fad179120c0843c21b4474ba6ee6e64cdcc0ef1e11cedcce",
+    "scripts/generation/test_provenance.py": "debc6167cdf86536fb3ca7e2f117f3041d7fe58474fc60f06c4adcab8debc5f5",
+    "scripts/generation/sources.py": "b34058b8dcdf53044d3b0d1bd5c8b5c49f2cb577f6d0acf4761b6e7c22a7f03e",
+    "scripts/generation/provenance.py": "b0740afa0c4d6e75c82414df6a4ecb0676530364bd3e0c96f881285ee66c9691"
   }
 }
