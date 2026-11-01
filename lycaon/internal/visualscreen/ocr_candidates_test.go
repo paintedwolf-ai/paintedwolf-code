@@ -32,6 +32,7 @@ func TestParseTesseractTSVPopulatesWordCandidates(t *testing.T) {
 	wantCandidates := []string{
 		"export TOKEN=AKIAQ7Z2M4N6P3R6T5V7",
 		"export TOKEN=AK1AQ7Z2M4N6P3R6T5V7",
+		"exportTOKEN=blurred",
 	}
 	if len(spans[0].Candidates) != len(wantCandidates) {
 		t.Fatalf("Candidates = %#v, want %#v", spans[0].Candidates, wantCandidates)
@@ -41,7 +42,7 @@ func TestParseTesseractTSVPopulatesWordCandidates(t *testing.T) {
 			t.Fatalf("Candidates[%d] = %q, want %q", i, spans[0].Candidates[i], want)
 		}
 	}
-	wantRepaired := "export SECRET=AKIAL6K4J2H7G5F3D2S7T41207"
+	wantRepaired := "exportSECRET=AKIAL6K4J2H7G5F3D2S7T41207"
 	foundRepaired := false
 	for _, cand := range spans[1].Candidates {
 		if cand == wantRepaired {

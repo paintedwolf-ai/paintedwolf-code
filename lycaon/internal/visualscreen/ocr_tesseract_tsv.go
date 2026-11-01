@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
 // tsvWordLevel is the row level of one recognized word in Tesseract TSV.
@@ -36,7 +38,9 @@ func (l *tsvLine) addWord(wordNum, text string, conf float64) {
 				return
 			}
 		}
-		l.wordAlts[slot] = append(l.wordAlts[slot], text)
+		if len(l.wordAlts[slot]) < maxOCRCandidates-1 {
+			l.wordAlts[slot] = append(l.wordAlts[slot], text)
+		}
 		return
 	}
 	slot := len(l.words)
@@ -46,7 +50,7 @@ func (l *tsvLine) addWord(wordNum, text string, conf float64) {
 	l.confidence += max(conf, 0)
 }
 
-func (l *tsvLine) candidates() []string {
+func (l *tsvLine) candidates() ([]string, error) {
 	primary := strings.Join(l.words, " ")
 	seen := map[string]struct{}{primary: {}}
 	var out []string
@@ -62,116 +66,28 @@ func (l *tsvLine) candidates() []string {
 	}
 	for slot, alts := range l.wordAlts {
 		for _, alt := range alts {
+			if len(out) >= maxOCRCandidates-1 {
+				return out, nil
+			}
 			words := append([]string(nil), l.words...)
 			words[slot] = alt
 			add(strings.Join(words, " "))
 		}
 	}
-	if joined, ok := joinKerningSplitWords(l.words); ok {
-		add(joined)
-		for _, collapsed := range collapseOCRDoublets(joined) {
-			add(collapsed)
+	// Recognition candidates retain the primary line and add a bounded spacing
+	// hypothesis. Joining once avoids repeatedly copying a growing token.
+	joined := strings.Join(l.words, "")
+	add(joined)
+	for _, text := range []string{joined, primary} {
+		candidates, err := secretmatch.OCRDoubletCandidates(text, maxOCRCandidates-1-len(out))
+		if err != nil {
+			return nil, err
+		}
+		for _, candidate := range candidates {
+			add(candidate)
 		}
 	}
-	for _, collapsed := range collapseOCRDoublets(primary) {
-		add(collapsed)
-	}
-	return out
-}
-
-// joinKerningSplitWords rejoins single tokens that Tesseract split into
-// adjacent words around kerning gaps or assignment operators.
-func joinKerningSplitWords(words []string) (string, bool) {
-	if len(words) < 2 {
-		return "", false
-	}
-	merged := make([]string, 0, len(words))
-	merged = append(merged, words[0])
-	changed := false
-	for i := 1; i < len(words); i++ {
-		prev := merged[len(merged)-1]
-		next := words[i]
-		if shouldJoinOCRWords(prev, next) {
-			merged[len(merged)-1] = prev + next
-			changed = true
-			continue
-		}
-		merged = append(merged, next)
-	}
-	if !changed {
-		return "", false
-	}
-	return strings.Join(merged, " "), true
-}
-
-func shouldJoinOCRWords(prev, next string) bool {
-	if prev == "" || next == "" {
-		return false
-	}
-	if strings.HasSuffix(prev, "=") || strings.HasPrefix(next, "=") {
-		return true
-	}
-	if looksLikeTokenFragment(prev) && looksLikeTokenFragment(next) {
-		return true
-	}
-	last := prev[len(prev)-1]
-	switch last {
-	case 'T', 'Y', 'F', 'V', 'W', '/':
-		return isTokenChar(next[0]) && (looksLikeTokenFragment(prev) || looksLikeTokenFragment(next))
-	}
-	return false
-}
-
-func looksLikeTokenFragment(s string) bool {
-	if strings.ContainsAny(s, "=_") {
-		return true
-	}
-	hasDigit, hasLetter := false, false
-	for i := 0; i < len(s); i++ {
-		b := s[i]
-		if b >= '0' && b <= '9' {
-			hasDigit = true
-		} else if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') {
-			hasLetter = true
-		}
-	}
-	return hasDigit && hasLetter
-}
-
-func isTokenChar(b byte) bool {
-	return (b >= '0' && b <= '9') || (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '_' || b == '|' || b == '!' || b == '/'
-}
-
-var ocrGlyphDoublets = [][2]string{
-	{"/7", "7"},
-	{"7/", "7"},
-	{"S5", "5"},
-	{"5S", "5"},
-	{"O0", "O"},
-	{"0O", "0"},
-	{"1I", "1"},
-	{"I1", "I"},
-	{"1l", "1"},
-	{"l1", "l"},
-	{"lI", "I"},
-	{"Il", "I"},
-}
-
-// collapseOCRDoublets collapses adjacent confusion-pair doublets produced when
-// Tesseract over-segments a single wide glyph into two characters.
-func collapseOCRDoublets(s string) []string {
-	var out []string
-	all := s
-	for _, pair := range ocrGlyphDoublets {
-		if idx := strings.Index(s, pair[0]); idx >= 0 {
-			out = append(out, s[:idx]+pair[1]+s[idx+len(pair[0]):])
-			all = strings.ReplaceAll(all, pair[0], pair[1])
-		}
-	}
-	if all != s {
-		out = append(out, all)
-	}
-	return out
+	return out, nil
 }
 
 // parseTesseractTSV groups word rows into line spans. Boxes are normalized to
@@ -234,9 +150,13 @@ func parseTesseractTSV(data []byte, width, height int) ([]TextSpan, error) {
 	spans := make([]TextSpan, 0, len(order))
 	for _, key := range order {
 		line := lines[key]
+		candidates, err := line.candidates()
+		if err != nil {
+			return nil, fmt.Errorf("tesseract tsv candidates: %w", err)
+		}
 		spans = append(spans, TextSpan{
 			Text:       strings.Join(line.words, " "),
-			Candidates: line.candidates(),
+			Candidates: candidates,
 			Confidence: line.confidence / float64(len(line.words)) / 100,
 			BoundingBox: [4]float64{
 				float64(line.left) / float64(width),

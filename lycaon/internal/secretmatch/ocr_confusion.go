@@ -109,7 +109,7 @@ func runCatalogOCR(ctx context.Context, m *Matcher, d *detect.Detector, s string
 
 func screenWindowOCR(ctx context.Context, m *Matcher, d *detect.Detector, window string, runeOffset int) []Match {
 	hits := detectWindowOCR(ctx, m, d, window, window, runeOffset)
-	if normWindow, changed := normalizeBoundarySlashes(window); changed {
+	if normWindow, changed := normalizeOCRBoundaries(m.ocr.confusions, window); changed {
 		hits = append(hits, detectWindowOCR(ctx, m, d, window, normWindow, runeOffset)...)
 	}
 	return hits
@@ -138,39 +138,36 @@ func detectWindowOCR(ctx context.Context, m *Matcher, d *detect.Detector, rawWin
 	return hits
 }
 
-// normalizeBoundarySlashes replaces single '/', '|', or '!' characters at token
-// boundaries with their canonical digits ('7' or '1') so word-boundary regexes
-// match when a boundary digit or vertical stroke is misread. Byte and rune
-// offsets remain 1:1 with the input.
-func normalizeBoundarySlashes(s string) (string, bool) {
-	if !strings.ContainsAny(s, "/|!") {
-		return s, false
-	}
-	buf := []byte(s)
-	changed := false
-	for i := 0; i < len(buf); i++ {
-		var rep byte
-		switch buf[i] {
-		case '/':
-			rep = '7'
-		case '|', '!':
-			rep = '1'
-		default:
+// normalizeOCRBoundaries repairs cataloged punctuation at word boundaries
+// without changing byte or rune offsets used to locate the original evidence.
+func normalizeOCRBoundaries(c ocrConfusionCatalog, s string) (string, bool) {
+	var out []byte
+	for i := 0; i < len(s); i++ {
+		replacement, ok := c.boundaryGlyph(s[i])
+		if !ok {
 			continue
 		}
-		prevAlnum := i > 0 && isASCIIAlnum(buf[i-1])
-		nextAlnum := i+1 < len(buf) && isASCIIAlnum(buf[i+1])
-		prevPunct := i > 0 && (buf[i-1] == '/' || buf[i-1] == ':' || buf[i-1] == '|' || buf[i-1] == '!')
-		nextPunct := i+1 < len(buf) && (buf[i+1] == '/' || buf[i+1] == '|' || buf[i+1] == '!')
+		prevAlnum := i > 0 && isASCIIAlnum(s[i-1])
+		nextAlnum := i+1 < len(s) && isASCIIAlnum(s[i+1])
+		prevPunct, nextPunct := false, false
+		if i > 0 {
+			_, prevPunct = c.boundaryGlyph(s[i-1])
+			prevPunct = prevPunct || s[i-1] == ':'
+		}
+		if i+1 < len(s) {
+			_, nextPunct = c.boundaryGlyph(s[i+1])
+		}
 		if (prevAlnum && !nextAlnum && !nextPunct) || (!prevAlnum && !prevPunct && nextAlnum) {
-			buf[i] = rep
-			changed = true
+			if out == nil {
+				out = []byte(s)
+			}
+			out[i] = replacement
 		}
 	}
-	if !changed {
+	if out == nil {
 		return s, false
 	}
-	return string(buf), true
+	return string(out), true
 }
 
 func isASCIIAlnum(b byte) bool {
