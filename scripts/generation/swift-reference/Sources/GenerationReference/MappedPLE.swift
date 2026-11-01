@@ -35,7 +35,7 @@ final class MappedPLE: Embedding {
               let header = try JSONSerialization.jsonObject(with: raw) as? [String: Any] else {
             throw ReferenceFailure("Invalid tensor header")
         }
-        let data = try Data(contentsOf: url, options: .alwaysMapped)
+        let data = try mapReadOnly(file)
         var entries: [Tensor] = []
         var rowCount = 0
         for (name, kind) in [("weight", "U32"), ("scales", "F16"), ("biases", "F16")] {
