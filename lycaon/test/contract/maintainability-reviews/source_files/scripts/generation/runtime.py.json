@@ -4,11 +4,14 @@
   "kind": "construction",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the measured 318-line task orchestration module. Backend selection, captured-source build paths and native test preparation belong to the same build lifecycle. Framed transport, provenance and toolchain preparation remain separate implementations. Six focused fixtures passed, including source-location cache separation and building the matching Vulkan adapter before test linking. The fresh Linux adapter build and 40 Rust fixtures also passed.",
-  "reviewed_commit": "d6e4823279bce05a37d92d63ad245b086fe838f3",
+  "reason": "Retain the measured 318-line task orchestration module. Backend selection, content-addressed source preparation and native test linking belong to the build lifecycle. Source patch validation, transport and provenance remain separate implementations. Thirteen Python fixtures and forty Rust fixtures passed with the freshly compiled Vulkan adapter, covering source-cache separation, failed patch publication and executable provenance.",
+  "reviewed_commit": "aadd2abe26f3a50d43fc6f925524ef15a0d32a23",
   "ceiling": 318,
   "boundaries": {
     "scripts/generation/test_native_bench.py": "4b5bcc67dd9bf36b56f24f51be22a7014c075f6b2c86ee7851f6cc3b9e2dee9f",
-    "scripts/generation/provenance.py": "fb233cd6bd0639e5d66494cf7d176ab0caf2f43bb3c9b536a7d15b7514758402"
+    "scripts/generation/test_sources.py": "1af0871547a344c6fad179120c0843c21b4474ba6ee6e64cdcc0ef1e11cedcce",
+    "scripts/generation/test_provenance.py": "debc6167cdf86536fb3ca7e2f117f3041d7fe58474fc60f06c4adcab8debc5f5",
+    "scripts/generation/sources.py": "b34058b8dcdf53044d3b0d1bd5c8b5c49f2cb577f6d0acf4761b6e7c22a7f03e",
+    "scripts/generation/provenance.py": "b0740afa0c4d6e75c82414df6a4ecb0676530364bd3e0c96f881285ee66c9691"
   }
 }
