@@ -56,9 +56,23 @@ fn checkpoint_uses_only_a_matching_declared_message_prefix() {
         tools: vec![],
         checkpoint_messages: 0,
     };
-    assert_eq!(renderer.measure(&changed).unwrap().rendered.checkpoint_tokens, 0);
+    assert_eq!(
+        renderer
+            .measure(&changed)
+            .unwrap()
+            .rendered
+            .checkpoint_tokens,
+        0
+    );
     changed.checkpoint_messages = 2;
-    assert_eq!(renderer.measure(&changed).unwrap().rendered.checkpoint_tokens, 3);
+    assert_eq!(
+        renderer
+            .measure(&changed)
+            .unwrap()
+            .rendered
+            .checkpoint_tokens,
+        3
+    );
     changed.checkpoint_messages = 3;
     assert!(renderer.measure(&changed).is_err());
     let measured = renderer.measure(&request).unwrap();
