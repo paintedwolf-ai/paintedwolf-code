@@ -15,6 +15,8 @@ class ProvenanceTests(unittest.TestCase):
             (root / "llama-reference").mkdir()
             source = root / "llama-reference/main.cpp"
             source.write_text("original source")
+            header = root / "llama-reference/memory.h"
+            header.write_text("original header")
             (root / "sources.json").write_text("{}")
             binary = root / "generation-reference"
             binary.write_bytes(b"original executable")
@@ -22,7 +24,7 @@ class ProvenanceTests(unittest.TestCase):
                 provenance.record_build("reference-llama", root, binary)
                 receipt = provenance.verified_build("reference-llama", root, binary)
                 self.assertEqual(receipt["binary_sha256"], provenance.file_digest(binary))
-                for path in (source, binary):
+                for path in (source, header, binary):
                     original = path.read_bytes()
                     path.write_bytes(b"changed")
                     with self.assertRaisesRegex(ValueError, "rebuild"):

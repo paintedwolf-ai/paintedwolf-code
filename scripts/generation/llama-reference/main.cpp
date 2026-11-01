@@ -1,6 +1,7 @@
 #include "llama.h"
 #include "ggml-backend.h"
 #include "json.hpp"
+#include "memory.h"
 
 #include <algorithm>
 #include <chrono>
@@ -78,7 +79,8 @@ static json measure(llama_context * ctx, const std::vector<llama_token> & prompt
 #ifndef __APPLE__
     peak *= 1024;
 #endif
-    return {{"prefill_step_max_seconds", prefill_step_max}, {"decode_step_max_seconds", decode_step_max},
+    return {{"backend_buffers", memory_buffers(ctx)},
+            {"prefill_step_max_seconds", prefill_step_max}, {"decode_step_max_seconds", decode_step_max},
             {"prefill_seconds", prefill}, {"decode_seconds", generation},
             {"prompt_tps", prompt.size() / prefill}, {"generation_tps", generated / generation},
             {"process_peak_rss_bytes", peak}, {"tokens", output},
@@ -105,6 +107,8 @@ int main(int argc, char ** argv) {
         auto device = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
         if (!device) { device = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_IGPU); }
         if (!device) { throw std::runtime_error("no hardware GPU available"); }
+        ggml_backend_dev_props device_properties {};
+        ggml_backend_dev_get_props(device, &device_properties);
         ggml_backend_dev_t devices[] = {device, nullptr};
         auto mp = llama_model_default_params();
         mp.devices = devices;
@@ -144,6 +148,9 @@ int main(int argc, char ** argv) {
             result["warmup"] = trial == 0;
             result["ple"] = spec.at("ple");
             result["device"] = ggml_backend_dev_name(device);
+            result["device_id"] = device_properties.device_id ? device_properties.device_id : "";
+            result["device_total_bytes"] = device_properties.memory_total;
+            result["device_free_bytes_before_load"] = device_properties.memory_free;
             std::cout << result.dump() << std::endl;
         }
     } catch (const std::exception & error) {
