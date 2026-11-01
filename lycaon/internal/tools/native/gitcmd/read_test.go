@@ -80,15 +80,16 @@ func copyFixtureDir(t *testing.T, src, dst string) {
 	testutil.FailErr(t, "copy fixture", err)
 }
 
+func mkdirSharedFixture(prefix string) (string, error) {
+	return os.MkdirTemp("", prefix)
+}
+
 func ensureEmptyFixture(t *testing.T, bin string) string {
 	t.Helper()
 	emptyFixtureOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "gitcmd-empty-*")
+		dir, err := mkdirSharedFixture("gitcmd-empty-*")
 		testutil.FailErr(t, "empty fixture dir", err)
-		tmpl, err := os.MkdirTemp("", "gitcmd-tmpl-*")
-		testutil.FailErr(t, "empty template dir", err)
-		defer func() { _ = os.RemoveAll(tmpl) }()
-		h := &harness{t: t, root: dir, bin: bin, template: tmpl}
+		h := &harness{t: t, root: dir, bin: bin, template: t.TempDir()}
 		h.git("init", "-q", "-b", "main")
 		h.git("config", "user.name", "Ann Author")
 		h.git("config", "user.email", "ann@example.test")
@@ -101,13 +102,10 @@ func ensureSeededFixture(t *testing.T, bin string) string {
 	t.Helper()
 	empty := ensureEmptyFixture(t, bin)
 	seededFixtureOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "gitcmd-seeded-*")
+		dir, err := mkdirSharedFixture("gitcmd-seeded-*")
 		testutil.FailErr(t, "seeded fixture dir", err)
 		copyFixtureDir(t, empty, dir)
-		tmpl, err := os.MkdirTemp("", "gitcmd-tmpl-*")
-		testutil.FailErr(t, "seeded template dir", err)
-		defer func() { _ = os.RemoveAll(tmpl) }()
-		h := &harness{t: t, root: dir, bin: bin, template: tmpl}
+		h := &harness{t: t, root: dir, bin: bin, template: t.TempDir()}
 		h.write("a.txt", "one\ntwo\n")
 		h.write("sub/b.txt", "bee\n")
 		h.git("add", ".")

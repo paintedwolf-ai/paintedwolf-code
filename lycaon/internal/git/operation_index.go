@@ -144,50 +144,34 @@ func readLooseGitObject(dir, oid string) (string, []byte, bool) {
 	if !ok || repo.CommonDir == "" {
 		return "", nil, false
 	}
-	objDirs := []string{filepath.Join(repo.CommonDir, "objects")}
-	if altRaw, err := os.ReadFile(filepath.Join(repo.CommonDir, "objects", "info", "alternates")); err == nil {
-		for _, line := range strings.Split(string(altRaw), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			if !filepath.IsAbs(line) {
-				line = filepath.Join(repo.CommonDir, "objects", line)
-			}
-			objDirs = append(objDirs, filepath.Clean(line))
-		}
+	f, err := os.DirFS(filepath.Join(repo.CommonDir, "objects")).Open(oid[:2] + "/" + oid[2:])
+	if err != nil {
+		return "", nil, false
 	}
-	for _, objDir := range objDirs {
-		f, err := os.Open(filepath.Join(objDir, oid[:2], oid[2:]))
-		if err != nil {
-			continue
-		}
-		zr, err := zlib.NewReader(f)
-		if err != nil {
-			_ = f.Close()
-			return "", nil, false
-		}
-		raw, err := io.ReadAll(io.LimitReader(zr, sourceledger.MaxRevisionContentBytes+1024))
-		_ = zr.Close()
+	zr, err := zlib.NewReader(f)
+	if err != nil {
 		_ = f.Close()
-		if err != nil || int64(len(raw)) > sourceledger.MaxRevisionContentBytes+512 {
-			return "", nil, false
-		}
-		headerBytes, body, found := bytes.Cut(raw, []byte{0})
-		if !found {
-			return "", nil, false
-		}
-		kind, sizeStr, found := strings.Cut(string(headerBytes), " ")
-		if !found {
-			return "", nil, false
-		}
-		size, err := strconv.ParseInt(sizeStr, 10, 64)
-		if err != nil || size != int64(len(body)) {
-			return "", nil, false
-		}
-		return kind, body, true
+		return "", nil, false
 	}
-	return "", nil, false
+	raw, err := io.ReadAll(io.LimitReader(zr, sourceledger.MaxRevisionContentBytes+1024))
+	_ = zr.Close()
+	_ = f.Close()
+	if err != nil || int64(len(raw)) > sourceledger.MaxRevisionContentBytes+512 {
+		return "", nil, false
+	}
+	headerBytes, body, found := bytes.Cut(raw, []byte{0})
+	if !found {
+		return "", nil, false
+	}
+	kind, sizeStr, found := strings.Cut(string(headerBytes), " ")
+	if !found {
+		return "", nil, false
+	}
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil || size != int64(len(body)) {
+		return "", nil, false
+	}
+	return kind, body, true
 }
 
 func readOperationBlob(ctx context.Context, dir string, entry operationIndexEntry) (RestoreContent, error) {
