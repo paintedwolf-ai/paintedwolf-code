@@ -3,6 +3,7 @@ package contextpreparation
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 )
 
@@ -114,6 +115,9 @@ func (s *Service) work() {
 		s.cancel = cancel
 		s.mu.Unlock()
 		candidate, err := s.build(ctx, focus)
+		if err != nil {
+			slog.DebugContext(ctx, "context preparation projection skipped", "session_id", focus, "error", err)
+		}
 		s.mu.Lock()
 		valid := err == nil && ctx.Err() == nil && revision == s.revision && candidate.Key != "" && candidate.Key != s.completed && candidate.Run != nil
 		s.mu.Unlock()
