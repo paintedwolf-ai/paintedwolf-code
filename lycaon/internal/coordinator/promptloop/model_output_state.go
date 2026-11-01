@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -13,4 +14,6 @@ type modelOutputState struct {
 	sourceContext         *api.SourceContext
 	rejection             *guidance.Refusal
 	droppedToolCallStreak int
+	truncatedRetries      int
+	truncatedOutcome      *promptresult.OutputTruncatedOutcome
 }

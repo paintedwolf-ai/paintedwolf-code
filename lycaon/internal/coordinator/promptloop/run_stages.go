@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/workerprogress"
@@ -27,6 +28,7 @@ const (
 	loopExitAssertRunnable
 	loopExitLLMTimeout
 	loopExitSecretWithheld
+	loopExitOutputTruncated
 	loopExitBlockedLoop
 )
 
@@ -457,7 +459,8 @@ func (l *PromptLoop) finalizePromptLoopRun(
 	// A refused credential ends without another provider request.
 	if !blockedLiveCommandParked && !st.proseFinishDelivered && strings.TrimSpace(st.lastAssistantID) != "" &&
 		loopExit != loopExitCompleted && loopExit != loopExitToolBoundary &&
-		loopExit != loopExitGracefulCancel && loopExit != loopExitSecretWithheld {
+		loopExit != loopExitGracefulCancel && loopExit != loopExitSecretWithheld &&
+		loopExit != loopExitOutputTruncated {
 		reason := TurnCloseoutIterationCap
 		switch loopExit {
 		case loopExitAssertRunnable:
@@ -466,7 +469,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 			reason = TurnCloseoutLLMTimeout
 		case loopExitBlockedLoop:
 			reason = TurnCloseoutBlockedLoop
-		case loopExitNone, loopExitCompleted, loopExitToolBoundary, loopExitGracefulCancel, loopExitSecretWithheld:
+		case loopExitNone, loopExitCompleted, loopExitToolBoundary, loopExitGracefulCancel, loopExitSecretWithheld, loopExitOutputTruncated:
 		}
 		closedHistory, aid, content, cerr := l.Closeout.runEarlyTurnCloseout(ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter, reason, "", closeoutNudgeSent, in, st)
 		if cerr != nil {
@@ -501,14 +504,20 @@ func (l *PromptLoop) finalizePromptLoopRun(
 	if err := l.Inbox.takePolicyFeedback(ctx, sessionID, st); err != nil {
 		return nil, err
 	}
+	outcome := promptresult.OutcomeCompleted
+	if st.output.truncatedOutcome != nil {
+		outcome = promptresult.OutcomeOutputTruncated
+	}
 	if st.lastAssistantID == "" {
-		if !st.turnEndedGuidanceReject && loopExit != loopExitSecretWithheld {
+		if !st.turnEndedGuidanceReject && loopExit != loopExitSecretWithheld && loopExit != loopExitOutputTruncated {
 			return nil, fmt.Errorf("prompt produced no assistant message")
 		}
 		return &PromptRunResult{
 			TurnTools:            st.turnTools,
 			OfferedTools:         st.offeredToolNames,
 			TasksDispatchedCount: st.tasksDispatchedCount,
+			Outcome:              outcome,
+			OutputTruncated:      st.output.truncatedOutcome,
 		}, nil
 	}
 	return &PromptRunResult{
@@ -518,5 +527,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		TurnTools:            st.turnTools,
 		OfferedTools:         st.offeredToolNames,
 		TasksDispatchedCount: st.tasksDispatchedCount,
+		Outcome:              outcome,
+		OutputTruncated:      st.output.truncatedOutcome,
 	}, nil
 }

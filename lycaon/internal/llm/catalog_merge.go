@@ -60,7 +60,19 @@ func mergeAssignableModels(
 func applyModelContextCaps(kind string, models, local []modelinfo.Entry) {
 	for i := range models {
 		configured, ok := catalogPricingForID(kind, local, models[i].ID)
-		if !ok || configured.ContextLength <= 0 {
+		if !ok {
+			continue
+		}
+		if configured.ProviderMaxTokens > models[i].ProviderMaxTokens {
+			models[i].ProviderMaxTokens = configured.ProviderMaxTokens
+		}
+		if configured.MaxTokens > 0 {
+			if models[i].MaxTokens > configured.MaxTokens && models[i].MaxTokens > models[i].ProviderMaxTokens {
+				models[i].ProviderMaxTokens = models[i].MaxTokens
+			}
+			models[i].MaxTokens = configured.MaxTokens
+		}
+		if configured.ContextLength <= 0 {
 			continue
 		}
 		if models[i].ContextLength <= 0 || configured.ContextLength < models[i].ContextLength {
@@ -395,9 +407,13 @@ func enrichFromDiscovery(base, discovered modelinfo.Entry) modelinfo.Entry {
 		out.ContextLength = discovered.ContextLength
 		out.ContextLengthSource = discovered.ContextLengthSource
 	}
+	if discovered.ProviderMaxTokens > out.ProviderMaxTokens {
+		out.ProviderMaxTokens = discovered.ProviderMaxTokens
+	}
 	// The live transport's own output ceiling outranks the feed's.
 	if discovered.MaxTokens > 0 {
 		out.MaxTokens = discovered.MaxTokens
+		out.ProviderMaxTokens = discovered.MaxTokens
 	}
 	if discovered.ThinkingAlwaysOn {
 		out.ThinkingAlwaysOn = true
@@ -572,6 +588,7 @@ func modelEntryFromFeed(m modelfeed.Model) modelinfo.Entry {
 			e.ContextLength = m.Limit.Context
 		}
 		e.MaxTokens = feedOutputLimit(*m.Limit)
+		e.ProviderMaxTokens = e.MaxTokens
 	}
 	if m.Modalities.Input != nil {
 		e.Capabilities.Vision = modelinfo.Evidence(modelinfo.CapabilityUnsupported, "models.dev")
@@ -609,7 +626,16 @@ func overlayLocalModel(base, local modelinfo.Entry) modelinfo.Entry {
 	if local.Temperature != nil {
 		out.Temperature = local.Temperature
 	}
+	if base.ProviderMaxTokens > out.ProviderMaxTokens {
+		out.ProviderMaxTokens = base.ProviderMaxTokens
+	}
+	if local.ProviderMaxTokens > out.ProviderMaxTokens {
+		out.ProviderMaxTokens = local.ProviderMaxTokens
+	}
 	if local.MaxTokens != 0 {
+		if out.ProviderMaxTokens == 0 && base.MaxTokens > local.MaxTokens {
+			out.ProviderMaxTokens = base.MaxTokens
+		}
 		out.MaxTokens = local.MaxTokens
 	}
 	if local.ReasoningEffort != "" {

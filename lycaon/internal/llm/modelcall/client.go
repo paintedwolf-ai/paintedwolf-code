@@ -141,6 +141,7 @@ type StreamChunk struct {
 	ToolCalls        []api.ToolCall
 	Usage            TokenUsage
 	AttemptUsage     *TokenUsage `json:"-" yaml:"-"`
+	FinishReason     string      `json:"-" yaml:"-"`
 	Done             bool
 	// Progress marks an intermediate tool-call snapshot (args may be partial).
 	Progress bool
@@ -169,6 +170,7 @@ type Completion struct {
 	AttemptUsage *TokenUsage `json:"-" yaml:"-"`
 	ProviderID   string
 	Model        string
+	FinishReason string `json:"-" yaml:"-"`
 	Fallback     bool
 }
 

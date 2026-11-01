@@ -60,7 +60,7 @@ func CollectToolCalls(acc map[int]*StreamTool, lengthCapped, done bool) []api.To
 				}
 			}
 		}
-		out = append(out, api.ToolCall{
+		tc := api.ToolCall{
 			ID:            slot.ID,
 			WireID:        slot.WireID,
 			Name:          slot.Name,
@@ -68,7 +68,11 @@ func CollectToolCalls(acc map[int]*StreamTool, lengthCapped, done bool) []api.To
 			ArgsTruncated: truncated,
 			ArgsMalformed: malformed,
 			ExtraContent:  CloneMetadata(slot.ExtraContent),
-		})
+		}
+		if truncated {
+			tc.SetTruncatedArgsBytes(len(raw))
+		}
+		out = append(out, tc)
 	}
 	return out
 }

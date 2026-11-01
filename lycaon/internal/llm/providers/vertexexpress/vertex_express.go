@@ -151,6 +151,10 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 	}
 	// Reasoning alone does not make a transcript turn nonempty.
 	hasOutput := out.Content != "" || len(out.ToolCalls) > 0
+	if !hasOutput && failure.IsOutputLimitFinishReason(wire.Candidates[0].FinishReason) {
+		entry, _ := p.ModelEntry(model)
+		return out, modelcall.NewOutputTruncatedError(p.id, model, wire.Candidates[0].FinishReason, out.Usage, modelcall.EffectiveOutputMaxTokens(req, entry), entry, out.ToolCalls)
+	}
 	if err := vertexExpressEmptyOutputErr(p.id, model, wire.Candidates[0].FinishReason, hasOutput); err != nil {
 		return out, err
 	}
@@ -268,11 +272,21 @@ func (p *Provider) streamFromResponse(ctx context.Context, req modelcall.Complet
 			return
 		}
 		// Preserve the finish reason for an empty filtered stream.
-		if err := vertexExpressEmptyOutputErr(p.id, model, finishReason, sawOutput); err != nil {
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Usage: usage, Done: true})
+		if !sawOutput && failure.IsOutputLimitFinishReason(finishReason) {
+			entry, _ := p.ModelEntry(model)
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
+				Err:          modelcall.NewOutputTruncatedError(p.id, model, finishReason, usage, modelcall.EffectiveOutputMaxTokens(req, entry), entry, toolCalls),
+				Usage:        usage,
+				FinishReason: finishReason,
+				Done:         true,
+			})
 			return
 		}
-		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{ToolCalls: toolCalls, Usage: usage, Done: true, Err: modelcall.OutputTruncation(req, p.id, model, finishReason, usage, len(toolCalls) > 0)})
+		if err := vertexExpressEmptyOutputErr(p.id, model, finishReason, sawOutput); err != nil {
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Usage: usage, FinishReason: finishReason, Done: true})
+			return
+		}
+		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{ToolCalls: toolCalls, Usage: usage, FinishReason: finishReason, Done: true, Err: modelcall.OutputTruncation(req, p.id, model, finishReason, usage, len(toolCalls) > 0)})
 	}()
 	return ch
 }

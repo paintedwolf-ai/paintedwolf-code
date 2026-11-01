@@ -387,6 +387,7 @@ func mapChatCompletionWire(resp *chatCompletionResponseWire) *modelcall.Completi
 		Reasoning:        reasoningWireText(msg.Reasoning, msg.ReasoningContent),
 		ReasoningDetails: msg.ReasoningDetails,
 		Usage:            NormalizeUsage(resp.Usage),
+		FinishReason:     strings.TrimSpace(string(choice.FinishReason)),
 	}
 	lengthCapped := choice.FinishReason == openai.FinishReasonLength
 	for _, tc := range msg.ToolCalls {
@@ -415,7 +416,7 @@ func toolCallFromWire(tc toolCallWire, lengthCapped bool) api.ToolCall {
 			}
 		}
 	}
-	return api.ToolCall{
+	out := api.ToolCall{
 		ID:            providerwire.NewToolCallID(),
 		WireID:        tc.ID,
 		Name:          tc.Function.Name,
@@ -424,6 +425,10 @@ func toolCallFromWire(tc toolCallWire, lengthCapped bool) api.ToolCall {
 		ArgsMalformed: malformed,
 		ExtraContent:  providerwire.CloneMetadata(tc.ExtraContent),
 	}
+	if truncated {
+		out.SetTruncatedArgsBytes(len(tc.Function.Arguments))
+	}
+	return out
 }
 
 func imageURLPart(mime, base64Data string) ContentPart {

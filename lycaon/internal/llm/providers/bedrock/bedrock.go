@@ -18,7 +18,6 @@ import (
 	"github.com/aws/smithy-go"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/lycaon/lycaon/internal/httpclient"
-	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerauth"
@@ -163,13 +162,15 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 			if out != nil {
 				reason = string(out.StopReason)
 			}
-			return completion, &failure.ProviderEmptyCompletionError{
-				ProviderID: p.id,
-				Model:      model,
-				Retryable:  bedrockEmptyCompletionRetryable(out),
-				Reason:     reason,
-				Terminal:   reason != "",
+			var usage modelcall.TokenUsage
+			if completion != nil {
+				usage = completion.Usage
 			}
+			entry, _ := p.ModelEntry(model)
+			return completion, modelcall.EmptyOrTruncatedOutputError(
+				p.id, model, reason, bedrockEmptyCompletionRetryable(out), reason != "",
+				usage, modelcall.EffectiveOutputMaxTokens(req, entry), entry, nil,
+			)
 		}
 		lastErr = err
 		if refusal := bedrockModelRefusal(p.id, model, err); refusal != nil {

@@ -123,7 +123,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 		_ = persistPlaceholder()
 	})
 	if err != nil {
-		return api.Message{}, nil, nil, withdrawFailedDraft(err)
+		return api.Message{}, completion, nil, withdrawFailedDraft(err)
 	}
 	if err := persistPlaceholder(); err != nil {
 		return api.Message{}, nil, nil, err
@@ -133,7 +133,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, iterIndex, wireContent,
 	)
 	if err != nil {
-		return api.Message{}, nil, nil, withdrawFailedDraft(err)
+		return api.Message{}, completion, nil, withdrawFailedDraft(err)
 	}
 	if st != nil && st.observePrompt != nil {
 		st.observePrompt(st.coordinatorFrame)
@@ -360,6 +360,12 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 				)
 			}
 		}
+		var truncated *failure.ProviderOutputTruncatedError
+		if errors.As(collectErr, &truncated) {
+			entry := l.modelEntryForTurn(ctx, callProvider, callModel)
+			truncated = modelcall.EnrichOutputTruncatedError(truncated, req, entry, collected.completion)
+			return collected.completion, nil, truncated
+		}
 		var recovered *modelcall.Completion
 		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {
 			callFailed()
@@ -370,6 +376,12 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	providerID, model := collected.providerID, collected.model
 	// What the provider delivered, before the tool-call contract rewrites it.
 	delivered := completion
+	if completion != nil && failure.IsOutputLimitFinishReason(completion.FinishReason) &&
+		(!modelcall.CompletionHasUsablePayload(completion) || modelcall.HasTruncatedToolCall(completion.ToolCalls)) {
+		l.recordAbandonedTurnUsage(ctx, sess, llmCallID, providerID, model, req, delivered)
+		entry := l.modelEntryForTurn(ctx, providerID, model)
+		return completion, nil, modelcall.NewOutputTruncatedError(providerID, model, completion.FinishReason, completion.Usage, req.MaxTokens, entry, completion.ToolCalls)
+	}
 
 	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, completion, providerID, model)
 	if err != nil {
@@ -423,7 +435,16 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	}
 	// Empty completions fail before the terminal event.
 	if !modelcall.CompletionHasPayload(completion) {
-		return nil, nil, &failure.ProviderEmptyCompletionError{ProviderID: providerID, Model: model}
+		finishReason := ""
+		var usage modelcall.TokenUsage
+		var calls []api.ToolCall
+		if completion != nil {
+			finishReason = completion.FinishReason
+			usage = completion.Usage
+			calls = completion.ToolCalls
+		}
+		entry := l.modelEntryForTurn(ctx, providerID, model)
+		return completion, nil, modelcall.EmptyOrTruncatedOutputError(providerID, model, finishReason, false, finishReason != "", usage, req.MaxTokens, entry, calls)
 	}
 	if isCoordinatorTurn {
 		l.publishLLMCallOK(ctx, sess, sessionID, llmCallID, providerID, model, completion.Usage,
