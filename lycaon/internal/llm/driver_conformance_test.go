@@ -48,6 +48,7 @@ func openAICompatConformanceCases() []openAICompatConformanceCase {
 		{kind: "omlx", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "cloudflare-workers-ai", wantBearer: true, promptCache: promptCacheForbidKey, cloudflareAccount: true},
 		{kind: "vertex", wantBearer: true, promptCache: promptCacheForbidKey},
+		{kind: "cerebras", wantBearer: true, promptCache: promptCacheForbidKey},
 	}
 }
 

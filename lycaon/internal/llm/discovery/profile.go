@@ -34,6 +34,9 @@ type Profile struct {
 	RequireOutputModality string
 	// RequirePositiveTokenPrice excludes provider rows with no positive input/output price.
 	RequirePositiveTokenPrice bool
+	// AssumeChatCapable treats discovered rows as chat-capable when the
+	// endpoint lists only conversation models.
+	AssumeChatCapable bool
 	// PricingScale normalizes wire prices to per-1k USD.
 	PricingScale PricingScale
 }
@@ -64,6 +67,7 @@ type discoveryCatalogRecord struct {
 	ID                  string
 	WireType            string
 	ContextLength       int
+	Active              *bool
 	InputPrice          *float64
 	OutputPrice         *float64
 	CacheReadPrice      *float64
@@ -98,7 +102,18 @@ func ProfileUntyped(profile Profile) bool {
 	if profile.RequirePositiveTokenPrice {
 		return false
 	}
+	if profile.AssumeChatCapable {
+		return false
+	}
 	return true
+}
+
+func CerebrasProfile() Profile {
+	return Profile{
+		ListPath:          "/models",
+		ResponseShape:     DiscoveryShapeOpenAIData,
+		AssumeChatCapable: true,
+	}
 }
 
 func TogetherProfile() Profile {
@@ -225,6 +240,7 @@ func decodeDiscoveryOpenAIDataRecords(r io.Reader) ([]discoveryCatalogRecord, er
 		Data []struct {
 			ID            string `json:"id"`
 			ContextLength int    `json:"context_length"`
+			Active        *bool  `json:"active"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(r).Decode(&listed); err != nil {
@@ -235,6 +251,7 @@ func decodeDiscoveryOpenAIDataRecords(r io.Reader) ([]discoveryCatalogRecord, er
 		out = append(out, discoveryCatalogRecord{
 			ID:            strings.TrimSpace(item.ID),
 			ContextLength: item.ContextLength,
+			Active:        item.Active,
 		})
 	}
 	return out, nil
@@ -344,9 +361,15 @@ func discoveryRecordAllowed(rec discoveryCatalogRecord, profile Profile) bool {
 	return true
 }
 
-// discoveryCallability derives callability from host-declared pricing.
+// discoveryCallability derives callability from host-declared availability or pricing.
 func discoveryCallability(rec discoveryCatalogRecord, profile Profile) modelinfo.CapabilityEvidence {
+	if rec.Active != nil {
+		return modelinfo.Evidence(modelinfo.State(*rec.Active), CallabilitySource)
+	}
 	if !profile.RequirePositiveTokenPrice {
+		if profile.AssumeChatCapable {
+			return modelinfo.Evidence(modelinfo.CapabilitySupported, CallabilitySource)
+		}
 		return modelinfo.CapabilityEvidence{}
 	}
 	if (rec.InputPrice != nil && *rec.InputPrice > 0) || (rec.OutputPrice != nil && *rec.OutputPrice > 0) {

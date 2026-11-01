@@ -92,6 +92,10 @@ var driverFactories = catalogruntime.NewFactorySet(
 				build.entry.ID, build.entry.BaseURL, build.entry.Models, build.apiKey, build.cloudflareUsage, build.discoveryClient,
 			), nil
 		},
+		"cerebras": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+				WithProfile(providerprofile.Cerebras()), nil
+		},
 	},
 	func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
 		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil

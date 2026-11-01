@@ -10,17 +10,20 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
+type openAICompatErrorFields struct {
+	Message string `json:"message"`
+	Status  string `json:"status"`
+	Type    string `json:"type"`
+	Param   string `json:"param"`
+	Code    any    `json:"code"`
+	Details []struct {
+		Reason string `json:"reason"`
+	} `json:"details"`
+}
+
 type openAICompatErrorBody struct {
-	Error struct {
-		Message string `json:"message"`
-		Status  string `json:"status"`
-		Type    string `json:"type"`
-		Param   string `json:"param"`
-		Code    any    `json:"code"`
-		Details []struct {
-			Reason string `json:"reason"`
-		} `json:"details"`
-	} `json:"error"`
+	Error openAICompatErrorFields `json:"error"`
+	openAICompatErrorFields
 }
 
 // ProviderHTTPError preserves structured response fields.
@@ -120,11 +123,15 @@ func ParseOpenAICompatError(body []byte) (ParsedProviderError, bool) {
 }
 
 func fieldsFromErrorEnvelope(env openAICompatErrorBody) (ParsedProviderError, bool) {
-	msg := strings.TrimSpace(env.Error.Message)
+	fields := env.Error
+	if strings.TrimSpace(fields.Message) == "" {
+		fields = env.openAICompatErrorFields
+	}
+	msg := strings.TrimSpace(fields.Message)
 	if msg == "" {
 		return ParsedProviderError{}, false
 	}
-	for _, detail := range env.Error.Details {
+	for _, detail := range fields.Details {
 		reason := strings.TrimSpace(detail.Reason)
 		if reason == "" {
 			continue
@@ -134,10 +141,10 @@ func fieldsFromErrorEnvelope(env openAICompatErrorBody) (ParsedProviderError, bo
 	}
 	return ParsedProviderError{
 		Message: msg,
-		Code:    providerErrorCode(env.Error.Code),
-		Param:   strings.TrimSpace(env.Error.Param),
-		Type:    strings.TrimSpace(env.Error.Type),
-		Status:  strings.TrimSpace(env.Error.Status),
+		Code:    providerErrorCode(fields.Code),
+		Param:   strings.TrimSpace(fields.Param),
+		Type:    strings.TrimSpace(fields.Type),
+		Status:  strings.TrimSpace(fields.Status),
 	}, true
 }
 

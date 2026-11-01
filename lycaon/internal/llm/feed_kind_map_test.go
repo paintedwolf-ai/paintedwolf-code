@@ -5,10 +5,10 @@ import (
 )
 
 func TestCatalogAuthoritative(t *testing.T) {
-	if !CatalogAuthoritative("openai", true) {
+	if !CatalogAuthoritative("openai", true) || !CatalogAuthoritative("cerebras", true) {
 		t.Fatal("mapped + usable should be authoritative")
 	}
-	if CatalogAuthoritative("openai", false) {
+	if CatalogAuthoritative("openai", false) || CatalogAuthoritative("cerebras", false) {
 		t.Fatal("mapped + unavailable must not be authoritative")
 	}
 	if CatalogAuthoritative("ollama", true) {

@@ -42,6 +42,17 @@ func TestConversationEligibleFixtureRows(t *testing.T) {
 			t.Fatalf("%s must not be ConversationEligible", id)
 		}
 	}
+
+	cerebras := loadFixtureDoc(t).Providers["cerebras"].Models
+	for _, id := range []string{"gpt-oss-120b", "llama3.1-8b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"} {
+		m, ok := cerebras[id]
+		if !ok {
+			t.Fatalf("cerebras fixture missing %s", id)
+		}
+		if !ConversationEligible(m) {
+			t.Fatalf("cerebras %s should be ConversationEligible", id)
+		}
+	}
 }
 
 func TestEligibleModelsDropsNonChat(t *testing.T) {

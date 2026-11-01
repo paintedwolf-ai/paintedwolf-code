@@ -2,13 +2,13 @@
 # Size, age and context capacity are not evidence of incompatibility.
 rules:
   - id: moderation
-    providers: [openai, anthropic, azure, gemini, vertex-express, vertex, fireworks, together, bedrock, openrouter, cloudflare-workers-ai]
+    providers: [openai, anthropic, azure, gemini, vertex-express, vertex, fireworks, together, bedrock, openrouter, cloudflare-workers-ai, cerebras]
     models: ["*llama-guard*", "*safeguard*", "*moderation*"]
     roles: [coordinator, agent_pool, lite]
     reason: This model classifies safety content rather than performing project work.
     evidence: Provider model catalog identifies a moderation model.
   - id: retrieval
-    providers: [openai, azure, gemini, vertex-express, vertex, fireworks, together, bedrock, openrouter, cloudflare-workers-ai]
+    providers: [openai, azure, gemini, vertex-express, vertex, fireworks, together, bedrock, openrouter, cloudflare-workers-ai, cerebras]
     models: ["*embedding*", "*embed-*", "*rerank*"]
     roles: [coordinator, agent_pool, lite]
     reason: This model produces embeddings or relevance rankings rather than assistant responses.

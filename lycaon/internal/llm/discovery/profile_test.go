@@ -46,3 +46,21 @@ func floatNear(a, b float64) bool {
 	}
 	return b-a <= eps
 }
+
+func TestCerebrasProfileMarksChatSupportedAndPreservesUnknownCapabilities(t *testing.T) {
+	profile := CerebrasProfile()
+	if ProfileUntyped(profile) {
+		t.Fatal("CerebrasProfile must be typed (chat-capable)")
+	}
+	activeTrue := true
+	activeFalse := false
+	if got := discoveryCallability(discoveryCatalogRecord{ID: "gpt-oss-120b"}, profile); !modelinfo.Supported(got) {
+		t.Fatalf("default callability = %+v, want supported", got)
+	}
+	if got := discoveryCallability(discoveryCatalogRecord{ID: "gpt-oss-120b", Active: &activeTrue}, profile); !modelinfo.Supported(got) {
+		t.Fatalf("active=true callability = %+v, want supported", got)
+	}
+	if got := discoveryCallability(discoveryCatalogRecord{ID: "qwen-3-235b-a22b-instruct-2507", Active: &activeFalse}, profile); !modelinfo.Refused(got) {
+		t.Fatalf("active=false callability = %+v, want unsupported", got)
+	}
+}

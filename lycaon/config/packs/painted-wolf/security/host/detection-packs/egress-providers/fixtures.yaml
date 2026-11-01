@@ -175,6 +175,7 @@ fixtures:
   - api.pinecone.io
   - api.anthropic.com
   - api.cohere.com
+  - api.cerebras.ai
   - api.redis.com
   negative:
   - example.com
