@@ -163,7 +163,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := checkLiveProgramProgress(ctx, progressFacts, bound); err != nil {
 		return result, err
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(facts.Contract, arguments.values); reject != nil {
+	if reject := capabilityrequest.ValidateCapabilityContract(facts.Identity, facts.Contract, arguments.values); reject != nil {
 		return result, reject
 	}
 	if err := validateNativeArguments(facts, effect.Argv, arguments.values, tc); err != nil {

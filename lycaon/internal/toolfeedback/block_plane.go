@@ -76,8 +76,8 @@ func (bp *BlockPlane) evaluateBlock(ctx context.Context, anchor, tool, profile s
 		return nil, nil
 	}
 	gc := oar.NewGuardContext()
-	fillOccurrenceIdentity(ctx, gc)
 	gc.ObserveToolCall(tool, args)
+	fillOccurrenceIdentity(ctx, gc)
 	gc.Session.Profile = profile
 	gc.Session.PermissionProfile = profile
 	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
@@ -115,8 +115,8 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 		return nil
 	}
 	gc := oar.NewGuardContext()
-	fillOccurrenceIdentity(ctx, gc)
 	gc.ObserveToolCall(tool, args)
+	fillOccurrenceIdentity(ctx, gc)
 	gc.Session.Profile = profile
 	gc.Session.PermissionProfile = profile
 	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
@@ -174,6 +174,10 @@ func ApplyToolRejectObservations(gc *oar.GuardContext, tr *toolrejection.ToolRej
 	}
 	code := strings.TrimSpace(tr.Code)
 	gc.ObservedRejectCode = code
+	if tr.CapabilityContract != nil {
+		snapshot := *tr.CapabilityContract
+		gc.Invocation.CapabilityContract = &snapshot
+	}
 	// [OAR-PROF-3] A handler or host-state failure is not an argument check.
 	if tr.ArgumentValidation {
 		gc.Invocation.ArgValidationErrors = AppendUnique(gc.Invocation.ArgValidationErrors, code)
