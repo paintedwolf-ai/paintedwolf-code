@@ -62,6 +62,7 @@ func TestBialyStartupRejectsInvalidResourcePlans(t *testing.T) {
 				cfg.Resources.DeviceMemory = memory
 				if kind == "unified" {
 					cfg.Resources.PhysicalDevice = inference.PhysicalDevice{Kind: "apple_silicon"}
+					cfg.Resources.UnifiedMemory = false
 				}
 			case "overflow":
 				cfg.Resources.HostBytes = math.MaxUint64

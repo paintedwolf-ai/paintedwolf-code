@@ -114,27 +114,10 @@ func (p *Runtime) initialize(ctx context.Context, child *rpcProcess, artifact st
 }
 
 func reserveLoaded(child *rpcProcess, runtime *RuntimeConfig, plan resourcePlan) error {
-	hostBytes := plan.HostReservationBytes - startupHostBytes
-	deviceBytes := plan.DeviceReservationBytes
-	if runtime.HostMemory == runtime.DeviceMemory {
-		if hostBytes > math.MaxUint64-deviceBytes {
-			return inference.ErrCapacity
-		}
-		deviceBytes += hostBytes
-		hostBytes = 0
-	}
-	if hostBytes > 0 {
-		reservation, err := runtime.HostMemory.Reserve(hostBytes)
-		if err != nil {
-			return err
-		}
-		if err := child.retain(reservation); err != nil {
-			return err
-		}
-	}
-	reservation, err := runtime.DeviceMemory.Reserve(deviceBytes)
+	reservations, err := inference.ReserveMemory(runtime.HostMemory, runtime.DeviceMemory,
+		plan.HostReservationBytes-startupHostBytes, plan.DeviceReservationBytes, runtime.UnifiedMemory)
 	if err != nil {
 		return err
 	}
-	return child.retain(reservation)
+	return child.retain(reservations...)
 }

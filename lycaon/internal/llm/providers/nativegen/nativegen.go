@@ -23,6 +23,7 @@ type RuntimeConfig struct {
 	Devices        *inference.Devices
 	HostMemory     *inference.MemoryBudget
 	DeviceMemory   *inference.MemoryBudget
+	UnifiedMemory  bool
 	ModelStore     *modelstore.Store
 }
 
@@ -121,7 +122,7 @@ func (p *Runtime) unload() {
 
 func (p *Runtime) validate() error {
 	r := &p.config
-	if r.BinaryPath == "" || r.ModelStore == nil || r.Devices == nil || r.HostMemory == nil || r.DeviceMemory == nil {
+	if r.BinaryPath == "" || r.ModelStore == nil || r.Devices == nil || r.HostMemory == nil || r.DeviceMemory == nil || r.HostMemory == r.DeviceMemory {
 		return errors.New("native generation: local runtime is not configured")
 	}
 	if p.config.ContextLimit < 2 || p.config.ContextLimit > 65536 || p.config.PrefillChunk < 1 || p.config.PrefillChunk > 256 {
@@ -129,7 +130,7 @@ func (p *Runtime) validate() error {
 	}
 	switch r.Backend {
 	case "mlx":
-		if r.PhysicalDevice.Kind != "apple_silicon" || r.MetalLibrary == "" || r.HostMemory != r.DeviceMemory {
+		if r.PhysicalDevice.Kind != "apple_silicon" || r.MetalLibrary == "" || !r.UnifiedMemory {
 			return errors.New("native generation: invalid unified-memory adapter")
 		}
 	case "vulkan":

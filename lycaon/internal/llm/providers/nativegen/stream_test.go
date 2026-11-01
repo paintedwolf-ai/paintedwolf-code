@@ -76,6 +76,24 @@ func TestProviderStreamOwnsLeaseAndReservationsUntilClose(t *testing.T) {
 	}
 }
 
+func TestUnifiedRuntimeRetainsBothMemoryChargesUntilReap(t *testing.T) {
+	provider, runtime := fixtureProvider(t)
+	runtime.config.UnifiedMemory = true
+	req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Compute 2 + 2."}}, MaxTokens: 2}
+	if _, err := provider.Complete(t.Context(), req); err != nil {
+		t.Fatalf("complete unified-memory fixture: %v", err)
+	}
+	if host, device := runtime.config.HostMemory.Snapshot(), runtime.config.DeviceMemory.Snapshot(); host.ReservedBytes != 1<<30 || device.ReservedBytes != 256<<20 {
+		t.Fatalf("unified memory charges: host=%+v device=%+v", host, device)
+	}
+	if err := runtime.Close(); err != nil {
+		t.Fatalf("close unified-memory fixture: %v", err)
+	}
+	if runtime.config.HostMemory.Snapshot().ReservedBytes != 0 || runtime.config.DeviceMemory.Snapshot().ReservedBytes != 0 {
+		t.Fatal("reaped runtime retained memory charges")
+	}
+}
+
 func TestProviderCancellationPublishesTerminalErrorWithBackpressure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	out := make(chan modelcall.StreamChunk, 1)
