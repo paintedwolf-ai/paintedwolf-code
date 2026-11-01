@@ -65,7 +65,7 @@ func TestInvariantClaimTokenConservationAndDesireSettlement(t *testing.T) {
 	}
 	book.requeueDispatches(t.Context(), recovered)
 
-	// Advance past exponential backoff due time, dispatch via Tick, complete scans, and verify all leases and desires settle.
+	// Advance past backoff due time, dispatch via Tick, complete scans, and verify leases and desires settle.
 	clock.Advance(2*cfg.WriteBurstSettle() + time.Second)
 	cadence.Tick(t.Context())
 	completeCadenceScans(t, cadence, store)
