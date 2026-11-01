@@ -44,6 +44,7 @@ func (p *responseRetryProvider) Complete(ctx context.Context, req modelcall.Comp
 			completion = &modelcall.Completion{Usage: usage.total(), AttemptUsage: usage.attemptUsage()}
 		}
 		usage.finishAttempt()
+		truncated, isTruncated := failure.AsProviderOutputTruncated(err)
 		empty, retryable := p.emptyCompletion(req, completion, err)
 		if empty == nil {
 			return completion, err
@@ -55,6 +56,9 @@ func (p *responseRetryProvider) Complete(ctx context.Context, req modelcall.Comp
 		if !retry {
 			empty.Attempts = attempt + 1
 			empty.Retryable = false
+			if isTruncated {
+				return completion, finalizedTruncatedError(truncated, empty, usage.total())
+			}
 			return completion, empty
 		}
 	}
@@ -72,6 +76,7 @@ func (p *responseRetryProvider) Stream(ctx context.Context, req modelcall.Comple
 			return out, nil
 		}
 		cancel()
+		truncated, isTruncated := failure.AsProviderOutputTruncated(err)
 		empty, retryable := p.emptyCompletion(req, nil, err)
 		if empty == nil {
 			return nil, err
@@ -83,6 +88,9 @@ func (p *responseRetryProvider) Stream(ctx context.Context, req modelcall.Comple
 		if !retry {
 			empty.Attempts = attempt + 1
 			empty.Retryable = false
+			if isTruncated {
+				return nil, finalizedTruncatedError(truncated, empty, modelcall.TokenUsage{})
+			}
 			return nil, empty
 		}
 	}
@@ -94,15 +102,17 @@ func (p *responseRetryProvider) forwardStream(ctx context.Context, req modelcall
 	var startErr error
 	for {
 		var empty *failure.ProviderEmptyCompletionError
+		var truncated *failure.ProviderOutputTruncatedError
 		var retry bool
 		if startErr != nil {
+			truncated, _ = failure.AsProviderOutputTruncated(startErr)
 			empty, retry = p.emptyCompletion(req, nil, startErr)
 			if empty == nil {
 				modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: startErr, Usage: usage.total(), AttemptUsage: usage.attemptUsage(), Done: true})
 				return
 			}
 		} else {
-			empty, retry = p.forwardAttempt(ctx, req, stream, out, &usage)
+			empty, truncated, retry = p.forwardAttempt(ctx, req, stream, out, &usage)
 			cancel()
 			if empty == nil {
 				return
@@ -116,7 +126,11 @@ func (p *responseRetryProvider) forwardStream(ctx context.Context, req modelcall
 		if !retry {
 			empty.Attempts = attempt + 1
 			empty.Retryable = false
-			modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: empty, Usage: usage.total(), AttemptUsage: usage.attemptUsage(), Done: true})
+			var finalErr error = empty
+			if truncated != nil {
+				finalErr = finalizedTruncatedError(truncated, empty, usage.total())
+			}
+			modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: finalErr, Usage: usage.total(), AttemptUsage: usage.attemptUsage(), Done: true})
 			return
 		}
 		if !modelcall.SendChunk(ctx, out, modelcall.StreamChunk{ResetReasoning: true, Usage: usage.total(), AttemptUsage: &modelcall.TokenUsage{}}) {
@@ -137,7 +151,7 @@ func (p *responseRetryProvider) forwardStream(ctx context.Context, req modelcall
 
 // forwardAttempt returns a typed empty completion only when replay is safe:
 // no visible content or tool call from this attempt reached the consumer.
-func (p *responseRetryProvider) forwardAttempt(ctx context.Context, req modelcall.CompletionRequest, stream <-chan modelcall.StreamChunk, out chan<- modelcall.StreamChunk, usage *responseRetryUsage) (*failure.ProviderEmptyCompletionError, bool) {
+func (p *responseRetryProvider) forwardAttempt(ctx context.Context, req modelcall.CompletionRequest, stream <-chan modelcall.StreamChunk, out chan<- modelcall.StreamChunk, usage *responseRetryUsage) (*failure.ProviderEmptyCompletionError, *failure.ProviderOutputTruncatedError, bool) {
 	defer usage.finishAttempt()
 	var attemptCompletion modelcall.Completion
 	var content strings.Builder
@@ -172,30 +186,32 @@ func (p *responseRetryProvider) forwardAttempt(ctx context.Context, req modelcal
 			noteBudget()
 		}
 		if chunk.Err != nil {
+			truncated, _ := failure.AsProviderOutputTruncated(chunk.Err)
 			empty, retryable := p.emptyCompletion(req, nil, chunk.Err)
 			if empty != nil && !hasPayload {
-				return empty, retryable
+				return empty, truncated, retryable
 			}
 			modelcall.SendChunk(ctx, out, chunk)
-			return nil, false
+			return nil, nil, false
 		}
 		if chunk.Done && !hasPayload {
 			empty, retryable := p.emptyCompletion(req, nil, nil)
 			empty.Terminal = true
-			return empty, retryable
+			return empty, nil, retryable
 		}
 		if !modelcall.SendChunk(ctx, out, chunk) {
-			return nil, false
+			return nil, nil, false
 		}
 		if chunk.Done {
-			return nil, false
+			return nil, nil, false
 		}
 	}
 	if !hasText && !hasToolCalls {
-		return p.emptyCompletion(req, nil, nil)
+		empty, retryable := p.emptyCompletion(req, nil, nil)
+		return empty, nil, retryable
 	}
 	modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: fmt.Errorf("provider %s/%s stream closed before a terminal event", p.ID(), req.Model), Done: true})
-	return nil, false
+	return nil, nil, false
 }
 
 func (p *responseRetryProvider) emptyCompletion(req modelcall.CompletionRequest, completion *modelcall.Completion, err error) (*failure.ProviderEmptyCompletionError, bool) {
@@ -204,7 +220,7 @@ func (p *responseRetryProvider) emptyCompletion(req modelcall.CompletionRequest,
 			return nil, false
 		}
 		existing, ok := failure.AsProviderEmptyCompletion(err)
-		if truncated, isTruncated := failure.AsProviderOutputTruncated(err); isTruncated && !modelcall.CompletionHasPayload(completion) {
+		if truncated, isTruncated := failure.AsProviderOutputTruncated(err); isTruncated && !truncated.ToolCallTruncated && !modelcall.CompletionHasPayload(completion) {
 			existing = &failure.ProviderEmptyCompletionError{ProviderID: truncated.ProviderID, Model: truncated.Model, Reason: truncated.FinishReason, Terminal: true}
 			ok = true
 		}
@@ -224,6 +240,30 @@ func (p *responseRetryProvider) emptyCompletion(req modelcall.CompletionRequest,
 		return nil, false
 	}
 	return &failure.ProviderEmptyCompletionError{ProviderID: p.ID(), Model: req.Model, Retryable: true, Terminal: completion != nil}, true
+}
+
+func finalizedTruncatedError(truncated *failure.ProviderOutputTruncatedError, empty *failure.ProviderEmptyCompletionError, total modelcall.TokenUsage) *failure.ProviderOutputTruncatedError {
+	out := *truncated
+	if out.ProviderID == "" && empty != nil {
+		out.ProviderID = empty.ProviderID
+	}
+	if out.Model == "" && empty != nil {
+		out.Model = empty.Model
+	}
+	if out.FinishReason == "" && empty != nil {
+		out.FinishReason = empty.Reason
+	}
+	if empty != nil {
+		out.Attempts = empty.Attempts
+		out.RecoveryAttempted = empty.RecoveryAttempted
+	}
+	if total.PromptTokens > 0 {
+		out.PromptTokens = total.PromptTokens
+	}
+	if total.CompletionTokens > 0 {
+		out.CompletionTokens = total.CompletionTokens
+	}
+	return &out
 }
 
 func emptyCompletionFault(err error) providerretry.Fault {

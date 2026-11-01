@@ -74,6 +74,36 @@ func ContextFromPromptError(err error) map[string]any {
 		}
 		return out
 	}
+	if e, ok := failure.AsProviderOutputTruncated(err); ok && e != nil {
+		out := map[string]any{
+			"output_limit_reached": true,
+			"recovery_attempted":   e.RecoveryAttempted,
+		}
+		if id := trimContextString(e.ProviderID); id != "" {
+			out["provider_id"] = id
+		}
+		if model := trimContextString(e.Model); model != "" {
+			out["model"] = model
+		}
+		if e.ToolCallTruncated {
+			out["tool_call_truncated"] = true
+			if tool := trimContextString(e.ToolName); tool != "" {
+				out["tool"] = tool
+			}
+			if e.ToolArgsBytes > 0 {
+				out["tool_args_bytes"] = e.ToolArgsBytes
+			}
+		}
+		if e.MaxTokens > 0 {
+			out["max_tokens"] = e.MaxTokens
+		}
+		if e.LowOutputCeiling() {
+			out["low_output_ceiling"] = true
+			out["configured_max_tokens"] = e.ConfiguredMaxTokens
+			out["provider_max_tokens"] = e.ProviderMaxTokens
+		}
+		return out
+	}
 	if e, ok := failure.AsProviderEmptyCompletion(err); ok && e != nil {
 		out := map[string]any{}
 		if e.OutputLimitReached() {

@@ -19,17 +19,21 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 	var reasoningDetails []json.RawMessage
 	var usage TokenUsage
 	var attemptUsage *TokenUsage
-	var providerID, model string
+	var providerID, model, finishReason string
 	var fallback, scripted bool
 	for chunk := range ch {
 		if chunk.ResetReasoning {
 			reasoning.Reset()
 			reasoningDetails = nil
 			attemptUsage = &TokenUsage{}
+			finishReason = ""
 		}
 		if chunk.ProviderID != "" {
 			providerID = chunk.ProviderID
 			model = chunk.Model
+		}
+		if chunk.FinishReason != "" {
+			finishReason = chunk.FinishReason
 		}
 		fallback = fallback || chunk.Fallback
 		scripted = scripted || chunk.Scripted
@@ -63,6 +67,7 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 				AttemptUsage:     attemptUsage,
 				ProviderID:       providerID,
 				Model:            model,
+				FinishReason:     finishReason,
 				Fallback:         fallback,
 				Scripted:         scripted,
 			}, tokens, chunk.Err
@@ -80,6 +85,7 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 		AttemptUsage:     attemptUsage,
 		ProviderID:       providerID,
 		Model:            model,
+		FinishReason:     finishReason,
 		Fallback:         fallback,
 		Scripted:         scripted,
 	}, tokens, nil
@@ -94,7 +100,7 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 	var reasoningDetails []json.RawMessage
 	var usage TokenUsage
 	var attemptUsage *TokenUsage
-	var providerID, model string
+	var providerID, model, finishReason string
 	var fallback, scripted bool
 	snapshot := func() *Completion {
 		return &Completion{
@@ -106,6 +112,7 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 			AttemptUsage:     attemptUsage,
 			ProviderID:       providerID,
 			Model:            model,
+			FinishReason:     finishReason,
 			Fallback:         fallback,
 			Scripted:         scripted,
 		}
@@ -115,10 +122,14 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 			reasoning.Reset()
 			reasoningDetails = nil
 			attemptUsage = &TokenUsage{}
+			finishReason = ""
 		}
 		if chunk.ProviderID != "" {
 			providerID = chunk.ProviderID
 			model = chunk.Model
+		}
+		if chunk.FinishReason != "" {
+			finishReason = chunk.FinishReason
 		}
 		fallback = fallback || chunk.Fallback
 		scripted = scripted || chunk.Scripted

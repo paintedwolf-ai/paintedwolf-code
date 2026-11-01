@@ -2,7 +2,6 @@ package promptloop
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -10,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
@@ -70,6 +69,8 @@ type PromptRunResult struct {
 	// OfferedTools are the tools the final model request could call.
 	OfferedTools         []string
 	TasksDispatchedCount int
+	Outcome              promptresult.Outcome
+	OutputTruncated      *promptresult.OutputTruncatedOutcome
 }
 
 type promptLoopSetup struct {
@@ -192,22 +193,15 @@ loop:
 
 		assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(turnCtx, id, sess, st.history, st, profileID, userPrompt, step, maxIter, in.HostTurn)
 		if err != nil {
-			if errors.Is(err, ErrLLMTurnTimeout) && strings.TrimSpace(st.lastAssistantID) != "" {
-				loopExit = loopExitLLMTimeout
-				break
+			retry, exit, serr := l.Nudges.handleStreamTurnError(turnCtx, sess, id, err, completion, st)
+			if serr != nil {
+				return nil, serr
 			}
-			if errors.Is(err, llm.ErrModelRequestSecretWithheld) {
-				retry, werr := l.Nudges.handleSecretWithheldTurn(turnCtx, sess, id, err, st)
-				if werr != nil {
-					return nil, werr
-				}
-				if retry {
-					continue
-				}
-				loopExit = loopExitSecretWithheld
-				break
+			if retry {
+				continue
 			}
-			return nil, err
+			loopExit = exit
+			break
 		}
 		if sess.IsWorkerChild() && l.Context.Deps.CommitWorkerContext != nil {
 			if err := l.Context.Deps.CommitWorkerContext(turnCtx, id, assistantMsg.ID); err != nil {

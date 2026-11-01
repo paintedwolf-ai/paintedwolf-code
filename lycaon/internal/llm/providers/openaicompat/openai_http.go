@@ -217,26 +217,35 @@ func (p *Provider) streamChatCompletionFromResponse(ctx context.Context, req mod
 			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: failure.InterruptedResponse(ctx, p.id, p.ResolveModel(req), io.ErrUnexpectedEOF), Done: true})
 			return
 		}
+		model := p.ResolveModel(req)
+		entry, _ := p.ModelEntry(model)
+		maxTokens := p.resolveRequestControls(req, model, controlOpts{}).MaxTokens
 		if len(toolAcc) > 0 {
+			toolCalls := providerwire.CollectToolCalls(toolAcc, finishReason == string(openai.FinishReasonLength), true)
+			var truncErr error
+			if failure.IsOutputLimitFinishReason(finishReason) && modelcall.HasTruncatedToolCall(toolCalls) {
+				truncErr = modelcall.NewOutputTruncatedError(p.id, model, finishReason, usage, maxTokens, entry, toolCalls)
+			}
 			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
-				ToolCalls:        providerwire.CollectToolCalls(toolAcc, finishReason == string(openai.FinishReasonLength), true),
+				ToolCalls:        toolCalls,
 				ReasoningDetails: reasoningDetails,
 				Usage:            usage,
+				FinishReason:     finishReason,
 				Done:             true,
+				Err:              truncErr,
 			})
 			return
 		}
 		if !sawOutput {
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: &failure.ProviderEmptyCompletionError{
-				ProviderID: p.id,
-				Model:      p.ResolveModel(req),
-				Retryable:  EmptyCompletionRetryable(finishReason),
-				Reason:     finishReason,
-				Terminal:   finishReason != "",
-			}, Usage: usage, Done: true})
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
+				Err:          modelcall.EmptyOrTruncatedOutputError(p.id, model, finishReason, EmptyCompletionRetryable(finishReason), finishReason != "", usage, maxTokens, entry, nil),
+				Usage:        usage,
+				FinishReason: finishReason,
+				Done:         true,
+			})
 			return
 		}
-		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{ReasoningDetails: reasoningDetails, Usage: usage, Done: true, Err: modelcall.OutputTruncation(req, p.id, p.ResolveModel(req), finishReason, usage, false)})
+		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{ReasoningDetails: reasoningDetails, Usage: usage, FinishReason: finishReason, Done: true, Err: modelcall.OutputTruncation(req, p.id, model, finishReason, usage, false)})
 	}()
 	return ch, nil
 }

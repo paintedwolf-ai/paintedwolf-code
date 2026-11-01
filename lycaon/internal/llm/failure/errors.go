@@ -56,17 +56,22 @@ type ProviderEmptyCompletionError struct {
 	RecoveryAttempted bool
 }
 
-// OutputLimitReached recognizes terminal tokens from the supported protocols.
-func (e *ProviderEmptyCompletionError) OutputLimitReached() bool {
-	if e == nil || !e.Terminal {
-		return false
-	}
-	switch e.Reason {
+// IsOutputLimitFinishReason recognizes terminal output-limit tokens across supported protocols.
+func IsOutputLimitFinishReason(reason string) bool {
+	switch strings.TrimSpace(reason) {
 	case "length", "max_tokens", "MAX_TOKENS":
 		return true
 	default:
 		return false
 	}
+}
+
+// OutputLimitReached recognizes terminal tokens from the supported protocols.
+func (e *ProviderEmptyCompletionError) OutputLimitReached() bool {
+	if e == nil || !e.Terminal {
+		return false
+	}
+	return IsOutputLimitFinishReason(e.Reason)
 }
 
 func (e *ProviderEmptyCompletionError) Error() string {
@@ -103,22 +108,52 @@ func AsProviderEmptyCompletion(err error) (*ProviderEmptyCompletionError, bool) 
 // ErrProviderOutputTruncated marks output-budget exhaustion.
 var ErrProviderOutputTruncated = errors.New("provider output truncated")
 
-// ProviderOutputTruncatedError carries the reported stop reason and token counts.
+// ProviderOutputTruncatedError carries the reported stop reason, token counts,
+// output ceiling metadata, and any truncated tool call facts.
 type ProviderOutputTruncatedError struct {
-	ProviderID       string
-	Model            string
-	FinishReason     string
-	PromptTokens     int
-	CompletionTokens int
-	ContextTokens    int
+	ProviderID          string
+	Model               string
+	FinishReason        string
+	PromptTokens        int
+	CompletionTokens    int
+	ContextTokens       int
+	MaxTokens           int
+	ConfiguredMaxTokens int
+	ProviderMaxTokens   int
+	ToolCallTruncated   bool
+	ToolName            string
+	ToolArgsBytes       int
+	Attempts            int
+	RecoveryAttempted   bool
+}
+
+// OutputLimitReached reports that the provider stopped on an output token ceiling.
+func (e *ProviderOutputTruncatedError) OutputLimitReached() bool {
+	return e != nil
+}
+
+// LowOutputCeiling reports whether the model entry's configured max_tokens is below the provider ceiling.
+func (e *ProviderOutputTruncatedError) LowOutputCeiling() bool {
+	return e != nil && e.ConfiguredMaxTokens > 0 && e.ProviderMaxTokens > e.ConfiguredMaxTokens
 }
 
 func (e *ProviderOutputTruncatedError) Error() string {
 	if e == nil {
 		return ErrProviderOutputTruncated.Error()
 	}
-	return fmt.Sprintf("provider %s/%s output truncated (%s; prompt=%d completion=%d context=%d)",
-		e.ProviderID, e.Model, e.FinishReason, e.PromptTokens, e.CompletionTokens, e.ContextTokens)
+	extra := ""
+	if e.ToolCallTruncated {
+		name := strings.TrimSpace(e.ToolName)
+		if name == "" {
+			name = "unknown"
+		}
+		extra += fmt.Sprintf(" tool=%s args_bytes=%d", name, e.ToolArgsBytes)
+	}
+	if e.LowOutputCeiling() {
+		extra += fmt.Sprintf(" configured_max_tokens=%d provider_max_tokens=%d", e.ConfiguredMaxTokens, e.ProviderMaxTokens)
+	}
+	return fmt.Sprintf("provider %s/%s output truncated (%s; prompt=%d completion=%d context=%d%s)",
+		e.ProviderID, e.Model, e.FinishReason, e.PromptTokens, e.CompletionTokens, e.ContextTokens, extra)
 }
 
 func (e *ProviderOutputTruncatedError) Is(target error) bool {
@@ -445,6 +480,10 @@ func (e *ProviderNotConfiguredError) NoticeCode() wire.NoticeCode {
 }
 
 func (e *ProviderEmptyCompletionError) NoticeCode() wire.NoticeCode {
+	return wire.NoticeCodeProviderEmptyCompletion
+}
+
+func (e *ProviderOutputTruncatedError) NoticeCode() wire.NoticeCode {
 	return wire.NoticeCodeProviderEmptyCompletion
 }
 

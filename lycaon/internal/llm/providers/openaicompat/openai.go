@@ -150,26 +150,26 @@ func (p *Provider) completeWithGuards(ctx context.Context, req modelcall.Complet
 		}
 		return nil, err
 	}
+	model := p.ResolveModel(req)
 	out := mapChatCompletionWire(resp)
 	if out == nil {
 		return nil, &failure.ProviderEmptyCompletionError{
 			ProviderID: p.id,
-			Model:      p.ResolveModel(req),
+			Model:      model,
 			Retryable:  true,
 			Reason:     "empty choices",
 		}
 	}
+	entry, _ := p.ModelEntry(model)
+	maxTokens := p.resolveRequestControls(req, model, opts).MaxTokens
+	reason := string(resp.Choices[0].FinishReason)
 	if !modelcall.CompletionHasPayload(out) {
-		reason := string(resp.Choices[0].FinishReason)
-		return out, &failure.ProviderEmptyCompletionError{
-			ProviderID: p.id,
-			Model:      p.ResolveModel(req),
-			Retryable:  EmptyCompletionRetryable(reason),
-			Reason:     reason,
-			Terminal:   reason != "",
-		}
+		return out, modelcall.EmptyOrTruncatedOutputError(p.id, model, reason, EmptyCompletionRetryable(reason), reason != "", out.Usage, maxTokens, entry, out.ToolCalls)
 	}
-	return out, modelcall.OutputTruncation(req, p.id, p.ResolveModel(req), string(resp.Choices[0].FinishReason), out.Usage, len(out.ToolCalls) > 0)
+	if failure.IsOutputLimitFinishReason(reason) && modelcall.HasTruncatedToolCall(out.ToolCalls) {
+		return out, modelcall.NewOutputTruncatedError(p.id, model, reason, out.Usage, maxTokens, entry, out.ToolCalls)
+	}
+	return out, modelcall.OutputTruncation(req, p.id, model, reason, out.Usage, len(out.ToolCalls) > 0)
 }
 
 func (p *Provider) retryCompleteAfterProviderError(ctx context.Context, req modelcall.CompletionRequest, opts controlOpts, err error) (*modelcall.Completion, error, bool) {
@@ -224,21 +224,31 @@ func (p *Provider) streamFromJSONResponse(ctx context.Context, req modelcall.Com
 		if completion.Reasoning != "" {
 			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Reasoning: completion.Reasoning})
 		}
+		model := p.ResolveModel(req)
+		entry, _ := p.ModelEntry(model)
+		maxTokens := p.resolveRequestControls(req, model, controlOpts{}).MaxTokens
+		reason := string(wire.Choices[0].FinishReason)
 		if !modelcall.CompletionHasPayload(completion) {
-			reason := string(wire.Choices[0].FinishReason)
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: &failure.ProviderEmptyCompletionError{
-				ProviderID: p.id,
-				Model:      p.ResolveModel(req),
-				Retryable:  EmptyCompletionRetryable(reason),
-				Reason:     reason,
-				Terminal:   reason != "",
-			}, Usage: completion.Usage, Done: true})
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
+				Err:          modelcall.EmptyOrTruncatedOutputError(p.id, model, reason, EmptyCompletionRetryable(reason), reason != "", completion.Usage, maxTokens, entry, completion.ToolCalls),
+				Usage:        completion.Usage,
+				FinishReason: reason,
+				Done:         true,
+			})
+			return
+		}
+		if failure.IsOutputLimitFinishReason(reason) && modelcall.HasTruncatedToolCall(completion.ToolCalls) {
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
+				Content: completion.Content, ReasoningDetails: completion.ReasoningDetails,
+				ToolCalls: completion.ToolCalls, Usage: completion.Usage, FinishReason: reason, Done: true,
+				Err: modelcall.NewOutputTruncatedError(p.id, model, reason, completion.Usage, maxTokens, entry, completion.ToolCalls),
+			})
 			return
 		}
 		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
 			Content: completion.Content, ReasoningDetails: completion.ReasoningDetails,
-			ToolCalls: completion.ToolCalls, Usage: completion.Usage, Done: true,
-			Err: modelcall.OutputTruncation(req, p.id, p.ResolveModel(req), string(wire.Choices[0].FinishReason), completion.Usage, len(completion.ToolCalls) > 0),
+			ToolCalls: completion.ToolCalls, Usage: completion.Usage, FinishReason: reason, Done: true,
+			Err: modelcall.OutputTruncation(req, p.id, model, reason, completion.Usage, len(completion.ToolCalls) > 0),
 		})
 	}()
 	return ch, nil

@@ -257,14 +257,23 @@ func (m *Service) executePromptRun(
 		execution.CloseoutID = result.Closeout.ID
 	}
 	if strings.TrimSpace(result.LastAssistantID) == "" {
+		if result.Outcome == promptresult.OutcomeOutputTruncated {
+			execution.Response = &promptresult.Result{
+				Outcome:         result.Outcome,
+				OutputTruncated: result.OutputTruncated,
+				OfferedTools:    result.OfferedTools,
+			}
+		}
 		return execution, nil
 	}
 
 	_ = m.History.ScheduleChunks(ctx, sess)
 	m.Status.PublishAssistant(ctx, sessionID, result.LastAssistantContent)
 	execution.Response = &promptresult.Result{
-		MessageID:    result.LastAssistantID,
-		OfferedTools: result.OfferedTools,
+		MessageID:       result.LastAssistantID,
+		Outcome:         result.Outcome,
+		OutputTruncated: result.OutputTruncated,
+		OfferedTools:    result.OfferedTools,
 	}
 	return execution, nil
 }

@@ -12,8 +12,16 @@ import (
 
 const ToolCompatibilityRevision = 1
 
+// ToolOutputCeiling reports when a model entry's configured max_tokens is below the provider ceiling.
+type ToolOutputCeiling struct {
+	ConfiguredMaxTokens int    `json:"configured_max_tokens"`
+	ProviderMaxTokens   int    `json:"provider_max_tokens"`
+	Diagnostic          string `json:"diagnostic,omitempty"`
+}
+
 type ToolVerification struct {
 	ReasoningPolicy *ToolReasoningPolicy `json:"reasoning_policy,omitempty"`
+	OutputCeiling   *ToolOutputCeiling   `json:"output_ceiling,omitempty"`
 	ToolCompatibilityResult
 	DriverSHA256        string `json:"driver_sha256"`
 	RequestPolicySHA256 string `json:"request_policy_sha256"`
@@ -63,6 +71,13 @@ func (r *Registry) CheckToolCompatibility(ctx context.Context, providerID, model
 func (target toolVerificationTarget) check(ctx context.Context) (ToolVerification, error) {
 	reasoning := toolReasoningPolicy(target.profile, target.model)
 	result := ToolVerification{ReasoningPolicy: &reasoning}
+	if configured, ceiling, low := modelcall.LowOutputCeiling(target.model); low {
+		result.OutputCeiling = &ToolOutputCeiling{
+			ConfiguredMaxTokens: configured,
+			ProviderMaxTokens:   ceiling,
+			Diagnostic:          modelcall.FormatLowOutputCeilingDiagnostic(target.model.ID, configured, ceiling),
+		}
+	}
 	var err error
 	result.DriverSHA256, err = toolDriverIdentity(target.profile)
 	if err != nil {
@@ -93,4 +108,61 @@ func (target toolVerificationTarget) check(ctx context.Context) (ToolVerificatio
 		return result, fmt.Errorf("request policy changed during the compatibility check")
 	}
 	return result, nil
+}
+
+// LookupModelEntry looks up the resolved model entry for providerID and model.
+func LookupModelEntry(ctx context.Context, r *Registry, providerID, model string) (modelinfo.Entry, bool) {
+	if r == nil {
+		return modelinfo.Entry{}, false
+	}
+	kind := ""
+	if snapshot := r.snapshot.Load(); snapshot != nil {
+		if entry, ok := snapshot.entries[providerID]; ok {
+			kind = entry.Kind
+		}
+	}
+	for _, candidate := range r.EffectiveModels(ctx, providerID) {
+		if modelinfo.EquivalentID(kind, candidate.ID, model) {
+			return candidate, true
+		}
+	}
+	if snapshot := r.snapshot.Load(); snapshot != nil {
+		if p := snapshot.providers[providerID]; p != nil {
+			if lookup, ok := p.(interface {
+				ModelEntry(string) (modelinfo.Entry, bool)
+			}); ok {
+				if entry, found := lookup.ModelEntry(model); found {
+					return entry, true
+				}
+			}
+		}
+	}
+	if p, err := r.Get(providerID); err == nil && p != nil {
+		if lookup, ok := p.(interface {
+			ModelEntry(string) (modelinfo.Entry, bool)
+		}); ok {
+			if entry, found := lookup.ModelEntry(model); found {
+				return entry, true
+			}
+		}
+	}
+	return modelinfo.Entry{}, false
+}
+
+// LookupModelOutputCeilingDiagnostic returns low-ceiling diagnostics when a model entry's
+// configured max_tokens is below what the provider allows.
+func LookupModelOutputCeilingDiagnostic(ctx context.Context, r *Registry, providerID, model string) *ToolOutputCeiling {
+	entry, ok := LookupModelEntry(ctx, r, providerID, model)
+	if !ok {
+		return nil
+	}
+	configured, ceiling, low := modelcall.LowOutputCeiling(entry)
+	if !low {
+		return nil
+	}
+	return &ToolOutputCeiling{
+		ConfiguredMaxTokens: configured,
+		ProviderMaxTokens:   ceiling,
+		Diagnostic:          modelcall.FormatLowOutputCeilingDiagnostic(entry.ID, configured, ceiling),
+	}
 }

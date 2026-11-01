@@ -412,6 +412,7 @@ func (p *Provider) outputTruncatedError(payload Request, reason string, usage mo
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
 		ContextTokens:    payload.Options.NumCtx,
+		MaxTokens:        payload.Options.NumPredict,
 	}
 }
 

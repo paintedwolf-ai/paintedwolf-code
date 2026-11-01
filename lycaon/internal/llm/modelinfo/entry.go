@@ -23,9 +23,10 @@ type Entry struct {
 	DiscoveredPricing *pricing.Rate   `yaml:"-"`
 
 	// Zero-value request controls are omitted.
-	Temperature     *float64 `yaml:"temperature,omitempty"`
-	MaxTokens       int      `yaml:"max_tokens,omitempty"`
-	ReasoningEffort string   `yaml:"reasoning_effort,omitempty"`
+	Temperature       *float64 `yaml:"temperature,omitempty"`
+	MaxTokens         int      `yaml:"max_tokens,omitempty"`
+	ProviderMaxTokens int      `yaml:"provider_max_tokens,omitempty"`
+	ReasoningEffort   string   `yaml:"reasoning_effort,omitempty"`
 	// ReasoningEffortLevels overrides the family mapping for this provider's model.
 	ReasoningEffortLevels ReasoningEffortLevels `yaml:"reasoning_effort_levels,omitempty"`
 	// Capabilities is the resolved assignment evidence.
