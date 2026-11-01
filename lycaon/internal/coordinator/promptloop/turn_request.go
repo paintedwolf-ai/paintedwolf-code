@@ -133,6 +133,7 @@ func (l *modelTurn) buildTurnRequest(
 			return coordinatorTurnRequest{}, err
 		}
 	}
+	req = l.fitRequestToLiveWindow(ctx, sess, sessionID, req)
 	if st != nil {
 		st.output.policyCheck = nil
 		if policyBinding != nil {

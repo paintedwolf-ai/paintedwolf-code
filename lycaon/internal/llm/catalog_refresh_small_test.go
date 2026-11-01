@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/discovery"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
@@ -19,7 +20,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 )
 
 func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {
@@ -271,6 +271,9 @@ func TestLoadBundledModelContextWindows(t *testing.T) {
 	w := testWindows(t)
 	if w.FallbackTrueWindow != 262144 {
 		t.Fatalf("fallback = %d", w.FallbackTrueWindow)
+	}
+	if w.LocalFallbackTrueWindow != 32768 {
+		t.Fatalf("local fallback = %d", w.LocalFallbackTrueWindow)
 	}
 	n, ok := w.Lookup("accounts/fireworks/models/kimi-k2p7-code")
 	if !ok || n != 262144 {

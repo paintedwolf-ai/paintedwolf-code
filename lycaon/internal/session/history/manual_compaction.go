@@ -12,6 +12,9 @@ import (
 
 // ForceCompact publishes deterministic reductions and schedules optional synthesis.
 func (m *Service) ForceCompact(ctx context.Context, sessionID string) (report compaction.CompactionReport, err error) {
+	if m == nil || m.Gate == nil || m.Runner == nil {
+		return report, fmt.Errorf("history service admission not configured")
+	}
 	turn, err := m.Gate.Capture(ctx, sessionID)
 	if err != nil {
 		return report, err

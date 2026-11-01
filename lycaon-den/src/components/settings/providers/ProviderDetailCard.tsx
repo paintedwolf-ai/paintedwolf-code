@@ -3,6 +3,7 @@ import type { ProviderKindTemplate, ProviderMeta } from "../../../api/types.ts";
 import { providerEndpointError } from "../../../settings/providers/cloudflare-endpoint.ts";
 import {
   providerDiscoveryFailure,
+  providerContextWindowState,
   providerDisplayName,
   providerIsReady,
   providerShowsApiKeyControls,
@@ -25,6 +26,7 @@ import { DenRadio } from "../../primitives/DenRadio.tsx";
 import { CloudflareAccountField } from "./CloudflareAccountField.tsx";
 import {
   PROVIDER_LABEL_MAX,
+  contextWindowStateCopy,
   endpointLabel,
   endpointStyle,
   providerFeedStatusHints,
@@ -170,6 +172,10 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
         >
           {toolCallStateCopy(provider())}
         </p>
+      </Show>
+
+      <Show when={providerContextWindowState(provider()) === "unknown"}>
+        <p class="den-settings-hint" data-testid={`provider-context-window-${provider().id}`} data-context-window="unknown">{contextWindowStateCopy(provider())}</p>
       </Show>
 
       <Show when={endpointStyle(provider().endpoint_style) !== "derived"}>

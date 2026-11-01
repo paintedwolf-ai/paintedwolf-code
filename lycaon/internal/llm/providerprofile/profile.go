@@ -66,6 +66,9 @@ type Profile struct {
 	// template-rendered servers that inject tool instructions whenever tools
 	// are present.
 	OmitToolsWhenNotCallable bool
+	// Local marks local inference endpoints (such as llama.cpp, vLLM, Ollama,
+	// LM Studio, oMLX, and LiteLLM proxy).
+	Local bool
 }
 
 // ToolResultImagePlacement selects where a tool-result image rides.

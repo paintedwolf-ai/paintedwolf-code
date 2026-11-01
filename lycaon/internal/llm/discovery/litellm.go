@@ -122,6 +122,7 @@ func litellmChatCapableEntries(records []litellmModelInfoRecord) []modelinfo.Ent
 		}}
 		if rec.ModelInfo.MaxInputTokens > 0 {
 			entry.ContextLength = rec.ModelInfo.MaxInputTokens
+			entry.ContextLengthSource = "litellm"
 		}
 		entry.Capabilities.Vision = modelinfo.Evidence(modelinfo.OptionalState(rec.ModelInfo.SupportsVision), "litellm")
 		if rec.ModelInfo.SupportsVision != nil && *rec.ModelInfo.SupportsVision {

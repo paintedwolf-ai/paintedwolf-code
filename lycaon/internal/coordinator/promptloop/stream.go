@@ -229,6 +229,24 @@ func (l *modelTurn) completeStream(
 	st *promptLoopTurnState,
 	onProgress func(*modelcall.Completion),
 ) (_ *modelcall.Completion, _ []string, err error) {
+	return l.completeStreamWithOverflowRetry(
+		ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, onProgress, false,
+	)
+}
+
+func (l *modelTurn) completeStreamWithOverflowRetry(
+	ctx context.Context,
+	sess *api.Session,
+	sessionID string,
+	history []api.Message,
+	profileID string,
+	userPrompt string,
+	iterIndex, maxIter int,
+	hostTurn bool,
+	st *promptLoopTurnState,
+	onProgress func(*modelcall.Completion),
+	overflowRecovered bool,
+) (_ *modelcall.Completion, _ []string, err error) {
 	// Secret overlays live for one outbound decision.
 	if st.hasSecretStorageOverlays() {
 		defer st.clearSecretStorageOverlays()
@@ -246,6 +264,15 @@ func (l *modelTurn) completeStream(
 	turn, err := l.buildTurnRequest(ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st)
 	slog.InfoContext(ctx, "model request preparation", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(preparationStarted).Milliseconds(), "failed", err != nil)
 	if err != nil {
+		if !overflowRecovered {
+			if tooSmall, ok := failure.AsProviderContextTooSmall(err); ok && tooSmall != nil && tooSmall.MaxContext > 0 {
+				finishPreparing()
+				history = l.recoverFromContextOverflow(ctx, sess, sessionID, history, st, "", tooSmall.ProviderID, tooSmall.Model, 0, tooSmall)
+				return l.completeStreamWithOverflowRetry(
+					ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, onProgress, true,
+				)
+			}
+		}
 		return nil, nil, err
 	}
 	if st != nil {
@@ -290,9 +317,10 @@ func (l *modelTurn) completeStream(
 			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish))
 		}
 	}
+	suppressCallFailed := false
 	// Publish one terminal event even after cancellation.
 	defer func() {
-		if err != nil {
+		if err != nil && !suppressCallFailed {
 			callFailed()
 		}
 	}()
@@ -323,6 +351,15 @@ func (l *modelTurn) completeStream(
 	callProvider, callModel = collected.providerID, collected.model
 	trainingcapture.Observe(ctx, collected.completion, collectErr != nil, callProvider, callModel)
 	if collectErr != nil {
+		if !overflowRecovered {
+			if tooSmall, ok := failure.AsProviderContextTooSmall(collectErr); ok && tooSmall != nil && tooSmall.MaxContext > 0 {
+				suppressCallFailed = true
+				history = l.recoverFromContextOverflow(ctx, sess, sessionID, history, st, surfaceID, callProvider, callModel, transcriptEstimate, tooSmall)
+				return l.completeStreamWithOverflowRetry(
+					ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, onProgress, true,
+				)
+			}
+		}
 		var recovered *modelcall.Completion
 		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {
 			callFailed()

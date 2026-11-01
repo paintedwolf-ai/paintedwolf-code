@@ -145,6 +145,7 @@ type ProviderContextTooSmallError struct {
 	PromptTokens      int
 	CompletionReserve int
 	MaxContext        int
+	Source            string
 }
 
 func (e *ProviderContextTooSmallError) Error() string {

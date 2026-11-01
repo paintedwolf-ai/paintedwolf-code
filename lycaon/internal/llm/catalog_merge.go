@@ -65,6 +65,7 @@ func applyModelContextCaps(kind string, models, local []modelinfo.Entry) {
 		}
 		if models[i].ContextLength <= 0 || configured.ContextLength < models[i].ContextLength {
 			models[i].ContextLength = configured.ContextLength
+			models[i].ContextLengthSource = "config"
 		}
 	}
 }
@@ -392,6 +393,7 @@ func enrichFromDiscovery(base, discovered modelinfo.Entry) modelinfo.Entry {
 	}
 	if discovered.ContextLength > 0 {
 		out.ContextLength = discovered.ContextLength
+		out.ContextLengthSource = discovered.ContextLengthSource
 	}
 	// The live transport's own output ceiling outranks the feed's.
 	if discovered.MaxTokens > 0 {
@@ -452,9 +454,15 @@ func untypedAllowlistIntersect(kind string, local, discovered []modelinfo.Entry)
 	}
 	allow := modelIDSet(local)
 	kept := make([]modelinfo.Entry, 0)
-	for _, d := range discovered {
+	var wildcardProps *modelinfo.Entry
+	for i := range discovered {
+		d := discovered[i]
 		id := strings.TrimSpace(d.ID)
 		if id == "" {
+			continue
+		}
+		if id == "*" && d.ContextLength > 0 {
+			wildcardProps = &discovered[i]
 			continue
 		}
 		if _, ok := allow[id]; ok {
@@ -466,6 +474,17 @@ func untypedAllowlistIntersect(kind string, local, discovered []modelinfo.Entry)
 				kept = append(kept, d)
 				break
 			}
+		}
+	}
+	if len(kept) == 0 && wildcardProps != nil {
+		for _, m := range local {
+			id := strings.TrimSpace(m.ID)
+			if id == "" {
+				continue
+			}
+			synth := *wildcardProps
+			synth.ID = id
+			kept = append(kept, synth)
 		}
 	}
 	return applyDiscoveredModels(kind, local, kept)
@@ -601,6 +620,11 @@ func overlayLocalModel(base, local modelinfo.Entry) modelinfo.Entry {
 	}
 	if local.ContextLength != 0 {
 		out.ContextLength = local.ContextLength
+		if local.ContextLengthSource != "" {
+			out.ContextLengthSource = local.ContextLengthSource
+		} else {
+			out.ContextLengthSource = "config"
+		}
 	}
 	if local.ThinkingAlwaysOn {
 		out.ThinkingAlwaysOn = true

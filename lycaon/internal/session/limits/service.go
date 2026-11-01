@@ -26,13 +26,14 @@ type ConfigSource interface {
 }
 
 type Service struct {
-	mu       sync.RWMutex
-	defaults settings.SessionLimits
-	provider Provider
-	roots    Roots
-	policy   ModelPolicySource
-	windows  llm.ContextLengthLookup
-	fallback ConfigSource
+	mu                 sync.RWMutex
+	defaults           settings.SessionLimits
+	provider           Provider
+	roots              Roots
+	policy             ModelPolicySource
+	windows            llm.ContextLengthLookup
+	fallback           ConfigSource
+	sessionLiveWindows map[string]int
 }
 
 func New(defaults settings.SessionLimits, roots Roots) *Service {
@@ -71,6 +72,49 @@ func (m *Service) SetMaxIterations(n int) {
 	}
 }
 
+// LowerSessionLiveWindow caps a session's live context window to window tokens
+// after a provider reports a smaller context ceiling at runtime.
+func (m *Service) LowerSessionLiveWindow(sessionID string, window int) {
+	if m == nil || sessionID == "" || window <= 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.sessionLiveWindows == nil {
+		m.sessionLiveWindows = make(map[string]int)
+	}
+	if cur, ok := m.sessionLiveWindows[sessionID]; !ok || window < cur {
+		m.sessionLiveWindows[sessionID] = window
+	}
+}
+
+// SessionLiveWindow returns any runtime-lowered live context window for sessionID.
+func (m *Service) SessionLiveWindow(sessionID string) (int, bool) {
+	if m == nil || sessionID == "" {
+		return 0, false
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	w, ok := m.sessionLiveWindows[sessionID]
+	return w, ok && w > 0
+}
+
+func applySessionLiveWindow(cfg compaction.CompactionConfig, liveWindow int) compaction.CompactionConfig {
+	if liveWindow <= 0 {
+		return cfg
+	}
+	if cfg.ModelContextWindow > 0 && cfg.ModelContextWindow <= liveWindow {
+		return cfg
+	}
+	cfg.ModelContextWindow = liveWindow
+	cfg.HardCeilingTokens = 0
+	cfg.TargetTokens = 0
+	if normalized, err := compaction.NormalizeConfig(cfg); err == nil {
+		return normalized
+	}
+	return cfg
+}
+
 func (m *Service) Effective(ctx context.Context, sess *api.Session) settings.SessionLimits {
 	m.mu.RLock()
 	lim, provider, roots := m.defaults, m.provider, m.roots
@@ -94,18 +138,22 @@ func (m *Service) Compaction(ctx context.Context, sess *api.Session) compaction.
 		paths = m.roots.SettingsRoots(ctx, sess)
 	}
 	cfg, _ := m.ResolveRoots(paths)
-	if sess == nil || sess.Model == "" {
+	if sess == nil {
 		return cfg
 	}
-	m.mu.RLock()
-	lookup := m.windows
-	m.mu.RUnlock()
-	policy := llm.ModelPolicy{Coordinator: llm.ModelRef{ProviderID: sess.ProviderID, Model: sess.Model}}
-	resolved, _, err := llm.ApplyLiveBudget(cfg, policy, lookup, modelinfo.DefaultModelContextWindows())
-	if err != nil {
-		return cfg
+	if sess.Model != "" {
+		m.mu.RLock()
+		lookup := m.windows
+		m.mu.RUnlock()
+		policy := llm.ModelPolicy{Coordinator: llm.ModelRef{ProviderID: sess.ProviderID, Model: sess.Model}}
+		if resolved, _, err := llm.ApplyLiveBudget(cfg, policy, lookup, modelinfo.DefaultModelContextWindows()); err == nil {
+			cfg = resolved
+		}
 	}
-	return resolved
+	if liveWindow, ok := m.SessionLiveWindow(sess.ID); ok {
+		cfg = applySessionLiveWindow(cfg, liveWindow)
+	}
+	return cfg
 }
 
 func (m *Service) ResolveRoots(projectDirs []string) (compaction.CompactionConfig, llm.SessionLimitFields) {

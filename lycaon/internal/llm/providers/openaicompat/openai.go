@@ -36,7 +36,8 @@ type Provider struct {
 	// httpRetry is the per-provider chat HTTP retry policy from providers.yaml.
 	httpRetry providerretry.ProviderHTTPRetry
 	// tokenSource mints per-request credentials.
-	tokenSource func(context.Context) (string, error)
+	tokenSource  func(context.Context) (string, error)
+	contextState *servingContextState
 	modelcall.Catalog
 }
 
@@ -79,7 +80,8 @@ func New(id, baseURL, apiKey string, models []modelinfo.Entry) *Provider {
 		id:             id,
 		baseURL:        strings.TrimRight(baseURL, "/"),
 		apiKey:         apiKey,
-		Catalog:        modelcall.NewCatalog("", models),
+		Catalog:        modelcall.NewCatalog("", stampDeclaredContextSource(models)),
+		contextState:   newServingContextState(),
 		profile:        providerprofile.OpenAI(),
 		http:           defaultHTTPProfile(),
 		streamClient:   providerhttp.NewStreamingClient(httpclient.DefaultResponseHeader),
@@ -126,7 +128,10 @@ func (p *Provider) WithPromptCache(policy providerprofile.PromptCachePolicy) *Pr
 // WithEffectiveModels replaces the provider's model catalog.
 func (p *Provider) WithEffectiveModels(models []modelinfo.Entry) *Provider {
 	next := *p
-	next.Catalog = p.WithModels(models)
+	if next.contextState == nil {
+		next.contextState = newServingContextState()
+	}
+	next.Catalog = p.WithModels(stampDeclaredContextSource(models))
 	return &next
 }
 

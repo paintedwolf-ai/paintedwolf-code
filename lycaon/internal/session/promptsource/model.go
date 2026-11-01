@@ -41,8 +41,29 @@ func (m *Model) Build() promptloop.ModelDeps {
 		}
 	}
 	deps.RecordCompactionTokenObservation = func(sessionID, providerID, model string, reportedPromptTokens, transcriptEstimate int) {
-		if m != nil {
+		if m != nil && m.History != nil {
 			m.History.ObserveTokens(sessionID, providerID, model, reportedPromptTokens, transcriptEstimate)
+		}
+	}
+	deps.LowerSessionLiveWindow = func(sessionID string, window int) {
+		if m != nil && m.Limits != nil {
+			m.Limits.LowerSessionLiveWindow(sessionID, window)
+		}
+	}
+	if m.History != nil {
+		deps.CompactAfterContextOverflow = func(ctx context.Context, sess *api.Session, rows []api.Message, reportedWindow int) ([]api.Message, error) {
+			if sess == nil {
+				return rows, nil
+			}
+			if m.Limits != nil && reportedWindow > 0 {
+				m.Limits.LowerSessionLiveWindow(sess.ID, reportedWindow)
+			}
+			_, err := m.History.ForceCompact(ctx, sess.ID)
+			reloaded, loadErr := m.History.Load(ctx, sess)
+			if loadErr == nil && len(reloaded) > 0 {
+				rows = reloaded
+			}
+			return rows, err
 		}
 	}
 

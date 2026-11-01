@@ -40,6 +40,11 @@ type Entry struct {
 	// ContextLength caps the usable token window.
 	ContextLength int `yaml:"context_length,omitempty"`
 
+	// ContextLengthSource records how ContextLength was determined (for example,
+	// "config", "llamacpp-props", "v1/models", "lmstudio", "omlx", "ollama-show",
+	// or "provider-overflow").
+	ContextLengthSource string `yaml:"-"`
+
 	// Neuron rates support providers that bill in those units.
 	InputNeuronsPerM  float64 `yaml:"input_neurons_per_m,omitempty"`
 	OutputNeuronsPerM float64 `yaml:"output_neurons_per_m,omitempty"`

@@ -174,6 +174,10 @@ func LocalInference(profile Profile) Profile {
 	if profile.ReasoningWire == "" {
 		profile.ReasoningWire = ReasoningWireContent
 	}
+	profile.Local = true
+	if profile.Discovery == DiscoveryConfigured {
+		profile.DiscoveryProfile.ProbeProps = true
+	}
 	profile.SystemPreambleOnly = true
 	profile.StreamResponseHeaderTimeout = LocalInferenceStreamResponseHeaderTimeout
 	profile.CompleteResponseHeaderTimeout = LocalInferenceCompleteResponseHeaderTimeout
