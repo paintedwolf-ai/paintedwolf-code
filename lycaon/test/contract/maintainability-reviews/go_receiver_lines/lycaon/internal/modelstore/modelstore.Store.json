@@ -4,13 +4,13 @@
   "kind": "runtime_service",
   "workstream": "local-model-store",
   "disposition": "retain",
-  "reason": "Retain the store transaction boundary at 766 receiver lines and 32 methods. Activation, journal recovery, collection and repair share revision identity and cross-process leases; export preparation and signing remain independent functions. Splitting the receiver would distribute the same publication and reader-lifetime rules across competing entry points. Lease, repair, interrupted-import and journal fixtures support this boundary.",
-  "reviewed_commit": "ceefbfd8332db4db19206f08016bca0fe7874702",
-  "reviewed_shape": "e3dc6712e8271e43b0fc0850640e7979695481d99c7a76c551196d290850c553",
-  "ceiling": 766,
+  "reason": "Retain the store transaction boundary at 782 receiver lines and 33 methods. Repair reuse verifies immutable payloads under the same collection pins and revision lease as replacement; extracting another owner would separate verification from publication and reader lifetime. Export preparation and signing remain independent functions. The 80-result store fixture run covers missing-link inode reuse, same-size corruption, failed replacement, leases and interrupted import.",
+  "reviewed_commit": "1d8531b6ca",
+  "reviewed_shape": "e70b2ac49f887441b6db22a0c75f5422649e91bc142dae4f912a4cbf9b43af70",
+  "ceiling": 782,
   "boundaries": {
     "lycaon/internal/modelstore/lifetime_test.go": "17084815f37662d3f1b72f2ecb0620d7e1a98fc56602eea9b769d259a33d61c7",
-    "lycaon/internal/modelstore/repair_test.go": "a3d9eb47ddcb8616b01e06c27b9d89333a25d61e4a172d54331e9beb98fdd583",
+    "lycaon/internal/modelstore/repair_test.go": "a1765b6567d7b1522132291452e760685947ea0e1a0c94947e4dbcc9079e097a",
     "lycaon/internal/modelstore/import_test.go": "485852352df3921e70ace2e435dcd0d1d4e08534ed28ad75f6fc2625cbafddbd",
     "lycaon/internal/modelstore/store_test.go": "45027be3e76ea0bda1466d2191394a4e90d76eb133fa4565626f45a6c0375745"
   }
