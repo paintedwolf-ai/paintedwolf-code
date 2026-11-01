@@ -14,12 +14,15 @@ import (
 )
 
 func TestClientReapsAnEngineWithAnUnusableResponsePipe(t *testing.T) {
-	for _, fault := range []string{"exec 1>&-", "printf 'invalid json\\n'"} {
-		t.Run(fault, func(t *testing.T) {
+	for _, fault := range []struct{ name, script string }{
+		{"closed stdout", "exec 1>&-"},
+		{"malformed response", "printf 'invalid json\\n'"},
+	} {
+		t.Run(fault.name, func(t *testing.T) {
 			cfg := fakeConfig(t)
 			body := strings.Replace(fakeEngine, `  case "$line" in`, `  case "$line" in
     *'"task":"break-response"'*)
-      `+fault+`
+      `+fault.script+`
       while IFS= read -r ignored; do :; done
       exit 0 ;;
   esac
