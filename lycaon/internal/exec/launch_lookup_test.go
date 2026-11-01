@@ -3,14 +3,50 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
+
+func TestLaunchLookupRetainsTheExecutorSelectedPath(t *testing.T) {
+	if os.Getenv("PW_TEST_SELECTED_LAUNCH_PATH") != "1" {
+		self, err := os.Executable()
+		testutil.FailErr(t, "locate isolated lookup fixture", err)
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
+		cmd := osexec.CommandContext(ctx, self, "-test.run=^TestLaunchLookupRetainsTheExecutorSelectedPath$")
+		cmd.Env = append(os.Environ(), "PW_TEST_SELECTED_LAUNCH_PATH=1")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("executor-selected lookup fixture: %v\n%s", err, output)
+		}
+		return
+	}
+	// Isolate the process-wide platform checker from concurrently running tests.
+	lookExecutable = func(candidate string) (string, error) { return candidate + ".exe", nil }
+	cwd := t.TempDir()
+	for _, tc := range []struct {
+		name, path, want string
+	}{
+		{"tool", "/native/bin", "/native/bin/tool.exe"},
+		{"tool", "relative", "relative/tool.exe"},
+		{"tool", "", "tool.exe"},
+		{"./tool", "", "./tool.exe"},
+		{"/native/bin/tool", "", "/native/bin/tool.exe"},
+	} {
+		got, err := LaunchLookup(tc.name, ExecOpts{Dir: cwd, Env: []string{"PATH=" + tc.path}})
+		testutil.FailErr(t, "select executor-qualified path", err)
+		if got != tc.want {
+			t.Fatalf("lookup %q on PATH %q = %q, want %q", tc.name, tc.path, got, tc.want)
+		}
+	}
+}
 
 // LaunchLookup selects exactly what prepareNativeCommand would: the final
 // child PATH from the launch environment and the launch directory.
