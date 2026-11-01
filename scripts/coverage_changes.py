@@ -291,19 +291,19 @@ def run_go(scope):
 def run_den(scope):
     floor = coverage_policy.changed("den")
     changed = [p for p in scope.paths if DEN_SOURCE.match(p) and not DEN_EXCLUDED.search(p) and (ROOT / p).is_file()]
-    if not changed:
-        return [], False, "no changed frontend source"
     reports = artifact_root(ROOT) / "coverage" / "changes-den"
     shutil.rmtree(reports, ignore_errors=True)
     include = [f"--coverage.include={Path(p).relative_to('lycaon-den').as_posix()}" for p in changed]
-    # Only tests related to the changed sources measure them, so a changed
-    # config or lockfile must not widen the run to the whole suite; Vitest's
-    # CLI has no flag for that, so vitest.config.ts reads PW_VITEST_CHANGED_ONLY.
-    code = subprocess.call(["bash", str(ROOT / "scripts" / "vitest-digest.sh"), "--name", "den:coverage:changes", "--",
-                            "--changed", scope.base, "--passWithNoTests",
-                            "--coverage", "--coverage.reporter=json",
-                            f"--coverage.reportsDirectory={reports}", *include], cwd=ROOT,
-                           env={**os.environ, "PW_VITEST_CHANGED_ONLY": "1"})
+    arguments = (["--coverage", "--coverage.reporter=json",
+                  f"--coverage.reportsDirectory={reports}", *include] if changed else [])
+    environment = {key: value for key, value in os.environ.items()
+                   if key not in {"LYCAON_VITEST_FAST", "PW_VITEST_CHANGED_ONLY"}}
+    code = subprocess.call(["bash", str(ROOT / "scripts" / "vitest-digest.sh"),
+                            "--name", "den:coverage:changes", "--", *arguments],
+                           cwd=ROOT, env=environment)
+    if not changed:
+        findings = [Finding("error", "den", "frontend tests failed; inspect the digest")] if code else []
+        return findings, bool(code), "complete frontend tests; no changed source to measure"
     result = reports / "coverage-final.json"
     if code != 0 or not result.exists():
         return [Finding("error", "den", "tests failed, so changed coverage was not measured; fix the tests above")], True, \
@@ -332,7 +332,11 @@ def run_python(scope):
     floor = coverage_policy.changed("python")
     changed = python_coverage.sources(ROOT, scope.paths)
     if not changed:
-        return [], False, "no changed scripts Python"
+        if "test:runner" not in coverage_policy.python_suites():
+            return [], False, "no changed scripts Python"
+        code = subprocess.call([sys.executable, str(ROOT / "scripts/ci_policy/runner_tests.py")], cwd=ROOT)
+        findings = [Finding("error", "python", "script tests failed; inspect the unittest output")] if code else []
+        return findings, bool(code), "complete script tests; no changed source to measure"
     measured = f"{len(changed)} changed file(s)"
     measurements = python_coverage.measure(ROOT, changed, coverage_policy.python_suites(),
                                            artifact_root(ROOT) / "coverage" / "changes-python")

@@ -53,7 +53,7 @@ def lanes():
             raise ValueError(f"CI lane {name} requires runtime engines for host checks")
         compilation = lane.get('compile_targets', {})
         if (name == 'ready' or 'compile_targets' in lane) and (name != 'ready' or not isinstance(compilation, dict)
-                or set(compilation) != {'den:test:rust', 'decide:test'}
+                or not set(compilation).issubset({'den:test:rust', 'decide:test'})
                 or any(not isinstance(roots, list) or not roots
                        or any(not isinstance(root, str) or not root.endswith('/') or '..' in root for root in roots)
                        for roots in compilation.values())):
@@ -75,7 +75,7 @@ def lanes():
             raise ValueError(f"invalid CI profiles: {name}")
         if lane["suite"] not in SUITES or lane.get("setup") not in SETUPS:
             raise ValueError(f"invalid CI setup or suite: {name}")
-        if lane["setup"] == "frontend" and not set(lane["targets"]).issubset({"den:typecheck", "den:lint", "den:test"}):
+        if lane["setup"] == "frontend" and not set(lane["targets"]).issubset({"den:typecheck", "den:lint", "den:test", "den:coverage:changes"}):
             raise ValueError(f"CI lane {name} requires toolchains outside frontend setup")
         if lane["setup"] == "analysis" and not set(lane["targets"]).issubset({
                 "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check"}):
@@ -207,7 +207,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "userlands": USERLANDS_TARGET in lane["targets"],
                            "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
                            "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
-                           or "scripts:coverage:changes" in lane["targets"] and scripts_python_in_scope(scope),
+                           or "scripts:coverage:changes" in lane["targets"],
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),

@@ -10,11 +10,8 @@
       "den:typecheck",
       "den:lint",
       "den:test:fast",
-      "den:coverage:changes",
       "test:short",
       "test:contract",
-      "coverage:changes",
-      "scripts:coverage:changes",
       "licenses:notices",
       "comments:check",
       "test:fail-messages:check",
@@ -43,11 +40,9 @@
       "licenses:notices"
     ],
     "check:tests": [
-      "test:runner",
       "test:full",
       "den:typecheck",
       "den:lint",
-      "den:test",
       "den:test:rust",
       "decide:test"
     ],
@@ -996,27 +991,18 @@
   },
   "ci": {
     "ready": {
-      "compile_targets": {
-        "den:test:rust": [
-          "lycaon-den/src-tauri/"
-        ],
-        "decide:test": [
-          "lycaon/internal/decide/native/"
-        ]
-      },
+      "compile_targets": {},
       "targets": [
         "build",
         "lint:full",
         "budgets",
         "den:typecheck",
         "den:lint",
-        "coverage:changes",
+        "test:short",
         "comments:check",
         "test:fail-messages:check",
         "docs:links",
-        "den:test:fast",
-        "den:coverage:changes",
-        "scripts:coverage:changes"
+        "den:test:fast"
       ],
       "minutes": 180,
       "profiles": [
@@ -1033,9 +1019,7 @@
     "limits": {
       "targets": [
         "budgets",
-        "coverage:changes",
-        "den:coverage:changes",
-        "scripts:coverage:changes"
+        "coverage:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1115,7 +1099,7 @@
     },
     "runner": {
       "targets": [
-        "test:runner"
+        "scripts:coverage:changes"
       ],
       "minutes": 60,
       "profiles": [
@@ -1148,7 +1132,7 @@
       "targets": [
         "den:typecheck",
         "den:lint",
-        "den:test"
+        "den:coverage:changes"
       ],
       "minutes": 90,
       "profiles": [
