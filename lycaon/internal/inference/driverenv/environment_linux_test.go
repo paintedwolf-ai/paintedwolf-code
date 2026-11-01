@@ -29,12 +29,25 @@ func TestLoadedVersionIsExactAndSupported(t *testing.T) {
 
 func TestExplicitDriverSelectionDoesNotCreateVendorEnvironment(t *testing.T) {
 	root := configFixture(t, `{"format_version":1,"mesa_icds":["/nix/mesa.json"]}`)
-	t.Setenv("VK_DRIVER_FILES", "/custom/driver.json")
-	values, cleanup, err := Prepare(root)
-	testutil.FailErr(t, "preserve explicit driver selection", err)
-	cleanup()
-	if len(values) != 0 {
-		t.Fatalf("overrode explicit selection: %v", values)
+	for _, test := range []struct {
+		name, current, alternate, want string
+	}{
+		{"current", "/custom/driver.json", "", ""},
+		{"current_precedence", "/custom/driver.json", "/other/driver.json", ""},
+		{"alternate", "", "/custom/driver.json", "VK_DRIVER_FILES=/custom/driver.json"},
+		{"packaged_default", "/nix/mesa.json", "/custom/driver.json", "VK_DRIVER_FILES=/custom/driver.json"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("VK_DRIVER_FILES", test.current)
+			t.Setenv("VK_ICD_FILENAMES", test.alternate)
+			values, cleanup, err := Prepare(root)
+			testutil.FailErr(t, "preserve explicit driver selection", err)
+			cleanup()
+			if (test.want == "" && len(values) != 0) ||
+				(test.want != "" && (len(values) != 1 || values[0] != test.want)) {
+				t.Fatalf("driver environment = %v; want %q", values, test.want)
+			}
+		})
 	}
 }
 

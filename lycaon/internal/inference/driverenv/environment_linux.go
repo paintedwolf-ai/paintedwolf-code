@@ -31,6 +31,9 @@ func Prepare(root string) ([]string, func(), error) {
 	if explicit := os.Getenv("VK_DRIVER_FILES"); explicit != "" && explicit != defaults {
 		return nil, noop, nil
 	}
+	if explicit := os.Getenv("VK_ICD_FILENAMES"); explicit != "" {
+		return []string{"VK_DRIVER_FILES=" + explicit}, noop, nil
+	}
 	file, err := os.Open("/sys/module/nvidia/version")
 	if os.IsNotExist(err) {
 		return environment(*config, nil, "")
