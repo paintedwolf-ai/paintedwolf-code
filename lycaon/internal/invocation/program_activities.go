@@ -14,7 +14,6 @@ type activityInput struct {
 	arguments                map[string]any
 	span                     api.CommandActivitySpan
 	pipeline                 bool
-	pipelineStart            int
 }
 
 func activityNeedsAttention(receipt api.CommandExecutionReceipt) bool {
