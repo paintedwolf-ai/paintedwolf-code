@@ -82,8 +82,18 @@ func (f *waitStateFixture) call(t *testing.T, source string) string {
 }
 func (f *waitStateFixture) start(t *testing.T, source string) <-chan string {
 	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan string, 1)
-	go func() { done <- f.call(t, source) }()
+	t.Cleanup(func() { cancel(); <-done })
+	go func() {
+		defer close(done)
+		content, err := f.Call(t, ctx, source)
+		if err != nil {
+			t.Errorf("run waiting program: %v", err)
+			return
+		}
+		done <- content
+	}()
 	return done
 }
 func (f *waitStateFixture) waitTimers(count int) {
