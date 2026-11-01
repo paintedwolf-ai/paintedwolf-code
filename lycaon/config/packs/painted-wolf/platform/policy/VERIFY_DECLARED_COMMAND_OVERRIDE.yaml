@@ -19,7 +19,7 @@ copy:
   what: This project declares `{{ paintedwolf.declared }}`, but this invocation requested `{{ paintedwolf.requested }}`.
   cause: The requested check does not match the declared project check; it was refused before execution.
   why: ''
-  fix: Omit both `command` and `pipeline` overrides to run `{{ paintedwolf.declared }}`.{% if paintedwolf.can_command %} Use the offered command tool for a narrower
+  fix: Omit the `command` argument and the `pipeline` argument to run `{{ paintedwolf.declared }}`.{% if paintedwolf.can_command %} Use the offered command tool for a narrower
     check; its result does not replace the declared check.{% endif %}
   instead: ''
 x-paintedwolf-category: recoverable
