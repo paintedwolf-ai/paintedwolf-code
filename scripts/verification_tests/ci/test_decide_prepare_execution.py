@@ -3,7 +3,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-import decide_prepare
+from toolchain import decide_prepare
 
 
 class DecidePreparationTests(unittest.TestCase):

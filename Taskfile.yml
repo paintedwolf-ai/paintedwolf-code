@@ -683,7 +683,7 @@ tasks:
   decide:prepare:
     desc: Fetch pinned Bialy dependencies or refresh its workspace lockfile
     cmds:
-      - python3 {{.SCRIPTS_DIR}}/decide_prepare.py {{.CLI_ARGS}}
+      - python3 {{.SCRIPTS_DIR}}/toolchain/decide_prepare.py {{.CLI_ARGS}}
 
   decide:test:
     desc: Decision engine (bialy) Rust tests
