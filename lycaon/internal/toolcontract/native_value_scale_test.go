@@ -1,6 +1,8 @@
 package toolcontract
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -41,5 +43,23 @@ func TestNativeValueWideReviewUsesPayloadAndStructure(t *testing.T) {
 	release()
 	if used := memory.InUse(); used != (ProgramMemoryUsage{}) {
 		t.Fatalf("review retained memory: %+v", used)
+	}
+}
+
+func TestNativeValueCanonicalEscapesMatchDurableJSON(t *testing.T) {
+	for _, text := range []string{"\b\f\n\r\t\x00<>&\"\\", "\u2028\u2029", "é😀"} {
+		memory := &reviewMemory{maximum: 64 << 20}
+		value, release, err := NewNativeValue(t.Context(), memory, OperationArgumentsDomain, text)
+		if err != nil {
+			t.Fatalf("encode escapes: %v", err)
+		}
+		expected, err := json.Marshal([]any{string(OperationArgumentsDomain), 1, []any{"utf8", text}})
+		if err != nil {
+			t.Fatalf("reference escapes: %v", err)
+		}
+		if !bytes.Equal([]byte(value.Canonical()), expected) {
+			t.Fatalf("canonical %q want %q", value.Canonical(), expected)
+		}
+		release()
 	}
 }

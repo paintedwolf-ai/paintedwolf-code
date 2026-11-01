@@ -141,6 +141,7 @@ type valueScreen struct {
 	metadata      *Metadata
 	input, output int64
 	initial       *StreamMetadata
+	buffer        *valueBuffer
 }
 
 func (s *valueScreen) count(input, output int64) error {
@@ -194,8 +195,13 @@ func (s *valueScreen) text(label, value string) (string, error) {
 		}
 		return nil
 	}
-	output := valueBuffer{storage: s.storage, maximum: s.options.Stream.Bounds.OutputBytes - s.output}
-	metadata, err := s.projector.ScreenStream(s.storage.ctx, s.scope, label, strings.NewReader(value), &output, options)
+	if s.buffer == nil {
+		s.buffer = &valueBuffer{storage: s.storage}
+	}
+	output := s.buffer
+	output.bytes = output.bytes[:0]
+	output.maximum = s.options.Stream.Bounds.OutputBytes - s.output
+	metadata, err := s.projector.ScreenStream(s.storage.ctx, s.scope, label, strings.NewReader(value), output, options)
 	if err != nil {
 		return "", err
 	}
@@ -210,10 +216,7 @@ func (s *valueScreen) text(label, value string) (string, error) {
 		return "", err
 	}
 	result := string(output.bytes)
-	output.bytes = nil
-	if output.release != nil {
-		output.release()
-	}
+
 	return result, nil
 }
 

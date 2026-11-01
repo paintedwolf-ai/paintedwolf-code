@@ -131,7 +131,7 @@ func (r *nativeValueReader) value(depth int) (any, error) {
 			return nil, err
 		}
 		raw, err := base64.StdEncoding.Strict().DecodeString(text)
-		if err == nil && !utf8.Valid(raw) && base64.StdEncoding.EncodeToString(raw) == text {
+		if err == nil && !utf8.Valid(raw) && !strings.ContainsAny(text, "\r\n") {
 			return string(raw), nil
 		}
 	}

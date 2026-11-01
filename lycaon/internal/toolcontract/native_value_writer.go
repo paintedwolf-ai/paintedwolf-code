@@ -192,6 +192,14 @@ func (w *nativeValueWriter) stringValue(v string) error {
 	if err := w.text(`["bytes_base64","`); err != nil {
 		return err
 	}
+	scratch, err := w.state.ReserveProgramState(w.ctx, 4096)
+	if err != nil {
+		return err
+	}
+	if scratch == nil {
+		return fmt.Errorf("native encoding requires retained admission")
+	}
+	defer scratch()
 	encoder := base64.NewEncoder(base64.StdEncoding, w)
 	var buffer [768]byte
 	for len(v) > 0 {
@@ -215,11 +223,20 @@ func (w *nativeValueWriter) quoted(v string) error {
 	start := 0
 	const digits = "0123456789abcdef"
 	for i := 0; i < len(v); i++ {
+		if i&4095 == 0 {
+			if err := w.ctx.Err(); err != nil {
+				return err
+			}
+		}
 		b := v[i]
 		escape := ""
 		switch b {
 		case '"', '\\':
 			escape = "\\" + string(b)
+		case '\b':
+			escape = `\b`
+		case '\f':
+			escape = `\f`
 		case '\n':
 			escape = `\n`
 		case '\r':

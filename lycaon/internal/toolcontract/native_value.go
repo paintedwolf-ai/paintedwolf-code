@@ -7,6 +7,8 @@ import (
 	"fmt"
 )
 
+const nativeValueMaxDepth = 1024
+
 type NativeValueDomain string
 
 const (
