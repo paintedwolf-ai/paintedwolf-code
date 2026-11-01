@@ -332,6 +332,9 @@ on the bounded backtracking engine; it is never RE2. A construct outside a
 dialect refuses with `GREP_REGEX_UNSUPPORTED`, never a reinterpretation. rg's
 default dialect is RE2. Each record search is metered against the catalog
 regex ceilings, and an overrun refuses with `GREP_MATCH_BUDGET`.
+Native rg JSON uses stream-backed ripgrep 15 record semantics. Reference checks
+use `--no-mmap` because file mapping changes binary records and searched-byte
+statistics on some platforms. Input pins and offsets retain the original bytes.
 
 Traversal walks the invocation's held roots in unsigned byte order. Every
 listed name counts against `traversal_visits`, and every file read is pinned
