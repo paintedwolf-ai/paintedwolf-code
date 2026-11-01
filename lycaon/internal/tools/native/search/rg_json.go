@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -12,10 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/textsearch"
 )
 
-// rgJSON is rg --json: ripgrep's JSON Lines messages. Each file with output
-// gets begin, match/context and end messages; one summary closes the run.
-// Field order, escaping and statistics follow rg 15; elapsed times are this
-// search's own measurements.
+// rgJSON writes JSON Lines events and cumulative search statistics.
 type rgJSON struct {
 	started time.Time
 	total   rgStats
@@ -48,7 +46,11 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 	}
 	lastSelectedEnd := 0
 	binaryOffset := bytes.IndexByte(content, 0)
-	n, err := textsearch.ScanReader(inv.ctx, bytes.NewReader(content), 0, nil, r.matcher, r.scan, func(line textsearch.Line) error {
+	var reader io.Reader = bytes.NewReader(content)
+	if binaryOffset >= 0 {
+		reader = binaryRecordReader{r: reader}
+	}
+	n, err := textsearch.ScanReader(inv.ctx, reader, 0, nil, r.matcher, r.scan, func(line textsearch.Line) error {
 		if !begun {
 			begun = true
 			if err := emit(`{"type":"begin","data":{"path":` + path + `}}`); err != nil {
@@ -60,6 +62,19 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 			end++
 		}
 		record := content[line.Start:line.End]
+		encodedLine := content[line.Start:end]
+		if end < len(content) && content[end] == 0 {
+			converted := &grepRecord{inv: inv}
+			defer converted.close()
+			if err := converted.data(record); err != nil {
+				return err
+			}
+			if err := converted.text("\n"); err != nil {
+				return err
+			}
+			encodedLine = converted.bytes
+			end++
+		}
 		kind := "context"
 		if line.Kind == textsearch.SelectedLine {
 			kind = "match"
@@ -71,7 +86,7 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 		if err := output.text(`{"type":"`, kind, `","data":{"path":`, path, `,"lines":`); err != nil {
 			return err
 		}
-		if err := output.jsonData(content[line.Start:end]); err != nil {
+		if err := output.jsonData(encodedLine); err != nil {
 			return err
 		}
 		if err := output.text(`,"line_number":`, strconv.Itoa(line.Number), `,"absolute_offset":`, strconv.Itoa(line.Start), `,"submatches":[`); err != nil {
@@ -98,11 +113,7 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 	if r.scan.MaxSelected > 0 && n >= r.scan.MaxSelected {
 		file.searched = int64(lastSelectedEnd)
 	}
-	if binaryOffset >= 0 {
-		// JSON preserves complete records, including NUL bytes. ripgrep's
-		// searched-byte statistic ends at the first detected binary byte.
-		file.searched = min(file.searched, int64(binaryOffset))
-	}
+
 	if n > 0 {
 		r.selected = true
 		file.withMatch = 1
