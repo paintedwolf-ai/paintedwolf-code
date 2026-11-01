@@ -84,8 +84,8 @@ func nvidiaLibraries(version, root string, uid uint32) ([]string, error) {
 		return nil, fmt.Errorf("unsupported NVIDIA userspace architecture")
 	}
 	directories = append(directories, "/usr/lib64", "/usr/lib", "/lib64", "/lib")
-	// EGL supplies Vulkan without importing the host's X11 libraries.
-	names := []string{"libnvidia-glsi", "libnvidia-gpucomp", "libnvidia-eglcore", "libnvidia-glvkspirv", "libEGL_nvidia"}
+	// Preload driver components opened by name during Vulkan device creation.
+	names := []string{"libnvidia-glsi", "libnvidia-gpucomp", "libnvidia-eglcore", "libnvidia-glvkspirv", "libnvidia-rtcore", "libcuda", "libEGL_nvidia"}
 	var paths []string
 	for _, name := range names {
 		leaf := name + ".so." + version
