@@ -5,11 +5,11 @@
   "workstream": "local-inference",
   "disposition": "retain",
   "reason": "Retain the 14 fields governing one native process and its IPC. The child owns command and driver cleanup through reap, alongside its model lease and memory reservations. Splitting those resources would detach release from process completion. Failure and cancellation fixtures cover acknowledgement and reap ordering.",
-  "reviewed_commit": "5b75a91ad3c99d993e4769db7627acfa1f4fdb16",
+  "reviewed_commit": "4d028fd99597fbac0c55a3be8416ebe5752d7561",
   "reviewed_shape": "7fcb3ee072dcf7d6cff7bc206d28fe8f8927d71ac4ed08672156d3958e1c06e7",
   "ceiling": 14,
   "boundaries": {
     "lycaon/internal/llm/providers/nativegen/process_test.go": "6ea305fdd26d9cf34f265a08590f9ea77993601b57d5beb6a8fde586a21190a3",
-    "lycaon/internal/llm/providers/nativegen/process_cancel_test.go": "ae1a355640e7717c524793eec973043e04208cfc1d6f9aa69f29c1c349c9be2d"
+    "lycaon/internal/llm/providers/nativegen/process_cancel_test.go": "b30d5f01bdc202aa053d1d6258025db6f6af41d047157b882527fc5a6eb0b3c2"
   }
 }
