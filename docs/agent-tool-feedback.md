@@ -37,7 +37,9 @@ unsupported forms and resource limits; diagnostic prose never selects recovery.
 A parser rejection applies to one complete source unit. It does not establish
 that a parent program has performed no operations.
 
-Recovery keeps the submitted operation intact. Examples are labeled examples,
+Recovery keeps the submitted operation intact. Source diagnostics offer no guessed
+repairs or option-prefix substitutions. Validated structural argument repairs
+retain their existing schema checks and require explicit submission. Examples are labeled examples,
 not executable replacement calls. Unknown causes, missing bytes and uncertain
 effects remain unknown. Permission failures name the approval boundary; runtime
 failures preserve native status and stderr. A corrected invocation still crosses
