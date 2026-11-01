@@ -35,6 +35,7 @@ const (
 // consecutive responses whose native call the provider dropped as invalid JSON.
 type modelOutputState struct {
 	id                    string
+	iteration             int
 	sourceContext         *api.SourceContext
 	rejection             *guidance.Refusal
 	droppedToolCallStreak int

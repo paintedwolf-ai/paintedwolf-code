@@ -94,3 +94,32 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 		})
 	}
 }
+
+func TestProjectionBuildForwardsSettledModelOutputIteration(t *testing.T) {
+	ctx := t.Context()
+	memory := store.NewMemory()
+	sess, err := memory.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	testutil.FailErr(t, "create session", err)
+	turn, err := memory.BeginTurn(ctx, store.TurnStart{
+		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}",
+	})
+	testutil.FailErr(t, "begin turn", err)
+
+	projection := &Projection{Sessions: memory, Transcript: transcript.New(memory, nil)}
+	deps := projection.Build()
+	iter, err := deps.SettledModelOutputIteration(ctx, turn.Attempt.ID)
+	testutil.FailErr(t, "initial settled iteration", err)
+	if iter != 0 {
+		t.Fatalf("initial settled iteration = %d, want 0", iter)
+	}
+	_, err = deps.SettleModelOutput(ctx, store.ModelOutput{
+		ID: "out-1", TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
+		Iteration: 2, MessageID: "msg-1", Content: "Done.",
+	})
+	testutil.FailErr(t, "settle model output", err)
+	iter, err = deps.SettledModelOutputIteration(ctx, turn.Attempt.ID)
+	testutil.FailErr(t, "settled iteration after output", err)
+	if iter != 2 {
+		t.Fatalf("settled iteration = %d, want 2", iter)
+	}
+}

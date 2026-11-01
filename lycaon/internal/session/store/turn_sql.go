@@ -272,12 +272,7 @@ func (s *SQL) SettleModelOutput(ctx context.Context, out ModelOutput) (ModelOutp
 	if err != nil {
 		return ModelOutput{}, err
 	}
-	if err := q.InsertModelOutput(ctx, db.InsertModelOutputParams{
-		ID: out.ID, TurnAttemptID: out.TurnAttemptID, SessionID: out.SessionID, ProjectID: projectID,
-		Iteration: int64(out.Iteration), MessageID: out.MessageID, ProviderID: out.ProviderID,
-		Model: out.Model, ContentBlobSha256: sha, FinishReason: out.FinishReason, Scripted: boolInt(out.Scripted),
-		CreatedAt: db.FormatTime(out.CreatedAt), SettledAt: db.FormatTime(out.SettledAt),
-	}); err != nil {
+	if err := insertSettledModelOutput(ctx, q, out, projectID, sha); err != nil {
 		return ModelOutput{}, err
 	}
 	committedRow, err := q.GetModelOutput(ctx, out.ID)
@@ -303,6 +298,37 @@ func (s *SQL) SettleModelOutput(ctx context.Context, out ModelOutput) (ModelOutp
 		return ModelOutput{}, err
 	}
 	return committed, nil
+}
+
+func insertSettledModelOutput(ctx context.Context, q *db.Queries, out ModelOutput, projectID, sha string) error {
+	err := q.InsertModelOutput(ctx, db.InsertModelOutputParams{
+		ID: out.ID, TurnAttemptID: out.TurnAttemptID, SessionID: out.SessionID, ProjectID: projectID,
+		Iteration: int64(out.Iteration), MessageID: out.MessageID, ProviderID: out.ProviderID,
+		Model: out.Model, ContentBlobSha256: sha, FinishReason: out.FinishReason, Scripted: boolInt(out.Scripted),
+		CreatedAt: db.FormatTime(out.CreatedAt), SettledAt: db.FormatTime(out.SettledAt),
+	})
+	if err != nil && db.IsUniqueConstraint(err) {
+		return &ModelOutputIterationCollisionError{TurnAttemptID: out.TurnAttemptID, Iteration: out.Iteration}
+	}
+	return err
+}
+
+// SettledModelOutputIteration returns the highest model output iteration
+// settled for the given turn attempt, or 0 when the attempt has none.
+func SettledModelOutputIteration(ctx context.Context, st any, attemptID string) (int, error) {
+	if strings.TrimSpace(attemptID) == "" || st == nil {
+		return 0, nil
+	}
+	switch s := st.(type) {
+	case *SQL:
+		var maxIteration int
+		err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(iteration), 0) FROM model_outputs WHERE turn_attempt_id = ?`, attemptID).Scan(&maxIteration)
+		return maxIteration, err
+	case *Memory:
+		return memorySettledModelOutputIteration(ctx, s, attemptID)
+	default:
+		return 0, nil
+	}
 }
 
 func (s *SQL) ListPendingModelOutputProjections(ctx context.Context) ([]PendingModelOutputProjection, error) {

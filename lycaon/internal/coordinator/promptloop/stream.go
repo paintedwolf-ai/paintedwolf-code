@@ -47,6 +47,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 			return api.Message{}, nil, nil, err
 		}
 	}
+	modelIteration := nextModelIteration(st)
 	messageID := uuid.NewString()
 	if st != nil && coordinatorDraftSlotEligible(sess, profileID) {
 		messageID = st.ensureCoordinatorDraftSlot()
@@ -134,7 +135,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 	}
 	clearStream()
 	promptAssistant, err := l.Projection.settleAssistantStreamTurn(
-		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, iterIndex, wireContent,
+		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, modelIteration, wireContent,
 	)
 	if err != nil {
 		return api.Message{}, nil, nil, withdrawFailedDraft(err)
@@ -154,7 +155,7 @@ func (l *turnProjection) settleAssistantStreamTurn(
 	completion *modelcall.Completion,
 	tokens []string,
 	outputID string,
-	iterIndex int,
+	iteration int,
 	wireContent func(string) string,
 ) (api.Message, error) {
 	assistantMsg.Content = completion.Content
@@ -180,7 +181,7 @@ func (l *turnProjection) settleAssistantStreamTurn(
 		}
 		committed, settleErr := l.Deps.SettleModelOutput(ctx, store.ModelOutput{
 			ID: outputID, TurnAttemptID: st.attemptID, SessionID: sessionID,
-			Iteration: iterIndex + 1, MessageID: assistantMsg.ID,
+			Iteration: iteration, MessageID: assistantMsg.ID,
 			ProviderID: completion.ProviderID, Model: completion.Model, Scripted: completion.Scripted,
 			Content: wireAssistant.Content, ToolCallsJSON: string(callsJSON),
 			ReasoningJSON: string(reasoningJSON), CreatedAt: assistantMsg.CreatedAt,
@@ -219,6 +220,34 @@ func (l *turnProjection) settleAssistantStreamTurn(
 		st.rememberSecretStorageOverlay(storedAssistant, promptAssistant)
 	}
 	return promptAssistant, nil
+}
+
+func (l *turnProjection) seedModelIteration(ctx context.Context, attemptID string, st *promptLoopTurnState) error {
+	if st == nil || strings.TrimSpace(attemptID) == "" || l == nil || l.Deps.SettledModelOutputIteration == nil {
+		return nil
+	}
+	settledIteration, err := l.Deps.SettledModelOutputIteration(ctx, attemptID)
+	if err != nil {
+		return err
+	}
+	st.output.iteration = settledIteration
+	return nil
+}
+
+// nextModelIteration allocates the next 1-based model-output iteration for the attempt.
+func nextModelIteration(st *promptLoopTurnState) int {
+	if st == nil {
+		return 1
+	}
+	st.output.iteration++
+	return st.output.iteration
+}
+
+func currentModelIteration(st *promptLoopTurnState, iterIndex int) int {
+	if st != nil && st.output.iteration > 0 {
+		return st.output.iteration
+	}
+	return iterIndex + 1
 }
 
 func (l *modelTurn) completeStream(
@@ -275,12 +304,13 @@ func (l *modelTurn) completeStream(
 		}
 	}
 	proseFinish := st.proseTurn(sess, iterIndex, maxIter)
+	progressIterIndex := currentModelIteration(st, iterIndex) - 1
 	ctx = llm.WithDispatchObserver(ctx, func() {
 		finishPreparing()
 		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
 			return
 		}
-		loop := coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish)
+		loop := coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish)
 		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
 			CallID:          llmCallID,
 			Provider:        callProvider,
@@ -291,7 +321,7 @@ func (l *modelTurn) completeStream(
 	})
 	callFailed := func() {
 		if isCoordinatorTurn {
-			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish))
+			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish))
 		}
 	}
 	// Publish one terminal event even after cancellation.
@@ -316,7 +346,7 @@ func (l *modelTurn) completeStream(
 			RetryWaitMs:     a.Wait.Milliseconds(),
 			RetryReason:     api.LLMRetryReason(a.Reason),
 			SilenceMs:       a.Silence.Milliseconds(),
-			CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
+			CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish),
 		})
 	})
 
@@ -384,7 +414,7 @@ func (l *modelTurn) completeStream(
 	}
 	if isCoordinatorTurn {
 		l.publishLLMCallOK(ctx, sess, sessionID, llmCallID, providerID, model, completion.Usage,
-			coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish))
+			coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish))
 	}
 	completion.ProviderID = providerID
 	completion.Model = model
@@ -555,7 +585,7 @@ func (l *modelTurn) buildTurnRequest(
 			ProfileID:        profileID,
 			HostTurn:         hostTurn,
 			Surface:          surfaceID,
-			Iteration:        iterIndex + 1,
+			Iteration:        currentModelIteration(st, iterIndex),
 			MaxIterations:    maxIter,
 			WorkflowRevision: frameValue.WorkflowRevision,
 		},
