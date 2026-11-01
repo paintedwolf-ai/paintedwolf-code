@@ -75,48 +75,10 @@ func ContextFromPromptError(err error) map[string]any {
 		return out
 	}
 	if e, ok := failure.AsProviderOutputTruncated(err); ok && e != nil {
-		out := map[string]any{
-			"output_limit_reached": true,
-			"recovery_attempted":   e.RecoveryAttempted,
-		}
-		if id := trimContextString(e.ProviderID); id != "" {
-			out["provider_id"] = id
-		}
-		if model := trimContextString(e.Model); model != "" {
-			out["model"] = model
-		}
-		if e.ToolCallTruncated {
-			out["tool_call_truncated"] = true
-			if tool := trimContextString(e.ToolName); tool != "" {
-				out["tool"] = tool
-			}
-			if e.ToolArgsBytes > 0 {
-				out["tool_args_bytes"] = e.ToolArgsBytes
-			}
-		}
-		if e.MaxTokens > 0 {
-			out["max_tokens"] = e.MaxTokens
-		}
-		if e.LowOutputCeiling() {
-			out["low_output_ceiling"] = true
-			out["configured_max_tokens"] = e.ConfiguredMaxTokens
-			out["provider_max_tokens"] = e.ProviderMaxTokens
-		}
-		return out
+		return outputTruncatedContext(e)
 	}
 	if e, ok := failure.AsProviderEmptyCompletion(err); ok && e != nil {
-		out := map[string]any{}
-		if e.OutputLimitReached() {
-			out["output_limit_reached"] = true
-			out["recovery_attempted"] = e.RecoveryAttempted
-		}
-		if id := trimContextString(e.ProviderID); id != "" {
-			out["provider_id"] = id
-		}
-		if model := trimContextString(e.Model); model != "" {
-			out["model"] = model
-		}
-		return out
+		return emptyCompletionContext(e)
 	}
 	if e, ok := failure.AsProviderContextTooSmall(err); ok && e != nil {
 		out := map[string]any{}
@@ -280,6 +242,39 @@ func providerModelContext(providerID, model string) map[string]any {
 	}
 	if m := trimContextString(model); m != "" {
 		out["model"] = m
+	}
+	return out
+}
+
+func emptyCompletionContext(e *failure.ProviderEmptyCompletionError) map[string]any {
+	out := providerModelContext(e.ProviderID, e.Model)
+	if e.OutputLimitReached() {
+		out["output_limit_reached"] = true
+		out["recovery_attempted"] = e.RecoveryAttempted
+	}
+	return out
+}
+
+func outputTruncatedContext(e *failure.ProviderOutputTruncatedError) map[string]any {
+	out := providerModelContext(e.ProviderID, e.Model)
+	out["output_limit_reached"] = true
+	out["recovery_attempted"] = e.RecoveryAttempted
+	if e.ToolCallTruncated {
+		out["tool_call_truncated"] = true
+		if tool := trimContextString(e.ToolName); tool != "" {
+			out["tool"] = tool
+		}
+		if e.ToolArgsBytes > 0 {
+			out["tool_args_bytes"] = e.ToolArgsBytes
+		}
+	}
+	if e.MaxTokens > 0 {
+		out["max_tokens"] = e.MaxTokens
+	}
+	if e.LowOutputCeiling() {
+		out["low_output_ceiling"] = true
+		out["configured_max_tokens"] = e.ConfiguredMaxTokens
+		out["provider_max_tokens"] = e.ProviderMaxTokens
 	}
 	return out
 }

@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
-	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -241,8 +240,7 @@ func (l *modelTurn) completeStream(
 	isCoordinatorTurn := strings.TrimSpace(sess.ParentSessionID) == ""
 	finishPreparing := func() {}
 	if isCoordinatorTurn {
-		activity := l.Projection.beginActivity(ctx, sess, sessionID, api.ActivityKindPreparingContext, "", "")
-		finishPreparing = activity.finish
+		finishPreparing = l.Projection.beginActivity(ctx, sess, sessionID, api.ActivityKindPreparingContext, "", "").finish
 	}
 	defer finishPreparing()
 	llmCallID := uuid.NewString()
@@ -280,13 +278,12 @@ func (l *modelTurn) completeStream(
 		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
 			return
 		}
-		loop := coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish)
 		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
 			CallID:          llmCallID,
 			Provider:        callProvider,
 			Model:           callModel,
 			Status:          api.LLMCallStatusActive,
-			CoordinatorLoop: loop,
+			CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
 		})
 	})
 	callFailed := func() {
@@ -327,27 +324,17 @@ func (l *modelTurn) completeStream(
 	callProvider, callModel = collected.providerID, collected.model
 	trainingcapture.Observe(ctx, collected.completion, collectErr != nil, callProvider, callModel)
 	if collectErr != nil {
-		var truncated *failure.ProviderOutputTruncatedError
-		if errors.As(collectErr, &truncated) {
-			entry := l.modelEntryForTurn(ctx, callProvider, callModel)
-			truncated = modelcall.EnrichOutputTruncatedError(truncated, req, entry, collected.completion)
-			return collected.completion, nil, truncated
-		}
-		var recovered *modelcall.Completion
-		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {
-			callFailed()
-		}
-		return recovered, nil, err
+		recovered, rerr := handleStreamCollectError(ctx, l, req, collected, collectErr, func() (*modelcall.Completion, error) {
+			return l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish)
+		}, callFailed)
+		return recovered, nil, rerr
 	}
 	completion, tokens := collected.completion, collected.tokens
 	providerID, model := collected.providerID, collected.model
 	// What the provider delivered, before the tool-call contract rewrites it.
 	delivered := completion
-	if completion != nil && failure.IsOutputLimitFinishReason(completion.FinishReason) &&
-		(!modelcall.CompletionHasUsablePayload(completion) || modelcall.HasTruncatedToolCall(completion.ToolCalls)) {
-		l.recordAbandonedTurnUsage(ctx, sess, llmCallID, providerID, model, req, delivered)
-		entry := l.modelEntryForTurn(ctx, providerID, model)
-		return completion, nil, modelcall.NewOutputTruncatedError(providerID, model, completion.FinishReason, completion.Usage, req.MaxTokens, entry, completion.ToolCalls)
+	if truncErr := truncatedCompletionFault(ctx, l, sess, llmCallID, req, providerID, model, completion); truncErr != nil {
+		return completion, nil, truncErr
 	}
 
 	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, completion, providerID, model)
@@ -392,16 +379,7 @@ func (l *modelTurn) completeStream(
 	}
 	// Empty completions fail before the terminal event.
 	if !modelcall.CompletionHasPayload(completion) {
-		finishReason := ""
-		var usage modelcall.TokenUsage
-		var calls []api.ToolCall
-		if completion != nil {
-			finishReason = completion.FinishReason
-			usage = completion.Usage
-			calls = completion.ToolCalls
-		}
-		entry := l.modelEntryForTurn(ctx, providerID, model)
-		return completion, nil, modelcall.EmptyOrTruncatedOutputError(providerID, model, finishReason, false, finishReason != "", usage, req.MaxTokens, entry, calls)
+		return completion, nil, emptyOrTruncatedCompletionError(ctx, l, req, providerID, model, completion)
 	}
 	if isCoordinatorTurn {
 		l.publishLLMCallOK(ctx, sess, sessionID, llmCallID, providerID, model, completion.Usage,
