@@ -37,14 +37,14 @@ stdenvNoCC.mkDerivation {
     mkdir -p "$root/engine-root/generation"
     install -m644 ${nativegen}/lib/libnativegen_vulkan.so "$root/engine-root/generation/"
     install -m755 ${document-core}/bin/pw-document-core "$root/bin/pw-document-core"
-    # Outside NixOS no driver environment is selected by the system configuration, and
-    # host-installed drivers are foreign to the generation, so the closure's Mesa is the
-    # explicit EGL, GBM and Vulkan driver. An explicitly set variable is kept.
+    # Mesa supplies the desktop defaults outside NixOS.
     for driver in ${mesa}/share/glvnd/egl_vendor.d/50_mesa.json ${mesa}/lib/gbm ${mesa}/lib/dri; do
       test -e "$driver"
     done
     vulkan_drivers=$(printf '%s:' ${mesa}/share/vulkan/icd.d/*.json)
     test -e "''${vulkan_drivers%%:*}"
+    ${python3}/bin/python3 -c 'import json,sys; json.dump({"format_version": 1, "mesa_icds": sys.argv[2:]}, open(sys.argv[1], "w"))' \
+      "$root/engine-root/generation/vulkan-drivers.json" ${mesa}/share/vulkan/icd.d/*.json
     graphics='[ -e /run/opengl-driver ] || {
       export __EGL_VENDOR_LIBRARY_DIRS="''${__EGL_VENDOR_LIBRARY_DIRS:-${mesa}/share/glvnd/egl_vendor.d}"
       export GBM_BACKENDS_PATH="''${GBM_BACKENDS_PATH:-${mesa}/lib/gbm}"
