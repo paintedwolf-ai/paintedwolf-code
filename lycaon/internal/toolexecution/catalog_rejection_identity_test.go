@@ -137,8 +137,8 @@ func TestCatalogCapabilityRecoveryUsesInvocationContract(t *testing.T) {
 	if strings.Contains(text, "accepts no execution capability request") {
 		t.Fatalf("command capability rejection falsely claimed no capabilities are accepted: %s", text)
 	}
-	if !strings.Contains(text, "write_root") || strings.Contains(text, "Fix:") {
-		t.Fatalf("unbound parse rejection acquired an invocation repair: %s", text)
+	if !strings.Contains(text, "write_root") || !strings.Contains(text, "following this tool's schema") {
+		t.Fatalf("parse rejection lost the receiving tool schema: %s", text)
 	}
 }
 
