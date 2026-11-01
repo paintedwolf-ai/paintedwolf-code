@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from artifact_paths import artifact_root, bin_dir, compiler_cache_dir
 from sources import ensure_source
 import swift_toolchain
+import vulkan_tools
 from provenance import record_build, verified_build, file_digest
 
 PINS = json.loads(Path(__file__).with_name("sources.json").read_text())
@@ -41,13 +42,15 @@ def prepare(args):
             raise ValueError("system build tools are only prepared for the Linux Vulkan candidate")
         run(["sudo", "-n", "apt-get", "update"])
         run(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends",
-             "cmake", "ninja-build", "libvulkan-dev", "glslc", "glslang-tools"])
+             "cmake", "ninja-build", "libvulkan-dev"])
     if args.backend == "reference-swift":
         source, build = paths(args.backend)
         compiler = swift_toolchain.prepare(bin_dir(ROOT))
         run([compiler, "package", "--package-path", source, "--scratch-path", build, "resolve"])
         return
     if args.backend == "reference-llama":
+        if sys.platform == "linux":
+            vulkan_tools.prepare(bin_dir(ROOT))
         print(ensure_source(PINS["llama.cpp"], bin_dir(ROOT) / "generation-sources"))
     elif args.backend == "reference-mlx":
         if sys.platform != "darwin" or platform.machine() != "arm64":
@@ -117,7 +120,11 @@ def build(args):
         if sys.platform == "darwin":
             options += ["-DGGML_METAL=ON", "-DGGML_METAL_EMBED_LIBRARY=ON"]
         elif sys.platform == "linux":
-            options += ["-DGGML_VULKAN=ON"]
+            sdk = bin_dir(ROOT) / ("vulkan-tools-" + vulkan_tools.VERSION)
+            if not (sdk / "bin/glslc").is_file():
+                raise ValueError("prepare the Linux Vulkan tools before building")
+            options += ["-DGGML_VULKAN=ON", "-DVulkan_GLSLC_EXECUTABLE=" + str(sdk / "bin/glslc"),
+                        "-DVulkan_INCLUDE_DIR=" + str(sdk / "include")]
         else:
             raise ValueError("generation requires macOS or Linux")
         run(["cmake", "-S", Path(__file__).parent / "llama-reference", "-B", output,
