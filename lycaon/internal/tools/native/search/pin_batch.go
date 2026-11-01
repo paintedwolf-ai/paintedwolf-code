@@ -24,6 +24,10 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 		}
 		inv.pinReleases = append(inv.pinReleases, release)
 	}
+	revision.Role = toolcontract.ExecutionRevisionRole(strings.Clone(string(revision.Role)))
+	revision.Mode = toolcontract.ExecutionRevisionMode(strings.Clone(string(revision.Mode)))
+	revision.Basis = toolcontract.ExecutionRevisionBasis(strings.Clone(string(revision.Basis)))
+	revision.Representation = toolcontract.SourceRepresentation(strings.Clone(string(revision.Representation)))
 	revision.RootID = strings.Clone(revision.RootID)
 	revision.Path = strings.Clone(revision.Path)
 	revision.DocumentID = strings.Clone(revision.DocumentID)
