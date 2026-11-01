@@ -1,10 +1,10 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/pkg/api"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -354,7 +354,6 @@ func TestDoomLoopPageResolverWiringOrder(t *testing.T) {
 		})
 	}
 }
-
 
 func TestFirstChecklistPublicationResolvesMissingProgressWithoutGeneralAdvancement(t *testing.T) {
 	manager, sessions := newTestManager(t)

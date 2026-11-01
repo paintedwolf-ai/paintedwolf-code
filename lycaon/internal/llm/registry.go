@@ -43,10 +43,10 @@ type registryRouting struct {
 
 type registryCore struct {
 	registryState
-	discovery            *discovery.Cache
-	cloudflareUsage      *openaicompat.CloudflareUsageCache
-	discoveryClient      *http.Client
-	roleExclusions       RoleExclusions
+	discovery       *discovery.Cache
+	cloudflareUsage *openaicompat.CloudflareUsageCache
+	discoveryClient *http.Client
+	roleExclusions  RoleExclusions
 	// modelFeed has independent synchronization.
 	modelFeed atomic.Pointer[modelfeed.Feed]
 	listCache *catalogruntime.SnapshotCache[[]api.ProviderMeta]

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcommand"
@@ -30,6 +31,15 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
 	// Exits render their own rejects; this is the backstop for one that does not.
 	defer func() {
+		if err != nil && !errors.Is(err, context.Canceled) && toolrejection.AsToolReject(err) == nil {
+			var socketErr *confine.SocketResolveError
+			if errors.As(err, &socketErr) || errors.Is(err, socketref.ErrUnbound) && len(tc.Socket.SocketGrants) > 0 {
+				if socketErr == nil {
+					socketErr = &confine.SocketResolveError{Code: confine.SocketResolveChanged, Err: err}
+				}
+				err = e.Rejections.settleReject(ctx, qualifiedName, tc.Identity.Agent, args, capabilityrequest.SocketResolveReject(socketErr))
+			}
+		}
 		err = e.Rejections.renderUnrenderedReject(qualifiedName, err)
 		if tc.Effects.Out != nil && strings.HasPrefix(qualifiedName, "mcp_") {
 			tc.Effects.Out.Facts.ProviderErrorCode = oar.MCPMachineErrorCode(err)

@@ -14,6 +14,7 @@ type checkpointText struct {
 	explanation ApprovalExplanation
 	reason      string
 	subjects    []string
+	rules       []ApprovalRuleMatch
 }
 
 func checkpointPresentationText(req CheckpointRequest) (checkpointText, error) {
@@ -23,6 +24,10 @@ func checkpointPresentationText(req CheckpointRequest) (checkpointText, error) {
 	}
 	result.title = observability.RedactCaptureText(req.Title)
 	result.description = observability.RedactCaptureText(req.Description)
+	result.rules = append([]ApprovalRuleMatch(nil), req.ApprovalMatches...)
+	for n := range result.rules {
+		result.rules[n].Command = observability.RedactCaptureText(result.rules[n].Command)
+	}
 	if req.Explanation != nil {
 		result.explanation = ApprovalExplanation{
 			What: observability.RedactCaptureText(req.Explanation.What), Who: observability.RedactCaptureText(req.Explanation.Who),
@@ -50,9 +55,9 @@ func (i *NativeActionInputs) inspectCheckpointText(req CheckpointRequest) (check
 	if r.closed || r.ctx == nil || r.projection == nil {
 		return result, fmt.Errorf("native checkpoint requires live bounded capture producer")
 	}
-	count := 0
+	count := len(req.ApprovalMatches)
 	if req.Repeat != nil {
-		count = len(req.Repeat.Subjects)
+		count += len(req.Repeat.Subjects)
 	}
 	if int64(count) > (math.MaxInt64-8192)/128 {
 		return result, fmt.Errorf("native checkpoint text bound overflow")
@@ -68,6 +73,11 @@ func (i *NativeActionInputs) inspectCheckpointText(req CheckpointRequest) (check
 	if req.Repeat != nil {
 		fields["reason"], fields["subjects"] = req.Repeat.ReasonKey, req.Repeat.Subjects
 	}
+	ruleCommands := make([]string, len(req.ApprovalMatches))
+	for n, rule := range req.ApprovalMatches {
+		ruleCommands[n] = rule.Command
+	}
+	fields["rule_commands"] = ruleCommands
 	screened, err := r.projectInspection(fields)
 	if err != nil {
 		return result, err
@@ -87,5 +97,19 @@ func (i *NativeActionInputs) inspectCheckpointText(req CheckpointRequest) (check
 		}
 	}
 	result.subjects, err = r.inspectionStrings(screened["subjects"])
-	return result, err
+	if err != nil {
+		return checkpointText{}, err
+	}
+	ruleCommands, err = r.inspectionStrings(screened["rule_commands"])
+	if err != nil {
+		return checkpointText{}, err
+	}
+	if len(ruleCommands) != len(req.ApprovalMatches) {
+		return checkpointText{}, fmt.Errorf("native checkpoint changed rule commands shape")
+	}
+	result.rules = append([]ApprovalRuleMatch(nil), req.ApprovalMatches...)
+	for n := range result.rules {
+		result.rules[n].Command = ruleCommands[n]
+	}
+	return result, nil
 }

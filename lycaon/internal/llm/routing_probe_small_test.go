@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/cost"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/pricing"
@@ -18,8 +20,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 )
 
 // terminalErrorStream answers inside the stream, as Converse does.

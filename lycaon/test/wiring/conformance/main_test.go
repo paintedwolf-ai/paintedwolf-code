@@ -9,6 +9,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	setReferenceUmask()
 	gittestsetup.Enable()
 	os.Exit(wiring.RunReleasingHosts(m))
 }

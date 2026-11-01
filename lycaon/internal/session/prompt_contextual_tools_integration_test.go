@@ -38,7 +38,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	}
 	specSession, err := specFix.Store.Get(t.Context(), specFix.Sess.ID)
 	testutil.FailErr(t, "read spec workflow posture", err)
-	if specSession.Posture != api.SessionPostureSpec || !hasTool(rec.LastRequest().Tools, "read") {
+	if specSession.Posture != api.SessionPostureSpec || !hasTool(rec.LastRequest().Tools, "command") {
 		t.Fatalf("spec workflow lost its reading posture: posture=%s tools=%v", specSession.Posture, toolNames(rec.LastRequest().Tools))
 	}
 	for _, tool := range rec.LastRequest().Tools {
@@ -227,8 +227,8 @@ func TestWorkerChildPromptUsesToolPolicy(t *testing.T) {
 		}
 		return false
 	}
-	if !has("write") || !has("edit") || !has("replace_lines") {
-		t.Fatalf("implementer child must list write/edit/replace_lines on wire, got %v", names)
+	if !has("command") || !has("edit") || !has("replace_lines") {
+		t.Fatalf("implementer child must list command/edit/replace_lines on wire, got %v", names)
 	}
 }
 

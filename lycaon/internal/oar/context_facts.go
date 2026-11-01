@@ -3,20 +3,20 @@ package oar
 import "sync"
 
 type InvocationFacts struct {
-	Tool                  string
-	ToolArgs              map[string]any
-	ToolArgsFingerprint   string
-	ToolAllowedForProfile bool
-	PatternParseOK        bool
-	ArgValidationErrors   []string
-	ArgValidationReason   string
-	ArgValidationField    string
-	ToolIsState           bool
-	ToolIsDelegation      bool
-	ToolIsTask            bool
-	ToolPayloadChunkable  bool
-	ToolIsHandoff         bool
-	PackRunnerTask        bool
+	Tool                            string
+	ToolArgs                        map[string]any
+	ToolArgsFingerprint             string
+	ToolAllowedForProfile           bool
+	PatternParseOK                  bool
+	ArgValidationErrors             []string
+	ArgValidationReason             string
+	ArgValidationField              string
+	ToolIsState                     bool
+	ToolIsDelegation                bool
+	ToolIsTask                      bool
+	ToolPayloadChunkable            bool
+	ToolIsHandoff                   bool
+	PackRunnerTask                  bool
 	CommandNotArgv                  bool
 	HTTPRequestWebPage              bool
 	HTTPRequestLoopbackOtherSession bool

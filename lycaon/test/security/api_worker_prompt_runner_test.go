@@ -19,11 +19,8 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 			Pattern: "implement feature",
 			ToolCalls: []llm.MockToolCall{{
 				ID:   "w1",
-				Name: "write",
-				Args: map[string]any{
-					"path":    "feature.go",
-					"content": "package feature\n",
-				},
+				Name: "command",
+				Args: map[string]any{"command": "printf 'package feature\\n' > feature.go"},
 			}},
 			FollowUpText: "implemented feature X",
 		},

@@ -67,3 +67,19 @@ func TestHarnessProviderProbeDoesNotBypassUnsupportedRole(t *testing.T) {
 		t.Fatalf("provider requests preceded role validation: %+v", result)
 	}
 }
+
+func TestHarnessProviderProbeIncludesOutputCeilingDiagnostic(t *testing.T) {
+	discovery := newProvADiscoveryServer(t)
+	catalog := strings.Replace(fakeProvidersYAML(discovery.URL), "- id: model-x", "- id: model-x\n        max_tokens: 4096\n        provider_max_tokens: 65536", 1)
+	server, _ := newProviderTestServerWithCatalogs(t, catalog, catalog)
+	result := server.Routes.HarnessProviders.probeProviderConversation(t.Context(), harnessProviderProbeRequest{
+		Provider: testProviderID, Model: "model-x", Role: llm.PolicySlotCoordinator,
+	})
+	if result["configured_max_tokens"] != 4096 || result["provider_max_tokens"] != 65536 {
+		t.Fatalf("missing output ceiling bounds: %+v", result)
+	}
+	diag, _ := result["output_ceiling_diagnostic"].(string)
+	if !strings.Contains(diag, "4096") || !strings.Contains(diag, "65536") || result["output_ceiling"] == nil {
+		t.Fatalf("missing output ceiling diagnostic: %+v", result)
+	}
+}

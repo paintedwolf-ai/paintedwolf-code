@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/modelfeed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -15,7 +16,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 )
 
 type outcomeScriptedProvider struct {

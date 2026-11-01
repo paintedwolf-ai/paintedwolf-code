@@ -3,11 +3,13 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerauth"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -17,8 +19,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 )
 
 // MinimalShipHTTPRetryYAML is an indented http_retry block for synthetic ship

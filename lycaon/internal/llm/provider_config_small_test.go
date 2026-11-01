@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
@@ -21,7 +22,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 )
 
 func TestDeviceConfigFilesUnchangedByOpen(t *testing.T) {

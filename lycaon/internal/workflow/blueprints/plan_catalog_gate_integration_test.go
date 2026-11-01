@@ -13,7 +13,7 @@ import (
 func TestResearchDepthNoneSetsResearchPhaseSkippedPredicate(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)

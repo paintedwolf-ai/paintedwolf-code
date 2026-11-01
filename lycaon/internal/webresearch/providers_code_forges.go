@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/webindex"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/url"
 	"strings"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 const (
