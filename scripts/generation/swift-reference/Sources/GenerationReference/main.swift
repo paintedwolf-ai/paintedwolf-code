@@ -76,9 +76,17 @@ do {
         throw ReferenceFailure("Benchmark dimensions exceed their bounds")
     }
     Memory.cacheLimit = 128 << 20
+    let loadingStart = ProcessInfo.processInfo.systemUptime
     let model = try loadReference(directory: directory, mappedPLE: spec.ple == "mapped")
+    let loadingSeconds = ProcessInfo.processInfo.systemUptime - loadingStart
+    let loadingPeak = Memory.peakMemory
+    var loadingUsage = rusage()
+    getrusage(RUSAGE_SELF, &loadingUsage)
     for trial in 0 ... spec.trials {
         var result = try measure(model, spec)
+        result["load_seconds"] = loadingSeconds
+        result["load_peak_mlx_bytes"] = loadingPeak
+        result["load_peak_process_rss_bytes"] = loadingUsage.ru_maxrss
         result["trial"] = trial
         result["warmup"] = trial == 0
         result["ple"] = spec.ple
