@@ -552,7 +552,7 @@
       "branch_instruction": "Check the recorded results before retrying the remaining work.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "This command reached its {{ paintedwolf.limit_id }} limit ({{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }})."
+      "summary": "Command limit reached: {{ paintedwolf.limit_id }}. Observed {{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }}."
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
       "branch_instruction": "Use a supported command form.",
@@ -567,7 +567,7 @@
       "summary": "{% if paintedwolf.shell_metacharacters %}command rejected — unquoted shell metacharacters in `{{ paintedwolf.command }}`{% else %}command `{{ paintedwolf.command }}` is not a single argv vector{% endif %}"
     },
     "COMMAND_NOT_FOUND": {
-      "branch_instruction": "Retry with a resolvable argv0 or absolute path — do not repeat the missing name",
+      "branch_instruction": "Correct the executable path before retrying this operation.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}` is not on PATH for this confined run.{% else %}An executable named in the command line is not on PATH for this confined run.{% endif %}"
@@ -576,7 +576,7 @@
       "branch_instruction": "Correct the operand using its typed details and the focused command help, then submit a new action after reviewing earlier effects.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "One command operand cannot be used as supplied."
+      "summary": "{% if paintedwolf.parser_message %}Shell source encoding error at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}: {{ paintedwolf.parser_message }}.{% else %}One command operand cannot be used as supplied.{% endif %}"
     },
     "COMMAND_OPERATION_NOT_ALLOWED": {
       "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
@@ -639,16 +639,16 @@
       "summary": "{% if paintedwolf.unsaved_draft %}{{ paintedwolf.path }} has unsaved changes in the editor, so this operation did not write there.{% else %}{{ paintedwolf.path }} changed after the program captured it, so this operation did not publish.{% endif %}"
     },
     "COMMAND_SYNTAX_INVALID": {
-      "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
+      "branch_instruction": "{% if paintedwolf.diagnostic_top_level %}Resubmit the complete corrected command.{% else %}Inspect completed and uncertain operations before submitting the remaining work.{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
+      "summary": "Shell syntax error{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}: {% if paintedwolf.parser_message %}{{ paintedwolf.parser_message }}{% else %}{{ paintedwolf.expected_form }}{% endif %}."
     },
     "COMMAND_SYNTAX_UNSUPPORTED": {
-      "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
+      "branch_instruction": "{% if paintedwolf.diagnostic_top_level %}Resubmit the complete corrected command.{% else %}Inspect recorded effects before submitting remaining work.{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "This shell form is not supported at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
+      "summary": "Unsupported shell form at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}: {% if paintedwolf.parser_message %}{{ paintedwolf.parser_message }}{% else %}{{ paintedwolf.expected_form }}{% endif %}."
     },
     "COMMAND_TLS_VERIFICATION_REQUIRED": {
       "branch_instruction": "Send the request without -k; do not retry through an external program.",
@@ -1835,13 +1835,13 @@
     "POLICY_CONTEXT_CHANGED": {
       "branch_instruction": "Continue read-only investigation, then propose only the remaining effects after fresh guidance is delivered.",
       "category": "recoverable",
-      "emit": "native",
+      "emit": "guard:tool",
       "summary": "The reached operation did not run because its applicable project guidance was not included in the proposing model request."
     },
     "POLICY_CONTEXT_UNAVAILABLE": {
       "branch_instruction": "Continue read-only investigation of accessible sources while resolving the reported workspace or policy access problem.",
       "category": "recoverable",
-      "emit": "native",
+      "emit": "guard:tool",
       "summary": "The reached operation did not run because its applicable project guidance could not be resolved."
     },
     "POLICY_WRITE_REQUIRES_COMMAND": {
@@ -2360,7 +2360,7 @@
       "branch_instruction": "Branch on Code; re-request after the socket path is stable",
       "category": "recoverable",
       "emit": "guard:sandbox_socket",
-      "summary": "A host-approved socket grant could not be revalidated before use."
+      "summary": "A host-approved socket grant is no longer usable for this invocation."
     },
     "SANDBOX_SOCKET_PATH_DENIED": {
       "branch_instruction": "Respect this rejection; fresh user direction permits a new approval request",
@@ -2689,7 +2689,7 @@
       "summary": "Session scratch is unavailable in this chat, so {{ paintedwolf.path }} has no folder to resolve against."
     },
     "SKILL_RESOURCE_UNKNOWN": {
-      "branch_instruction": "Branch on Code SKILL_RESOURCE_UNKNOWN; choose a listed skill resource",
+      "branch_instruction": "{% if paintedwolf.available %}Branch on Code SKILL_RESOURCE_UNKNOWN; choose a listed skill resource{% else %}Branch on Code SKILL_RESOURCE_UNKNOWN; do not request a supporting resource for {{ paintedwolf.name }}{% endif %}",
       "category": "recoverable",
       "emit": "guard:skills_read",
       "summary": "Skill {{ paintedwolf.name }} has no readable resource at {{ paintedwolf.resource }}."
