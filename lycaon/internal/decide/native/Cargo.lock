@@ -738,6 +738,7 @@ dependencies = [
  "burn-backend",
  "burn-backend-extension",
  "burn-cpu",
+ "burn-cubecl",
  "burn-cuda",
  "burn-derive",
  "burn-dispatch",
