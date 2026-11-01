@@ -24,7 +24,7 @@ func (r *Registry) CanPrepareContext(providerID string) bool {
 	if snapshot == nil || !snapshot.configured[id] || snapshot.entries[id].Kind != "nativegen" {
 		return false
 	}
-	_, ok := snapshot.providers[id].(modelcall.ContextPreparer)
+	_, ok := contextPreparer(snapshot.providers[id])
 	return ok
 }
 
@@ -39,7 +39,7 @@ func (r *Registry) PrepareContext(ctx context.Context, selection *ModelSelection
 		return modelcall.ContextPreparation{}, nil
 	}
 	provider := snapshot.providers[id]
-	preparer, ok := provider.(modelcall.ContextPreparer)
+	preparer, ok := contextPreparer(provider)
 	if !ok {
 		return modelcall.ContextPreparation{}, nil
 	}
@@ -84,4 +84,12 @@ func (s *ModelSecretScreen) ScreenPreparation(ctx context.Context, req modelcall
 	}
 	ctx = s.matcher.WithClassifications(ctx, s.matcher.ClassificationSnapshot(ctx))
 	return len(inspectModelRequest(ctx, s.matcher, req)) == 0, nil
+}
+
+func contextPreparer(provider modelcall.Provider) (modelcall.ContextPreparer, bool) {
+	if logged, ok := provider.(*loggingProvider); ok {
+		provider = logged.inner
+	}
+	preparer, ok := provider.(modelcall.ContextPreparer)
+	return preparer, ok
 }
