@@ -1,6 +1,7 @@
 #include "adapter.h"
 #include "artifact.h"
 #include "llama-ext.h"
+#include "llama-kv-cache-iswa.h"
 #include "llama.h"
 #include "ggml-backend.h"
 #include <algorithm>
@@ -180,7 +181,13 @@ extern "C" int pw_generation_cache(pw_generation * engine, int operation,
             if (!engine->position || engine->position > engine->prefix_limit)
                 throw std::runtime_error("prefix exceeds its allocation");
             if (!llama_memory_seq_rm(memory, 1, -1, -1)) throw std::runtime_error("prefix reset failed");
-            llama_memory_seq_cp(memory, 0, 1, -1, -1);
+            {
+                auto * cache = dynamic_cast<llama_kv_cache_iswa *>(memory);
+                if (!cache) throw std::runtime_error("E4B requires separate global and sliding caches");
+                cache->get_base()->seq_cp(0, 1, -1, -1);
+                // Only live sliding rows may be pinned by the retained prefix.
+                cache->get_swa()->seq_cp(0, 1, std::max(0, static_cast<int>(engine->position) - 512), -1);
+            }
             engine->prefix_position = engine->position;
             break;
         case 2:
