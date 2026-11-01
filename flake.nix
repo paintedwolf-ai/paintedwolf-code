@@ -49,6 +49,7 @@
           };
           resources = pkgs.callPackage ./packaging/nix/resources.nix { source = self; inherit frontend; };
           nativegen = pkgs.callPackage ./packaging/nix/nativegen.nix { source = self; };
+          model-bundle = pkgs.callPackage ./packaging/nix/model-bundle.nix { source = self; };
           bialy = pkgs.callPackage ./packaging/nix/bialy.nix { source = self; };
           document-core = pkgs.callPackage ./packaging/nix/document-core.nix { source = self; };
           shell = pkgs.callPackage ./packaging/nix/shell.nix { source = self; inherit frontend; };
@@ -70,7 +71,8 @@
           engine = pkgs.callPackage ./packaging/nix/engine.nix {
             source = self;
           };
-          inherit frontend resources shell bialy nativegen document-core bound-engine desktop-settings-observer;
+          inherit frontend resources shell bialy nativegen model-bundle document-core bound-engine desktop-settings-observer;
+          generation-seed-check = pkgs.callPackage ./packaging/nix/generation-seed-check.nix { source = self; };
           desktop-shell-check = shell.overrideAttrs (_: {
             doCheck = true;
             cargoCheckType = "release";

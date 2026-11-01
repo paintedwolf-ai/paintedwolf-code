@@ -275,3 +275,25 @@ directory's `health/` subdirectory. These contain only the epoch, utility purpos
 reason and timestamp. They let a runner stop after repeated truncated compaction
 summaries without parsing provider error prose or capturing utility payloads. The
 receipt exporter does not traverse that directory; they are diagnostic evidence, never training rows.
+
+### Nix seed assembly
+
+The release factory supplies `generationRelease` when constructing
+`packaging/nix/resources.nix`. It contains `manifest`, `authority`, `payloads`
+(an attribute set of exact filenames to immutable file inputs), and the model's
+`license` metadata. Use independently pinned public release files, never a
+signing workspace or a private key directory. The factory must supply this
+input for a release that includes the local generation model; the default
+source package has no trained release artifact selected.
+
+`generation-seed.nix` requires the payload names to exactly match the signed
+manifest, copies those files into the Vulkan seed layout, and authenticates the
+copied bytes with `model-bundle` before publishing the derivation. The packaged
+host repeats authentication when importing its writable model store. The
+build-time verifier is not a runtime dependency. Resource closure notices retain
+the supplied model license metadata.
+
+`./task nix:build -- --component generation-seed-check` builds the seed path
+using a small signed packaging fixture and checks invalid input sets at
+evaluation. Its fixture key is test-only (seed bytes 0 through 31); its payload
+is not a model and must never be selected as a release resource.

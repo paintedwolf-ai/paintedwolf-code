@@ -21,7 +21,7 @@ SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 CREDENTIALS = ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY", "FEED_SIGNING_KEYS_JSON",
                "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
-COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "nativegen", "document-core",
+COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "nativegen", "model-bundle", "generation-seed-check", "document-core",
               "desktop-settings-observer", "desktop-shell-check", "resources", "browser", "gitengine", "ocr",
               "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools",
               "closure-notices", "scanner-host-tools", "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm",
