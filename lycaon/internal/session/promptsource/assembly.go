@@ -146,12 +146,16 @@ func (m *Assembly) PromptTools(ctx context.Context, sess *api.Session, profileID
 	if m == nil || sess == nil {
 		return nil, nil
 	}
+	return m.ProjectPromptTools(ctx, sess, m.Profiles.ProjectMachine(ctx, sess, profileID))
+}
+
+// ProjectPromptTools uses an already projected machine.
+func (m *Assembly) ProjectPromptTools(ctx context.Context, sess *api.Session, machine inject.Machine) ([]tools.ToolMeta, error) {
 	policy := m.Guards.Policy()
 	if policy == nil {
 		return nil, nil
 	}
-	metas := policy.ListForPrompt(ctx, sess, profileID)
-	machine := m.Profiles.CompileMachine(ctx, sess, profileID)
+	metas := policy.ListForPrompt(ctx, sess, machine.ProfileID)
 	return tools.HideSkillsReadWhenEmpty(metas, machine.SkillCount), nil
 }
 

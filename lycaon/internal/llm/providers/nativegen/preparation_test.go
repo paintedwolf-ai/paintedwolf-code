@@ -51,7 +51,7 @@ func TestPreparationCancellationSettlesWithoutReload(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	child.output = &cancelOnRead{ReadCloser: child.output, cancel: cancel}
-	_, err := runtime.prefill(ctx, []uint32{2, 5, 6, 7, 8, 9})
+	_, err := runtime.prefill(ctx, []uint32{2, 5, 6, 7, 8, 9}, 0)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled preparation: %v", err)
 	}
@@ -66,9 +66,47 @@ func TestPreparationCancellationSettlesWithoutReload(t *testing.T) {
 func TestPreparationAdvancesAcrossBoundedChunks(t *testing.T) {
 	_, runtime := fixtureProvider(t)
 	testutil.FailErr(t, "warm model", runtime.Warm(t.Context(), DefaultModelID))
-	result, err := runtime.prefill(t.Context(), []uint32{2, 5, 6, 7, 8, 9, 10, 11, 12})
+	result, err := runtime.prefill(t.Context(), []uint32{2, 5, 6, 7, 8, 9, 10, 11, 12}, 3)
 	testutil.FailErr(t, "prepare multiple chunks", err)
 	if result.PreparedTokens != 9 || result.ReusedTokens != 0 {
 		t.Fatalf("preparation: %+v", result)
+	}
+}
+
+func TestPreparationPassesStandingBoundaryInsideKnownHistory(t *testing.T) {
+	t.Setenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES", "1")
+	provider, runtime := fixtureProvider(t)
+	testutil.FailErr(t, "warm model", runtime.Warm(t.Context(), DefaultModelID))
+	request := modelcall.CompletionRequest{Messages: []api.Message{
+		{Role: api.MessageRoleSystem, Content: "Instructions", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+		{Role: api.MessageRoleUser, Content: "Known history", PromptCacheBreakpoint: api.PromptCacheTierHistory},
+		{Role: api.MessageRoleAssistant, Content: "Answer"},
+	}}
+	result, err := provider.PrepareContext(t.Context(), request)
+	testutil.FailErr(t, "prepare known history with standing checkpoint", err)
+	if result.PreparedTokens != 2 {
+		t.Fatalf("prepared tokens = %d, want 2", result.PreparedTokens)
+	}
+}
+
+func TestPreparationRetainsStandingWhenHistoryExceedsContext(t *testing.T) {
+	t.Setenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES", "1")
+	t.Setenv("PW_NATIVEGEN_PREPARATION_STANDING_ONLY", "1")
+	provider, runtime := fixtureProvider(t)
+	testutil.FailErr(t, "warm model", runtime.Warm(t.Context(), DefaultModelID))
+	runtime.window.Store(2)
+	request := modelcall.CompletionRequest{Messages: []api.Message{
+		{Role: api.MessageRoleSystem, Content: "Instructions", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+		{Role: api.MessageRoleUser, Content: "Known history", PromptCacheBreakpoint: api.PromptCacheTierHistory},
+	}}
+	result, err := provider.PrepareContext(t.Context(), request)
+	testutil.FailErr(t, "prepare standing before history fitting", err)
+	if result.PreparedTokens != 1 {
+		t.Fatalf("prepared tokens = %d, want 1", result.PreparedTokens)
+	}
+	runtime.window.Store(1)
+	_, err = provider.PrepareContext(t.Context(), request)
+	if !errors.Is(err, ErrContextCapacityExceeded) {
+		t.Fatalf("oversized standing prefix: %v", err)
 	}
 }

@@ -55,6 +55,14 @@ func runtimeFixture() {
 				return
 			}
 			result = map[string]any{"kind": "measured", "input_tokens": 3, "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
+			if os.Getenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES") == "1" {
+				var render renderRequest
+				raw, _ := json.Marshal(request.Command.Request)
+				if json.Unmarshal(raw, &render) != nil {
+					os.Exit(6)
+				}
+				result["checkpoint_tokens"] = render.CheckpointMessages
+			}
 		case "render":
 			result = map[string]any{"kind": "rendered", "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
 		case "prepare":
@@ -62,12 +70,23 @@ func runtimeFixture() {
 			if err != nil || json.Unmarshal(raw, &prefix) != nil {
 				os.Exit(6)
 			}
+			expectedKnown := 2
+			if os.Getenv("PW_NATIVEGEN_PREPARATION_STANDING_ONLY") == "1" {
+				expectedKnown = 1
+			}
+			if os.Getenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES") == "1" && (prefix.CheckpointTokens != 1 || len(prefix.PromptTokens) != expectedKnown) {
+				os.Exit(7)
+			}
 			prefixProcessed = 0
 			result = map[string]any{"kind": "begun", "request_id": prefix.RequestID, "reused_prefix_tokens": 0}
 		case "advance_preparation", "cancel_preparation":
 			canceled := request.Command.Method == "cancel_preparation"
 			if !canceled {
-				prefixProcessed = min(prefixProcessed+chunk, len(prefix.PromptTokens))
+				end := min(prefixProcessed+chunk, len(prefix.PromptTokens))
+				if prefixProcessed < prefix.CheckpointTokens {
+					end = min(end, prefix.CheckpointTokens)
+				}
+				prefixProcessed = end
 			}
 			result = map[string]any{"kind": "preparation_progress", "progress": map[string]any{
 				"request_id": prefix.RequestID, "processed_prompt_tokens": prefixProcessed,

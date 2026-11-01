@@ -4,12 +4,12 @@
   "kind": "runtime_service",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the measured 303-line generation executor. Generation and preparation share one backend position and mutually exclusive request lifetime. Exact-prefix selection and prefill-only transitions live in child modules on that same executor, without another state owner. The 64-test Mac native suite covers declared boundaries, bounded preparation, cancellation, restoration and changed-token replay; the preparation lifecycle also passed the Linux suite.",
-  "reviewed_commit": "51b5fc4779251cbd9f85ba63b60c2340f0851fc5",
+  "reason": "Retain the measured 303-line generation executor. Generation and preparation share one backend position and mutually exclusive request lifetime. Cache eligibility and preparation remain child modules on that executor. The 68-test Mac native suite covers declared boundaries, bounded preparation, cancellation, exact reuse and changed-history fallback to a preserved standing checkpoint. Cold preparation stops at the standing boundary before evaluating history. No additional GPU bank is retained.",
+  "reviewed_commit": "02b78a117ca4ab41b2a2a95fee14d3a9bb46a8d6",
   "ceiling": 303,
   "boundaries": {
     "lycaon/internal/generation/native/src/execution_tests.rs": "2dd28fde63cd0c088de1f8c2592bd3a212c83ac6ef3c1ababc054d6015c4db4a",
-    "lycaon/internal/generation/native/src/execution/preparation_tests.rs": "b3c44b3d5c13bdbd376e3ca9b22fcd68cf91df64509cc8849a41357b41165708",
-    "lycaon/internal/generation/native/src/rendering_tests.rs": "f47b87be212829edb0d55643ef9c88904d8649e8024501070acd2f3f07a681ad"
+    "lycaon/internal/generation/native/src/execution/preparation_tests.rs": "9ffc4493ddcb33873f4b84e053b362b421c4f11fce4ccd357f0e25a432ae1dd2",
+    "lycaon/internal/generation/native/src/rendering_tests.rs": "a40b45b0c64cd8ee38dad77eacd0786f62e0df9051cbcc606e2fd45ea719edd0"
   }
 }
