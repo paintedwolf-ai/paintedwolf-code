@@ -184,6 +184,15 @@ screening and execution keep separate values; inspection never becomes execution
 authority. Retained input bodies have the invocation store's 8 MiB bound, and
 native review node admission derives from the catalog's expanded-field ceiling.
 
+### Batched command resources
+
+Batch-producing commands plan child argument bytes and fields against the
+remaining program resources and declared parallelism. Explicit item, line and
+exact-size constraints retain their command semantics. A resource refusal stops
+admission before effects; it never triggers replay of an attempted child.
+Input revision membership uses independently admitted buckets so a large file
+set does not require a second complete membership table during growth.
+
 ### Complete byte streams
 
 `commandprogram.BytePipe` uses unbuffered `io.Pipe` backpressure and an explicit
