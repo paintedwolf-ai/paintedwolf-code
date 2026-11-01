@@ -102,6 +102,13 @@ func CloudflareWorkersAI() Profile {
 	return profile
 }
 
+func Scaleway() Profile {
+	profile := OpenAI()
+	profile.ReasoningEffortOff = OpenAIReasoningEffortOff
+	profile.ReasoningWire = ReasoningWireContent
+	return profile
+}
+
 func Openrouter() Profile {
 	profile := OpenAI()
 	profile.DiscoveryProfile = discovery.OpenRouterProfile()

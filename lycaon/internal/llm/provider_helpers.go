@@ -213,6 +213,7 @@ func azureV1Base(raw string) string {
 }
 
 var providerKindSpecs = map[string]ProviderKindSpec{
+	"scaleway":              {Kind: "scaleway", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"openai":                {Kind: "openai", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"openai-compatible":     {Kind: "openai-compatible", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"azure":                 {Kind: "azure", Protocol: ProtocolOpenAICompat, ChatBaseURL: azureV1Base, ResourceRootOnly: true},

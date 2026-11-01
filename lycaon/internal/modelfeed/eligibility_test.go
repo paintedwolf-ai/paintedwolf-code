@@ -66,6 +66,17 @@ func TestEligibleModelsDropsNonChat(t *testing.T) {
 	if deepinfraIDs["Qwen/Qwen3-Embedding-8B"] {
 		t.Fatalf("expected deepinfra embedding dropped, got %v", deepinfraIDs)
 	}
+
+	scalewayIDs := map[string]bool{}
+	for _, m := range loadFixtureDoc(t).EligibleModels("scaleway") {
+		scalewayIDs[m.ID] = true
+	}
+	if !scalewayIDs["qwen3-235b-a22b-instruct-2507"] {
+		t.Fatalf("expected scaleway chat model kept, got %v", scalewayIDs)
+	}
+	if scalewayIDs["qwen3-embedding-8b"] {
+		t.Fatalf("expected scaleway embedding dropped, got %v", scalewayIDs)
+	}
 }
 
 func TestConversationEligibleKeepsFreeAndUnpricedChatModels(t *testing.T) {
