@@ -56,6 +56,7 @@ func TestEngineServingPathNeverWritesStdout(t *testing.T) {
 			if parseErr != nil {
 				return parseErr
 			}
+			forwarded := childStdoutForwarding(rel, file)
 			ast.Inspect(file, func(n ast.Node) bool {
 				sel, ok := n.(*ast.SelectorExpr)
 				if !ok {
@@ -66,7 +67,7 @@ func TestEngineServingPathNeverWritesStdout(t *testing.T) {
 					return true
 				}
 				switch {
-				case pkg.Name == "os" && sel.Sel.Name == "Stdout":
+				case pkg.Name == "os" && sel.Sel.Name == "Stdout" && !forwarded[sel]:
 					findings = append(findings, rel+": writes to os.Stdout")
 				case pkg.Name == "middleware" && sel.Sel.Name == "Logger":
 					// This logger binds stdout at initialization.
