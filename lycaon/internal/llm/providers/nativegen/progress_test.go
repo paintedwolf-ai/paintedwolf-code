@@ -1,24 +1,24 @@
 package nativegen
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+)
 
 func TestProgressTracksBoundedPrefillAndOneTokenDecode(t *testing.T) {
 	cursor := &progressCursor{requestID: 9, prompt: 6, maximum: 2, chunk: 4}
 	first := &progressResult{expected: cursor}
 	first.Progress.RequestID = 9
 	first.Progress.ProcessedPromptTokens = 4
-	if err := first.validate(); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "validate prefill progress", first.validate())
 	token := uint32(12)
 	second := &progressResult{expected: cursor, Text: "answer"}
 	second.Progress.RequestID = 9
 	second.Progress.ProcessedPromptTokens = 6
 	second.Progress.GeneratedTokens = 1
 	second.Progress.Token = &token
-	if err := second.validate(); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "validate decode progress", second.validate())
 	stop := "eos"
 	last := &progressResult{expected: cursor}
 	last.Progress.RequestID = 9
@@ -30,6 +30,37 @@ func TestProgressTracksBoundedPrefillAndOneTokenDecode(t *testing.T) {
 	}
 	if err := last.validate(); err == nil {
 		t.Fatal("accepted a repeated terminal step")
+	}
+}
+
+func TestProgressRequiresTheRequestedTerminationContract(t *testing.T) {
+	for _, tc := range []struct {
+		stop     string
+		schema   bool
+		accepted bool
+	}{
+		{"structured_output", false, false},
+		{"structured_output", true, true},
+		{"stop_token", false, false},
+	} {
+		t.Run(tc.stop+"_schema_"+map[bool]string{false: "absent", true: "present"}[tc.schema], func(t *testing.T) {
+			cursor := &progressCursor{requestID: 1, prompt: 2, processed: 2, maximum: 4, chunk: 2, schema: tc.schema}
+			result := &progressResult{expected: cursor}
+			result.Progress.RequestID = 1
+			result.Progress.ProcessedPromptTokens = 2
+			result.Progress.GeneratedTokens = 1
+			result.Progress.StopReason = &tc.stop
+			if tc.stop == "structured_output" {
+				token := uint32(12)
+				result.Progress.Token = &token
+			}
+			if err := result.validate(); (err == nil) != tc.accepted {
+				t.Fatalf("termination acceptance = %v, want %v: %v", err == nil, tc.accepted, err)
+			}
+			if cursor.terminal != tc.accepted {
+				t.Fatalf("terminal cursor = %v, want %v", cursor.terminal, tc.accepted)
+			}
+		})
 	}
 }
 

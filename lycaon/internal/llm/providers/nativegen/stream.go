@@ -58,7 +58,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		return nil, err
 	}
 	maximum := outputLimit(req)
-	if maximum <= 0 || maximum >= p.runtime.config.ContextLimit {
+	if maximum <= 0 || maximum >= p.runtime.ContextWindow() {
 		release()
 		return nil, ErrContextCapacityExceeded
 	}
@@ -81,10 +81,10 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json.RawMessage, maximum int) (*progressCursor, error) {
 	child := p.loaded.process
 	var rendered renderedResult
-	if err := child.call(ctx, command{Method: "render", Request: render, MaxPromptTokens: p.config.ContextLimit - maximum}, "rendered", inference.Foreground, false, &rendered); err != nil {
+	if err := child.call(ctx, command{Method: "render", Request: render, MaxPromptTokens: p.ContextWindow() - maximum}, "rendered", inference.Foreground, false, &rendered); err != nil {
 		return nil, err
 	}
-	if len(rendered.PromptTokens) == 0 || len(rendered.PromptTokens)+maximum > p.config.ContextLimit || rendered.CheckpointTokens < 0 || rendered.CheckpointTokens > 4096 || rendered.CheckpointTokens >= len(rendered.PromptTokens) {
+	if len(rendered.PromptTokens) == 0 || len(rendered.PromptTokens)+maximum > p.ContextWindow() || rendered.CheckpointTokens < 0 || rendered.CheckpointTokens > 4096 || rendered.CheckpointTokens >= len(rendered.PromptTokens) {
 		child.close()
 		return nil, errors.New("native generation: invalid rendered context")
 	}
@@ -109,7 +109,7 @@ func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json
 		child.close()
 		return nil, errors.New("native generation: invalid prefix acknowledgement")
 	}
-	return &progressCursor{requestID: request.RequestID, prompt: len(rendered.PromptTokens), processed: begun.ReusedPrefixTokens, reused: begun.ReusedPrefixTokens, maximum: maximum, chunk: p.config.PrefillChunk}, nil
+	return &progressCursor{requestID: request.RequestID, prompt: len(rendered.PromptTokens), processed: begun.ReusedPrefixTokens, reused: begun.ReusedPrefixTokens, maximum: maximum, chunk: p.config.PrefillChunk, schema: len(schema) > 0}, nil
 }
 
 func (p *Runtime) finishRequest(cursor *progressCursor) {

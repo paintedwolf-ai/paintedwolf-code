@@ -174,7 +174,7 @@ func (c Config) Args() []string {
 		args = append(args, "--model-id", c.ModelID)
 	}
 	if c.Resources != nil {
-		args = append(args, "--device", c.Resources.deviceArgument())
+		args = append(args, "--device", c.Resources.deviceArgument(), "--max-rows", strconv.Itoa(c.Resources.MaxRows))
 	} else if c.Device != "" {
 		args = append(args, "--device", c.Device)
 	}

@@ -27,6 +27,37 @@ impl Settings {
     }
 
     fn parse(value: &Value) -> Result<Self> {
+        let fields = value.as_object().ok_or_else(invalid)?;
+        for key in fields.keys() {
+            if !matches!(
+                key.as_str(),
+                "bos_token_id"
+                    | "eos_token_id"
+                    | "pad_token_id"
+                    | "do_sample"
+                    | "temperature"
+                    | "top_p"
+                    | "top_k"
+                    | "transformers_version"
+                    | "_from_model_config"
+            ) {
+                return Err(Error::Checkpoint(format!(
+                    "unsupported generation setting: {key}"
+                )));
+            }
+        }
+        for (name, token) in [("bos_token_id", 2), ("pad_token_id", 0)] {
+            if value
+                .get(name)
+                .is_some_and(|value| value.as_u64() != Some(token))
+            {
+                return Err(invalid());
+            }
+        }
+        let sample = value
+            .get("do_sample")
+            .map_or(Some(false), Value::as_bool)
+            .ok_or_else(invalid)?;
         let tokens = match &value["eos_token_id"] {
             Value::Array(values) => values.clone(),
             value => vec![value.clone()],
@@ -54,10 +85,11 @@ impl Settings {
             .ok_or_else(invalid)? as f32;
         let top_k = value
             .get("top_k")
-            .map_or(Some(0), Value::as_u64)
+            .map_or(Some(50), Value::as_u64)
             .ok_or_else(invalid)?;
         if !temperature.is_finite()
             || temperature < 0.0
+            || sample && temperature == 0.0
             || !top_p.is_finite()
             || !(0.0 < top_p && top_p <= 1.0)
             || top_k > 262144
@@ -67,7 +99,7 @@ impl Settings {
         Ok(Self {
             eos,
             sampling: SamplingDefaults {
-                temperature,
+                temperature: if sample { temperature } else { 0.0 },
                 top_p,
                 top_k: top_k as usize,
             },
@@ -86,7 +118,7 @@ mod tests {
     #[test]
     fn preserves_artifact_sampling_and_stop_tokens() {
         let settings = Settings::parse(
-            &json!({"eos_token_id":[1,106,50],"temperature":1.0,"top_p":0.95,"top_k":64}),
+            &json!({"eos_token_id":[1,106,50],"do_sample":true,"temperature":1.0,"top_p":0.95,"top_k":64}),
         )
         .unwrap();
         assert_eq!(settings.eos, [1, 106, 50]);
@@ -97,8 +129,24 @@ mod tests {
             json!({"eos_token_id":1,"top_k":-1}),
             json!({"eos_token_id":1,"temperature":"1"}),
             json!({"eos_token_id":1,"top_p":0}),
+            json!({"eos_token_id":1,"do_sample":"true"}),
+            json!({"eos_token_id":1,"do_sample":true,"temperature":0}),
+            json!({"eos_token_id":1,"repetition_penalty":1.2}),
+            json!({"eos_token_id":1,"bos_token_id":3}),
         ] {
             assert!(Settings::parse(&value).is_err());
+        }
+    }
+
+    #[test]
+    fn greedy_configuration_does_not_silently_enable_sampling() {
+        for value in [
+            json!({"eos_token_id":1}),
+            json!({"eos_token_id":1,"do_sample":false,"temperature":0.7}),
+        ] {
+            let settings = Settings::parse(&value).unwrap();
+            assert_eq!(settings.sampling.temperature, 0.0);
+            assert_eq!(settings.sampling.top_k, 50);
         }
     }
 }

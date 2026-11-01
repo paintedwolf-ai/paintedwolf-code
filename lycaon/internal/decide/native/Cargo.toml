@@ -43,5 +43,9 @@ opt-level = 3
 lto = "thin"
 strip = true
 
+[profile.release.build-override]
+# Preserve loadable Mach-O metadata in compiler plugins.
+strip = "none"
+
 [patch.crates-io]
 mlx-sys = { path = "vendor/mlx-sys" }

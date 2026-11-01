@@ -4,6 +4,7 @@ package nativegen
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -23,6 +24,7 @@ type RuntimeConfig struct {
 	Devices        *inference.Devices
 	HostMemory     *inference.MemoryBudget
 	DeviceMemory   *inference.MemoryBudget
+	UnifiedMemory  bool
 	ModelStore     *modelstore.Store
 }
 
@@ -59,6 +61,7 @@ type Runtime struct {
 	gate       chan struct{}
 	loaded     *loadedProcess
 	generation uint64
+	window     atomic.Int64
 }
 
 func NewRuntime(config RuntimeConfig) *Runtime {
@@ -70,8 +73,22 @@ func NewRuntime(config RuntimeConfig) *Runtime {
 	}
 	lifetime, cancel := context.WithCancel(context.Background())
 	runtime := &Runtime{config: config, lifetime: lifetime, cancel: cancel, gate: make(chan struct{}, 1)}
+	runtime.window.Store(int64(config.ContextLimit))
 	runtime.gate <- struct{}{}
 	return runtime
+}
+
+// ContextWindow reports the admitted window once the runtime has warmed.
+func (p *Runtime) ContextWindow() int { return int(p.window.Load()) }
+
+// Warm establishes the model process and its admitted context before role selection.
+func (p *Runtime) Warm(ctx context.Context, model string) error {
+	ctx, release, err := p.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return p.ensureLoaded(ctx, model)
 }
 
 func (p *Provider) ID() string { return p.id }
@@ -121,7 +138,7 @@ func (p *Runtime) unload() {
 
 func (p *Runtime) validate() error {
 	r := &p.config
-	if r.BinaryPath == "" || r.ModelStore == nil || r.Devices == nil || r.HostMemory == nil || r.DeviceMemory == nil {
+	if r.BinaryPath == "" || r.ModelStore == nil || r.Devices == nil || r.HostMemory == nil || r.DeviceMemory == nil || r.HostMemory == r.DeviceMemory {
 		return errors.New("native generation: local runtime is not configured")
 	}
 	if p.config.ContextLimit < 2 || p.config.ContextLimit > 65536 || p.config.PrefillChunk < 1 || p.config.PrefillChunk > 256 {
@@ -129,7 +146,7 @@ func (p *Runtime) validate() error {
 	}
 	switch r.Backend {
 	case "mlx":
-		if r.PhysicalDevice.Kind != "apple_silicon" || r.MetalLibrary == "" || r.HostMemory != r.DeviceMemory {
+		if r.PhysicalDevice.Kind != "apple_silicon" || r.MetalLibrary == "" || !r.UnifiedMemory {
 			return errors.New("native generation: invalid unified-memory adapter")
 		}
 	case "vulkan":

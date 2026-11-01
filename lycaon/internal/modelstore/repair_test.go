@@ -26,12 +26,27 @@ func TestRepairRequiresReleasedRevisionAndPreservesIdentity(t *testing.T) {
 	}
 	lease.Release()
 	path := filepath.Join(s.RevisionDir(m), "model.safetensors")
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat payload: %v", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatalf("make corruption fixture writable: %v", err)
+	}
 	if err := os.WriteFile(path, []byte("damaged"), 0600); err != nil {
 		t.Fatalf("damage fixture: %v", err)
 	}
-	if _, err := s.AcquireLease("e4b", "mlx", "runner", 2); err == nil {
-		t.Fatal("leased damaged revision")
+	if err := os.Chtimes(path, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatalf("restore payload timestamp: %v", err)
 	}
+	damaged, err := s.AcquireLease("e4b", "mlx", "runner", 2)
+	if err != nil {
+		t.Fatalf("metadata lease: %v", err)
+	}
+	if err := damaged.Audit(context.Background()); err == nil {
+		t.Fatal("audit accepted same-size corruption with unchanged timestamp")
+	}
+	damaged.Release()
 	if err := s.Repair(context.Background(), SignedManifest{Manifest: m}, reader); err != nil {
 		t.Fatalf("repair: %v", err)
 	}
