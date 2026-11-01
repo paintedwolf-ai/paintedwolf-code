@@ -43,8 +43,14 @@ func (w *nativeValueWriter) jsonValue(value any, depth int) error {
 		}
 		return w.quoted(value)
 	case map[string]any:
+		if value == nil {
+			return w.text("null")
+		}
 		return w.jsonObject(value, depth)
 	case []any:
+		if value == nil {
+			return w.text("null")
+		}
 		if err := w.text("["); err != nil {
 			return err
 		}
@@ -60,6 +66,9 @@ func (w *nativeValueWriter) jsonValue(value any, depth int) error {
 		}
 		return w.text("]")
 	case []string:
+		if value == nil {
+			return w.text("null")
+		}
 		if err := w.text("["); err != nil {
 			return err
 		}
