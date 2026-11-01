@@ -4,12 +4,14 @@
   "kind": "algorithm",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "The 309-line E4B graph keeps attention, residual/PLE composition, and shared-KV output selection together. Cache-only prefill is the same graph dependency boundary: layers after the last KV producer cannot change retained state. Keep cache storage, sparse PLE, tensor loading, layout validation, and activation separate. M4 full-cache versus cache-only prefill produced exactly equal subsequent logits across sliding-window rollover; rotary and precision fixtures passed. Matched timing showed no material speedup, so this retention makes no throughput claim.",
-  "reviewed_commit": "ba94126c995198277c9797c4a90a6fb993181194",
-  "ceiling": 309,
+  "reason": "Retain the 318-line E4B tensor graph: attention, residual/PLE composition, and output-dependent shared-KV execution belong to one forward operation. Cache-only chunks project and gather only KV-producing layers; sparse reads and linear slicing remain in their existing modules. M4 full-cache versus selective prefill produced exactly equal subsequent logits across sliding rollover, and all four 8K native token arrays matched baseline. Fixtures cover prefix bounds and selected PLE size. The observed warm prefill difference is small; retention is justified by bounded work and the cohesive graph, not a throughput guarantee.",
+  "reviewed_commit": "8e3fa959e20f93191b0085c8cd6b4b8e6f9d7877",
+  "ceiling": 318,
   "boundaries": {
-    "lycaon/internal/generation/native/src/mlx_engine/mod.rs": "367940806f026ca7fc7422ae8021abf498d72fdaf990870d914c039ac2e70011",
+    "lycaon/internal/generation/native/src/mlx_engine/mod.rs": "8f6f998b65980a20f8dcfb180416bbc37b31572e635e3432f2fb26db371f87c2",
     "lycaon/internal/generation/native/src/mlx_engine/cache.rs": "b7aef82d644332c5fe34fc8f5ddd4663b8e1347ef9c4a2aa49d101b3adb9377e",
-    "lycaon/internal/generation/native/src/mlx_bench.rs": "81bc3f1324c3f33309033150c8e166eb0e55421d054c5573f5c76ebf7f05ec8e"
+    "lycaon/internal/generation/native/src/mlx_bench.rs": "81bc3f1324c3f33309033150c8e166eb0e55421d054c5573f5c76ebf7f05ec8e",
+    "lycaon/internal/generation/native/src/mlx_engine/ple.rs": "ae18a556ba1d0f416b94e521d9bd1e5cfff8c5f580cc2dbe901dce98ca8fe566",
+    "lycaon/internal/generation/native/src/mlx_engine/weights.rs": "fe665a9a288d34190c22cc3c9f3a5e19d2c4000e45aade0f738960f7163fb2b7"
   }
 }
