@@ -56,15 +56,16 @@ func installedFixture(t *testing.T) localmodels.Options {
 	return localmodels.Options{Binary: binary, MetalLibrary: "fixture.metallib", Authority: authority, Seed: dir, StoreRoot: filepath.Join(t.TempDir(), "models"), PhysicalRAM: 8 << 30, Decision: bialy.Config{ModelDir: decisionDir}}
 }
 
-func TestBuildAuthenticatesSeedAndSharesDecisionResources(t *testing.T) {
+func TestBuildSharesDecisionResourcesBeforeInstallingSeed(t *testing.T) {
 	options := installedFixture(t)
 	r, err := localmodels.Build(t.Context(), options)
 	testutil.FailErr(t, "compose installed local models", err)
 	defer r.Resources.Close()
 	defer r.Generation.Close()
-	if r.Decision.Resources != r.Resources.Decision || r.Backend != "mlx" || r.Store.Status(nativegen.DefaultModelID, "mlx").State != modelstore.StateReady {
+	if r.Decision.Resources != r.Resources.Decision || r.Backend != "mlx" || r.Store.Status(nativegen.DefaultModelID, "mlx").State != modelstore.StateAbsent {
 		t.Fatalf("incomplete installed composition: %+v", r)
 	}
+	testutil.FailErr(t, "install authenticated seed", r.Store.ImportBundle(t.Context(), options.Seed, modelstore.Slot{Model: nativegen.DefaultModelID, Device: "mlx"}))
 	testutil.FailErr(t, "remove bundled seed after installation", os.Remove(filepath.Join(options.Seed, "manifest.json")))
 	second, err := localmodels.Build(t.Context(), options)
 	testutil.FailErr(t, "reuse authenticated installed revision", err)
@@ -73,14 +74,12 @@ func TestBuildAuthenticatesSeedAndSharesDecisionResources(t *testing.T) {
 }
 
 func TestBuildRejectsUntrustedAndUnsupportedInstallations(t *testing.T) {
-	for _, name := range []string{"authority", "signature", "device", "checkpoint", "capacity", "binary", "disabled"} {
+	for _, name := range []string{"authority", "device", "checkpoint", "capacity", "binary", "disabled"} {
 		t.Run(name, func(t *testing.T) {
 			options := installedFixture(t)
 			switch name {
 			case "authority":
 				testutil.FailErr(t, "damage authority", os.WriteFile(options.Authority, []byte(`{}`), 0o600))
-			case "signature":
-				testutil.FailErr(t, "damage seed signature", os.WriteFile(filepath.Join(options.Seed, "manifest.json"), []byte(`{}`), 0o600))
 			case "device":
 				options.Decision.Device = "vulkan:0"
 			case "checkpoint":
@@ -98,5 +97,23 @@ func TestBuildRejectsUntrustedAndUnsupportedInstallations(t *testing.T) {
 				t.Fatal("invalid installation composed")
 			}
 		})
+	}
+}
+
+func TestBuildRetainsRecoveryWhenSeedIsInvalid(t *testing.T) {
+	options := installedFixture(t)
+	testutil.FailErr(t, "damage seed signature", os.WriteFile(filepath.Join(options.Seed, "manifest.json"), []byte(`{}`), 0o600))
+	r, err := localmodels.Build(t.Context(), options)
+	testutil.FailErr(t, "compose recovery runtime", err)
+	defer r.Resources.Close()
+	defer r.Generation.Close()
+	if err := r.Generation.Warm(t.Context(), nativegen.DefaultModelID); err == nil {
+		t.Fatal("loaded an invalid seed")
+	}
+	if status := r.Generation.Readiness(); status.State != "repair_required" || status.Action != "repair" {
+		t.Fatalf("seed failure lost recovery: %+v", status)
+	}
+	if r.Decision.Resources != r.Resources.Decision {
+		t.Fatal("seed failure discarded the shared decision partition")
 	}
 }
