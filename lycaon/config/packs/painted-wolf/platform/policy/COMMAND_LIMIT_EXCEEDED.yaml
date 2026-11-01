@@ -20,11 +20,10 @@ when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
 effect: block
 copy:
   what: 'Command limit reached: {{ paintedwolf.limit_id }}. Observed {{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }}.'
-  cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}The command stopped at the recorded boundary.{% endif %}'
-  fix: >-
-    {% if paintedwolf.diagnostic_top_level %}Reduce the size or complexity of the submitted shell source, then resubmit it.
-    {% else %}Reduce usage of {{ paintedwolf.limit_id }} in the remaining work to fit the reported bound. Preserve completed results.{% endif %}
-  instead: Check the recorded results before retrying the remaining work.
+  cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}The command stopped at the recorded boundary.{% endif
+    %}'
+  fix: '{% if paintedwolf.diagnostic_top_level %}Reduce the size or complexity of the submitted shell source before resubmitting it.{% endif %}'
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command reached a resource limit

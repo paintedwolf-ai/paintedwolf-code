@@ -21,7 +21,6 @@ type Diagnosis struct {
 	// Misplaced groups members written under one object that the schema
 	// declares under another, outside any JSON text.
 	Misplaced    []Misplacement
-	DidYouMean   *NearMiss
 	ConflictKeys []string
 	// Replacement is the call with every repairable finding applied; it is
 	// set only when it validates and fits maxReplacementArgsBytes.
@@ -53,11 +52,6 @@ type Misplacement struct {
 	CloseBefore string
 }
 
-type NearMiss struct {
-	Path       string
-	DidYouMean string
-}
-
 // Diagnose walks args against schema at every depth; validate decides whether
 // the repaired call satisfies the schema.
 func Diagnose(schema, args map[string]any, validate func(schema, args map[string]any) error) Diagnosis {
@@ -66,7 +60,7 @@ func Diagnose(schema, args map[string]any, validate func(schema, args map[string
 		return d
 	}
 	repaired := jsonvalue.CloneMap(args)
-	w := &argsWalker{diag: &d, validate: validate}
+	w := &argsWalker{diag: &d}
 	w.object(objectNode{schema: schema, value: repaired})
 	d.Misplaced = w.top.groups()
 	d.ConflictKeys = detectCombinatorConflicts(schema, args)
@@ -98,10 +92,9 @@ type objectNode struct {
 }
 
 type argsWalker struct {
-	diag     *Diagnosis
-	validate func(schema, args map[string]any) error
-	top      misplacementSet
-	repairs  []func()
+	diag    *Diagnosis
+	top     misplacementSet
+	repairs []func()
 }
 
 // misplacementSet groups moves by source and destination object.
@@ -149,29 +142,8 @@ func (w *argsWalker) objectInto(n objectNode, sink *misplacementSet) {
 		}
 		w.member(n, key, propSchema, sink)
 	}
-	var unplaced []string
 	for _, key := range unknown {
-		if !w.relocate(n, key, declared, sink) {
-			unplaced = append(unplaced, key)
-		}
-	}
-	if w.diag.DidYouMean != nil || len(unplaced) == 0 {
-		return
-	}
-	names := make([]string, 0, len(declared))
-	for name := range declared {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	match, field := findClosestPropertyMatch(unplaced, names)
-	if match == "" {
-		if nestedMatch, nestedField := findClosestNestedPropertyMatch(unplaced, declared); nestedMatch != "" {
-			match = joinArgPath(n.path, nestedMatch)
-			field = nestedField
-		}
-	}
-	if match != "" {
-		w.diag.DidYouMean = &NearMiss{Path: joinArgPath(n.path, field), DidYouMean: match}
+		w.relocate(n, key, declared, sink)
 	}
 }
 
@@ -354,11 +326,6 @@ func (w *argsWalker) relocate(n objectNode, key string, declared map[string]map[
 			value = parsed
 		}
 	}
-	// Relocation preserves a value that already satisfies its destination.
-	wrapper := map[string]any{"type": "object", "properties": map[string]any{"value": dest.schema}}
-	if w.validate(wrapper, map[string]any{"value": value}) != nil {
-		value = coerceRelocatedValue(value, dest.schema)
-	}
 	source := n.value
 	w.repairs = append(w.repairs, func() {
 		delete(source, key)
@@ -430,11 +397,6 @@ func (d Diagnosis) AddFacts(data map[string]any) {
 		m := d.Misplaced[0]
 		data["field"] = joinArgPath(m.FoundUnder, m.Fields[0])
 		m.addFacts(data)
-	case d.DidYouMean != nil:
-		data["field"] = d.DidYouMean.Path
-	}
-	if d.DidYouMean != nil {
-		data["did_you_mean"] = d.DidYouMean.DidYouMean
 	}
 	if len(d.ConflictKeys) > 0 {
 		data["conflict_keys"] = d.ConflictKeys

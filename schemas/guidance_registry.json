@@ -483,19 +483,16 @@
       "summary": "code_rewrite on {{ paintedwolf.path }} rejected pattern {{ paintedwolf.pattern }} — a bare {{ paintedwolf.operator }} between two metavariables matches every such operator in the file, not one meaning of it."
     },
     "COMMAND_ARGV_CONFLICT": {
-      "branch_instruction": "Retry with one explicit command form, not both",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "`{{ tool }}()` received conflicting explicit command forms."
     },
     "COMMAND_ARGV_REQUIRED": {
-      "branch_instruction": "Retry `command()` with explicit `command` text",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "`command()` was called without explicit `command` text."
+      "summary": "`{{ tool }}` requires explicit `command` text."
     },
     "COMMAND_CONCURRENCY_CAP_REACHED": {
-      "branch_instruction": "Reduce the live awaited command set",
       "category": "recoverable",
       "emit": "guard:command_job",
       "summary": "At admission, this session had {{ paintedwolf.count }} live awaited command jobs; the configured limit is {{ paintedwolf.max_awaited }}."
@@ -507,16 +504,14 @@
       "summary": "This exact command execution is already live ({{ paintedwolf.handles_text }})."
     },
     "COMMAND_EFFECT_NOT_ALLOWED": {
-      "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
       "category": "recoverable",
       "emit": "guard:command_effect_admission",
-      "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
+      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside the active permission profile."
     },
     "COMMAND_EXEC_DENIED": {
-      "branch_instruction": "Resolve executable permissions or explicitly declare the required host_execution capability; do not poll a failed launch",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "{% if paintedwolf.path %}The confine helper resolved `{{ paintedwolf.path }}` but the kernel refused to execute it.{% else %}The confine helper resolved argv0 but the kernel refused to execute it.{% endif %}"
+      "summary": "{% if paintedwolf.path %}Executable `{{ paintedwolf.path }}` could not be started.{% else %}The executable could not be started.{% endif %}"
     },
     "COMMAND_EXTERNAL_HIDDEN": {
       "branch_instruction": "Run the command by its ordinary name without external --",
@@ -531,13 +526,11 @@
       "summary": "command `{{ paintedwolf.command }}` has failed {{ paintedwolf.count }} times in a row."
     },
     "COMMAND_GLOB_BUDGET_EXCEEDED": {
-      "branch_instruction": "Narrow or quote the pattern",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "The glob `{{ paintedwolf.pattern }}` expands past {{ paintedwolf.max }} {{ paintedwolf.glob_limit }}."
     },
     "COMMAND_IN_FLIGHT": {
-      "branch_instruction": "Reuse the live job or make concurrency explicit",
       "category": "recoverable",
       "emit": "guard:command_job",
       "summary": "An awaited command job is already live for this session ({{ paintedwolf.handles_text }})."
@@ -549,13 +542,11 @@
       "summary": "The job reference names no job of this session."
     },
     "COMMAND_LIMIT_EXCEEDED": {
-      "branch_instruction": "Check the recorded results before retrying the remaining work.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "Command limit reached: {{ paintedwolf.limit_id }}. Observed {{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }}."
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
-      "branch_instruction": "Use a supported command form.",
       "category": "recoverable",
       "emit": "guard:command_native_admission",
       "summary": "{% if paintedwolf.command %}{{ paintedwolf.command }} cannot run in this form{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.{% else %}This command cannot run in the requested form.{% endif %}"
@@ -567,31 +558,26 @@
       "summary": "{% if paintedwolf.shell_metacharacters %}command rejected — unquoted shell metacharacters in `{{ paintedwolf.command }}`{% else %}command `{{ paintedwolf.command }}` is not a single argv vector{% endif %}"
     },
     "COMMAND_NOT_FOUND": {
-      "branch_instruction": "Correct the executable path before retrying this operation.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}` is not on PATH for this confined run.{% else %}An executable named in the command line is not on PATH for this confined run.{% endif %}"
     },
     "COMMAND_OPERAND_INVALID": {
-      "branch_instruction": "Correct the operand using its typed details and the focused command help, then submit a new action after reviewing earlier effects.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "{% if paintedwolf.parser_message %}Shell source encoding error at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}: {{ paintedwolf.parser_message }}.{% else %}One command operand cannot be used as supplied.{% endif %}"
+      "summary": "{% if paintedwolf.parser_message %}Shell source encoding error{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}: {{ paintedwolf.parser_message }}.{% else %}A command operand was refused.{% endif %}"
     },
     "COMMAND_OPERATION_NOT_ALLOWED": {
-      "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
       "category": "recoverable",
       "emit": "guard:command_operation_admission",
-      "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
+      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside the active permission profile."
     },
     "COMMAND_OPTION_UNSUPPORTED": {
-      "branch_instruction": "Use {{ paintedwolf.expected_form }}.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "{{ paintedwolf.command }} cannot use {% if paintedwolf.word %}{{ paintedwolf.word }}{% else %}that option{% endif %}{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}."
+      "summary": "{% if paintedwolf.command %}{{ paintedwolf.command }}{% else %}This command{% endif %} cannot use {% if paintedwolf.word %}{{ paintedwolf.word }}{% else %}the supplied option{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}."
     },
     "COMMAND_OUTPUT_NO_LIVE_JOB": {
-      "branch_instruction": "Use the retained execution outcome; stop polling this unavailable handle",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "No live command job exists in this session, so handle {{ paintedwolf.handle }} cannot be polled or stopped."
@@ -603,13 +589,11 @@
       "summary": "The host could not complete a verified output read for {{ paintedwolf.path }} in this chat."
     },
     "COMMAND_PLATFORM_UNAVAILABLE": {
-      "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "This native command operation is unavailable on the current platform."
     },
     "COMMAND_PROGRAMS_DISABLED": {
-      "branch_instruction": "Continue with the other offered tools; do not resubmit this program",
       "category": "blocked",
       "emit": "guard:tool",
       "summary": "Command programs are turned off on this host, so this program did not start."
@@ -645,7 +629,6 @@
       "summary": "Shell syntax error{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}: {% if paintedwolf.parser_message %}{{ paintedwolf.parser_message }}{% else %}{{ paintedwolf.expected_form }}{% endif %}."
     },
     "COMMAND_SYNTAX_UNSUPPORTED": {
-      "branch_instruction": "{% if paintedwolf.diagnostic_top_level %}Resubmit the complete corrected command.{% else %}Inspect recorded effects before submitting remaining work.{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "Unsupported shell form at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}: {% if paintedwolf.parser_message %}{{ paintedwolf.parser_message }}{% else %}{{ paintedwolf.expected_form }}{% endif %}."
@@ -837,10 +820,9 @@
       "summary": "The requested cwd {{ paintedwolf.cwd }} could not be resolved to an existing directory for {{ tool }}."
     },
     "CWD_OUT_OF_SCOPE": {
-      "branch_instruction": "Branch on Code; pick an in-scope directory",
       "category": "recoverable",
       "emit": "guard:tool",
-      "summary": "`command`/`verify`/`terminal_open` cwd {{ paintedwolf.cwd }} is outside the project read scope for this profile."
+      "summary": "The requested working directory {{ paintedwolf.cwd }} is outside this invocation's project read scope."
     },
     "CWD_SCRATCH_NOT_VERIFICATION": {
       "branch_instruction": "Branch on Code; run verification targets against project root paths",
@@ -1018,7 +1000,6 @@
       "summary": "edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars), and the ledger recorded {{ paintedwolf.change_count }} change(s) to this file by other actors during this session."
     },
     "ENV_KEY_INVALID": {
-      "branch_instruction": "Use valid permitted names in the receiving tool’s env field",
       "category": "recoverable",
       "emit": "guard:command_env_input",
       "summary": "Inline env key rejected — {{ paintedwolf.rejection_reason }}"
@@ -2261,13 +2242,11 @@
       "summary": "The requested capability could not reach its approval boundary."
     },
     "SANDBOX_BOUNDARY_REFUSED": {
-      "branch_instruction": "Use the observed destination when requesting the required access",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "The egress broker refused a connection from `{{ tool }}`{% if paintedwolf.destination %} to `{{ paintedwolf.destination }}`{% endif %}."
     },
     "SANDBOX_CAPABILITY_REQUEST_INVALID": {
-      "branch_instruction": "Branch on Code; correct the structured capability request",
       "category": "recoverable",
       "emit": "guard:sandbox_capability",
       "summary": "The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}{% if paintedwolf.rejection_field %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}."
@@ -2351,7 +2330,6 @@
       "summary": "{{ tool }} was not granted read access to {{ paintedwolf.path }}."
     },
     "SANDBOX_REFUSAL_REPORT_SILENT": {
-      "branch_instruction": "Diagnose the failed command; keep the current sandbox boundary",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "{% if paintedwolf.process_timed_out %}The command reached its host deadline; no kernel refusal was reported.{% else %}{% if paintedwolf.process_stopped %}The command was stopped; no kernel refusal was reported.{% else %}{% if paintedwolf.process_exited %}The command exited unsuccessfully; no kernel refusal was reported.{% else %}The invocation did not finish successfully; no kernel refusal was reported.{% endif %}{% endif %}{% endif %}"
@@ -2411,55 +2389,46 @@
       "summary": "The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}."
     },
     "SANDBOX_TRY_CREDENTIAL_STORE": {
-      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "In `{{ tool }}`, the sandbox refused access to the host OS credential store at {{ paintedwolf.refused_credential_store_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
+      "summary": "In `{{ tool }}`, the sandbox refused access to the host OS credential store at {{ paintedwolf.refused_credential_store_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}."
     },
     "SANDBOX_TRY_HOST_EXECUTION": {
-      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused {{ paintedwolf.unsandboxed_refusals }}{% if paintedwolf.process_running %}, and the job is still running{% endif %}."
     },
     "SANDBOX_TRY_LOCAL_NETWORK": {
-      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused{% if paintedwolf.refused_listen_ports %} a listener on port {{ paintedwolf.refused_listen_ports }}{% if paintedwolf.refused_connect_ports %} and{% endif %}{% endif %}{% if paintedwolf.refused_connect_ports %} a direct connection to port {{ paintedwolf.refused_connect_ports }}{% endif %}."
     },
     "SANDBOX_TRY_LOOPBACK_CONNECT": {
-      "branch_instruction": "Declare capability_request.loopback_connect for the requested local service",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "`{{ tool }}` requires access to a local service{% if paintedwolf.port %} on port {{ paintedwolf.port }}{% endif %}."
     },
     "SANDBOX_TRY_PROCESS_CONTROL": {
-      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused signals to processes outside the command's boundary: {{ paintedwolf.refused_signals }}."
     },
     "SANDBOX_TRY_READ_PATH": {
-      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "In `{{ tool }}`, the sandbox refused reads of protected paths {{ paintedwolf.refused_read_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
+      "summary": "In `{{ tool }}`, the sandbox refused reads of protected paths {{ paintedwolf.refused_read_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}."
     },
     "SANDBOX_TRY_SOCKET_PATH": {
-      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused connections to the local sockets {{ paintedwolf.refused_socket_paths }}."
     },
     "SANDBOX_TRY_WRITE_ROOT": {
-      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
+      "summary": "In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}."
     },
     "SANDBOX_WORKTREE_BEHIND_INDEX": {
-      "branch_instruction": "Finish the update with git_restore, delete, or edit — do not rerun the Git command under the same sandbox",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "`{{ tool }}` changed the Git index for agent-policy files the sandbox kept unchanged in the worktree."
@@ -2665,7 +2634,6 @@
       "summary": "The protected secret store is unavailable."
     },
     "SECRET_USE_WITHOUT_REFERENCE": {
-      "branch_instruction": "Remove secret_use; do not add a credential to satisfy this field",
       "category": "recoverable",
       "emit": "guard:secret",
       "summary": "This invocation declares secret_use but passes no managed secret reference."
@@ -3194,10 +3162,9 @@
       "summary": "No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}."
     },
     "TOOL_ARGS_INVALID": {
-      "branch_instruction": "Repair the rejected argument object and retry; preserve any source-read prerequisite from an earlier rejection.",
       "category": "recoverable",
       "emit": "guard:tool_args",
-      "summary": "{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{% else %}{% if paintedwolf.did_you_mean %}Unknown argument `{{ paintedwolf.rejection_field }}`: did you mean `{{ paintedwolf.did_you_mean }}`?{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}"
+      "summary": "{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}"
     },
     "TOOL_ARGS_MALFORMED": {
       "branch_instruction": "Repair the arguments object without changing the intended payload",
@@ -3263,16 +3230,14 @@
       "summary": "Tool output was shortened for the inline budget.{% if paintedwolf.spill_path %} Retained output is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes).{% else %} No spill file is available for the omitted output.{% endif %}"
     },
     "TOOL_OWNER_FAILED": {
-      "branch_instruction": "Branch on Code; a missing field is TOOL_ARGS_INVALID, not this code",
       "category": "recoverable",
       "emit": "guard:tool_owner",
-      "summary": "The subsystem owner could not settle the action."
+      "summary": "The operation failed."
     },
     "TOOL_OWNER_INTERRUPTED": {
-      "branch_instruction": "Branch on Code TOOL_OWNER_INTERRUPTED; inspect completed effects before starting new work",
       "category": "recoverable",
       "emit": "guard:tool_owner",
-      "summary": "The subsystem owner stopped the action before it settled."
+      "summary": "The operation was interrupted."
     },
     "TOOL_PROFILE_DENIED": {
       "branch_instruction": "Preserve the profile boundary and report unavailable work",

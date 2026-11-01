@@ -786,6 +786,48 @@ host_facts:
    type: list<string>
  - name: paintedwolf.missing_summary_job_ids
    type: list<string>
+ - name: paintedwolf.missing_capability_host_resources
+   type: bool
+ - name: paintedwolf.missing_capability_socket_paths
+   type: bool
+ - name: paintedwolf.missing_capability_direct_ip
+   type: bool
+ - name: paintedwolf.missing_capability_process_control
+   type: bool
+ - name: paintedwolf.missing_capability_credential_store
+   type: bool
+ - name: paintedwolf.missing_capability_host_execution
+   type: bool
+ - name: paintedwolf.missing_capability_local_listen
+   type: bool
+ - name: paintedwolf.missing_capability_loopback_connect
+   type: bool
+ - name: paintedwolf.missing_capability_write_root
+   type: bool
+ - name: paintedwolf.missing_capability_read_path
+   type: bool
+ - name: paintedwolf.argument_schema_tool
+   type: string
+ - name: paintedwolf.argument_schema_matches_tool
+   type: bool
+ - name: paintedwolf.capability_contract_known
+   type: bool
+ - name: paintedwolf.supports_host_resources
+   type: bool
+ - name: paintedwolf.supports_socket_paths
+   type: bool
+ - name: paintedwolf.supports_direct_ip
+   type: bool
+ - name: paintedwolf.supports_process_control
+   type: bool
+ - name: paintedwolf.supports_credential_store
+   type: bool
+ - name: paintedwolf.supports_host_execution
+   type: bool
+ - name: paintedwolf.supports_write_root
+   type: bool
+ - name: paintedwolf.supports_read_path
+   type: bool
  - name: paintedwolf.supports_local_listen
    type: bool
  - name: paintedwolf.supports_loopback_connect

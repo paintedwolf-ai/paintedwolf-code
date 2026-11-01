@@ -14,17 +14,17 @@ requires:
   - paintedwolf.max_awaited
   - paintedwolf.count
   - paintedwolf.live_command_handles
+  - paintedwolf.can_command_output
+  - paintedwolf.can_command_stop
 when: paintedwolf.rejection_code == "COMMAND_CONCURRENCY_CAP_REACHED"
 effect: block
 copy:
-  what: At admission, this session had {{ paintedwolf.count }} live awaited command jobs; the configured limit
-    is {{ paintedwolf.max_awaited }}.
+  what: At admission, this session had {{ paintedwolf.count }} live awaited command jobs; the configured limit is {{ paintedwolf.max_awaited }}.
   cause: Explicit awaited concurrency is bounded independently from background servers and watches.
   why: More overlapping foreground work would make completion order and resource coordination unreliable.
-  fix: Inspect or await an existing job from {{ paintedwolf.live_command_handles }}. Stop a job only if the
-    task no longer needs it. Retry after capacity is actually free; allow_concurrent does not override this
-    bound.
-  instead: Reduce the live awaited command set
+  fix: '{% if paintedwolf.can_command_output %}Use command_output to inspect an existing handle from {{ paintedwolf.live_command_handles }}.{% endif %}{% if paintedwolf.can_command_stop
+    %} Stop only work that is no longer needed, then observe its exit before replacement work.{% endif %}'
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_job
 x-paintedwolf-message: awaited command concurrency cap reached

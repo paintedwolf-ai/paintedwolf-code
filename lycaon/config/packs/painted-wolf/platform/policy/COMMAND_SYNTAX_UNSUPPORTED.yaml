@@ -20,10 +20,12 @@ requires:
 when: paintedwolf.rejection_code == "COMMAND_SYNTAX_UNSUPPORTED"
 effect: block
 copy:
-  what: 'Unsupported shell form at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}: {% if paintedwolf.parser_message %}{{ paintedwolf.parser_message }}{% else %}{{ paintedwolf.expected_form }}{% endif %}.'
-  cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}{% if paintedwolf.diagnostic_pre_evaluation %}This source unit did not execute. Earlier commands that finished still count.{% else %}Earlier commands that finished still count.{% endif %}{% endif %}'
-  fix: 'Change this construct to the supported form: {{ paintedwolf.expected_form }}. Preserve its intended operation.'
-  instead: '{% if paintedwolf.diagnostic_top_level %}Resubmit the complete corrected command.{% else %}Inspect recorded effects before submitting remaining work.{% endif %}'
+  what: 'Unsupported shell form at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}: {% if paintedwolf.parser_message %}{{ paintedwolf.parser_message
+    }}{% else %}{{ paintedwolf.expected_form }}{% endif %}.'
+  cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}{% if paintedwolf.diagnostic_pre_evaluation %}This
+    source unit did not execute. Earlier commands that finished still count.{% else %}Earlier commands that finished still count.{% endif %}{% endif %}'
+  fix: '{% if paintedwolf.expected_form %}Supported form: {{ paintedwolf.expected_form }}. Preserve the intended operation and earlier effects.{% endif %}'
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command syntax unit was not admitted

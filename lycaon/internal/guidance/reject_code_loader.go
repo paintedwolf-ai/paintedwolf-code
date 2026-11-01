@@ -225,20 +225,6 @@ func validateHintEntry(code string, entry HintEntry) error {
 	if strings.TrimSpace(view.What) == "" && strings.TrimSpace(view.Cause) == "" {
 		return fmt.Errorf("%s: what required", code)
 	}
-	if !copyOnly {
-		for _, field := range []struct {
-			name, val string
-		}{
-			{"cause", view.Cause},
-			{"why", view.Why},
-			{"fix", view.Fix},
-			{"instead", view.Instead},
-		} {
-			if strings.TrimSpace(field.val) == "" || field.val == "n/a" {
-				return fmt.Errorf("%s: %s required", code, field.name)
-			}
-		}
-	}
 	if len(scenarioRows(entry)) == 0 && !copyOnly && entry.Severity != "warning" {
 		return fmt.Errorf("%s: scenarios required (>=1)", code)
 	}
@@ -280,9 +266,7 @@ func validateCopyFields(code string, view RejectCodeView) error {
 	return nil
 }
 
-// NormalizeRejectCodeView fills the derived prose slots: What falls back to Message,
-// Cause to Message then What, Why to Fix then Cause. Instead has no fallback — a unit
-// either authors a branch instruction or emits none.
+// NormalizeRejectCodeView preserves omitted explanations and remedies.
 func NormalizeRejectCodeView(code string, entry HintEntry) RejectCodeView {
 	view := RejectCodeView{
 		ID:        strings.TrimSpace(code),
@@ -302,18 +286,6 @@ func NormalizeRejectCodeView(code string, entry HintEntry) RejectCodeView {
 	msg := strings.TrimSpace(entry.Message)
 	if view.What == "" {
 		view.What = msg
-	}
-	if view.Cause == "" {
-		view.Cause = msg
-		if view.Cause == "" {
-			view.Cause = view.What
-		}
-	}
-	if view.Why == "" {
-		view.Why = view.Fix
-		if view.Why == "" {
-			view.Why = view.Cause
-		}
 	}
 	return view
 }

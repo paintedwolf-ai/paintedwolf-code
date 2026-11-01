@@ -16,11 +16,13 @@ requires:
 when: paintedwolf.rejection_code == "COMMAND_NOT_FOUND"
 effect: block
 copy:
-  what: '{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}` is not on PATH for this confined run.{% else %}An executable named in the command line is not on PATH for this confined run.{% endif %}'
-  cause: The process launcher could not resolve argv0 before starting the command.
+  what: '{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}` is not on PATH for this confined run.{% else %}An executable named in the command line
+    is not on PATH for this confined run.{% endif %}'
+  cause: 'The process launcher could not resolve this executable before starting it.{% if paintedwolf.resolvable %} Other resolvable names: {{ paintedwolf.resolvable
+    }}. Their presence does not establish an equivalent operation.{% endif %}'
   why: The requested executable did not start. Earlier operations may have run.
-  fix: '{% if paintedwolf.resolvable %}This PATH does resolve: {{ paintedwolf.resolvable }}. Retry with the one this project means, or an absolute path.{% else %}Use an argv0 that resolves on this machine (absolute path, or a name that `LookPath` finds). Discover with a resolvable probe or the project''s documented runner.{% endif %}'
-  instead: Correct the executable path before retrying this operation.
+  fix: ''
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: Executable not found on PATH

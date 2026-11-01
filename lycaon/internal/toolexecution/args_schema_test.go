@@ -414,7 +414,7 @@ func TestValidateCallArgumentsIntrospectionStringifiedJSON(t *testing.T) {
 	}
 }
 
-func TestValidateCallArgumentsIntrospectionFuzzyTypo(t *testing.T) {
+func TestArgumentValidationDoesNotGuessTimeoutUnits(t *testing.T) {
 	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
@@ -432,8 +432,8 @@ func TestValidateCallArgumentsIntrospectionFuzzyTypo(t *testing.T) {
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("expected TOOL_ARGS_INVALID, got: %#v", reject)
 	}
-	if reject.Data["did_you_mean"] != "timeout_ms" {
-		t.Errorf("did_you_mean = %v, want timeout_ms", reject.Data["did_you_mean"])
+	if reject.Data["did_you_mean"] != nil || reject.Data["replacement_args"] != nil {
+		t.Fatalf("unknown timeout units became a repair: %#v", reject.Data)
 	}
 }
 
@@ -476,7 +476,7 @@ func TestValidateCallArgumentsIntrospectionMultipleMisnestedFields(t *testing.T)
 		t.Fatal("command schema missing")
 	}
 
-	// Multiple fields placed at root: host_resources and direct_ip
+	// Both fields belong to the same declared capability object.
 	args := map[string]any{
 		"command":        "colima start",
 		"host_resources": []any{"colima"},

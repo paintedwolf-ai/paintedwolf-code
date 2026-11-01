@@ -275,7 +275,7 @@ func commandCapabilitySchema() map[string]any {
 	}
 }
 
-func TestDiagnoseRelocatesBooleanCapabilityFlagAsEmptyObject(t *testing.T) {
+func TestRelocationDoesNotGuessMissingCapabilityStructure(t *testing.T) {
 	schema := commandCapabilitySchema()
 	for _, field := range []string{"direct_ip", "local_listen", "loopback_connect"} {
 		t.Run(field, func(t *testing.T) {
@@ -284,33 +284,23 @@ func TestDiagnoseRelocatesBooleanCapabilityFlagAsEmptyObject(t *testing.T) {
 				field:     true,
 			})
 			assertMisplaced(t, data, []string{field}, "", "capability_request")
-			rep, _ := data["replacement_args"].(map[string]any)
-			if rep == nil {
-				t.Fatalf("expected replacement_args for %s, got nil", field)
-			}
-			capReq, _ := rep["capability_request"].(map[string]any)
-			nested, ok := capReq[field].(map[string]any)
-			if !ok || len(nested) != 0 {
-				t.Fatalf("capability_request.%s = %#v, want empty object", field, capReq[field])
-			}
-			if err := tools.ValidateToolArgs(schema, rep); err != nil {
-				t.Fatalf("replacement_args failed validation: %v", err)
+			if data["replacement_args"] != nil || data["replacement_args_json"] != nil {
+				t.Fatalf("relocation invented capability structure: %#v", data)
 			}
 		})
 	}
 }
 
-func TestDiagnoseSuggestsNestedCapabilityPropertyForNearMissesAndSynonyms(t *testing.T) {
+func TestDiagnosisDoesNotGuessArgumentNamesOrCardinality(t *testing.T) {
 	schema := commandCapabilitySchema()
 	cases := []struct {
 		input string
 		value any
-		want  string
 	}{
-		{input: "read_paths", value: []any{"/tmp"}, want: "capability_request.read_path"},
-		{input: "write_paths", value: []any{"/tmp"}, want: "capability_request.write_root"},
-		{input: "write_roots", value: []any{"/tmp"}, want: "capability_request.write_root"},
-		{input: "socket_path", value: "/tmp/daemon.sock", want: "capability_request.socket_paths"},
+		{input: "read_paths", value: []any{"/tmp"}},
+		{input: "write_paths", value: []any{"/tmp"}},
+		{input: "write_roots", value: []any{"/tmp"}},
+		{input: "socket_path", value: "/tmp/daemon.sock"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
@@ -318,9 +308,8 @@ func TestDiagnoseSuggestsNestedCapabilityPropertyForNearMissesAndSynonyms(t *tes
 				"command": "ls /tmp",
 				tc.input:  tc.value,
 			})
-			if data["field"] != tc.input || data["did_you_mean"] != tc.want {
-				t.Fatalf("field=%v did_you_mean=%v, want field=%q did_you_mean=%q",
-					data["field"], data["did_you_mean"], tc.input, tc.want)
+			if data["did_you_mean"] != nil || data["replacement_args"] != nil || data["replacement_args_json"] != nil {
+				t.Fatalf("unknown intent became an argument repair: %#v", data)
 			}
 		})
 	}

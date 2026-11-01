@@ -12,11 +12,11 @@ requires:
 when: paintedwolf.rejection_code == "COMMAND_ARGV_REQUIRED"
 effect: block
 copy:
-  what: '`command()` was called without explicit `command` text.'
-  cause: The host does not remember the previous command. Omitting its text is not a retry.
-  why: Every invocation must carry the program or captured argv line to run.
-  fix: 'Supply the executable or program text in `command` on this call.'
-  instead: 'Retry `command()` with explicit `command` text'
+  what: '`{{ tool }}` requires explicit `command` text.'
+  cause: This invocation supplied no command text.
+  why: ''
+  fix: Supply the intended program or executable in `command`.
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command() needs explicit command text

@@ -9,6 +9,6 @@
 {% if cause and cause != what %}Cause: {{ cause }}
 {% endif %}
 {% if why and why != cause and why != fix %}Why: {{ why }}
-{% endif %}Fix: {{ fix }}
-{% if instead and instead != fix %}Next: {{ instead }}
+{% endif %}{% if fix %}Fix: {{ fix }}
+{% endif %}{% if instead and instead != fix %}Next: {{ instead }}
 {% endif %}Code: {{ code }}

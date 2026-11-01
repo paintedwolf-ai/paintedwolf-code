@@ -22,15 +22,15 @@ requires:
 when: paintedwolf.rejection_code == "COMMAND_OPERAND_INVALID"
 effect: block
 copy:
-  what: '{% if paintedwolf.parser_message %}Shell source encoding error at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}: {{ paintedwolf.parser_message }}.{% else %}One command operand cannot be used as supplied.{% endif %}'
-  cause: '{% if paintedwolf.diagnostic_pre_evaluation %}This source unit did not execute. Earlier parent operations may have run.{% else %}{{ paintedwolf.rejection_reason }}{% endif %}'
-  why: The host validates operand identity, representation and role before admitting its effect. Unsupported operands never fall through to an external implementation.
-  fix: >-
-    {% if paintedwolf.parser_utf8_bom %}Remove the leading byte-order mark from the captured source. Preserve its text and earlier effects.
-    {% else %}{% if paintedwolf.parser_nul_byte %}Remove the NUL byte from the shell source. Pass binary input as data rather than source.
-    {% else %}{% if paintedwolf.parser_invalid_utf8 %}Encode this source unit as valid UTF-8; preserve its text and earlier effects.
-    {% else %}Check the typed operand details and command help. Preserve exact path bytes and source revisions; conversion alone does not grant access. Earlier effects remain recorded.{% endif %}{% endif %}{% endif %}
-  instead: Correct the operand using its typed details and the focused command help, then submit a new action after reviewing earlier effects.
+  what: '{% if paintedwolf.parser_message %}Shell source encoding error{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column
+    }}{% endif %}: {{ paintedwolf.parser_message }}.{% else %}A command operand was refused.{% endif %}'
+  cause: '{% if paintedwolf.diagnostic_pre_evaluation %}This source unit did not execute. Earlier parent operations may have run.{% else %}{{ paintedwolf.rejection_reason
+    }}{% endif %}'
+  why: ''
+  fix: '{% if paintedwolf.parser_utf8_bom %}Remove the leading byte-order mark from this source unit.{% else %}{% if paintedwolf.parser_nul_byte %}Shell source cannot
+    contain a NUL byte. Supply binary bytes as input data rather than source.{% else %}{% if paintedwolf.parser_invalid_utf8 %}Encode this source unit as valid UTF-8.{%
+    endif %}{% endif %}{% endif %}'
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command operand was not admitted
