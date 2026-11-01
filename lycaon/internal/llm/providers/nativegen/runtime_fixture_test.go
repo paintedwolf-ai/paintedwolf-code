@@ -3,6 +3,7 @@ package nativegen
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 )
 
 func runtimeFixture() {
@@ -16,6 +17,7 @@ func runtimeFixture() {
 	generated := 0
 	measured := 0
 	begun := 0
+	reused, _ := strconv.Atoi(os.Getenv("PW_NATIVEGEN_REUSED_TOKENS"))
 	for {
 		payload, err := readProtocolFrame(os.Stdin)
 		if err != nil {
@@ -65,7 +67,7 @@ func runtimeFixture() {
 				begun++
 			}
 			generated = 0
-			result = map[string]any{"kind": "begun", "request_id": active.RequestID, "reused_prefix_tokens": 0}
+			result = map[string]any{"kind": "begun", "request_id": active.RequestID, "reused_prefix_tokens": reused}
 		case "advance", "cancel":
 			fault := os.Getenv("PW_NATIVEGEN_RESPONSE_FAULT")
 			if request.Command.Method == "advance" && (fault == "before_output" || fault == "after_output" && generated > 0) {
@@ -92,11 +94,11 @@ func runtimeFixture() {
 					stop = &value
 				}
 			}
-			processed := 0
+			processed := reused
 			if generated > 0 {
 				processed = len(active.PromptTokens)
 			}
-			result = map[string]any{"kind": "progress", "text": text, "progress": map[string]any{"request_id": active.RequestID, "processed_prompt_tokens": processed, "generated_tokens": generated, "reused_prefix_tokens": 0, "token": token, "stop_reason": stop}}
+			result = map[string]any{"kind": "progress", "text": text, "progress": map[string]any{"request_id": active.RequestID, "processed_prompt_tokens": processed, "generated_tokens": generated, "reused_prefix_tokens": reused, "token": token, "stop_reason": stop}}
 		default:
 			os.Exit(4)
 		}
