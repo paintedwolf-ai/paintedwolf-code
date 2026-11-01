@@ -1,0 +1,13 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Command program not found
+message: >-
+  That command program is not in this chat.
+suggested_action: >-
+  Reload the chat to view the command receipts that are still available.
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - not in this chat
+      - Reload the chat

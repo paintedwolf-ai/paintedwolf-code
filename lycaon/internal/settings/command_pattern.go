@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/argv"
+	"github.com/lycaon/lycaon/internal/hitl"
 )
 
 // MatchCommandPattern reports whether command matches an authored deny/ask
@@ -122,4 +123,24 @@ func pipelineStageTexts(args map[string]any) []string {
 		stages = append(stages, argv.JoinCommandLine(env, name, cmdArgs))
 	}
 	return stages
+}
+
+func commandUnitsForAction(action hitl.ProposedAction) []string {
+	if action.Invocation.BoundStages != nil {
+		return action.Invocation.BoundCommands()
+	}
+	if !IsCommandToolName(action.Invocation.Tool) {
+		return nil
+	}
+	return commandUnitsFromArgs(action.Invocation.Args)
+}
+
+func commandTextForAction(action hitl.ProposedAction) string {
+	if action.Invocation.BoundStages != nil {
+		return strings.Join(action.Invocation.BoundCommands(), " | ")
+	}
+	if !IsCommandToolName(action.Invocation.Tool) {
+		return ""
+	}
+	return CommandTextFromActionArgs(action.Invocation.Args)
 }

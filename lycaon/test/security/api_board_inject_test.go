@@ -24,7 +24,7 @@ func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
 	}
 	sess := createSessionHTTP(t, srv, dir)
 	if _, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	}); err != nil {
 		t.Fatal(err)
 	}

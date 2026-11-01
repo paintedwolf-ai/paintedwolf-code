@@ -50,7 +50,7 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 	// Deny rules remain active when prompts are disabled.
 	if rule, ok := denyRuleForLayers(layers, action); ok {
 		return deniedByRules(
-			matchingDenyRules(layers, action), rule, action, CommandTextFromActionArgs(action.Invocation.Args),
+			matchingDenyRules(layers, action), rule, commandTextForAction(action),
 		), nil
 	}
 
@@ -71,7 +71,7 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 	}
 	res.Decision = decision
 	res.FileAccess = g.currentActionFileAccess(action)
-	res.MatchedRules = approvalRuleMatches(matchedRules, action, CommandTextFromActionArgs(action.Invocation.Args))
+	res.MatchedRules = approvalRuleMatches(matchedRules, commandTextForAction(action))
 	res.HostResourceApproval = hostResourceAskPending(g, cfg, layers, action)
 	if !facts.Leased && g.grants != nil && g.grants.hasExactActionSet(action.Scope.ChatSession()) {
 		res.GrantDelta = "This action was not in the approved action set."
@@ -80,24 +80,24 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 }
 
 // deniedByRules renders an enforcement block with rule citations.
-func deniedByRules(matches []ApprovalRule, primary ApprovalRule, action hitl.ProposedAction, command string) *hitl.ApprovalResult {
+func deniedByRules(matches []ApprovalRule, primary ApprovalRule, command string) *hitl.ApprovalResult {
 	if len(matches) == 0 {
 		matches = []ApprovalRule{primary}
 	}
 	return &hitl.ApprovalResult{
 		Denied: true, DenyCode: "APPROVAL_RULE_DENIED",
-		MatchedRules: approvalRuleMatches(matches, action, command),
+		MatchedRules: approvalRuleMatches(matches, command),
 	}
 }
 
-func approvalRuleMatches(rules []ApprovalRule, action hitl.ProposedAction, command string) []hitl.ApprovalRuleMatch {
+func approvalRuleMatches(rules []ApprovalRule, command string) []hitl.ApprovalRuleMatch {
 	out := make([]hitl.ApprovalRuleMatch, 0, len(rules))
 	for _, rule := range rules {
 		match := hitl.ApprovalRuleMatch{
 			Category: string(rule.Category), Pattern: rule.Pattern, Effect: string(rule.Effect),
 			UnitID: rule.Source.UnitID, PackID: rule.Source.PackID, Scope: string(rule.Source.Scope),
 		}
-		if rule.Category == ApprovalCategoryCommand && command != "" && IsCommandToolName(action.Invocation.Tool) {
+		if rule.Category == ApprovalCategoryCommand && command != "" {
 			match.Command = command
 		}
 		out = append(out, match)

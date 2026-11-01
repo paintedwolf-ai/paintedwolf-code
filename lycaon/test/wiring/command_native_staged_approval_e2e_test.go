@@ -55,27 +55,30 @@ func assertStagedSedReviewedInputs(t *testing.T, s *commandProgramSession, scrip
 	t.Helper()
 	var mode, certainty, initialDigest, finalDigest, representation, blobJSON string
 	var started, pins int
+	var body []byte
 	err := s.h.DB.QueryRowContext(t.Context(), `SELECT e.effect_mode,e.effect_certainty,e.owner_started,e.arguments_digest,
-		e.reviewed_arguments_digest,e.reviewed_arguments_representation,o.blob_json,
+		e.reviewed_arguments_digest,e.reviewed_arguments_representation,o.blob_json,o.inline_body,
 		(SELECT count(*) FROM invocation_program_revision_pins pin WHERE pin.execution_id=e.id AND pin.path=?)
 		FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id
 		JOIN invocation_receipts r ON r.id=p.parent_receipt_id
 		JOIN invocation_program_outputs o ON o.program_id=e.program_id AND o.execution_id=e.id AND o.reference=e.reviewed_arguments_ref
 		WHERE r.session_id=? AND e.operation_id='sed' AND e.native_command='sed' AND o.stream='arguments'`, script, s.session).
-		Scan(&mode, &certainty, &started, &initialDigest, &finalDigest, &representation, &blobJSON, &pins)
+		Scan(&mode, &certainty, &started, &initialDigest, &finalDigest, &representation, &blobJSON, &body, &pins)
 	testutil.FailErr(t, "read final staged receipt provenance", err)
 	if mode != "w-command" || certainty != "completed" || started != 1 || pins != 1 || initialDigest == finalDigest {
 		t.Fatalf("staged receipt mode=%s certainty=%s started=%d pins=%d initial=%s final=%s", mode, certainty, started, pins, initialDigest, finalDigest)
 	}
-	var databasePath string
-	testutil.FailErr(t, "locate fixture host storage", s.h.DB.QueryRowContext(t.Context(), `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&databasePath))
-	var blob blobstore.Blob
-	testutil.FailErr(t, "decode retained input blob", json.Unmarshal([]byte(blobJSON), &blob))
-	reader, err := (blobstore.Store{Root: filepath.Dir(databasePath), Dir: tooloutput.ToolOutputSpillDir}).Open(blob)
-	testutil.FailErr(t, "open retained final inputs", err)
-	body, err := io.ReadAll(reader)
-	testutil.FailErr(t, "read retained final inputs", err)
-	testutil.FailErr(t, "close retained final inputs", reader.Close())
+	if body == nil {
+		var databasePath string
+		testutil.FailErr(t, "locate fixture host storage", s.h.DB.QueryRowContext(t.Context(), `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&databasePath))
+		var blob blobstore.Blob
+		testutil.FailErr(t, "decode retained input blob", json.Unmarshal([]byte(blobJSON), &blob))
+		reader, err := (blobstore.Store{Root: filepath.Dir(databasePath), Dir: tooloutput.ToolOutputSpillDir}).Open(blob)
+		testutil.FailErr(t, "open retained final inputs", err)
+		body, err = io.ReadAll(reader)
+		testutil.FailErr(t, "read retained final inputs", err)
+		testutil.FailErr(t, "close retained final inputs", reader.Close())
+	}
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
 	testutil.FailErr(t, "admit fixture input inspection", err)
 	reviewed, releaseReview, err := toolcontract.RestoreReviewedOperationInputs(t.Context(), memory, representation, finalDigest, string(body))
