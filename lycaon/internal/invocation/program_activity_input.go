@@ -15,15 +15,14 @@ func readActivityInput(ctx context.Context, tx *sql.Tx, receipt api.CommandExecu
 	var digest string
 	err := tx.QueryRowContext(ctx, `SELECT e.operation_id,e.scope_json,s.detail_ref,n.start_byte,n.end_byte,
  COALESCE((SELECT json_extract(c.value,'$.family') FROM json_each(d.definition_json,'$.Commands') c WHERE json_extract(c.value,'$.name')=e.native_command LIMIT 1),''),
- COALESCE(o.inline_digest,''),o.inline_body,COALESCE(parent.operation_id='program |',0),COALESCE(pn.start_byte,0)
+ COALESCE(o.inline_digest,''),o.inline_body,COALESCE(parent.operation_id='program |',0)
  FROM invocation_program_executions e
  JOIN invocation_program_definitions d ON d.program_id=e.program_id AND d.definition_digest=e.definition_digest
  JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id
  JOIN invocation_program_sources s ON s.program_id=n.program_id AND s.source_unit_id=n.source_unit_id
  LEFT JOIN invocation_program_executions parent ON parent.program_id=e.program_id AND parent.id=e.parent_execution_id
- LEFT JOIN invocation_program_nodes pn ON pn.program_id=parent.program_id AND pn.node_id=parent.node_id
  LEFT JOIN invocation_program_outputs o ON o.program_id=e.program_id AND o.reference=CASE WHEN e.reviewed_arguments_ref<>'' THEN e.reviewed_arguments_ref ELSE e.arguments_ref END
- WHERE e.program_id=? AND e.id=?`, receipt.ProgramID, receipt.ID).Scan(&input.operation, &input.scope, &input.span.SourceRef, &input.span.StartByte, &input.span.EndByte, &input.family, &digest, &body, &input.pipeline, &input.pipelineStart)
+ WHERE e.program_id=? AND e.id=?`, receipt.ProgramID, receipt.ID).Scan(&input.operation, &input.scope, &input.span.SourceRef, &input.span.StartByte, &input.span.EndByte, &input.family, &digest, &body, &input.pipeline)
 	if err != nil {
 		return input, err
 	}
