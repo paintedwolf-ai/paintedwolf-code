@@ -15,7 +15,7 @@ var manifestLayoutSource = Baseline{Revision: 4, Shape: "c0280798481d97c01e3ddf3
 func SourceManifestLayout(target Baseline) Step {
 	return Step{
 		ID: "source-manifest-layout", Source: append(append([]byte{}, manifestLayoutImplementation...), manifestLayoutSchema...),
-		Checksum: "0813eedef7e1f3baccf602df155e94338fa9e4c209dc60b7f0b1b9829f13b76f",
+		Checksum: "2820b2e7c953f8ba40ac7594e2d03a79e0e7751e3120ae371e0b1f34bf49345a",
 		From:     manifestLayoutSource, To: target, Apply: migrateManifestLayout, Validate: validateManifestLayout,
 		Writes:       manifestLayoutWrites,
 		RetainedCopy: retainedManifestCopy(),

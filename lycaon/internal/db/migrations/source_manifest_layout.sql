@@ -99,3 +99,11 @@ CREATE TRIGGER IF NOT EXISTS queue_deleted_manifest_source_blob AFTER DELETE ON 
 WHEN OLD.sha256 != '' BEGIN
  INSERT OR IGNORE INTO source_blob_reclaim_queue(sha256) SELECT OLD.sha256 WHERE EXISTS(SELECT 1 FROM source_blob_objects WHERE sha256=OLD.sha256);
 END;
+
+-- Deferred secondary indexes:
+CREATE INDEX IF NOT EXISTS idx_source_snapshot_roots_manifest
+    ON source_snapshot_roots(manifest_id);
+CREATE INDEX IF NOT EXISTS idx_source_manifest_layout_chunk
+    ON source_manifest_layout(chunk_id);
+CREATE INDEX IF NOT EXISTS idx_source_manifest_entries_sha
+    ON source_manifest_entries(sha256) WHERE sha256 != '';

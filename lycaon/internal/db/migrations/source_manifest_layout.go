@@ -26,13 +26,6 @@ const (
 	layoutChunkMaxEntries = 4096
 	layoutChunkCutMask    = 511
 	layoutInsertRows      = 64
-	manifestLayoutIndexes = `
-CREATE INDEX IF NOT EXISTS idx_source_snapshot_roots_manifest
-    ON source_snapshot_roots(manifest_id);
-CREATE INDEX IF NOT EXISTS idx_source_manifest_layout_chunk
-    ON source_manifest_layout(chunk_id);
-CREATE INDEX IF NOT EXISTS idx_source_manifest_entries_sha
-    ON source_manifest_entries(sha256) WHERE sha256 != '';`
 )
 
 type layoutEntry struct {
@@ -46,7 +39,11 @@ type layoutChunk struct {
 }
 
 func migrateManifestLayout(ctx context.Context, tx *sql.Tx) error {
-	if _, err := tx.ExecContext(ctx, string(manifestLayoutSchema)); err != nil {
+	schema, indexes, ok := strings.Cut(string(manifestLayoutSchema), "\n-- Deferred secondary indexes:\n")
+	if !ok {
+		return fmt.Errorf("manifest layout schema is missing deferred index section")
+	}
+	if _, err := tx.ExecContext(ctx, schema); err != nil {
 		return err
 	}
 	if err := convertLegacyRoots(ctx, tx); err != nil {
@@ -61,7 +58,7 @@ func migrateManifestLayout(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	_, err := tx.ExecContext(ctx, manifestLayoutIndexes)
+	_, err := tx.ExecContext(ctx, indexes)
 	return err
 }
 
