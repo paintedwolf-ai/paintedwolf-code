@@ -101,3 +101,31 @@ func TestProviderRefusesCapacityBeforeLoadingModel(t *testing.T) {
 		t.Fatal("failed admission retained a process or memory")
 	}
 }
+
+func TestProviderActivationReplacesProcessBetweenRequests(t *testing.T) {
+	provider, runtime := fixtureProvider(t)
+	request := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Hello"}}, MaxTokens: 2}
+	if _, err := provider.Complete(t.Context(), request); err != nil {
+		t.Fatalf("complete first revision: %v", err)
+	}
+	previous := runtime.loaded.process
+	manifest := previous.lease.Manifest
+	manifest.Revision = "replacement"
+	if err := runtime.config.ModelStore.Activate(modelstore.SignedManifest{Manifest: manifest, Signature: "fixture"}); err != nil {
+		t.Fatalf("activate replacement: %v", err)
+	}
+	if _, err := provider.Complete(t.Context(), request); err != nil {
+		t.Fatalf("complete replacement: %v", err)
+	}
+	if runtime.generation != 2 || runtime.loaded.process.lease.Manifest.Revision != "replacement" {
+		t.Fatal("continued serving the previous artifact revision")
+	}
+	select {
+	case <-previous.done:
+	default:
+		t.Fatal("replaced the revision without reaping its process")
+	}
+	if runtime.config.HostMemory.Snapshot().ReservedBytes != startupHostBytes || runtime.config.DeviceMemory.Snapshot().ReservedBytes != 256<<20 {
+		t.Fatal("replacement retained both revisions' reservations")
+	}
+}

@@ -23,7 +23,15 @@ func (p *Runtime) ensureLoaded(ctx context.Context, model string) error {
 			p.unload()
 		default:
 			if p.loaded.model == model {
-				return nil
+				active, err := p.config.ModelStore.Active()
+				if err != nil {
+					p.unload()
+					return err
+				}
+				manifest, ok := active[model+"/"+p.config.Backend]
+				if ok && manifest.Revision == p.loaded.process.lease.Manifest.Revision {
+					return nil
+				}
 			}
 			p.unload()
 		}
