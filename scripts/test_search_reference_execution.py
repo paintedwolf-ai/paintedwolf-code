@@ -2,7 +2,11 @@
 
 import hashlib
 import io
+import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -162,10 +166,49 @@ class VerificationPythonInputsTest(unittest.TestCase):
         run.assert_not_called()
 
     def test_unsupported_interpreter_fails_before_dependency_loading(self):
-        with mock.patch.object(runner_tests.sys, "version_info", (3, 9)), mock.patch.object(runner_tests.python_tools, "prepared") as prepare:
+        with mock.patch.object(runner_tests.sys, "version_info", (3, 10)), mock.patch.object(runner_tests.python_tools, "prepared") as prepare:
             with self.assertRaises(SystemExit):
                 runner_tests.main([])
         prepare.assert_not_called()
+
+
+class RepositoryToolsInputsTest(unittest.TestCase):
+    def run_profile(self, system, *arguments):
+        with tempfile.TemporaryDirectory() as directory:
+            tools = Path(directory)
+            commands = {
+                "uname": "import os; print(os.environ['FIXTURE_SYSTEM'])",
+                "sudo": "import json,sys; print(json.dumps({'argv':sys.argv[1:]}))",
+                "brew": "import json,os,sys; print(json.dumps({'argv':['brew',*sys.argv[1:]],'auto':os.environ.get('HOMEBREW_NO_AUTO_UPDATE')}))",
+            }
+            for name, body in commands.items():
+                command = tools / name
+                command.write_text(f"#!{sys.executable}\n{body}\n")
+                command.chmod(0o755)
+            environment = {**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"], "FIXTURE_SYSTEM": system}
+            result = subprocess.run(["bash", str(runner_tests.SCRIPTS / "ci_policy/provision.sh"),
+                                     "repository-tools", *arguments], env=environment, capture_output=True, text=True)
+            return result, [json.loads(line) for line in result.stdout.splitlines()]
+
+    def test_linux_preparation_keeps_the_hosted_repository_tool_inventory(self):
+        result, calls = self.run_profile("Linux")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[0]["argv"], ["apt-get", "update", "-qq"])
+        self.assertEqual(calls[1]["argv"][:4], ["apt-get", "install", "-y", "--no-install-recommends"])
+        self.assertEqual(set(calls[1]["argv"][4:]), {"apt-utils", "createrepo-c", "gnupg", "libarchive-tools",
+                                                           "makepkg", "minisign", "pacman-package-manager", "rpm"})
+
+    def test_macos_prepares_the_signer_without_an_unrelated_homebrew_update(self):
+        result, calls = self.run_profile("Darwin")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, [{"argv": ["brew", "install", "minisign"], "auto": "1"}])
+
+    def test_unknown_platform_and_extra_arguments_cannot_install_tools(self):
+        for system, arguments in [("unknown", []), ("Linux", ["unexpected"])]:
+            with self.subTest(system=system, arguments=arguments):
+                result, calls = self.run_profile(system, *arguments)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":

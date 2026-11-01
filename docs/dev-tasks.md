@@ -31,9 +31,11 @@ inspect Git repositories. This downloads and verifies the pinned Git bundle.
 Verification copies the staged bundle into its captured tree; it does not
 provision a missing bundle.
 
-Script verification uses Python 3.10 or newer and the pinned workflow Python
+Script verification uses Python 3.11 or newer and the pinned workflow Python
 packages prepared by `./task setup-dev -- --ci-inputs analysis`. The runner
 loads those packages directly rather than inheriting a global Python install.
+Prepare repository signing/package tools with
+`./task setup-dev -- --ci-inputs repository-tools` on macOS or apt-based Linux.
 
 Native search differential tests use the pinned ripgrep 15 reference. Prepare it
 with `./task setup-dev -- --ci-inputs search-reference <directory>` and prepend
