@@ -1,9 +1,12 @@
 #pragma once
 #include <memory>
+#include "llama-kv-cache.h"
 struct llama_memory_i;
 
 class pw_checkpoint {
     int fd;
+    llama_kv_cache::slot_info_vec_t global_layout;
+    llama_kv_cache::slot_info_vec_t sliding_layout;
     explicit pw_checkpoint(int descriptor) : fd(descriptor) {}
 public:
     ~pw_checkpoint();
