@@ -23,10 +23,10 @@ func TestExecutionCapabilityGrammar(t *testing.T) {
 			if reject != nil || request == nil {
 				t.Fatalf("parse %s: %v", name, reject)
 			}
-			if reject := capabilityrequest.ValidateCapabilityContract(commandContract, args); reject != nil {
+			if reject := capabilityrequest.ValidateCapabilityContract("command", commandContract, args); reject != nil {
 				t.Fatalf("command %s: %v", name, reject)
 			}
-			if reject := capabilityrequest.ValidateCapabilityContract(terminalContract, args); reject == nil {
+			if reject := capabilityrequest.ValidateCapabilityContract("terminal_open", terminalContract, args); reject == nil {
 				t.Fatalf("held session accepted %s", name)
 			}
 		}

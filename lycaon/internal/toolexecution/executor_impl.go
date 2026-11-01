@@ -53,6 +53,13 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		profileID = e.defaultProfile
 	}
 	tc.Identity.Agent = profileID
+	contract := tc.Invocation.Contract
+	if contract.Owner == "" {
+		if definition, ok := e.definitionFor(qualifiedName); ok {
+			contract = definition.Contract
+		}
+	}
+	ctx = tools.WithRecoveryContract(ctx, qualifiedName, contract)
 	ctx = invocationContext(ctx, tc)
 	if retained, entry := e.programEntries[qualifiedName]; entry && (retained == nil || !retained(args)) {
 		return e.invokeProgramEntry(ctx, qualifiedName, profileID, args, tc)
@@ -170,7 +177,7 @@ func (e *Executor) validateInvocation(
 		}
 		tc.Invocation.Contract = def.Contract
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(tc.Invocation.Contract, args); reject != nil {
+	if reject := capabilityrequest.ValidateCapabilityContract(qualifiedName, tc.Invocation.Contract, args); reject != nil {
 		return reject
 	}
 	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)

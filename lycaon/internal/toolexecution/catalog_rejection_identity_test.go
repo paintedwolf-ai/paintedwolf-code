@@ -103,13 +103,13 @@ func TestCatalogCapabilityRecoveryUsesInvocationContract(t *testing.T) {
 	bp := stockBlockPlane(t)
 	for _, capabilities := range []toolcontract.Capability{0, toolcontract.CapabilityLoopbackConnect} {
 		contract := toolcontract.Contract{Capabilities: capabilities}
-		reject := capabilityrequest.ValidateCapabilityContract(contract, map[string]any{
+		reject := capabilityrequest.ValidateCapabilityContract("command", contract, map[string]any{
 			"capability_request": map[string]any{"direct_ip": map[string]any{}},
 		})
 		if reject == nil {
 			t.Fatal("unsupported direct IP accepted")
 		}
-		// A dynamically narrowed definition overrides the compiled command contract.
+		// Recovery uses the definition validated for this invocation.
 		err := bp.RejectFromObservation(t.Context(), oar.AnchorToolRejected, "command", "implement", nil, reject)
 		if err == nil {
 			t.Fatal("missing capability refusal")
@@ -137,8 +137,8 @@ func TestCatalogCapabilityRecoveryUsesInvocationContract(t *testing.T) {
 	if strings.Contains(text, "accepts no execution capability request") {
 		t.Fatalf("command capability rejection falsely claimed no capabilities are accepted: %s", text)
 	}
-	if !strings.Contains(text, "Omit capability_request for ordinary project-tree reads and writes") || !strings.Contains(text, "write_root") {
-		t.Fatalf("command capability rejection missing fields or ordinary project-tree guidance: %s", text)
+	if !strings.Contains(text, "write_root") || strings.Contains(text, "Fix:") {
+		t.Fatalf("unbound parse rejection acquired an invocation repair: %s", text)
 	}
 }
 

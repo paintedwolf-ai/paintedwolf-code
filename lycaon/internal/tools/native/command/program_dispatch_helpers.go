@@ -331,8 +331,11 @@ func catalogShellReason(code, command string, facts map[string]any) string {
 	}
 	data["command"] = command
 	data["rejection_code"] = code
-	_, cause, _ := guidance.RenderHintFields(code, entry, data)
-	return strings.TrimSpace(cause)
+	what, cause, _ := guidance.RenderHintFields(code, entry, data)
+	if cause = strings.TrimSpace(cause); cause != "" {
+		return cause
+	}
+	return strings.TrimSpace(what)
 }
 
 type trackingWriter struct {
