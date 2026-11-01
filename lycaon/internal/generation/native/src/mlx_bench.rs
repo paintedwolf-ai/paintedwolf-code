@@ -18,9 +18,9 @@ struct Specification {
 }
 
 fn compare_logits(model: &Model, spec: &Specification) -> Result<()> {
-    let mut full_cache = Cache::default();
-    let mut last_cache = Cache::default();
-    let mut prefill_cache = Cache::default();
+    let mut full_cache = Cache::new(spec.prompt_tokens.len() + spec.generation_tokens)?;
+    let mut last_cache = Cache::new(spec.prompt_tokens.len() + spec.generation_tokens)?;
+    let mut prefill_cache = Cache::new(spec.prompt_tokens.len() + spec.generation_tokens)?;
     for (index, chunk) in spec.prompt_tokens.chunks(spec.prefill_chunk).enumerate() {
         let full = model
             .forward(chunk, &mut full_cache, Logits::All)?
@@ -137,7 +137,7 @@ fn usage() -> libc::rusage {
 }
 
 fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
-    let mut cache = Cache::default();
+    let mut cache = Cache::new(spec.prompt_tokens.len() + spec.generation_tokens)?;
     memory::reset_peak_memory()?;
     let before = usage();
     let started = Instant::now();

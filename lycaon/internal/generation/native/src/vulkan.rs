@@ -104,7 +104,7 @@ impl Vulkan {
                 pci.as_ptr(),
                 context as u32,
                 chunk as u32,
-                4096.min(context.saturating_sub(1)) as u32,
+                context.saturating_sub(1) as u32,
                 budget,
                 &mut engine,
                 error,
