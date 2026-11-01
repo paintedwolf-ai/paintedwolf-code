@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -83,7 +85,9 @@ func (m *Service) BuildPreparation(ctx context.Context, id string) (contextprepa
 	}
 	digest := sha256.Sum256(payload)
 	return contextpreparation.Candidate{Key: hex.EncodeToString(digest[:]), Run: func(ctx context.Context) bool {
+		started := time.Now()
 		result, err := service.Registry.PrepareContext(ctx, selection, req)
+		slog.DebugContext(ctx, "context preparation completed", "session_id", id, "provider", selection.ProviderID, "prepared_tokens", result.PreparedTokens, "reused_tokens", result.ReusedTokens, "elapsed_ms", time.Since(started).Milliseconds(), "error", err)
 		return err == nil && result.PreparedTokens > 0
 	}}, nil
 }
