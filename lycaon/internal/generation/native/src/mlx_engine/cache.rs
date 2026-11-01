@@ -2,6 +2,9 @@ use super::Result;
 use mlx_rs::{Array, Dtype, ops, ops::indexing::*};
 use std::{cell::RefCell, rc::Rc};
 
+#[path = "cache_checkpoint.rs"]
+pub(super) mod checkpoint;
+
 #[derive(Clone)]
 pub struct KV {
     pub keys: Array,

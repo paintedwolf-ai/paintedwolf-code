@@ -170,8 +170,9 @@ impl Backend for Vulkan {
     fn save_prefix(&mut self) -> Result<()> {
         self.cache(1)
     }
-    fn restore_prefix(&mut self) -> Result<()> {
-        self.cache(2)
+    fn restore_prefix(&mut self) -> Result<bool> {
+        self.cache(2)?;
+        Ok(true)
     }
     fn clear_prefix(&mut self) -> Result<()> {
         self.cache(3)

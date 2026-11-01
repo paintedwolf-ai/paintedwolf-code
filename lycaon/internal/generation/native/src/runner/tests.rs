@@ -17,8 +17,8 @@ impl Backend for NoDevice {
     fn save_prefix(&mut self) -> Result<()> {
         Ok(())
     }
-    fn restore_prefix(&mut self) -> Result<()> {
-        Ok(())
+    fn restore_prefix(&mut self) -> Result<bool> {
+        Ok(true)
     }
     fn clear_prefix(&mut self) -> Result<()> {
         Ok(())
