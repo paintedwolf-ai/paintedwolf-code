@@ -12,6 +12,10 @@ import (
 )
 
 func (in *inputs) close() {
+	if in.stream != nil {
+		in.stream.Close()
+		in.stream = nil
+	}
 	if in.rawWork != nil {
 		in.rawWork.Close()
 		in.rawWork = nil
@@ -19,10 +23,6 @@ func (in *inputs) close() {
 	if in.currentCloser != nil {
 		_ = in.currentCloser.Close()
 		in.currentCloser = nil
-	}
-	if in.positions != nil {
-		in.positions.close()
-		in.positions = nil
 	}
 }
 
@@ -61,18 +61,21 @@ func (in *inputs) openStream(operand commandprogram.Field) {
 			reader = stream.Reader
 		}
 	}
-	positions, err := newInputPositions(in.inv, in.limit, in.label)
-	if err != nil {
-		in.stop = err
-		return
+	in.lastLine = 0
+	var memory nativejq.DecodeMemory
+	if in.inv.owners.Revisions.Memory != nil {
+		memory = in.inv.owners.Revisions.Memory
 	}
-	in.positions = positions
 	tracked := queryInputReader{input: reader, owner: in}
 	if in.raw {
 		in.rawReader = bufio.NewReader(tracked)
-		in.rawOffset = 0
+		in.rawLines = 0
 	} else {
-		in.stream = nativejq.NewValueStream(bufio.NewReader(tracked))
+		if in.eventMode {
+			in.stream = nativejq.NewEventStream(in.inv.ctx, tracked, nativejq.DecodeLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory)
+		} else {
+			in.stream = nativejq.NewBoundedValueStream(in.inv.ctx, tracked, nativejq.DecodeLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory, in.inv.owners.limit("query_value_bytes"))
+		}
 	}
 }
 
@@ -95,7 +98,12 @@ type queryInputReader struct {
 func (r queryInputReader) Read(p []byte) (int, error) {
 	n, err := r.input.Read(p)
 	if n > 0 {
-		if _, failure := r.owner.positions.Write(p[:n]); failure != nil {
+		r.owner.readBytes += int64(n)
+		var failure error
+		if r.owner.readBytes > r.owner.limit {
+			failure = tools.CommandLimitExceeded("stream_throughput_bytes", r.owner.limit, r.owner.readBytes)
+		}
+		if failure != nil {
 			r.owner.stop = failure
 			return 0, failure
 		}
