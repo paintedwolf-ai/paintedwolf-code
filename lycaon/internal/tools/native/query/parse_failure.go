@@ -10,7 +10,7 @@ import (
 )
 
 func (in *inputs) parseFailure(err error) {
-	var limit *nativejq.EventLimitError
+	var limit *nativejq.DecodeLimitError
 	if errors.As(err, &limit) {
 		in.stop = tools.CommandLimitExceeded(limit.Limit, limit.Maximum, limit.Observed)
 		return

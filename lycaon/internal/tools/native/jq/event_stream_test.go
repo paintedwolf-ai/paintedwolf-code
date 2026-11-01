@@ -18,7 +18,7 @@ func (r *eventReadGuard) Read(p []byte) (int, error) {
 }
 func TestJSONEventsDoNotReadTheCompleteDocument(t *testing.T) {
 	input := &eventReadGuard{source: strings.NewReader("[0," + strings.Repeat("1,", 100000) + "2]")}
-	stream := NewEventStream(t.Context(), input, EventLimits{MaximumDepth: 128, MaximumScalarBytes: 1 << 20}, nil)
+	stream := NewEventStream(t.Context(), input, DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1 << 20}, nil)
 	defer stream.Close()
 	event, err := stream.Decode()
 	if err != nil {
@@ -58,7 +58,7 @@ func TestJSONEventsPreserveQueryEvents(t *testing.T) {
 					t.Fatalf("reference events: %v", err)
 				}
 			}
-			actual := NewEventStream(t.Context(), strings.NewReader(source), EventLimits{MaximumDepth: 128, MaximumScalarBytes: 1 << 20}, nil)
+			actual := NewEventStream(t.Context(), strings.NewReader(source), DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1 << 20}, nil)
 			defer actual.Close()
 			var got []string
 			for {
@@ -84,7 +84,7 @@ func TestJSONEventsPreserveQueryEvents(t *testing.T) {
 
 func TestJSONEventsRefuseMalformedInput(t *testing.T) {
 	for _, input := range []string{`[1,]`, `{"x":1,}`, `[1 2]`, `{1:2}`, `{"x" 1}`, `[`, `"unterminated`, `tru`} {
-		s := NewEventStream(t.Context(), strings.NewReader(input), EventLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, nil)
+		s := NewEventStream(t.Context(), strings.NewReader(input), DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, nil)
 		var err error
 		for err == nil {
 			_, err = s.Decode()

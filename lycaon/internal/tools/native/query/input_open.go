@@ -62,7 +62,7 @@ func (in *inputs) openStream(operand commandprogram.Field) {
 		}
 	}
 	in.lastLine = 0
-	var memory nativejq.EventMemory
+	var memory nativejq.DecodeMemory
 	if in.inv.owners.Revisions.Memory != nil {
 		memory = in.inv.owners.Revisions.Memory
 	}
@@ -73,9 +73,9 @@ func (in *inputs) openStream(operand commandprogram.Field) {
 		in.rawLines = 0
 	} else {
 		if in.eventMode {
-			in.stream = nativejq.NewEventStream(ctx, tracked, nativejq.EventLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory)
+			in.stream = nativejq.NewEventStream(ctx, tracked, nativejq.DecodeLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory)
 		} else {
-			in.stream = nativejq.NewBoundedValueStream(ctx, tracked, nativejq.EventLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory, in.inv.owners.limit("query_value_bytes"))
+			in.stream = nativejq.NewBoundedValueStream(ctx, tracked, nativejq.DecodeLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory, in.inv.owners.limit("query_value_bytes"))
 		}
 	}
 }

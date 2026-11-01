@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-func (s *EventStream) scalar(maximum int64) (value any, release func(), failure error) {
+func (s *jsonCursor) scalar(maximum int64) (value any, release func(), failure error) {
 	var raw []byte
 	var held func()
 	defer func() {
@@ -15,7 +15,7 @@ func (s *EventStream) scalar(maximum int64) (value any, release func(), failure 
 	}()
 	appendByte := func(b byte) error {
 		if int64(len(raw)) >= maximum {
-			return &EventLimitError{Limit: "query_value_bytes", Maximum: maximum, Observed: int64(len(raw) + 1)}
+			return &DecodeLimitError{Limit: "query_value_bytes", Maximum: maximum, Observed: int64(len(raw) + 1)}
 		}
 		if len(raw) == cap(raw) {
 			capacity := min(maximum, max(256, 2*int64(cap(raw))))

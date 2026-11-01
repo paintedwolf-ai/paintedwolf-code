@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/query/jq.go",
+  "kind": "module",
+  "workstream": "large-query-inputs",
+  "disposition": "retain",
+  "reason": "Retain the 474-line query entry for CLI arguments, compilation, input iteration, evaluation status and output layout. JSON lexical and materializing input state live in their cursor and decoder modules. Slurp admits retained storage separately from encoded value limits. These steps share one invocation and error/status protocol; their differential and aggregate-bound contracts support this file boundary.",
+  "reviewed_commit": "0c75a8e9da48ca7732b11a3d875a0a10d4208506",
+  "ceiling": 474,
+  "boundaries": {
+    "lycaon/internal/tools/native/query/forms_test.go": "d6ddb20ca87e46fafbceee6818d98524eeb55fb2a65368f7c1f2a94c51d4151a",
+    "lycaon/internal/tools/native/query/event_scale_test.go": "a3dbdecd32f56ea5e521d73afb05b771af72f28563d93c232a9d6ce912ed5187",
+    "lycaon/internal/tools/native/jq/value_size_test.go": "ad023d03b05db2480bfa3bc871ab07dbd2470a11380db1f4191ea47ee2ecdc09"
+  }
+}
