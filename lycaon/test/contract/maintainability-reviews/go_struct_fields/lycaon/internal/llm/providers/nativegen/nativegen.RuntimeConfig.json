@@ -4,12 +4,12 @@
   "kind": "construction",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain 13 explicit construction fields for platform identity, resource admission, executable resources and model storage. They are independently validated inputs, not a new runtime owner; capacity and backend validation fixtures cover their composition.",
-  "reviewed_commit": "7a48b783d843c4ec420d7fce2bf8e074cefd4ae6",
-  "reviewed_shape": "83b5aee5a3bf9b2113b036489428b2af0e322648061d461632be97607ff06159",
+  "reason": "Retain the 13 independently validated construction inputs for platform identity, device and host budgets, packaged resources and model storage. Preparation introduces no new configuration fields or separate model lifetime. The 89-result adapter suite includes backend validation, context admission and loading contracts.",
+  "reviewed_commit": "6e4953482a290440ca0c12f820a9d714bba1b61a",
+  "reviewed_shape": "3cbae97b486fca3f209b397bb6eaa61c29e6b87da5f630005058486f630eb821",
   "ceiling": 13,
   "boundaries": {
-    "lycaon/internal/llm/providers/nativegen/context_test.go": "1bf2b0825798c9490f15b63374c90e7522a7324eff1982b48573915511bb3fb7",
+    "lycaon/internal/llm/providers/nativegen/context_test.go": "591864c0aa8faf0602fccb6b064b2481c25644747b9cb96896ebcfb525d441db",
     "lycaon/internal/llm/providers/nativegen/loading_test.go": "2e48f6eb099eb86e210c529912cdfb61c8a90c43bb048f3dd34967e35e0551f2"
   }
 }
