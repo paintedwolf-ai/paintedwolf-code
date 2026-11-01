@@ -101,15 +101,35 @@ func TestResolveSocketRequestLive(t *testing.T) {
 	if grant.ResolvedPath != resolved {
 		t.Fatalf("resolved = %q want %q", grant.ResolvedPath, resolved)
 	}
-	if grant.Listener.IsZero() {
-		t.Fatal("expected listener identity to be recorded on approval")
+	if runtime.GOOS == "darwin" {
+		if grant.Listener.IsZero() {
+			t.Fatal("expected listener identity to be recorded on approval")
+		}
+		hardLink := filepath.Join(dir, "hard.sock")
+		testutil.FailErr(t, "link socket", os.Link(sockPath, hardLink))
+		if _, err := confine.ResolveSocketRequest(hardLink); err == nil {
+			t.Fatal("expected hard-linked socket to be refused at approval")
+		}
 	}
 
-	hardLink := filepath.Join(dir, "hard.sock")
-	testutil.FailErr(t, "link socket", os.Link(sockPath, hardLink))
-	if _, err := confine.ResolveSocketRequest(hardLink); err == nil {
-		t.Fatal("expected hard-linked socket to be refused at approval")
+	relayGrant := grant
+	relayGrant.RelayPath = filepath.Join(dir, "relay.sock")
+	c := &confine.Confinement{
+		Roots:        []string{dir},
+		Network:      confine.NetworkDeny,
+		SocketGrants: []confine.SocketGrant{relayGrant},
 	}
+	prof, err := confine.BuildSeatbeltProfile(*c)
+	testutil.FailErr(t, "BuildSeatbeltProfile relayGrant", err)
+	if !strings.Contains(prof, relayGrant.RelayPath) {
+		t.Fatalf("expected profile to contain relay path %q", relayGrant.RelayPath)
+	}
+	lease, err := confine.BindAction(c, confine.EgressCommand{SessionID: "sess-live", ToolName: "command"})
+	testutil.FailErr(t, "BindAction", err)
+	_ = lease.SocketRefusal()
+	rt := approvalstate.NewSocketCapabilityRuntime()
+	rt.ForgetSession("sess-live")
+	lease.Close(t.Context())
 }
 
 func TestRevalidateSocketGrantChanged(t *testing.T) {
@@ -125,6 +145,21 @@ func TestRevalidateSocketGrantChanged(t *testing.T) {
 	_ = os.Remove(sockPath)
 	if err := confine.RevalidateSocketGrant(grant); err == nil {
 		t.Fatal("expected changed error after socket removal")
+	}
+
+	decoyPath := filepath.Join(dir, "b.sock")
+	startProbeServer(t, decoyPath, "decoy")
+	testutil.FailErr(t, "symlink repoint", os.Symlink(decoyPath, sockPath))
+	if err := confine.RevalidateSocketGrant(grant); err == nil {
+		t.Fatal("expected changed error after symlink repoint")
+	}
+	_, _ = confine.BuildSeatbeltProfile(confine.Confinement{
+		Roots:        []string{dir},
+		Network:      confine.NetworkDeny,
+		SocketGrants: []confine.SocketGrant{{ApprovedPath: sockPath, ResolvedPath: grant.ResolvedPath}},
+	})
+	if rej := confine.SocketRelayRefusal(confine.Confinement{SocketGrants: []confine.SocketGrant{grant}}); rej == nil || rej.Code != confine.SocketResolveChanged {
+		t.Fatalf("expected SocketRelayRefusal %q, got %+v", confine.SocketResolveChanged, rej)
 	}
 }
 

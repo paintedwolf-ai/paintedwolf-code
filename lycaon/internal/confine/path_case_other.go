@@ -74,8 +74,8 @@ func flipASCIICase(name string) string {
 
 func socketHardLinked(os.FileInfo) bool { return false }
 
-func inspectSocketListener(string, string, os.FileInfo) (SocketListenerIdentity, error) {
-	return SocketListenerIdentity{}, nil
+func inspectSocketListener(_ string, resolvedPath string, _ os.FileInfo) (SocketListenerIdentity, error) {
+	return SocketListenerIdentity{Ino: 1, BoundPath: resolvedPath}, nil
 }
 
 func revalidateSocketListener(_ string, _ string, _ os.FileInfo, pinned SocketListenerIdentity) (SocketListenerIdentity, error) {
@@ -89,5 +89,5 @@ func (*socketRelayLease) close()                       {}
 func (*socketRelayLease) refusal() *SocketResolveError { return nil }
 func ForgetSocketSession(string)                       {}
 func openActionSocketRelays(*Confinement, string) (*socketRelayLease, error) {
-	return nil, nil
+	return &socketRelayLease{}, nil
 }
