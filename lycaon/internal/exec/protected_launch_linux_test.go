@@ -4,6 +4,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -204,7 +205,7 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 
 func TestBrokerRelaySubprocess(t *testing.T) {
 	if os.Getenv("PW_TEST_BROKER_RELAY_SUBPROCESS") == "1" {
-		if code := runBrokerRelay([]string{"1", "/bin/true", "true"}); code != 9 {
+		if code := runBrokerRelay([]string{"0", "/bin/true", "true"}); code != 9 {
 			t.Fatalf("runBrokerRelay = %d, want 9", code)
 		}
 		return
@@ -226,13 +227,18 @@ func TestBrokerRelaySubprocess(t *testing.T) {
 			done <- err
 			return
 		}
-		_, fds, err := launchbroker.Decode(payload[:n], control[:oobn])
+		request, fds, err := launchbroker.Decode(payload[:n], control[:oobn])
 		if err != nil {
 			done <- err
 			return
 		}
 		for _, fd := range fds[1:] {
 			_ = unix.Close(fd)
+		}
+		if request.ExtraFileLayout != "0" {
+			done <- fmt.Errorf("relay changed closed-slot layout to %q", request.ExtraFileLayout)
+			_ = unix.Close(fds[0])
+			return
 		}
 		launchbroker.SendEvent(fds[0], launchbroker.Event{Started: os.Getpid()})
 		launchbroker.SendEvent(fds[0], launchbroker.Event{Exited: true, Code: 9})

@@ -99,14 +99,21 @@ func TestBrokerRequestsBoundTheirExtraDescriptors(t *testing.T) {
 		t.Fatalf("bounded extra descriptors: %v", err)
 	}
 	for name, mutate := range map[string]func(*launchbroker.Request){
-		"too many": func(r *launchbroker.Request) { r.ExtraFiles = launchbroker.MaxExtraFiles + 1 },
-		"negative": func(r *launchbroker.Request) { r.ExtraFiles = -1 },
+		"too many":       func(r *launchbroker.Request) { r.ExtraFiles = launchbroker.MaxExtraFiles + 1 },
+		"negative":       func(r *launchbroker.Request) { r.ExtraFiles = -1 },
+		"short layout":   func(r *launchbroker.Request) { r.ExtraFileLayout = "1" },
+		"long layout":    func(r *launchbroker.Request) { r.ExtraFileLayout = strings.Repeat("1", r.ExtraFiles+1) },
+		"invalid layout": func(r *launchbroker.Request) { r.ExtraFileLayout = strings.Repeat("1", r.ExtraFiles-1) + "x" },
 	} {
 		changed := request
 		mutate(&changed)
 		if err := changed.Validate(); err == nil {
 			t.Fatalf("%s accepted", name)
 		}
+	}
+	request.ExtraFileLayout = strings.Repeat("01", request.ExtraFiles/2)
+	if err := request.Validate(); err != nil {
+		t.Fatalf("bounded sparse descriptor layout: %v", err)
 	}
 }
 

@@ -1060,7 +1060,7 @@
         "den:coverage:changes",
         "scripts:coverage:changes"
       ],
-      "minutes": 120,
+      "minutes": 180,
       "profiles": [
         "fast"
       ],
