@@ -33,6 +33,38 @@ type fixedConfig struct{ cfg compaction.CompactionConfig }
 
 func (f fixedConfig) Config() compaction.CompactionConfig { return f.cfg }
 
+type observedContextWindows map[llm.ModelRef]int
+
+func (windows observedContextWindows) ContextLength(provider, model string) int {
+	return windows[llm.ModelRef{ProviderID: provider, Model: model}]
+}
+
+func TestCompactionFollowsCurrentProviderModelFactsWithoutSessionCarryover(t *testing.T) {
+	left := llm.ModelRef{ProviderID: "left", Model: "model"}
+	right := llm.ModelRef{ProviderID: "right", Model: "model"}
+	other := llm.ModelRef{ProviderID: "left", Model: "other"}
+	facts := observedContextWindows{left: 16000, right: 64000, other: 32000}
+	service := New(settings.DefaultSessionLimits(), nil)
+	service.SetModelSources(nil, facts)
+	session := &api.Session{ID: "same-session"}
+	check := func(selection llm.ModelRef, window int) {
+		t.Helper()
+		session.ProviderID, session.Model = selection.ProviderID, selection.Model
+		if actual := service.Compaction(t.Context(), session).ModelContextWindow; actual != window*75/100 {
+			t.Fatalf("compaction retained another selection's facts: %+v window=%d", selection, actual)
+		}
+	}
+	check(left, 16000)
+	facts[left] = 8000
+	check(left, 8000)
+	check(right, 64000)
+	check(other, 32000)
+	// Replacing the provider's current facts also replaces its old endpoint's
+	// observation; the session cannot retain a second authoritative limit.
+	service.SetModelSources(nil, observedContextWindows{left: 48000})
+	check(left, 48000)
+}
+
 func TestCompactionConfigFuncReapplies(t *testing.T) {
 	tmp := t.TempDir()
 	global := filepath.Join(tmp, "global.yaml")
@@ -117,16 +149,5 @@ agent_pool:
 	}
 	if got := mgr.Compaction(t.Context(), &api.Session{ProviderID: "fw", Model: "accounts/fireworks/models/kimi-k2p7-code"}); got.ModelContextWindow != 196608 {
 		t.Fatalf("session model compaction window = %d want 196608", got.ModelContextWindow)
-	}
-	mgr.LowerSessionLiveWindow("s1", 16384)
-	mgr.LowerSessionLiveWindow("s1", 32768)
-	if w, ok := mgr.SessionLiveWindow("s1"); !ok || w != 16384 {
-		t.Fatalf("SessionLiveWindow = (%d, %v) want (16384, true)", w, ok)
-	}
-	if _, ok := mgr.SessionLiveWindow(""); ok {
-		t.Fatal("empty session ID should not report a live window")
-	}
-	if got := mgr.Compaction(t.Context(), &api.Session{ID: "s1", ProviderID: "fw", Model: "accounts/fireworks/models/kimi-k2p7-code"}); got.ModelContextWindow != 16384 {
-		t.Fatalf("lowered session compaction window = %d want 16384", got.ModelContextWindow)
 	}
 }

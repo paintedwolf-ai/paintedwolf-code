@@ -258,7 +258,6 @@ func TestContextOverflow400TriggersCompactionAndOneRetry(t *testing.T) {
 	provider := openaicompat.New("openai-compatible", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "qwen2.5-coder"}}).
 		WithProfile(providerprofile.LocalInference(providerprofile.OpenAI()))
 
-	var loweredWindow int
 	var compactCalled int
 	var observedWindow int
 	var observedPrompts []int
@@ -266,9 +265,6 @@ func TestContextOverflow400TriggersCompactionAndOneRetry(t *testing.T) {
 		Model: ModelDeps{
 			LLM:              provider,
 			CompactionConfig: staticCompactionConfig,
-			LowerSessionLiveWindow: func(_ string, window int) {
-				loweredWindow = window
-			},
 			CompactAfterContextOverflow: func(_ context.Context, _ *api.Session, history []api.Message, reportedWindow int) ([]api.Message, error) {
 				compactCalled++
 				observedWindow = reportedWindow
@@ -332,15 +328,14 @@ func TestContextOverflow400TriggersCompactionAndOneRetry(t *testing.T) {
 	if compactCalled != 1 {
 		t.Fatalf("CompactAfterContextOverflow calls = %d want 1", compactCalled)
 	}
-	if loweredWindow != 32768 || observedWindow != 32768 {
-		t.Fatalf("loweredWindow=%d observedWindow=%d; want 32768", loweredWindow, observedWindow)
+	if observedWindow != 32768 {
+		t.Fatalf("observedWindow=%d; want 32768", observedWindow)
+	}
+	if cfg, ok := loop.Model.effectiveCompactionConfig(t.Context(), sess); !ok || cfg.ModelContextWindow != staticCompactionConfig(t.Context(), sess).ModelContextWindow {
+		t.Fatal("one response changed the session's configured compaction window")
 	}
 	if len(observedPrompts) != 2 || observedPrompts[0] != 33442 || observedPrompts[1] != 4096 {
 		t.Fatalf("observedPrompts = %v want [33442 4096]", observedPrompts)
-	}
-	effCfg, ok := loop.Model.effectiveCompactionConfig(context.Background(), sess)
-	if !ok || effCfg.ModelContextWindow != 32768 {
-		t.Fatalf("effectiveCompactionConfig.ModelContextWindow = %d (ok=%v); want 32768", effCfg.ModelContextWindow, ok)
 	}
 	entry, ok := provider.ModelEntry("qwen2.5-coder")
 	if !ok || entry.ContextLength != 32768 {

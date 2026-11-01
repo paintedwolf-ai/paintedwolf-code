@@ -111,7 +111,7 @@ func (r *registryRouting) modelSnapshot(ctx context.Context, providerID string) 
 		return mergeResult{DiscoveryStatus: DiscoveryStatusSkipped}, noop
 	}
 	profile := providerprofile.Default()
-	if provider := snapshot.providers[providerID]; provider != nil {
+	if provider := providerAdapter(snapshot.providers[providerID]); provider != nil {
 		profile = provider.Profile()
 	}
 	key := snapshot.credentialValues[providerID]
@@ -204,7 +204,7 @@ func (r *Registry) RequestBudget(ctx context.Context, providerID string, req mod
 	}
 	// Planning reads the adapter without dispatch middleware.
 	if snapshot := r.snapshot.Load(); snapshot != nil {
-		provider := snapshot.providers[providerID]
+		provider := providerAdapter(snapshot.providers[providerID])
 		if provider != nil {
 			policy := thinkingPolicyProvider{Provider: provider, registry: r}
 			if prepared, err := policy.prepare(ctx, req, nil); err == nil {

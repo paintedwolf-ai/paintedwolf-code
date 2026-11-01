@@ -3,62 +3,11 @@ package promptloop
 import (
 	"context"
 	"strings"
-	"sync"
 
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-type sessionLiveWindowTracker struct {
-	mu      sync.RWMutex
-	windows map[string]int
-}
-
-func (t *sessionLiveWindowTracker) lower(sessionID string, window int) {
-	sessionID = strings.TrimSpace(sessionID)
-	if t == nil || sessionID == "" || window <= 0 {
-		return
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.windows == nil {
-		t.windows = make(map[string]int)
-	}
-	if cur, ok := t.windows[sessionID]; !ok || window < cur {
-		t.windows[sessionID] = window
-	}
-}
-
-func (t *sessionLiveWindowTracker) get(sessionID string) (int, bool) {
-	sessionID = strings.TrimSpace(sessionID)
-	if t == nil || sessionID == "" {
-		return 0, false
-	}
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	w, ok := t.windows[sessionID]
-	return w, ok && w > 0
-}
-
-func (l *modelTurn) lowerSessionLiveWindow(sessionID string, window int) {
-	if l == nil || window <= 0 {
-		return
-	}
-	l.liveWindows.lower(sessionID, window)
-	if l.Deps.LowerSessionLiveWindow != nil {
-		l.Deps.LowerSessionLiveWindow(sessionID, window)
-	}
-}
-
-func (l *modelTurn) sessionLiveWindow(sessionID string) (int, bool) {
-	if l == nil {
-		return 0, false
-	}
-	return l.liveWindows.get(sessionID)
-}
 
 func (l *modelTurn) effectiveCompactionConfig(ctx context.Context, sess *api.Session) (compaction.CompactionConfig, bool) {
 	var cfg compaction.CompactionConfig
@@ -66,27 +15,6 @@ func (l *modelTurn) effectiveCompactionConfig(ctx context.Context, sess *api.Ses
 	if l != nil && l.Deps.CompactionConfig != nil {
 		cfg = l.Deps.CompactionConfig(ctx, sess)
 		hasConfig = true
-	}
-	var sessionID string
-	if sess != nil {
-		sessionID = sess.ID
-	}
-	if liveWindow, ok := l.sessionLiveWindow(sessionID); ok && liveWindow > 0 {
-		if !hasConfig {
-			cfg = compaction.DefaultCompactionConfig()
-			hasConfig = true
-		}
-		if cfg.ModelContextWindow <= 0 || liveWindow < cfg.ModelContextWindow {
-			cfg.ModelContextWindow = liveWindow
-			cfg.HardCeilingTokens = 0
-			cfg.TargetTokens = 0
-			if normalized, err := compaction.NormalizeConfig(cfg); err == nil {
-				cfg = normalized
-			} else {
-				cfg.HardCeilingTokens = liveWindow * 85 / 100
-				cfg.TargetTokens = liveWindow * 35 / 100
-			}
-		}
 	}
 	return cfg, hasConfig
 }
@@ -114,13 +42,9 @@ func (l *modelTurn) recoverFromContextOverflow(
 	if model == "" {
 		model = strings.TrimSpace(callModel)
 	}
-	if l.Deps.LLMService != nil && l.Deps.LLMService.Registry != nil && providerID != "" && model != "" {
-		llm.RecordContextWindow(l.Deps.LLMService.Registry, providerID, model, reportedWindow, tooSmall.Source, true)
-	}
 	if tooSmall.PromptTokens > 0 && transcriptEstimate > 0 && l.Deps.RecordCompactionTokenObservation != nil {
 		l.Deps.RecordCompactionTokenObservation(sessionID, providerID, model, tooSmall.PromptTokens, transcriptEstimate)
 	}
-	l.lowerSessionLiveWindow(sessionID, reportedWindow)
 
 	compacted := history
 	if l.Deps.CompactAfterContextOverflow != nil {
@@ -197,46 +121,4 @@ func (l *modelTurn) compactHistoryToWindow(
 		}
 	}
 	return compaction.ContextMessagesToAPI(ctxMsgs, history)
-}
-
-func (l *modelTurn) fitRequestToLiveWindow(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID string,
-	req modelcall.CompletionRequest,
-) modelcall.CompletionRequest {
-	liveWindow, ok := l.sessionLiveWindow(sessionID)
-	if !ok || liveWindow <= 0 {
-		return req
-	}
-	headroom := min(1024, max(0, liveWindow/8))
-	reserve := req.MaxTokens
-	if reserve <= 0 {
-		reserve = max(128, min(4096, liveWindow/8))
-	}
-	ceiling := max(64, liveWindow-headroom-reserve)
-	if modelcall.EstimateRequestInput(req) <= ceiling {
-		if req.MaxTokens > 0 && modelcall.EstimateRequestInput(req)+req.MaxTokens+headroom > liveWindow {
-			req.MaxTokens = max(128, liveWindow-headroom-modelcall.EstimateRequestInput(req))
-		}
-		return req
-	}
-	cfg, hasCfg := l.effectiveCompactionConfig(ctx, sess)
-	if !hasCfg {
-		cfg = compaction.DefaultCompactionConfig()
-	}
-	if cfg.KeepRecentMessages > 4 {
-		cfg.KeepRecentMessages = 4
-	}
-	ctxMsgs := compaction.ContextMessagesFromAPI(req.Messages)
-	fitted := compaction.DeterministicFit(cfg, ctxMsgs, ceiling)
-	if len(fitted) > 0 {
-		req.Messages = compaction.ContextMessagesToAPI(fitted, req.Messages)
-	}
-	if req.MaxTokens <= 0 {
-		if avail := liveWindow - headroom - modelcall.EstimateRequestInput(req); avail >= 128 {
-			req.MaxTokens = avail
-		}
-	}
-	return req
 }

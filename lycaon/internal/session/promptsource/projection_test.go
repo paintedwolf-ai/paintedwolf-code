@@ -99,7 +99,7 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 	}
 }
 
-func TestModelBuildWiresContextOverflowAndLiveWindowCallbacks(t *testing.T) {
+func TestModelBuildWiresContextOverflowAndTokenObservationCallbacks(t *testing.T) {
 	memory := store.NewMemory()
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
@@ -112,18 +112,11 @@ func TestModelBuildWiresContextOverflowAndLiveWindowCallbacks(t *testing.T) {
 	deps := m.Build()
 
 	deps.RecordCompactionTokenObservation(sess.ID, "openai-compatible", "qwen", 4096, 3500)
-	deps.LowerSessionLiveWindow(sess.ID, 32768)
-	if got, ok := lim.SessionLiveWindow(sess.ID); !ok || got != 32768 {
-		t.Fatalf("SessionLiveWindow = (%d, %v), want (32768, true)", got, ok)
-	}
 	if rows, err := deps.CompactAfterContextOverflow(t.Context(), nil, []api.Message{{ID: "m0"}}, 16384); err != nil || len(rows) != 1 {
 		t.Fatalf("nil session CompactAfterContextOverflow = (%v, %v)", rows, err)
 	}
 	rows, _ := deps.CompactAfterContextOverflow(t.Context(), sess, []api.Message{{ID: "m1", Role: api.MessageRoleUser, Content: "hello"}}, 16384)
 	if len(rows) == 0 {
 		t.Fatal("expected non-empty rows after CompactAfterContextOverflow")
-	}
-	if got, ok := lim.SessionLiveWindow(sess.ID); !ok || got != 16384 {
-		t.Fatalf("SessionLiveWindow after overflow = (%d, %v), want (16384, true)", got, ok)
 	}
 }

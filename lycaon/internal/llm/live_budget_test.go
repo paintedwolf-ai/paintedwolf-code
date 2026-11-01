@@ -5,7 +5,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -15,6 +17,11 @@ func newTestLocalRegistry(t *testing.T, entries ...CatalogEntry) (*Registry, *Pr
 	reg, err := NewRegistry(t.Context(), catalog, nil)
 	testutil.FailErr(t, "NewRegistry failed", err)
 	reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
+	for _, entry := range entries {
+		for _, model := range entry.Models {
+			reg.RequestBudget(t.Context(), entry.ID, modelcall.CompletionRequest{Model: model.ID})
+		}
+	}
 	return reg, catalog
 }
 
@@ -146,7 +153,7 @@ func TestDeclaredContextLengthWinsOverDiscoveredProps(t *testing.T) {
 	if !ok || entry.ContextLength != 16384 || entry.ContextLengthSource != "config" {
 		t.Fatalf("ContextEntry = %+v, ok=%v; want 16384 from config", entry, ok)
 	}
-	RecordContextWindow(reg, "openai-compatible", "qwen", 8192, "exceed_context_size_error", true)
+	providerAdapter(reg.snapshot.Load().providers["openai-compatible"]).(*openaicompat.Provider).RecordContextWindow("qwen", 8192, "exceed_context_size_error", true)
 	entryAfterOverflow, ok := ContextEntry(reg, "openai-compatible", "qwen")
 	if !ok || entryAfterOverflow.ContextLength != 8192 {
 		t.Fatalf("ContextEntry after lower overflow = %+v, ok=%v; want 8192", entryAfterOverflow, ok)
@@ -200,10 +207,11 @@ func TestServingWindowRefreshesWhenEndpointIdentityChanges(t *testing.T) {
 		Models:  []modelinfo.Entry{{ID: "local-model"}},
 	}))
 	testutil.FailErr(t, "reg.Reload failed", reg.Reload(t.Context()))
+	reg.RequestBudget(t.Context(), "openai-compatible", modelcall.CompletionRequest{Model: "local-model"})
 	if got := reg.ContextLength("openai-compatible", "local-model"); got != 32768 {
 		t.Fatalf("refreshed ContextLength after endpoint change = %d want 32768", got)
 	}
-	RecordContextWindow(reg, "openai-compatible", "local-model", 12288, "exceed_context_size_error", true)
+	providerAdapter(reg.snapshot.Load().providers["openai-compatible"]).(*openaicompat.Provider).RecordContextWindow("local-model", 12288, "exceed_context_size_error", true)
 	if got := reg.ContextLength("openai-compatible", "local-model"); got != 12288 {
 		t.Fatalf("ContextLength after RecordContextWindow = %d want 12288", got)
 	}

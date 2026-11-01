@@ -65,7 +65,6 @@ type ModelDeps struct {
 	Cost                             cost.CostTracker
 	CompactionConfig                 func(ctx context.Context, sess *api.Session) compaction.CompactionConfig
 	RecordCompactionTokenObservation func(sessionID, providerID, model string, reportedPromptTokens, transcriptEstimate int)
-	LowerSessionLiveWindow           func(sessionID string, window int)
 	CompactAfterContextOverflow      func(ctx context.Context, sess *api.Session, history []api.Message, reportedWindow int) ([]api.Message, error)
 }
 
@@ -173,14 +172,13 @@ type promptContext struct {
 }
 
 type modelTurn struct {
-	Deps        ModelDeps
-	Closeout    *turnCloseout
-	Context     *promptContext
-	Inbox       *turnInbox
-	Nudges      *turnNudges
-	Projection  *turnProjection
-	Tools       *toolInvocations
-	liveWindows sessionLiveWindowTracker
+	Deps       ModelDeps
+	Closeout   *turnCloseout
+	Context    *promptContext
+	Inbox      *turnInbox
+	Nudges     *turnNudges
+	Projection *turnProjection
+	Tools      *toolInvocations
 }
 
 type toolInvocations struct {
