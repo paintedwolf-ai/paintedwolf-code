@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -129,6 +130,36 @@ public:
         }
     }
 };
+
+class comparison : public llama_io_write_i {
+    stream expected;
+    std::vector<unsigned char> bytes = std::vector<unsigned char>(block_size);
+    std::vector<unsigned char> tensor = std::vector<unsigned char>(block_size);
+public:
+    explicit comparison(int fd) : expected(fd) {}
+    size_t n_bytes() override { return expected.n_bytes(); }
+    void write(const void * source, size_t size) override {
+        auto actual = static_cast<const unsigned char *>(source);
+        while (size) {
+            const auto count = std::min(size, bytes.size());
+            const auto offset = n_bytes();
+            expected.read(bytes.data(), count);
+            if (std::memcmp(actual, bytes.data(), count) != 0)
+                throw std::runtime_error("checkpoint roundtrip differs at byte " + std::to_string(offset));
+            actual += count;
+            size -= count;
+        }
+    }
+    void write_tensor(ggml_tensor * value, size_t offset, size_t size) override {
+        while (size) {
+            const auto count = std::min(size, tensor.size());
+            ggml_backend_tensor_get(value, tensor.data(), offset, count);
+            write(tensor.data(), count);
+            offset += count;
+            size -= count;
+        }
+    }
+};
 }
 
 pw_checkpoint::~pw_checkpoint() { close(fd); }
@@ -158,6 +189,12 @@ void pw_checkpoint::restore(llama_memory_i * memory) {
     // Continue allocating rows from the checkpoint's original cursor.
     cache->get_base()->set_allocation_head(0, global_head);
     cache->get_swa()->set_allocation_head(0, sliding_head);
+    if (const auto debug = std::getenv("LLAMA_KV_CACHE_DEBUG"); debug && std::atoi(debug) > 0) {
+        if (lseek(fd, 0, SEEK_SET) < 0) throw std::runtime_error("checkpoint verification seek failed");
+        comparison verified(fd);
+        cache->get_base()->state_write(verified, 1, 0);
+        cache->get_swa()->state_write(verified, 1, 0);
+    }
     if (posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED) != 0)
         throw std::runtime_error("checkpoint page eviction failed");
 }
