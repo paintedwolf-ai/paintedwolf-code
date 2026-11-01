@@ -229,10 +229,10 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 				BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 					return history, nil
 				},
-				ProjectRootCount:  func(context.Context, *api.Session) int { return 1 },
-				Policy:            &recordingToolPolicy{},
-				Tools:             registry,
-				PromptTurnSurface: func(string) string { return "implement_investigate" },
+				ProjectRootCount:   func(context.Context, *api.Session) int { return 1 },
+				Policy:             &recordingToolPolicy{},
+				Tools:              registry,
+				ContextSurfaceDeps: ContextSurfaceDeps{PromptTurnSurface: func(string) string { return "implement_investigate" }},
 			},
 			Model: ModelDeps{LLM: client},
 			Projection: ProjectionDeps{
