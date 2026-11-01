@@ -28,6 +28,21 @@ On the wire, a tool result carries ordered `feedback` entries (`code`, typed `de
 Redirected output such as `printf ... > file` is an ordinary native write in
 the program; the host does not redirect it to a structured tool.
 
+## Command recovery design
+
+Command feedback starts with the observed failure, execution state, and one
+reachable next step. Parser diagnostics retain their own explanation and source
+coordinates. Typed categories identify incomplete constructs, invalid encoding,
+unsupported forms and resource limits; diagnostic prose never selects recovery.
+A parser rejection applies to one complete source unit. It does not establish
+that a parent program has performed no operations.
+
+Recovery keeps the submitted operation intact. Examples are labeled examples,
+not executable replacement calls. Unknown causes, missing bytes and uncertain
+effects remain unknown. Permission failures name the approval boundary; runtime
+failures preserve native status and stderr. A corrected invocation still crosses
+normal admission and authorization.
+
 ## Native command failure attribution
 
 A reached native operation retains the actual `command` model call and its
