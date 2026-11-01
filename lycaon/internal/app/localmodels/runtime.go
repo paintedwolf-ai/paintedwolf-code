@@ -34,7 +34,7 @@ type Runtime struct {
 	Backend    string
 }
 
-// Build authenticates installed artifacts before constructing local inference.
+// Build binds both adapters to one device and resource partition.
 func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if options.Binary == "" || options.StoreRoot == "" || options.Decision.Disabled {
 		return nil, errors.New("local models: incomplete runtime configuration")
@@ -64,12 +64,6 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	store := modelstore.New(options.StoreRoot, authority)
-	if store.Status(nativegen.DefaultModelID, inventory.Backend).State == modelstore.StateAbsent {
-		if err := store.ImportBundle(ctx, options.Seed, modelstore.Slot{Model: nativegen.DefaultModelID, Device: inventory.Backend}); err != nil {
-			resources.Close()
-			return nil, err
-		}
-	}
 	decision := options.Decision
 	decision.Resources = resources.Decision
 	return &Runtime{
