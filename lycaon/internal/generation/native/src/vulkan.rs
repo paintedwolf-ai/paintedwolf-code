@@ -1,7 +1,6 @@
 use crate::{
     error::{Error, Result},
     execution::{Backend, Sampling},
-    sampler,
 };
 use std::{
     ffi::{CStr, CString, c_char, c_int, c_void},
@@ -138,9 +137,13 @@ impl Backend for Vulkan {
     }
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
         let mut sampled = u32::MAX;
-        let mode = sampling
-            .as_ref()
-            .map_or(0, |s| if s.temperature == 0.0 { 2 } else { 1 });
+        let mode = sampling.as_ref().map_or(0, |s| {
+            if s.temperature == 0.0 && s.constraint.is_none() {
+                2
+            } else {
+                1
+            }
+        });
         checked(|error, capacity| unsafe {
             pw_generation_forward(
                 self.engine.as_ptr(),
@@ -157,17 +160,10 @@ impl Backend for Vulkan {
             return Ok(Some(sampled));
         }
         sampling
-            .map(|sampling| {
-                sampler::sample(
-                    &self.logits,
-                    sampling.temperature,
-                    sampling.top_p,
-                    sampling.top_k,
-                    &mut sampling.rng,
-                )
-            })
+            .map(|sampling| sampling.sample(&self.logits))
             .transpose()
     }
+
     fn reset(&mut self) -> Result<()> {
         self.cache(0)
     }

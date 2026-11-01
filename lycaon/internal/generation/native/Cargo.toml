@@ -36,6 +36,8 @@ minijinja = { version = "2.24", features = ["fuel", "json", "loader"] }
 minijinja-contrib = { version = "2.24", features = ["pycompat"] }
 tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
 
+llguidance = { version = "=1.9.1", default-features = false, features = ["lark", "referencing", "ahash"] }
+
 [target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
 mlx-rs = { version = "0.32", optional = true }
 

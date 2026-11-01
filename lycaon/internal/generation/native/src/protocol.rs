@@ -90,5 +90,5 @@ pub enum StopReason {
     StopToken,
     MaxTokens,
     Canceled,
-    Deadline,
+    StructuredOutput,
 }
