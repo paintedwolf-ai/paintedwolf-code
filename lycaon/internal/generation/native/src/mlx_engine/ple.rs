@@ -140,9 +140,15 @@ mod tests {
     fn fixture(overlap: bool) -> Fixture {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
-            "paintedwolf-ple-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)
+            "paintedwolf-ple-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path).unwrap();
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
         let mut header = serde_json::Map::new();
         let mut end = 0;
         let mut bias_offset = 0;
@@ -153,17 +159,25 @@ mod tests {
         ] {
             let begin = if overlap { 0 } else { end };
             end = begin + 262144_u64 * width * bytes;
-            if suffix == "biases" { bias_offset = begin; }
+            if suffix == "biases" {
+                bias_offset = begin;
+            }
             header.insert(format!("language_model.model.embed_tokens_per_layer.{suffix}"),
                 serde_json::json!({"dtype": dtype, "shape": [262144, width], "data_offsets": [begin, end]}));
         }
         let header = serde_json::to_vec(&header).unwrap();
-        file.write_all(&(header.len() as u64).to_le_bytes()).unwrap();
+        file.write_all(&(header.len() as u64).to_le_bytes())
+            .unwrap();
         file.write_all(&header).unwrap();
         let start = 8 + header.len() as u64;
-        file.set_len(start + 262144 * 1344 * 4 + 2 * 262144 * 168 * 2).unwrap();
-        file.seek(SeekFrom::Start(start + bias_offset + 7 * 168 * 2)).unwrap();
-        for _ in 0..168 { file.write_all(&f16::from_f32(2.0).to_bits().to_le_bytes()).unwrap(); }
+        file.set_len(start + 262144 * 1344 * 4 + 2 * 262144 * 168 * 2)
+            .unwrap();
+        file.seek(SeekFrom::Start(start + bias_offset + 7 * 168 * 2))
+            .unwrap();
+        for _ in 0..168 {
+            file.write_all(&f16::from_f32(2.0).to_bits().to_le_bytes())
+                .unwrap();
+        }
         Fixture(path)
     }
 
@@ -171,7 +185,11 @@ mod tests {
     fn sparse_mapping_gathers_selected_rows_without_materializing_table() {
         let fixture = fixture(false);
         let ple = MappedPLE::open(&fixture.0, 4).unwrap();
-        let output = ple.gather(&[7, 0, 7]).unwrap().as_dtype(mlx_rs::Dtype::Float32).unwrap();
+        let output = ple
+            .gather(&[7, 0, 7])
+            .unwrap()
+            .as_dtype(mlx_rs::Dtype::Float32)
+            .unwrap();
         output.eval().unwrap();
         let values = output.as_slice::<f32>();
         assert_eq!(values.len(), 3 * 10752);

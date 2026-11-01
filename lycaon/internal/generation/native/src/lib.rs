@@ -7,6 +7,7 @@ pub mod error;
 pub mod protocol;
 pub mod sampler;
 pub mod service;
+pub mod rendering;
 
 pub use cache::Cache;
 pub use decoder::Decoder;

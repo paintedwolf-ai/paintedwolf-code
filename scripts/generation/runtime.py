@@ -145,7 +145,7 @@ def build(args):
         record_build(args.backend, output, output / "generation-reference")
     elif args.backend == "reference-rust":
         run(["cargo", "build", "--locked", "--release", "--features", "mlx", "--jobs", workers,
-             "--bin", "nativegen-bench", "--manifest-path", source / "Cargo.toml"], env=rust_environment(output))
+             "--bins", "--manifest-path", source / "Cargo.toml"], env=rust_environment(output))
         record_build(args.backend, output, output / "release/nativegen-bench")
     elif args.backend == "native":
         run(["cargo", "build", "--locked", "--release", "--manifest-path", source / "Cargo.toml"],
@@ -203,6 +203,14 @@ def bench(args):
                 any(type(token) is not int or not 0 <= token < 262144 for token in prompt)):
             raise ValueError("rendered prompt exceeds its bounds")
         shutil.copyfile(args.messages, destination / "messages.json")
+    if args.prompt_file:
+        if args.prompt_file.stat().st_size > 1 << 20:
+            raise ValueError("rendered prompt file exceeds its bound")
+        prompt = json.loads(args.prompt_file.read_text())["prompt_tokens"]
+        if (not isinstance(prompt, list) or not prompt or len(prompt) + args.tokens > 65536 or
+                any(type(token) is not int or not 0 <= token < 262144 for token in prompt)):
+            raise ValueError("rendered prompt exceeds its bounds")
+        shutil.copyfile(args.prompt_file, destination / "rendered-prompt.json")
     specification = {"prompt_tokens": prompt, "generation_tokens": args.tokens,
                      "trials": args.trials, "ple": args.ple, "prefill_chunk": args.prefill_chunk, "kv_bits": args.kv_bits}
     input_path = destination / "input.json"
@@ -256,7 +264,9 @@ def main():
     parser.add_argument("--refresh-lock", action="store_true")
     parser.add_argument("--install-build-tools", action="store_true")
     parser.add_argument("--model", type=Path)
-    parser.add_argument("--messages", type=Path)
+    prompts = parser.add_mutually_exclusive_group()
+    prompts.add_argument("--messages", type=Path)
+    prompts.add_argument("--prompt-file", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--artifact-identity")
     parser.add_argument("--precision", type=Path)

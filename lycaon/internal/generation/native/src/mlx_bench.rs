@@ -41,8 +41,7 @@ fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
         &spec.prompt_tokens[spec.prompt_tokens.len() - 1..],
         &mut cache,
     )?;
-    logits.eval()?;
-    cache.evaluate()?;
+    cache.evaluate_with(&[&logits])?;
     prefill_step = prefill_step.max(step.elapsed().as_secs_f64());
     let prefill = started.elapsed().as_secs_f64();
     let mut token = argmax(logits.index((0, -1, ..)), None)?;
@@ -56,8 +55,7 @@ fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
         tokens.push(next);
         let logits = model.forward(&[next], &mut cache)?;
         token = argmax(logits.index((0, -1, ..)), None)?;
-        token.eval()?;
-        cache.evaluate()?;
+        cache.evaluate_with(&[&token])?;
         decode_step = decode_step.max(step.elapsed().as_secs_f64());
     }
     let decoding = started.elapsed().as_secs_f64();

@@ -75,6 +75,6 @@ def identity(cache):
     return {
         "executable": str(compiler),
         "version": subprocess.check_output([str(compiler), "--version"], text=True).strip(),
-        "sdk": subprocess.check_output(["xcrun", "--show-sdk-path"], text=True).strip(),
-        "sdk_version": subprocess.check_output(["xcrun", "--show-sdk-version"], text=True).strip(),
+        "sdk": subprocess.check_output(["xcrun", "--sdk", "macosx", "--show-sdk-path"], text=True).strip(),
+        "sdk_version": subprocess.check_output(["xcrun", "--sdk", "macosx", "--show-sdk-version"], text=True).strip(),
     }

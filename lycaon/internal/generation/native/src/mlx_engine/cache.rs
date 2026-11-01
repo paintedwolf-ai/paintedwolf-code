@@ -22,8 +22,17 @@ impl Default for Cache {
 
 impl Cache {
     pub fn update(&mut self, layer: usize, keys: Array, values: Array) -> Result<KV> {
-        let count = keys.shape()[2];
-        if layer >= 24 || count == 0 || count > 256 || self.offset + count > 65536 {
+        let shape = keys.shape();
+        let count = shape.get(2).copied().unwrap_or(0);
+        let dimension = if layer % 6 == 5 { 512 } else { 256 };
+        if layer >= 24
+            || !(1..=256).contains(&count)
+            || !(0..=65536 - count).contains(&self.offset)
+            || shape != [1, 2, count, dimension]
+            || values.shape() != shape
+            || keys.dtype() != Dtype::Float16
+            || values.dtype() != Dtype::Float16
+        {
             return Err("KV update exceeds E4B bounds".into());
         }
         let sliding = layer % 6 != 5;
@@ -69,6 +78,10 @@ impl Cache {
     }
 
     pub fn get(&self, layer: usize, count: i32) -> Result<KV> {
+        if layer >= 24 || !(1..=256).contains(&count) || !(0..=65536 - count).contains(&self.offset)
+        {
+            return Err("KV read exceeds E4B bounds".into());
+        }
         let stored = self.layers[layer]
             .as_ref()
             .ok_or("Missing shared KV source")?;
@@ -84,11 +97,17 @@ impl Cache {
     }
 
     pub fn evaluate(&self) -> Result<()> {
+        self.evaluate_with(&[])
+    }
+
+    pub fn evaluate_with(&self, outputs: &[&Array]) -> Result<()> {
         mlx_rs::transforms::eval(
-            self.layers
-                .iter()
-                .flatten()
-                .flat_map(|kv| [&kv.keys, &kv.values]),
+            outputs.iter().copied().chain(
+                self.layers
+                    .iter()
+                    .flatten()
+                    .flat_map(|kv| [&kv.keys, &kv.values]),
+            ),
         )?;
         Ok(())
     }
@@ -97,7 +116,7 @@ impl Cache {
         self.layers
             .iter()
             .flatten()
-            .map(|kv| (kv.keys.size() + kv.values.size()) * 2)
+            .map(|kv| kv.keys.nbytes() + kv.values.nbytes())
             .sum()
     }
 }
@@ -105,6 +124,17 @@ impl Cache {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_precision_drift_and_malformed_cache_shapes() {
+        let mut cache = Cache::default();
+        for shape in [&[1, 2, 1, 256][..], &[1][..]] {
+            let keys = Array::zeros::<f32>(shape).unwrap();
+            assert!(cache.update(0, keys.clone(), keys).is_err());
+        }
+        assert!(cache.get(24, 1).is_err());
+        assert_eq!(cache.bytes(), 0);
+    }
 
     #[test]
     fn global_capacity_grows_in_bounded_blocks() {

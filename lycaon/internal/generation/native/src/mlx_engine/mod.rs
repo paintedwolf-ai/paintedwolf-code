@@ -1,12 +1,14 @@
-use mlx_rs::{Array, fast, nn, ops, ops::indexing::*};
+use mlx_rs::{Array, fast, ops, ops::indexing::*};
 use serde_json::Value;
 use std::path::Path;
 
+mod activation;
 mod cache;
 mod config;
 mod ple;
 mod weights;
 
+use activation::Activation;
 pub use cache::Cache;
 use ple::MappedPLE;
 use weights::{Linear, Weights};
@@ -15,6 +17,10 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn norm(x: &Array, weight: &Array) -> Result<Array> {
     Ok(fast::rms_norm(x, Some(weight), 1e-6)?)
+}
+
+fn scale(x: &Array, value: f32) -> Result<Array> {
+    Ok(x.multiply(Array::from_f32(value).as_dtype(x.dtype())?)?)
 }
 
 fn rotary(x: &Array, sliding: bool, offset: i32) -> Result<Array> {
@@ -76,7 +82,13 @@ impl Attention {
         })
     }
 
-    fn forward(&self, x: &Array, layer: usize, cache: &mut Cache, mask: &Array) -> Result<Array> {
+    fn forward(
+        &self,
+        x: &Array,
+        layer: usize,
+        cache: &mut Cache,
+        mask: Option<&Array>,
+    ) -> Result<Array> {
         let sliding = layer % 6 != 5;
         let dimension = if sliding { 256 } else { 512 };
         let count = x.shape()[1];
@@ -98,9 +110,9 @@ impl Attention {
             cache.get(if sliding { 22 } else { 23 }, count)?
         };
         let masking = if sliding {
-            fast::ScaledDotProductAttentionMask::Array(mask)
+            mask.map(fast::ScaledDotProductAttentionMask::Array)
         } else {
-            fast::ScaledDotProductAttentionMask::Causal
+            (count > 1).then_some(fast::ScaledDotProductAttentionMask::Causal)
         };
         let result = fast::scaled_dot_product_attention(q, kv.keys, kv.values, 1.0, masking, None)?;
         self.output
@@ -152,7 +164,8 @@ impl Layer {
         ple: &Array,
         i: usize,
         cache: &mut Cache,
-        mask: &Array,
+        mask: Option<&Array>,
+        activation: &Activation,
     ) -> Result<Array> {
         let h = norm(x, &self.input_norm)?;
         let x = x.add(norm(
@@ -160,9 +173,13 @@ impl Layer {
             &self.attention_norm,
         )?)?;
         let h = norm(&x, &self.feedforward_norm)?;
-        let h = nn::gelu_approximate(self.gate.forward(&h)?)?.multiply(self.up.forward(&h)?)?;
+        let h = activation
+            .apply(&self.gate.forward(&h)?)?
+            .multiply(self.up.forward(&h)?)?;
         let x = x.add(norm(&self.down.forward(&h)?, &self.output_norm)?)?;
-        let h = nn::gelu_approximate(self.ple_gate.forward(&x)?)?.multiply(ple)?;
+        let h = activation
+            .apply(&self.ple_gate.forward(&x)?)?
+            .multiply(ple)?;
         Ok(
             x.add(norm(&self.ple_projection.forward(&h)?, &self.ple_norm)?)?
                 .multiply(&self.scalar)?,
@@ -177,6 +194,7 @@ pub struct Model {
     projection_norm: Array,
     layers: Vec<Layer>,
     final_norm: Array,
+    activation: Activation,
 }
 
 impl Model {
@@ -184,11 +202,7 @@ impl Model {
         let config: Value = serde_json::from_slice(&std::fs::read(directory.join("config.json"))?)?;
         config::validate(&config)?;
         let quantization = config["quantization"].clone();
-        let bits = i32::try_from(quantization
-            .get("language_model.model.embed_tokens_per_layer")
-            .unwrap_or(&quantization)["bits"]
-            .as_i64()
-            .ok_or("Missing PLE precision")?)?;
+        let bits = weights::quantization_bits(&quantization, "model.embed_tokens_per_layer")?;
         let path = directory.join("model.safetensors");
         let ple = MappedPLE::open(&path, bits)?;
         let mut weights = Weights::load(&path, quantization)?;
@@ -201,6 +215,7 @@ impl Model {
                 .map(|i| Layer::load(&mut weights, i))
                 .collect::<Result<_>>()?,
             final_norm: weights.take("model.norm.weight")?,
+            activation: Activation::new(),
         })
     }
 
@@ -214,38 +229,53 @@ impl Model {
         }
         let count = ids.len() as i32;
         let indices = Array::from_slice(ids, &[1, count]);
-        let mut h = self
-            .embedding
-            .embedding(&indices)?
-            .multiply(Array::from_f32(2560_f32.sqrt()))?;
-        let projected = self
-            .projection
-            .forward(&h)?
-            .multiply(Array::from_f32(1.0 / 2560_f32.sqrt()))?
+        let mut h = scale(&self.embedding.embedding(&indices)?, 2560_f32.sqrt())?;
+        let projected = scale(&self.projection.forward(&h)?, 1.0 / 2560_f32.sqrt())?
             .reshape(&[1, count, 42, 256])?;
-        let ple = norm(&projected, &self.projection_norm)?
-            .add(self.ple.gather(ids)?.multiply(Array::from_f32(16.0))?)?
-            .multiply(Array::from_f32(std::f32::consts::FRAC_1_SQRT_2))?;
+        let ple = scale(
+            &norm(&projected, &self.projection_norm)?.add(scale(&self.ple.gather(ids)?, 16.0)?)?,
+            std::f32::consts::FRAC_1_SQRT_2,
+        )?;
         let old = cache.offset.min(511);
-        let mask = Array::from_slice(
-            &(0..count)
-                .flat_map(|q| (0..old + count).map(move |k| k <= old + q && k > old + q - 512))
-                .collect::<Vec<_>>(),
-            &[count, old + count],
-        );
+        let mask = (count > 1).then(|| {
+            Array::from_slice(
+                &(0..count)
+                    .flat_map(|q| (0..old + count).map(move |k| k <= old + q && k > old + q - 512))
+                    .collect::<Vec<_>>(),
+                &[count, old + count],
+            )
+        });
         for (i, layer) in self.layers.iter().enumerate() {
-            h = layer.forward(&h, &ple.index((.., .., i as i32, ..)), i, cache, &mask)?;
+            h = layer.forward(
+                &h,
+                &ple.index((.., .., i as i32, ..)),
+                i,
+                cache,
+                mask.as_ref(),
+                &self.activation,
+            )?;
         }
         cache.offset += count;
         let logits = self.embedding.forward(&norm(&h, &self.final_norm)?)?;
-        Ok(ops::tanh(logits.divide(Array::from_f32(30.0))?)?
-            .multiply(Array::from_f32(30.0))?)
+        let cap = Array::from_f32(30.0).as_dtype(logits.dtype())?;
+        Ok(ops::tanh(logits.divide(&cap)?)?.multiply(&cap)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scalar_scaling_preserves_activation_precision() {
+        let input = Array::ones::<f32>(&[1, 2])
+            .unwrap()
+            .as_dtype(mlx_rs::Dtype::Float16)
+            .unwrap();
+        let output = scale(&input, 16.0).unwrap();
+        assert_eq!(output.dtype(), mlx_rs::Dtype::Float16);
+        assert_eq!(output.nbytes(), 4);
+    }
 
     #[test]
     fn proportional_rope_rotates_pairs_across_the_full_head() {
