@@ -42,6 +42,7 @@ var occurrenceFactDecls = []factDecl{
 	{"source_end_byte", oarcore.TypeInt, FactTierHost, ""},
 	{"source_line", oarcore.TypeInt, FactTierHost, ""},
 	{"source_column", oarcore.TypeInt, FactTierHost, ""},
+	{"command_execution", oarcore.TypeString, FactTierHost, ""},
 	{"expected_form", oarcore.TypeString, FactTierHost, ""},
 	{"source_excerpt", oarcore.TypeString, FactTierHost, ""},
 	{"source_excerpt_start_byte", oarcore.TypeInt, FactTierHost, ""},

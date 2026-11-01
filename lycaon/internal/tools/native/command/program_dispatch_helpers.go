@@ -299,7 +299,10 @@ func writeShellRefusal(w io.Writer, command, subject, code string, policyCopy ma
 	if subject == "" || strings.HasPrefix(subject, "-") {
 		subject = "request"
 	}
-	reason := strings.TrimSpace(policyCopy["cause"])
+	reason, _ := facts["parser_message"].(string)
+	if reason == "" {
+		reason = strings.TrimSpace(policyCopy["cause"])
+	}
 	if reason == "" {
 		reason = strings.TrimSpace(policyCopy["what"])
 	}

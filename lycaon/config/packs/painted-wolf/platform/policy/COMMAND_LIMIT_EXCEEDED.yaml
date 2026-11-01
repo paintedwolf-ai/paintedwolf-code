@@ -18,11 +18,14 @@ requires:
 when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
 effect: block
 copy:
-  what: 'This command reached its {{ paintedwolf.limit_id }} limit ({{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }}).'
-  cause: 'The command stopped at this statement. Earlier completed steps and their results remain recorded.'
-  why: 'The host cannot run another step once the limit is reached.'
-  fix: 'Check the completed steps, then process the remaining items in fewer, larger steps or write intermediate results to a file.'
-  instead: 'Check the recorded results before retrying the remaining work.'
+  what: 'Command limit reached: {{ paintedwolf.limit_id }}. Observed {{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }}.'
+  cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}The command stopped at the recorded boundary.{% endif %}'
+  fix: >-
+    {% if paintedwolf.diagnostic_top_level %}Reduce the size or complexity of the submitted shell source, then resubmit it.
+    {% elif paintedwolf.limit_id == "regex_work_steps" %}Reduce the searched input or simplify the regular expression. Preserve earlier results.
+    {% elif paintedwolf.resource_unit == "bytes" %}Reduce the data held or emitted by the remaining work; use bounded input or output ranges.
+    {% else %}Reduce usage of the named resource in the remaining work. Preserve completed results.{% endif %}
+  instead: Check the recorded results before retrying the remaining work.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command reached a resource limit

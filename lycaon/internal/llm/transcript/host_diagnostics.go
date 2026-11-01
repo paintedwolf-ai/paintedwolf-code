@@ -22,6 +22,7 @@ const (
 // a validated exact byte span (toolcontract.ProgramRepair) for explicit
 // submission; it is never presented as an equivalent executed repair.
 var diagnosticFields = []string{
+	"command_execution",
 	"program_completed_effects", "program_uncertain_effects", "program_replay_available", "program_effect_details_omitted",
 	"program_executed_children", "program_executed_reads", "native_operation", "native_command",
 	"operation_source_unit_id", "operation_source_start_byte", "operation_source_end_byte", "operation_source_line", "operation_source_column",

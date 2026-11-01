@@ -40,6 +40,9 @@ func ProgramSyntaxObservation(tool string, err error) *toolrejection.ToolReject 
 		facts["tool"] = tool
 		facts["reason"] = diagnostic.Expected
 		facts["diagnostic_top_level"] = !diagnostic.Sourced
+		if !diagnostic.Sourced {
+			facts["command_execution"] = "not_started"
+		}
 		if diagnostic.Limit != "" {
 			facts["limit_id"], facts["resource_unit"] = diagnostic.Limit, diagnostic.Unit
 			facts["maximum"], facts["observed"] = diagnostic.Maximum, diagnostic.Observed

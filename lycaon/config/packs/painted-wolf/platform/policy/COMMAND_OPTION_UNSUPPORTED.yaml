@@ -21,8 +21,8 @@ effect: block
 copy:
   what: '{{ paintedwolf.command }} cannot use {% if paintedwolf.word %}{{ paintedwolf.word }}{% else %}that option{% endif %}{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.'
   cause: 'Supported form: {{ paintedwolf.expected_form }}.'
-  why: No available {{ paintedwolf.command }} accepts that option here.
-  fix: Use the supported form below, or another command that reaches the same result. Earlier output and changes remain in this result.
+  why: This command form does not accept the supplied option.
+  fix: Correct this option using the supported form. Keep the other operands and intended operation; review earlier output and changes before submitting remaining work.
   instead: 'Use {{ paintedwolf.expected_form }}.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect

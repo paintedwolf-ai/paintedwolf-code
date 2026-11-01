@@ -135,7 +135,9 @@ func (f *frame) sourceRefusal(ctx context.Context, run *childRun, s commandsurfa
 	switch {
 	case errors.As(err, &diagnostic):
 		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: diagnostic.Code, EffectCertainty: toolcontract.NoEffect}, err)
-		f.hostRefusal(command, fmt.Sprintf("line %d", diagnostic.Span.Line), diagnostic.Expected, diagnostic.Code)
+		if report := f.e.ports.Refusals; report != nil {
+			report(f.io.streams.Error, RefusalReport{Operation: command, Operand: fmt.Sprintf("line %d", diagnostic.Span.Line), Code: diagnostic.Code, Expected: diagnostic.Expected, Span: diagnostic.Span, Cause: err})
+		}
 		return f.refuse(s.SyntaxLocation, diagnostic.Code, diagnostic.Expected, err)
 	case errors.As(err, &integrity):
 		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_OPERAND_INVALID", EffectCertainty: toolcontract.NoEffect}, err)

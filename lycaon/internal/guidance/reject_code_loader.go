@@ -355,16 +355,17 @@ func scenarioTool(entry HintEntry, sc ScenarioEntry) string {
 func RenderUnifiedRejectBlock(ctx context.Context, code string, entry HintEntry, data map[string]any) (string, error) {
 	view := NormalizeRejectCodeView(code, entry)
 	payload := map[string]any{
-		"code":     view.ID,
-		"emit":     view.Emit,
-		"effect":   view.Effect,
-		"anchor":   view.Anchor,
-		"category": view.Category,
-		"what":     renderFieldTemplate(view.What, data),
-		"cause":    renderFieldTemplate(view.Cause, data),
-		"why":      renderFieldTemplate(view.Why, data),
-		"fix":      renderFieldTemplate(view.Fix, data),
-		"instead":  renderFieldTemplate(view.Instead, data),
+		"execution": commandRecoveryView(data),
+		"code":      view.ID,
+		"emit":      view.Emit,
+		"effect":    view.Effect,
+		"anchor":    view.Anchor,
+		"category":  view.Category,
+		"what":      renderFieldTemplate(view.What, data),
+		"cause":     renderFieldTemplate(view.Cause, data),
+		"why":       renderFieldTemplate(view.Why, data),
+		"fix":       renderFieldTemplate(view.Fix, data),
+		"instead":   renderFieldTemplate(view.Instead, data),
 	}
 	return RenderGuidance(ctx, "reject/_reject", payload)
 }
