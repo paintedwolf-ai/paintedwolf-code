@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { ContextMenu } from "../../components/ContextMenu.tsx";
 import { seedStockFrame } from "../../contributions/stock-frame-test.ts";
 import { filesContextMenuItems } from "../commands/project-files-context-menu.ts";
+import { fileVersionFromSnapshot } from "../history/file-version.ts";
 import { loadedBuffer } from "../components/project-files-view-test-harness.ts";
 import { type FileBuffer, projectFilesState } from "../documents/files-buffer-state.ts";
 import { FilesEditorHeaderChrome, createEditorToolbarMenus } from "./FilesEditorChrome.tsx";
@@ -125,8 +126,7 @@ describe("files editor context menu a11y", () => {
       diffPreview: {
         title: "Review diff",
         detail: "1 file changed",
-        base: "old\n",
-        modified: "new\n",
+        version: fileVersionFromSnapshot({ rootId: baseBuffer.rootId, path: baseBuffer.path, before: "old\n", after: "new\n" }),
         walkStep: {
           kind: "outside" as const,
           key: "step-1",
