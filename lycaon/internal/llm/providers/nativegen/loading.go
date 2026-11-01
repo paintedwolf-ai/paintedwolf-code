@@ -46,6 +46,10 @@ func (p *Runtime) ensureLoaded(ctx context.Context, model string) error {
 	if err != nil {
 		return err
 	}
+	if err := lease.Audit(ctx); err != nil {
+		lease.Release()
+		return err
+	}
 	identity, err := modelstore.SigningBytes(lease.Manifest)
 	if err != nil {
 		lease.Release()
