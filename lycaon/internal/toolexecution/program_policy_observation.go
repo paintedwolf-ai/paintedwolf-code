@@ -43,15 +43,6 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission *t
 			end()
 		}
 	}()
-	end, err := frame.beginUse()
-	if err != nil {
-		return nil, nil, err
-	}
-	defer func() {
-		if end != nil {
-			end()
-		}
-	}()
 	model, err := frame.ModelInvocation(ctx)
 	if err != nil {
 		return nil, nil, err
