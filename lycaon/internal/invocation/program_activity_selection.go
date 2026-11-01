@@ -28,7 +28,7 @@ func selectActivityExecutions(activities []api.CommandActivity, id string) (exec
 			marks = append(marks, "?")
 			args = append(args, id)
 		}
-		return executionSelection{sql: `AND EXISTS (SELECT 1 FROM invocation_program_executions a WHERE a.program_id=e.program_id AND a.id IN (` + strings.Join(marks, ",") + `) AND a.node_id=e.node_id AND a.operation_id=e.operation_id AND a.scope_json=e.scope_json)`, args: args}, nil
+		return executionSelection{sql: `AND EXISTS (SELECT 1 FROM invocation_program_executions a WHERE a.program_id=e.program_id AND a.id IN (` + strings.Join(marks, ",") + `) AND ((a.operation_id='program &' AND a.id=e.id) OR (a.operation_id<>'program &' AND a.node_id=e.node_id AND a.operation_id=e.operation_id AND a.scope_json=e.scope_json)))`, args: args}, nil
 	}
 	return executionSelection{}, ErrProgramNotFound
 }

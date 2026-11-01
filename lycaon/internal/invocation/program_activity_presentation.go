@@ -11,6 +11,9 @@ type activityRule struct{ role, group, label string }
 
 func activityPresentation(input activityInput) activityRule {
 	receipt := input.receipt
+	if input.operation == "program &" {
+		return activityRule{"primary", "Running programs", "Start background job"}
+	}
 	if strings.HasPrefix(input.operation, "program ") {
 		return activityRule{"container", "Running commands", "Run command"}
 	}

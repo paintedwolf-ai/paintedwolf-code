@@ -143,3 +143,16 @@ func TestActivityInputBoundsAndScreenedValue(t *testing.T) {
 		t.Fatal("ignored cancellation")
 	}
 }
+
+func TestActivityStructureKeepsStandaloneFailureAndBackgroundLaunch(t *testing.T) {
+	process := activityFixture("process", "root", "command", "external", 0)
+	helper := activityFixture("helper", "root", "sort", "sort", 10)
+	job := activityFixture("job", "root", "program &", "", 20)
+	job.receipt.JobHandle = "job:one"
+	groups := activityGroups(process, helper, job)
+	groups[1].counts.failed = 1
+	values := composeActivityGroups(groups, true)
+	if len(values) != 3 || values[1].FailedCount != 1 || values[2].JobHandle != "job:one" || values[2].Outcome != "Started" {
+		t.Fatalf("lost host outcome: %+v", values)
+	}
+}
