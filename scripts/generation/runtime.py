@@ -328,8 +328,8 @@ def main():
         parser.error("the Rust MLX candidate requires Apple silicon")
     if args.kv_bits != 16 and args.backend != "reference-swift":
         parser.error("quantized global KV is currently measured only by the Swift MLX candidate")
-    if not 0 <= args.checkpoint_tokens <= 4096 or (args.checkpoint_tokens and args.backend != "native"):
-        parser.error("prefix checkpoints require the native backend and at most 4096 tokens")
+    if not 0 <= args.checkpoint_tokens < 65536 or (args.checkpoint_tokens and args.backend != "native"):
+        parser.error("prefix checkpoints require the native backend and fewer than 65536 tokens")
     if args.backend == "native" and args.ple != "mapped":
         parser.error("the production runner uses mapped PLE")
     if args.verify_last_logits and args.backend != "reference-rust":

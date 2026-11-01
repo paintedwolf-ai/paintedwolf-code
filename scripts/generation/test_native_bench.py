@@ -1,7 +1,12 @@
+import contextlib
+import io
 import json
 import subprocess
 import sys
 import unittest
+from unittest import mock
+
+import runtime
 
 from native_bench import Client, trial
 
@@ -65,3 +70,17 @@ sys.stdout.buffer.flush()
         self.assertEqual(result["tokens"], [100, 100, 100])
         self.assertEqual(len(result["steps"]), 3)
         self.assertAlmostEqual(result["decode_tokens_per_second"] * result["decode_seconds"], 2)
+
+    def test_cli_accepts_full_context_prefixes_and_rejects_invalid_bounds(self):
+        for checkpoint in (0, 8193, 65535):
+            with mock.patch.object(sys, "argv", ["runtime", "bench", "--checkpoint-tokens", str(checkpoint)]), mock.patch.object(runtime, "bench") as bench:
+                runtime.main()
+                self.assertEqual(bench.call_args.args[0].checkpoint_tokens, checkpoint)
+        for flags in (["--checkpoint-tokens", "-1"],
+                      ["--checkpoint-tokens", "65536"],
+                      ["--checkpoint-tokens", "8193", "--backend", "reference-llama"]):
+            with mock.patch.object(sys, "argv", ["runtime", "bench", *flags]), mock.patch.object(runtime, "bench") as bench, contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as error:
+                    runtime.main()
+                self.assertEqual(error.exception.code, 2)
+                bench.assert_not_called()
