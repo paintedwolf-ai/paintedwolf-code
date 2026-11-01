@@ -192,6 +192,9 @@ func (p *Provider) ContextLimit(ctx context.Context, model string) int {
 
 // ContextLength implements llm.ContextLengthLookup for direct provider queries.
 func (p *Provider) ContextLength(_, model string) int {
+	if p == nil {
+		return 0
+	}
 	if entry, ok := p.ModelEntry(model); ok {
 		return entry.ContextLength
 	}
