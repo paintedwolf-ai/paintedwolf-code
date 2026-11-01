@@ -14,6 +14,20 @@ type preparationSecretScreen interface {
 	ScreenPreparation(context.Context, modelcall.CompletionRequest) (bool, error)
 }
 
+// CanPrepareContext reports configured local preparation without starting a runtime.
+func (r *Registry) CanPrepareContext(providerID string) bool {
+	if r == nil {
+		return false
+	}
+	snapshot := r.snapshot.Load()
+	id := strings.TrimSpace(providerID)
+	if snapshot == nil || !snapshot.configured[id] || snapshot.entries[id].Kind != "nativegen" {
+		return false
+	}
+	_, ok := snapshot.providers[id].(modelcall.ContextPreparer)
+	return ok
+}
+
 // PrepareContext evaluates a local candidate without starting a model turn.
 func (r *Registry) PrepareContext(ctx context.Context, selection *ModelSelection, req modelcall.CompletionRequest) (modelcall.ContextPreparation, error) {
 	if r == nil || selection == nil {
