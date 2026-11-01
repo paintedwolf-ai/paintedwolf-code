@@ -64,7 +64,9 @@
             desktopSettings = desktop-settings-observer;
             inherit shell bialy nativegen document-core resources;
           };
-        in assert noticesOutputsValid; {
+        # Lock generation cannot depend on the previous lock's notice inventory.
+        in builtins.mapAttrs (name: value:
+          if name == "bun-lock" then value else assert noticesOutputsValid; value) ({
           engine = pkgs.callPackage ./packaging/nix/engine.nix {
             source = self;
           };
@@ -139,7 +141,7 @@
             package = self.packages.${system}.default;
             desktop = "plasma";
           };
-        });
+        }));
       devShells = eachSystem (system:
         let pkgs = packagesFor system;
         in {
