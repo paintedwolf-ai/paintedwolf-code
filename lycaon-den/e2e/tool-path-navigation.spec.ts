@@ -53,7 +53,6 @@ for (const target of [".", "src", "@other/src"]) {
   });
 }
 
-// One command card per program call: plain sections inside the existing opening.
 const programId = "6f7d0a8e-1b2c-4d3e-8f90-112233445566";
 
 const program: CommandProgramReceipt = {
@@ -116,11 +115,12 @@ webE2e.describe("command activity details", () => {
     await expect(card).toHaveCount(1);
     if (await card.getAttribute("data-expanded") !== "true") await card.locator(":scope > .den-transcript-disclosure-header").click();
     const body = card.getByTestId("command-activity-details");
-    await expect(body.locator(".den-command-activity-step")).toHaveCount(3);
+    await expect(body.locator(".den-command-activity-step")).toHaveCount(0);
     await expect(body).toContainText("Partial effects; unknown outcome");
     await expect(body).toContainText("HTTP_REQUEST_FAILED");
     await expect(body).toContainText("Full original command");
-    await expect(body).toContainText("Not started");
+    await expect(body).toContainText("Execution receipts and diagnostics");
+    await expect(body.locator("pre")).toHaveCount(0);
     await expect(body.locator("details")).toHaveCount(0);
   });
 });
@@ -131,7 +131,7 @@ modelIndependentWebE2e("command activities contain long text at narrow card widt
  const assistant = crypto.randomUUID();
  const call = crypto.randomUUID();
  const source = `cd /${"long-directory/".repeat(30)} && cargo build && cargo test`;
- const facts: CommandActivity[] = ["build", "test"].map(id => ({ id, group: "Running programs", label: "Run process", subject: `${id}-${"x".repeat(256)}`, directory: `/${"directory/".repeat(24)}`, state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [] }));
+ const facts: CommandActivity[] = ["build", "test"].map(id => ({ id, group: "Running programs", label: "Run process", subject: `${id}-${"x".repeat(256)}`, directory: `/${"directory/".repeat(24)}`, state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], steps: [{id, command: id, count: 1, running: 0, waiting: 0, failed: 0, refused: 0, interrupted: 0, state: "completed", outcome: "Finished"}] }));
  const program: CommandProgramReceipt = { id: crypto.randomUUID(), parent_receipt_id: crypto.randomUUID(), language_version: 1, catalog_digest: "catalog", source_digest: "source", source_ref: "source", state: "completed", detail_ref: "detail", progress_state: "unchanged", started_at: "2026-10-30T10:00:00Z", activities: facts };
  await page.route("**/program-receipts/**", route => route.fulfill({ json: { program, executions: [], nodes: [], executions_omitted: 0, nodes_omitted: 0 } }));
  await apiSeedSessionTranscript(request, session, transcriptMessages([
@@ -157,7 +157,8 @@ modelIndependentWebE2e("command activities contain long text at narrow card widt
    });
   })).toBe(true);
   expect(await row.locator(".den-tool-part-title").first().evaluate(element => getComputedStyle(element).whiteSpace)).toBe("nowrap");
-  expect(await row.locator(".den-command-activity-command").evaluate(element => element.scrollWidth <= element.clientWidth+1)).toBe(true);
+  await expect(row.locator("pre")).toHaveCount(0);
+  await expect(row.getByRole("button", {name: /Full original command/})).toBeVisible();
   for (const selector of [".den-tool-part-name", ".den-command-activity-outcome"]) {
    expect(await row.locator(selector).evaluate(element => element.scrollWidth <= element.clientWidth+1)).toBe(true);
   }
