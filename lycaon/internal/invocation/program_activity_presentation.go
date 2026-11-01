@@ -30,7 +30,7 @@ func activityPresentation(input activityInput) activityRule {
 		return activityRule{"primary", "Recording changes", "Stage changes"}
 	}
 	if strings.HasPrefix(input.operation, "git") || input.family == "git" {
-		if receipt.Lifecycle == "read_only" {
+		if receipt.Lifecycle == "read_only" || hasActivityClass(receipt, "read_only") {
 			return activityRule{"primary", "Inspecting version history", "Inspect Git"}
 		}
 		return activityRule{"primary", "Recording changes", "Change Git state"}
@@ -55,8 +55,8 @@ func activityPresentation(input activityInput) activityRule {
 	if receipt.Lifecycle == "read_only" && len(reads) > 0 {
 		return activityRule{"primary", "Exploring project files", "Read source"}
 	}
-	if receipt.Lifecycle == "read_only" {
-		if input.pipeline && input.span.StartByte > input.pipelineStart {
+	if receipt.Lifecycle == "read_only" || hasActivityClass(receipt, "read_only") {
+		if input.pipeline || len(reads) == 0 {
 			return activityRule{"support", "Processing output", "Process output"}
 		}
 		return activityRule{"primary", "Processing output", "Process output"}

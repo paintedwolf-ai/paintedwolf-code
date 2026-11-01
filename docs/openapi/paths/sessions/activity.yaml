@@ -118,6 +118,10 @@ paths:
         in: path
         required: true
         schema: {type: string, format: uuid}
+      - name: activity_id
+        in: query
+        description: Restrict execution receipts to a host activity, including all repetitions.
+        schema: {type: string}
       - name: cursor
         in: query
         schema: {type: string}

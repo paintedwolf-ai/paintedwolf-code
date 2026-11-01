@@ -160,12 +160,15 @@ func selectExecutionProjection(ctx context.Context, tx *sql.Tx, program, kind st
 	}
 	out := make([]ExecutionProjection, 0, len(entries))
 	for _, entry := range entries {
-		values, _, err := readExecutions(ctx, tx, program, entry.ordinal-1, 1)
+		values, _, err := readExecutions(ctx, tx, program, entry.ordinal-1, 1, executionSelection{})
 		if err != nil {
 			return nil, err
 		}
 		if len(values) != 1 {
 			return nil, fmt.Errorf("selected execution disappeared")
+		}
+		if err := readExecutionOutputs(ctx, tx, program, values); err != nil {
+			return nil, err
 		}
 		entry.projection.Receipt = values[0]
 		out = append(out, entry.projection)
