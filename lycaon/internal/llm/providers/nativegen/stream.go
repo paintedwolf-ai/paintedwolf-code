@@ -145,7 +145,8 @@ func (p *Provider) generate(ctx context.Context, req modelcall.CompletionRequest
 			return
 		}
 		sawOutput = sawOutput || text != ""
-		chunk := modelcall.StreamChunk{Content: text, Usage: usage, Done: cursor.terminal}
+		chunk := modelcall.StreamChunk{Content: text, Reasoning: decoder.reasoning, Usage: usage, Done: cursor.terminal}
+		decoder.reasoning = ""
 		if cursor.terminal {
 			capped := result.Progress.StopReason != nil && *result.Progress.StopReason == "max_tokens"
 			chunk.ToolCalls, chunk.Err = decoder.finish(capped)

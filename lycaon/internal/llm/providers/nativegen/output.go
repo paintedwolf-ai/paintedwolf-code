@@ -3,6 +3,7 @@ package nativegen
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -11,13 +12,16 @@ import (
 )
 
 type outputDecoder struct {
-	allowed map[string]bool
-	calls   []api.ToolCall
-	body    strings.Builder
-	literal strings.Builder
-	inCall  bool
-	quoted  bool
-	bytes   int
+	allowed   map[string]bool
+	calls     []api.ToolCall
+	body      strings.Builder
+	literal   strings.Builder
+	inCall    bool
+	quoted    bool
+	bytes     int
+	channel   bool
+	header    string
+	reasoning string
 }
 
 func newOutputDecoder(req modelcall.CompletionRequest) *outputDecoder {
@@ -46,6 +50,9 @@ func (d *outputDecoder) step(token *uint32, text string) (string, error) {
 	if d.bytes > 4<<20 || d.body.Len()+d.literal.Len() > 1<<20 {
 		return "", errors.New("native generation: output exceeds its bound")
 	}
+	if handled, visible, err := d.channelStep(token, text); handled {
+		return visible, err
+	}
 	if token == nil {
 		return d.text(text), nil
 	}
@@ -60,7 +67,7 @@ func (d *outputDecoder) step(token *uint32, text string) (string, error) {
 			marker = `<|"|>`
 		}
 	case 0, 1, 2, 3, 4, 46, 47, 50, 51, 98, 100, 101, 105, 106:
-		return "", errors.New("native generation: unexpected output control token")
+		return "", fmt.Errorf("native generation: unexpected output control token %d", *token)
 	}
 	if marker == "" {
 		return d.text(text), nil
@@ -121,6 +128,9 @@ func (d *outputDecoder) finishCall(truncated bool) error {
 }
 
 func (d *outputDecoder) finish(lengthCapped bool) ([]api.ToolCall, error) {
+	if d.channel && !lengthCapped {
+		return nil, errors.New("native generation: unfinished thought channel")
+	}
 	if d.inCall {
 		if !lengthCapped {
 			return nil, errors.New("native generation: unfinished tool call")
