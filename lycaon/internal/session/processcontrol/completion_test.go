@@ -104,7 +104,7 @@ func TestSilentRunningProcessSerializesEmptyChunksAcrossEndpoints(t *testing.T) 
 	if err != nil {
 		t.Fatalf("start silent process: %v", err)
 	}
-	t.Cleanup(func() { _, _ = bg.Lifecycle.Stop("s", handle) })
+	t.Cleanup(func() { _, _ = bg.Lifecycle.Stop("s", handle, bgprocess.TerminationStoppedByUser) })
 
 	directOut, err := svc.GetBackgroundProcessOutput(t.Context(), "s", handle)
 	if err != nil {
