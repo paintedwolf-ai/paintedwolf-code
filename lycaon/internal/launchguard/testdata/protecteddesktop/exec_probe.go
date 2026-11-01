@@ -114,7 +114,7 @@ func preparedProbe(ctx context.Context, launch exec.LaunchPlan) (string, int, st
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
+	if err := exec.StartPrepared(ctx, cmd); err != nil {
 		return "", -1, err.Error()
 	}
 	_, _ = stdin.Write([]byte("streamed-over-stdin\n"))
