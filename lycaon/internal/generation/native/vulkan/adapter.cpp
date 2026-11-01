@@ -10,6 +10,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 struct pw_generation {
     std::unique_ptr<llama_model, decltype(&llama_model_free)> model{nullptr, llama_model_free};
@@ -61,6 +62,26 @@ ggml_backend_dev_t device(const char * pci) {
              properties.type == GGML_BACKEND_DEVICE_TYPE_IGPU)) return candidate;
     }
     throw std::runtime_error("requested Vulkan PCI device is unavailable");
+}
+
+void warm(pw_generation * engine) {
+    const auto vocab = llama_model_get_vocab(engine->model.get());
+    const auto bos = llama_vocab_bos(vocab);
+    std::vector<uint32_t> tokens(std::min(engine->chunk, engine->limit),
+                                 bos == LLAMA_TOKEN_NULL ? 0 : static_cast<uint32_t>(bos));
+    std::vector<float> logits(262144);
+    char error[1024]{};
+    uint32_t sampled;
+    // Compile prefill, GPU sampling and host-logit paths before serving requests.
+    for (const int output : {0, 2, 1}) {
+        const auto count = output ? 1 : tokens.size();
+        if (pw_generation_forward(engine, tokens.data(), count, output, logits.data(), &sampled,
+                                  error, sizeof(error)) != 0 ||
+            pw_generation_cache(engine, 0, error, sizeof(error)) != 0)
+            throw std::runtime_error(error);
+    }
+    llama_sampler_reset(engine->sampler.get());
+    llama_perf_context_reset(engine->context.get());
 }
 }
 
@@ -123,6 +144,7 @@ extern "C" int pw_generation_load(const char * path, const char * pci, uint32_t 
         engine->limit = context;
         engine->chunk = chunk;
         engine->prefix_limit = prefix;
+        warm(engine.get());
         *result = engine.release();
     });
 }
@@ -137,7 +159,13 @@ extern "C" int pw_generation_forward(pw_generation * engine, const uint32_t * to
             if (tokens[i] >= 262144) throw std::runtime_error("invalid input token");
         *sampled = UINT32_MAX;
         if (output && engine->greedy != (output == 2)) {
-            llama_set_sampler(engine->context.get(), 0, output == 2 ? engine->sampler.get() : nullptr);
+            if (output == 2) {
+                // Backend sampler chains can only be initialized once.
+                engine->sampler.reset(llama_sampler_chain_init(llama_sampler_chain_default_params()));
+                llama_sampler_chain_add(engine->sampler.get(), llama_sampler_init_greedy());
+            }
+            if (!llama_set_sampler(engine->context.get(), 0, output == 2 ? engine->sampler.get() : nullptr))
+                throw std::runtime_error("sampler transition failed");
             engine->greedy = output == 2;
         }
         auto batch = llama_batch_init(static_cast<int32_t>(count), 0, 1);
