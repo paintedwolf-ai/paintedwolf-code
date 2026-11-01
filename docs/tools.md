@@ -172,6 +172,18 @@ boolean as validation proof; the identity check itself applies no progress.
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
 
+### Command review storage
+
+Native operation review retains exact, domain-tagged canonical inputs. Encoding
+writes that representation incrementally; decoding builds admitted result
+containers directly, without a second representation tree. The durable format,
+raw-byte string identity, sorted keys and numeric spellings remain unchanged.
+Transient codec frames follow nesting depth. Retained containers, payloads and
+screened projections follow their actual capacities and lifetimes. Secret
+screening and execution keep separate values; inspection never becomes execution
+authority. Retained input bodies have the invocation store's 8 MiB bound, and
+native review node admission derives from the catalog's expanded-field ceiling.
+
 ### Complete byte streams
 
 `commandprogram.BytePipe` uses unbuffered `io.Pipe` backpressure and an explicit

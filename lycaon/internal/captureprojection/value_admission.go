@@ -43,7 +43,7 @@ func (p *Projector) Value(ctx context.Context, scope Scope, label string, value 
 		return nil, Metadata{}, nil, ErrUnavailable
 	}
 	storage := &valueStorage{ctx: ctx, state: options.State}
-	if _, err := storage.reserve(4096); err != nil {
+	if _, err := storage.reserve(128); err != nil {
 		return nil, Metadata{}, nil, err
 	}
 	metadata := Metadata{StructuredCoverage: true}
@@ -73,7 +73,7 @@ func (p *Projector) Value(ctx context.Context, scope Scope, label string, value 
 		if depth > options.MaximumDepth {
 			return &secretmatch.StreamLimitError{Resource: "capture_value_depth", Maximum: int64(options.MaximumDepth), Observed: int64(depth)}
 		}
-		_, err := storage.reserve(4096)
+		_, err := storage.reserve(128)
 		return err
 	}
 	// A first and final empty stream also freeze/check classification for trees
@@ -162,7 +162,7 @@ func (s *valueScreen) number(value any) (any, error) {
 	if number, ok := value.(json.Number); ok {
 		size = int64(len(number))
 	}
-	if _, err := s.storage.reserve(size*4 + 4096); err != nil {
+	if _, err := s.storage.reserve(size*2 + 128); err != nil {
 		return nil, err
 	}
 	encoded, err := json.Marshal(value)
@@ -206,7 +206,7 @@ func (s *valueScreen) text(label, value string) (string, error) {
 	}
 	s.metadata.CatalogVersion = metadata.CatalogVersion
 	s.output += metadata.EmittedBytes
-	if _, err := s.storage.reserve(int64(len(output.bytes))*2 + 4096); err != nil {
+	if _, err := s.storage.reserve(int64(len(output.bytes)) + 128); err != nil {
 		return "", err
 	}
 	result := string(output.bytes)
@@ -234,7 +234,7 @@ func (b *valueBuffer) Write(p []byte) (int, error) {
 		if capacity > int64(int(^uint(0)>>1)) {
 			return 0, errors.New("capture value exceeds addressable storage")
 		}
-		release, err := b.storage.reserve(capacity + 4096)
+		release, err := b.storage.reserve(capacity + 128)
 		if err != nil {
 			return 0, err
 		}

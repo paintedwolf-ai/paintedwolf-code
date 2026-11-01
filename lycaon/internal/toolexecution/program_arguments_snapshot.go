@@ -23,7 +23,7 @@ func prepareNativeArguments(ctx context.Context, admission *toolcontract.Program
 		return nil, fmt.Errorf("native review inputs require retained state admission")
 	}
 	snapshot := &nativeArguments{}
-	if err := snapshot.reserve(ctx, admission, values); err != nil {
+	if err := snapshot.reserve(ctx, admission, values, 0); err != nil {
 		snapshot.close()
 		return nil, err
 	}
@@ -31,16 +31,16 @@ func prepareNativeArguments(ctx context.Context, admission *toolcontract.Program
 	return snapshot, nil
 }
 
-// Reserve each traversal frame before descending. This also bounds cyclic host
-// values through the same aggregate ceiling instead of an unmetered recursive
-// walk. The conservative payload bound covers JSON escaping, review projections
-// and the detached map while overlapping review/dispatch facts remain live.
-func (s *nativeArguments) reserve(ctx context.Context, admission *toolcontract.ProgramMemory, value any) error {
+// Each snapshot admits its containers and retained scalar backing before cloning.
+func (s *nativeArguments) reserve(ctx context.Context, admission *toolcontract.ProgramMemory, value any, depth int) error {
+	if depth > 1024 {
+		return fmt.Errorf("native review nesting exceeds 1024")
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	const copies = int64(8)
-	bound := int64(2048)
+	const copies = int64(1)
+	bound := int64(128)
 	add := func(size int64) bool {
 		if size < 0 || size > (math.MaxInt64-bound)/copies {
 			return false
@@ -89,22 +89,22 @@ func (s *nativeArguments) reserve(ctx context.Context, admission *toolcontract.P
 	switch v := value.(type) {
 	case map[string]any:
 		for key, item := range v {
-			if err := s.reserve(ctx, admission, key); err != nil {
+			if err := s.reserve(ctx, admission, key, depth+1); err != nil {
 				return err
 			}
-			if err := s.reserve(ctx, admission, item); err != nil {
+			if err := s.reserve(ctx, admission, item, depth+1); err != nil {
 				return err
 			}
 		}
 	case []any:
 		for _, item := range v {
-			if err := s.reserve(ctx, admission, item); err != nil {
+			if err := s.reserve(ctx, admission, item, depth+1); err != nil {
 				return err
 			}
 		}
 	case []string:
 		for _, item := range v {
-			if err := s.reserve(ctx, admission, item); err != nil {
+			if err := s.reserve(ctx, admission, item, depth+1); err != nil {
 				return err
 			}
 		}
