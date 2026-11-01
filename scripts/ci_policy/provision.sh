@@ -8,11 +8,18 @@ if [[ "${1:-}" == search-reference ]]; then
 fi
 if [[ "${1:-}" == repository-tools ]]; then
   if [[ $# -eq 3 && "$2" == --signer ]]; then
-    exec nix build --inputs-from "$ROOT" --no-write-lock-file nixpkgs#minisign --out-link "$3"
+    exec nix --extra-experimental-features "nix-command flakes" build --inputs-from "$ROOT" --no-write-lock-file nixpkgs#minisign --out-link "$3"
   fi
   if [[ $# -eq 3 && "$2" == --python ]]; then
-    exec nix build --inputs-from "$ROOT" --no-write-lock-file --impure \
-      --expr 'let pkgs = (builtins.getFlake "nixpkgs").legacyPackages.${builtins.currentSystem}; in pkgs.python3.withPackages (p: [ p.pip ])' \
+    case "$(uname -s):$(uname -m)" in
+      Linux:x86_64) system=x86_64-linux ;;
+      Linux:aarch64) system=aarch64-linux ;;
+      Darwin:x86_64) system=x86_64-darwin ;;
+      Darwin:arm64) system=aarch64-darwin ;;
+      *) echo "error: verification Python requires a supported Linux or macOS architecture" >&2; exit 2 ;;
+    esac
+    exec nix --extra-experimental-features "nix-command flakes" build --inputs-from "$ROOT" --no-write-lock-file --impure \
+      --expr "let pkgs = (builtins.getFlake \"nixpkgs\").legacyPackages.${system}; in pkgs.python3.withPackages (p: [ p.pip ])" \
       --out-link "$3"
   fi
   [[ $# -eq 1 ]] || { echo "error: expected repository-tools [--signer DIRECTORY | --python DIRECTORY]" >&2; exit 2; }
