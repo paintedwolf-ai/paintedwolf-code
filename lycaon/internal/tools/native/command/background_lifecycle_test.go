@@ -127,11 +127,18 @@ func TestPromotedForegroundCommandSurvivesTurnCancelAndRetainsOutput(t *testing.
 	turnCtx, cancelTurn := context.WithCancel(t.Context())
 	defer cancelTurn()
 
-	raw, err := tool.Run(turnCtx, map[string]any{
+	args := map[string]any{
 		"command": "printf 'phase-1\\n'; sleep 0.3; printf 'phase-2\\n'; sleep 10",
 		"wait_ms": float64(50),
-	}, ctx)
-	testutil.FailErr(t, "run foreground command that promotes", err)
+	}
+	foreground := command.ConfinedForeground{Background: reg, Runner: tool.Runner, Boundary: tool.Boundary, ToolName: command.VerifyToolName}
+	_, outcome, err := foreground.Run(turnCtx, args, ctx)
+	testutil.FailErr(t, "run confined foreground command", err)
+	if outcome.Finished {
+		t.Fatal("foreground command ended before promotion")
+	}
+	raw, err := command.EncodeCommandRunning(ctx, outcome, command.WaitBudget(args))
+	testutil.FailErr(t, "render promoted command", err)
 	if captured.Process == nil || !captured.Process.Running || captured.Process.Handle == "" {
 		t.Fatalf("expected promoted live process handle, got %+v (raw=%s)", captured.Process, raw)
 	}
