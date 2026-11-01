@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestDecideReleasesDeviceBetweenWholeQuestionBatches(t *testing.T) {
+func TestDecideRetainsPriorityAcrossWholeQuestionBatches(t *testing.T) {
 	for _, outcome := range []string{"success", "cancel", "missing_answer"} {
 		t.Run(outcome, func(t *testing.T) {
 			answer := `"c":{"type":"noul","noul":0.3,"confidence":0.8}`
@@ -47,16 +47,14 @@ func TestDecideReleasesDeviceBetweenWholeQuestionBatches(t *testing.T) {
 				}
 			}()
 			testutil.WaitFor(t, func() bool { return device.Snapshot().Queued == 1 })
-			_, err := fifo.WriteString("release\n")
-			testutil.FailErr(t, "complete decision batch", err)
-			permit := <-generation
-			defer permit.Complete()
-			testutil.WaitFor(t, func() bool { return device.Snapshot().Queued == 1 })
 			if outcome == "cancel" {
 				cancel()
 			}
-			permit.Complete()
+			_, err := fifo.WriteString("release\n")
+			testutil.FailErr(t, "complete decision batch", err)
 			got := <-done
+			permit := <-generation
+			permit.Complete()
 			if outcome == "success" {
 				testutil.FailErr(t, "decide all batches", got.err)
 				if len(got.value.Answers) != 3 || got.value.Answers["a"].Noul != 0.1 || got.value.Answers["b"].Noul != 0.2 || got.value.Answers["c"].Noul != 0.3 {

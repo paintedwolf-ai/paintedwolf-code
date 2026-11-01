@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 )
 
-// Decide evaluates complete questions, releasing the device between native batches.
+// Decide preserves whole questions and decision priority across bounded batches.
 func (c *Client) Decide(ctx context.Context, head decide.Head, state any, questions map[string]decide.Question) (decide.Result, error) {
 	if len(questions) == 0 {
 		return decide.Result{Engine: c.Engine()}, nil
@@ -19,6 +19,11 @@ func (c *Client) Decide(ctx context.Context, head decide.Head, state any, questi
 	if err != nil {
 		return decide.Result{}, err
 	}
+	release, err := proc.prioritize(ctx)
+	if err != nil {
+		return decide.Result{}, err
+	}
+	defer release()
 	engine := c.Engine()
 	rows := 32
 	if c.cfg.Resources != nil {
