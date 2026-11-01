@@ -392,7 +392,8 @@ export function toolCompletionLabel(part: ToolPartView, sessionId?: string): str
       if (process?.exitCode !== undefined) return `Exited ${process.exitCode}`;
       return "Completed";
     }
-    return part.commandActivity.fact.outcome;
+    const fact = part.commandActivity.fact;
+    return `${fact.outcome}${(fact.repetitions ?? 0) > 1 ? ` · ${fact.repetitions!.toLocaleString()} runs` : ""}`;
   }
   const completion = part.completion;
   const operation = completion?.operation.trim().replaceAll("_", " ");
