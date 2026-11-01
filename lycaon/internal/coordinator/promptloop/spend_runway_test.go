@@ -407,7 +407,7 @@ func TestContextOverflow400RetryFailsTurnAfterSingleRetry(t *testing.T) {
 		t.Fatalf("attempts = %d want 2 (1 initial + 1 retry)", got)
 	}
 	tooSmall, ok := failure.AsProviderContextTooSmall(err)
-	if !ok || tooSmall.MaxContext != 16384 {
-		t.Fatalf("expected ProviderContextTooSmallError with MaxContext=16384, got %T: %v", err, err)
+	if !ok || tooSmall.MaxContext != 0 {
+		t.Fatalf("expected typed overflow without a structured capacity, got %T: %v", err, err)
 	}
 }

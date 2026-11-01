@@ -1,6 +1,7 @@
 package providerretry
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -97,5 +98,34 @@ func TestIsRequestRejectedGatesResponseFormatRetry(t *testing.T) {
 		Message:        "response_format json_schema not supported",
 	}) {
 		t.Fatal("5xx must not trigger format retry")
+	}
+}
+
+func TestOverflowCapacityDependsOnStructuredFieldsRatherThanDiagnostics(t *testing.T) {
+	for _, message := range []string{"", "maximum context length is 12 tokens; requested 999999 tokens", "n_ctx=1 n_prompt_tokens=2", "context window: 999999"} {
+		for _, structured := range []bool{false, true} {
+			envelope := map[string]any{"code": "context_length_exceeded", "message": message}
+			if structured {
+				envelope["n_ctx"], envelope["n_prompt_tokens"] = 8192, 9000
+			}
+			body, err := json.Marshal(map[string]any{"error": envelope})
+			if err != nil {
+				t.Fatalf("marshal fixture: %v", err)
+			}
+			parsed, ok := ParseOpenAICompatError(body)
+			if !ok {
+				t.Fatal("structured rejection was not parsed")
+			}
+			if _, overflow := parsed.IsContextOverflow(); !overflow {
+				t.Fatal("structured rejection lost overflow classification")
+			}
+			window, prompt := 0, 0
+			if structured {
+				window, prompt = 8192, 9000
+			}
+			if parsed.MaxContext != window || parsed.PromptTokens != prompt {
+				t.Fatalf("diagnostic changed facts: %+v", parsed)
+			}
+		}
 	}
 }

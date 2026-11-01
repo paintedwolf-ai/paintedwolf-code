@@ -102,8 +102,8 @@ func TestContextOverflow400ClassificationAndWindowRecording(t *testing.T) {
 		{
 			name:       "OpenAI-compatible context_length_exceeded code",
 			body:       `{"error":{"message":"This model's maximum context length is 32768 tokens. However, your messages resulted in 35000 tokens.","type":"invalid_request_error","param":"messages","code":"context_length_exceeded"}}`,
-			wantWindow: 32768,
-			wantPrompt: 35000,
+			wantWindow: 0,
+			wantPrompt: 0,
 			wantSource: "context_length_exceeded",
 		},
 	}
@@ -145,7 +145,11 @@ func TestContextOverflow400ClassificationAndWindowRecording(t *testing.T) {
 				t.Fatalf("Source = %q want %q", tooSmall.Source, tc.wantSource)
 			}
 			entry, ok := p.ModelEntry("local-model")
-			if !ok || entry.ContextLength != tc.wantWindow || entry.ContextLengthSource != tc.wantSource {
+			wantRecordedSource := tc.wantSource
+			if tc.wantWindow == 0 {
+				wantRecordedSource = ""
+			}
+			if !ok || entry.ContextLength != tc.wantWindow || entry.ContextLengthSource != wantRecordedSource {
 				t.Fatalf("recorded ModelEntry = %+v, ok=%v; want ContextLength=%d Source=%q", entry, ok, tc.wantWindow, tc.wantSource)
 			}
 		})

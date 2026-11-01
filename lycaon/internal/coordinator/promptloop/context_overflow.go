@@ -30,7 +30,7 @@ func (l *modelTurn) recoverFromContextOverflow(
 	transcriptEstimate int,
 	tooSmall *failure.ProviderContextTooSmallError,
 ) []api.Message {
-	if tooSmall == nil || tooSmall.MaxContext <= 0 {
+	if tooSmall == nil {
 		return history
 	}
 	reportedWindow := tooSmall.MaxContext
@@ -73,13 +73,15 @@ func (l *modelTurn) compactHistoryToWindow(
 	history []api.Message,
 	reportedWindow int,
 ) []api.Message {
-	if len(history) == 0 || reportedWindow <= 0 {
+	if len(history) == 0 {
 		return history
 	}
 	cfg, ok := l.effectiveCompactionConfig(ctx, sess)
 	if !ok {
 		cfg = compaction.DefaultCompactionConfig()
-		cfg.ModelContextWindow = reportedWindow
+		if reportedWindow > 0 {
+			cfg.ModelContextWindow = reportedWindow
+		}
 		cfg.HardCeilingTokens = 0
 		cfg.TargetTokens = 0
 		if normalized, err := compaction.NormalizeConfig(cfg); err == nil {
@@ -87,11 +89,16 @@ func (l *modelTurn) compactHistoryToWindow(
 		}
 	}
 	targetTokens := cfg.TargetTokens
-	if targetTokens <= 0 || targetTokens >= reportedWindow {
+	if reportedWindow > 0 && (targetTokens <= 0 || targetTokens >= reportedWindow) {
 		targetTokens = max(128, reportedWindow*35/100)
 	}
 	ctxMsgs := compaction.ContextMessagesFromAPI(history)
 	beforeTokens := compaction.EstimateMessagesTokens(ctxMsgs)
+	if reportedWindow <= 0 {
+		// A typed rejection without a capacity still permits one bounded reduction.
+		// Diagnostic numbers never become serving-window facts.
+		targetTokens = max(1, beforeTokens/2)
+	}
 	compactor := compaction.NewSimpleCompactor(cfg, nil).Baseline()
 	info := compaction.SessionInfo{
 		ID: sessionID,

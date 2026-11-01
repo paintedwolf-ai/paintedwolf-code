@@ -81,7 +81,7 @@ func TestScalewayStreamToolCallContinuationAndUsage(t *testing.T) {
 	}
 	ch, err := p.Stream(context.Background(), req)
 	testutil.FailErr(t, "Stream initial turn", err)
-	first, usage, err := modelcall.CollectStream(ch)
+	first, _, err := modelcall.CollectStream(ch)
 	testutil.FailErr(t, "CollectStream initial turn", err)
 
 	if gotAuth != "Bearer scw-secret-token" {
@@ -93,6 +93,7 @@ func TestScalewayStreamToolCallContinuationAndUsage(t *testing.T) {
 	if len(first.ToolCalls) != 1 || first.ToolCalls[0].Name != "read_file" || first.ToolCalls[0].Args["path"] != "go.mod" {
 		t.Fatalf("ToolCalls = %+v", first.ToolCalls)
 	}
+	usage := first.Usage
 	if usage.InputTokens != 120 || usage.OutputTokens != 28 || usage.CacheReadInputTokens != 64 {
 		t.Fatalf("usage = %+v", usage)
 	}
@@ -116,11 +117,12 @@ func TestScalewayStreamToolCallContinuationAndUsage(t *testing.T) {
 	)
 	ch, err = p.Stream(context.Background(), req)
 	testutil.FailErr(t, "Stream continuation turn", err)
-	second, secondUsage, err := modelcall.CollectStream(ch)
+	second, _, err := modelcall.CollectStream(ch)
 	testutil.FailErr(t, "CollectStream continuation turn", err)
 	if second.Content != "Module is ready." {
 		t.Fatalf("second content = %q", second.Content)
 	}
+	secondUsage := second.Usage
 	if secondUsage.CacheReadInputTokens != 120 {
 		t.Fatalf("second usage = %+v", secondUsage)
 	}

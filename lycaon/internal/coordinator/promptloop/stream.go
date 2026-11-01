@@ -265,7 +265,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	slog.InfoContext(ctx, "model request preparation", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(preparationStarted).Milliseconds(), "failed", err != nil)
 	if err != nil {
 		if !overflowRecovered {
-			if tooSmall, ok := failure.AsProviderContextTooSmall(err); ok && tooSmall != nil && tooSmall.MaxContext > 0 {
+			if tooSmall, ok := failure.AsProviderContextTooSmall(err); ok && tooSmall != nil {
 				finishPreparing()
 				history = l.recoverFromContextOverflow(ctx, sess, sessionID, history, st, "", tooSmall.ProviderID, tooSmall.Model, 0, tooSmall)
 				return l.completeStreamWithOverflowRetry(
@@ -352,7 +352,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	trainingcapture.Observe(ctx, collected.completion, collectErr != nil, callProvider, callModel)
 	if collectErr != nil {
 		if !overflowRecovered {
-			if tooSmall, ok := failure.AsProviderContextTooSmall(collectErr); ok && tooSmall != nil && tooSmall.MaxContext > 0 {
+			if tooSmall, ok := failure.AsProviderContextTooSmall(collectErr); ok && tooSmall != nil {
 				suppressCallFailed = true
 				history = l.recoverFromContextOverflow(ctx, sess, sessionID, history, st, surfaceID, callProvider, callModel, transcriptEstimate, tooSmall)
 				return l.completeStreamWithOverflowRetry(

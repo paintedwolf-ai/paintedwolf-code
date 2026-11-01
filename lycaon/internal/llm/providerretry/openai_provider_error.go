@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -95,7 +93,6 @@ func FormatOpenAIProviderError(err error) error {
 			Param:   param,
 			Type:    apiErr.Type,
 		}
-		populateOverflowCounts(&parsed)
 		var cause error = err
 		if src, ok := parsed.IsContextOverflow(); ok {
 			cause = &failure.ProviderContextTooSmallError{
@@ -194,7 +191,7 @@ func fieldsFromErrorEnvelope(env openAICompatErrorBody) (ParsedProviderError, bo
 	code := providerErrorCode(env.Error.Code)
 	typ := strings.TrimSpace(env.Error.Type)
 	status := strings.TrimSpace(env.Error.Status)
-	if msg == "" && code == "" && typ == "" {
+	if msg == "" && code == "" && typ == "" && status == "" {
 		return ParsedProviderError{}, false
 	}
 	for _, detail := range env.Error.Details {
@@ -218,7 +215,6 @@ func fieldsFromErrorEnvelope(env openAICompatErrorBody) (ParsedProviderError, bo
 		MaxContext:   firstPositiveInt(env.Error.NCtx, env.Error.MaxModelLen, env.Error.ContextLength, env.Error.MaxContextLen, env.NCtx),
 		PromptTokens: firstPositiveInt(env.Error.NPromptTokens, env.Error.PromptTokens, env.NPromptTokens),
 	}
-	populateOverflowCounts(&parsed)
 	return parsed, true
 }
 
@@ -229,48 +225,6 @@ func firstPositiveInt(values ...int) int {
 		}
 	}
 	return 0
-}
-
-var (
-	overflowWindowPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)(?:available\s+)?context\s+(?:size|length|window)\s*(?:is|of|=|:)?\s*\(?(\d+)\b`),
-		regexp.MustCompile(`(?i)maximum\s+context\s+length\s+(?:is|of)\s+(\d+)\b`),
-		regexp.MustCompile(`(?i)(?:n_ctx|max_model_len|max_context_length)\s*(?:is|of|=|:)?\s*\(?(\d+)\b`),
-	}
-	overflowPromptPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)(?:request|prompt)\s*\((\d+)\s*tokens\)`),
-		regexp.MustCompile(`(?i)(?:resulted\s+in|requested|passed|prompt\s+is)\s+(\d+)\s*(?:prompt\s+)?tokens`),
-		regexp.MustCompile(`(?i)n_prompt_tokens\s*(?:is|=|:)?\s*\(?(\d+)\b`),
-	}
-)
-
-func populateOverflowCounts(parsed *ParsedProviderError) {
-	if parsed == nil {
-		return
-	}
-	if _, ok := parsed.IsContextOverflow(); !ok {
-		return
-	}
-	if parsed.MaxContext <= 0 {
-		for _, re := range overflowWindowPatterns {
-			if m := re.FindStringSubmatch(parsed.Message); len(m) == 2 {
-				if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
-					parsed.MaxContext = n
-					break
-				}
-			}
-		}
-	}
-	if parsed.PromptTokens <= 0 {
-		for _, re := range overflowPromptPatterns {
-			if m := re.FindStringSubmatch(parsed.Message); len(m) == 2 {
-				if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
-					parsed.PromptTokens = n
-					break
-				}
-			}
-		}
-	}
 }
 
 func providerErrorCode(code any) string {
