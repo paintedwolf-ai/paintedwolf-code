@@ -9,7 +9,7 @@ func TestWireSpillRejectsStructuredJSONOverCap(t *testing.T) {
 	dir := t.TempDir()
 	cap := 1024
 	content := `{"results":[{"path":"a.go","content":"` + strings.Repeat("x", cap+100) + `"}]}`
-	out := WireSpillToolOutput(dir, Screened(content), 50, cap)
+	out := WireSpillToolOutput(t.Context(), dir, Screened(content), 50, cap)
 	if out.RejectCode != ToolOutputSpillCapExceededCode {
 		t.Fatalf("reject code=%q want %q", out.RejectCode, ToolOutputSpillCapExceededCode)
 	}
@@ -22,7 +22,7 @@ func TestWireSpillCapsOpaqueOverCap(t *testing.T) {
 	dir := t.TempDir()
 	cap := 1024
 	content := strings.Repeat("z", cap+50)
-	out := WireSpillToolOutput(dir, Screened(content), 50, cap)
+	out := WireSpillToolOutput(t.Context(), dir, Screened(content), 50, cap)
 	if out.RejectCode != "" {
 		t.Fatalf("unexpected reject %q", out.RejectCode)
 	}

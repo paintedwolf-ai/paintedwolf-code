@@ -123,7 +123,8 @@ func editOldStringAmbiguous(path string, occurrences int) error {
 	}
 }
 
-func editArgsConflict(detail string) error {
+// EditArgsConflict refuses edit arguments that cannot name one replacement.
+func EditArgsConflict(detail string) error {
 	return &toolrejection.ToolReject{
 		Code: "EDIT_ARGS_CONFLICT",
 		Data: map[string]any{"detail": detail, "conflict": true},

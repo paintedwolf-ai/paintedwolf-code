@@ -12,8 +12,8 @@ import unittest
 from unittest.mock import Mock, patch
 from episode import disposition, reattachment_order
 from episode_runtime import execute, lease_available, worker, command_worker, assert_execution_quiescence, run_retained_step, RetainedProcessingExhausted
-from process_group import live_members, signal_group, stop_process
-from measurement_cache import measure
+from local_runtime import live_members, signal_group, stop_process
+from grading_identity import measure
 from progress import save
 
 

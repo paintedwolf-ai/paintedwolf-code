@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// testMockConfig loads the same command-program responses as the runtime fixture.
 func testMockConfig(t *testing.T) *llm.MockConfig {
 	t.Helper()
 	cfg, err := llm.LoadMockConfig()
@@ -32,6 +33,17 @@ func testMockConfig(t *testing.T) *llm.MockConfig {
 		t.Fatalf("load mock config: %v", err)
 	}
 	return cfg
+}
+
+// newStubCommandRegistry adds a command stub to the read and write stubs.
+func newStubCommandRegistry(t *testing.T) *tools.StubRegistry {
+	t.Helper()
+	registry := tools.NewStubRegistry()
+	testutil.FailErr(t, "register command stub", registry.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+		program, _ := args["command"].(string)
+		return "ran " + program, nil
+	}))
+	return registry
 }
 
 func newTestManager(t *testing.T) (*Host, *store.Memory) {
@@ -42,7 +54,7 @@ func newTestManager(t *testing.T) (*Host, *store.Memory) {
 
 func newTestManagerWithStore(t *testing.T, persistence Store) *Host {
 	t.Helper()
-	registry := tools.NewStubRegistry()
+	registry := newStubCommandRegistry(t)
 	mgr := NewHost(persistence, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
@@ -225,8 +237,8 @@ func TestSessionHistoryAccumulation(t *testing.T) {
 
 func TestToolCallError(t *testing.T) {
 	store := store.NewMemory()
-	reg := tools.NewStubRegistry()
-	reg.SetFail("read", fmt.Errorf("read failed"))
+	reg := newStubCommandRegistry(t)
+	reg.SetFail("command", fmt.Errorf("command failed"))
 	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})

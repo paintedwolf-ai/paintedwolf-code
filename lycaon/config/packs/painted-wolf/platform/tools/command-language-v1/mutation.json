@@ -5,7 +5,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "cp [-r|-R] [-f|-n] [-p] [--] SOURCE ... DEST",
+      "argv": "cp [-a] [-r|-R] [-f|-n] [-p] [-v] [-c] [-X] [--] SOURCE ... DEST",
       "forms": [
         {
           "spellings": [
@@ -47,10 +47,52 @@
           "fixture_id": "cp-option-p",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a",
+            "--archive"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-a-archive",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-c",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-X"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-X",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cp [-r|-R] [-f|-n] [-p] [--] SOURCE ... DEST",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cp [--] SOURCE ... DEST",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -101,7 +143,7 @@
           }
         }
       },
-      "notes": "Bounded recursive -r/-R preserves entries, never follows escaping symlinks; -p supported metadata or capability refusal; -n skips existing target without mutation, -f reviewed replacement. Same-source/destination refuses.",
+      "notes": "Bounded recursive -r/-R preserves entries, never follows escaping symlinks; -p supported metadata or capability refusal; -n skips existing target without mutation, -f reviewed replacement. Same-source/destination refuses. -a is -R -p and refuses a tree holding a symbolic link, since links are copied as links and no owner creates links. -v prints GNU 'SRC' -> 'DEST' lines. BSD -c (clone) produces the same copy, and -X (no extended attributes) matches what the owner copies.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/copy.go",
         "tests": [
@@ -124,7 +166,11 @@
         "cp-option-r-R",
         "cp-option-f",
         "cp-option-n",
-        "cp-option-p"
+        "cp-option-p",
+        "cp-option-a-archive",
+        "cp-option-v-verbose",
+        "cp-option-c",
+        "cp-option-X"
       ]
     },
     {
@@ -132,7 +178,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "mv [-f|-n] [--] SOURCE ... DEST",
+      "argv": "mv [-f|-n] [-v] [--] SOURCE ... DEST",
       "forms": [
         {
           "spellings": [
@@ -153,10 +199,21 @@
           "fixture_id": "mv-option-n",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "mv-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mv [-f|-n] [--] SOURCE ... DEST",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mv [--] SOURCE ... DEST",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -207,7 +264,7 @@
           }
         }
       },
-      "notes": "Same-root only; cross-root directory moves rejected; preserve unrelated drafts; -f/-n exclusive.",
+      "notes": "Same-root only; cross-root directory moves rejected; preserve unrelated drafts; -f/-n exclusive. -v prints GNU renamed 'SRC' -> 'DEST'.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/move.go",
         "tests": [
@@ -228,7 +285,148 @@
         "mv-operands-valid",
         "mv-rejection",
         "mv-option-f",
-        "mv-option-n"
+        "mv-option-n",
+        "mv-option-v-verbose"
+      ]
+    },
+    {
+      "name": "ln",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "ln [-s] [-f] [-n] [-v] [-r] [--] TARGET LINK",
+      "forms": [
+        {
+          "spellings": [
+            "-s",
+            "--symbolic"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-s-symbolic",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-f-force",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "-h",
+            "--no-dereference"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-n-no-dereference",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-r",
+            "--relative"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-r-relative",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "TARGET is stored as link text; LINK is a writable path. Without -s, hard links are refused.",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "ln -s -- input link",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Symbolic links keep TARGET text, are confined at creation and on later reads, and enter source history. Hard links are refused because shared inode identity conflicts with revisions and undo.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/link.go",
+        "tests": [
+          "lycaon/internal/tools/native/mutation/link_test.go"
+        ],
+        "extension": "Publish the link entry through the shared mutation journal and source ledger.",
+        "evidence_kind": "new command behavior and adjacent regression references"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "ln-operands-valid",
+        "ln-rejection",
+        "ln-option-s-symbolic",
+        "ln-option-f-force",
+        "ln-option-n-no-dereference",
+        "ln-option-v-verbose",
+        "ln-option-r-relative"
       ]
     },
     {
@@ -236,7 +434,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "rm [-r|-R] [-f] [--] PATH ...",
+      "argv": "rm [-r|-R|-d] [-f] [-v] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -258,10 +456,32 @@
           "fixture_id": "rm-option-f",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rm-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--dir"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rm-option-d-dir",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rm [-r|-R] [-f] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rm [--] PATH ...",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -312,7 +532,7 @@
           }
         }
       },
-      "notes": "Recoverable recursive removal; -f missing is complete no-op; refuse root/self/parent; 10000-file/100MiB limits captured before effects; partial commits explicit.",
+      "notes": "Recoverable recursive removal; -f missing is complete no-op; refuse root/self/parent; 10000-file/100MiB limits captured before effects; partial commits explicit. Never prompts; -i is not offered. -v prints GNU removed lines. -d removes empty directories, as GNU and BSD rm do.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/delete.go",
         "tests": [
@@ -333,7 +553,9 @@
         "rm-operands-valid",
         "rm-rejection",
         "rm-option-r-R",
-        "rm-option-f"
+        "rm-option-f",
+        "rm-option-v-verbose",
+        "rm-option-d-dir"
       ]
     },
     {
@@ -344,7 +566,7 @@
       "argv": "rmdir [--] PATH ...",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rmdir [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -422,7 +644,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "mkdir [-p] [-m MODE] [--] PATH ...",
+      "argv": "mkdir [-p] [-m MODE] [-v] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -446,10 +668,21 @@
           "sample_values": [
             "755"
           ]
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "mkdir-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mkdir [-p] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -500,7 +733,7 @@
           }
         }
       },
-      "notes": "-p missing parents, existing directory complete no-op; file collision fails. -m numeric/symbolic mode applies to newly created final directories only after platform capability check; existing directories unchanged.",
+      "notes": "-p missing parents, existing directory complete no-op; file collision fails. -m numeric/symbolic mode applies to newly created final directories only after platform capability check; existing directories unchanged. -v prints GNU created directory lines, one per created parent with -p.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/mkdir.go",
         "tests": [
@@ -521,7 +754,8 @@
         "mkdir-operands-valid",
         "mkdir-rejection",
         "mkdir-option-p-parents",
-        "mkdir-option-m"
+        "mkdir-option-m",
+        "mkdir-option-v-verbose"
       ]
     },
     {
@@ -529,7 +763,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "touch [-c] [-m] [-a] [--] PATH ...",
+      "argv": "touch [-c] [-f] [-m] [-a] [-t STAMP|-d DATE|-r FILE] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -560,10 +794,58 @@
           "fixture_id": "touch-option-a",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 1,
+          "value_role": "timestamp",
+          "fixture_id": "touch-option-t",
+          "consumption": "fixed",
+          "sample_values": [
+            "202610201200.30"
+          ]
+        },
+        {
+          "spellings": [
+            "-d",
+            "--date"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "touch-option-d-date",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-20 12:00:30"
+          ]
+        },
+        {
+          "spellings": [
+            "-r",
+            "--reference"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "touch-option-r-reference",
+          "consumption": "fixed",
+          "sample_values": [
+            "input"
+          ]
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "touch-option-f",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. touch [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -614,7 +896,7 @@
           }
         }
       },
-      "notes": "Create absent empty file or update existing timestamps to captured invocation time through owner; retain bytes and revision; no implicit truncate. -c no-create; -m modification only, -a access only, default both; timestamps use one captured operation clock.",
+      "notes": "Create absent empty file or update existing timestamps to captured invocation time through owner; retain bytes and revision; no implicit truncate. -c no-create; -m modification only, -a access only, default both; timestamps use one captured operation clock. -t [[CC]YY]MMDDhhmm[.ss], -d DATE (ISO 8601, RFC 5322, @SECONDS, now, today, yesterday, tomorrow, N UNIT ago) and -r FILE set explicit times; at most one of them; a new file receives them after creation. -f is accepted and ignored, as BSD and GNU touch do.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/source_write.go",
         "tests": [
@@ -636,7 +918,11 @@
         "touch-rejection",
         "touch-option-c",
         "touch-option-m",
-        "touch-option-a"
+        "touch-option-a",
+        "touch-option-t",
+        "touch-option-d-date",
+        "touch-option-r-reference",
+        "touch-option-f"
       ]
     },
     {
@@ -670,7 +956,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mktemp [-d] [-t PREFIX] [TEMPLATE]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -765,7 +1051,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tee [-a] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -847,7 +1133,7 @@
       "argv": "chmod [--] MODE PATH ...",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. chmod [--] MODE PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -926,7 +1212,7 @@
       "argv": "chown [--] UID[:GID] PATH ...",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. chown [--] UID[:GID] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1052,7 +1338,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. edit --path PATH --old-string TEXT --new-string TEXT [--replace-all]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1186,7 +1472,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. replace-lines --path PATH --start N --end N --content TEXT",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1328,7 +1614,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. code-rewrite --pattern PATTERN --rewrite TEXT --path PATH [--recursive] [--dry-run]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1413,6 +1699,259 @@
       ]
     },
     {
+      "name": "patch",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "patch [-p N] [-i PATCHFILE] [-R] [-N] [--dry-run] [-d DIR] [-F N] [-s] [-t] [-f] [-E] [--no-backup-if-mismatch] [-u] [ORIGFILE [PATCHFILE]]",
+      "forms": [
+        {
+          "spellings": [
+            "-p",
+            "--strip"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "patch-option-p-strip",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-i",
+            "--input"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "patch-option-i-input",
+          "consumption": "fixed",
+          "sample_values": [
+            "./fix.diff"
+          ]
+        },
+        {
+          "spellings": [
+            "-R",
+            "--reverse"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-R-reverse",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-N",
+            "--forward"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-N-forward",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--dry-run"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-dry-run",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--directory"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "patch-option-d-directory",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-F",
+            "--fuzz"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "patch-option-F-fuzz",
+          "consumption": "fixed",
+          "sample_values": [
+            "2"
+          ]
+        },
+        {
+          "spellings": [
+            "-s",
+            "--quiet",
+            "--silent"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-s-quiet",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--batch"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-t-batch",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-f-force",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-E",
+            "--remove-empty-files"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-E-remove-empty-files",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--no-backup-if-mismatch"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-no-backup-if-mismatch",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u",
+            "--unified"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "patch-option-u-unified",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. patch [OPTION ...] [ORIGFILE [PATCHFILE]]; the patch is read from -i PATCHFILE, the PATCHFILE operand, or standard input.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "every hunk applied",
+        "1": "some hunks failed or were skipped; the files whose hunks applied still publish",
+        "2": "usage error or malformed patch input"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        },
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "dry-run"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "patch -p1 -i ./fix.diff",
+        "stdout": "patching file input\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          },
+          "fix.diff": "--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\n\\ No newline at end of file\n"
+        }
+      },
+      "notes": "Applies unified and Git text diffs through the shared hunk applier (offset search, fuzz up to -F, default 2; -R reverses). Every touched file is captured before anything is written; each file then publishes through the pinned write door, creations and deletions from /dev/null headers through the recoverable write and delete owners. A file changed after capture refuses with COMMAND_REVISION_CONFLICT and nothing lands for it. Without -p, Git sections strip a/ and b/, and other names stay as written when their directory exists, otherwise their base name is used. Status 1 when hunks fail: the other files still publish and failed hunks are reported on stderr in GNU's wording and in the receipt evidence. Never writes .rej or .orig files. Git binary patches refuse here; git apply applies them. -b, --merge and -o are not supported.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/mutation/patch.go",
+        "tests": [
+          "lycaon/internal/tools/native/mutation/patch_test.go",
+          "lycaon/internal/tools/native/patchapply/apply_test.go"
+        ],
+        "extension": "Shared hunk applier in internal/tools/native/patchapply over github.com/bluekeyes/go-gitdiff parsing; publication reuses the pinned write door and delete owner.",
+        "evidence_kind": "owner tests over fixture trees and golden programs"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "-b"
+        ]
+      },
+      "fixture_ids": [
+        "patch-operands-valid",
+        "patch-rejection",
+        "patch-option-p-strip",
+        "patch-option-i-input",
+        "patch-option-R-reverse",
+        "patch-option-N-forward",
+        "patch-option-dry-run",
+        "patch-option-d-directory",
+        "patch-option-F-fuzz",
+        "patch-option-s-quiet",
+        "patch-option-t-batch",
+        "patch-option-f-force",
+        "patch-option-E-remove-empty-files",
+        "patch-option-no-backup-if-mismatch",
+        "patch-option-u-unified"
+      ]
+    },
+    {
       "name": "jq-edit",
       "aliases": [],
       "family": "mutation",
@@ -1457,7 +1996,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jq-edit --path PATH --query QUERY [--format FORMAT]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",

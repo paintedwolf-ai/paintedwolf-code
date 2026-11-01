@@ -1,3 +1,4 @@
+import type { CommandActivityView } from "./command-activity-model.ts";
 import type {
   Message,
   ChatContentReference,
@@ -10,6 +11,7 @@ import type {
   ToolProcessHandle,
   ToolCompletion,
   InvocationReceipt,
+  CommandProgramReceipt,
   VerdictOutcome,
   HostSecretRedactionMeta,
   ToolFeedback,
@@ -100,6 +102,9 @@ export interface ToolPartView {
   verdict?: VerdictOutcome | null;
   /** Contract receipt for the action shown by this card. */
   invocation?: InvocationReceipt | null;
+  /** Host program receipt; present only for portable command programs. */
+  commandProgram?: CommandProgramReceipt | null;
+  commandActivity?: CommandActivityView;
   /** Host provenance for redacted result spans. */
   redaction?: HostSecretRedactionMeta | null;
   /** Host provenance for rendered argument spans. */
@@ -189,6 +194,12 @@ function statusFromToolResult(
       ? "running"
       : "completed";
   }
+  const program = resultMsg?.tool_result?.command_program;
+  if (program) {
+    if (program.state === "running" || program.state === "waiting") return "running";
+    if (program.state !== "completed") return "error";
+    return withHandle(resultMsg?.tool_result?.process)?.running ? "running" : "completed";
+  }
   if (!output && !resultMsg?.tool_result?.content_ref) return "running";
   const outcome = resultMsg?.tool_result?.outcome;
   if (outcome === "rejected" || outcome === "error") return "error";
@@ -208,7 +219,10 @@ export function toolPartDisplayStatus(
   const sid = sessionId?.trim();
   if (!sid) return live.running ? "running" : "completed";
   const snap = getBackgroundProcessSnapshot(sid, live.handle);
-  if (snap) return snap.running ? "running" : "completed";
+  if (snap) {
+    if (part.commandActivity && !snap.running && snap.exitCode !== undefined && snap.exitCode !== 0) return "error";
+    return snap.running ? "running" : "completed";
+  }
   if (hasHydratedBackgroundProcesses(sid)) return "completed";
   return live.running ? "running" : "completed";
 }
@@ -337,6 +351,7 @@ export function toolPartFromCall(
     completion: resultMsg?.tool_result?.completion ?? null,
     process: resultMsg?.tool_result?.process ?? null,
     invocation: resultMsg?.tool_result?.invocation ?? null,
+    commandProgram: resultMsg?.tool_result?.command_program ?? null,
     verdict: resultMsg?.tool_result?.verdict ?? null,
     outcome: resultMsg?.tool_result?.outcome,
     codes: resultMsg?.tool_result?.codes,
@@ -369,7 +384,16 @@ export function toolSummaryFields(
   };
 }
 
-export function toolCompletionLabel(part: ToolPartView): string | undefined {
+export function toolCompletionLabel(part: ToolPartView, sessionId?: string): string | undefined {
+  if (part.commandActivity) {
+    if (part.process && part.status !== "error") {
+      const process = sessionId ? getBackgroundProcessSnapshot(sessionId, part.process.handle) : undefined;
+      if (toolPartDisplayStatus(part, sessionId) === "running") return "Running";
+      if (process?.exitCode !== undefined) return `Exited ${process.exitCode}`;
+      return "Completed";
+    }
+    return part.commandActivity.fact.outcome;
+  }
   const completion = part.completion;
   const operation = completion?.operation.trim().replaceAll("_", " ");
   const state = completion?.state.trim().replaceAll("_", " ");

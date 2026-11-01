@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,18 +29,28 @@ func validateGitRef(value, label string) error {
 }
 
 type Manager struct {
+	gitBranchManager
+	gitCommitManager
+	gitDiffStatusManager
+}
+
+type gitBranchManager struct{ CommandReader }
+
+type gitCommitManager struct {
 	histories immutableCache[[]GitFileCommit]
 	commits   immutableCache[CommitDetails]
 	reviews   immutableCache[commitReviewSnapshot]
 	trees     immutableCache[map[string]string]
 }
 
+type gitDiffStatusManager struct{}
+
 func NewManager() *Manager {
 	return &Manager{}
 }
 
 // Status returns a porcelain git status summary.
-func (m *Manager) Status(ctx context.Context, projectDir string) (*GitStatus, error) {
+func (m *gitDiffStatusManager) Status(ctx context.Context, projectDir string) (*GitStatus, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -71,7 +82,7 @@ func (m *Manager) Status(ctx context.Context, projectDir string) (*GitStatus, er
 }
 
 // StatusIgnored returns ignored entries matching explicit paths.
-func (m *Manager) StatusIgnored(ctx context.Context, projectDir string, paths []string) ([]GitStatusEntry, error) {
+func (m *gitDiffStatusManager) StatusIgnored(ctx context.Context, projectDir string, paths []string) ([]GitStatusEntry, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -129,7 +140,7 @@ func parseStatusBranchLine(rest string, status *GitStatus) {
 }
 
 // ChangedPaths returns repo-relative paths with staged or unstaged changes.
-func (m *Manager) ChangedPaths(ctx context.Context, projectDir string) ([]string, error) {
+func (m *gitDiffStatusManager) ChangedPaths(ctx context.Context, projectDir string) ([]string, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -141,18 +152,21 @@ func (m *Manager) ChangedPaths(ctx context.Context, projectDir string) ([]string
 	seen := map[string]struct{}{}
 	var paths []string
 	for _, entry := range entries {
-		if _, ok := seen[entry.path]; ok {
-			continue
+		// A rename changes its source too; a copy leaves the source in place.
+		for _, path := range []string{entry.path, renameSource(entry)} {
+			if _, ok := seen[path]; ok || path == "" {
+				continue
+			}
+			seen[path] = struct{}{}
+			paths = append(paths, path)
 		}
-		seen[entry.path] = struct{}{}
-		paths = append(paths, entry.path)
 	}
 	return paths, nil
 }
 
 // Diff returns git diff output for optional paths (worktree vs index, staged
 // vs HEAD, or either side against BaseRef).
-func (m *Manager) Diff(ctx context.Context, projectDir string, opts GitDiffOpts) (string, error) {
+func (m *gitDiffStatusManager) Diff(ctx context.Context, projectDir string, opts GitDiffOpts) (string, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return "", err
@@ -205,7 +219,7 @@ func diffArgs(prefix []string, opts GitDiffOpts) ([]string, error) {
 
 // UntrackedPaths lists untracked, non-ignored files under the optional
 // pathspecs, in git's order.
-func (m *Manager) UntrackedPaths(ctx context.Context, projectDir string, paths []string) ([]string, error) {
+func (m *gitDiffStatusManager) UntrackedPaths(ctx context.Context, projectDir string, paths []string) ([]string, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -235,7 +249,7 @@ func (m *Manager) UntrackedPaths(ctx context.Context, projectDir string, paths [
 }
 
 // UntrackedFileDiff returns the synthetic addition hunk for one untracked file.
-func (m *Manager) UntrackedFileDiff(ctx context.Context, projectDir, rel string) (string, error) {
+func (m *gitDiffStatusManager) UntrackedFileDiff(ctx context.Context, projectDir, rel string) (string, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return "", err
@@ -251,7 +265,7 @@ func (m *Manager) UntrackedFileDiff(ctx context.Context, projectDir, rel string)
 }
 
 // UntrackedDiff returns synthetic addition hunks for every untracked file.
-func (m *Manager) UntrackedDiff(ctx context.Context, projectDir string) (string, error) {
+func (m *gitDiffStatusManager) UntrackedDiff(ctx context.Context, projectDir string) (string, error) {
 	paths, err := m.UntrackedPaths(ctx, projectDir, nil)
 	if err != nil {
 		return "", err
@@ -274,7 +288,7 @@ func (m *Manager) UntrackedDiff(ctx context.Context, projectDir string) (string,
 }
 
 // DiffStat returns per-path insertion/deletion counts without hunks.
-func (m *Manager) DiffStat(ctx context.Context, projectDir string, opts GitDiffOpts) ([]GitDiffStatEntry, error) {
+func (m *gitDiffStatusManager) DiffStat(ctx context.Context, projectDir string, opts GitDiffOpts) ([]GitDiffStatEntry, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -291,7 +305,7 @@ func (m *Manager) DiffStat(ctx context.Context, projectDir string, opts GitDiffO
 }
 
 // LastTouchByPath returns each path's newest committer timestamp.
-func (m *Manager) LastTouchByPath(ctx context.Context, projectDir string) (map[string]time.Time, error) {
+func (m *gitDiffStatusManager) LastTouchByPath(ctx context.Context, projectDir string) (map[string]time.Time, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -304,27 +318,48 @@ func (m *Manager) LastTouchByPath(ctx context.Context, projectDir string) (map[s
 	return p.result, nil
 }
 
-func (m *Manager) Init(ctx context.Context, projectDir string) error {
-	dir, err := absProjectDir(projectDir)
-	if err != nil {
-		return err
-	}
-	release, err := gitlease.Path(ctx, dir)
-	if err != nil {
-		return err
-	}
-	defer release()
-	out, code, err := gitexec.Run(ctx, dir, []string{"init"}, hermeticOpts(0))
+func (m *gitBranchManager) Init(ctx context.Context, projectDir string) error {
+	output, code, err := m.InitCommand(ctx, projectDir, "", nil, nil, io.Discard)
 	if err != nil {
 		return err
 	}
 	if code != 0 {
-		return fmt.Errorf("git init failed: %s", strings.TrimSpace(string(out)))
+		return fmt.Errorf("git init failed: %s", strings.TrimSpace(string(output)))
 	}
 	return nil
 }
 
-func (m *Manager) Clone(ctx context.Context, url, destDir string) error {
+// InitCommand runs Git initialization under the path lease and returns its CLI result.
+func (m *gitBranchManager) InitCommand(ctx context.Context, projectDir, target string, config, options []string, stdout io.Writer) ([]byte, int, error) {
+	dir, err := absProjectDir(projectDir)
+	if err != nil {
+		return nil, -1, err
+	}
+	leaseDir := dir
+	if target != "" {
+		leaseDir, err = absProjectDir(target)
+		if err != nil {
+			return nil, -1, err
+		}
+	}
+	release, err := gitlease.Path(ctx, leaseDir)
+	if err != nil {
+		return nil, -1, err
+	}
+	defer release()
+	args := make([]string, 0, len(config)*2+len(options)+2)
+	for _, override := range config {
+		args = append(args, "-c", override)
+	}
+	args = append(args, "init")
+	args = append(args, options...)
+	if target != "" {
+		args = append(args, target)
+	}
+	return gitexec.RunTo(ctx, dir, args, hermeticOpts(0), stdout)
+}
+
+func (m *gitBranchManager) Clone(ctx context.Context, url, destDir string) error {
 	if err := gitargv.ValidateCloneURL(url); err != nil {
 		return err
 	}
@@ -363,7 +398,7 @@ func (m *Manager) Clone(ctx context.Context, url, destDir string) error {
 }
 
 // Stash saves the working tree (including untracked files) to a new stash entry.
-func (m *Manager) Stash(ctx context.Context, projectDir string, message string) error {
+func (m *gitBranchManager) Stash(ctx context.Context, projectDir string, message string) error {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return err
@@ -389,7 +424,7 @@ func (m *Manager) Stash(ctx context.Context, projectDir string, message string) 
 }
 
 // DiscardAll resets tracked files and removes untracked files.
-func (m *Manager) DiscardAll(ctx context.Context, projectDir string) error {
+func (m *gitBranchManager) DiscardAll(ctx context.Context, projectDir string) error {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return err
@@ -420,16 +455,16 @@ func (m *Manager) DiscardAll(ctx context.Context, projectDir string) error {
 }
 
 // Push publishes the current branch to its upstream.
-func (m *Manager) Push(ctx context.Context, projectDir string) error {
+func (m *gitBranchManager) Push(ctx context.Context, projectDir string) error {
 	return m.runRemote(ctx, projectDir, "push", []string{"push"})
 }
 
 // Pull fast-forwards the current branch from its upstream.
-func (m *Manager) Pull(ctx context.Context, projectDir string) error {
+func (m *gitBranchManager) Pull(ctx context.Context, projectDir string) error {
 	return m.runRemote(ctx, projectDir, "pull", []string{"pull", "--ff-only"})
 }
 
-func (m *Manager) runRemote(ctx context.Context, projectDir, label string, args []string) error {
+func (m *gitBranchManager) runRemote(ctx context.Context, projectDir, label string, args []string) error {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return err
@@ -450,7 +485,7 @@ func (m *Manager) runRemote(ctx context.Context, projectDir, label string, args 
 }
 
 // Checkout switches the working tree to an existing branch.
-func (m *Manager) Checkout(ctx context.Context, projectDir string, branch string) error {
+func (m *gitBranchManager) Checkout(ctx context.Context, projectDir string, branch string) error {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return err
@@ -476,7 +511,7 @@ func (m *Manager) Checkout(ctx context.Context, projectDir string, branch string
 }
 
 // Branch returns the current branch name (in-process .git read; falls back to git).
-func (m *Manager) Branch(ctx context.Context, projectDir string) (string, error) {
+func (m *gitBranchManager) Branch(ctx context.Context, projectDir string) (string, error) {
 	if name, err := ReadBranch(projectDir); err == nil {
 		// A readable HEAD distinguishes detached state from an unresolved repository.
 		if name != "" {
@@ -501,7 +536,7 @@ func (m *Manager) Branch(ctx context.Context, projectDir string) (string, error)
 }
 
 // AheadBehindCounts returns divergence from upstream.
-func (m *Manager) AheadBehindCounts(ctx context.Context, projectDir string) (ahead, behind int, upstream string, err error) {
+func (m *gitBranchManager) AheadBehindCounts(ctx context.Context, projectDir string) (ahead, behind int, upstream string, err error) {
 	ab, ferr := ReadAheadBehind(projectDir)
 	if ferr == nil && ab.Exact {
 		return ab.Ahead, ab.Behind, ab.Upstream, nil
@@ -535,7 +570,7 @@ func (m *Manager) AheadBehindCounts(ctx context.Context, projectDir string) (ahe
 }
 
 // CreateBranch creates and checks out a branch.
-func (m *Manager) CreateBranch(ctx context.Context, projectDir string, branch string) error {
+func (m *gitBranchManager) CreateBranch(ctx context.Context, projectDir string, branch string) error {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return err
@@ -559,7 +594,7 @@ func (m *Manager) CreateBranch(ctx context.Context, projectDir string, branch st
 }
 
 // DiffFromRef reports whether path changed since baseRef.
-func (m *Manager) DiffFromRef(ctx context.Context, projectDir, baseRef, path string) (bool, error) {
+func (m *gitDiffStatusManager) DiffFromRef(ctx context.Context, projectDir, baseRef, path string) (bool, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return false, err
@@ -579,7 +614,11 @@ func (m *Manager) DiffFromRef(ctx context.Context, projectDir, baseRef, path str
 }
 
 // HeadSHA returns the current commit hash (in-process .git read; falls back to git).
-func (m *Manager) HeadSHA(ctx context.Context, projectDir string) (string, error) {
+func (m *gitBranchManager) HeadSHA(ctx context.Context, projectDir string) (string, error) {
+	return headSHA(ctx, projectDir)
+}
+
+func headSHA(ctx context.Context, projectDir string) (string, error) {
 	if sha, err := ReadHeadSHA(projectDir); err == nil && sha != "" {
 		return sha, nil
 	}
@@ -628,6 +667,13 @@ func notifyRepoChange(ctx context.Context, projectDir string, kind repochange.Ki
 }
 
 // Untracked directories expand to files for staging and invalidation.
+func renameSource(entry porcelainEntry) string {
+	if entry.status[0] == 'R' || entry.status[1] == 'R' {
+		return entry.from
+	}
+	return ""
+}
+
 func readPorcelainStatus(ctx context.Context, dir string, branch bool) (string, []porcelainEntry, error) {
 	args := []string{"status", "--porcelain=v1", "-z", "--untracked-files=all"}
 	if branch {

@@ -1,0 +1,20 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/tools/native/native.verifiedSource",
+  "kind": "runtime_service",
+  "workstream": "portable-command-capture-observation",
+  "disposition": "retain",
+  "reason": "Retain the measured 14 fields as one live capture and replay state. Ordered block proofs, the reusable buffer, cursor and cache position, working and retained leases, close state and committed filter telemetry share one descriptor lifetime. Splitting these facts would separate replay identity from its resource release. Focused exact-byte, restored-metadata rewrite, seek, cancellation, metadata-conflict cleanup and capture-observation contracts support this bounded shape. Further fields or dependency changes require renewed review.",
+  "reviewed_commit": "f44bfb1c8e0f605e75d1a8cac3271ce078174f83",
+  "ceiling": 14,
+  "boundaries": {
+    "lycaon/internal/tools/native/source_write_contract_test.go": "ebec17ac79abd8b6a04bcd774ea13f5ec81a0cb624967bf0e6c8cd6c0c223858",
+    "lycaon/internal/tools/native/write_operation_test.go": "4f8318b91bfb4f42ecdeda7586024f1f08311a1f325be95a149cbe877cf4b753",
+    "lycaon/internal/tools/native/execution_capture_test.go": "23b52f46b43df239ad7a25bfbf52920ef5d9517b0ec9ef22411eb26a21e7d2b9",
+    "lycaon/internal/tools/native/execution_stream_blocks_test.go": "d3a6c13411439fff8c3cbcc9d7638adcdd72ba23c764bbf012d867230b5374e1",
+    "lycaon/internal/tools/native/execution_observation_test.go": "e0df4da09e4fe9ae54c570fd43bff82137cc276e2280c58923b0b4d3929a9e45",
+    "lycaon/internal/sourcecatalog/literal_capture_commit_test.go": "2d300d11dd039ba173a239d4445d6f8eae6ba3f403c1c5201389ed8ed54acc00",
+    "lycaon/internal/tools/native/search/index_capture_test.go": "c0e5a9176a9a8ce2debc9087fc219f20a9db9874be547ce3139c732ca81db349"
+  },
+  "reviewed_shape": "489cc7deb487927207ba41e0f679761db37a3a75f78644464f696facb634fe00"
+}

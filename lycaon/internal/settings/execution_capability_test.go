@@ -14,18 +14,18 @@ import (
 func TestTaskExecutionPermissionCoversDifferentCommandsAndRevokes(t *testing.T) {
 	approvals := ladderGate(t)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "sudo -n id"},
-},
-Scope: hitl.ActionScope{
-SessionID: "task",
-ProjectID: "project",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{HostExecution: true},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "sudo -n id"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "task",
+			ProjectID: "project",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{HostExecution: true},
+		},
+	}
 	decision := &gate.Decision{Posture: gate.PostureBalanced, Primary: api.GateUnobservedChannel, ReasonKey: "unobserved_channel:host_execution", Cited: []gate.Fact{{Gate: api.GateUnobservedChannel, Key: "boundary.execution", Value: "host_execution", Source: "host"}}}
 	offers := approvals.GrantOffers(action, &hitl.ApprovalResult{Decision: decision})
 	if len(offers) != 3 {
@@ -84,6 +84,11 @@ Contained: hitl.Contained{HostExecution: true},
 	foreign.Execution.Contained = hitl.Contained{ProcessControl: true}
 	if approvals.executionCapabilityCovers(foreign) {
 		t.Fatal("permission changed capability")
+	}
+	foreign = action
+	foreign.Execution.Contained = hitl.Contained{CredentialStore: true}
+	if approvals.executionCapabilityCovers(foreign) {
+		t.Fatal("permission changed capability to credential_store")
 	}
 	approvals.grants.revoke(task.Grant.ID)
 	if approvals.executionCapabilityCovers(action) {

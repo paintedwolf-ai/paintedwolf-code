@@ -44,8 +44,7 @@ func TestProjectMessageGroundingRows(t *testing.T) {
 
 func TestProjectMessageWorkerSummaryGrounding(t *testing.T) {
 	ts := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
-	// Worker completion summaries carry no top-level Content/Grounding; the
-	// grounding lives under WorkerSummary and must still be surfaced.
+	// Worker completion summaries store grounding under WorkerSummary.
 	msg := api.Message{
 		ID:        "msg-ws",
 		Role:      api.MessageRoleAssistant,
@@ -104,5 +103,80 @@ func TestRowIDDeterministic(t *testing.T) {
 	}
 	if c := RowID(SourceMessage, "m1", "other"); c == a {
 		t.Fatal("RowID collision across suffix")
+	}
+}
+
+func TestProjectMessageDeduplicatesCloseoutLedgerSnapshotsAndEnrichesCitedRows(t *testing.T) {
+	ts := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
+	gr := &api.CitationGrounding{
+		Traced: true,
+		EvidenceRecords: []api.CitationGroundingEvidenceRecord{
+			{
+				Handle:   "read#1",
+				Kind:     "read",
+				Shape:    "file_region",
+				Fidelity: "structured",
+				Tool:     "read",
+				Path:     "./src/a.go",
+				Line:     10,
+				Excerpt:  "func main()",
+			},
+			{
+				Handle:   "grep#1",
+				Kind:     "grep",
+				Shape:    "file_region",
+				Fidelity: "structured",
+				Tool:     "grep",
+				Path:     "./src/b.go",
+				Line:     20,
+				Excerpt:  "func helper()",
+			},
+		},
+		CitedEvidence: []api.CitationGroundingCitedEvidence{{
+			Handle:  "read#1",
+			Path:    "./src/a.go",
+			Line:    10,
+			Excerpt: "func main()",
+			Verdict: api.CitationVerdictMatched,
+		}},
+	}
+	rowsTurn1 := ProjectMessage("proj-1", "sess-1", api.Message{
+		ID:        "msg-turn-1",
+		Role:      api.MessageRoleAssistant,
+		CreatedAt: ts,
+		Grounding: gr,
+	})
+	// read#1 is in both EvidenceRecords and CitedEvidence, so it projects once (merged into cited).
+	// grep#1 is uncited in this message, so it projects as a session-keyed evidence_record row.
+	if len(rowsTurn1) != 2 {
+		t.Fatalf("rowsTurn1 = %d, want 2", len(rowsTurn1))
+	}
+	var uncitedTurn1, citedTurn1 IndexRow
+	for _, r := range rowsTurn1 {
+		if r.Handle == "grep#1" {
+			uncitedTurn1 = r
+		} else if r.Handle == "read#1" {
+			citedTurn1 = r
+		}
+	}
+	if citedTurn1.Tool != "read" || citedTurn1.Kind != "read" || citedTurn1.Shape != "file_region" || citedTurn1.Path != "src/a.go" {
+		t.Fatalf("cited row missing merged record metadata: %+v", citedTurn1)
+	}
+	if uncitedTurn1.Tool != "grep" || uncitedTurn1.Path != "src/b.go" {
+		t.Fatalf("uncited row missing metadata: %+v", uncitedTurn1)
+	}
+
+	// A later turn carrying the same uncited ledger snapshot produces the same row ID for grep#1.
+	rowsTurn2 := ProjectMessage("proj-1", "sess-1", api.Message{
+		ID:        "msg-turn-2",
+		Role:      api.MessageRoleAssistant,
+		CreatedAt: ts.Add(time.Minute),
+		Grounding: &api.CitationGrounding{
+			Traced:          true,
+			EvidenceRecords: gr.EvidenceRecords[1:],
+		},
+	})
+	if len(rowsTurn2) != 1 || rowsTurn2[0].ID != uncitedTurn1.ID {
+		t.Fatalf("rowsTurn2 = %+v, want session-stable ID %q", rowsTurn2, uncitedTurn1.ID)
 	}
 }

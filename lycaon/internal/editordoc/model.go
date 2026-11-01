@@ -19,45 +19,63 @@ import (
 )
 
 var (
-	ErrReadOnly           = errors.New("editor source is read-only")
-	ErrNotFound           = errors.New("editor document not found")
-	ErrInvalidEOL         = errors.New("editor line ending must be lf or crlf")
-	ErrRevisionConflict   = errors.New("editor document revision conflict")
-	ErrRootDetached       = errors.New("editor document root is not attached")
+	ErrReadOnly         = errors.New("editor source is read-only")
+	ErrNotFound         = errors.New("editor document not found")
+	ErrInvalidEOL       = errors.New("editor line ending must be lf or crlf")
+	ErrRevisionConflict = errors.New("editor document revision conflict")
+	ErrRootDetached     = errors.New("editor document root is not attached")
 	// ErrOperationConflict rejects operation reuse with different input.
 	ErrOperationConflict = errors.New("editor save operation id was already used for different input")
 )
 
 type Document struct {
-	SaveRevision                             int64 `json:"-"`
-	CommandHistory                           *CommandHistory
-	historyVector                            []byte
-	BranchID                                 sourcebranch.ID
-	WorkspaceID                              string
-	authorship                               authorshipContext
-	pinnedCheckpoint                         []byte
-	publishedCheckpoint                      []byte
-	filesystemClient                         uint32
-	plannedEdits                             []documentcore.Edit
-	ReplicaID                                uint32
-	Participants                             []Participant
-	replicaCommit                            *replicaCommit
-	Epoch                                    int64
-	StateVector                              []byte
-	CRDTUpdate                               []byte
-	PublishedRevision                        int64
-	ID, ProjectID, FileID, RootID, Path      string
-	Draft, BaseContent, BaseSHA256, Encoding string
-	SizeBytes                                int64
-	EOL, BaseEOL                             string
-	MixedEOL, BaseMixedEOL, Dirty            bool
-	Revision                                 int64
-	CreatedAt, UpdatedAt                     time.Time
-	Diverged                                 bool
-	// Absent says the path has no file on disk; the draft and saved base stay.
-	Absent bool
+	ID, ProjectID, FileID, RootID, Path string
+	WorkspaceID                         string
+	BranchID                            sourcebranch.ID
+	Draft                               string
+	Revision                            int64
+	Dirty                               bool
 	// HeldAgentVersionID retains an unsaved agent edit until a save settles it.
 	HeldAgentVersionID string
+	DocumentBase
+}
+
+// DocumentBase holds baseline file content and encoding attributes.
+type DocumentBase struct {
+	BaseContent, BaseSHA256, Encoding string
+	SizeBytes                         int64
+	EOL, BaseEOL                      string
+	MixedEOL, BaseMixedEOL            bool
+	CreatedAt                         time.Time
+	DocumentState
+}
+
+// DocumentState holds synchronization, epoch, and CRDT state.
+type DocumentState struct {
+	UpdatedAt  time.Time
+	Diverged   bool
+	// Absent says the path has no file on disk; the draft and saved base stay.
+	Absent            bool
+	Epoch             int64
+	PublishedRevision int64
+	SaveRevision      int64 `json:"-"`
+	StateVector       []byte
+	CRDTUpdate        []byte
+	ReplicaID         uint32
+	DocumentReplica
+}
+
+// DocumentReplica holds participant, history, and checkpoint state.
+type DocumentReplica struct {
+	Participants        []Participant
+	CommandHistory      *CommandHistory
+	historyVector       []byte
+	authorship          authorshipContext
+	pinnedCheckpoint    []byte
+	publishedCheckpoint []byte
+	filesystemClient    uint32
+	plannedEdits        []documentcore.Edit
+	replicaCommit       *replicaCommit
 }
 
 // HoldsDraft reports whether the document carries text the file does not.

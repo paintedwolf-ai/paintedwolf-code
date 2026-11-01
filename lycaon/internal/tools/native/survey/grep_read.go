@@ -33,7 +33,7 @@ func readGrepFile(ctx context.Context, reads *projectpaths.ReadSession, absPath 
 	if err != nil {
 		return nil, false, false, err
 	}
-	f, err := reads.Open(resolved)
+	f, err := reads.Open(ctx, resolved)
 	if err != nil {
 		return nil, false, false, err
 	}

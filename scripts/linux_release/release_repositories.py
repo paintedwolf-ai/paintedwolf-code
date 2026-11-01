@@ -11,8 +11,8 @@ from urllib.parse import urlsplit
 
 from release_distribution_contract.platforms import load_platforms, ORIGIN
 
-from . import (native_repositories, pacman_publication, pacman_repository, pacman_r2, release_qualification,
-               repository_r2, repository_transaction)
+from . import (native_repositories, pacman_publication, pacman_repository, pacman_r2,
+               release_signing as release_qualification, repository_r2, repository_transaction)
 from .r2_objects import current, public_bytes, put, prefix as checked_prefix
 from .repository_objects import encoded
 from .repository_operations import identity, version_marker

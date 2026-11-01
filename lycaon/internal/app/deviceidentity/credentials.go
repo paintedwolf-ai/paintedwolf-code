@@ -34,6 +34,7 @@ func Load(delivered string) (Credentials, error) {
 	}
 	return credentials, nil
 }
+
 // ResolveToken prefers the delivered token, then LYCAON_API_TOKEN for a
 // standalone engine, then a generated one.
 func ResolveToken(delivered string) (token string, generated bool, err error) {

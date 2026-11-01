@@ -24,7 +24,7 @@ func (s *SourceEffects) applySourceCopy(ctx context.Context, row *sourceMutation
 		if err := requireSourceIdentity(plan.ToAbs, plan.DestinationIdentity); err != nil {
 			return err
 		}
-		return requireSourceFingerprint(ctx, plan.ToAbs, plan.TreeSHA)
+		return requireSourceFingerprint(ctx, plan.ToAbs, plan.TreeSHA, row.memory)
 	}
 	if err := requireSourceIdentity(plan.FromAbs, plan.EntryIdentity); err != nil {
 		return err
@@ -88,13 +88,13 @@ func (s *SourceEffects) prepareSourceCopy(ctx context.Context, row *sourceMutati
 	}
 	transfer.progress.report(true)
 	if plan.Kind == "copy" {
-		if err := requireSourceFingerprint(ctx, filepath.Join(plan.StageAbs, "entry"), plan.TreeSHA); err != nil {
+		if err := requireSourceFingerprint(ctx, filepath.Join(plan.StageAbs, "entry"), plan.TreeSHA, row.memory); err != nil {
 			return err
 		}
 		if err := requireSourceIdentity(plan.FromAbs, plan.EntryIdentity); err != nil {
 			return err
 		}
-		if err := requireSourceFingerprint(ctx, plan.FromAbs, plan.TreeSHA); err != nil {
+		if err := requireSourceFingerprint(ctx, plan.FromAbs, plan.TreeSHA, row.memory); err != nil {
 			return err
 		}
 	}
@@ -116,7 +116,7 @@ func (s *SourceEffects) openSourceStage(ctx context.Context, row *sourceMutation
 	plan := &row.Plan
 	parent := filepath.Dir(plan.Path)
 	if parent != "." {
-		if err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
+		if _, err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
 			return nil, err
 		}
 	}
@@ -166,7 +166,7 @@ func clearSourceStage(plan *sourceMutationPlan) error {
 
 func (s *SourceEffects) prepareSourceContents(ctx context.Context, row *sourceMutationRow) error {
 	plan := &row.Plan
-	if plan.Kind != "delete" || plan.NativeTrash != nil || plan.RecoveryCount > 0 {
+	if plan.Kind != "delete" || plan.Disposal == sourceDisposalDiscard || plan.NativeTrash != nil || plan.Unrecoverable || plan.RecoveryCount > 0 {
 		return nil
 	}
 	if plan.RecoveryID == "" {
@@ -175,7 +175,7 @@ func (s *SourceEffects) prepareSourceContents(ctx context.Context, row *sourceMu
 			return err
 		}
 	}
-	if err := s.recovery.captureRecovery(ctx, plan, plan.AbsPath); err != nil {
+	if err := s.recovery.captureRecovery(ctx, plan, plan.AbsPath, row.memory); err != nil {
 		return err
 	}
 	return s.Journal.update(ctx, row)
@@ -195,6 +195,15 @@ func sourceHistoryEvidence(ctx context.Context, abs string) (sourceEvidence, err
 	}
 	if info.IsDir() {
 		return sourceEvidence{entryKind: SourceEntryFolder}, nil
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, readErr := os.Readlink(abs)
+		if readErr != nil {
+			return sourceEvidence{}, readErr
+		}
+		content := []byte(target)
+		digest := sha256.Sum256(content)
+		return sourceEvidence{entryKind: SourceEntryLink, content: content, sha256: hex.EncodeToString(digest[:]), size: int64(len(content))}, nil
 	}
 	if !info.Mode().IsRegular() {
 		return sourceEvidence{entryKind: SourceEntryFile, size: info.Size()}, nil

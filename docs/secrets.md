@@ -8,7 +8,7 @@ Painted Wolf Code separates protected credential bytes from the references an ag
 
 ## Scope and vocabulary
 
-This is not a secrets manager or a KMS. It does not provision credentials in an external system, distribute them to workloads, or become their system of record. It protects credentials already needed by local work so the model can use a bounded reference without receiving the value.
+This is not a secrets manager or a KMS. It does not provision credentials in an external system, distribute them to workloads, or become their system of record. It protects credentials already needed by local work so the model can use a bounded reference without receiving the value. Confined commands that authenticate through the host operating system's credential store (`gh`, `glab`, `git-credential-osxkeychain`, `git-credential-libsecret`, `docker-credential-*`, `security`, `secret-tool`) request `capability_request.credential_store: true` on `command` or `verify` ([Security](security.md#host-processes-and-exceptional-execution)) rather than reading raw keychain or keyring files through `read_path`; Painted Wolf Code's own `credential-vault.age` remains on the control-plane floor and is never opened by `credential_store`.
 
 Four mechanisms stay distinct:
 

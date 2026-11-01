@@ -35,7 +35,7 @@ type Service struct {
 	captures        *checkpointcontrol.Capture
 	execution       *execution.Lifetime
 	projects        Projects
-	loopbackProv    tools.ContainerRecorder
+	loopbackProv    tools.LoopbackEndpointObserver
 	SourceLedger    sourceledger.Recorder
 	history         tools.SourceHistory
 	commands        sourceledger.CommandWindowOpener
@@ -52,8 +52,22 @@ func New(store Store, workspace *sessionscope.Service, limits *limits.Service, p
 	return &Service{store: store, workspace: workspace, limits: limits, profiles: profiles, captures: captures, execution: execution}
 }
 func (m *Service) SetProjects(projects Projects) { m.projects = projects }
-func (m *Service) SetDataDir(dir string)         { m.dataDir = strings.TrimSpace(dir) }
-func (m *Service) SetContainers(containers tools.ContainerRecorder) {
+
+// ScratchDir is the session's scratch folder, as tool contexts carry it.
+func (m *Service) ScratchDir(ctx context.Context, sess *api.Session) string {
+	if m == nil {
+		return ""
+	}
+	return m.execution.SessionDirectories(ctx, sess).Scratch
+}
+func (m *Service) Project(ctx context.Context, id string) (*project.Project, error) {
+	if m == nil || m.projects == nil || strings.TrimSpace(id) == "" {
+		return nil, nil
+	}
+	return m.projects.Get(ctx, id)
+}
+func (m *Service) SetDataDir(dir string) { m.dataDir = strings.TrimSpace(dir) }
+func (m *Service) SetLoopbackObserver(containers tools.LoopbackEndpointObserver) {
 	m.loopbackProv = containers
 }
 func (m *Service) SetSourceLedger(source sourceledger.Recorder, history tools.SourceHistory, commands sourceledger.CommandWindowOpener, mutations tools.SourceGitMutations, observations *sourceledger.Inventory) {

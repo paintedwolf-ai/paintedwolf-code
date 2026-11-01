@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -38,12 +37,8 @@ func (m *Service) BeforeTool(
 	}
 	implState := m.state.ForSession(ctx, sess)
 	surfaceID := m.surface.PromptTurnSurfaceID(sess.ID)
-	root := sessiontree.RootID(ctx, m.store, sess.ID)
-	currentProgress := ""
-	if m.progress != nil {
-		currentProgress = m.progress.Get(ctx, root)
-	}
-	reviewLoopActive := m.workflows != nil && m.workflows.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID)
+	progressState := m.progressPrerequisites(ctx, sess)
+	root, currentProgress, reviewLoopActive := progressState.RootSessionID, progressState.Content, progressState.ReviewLoopActive
 	closureBaseline, closureArmed := m.ProgressClosure.Baseline(root)
 	guardDeps := m.WorkerAdmission()
 	declaredVerify := ""
@@ -67,9 +62,6 @@ func (m *Service) BeforeTool(
 			return "", false, reject
 		}
 		return "", skip, err
-	}
-	if closureArmed {
-		m.ProgressClosure.ClearSatisfied(root, currentProgress, closureBaseline)
 	}
 	return "", false, nil
 }
@@ -109,14 +101,32 @@ func (m *Service) BeforeFinish(
 		return reject, true
 	}
 	implState := m.state.ForSession(ctx, sess)
-	batchTurn := m.Batch.TurnGuard(sess.ID)
-	if reject, block := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		guard.ObserveCoordinatorHostNoToolTurn(
-			sess, history, lastAssistant, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
+	openProgressChecked := false
+	if invokeAllowed && workersIdle && len(implState.PendingOverlayIDs) == 0 && guard.SurfaceFinishesWithUserProse(surfaceID) && implState.ProgressOpenCount > 0 {
+		openProgressChecked = true
+		reject, block, waived := m.openProgressWithWaiver(
+			ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed,
 		)
-		return nil
-	}); block {
-		return reject, true
+		if block {
+			return reject, true
+		}
+		if waived {
+			implState.ProgressOpenCount = 0
+		}
+	}
+	if invokeAllowed {
+		var batchTurn guard.BatchTurnGuard
+		if m.Batch != nil {
+			batchTurn = m.Batch.TurnGuard(sess.ID)
+		}
+		if reject, block := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
+			guard.ObserveCoordinatorHostNoToolTurn(
+				sess, history, lastAssistant, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
+			)
+			return nil
+		}); block {
+			return reject, true
+		}
 	}
 	if reject, block := m.MissingVerdict(ctx, sess, workersIdle, invokeAllowed); block {
 		return reject, true
@@ -129,6 +139,9 @@ func (m *Service) BeforeFinish(
 	}
 	if reject, block := m.OpenGates(ctx, sess, workersIdle, invokeAllowed); block {
 		return reject, true
+	}
+	if openProgressChecked {
+		return nil, false
 	}
 	return m.OpenProgress(
 		ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed,

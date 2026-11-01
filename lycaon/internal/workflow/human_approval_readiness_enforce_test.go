@@ -18,7 +18,7 @@ func TestSyncHumanApprovalRejectsWhenNotReady(t *testing.T) {
 	mgr, sessStore, _, projectDir := testManagerWithRegistry(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
@@ -59,7 +59,7 @@ func TestPlanApprovalPreflightThenSyncAdvancesWhenReady(t *testing.T) {
 	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	ctx := workflowCaller(t, mgr)
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)

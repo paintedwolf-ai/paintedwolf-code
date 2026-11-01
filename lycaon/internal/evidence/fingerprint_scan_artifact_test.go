@@ -250,4 +250,3 @@ func TestScanGroupsViewIndexesLocationPaths(t *testing.T) {
 		t.Fatal("group message must ground against captured scan body")
 	}
 }
-

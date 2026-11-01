@@ -2,10 +2,13 @@
   "commands": [
     {
       "name": "grep",
-      "aliases": [],
+      "aliases": [
+        "egrep",
+        "fgrep"
+      ],
       "family": "search",
       "owner": "filesystem",
-      "argv": "grep [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
+      "argv": "grep [OPTIONS] [-e PATTERN ...|-f FILE ...|PATTERN] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -42,7 +45,8 @@
         {
           "spellings": [
             "-i",
-            "--ignore-case"
+            "--ignore-case",
+            "-y"
           ],
           "arity": 0,
           "value_role": "boolean",
@@ -91,6 +95,17 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "grep-option-w-wordregexp",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x",
+            "--line-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-x-lineregexp",
           "consumption": "fixed",
           "sample_values": []
         },
@@ -152,7 +167,8 @@
         {
           "spellings": [
             "-q",
-            "--quiet"
+            "--quiet",
+            "--silent"
           ],
           "arity": 0,
           "value_role": "boolean",
@@ -243,7 +259,8 @@
           "consumption": "fixed",
           "sample_values": [
             "1"
-          ]
+          ],
+          "shorthand": "numeric"
         },
         {
           "spellings": [
@@ -256,6 +273,19 @@
           "consumption": "fixed",
           "sample_values": [
             "a"
+          ]
+        },
+        {
+          "spellings": [
+            "-f",
+            "--file"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "grep-option-f-file",
+          "consumption": "fixed",
+          "sample_values": [
+            "patterns"
           ]
         },
         {
@@ -293,10 +323,230 @@
           "sample_values": [
             "*.go"
           ]
+        },
+        {
+          "spellings": [
+            "-b",
+            "--byte-offset"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-b-byteoffset",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-Z",
+            "--null"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-Z-null",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z",
+            "--null-data"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-z-nulldata",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-T",
+            "--initial-tab"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-T-initialtab",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--line-buffered"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-linebuffered",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a",
+            "--text"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-a-text",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-I"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-I",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--binary-files"
+          ],
+          "arity": 1,
+          "value_role": "binary-mode",
+          "fixture_id": "grep-option-binary-files",
+          "consumption": "fixed",
+          "sample_values": [
+            "text"
+          ]
+        },
+        {
+          "spellings": [
+            "-G",
+            "--basic-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-G-basicregexp",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--directories"
+          ],
+          "arity": 1,
+          "value_role": "directory-action",
+          "fixture_id": "grep-option-d-directories",
+          "consumption": "fixed",
+          "sample_values": [
+            "skip"
+          ]
+        },
+        {
+          "spellings": [
+            "-D",
+            "--devices"
+          ],
+          "arity": 1,
+          "value_role": "device-action",
+          "fixture_id": "grep-option-D-devices",
+          "consumption": "fixed",
+          "sample_values": [
+            "skip"
+          ]
+        },
+        {
+          "spellings": [
+            "--include-dir"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "grep-option-include-dir",
+          "consumption": "fixed",
+          "sample_values": [
+            "src"
+          ]
+        },
+        {
+          "spellings": [
+            "-O"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-O",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-p"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-p",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-S"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-S",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-u",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-U",
+            "--binary"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-U-binary",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--label"
+          ],
+          "arity": 1,
+          "value_role": "label",
+          "fixture_id": "grep-option-label",
+          "consumption": "fixed",
+          "sample_values": [
+            "stdin"
+          ]
+        },
+        {
+          "spellings": [
+            "--mmap"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-mmap",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--color",
+            "--colour"
+          ],
+          "arity": -1,
+          "value_role": "color-when",
+          "fixture_id": "grep-option-color",
+          "consumption": "optional-attached-value",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. grep [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. grep [OPTIONS] [-e PATTERN ...|-f FILE ...|PATTERN] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete matches; publication eligible",
         "1": "complete no matches; empty publication eligible",
@@ -343,7 +593,7 @@
           }
         }
       },
-      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Context markers, path prefixes, only-matching and NUL paths defined in output.json.",
+      "notes": "grep default BRE; -E ERE; egrep is grep -E and fgrep is grep -F; differing -E/-F/-P/dialect aliases are a conflicting-matchers usage error (status 2). -x anchors each pattern to the whole line; -f FILE reads LF-separated patterns from a pinned file (an empty file selects nothing). rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered. A file holding NUL bytes is binary (GNU 3.5+ form): a selected output line prints 'grep: PATH: binary file matches' once on stderr and the file stops; -c/-l/-L/-q count normally. Recursion visits names in unsigned byte order. -b prefixes the byte offset of each line (of each match with -o); -Z ends file names with NUL instead of ':' or LF; -z reads and writes NUL-terminated records; -T right-aligns numbers to the digit count of the input's size and puts a TAB before content; --line-buffered is accepted (output is already exact); --color=never|auto prints plain text (stdout is never a terminal) and --color=always refuses. GNU, BSD and busybox spellings with one meaning are all accepted: -a/--text searches binary data as text; -I and --binary-files=without-match treat binary files as holding no match; --binary-files=binary|text select the default or -a; -G is the default BRE; -y is -i; --silent is -q; -NUM is -C NUM; -d read|skip|recurse and -D read|skip choose directory and device handling; BSD --include-dir descends only into matching directories; BSD -S follows every link under -R, -p and -O none beyond the command line; -u, -U/--binary and --mmap change nothing; --label names standard input. -Z stays GNU's --null (BSD's decompression spelling would mean something else); BSD -J, -X and -M decompressors are refused.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -371,6 +621,7 @@
         "grep-option-E-extendedregexp",
         "grep-option-P-perlregexp",
         "grep-option-w-wordregexp",
+        "grep-option-x-lineregexp",
         "grep-option-v-invertmatch",
         "grep-option-l-fileswithmatches",
         "grep-option-L-fileswithoutmatch",
@@ -385,9 +636,30 @@
         "grep-option-B-beforecontext",
         "grep-option-C-context",
         "grep-option-e-regexp",
+        "grep-option-f-file",
         "grep-option-include",
         "grep-option-exclude",
-        "grep-option-excludedir"
+        "grep-option-excludedir",
+        "grep-option-b-byteoffset",
+        "grep-option-Z-null",
+        "grep-option-z-nulldata",
+        "grep-option-T-initialtab",
+        "grep-option-linebuffered",
+        "grep-option-color",
+        "grep-option-a-text",
+        "grep-option-I",
+        "grep-option-binary-files",
+        "grep-option-G-basicregexp",
+        "grep-option-d-directories",
+        "grep-option-D-devices",
+        "grep-option-include-dir",
+        "grep-option-O",
+        "grep-option-p",
+        "grep-option-S",
+        "grep-option-u",
+        "grep-option-U-binary",
+        "grep-option-label",
+        "grep-option-mmap"
       ]
     },
     {
@@ -658,6 +930,19 @@
         },
         {
           "spellings": [
+            "-T",
+            "--type-not"
+          ],
+          "arity": 1,
+          "value_role": "file-type",
+          "fixture_id": "rg-option-T-typenot",
+          "consumption": "fixed",
+          "sample_values": [
+            "md"
+          ]
+        },
+        {
+          "spellings": [
             "-S",
             "--smart-case"
           ],
@@ -689,11 +974,41 @@
         },
         {
           "spellings": [
+            "--no-ignore"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-no-ignore",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--color"
+          ],
+          "arity": -1,
+          "value_role": "color-when",
+          "fixture_id": "rg-option-color",
+          "consumption": "optional-attached-value",
+          "sample_values": []
+        },
+        {
+          "spellings": [
             "--files"
           ],
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "rg-option-files",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--json"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-json",
           "consumption": "fixed",
           "sample_values": []
         },
@@ -775,7 +1090,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rg [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete matches; publication eligible",
         "1": "complete no matches; empty publication eligible",
@@ -822,7 +1137,7 @@
           }
         }
       },
-      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Context markers, path prefixes, only-matching and NUL paths defined in output.json. rg -r/--replace consumes replacement text (capture $N supported); -L/--follow follows authorized symlinks with cycle detection; -h help; --no-filename and --files-without-match are explicit long forms. Recursive discovery is rg default. -s is case-sensitive override, -S smart-case; never reuse grep -s suppression. GNU-only --include/--exclude forms are accepted portable extensions with same stated filtering, not claimed stock ripgrep aliases.",
+      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered. rg -r/--replace consumes replacement text (capture $N supported); -L/--follow follows authorized symlinks with cycle detection; -h help; --no-filename and --files-without-match are explicit long forms. Recursive discovery is rg default. -s is case-sensitive override, -S smart-case; never reuse grep -s suppression. GNU-only --include/--exclude forms are accepted portable extensions with same stated filtering, not claimed stock ripgrep aliases. rg honours .gitignore, .ignore and the project's ignore rules by default; --no-ignore drops them (as -u does) while still skipping hidden entries; -T excludes a catalogued file type; --color=never|auto prints plain text and --color=always refuses. --json prints ripgrep 15's JSON Lines: begin, match and context messages per file with output, its end message with statistics and one closing summary; field order, escaping, {\"bytes\"} base64 data and statistics follow rg, elapsed times are this search's own; listing and counting forms ignore --json as rg does. Without PATH operands rg searches an attached stdin (a pipe or redirect) and walks the current directory when no producer is attached, as ripgrep does.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -874,7 +1189,11 @@
         "rg-option-help",
         "rg-option-no-filename",
         "rg-option-no-messages",
-        "rg-option-case-sensitive"
+        "rg-option-case-sensitive",
+        "rg-option-T-typenot",
+        "rg-option-no-ignore",
+        "rg-option-color",
+        "rg-option-json"
       ]
     },
     {
@@ -946,6 +1265,18 @@
         },
         {
           "spellings": [
+            "-iregex"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "find-option-iregex",
+          "consumption": "fixed",
+          "sample_values": [
+            "a"
+          ]
+        },
+        {
+          "spellings": [
             "-type"
           ],
           "arity": 1,
@@ -1004,6 +1335,66 @@
         },
         {
           "spellings": [
+            "-mtime"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-mtime",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-newer"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newer",
+          "consumption": "fixed",
+          "sample_values": [
+            "input"
+          ]
+        },
+        {
+          "spellings": [
+            "-mmin"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-mmin",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-perm"
+          ],
+          "arity": 1,
+          "value_role": "mode",
+          "fixture_id": "find-option-perm",
+          "consumption": "fixed",
+          "sample_values": [
+            "644"
+          ]
+        },
+        {
+          "spellings": [
+            "-user"
+          ],
+          "arity": 1,
+          "value_role": "uid",
+          "fixture_id": "find-option-user",
+          "consumption": "fixed",
+          "sample_values": [
+            "0"
+          ]
+        },
+        {
+          "spellings": [
             "-not"
           ],
           "arity": 0,
@@ -1014,7 +1405,8 @@
         },
         {
           "spellings": [
-            "-a"
+            "-a",
+            "-and"
           ],
           "arity": 0,
           "value_role": "boolean",
@@ -1024,7 +1416,8 @@
         },
         {
           "spellings": [
-            "-o"
+            "-o",
+            "-or"
           ],
           "arity": 0,
           "value_role": "boolean",
@@ -1064,6 +1457,18 @@
         },
         {
           "spellings": [
+            "-printf"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "find-option-printf",
+          "consumption": "fixed",
+          "sample_values": [
+            "%p\\n"
+          ]
+        },
+        {
+          "spellings": [
             "-exec"
           ],
           "arity": -2,
@@ -1086,10 +1491,350 @@
           "fixture_id": "find-option-delete",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-E"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-E",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-s",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-x",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-xdev",
+            "-mount"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-xdev",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-H"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-H",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-L",
+            "-follow"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-L",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-P",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-d",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-depth"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-depth",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-amin"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-amin",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-cmin"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-cmin",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-atime"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-atime",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-ctime"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-ctime",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-uid"
+          ],
+          "arity": 1,
+          "value_role": "uid",
+          "fixture_id": "find-option-uid",
+          "consumption": "fixed",
+          "sample_values": [
+            "0"
+          ]
+        },
+        {
+          "spellings": [
+            "-gid"
+          ],
+          "arity": 1,
+          "value_role": "gid",
+          "fixture_id": "find-option-gid",
+          "consumption": "fixed",
+          "sample_values": [
+            "0"
+          ]
+        },
+        {
+          "spellings": [
+            "-group"
+          ],
+          "arity": 1,
+          "value_role": "gid",
+          "fixture_id": "find-option-group",
+          "consumption": "fixed",
+          "sample_values": [
+            "0"
+          ]
+        },
+        {
+          "spellings": [
+            "-true"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-true",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-false"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-false",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-neweraa"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-neweraa",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-neweram"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-neweram",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerac"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newerac",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerat"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "find-option-newerat",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-01"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerma"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newerma",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newermm"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newermm",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newermc"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newermc",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newermt"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "find-option-newermt",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-01"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerca"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newerca",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newercm"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newercm",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newercc"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newercc",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-newerct"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "find-option-newerct",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-01"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. find [PATH ...] [EXPRESSION]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1151,7 +1896,7 @@
           }
         }
       },
-      "notes": "Default . and implicit -print if no action. Boolean !/-not > implicit/-a > -o; parenthesis group; short-circuit. -type f|d|l, -size signed count in c bytes/k KiB/M MiB/default512-byte blocks; name/path shell patterns, regex ERE whole path. -prune stops descend, -delete depth-first recoverable P16 rm. -exec CMD ... {} ; exact single or {} + serial batched argv through normal binder; delimiters are AST words, no reparsing. -R symlink recursion absent.",
+      "notes": "Default . and implicit -print if no action. Boolean !/-not > implicit/-a > -o; parenthesis group; short-circuit. -type f|d|l, -size signed count in c bytes/k KiB/M MiB/default512-byte blocks; -mtime N compares whole days since modification (truncated) against N, +N greater, -N less; -newer FILE is a strictly later modification time than FILE's; name/path shell patterns, regex ERE whole path. -prune stops descend, -delete depth-first recoverable P16 rm. -exec CMD ... {} ; exact single or {} + serial batched argv through normal binder; delimiters are AST words, no reparsing. -R symlink recursion absent. -iregex is -regex with Unicode simple case folding; -mmin is -mtime in minutes; -perm MODE matches exact octal permission bits, -MODE all of them and /MODE any of them; -user takes a numeric uid (names are not resolved) and refuses where the platform has no POSIX owners; -printf supports %p %f %h %P %s %d %y %m %U %G %T@ %% and the escapes \\n \\t \\0 \\\\, refusing other directives. GNU, BSD and busybox spellings with one meaning are all accepted: BSD's leading -E (extended -regex, already the dialect) and -s (sorted, already the order); -x, -xdev and -mount stay on the starting point's device; -P never follows links (the default), -H follows command-line links and -L/-follow every contained link with loop detection (a followed link is its target, so -type l then matches only unreachable links); -d and -depth visit depth first, and BSD's -depth N is a depth test when a number follows; -amin, -cmin, -atime and -ctime are -mmin/-mtime over access and change times; -uid, -gid and -group take numeric ids; -and, -or, -true and -false; -type also takes p, s, b and c; -size also takes w (2-byte words), G, T and P. -newerXY REF is true when the entry's X time (a access, m modification, c change) is strictly later than REF's Y time, or than the date REF when Y is t; dates use the date -d grammar in the program TZ.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -1181,6 +1926,8 @@
         "find-option-mindepth",
         "find-option-size",
         "find-option-empty",
+        "find-option-mtime",
+        "find-option-newer",
         "find-option-not",
         "find-option-a",
         "find-option-o",
@@ -1188,7 +1935,225 @@
         "find-option-print",
         "find-option-print0",
         "find-option-exec",
-        "find-option-delete"
+        "find-option-delete",
+        "find-option-iregex",
+        "find-option-mmin",
+        "find-option-perm",
+        "find-option-user",
+        "find-option-printf",
+        "find-option-E",
+        "find-option-s",
+        "find-option-x",
+        "find-option-xdev",
+        "find-option-H",
+        "find-option-L",
+        "find-option-P",
+        "find-option-d",
+        "find-option-depth",
+        "find-option-amin",
+        "find-option-cmin",
+        "find-option-atime",
+        "find-option-ctime",
+        "find-option-uid",
+        "find-option-gid",
+        "find-option-group",
+        "find-option-true",
+        "find-option-false",
+        "find-option-neweraa",
+        "find-option-neweram",
+        "find-option-newerac",
+        "find-option-newerat",
+        "find-option-newerma",
+        "find-option-newermm",
+        "find-option-newermc",
+        "find-option-newermt",
+        "find-option-newerca",
+        "find-option-newercm",
+        "find-option-newercc",
+        "find-option-newerct"
+      ]
+    },
+    {
+      "name": "tree",
+      "aliases": [],
+      "family": "search",
+      "owner": "filesystem",
+      "argv": "tree [-adfJ] [-L LEVEL] [-I PATTERN] [-P PATTERN] [--gitignore] [--noreport] [--] [DIRECTORY ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-L"
+          ],
+          "arity": 1,
+          "value_role": "depth",
+          "fixture_id": "tree-option-L",
+          "consumption": "fixed",
+          "sample_values": [
+            "2"
+          ]
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-a",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-d",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-f",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-I"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "tree-option-I",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.log"
+          ]
+        },
+        {
+          "spellings": [
+            "-P"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "tree-option-P",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
+        },
+        {
+          "spellings": [
+            "--gitignore"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-gitignore",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--noreport"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-noreport",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-J"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-J",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tree [-adfJ] [-L LEVEL] [-I PATTERN] [-P PATTERN] [--gitignore] [--noreport] [--] [DIRECTORY ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "tree empty-dir",
+        "stdout": "empty-dir\n\n0 directories, 0 files\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "tree 2.x over the held roots through the search walk: entries in unsigned byte order with UTF-8 branches, links shown as NAME -> TARGET and not followed, hidden names only with -a. -L limits depth, -d lists directories only, -f prints paths from the operand, -I excludes and -P selects file names by wildcard patterns joined with |. --gitignore applies the project ignore owner, the same view rg and the source catalog use. The report counts listed directories (the operand when it lists anything) and files; --noreport omits it and -J prints tree's JSON. Entries the read boundary protects are never listed; walks over traversal_visits refuse.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/search/tree.go",
+        "tests": [
+          "lycaon/internal/tools/native/search/tree_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "tree-operands-valid",
+        "tree-rejection",
+        "tree-option-L",
+        "tree-option-a",
+        "tree-option-d",
+        "tree-option-f",
+        "tree-option-I",
+        "tree-option-P",
+        "tree-option-gitignore",
+        "tree-option-noreport",
+        "tree-option-J"
       ]
     }
   ]

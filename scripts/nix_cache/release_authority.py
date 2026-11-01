@@ -1,7 +1,7 @@
 """Bind a cache request to the selected release and its fresh exact-source Qualification record."""
 from __future__ import annotations
 
-from scripts.linux_release import release_qualification
+from scripts.linux_release import release_signing as release_qualification
 
 from .admission import validate_request
 

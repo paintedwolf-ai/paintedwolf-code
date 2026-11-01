@@ -49,8 +49,26 @@ type cohortAssessment struct {
 	draft    *scanbase.AssessmentDraft
 }
 
+func hasExecutableMember(rows []scanbase.SeriesRow, executionErrors map[string]error) bool {
+	for _, row := range rows {
+		if executionErrors[row.ScannerID] == nil {
+			return true
+		}
+	}
+	return false
+}
+
 func (d rootDispatcher) enqueueCohort(ctx context.Context, generation dispatchGeneration, cohort dispatchCohort) ([]*api.CodeScan, []dispatchFailure) {
 	claims := claimBook(d)
+	if cohort.passID == "" && !hasExecutableMember(cohort.rows, generation.executionErrors) {
+		failures := make([]dispatchFailure, 0, len(cohort.rows))
+		for _, row := range cohort.rows {
+			executionErr := generation.executionErrors[row.ScannerID]
+			failures = append(failures, newDispatchFailure(row.ScannerID, executionErr))
+			claims.releaseUndispatched(ctx, generation.canonical, row, executionErr)
+		}
+		return nil, failures
+	}
 	assessment, err := d.ensureCohortAssessment(ctx, generation, cohort)
 	if err != nil {
 		d.logDispatch(ctx, "requeued", generation.canonical, cohort.rows, err)
@@ -62,7 +80,7 @@ func (d rootDispatcher) enqueueCohort(ctx context.Context, generation dispatchGe
 		} else {
 			claims.requeueDispatches(ctx, cohort.rows)
 		}
-		return nil, []dispatchFailure{{Error: err.Error()}}
+		return nil, []dispatchFailure{newDispatchFailure("", err)}
 	}
 	if cohort.passID != "" {
 		if err := d.c.Store.MarkFullPassStarted(ctx, cohort.passID, nowUTC(d.c)); err != nil {
@@ -73,7 +91,7 @@ func (d rootDispatcher) enqueueCohort(ctx context.Context, generation dispatchGe
 	failures := make([]dispatchFailure, 0)
 	for _, row := range cohort.rows {
 		if executionErr := generation.executionErrors[row.ScannerID]; executionErr != nil {
-			failures = append(failures, dispatchFailure{ScannerID: row.ScannerID, Error: executionErr.Error()})
+			failures = append(failures, newDispatchFailure(row.ScannerID, executionErr))
 			claims.releaseUndispatched(ctx, generation.canonical, row, executionErr)
 			continue
 		}
@@ -93,12 +111,12 @@ func (d rootDispatcher) enqueueCohort(ctx context.Context, generation dispatchGe
 			BaseSnapshotID: selection.BaseSnapshotID, Assessment: assessment.draft,
 		})
 		if enqueueErr != nil {
-			failures = append(failures, dispatchFailure{ScannerID: row.ScannerID, Error: enqueueErr.Error()})
+			failures = append(failures, newDispatchFailure(row.ScannerID, enqueueErr))
 			claims.releaseUndispatched(ctx, generation.canonical, row, enqueueErr)
 			continue
 		}
 		if err := claims.finishDispatch(ctx, row, record); err != nil {
-			failures = append(failures, dispatchFailure{ScannerID: row.ScannerID, Error: err.Error()})
+			failures = append(failures, newDispatchFailure(row.ScannerID, err))
 			continue
 		}
 		if cohort.passID != "" {

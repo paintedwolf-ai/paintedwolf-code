@@ -461,4 +461,3 @@ func parseHostHeader(raw any) (string, error) {
 	h = strings.TrimSpace(h)
 	return h, nil
 }
-

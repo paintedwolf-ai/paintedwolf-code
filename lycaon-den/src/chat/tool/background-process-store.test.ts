@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   applyBackgroundProcessEvent,
+  applyBackgroundProcessOutputs,
   forgetBackgroundProcessSession,
   getBackgroundProcessSnapshot,
   hasHydratedBackgroundProcesses,
+  prepareBackgroundProcessOutput,
   refreshBackgroundProcessSnapshots,
   resetBackgroundProcessStoreForTests,
   subscribeBackgroundProcessStore,
@@ -211,5 +213,65 @@ describe("background-process-store", () => {
 
     expect(getBackgroundProcessSnapshot("s1", "late")).toBeUndefined();
     expect(hasHydratedBackgroundProcesses("s1")).toBe(false);
+  });
+
+  it("tolerates missing or null chunks on bootstrap, list, and output snapshots", async () => {
+    resetBackgroundProcessStoreForTests();
+    applyBackgroundProcessOutputs("s1", [
+      {
+        process_id: "silent",
+        running: true,
+        chunks: null as unknown as [],
+      },
+    ]);
+    expect(getBackgroundProcessSnapshot("s1", "silent")).toMatchObject({
+      processId: "silent",
+      sessionId: "s1",
+      running: true,
+      text: "",
+    });
+
+    await refreshBackgroundProcessSnapshots(
+      {
+        listSessionBackgroundProcesses: vi.fn(async () => [
+          {
+            process_id: "silent-list",
+            running: true,
+            output: {
+              process_id: "silent-list",
+              running: true,
+              chunks: null as unknown as [],
+            },
+          },
+        ]),
+        getSessionBackgroundProcessOutput: vi.fn(async () => ({
+          process_id: "silent-direct",
+          running: true,
+          chunks: undefined as unknown as [],
+        })),
+      },
+      "s1",
+    );
+    expect(getBackgroundProcessSnapshot("s1", "silent-list")).toMatchObject({
+      running: true,
+      text: "",
+    });
+
+    await prepareBackgroundProcessOutput(
+      {
+        listSessionBackgroundProcesses: vi.fn(async () => []),
+        getSessionBackgroundProcessOutput: vi.fn(async () => ({
+          process_id: "silent-direct",
+          running: true,
+          chunks: null as unknown as [],
+        })),
+      },
+      "s1",
+      "silent-direct",
+    );
+    expect(getBackgroundProcessSnapshot("s1", "silent-direct")).toMatchObject({
+      running: true,
+      text: "",
+    });
   });
 });

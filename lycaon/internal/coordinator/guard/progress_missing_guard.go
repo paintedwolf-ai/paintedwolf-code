@@ -27,7 +27,7 @@ func ObserveProgressMissingBeforeDispatch(
 	gc.DeriveToolClassFacts()
 	gc.Progress.ProgressGatedTool = progress.IsProgressGatedTool(tool)
 	gc.Progress.ProgressMissing = progress.ProgressMissing(progressContent)
-	if gc.Progress.ProgressGatedTool && gc.Progress.ProgressMissing && !reviewLoopActive {
+	if gc.Progress.ProgressGatedTool && progress.PrerequisiteMissing(progressContent, sess.IsWorkerChild(), reviewLoopActive) {
 		data := map[string]any{"tool": strings.TrimSpace(tool)}
 		if call := rejectedProgressCall(gc.Invocation.Tool, gc.Invocation.ToolArgs); call != nil {
 			data["rejected_call"] = call

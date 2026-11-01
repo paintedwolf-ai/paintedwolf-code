@@ -14,7 +14,7 @@ func TestBundledPlanManifestDiscoveryFields(t *testing.T) {
 	path := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "plan", "workflows", "plan", "workflow.yaml")
 	m, err := workflowdef.LoadManifestFromFile(path)
 	contractcheck.FailErr(t, "workflow.LoadManifestFromFile failed", err)
-	if m.ID != "plan" || m.Version != "1.0.0" {
+	if m.ID != "plan" || m.Version != "1.0.1" {
 		t.Fatalf("id/version = %s@%s", m.ID, m.Version)
 	}
 	if m.Trigger != "/plan" {

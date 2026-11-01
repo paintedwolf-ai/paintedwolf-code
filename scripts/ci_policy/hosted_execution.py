@@ -62,6 +62,25 @@ def sample_resources(stop, interval=60):
         print(resource_line(), flush=True)
 
 
+HISTORY_KEYS = ("failed_targets", "passed_targets", "native_failed", "native_passed", "contract_failures")
+
+
+def parse_early_history(raw, targets):
+    """Parse PW_CI_EARLY_TARGET as a validated JSON history dict or a single target name."""
+    if not raw:
+        return {}
+    if raw.startswith("{"):
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {key: [item for item in value if isinstance(item, str)]
+                for key, value in data.items() if key in HISTORY_KEYS and isinstance(value, list)}
+    return {"failed_targets": [raw]} if raw in targets else {}
+
+
 def run_lane(name, shard="", merge_group=False):
     lane = hosted_plan.lanes()[name]
     count = lane.get("shards", 1)
@@ -118,21 +137,31 @@ def run_lane(name, shard="", merge_group=False):
             if packages:
                 command += ["--", *packages]
                 record["packages"] = packages
+        early_raw = environment.pop('PW_CI_EARLY_TARGET', '')
+        history = parse_early_history(early_raw, targets) if (name == 'ready' and os.environ.get('GITHUB_ACTIONS') == 'true') else {}
         if lane.get("preflight"):
-            preflight = ["./task", *lane["preflight"]]
-            record["preflight"] = {"command": preflight, "started_at": time.time()}
+            from ci_policy.merge_preflight import preflight_commands
+            preflights = preflight_commands(lane["preflight"], history)
+            record["preflight"] = {"command": preflights[0], "started_at": time.time()}
+            if len(preflights) > 1:
+                record["preflight"]["phases"] = []
             path.write_text(json.dumps(record, indent=2) + "\n")
-            code = subprocess.call(preflight, cwd=ROOT, env=environment)
+            for preflight_cmd in preflights:
+                if code != 0:
+                    break
+                record["preflight"]["command"] = preflight_cmd
+                phase = {"command": preflight_cmd, "started_at": time.time()}
+                if "phases" in record["preflight"]:
+                    record["preflight"]["phases"].append(phase)
+                path.write_text(json.dumps(record, indent=2) + "\n")
+                code = subprocess.call(preflight_cmd, cwd=ROOT, env=environment)
+                phase.update(exit_code=code, finished_at=time.time())
             record["preflight"].update(exit_code=code, finished_at=time.time())
         commands = [command]
         if name == 'ready':
             from ci_policy.native_admission import commands as native_commands
-            commands = [*native_commands(scope), command]
-            early = environment.pop('PW_CI_EARLY_TARGET', '')
-            if os.environ.get('GITHUB_ACTIONS') == 'true' and early in targets:
-                from ci_policy.merge_preflight import commands as ordered_commands
-                ordered = ordered_commands({**lane, 'early_targets': [early]}, hosted_plan.invocation(targets))
-                commands = [ordered[0], *commands[:-1], *ordered[1:]]
+            from ci_policy.merge_preflight import ready_commands
+            commands = ready_commands(targets, native_commands(scope), history)
         if code == 0 and merge_group:
             from ci_policy.merge_preflight import commands as ordered_commands
             commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)

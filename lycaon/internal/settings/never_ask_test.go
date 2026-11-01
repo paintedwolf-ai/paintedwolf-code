@@ -70,14 +70,14 @@ func TestNeverAskDoesNotClearHardDenies(t *testing.T) {
 		filepath.Join(configDir, "extensions.yaml"),
 	} {
 		res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-Files: []string{rel},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool:  "write",
+				Files: []string{rel},
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: proj,
+			},
+		})
 		testutil.FailErr(t, "evaluate "+rel, err)
 		if !res.Denied {
 			t.Fatalf("never_ask must not clear the hard deny on %s: %+v", rel, res)
@@ -90,14 +90,14 @@ ProjectDir: proj,
 func TestWithoutNeverAskStrictStillAsks(t *testing.T) {
 	gate, proj := neverAskGate(t, false)
 	res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "true"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "true"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: proj,
+		},
+	})
 	testutil.FailErr(t, "evaluate", err)
 	if !res.Required() {
 		t.Fatalf("an unconfined process must ask when never_ask is unset: %+v", res)

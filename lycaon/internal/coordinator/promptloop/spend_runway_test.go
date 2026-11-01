@@ -4,10 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"slices"
+	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -109,7 +118,7 @@ func TestApplySpendCeilingGrantsOneCoordinatorWindDown(t *testing.T) {
 			IsSpendCeiling: func(err error) bool { return errors.Is(err, ceilingErr) },
 		},
 	})
-	st := &promptLoopTurnState{lastAssistantID: "a1"}
+	st := &promptLoopTurnState{turnStreamState: turnStreamState{lastAssistantID: "a1"}}
 	decision, err := loop.Nudges.applySpendCeiling(
 		context.Background(), &api.Session{ID: "s1"}, "s1", "implement", "prompt", 10,
 		PromptRunInput{}, st,
@@ -223,5 +232,182 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 	}
 	if result.LastAssistantContent != "Landed with the best usable result." {
 		t.Fatalf("content = %q", result.LastAssistantContent)
+	}
+}
+
+func TestContextOverflow400TriggersCompactionAndOneRetry(t *testing.T) {
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			call := attempts.Add(1)
+			if call == 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":400,"message":"request (33442 tokens) exceeds the available context size (32768 tokens), try increasing it","type":"exceed_context_size_error","n_prompt_tokens":33442,"n_ctx":32768}}`))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"chatcmpl-1","choices":[{"index":0,"message":{"role":"assistant","content":"recovered after compaction"},"finish_reason":"stop"}],"usage":{"prompt_tokens":4096,"completion_tokens":12,"total_tokens":4108}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	provider := openaicompat.New("openai-compatible", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "qwen2.5-coder"}}).
+		WithProfile(providerprofile.LocalInference(providerprofile.OpenAI()))
+
+	var compactCalled int
+	var observedWindow int
+	var observedPrompts []int
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM:              provider,
+			CompactionConfig: staticCompactionConfig,
+			CompactAfterContextOverflow: func(_ context.Context, _ *api.Session, history []api.Message, reportedWindow int) ([]api.Message, error) {
+				compactCalled++
+				observedWindow = reportedWindow
+				if len(history) > 2 {
+					return history[len(history)-2:], nil
+				}
+				return history, nil
+			},
+			RecordCompactionTokenObservation: func(_, _, _ string, reportedPromptTokens, _ int) {
+				observedPrompts = append(observedPrompts, reportedPromptTokens)
+			},
+		},
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
+				return nil
+			},
+		},
+		Context: ContextDeps{
+			Policy: &recordingToolPolicy{},
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
+
+	sess := &api.Session{
+		ID:            "s-overflow",
+		ProviderID:    "openai-compatible",
+		Model:         "qwen2.5-coder",
+		WorkspacePath: t.TempDir(),
+	}
+	initialHistory := []api.Message{
+		{ID: "m1", Role: api.MessageRoleUser, Content: strings.Repeat("earlier context ", 500)},
+		{ID: "m2", Role: api.MessageRoleAssistant, Content: strings.Repeat("earlier reply ", 500)},
+		{ID: "m3", Role: api.MessageRoleUser, Content: "please summarize"},
+	}
+	st := &promptLoopTurnState{history: append([]api.Message(nil), initialHistory...)}
+
+	completion, _, err := loop.Model.completeStream(
+		context.Background(),
+		sess,
+		sess.ID,
+		initialHistory,
+		"coordinator",
+		"please summarize",
+		0,
+		4,
+		false,
+		st,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("completeStream failed after overflow recovery: %v", err)
+	}
+	if completion == nil || completion.Content != "recovered after compaction" {
+		t.Fatalf("completion = %+v; want 'recovered after compaction'", completion)
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Fatalf("chat completion attempts = %d want 2 (initial + 1 retry)", got)
+	}
+	if compactCalled != 1 {
+		t.Fatalf("CompactAfterContextOverflow calls = %d want 1", compactCalled)
+	}
+	if observedWindow != 32768 {
+		t.Fatalf("observedWindow=%d; want 32768", observedWindow)
+	}
+	if cfg, ok := loop.Model.effectiveCompactionConfig(t.Context(), sess); !ok || cfg.ModelContextWindow != staticCompactionConfig(t.Context(), sess).ModelContextWindow {
+		t.Fatal("one response changed the session's configured compaction window")
+	}
+	if len(observedPrompts) != 2 || observedPrompts[0] != 33442 || observedPrompts[1] != 4096 {
+		t.Fatalf("observedPrompts = %v want [33442 4096]", observedPrompts)
+	}
+	entry, ok := provider.ModelEntry("qwen2.5-coder")
+	if !ok || entry.ContextLength != 32768 {
+		t.Fatalf("provider ModelEntry = %+v, ok=%v; want ContextLength=32768", entry, ok)
+	}
+}
+
+func TestContextOverflow400RetryFailsTurnAfterSingleRetry(t *testing.T) {
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/chat/completions" {
+			attempts.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"This model's maximum context length is 16384 tokens. However, your messages resulted in 20000 tokens.","type":"invalid_request_error","code":"context_length_exceeded"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	provider := openaicompat.New("openai-compatible", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "qwen2.5-coder"}}).
+		WithProfile(providerprofile.LocalInference(providerprofile.OpenAI()))
+
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM: provider,
+		},
+		Tools: ToolsDeps{
+			CompactOversizedToolResults: func(context.Context, string, *api.Session) error { return nil },
+			ReloadHistory: func(context.Context, string, *api.Session, string) ([]api.Message, error) {
+				return []api.Message{
+					{ID: "m1", Role: api.MessageRoleUser, Content: "first"},
+					{ID: "m2", Role: api.MessageRoleAssistant, Content: "second"},
+					{ID: "m3", Role: api.MessageRoleUser, Content: "third"},
+				}, nil
+			},
+		},
+		Context: ContextDeps{
+			Policy: &recordingToolPolicy{},
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
+	sess := &api.Session{ID: "s-overflow-fail", ProviderID: "openai-compatible", Model: "qwen2.5-coder", WorkspacePath: t.TempDir()}
+	st := &promptLoopTurnState{}
+	_, _, err := loop.Model.completeStream(
+		context.Background(),
+		sess,
+		sess.ID,
+		[]api.Message{
+			{ID: "m1", Role: api.MessageRoleUser, Content: "first"},
+			{ID: "m2", Role: api.MessageRoleAssistant, Content: "second"},
+			{ID: "m3", Role: api.MessageRoleUser, Content: "third"},
+		},
+		"coordinator",
+		"third",
+		0,
+		4,
+		false,
+		st,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("expected error when retry also overflows")
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Fatalf("attempts = %d want 2 (1 initial + 1 retry)", got)
+	}
+	tooSmall, ok := failure.AsProviderContextTooSmall(err)
+	if !ok || tooSmall.MaxContext != 0 {
+		t.Fatalf("expected typed overflow without a structured capacity, got %T: %v", err, err)
 	}
 }

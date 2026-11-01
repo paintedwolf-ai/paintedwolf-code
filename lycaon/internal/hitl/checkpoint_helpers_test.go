@@ -10,13 +10,13 @@ import (
 
 func TestDecisionSubjectToolApprovalCommand(t *testing.T) {
 	got := decisionSubject(storedApprovalCheckpoint(t, ProposedAction{
-Invocation: ActionInvocation{
-Tool: "command",
-},
-Presentation: ActionPresentation{
-Command: "git push origin main",
-},
-}))
+		Invocation: ActionInvocation{
+			Tool: "command",
+		},
+		Presentation: ActionPresentation{
+			Command: "git push origin main",
+		},
+	}))
 	if got != "git push origin main" {
 		t.Fatalf("subject = %q", got)
 	}
@@ -34,11 +34,11 @@ func TestDecisionCausingCommandWriteRoot(t *testing.T) {
 	}
 	plan, err := NewApprovalPlan(
 		ProposedAction{
-Invocation: ActionInvocation{
-Tool: "write_root",
-Args: map[string]any{"proposed_write_root": "/Users/me/go"},
-},
-},
+			Invocation: ActionInvocation{
+				Tool: "write_root",
+				Args: map[string]any{"proposed_write_root": "/Users/me/go"},
+			},
+		},
 		ApprovalStagePreSpawn,
 		ApprovalSubject{
 			Kind: ApprovalSubjectWriteRootSet, Title: "Allow write access",
@@ -91,13 +91,13 @@ Args: map[string]any{"proposed_write_root": "/Users/me/go"},
 
 func TestDecisionCausingCommandSuppressedWhenSubjectIsArgv(t *testing.T) {
 	got := decisionCausingCommand(storedApprovalCheckpoint(t, ProposedAction{
-Invocation: ActionInvocation{
-Tool: "command",
-},
-Presentation: ActionPresentation{
-Command: "git status",
-},
-}))
+		Invocation: ActionInvocation{
+			Tool: "command",
+		},
+		Presentation: ActionPresentation{
+			Command: "git status",
+		},
+	}))
 	if got != "" {
 		t.Fatalf("causing = %q want empty", got)
 	}
@@ -115,11 +115,11 @@ func TestDecisionSubjectContentApplyPath(t *testing.T) {
 
 func TestDecisionSubjectWritePathArg(t *testing.T) {
 	got := decisionSubject(storedApprovalCheckpoint(t, ProposedAction{
-Invocation: ActionInvocation{
-Tool: "write",
-Files: []string{"README.md"},
-},
-}))
+		Invocation: ActionInvocation{
+			Tool:  "write",
+			Files: []string{"README.md"},
+		},
+	}))
 	if got != "README.md" {
 		t.Fatalf("subject = %q", got)
 	}
@@ -127,13 +127,13 @@ Files: []string{"README.md"},
 
 func TestApprovalPlanIdentityRejectsPersistedContentMutation(t *testing.T) {
 	row := storedApprovalCheckpoint(t, ProposedAction{
-Invocation: ActionInvocation{
-Tool: "command",
-},
-Presentation: ActionPresentation{
-Command: "safe command",
-},
-})
+		Invocation: ActionInvocation{
+			Tool: "command",
+		},
+		Presentation: ActionPresentation{
+			Command: "safe command",
+		},
+	})
 	raw := row.Payload["approval_plan"].(map[string]any)
 	subject := raw["subject"].(map[string]any)
 	targets := subject["targets"].([]any)

@@ -26,7 +26,7 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 	})
 	_ = reg.Register("wait", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		if tctx.Effects.Out != nil {
-			tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
+			tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait"}
 		}
 		return `{"status":"sleeping","wake_at":"2099-01-01T00:00:00Z"}`, nil
 	})
@@ -63,7 +63,7 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 		return nil
 	}
 
-	history, turnTools, anyTask, taskCount, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+	batchResult, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,
@@ -77,6 +77,11 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 		"",
 		nil,
 	)
+	history = batchResult.history
+	turnTools := batchResult.turnTools
+	anyTask := batchResult.anyTaskEnqueued
+	taskCount := batchResult.taskEnqueuedThisTurn
+	breakLoop := batchResult.breakToolLoop
 	testutil.FailErr(t, "executeToolCallsInTurn", err)
 	if !anyTask || taskCount != 3 {
 		t.Fatalf("anyTask=%v taskCount=%d want true, 3", anyTask, taskCount)

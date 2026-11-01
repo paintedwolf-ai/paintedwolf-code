@@ -18,6 +18,8 @@ function openedText(view: ReturnType<typeof render>, label = "Approval details i
   return request.document.content.text;
 }
 
+import { registerChatDestinationOpenSink } from "../../chat/composer/chat-destination.ts";
+
 const openSourceLocation = vi.hoisted(() => vi.fn());
 vi.mock("../../platform/navigation/open-source.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../platform/navigation/open-source.ts")>();
@@ -426,5 +428,64 @@ describe("directory scope", () => {
     expect(selector.textContent).toContain(broad);
     fireEvent.keyDown(view.getByTestId("tool-approval-card"), {key:"3"});
     expect(onToolApproval).toHaveBeenCalledWith("approve", {optionId:"chat-1"});
+  });
+});
+
+describe("loopback port holder attribution", () => {
+  it("renders the holder lead and opens the other chat when clicked", () => {
+    const openChat = vi.fn(async () => {});
+    const unregister = registerChatDestinationOpenSink(openChat);
+    const cp = checkpoint();
+    cp.tool_approval = toolApprovalFixture({
+      subject: {
+        kind: "loopback_connect",
+        title: "Allow a local service connection",
+        targets: [
+          {
+            kind: "loopback_connect",
+            label: "local destination port 8000",
+            details: {
+              connect_ports: [8000],
+              holders: [
+                {
+                  kind: "other_session",
+                  pid: 401,
+                  addr: "127.0.0.1:8000",
+                  session_id: "session-ttt",
+                  session_title: "Tic Tac Toe Game with AI",
+                  project_id: "proj-ttt",
+                  project_name: "Tic-Tac-Toe",
+                  handle: "bg-1",
+                  command: "python3 -m http.server 8000",
+                  background: true,
+                },
+              ],
+            },
+          },
+        ],
+      },
+      presentation: {
+        lead: "Port 8000 is served by `python3 -m http.server 8000`, a background command in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'.",
+      } as never,
+    });
+    const view = render(() => (
+      <ApprovalCard
+        checkpoint={cp}
+        resolving={false}
+        onToolApproval={vi.fn()}
+        onContentApply={vi.fn()}
+      />
+    ));
+    expect(view.getByTestId("approval-lead").textContent).toContain(
+      "Port 8000 is served by `python3 -m http.server 8000`, a background command in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'.",
+    );
+    const openBtn = view.getByTestId("approval-open-holder-chat");
+    expect(openBtn.textContent).toBe("Open chat 'Tic Tac Toe Game with AI'");
+    fireEvent.click(openBtn);
+    expect(openChat).toHaveBeenCalledWith({
+      projectId: "proj-ttt",
+      sessionId: "session-ttt",
+    });
+    unregister();
   });
 });

@@ -36,6 +36,9 @@ var (
 
 // ClassifyTier maps a proposed action to a reversibility tier.
 func ClassifyTier(action hitl.ProposedAction) ReversibilityTier {
+	if action.Mutations.RecoveryLoss {
+		return TierIrreversible
+	}
 	// Writes outside the execution roots are irreversible.
 	if PathEscapesWorkspace(action) {
 		return TierIrreversible

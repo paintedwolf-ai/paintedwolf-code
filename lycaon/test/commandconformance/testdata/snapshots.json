@@ -1,0 +1,1709 @@
+{
+  "userlands": {
+    "bsd": {
+      "base": "docker.io/library/debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31",
+      "trees": {
+        "amd64": "sha256:38cb4f78da5f3cb78a7d5473e922acc6c4fa5a807265ec3f1e8ad0bb44547a6c",
+        "arm64": "sha256:a665dff635d609ad530d2ac2070ff18e62ec56bb5c240ae2fdbdbd00469adddc"
+      }
+    },
+    "busybox": {
+      "base": "docker.io/library/busybox:1.37.0-musl@sha256:5cec3fc171c87218698e85a52af7087de727372aae264a787b8112901a5b0092",
+      "trees": {
+        "amd64": "sha256:1e6f0b85f4e3899ef0cee41bc617820b35bbe072b0c4f6cdb3294b78a8999a2a",
+        "arm64": "sha256:ca221f0ba70e8ae33e5ef44820dc4958faf4fc5e086770de2e975b939ef3ddfc"
+      }
+    },
+    "gnu": {
+      "base": "docker.io/library/debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31",
+      "trees": {
+        "amd64": "sha256:de29b8b650c044a87eee50743e9bd30512d49257a614a80c184d9bc676efc7bb",
+        "arm64": "sha256:845c85a1c2b74fa0e6afa071c90cf4172ff529609e70b3b39442e600e07d830f"
+      }
+    }
+  },
+  "cases": {
+    "archive-tar-gzip-bzip2-zip-unzip": {
+      "bsd": {
+        "input": "sha256:4b0115dde10da56b0f2f6a2848ef567f672967ed6eb2df28a8c8028c05a158a8",
+        "status": 0,
+        "stdout": "sub/a.txt\nsub/b.txt\nfirst\nsecond\nfirst\nsecond\nfirst\nthird\nfirst\nsecond\nfirst\nsecond\nfirst\nsecond\nfirst\nsecond\n",
+        "stderr": "",
+        "files": {
+          "out_tar/sub/a.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          },
+          "out_tbz/b.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nthird\n"
+          },
+          "out_tgz/a.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          },
+          "out_zip/sub/a.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          },
+          "sample_gz.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:4b0115dde10da56b0f2f6a2848ef567f672967ed6eb2df28a8c8028c05a158a8",
+        "status": 0,
+        "stdout": "sub/a.txt\nsub/b.txt\nfirst\nsecond\nfirst\nsecond\nfirst\nthird\nfirst\nsecond\nfirst\nsecond\nfirst\nsecond\nfirst\nsecond\n",
+        "stderr": "",
+        "files": {
+          "out_tar/sub/a.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          },
+          "out_tbz/b.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nthird\n"
+          },
+          "out_tgz/a.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          },
+          "out_zip/sub/a.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          },
+          "sample_gz.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          }
+        }
+      }
+    },
+    "git-global-flag-before-subcommand": {
+      "bsd": {
+        "input": "sha256:a6fc7a185d3b648c81c9c9eba3745d954f0e4fe3395bde08a349f2d003aaca28",
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:a6fc7a185d3b648c81c9c9eba3745d954f0e4fe3395bde08a349f2d003aaca28",
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    "git-init-forms": {
+      "bsd": {
+        "input": "sha256:58a059b5b1c8fea17a3819636dc8b55f640011895c58ff5eff2f2c5c0631fa76",
+        "status": 0,
+        "stdout": "ref: refs/heads/trunk\nref: refs/heads/trunk\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:58a059b5b1c8fea17a3819636dc8b55f640011895c58ff5eff2f2c5c0631fa76",
+        "status": 0,
+        "stdout": "ref: refs/heads/trunk\nref: refs/heads/trunk\n",
+        "stderr": ""
+      }
+    },
+    "git-read-and-mutation-subcommands": {
+      "bsd": {
+        "input": "sha256:123fbd2ea0882072db98564c44fab73a890dbbd507659c39b23f7588db5e3b4a",
+        "status": 0,
+        "stdout": "1152b28 initial fixture commit\n1\n* main\ntest@paintedwolf.dev\n+modified\n",
+        "stderr": "",
+        "files": {
+          "sub/a.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:123fbd2ea0882072db98564c44fab73a890dbbd507659c39b23f7588db5e3b4a",
+        "status": 0,
+        "stdout": "1152b28 initial fixture commit\n1\n* main\ntest@paintedwolf.dev\n+modified\n",
+        "stderr": "",
+        "files": {
+          "sub/a.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          }
+        }
+      }
+    },
+    "http-curl-options": {
+      "bsd": {
+        "input": "sha256:8f0b37fd65dd98b620f0c2e2b5613c02ef0b834cabe5b9511b4c384c505cef43",
+        "status": 0,
+        "stdout": "curl-failed\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:8f0b37fd65dd98b620f0c2e2b5613c02ef0b834cabe5b9511b4c384c505cef43",
+        "status": 0,
+        "stdout": "curl-failed\n",
+        "stderr": ""
+      }
+    },
+    "inspect-base64-gnu": {
+      "bsd": {
+        "input": "sha256:630a5ac916019927caa395770c00f3837ae0c8b6477fe2e56ff9329d1d53dc1e",
+        "status": 0,
+        "stdout": "painted-wolf\n",
+        "stderr": "",
+        "files": {
+          "b64.txt": {
+            "mode": "-rw-r--r--",
+            "data": "cGFpbnRlZC13b2xm\n"
+          }
+        }
+      },
+      "busybox": {
+        "input": "sha256:618cc2630edc680b087d73f0fbb14be997b4ecb1a87d350375c1148d7e02a412",
+        "status": 0,
+        "stdout": "painted-wolf\n",
+        "stderr": "",
+        "files": {
+          "b64.txt": {
+            "mode": "-rw-r--r--",
+            "data": "cGFpbnRlZC13b2xm"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:630a5ac916019927caa395770c00f3837ae0c8b6477fe2e56ff9329d1d53dc1e",
+        "status": 0,
+        "stdout": "painted-wolf\n",
+        "stderr": "",
+        "files": {
+          "b64.txt": {
+            "mode": "-rw-r--r--",
+            "data": "cGFpbnRlZC13b2xm"
+          }
+        }
+      }
+    },
+    "inspect-cat-options": {
+      "gnu": {
+        "input": "sha256:12fac4d3951cf508f170827426beb42098ea4a7c5846b6c163172b8880942f33",
+        "status": 0,
+        "stdout": "     1\talpha line 1\n     2\tbeta line 2\n     3\t\n     4\talpha line 4\n     5\tgamma\twith\ttabs\n     1\tfirst$\n     2\tsecond$\nfirst$\nsecond$\nfirst\nsecond\n",
+        "stderr": ""
+      }
+    },
+    "inspect-checksums": {
+      "bsd": {
+        "input": "sha256:8fa9705d1c4cef4f1aac4a0c39a37e70a3b3d917833a5210474e71c188c8d52a",
+        "status": 0,
+        "stdout": "sub/a.txt: OK\nsub/a.txt: OK\nsub/a.txt: OK\nsub/a.txt: OK\nsub/a.txt: OK\n",
+        "stderr": "",
+        "files": {
+          "m5.txt": {
+            "mode": "-rw-r--r--",
+            "data": "b00f5ebd2719660908505ec74f769ad0  sub/a.txt\n"
+          },
+          "s1.txt": {
+            "mode": "-rw-r--r--",
+            "data": "f5c5dcd4cfb1f9757df6c09711164ebbeb64f826  sub/a.txt\n"
+          },
+          "s256.txt": {
+            "mode": "-rw-r--r--",
+            "data": "dbea9325179efe46ea2add94f7b6b745ca983fabb208dc6d34aa064623d7ee23  sub/a.txt\n"
+          },
+          "s512.txt": {
+            "mode": "-rw-r--r--",
+            "data": "bc3138edc8f53d06270c1a4b6ad8605f77144c01e955ece5a4fe0dd62bdef8830ba23b157b0c544c267590e44ff9e18ef722a00a35304549986109408c17a8a7  sub/a.txt\n"
+          },
+          "sha.txt": {
+            "mode": "-rw-r--r--",
+            "data": "dbea9325179efe46ea2add94f7b6b745ca983fabb208dc6d34aa064623d7ee23  sub/a.txt\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:8fa9705d1c4cef4f1aac4a0c39a37e70a3b3d917833a5210474e71c188c8d52a",
+        "status": 0,
+        "stdout": "sub/a.txt: OK\nsub/a.txt: OK\nsub/a.txt: OK\nsub/a.txt: OK\nsub/a.txt: OK\n",
+        "stderr": "",
+        "files": {
+          "m5.txt": {
+            "mode": "-rw-r--r--",
+            "data": "b00f5ebd2719660908505ec74f769ad0  sub/a.txt\n"
+          },
+          "s1.txt": {
+            "mode": "-rw-r--r--",
+            "data": "f5c5dcd4cfb1f9757df6c09711164ebbeb64f826  sub/a.txt\n"
+          },
+          "s256.txt": {
+            "mode": "-rw-r--r--",
+            "data": "dbea9325179efe46ea2add94f7b6b745ca983fabb208dc6d34aa064623d7ee23  sub/a.txt\n"
+          },
+          "s512.txt": {
+            "mode": "-rw-r--r--",
+            "data": "bc3138edc8f53d06270c1a4b6ad8605f77144c01e955ece5a4fe0dd62bdef8830ba23b157b0c544c267590e44ff9e18ef722a00a35304549986109408c17a8a7  sub/a.txt\n"
+          },
+          "sha.txt": {
+            "mode": "-rw-r--r--",
+            "data": "dbea9325179efe46ea2add94f7b6b745ca983fabb208dc6d34aa064623d7ee23  sub/a.txt\n"
+          }
+        }
+      }
+    },
+    "inspect-file-signatures": {
+      "bsd": {
+        "input": "sha256:1f48d2cc8de684f88d7e6a9625872c6ededb9439b209f873b9d91248dc58dcda",
+        "status": 0,
+        "stdout": "ASCII text\ndata\ntext/plain; charset=us-ascii\napplication/octet-stream; charset=binary\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:1f48d2cc8de684f88d7e6a9625872c6ededb9439b209f873b9d91248dc58dcda",
+        "status": 0,
+        "stdout": "ASCII text\ndata\ntext/plain; charset=us-ascii\napplication/octet-stream; charset=binary\n",
+        "stderr": ""
+      }
+    },
+    "inspect-head-and-tail": {
+      "bsd": {
+        "input": "sha256:6f33a6191cf57bbfd23251f3bd6c94de1eb53c576bdd91375415c2f5a890bc4e",
+        "status": 0,
+        "stdout": "alpha line 1\nbeta line 2\nalpha\nfirst\nfirst\n==> sub/a.txt <==\nfirst\nalpha line 4\ngamma\twith\ttabs\nalpha line 4\ngamma\twith\ttabs\nsecond\nsecond\nthird\n==> sub/a.txt <==\nsecond\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:cf502d8208cdf2cd191bc0fba989f131b03bc7545511c698ea426a42c766d325",
+        "status": 0,
+        "stdout": "alpha line 1\nbeta line 2\nalpha\nfirst\nfirst\n==> sub/a.txt <==\nfirst\nalpha line 4\ngamma\twith\ttabs\nalpha line 4\ngamma\twith\ttabs\nsecond\nsecond\nthird\n==> sub/a.txt <==\nsecond\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:6f33a6191cf57bbfd23251f3bd6c94de1eb53c576bdd91375415c2f5a890bc4e",
+        "status": 0,
+        "stdout": "alpha line 1\nbeta line 2\nalpha\nfirst\nfirst\n==> sub/a.txt <==\nfirst\nalpha line 4\ngamma\twith\ttabs\nalpha line 4\ngamma\twith\ttabs\nsecond\nsecond\nthird\n==> sub/a.txt <==\nsecond\n",
+        "stderr": ""
+      }
+    },
+    "inspect-nl-formatting": {
+      "bsd": {
+        "input": "sha256:893b0416030e3838a710454169ec71b6ec5d6dbb0091229fd583f2e07d59ed3b",
+        "status": 0,
+        "stdout": "  10: first\n  11: second\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:323b49e3d8849be3bf3cab2b95970b881383630236be0f5baf34d2261c895939",
+        "status": 0,
+        "stdout": "  10: first\n  11: second\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:893b0416030e3838a710454169ec71b6ec5d6dbb0091229fd583f2e07d59ed3b",
+        "status": 0,
+        "stdout": "  10: first\n  11: second\n",
+        "stderr": ""
+      }
+    },
+    "inspect-xxd-and-hexdump": {
+      "bsd": {
+        "input": "sha256:cd675d93f2ff01716f2988d09419c544806c3f828fbcb06b1b0b87cd1f9bca40",
+        "status": 0,
+        "stdout": "00000002: 4e47 0d0a 1a0a 0001                      NG......\n89504e470d0a\n00000002  4e 47 0d 0a 1a 0a 00 01                           |NG......|\n0000000a\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:3e010b05d0ad66509f09e97b7d3d7964282ae288bc5fe4cafb8c4c5282c4b9fe",
+        "status": 0,
+        "stdout": "00000002: 4e47 0d0a 1a0a 0001                      NG......\n89504e470d0a\n00000002  4e 47 0d 0a 1a 0a 00 01                           |NG......|\n0000000a\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:cd675d93f2ff01716f2988d09419c544806c3f828fbcb06b1b0b87cd1f9bca40",
+        "status": 0,
+        "stdout": "00000002: 4e47 0d0a 1a0a 0001                      NG......\n89504e470d0a\n00000002  4e 47 0d 0a 1a 0a 00 01                           |NG......|\n0000000a\n",
+        "stderr": ""
+      }
+    },
+    "lang-command-substitutions": {
+      "bsd": {
+        "input": "sha256:ca359205f349f9f44b5466b190aabbd3495633b86495b40737ed4a0b6b0b7f17",
+        "status": 0,
+        "stdout": "hello:first\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:b7d41c69d6a9bc59a99248af72f2f6bbba593e03cf1b6d5e221e91fdc99806fb",
+        "status": 0,
+        "stdout": "hello:first\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:ca359205f349f9f44b5466b190aabbd3495633b86495b40737ed4a0b6b0b7f17",
+        "status": 0,
+        "stdout": "hello:first\n",
+        "stderr": ""
+      }
+    },
+    "lang-conditionals-and-predicates": {
+      "bsd": {
+        "input": "sha256:0df2f6f6734d3447cd926c2fe65d39ac887a879ea47531497b9cdb01de9d7b20",
+        "status": 0,
+        "stdout": "cond-ok\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:0df2f6f6734d3447cd926c2fe65d39ac887a879ea47531497b9cdb01de9d7b20",
+        "status": 0,
+        "stdout": "cond-ok\n",
+        "stderr": ""
+      }
+    },
+    "lang-functions-and-frames": {
+      "bsd": {
+        "input": "sha256:0105f32f5fd72438a0bb904d68eefe9d8d037609e3289d32b58da1cad2ed7494",
+        "status": 0,
+        "stdout": "fn:arg one:2\nret=4\nv=brace exp=unset\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:2cc208730453fb246536b33ad27853b57825e58df19bac6566f585d6feb15a11",
+        "status": 0,
+        "stdout": "fn:arg one:2\nret=4\nv=brace exp=unset\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:0105f32f5fd72438a0bb904d68eefe9d8d037609e3289d32b58da1cad2ed7494",
+        "status": 0,
+        "stdout": "fn:arg one:2\nret=4\nv=brace exp=unset\n",
+        "stderr": ""
+      }
+    },
+    "lang-glob-sorting-and-brackets": {
+      "bsd": {
+        "input": "sha256:232ed74196dbb73e1fe29b85f3c9efd6f9c986eb0f4baac498aa82e6bbd868be",
+        "status": 0,
+        "stdout": "sub/a.txt\nsub/b.txt\nsub/a.txt\nsub/b.txt\nsub/a.txt\nsub/b.txt\n.hidden.txt\nsub/*.txt\nsub/*.nonexistent\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:aa08320df6db397c4482ed947229952fc38262ed19a43fc98ac2152b698aa0fe",
+        "status": 0,
+        "stdout": "sub/a.txt\nsub/b.txt\nsub/a.txt\nsub/b.txt\nsub/a.txt\nsub/b.txt\n.hidden.txt\nsub/*.txt\nsub/*.nonexistent\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:232ed74196dbb73e1fe29b85f3c9efd6f9c986eb0f4baac498aa82e6bbd868be",
+        "status": 0,
+        "stdout": "sub/a.txt\nsub/b.txt\nsub/a.txt\nsub/b.txt\nsub/a.txt\nsub/b.txt\n.hidden.txt\nsub/*.txt\nsub/*.nonexistent\n",
+        "stderr": ""
+      }
+    },
+    "lang-globstar-recursive": {
+      "bsd": {
+        "input": "sha256:7cb04cd64c00626b218cf7ea36987d529327043fa190c733cdef77c6ba03b533",
+        "status": 0,
+        "stdout": "code.go\nsub/nested/deep.go\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:7cb04cd64c00626b218cf7ea36987d529327043fa190c733cdef77c6ba03b533",
+        "status": 0,
+        "stdout": "code.go\nsub/nested/deep.go\n",
+        "stderr": ""
+      }
+    },
+    "lang-heredocs-literal-expanded-tab": {
+      "bsd": {
+        "input": "sha256:713dc13d379fd548d0122a8d9d1841c13843d0dac42ddf1f265fe5141cb5a602",
+        "status": 0,
+        "stdout": "lit:$v\nexp:val\nstripped\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:62b330ae1f0c388ead32c233cc0fb9995a62c2b0d9d91024a19efe9332bc6dc3",
+        "status": 0,
+        "stdout": "lit:$v\nexp:val\nstripped\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:713dc13d379fd548d0122a8d9d1841c13843d0dac42ddf1f265fe5141cb5a602",
+        "status": 0,
+        "stdout": "lit:$v\nexp:val\nstripped\n",
+        "stderr": ""
+      }
+    },
+    "lang-loops-for-while-break-continue": {
+      "bsd": {
+        "input": "sha256:a63410d6c6764e18b1828a83130e0551b38abc959e1bda5f56ca1757f71f765a",
+        "status": 0,
+        "stdout": "for:one\nfor:three\nwhile:x\nwhile:xx\nwhile:xxx\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:e1c3ae48464c56131488d208a8fc43bc98cea1f69ce30915db163b137b5ee20e",
+        "status": 0,
+        "stdout": "for:one\nfor:three\nwhile:x\nwhile:xx\nwhile:xxx\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:a63410d6c6764e18b1828a83130e0551b38abc959e1bda5f56ca1757f71f765a",
+        "status": 0,
+        "stdout": "for:one\nfor:three\nwhile:x\nwhile:xx\nwhile:xxx\n",
+        "stderr": ""
+      }
+    },
+    "lang-parameter-operators": {
+      "bsd": {
+        "input": "sha256:2c2a9bc78c260084e7b9482413cb061ad03b1f6a74049b8c49f3c93900f47c3a",
+        "status": 0,
+        "stdout": "def|def2||present|19|sub/file.tar.gz|file.tar.gz|dir/sub/file.tar|dir/sub/file\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:cb5df125dcbcd6ef675940b86a056f4c673a532eba59f8ec2a272490219184a0",
+        "status": 0,
+        "stdout": "def|def2||present|19|sub/file.tar.gz|file.tar.gz|dir/sub/file.tar|dir/sub/file\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:2c2a9bc78c260084e7b9482413cb061ad03b1f6a74049b8c49f3c93900f47c3a",
+        "status": 0,
+        "stdout": "def|def2||present|19|sub/file.tar.gz|file.tar.gz|dir/sub/file.tar|dir/sub/file\n",
+        "stderr": ""
+      }
+    },
+    "lang-pipeline-and-early-consumer": {
+      "bsd": {
+        "input": "sha256:0f4e5a3d7b43750bb95db639b664f5854024b1eb0f78de5e98c18c3e06f71b1a",
+        "status": 0,
+        "stdout": "ALPHA LINE 1\nBETA LINE 2\npipe=1\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:b92289aea4c986081e96356534a99dc0318c9dfcbb1b2bbd982236f228498391",
+        "status": 0,
+        "stdout": "ALPHA LINE 1\nBETA LINE 2\npipe=1\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:0f4e5a3d7b43750bb95db639b664f5854024b1eb0f78de5e98c18c3e06f71b1a",
+        "status": 0,
+        "stdout": "ALPHA LINE 1\nBETA LINE 2\npipe=1\n",
+        "stderr": ""
+      }
+    },
+    "lang-quoting-single-and-double": {
+      "bsd": {
+        "input": "sha256:bac524970e47939137586b9a4425b04ccc342f135c4c29b157e078a0bddb894c",
+        "status": 0,
+        "stdout": "<a; rm -rf / | $x *>\n<hello world  wide \"quoted\" $lit>\n<escaped space>\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:645f642bf87f191b90eac76ad72664fe77ecd1caa614694406c46acab760cdc1",
+        "status": 0,
+        "stdout": "<a; rm -rf / | $x *>\n<hello world  wide \"quoted\" $lit>\n<escaped space>\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:bac524970e47939137586b9a4425b04ccc342f135c4c29b157e078a0bddb894c",
+        "status": 0,
+        "stdout": "<a; rm -rf / | $x *>\n<hello world  wide \"quoted\" $lit>\n<escaped space>\n",
+        "stderr": ""
+      }
+    },
+    "lang-redirects-and-streams": {
+      "bsd": {
+        "input": "sha256:e7e934b1bd56285482faeae0811986be57af0536fcca1f8e574d87010ea97752",
+        "status": 0,
+        "stdout": "first-out\nsecond-out\nmasked=1\nFIRST\nSECOND\n",
+        "stderr": "",
+        "files": {
+          "merged.txt": {
+            "mode": "-rw-r--r--",
+            "data": "out-line\nerr-line\n"
+          },
+          "out.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first-out\nsecond-out\n"
+          },
+          "sub/a_upper.txt": {
+            "mode": "-rw-r--r--",
+            "data": "FIRST\nSECOND\n"
+          }
+        }
+      },
+      "busybox": {
+        "input": "sha256:8001b4d3e78061c047ff285c35cb89e75ae4ebbccffcccf401eeb7103d7e004e",
+        "status": 0,
+        "stdout": "first-out\nsecond-out\nmasked=1\nFIRST\nSECOND\n",
+        "stderr": "",
+        "files": {
+          "merged.txt": {
+            "mode": "-rw-r--r--",
+            "data": "out-line\nerr-line\n"
+          },
+          "out.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first-out\nsecond-out\n"
+          },
+          "sub/a_upper.txt": {
+            "mode": "-rw-r--r--",
+            "data": "FIRST\nSECOND\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:e7e934b1bd56285482faeae0811986be57af0536fcca1f8e574d87010ea97752",
+        "status": 0,
+        "stdout": "first-out\nsecond-out\nmasked=2\nFIRST\nSECOND\n",
+        "stderr": "",
+        "files": {
+          "merged.txt": {
+            "mode": "-rw-r--r--",
+            "data": "out-line\nerr-line\n"
+          },
+          "out.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first-out\nsecond-out\n"
+          },
+          "sub/a_upper.txt": {
+            "mode": "-rw-r--r--",
+            "data": "FIRST\nSECOND\n"
+          }
+        }
+      }
+    },
+    "lang-statuses-and-short-circuit": {
+      "bsd": {
+        "input": "sha256:a8eeff8ded966d9316da051b651056f25dd5ddc5cac43fd387cf55e818d346a8",
+        "status": 0,
+        "stdout": "and:0\nor:1\nneg:0\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:d64d0cf09c733008c30d246c36587f3823ae596020a26345fcebe357d4428001",
+        "status": 0,
+        "stdout": "and:0\nor:1\nneg:0\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:a8eeff8ded966d9316da051b651056f25dd5ddc5cac43fd387cf55e818d346a8",
+        "status": 0,
+        "stdout": "and:0\nor:1\nneg:0\n",
+        "stderr": ""
+      }
+    },
+    "lang-test-nonempty-file-predicate": {
+      "bsd": {
+        "input": "sha256:146d0cca1e79fd3bcc990f18fe3e5f6ae1ee5e31429c55d00e5c6d61c095c3c5",
+        "status": 0,
+        "stdout": "size-ok\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:50b747f958a651ea1669a71c906711e33a91756d58cdd5bd5c4f80fa5acce84e",
+        "status": 0,
+        "stdout": "size-ok\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:146d0cca1e79fd3bcc990f18fe3e5f6ae1ee5e31429c55d00e5c6d61c095c3c5",
+        "status": 0,
+        "stdout": "size-ok\n",
+        "stderr": ""
+      }
+    },
+    "lang-word-splitting-and-empty": {
+      "bsd": {
+        "input": "sha256:c274a736f942f8e3c649c7282666683a0d97e03206a0c622bac391531f20ce01",
+        "status": 0,
+        "stdout": "<>\n<one>\n<two>\n<three>\n<  one   two\tthree  >\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:0b5cb3b7347d43b13a1f6c4b4aa1a2419deb20ec8273e03765988cd5e29bc389",
+        "status": 0,
+        "stdout": "<>\n<one>\n<two>\n<three>\n<  one   two\tthree  >\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:c274a736f942f8e3c649c7282666683a0d97e03206a0c622bac391531f20ce01",
+        "status": 0,
+        "stdout": "<>\n<one>\n<two>\n<three>\n<  one   two\tthree  >\n",
+        "stderr": ""
+      }
+    },
+    "metadata-diff-options": {
+      "bsd": {
+        "input": "sha256:4e647e073944323d8addf07a40b9a0f5d4efe0f47a715348549c52e01dceee80",
+        "status": 0,
+        "stdout": "Files sub/a.txt and sub/b.txt differ\nq=1\nu=1\n",
+        "stderr": "",
+        "files": {
+          "diff.patch": {
+            "mode": "-rw-r--r--",
+            "data": "--- sub/a.txt\t2025-01-01 00:00:00.000000000 +0000\n+++ sub/b.txt\t2025-01-01 00:00:00.000000000 +0000\n@@ -1,2 +1,2 @@\n first\n-second\n+third\n"
+          }
+        }
+      },
+      "busybox": {
+        "input": "sha256:16494e2b3f9bc2a4eac862ddc96ae20944871647fdac413994f2f40d101a070d",
+        "status": 0,
+        "stdout": "Files sub/a.txt and sub/b.txt differ\nq=1\nu=1\n",
+        "stderr": "",
+        "files": {
+          "diff.patch": {
+            "mode": "-rw-r--r--",
+            "data": "--- sub/a.txt\n+++ sub/b.txt\n@@ -1,2 +1,2 @@\n first\n-second\n+third\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:4e647e073944323d8addf07a40b9a0f5d4efe0f47a715348549c52e01dceee80",
+        "status": 0,
+        "stdout": "Files sub/a.txt and sub/b.txt differ\nq=1\nu=1\n",
+        "stderr": "",
+        "files": {
+          "diff.patch": {
+            "mode": "-rw-r--r--",
+            "data": "--- sub/a.txt\t2025-01-01 00:00:00.000000000 +0000\n+++ sub/b.txt\t2025-01-01 00:00:00.000000000 +0000\n@@ -1,2 +1,2 @@\n first\n-second\n+third\n"
+          }
+        }
+      }
+    },
+    "metadata-ls-options": {
+      "bsd": {
+        "input": "sha256:8353c82f0b6742dee55972a72efb0e35b0c8c51b3a4e5149e5ef0dd30cedf8ea",
+        "status": 0,
+        "stdout": "a.txt\nb.txt\nbad.sh\nnested\nscript.sh\n.\n..\na.txt\nb.txt\nbad.sh\nnested\nscript.sh\n.hidden.txt\nbinary.bin\ncode.go\nconfig.json\ndata.yaml\nempty.txt\nnotes.txt\nnumbers.txt\npatterns.txt\nsub\ntable.tsv\nempty.txt\nsub/\na.txt\nb.txt\nbad.sh\nnested\nscript.sh\n\nsub/nested:\ndeep.go\nb.txt\na.txt\nbad.sh\nscript.sh\nnested\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:8442e8eeee85fcf678b0bf00af3ac864f14987f4299a01cd3d97a5f612e225ef",
+        "status": 0,
+        "stdout": "a.txt\nb.txt\nbad.sh\nnested\nscript.sh\n.\n..\na.txt\nb.txt\nbad.sh\nnested\nscript.sh\n.hidden.txt\nbinary.bin\ncode.go\nconfig.json\ndata.yaml\nempty.txt\nnotes.txt\nnumbers.txt\npatterns.txt\nsub\ntable.tsv\nempty.txt\nsub/\nsub:\na.txt\nb.txt\nbad.sh\nnested\nscript.sh\n\nsub/nested:\ndeep.go\nb.txt\na.txt\nbad.sh\nscript.sh\nnested\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:8353c82f0b6742dee55972a72efb0e35b0c8c51b3a4e5149e5ef0dd30cedf8ea",
+        "status": 0,
+        "stdout": "a.txt\nb.txt\nbad.sh\nnested\nscript.sh\n.\n..\na.txt\nb.txt\nbad.sh\nnested\nscript.sh\n.hidden.txt\nbinary.bin\ncode.go\nconfig.json\ndata.yaml\nempty.txt\nnotes.txt\nnumbers.txt\npatterns.txt\nsub\ntable.tsv\nempty.txt\nsub/\nsub:\na.txt\nb.txt\nbad.sh\nnested\nscript.sh\n\nsub/nested:\ndeep.go\nb.txt\na.txt\nbad.sh\nscript.sh\nnested\n",
+        "stderr": ""
+      }
+    },
+    "metadata-stat-bsd-format": {
+      "bsd": {
+        "input": "sha256:a8ea8b8366cd42de049e863f2a5e9a0a96cfa3edd210ed834c3b4bcb28682582",
+        "status": 0,
+        "stdout": "13:Regular File\n",
+        "stderr": ""
+      }
+    },
+    "metadata-stat-gnu-format": {
+      "busybox": {
+        "input": "sha256:74c2d47242a66b1bf739efaece82536168721796271c39956bd2696b054e65a2",
+        "status": 0,
+        "stdout": "13:regular file\n13\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:96fefcc16e5e639302f110921e15d2fe01606a86c6b108aa9ac7273e361a5956",
+        "status": 0,
+        "stdout": "13:regular file\n13\n",
+        "stderr": ""
+      }
+    },
+    "metadata-wc-options": {
+      "bsd": {
+        "input": "sha256:ec3267d6bbdfb61c27d9e0d3874ccccda7f487390fbbb3d92142d9d46d185f0f",
+        "status": 0,
+        "stdout": "       5      12      55 notes.txt\n      55      15 notes.txt\n       1\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:c140f12840bb1f3d0335e6af7df9b9c44f3855d3ec0f7b51c53bbda4cee24453",
+        "status": 0,
+        "stdout": "        5        12        55 notes.txt\n       55        20 notes.txt\n1\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:ec3267d6bbdfb61c27d9e0d3874ccccda7f487390fbbb3d92142d9d46d185f0f",
+        "status": 0,
+        "stdout": " 5 12 55 notes.txt\n55 20 notes.txt\n1\n",
+        "stderr": ""
+      }
+    },
+    "mutation-chown-explicit": {
+      "bsd": {
+        "input": "sha256:3580666190b918a64485ee88d101d325d2940b0fedf21c2c470f7fd322baf1d3",
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:69d97a48e960b9c5b8e423760a1a1a09bbba8e58f5368a84944ecdaf615a0a53",
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:3580666190b918a64485ee88d101d325d2940b0fedf21c2c470f7fd322baf1d3",
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    "mutation-cp-mv-rm-rmdir-mkdir-touch-tee-mktemp-chmod-chown": {
+      "bsd": {
+        "input": "sha256:703693b96aa886dc4a685911641baa206a06d61b1990579fc43a2823ead5123c",
+        "status": 0,
+        "stdout": "first\nsecond\nt1\nt2\n",
+        "stderr": "",
+        "files": {
+          "work/missing_no_create.txt": null,
+          "work/moved.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          },
+          "work/tee.txt": {
+            "mode": "-rw-r--r--",
+            "data": "t1\nt2\n"
+          },
+          "work/touched.txt": {
+            "mode": "-rw-r--r--"
+          }
+        }
+      },
+      "busybox": {
+        "input": "sha256:736067022b8a25d351baeb6db55e9cf2b887d84d6a21e4346257dc0c6615bbf5",
+        "status": 0,
+        "stdout": "first\nsecond\nt1\nt2\n",
+        "stderr": "",
+        "files": {
+          "work/missing_no_create.txt": null,
+          "work/moved.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          },
+          "work/tee.txt": {
+            "mode": "-rw-r--r--",
+            "data": "t1\nt2\n"
+          },
+          "work/touched.txt": {
+            "mode": "-rw-r--r--"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:703693b96aa886dc4a685911641baa206a06d61b1990579fc43a2823ead5123c",
+        "status": 0,
+        "stdout": "first\nsecond\nt1\nt2\n",
+        "stderr": "",
+        "files": {
+          "work/missing_no_create.txt": null,
+          "work/moved.txt": {
+            "mode": "-rw-r--r--",
+            "data": "first\nsecond\n"
+          },
+          "work/tee.txt": {
+            "mode": "-rw-r--r--",
+            "data": "t1\nt2\n"
+          },
+          "work/touched.txt": {
+            "mode": "-rw-r--r--"
+          }
+        }
+      }
+    },
+    "natural-awk-field-sum": {
+      "bsd": {
+        "input": "sha256:13cda95d9956eda25cccb1a3bae23908604622872b8c85044c19bb2709dc22fc",
+        "status": 0,
+        "stdout": "60\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:cbe024d167c0e5efb6b8991e61baabf79c4680f30f2f584ed20446e6c27ce468",
+        "status": 0,
+        "stdout": "60\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:13cda95d9956eda25cccb1a3bae23908604622872b8c85044c19bb2709dc22fc",
+        "status": 0,
+        "stdout": "60\n",
+        "stderr": ""
+      }
+    },
+    "natural-find-xargs": {
+      "bsd": {
+        "input": "sha256:9a7526d921b48be764b6540d64b91f4f97706bb27b4210ed5b769a607d705ac0",
+        "status": 0,
+        "stdout": "first\nfirst\nsecond\nthird\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:975fd403ff77589b058f91d9ff819217c18e34b2098e4149df37fdd4802c4311",
+        "status": 0,
+        "stdout": "first\nfirst\nsecond\nthird\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:9a7526d921b48be764b6540d64b91f4f97706bb27b4210ed5b769a607d705ac0",
+        "status": 0,
+        "stdout": "first\nfirst\nsecond\nthird\n",
+        "stderr": ""
+      }
+    },
+    "natural-git-log-oneline": {
+      "bsd": {
+        "input": "sha256:ae7daa425188f374de3bbd79d21dd7a1b8abf8ad4460ef61d4bce870ab896446",
+        "status": 0,
+        "stdout": "1152b28 initial fixture commit\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:ae7daa425188f374de3bbd79d21dd7a1b8abf8ad4460ef61d4bce870ab896446",
+        "status": 0,
+        "stdout": "1152b28 initial fixture commit\n",
+        "stderr": ""
+      }
+    },
+    "natural-jq-pipeline": {
+      "bsd": {
+        "input": "sha256:eecda625cbb438b7613caa8fe5a4155b376789d9915851eae37f450e5b6171e4",
+        "status": 0,
+        "stdout": "A,B\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:eecda625cbb438b7613caa8fe5a4155b376789d9915851eae37f450e5b6171e4",
+        "status": 0,
+        "stdout": "A,B\n",
+        "stderr": ""
+      }
+    },
+    "natural-sed-hold-space": {
+      "bsd": {
+        "input": "sha256:f81c3dd80df034077b4d7945ad9ff9a9614d359f3e3485f7f6b525b41f3876c7",
+        "status": 0,
+        "stdout": "first\nsecond\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:8bf85d99aca8b51672bce974713f2ccf4e5ca4136ddd24bb9f3c7128bd76ba30",
+        "status": 0,
+        "stdout": "first\nsecond\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:f81c3dd80df034077b4d7945ad9ff9a9614d359f3e3485f7f6b525b41f3876c7",
+        "status": 0,
+        "stdout": "first\nsecond\n",
+        "stderr": ""
+      }
+    },
+    "natural-sort-key": {
+      "bsd": {
+        "input": "sha256:b313aa816f81b314bfef0470c8b6a5e283e5e88c226100d767ded2d2986b202c",
+        "status": 0,
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:e9303cb06cefb9b3b29d958e9df2c03aec509013d81cbf34e373f60ba7c3118a",
+        "status": 0,
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:b313aa816f81b314bfef0470c8b6a5e283e5e88c226100d767ded2d2986b202c",
+        "status": 0,
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n",
+        "stderr": ""
+      }
+    },
+    "natural-while-read": {
+      "bsd": {
+        "input": "sha256:14528d7dd9e3edf82ceafd901cc9f5107a063caa6ae113f9fa99b0c2945cf70c",
+        "status": 0,
+        "stdout": "<first>\n<second>\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:9c5dd3089dce3d46eb5f4ab619ec2fb069d111309ceccf326e4d41cbc1e94502",
+        "status": 0,
+        "stdout": "<first>\n<second>\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:14528d7dd9e3edf82ceafd901cc9f5107a063caa6ae113f9fa99b0c2945cf70c",
+        "status": 0,
+        "stdout": "<first>\n<second>\n",
+        "stderr": ""
+      }
+    },
+    "paths-cd-basename-dirname-realpath-readlink-source": {
+      "bsd": {
+        "input": "sha256:b73628cde4abb7a0cdb53d1fb7c5387c6682b6e00b71c763ba24f2e8f39f1307",
+        "status": 0,
+        "stdout": "deep\nsub/nested\nfrom-source:sourced_ok\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:b73628cde4abb7a0cdb53d1fb7c5387c6682b6e00b71c763ba24f2e8f39f1307",
+        "status": 0,
+        "stdout": "deep\nsub/nested\nfrom-source:sourced_ok\n",
+        "stderr": ""
+      }
+    },
+    "process-jobs-wait-kill-ps-lsof": {
+      "gnu": {
+        "input": "sha256:431a1506d165eca9eafec99e1be5efc813c5308ec6635f5fef66c72cb0407a07",
+        "status": 0,
+        "stdout": "w1=0\nw2=1\nlsof=1\n",
+        "stderr": ""
+      }
+    },
+    "pure-awk-fields-and-vars": {
+      "bsd": {
+        "input": "sha256:50d1ea64c4be41a8a7b1f91be642e1ddd336273cb71818b4fb4688f70c0d8c99",
+        "status": 0,
+        "stdout": "ITEM:alpha=20\nITEM:beta=40\nITEM:gamma=60\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:64d7a4046861b12faf9de5c0882d85b8da685a52cdb173444463f6c3fa07d8a5",
+        "status": 0,
+        "stdout": "ITEM:alpha=20\nITEM:beta=40\nITEM:gamma=60\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:50d1ea64c4be41a8a7b1f91be642e1ddd336273cb71818b4fb4688f70c0d8c99",
+        "status": 0,
+        "stdout": "ITEM:alpha=20\nITEM:beta=40\nITEM:gamma=60\n",
+        "stderr": ""
+      }
+    },
+    "pure-echo-and-printf-leading-options": {
+      "bsd": {
+        "input": "sha256:6042acfa387fcd940f6c4aad5bc11907d394d0d5da0db4937825afb63bddc091",
+        "status": 0,
+        "stdout": "head:a\tb\na\\tb\n-z literal\n-v:05\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:024cc9359f11ad7e347d4857e0a33f9294b879166507ba2fcc55084debbb740c",
+        "status": 0,
+        "stdout": "head:a\tb\na\\tb\n-z literal\n-v:05\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:6042acfa387fcd940f6c4aad5bc11907d394d0d5da0db4937825afb63bddc091",
+        "status": 0,
+        "stdout": "head:a\tb\na\\tb\n-z literal\n-v:05\n",
+        "stderr": ""
+      }
+    },
+    "pure-env-and-discovery": {
+      "bsd": {
+        "input": "sha256:b566d6ec6bfa7a9bd3a33f85dbdbf1f32b44f0501c0dbf3c827d3e28f7045a14",
+        "status": 0,
+        "stdout": "1\n2\nyes\nenv-host-ok\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:ba22feaeb3d538f746aa47593c5583ed07f4daac35a31e6e2e23df4c422fdec1",
+        "status": 0,
+        "stdout": "1\n2\nyes\nenv-host-ok\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:b566d6ec6bfa7a9bd3a33f85dbdbf1f32b44f0501c0dbf3c827d3e28f7045a14",
+        "status": 0,
+        "stdout": "1\n2\nyes\nenv-host-ok\n",
+        "stderr": ""
+      }
+    },
+    "pure-sed-bsd-inplace": {
+      "bsd": {
+        "input": "sha256:c7c8f236d0dc9333f59e52825a6ab399398af654776a3dd661ab6077fdb1b415",
+        "status": 0,
+        "stdout": "BSD_FIRST\nsecond\n",
+        "stderr": "",
+        "files": {
+          "sub/sed_bsd.txt": {
+            "mode": "-rw-r--r--",
+            "data": "BSD_FIRST\nsecond\n"
+          }
+        }
+      }
+    },
+    "pure-sed-stream-and-gnu-inplace": {
+      "busybox": {
+        "input": "sha256:335b22b10fe36a6438aec9cb0f0b727b9f97bbcdea7d3a7e4762c4972421b04c",
+        "status": 0,
+        "stdout": "ALPHA line 1\nALPHA line 4\nGNU_FIRST\nsecond\n",
+        "stderr": "",
+        "files": {
+          "sub/sed_gnu.txt": {
+            "mode": "-rw-r--r--",
+            "data": "GNU_FIRST\nsecond\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:05148feebe3aa702ce4d3ea84230d9d952ec090325af4f9cea9d09328136b77d",
+        "status": 0,
+        "stdout": "ALPHA line 1\nALPHA line 4\nGNU_FIRST\nsecond\n",
+        "stderr": "",
+        "files": {
+          "sub/sed_gnu.txt": {
+            "mode": "-rw-r--r--",
+            "data": "GNU_FIRST\nsecond\n"
+          }
+        }
+      }
+    },
+    "pure-sort-uniq-cut-tr-xargs": {
+      "bsd": {
+        "input": "sha256:114f45f3af739a3497f03b8ddf63d5985e79a6c620d2098b6ae7b54643aa51d0",
+        "status": 0,
+        "stdout": "2\n2\n10\n30\n30\n10\n2\n3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n 1 10\n 2 2\n 1 30\n2\n10\n30\nname\tcount\nalpha\t10\nbeta\t20\ngamma\t30\nfirst\nsecon\nfirst\nsecon\nABC\nfirst\nfirst\nfirst\nfirst\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:9992de5f68f7d20d5bf49df1e79e550526b03b0595a514d1281dee822ef2a130",
+        "status": 0,
+        "stdout": "2\n2\n10\n30\n30\n10\n2\n3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n 1 10\n 2 2\n 1 30\n2\n10\n30\nname\tcount\nalpha\t10\nbeta\t20\ngamma\t30\nfirst\nsecon\nfirst\nsecon\nABC\nfirst\nfirst\nfirst\nfirst\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:114f45f3af739a3497f03b8ddf63d5985e79a6c620d2098b6ae7b54643aa51d0",
+        "status": 0,
+        "stdout": "2\n2\n10\n30\n30\n10\n2\n3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n 1 10\n 2 2\n 1 30\n2\n10\n30\nname\tcount\nalpha\t10\nbeta\t20\ngamma\t30\nfirst\nsecon\nfirst\nsecon\nABC\nfirst\nfirst\nfirst\nfirst\n",
+        "stderr": ""
+      }
+    },
+    "pure-text-utilities-extended": {
+      "gnu": {
+        "input": "sha256:8fa748dc43f012c8969d18f96236e7ec410e04fc5c29cea842ab6bf30877c9e9",
+        "status": 0,
+        "stdout": "3\n2\n1\ncba\nfirst\tfirst\nsecond\tthird\nfirst\nfirst\n123\n456\na  b\nc  d\nok\nok\nnproc-ok\n",
+        "stderr": ""
+      }
+    },
+    "query-jq-options": {
+      "bsd": {
+        "input": "sha256:53900471ff6e2df48fce77e9c087ae62ddb9a316ba236c9863c051d707fa45a3",
+        "status": 0,
+        "stdout": "a\nb\n{\"greeting\":7}\n5\njq_e=1\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:53900471ff6e2df48fce77e9c087ae62ddb9a316ba236c9863c051d707fa45a3",
+        "status": 0,
+        "stdout": "a\nb\n{\"greeting\":7}\n5\njq_e=1\n",
+        "stderr": ""
+      }
+    },
+    "query-yq-options": {
+      "bsd": {
+        "input": "sha256:7f538f84e19ef9d92a67fb9b3f5bf9c3957b09616e190d8126d931cf1445f43a",
+        "status": 0,
+        "stdout": "1\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:7f538f84e19ef9d92a67fb9b3f5bf9c3957b09616e190d8126d931cf1445f43a",
+        "status": 0,
+        "stdout": "1\n",
+        "stderr": ""
+      }
+    },
+    "run3-background-kill-wait": {
+      "bsd": {
+        "input": "sha256:fcaa675bf288cc9113eaf97a628e967352347120e093cdfc302ba2923090e874",
+        "status": 0,
+        "stdout": "pid:143\njob:143\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:fcaa675bf288cc9113eaf97a628e967352347120e093cdfc302ba2923090e874",
+        "status": 0,
+        "stdout": "pid:143\njob:143\n",
+        "stderr": ""
+      }
+    },
+    "run3-binary-grep-count": {
+      "bsd": {
+        "input": "sha256:55c70d66a6d15c184842e451f95ba74c0628e86be11dccf3a40f16722424466d",
+        "status": 0,
+        "stdout": "   1 ./sub/nested/deep.go\n   1 Binary file ./sub/nested/todo.bin matches\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:55c70d66a6d15c184842e451f95ba74c0628e86be11dccf3a40f16722424466d",
+        "status": 0,
+        "stdout": "      1 ./sub/nested/deep.go\n",
+        "stderr": "grep: ./sub/nested/todo.bin: binary file matches\n"
+      }
+    },
+    "run3-binary-grep-walk": {
+      "bsd": {
+        "input": "sha256:4a9f5ef1583029c9bf60ef9d260c6f60eb94ffba629bd7827fb38aeb7a5fa61e",
+        "status": 0,
+        "stdout": "Binary file sub/nested/todo.bin matches\nsub/nested/deep.go:3:// TODO: fix OldName\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:4a9f5ef1583029c9bf60ef9d260c6f60eb94ffba629bd7827fb38aeb7a5fa61e",
+        "status": 0,
+        "stdout": "sub/nested/deep.go:3:// TODO: fix OldName\n",
+        "stderr": "grep: sub/nested/todo.bin: binary file matches\n"
+      }
+    },
+    "run3-binary-rg-explicit": {
+      "bsd": {
+        "input": "sha256:2cbb114198840527442ccef756303bc9305410e4a593fdaeca34a38151f00233",
+        "status": 0,
+        "stdout": "binary file matches (found \"\\0\" byte around offset 4)\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:2cbb114198840527442ccef756303bc9305410e4a593fdaeca34a38151f00233",
+        "status": 0,
+        "stdout": "binary file matches (found \"\\0\" byte around offset 4)\n",
+        "stderr": ""
+      }
+    },
+    "run3-binary-rg-implicit-walk": {
+      "bsd": {
+        "input": "sha256:023a945281eeb919edd4941bae8efa3becf84626ec8ede41d1b7c39d2992997b",
+        "status": 0,
+        "stdout": "sub/nested/deep.go:3:// TODO: fix OldName\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:023a945281eeb919edd4941bae8efa3becf84626ec8ede41d1b7c39d2992997b",
+        "status": 0,
+        "stdout": "sub/nested/deep.go:3:// TODO: fix OldName\n",
+        "stderr": ""
+      }
+    },
+    "run3-command-not-found": {
+      "bsd": {
+        "input": "sha256:1fa7ec2315d04fac3af034a752eca8aa279b7397b1d6613cc7d232945f353eaa",
+        "status": 0,
+        "stdout": "missing:127\n",
+        "stderr": "/bin/bash: line 3: pw-missing-program-039: command not found\n"
+      },
+      "gnu": {
+        "input": "sha256:1fa7ec2315d04fac3af034a752eca8aa279b7397b1d6613cc7d232945f353eaa",
+        "status": 0,
+        "stdout": "missing:127\n",
+        "stderr": "/bin/bash: line 3: pw-missing-program-039: command not found\n"
+      }
+    },
+    "run3-eval-admitted-program": {
+      "bsd": {
+        "input": "sha256:0da8def238d4ea43fcb2d5af149a4ca3cffd7c6a562995d0723ed22733f63f3d",
+        "status": 0,
+        "stdout": "inner:value\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:4c9726024bc7f61d60e42c1d61f5a4b154f64c9e9e22947a13c9a05ec37fae64",
+        "status": 0,
+        "stdout": "inner:value\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:0da8def238d4ea43fcb2d5af149a4ca3cffd7c6a562995d0723ed22733f63f3d",
+        "status": 0,
+        "stdout": "inner:value\n",
+        "stderr": ""
+      }
+    },
+    "run3-eval-forms": {
+      "bsd": {
+        "input": "sha256:274e0299ad715707944be17f141de4e259ce4377a1cc362a0d94554b89cd48a6",
+        "status": 0,
+        "stdout": "inner\na\nb\nstatus:3\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:274e0299ad715707944be17f141de4e259ce4377a1cc362a0d94554b89cd48a6",
+        "status": 0,
+        "stdout": "inner\na\nb\nstatus:3\n",
+        "stderr": ""
+      }
+    },
+    "run3-git-add-beside-nested-repository": {
+      "bsd": {
+        "input": "sha256:693d71876235c65777af1fe97f619d02b28ba0567c1b8d04fa05d098e68475f2",
+        "status": 0,
+        "stdout": "A  README.txt\n?? gt/\n",
+        "stderr": "",
+        "files": {
+          "README.txt": {
+            "mode": "-rw-r--r--",
+            "data": "new\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:693d71876235c65777af1fe97f619d02b28ba0567c1b8d04fa05d098e68475f2",
+        "status": 0,
+        "stdout": "A  README.txt\n?? gt/\n",
+        "stderr": "",
+        "files": {
+          "README.txt": {
+            "mode": "-rw-r--r--",
+            "data": "new\n"
+          }
+        }
+      }
+    },
+    "run3-git-initial-commit": {
+      "bsd": {
+        "input": "sha256:a31d2c0069ad1e3b479004e371fa20960ecf097d03dcea9fbb3e5984d937bb03",
+        "status": 0,
+        "stdout": "first\n",
+        "stderr": "",
+        "files": {
+          "fresh/README.txt": {
+            "mode": "-rw-r--r--",
+            "data": "new\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:a31d2c0069ad1e3b479004e371fa20960ecf097d03dcea9fbb3e5984d937bb03",
+        "status": 0,
+        "stdout": "first\n",
+        "stderr": "",
+        "files": {
+          "fresh/README.txt": {
+            "mode": "-rw-r--r--",
+            "data": "new\n"
+          }
+        }
+      }
+    },
+    "run3-gnu-errors": {
+      "bsd": {
+        "input": "sha256:70923e768029c99c9862c6febe24a61b901ea4cd927ae724c9d3a9d574f78753",
+        "status": 0,
+        "stdout": "grep: Unmatched ( or \\(\ngrep:2\ncat: missing.txt: No such file or directory\ncat:1\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:fe49c84a1b698bac7ed17f6979a08ce965e8a21e99dddc8546c74c0bebc4d08f",
+        "status": 0,
+        "stdout": "grep: bad regex '(': Missing ')'\ngrep:2\ncat: can't open 'missing.txt': No such file or directory\ncat:1\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:70923e768029c99c9862c6febe24a61b901ea4cd927ae724c9d3a9d574f78753",
+        "status": 0,
+        "stdout": "grep: Unmatched ( or \\(\ngrep:2\ncat: missing.txt: No such file or directory\ncat:1\n",
+        "stderr": ""
+      }
+    },
+    "run3-long-listing-names": {
+      "bsd": {
+        "input": "sha256:6a14402197682b1360407fc9a89ebe3110052445611758e89e61566f20d7e0b0",
+        "status": 0,
+        "stdout": "-rw-r--r-- a.txt\n-rw-r--r-- b.txt\n-rw-r--r-- bad.sh\ndrwxr-xr-x nested\n-rw-r--r-- script.sh\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:4a4ff050ac6a1e65b480fbeb24ae48d89aeabf8e4a637b782e67f315058c8499",
+        "status": 0,
+        "stdout": "-rw-r--r-- a.txt\n-rw-r--r-- b.txt\n-rw-r--r-- bad.sh\ndrwxr-xr-x nested\n-rw-r--r-- script.sh\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:6a14402197682b1360407fc9a89ebe3110052445611758e89e61566f20d7e0b0",
+        "status": 0,
+        "stdout": "-rw-r--r-- a.txt\n-rw-r--r-- b.txt\n-rw-r--r-- bad.sh\ndrwxr-xr-x nested\n-rw-r--r-- script.sh\n",
+        "stderr": ""
+      }
+    },
+    "run3-missing-operand-status": {
+      "bsd": {
+        "input": "sha256:aea8c2d988e194935cda1f2d1d4fedfc0a6e46aac1b38605130bd8bcd005fc5d",
+        "status": 0,
+        "stdout": "ls:1\ncat:1\n",
+        "stderr": "ls: nonexistent: No such file or directory\ncat: nonexistent: No such file or directory\n"
+      },
+      "busybox": {
+        "input": "sha256:cbf91e4b16e2af3301ca050519c5c7f0853f3204635800628a9a48bb6df751a2",
+        "status": 0,
+        "stdout": "ls:1\ncat:1\n",
+        "stderr": "ls: nonexistent: No such file or directory\ncat: can't open 'nonexistent': No such file or directory\n"
+      },
+      "gnu": {
+        "input": "sha256:aea8c2d988e194935cda1f2d1d4fedfc0a6e46aac1b38605130bd8bcd005fc5d",
+        "status": 0,
+        "stdout": "ls:2\ncat:1\n",
+        "stderr": "ls: cannot access 'nonexistent': No such file or directory\ncat: nonexistent: No such file or directory\n"
+      }
+    },
+    "run3-pipeline-hash": {
+      "bsd": {
+        "input": "sha256:73c648ab6d3d3fed4886e970c4bbabdb5dc5cae15e0084163da89ba90bf1e80f",
+        "status": 0,
+        "stdout": "fd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\nfd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:4a32ab8408de89d1c85d9dcfd8e9186b02ed0fed8455c2b4e408ce0f5b057901",
+        "status": 0,
+        "stdout": "fd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\nfd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:73c648ab6d3d3fed4886e970c4bbabdb5dc5cae15e0084163da89ba90bf1e80f",
+        "status": 0,
+        "stdout": "fd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\nfd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\n",
+        "stderr": ""
+      }
+    },
+    "run3-pipestatus-index": {
+      "bsd": {
+        "input": "sha256:7faf223982007044991f0688813e4073abde7076d3062eba18180355b3036385",
+        "status": 0,
+        "stdout": "first:1\ny\nall:141 0\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:7faf223982007044991f0688813e4073abde7076d3062eba18180355b3036385",
+        "status": 0,
+        "stdout": "first:1\ny\nall:141 0\n",
+        "stderr": ""
+      }
+    },
+    "run3-pipestatus-sigpipe": {
+      "bsd": {
+        "input": "sha256:4c12f9e66a0e3cdfebdeded969c3412972e7011512304953a67cfafb09919d37",
+        "status": 0,
+        "stdout": "y\npipe:141 0\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:4c12f9e66a0e3cdfebdeded969c3412972e7011512304953a67cfafb09919d37",
+        "status": 0,
+        "stdout": "y\npipe:141 0\n",
+        "stderr": ""
+      }
+    },
+    "run3-prefix-assignment-scope": {
+      "bsd": {
+        "input": "sha256:c65e0cdf6e288af7e4dc90927012bec6d002d6a71c48babaf5bf12387e7ae5c2",
+        "status": 0,
+        "stdout": "outer\na/b\nifs:3\nv:outer\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:e428a6f2027f9ba21394b7e34b638a11108d2ea36584a4f96880833fd9ceb47e",
+        "status": 0,
+        "stdout": "outer\na/b\nifs:3\nv:outer\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:c65e0cdf6e288af7e4dc90927012bec6d002d6a71c48babaf5bf12387e7ae5c2",
+        "status": 0,
+        "stdout": "outer\na/b\nifs:3\nv:outer\n",
+        "stderr": ""
+      }
+    },
+    "run3-prefix-ifs-read": {
+      "bsd": {
+        "input": "sha256:87fa2df16c22f0bbaa53a0fd54f900181eea3c068a2204445d3242956e9a8f31",
+        "status": 0,
+        "stdout": "<  first  second  >\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:41343a3830cd6bf795bc3374775f7cbe35c724a9c482d75725c9d8cbf2985546",
+        "status": 0,
+        "stdout": "<  first  second  >\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:87fa2df16c22f0bbaa53a0fd54f900181eea3c068a2204445d3242956e9a8f31",
+        "status": 0,
+        "stdout": "<  first  second  >\n",
+        "stderr": ""
+      }
+    },
+    "run3-scratch-atomic-move": {
+      "bsd": {
+        "input": "sha256:a02c9db92ab816ba9bb17b870fd1203ff28fffda04e41308ceb5ea6374cfb27f",
+        "status": 0,
+        "stdout": "saved\n",
+        "stderr": "",
+        "files": {
+          "saved.txt": {
+            "mode": "-rw-------",
+            "data": "saved\n"
+          }
+        }
+      },
+      "busybox": {
+        "input": "sha256:5daf5e8718386d46f85b919997c1db383e4aea365522f82c4c579438c166c695",
+        "status": 0,
+        "stdout": "saved\n",
+        "stderr": "",
+        "files": {
+          "saved.txt": {
+            "mode": "-rw-------",
+            "data": "saved\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:a02c9db92ab816ba9bb17b870fd1203ff28fffda04e41308ceb5ea6374cfb27f",
+        "status": 0,
+        "stdout": "saved\n",
+        "stderr": "",
+        "files": {
+          "saved.txt": {
+            "mode": "-rw-------",
+            "data": "saved\n"
+          }
+        }
+      }
+    },
+    "run3-sed-bsd-in-place-append": {
+      "bsd": {
+        "input": "sha256:05ecd5ed2a115410eed808cd954d35ab5a5ac97013ae724eaa2aa51b7bcf5c1f",
+        "status": 0,
+        "stdout": "ALPHA line 1\n\nALPHA line 4\ngamma\twith\ttabs\nend\n",
+        "stderr": "",
+        "files": {
+          "n.txt": {
+            "mode": "-rw-r--r--",
+            "data": "ALPHA line 1\n\nALPHA line 4\ngamma\twith\ttabs\nend\n"
+          }
+        }
+      }
+    },
+    "run3-sed-bsd-next-line-append": {
+      "bsd": {
+        "input": "sha256:e8d03fa0ee9de3297a2440d55adab5f499cee1e2697cbc608ccdd201b7b5a7c4",
+        "status": 0,
+        "stdout": "first\nsecond\nend\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:5b7cd5c82cf72df69a2eeb925a2e8b1331ffa2bd1b7323ff5f3ebfd5359c45c8",
+        "status": 0,
+        "stdout": "first\nsecond\nend\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:e8d03fa0ee9de3297a2440d55adab5f499cee1e2697cbc608ccdd201b7b5a7c4",
+        "status": 0,
+        "stdout": "first\nsecond\nend\n",
+        "stderr": ""
+      }
+    },
+    "run3-sed-deleted-last-line": {
+      "bsd": {
+        "input": "sha256:8fc77ef5f374c8491236c15843c9191c3c7a01c10735414fe7cf88fbf4aa316c",
+        "status": 0,
+        "stdout": "first\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:fb2ef26237e02327529306b92185ad343b322a3a37dbe10fbf264ace815f6a35",
+        "status": 0,
+        "stdout": "first\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:8fc77ef5f374c8491236c15843c9191c3c7a01c10735414fe7cf88fbf4aa316c",
+        "status": 0,
+        "stdout": "first\n",
+        "stderr": ""
+      }
+    },
+    "run3-sed-gnu-in-place-append": {
+      "busybox": {
+        "input": "sha256:c4e20a22bdd86f7853d9c6e422bef45af1f85d73c0a04160105c214e8cf792d7",
+        "status": 0,
+        "stdout": "ALPHA line 1\nbeta line 2\n\nALPHA line 4\ngamma\twith\ttabs\nend\n",
+        "stderr": "",
+        "files": {
+          "n.txt": {
+            "mode": "-rw-r--r--",
+            "data": "ALPHA line 1\nbeta line 2\n\nALPHA line 4\ngamma\twith\ttabs\nend\n"
+          }
+        }
+      },
+      "gnu": {
+        "input": "sha256:a923a7697dba0744a597c08df1ee32afe9c43d466b9df8cc7d4c9e8c4acf9982",
+        "status": 0,
+        "stdout": "ALPHA line 1\nbeta line 2\n\nALPHA line 4\ngamma\twith\ttabs\nend\n",
+        "stderr": "",
+        "files": {
+          "n.txt": {
+            "mode": "-rw-r--r--",
+            "data": "ALPHA line 1\nbeta line 2\n\nALPHA line 4\ngamma\twith\ttabs\nend\n"
+          }
+        }
+      }
+    },
+    "run3-sed-gnu-one-line-append": {
+      "busybox": {
+        "input": "sha256:c959ac8841fa00db852c47e54184217115b302fd8a9b5c8c8a9e9421f7bab523",
+        "status": 0,
+        "stdout": "first\nsecond\nend\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:b3026bd214c2b8cb7cf4a75a8be4fa03a6842c580a7aa2162ac55a89f7652331",
+        "status": 0,
+        "stdout": "first\nsecond\nend\n",
+        "stderr": ""
+      }
+    },
+    "run3-sed-hold-reversal": {
+      "bsd": {
+        "input": "sha256:bfab8dc76dfff4bdbda0ba859d8f77fe7b48e5c6ae21d7c561e637a4ad4611a4",
+        "status": 0,
+        "stdout": "second\nfirst\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:1693e38c9086cb604c8b6d3a820d2e0aec12f4f69e08183310a89caafab4070b",
+        "status": 0,
+        "stdout": "second\nfirst\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:bfab8dc76dfff4bdbda0ba859d8f77fe7b48e5c6ae21d7c561e637a4ad4611a4",
+        "status": 0,
+        "stdout": "second\nfirst\n",
+        "stderr": ""
+      }
+    },
+    "run3-sed-next-line-insert-and-change": {
+      "bsd": {
+        "input": "sha256:6b8f79fa81d8cc138706612cb7028e4ec655f514c77c915be3d212c053bf24cf",
+        "status": 0,
+        "stdout": "start\nfirst\nchanged\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:f677f17eba176bb0b2ffd4f4221b9dca0065908f4bcc147280d7c3d04d638759",
+        "status": 0,
+        "stdout": "start\nfirst\nchanged\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:6b8f79fa81d8cc138706612cb7028e4ec655f514c77c915be3d212c053bf24cf",
+        "status": 0,
+        "stdout": "start\nfirst\nchanged\n",
+        "stderr": ""
+      }
+    },
+    "run3-sort-key-separated": {
+      "bsd": {
+        "input": "sha256:1c3884bbeb3ac51e48ac2c792abb3053d0c6b46172d7aafb27693160281689a7",
+        "status": 0,
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:b35917db2f2bda94949034b6ec27e7d17e179da0aa536656547bf88203b4dc8e",
+        "status": 0,
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:1c3884bbeb3ac51e48ac2c792abb3053d0c6b46172d7aafb27693160281689a7",
+        "status": 0,
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n",
+        "stderr": ""
+      }
+    },
+    "run3-working-directory": {
+      "bsd": {
+        "input": "sha256:c50ea0381fe038234f877dde890130092200c0dd390317a5757a7710cf5d9b38",
+        "status": 0,
+        "stdout": "/workspace/sub\n/workspace\n/workspace/sub\n",
+        "stderr": ""
+      },
+      "busybox": {
+        "input": "sha256:6f6bdc1ba9b20f42236b6e4c64b9764c5c0afd1cd8b8fb071c084fac1885e125",
+        "status": 0,
+        "stdout": "/workspace/sub\n/workspace\n/workspace/sub\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:c50ea0381fe038234f877dde890130092200c0dd390317a5757a7710cf5d9b38",
+        "status": 0,
+        "stdout": "/workspace/sub\n/workspace\n/workspace/sub\n",
+        "stderr": ""
+      }
+    },
+    "search-find-predicates-and-actions": {
+      "bsd": {
+        "input": "sha256:9ffe6e6c0677708039f3741416d87da1ff0d36d8319e24ff1dd75257bb9cd66c",
+        "status": 0,
+        "stdout": "sub/a.txt\nsub/b.txt\nsub/nested/deep.go\n./empty.txt\nsub/a.txt\nsub/b.txt\nsub/bad.sh\nsub/script.sh\na.txt:13\n==> sub/a.txt <==\nfirst\n\n==> sub/b.txt <==\nfirst\nfirst\ndeleted-ok\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:9ffe6e6c0677708039f3741416d87da1ff0d36d8319e24ff1dd75257bb9cd66c",
+        "status": 0,
+        "stdout": "sub/a.txt\nsub/b.txt\nsub/nested/deep.go\n./empty.txt\nsub/a.txt\nsub/b.txt\nsub/bad.sh\nsub/script.sh\na.txt:13\n==> sub/a.txt <==\nfirst\n\n==> sub/b.txt <==\nfirst\nfirst\ndeleted-ok\n",
+        "stderr": ""
+      }
+    },
+    "search-grep-context-and-walk": {
+      "bsd": {
+        "input": "sha256:e97fbc451bd64319520b7544becf3745aa27de1e95e36f6320c8c59cd90163a7",
+        "status": 0,
+        "stdout": "alpha line 1\nbeta line 2\n\nsub/a.txt\nsub/a.txt\nfirst\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:e97fbc451bd64319520b7544becf3745aa27de1e95e36f6320c8c59cd90163a7",
+        "status": 0,
+        "stdout": "alpha line 1\nbeta line 2\n\nsub/a.txt\nsub/a.txt\nfirst\n",
+        "stderr": ""
+      }
+    },
+    "search-grep-core-and-aliases": {
+      "gnu": {
+        "input": "sha256:911b60924ec007a1ce6e74fffe090f88c454af7b1693b432b1fbe8ce10cdf2d1",
+        "status": 0,
+        "stdout": "1:alpha line 1\n2:beta line 2\n4:alpha line 4\nfirst\nsecond\nfirst\n1\n0:alpha\n26:alpha\nalpha line 1\nalpha line 4\ngamma\twith\ttabs\nalpha line 1\nalpha line 4\nfirst\nthird\nfirst\nquiet-ok\n",
+        "stderr": ""
+      }
+    },
+    "search-rg-options": {
+      "bsd": {
+        "input": "sha256:cf2bf5d6120f5e2185d781387fac27fadce0b86a44ee8c19557119c5bf756ee7",
+        "status": 0,
+        "stdout": "1:alpha line 1\n4:alpha line 4\n1\nsub/nested/deep.go\nsub/a.txt\nsub/a.txt\nsub/b.txt\nsub/bad.sh\nsub/nested/deep.go\nsub/script.sh\nFIRST\n./.hidden.txt:secret-dotfile\n",
+        "stderr": ""
+      },
+      "gnu": {
+        "input": "sha256:cf2bf5d6120f5e2185d781387fac27fadce0b86a44ee8c19557119c5bf756ee7",
+        "status": 0,
+        "stdout": "1:alpha line 1\n4:alpha line 4\n1\nsub/nested/deep.go\nsub/a.txt\nsub/a.txt\nsub/b.txt\nsub/bad.sh\nsub/nested/deep.go\nsub/script.sh\nFIRST\n./.hidden.txt:secret-dotfile\n",
+        "stderr": ""
+      }
+    }
+  }
+}

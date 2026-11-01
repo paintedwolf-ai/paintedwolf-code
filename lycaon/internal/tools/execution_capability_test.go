@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -37,6 +38,33 @@ func TestExecutionCapabilityGrammar(t *testing.T) {
 	}
 	if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"host_execution": true, "direct_ip": true}}); reject == nil {
 		t.Fatal("accepted conflicting authority")
+	}
+	if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"credential_store": true, "host_execution": true}}); reject == nil {
+		t.Fatal("accepted credential_store with host_execution")
+	}
+	for _, value := range []any{false, nil, "true", 1, map[string]any{}} {
+		if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"credential_store": value}}); reject == nil {
+			t.Fatalf("accepted invalid credential_store: %#v", value)
+		}
+	}
+}
+
+func TestExecutionPermitCannotMoveBetweenProgramChildren(t *testing.T) {
+	req := confine.Request{HostExecution: true}
+	args := map[string]any{"argv": []string{"fixture-program", "same-operand"}}
+	tc := ToolContext{Identity: InvocationIdentity{SessionID: "session", ToolCallID: "actual-model-call"}, Invocation: Invocation{ID: "first-child"}, Execution: InvocationExecution{HostExecution: true}, Effects: InvocationEffects{CanonicalArgs: args}}
+	action := hitl.ProposedAction{Execution: hitl.ActionExecution{ExecutionBoundaryDigest: ExecutionBoundaryDigest(req)}}
+	tc.StampExecutionApproval(args, action)
+	other := tc
+	other.Invocation.ID = "second-child"
+	if reject := finalizeExecutionCapability(other, req); reject == nil {
+		t.Fatal("identical operands and outer model call reused another child's permit")
+	}
+	if reject := finalizeExecutionCapability(tc, req); reject != nil {
+		t.Fatalf("original child lost its permit: %v", reject)
+	}
+	if tc.Identity.ToolCallID != "actual-model-call" {
+		t.Fatal("child identity replaced actual model call correlation")
 	}
 }
 
@@ -70,6 +98,25 @@ func TestExecutionPermitBindsBoundaryAndIsSingleUse(t *testing.T) {
 	tc.Execution.executionPermit = nil
 	if reject := finalizeExecutionCapability(tc, req); reject == nil {
 		t.Fatal("missing permit accepted")
+	}
+
+	credReq := confine.Request{CredentialStore: true, Roots: []string{"/tmp/project"}}
+	credTC := ToolContext{
+		Identity:  InvocationIdentity{SessionID: "task", ToolCallID: "call-cred"},
+		Execution: InvocationExecution{CredentialStore: true},
+	}
+	credTC.Execution.executionPermit = &executionPermit{
+		session:         credTC.Identity.SessionID,
+		call:            credTC.Identity.ToolCallID,
+		credentialStore: true,
+		boundary:        ExecutionBoundaryDigest(credReq),
+		arguments:       executionArgumentsDigest(credTC.Effects.CanonicalArgs),
+	}
+	if reject := finalizeExecutionCapability(credTC, credReq); reject != nil {
+		t.Fatalf("matching credential_store permit: %v", reject)
+	}
+	if reject := finalizeExecutionCapability(credTC, credReq); reject == nil {
+		t.Fatal("credential_store permit reused")
 	}
 }
 

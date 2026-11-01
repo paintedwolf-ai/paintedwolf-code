@@ -28,7 +28,6 @@ func (b *serveBuilder) wireToolRuntime() error {
 	b.startup.resources.Track("egress-approvals", 56, b.execution.Host.Authority.ReleaseEgressApprovals)
 	b.startup.resources.Track("egress-policy", 160, func(context.Context) error { b.execution.Host.Authority.ReleaseEgressPolicy(); return nil })
 	b.providers.BindCurator()
-	b.execution.Host.Survey.SetReadEvidenceLedger(b.storage.Sessions)
 	b.security.Detections.Load(b.storage.Directory, b.catalog.DeviceView.DetectionPacks(), b.execution.Host.Authority)
 	return b.execution.LoadGuidance()
 }
@@ -80,7 +79,7 @@ func (b *serveBuilder) loadConfig() error {
 	if _, err := tsparse.LoadConfig(); err != nil {
 		return fmt.Errorf("source parsing: %w", err)
 	}
-	if err := b.settings.Load(b.startup.cfg); err != nil {
+	if err := b.settings.Load(b.startup.cfg, b.startup.resources); err != nil {
 		return err
 	}
 	b.security.BindTrust(b.settings.Service.TrustSurfaces)

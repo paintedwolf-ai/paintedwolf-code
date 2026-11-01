@@ -15,7 +15,7 @@ from unittest.mock import patch
 from scripts.linux_release import release_repository_setup as setup
 from scripts.linux_release.repository_objects import encoded
 from scripts.linux_release.repository_operations import identity
-from scripts.linux_release.repository_setup_identity import package_identity
+from scripts.linux_release.repository_setup import package_identity
 from scripts.release_distribution_contract.channels import select
 
 SOURCE = "a" * 40

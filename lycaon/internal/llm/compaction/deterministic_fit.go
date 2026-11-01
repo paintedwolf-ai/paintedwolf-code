@@ -123,10 +123,12 @@ func contextTrimNotice() ContextMessage {
 		ID:            contextTrimNoticeID,
 		Role:          string(api.MessageRoleSystem),
 		Content:       guidance.ContextTrimNotice,
-		Origin:        api.MessageOriginHost,
-		Authority:     api.ContentAuthoritySystem,
-		TrustTier:     api.ContentTrustTierTrusted,
 		ContextPinned: true,
+		ContextMessageProvenance: ContextMessageProvenance{
+			Origin:    api.MessageOriginHost,
+			Authority: api.ContentAuthoritySystem,
+			TrustTier: api.ContentTrustTierTrusted,
+		},
 	}
 }
 

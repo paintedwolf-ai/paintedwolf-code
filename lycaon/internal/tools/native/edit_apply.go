@@ -14,6 +14,7 @@ func (t *EditTool) applyEditedContent(ctx context.Context, path string, resolved
 	if err := guardMutationContent("edit", path, newContent); err != nil {
 		return "", landing{}, err
 	}
+	proposed := newContent
 	reportTextIntent(tctx, resolved, st, true, newContent)
 	if t.ContentApply != nil {
 		beforeCopy := before
@@ -31,7 +32,7 @@ func (t *EditTool) applyEditedContent(ctx context.Context, path string, resolved
 	}); err != nil {
 		return "", landing{}, err
 	}
-	landed, err := landEditedText(ctx, tctx, "edit", resolved, st, newContent)
+	landed, err := landEditedText(ctx, tctx, "edit", resolved, st, editorTextProposal{Authored: proposed, Reviewed: newContent})
 	if err != nil {
 		return "", landing{}, err
 	}

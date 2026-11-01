@@ -27,6 +27,7 @@ func cleanRootPath(path string) string {
 type observedFile struct {
 	rootID string
 	path   string
+	kind   string
 	sha    string
 	bytes  []byte
 	size   int64
@@ -132,8 +133,16 @@ func (s *Inventory) prepareObservation(ctx context.Context, projectID string, he
 		}
 	}
 	in := cause.apply(RecordInput{
-		RecordLocation: RecordLocation{RootID: head.RootID, Path: head.Path},
-		ProjectID:      projectID, BranchID: sourcebranch.ID(head.BranchID), FileID: head.FileID,
+		RecordLocation: RecordLocation{RootID: head.RootID, Path: head.Path, EntryKind: func() string {
+			if after != nil && after.kind != "" {
+				return after.kind
+			}
+			if head.State == "link" {
+				return EntryKindLink
+			}
+			return EntryKindFile
+		}()},
+		ProjectID: projectID, BranchID: sourcebranch.ID(head.BranchID), FileID: head.FileID,
 		Op: op, BeforeSHA256: head.ContentSha256, AfterSHA256: afterSHA,
 		Before: beforeBytes, After: afterBytes, BeforeSize: int64(len(beforeBytes)),
 		AfterSize: func() int64 {

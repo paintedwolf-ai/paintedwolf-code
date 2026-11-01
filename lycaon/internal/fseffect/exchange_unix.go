@@ -28,7 +28,7 @@ func ExchangeGuarded(root, first, second, firstIdentity, secondIdentity string) 
 		parent   *openedParent
 		identity string
 	}{{from, firstIdentity}, {to, secondIdentity}} {
-		identity, err := fspath.EntryIdentityAt(int(check.parent.file.Fd()), check.parent.name)
+		identity, err := fspath.EntryIdentityAt(check.parent.fd, check.parent.name)
 		if err != nil {
 			return err
 		}
@@ -44,8 +44,8 @@ func ExchangeGuarded(root, first, second, firstIdentity, secondIdentity string) 
 
 // Keep both directory flushes observable even if the first one fails.
 func exchangeParents(from, to *openedParent, syncDirectory func(int) error) error {
-	if err := renameExchange(int(from.file.Fd()), from.name, int(to.file.Fd()), to.name); err != nil {
+	if err := renameExchange(from.fd, from.name, to.fd, to.name); err != nil {
 		return err
 	}
-	return errors.Join(syncDirectory(int(from.file.Fd())), syncDirectory(int(to.file.Fd())))
+	return errors.Join(syncDirectory(from.fd), syncDirectory(to.fd))
 }

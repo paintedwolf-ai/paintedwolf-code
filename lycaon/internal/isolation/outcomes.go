@@ -52,6 +52,7 @@ const (
 	CodeSocketPathNotSocket                = "SANDBOX_SOCKET_PATH_NOT_SOCKET"
 	CodeSocketPathRefused                  = "SANDBOX_SOCKET_PATH_REFUSED"
 	CodeSocksProxyInvalid                  = "SANDBOX_SOCKS_PROXY_INVALID"
+	CodeTryCredentialStore                 = "SANDBOX_TRY_CREDENTIAL_STORE"
 	CodeTryHostExecution                   = "SANDBOX_TRY_HOST_EXECUTION"
 	CodeTryLocalNetwork                    = "SANDBOX_TRY_LOCAL_NETWORK"
 	CodeTryLoopbackConnect                 = "SANDBOX_TRY_LOOPBACK_CONNECT"
@@ -93,6 +94,7 @@ var outcomes = [...]Outcome{
 	{CodeSocketPathNotSocket, DispositionRetry},
 	{CodeSocketPathRefused, DispositionRetry},
 	{CodeSocksProxyInvalid, DispositionRetry},
+	{CodeTryCredentialStore, DispositionRetry},
 	{CodeTryHostExecution, DispositionRetry},
 	{CodeTryLocalNetwork, DispositionRetry},
 	{CodeTryLoopbackConnect, DispositionRetry},

@@ -210,6 +210,8 @@ work-in-a-dev-container:
 work-with-containers:
   should_not_trigger:
   - Explain the sorting algorithm in this source file
+  - Tell me about this application
+  - Which parts of this project are custom code and which are dependencies?
   should_trigger:
   - Add a redis service to the compose file
   - The app starts before the database is ready

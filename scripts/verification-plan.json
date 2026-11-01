@@ -216,20 +216,23 @@
       ],
       "packages": [
         "./cmd/opengrep-artifact",
+        "./internal/app",
         "./internal/exec",
         "./internal/hitl",
         "./internal/mcp",
+        "./internal/programtest",
         "./internal/scan/drivers/bundled",
         "./internal/scan/drivers/external",
         "./internal/scan/installed",
         "./internal/scan/integration",
         "./internal/toolexecution",
+        "./internal/tools/native",
         "./internal/tools/native/command",
         "./internal/webresearch",
         "./test/contract/security"
       ],
       "flags": [
-        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata)$"
+        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration|TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments|TestPreparedLaunchPreservesRelativeScriptKernelFilename|TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority|TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart|TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd|TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode|TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv|TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload|TestPreparedStrictBoundaryNeverFallsBackToHostExecution|TestOwnedProcessGroupCancellationRetainsNativeSettlement|TestOwnedProcessGroupRefusesConsumedPreparedCommand|TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess|TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand|TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory|TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload|TestPinnedHostExecutionPreservesSetuidProcessInspection|TestRunInOwnGroupCancellationKillsAShellIgnoringTerm|TestRunInOwnGroupDetachesFromTheEnginesTerminal|TestRunInOwnGroupEndsWhatTheCommandLeftBehind|TestRunInOwnGroupReportsACommandRemovedAfterPreparation|TestRunInOwnGroupTerminalHelperProcess|TestNonHTTPContractStaleSymlinkGrantRevalidateDenies|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata|TestExternalCommandSaveMergesWithHumanTyping|TestProgramAppendStopsOnUnsavedAcceptanceWithoutReplaying|TestProgramBackgroundReadTransfersUndeliveredDraftNotice|TestProgramHumanDraftKeepsOneSavedFileViewAndReadNote|TestProgramPublicationRedirectEffectsAdmitBeforeOpening|TestProgramPublicationRedirectRequiresCurrentWriteProgress|TestProgramPublicationRespectsCurrentEffectAuthority|TestProgramPublicationReviewRaceStopsBeforeRead|TestProgramPublicationSettlesBeforeRedirectCapture|TestProgramPublishesOwnAgentDraftBeforeNativeReadAndGoTest|TestProgramRepoMapReadsSavedContentAndReportsHumanDraft|TestRetainedCommandOutputCreditsOnlyDeliveredHeadAndTail|TestEveryTerminalResultStatesTheBox|TestTerminalAndCommandShareLaunchEnvironmentAndScratch|TestProgramExternalMacOSShimToolsWriteDarwinUserTempWithoutStderr|TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed)$"
       ],
       "bundled": true
     },
@@ -446,6 +449,15 @@
     ],
     "release:rehearse:pacman-construction": [
       "release:rehearse:pacman-construction"
+    ],
+    "userlands:build": [
+      "userlands:build"
+    ],
+    "test:userlands": [
+      "test:userlands"
+    ],
+    "test:conformance:live": [
+      "test:conformance:live"
     ]
   },
   "private": [
@@ -489,7 +501,9 @@
     "release:live-test": "passthrough",
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
-    "release:rehearse:pacman-construction": "passthrough"
+    "release:rehearse:pacman-construction": "passthrough",
+    "userlands:build": "passthrough",
+    "test:conformance:live": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -824,7 +838,9 @@
       "progress": "log"
     },
     "nix:build": {
-      "locks": ["*"],
+      "locks": [
+        "*"
+      ],
       "workers": 1,
       "progress": "log"
     },
@@ -899,6 +915,32 @@
         "pacman-substrate"
       ],
       "workers": 1
+    },
+    "userlands:build": {
+      "locks": [
+        "reference-userlands"
+      ],
+      "workers": 1
+    },
+    "test:userlands": {
+      "locks": [
+        "go",
+        "reference-userlands"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
+    },
+    "test:conformance:live": {
+      "locks": [
+        "go",
+        "reference-userlands"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
     }
   },
   "environment": {
@@ -926,7 +968,10 @@
       "NODE_OPTIONS",
       "NODE_EXTRA_CA_CERTS",
       "SSL_CERT_FILE",
-      "SSL_CERT_DIR"
+      "SSL_CERT_DIR",
+      "DOCKER_HOST",
+      "DOCKER_CONTEXT",
+      "DOCKER_CONFIG"
     ],
     "prefixes": [
       "LC_",
@@ -952,8 +997,12 @@
   "ci": {
     "ready": {
       "compile_targets": {
-        "den:test:rust": ["lycaon-den/src-tauri/"],
-        "decide:test": ["lycaon/internal/decide/native/"]
+        "den:test:rust": [
+          "lycaon-den/src-tauri/"
+        ],
+        "decide:test": [
+          "lycaon/internal/decide/native/"
+        ]
       },
       "targets": [
         "build",
@@ -1167,6 +1216,21 @@
       "suite": "behavior",
       "setup": "verification",
       "runner": "ubuntu-24.04-arm",
+      "platform": "linux"
+    },
+    "reference-userlands": {
+      "targets": [
+        "test:userlands",
+        "test:conformance:live"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
       "platform": "linux"
     },
     "nix": {

@@ -40,7 +40,7 @@ func TestContextRetentionKeepsRecentToolBatchBeforeSystemTail(t *testing.T) {
 func TestRecentRetentionUsesAvailableWorkingBudget(t *testing.T) {
 	rows := []ContextMessage{
 		{ID: "request", Role: "user", Content: "Compare the original observation to the current source", ContextPinned: true},
-		{ID: "recover", Role: "assistant", ToolCalls: []api.ToolCall{{ID: "r", Name: "recall"}}, ModelReasoning: &api.ModelReasoning{Text: strings.Repeat("recover recorded evidence ", 20)}},
+		{ID: "recover", Role: "assistant", ToolCalls: []api.ToolCall{{ID: "r", Name: "recall"}}, ContextMessageProvenance: ContextMessageProvenance{ModelReasoning: &api.ModelReasoning{Text: strings.Repeat("recover recorded evidence ", 20)}}},
 		{ID: "observation", Role: "tool", ToolCallID: "r", Content: strings.Repeat("original checksum cypress ", 40)},
 		{ID: "read", Role: "assistant", ToolCalls: []api.ToolCall{{ID: "f", Name: "read"}}},
 		{ID: "rejection", Role: "tool", ToolCallID: "f", Content: "Rejected: correct the argument type and retry"},

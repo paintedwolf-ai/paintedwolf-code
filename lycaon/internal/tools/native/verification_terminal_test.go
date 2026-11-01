@@ -11,7 +11,7 @@ import (
 )
 
 func TestVerificationCanceledZeroExitIsNotPass(t *testing.T) {
-	for _, reason := range []bgprocess.TerminationReason{bgprocess.TerminationStopped, bgprocess.TerminationTimedOut} {
+	for _, reason := range []bgprocess.TerminationReason{bgprocess.TerminationStoppedByAgent, bgprocess.TerminationStoppedByUser, bgprocess.TerminationTimedOut} {
 		result := command.CommandResultFromOutcome(command.RunOutcome{Snapshot: bgprocess.Snapshot{HasExit: true, ExitCode: 0, TerminationReason: reason}}, confine.LocalNetworkGrant{}, nil)
 		verdict, _ := verdictFor(result)
 		if verdict == VerifyOutcomePassed || result.OK {

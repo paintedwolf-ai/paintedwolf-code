@@ -184,7 +184,7 @@ func TestTesseractOCRFailsOnEngineExitAndGarbage(t *testing.T) {
 
 func TestTesseractOCRBoundsTimeAndOutput(t *testing.T) {
 	slow := newTesseractOCR(resolving(scriptEngine(t, "sleep 5\n")))
-	slow.timeout = 200 * time.Millisecond
+	slow.timeout = testutil.Timeout(200 * time.Millisecond)
 	_, err := slow.RecognizeText(context.Background(), "image/png", whitePNG(t, 8, 8))
 	if !errors.Is(err, execpkg.ErrTimeout) || errors.Is(err, ErrOCRUnavailable) {
 		t.Fatalf("timeout err = %v", err)

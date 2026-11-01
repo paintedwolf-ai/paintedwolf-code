@@ -36,45 +36,46 @@ const (
 	SharedWorkflowDiag  = PlatformShared + "/workflow-diagnostics"
 
 	// Platform host shells — operator YAML each subsystem reads by a fixed path.
-	Providers          = PlatformHost + "/providers.yaml"
-	PricingSources     = PlatformHost + "/pricing-sources.yaml"
-	ToolsScope         = PlatformHost + "/tools-scope.yaml"
-	ModelPolicy        = PlatformHost + "/model-policy.yaml"
-	Compaction         = PlatformHost + "/compaction.yaml"
-	ComposePolicy      = PlatformHost + "/compose-policy.yaml"
-	CoordinatorFlow    = PlatformHost + "/coordinator-flow.yaml"
-	ContentAuthority   = PlatformHost + "/content-authority.yaml"
-	DesignKitUsage     = PlatformHost + "/design-kit-usage.yaml"
-	CoordinatorSurface = PlatformHost + "/coordinator-surfaces.yaml"
-	Decisions          = PlatformHost + "/decisions.yaml"
-	DecisionRelease    = PlatformHost + "/decision-release.json"
-	SurfaceProfiles    = PlatformHost + "/surface-profiles.yaml"
-	DistroMCP          = PlatformHost + "/distro-mcp.yaml"
-	MCPRecipes         = PlatformHost + "/mcp-recipes.yaml"
-	HostResources      = PlatformHost + "/host-resources.yaml"
-	PathScopes         = PlatformHost + "/path-scopes.yaml"
-	UserPath           = PlatformHost + "/user-path.yaml"
-	PromptBudgets      = PlatformHost + "/prompt-budgets.yaml"
-	RenderBudgets      = PlatformHost + "/render-budgets.yaml"
-	SourceParsing      = PlatformHost + "/source-parsing.yaml"
-	SessionLimits      = PlatformHost + "/session.yaml"
-	SessionPostures    = PlatformHost + "/session-postures.yaml"
-	StackRegistryDocs  = PlatformHost + "/stack-registry-docs.yaml"
-	Workers            = PlatformHost + "/workers.yaml"
-	AgentToolProfiles  = PlatformHost + "/agent-tool-profiles.yaml"
-	DisclosurePolicy   = PlatformHost + "/disclosure-policy.yaml"
-	ModelContextWindow = PlatformHost + "/model-context-windows.yaml"
-	ProjectPolicy      = PlatformHost + "/project-policy.yaml"
-	Review             = PlatformHost + "/review.yaml"
-	FileBriefing       = PlatformHost + "/file-briefing.yaml"
-	Summarize          = PlatformHost + "/summarize.yaml"
-	AnchorsDir         = PlatformHost + "/anchors"
-	AnchorCatalog      = AnchorsDir + "/catalog.yaml"
-	OARProfile         = AnchorsDir + "/oar-profile.yaml"
-	PostureRulesDir    = PlatformHost + "/posture-rules"
-	SecretPatternsDir  = PlatformHost + "/secret-patterns"
-	UserNoticesDir     = PlatformHost + "/user-notices"
-	ClientNoticesDir   = PlatformHost + "/client-notices"
+	Providers           = PlatformHost + "/providers.yaml"
+	CredentialStoreRead = PlatformHost + "/credential-store-read.yaml"
+	PricingSources      = PlatformHost + "/pricing-sources.yaml"
+	ToolsScope          = PlatformHost + "/tools-scope.yaml"
+	ModelPolicy         = PlatformHost + "/model-policy.yaml"
+	Compaction          = PlatformHost + "/compaction.yaml"
+	ComposePolicy       = PlatformHost + "/compose-policy.yaml"
+	CoordinatorFlow     = PlatformHost + "/coordinator-flow.yaml"
+	ContentAuthority    = PlatformHost + "/content-authority.yaml"
+	DesignKitUsage      = PlatformHost + "/design-kit-usage.yaml"
+	CoordinatorSurface  = PlatformHost + "/coordinator-surfaces.yaml"
+	Decisions           = PlatformHost + "/decisions.yaml"
+	DecisionRelease     = PlatformHost + "/decision-release.json"
+	SurfaceProfiles     = PlatformHost + "/surface-profiles.yaml"
+	DistroMCP           = PlatformHost + "/distro-mcp.yaml"
+	MCPRecipes          = PlatformHost + "/mcp-recipes.yaml"
+	HostResources       = PlatformHost + "/host-resources.yaml"
+	PathScopes          = PlatformHost + "/path-scopes.yaml"
+	UserPath            = PlatformHost + "/user-path.yaml"
+	PromptBudgets       = PlatformHost + "/prompt-budgets.yaml"
+	RenderBudgets       = PlatformHost + "/render-budgets.yaml"
+	SourceParsing       = PlatformHost + "/source-parsing.yaml"
+	SessionLimits       = PlatformHost + "/session.yaml"
+	SessionPostures     = PlatformHost + "/session-postures.yaml"
+	StackRegistryDocs   = PlatformHost + "/stack-registry-docs.yaml"
+	Workers             = PlatformHost + "/workers.yaml"
+	AgentToolProfiles   = PlatformHost + "/agent-tool-profiles.yaml"
+	DisclosurePolicy    = PlatformHost + "/disclosure-policy.yaml"
+	ModelContextWindow  = PlatformHost + "/model-context-windows.yaml"
+	ProjectPolicy       = PlatformHost + "/project-policy.yaml"
+	Review              = PlatformHost + "/review.yaml"
+	FileBriefing        = PlatformHost + "/file-briefing.yaml"
+	Summarize           = PlatformHost + "/summarize.yaml"
+	AnchorsDir          = PlatformHost + "/anchors"
+	AnchorCatalog       = AnchorsDir + "/catalog.yaml"
+	OARProfile          = AnchorsDir + "/oar-profile.yaml"
+	PostureRulesDir     = PlatformHost + "/posture-rules"
+	SecretPatternsDir   = PlatformHost + "/secret-patterns"
+	UserNoticesDir      = PlatformHost + "/user-notices"
+	ClientNoticesDir    = PlatformHost + "/client-notices"
 
 	// Security pack.
 	SecurityHost             = StockPacks + "/security/host"
@@ -103,6 +104,9 @@ const (
 	// SecretPlaceholders lists documented example credentials the outbound
 	// screen never treats as a secret.
 	SecretPlaceholders = SecurityHost + "/secret-placeholders.yaml"
+	// SecretOCRConfusions lists character equivalence classes tolerated when
+	// screening OCR-recognized text for secrets.
+	SecretOCRConfusions = SecurityHost + "/secret-ocr-confusions.yaml"
 
 	// Web-research pack.
 	WebResearchHost      = StockPacks + "/web-research/host"
@@ -164,7 +168,8 @@ const (
 )
 
 var consumedPackYAMLFiles = map[Rel]struct{}{
-	EvidenceKinds: {},
+	CredentialStoreRead: {},
+	EvidenceKinds:       {},
 	PlatformFlows + "/" + WorkflowRegistryFile: {},
 	Providers:                {},
 	PricingSources:           {},
@@ -212,6 +217,7 @@ var consumedPackYAMLFiles = map[Rel]struct{}{
 	PackageExecutionManagers: {},
 	PackageRegistries:        {},
 	SecretPlaceholders:       {},
+	SecretOCRConfusions:      {},
 	WebResearchProviders:     {},
 	WebResearchLimits:        {},
 	ImplementDefaultSpawn:    {},

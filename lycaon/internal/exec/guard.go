@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os/exec"
+	"syscall"
 	"time"
 )
 
@@ -16,10 +17,14 @@ type runGuard interface {
 	// Cancel hook on a context-free command at Start.
 	configure(*exec.Cmd)
 	onStarted(*exec.Cmd) error
+	// wait snapshots surviving session members before reaping the leader.
+	wait(*exec.Cmd) error
 	// terminate asks the whole tree to exit and kills whatever remains after
 	// TerminateGrace.
 	terminate(*exec.Cmd)
 	// kill ends the whole tree at once.
 	kill(*exec.Cmd)
+	// relay delivers one signal to the tree without terminating it.
+	relay(*exec.Cmd, syscall.Signal) bool
 	release()
 }

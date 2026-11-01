@@ -98,6 +98,9 @@ func finishIntegrityAudit(ctx context.Context, store *Store, auditErr error) err
 	if failure := store.Failure(); failure != nil {
 		return failure
 	}
+	if clearErr == nil {
+		store.auditCompleted()
+	}
 	return clearErr
 }
 
@@ -115,10 +118,10 @@ func clearIntegrityAuditFailed(ctx context.Context, sqlDB DBTX) error {
 	return err
 }
 
-// validateStoreIntegrity checks the whole file at once, page accounting
-// included. Startup paths that hold the store alone use it.
-func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
-	if err := scanCheck(ctx, sqlDB, "PRAGMA integrity_check"); err != nil {
+// validateStoreStructure admits structurally readable stores without auditing
+// correspondence between every secondary index and every historical table row.
+func validateStoreStructure(ctx context.Context, sqlDB DBTX) error {
+	if err := scanCheck(ctx, sqlDB, "PRAGMA quick_check"); err != nil {
 		return err
 	}
 	return foreignKeyCheck(ctx, sqlDB, "PRAGMA foreign_key_check")
@@ -150,7 +153,7 @@ func auditSnapshot(ctx context.Context, database *sql.DB, betweenChecks func()) 
 
 // scanCheck reads SQLite's integrity check: one "ok" row or one row per problem.
 func scanCheck(ctx context.Context, sqlDB DBTX, statement string) error {
-	const pragma = "integrity_check"
+	pragma := strings.TrimPrefix(statement, "PRAGMA ")
 	rows, err := sqlDB.QueryContext(ctx, statement) // #nosec G202 -- a fixed pragma over a listed table name
 	if err != nil {
 		return integrityCheckError(err, pragma)
