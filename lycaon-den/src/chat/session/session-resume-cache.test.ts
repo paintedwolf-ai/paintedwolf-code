@@ -13,6 +13,8 @@ import { advanceTranscriptAnnouncement } from "../transcript/presentation/transc
 import type { Message, Session } from "../../api/types.ts";
 import { emptyProjects } from "../../test/projects-fixture.ts";
 import { withBootstrap } from "./session-lifecycle-test-fixture.ts";
+import * as appConnection from "../../platform/connection/app-connection.ts";
+import { stubClient } from "../../test/client-fixture.ts";
 
 describe("resumeChatSession cache", () => {
   it("resumeChatSession restores a cached session then reconciles in the background", async () => {
@@ -317,4 +319,210 @@ describe("resumeChatSession cache", () => {
     expect(tracked.announcement).toBe("Assistant: Fresh live reply");
     expect(getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" })?.messages.map((m) => m.id)).toEqual(["m1", "a1", "a2"]);
   });
+
+  it("reconciles a cached cross-project resume when bootstrap has a running background process with null chunks", async () => {
+    clearSessionChatCacheForTests();
+    const appStore = createAppStore();
+    const resumeSpy = vi.spyOn(appConnection, "resumeProjectEventsAfter");
+    try {
+      const session: Session = {
+        id: "sess-a",
+        owner_person_id: "00000000-0000-4000-8000-000000000002",
+        project_id: "proj-1",
+        workspace_path: "/tmp/p",
+        posture: "build",
+        status: "busy",
+        created_at: "t",
+        activity_at: "t",
+        updated_at: "t",
+      };
+      const staleMessage = {
+        id: "m1",
+        role: "user" as const,
+        origin: "user" as const,
+        authority: "user" as const,
+        trust_tier: "trusted" as const,
+        content: "before leaving",
+        created_at: "t",
+        seq: 1,
+      };
+      const freshMessage = {
+        id: "m2",
+        role: "user" as const,
+        origin: "user" as const,
+        authority: "user" as const,
+        trust_tier: "trusted" as const,
+        content: "delivered while away",
+        created_at: "t2",
+        seq: 2,
+      };
+      putSessionChatCache({
+        scope: { projectId: "proj-1", sessionId: "sess-a" },
+        touchedAt: 1,
+        session,
+        messages: [staleMessage],
+        transcript: {
+          tail: [staleMessage],
+          pages: {},
+          hasTailGap: false,
+          hasMoreBefore: false,
+          hasMoreAfter: false,
+        },
+        transcriptWatermark: 1,
+        turnClocks: [],
+        turnLoads: [],
+        workers: [],
+        workerTranscripts: {},
+        workflowRuns: [],
+        workflowCatalog: [],
+        blueprints: [],
+        pendingCheckpoints: [],
+      });
+
+      appStore.actions.clearChatForSessionSwitch("*");
+      const client = stubClient({
+        getSessionBootstrap: vi.fn(async () => ({
+          event_cursor: "cursor-after-away",
+          session,
+          transcript: {
+            messages: [staleMessage, freshMessage],
+            watermark: 2,
+            turn_clocks: {},
+            turn_loads: {},
+          },
+          progress: { steps: [], revision: 0 },
+          turn_clock: { session_id: session.id, active_ms: 0, work_ms: 0, running: false },
+          findings: { findings: [], revision: 0 },
+          queue: { queue_items: [], hold: false, sending: false, revision: 0 },
+          coordinator: {},
+          background_outputs: [
+            {
+              process_id: "proc-silent",
+              running: true,
+              chunks: null as unknown as [],
+            },
+          ],
+          previews: [],
+          workers: [],
+          checkpoints: [],
+        })),
+        listWorkers: vi.fn(async () => []),
+        getBoard: vi.fn(async () => ({ tasks: [], updated_at: "t" })),
+        getActiveWorkflowRun: vi.fn(async () => undefined),
+        listSessionWorkflowRuns: vi.fn(async () => ({ runs: [] })),
+        listWorkflows: vi.fn(async () => []),
+        listBlueprints: vi.fn(async () => []),
+      });
+
+      await resumeChatSession(appStore, client, "sess-a", emptyProjects, undefined, {
+        projectId: "proj-1",
+      });
+
+      expect(appStore.state.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
+      expect(resumeSpy).toHaveBeenCalledWith("cursor-after-away");
+      expect(appStore.state.chatHydrationLock).toBeUndefined();
+      expect(
+        getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" })?.messages.map(
+          (m) => m.id,
+        ),
+      ).toEqual(["m1", "m2"]);
+    } finally {
+      resumeSpy.mockRestore();
+    }
+  });
+
+  it("does not overwrite the session chat cache when reconcile fails", async () => {
+    clearSessionChatCacheForTests();
+    const appStore = createAppStore();
+    const session: Session = {
+      id: "sess-a",
+      title: "Cached title",
+      owner_person_id: "00000000-0000-4000-8000-000000000002",
+      project_id: "proj-1",
+      workspace_path: "/tmp/p",
+      posture: "build",
+      status: "idle",
+      created_at: "t",
+      activity_at: "t",
+      updated_at: "t",
+    };
+    const cachedMessage = {
+      id: "m1",
+      role: "user" as const,
+      origin: "user" as const,
+      authority: "user" as const,
+      trust_tier: "trusted" as const,
+      content: "cached turn",
+      created_at: "t",
+      seq: 1,
+    };
+    putSessionChatCache({
+      scope: { projectId: "proj-1", sessionId: "sess-a" },
+      touchedAt: 1,
+      session,
+      messages: [cachedMessage],
+      transcript: {
+        tail: [cachedMessage],
+        pages: {},
+        hasTailGap: false,
+        hasMoreBefore: false,
+        hasMoreAfter: false,
+      },
+      transcriptWatermark: 1,
+      turnClocks: [],
+      turnLoads: [],
+      workers: [],
+      workerTranscripts: {},
+      workflowRuns: [],
+      workflowCatalog: [],
+      blueprints: [],
+      pendingCheckpoints: [],
+    });
+
+    const client = stubClient({
+      getSessionBootstrap: vi.fn(async () => ({
+        event_cursor: "cursor-1",
+        session: { ...session, title: "Half-applied title" },
+        transcript: {
+          messages: [
+            {
+              ...cachedMessage,
+              id: "m2",
+              content: "needs missing run",
+              workflow_run_id: "run-fail",
+            },
+          ],
+          watermark: 2,
+          turn_clocks: {},
+          turn_loads: {},
+        },
+        progress: { steps: [], revision: 0 },
+        turn_clock: { session_id: session.id, active_ms: 0, work_ms: 0, running: false },
+        findings: { findings: [], revision: 0 },
+        queue: { queue_items: [], hold: false, sending: false, revision: 0 },
+        coordinator: {},
+        background_outputs: [],
+        previews: [],
+        workers: [],
+        checkpoints: [],
+      })),
+      getActiveWorkflowRun: vi.fn(async () => {
+        throw new Error("reconcile failed");
+      }),
+      listSessionWorkflowRuns: vi.fn(async () => ({ runs: [] })),
+      listWorkflows: vi.fn(async () => []),
+      listBlueprints: vi.fn(async () => []),
+    });
+
+    await expect(
+      resumeChatSession(appStore, client, "sess-a", emptyProjects, undefined, {
+        projectId: "proj-1",
+      }),
+    ).rejects.toThrow("reconcile failed");
+
+    const retained = getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" });
+    expect(retained?.session.title).toBe("Cached title");
+    expect(retained?.messages.map((m) => m.id)).toEqual(["m1"]);
+  });
+
 });

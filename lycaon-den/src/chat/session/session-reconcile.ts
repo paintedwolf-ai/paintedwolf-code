@@ -8,7 +8,10 @@ import { isScanNotFoundError, isSessionNotFoundError } from "./session-not-found
 import type { SessionScope } from "./session-scope.ts";
 import { completeChatHydrationAndReplay } from "../transcript/projection/message-events.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
-import { applySessionBootstrapChrome } from "./session-chrome.ts";
+import {
+  applySessionBootstrapAuxiliaryChrome,
+  installSessionBootstrapChrome,
+} from "./session-chrome.ts";
 import { resumeProjectEventsAfter } from "../../platform/connection/app-connection.ts";
 
 export type RecentsReconcileResult = {
@@ -154,8 +157,7 @@ export async function reconcileActiveScope(
     const bootstrap = await client.getSessionBootstrap(sessionId, { signal: opts?.signal });
     const { transcript } = bootstrap;
     if (!shouldApply()) return;
-    applySessionBootstrapChrome(appStore, bootstrap);
-    epoch = appStore.state.sessionViewEpoch;
+    epoch = installSessionBootstrapChrome(appStore, bootstrap);
     if (opts?.resumeEvents !== false) {
       resumeProjectEventsAfter(bootstrap.event_cursor);
     }
@@ -169,6 +171,7 @@ export async function reconcileActiveScope(
       projects,
     );
     if (!shouldApply()) return;
+    applySessionBootstrapAuxiliaryChrome(appStore, bootstrap);
     if (resumeVisible && hydrationLockAllows(appStore, sessionId)) {
       completeChatHydrationAndReplay(appStore);
     }

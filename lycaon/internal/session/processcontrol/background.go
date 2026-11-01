@@ -67,7 +67,8 @@ func (m *Service) GetBackgroundProcessOutput(ctx context.Context, sessionID, han
 // Cut only after screening: a preview cannot expose a fragment of a secret.
 func capBackgroundOutput(output *api.BackgroundProcessOutput, budget int) {
 	remaining := budget
-	chunks := append([]api.BackgroundProcessChunk(nil), output.Chunks...)
+	chunks := make([]api.BackgroundProcessChunk, len(output.Chunks))
+	copy(chunks, output.Chunks)
 	first := len(chunks)
 	for first > 0 && remaining > 0 {
 		first--
