@@ -4,15 +4,15 @@
   "kind": "runtime_service",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the measured 455-line, 21-method runtime. Preparation admission, foreground preemption, model leases and repair fence the same resident process and cannot independently settle its lifetime. Admission and preparation have focused files; IPC, device permits and reap cleanup remain on the process. The 89-result Linux adapter suite covers resource bounds, cancellation, repair and generation after preparation without a model reload. Further growth requires renewed review.",
-  "reviewed_commit": "6e4953482a290440ca0c12f820a9d714bba1b61a",
-  "reviewed_shape": "17b667cb3f0cfbde3a35b575f7feb381d7bc8fc7204ec5212024c183821c3c10",
-  "ceiling": 455,
+  "reason": "Retain the measured 458-line, 21-method runtime. Preparation admission, foreground preemption, model leases and repair fence one resident process. Bounded preparation stops at the standing checkpoint and yields through the shared scheduler. IPC, device permits and reap cleanup remain on the process. The 91-result Mac adapter suite covers memory bounds, cancellation, repair, standing fallback for oversized history and generation after preparation without reload. Retain these lifecycle boundaries within the measured ceiling.",
+  "reviewed_commit": "2b2ec52bb63f8b0a6d17c3a1b1ac1b49bcb9bc8f",
+  "reviewed_shape": "4491beb879317fa1be7d8cc3465a514e83da23436cf9366f67a4f7d29c6f81d5",
+  "ceiling": 458,
   "boundaries": {
-    "lycaon/internal/llm/providers/nativegen/context_test.go": "1bf2b0825798c9490f15b63374c90e7522a7324eff1982b48573915511bb3fb7",
-    "lycaon/internal/llm/providers/nativegen/repair_test.go": "94b8d19c19f1c821eb2cb0d57551247d046c49a9a82a15d37f0b7360808ba466",
-    "lycaon/internal/llm/providers/nativegen/process_cancel_test.go": "ae1a355640e7717c524793eec973043e04208cfc1d6f9aa69f29c1c349c9be2d",
+    "lycaon/internal/llm/providers/nativegen/context_test.go": "591864c0aa8faf0602fccb6b064b2481c25644747b9cb96896ebcfb525d441db",
+    "lycaon/internal/llm/providers/nativegen/repair_test.go": "3c7d86fa86c3c0ae5213ed18ada7aa0d9158ebff9431ac9a47e5141f2017be33",
+    "lycaon/internal/llm/providers/nativegen/process_cancel_test.go": "b30d5f01bdc202aa053d1d6258025db6f6af41d047157b882527fc5a6eb0b3c2",
     "lycaon/internal/llm/providers/nativegen/admission_test.go": "46a8471bd6ff1013b2958d82047697431ee06473ff13c3365fa98b600210011f",
-    "lycaon/internal/llm/providers/nativegen/preparation_test.go": "6527ada2295250ef86d66a10e4e9565afaf9436eaeb7997be63ad6d443ebfaae"
+    "lycaon/internal/llm/providers/nativegen/preparation_test.go": "3927d45fd862403f557164ab567bf0d2709b033a19d27b8c8398688507a6f4a9"
   }
 }
