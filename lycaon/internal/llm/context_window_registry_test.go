@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -77,6 +78,14 @@ func TestContextMetadataUsesObservedFactsWithoutProbingOrCrossingAdapterIdentity
 		publish(adapter, modelinfo.Entry{ID: "model"})
 		if window := registry.ContextLength("runtime", "model"); window != 0 || requests.Load() != 0 {
 			t.Fatalf("metadata lookup started work or invented a window: window=%d requests=%d", window, requests.Load())
+		}
+		if window := adapter.ContextLength("runtime", "model"); window != 0 || requests.Load() != 0 {
+			t.Fatal("direct adapter metadata performed HTTP discovery")
+		}
+		canceled, cancel := context.WithCancel(t.Context())
+		cancel()
+		if window := adapter.ContextLimit(canceled, "model"); window != 0 {
+			t.Fatal("canceled discovery invented a serving window")
 		}
 		if window := adapter.ContextLimit(t.Context(), "model"); window != 8192 {
 			t.Fatalf("request preparation did not discover the serving window: %d", window)

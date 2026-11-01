@@ -167,6 +167,9 @@ func (p *Provider) ContextLimit(ctx context.Context, model string) int {
 		return fact.ContextLength
 	}
 	window, source := p.fetchServingContext(ctx, model)
+	if ctx.Err() != nil {
+		return 0
+	}
 	if p.contextState == nil {
 		p.contextState = newServingContextState()
 	}
@@ -189,7 +192,10 @@ func (p *Provider) ContextLimit(ctx context.Context, model string) int {
 
 // ContextLength implements llm.ContextLengthLookup for direct provider queries.
 func (p *Provider) ContextLength(_, model string) int {
-	return p.ContextLimit(context.Background(), model)
+	if entry, ok := p.ModelEntry(model); ok {
+		return entry.ContextLength
+	}
+	return 0
 }
 
 // IsLocalProvider reports whether this provider is configured for local inference.
