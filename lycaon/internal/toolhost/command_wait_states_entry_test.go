@@ -263,33 +263,37 @@ func TestCommandEntryTimedReadValidatesAndPollsWithoutConsuming(t *testing.T) {
 }
 func TestCommandEntryPollingLoopRunsProbesBetweenFullSleeps(t *testing.T) {
 	f := newWaitStateFixture(t)
+	started := f.clock.Now()
 	done := f.start(t, `{ sleep 12; touch ready; } & until test -f ready; do sleep 5; done; echo done`)
-	for range 2 {
+	waitUntil := func(until time.Time) {
 		for {
-			state := <-f.states
-			if state.Until.Equal(f.clock.Now().Add(5 * time.Second)) {
-				break
+			select {
+			case state := <-f.states:
+				if state.Until.Equal(until) {
+					return
+				}
+			case result := <-done:
+				t.Fatalf("program ended before wait %s: %s", until, result)
 			}
 		}
+	}
+	for step := 1; step <= 2; step++ {
+		waitUntil(started.Add(time.Duration(step) * 5 * time.Second))
 		f.clock.Advance(5 * time.Second)
 	}
-	pending := <-f.parked
-	<-done
+	waitUntil(started.Add(12 * time.Second))
 	f.clock.Advance(2 * time.Second)
-	for {
-		state := <-f.states
-		if state.Until.Equal(f.clock.Now().Add(3 * time.Second)) {
-			break
-		}
-	}
+	waitUntil(started.Add(15 * time.Second))
 	select {
-	case result := <-pending.settled:
+	case result := <-done:
 		t.Fatalf("readiness woke sleep early: %s", result)
+	case parked := <-f.parked:
+		t.Fatalf("short polling interval parked: %+v", parked.request)
 	default:
 	}
 	f.clock.Advance(3 * time.Second)
-	outcome := decodeWaitOutcome(t, <-pending.settled)
-	if outcome.Status != 0 || outcome.Stdout != "done\n" {
+	outcome := decodeWaitOutcome(t, <-done)
+	if outcome.State != "completed" || outcome.Status != 0 || outcome.Stdout != "done\n" {
 		t.Fatalf("readiness loop %+v", outcome)
 	}
 }
