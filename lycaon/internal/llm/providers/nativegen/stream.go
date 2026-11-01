@@ -109,7 +109,7 @@ func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json
 		child.close()
 		return nil, errors.New("native generation: invalid prefix acknowledgement")
 	}
-	return &progressCursor{requestID: request.RequestID, prompt: len(rendered.PromptTokens), processed: begun.ReusedPrefixTokens, reused: begun.ReusedPrefixTokens, maximum: maximum, chunk: p.config.PrefillChunk}, nil
+	return &progressCursor{requestID: request.RequestID, prompt: len(rendered.PromptTokens), processed: begun.ReusedPrefixTokens, reused: begun.ReusedPrefixTokens, maximum: maximum, chunk: p.config.PrefillChunk, schema: len(schema) > 0}, nil
 }
 
 func (p *Runtime) finishRequest(cursor *progressCursor) {
