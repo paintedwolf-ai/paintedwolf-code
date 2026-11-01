@@ -94,7 +94,7 @@ func FormatOpenAIProviderError(err error) error {
 			Param:   param,
 			Type:    apiErr.Type,
 		}
-		var cause error = err
+		cause := err
 		if src, ok := parsed.IsContextOverflow(); ok {
 			cause = &failure.ProviderContextTooSmallError{
 				PromptTokens: parsed.PromptTokens,
@@ -116,7 +116,7 @@ func FormatOpenAIProviderError(err error) error {
 	var reqErr *openai.RequestError
 	if errors.As(err, &reqErr) {
 		if parsed, ok := ParseOpenAICompatError(reqErr.Body); ok {
-			var cause error = err
+			cause := err
 			if src, overflow := parsed.IsContextOverflow(); overflow {
 				cause = &failure.ProviderContextTooSmallError{
 					PromptTokens: parsed.PromptTokens,

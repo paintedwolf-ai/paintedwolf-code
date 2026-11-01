@@ -311,40 +311,16 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	// One id joins usage and completion records.
 	req.Debug.CallID = llmCallID
 	callProvider, callModel := l.resolveUsageMeta(sess, &modelcall.Completion{}) //nolint:contextcheck // pure registry lookup
-	if ledger, ok := l.Deps.Cost.(cost.CallLedger); ok {
-		if beginErr := ledger.BeginCall(ctx, cost.UsageEvent{
-			ID: llmCallID, SessionID: sess.ID, ParentSessionID: strings.TrimSpace(sess.ParentSessionID),
-			ProjectID: sess.ProjectID, ProviderID: callProvider, Model: callModel,
-			Caller: promptLoopUsageCaller(sess), StartedAt: time.Now().UTC(),
-		}); beginErr != nil {
-			slog.WarnContext(ctx, "open llm call receipt", "call_id", llmCallID, "error", beginErr)
-		} else {
-			defer func() {
-				if unknownErr := ledger.MarkCallUnknown(context.WithoutCancel(ctx), llmCallID); unknownErr != nil {
-					slog.WarnContext(context.WithoutCancel(ctx), "mark interrupted llm call unknown", "call_id", llmCallID, "error", unknownErr)
-				}
-			}()
-		}
-	}
+	defer beginTurnCallLedger(ctx, l.Deps.Cost, sess, llmCallID, callProvider, callModel)()
 	proseFinish := st.proseTurn(sess, iterIndex, maxIter)
 	progressIterIndex := currentModelIteration(st, iterIndex) - 1
-	ctx = llm.WithDispatchObserver(ctx, func() {
-		finishPreparing()
-		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
-			return
-		}
-		loop := coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish)
-		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-			CallID:          llmCallID,
-			Provider:        callProvider,
-			Model:           callModel,
-			Status:          api.LLMCallStatusActive,
-			CoordinatorLoop: loop,
-		})
-	})
+	loopProgress := func() *api.CoordinatorLoopProgress {
+		return coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish)
+	}
+	ctx = attachStreamObservers(ctx, l, sess, sessionID, llmCallID, callProvider, callModel, isCoordinatorTurn, finishPreparing, loopProgress)
 	callFailed := func() {
 		if isCoordinatorTurn {
-			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish))
+			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, loopProgress())
 		}
 	}
 	suppressCallFailed := false
@@ -354,25 +330,6 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 			callFailed()
 		}
 	}()
-
-	// Retry updates reuse the call id.
-	ctx = providerretry.WithRetryObserver(ctx, func(a providerretry.RetryAttempt) {
-		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
-			return
-		}
-		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-			CallID:          llmCallID,
-			Provider:        callProvider,
-			Model:           callModel,
-			Status:          api.LLMCallStatusActive,
-			Attempt:         a.Attempt,
-			MaxAttempts:     a.MaxAttempts,
-			RetryWaitMs:     a.Wait.Milliseconds(),
-			RetryReason:     api.LLMRetryReason(a.Reason),
-			SilenceMs:       a.Silence.Milliseconds(),
-			CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish),
-		})
-	})
 
 	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
 	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx))
@@ -483,6 +440,67 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	completion.ProviderID = providerID
 	completion.Model = model
 	return completion, tokens, nil
+}
+
+func beginTurnCallLedger(ctx context.Context, costDep any, sess *api.Session, llmCallID, callProvider, callModel string) func() {
+	ledger, ok := costDep.(cost.CallLedger)
+	if !ok {
+		return func() {}
+	}
+	if beginErr := ledger.BeginCall(ctx, cost.UsageEvent{
+		ID: llmCallID, SessionID: sess.ID, ParentSessionID: strings.TrimSpace(sess.ParentSessionID),
+		ProjectID: sess.ProjectID, ProviderID: callProvider, Model: callModel,
+		Caller: promptLoopUsageCaller(sess), StartedAt: time.Now().UTC(),
+	}); beginErr != nil {
+		slog.WarnContext(ctx, "open llm call receipt", "call_id", llmCallID, "error", beginErr)
+		return func() {}
+	}
+	return func() {
+		if unknownErr := ledger.MarkCallUnknown(context.WithoutCancel(ctx), llmCallID); unknownErr != nil {
+			slog.WarnContext(context.WithoutCancel(ctx), "mark interrupted llm call unknown", "call_id", llmCallID, "error", unknownErr)
+		}
+	}
+}
+
+func attachStreamObservers(
+	ctx context.Context,
+	l *modelTurn,
+	sess *api.Session,
+	sessionID, llmCallID, callProvider, callModel string,
+	isCoordinatorTurn bool,
+	finishPreparing func(),
+	loopProgress func() *api.CoordinatorLoopProgress,
+) context.Context {
+	ctx = llm.WithDispatchObserver(ctx, func() {
+		finishPreparing()
+		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
+			return
+		}
+		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+			CallID:          llmCallID,
+			Provider:        callProvider,
+			Model:           callModel,
+			Status:          api.LLMCallStatusActive,
+			CoordinatorLoop: loopProgress(),
+		})
+	})
+	return providerretry.WithRetryObserver(ctx, func(a providerretry.RetryAttempt) {
+		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
+			return
+		}
+		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+			CallID:          llmCallID,
+			Provider:        callProvider,
+			Model:           callModel,
+			Status:          api.LLMCallStatusActive,
+			Attempt:         a.Attempt,
+			MaxAttempts:     a.MaxAttempts,
+			RetryWaitMs:     a.Wait.Milliseconds(),
+			RetryReason:     api.LLMRetryReason(a.Reason),
+			SilenceMs:       a.Silence.Milliseconds(),
+			CoordinatorLoop: loopProgress(),
+		})
+	})
 }
 
 type promptStreamCollection struct {
