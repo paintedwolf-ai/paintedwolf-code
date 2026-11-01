@@ -1,7 +1,10 @@
 package oarcopy
 
 func publishParserFacts(out map[string]any) {
-	kind, _ := out["paintedwolf.parser_kind"].(string)
+	kind, present := out["paintedwolf.parser_kind"].(string)
+	if !present {
+		return
+	}
 	for name, value := range map[string]string{
 		"parser_unclosed_quote": "unclosed_quote", "parser_unclosed_heredoc": "unclosed_heredoc",
 		"parser_expected_closer": "expected_closer", "parser_expected_following": "expected_following",

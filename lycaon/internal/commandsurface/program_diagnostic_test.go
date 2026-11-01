@@ -55,7 +55,7 @@ func TestParserDiagnosticsDescribeStateAcrossSourceUnits(t *testing.T) {
 
 func TestParserContextPreservesBoundedOriginalBytes(t *testing.T) {
 	for _, prefix := range []string{"", "# prior line\n", strings.Repeat("é", 200)} {
-		source := prefix + "\nprintf '%s' 'open"
+		source := prefix + "printf '%s' 'open"
 		_, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
 		var d *commandsurface.SyntaxDiagnostic
 		if !errors.As(err, &d) || d.Parser == nil {
