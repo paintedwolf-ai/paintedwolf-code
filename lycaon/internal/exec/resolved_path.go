@@ -82,11 +82,11 @@ func LookPathAt(name, pathValue, cwd string) (string, error) {
 			}
 		}
 		candidate := dir + string(filepath.Separator) + name
-		if _, err := osexec.LookPath(candidate); err == nil {
-			if nativeDir == "" {
-				return name, nil
+		if found, err := lookExecutable(candidate); err == nil {
+			if !filepath.IsAbs(nativeDir) {
+				return strings.TrimPrefix(found, cwd+string(filepath.Separator)), nil
 			}
-			return nativeDir + string(filepath.Separator) + name, nil
+			return found, nil
 		}
 	}
 	return "", ErrNotInPath
