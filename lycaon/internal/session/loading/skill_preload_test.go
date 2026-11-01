@@ -83,9 +83,9 @@ func TestSelectSkillPreloadGatesStockSkillsByTurnOfferedTools(t *testing.T) {
 			OptionalTools: []string{"capture_page"},
 		},
 		{
-			Name:        "user-skill",
-			Description: "Custom project skill.",
-			Body:        "Use `measure_page` to inspect the page.",
+			Name:         "user-skill",
+			Description:  "Custom project skill.",
+			Body:         "Use `measure_page` to inspect the page.",
 			UserProvided: true,
 		},
 	}

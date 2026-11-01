@@ -37,7 +37,7 @@ func (h *countedOwnerTransactions) BeginReadTx(ctx context.Context) (*sql.Tx, er
 func TestReviewedOwnerStartCommitsOneAtomicBoundary(t *testing.T) {
 	for _, progress := range []bool{false, true} {
 		for _, size := range []int{16, 17 << 10} {
-			for _, outcome := range []string{"commit", "owner-refused", "input-refused", "wrong-model-call", "parent-revoked", "cancelled"} {
+			for _, outcome := range []string{"commit", "owner-refused", "input-refused", "wrong-model-call", "parent-revoked", "returned-parent", "uninvoked-return", "settled-program", "cancelled"} {
 				t.Run(fmt.Sprintf("progress=%t/bytes=%d/%s", progress, size, outcome), func(t *testing.T) {
 					f := newProgramReceiptFixture(t)
 					bound := f.child(t)
@@ -69,6 +69,14 @@ func TestReviewedOwnerStartCommitsOneAtomicBoundary(t *testing.T) {
 						_, err = f.database.ExecContext(t.Context(), `UPDATE invocation_receipts SET status='interrupted' WHERE id=?`, f.parent)
 						testutil.FailErr(t, "revoke running model receipt", err)
 					}
+					if outcome == "returned-parent" || outcome == "uninvoked-return" {
+						_, err = f.database.ExecContext(t.Context(), `UPDATE invocation_receipts SET status='completed',invoked=? WHERE id=?`, outcome == "returned-parent", f.parent)
+						testutil.FailErr(t, "return model call while program lives", err)
+					}
+					if outcome == "settled-program" {
+						_, err = f.database.ExecContext(t.Context(), `UPDATE invocation_programs SET state='completed' WHERE id=?`, f.program)
+						testutil.FailErr(t, "close program admission", err)
+					}
 					call := "actual-model-call"
 					if outcome == "wrong-model-call" {
 						call = "foreign-model-call"
@@ -91,7 +99,7 @@ func TestReviewedOwnerStartCommitsOneAtomicBoundary(t *testing.T) {
 					if counted.starts-before != 1 {
 						t.Fatalf("owner boundary opened %d transactions, want one", counted.starts-before)
 					}
-					if (err == nil) != (outcome == "commit") {
+					if (err == nil) != (outcome == "commit" || outcome == "returned-parent") {
 						t.Fatalf("start outcome=%s error=%v", outcome, err)
 					}
 					var bodyCount int
@@ -108,7 +116,7 @@ func TestReviewedOwnerStartCommitsOneAtomicBoundary(t *testing.T) {
 					} else {
 						testutil.FailErr(t, "read native start", f.database.QueryRowContext(t.Context(), `SELECT state,owner_started,reviewed_arguments_ref,reviewed_arguments_digest FROM invocation_program_executions WHERE id=?`, execution).Scan(&state, &started, &reference, &digest))
 					}
-					if outcome == "commit" {
+					if outcome == "commit" || outcome == "returned-parent" {
 						if !started || state != "running" || bodyCount != 1 || reference == "" || digest != review.ArgumentsDigest() {
 							t.Fatalf("incomplete durable boundary: started=%t state=%s inputs=%d ref=%q", started, state, bodyCount, reference)
 						}
@@ -141,5 +149,22 @@ func TestReviewedOwnerStartCommitsOneAtomicBoundary(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestReturnedModelCallCannotStartAnotherProgram(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	_, err := f.database.ExecContext(t.Context(), `UPDATE invocation_receipts SET status='completed',invoked=1 WHERE id=?`, f.parent)
+	testutil.FailErr(t, "return model call", err)
+	start := f.sourceStart
+	start.Version.ProgramID = uuid.NewString()
+	start.Version.RootExecutionID = uuid.NewString()
+	if err := f.recorder.BeginProgram(t.Context(), start); err == nil {
+		t.Fatal("returned model call admitted a new program")
+	}
+	var count int
+	testutil.FailErr(t, "count retained programs", f.database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_programs WHERE parent_receipt_id=?`, f.parent).Scan(&count))
+	if count != 1 {
+		t.Fatalf("program count=%d, want original program only", count)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -76,7 +77,7 @@ type Boundary struct {
 	CredentialStore bool
 	HostExecution   bool
 	Applied         bool
-	Network        NetworkMode
+	Network         NetworkMode
 	// EgressOff is why Network is NetworkDeny. Meaningless for any other mode.
 	EgressOff EgressOffCause
 	// SocksProxyEnv records mediated non-HTTP routing.
@@ -111,7 +112,7 @@ func BoundaryOf(c *Confinement) Boundary {
 		ProcessControl:  c.ProcessControl,
 		CredentialStore: c.CredentialStore,
 		Filesystem:      filesystem,
-		Applied:        true, Network: c.Network, EgressOff: c.EgressOff,
+		Applied:         true, Network: c.Network, EgressOff: c.EgressOff,
 		SocksProxyEnv:   c.SocksProxyEnv && c.Network == NetworkProxyOnly && c.SocksProxyAddr != "",
 		WriteRoots:      writeRoots,
 		LocalListen:     c.Network == NetworkDirectIP || c.Browser || c.LocalListen,
@@ -145,6 +146,8 @@ type Confinement struct {
 	EgressOff EgressOffCause
 	// SocketGrants are exact AF_UNIX connect literals validated at the choke point.
 	SocketGrants []SocketGrant
+	// socketEndpoints are compiled from retained action authority, never input.
+	socketEndpoints map[string]string
 	// DroppedSocketGrants records rejected socket grants.
 	DroppedSocketGrants []SocketGrantDrop
 	// ProtectedWriteGrants are approved protected-path write transactions.
@@ -299,7 +302,19 @@ func validateProfileInputs(c Confinement) (Confinement, error) {
 }
 
 func renderSeatbeltProfile(c Confinement) (string, error) {
-	if err := validateSocketRealization(c.SocketGrants, socketref.KernelPathname); err != nil {
+	if runtime.GOOS == "darwin" {
+		if err := validateSocketRealization(c.SocketGrants, socketref.RetainedObject); err != nil {
+			return "", err
+		}
+		if err := c.SocketError(); err != nil {
+			return "", err
+		}
+		for _, grant := range c.SocketGrants {
+			if c.socketEndpoints[socketEndpointKey(grant.Binding, "unix")] == "" || c.socketEndpoints[socketEndpointKey(grant.Binding, "unixgram")] == "" {
+				return "", &SocketResolveError{Code: SocketResolveChanged, Path: grant.ApprovedPath, Err: socketref.ErrUnbound}
+			}
+		}
+	} else if err := validateSocketRealization(c.SocketGrants, socketref.KernelPathname); err != nil {
 		return "", err
 	}
 	var b strings.Builder

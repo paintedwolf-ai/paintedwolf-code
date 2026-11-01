@@ -118,12 +118,12 @@ func TestLinuxCredentialReadMediationWorksThroughTheAppliedSandbox(t *testing.T)
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+path)
 	environment := append(os.Environ(), credentialProbeEnv+"=1")
 	base := denyConfinement(t.TempDir())
-	status, output := linuxConfinedRun(t, self, base, environment, self, credentialProbeFlag)
+	status, _ := linuxConfinedRun(t, self, base, environment, self, credentialProbeFlag)
 	if status.ExitStatus() == 0 {
 		t.Fatal("ordinary confinement reached a host credential service")
 	}
 	base.CredentialStore = true
-	status, output = linuxConfinedRun(t, self, base, environment, self, credentialProbeFlag)
+	status, output := linuxConfinedRun(t, self, base, environment, self, credentialProbeFlag)
 	if status.ExitStatus() != 0 || !strings.Contains(output, "credential read confined; mutations and bus administration denied") || service.mutations.Load() != 0 {
 		t.Fatalf("credential mediation failed: exit=%d mutations=%d output=%s", status.ExitStatus(), service.mutations.Load(), output)
 	}

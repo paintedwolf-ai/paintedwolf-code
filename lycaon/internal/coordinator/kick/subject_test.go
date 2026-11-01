@@ -97,4 +97,3 @@ func TestProcessFinishedKicksQueuePerHandleAndSurviveClearPendingOnTurnAbort(t *
 		t.Fatalf("rendered after ClearPending = %v, want %v", rendered, want)
 	}
 }
-

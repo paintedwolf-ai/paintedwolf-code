@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/curationctx"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -11,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 )
 
 // Trust installed by an approval is withdrawn only by that approval's

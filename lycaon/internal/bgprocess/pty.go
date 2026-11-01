@@ -104,7 +104,6 @@ func (r *Terminal) startPTY(
 	}
 
 	handle := uuid.NewString()
-	// The terminal keeps request values without request cancellation.
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	size := winsize
@@ -184,21 +183,10 @@ func (r *Terminal) startPTY(
 	r.jobs.mu.Unlock()
 
 	stage := req.Stages[0]
-	inlineEnv := req.InlineEnv
-	if len(stage.Env) > 0 {
-		merged := make(map[string]string, len(inlineEnv)+len(stage.Env))
-		for k, v := range inlineEnv {
-			merged[k] = v
-		}
-		for k, v := range stage.Env {
-			merged[k] = v
-		}
-		inlineEnv = merged
-	}
 	session, err := lycexec.StartPTY(runCtx, stage.Name, stage.Args, lycexec.PTYOpts{
 		Dir:            projectDir,
 		NoTimeout:      true,
-		InlineEnv:      inlineEnv,
+		InlineEnv:      lycexec.MergeInlineEnv(req.InlineEnv, stage.Env),
 		PathExtra:      req.PathExtra,
 		Launch:         req.Launch,
 		WinSize:        size,
@@ -210,11 +198,7 @@ func (r *Terminal) startPTY(
 	}
 	r.jobs.mu.Lock()
 	proc.pty = session
-	if reason, admitted := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, projectDir); !admitted && !proc.stopped {
-		proc.stopped = true
-		proc.reason = reason
-	}
-	stopped := proc.stopped
+	stopped := r.jobs.revalidateStartedProcessLocked(proc, projectDir)
 	startEvent, publish := r.jobs.indexProjectProcessLocked(proc)
 	r.jobs.mu.Unlock()
 	if stopped {

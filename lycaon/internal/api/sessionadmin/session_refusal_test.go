@@ -184,6 +184,9 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 		if rec.Code != tc.wantStatus {
 			t.Fatalf("target=%s status=%d want=%d", tc.target, rec.Code, tc.wantStatus)
 		}
+		if tc.wantStatus == http.StatusNotFound {
+			assertSessionRefusal(t, rec, wire.ApiErrorCodeCommandProgramNotFound)
+		}
 	}
 	workers, checkpoints, err := bootstrap.sessionBootstrapWorkersAndCheckpoints(t.Context(), "project", "session")
 	if err != nil || workers == nil || checkpoints == nil || len(workers) != 0 || len(checkpoints) != 0 {

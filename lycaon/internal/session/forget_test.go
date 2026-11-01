@@ -1,7 +1,6 @@
 package session
 
 import (
-
 	"context"
 	"fmt"
 	"os"
@@ -392,7 +391,6 @@ agent_pool:
 		t.Fatalf("cycles = %d want derived 64", got.MaxCoordinatorLoopCycles)
 	}
 }
-
 
 func TestHTTPRequestLoopbackOtherSessionCardAdvisesReportingToUser(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)

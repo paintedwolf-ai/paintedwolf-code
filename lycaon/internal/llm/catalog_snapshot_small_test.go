@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
@@ -15,7 +16,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 )
 
 func TestMergeBedrockInferenceProfilesExposesOnlyCallableProfileIDs(t *testing.T) {
