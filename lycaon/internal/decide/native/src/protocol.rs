@@ -204,9 +204,7 @@ fn decide_questions(
 }
 
 /// Serve requests from `input` to `output` until the input closes.
-///
-/// Every fault is reported on the wire under the request's id; only an unwritable output ends
-/// the loop early.
+/// Device failures end the process before another request can use its memory grant.
 pub fn serve(engine: &Engine, input: impl BufRead, mut output: impl Write) -> std::io::Result<()> {
     for line in input.lines() {
         let line = line?;
@@ -215,11 +213,17 @@ pub fn serve(engine: &Engine, input: impl BufRead, mut output: impl Write) -> st
             continue;
         }
         let resp = match serde_json::from_str::<Request>(line) {
-            Ok(req) => handle(engine, &req).unwrap_or_else(|e| Response {
-                id: req.id,
-                error: Some(e.to_string()),
-                ..Default::default()
-            }),
+            Ok(req) => match handle(engine, &req) {
+                Ok(response) => response,
+                Err(error @ (Error::Device(_) | Error::Mlx(_))) => {
+                    return Err(std::io::Error::other(error.to_string()));
+                }
+                Err(error) => Response {
+                    id: req.id,
+                    error: Some(error.to_string()),
+                    ..Default::default()
+                },
+            },
             Err(e) => Response {
                 id: 0,
                 error: Some(format!("unreadable request: {e}")),

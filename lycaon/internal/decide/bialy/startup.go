@@ -16,6 +16,7 @@ type Resources struct {
 	UnifiedMemory  bool
 	HostBytes      uint64
 	DeviceBytes    uint64
+	WorkspaceBytes uint64
 	MaxRows        int
 }
 
@@ -29,6 +30,9 @@ type startupGrant struct {
 func (r *Resources) acquire(ctx context.Context) (*startupGrant, error) {
 	if r == nil {
 		return nil, nil
+	}
+	if r.WorkspaceBytes > 0 && (r.PhysicalDevice.Kind != "apple_silicon" || r.WorkspaceBytes >= r.DeviceBytes) {
+		return nil, errors.New("decide: invalid shared workspace grant")
 	}
 	if r.MaxRows < 1 || r.MaxRows > 32 {
 		return nil, errors.New("decide: batch rows must be between 1 and 32")

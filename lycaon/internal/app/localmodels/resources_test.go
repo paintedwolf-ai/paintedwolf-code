@@ -92,3 +92,43 @@ func TestResourcePlanRejectsMissingCapacity(t *testing.T) {
 		})
 	}
 }
+
+func TestMLXWorkspaceRemainsReservedAcrossBothRuntimeLifetimes(t *testing.T) {
+	facts := inference.DeviceFacts{PhysicalDevice: inference.PhysicalDevice{Kind: "apple_silicon"}, TotalBytes: 8 << 30, RecommendedBytes: 6 << 30, UnifiedMemory: true}
+	plan := bialy.MemoryPlan{HostBytes: 384 << 20, DeviceBytes: 2 << 30, WorkspaceBytes: 1 << 30, MaxRows: 2}
+	resources, err := localmodels.AllocateResources(8<<30, facts, plan)
+	testutil.FailErr(t, "allocate shared workspace", err)
+	defer resources.Close()
+	if resources.SharedWorkspaceBytes != plan.WorkspaceBytes || resources.Decision.WorkspaceBytes != plan.WorkspaceBytes {
+		t.Fatal("workspace grant lost at composition")
+	}
+	if resources.GenerationHost.Snapshot().CapacityBytes != (6<<30)-plan.HostBytes-plan.DeviceBytes {
+		t.Fatal("workspace was not retained in the decision partition")
+	}
+	facts.PhysicalDevice = inference.PhysicalDevice{Kind: "pci", Address: "0000:03:00.0"}
+	if _, err := localmodels.AllocateResources(8<<30, facts, plan); err == nil {
+		t.Fatal("unqualified adapter shared transient workspace")
+	}
+}
+
+func TestEightGiBMacAdmitsSixHeadsAndSixteenKGenerationContext(t *testing.T) {
+	facts := inference.DeviceFacts{PhysicalDevice: inference.PhysicalDevice{Kind: "apple_silicon"}, TotalBytes: 8 << 30, RecommendedBytes: (16 << 30) / 3, UnifiedMemory: true}
+	decision := bialy.MemoryPlan{HostBytes: 384 << 20, DeviceBytes: 643835514 + 6*59881676 + (64 << 20) + (1 << 30), WorkspaceBytes: 1 << 30, MaxRows: 2}
+	resources, err := localmodels.AllocateResources(8<<30, facts, decision)
+	testutil.FailErr(t, "allocate minimum Mac", err)
+	defer resources.Close()
+	// Pinned prototype inspection at 16,384 context tokens and 128-token prefill chunks.
+	const generationPeak, generationWorkspace, generationHost = 3981213696, 671088640, 536870912
+	resident, err := inference.ReserveMemory(resources.GenerationHost, resources.GenerationDevice, generationHost, generationPeak-min(generationWorkspace, resources.SharedWorkspaceBytes), true)
+	testutil.FailErr(t, "admit prototype context", err)
+	defer func() {
+		for _, held := range resident {
+			held.Release()
+		}
+	}()
+	decisionResident, err := inference.ReserveMemory(resources.Decision.HostMemory, resources.Decision.DeviceMemory, decision.HostBytes, decision.DeviceBytes, true)
+	testutil.FailErr(t, "admit six decision heads", err)
+	for _, held := range decisionResident {
+		held.Release()
+	}
+}

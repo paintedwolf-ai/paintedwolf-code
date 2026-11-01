@@ -53,3 +53,26 @@ func TestWarmRefusesCapacityBelowMinimumContext(t *testing.T) {
 		t.Fatal("refused load retained resources")
 	}
 }
+
+func TestSharedWorkspaceChargesOnlyTheLargerTransientGrant(t *testing.T) {
+	for _, shared := range []uint64{0, 32 << 20, 64 << 20, 128 << 20} {
+		device, _ := inference.NewMemoryBudget(512 << 20)
+		host, _ := inference.NewMemoryBudget(1 << 30)
+		runtime := RuntimeConfig{HostMemory: host, DeviceMemory: device, UnifiedMemory: true, SharedWorkspaceBytes: shared}
+		plan := resourcePlan{HostReservationBytes: startupHostBytes, DeviceReservationBytes: 256 << 20, WorkspaceBytes: 64 << 20}
+		child := &rpcProcess{}
+		if err := reserveLoaded(child, &runtime, plan); err != nil {
+			t.Fatalf("reserve shared workspace: %v", err)
+		}
+		want := plan.DeviceReservationBytes - min(shared, plan.WorkspaceBytes)
+		if host.Snapshot().ReservedBytes != want || device.Snapshot().ReservedBytes != want {
+			t.Fatalf("shared=%d: host=%+v device=%+v", shared, host.Snapshot(), device.Snapshot())
+		}
+		for _, reservation := range child.reservations {
+			reservation.Release()
+		}
+		if host.Snapshot().ReservedBytes != 0 || device.Snapshot().ReservedBytes != 0 {
+			t.Fatal("generation reservation leaked")
+		}
+	}
+}

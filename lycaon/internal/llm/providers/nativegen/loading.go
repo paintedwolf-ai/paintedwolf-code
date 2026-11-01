@@ -86,7 +86,7 @@ func (p *Runtime) initialize(ctx context.Context, child *rpcProcess, artifact st
 	if err := child.call(ctx, command{Method: "hello"}, "hello", inference.Foreground, false, &hello); err != nil {
 		return loadedResult{}, err
 	}
-	if hello.Protocol != 1 || hello.ArtifactID != artifact || hello.Backend != runtime.Backend {
+	if (runtime.SharedWorkspaceBytes > 0 && !hello.QuiescentMemory) || hello.Protocol != 1 || hello.ArtifactID != artifact || hello.Backend != runtime.Backend {
 		return loadedResult{}, errors.New("native generation: runtime identity mismatch")
 	}
 	actual, err := runtime.Devices.Bind(hello.PhysicalDevice)
@@ -109,8 +109,10 @@ func (p *Runtime) initialize(ctx context.Context, child *rpcProcess, artifact st
 }
 
 func reserveLoaded(child *rpcProcess, runtime *RuntimeConfig, plan resourcePlan) error {
+	// The decision partition retains the physical workspace across both process lifetimes.
+	deviceBytes := plan.DeviceReservationBytes - min(plan.WorkspaceBytes, runtime.SharedWorkspaceBytes)
 	reservations, err := inference.ReserveMemory(runtime.HostMemory, runtime.DeviceMemory,
-		plan.HostReservationBytes-startupHostBytes, plan.DeviceReservationBytes, runtime.UnifiedMemory)
+		plan.HostReservationBytes-startupHostBytes, deviceBytes, runtime.UnifiedMemory)
 	if err != nil {
 		return err
 	}

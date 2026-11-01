@@ -15,17 +15,18 @@ import (
 
 // RuntimeConfig binds the packaged adapter to host-owned resource admission.
 type RuntimeConfig struct {
-	ContextLimit   int
-	PrefillChunk   int
-	BinaryPath     string
-	MetalLibrary   string
-	Backend        string
-	PhysicalDevice inference.PhysicalDevice
-	Devices        *inference.Devices
-	HostMemory     *inference.MemoryBudget
-	DeviceMemory   *inference.MemoryBudget
-	UnifiedMemory  bool
-	ModelStore     *modelstore.Store
+	ContextLimit         int
+	PrefillChunk         int
+	BinaryPath           string
+	MetalLibrary         string
+	Backend              string
+	PhysicalDevice       inference.PhysicalDevice
+	Devices              *inference.Devices
+	HostMemory           *inference.MemoryBudget
+	DeviceMemory         *inference.MemoryBudget
+	UnifiedMemory        bool
+	SharedWorkspaceBytes uint64
+	ModelStore           *modelstore.Store
 }
 
 type Options struct {
@@ -145,6 +146,9 @@ func (p *Runtime) validate() error {
 	}
 	if p.config.ContextLimit < 2 || p.config.ContextLimit > 65536 || p.config.PrefillChunk < 1 || p.config.PrefillChunk > 256 {
 		return errors.New("native generation: invalid execution limits")
+	}
+	if r.SharedWorkspaceBytes > 0 && r.Backend != "mlx" {
+		return errors.New("native generation: adapter cannot share transient workspace")
 	}
 	switch r.Backend {
 	case "mlx":
