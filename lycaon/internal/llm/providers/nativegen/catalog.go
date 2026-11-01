@@ -50,15 +50,6 @@ func (p *Provider) ModelEntry(model string) (modelinfo.Entry, bool) {
 	return entry, ok
 }
 
-func (p *Provider) RequestBudget(ctx context.Context, req modelcall.CompletionRequest) modelcall.RequestBudget {
-	budget := p.Catalog.RequestBudget(ctx, req)
-	entry, _ := p.ModelEntry(p.ResolveModel(req))
-	budget.Window = entry.ContextLength
-	budget.Output = outputLimit(req)
-	budget.MinimumOutput = 0
-	return budget
-}
-
 func outputLimit(req modelcall.CompletionRequest) int {
 	limit := modelcall.CompletionTokenLimit(req, MaxOutputReserveTokens, DefaultOutputReserveTokens, modelcall.ThinkOff, false)
 	if req.MaxTokens <= 0 {

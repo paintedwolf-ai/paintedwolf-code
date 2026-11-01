@@ -81,20 +81,14 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 
 func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json.RawMessage, maximum int) (*progressCursor, error) {
 	child := p.loaded.process
-	var rendered renderedResult
-	if err := child.call(ctx, command{Method: "render", Request: render, MaxPromptTokens: p.ContextWindow() - maximum}, "rendered", inference.Foreground, false, &rendered); err != nil {
+	measured, err := p.measure(ctx, render)
+	if err != nil {
 		return nil, err
 	}
-	if len(rendered.PromptTokens) == 0 || len(rendered.PromptTokens)+maximum > p.ContextWindow() || rendered.CheckpointTokens < 0 || rendered.CheckpointTokens > 4096 || rendered.CheckpointTokens >= len(rendered.PromptTokens) {
-		child.close()
-		return nil, errors.New("native generation: invalid rendered context")
+	if measured.InputTokens+maximum > p.ContextWindow() {
+		return nil, ErrContextCapacityExceeded
 	}
-	for _, token := range rendered.PromptTokens {
-		if token >= 262144 {
-			child.close()
-			return nil, errors.New("native generation: invalid rendered token")
-		}
-	}
+	rendered := measured.renderedResult
 	var entropy [8]byte
 	if _, err := rand.Read(entropy[:]); err != nil {
 		return nil, err

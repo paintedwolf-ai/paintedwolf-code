@@ -14,6 +14,7 @@ func runtimeFixture() {
 	}
 	var active beginRequest
 	generated := 0
+	measured := 0
 	for {
 		payload, err := readProtocolFrame(os.Stdin)
 		if err != nil {
@@ -42,6 +43,12 @@ func runtimeFixture() {
 			result = map[string]any{"kind": "resources", "plan": plan}
 		case "load":
 			result = map[string]any{"kind": "loaded", "context_tokens": request.Command.ContextTokens, "prefill_chunk": request.Command.PrefillChunk, "sampling": samplingDefaults{Temperature: 0, TopP: 1}}
+		case "measure":
+			measured++
+			if measured > 1 && os.Getenv("PW_NATIVEGEN_MEASURE_ONCE") == "1" {
+				return
+			}
+			result = map[string]any{"kind": "measured", "input_tokens": 3, "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
 		case "render":
 			result = map[string]any{"kind": "rendered", "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
 		case "begin":

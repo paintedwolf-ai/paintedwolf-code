@@ -60,6 +60,7 @@ type Runtime struct {
 	cancel     context.CancelFunc
 	gate       chan struct{}
 	loaded     *loadedProcess
+	prepared   *preparedPrompt
 	generation uint64
 	window     atomic.Int64
 }
@@ -130,6 +131,7 @@ func (p *Runtime) Close() error {
 }
 
 func (p *Runtime) unload() {
+	p.prepared = nil
 	if p.loaded != nil {
 		p.loaded.process.close()
 		p.loaded = nil
