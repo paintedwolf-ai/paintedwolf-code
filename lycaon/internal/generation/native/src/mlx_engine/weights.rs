@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use mlx_rs::{Array, ops};
+use mlx_rs::{ops, ops::indexing::IndexOp, Array};
 use serde_json::Value;
 
 use super::Result;
@@ -91,6 +91,25 @@ impl Linear {
         })
     }
 
+    pub fn forward_prefix(&self, x: &Array, rows: i32) -> Result<Array> {
+        if rows <= 0 || rows > self.weight.shape()[0] {
+            return Err("Linear output prefix exceeds its bounds".into());
+        }
+        let weight = self.weight.index((..rows, ..));
+        Ok(match &self.quantization {
+            Some((scales, biases, bits)) => ops::quantized_matmul(
+                x,
+                weight,
+                scales.index((..rows, ..)),
+                biases.index((..rows, ..)),
+                true,
+                64,
+                *bits,
+            )?,
+            None => x.matmul(weight.t())?,
+        })
+    }
+
     pub fn embedding(&self, ids: &Array) -> Result<Array> {
         let rows = self.weight.take_axis(ids, 0)?;
         Ok(match &self.quantization {
@@ -103,5 +122,24 @@ impl Linear {
             )?,
             None => rows,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_prefix_preserves_rows_and_rejects_invalid_ranges() {
+        let linear = Linear {
+            weight: Array::from_slice(&[1_f32, 2., 3., 4., 5., 6.], &[3, 2]),
+            quantization: None,
+        };
+        let input = Array::from_slice(&[2_f32, 3.], &[1, 2]);
+        let prefix = linear.forward_prefix(&input, 2).unwrap();
+        prefix.eval().unwrap();
+        assert_eq!(prefix.as_slice::<f32>(), &[8., 18.]);
+        assert!(linear.forward_prefix(&input, 0).is_err());
+        assert!(linear.forward_prefix(&input, 4).is_err());
     }
 }
