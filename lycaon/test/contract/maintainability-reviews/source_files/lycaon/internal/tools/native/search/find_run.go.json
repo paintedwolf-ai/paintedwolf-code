@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/search/find_run.go",
+  "kind": "algorithm",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain the 328-line find traversal and action loop. Short circuiting, pruning, depth and child batching must observe one traversal order. Common batch capacity calculation is separate from this loop; actual admission stays in the dispatcher. Find parity and composed large-tree contracts support this bound.",
+  "reviewed_commit": "abd7258eca3ad0cdf084a28196481237096744cd",
+  "ceiling": 328,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/find_test.go": "ec430d03c9d359db5e992b7dd0c7c9c39ceb5b323b5b95a957c85fbabbbf9040",
+    "lycaon/internal/toolhost/command_large_queries_stress_test.go": "0eed542d5ce89b4c542abf208b2835911302ff38e0d121f8cf912528928b5801"
+  }
+}
