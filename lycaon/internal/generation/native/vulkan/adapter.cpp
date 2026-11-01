@@ -10,6 +10,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 struct pw_generation {
     std::unique_ptr<llama_model, decltype(&llama_model_free)> model{nullptr, llama_model_free};
@@ -61,6 +62,26 @@ ggml_backend_dev_t device(const char * pci) {
              properties.type == GGML_BACKEND_DEVICE_TYPE_IGPU)) return candidate;
     }
     throw std::runtime_error("requested Vulkan PCI device is unavailable");
+}
+
+void warm(pw_generation * engine) {
+    const auto vocab = llama_model_get_vocab(engine->model.get());
+    const auto bos = llama_vocab_bos(vocab);
+    std::vector<uint32_t> tokens(std::min(engine->chunk, engine->limit),
+                                 bos == LLAMA_TOKEN_NULL ? 0 : static_cast<uint32_t>(bos));
+    std::vector<float> logits(262144);
+    char error[1024]{};
+    uint32_t sampled;
+    // Compile prefill, GPU sampling and host-logit paths before serving requests.
+    for (const int output : {0, 2, 1}) {
+        const auto count = output ? 1 : tokens.size();
+        if (pw_generation_forward(engine, tokens.data(), count, output, logits.data(), &sampled,
+                                  error, sizeof(error)) != 0 ||
+            pw_generation_cache(engine, 0, error, sizeof(error)) != 0)
+            throw std::runtime_error(error);
+    }
+    llama_sampler_reset(engine->sampler.get());
+    llama_perf_context_reset(engine->context.get());
 }
 }
 
@@ -123,6 +144,7 @@ extern "C" int pw_generation_load(const char * path, const char * pci, uint32_t 
         engine->limit = context;
         engine->chunk = chunk;
         engine->prefix_limit = prefix;
+        warm(engine.get());
         *result = engine.release();
     });
 }
