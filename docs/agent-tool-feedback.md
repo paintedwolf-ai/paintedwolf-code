@@ -45,6 +45,15 @@ effects remain unknown. Permission failures name the approval boundary; runtime
 failures preserve native status and stderr. A corrected invocation still crosses
 normal admission and authorization.
 
+## Command result presentation
+
+Model delivery separates a command refusal's explanation and native stream text
+from its JSON metadata. Projection requires matching host invocation and program
+receipts; a JSON object printed by a program supplies no host identity. Every
+projected part remains non-authoritative data. The retained result, receipts,
+source identities and output references remain unchanged. Unsupported shapes
+retain their original presentation. Repeated projection is idempotent.
+
 ## Native command failure attribution
 
 A reached native operation retains the actual `command` model call and its
