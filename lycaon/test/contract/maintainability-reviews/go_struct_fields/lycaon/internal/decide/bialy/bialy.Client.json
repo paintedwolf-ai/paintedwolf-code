@@ -4,13 +4,13 @@
   "kind": "runtime_service",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the 13 fields coordinating one lazy start and supervised decision process. Startup generation fencing and terminal device facts belong with the client lifetime; row batching retains the selected process while yielding device admission. Startup, cancellation and batch fixtures cover these contracts.",
-  "reviewed_commit": "7a48b783d843c4ec420d7fce2bf8e074cefd4ae6",
+  "reason": "Retain 13 fields coordinating one lazy start and supervised decision process. Startup fencing and terminal device facts belong to the client lifetime. Each request retains decision priority across bounded row batches, while physical permits remain completion-bound. Startup, cancellation, failed-response and complete-batch fixtures verify these boundaries.",
+  "reviewed_commit": "699f658ddc0747eb30337008ffb4dd96c9e57e64",
   "reviewed_shape": "00c4e021ef89d6799399eae0282eadf2625ed641ba8b6d2b9011eda579d7829f",
   "ceiling": 13,
   "boundaries": {
     "lycaon/internal/decide/bialy/startup_test.go": "6e3b2c014dee8d4757eebb8199bbdacf83a9c4df0f7623f7aba345a58ab30392",
-    "lycaon/internal/decide/bialy/rank_test.go": "d3e26b9d4bea0bb8723069b88c679416bd6aa634fe6124962578f2413c343fd5",
-    "lycaon/internal/decide/bialy/decide_test.go": "9ad75c6714cb2af21d87d5f777566a21699f2767868ba1f54ebe61fc35169896"
+    "lycaon/internal/decide/bialy/rank_test.go": "f80a5f6dc015dcdba51e7f214fc138194dab53d1526c0c1744425f1e758bc1e6",
+    "lycaon/internal/decide/bialy/decide_test.go": "07edf464269e4ed6d5c38e01152305e6575f197c78ec0d6c7dee4833542ea3c3"
   }
 }

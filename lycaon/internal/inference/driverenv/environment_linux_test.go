@@ -29,12 +29,25 @@ func TestLoadedVersionIsExactAndSupported(t *testing.T) {
 
 func TestExplicitDriverSelectionDoesNotCreateVendorEnvironment(t *testing.T) {
 	root := configFixture(t, `{"format_version":1,"mesa_icds":["/nix/mesa.json"]}`)
-	t.Setenv("VK_DRIVER_FILES", "/custom/driver.json")
-	values, cleanup, err := Prepare(root)
-	testutil.FailErr(t, "preserve explicit driver selection", err)
-	cleanup()
-	if len(values) != 0 {
-		t.Fatalf("overrode explicit selection: %v", values)
+	for _, test := range []struct {
+		name, current, alternate, want string
+	}{
+		{"current", "/custom/driver.json", "", ""},
+		{"current_precedence", "/custom/driver.json", "/other/driver.json", ""},
+		{"alternate", "", "/custom/driver.json", "VK_DRIVER_FILES=/custom/driver.json"},
+		{"packaged_default", "/nix/mesa.json", "/custom/driver.json", "VK_DRIVER_FILES=/custom/driver.json"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("VK_DRIVER_FILES", test.current)
+			t.Setenv("VK_ICD_FILENAMES", test.alternate)
+			values, cleanup, err := Prepare(root)
+			testutil.FailErr(t, "preserve explicit driver selection", err)
+			cleanup()
+			if (test.want == "" && len(values) != 0) ||
+				(test.want != "" && (len(values) != 1 || values[0] != test.want)) {
+				t.Fatalf("driver environment = %v; want %q", values, test.want)
+			}
+		})
 	}
 }
 
@@ -73,14 +86,22 @@ func TestVersionedDriverLibraryResolution(t *testing.T) {
 	binary.LittleEndian.PutUint16(header[52:], 64)
 	binary.LittleEndian.PutUint16(header[54:], 56)
 	binary.LittleEndian.PutUint16(header[58:], 64)
-	names := []string{"libnvidia-glsi", "libnvidia-gpucomp", "libnvidia-eglcore", "libnvidia-glvkspirv", "libEGL_nvidia"}
+	names := []string{"libnvidia-glsi", "libnvidia-gpucomp", "libnvidia-eglcore", "libnvidia-glvkspirv", "libnvidia-rtcore", "libcuda", "libEGL_nvidia"}
 	for _, name := range names {
 		testutil.FailErr(t, "write versioned ELF fixture", os.WriteFile(filepath.Join(directory, name+".so."+version), header, 0o644))
 	}
 	paths, err := nvidiaLibraries(version, root, uint32(os.Getuid()))
 	testutil.FailErr(t, "resolve matching driver components", err)
-	if len(paths) != 5 || paths[4] != filepath.Join(directory, "libEGL_nvidia.so."+version) {
+	if len(paths) != 7 || paths[6] != filepath.Join(directory, "libEGL_nvidia.so."+version) {
 		t.Fatalf("driver paths = %v", paths)
+	}
+	for _, name := range []string{"libnvidia-rtcore", "libcuda"} {
+		path := filepath.Join(directory, name+".so."+version)
+		testutil.FailErr(t, "remove required device component", os.Remove(path))
+		if _, err := nvidiaLibraries(version, root, uint32(os.Getuid())); err == nil {
+			t.Fatalf("accepted missing device component %s", name)
+		}
+		testutil.FailErr(t, "restore device component", os.WriteFile(path, header, 0o644))
 	}
 	if _, err := nvidiaLibraries("590.12", root, uint32(os.Getuid())); err == nil {
 		t.Fatal("accepted mismatched driver version")
