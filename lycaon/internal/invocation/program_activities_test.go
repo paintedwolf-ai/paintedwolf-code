@@ -73,7 +73,6 @@ func TestActivitiesKeepRefusalAndContextFailure(t *testing.T) {
 	stage := activityFixture("stage", "root", "git_add", "git add", 0)
 	commit := activityFixture("commit", "root", "git_commit", "git commit", 5)
 	cd := activityFixture("cd", "root", "cd", "cd", 10)
-	cd.receipt.State = "failed"
 	groups := activityGroups(stage, commit, cd)
 	groups[1].counts.refused = 1
 	groups[2].counts.failed = 1

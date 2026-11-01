@@ -133,7 +133,8 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	primary := make(map[int]bool)
 	for i, g := range groups {
 		role := activityPresentation(g.input).role
-		if role == "primary" || (role == "context" && activityNeedsAttention(g.input.receipt)) {
+		attention := activityNeedsAttention(g.input.receipt) || g.counts.failed+g.counts.refused+g.counts.interrupted+g.counts.waiting > 0
+		if role == "primary" || (role == "context" && attention) {
 			primary[i] = true
 		}
 	}
