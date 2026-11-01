@@ -171,6 +171,7 @@ func (c *childRun) close(ctx context.Context) {
 	}
 	c.settled = true
 	if c.recorded {
+		//nolint:contextcheck // Settling the child receipt detaches from caller cancellation while retaining child values.
 		_ = c.frame.e.ports.Executions.SettleExecution(context.WithoutCancel(c.ctx), c.inv, c.record)
 	}
 	e := c.frame.e

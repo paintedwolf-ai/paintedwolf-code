@@ -21,9 +21,11 @@ func (p sourceMutationPlan) ledgerInput(operationID string) sourceledger.RecordI
 		in.Origin, in.PersonID = api.SourceChangeOriginAgent, ""
 		in.JobID, in.ToolCallID, in.ToolName = p.Agent.JobID, p.Agent.ToolCallID, p.Agent.ToolName
 	}
-	if p.EntryKind == SourceEntryFolder {
+	switch p.EntryKind {
+	case SourceEntryFile:
+	case SourceEntryFolder:
 		in.EntryKind = sourceledger.EntryKindDirectory
-	} else if p.EntryKind == SourceEntryLink {
+	case SourceEntryLink:
 		in.EntryKind = sourceledger.EntryKindLink
 	}
 	if p.NativeTrash != nil && (p.Kind == "delete" || p.Kind == "restore") {

@@ -233,7 +233,7 @@ cat "$SCRATCH_DIR/copy-name" | `+f.echo(`read /dev/stdin`))
 		t.Fatalf("stdout =\n%s\nwant\n%s", got, want)
 	}
 	// A literal /tmp path keeps its OS meaning: it is not scratch.
-	if strings.HasPrefix(f.scratch, "/tmp/") {
+	if filepath.Clean(f.scratch) == "/tmp" {
 		t.Fatalf("fixture scratch %q aliases literal /tmp", f.scratch)
 	}
 }

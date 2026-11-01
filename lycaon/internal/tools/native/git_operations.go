@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -107,49 +106,6 @@ func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git
 }
 
 func gitString(args map[string]any, key string) string { value, _ := args[key].(string); return value }
-
-// GitCompareTool reports graph facts for two immutable resolved tips.
-type GitCompareTool struct{ Git git.GitManager }
-
-func (t *GitCompareTool) Run(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-	head := gitString(args, "head_ref")
-	if head == "" {
-		head = "HEAD"
-	}
-	result, err := t.Git.Compare(ctx, tc.ActiveRootPath(), gitString(args, "base_ref"), head)
-	if err != nil {
-		return git.MarshalToolFailure(err)
-	}
-	raw, err := surveyjson.Marshal(result)
-	return string(raw), err
-}
-
-// GitStashListTool exposes a bounded page with stable object identities.
-type GitStashListTool struct{ Git git.GitManager }
-
-func (t *GitStashListTool) Run(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-	offset := intArg(args, "offset", 0)
-	limit := intArg(args, "limit", 20)
-	if limit > git.MaxGitLogPage {
-		limit = git.MaxGitLogPage
-	}
-	entries, err := t.Git.ListStashes(ctx, tc.ActiveRootPath(), offset, limit+1)
-	if err != nil {
-		return git.MarshalToolFailure(err)
-	}
-	var next *int
-	if len(entries) > limit {
-		entries = entries[:limit]
-		n := offset + limit
-		next = &n
-	}
-	raw, err := surveyjson.Marshal(struct {
-		Available  bool             `json:"available"`
-		Stashes    []git.StashEntry `json:"stashes"`
-		NextOffset *int             `json:"next_offset,omitempty"`
-	}{true, entries, next})
-	return string(raw), err
-}
 
 func assertGitOperationPath(ctx context.Context, boundary *sandbox.Boundary, tc tools.ToolContext, path, tool string) error {
 	_, err := assertWritePath(ctx, boundary, tc, path, tc.ProfileID(), tool, func(path string) error {

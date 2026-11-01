@@ -31,13 +31,13 @@ func platformLink(req LinkRequest) error {
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	parentRel, name := filepath.Split(loc.Rel)
 	parent, err := root.OpenRoot(filepath.Clean(parentRel))
 	if err != nil {
 		return err
 	}
-	defer parent.Close()
+	defer func() { _ = parent.Close() }()
 	target := rootLinkTarget{root: parent, name: name}
 	if _, err := parent.Lstat(name); err == nil && !req.Replace {
 		return os.ErrExist
@@ -52,7 +52,7 @@ func platformLink(req LinkRequest) error {
 	if err := parent.Symlink(req.Target, tmp); err != nil {
 		return err
 	}
-	defer parent.Remove(tmp)
+	defer func() { _ = parent.Remove(tmp) }()
 	if req.BeforeCommit != nil {
 		if err := req.BeforeCommit(target); err != nil {
 			return err

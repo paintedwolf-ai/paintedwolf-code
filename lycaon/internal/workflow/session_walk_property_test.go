@@ -47,7 +47,7 @@ func TestSessionWalkPropertyInvariants(t *testing.T) {
 		switch choice {
 		case opStart:
 			run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-				WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+				WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 			})
 			if err != nil {
 				t.Fatalf("step %d Start unexpected err: %v (active=%v)", step, err, active)

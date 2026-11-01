@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -23,9 +24,7 @@ func TestChecksumManifestPinsManyTargetsWithAdmittedDedupAndCleanup(t *testing.T
 	for _, state := range []int64{2 << 20, 160 << 10} {
 		h := newHarness(t, files)
 		memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 2 << 20, State: state})
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 		h.owners.Revisions.Memory = memory
 		result := h.exec("", "sha256sum", "-c", "manifest")
 		if state < 1<<20 {

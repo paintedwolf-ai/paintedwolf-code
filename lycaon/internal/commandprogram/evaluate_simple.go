@@ -162,7 +162,7 @@ func (f *frame) testExpression(ctx context.Context, s commandsurface.Statement, 
 // inProcess runs a native host builtin as its own dynamic execution.
 func (f *frame) inProcess(ctx context.Context, s commandsurface.Statement, name string, run func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error)) error {
 	child := f.activeHost
-	if child != nil && child.inv.Identity.NodeID == string(s.SyntaxLocation.ID) && child.inv.SourceUnitID == f.unit {
+	if child != nil && child.inv.Identity.NodeID == string(s.ID) && child.inv.SourceUnitID == f.unit {
 		f.activeHost = nil
 	} else {
 		var err error

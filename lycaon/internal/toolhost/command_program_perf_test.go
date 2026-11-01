@@ -404,6 +404,7 @@ func seedResourceCeilingInputs(t *testing.T, f *perfFixture) {
 // count and goroutines stay bounded, limit refusals fire at 1 past each bound,
 // and cleanup leaves nothing behind. Elapsed time is logged for manual
 // inspection; automated gates use deterministic resource counts.
+//nolint:funlen // Table-driven resource ceiling verification across all catalog bounds.
 func TestCommandProgramResourceCeilings(t *testing.T) {
 	f := newPerfFixture(t, nil)
 	seedResourceCeilingInputs(t, f)

@@ -16,25 +16,24 @@ func observeProgramActivities(ctx context.Context, recorder *invocation.SQLRecor
 	}
 	var mu sync.Mutex
 	var sampled time.Time
-	var previous *api.CommandProgramReceipt
 	known := map[string]bool{}
 	return invocation.WithActivityObserver(ctx, func(ctx context.Context, program, execution string) {
 		mu.Lock()
 		defer mu.Unlock()
-		// Overflow counters coalesce; visible execution transitions publish immediately.
-		if previous != nil && previous.ActivitiesOmitted > 0 && !known[execution] && time.Since(sampled) < time.Second {
+		// Repetitions coalesce; new structural states publish immediately.
+		transition, err := recorder.ActivityTransition(ctx, execution)
+		if err != nil {
+			return
+		}
+		if known[transition] && time.Since(sampled) < time.Second {
 			return
 		}
 		receipt, err := recorder.ActivitySummary(ctx, tc.Identity.SessionID, program)
 		if err != nil {
 			return
 		}
-		known = make(map[string]bool, len(receipt.ActivityExecutions))
-		for _, child := range receipt.ActivityExecutions {
-			known[child.ID] = true
-		}
+		known[transition] = true
 		sampled = time.Now()
-		previous = &receipt
 		tc.Effects.ReportProgress(api.ToolProgress{Phase: "executing", CommandProgram: &receipt})
 	})
 }

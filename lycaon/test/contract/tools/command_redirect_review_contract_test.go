@@ -22,7 +22,7 @@ import (
 
 // Every file a command plan writes through a stream reaches the approval gate
 // as a prepared change, and the gate judges that change as it judges the same
-// change from the write tool: pointed at a credential file, both ask.
+// change from the editor: pointed at a credential file, both ask.
 func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 	t.Parallel()
 	profiles, err := sandbox.LoadToolProfiles()
@@ -72,16 +72,16 @@ func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 				credential := filepath.Join(filepath.Dir(written), ".env")
 				asCommand := retarget(review, credential)
 				asWrite := retarget(review, credential)
-				asWrite.Invocation.Tool, asWrite.Invocation.Args = "write", map[string]any{"path": credential, "content": ""}
+				asWrite.Invocation.Tool, asWrite.Invocation.Args = "edit", map[string]any{"path": credential, "old": "before", "new": "after"}
 				commandResult, err := realGate.Evaluate(t.Context(), asCommand)
 				contractcheck.FailErr(t, "evaluate command review", err)
 				writeResult, err := realGate.Evaluate(t.Context(), asWrite)
 				contractcheck.FailErr(t, "evaluate write review", err)
 				if !writeResult.Required() {
-					t.Fatalf("the write tool's review of %s did not ask; the comparison checks nothing", credential)
+					t.Fatalf("the editor's review of %s did not ask; the comparison checks nothing", credential)
 				}
 				if !commandResult.Required() || !slices.Contains(commandResult.Decision.Gates(), writeResult.Gate()) {
-					t.Errorf("%s %s: a stream write to %s asks %v, the same write from the write tool asks %q",
+					t.Errorf("%s %s: a stream write to %s asks %v, the same write from the editor asks %q",
 						tool, tc.name, relTo(root, credential), gatesOf(commandResult), writeResult.Gate())
 				}
 			}
@@ -112,6 +112,8 @@ func changeReviewFor(g *recordingGate, tool, path string) (hitl.ProposedAction, 
 func retarget(action hitl.ProposedAction, path string) hitl.ProposedAction {
 	out := action
 	out.Invocation.Files, out.Invocation.ResolvedFiles = []string{path}, []string{fspath.CanonicalPath(path)}
+	out.Invocation.NativePathTargets = []hitl.NativePathTarget{{Path: path, Write: true}}
+	out.Invocation.ApprovedFileAccess = nil
 	out.Mutations.FileChanges = []api.ApprovalFileChange{{Path: path, Operation: "write"}}
 	out.Mutations.AgentPolicy = nil
 	return out

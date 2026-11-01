@@ -56,7 +56,7 @@ type programCall struct {
 	detach   func() bool
 }
 
-func (r *ProgramRuntime) newProgramCall(ctx context.Context, args map[string]any, catalog toolcontract.LanguageCatalog) *programCall {
+func (r *ProgramRuntime) newProgramCall(ctx context.Context, args map[string]any, catalog toolcontract.LanguageCatalog) (context.Context, *programCall) {
 	call := &programCall{started: r.clock().Now(), bound: callBound(args, catalog)}
 	programCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
 	call.detach = context.AfterFunc(ctx, func() { cancel(context.Cause(ctx)) })
@@ -68,7 +68,7 @@ func (r *ProgramRuntime) newProgramCall(ctx context.Context, args map[string]any
 		call.end = func() { cancelDeadline(); cancel(nil) }
 	}
 	call.ctx = programCtx
-	return call
+	return programCtx, call
 }
 
 // programPark is one call's watch over its program's waits. It refuses a wait

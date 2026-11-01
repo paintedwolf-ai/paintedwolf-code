@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
@@ -19,12 +20,10 @@ func TestQueryPositionsPreserveLineAndColumnAcrossChunkBoundaries(t *testing.T) 
 		h := newHarness(t, nil)
 		inv := &invocation{ctx: t.Context(), owners: h.owners}
 		positions, err := newInputPositions(inv, 1024, "input")
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "newInputPositions failed", err)
 		for start := 0; start < len(data); start += chunk {
 			if _, err = positions.Write(data[start:min(start+chunk, len(data))]); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "positions.Write failed", err)
 			}
 		}
 		for offset := int64(0); offset <= int64(len(data)); offset++ {
@@ -48,18 +47,14 @@ func TestQueryPositionsPreserveLineAndColumnAcrossChunkBoundaries(t *testing.T) 
 func TestQueryPositionsAdmitCompactMetadataAndRelease(t *testing.T) {
 	h := newHarness(t, nil)
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 	h.owners.Revisions.Memory = memory
 	positions, err := newInputPositions(&invocation{ctx: t.Context(), owners: h.owners}, 64<<20, "input")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "newInputPositions failed", err)
 	chunk := []byte(strings.Repeat("x", (64<<10)-1) + "\n")
 	for range 64 {
 		if _, err = positions.Write(chunk); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "positions.Write failed", err)
 		}
 	}
 	if len(positions.buffer.Bytes) != 512<<10 || memory.InUse().State > 512<<10 {
@@ -88,9 +83,7 @@ func TestQueryReadRefusalCannotBecomeSuccessfulBufferedValue(t *testing.T) {
 	h := newHarness(t, nil)
 	in := &inputs{inv: &invocation{ctx: context.Background(), owners: h.owners}, limit: 1024, label: "input"}
 	positions, err := newInputPositions(in.inv, in.limit, in.label)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "newInputPositions failed", err)
 	in.positions = positions
 	defer in.close()
 	refused := &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED"}
@@ -112,9 +105,7 @@ func TestQueryRawRecordAndAggregateSlurpLimitsRelease(t *testing.T) {
 	} {
 		h := newHarness(t, nil)
 		memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 		h.owners.Revisions.Memory = memory
 		h.owners.limitOverride = map[string]int64{test.limit: test.maximum}
 		result := h.exec(test.input, test.words...)

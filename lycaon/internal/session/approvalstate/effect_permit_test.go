@@ -3,6 +3,7 @@ package approvalstate
 import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"testing"
 )
 
@@ -13,7 +14,7 @@ func TestNativeChildOncePermitNeverCoversSiblingOrStructuredCall(t *testing.T) {
 	legacy := first
 	legacy.ExecutionID = ""
 	sockets := NewSocketCapabilityRuntime()
-	grant := confine.SocketGrant{ApprovedPath: "/fixture/service.sock", ResolvedPath: "/fixture/service.sock"}
+	grant := confine.SocketGrant{ApprovedPath: "/fixture/service.sock", ResolvedPath: "/fixture/service.sock", Binding: socketref.Binding{Enforcement: socketref.KernelPathname}}
 	sockets.IssuePermit((first).SessionID, first, "same-semantic-action", grant)
 	direct := NewDirectIPCapabilityRuntime()
 	direct.IssuePermit(first, "same-semantic-action", "request", "confinement")

@@ -49,7 +49,9 @@ func upgradeStagedStore(ctx context.Context, root string, manifest *Manifest, fi
 			return err
 		}
 		entry.SHA256, entry.Size = sum, size
-		files[i].SHA256, files[i].Size = sum, size
+		if i < len(files) {
+			files[i].SHA256, files[i].Size = sum, size
+		}
 	}
 	manifest.SchemaUserVersion, manifest.SchemaShapeDigest = plan.Target.Revision, plan.Target.Shape
 	return nil

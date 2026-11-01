@@ -41,7 +41,7 @@ func TestCoordinatorProposesRunBeforeHumanStart(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := toolReg.Run(ctx, "state_start", map[string]any{
-		"workflow_id": "plan", "workflow_version": "1.0.0",
+		"workflow_id": "plan", "workflow_version": "1.0.1",
 	}, securityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL" {
@@ -49,7 +49,7 @@ func TestCoordinatorProposesRunBeforeHumanStart(t *testing.T) {
 	}
 
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	if run.WorkflowID != "plan" {

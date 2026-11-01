@@ -90,7 +90,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 		SessionID: sess.ID,
 		Session:   sess,
 		History:   userHistory("survey"),
-		ProfileID: "coordinator",
+		ProfileID: "explore_readonly",
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if atomic.LoadInt32(&peak) < 2 {
@@ -102,13 +102,13 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 	for _, surface := range []string{toolcontract.SurfaceImplementInvestigate, "orchestrate_plan", "implement_overlay_promote"} {
 		t.Run(surface, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
-			_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+			_ = reg.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 				path, _ := args["path"].(string)
 				return "contents of " + path, nil
 			})
 			client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review the code", []llm.MockToolCall{
-				{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
-				{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
+				{ID: "tc1", Name: "command", Args: map[string]any{"path": "a.go", "command": "cat a.go"}},
+				{ID: "tc2", Name: "command", Args: map[string]any{"path": "b.go", "command": "cat b.go"}},
 			})})
 			store := store.NewMemory()
 			deps := promptloop.StoreDeps(store)
@@ -143,12 +143,12 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 				if m.Role != api.MessageRoleTool || m.ToolResult == nil {
 					continue
 				}
-				if nl := strings.IndexByte(m.Content, '\n'); nl > 0 && strings.HasPrefix(m.Content, "[read#") {
+				if nl := strings.IndexByte(m.Content, '\n'); nl > 0 && strings.HasPrefix(m.Content, "[command#") {
 					path, _ := m.ToolResult.ToolArgs["path"].(string)
 					got[path] = m.Content[:nl]
 				}
 			}
-			want := map[string]string{"a.go": "[read#1]", "b.go": "[read#2]"}
+			want := map[string]string{"a.go": "[command#1]", "b.go": "[command#2]"}
 			if got["a.go"] != want["a.go"] || got["b.go"] != want["b.go"] {
 				t.Fatalf("coordinator reads tagged %v, want %v", got, want)
 			}
@@ -357,12 +357,12 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 		orderMu.Unlock()
 	}
 	reg := tools.NewStubRegistry()
-	_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+	_ = reg.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)
 		return "contents of " + path, nil
 	})
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
-		{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
+		{ID: "tc1", Name: "command", Args: map[string]any{"path": "a.go", "command": "cat a.go"}},
 	})})
 	mem := store.NewMemory()
 	deps := promptloop.StoreDeps(mem)

@@ -581,6 +581,11 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: activity_id
+          in: query
+          description: Restrict execution receipts to a host activity, including all repetitions.
+          schema:
+            type: string
         - name: cursor
           in: query
           schema:
@@ -25689,6 +25694,7 @@ components:
         - invalid_workflow_revision
         - invalid_workflow_replacement_target
         - message_not_found
+        - command_program_not_found
         - not_found
         - path_not_found
         - persist_not_confirmed
@@ -26372,6 +26378,42 @@ components:
       enum:
         - active
         - done
+    CommandActivityStep:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - command
+        - count
+        - running
+        - waiting
+        - failed
+        - refused
+        - interrupted
+        - state
+        - outcome
+      properties:
+        id:
+          type: string
+        command:
+          type: string
+        count:
+          type: integer
+        running:
+          type: integer
+        waiting:
+          type: integer
+        failed:
+          type: integer
+        refused:
+          type: integer
+        interrupted:
+          type: integer
+        state:
+          type: string
+        outcome:
+          type: string
     CommandActivitySpan:
       x-go-generate: true
       type: object
@@ -26429,10 +26471,29 @@ components:
         status_code:
           type: integer
           x-go-pointer: true
-        merge_key:
-          type: string
-          description: Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate.
+        repetitions:
+          type: integer
+          description: Number of executions of the primary structural operation.
+        execution_count:
+          type: integer
+          description: All executions represented by this activity.
+        failed_count:
+          type: integer
+          description: Executions reporting failure
+          refusal or interruption: null
+          independent of the enclosing outcome.: null
+        waiting_count:
+          type: integer
+        uncertain_effects:
+          type: integer
+        completed_effects:
+          type: integer
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandActivityStep'
         execution_ids:
+          description: First execution of each structural step; use activity_id to page all member receipts.
           x-go-name: ExecutionIDs
           type: array
           items:

@@ -178,6 +178,7 @@ func (g *gitGrep) operands(dir string) ([]grepSource, []string, int, error) {
 		}
 		if _, err := os.Lstat(target); err != nil {
 			writeLine(g.stderr, fmt.Sprintf("fatal: ambiguous argument '%s': unknown revision or path not in the working tree.\nUse '--' to separate paths from revisions, like this:\n'git <command> [<revision>...] -- [<file>...]'", word))
+			//nolint:nilerr // Missing revision or working-tree path reports status 128 on stderr.
 			return nil, nil, 128, nil
 		}
 		paths = append(paths, word)

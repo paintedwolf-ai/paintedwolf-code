@@ -33,7 +33,7 @@ func TestSecurityPackVersionResolvesWithPlatformDependency(t *testing.T) {
 	testutil.FailErr(t, "resolve catalog", err)
 	for _, pack := range eff.Packs {
 		if pack.ID == "painted-wolf/security-survey" {
-			if pack.Version != "2.0.0" || !pack.Contributing {
+			if pack.Version != "2.0.1" || !pack.Contributing {
 				t.Fatalf("security pack = %+v", pack)
 			}
 			return

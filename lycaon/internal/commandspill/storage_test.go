@@ -68,3 +68,18 @@ func TestRunFrameLengthCannotWrapOrAllocateBeforeAdmission(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionSpillsLifecycleAndReclaim(t *testing.T) {
+	scratch := t.TempDir()
+	spills, err := NewSessionSpills(scratch, "prog-1")
+	testutil.FailErr(t, "create session spills", err)
+	run, err := spills.Create(t.Context())
+	testutil.FailErr(t, "create session run", err)
+	testutil.FailErr(t, "write session record", run.WriteRecord([]byte("row")))
+	testutil.FailErr(t, "finish session run", run.Finish())
+	testutil.FailErr(t, "close session spills", spills.Close())
+	if _, err := spills.Create(t.Context()); err == nil {
+		t.Fatal("expected closed session spills to refuse new runs")
+	}
+	testutil.FailErr(t, "reclaim session spills", ReclaimSessionSpills(scratch))
+}

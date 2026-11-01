@@ -34,13 +34,13 @@ func (s *Transcript) HandleGetCommandProgramReceipt(w http.ResponseWriter, r *ht
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	result, err := reader.ReadProgramPage(r.Context(), sessionID, chi.URLParam(r, "program_id"), query.Cursor, query.Limit)
+	result, err := reader.ReadProgramActivityPage(r.Context(), sessionID, chi.URLParam(r, "program_id"), r.URL.Query().Get("activity_id"), query.Cursor, query.Limit)
 	if err != nil {
 		switch {
 		case errors.Is(err, pagecursor.ErrInvalid), errors.Is(err, pagecursor.ErrExpired):
 			s.responses.PageCursorError(w, r, "cursor", err)
 		case errors.Is(err, invocation.ErrProgramNotFound):
-			http.NotFound(w, r)
+			s.responses.Fail(w, wire.ApiErrorCodeCommandProgramNotFound, "command program not found")
 		default:
 			s.responses.InternalError(w, r, err)
 		}

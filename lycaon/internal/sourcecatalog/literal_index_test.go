@@ -1,7 +1,6 @@
 package sourcecatalog
 
 import (
-	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,13 +8,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
-
-func observeRoot(t *testing.T, catalog *Catalog, root string) Snapshot {
-	t.Helper()
-	snapshot, err := catalog.Observe(context.Background(), "project", []Root{{ID: "root", Path: root}})
-	testutil.FailErr(t, "observe root", err)
-	return snapshot
-}
 
 func literalCandidatePaths(entries []Entry) []string {
 	paths := make([]string, 0, len(entries))

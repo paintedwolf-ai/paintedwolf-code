@@ -58,17 +58,24 @@ func documentProgram(t *testing.T) (*programtest.Fixture, *editordoc.Service, *p
 		Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary}, Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary}, Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary},
 	})
 	testutil.FailErr(t, "mutation owners", err)
-	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, _ *toolcontract.ProgramMemory, _ tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		literalOwners := owners.ForProgram(memory)
+		mutationProgram := *mutations
+		mutationProgram.Revisions.Memory, mutationProgram.Admission = memory, admission
+		mutations := &mutationProgram
 		publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths}, Tools: tc}
 		prepare := func(_ context.Context, paths *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-			prepared, err := owners.Prepare(paths, request)
+			prepared, err := literalOwners.Prepare(paths, request)
 			return command.NativePrepared{Tool: prepared.Operation, Review: prepared.Review, Invoke: prepared.InvokeOwner}, err
 		}
 		return command.ProgramOwners{PublishDocument: mutations.Operations.Write.PublishAccepted, Publication: func(admit tools.CommandOutputAdmission) commandprogram.OutputPublication {
 			copy := *publication
 			copy.Admission = admit
 			return &copy
-		}, Input: publication, Natives: map[string]command.NativeOperation{
+		}, Input: publication, Redirections: func(frame *projectpaths.ProgramPaths, admit tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+			pub := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: frame}, Tools: tc, Admission: admit}
+			return pub, pub
+		}, Natives: map[string]command.NativeOperation{
 			"cat": {Tool: "read", Prepare: prepare}, "repo-map": {Tool: "survey_repo", Prepare: prepare},
 		}}, nil
 	}

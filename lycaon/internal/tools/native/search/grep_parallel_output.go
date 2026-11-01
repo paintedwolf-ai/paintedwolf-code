@@ -94,7 +94,7 @@ func (w *grepFileWriter) Write(raw []byte) (int, error) {
 		n := min(len(raw), grepOutputChunk-len(w.sink.buffer))
 		w.sink.buffer = append(w.sink.buffer, raw[:n]...)
 		raw, written = raw[n:], written+n
-		if len(w.sink.buffer) == grepOutputChunk || (!w.sink.started || w.stderr) && bytes.IndexAny(w.sink.buffer, "\n\x00") >= 0 {
+		if len(w.sink.buffer) == grepOutputChunk || (!w.sink.started || w.stderr) && bytes.ContainsAny(w.sink.buffer, "\n\x00") {
 			if err := w.flush(); err != nil {
 				return written, err
 			}

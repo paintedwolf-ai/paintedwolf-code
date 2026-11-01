@@ -2,6 +2,7 @@ package literal
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -67,7 +68,7 @@ func runCmp(inv *invocation) error {
 			return err
 		}
 		run.sides[i] = cmpSide{name: file.Value, in: in, reader: bufio.NewReaderSize(in.reader(), 64<<10)}
-		if _, err := io.CopyN(io.Discard, run.sides[i].reader, opts.skip[i]); err != nil && err != io.EOF {
+		if _, err := io.CopyN(io.Discard, run.sides[i].reader, opts.skip[i]); err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
 	}

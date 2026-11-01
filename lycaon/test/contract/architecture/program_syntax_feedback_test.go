@@ -25,14 +25,15 @@ func TestProgramSyntaxFeedbackUsesTypedSpansWithoutGuessedRepairs(t *testing.T) 
 		out, err := formatter.Format(rejection.Code, rejection.Data)
 		contractcheck.FailErr(t, "render syntax feedback", err)
 		wantFacts := []string{"Code: " + rejection.Code}
-		if rejection.Code == "COMMAND_LIMIT_EXCEEDED" {
+		switch rejection.Code {
+		case "COMMAND_LIMIT_EXCEEDED":
 			if rejection.Data["limit_id"] != "program_bytes" || rejection.Data["resource_unit"] != "bytes" {
 				t.Fatalf("resource feedback lacks typed limit facts: %+v", rejection.Data)
 			}
 			wantFacts = append(wantFacts, "Earlier completed steps and their results remain recorded")
-		} else if rejection.Code == "COMMAND_SYNTAX_UNSUPPORTED" {
+		case "COMMAND_SYNTAX_UNSUPPORTED":
 			wantFacts = append(wantFacts, "Earlier commands that finished still count")
-		} else {
+		default:
 			wantFacts = append(wantFacts, "earlier parent effects")
 		}
 		for _, want := range wantFacts {

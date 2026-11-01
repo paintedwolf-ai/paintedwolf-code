@@ -3426,9 +3426,7 @@
           "fixture_id": "git describe-option-abbrev",
           "scope": "subcommand",
           "consumption": "optional-attached-value",
-          "sample_values": [
-            "7"
-          ]
+          "sample_values": []
         },
         {
           "spellings": [
@@ -3487,9 +3485,7 @@
           "fixture_id": "git describe-option-dirty",
           "scope": "subcommand",
           "consumption": "optional-attached-value",
-          "sample_values": [
-            "-dirty"
-          ]
+          "sample_values": []
         }
       ],
       "operands": "Optional commit-ish operands; --dirty describes the working tree and takes none.",
@@ -4036,9 +4032,7 @@
           "fixture_id": "git ls-tree-option-abbrev",
           "scope": "subcommand",
           "consumption": "optional-attached-value",
-          "sample_values": [
-            "7"
-          ]
+          "sample_values": []
         }
       ],
       "operands": "One tree-ish, then optional paths relative to the command directory.",
@@ -4391,9 +4385,7 @@
           "fixture_id": "git show-ref-option-s-hash",
           "scope": "subcommand",
           "consumption": "optional-attached-value",
-          "sample_values": [
-            "7"
-          ]
+          "sample_values": []
         },
         {
           "spellings": [
@@ -4404,9 +4396,7 @@
           "fixture_id": "git show-ref-option-abbrev",
           "scope": "subcommand",
           "consumption": "optional-attached-value",
-          "sample_values": [
-            "7"
-          ]
+          "sample_values": []
         },
         {
           "spellings": [

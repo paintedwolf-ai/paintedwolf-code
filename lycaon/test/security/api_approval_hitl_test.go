@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,10 +14,12 @@ import (
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -49,7 +52,7 @@ func newApprovalHITLHarness(t *testing.T) *approvalHITLHarness {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "write",
 		ToolCalls: []llm.MockToolCall{{
-			ID: "call_write", Name: "write", Args: map[string]any{"path": "a.txt", "content": "x"},
+			ID: "call_write", Name: "command", Args: map[string]any{"command": "printf x > a.txt"},
 		}},
 		FollowUpText: "done",
 	}}})
@@ -62,7 +65,7 @@ func newApprovalHITLHarness(t *testing.T) *approvalHITLHarness {
 		manifest.PhaseDefs[i].ContentReview = nil
 	}
 	h.RegisterManifest(manifest)
-	ctx := context.Background()
+	ctx := t.Context()
 	projectDir := t.TempDir()
 	forceWriteAsk(t, projectDir)
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
@@ -94,10 +97,15 @@ func deniedCopy(t *testing.T) string {
 	return approvaloutcome.NewCatalog(cfg).Message(approvaloutcome.CodeApprovalDenied, nil)
 }
 
-func (h *approvalHITLHarness) waitPending(t *testing.T) string {
+func (h *approvalHITLHarness) waitPending(t *testing.T, done <-chan error) string {
 	t.Helper()
 	var checkpointID string
 	testutil.WaitFor(t, func() bool {
+		select {
+		case err := <-done:
+			t.Fatalf("prompt completed before approval: %v", err)
+		default:
+		}
 		kind := wire.CheckpointKindToolApproval
 		pending, err := h.checkpointMgr.ListPending(h.ctx, h.sess.ID, &kind)
 		if err == nil && len(pending) == 1 {
@@ -123,7 +131,7 @@ func TestApprovalHITLApproveCompletesTool(t *testing.T) {
 	h := newApprovalHITLHarness(t)
 
 	done := h.runPrompt(t)
-	decisionID := h.waitPending(t)
+	decisionID := h.waitPending(t, done)
 
 	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(`{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -146,7 +154,7 @@ func TestApprovalHITLRejectBlocksTool(t *testing.T) {
 	h := newApprovalHITLHarness(t)
 
 	done := h.runPrompt(t)
-	decisionID := h.waitPending(t)
+	decisionID := h.waitPending(t, done)
 	if _, err := h.checkpointMgr.ResolveCheckpoint(h.ownerCtx, h.sess.ID, decisionID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil); err != nil {
 		testutil.FailErr(t, "h.checkpointMgr.ResolveCheckpoint failed", err)
 	}
@@ -161,26 +169,14 @@ func TestApprovalHITLRejectBlocksTool(t *testing.T) {
 
 	msgs, err := h.store.GetMessages(h.ctx, h.sess.ID)
 	testutil.FailErr(t, "h.store.GetMessages failed", err)
-	wantDenied := deniedCopy(t)
-	foundDenied := false
-	for _, m := range msgs {
-		if m.Role == wire.MessageRoleTool && m.Content == wantDenied {
-			foundDenied = true
-		}
-		if m.Role == wire.MessageRoleTool && m.Content != wantDenied {
-			t.Fatalf("unexpected tool message after reject: %+v", m)
-		}
-	}
-	if !foundDenied {
-		t.Fatalf("expected approval denied tool message, got %+v", msgs)
-	}
+	h.assertDeniedCommand(t, msgs)
 }
 
 func TestApprovalHITLRejectViaHTTP(t *testing.T) {
 	h := newApprovalHITLHarness(t)
 
 	done := h.runPrompt(t)
-	decisionID := h.waitPending(t)
+	decisionID := h.waitPending(t, done)
 
 	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(`{"kind":"tool_approval","action":"reject"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -201,26 +197,14 @@ func TestApprovalHITLRejectViaHTTP(t *testing.T) {
 
 	msgs, err := h.store.GetMessages(h.ctx, h.sess.ID)
 	testutil.FailErr(t, "h.store.GetMessages failed", err)
-	wantDenied := deniedCopy(t)
-	foundDenied := false
-	for _, m := range msgs {
-		if m.Role == wire.MessageRoleTool && m.Content == wantDenied {
-			foundDenied = true
-		}
-		if m.Role == wire.MessageRoleTool && m.Content != wantDenied {
-			t.Fatalf("unexpected tool message after HTTP reject: %+v", m)
-		}
-	}
-	if !foundDenied {
-		t.Fatalf("expected approval denied tool message, got %+v", msgs)
-	}
+	h.assertDeniedCommand(t, msgs)
 }
 
 func TestApprovalHITLRejectsClientAuthoredEdit(t *testing.T) {
 	h := newApprovalHITLHarness(t)
 
 	done := h.runPrompt(t)
-	decisionID := h.waitPending(t)
+	decisionID := h.waitPending(t, done)
 
 	body := `{"kind":"tool_approval","action":"edit","edited_args":{"path":"via-http.txt","content":"z"}}`
 	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(body))
@@ -247,4 +231,27 @@ func TestApprovalHITLRejectsClientAuthoredEdit(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(h.projectDir, "via-http.txt")); !os.IsNotExist(err) {
 		t.Fatalf("client-authored replacement must not exist: %v", err)
 	}
+}
+
+func (h *approvalHITLHarness) assertDeniedCommand(t *testing.T, messages []wire.Message) {
+	t.Helper()
+	for _, message := range messages {
+		if message.ToolResult == nil || message.ToolResult.ToolCallID != "call_write" {
+			continue
+		}
+		_, body, _, ok := hostmarker.SplitToolJSONBody(message.Content)
+		if !ok {
+			t.Fatalf("command denial has no outcome: %q", message.Content)
+		}
+		var outcome command.ProgramOutcome
+		testutil.FailErr(t, "decode denied command", json.Unmarshal([]byte(body), &outcome))
+		if outcome.Refusal == nil || outcome.Refusal.Code != approvaloutcome.CodeApprovalDenied || outcome.CompletedEffects != 0 || outcome.Status == 0 {
+			t.Fatalf("denied command outcome = %+v", outcome)
+		}
+		if _, err := os.Stat(filepath.Join(h.projectDir, "a.txt")); !os.IsNotExist(err) {
+			t.Fatalf("denied command changed file: %v", err)
+		}
+		return
+	}
+	t.Fatal("denied command has no tool result")
 }

@@ -18,11 +18,18 @@ import (
 	"strings"
 )
 
-type outputQuota struct{ disk, state, memory int }
+type outputQuota struct {
+	disk, state, memory int
+	diskBytes           int64
+}
 
-func (q *outputQuota) ReserveSpill(context.Context, int64) (func(), error) {
+func (q *outputQuota) ReserveSpill(_ context.Context, n int64) (func(), error) {
 	q.disk++
-	return func() { q.disk-- }, nil
+	q.diskBytes += n
+	return func() {
+		q.disk--
+		q.diskBytes -= n
+	}, nil
 }
 func (q *outputQuota) ReserveProgramState(context.Context, int64) (func(), error) {
 	q.state++
@@ -156,8 +163,8 @@ func TestProgramOutputOmitsUnadmittedMappingsAndKeepsCompleteBody(t *testing.T) 
 			mappings := make([]toolcontract.StreamSourceMapping, len(body))
 			for i := range mappings {
 				source := fmt.Sprintf("source:%d", i)
-				if mode == "encoding" {
-					source += strings.Repeat("s", 4096)
+				if mode == "encoding" && i == 0 {
+					source += strings.Repeat("s", 90<<20)
 				}
 				mappings[i] = toolcontract.StreamSourceMapping{Source: toolcontract.SourcePin{SourceID: source, Revision: "r1", SHA256: strings.Repeat("a", 64), StartByte: 0, EndByte: 1}, OutputStartByte: int64(i), OutputEndByte: int64(i + 1), SourceStartByte: 0, SourceEndByte: 1}
 			}

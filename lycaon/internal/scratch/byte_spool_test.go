@@ -7,26 +7,24 @@ import (
 	"os"
 	"sync"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestByteSpoolSnapshotsAreAnonymousAndExact(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
 	spool, err := NewByteSpool()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "NewByteSpool failed", err)
 	t.Cleanup(func() { _ = spool.Close() })
 	content := []byte{'a', 0, 0xff, '\n'}
 	if n, err := spool.Write(content); err != nil || n != len(content) {
 		t.Fatalf("write %d: %v", n, err)
 	}
 	snapshot, err := spool.Reader()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "spool.Reader failed", err)
 	if _, err := spool.Write([]byte("later")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "spool.Write failed", err)
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 0 {
@@ -37,15 +35,13 @@ func TestByteSpoolSnapshotsAreAnonymousAndExact(t *testing.T) {
 		t.Fatalf("snapshot %q: %v", got, err)
 	}
 	current, err := spool.Reader()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "spool.Reader failed", err)
 	got, err = io.ReadAll(current)
 	if err != nil || !bytes.Equal(got, append(content, []byte("later")...)) {
 		t.Fatalf("current %q: %v", got, err)
 	}
 	if err := spool.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "spool.Close failed", err)
 	}
 	if _, err := spool.Write(nil); !errors.Is(err, os.ErrClosed) {
 		t.Fatalf("write after close: %v", err)
@@ -57,15 +53,13 @@ func TestByteSpoolSnapshotsAreAnonymousAndExact(t *testing.T) {
 		t.Fatalf("snapshot after close: %v", err)
 	}
 	if err := spool.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "spool.Close failed", err)
 	}
 }
 
 func TestByteSpoolSerializesConcurrentAppends(t *testing.T) {
 	spool, err := NewByteSpool()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "NewByteSpool failed", err)
 	defer spool.Close()
 	var workers sync.WaitGroup
 	for range 8 {
@@ -89,9 +83,7 @@ func TestByteSpoolSerializesConcurrentAppends(t *testing.T) {
 	}
 	workers.Wait()
 	reader, err := spool.Reader()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "spool.Reader failed", err)
 	got, err := io.ReadAll(reader)
 	if err != nil || !bytes.Equal(got, bytes.Repeat([]byte("record\n"), 800)) {
 		t.Fatalf("appends: %d bytes, %v", len(got), err)

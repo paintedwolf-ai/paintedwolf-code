@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// Serial: sets process-wide GIT_CONFIG_GLOBAL via t.Setenv.
 func TestConfigReadDoorKeepsLocalQueriesAndRefusesWrites(t *testing.T) {
 	h := newEmptyHarness(t)
 	configPath := filepath.Join(h.root, ".git", "config")

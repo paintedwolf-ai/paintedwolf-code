@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -35,15 +36,13 @@ func (o resourceRefusalObserver) Invoke(ctx context.Context, request commandprog
 func TestCommandResourceRefusalPreservesFactsAndEarlierEffects(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	hints, err := guidance.LoadHintConfigStock()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
 	if err = guidance.ValidateHintConfig(hints); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "guidance.ValidateHintConfig failed", err)
 	}
 	env.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 	if err := os.WriteFile(filepath.Join(env.Dir, "record"), bytes.Repeat([]byte{'x'}, (4<<20)+1), 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	owners := env.Runtime.Owners
 	var refusal *toolrejection.ToolReject
@@ -64,9 +63,7 @@ func TestCommandResourceRefusalPreservesFactsAndEarlierEffects(t *testing.T) {
 		return bound, nil
 	}
 	out, err := env.Call(t, t.Context(), `printf before > kept; cut -f1 record; printf after > never`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "env.Call failed", err)
 	result := decodePipeOutcome(t, out)
 	if observed != 1 || refusal == nil || refusal.Code != "COMMAND_LIMIT_EXCEEDED" || refusal.Data["limit_id"] != "record_bytes" {
 		t.Fatalf("owner refusal %d %+v", observed, refusal)

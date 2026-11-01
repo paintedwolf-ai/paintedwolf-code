@@ -83,7 +83,7 @@ func TestClosedDirectoryCannotPublishAnEmptyNamespace(t *testing.T) {
 		if err == nil || len(names) != 0 {
 			t.Fatalf("closed namespace=%v error=%v", names, err)
 		}
-		if first != nil && err != first {
+		if first != nil && !errors.Is(err, first) {
 			t.Fatal("closed directory discarded its failed observation")
 		}
 		first = err

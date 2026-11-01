@@ -53,7 +53,7 @@ func TestWorkerKickRenderedCloseoutLLMTimeoutNamesDiscard(t *testing.T) {
 	for _, want := range []string{
 		"the LLM turn time limit was reached",
 		"discarded",
-		"append: true",
+		"append bounded chunks",
 		"Do not paste file or code content",
 	} {
 		if !strings.Contains(got, want) {

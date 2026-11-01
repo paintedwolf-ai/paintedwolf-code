@@ -285,6 +285,7 @@ func positionalName(name string) bool {
 
 func (r *expansionRun) substitution(ctx context.Context, part commandsurface.SubstitutionPart, quoted bool) error {
 	if part.Operator == "<(" || part.Operator == ">(" {
+		//nolint:contextcheck // expansionRun carries the expansion context for process substitution.
 		subst, err := r.expander.processSubstitute(r, part)
 		if err != nil {
 			return err

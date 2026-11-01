@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -176,19 +177,33 @@ func operationStatus(before, after RepositoryState, code int, err error) string 
 	return "completed"
 }
 
-func readRepositoryState(ctx context.Context, dir string) (RepositoryState, error) {
+func readRepositoryMetadata(ctx context.Context, dir string) (RepositoryState, error) {
 	state := RepositoryState{Conflicts: []string{}}
-	var err error
-	state.Head, err = ResolveOptionalObject(ctx, dir, "HEAD^{commit}")
+	repo, _ := gitrepo.Discover(dir)
+	headContent, err := readRestoreContent(filepath.Join(repo.GitDir, "HEAD"))
 	if err != nil {
 		return state, err
 	}
-	out, code, err := gitexec.Run(ctx, dir, []string{"symbolic-ref", "--quiet", "HEAD"}, hermeticOpts(0))
-	if err != nil || code > 1 {
-		return state, fmt.Errorf("read symbolic HEAD: %w", err)
+	headLine := strings.TrimSpace(string(headContent.Bytes))
+	if ref, ok := strings.CutPrefix(headLine, "ref:"); ok {
+		ref = strings.TrimSpace(ref)
+		state.Branch = strings.TrimPrefix(ref, "refs/heads/")
+		loose, _ := readRestoreContent(filepath.Join(repo.CommonDir, filepath.FromSlash(ref)))
+		if oid := strings.TrimSpace(string(loose.Bytes)); validObjectID(oid) {
+			state.Head = oid
+		} else if oid, packedErr := resolvePackedRef(repo.CommonDir, ref); packedErr == nil && validObjectID(oid) {
+			state.Head = oid
+		} else if packed, _ := readRestoreContent(filepath.Join(repo.CommonDir, "packed-refs")); loose.Exists || bytes.Contains(packed.Bytes, []byte(ref)) {
+			state.Head, err = ResolveOptionalObject(ctx, dir, "HEAD^{commit}")
+		}
+	} else if validObjectID(headLine) {
+		state.Head = headLine
+	} else {
+		state.Head, err = ResolveOptionalObject(ctx, dir, "HEAD^{commit}")
 	}
-	state.Branch = strings.TrimPrefix(strings.TrimSpace(string(out)), "refs/heads/")
-	repo, _ := gitrepo.Discover(dir)
+	if err != nil {
+		return state, err
+	}
 	index, err := readRestoreContent(filepath.Join(repo.GitDir, "index"))
 	if err != nil {
 		return state, err
@@ -204,23 +219,65 @@ func readRepositoryState(ctx context.Context, dir string) (RepositoryState, erro
 		return state, err
 	}
 	state.StashLog = stashLog.SHA256
-	state.Stash, err = ResolveOptionalObject(ctx, dir, "refs/stash")
-	if err != nil {
-		return state, err
+	stashRef, _ := readRestoreContent(filepath.Join(repo.CommonDir, "refs", "stash"))
+	if oid := strings.TrimSpace(string(stashRef.Bytes)); validObjectID(oid) {
+		state.Stash = oid
+	} else if oid, packedErr := resolvePackedRef(repo.CommonDir, "refs/stash"); packedErr == nil && validObjectID(oid) {
+		state.Stash = oid
+	} else if packed, _ := readRestoreContent(filepath.Join(repo.CommonDir, "packed-refs")); stashLog.Exists || stashRef.Exists || bytes.Contains(packed.Bytes, []byte("refs/stash")) {
+		state.Stash, err = ResolveOptionalObject(ctx, dir, "refs/stash")
+		if err != nil {
+			return state, err
+		}
 	}
-	conflicts, err := gitPaths(ctx, dir, "diff", "--name-only", "--diff-filter=U", "-z", "--")
-	if err != nil {
-		return state, err
-	}
-	state.Conflicts = conflicts
-	_, entries, err := readPorcelainStatus(ctx, dir, false)
-	state.Dirty = len(entries) > 0
+	return state, nil
+}
+
+func readRepositoryState(ctx context.Context, dir string) (RepositoryState, error) {
+	state, _, err := readRepositoryStateAndStatus(ctx, dir)
 	return state, err
+}
+
+func readRepositoryStateAndStatus(ctx context.Context, dir string) (RepositoryState, string, error) {
+	state, err := readRepositoryMetadata(ctx, dir)
+	if err != nil {
+		return state, "", err
+	}
+	raw, err := restoreGit(ctx, dir, hermeticOpts(0), "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	if err != nil {
+		return state, "", err
+	}
+	var parser porcelainParser
+	for _, record := range bytes.Split(raw, []byte{0}) {
+		if len(record) == 0 {
+			continue
+		}
+		if err := parser.record(record); err != nil {
+			return state, "", err
+		}
+	}
+	_, entries, err := parser.finish()
+	if err != nil {
+		return state, "", err
+	}
+	state.Dirty = len(entries) > 0
+	for _, entry := range entries {
+		if entry.status[0] == 'U' || entry.status[1] == 'U' || entry.status == "AA" || entry.status == "DD" {
+			state.Conflicts, err = gitPaths(ctx, dir, "diff", "--name-only", "--diff-filter=U", "-z", "--")
+			break
+		}
+	}
+	return state, string(raw), err
 }
 
 // ResolveOptionalObject reads an object selector. An absent selector returns
 // an empty identity; failures other than Git's exact absence status remain errors.
 func ResolveOptionalObject(ctx context.Context, dir, ref string) (string, error) {
+	if ctx.Err() == nil {
+		if oid, handled := resolveOptionalObjectFast(ctx, dir, ref); handled {
+			return oid, nil
+		}
+	}
 	out, code, err := gitexec.Run(ctx, dir, []string{"rev-parse", "--verify", "--quiet", "--end-of-options", ref}, hermeticOpts(0))
 	if err != nil {
 		return "", err
@@ -236,6 +293,50 @@ func ResolveOptionalObject(ctx context.Context, dir, ref string) (string, error)
 		return "", fmt.Errorf("malformed Git selector identity")
 	}
 	return oid, nil
+}
+
+func resolveOptionalObjectFast(ctx context.Context, dir, ref string) (string, bool) {
+	base, commitOnly := strings.CutSuffix(ref, "^{commit}")
+	if base == "HEAD" {
+		if state, err := readRepositoryMetadata(ctx, dir); err == nil && validObjectID(state.Head) {
+			if kind, _, ok := readLooseGitObject(dir, state.Head); ok && kind == "commit" {
+				return state.Head, true
+			}
+		}
+		return "", false
+	}
+	if validObjectID(base) {
+		if kind, _, ok := readLooseGitObject(dir, base); ok && (!commitOnly || kind == "commit") {
+			return base, true
+		}
+		return "", false
+	}
+	if strings.HasPrefix(base, "refs/") && !strings.Contains(base, "..") {
+		repo, ok := gitrepo.Discover(dir)
+		if !ok || repo.CommonDir == "" {
+			return "", false
+		}
+		looseGit, _ := readRestoreContent(filepath.Join(repo.GitDir, filepath.FromSlash(base)))
+		looseCommon, _ := readRestoreContent(filepath.Join(repo.CommonDir, filepath.FromSlash(base)))
+		oid := strings.TrimSpace(string(looseGit.Bytes))
+		if !validObjectID(oid) {
+			oid = strings.TrimSpace(string(looseCommon.Bytes))
+		}
+		if !validObjectID(oid) {
+			oid, _ = resolvePackedRef(repo.CommonDir, base)
+		}
+		if validObjectID(oid) {
+			if kind, _, ok := readLooseGitObject(dir, oid); ok && (!commitOnly || kind == "commit") {
+				return oid, true
+			}
+			return "", false
+		}
+		packed, _ := readRestoreContent(filepath.Join(repo.CommonDir, "packed-refs"))
+		if !looseGit.Exists && !looseCommon.Exists && !bytes.Contains(packed.Bytes, []byte(base)) {
+			return "", true
+		}
+	}
+	return "", false
 }
 
 func gitPaths(ctx context.Context, dir string, args ...string) ([]string, error) {

@@ -31,7 +31,7 @@ func CopyQuiescentSnapshot(ctx context.Context, source DBTX, storePath, destPath
 	if err := checkpointSnapshot(ctx, storePath); err != nil {
 		return "", err
 	}
-	file, err := os.Open(storePath)
+	file, err := os.Open(storePath) // #nosec G304,G703
 	if err != nil {
 		return "", err
 	}

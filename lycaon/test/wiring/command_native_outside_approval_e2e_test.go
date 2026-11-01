@@ -24,6 +24,7 @@ func outsideCommandFolder(t *testing.T) string {
 	if hostHome := os.Getenv("PW_TEST_HOST_HOME"); hostHome != "" {
 		home = hostHome
 	}
+	//nolint:usetesting // Must reside under the user home directory outside the project and system temp roots.
 	folder, err := os.MkdirTemp(home, "paintedwolf-command-outside-*")
 	testutil.FailErr(t, "outside folder", err)
 	t.Cleanup(func() { _ = os.RemoveAll(folder) })
