@@ -868,8 +868,8 @@ once against the checkout, sharing its compiler cache. It also checks the
 migration identities of every stable release tag; release CI adds the published
 preview releases it reads from GitHub.
 
-The execution budget is two hours, allowing the integration lint lane's existing
-ninety-minute allowance plus the contracts and remaining checks. This is a
+The admission execution budget is three hours, allowing the integration lint lane's existing
+ninety-minute allowance plus the contracts, affected native compilation and remaining checks. This is a
 conservative ceiling, not a measured duration; broad-change hosted timings are
 required before tightening it or claiming an admission latency improvement.
 
@@ -887,7 +887,7 @@ cost to affected PRs; it does not claim a full native build is inexpensive.
 The merge queue repeats changed coverage on the landing commit and runs the complete affected integration
 selection. Its `limits` and `lint` lanes start first, and the group stops at its
 first failure. The PR's pass does not replace verification of the landing commit.
-The `limits` lane has the same two-hour ceiling as admission: broad Go changes
+The `limits` lane retains a two-hour ceiling: broad Go changes
 run both changed-package and importer coverage passes before Den and scripts
 coverage. This accommodates broad changes without reducing the coverage selection.
 
