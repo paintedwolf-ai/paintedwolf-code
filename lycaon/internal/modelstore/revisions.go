@@ -57,7 +57,11 @@ func (s *Store) materializeRevision(m Manifest, repair bool) (string, error) {
 	exists := false
 	if _, err := root.Lstat(rel); err == nil {
 		if !repair {
-			return s.checkRevision(m)
+			path, err := s.checkRevision(m)
+			if err == nil {
+				err = syncPublicationDirectories(root, filepath.Dir(rel), fseffect.SyncDirectory)
+			}
+			return path, err
 		}
 		exists = true
 	} else if !os.IsNotExist(err) {
@@ -101,7 +105,7 @@ func (s *Store) materializeRevision(m Manifest, repair bool) (string, error) {
 	if closeErr != nil {
 		return "", closeErr
 	}
-	if err := syncRootDir(root, tmp); err != nil {
+	if err := fseffect.SyncDirectory(root, tmp); err != nil {
 		return "", err
 	}
 	if exists {
@@ -119,7 +123,7 @@ func (s *Store) materializeRevision(m Manifest, repair bool) (string, error) {
 	} else if err := root.Rename(tmp, rel); err != nil {
 		return "", err
 	}
-	if err := syncRootDir(root, filepath.Dir(rel)); err != nil {
+	if err := syncPublicationDirectories(root, filepath.Dir(rel), fseffect.SyncDirectory); err != nil {
 		return "", err
 	}
 	return filepath.Join(s.root, rel), nil
@@ -161,13 +165,4 @@ func (s *Store) checkRevision(m Manifest) (string, error) {
 		}
 	}
 	return filepath.Join(s.root, rel), nil
-}
-
-func syncRootDir(root *os.Root, name string) error {
-	f, err := root.Open(name)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return fssync.File(f)
 }

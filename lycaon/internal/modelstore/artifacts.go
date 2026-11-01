@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
@@ -65,16 +66,8 @@ func (s *Store) Stage(r io.Reader, want Artifact) error {
 	if err := root.Rename(tmpName, s.artifactRel(want.Digest)); err != nil {
 		return fmt.Errorf("modelstore: publish: %w", err)
 	}
-	dfd, err := root.Open(dir)
-	if err != nil {
-		return fmt.Errorf("modelstore: publish dir: %w", err)
-	}
-	if err := fssync.File(dfd); err != nil {
-		dfd.Close()
-		return fmt.Errorf("modelstore: publish dir sync: %w", err)
-	}
-	if err := dfd.Close(); err != nil {
-		return fmt.Errorf("modelstore: publish dir close: %w", err)
+	if err := syncPublicationDirectories(root, dir, fseffect.SyncDirectory); err != nil {
+		return fmt.Errorf("modelstore: publish directories: %w", err)
 	}
 	return nil
 }
