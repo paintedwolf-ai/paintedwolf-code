@@ -85,7 +85,6 @@ func (p *rpcProcess) reap() {
 	}
 	p.reservations = nil
 	p.lease.Release()
-	p.lease = nil
 	close(p.done)
 	p.mu.Unlock()
 }
