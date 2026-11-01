@@ -14,7 +14,6 @@ import (
 const startupHostBytes = 512 << 20
 
 func (p *Runtime) ensureLoaded(ctx context.Context, model string) (err error) {
-	p.publishReadiness("loading", "none")
 	defer func() { p.settleReadiness(err) }()
 	return p.loadModel(ctx, model)
 }
@@ -42,6 +41,7 @@ func (p *Runtime) loadModel(ctx context.Context, model string) error {
 			p.unload()
 		}
 	}
+	p.publishReadiness("loading", "none")
 	runtime := &p.config
 	device, err := runtime.Devices.Bind(runtime.PhysicalDevice)
 	if err != nil {
