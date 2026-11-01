@@ -73,6 +73,14 @@ Deleting bytes must produce an explainable unavailable state, not make a durable
 
 ## Portable command records
 
+Command diagnostic categories and recovery actions are additive `agent-public`
+facts. Existing rejection codes retain their meanings. Explanations and bounded
+source context are co-shipped `bundle` presentation; they do not authorize an
+operation, repair source, or establish replay eligibility. Execution and effect
+claims remain projections of the invocation recorder. This work changes no
+persisted schema or command language version.
+
+
 The compiled catalog freezes the language, operation definitions and limits for each invocation. The model call owns the aggregate receipt; child identities are host operations. Persistence and wire consumers follow the classifications below.
 
 Command limit identifiers are `agent-public` vocabulary. The shared text-search
