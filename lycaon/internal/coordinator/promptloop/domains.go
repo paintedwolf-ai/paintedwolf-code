@@ -76,7 +76,7 @@ type ToolsDeps struct {
 	BlockPlane                  *toolfeedback.BlockPlane
 	BeforeToolRun               func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, tool string, args map[string]any) (output string, skipRun bool, err error)
 	AfterToolRun                func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, succeeded bool, out *tools.ToolInvocationOut) string
-	EnrichToolOutput            func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, raised guidance.ToolResultFacts, doomCompletionCountAfter int) (string, guidance.ToolResultFacts)
+	EnrichToolOutput            func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, raised guidance.ToolResultFacts, completion *api.ToolCompletion, doomCompletionCountAfter int) (string, guidance.ToolResultFacts)
 	InFlightWorkerRosterNote    func(ctx context.Context, sess *api.Session) string
 	DataDir                     string
 	ReloadHistory               func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error)

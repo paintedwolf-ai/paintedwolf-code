@@ -246,7 +246,7 @@ func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.R
 		return nil, nil
 	}
 	var staged []string
-	stagedArgs := []string{"diff", "--name-only", "--no-renames", "-z", "HEAD", "--"}
+	stagedArgs := []string{"diff", "--cached", "--name-only", "--no-renames", "-z", "HEAD", "--"}
 	if p.result.Before.Head == "" {
 		stagedArgs = []string{"ls-files", "--cached", "-z", "--"}
 	}

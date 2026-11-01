@@ -348,7 +348,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 		if ownerInvoked || run.runErr == nil {
 			if l.Deps.EnrichToolOutput != nil {
 				content, facts := l.Deps.EnrichToolOutput(ctx, sess, run.call.Name, run.call.Args,
-					result.content, result.facts, run.doomPreCount+1)
+					result.content, result.facts, captures.completion, run.doomPreCount+1)
 				result.content, result.facts = content, facts
 			}
 			if result.facts.ContentReplaced {

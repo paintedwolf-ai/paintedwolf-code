@@ -242,8 +242,9 @@ func validateChildParent(ctx context.Context, tx *sql.Tx, in toolcontract.Progra
 	var parent, root, session, state, catalog, unit, receiptStatus, receiptToolCall string
 	var start, end int64
 	var line, column int
+	var receiptInvoked bool
 	id := in.Invocation.Identity
-	err := tx.QueryRowContext(ctx, `SELECT p.parent_receipt_id,p.root_execution_id,r.session_id,p.state,p.catalog_digest,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number,r.status,r.tool_call_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=p.id AND n.node_id=? WHERE p.id=? AND p.syntax_validated=1`, id.NodeID, id.ProgramID).Scan(&parent, &root, &session, &state, &catalog, &unit, &start, &end, &line, &column, &receiptStatus, &receiptToolCall)
+	err := tx.QueryRowContext(ctx, `SELECT p.parent_receipt_id,p.root_execution_id,r.session_id,p.state,p.catalog_digest,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number,r.status,r.tool_call_id,r.invoked FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=p.id AND n.node_id=? WHERE p.id=? AND p.syntax_validated=1`, id.NodeID, id.ProgramID).Scan(&parent, &root, &session, &state, &catalog, &unit, &start, &end, &line, &column, &receiptStatus, &receiptToolCall, &receiptInvoked)
 	if err != nil {
 		return fmt.Errorf("child program identity: %w", err)
 	}
@@ -253,7 +254,7 @@ func validateChildParent(ctx context.Context, tx *sql.Tx, in toolcontract.Progra
 	}
 	if in.StartOwner != nil {
 		ownerIn := in.StartOwner.Invocation()
-		if in.ModelToolCallID == "" || receiptStatus != "running" || receiptToolCall != in.ModelToolCallID || ownerIn.Identity != v.Identity || ownerIn.ActorID != v.ActorID || ownerIn.Scope != v.Scope || in.StartOwner.Definition().Digest() != in.Definition.Digest() {
+		if in.ModelToolCallID == "" || (receiptStatus != "running" && (receiptStatus != "completed" || !receiptInvoked)) || receiptToolCall != in.ModelToolCallID || ownerIn.Identity != v.Identity || ownerIn.ActorID != v.ActorID || ownerIn.Scope != v.Scope || in.StartOwner.Definition().Digest() != in.Definition.Digest() {
 			return fmt.Errorf("child owner start differs from its retained program")
 		}
 	}

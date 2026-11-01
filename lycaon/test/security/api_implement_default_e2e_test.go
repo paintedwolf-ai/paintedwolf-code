@@ -31,30 +31,14 @@ func writeTestProjectApprovalsAllowWrite(t *testing.T, dir string) {
 func TestImplementDefaultParitySmoke(t *testing.T) {
 	// This smoke exercises workflow behavior, not confinement.
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
-	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
-		{
-			Pattern: "^Add a // TODO: review here comment",
-			ToolCalls: []llm.MockToolCall{{
-				ID:   "c1",
-				Name: "task",
-				Args: wiring.TaskToolArgs("implementer", "Add a // TODO: review here comment at the top of main.go"),
-			}},
-			FollowUpText: "Delegated to implementer to update main.go.",
-		},
-		{
-			Pattern: "Add a // TODO: review here",
-			ToolCalls: []llm.MockToolCall{{
-				ID:   "w1",
-				Name: "write",
-				Args: map[string]any{
-					"path":    "main.go",
-					"content": "// TODO: review here\npackage main\n\nfunc main() {}\n",
-				},
-			}},
-			FollowUpText: wiring.MockWorkerCompletionJSON("complete", "Added the TODO comment at the top of main.go.",
-				[]string{"Added the TODO comment to main.go."}),
-		},
-	}})
+	mock := newScriptedLLM().on("default_parity",
+		loadSchemasStep("load-task", "task"),
+		toolStep("", call("c1", "task", wiring.TaskToolArgs("implementer", "[[scn:default_parity_worker]] Add a // TODO: review here comment at the top of main.go"))),
+		textStep("Delegated to implementer to update main.go."),
+	).on("default_parity_worker",
+		toolStep("", call("w1", "command", map[string]any{"command": "printf '// TODO: review here\\npackage main\\n\\nfunc main() {}\\n' > main.go"})),
+		textStep(wiring.MockWorkerCompletionJSON("complete", "Added the TODO comment at the top of main.go.", []string{"Added the TODO comment to main.go."})),
+	)
 	recording := llm.NewRecordingClient(mock)
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(recording))
 
@@ -70,7 +54,7 @@ func TestImplementDefaultParitySmoke(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	wiring.AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
-	prompt := "Add a // TODO: review here comment at the top of main.go"
+	prompt := "[[scn:default_parity]] Add a // TODO: review here comment at the top of main.go"
 	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
 		testutil.FailErr(t, "h.Sessions.Manager.Submissions.Prompt failed", err)
 	}
@@ -92,6 +76,14 @@ func TestImplementDefaultParitySmoke(t *testing.T) {
 	data, err := os.ReadFile(mainPath)
 	testutil.FailErr(t, "read file", err)
 	if !strings.Contains(string(data), "// TODO: review here") {
+		for _, request := range recording.AllRequests() {
+			t.Logf("fixture request: %+v", request.Debug)
+			for _, message := range request.Messages {
+				if message.ToolResult != nil {
+					t.Logf("fixture result: tool=%s codes=%v content=%s", message.ToolResult.Tool, message.ToolResult.Codes, message.Content)
+				}
+			}
+		}
 		t.Fatalf("main.go = %q want TODO comment after worker", string(data))
 	}
 

@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	grobotstxt "github.com/jimsmart/grobotstxt"
 	"github.com/lycaon/lycaon/internal/observability"
 	"io"
 	"regexp"
@@ -10,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 	"unicode"
-	grobotstxt "github.com/jimsmart/grobotstxt"
 )
 
 // queryOps is a query with its search operators parsed out. Operators are

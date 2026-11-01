@@ -49,7 +49,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 			return modelcall.Completion{Content: body}
 		}
 		if turn == 1 {
-			return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "read", Args: map[string]any{"path": "audit.go"}}}}
+			return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "command", Args: map[string]any{"command": "cat audit.go"}}}}
 		}
 		task, ok := h.Delegations.Queue.Get(jobID)
 		if !ok {

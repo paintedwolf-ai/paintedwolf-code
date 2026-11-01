@@ -36,13 +36,13 @@ import (
 )
 
 type projectBackgroundTestEnv struct {
-	srv       *Server
-	bgReg     *bgprocess.Registry
-	hub       *events.MemoryHub
-	store     session.Store
-	projects  project.Registry
-	sessions  *session.Host
-	setPorts  func(handle string, addrs ...netip.AddrPort)
+	srv      *Server
+	bgReg    *bgprocess.Registry
+	hub      *events.MemoryHub
+	store    session.Store
+	projects project.Registry
+	sessions *session.Host
+	setPorts func(handle string, addrs ...netip.AddrPort)
 }
 
 func newProjectBackgroundTestEnv(t *testing.T) *projectBackgroundTestEnv {
@@ -130,6 +130,21 @@ func newProjectBackgroundTestEnv(t *testing.T) *projectBackgroundTestEnv {
 	}
 }
 
+func (env *projectBackgroundTestEnv) listBackground(t *testing.T, projectID string) wire.ProjectBackgroundProcessListResponse {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	env.srv.ServeHTTP(recorder, newAuthedRequest(http.MethodGet, "/v1/projects/"+projectID+"/background", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("background list status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response wire.ProjectBackgroundProcessListResponse
+	testutil.FailErr(t, "decode background list", json.Unmarshal(recorder.Body.Bytes(), &response))
+	if response.Revision <= 0 {
+		t.Fatalf("expected positive background revision, got %d", response.Revision)
+	}
+	return response
+}
+
 func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sh/sleep fixture is unix-oriented")
@@ -193,28 +208,12 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 	runner := hostcmd.NewRunner()
 
 	// 1. Running background job in sess1 under rootA/services/web with a secret in command.
-	h1, err := env.bgReg.StartPipeline(ctx, bgprocess.PipelineSpec{
-		SessionID: sess1.ID, ProjectID: proj1.ID, Runner: runner, Mode: bgprocess.JobModeBackground,
-		Request: hostcmd.Request{
-			Launch:     exec.HostLaunch("serve --token super-secret-token-xyz"),
-			ProjectDir: subDirA,
-			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-		},
-	})
-	testutil.FailErr(t, "start h1", err)
+	h1 := env.startLongLivedBackground(t, sess1, subDirA, "serve --token super-secret-token-xyz")
 	env.setPorts(h1, netip.MustParseAddrPort("127.0.0.1:5173"))
 	env.bgReg.RefreshListeners(ctx)
 
 	// 2. Running background job in archived sess2 under rootB.
-	h2, err := env.bgReg.StartPipeline(ctx, bgprocess.PipelineSpec{
-		SessionID: sess2.ID, ProjectID: proj1.ID, Runner: runner, Mode: bgprocess.JobModeBackground,
-		Request: hostcmd.Request{
-			Launch:     exec.HostLaunch("worker-daemon"),
-			ProjectDir: rootBDir,
-			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-		},
-	})
-	testutil.FailErr(t, "start h2", err)
+	h2 := env.startLongLivedBackground(t, sess2, rootBDir, "worker-daemon")
 
 	// 3. Unpromoted JobModeAwaited job in sess1 (must NOT appear in project background list).
 	_, err = env.bgReg.StartPipeline(ctx, bgprocess.PipelineSpec{
@@ -244,27 +243,9 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 	}
 
 	// 5. Running background job in proj2 (must NOT appear in proj1's list).
-	hOther, err := env.bgReg.StartPipeline(ctx, bgprocess.PipelineSpec{
-		SessionID: sessOther.ID, ProjectID: proj2.ID, Runner: runner, Mode: bgprocess.JobModeBackground,
-		Request: hostcmd.Request{
-			Launch:     exec.HostLaunch("other-project-server"),
-			ProjectDir: otherDir,
-			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-		},
-	})
-	testutil.FailErr(t, "start hOther", err)
+	hOther := env.startLongLivedBackground(t, sessOther, otherDir, "other-project-server")
 
-	// Call GET /v1/projects/{proj1.ID}/background
-	listRec := httptest.NewRecorder()
-	env.srv.ServeHTTP(listRec, newAuthedRequest(http.MethodGet, "/v1/projects/"+proj1.ID+"/background", nil))
-	if listRec.Code != http.StatusOK {
-		t.Fatalf("list status = %d body=%s", listRec.Code, listRec.Body.String())
-	}
-	var listResp wire.ProjectBackgroundProcessListResponse
-	testutil.FailErr(t, "decode list response", json.Unmarshal(listRec.Body.Bytes(), &listResp))
-	if listResp.Revision <= 0 {
-		t.Fatalf("expected positive revision, got %d", listResp.Revision)
-	}
+	listResp := env.listBackground(t, proj1.ID)
 	if len(listResp.Processes) != 3 {
 		t.Fatalf("expected 3 processes (h1, h2, hEnded), got %d: %+v", len(listResp.Processes), listResp.Processes)
 	}
@@ -323,24 +304,43 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 		s.ArchivedAt = &now
 	}))
 
-	listRec2 := httptest.NewRecorder()
-	env.srv.ServeHTTP(listRec2, newAuthedRequest(http.MethodGet, "/v1/projects/"+proj1.ID+"/background", nil))
-	if listRec2.Code != http.StatusOK {
-		t.Fatalf("list2 status = %d", listRec2.Code)
-	}
-	var listResp2 wire.ProjectBackgroundProcessListResponse
-	testutil.FailErr(t, "decode list2 response", json.Unmarshal(listRec2.Body.Bytes(), &listResp2))
-	for _, p := range listResp2.Processes {
-		if p.ProcessID == h1 {
-			if p.SessionTitle != "Renamed Live Title" || !p.SessionArchived {
-				t.Fatalf("live hydration did not reflect updated session title/archived state: %+v", p)
-			}
-		}
-	}
+	env.assertBackgroundSessionMetadata(t, proj1.ID, h1, "Renamed Live Title", true)
 
-	// Verify SessionSummary.BackgroundRunning on GET /v1/projects/{proj1.ID}/sessions?archived=true.
+	env.assertBackgroundCountsAcrossSurfaces(t, proj1.ID, 3)
+}
+
+func (env *projectBackgroundTestEnv) assertBackgroundSessionMetadata(t *testing.T, projectID, handle, title string, archived bool) {
+	t.Helper()
+	for _, process := range env.listBackground(t, projectID).Processes {
+		if process.ProcessID != handle {
+			continue
+		}
+		if process.SessionTitle != title || process.SessionArchived != archived {
+			t.Fatalf("live hydration did not reflect updated session title/archived state: %+v", process)
+		}
+		return
+	}
+	t.Fatalf("live hydration lost background process %s", handle)
+}
+
+func (env *projectBackgroundTestEnv) startLongLivedBackground(t *testing.T, sess *wire.Session, dir, command string) string {
+	t.Helper()
+	handle, err := env.bgReg.StartPipeline(t.Context(), bgprocess.PipelineSpec{
+		SessionID: sess.ID, ProjectID: sess.ProjectID, Runner: hostcmd.NewRunner(), Mode: bgprocess.JobModeBackground,
+		Request: hostcmd.Request{
+			Launch: exec.HostLaunch(command), ProjectDir: dir,
+			Stages: []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
+		},
+	})
+	testutil.FailErr(t, "start long-lived background fixture", err)
+	return handle
+}
+
+func (env *projectBackgroundTestEnv) assertBackgroundCountsAcrossSurfaces(t *testing.T, projectID string, totalRunning int) {
+	t.Helper()
+	// Verify SessionSummary.BackgroundRunning on GET /v1/projects/{projectID}/sessions?archived=true.
 	sessListRec := httptest.NewRecorder()
-	env.srv.ServeHTTP(sessListRec, newAuthedRequest(http.MethodGet, "/v1/projects/"+proj1.ID+"/sessions?archived=true", nil))
+	env.srv.ServeHTTP(sessListRec, newAuthedRequest(http.MethodGet, "/v1/projects/"+projectID+"/sessions?archived=true", nil))
 	if sessListRec.Code != http.StatusOK {
 		t.Fatalf("sessions list status = %d body=%s", sessListRec.Code, sessListRec.Body.String())
 	}
@@ -355,9 +355,9 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 		}
 	}
 
-	// Verify GET /v1/projects/{proj1.ID}/removal-assessment populates background_processes.
+	// Verify GET /v1/projects/{projectID}/removal-assessment populates background_processes.
 	assessRec := httptest.NewRecorder()
-	env.srv.ServeHTTP(assessRec, newAuthedRequest(http.MethodGet, "/v1/projects/"+proj1.ID+"/removal-assessment", nil))
+	env.srv.ServeHTTP(assessRec, newAuthedRequest(http.MethodGet, "/v1/projects/"+projectID+"/removal-assessment", nil))
 	if assessRec.Code != http.StatusOK {
 		t.Fatalf("removal-assessment status = %d body=%s", assessRec.Code, assessRec.Body.String())
 	}
@@ -368,10 +368,10 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 	}
 
 	// Verify cross-project active background command query returns all 3 running jobs across proj1 and proj2.
-	allRunning, err := env.sessions.ProjectControl.AllRunningBackgroundProcesses(ctx)
+	allRunning, err := env.sessions.ProjectControl.AllRunningBackgroundProcesses(t.Context())
 	testutil.FailErr(t, "AllRunningBackgroundProcesses", err)
-	if len(allRunning) != 3 {
-		t.Fatalf("AllRunningBackgroundProcesses = %d, want 3 (h1, h2, hOther)", len(allRunning))
+	if len(allRunning) != totalRunning {
+		t.Fatalf("AllRunningBackgroundProcesses = %d, want %d", len(allRunning), totalRunning)
 	}
 	for _, proc := range allRunning {
 		if proc.ProjectName == "" {
@@ -387,8 +387,8 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 	}
 	var powerResp wire.PowerSettingsResponse
 	testutil.FailErr(t, "decode power settings", json.Unmarshal(powerRec.Body.Bytes(), &powerResp))
-	if len(powerResp.BackgroundProcesses) != 3 {
-		t.Fatalf("power settings background_processes = %+v, want 3", powerResp.BackgroundProcesses)
+	if len(powerResp.BackgroundProcesses) != totalRunning {
+		t.Fatalf("power settings background_processes = %+v, want %d", powerResp.BackgroundProcesses, totalRunning)
 	}
 }
 
@@ -624,7 +624,7 @@ func TestProjectBackgroundEventsAndReconnectReplay(t *testing.T) {
 				continue
 			}
 			var envEvent struct {
-				Topic   wire.EventTopic            `json:"topic"`
+				Topic   wire.EventTopic             `json:"topic"`
 				Payload wire.ProjectBackgroundEvent `json:"payload"`
 			}
 			testutil.FailErr(t, "decode SSE envelope", json.Unmarshal([]byte(strings.TrimSpace(data)), &envEvent))

@@ -116,6 +116,14 @@ fi
 		t.Fatalf("terminal not registered with session process owner: %+v", listed)
 	}
 	process := listed.Processes[0]
+	line, ok := lineage.Of(pid)
+	if !ok {
+		t.Fatal("terminal process lost its live action lineage")
+	}
+	job, ok := f.Background.LookupByLineage(string(line.ID()))
+	if !ok || job.Handle != opened.ID || job.SessionID != tc.Identity.SessionID || !job.Running {
+		t.Fatalf("terminal action is not attached to its registered process: %+v, found=%v", job, ok)
+	}
 	testutil.FailErr(t, "signal own terminal", processes.Signal(t.Context(), tc.Identity.SessionID, process, "CONT"))
 	if err := processes.Signal(t.Context(), "another-session", process, "CONT"); !errors.Is(err, hostprocess.ErrNotOwned) {
 		t.Fatalf("foreign session terminal signal=%v", err)

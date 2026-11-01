@@ -199,7 +199,7 @@ func providerMeta(entry CatalogEntry, reg *Registry, settings Settings, creds *C
 		Roles:                wireProviderRoles(entry),
 		DefaultEnabled:       entry.DefaultEnabled,
 		Configured:           configured,
-		CredentialPresent:   credPresent,
+		CredentialPresent:    credPresent,
 		CredentialSource:     credentialSource,
 		CredentialSlot:       slot,
 		AllowPrivateEndpoint: entry.AllowPrivateEndpoint,

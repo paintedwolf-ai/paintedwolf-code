@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -20,25 +19,25 @@ import (
 var relayedSignals = []os.Signal{syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGCONT}
 
 // parseRelayTarget decodes a relayed supervisor or a relayed prepared command
-// into the extra-descriptor count and the request argv for the broker.
-func parseRelayTarget(program string, args []string) (int, []string, bool) {
+// into the explicit descriptor layout and the request argv for the broker.
+func parseRelayTarget(program string, args []string) (string, []string, bool) {
 	if len(args) > 0 && args[0] == supervisorCommand {
 		target, ok := parseSupervisorTarget(args[1:])
 		if !ok {
-			return 0, nil, false
+			return "", nil, false
 		}
 		// The supervisor's descriptors: the target's, its lifetime pipe and its
 		// startup report.
-		return target.extraFiles + 2, append([]string{program, supervisorCommand}, args[1:]...), true
+		layout := target.descriptors + "11"
+		return layout, append([]string{program, supervisorCommand}, args[1:]...), validFileLayout(layout)
 	}
 	if len(args) < 3 || args[1] == "" {
-		return 0, nil, false
+		return "", nil, false
 	}
-	count, err := strconv.Atoi(args[0])
-	if err != nil || count < 0 {
-		return 0, nil, false
+	if !validFileLayout(args[0]) {
+		return "", nil, false
 	}
-	return count, append([]string{args[1]}, args[3:]...), true
+	return args[0], append([]string{args[1]}, args[3:]...), true
 }
 
 // runBrokerRelay starts, through the protected launch's broker, the command
@@ -50,31 +49,19 @@ func runBrokerRelay(args []string) int {
 	if err != nil {
 		return 125
 	}
-	extras, argv, ok := parseRelayTarget(program, args)
+	layout, argv, ok := parseRelayTarget(program, args)
 	if !ok {
 		return 125
 	}
-	brokerFD := 3 + extras
+	brokerFD := 3 + len(layout)
 	if _, err := launchbroker.CheckSocket(brokerFD); err != nil {
 		fmt.Fprintf(os.Stderr, "broker relay: %v\n", err)
 		return 125
 	}
 	broker := os.NewFile(uintptr(brokerFD), "launch-broker")
-	files := make([]*os.File, extras)
-	for i := range files {
-		fd := 3 + i
-		if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err != nil {
-			// A slot the parent left closed (a confinement helper pads its
-			// descriptor layout this way) cannot travel as a right; the
-			// supervisor receives /dev/null there, which no flag names.
-			null, err := os.Open(os.DevNull)
-			if err != nil {
-				return 125
-			}
-			files[i] = null
-			continue
-		}
-		files[i] = os.NewFile(uintptr(fd), "supervisor-descriptor")
+	files, err := relayDescriptorFiles(layout)
+	if err != nil {
+		return 125
 	}
 	events := make(chan os.Signal, 8)
 	signal.Notify(events, relayedSignals...)
@@ -92,9 +79,9 @@ func runBrokerRelay(args []string) int {
 	channel, err := launchbroker.Send(
 		broker,
 		request,
-		os.NewFile(0, "relay-stdin"),
-		os.NewFile(1, "relay-stdout"),
-		os.NewFile(2, "relay-stderr"),
+		os.Stdin,
+		os.Stdout,
+		os.Stderr,
 		files...,
 	)
 	// The supervisor holds its own copies now; the startup report must reach
@@ -108,6 +95,32 @@ func runBrokerRelay(args []string) int {
 		return 125
 	}
 	return relayEvents(channel, events)
+}
+
+func relayDescriptorFiles(layout string) ([]*os.File, error) {
+	if !validFileLayout(layout) {
+		return nil, fmt.Errorf("invalid inherited descriptor layout")
+	}
+	files := make([]*os.File, len(layout))
+	for i := range files {
+		if layout[i] == '1' {
+			files[i] = os.NewFile(uintptr(3+i), "supervisor-descriptor")
+			continue
+		}
+		// SCM_RIGHTS needs a real descriptor in each transport slot. The target
+		// still sees a closed slot from the explicit supervisor layout.
+		file, err := os.Open(os.DevNull)
+		if err != nil {
+			for _, opened := range files {
+				if opened != nil {
+					_ = opened.Close()
+				}
+			}
+			return nil, err
+		}
+		files[i] = file
+	}
+	return files, nil
 }
 
 // relayEvents forwards signals to the brokered supervisor and returns, or

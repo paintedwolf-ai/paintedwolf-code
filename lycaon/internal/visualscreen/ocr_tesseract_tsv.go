@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
 // tsvWordLevel is the row level of one recognized word in Tesseract TSV.
@@ -36,7 +38,9 @@ func (l *tsvLine) addWord(wordNum, text string, conf float64) {
 				return
 			}
 		}
-		l.wordAlts[slot] = append(l.wordAlts[slot], text)
+		if len(l.wordAlts[slot]) < maxOCRCandidates-1 {
+			l.wordAlts[slot] = append(l.wordAlts[slot], text)
+		}
 		return
 	}
 	slot := len(l.words)
@@ -46,19 +50,44 @@ func (l *tsvLine) addWord(wordNum, text string, conf float64) {
 	l.confidence += max(conf, 0)
 }
 
-func (l *tsvLine) candidates() []string {
+func (l *tsvLine) candidates() ([]string, error) {
+	primary := strings.Join(l.words, " ")
+	seen := map[string]struct{}{primary: {}}
 	var out []string
+	add := func(s string) {
+		if s == "" || len(out) >= maxOCRCandidates-1 {
+			return
+		}
+		if _, dup := seen[s]; dup {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
 	for slot, alts := range l.wordAlts {
 		for _, alt := range alts {
 			if len(out) >= maxOCRCandidates-1 {
-				return out
+				return out, nil
 			}
 			words := append([]string(nil), l.words...)
 			words[slot] = alt
-			out = append(out, strings.Join(words, " "))
+			add(strings.Join(words, " "))
 		}
 	}
-	return out
+	// Recognition candidates retain the primary line and add a bounded spacing
+	// hypothesis. Joining once avoids repeatedly copying a growing token.
+	joined := strings.Join(l.words, "")
+	add(joined)
+	for _, text := range []string{joined, primary} {
+		candidates, err := secretmatch.OCRDoubletCandidates(text, maxOCRCandidates-1-len(out))
+		if err != nil {
+			return nil, err
+		}
+		for _, candidate := range candidates {
+			add(candidate)
+		}
+	}
+	return out, nil
 }
 
 // parseTesseractTSV groups word rows into line spans. Boxes are normalized to
@@ -121,9 +150,13 @@ func parseTesseractTSV(data []byte, width, height int) ([]TextSpan, error) {
 	spans := make([]TextSpan, 0, len(order))
 	for _, key := range order {
 		line := lines[key]
+		candidates, err := line.candidates()
+		if err != nil {
+			return nil, fmt.Errorf("tesseract tsv candidates: %w", err)
+		}
 		spans = append(spans, TextSpan{
 			Text:       strings.Join(line.words, " "),
-			Candidates: line.candidates(),
+			Candidates: candidates,
 			Confidence: line.confidence / float64(len(line.words)) / 100,
 			BoundingBox: [4]float64{
 				float64(line.left) / float64(width),

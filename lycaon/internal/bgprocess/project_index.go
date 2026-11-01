@@ -60,6 +60,15 @@ func (r *processTable) checkAdmissionLocked(projectID, sessionID, rootSessionID,
 	return "", true
 }
 
+// Recheck teardown after native launch, before publishing the registered process.
+func (r *processTable) revalidateStartedProcessLocked(proc *Process, workDir string) bool {
+	if reason, admitted := r.checkAdmissionLocked(proc.ProjectID, proc.SessionID, proc.RootSessionID, workDir); !admitted && !proc.stopped {
+		proc.stopped = true
+		proc.reason = reason
+	}
+	return proc.stopped
+}
+
 func (r *processTable) recordStagePID(handle string, pid int) {
 	if r == nil || pid <= 0 || handle == "" {
 		return

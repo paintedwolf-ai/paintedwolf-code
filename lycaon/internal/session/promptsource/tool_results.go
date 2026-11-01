@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -25,7 +26,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ToolResults applies host feedback to a completed tool invocation.
+// ToolResults applies host feedback to a returned tool invocation.
 type ToolResults struct {
 	Batch       *batchcontrol.Service
 	Enricher    *guidance.ToolOutputEnricher
@@ -69,6 +70,7 @@ func (m *ToolResults) EnrichTool(
 	args map[string]any,
 	output string,
 	raised guidance.ToolResultFacts,
+	completion *api.ToolCompletion,
 	doomCompletionCountAfter int,
 ) (string, guidance.ToolResultFacts) {
 	facts := raised
@@ -82,7 +84,8 @@ func (m *ToolResults) EnrichTool(
 		)
 		facts = facts.Merge(postFacts)
 	}
-	if !facts.Succeeded() || m.Enricher == nil {
+	// A parked call still crosses post-tool policy, but its operation is unfinished.
+	if !facts.Succeeded() || m.Enricher == nil || loopwake.ParkedCompletionEndsCycle(completion) {
 		return output, facts
 	}
 	eval, err := toolpolicy.BuildEvalContext(ctx, m.Guards.PolicyDependencies(), sess, tool, args)

@@ -41,9 +41,12 @@ copy:
     exit.{% else %}Wait for its observed exit.{% endif %} A stop request alone does not
     establish exit. Do not reissue while the job is running. After it exits, review the outcome.
     {% endif %}Preserve completed effects. If the task still needs the refused operation, reissue
-    the same command with `capability_request.socket_paths` naming the socket,
-    or with `capability_request.host_resources` naming the listed host
-    resource whose route is that socket.
+    the operation with `capability_request.socket_paths` naming the exact service.
+    For an external process, pass a whole `paintedwolf-socket` reference
+    (the syntax in the socket_paths tool schema) as its socket argument or an environment value; code or configuration
+    reads that variable. An already-declared raw pathname does not become a bound
+    endpoint. Native socket arguments take the ordinary path. A host-resource
+    pathname lease cannot authorize a replacement service.
   instead: >-
     {% if paintedwolf.process_running %}Resolve the running job before retrying;
     a stop request alone does not establish exit.{% else %}Preserve completed effects;

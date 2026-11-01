@@ -216,7 +216,7 @@ func TestBatchProgressConsumesInvocationFactsBeforeTranscriptProjection(t *testi
 					}
 					return "", false, nil
 				},
-				EnrichToolOutput: func(_ context.Context, _ *api.Session, _ string, _ map[string]any, _ string, facts guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
+				EnrichToolOutput: func(_ context.Context, _ *api.Session, _ string, _ map[string]any, _ string, facts guidance.ToolResultFacts, _ *api.ToolCompletion, _ int) (string, guidance.ToolResultFacts) {
 					return "Display replaced after execution", facts
 				},
 			}, Projection: ProjectionDeps{AppendMessages: func(context.Context, string, ...api.Message) error { return nil }}})

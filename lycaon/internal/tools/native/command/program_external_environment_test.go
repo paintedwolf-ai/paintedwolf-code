@@ -163,7 +163,7 @@ func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 
 	// Verify a multi-stage pipeline preserves the failing external stage's confinement facts
 	// even when a downstream stage exits 0.
-	out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf nope > \"$1\"' sh "+outsideTarget+" 2>&1 | head -n 1")
+	_, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf nope > \"$1\"' sh "+outsideTarget+" 2>&1 | head -n 1")
 	testutil.FailErr(t, "run confined outside write pipeline", err)
 	if !effects.Facts.Confine.Applied || len(effects.Facts.Confine.FailedStages) == 0 {
 		t.Fatalf("pipeline lost earlier external stage confinement facts: %+v", effects.Facts.Confine)
