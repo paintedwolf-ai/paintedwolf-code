@@ -6,6 +6,18 @@ if [[ "${1:-}" == search-reference ]]; then
   [[ $# -eq 2 ]] || { echo "error: expected a search-reference destination" >&2; exit 2; }
   exec python3 "$ROOT/scripts/ci_policy/search_reference.py" "$2"
 fi
+if [[ "${1:-}" == repository-tools ]]; then
+  [[ $# -eq 1 ]] || { echo "error: repository-tools takes no arguments" >&2; exit 2; }
+  case "$(uname -s)" in
+    Linux)
+      sudo apt-get update -qq
+      sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg minisign pacman-package-manager rpm
+      ;;
+    Darwin) HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign ;;
+    *) echo "error: repository tools require macOS or apt-based Linux" >&2; exit 2 ;;
+  esac
+  exit 0
+fi
 case "${1:-verification}" in
   verification|analysis) ;;
   *) echo "error: unknown CI input profile: $1" >&2; exit 2 ;;
