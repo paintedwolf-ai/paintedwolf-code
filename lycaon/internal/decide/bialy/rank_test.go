@@ -19,7 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestRankReleasesDeviceBetweenBatches(t *testing.T) {
+func TestRankRetainsPriorityAcrossBatches(t *testing.T) {
 	for _, outcome := range []string{"success", "cancel", "invalid_scores", "engine_error"} {
 		t.Run(outcome, func(t *testing.T) {
 			second := `printf '{"id":%s,"scores":[2,3]}\n' "$id"`
@@ -54,21 +54,14 @@ func TestRankReleasesDeviceBetweenBatches(t *testing.T) {
 				}
 			}()
 			testutil.WaitFor(t, func() bool { return device.Snapshot().Queued == 1 })
-			_, err := fifo.WriteString("release\n")
-			testutil.FailErr(t, "complete first batch", err)
-			permit := <-generation
-			defer permit.Complete()
-			testutil.WaitFor(t, func() bool { return device.Snapshot().Queued == 1 })
-			select {
-			case got := <-done:
-				t.Fatalf("ranking finished before generation released its permit: %+v", got)
-			default:
-			}
 			if outcome == "cancel" {
 				cancel()
 			}
-			permit.Complete()
+			_, err := fifo.WriteString("release\n")
+			testutil.FailErr(t, "complete first batch", err)
 			got := <-done
+			permit := <-generation
+			permit.Complete()
 			if outcome == "success" {
 				testutil.FailErr(t, "rank all batches", got.err)
 				if !reflect.DeepEqual(got.scores, []float64{0, 1, 2, 3, 4}) {

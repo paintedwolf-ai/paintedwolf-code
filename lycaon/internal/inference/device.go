@@ -31,11 +31,12 @@ type Work struct {
 
 // Device admits one physical step at a time. Cancellation never releases active work.
 type Device struct {
-	mu      sync.Mutex
-	limit   int
-	closed  bool
-	active  *Permit
-	waiters []*ticket
+	mu            sync.Mutex
+	limit         int
+	closed        bool
+	active        *Permit
+	waiters       []*ticket
+	priorityHolds [4]int
 }
 
 func NewDevice(queueLimit int) (*Device, error) {
@@ -129,6 +130,11 @@ func (d *Device) dispatch() {
 			}
 		}
 		t := d.waiters[best]
+		for priority, held := range d.priorityHolds {
+			if held > 0 && t.work.Priority > Priority(priority) {
+				return
+			}
+		}
 		d.remove(best)
 		t.stop()
 		if err := t.ctx.Err(); err != nil {

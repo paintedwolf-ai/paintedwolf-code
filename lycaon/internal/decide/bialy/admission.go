@@ -25,3 +25,16 @@ func (p *process) acquireDevice(ctx context.Context) (*inference.Permit, error) 
 	}
 	return permit, err
 }
+
+func (p *process) prioritize(ctx context.Context) (func(), error) {
+	if p.device == nil {
+		return func() {}, nil
+	}
+	lease, err := p.device.HoldPriority(ctx, inference.Work{
+		Owner: "bialy", Generation: p.generation, Priority: inference.Decision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return lease.Release, nil
+}

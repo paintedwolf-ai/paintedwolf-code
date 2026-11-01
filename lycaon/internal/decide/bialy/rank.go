@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 )
 
-// Rank scores candidates in order, releasing the device between native batches.
+// Rank preserves candidate order and decision priority across bounded batches.
 func (c *Client) Rank(ctx context.Context, head decide.Head, task string, candidates []string) ([]float64, decide.Engine, error) {
 	if len(candidates) == 0 {
 		return nil, c.Engine(), nil
@@ -16,6 +16,11 @@ func (c *Client) Rank(ctx context.Context, head decide.Head, task string, candid
 	if err != nil {
 		return nil, decide.Engine{}, err
 	}
+	release, err := proc.prioritize(ctx)
+	if err != nil {
+		return nil, decide.Engine{}, err
+	}
+	defer release()
 	engine := c.Engine()
 	rows := 32
 	if c.cfg.Resources != nil {
