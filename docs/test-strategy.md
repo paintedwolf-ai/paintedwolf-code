@@ -1238,6 +1238,17 @@ evidence must retain the actual test and child/cleanup errors through enclosing
 coverage tasks, so each repair starts from the complete failure rather than a
 truncated summary.
 
+Review the test portfolio alongside execution cost. One instrumented run should
+supply assertions and coverage when its inputs and execution mode satisfy both
+contracts; compare test inventories and child coverage before consolidating runs.
+Short covered tests, full integration-tagged tests and real platform boundaries
+can provide different evidence even when names overlap. Keep cheap mechanism and
+resource-bound cases in ready checks, and explicitly select full-size scale cases
+for affected qualification, nightly and release work. Preserve real default-limit
+acceptance/refusal cases when smaller fixtures use an injectable limit. Retire a
+test only after identifying its distinct regression and proving that a retained
+replacement catches it; elapsed time or test count alone does not establish value.
+
 1. Separate preparation, compiler execution, queue admission wait, test execution,
    and evidence publication in the latency report. A parent task's elapsed time
    can include a nested request's wait; do not attribute all of it to its tests.
