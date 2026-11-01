@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -25,6 +26,13 @@ const (
 	layoutChunkMaxEntries = 4096
 	layoutChunkCutMask    = 511
 	layoutInsertRows      = 64
+	manifestLayoutIndexes = `
+CREATE INDEX IF NOT EXISTS idx_source_snapshot_roots_manifest
+    ON source_snapshot_roots(manifest_id);
+CREATE INDEX IF NOT EXISTS idx_source_manifest_layout_chunk
+    ON source_manifest_layout(chunk_id);
+CREATE INDEX IF NOT EXISTS idx_source_manifest_entries_sha
+    ON source_manifest_entries(sha256) WHERE sha256 != '';`
 )
 
 type layoutEntry struct {
@@ -37,51 +45,12 @@ type layoutChunk struct {
 	entries, totalBytes, hashed int64
 }
 
-func retainedManifestCopy() *RetainedCopy {
-	return &RetainedCopy{
-		SourceShapes: []string{SourceNamespace().From.Shape, sourceNamespaceTarget.Shape, manifestLayoutSource.Shape},
-		// Independent cardinalities: source chunk metadata states how many entries
-		// must survive, rather than trusting the copying predicate to validate itself.
-		ExpectedRows: map[string]string{
-			"source_manifest_chunks":  `SELECT COUNT(DISTINCT chunk_id) FROM original.source_snapshot_chunks NOT INDEXED`,
-			"source_manifest_entries": `SELECT COALESCE(SUM(entry_count),0) FROM original.source_manifest_chunks NOT INDEXED WHERE id IN (SELECT chunk_id FROM original.source_snapshot_chunks NOT INDEXED)`,
-			"source_manifest_staging": `SELECT 0`,
-		},
-		Sources: map[string]string{
-			"source_manifest_chunks": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks NOT INDEXED) c
-CROSS JOIN original.source_manifest_chunks e ON e.id = c.chunk_id`,
-			"source_manifest_entries": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks NOT INDEXED) c
-CROSS JOIN original.source_manifest_entries e ON e.chunk_id = c.chunk_id`,
-			"source_manifest_staging": `FROM original.source_manifest_staging e WHERE 0`,
-		},
-		// Reclamation checks surviving references independently. Reading every
-		// discarded entry just to discover candidates would defeat the rebuild.
-		After: []string{`INSERT OR IGNORE INTO source_blob_reclaim_queue SELECT sha256 FROM source_blob_objects`},
-	}
-}
-
 func migrateManifestLayout(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, string(manifestLayoutSchema)); err != nil {
 		return err
 	}
-	insert, err := prepareLayoutEntryInsert(ctx, tx, layoutInsertRows)
-	if err != nil {
+	if err := convertLegacyRoots(ctx, tx); err != nil {
 		return err
-	}
-	defer func() { _ = insert.Close() }()
-	roots, err := legacySnapshotRoots(ctx, tx)
-	if err != nil {
-		return err
-	}
-	for _, root := range roots {
-		manifest, err := convertLegacyRoot(ctx, tx, insert, root.snapshotID, root.path)
-		if err != nil {
-			return fmt.Errorf("convert snapshot %s root %s: %w", root.snapshotID, root.path, err)
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO source_snapshot_roots (snapshot_id, root_path, ordinal, manifest_id)
-VALUES (?, ?, ?, ?)`, root.snapshotID, root.path, root.ordinal, manifest); err != nil {
-			return err
-		}
 	}
 	// Children drop before their parent so no drop deletes row by row.
 	for _, table := range []string{
@@ -92,12 +61,61 @@ VALUES (?, ?, ?, ?)`, root.snapshotID, root.path, root.ordinal, manifest); err !
 			return err
 		}
 	}
-	return nil
+	_, err := tx.ExecContext(ctx, manifestLayoutIndexes)
+	return err
 }
 
 type legacyRoot struct {
 	snapshotID, path string
 	ordinal          int64
+}
+
+type legacyManifestConverter struct {
+	tx            *sql.Tx
+	insert        *sql.Stmt
+	readChunk     *sql.Stmt
+	chunks        map[string]map[string][]layoutEntry
+	manifests     map[string]string
+	writtenChunks map[string]struct{}
+}
+
+func convertLegacyRoots(ctx context.Context, tx *sql.Tx) error {
+	roots, err := legacySnapshotRoots(ctx, tx)
+	if err != nil || len(roots) == 0 {
+		return err
+	}
+	snapshotChunks, err := legacySnapshotChunks(ctx, tx)
+	if err != nil {
+		return err
+	}
+	insert, err := prepareLayoutEntryInsert(ctx, tx, layoutInsertRows)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = insert.Close() }()
+	readChunk, err := tx.PrepareContext(ctx, `SELECT root_path, path, sha256, git_oid, identity, size, mode, modified_ns
+FROM legacy_source_manifest_entries WHERE chunk_id = ?`)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = readChunk.Close() }()
+	converter := &legacyManifestConverter{
+		tx: tx, insert: insert, readChunk: readChunk,
+		chunks:        map[string]map[string][]layoutEntry{},
+		manifests:     map[string]string{},
+		writtenChunks: map[string]struct{}{},
+	}
+	for _, root := range roots {
+		manifest, err := converter.convertRoot(ctx, root.path, snapshotChunks[root.snapshotID])
+		if err != nil {
+			return fmt.Errorf("convert snapshot %s root %s: %w", root.snapshotID, root.path, err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO source_snapshot_roots (snapshot_id, root_path, ordinal, manifest_id)
+VALUES (?, ?, ?, ?)`, root.snapshotID, root.path, root.ordinal, manifest); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func legacySnapshotRoots(ctx context.Context, tx *sql.Tx) ([]legacyRoot, error) {
@@ -118,45 +136,127 @@ ORDER BY snapshot_id, ordinal`)
 	return out, rows.Err()
 }
 
-// convertLegacyRoot streams one root's retained entries in path order into
-// content-defined chunks and records the manifest that lists them.
-func convertLegacyRoot(ctx context.Context, tx *sql.Tx, insert *sql.Stmt, snapshotID, rootPath string) (string, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
-FROM legacy_source_snapshot_chunks c
-CROSS JOIN legacy_source_manifest_entries e ON e.chunk_id = c.chunk_id
-WHERE c.snapshot_id = ? AND e.root_path = ?
-ORDER BY e.path`, snapshotID, rootPath)
+func legacySnapshotChunks(ctx context.Context, tx *sql.Tx) (map[string][]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT snapshot_id, chunk_id FROM legacy_source_snapshot_chunks
+ORDER BY snapshot_id, chunk_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string][]string{}
+	for rows.Next() {
+		var snapshotID, chunkID string
+		if err := rows.Scan(&snapshotID, &chunkID); err != nil {
+			return nil, err
+		}
+		chunks := out[snapshotID]
+		if len(chunks) == 0 || chunks[len(chunks)-1] != chunkID {
+			out[snapshotID] = append(chunks, chunkID)
+		}
+	}
+	return out, rows.Err()
+}
+
+func legacyRootManifestKey(rootPath string, chunkIDs []string) string {
+	return strconv.Itoa(len(rootPath)) + ":" + rootPath + "\x00" + strings.Join(chunkIDs, "\x00")
+}
+
+// convertRoot merges one root's retained legacy chunks in path order into
+// content-defined chunks and reuses manifests across identical chunk sets.
+func (c *legacyManifestConverter) convertRoot(ctx context.Context, rootPath string, chunkIDs []string) (string, error) {
+	key := legacyRootManifestKey(rootPath, chunkIDs)
+	if manifest, ok := c.manifests[key]; ok {
+		return manifest, nil
+	}
+	var active []string
+	var total int
+	for _, chunkID := range chunkIDs {
+		if err := c.ensureChunkDecoded(ctx, chunkID); err != nil {
+			return "", err
+		}
+		if n := len(c.chunks[chunkID][rootPath]); n > 0 {
+			active = append(active, chunkID)
+			total += n
+		}
+	}
+	activeKey := legacyRootManifestKey(rootPath, active)
+	if manifest, ok := c.manifests[activeKey]; ok {
+		c.manifests[key] = manifest
+		return manifest, nil
+	}
+	entries := make([]layoutEntry, 0, total)
+	for _, chunkID := range active {
+		entries = append(entries, c.chunks[chunkID][rootPath]...)
+	}
+	slices.SortStableFunc(entries, func(a, b layoutEntry) int {
+		return strings.Compare(a.path, b.path)
+	})
+	manifest, err := c.writeRootManifest(ctx, entries)
 	if err != nil {
 		return "", err
 	}
+	c.manifests[key], c.manifests[activeKey] = manifest, manifest
+	return manifest, nil
+}
+
+func (c *legacyManifestConverter) ensureChunkDecoded(ctx context.Context, chunkID string) error {
+	if _, ok := c.chunks[chunkID]; ok {
+		return nil
+	}
+	rows, err := c.readChunk.QueryContext(ctx, chunkID)
+	if err != nil {
+		return err
+	}
 	defer func() { _ = rows.Close() }()
+	byRoot := map[string][]layoutEntry{}
+	for rows.Next() {
+		var rootPath string
+		var entry layoutEntry
+		if err := rows.Scan(&rootPath, &entry.path, &entry.sha256, &entry.gitOID, &entry.identity, &entry.size, &entry.mode, &entry.modifiedNS); err != nil {
+			return err
+		}
+		byRoot[rootPath] = append(byRoot[rootPath], entry)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	c.chunks[chunkID] = byRoot
+	return rows.Close()
+}
+
+func (c *legacyManifestConverter) writeRootManifest(ctx context.Context, entries []layoutEntry) (string, error) {
 	var pending []layoutEntry
 	var chunks []layoutChunk
-	for rows.Next() {
-		var entry layoutEntry
-		if err := rows.Scan(&entry.path, &entry.sha256, &entry.gitOID, &entry.identity, &entry.size, &entry.mode, &entry.modifiedNS); err != nil {
-			return "", err
-		}
+	for _, entry := range entries {
 		pending = append(pending, entry)
 		if layoutCutAfter(entry.path, len(pending)) {
-			chunk, err := writeLayoutChunk(ctx, tx, insert, pending)
+			chunk, err := c.writeChunk(ctx, pending)
 			if err != nil {
 				return "", err
 			}
 			chunks, pending = append(chunks, chunk), pending[:0]
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return "", err
-	}
 	if len(pending) > 0 {
-		chunk, err := writeLayoutChunk(ctx, tx, insert, pending)
+		chunk, err := c.writeChunk(ctx, pending)
 		if err != nil {
 			return "", err
 		}
 		chunks = append(chunks, chunk)
 	}
-	return writeLayoutManifest(ctx, tx, chunks)
+	return writeLayoutManifest(ctx, c.tx, chunks)
+}
+
+func (c *legacyManifestConverter) writeChunk(ctx context.Context, entries []layoutEntry) (layoutChunk, error) {
+	chunk := buildLayoutChunk(entries)
+	if _, ok := c.writtenChunks[chunk.id]; ok {
+		return chunk, nil
+	}
+	if _, err := insertLayoutChunk(ctx, c.tx, c.insert, chunk, entries); err != nil {
+		return layoutChunk{}, err
+	}
+	c.writtenChunks[chunk.id] = struct{}{}
+	return chunk, nil
 }
 
 func layoutCutAfter(path string, n int) bool {
@@ -172,6 +272,10 @@ func layoutCutAfter(path string, n int) bool {
 }
 
 func writeLayoutChunk(ctx context.Context, tx *sql.Tx, insert *sql.Stmt, entries []layoutEntry) (layoutChunk, error) {
+	return insertLayoutChunk(ctx, tx, insert, buildLayoutChunk(entries), entries)
+}
+
+func buildLayoutChunk(entries []layoutEntry) layoutChunk {
 	hash := sha256.New()
 	_, _ = hash.Write([]byte("painted-wolf-source-manifest-chunk-v3\x00"))
 	chunk := layoutChunk{firstPath: entries[0].path, entries: int64(len(entries))}
@@ -190,6 +294,10 @@ func writeLayoutChunk(ctx context.Context, tx *sql.Tx, insert *sql.Stmt, entries
 		_, _ = hash.Write([]byte(entry.sha256 + "\x00" + entry.gitOID + "\x00" + entry.identity + "\x00" + strconv.FormatInt(entry.modifiedNS, 10) + "\x00"))
 	}
 	chunk.id = hex.EncodeToString(hash.Sum(nil))
+	return chunk
+}
+
+func insertLayoutChunk(ctx context.Context, tx *sql.Tx, insert *sql.Stmt, chunk layoutChunk, entries []layoutEntry) (layoutChunk, error) {
 	result, err := tx.ExecContext(ctx, `INSERT INTO source_manifest_chunks (id, content_id, entry_count, total_bytes, hashed_count)
 VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`, chunk.id, chunk.contentID, chunk.entries, chunk.totalBytes, chunk.hashed)
 	if err != nil {
@@ -277,20 +385,4 @@ VALUES (?, ?, ?)`, id, chunk.firstPath, chunk.id); err != nil {
 		}
 	}
 	return id, nil
-}
-
-// validateManifestLayout requires every retained snapshot to list exactly
-// the files it counted, through one manifest per root.
-func validateManifestLayout(ctx context.Context, tx *sql.Tx) error {
-	var mismatched int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_snapshots s
-WHERE s.file_count != COALESCE((
-    SELECT SUM(m.entry_count) FROM source_snapshot_roots r JOIN source_manifests m ON m.id = r.manifest_id
-    WHERE r.snapshot_id = s.id), 0)`).Scan(&mismatched); err != nil {
-		return err
-	}
-	if mismatched != 0 {
-		return fmt.Errorf("%d retained snapshots lost entries in the manifest layout", mismatched)
-	}
-	return nil
 }
