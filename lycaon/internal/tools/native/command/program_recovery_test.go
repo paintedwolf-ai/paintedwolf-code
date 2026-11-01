@@ -8,9 +8,13 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCommandRecoveryPreservesUnitAndPriorEffects(t *testing.T) {
@@ -83,5 +87,31 @@ func TestCommandInputIsExplicitAndPreservesLiteralBytes(t *testing.T) {
 		if got.Status != 0 || got.Refusal != nil || got.Stdout != tc.want {
 			t.Fatalf("stdin contract changed: %+v, want %q", got, tc.want)
 		}
+	}
+}
+
+func TestReachedRecoveryTravelsFromLedgerToModel(t *testing.T) {
+	f := newRecoveryFixture(t)
+	var parentID, callID string
+	observed := &tools.ToolInvocationOut{}
+	f.Configure = func(tc *tools.ToolContext) {
+		parentID, callID = tc.Invocation.ID, tc.Identity.ToolCallID
+		tc.Effects.Out = observed
+	}
+	testutil.FailErr(t, "establish write progress", f.SetProgress("- [ ] Preserve output and repair the source"))
+	body, err := f.call(t, t.Context(), `printf before | tee retained; eval 'if'`)
+	testutil.FailErr(t, "run reached refusal", err)
+	receipt, err := f.Recorder.Settle(t.Context(), parentID, invocation.Settlement{Status: api.InvocationStatusCompleted, Invoked: true, EvidenceKind: "program", SourceVerdict: api.SourceVerdictFailed})
+	testutil.FailErr(t, "settle model invocation", err)
+	message := api.Message{ID: "retained-result", Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: body, ToolResult: &api.ToolResult{Tool: "command", ToolCallID: callID, Content: body, Invocation: receipt, CommandProgram: observed.CommandProgram}}
+	projected := transcript.Project([]api.Message{message})
+	text := projected[len(projected)-1].Content
+	for _, want := range []string{"Command refusal:", "\n⟦D⟧State: Operations started:", "Completed effects: 1", "\n⟦D⟧Fix:", "Command stdout:", "before"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("reached recovery lost %q: %s", want, text)
+		}
+	}
+	if strings.Contains(text, "Nothing executed") || strings.Contains(text, `"feedback"`) || message.Content != body {
+		t.Fatalf("recovery contradicted or rewrote retained results: %s", text)
 	}
 }
