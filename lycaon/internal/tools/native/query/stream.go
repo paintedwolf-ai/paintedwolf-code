@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/itchyny/gojq"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
@@ -20,6 +21,11 @@ import (
 // gojq's input/inputs builtins, so they share one position. A malformed
 // input stops the stream after the values before it (jq's status 5); stop is
 // a typed refusal (budget, authority) that ends the run.
+type inputDecoder interface {
+	Decode() (any, error)
+	InputOffset() int64
+}
+
 type inputs struct {
 	inv      *invocation
 	operands commandprogram.Fields
@@ -30,19 +36,22 @@ type inputs struct {
 	yamlDoc   int
 	roundtrip *nativejq.YAMLRoundtrip
 	// events turns each value into its --stream events; nil passes values.
-	events        *nativejq.Program
-	pendingEvents []any
+	events        *nativejq.EventStream
+	eventMode     bool
+	eventProgram  *nativejq.Program
+	eventIterator gojq.Iter
 	pending       []any
-	stream        *nativejq.ValueStream
+	stream        inputDecoder
 	rawReader     *bufio.Reader
 	rawWork       *queryWorking
 	rawOffset     int64
 	// data holds the current operand's bytes read so far, for positions.
-	data   *bytes.Buffer
-	label  string
-	limit  int64
-	stop   error
-	broken bool
+	data      *bytes.Buffer
+	label     string
+	limit     int64
+	readBytes int64
+	stop      error
+	broken    bool
 	// openErrors records an operand that could not be read (jq's status 2).
 	openErrors    bool
 	positions     *inputPositions
@@ -53,25 +62,31 @@ type inputs struct {
 
 // Next yields the next input, or with --stream the next event of it.
 func (in *inputs) Next() (any, bool) {
-	if in.events == nil {
+	if in.eventProgram == nil {
 		return in.nextValue()
 	}
-	for len(in.pendingEvents) == 0 {
-		v, ok := in.nextValue()
+	for {
+		if in.eventIterator != nil {
+			value, ok := in.eventIterator.Next()
+			if ok {
+				if err, failed := value.(error); failed {
+					in.stop = err
+					return nil, false
+				}
+				if err := in.inv.step(); err != nil {
+					in.stop = err
+					return nil, false
+				}
+				return value, true
+			}
+			in.eventIterator = nil
+		}
+		value, ok := in.nextValue()
 		if !ok {
 			return nil, false
 		}
-		if _, err := in.events.Run(in.inv.ctx, v, func(event any) error {
-			in.pendingEvents = append(in.pendingEvents, event)
-			return nil
-		}); err != nil {
-			in.stop = err
-			return nil, false
-		}
+		in.eventIterator = in.eventProgram.Iterate(in.inv.ctx, value)
 	}
-	event := in.pendingEvents[0]
-	in.pendingEvents = in.pendingEvents[1:]
-	return event, true
 }
 
 func (in *inputs) nextValue() (any, bool) {
@@ -104,6 +119,27 @@ func (in *inputs) nextValue() (any, bool) {
 			}
 			return line, true
 		}
+		if in.events != nil {
+			value, err := in.events.Decode()
+			if in.stop != nil {
+				return nil, false
+			}
+			if err == io.EOF {
+				in.events.Close()
+				in.events = nil
+				continue
+			}
+			if err != nil {
+				in.parseFailure(err)
+				return nil, false
+			}
+
+			if err := in.inv.step(); err != nil {
+				in.stop = err
+				return nil, false
+			}
+			return value, true
+		}
 		if in.stream != nil {
 			v, err := in.stream.Decode()
 			if in.stop != nil {
@@ -111,10 +147,13 @@ func (in *inputs) nextValue() (any, bool) {
 			}
 			switch {
 			case errors.Is(err, io.EOF):
+				if closer, ok := in.stream.(interface{ Close() }); ok {
+					closer.Close()
+				}
 				in.stream = nil
 				continue
 			case err != nil:
-				in.malformed(err)
+				in.parseFailure(err)
 				return nil, false
 			}
 			if in.stream.InputOffset() > in.limit {
@@ -237,22 +276,33 @@ func rawLines(text string) []any {
 
 // malformed reports an input that is not JSON as jq does and stops reading.
 func (in *inputs) malformed(err error) {
-	offset := in.stream.InputOffset()
+	offset := int64(0)
+	if in.events != nil {
+		offset = in.events.InputOffset()
+	} else if in.stream != nil {
+		offset = in.stream.InputOffset()
+	}
 	message := err.Error()
 	var syntax *json.SyntaxError
 	switch {
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		message = "Unfinished JSON term at EOF"
-		if in.positions != nil {
+		if in.events != nil {
+			offset = in.events.InputOffset()
+		} else if in.positions != nil {
 			offset = in.positions.read
-		} else {
+		} else if in.data != nil {
 			offset = int64(in.data.Len())
 		}
 	case errors.As(err, &syntax):
 		offset = syntax.Offset
 	}
 	var line, column int
-	if in.positions != nil {
+	if in.events != nil {
+		line, column = in.events.Position()
+	} else if position, ok := in.stream.(interface{ Position() (int, int) }); ok {
+		line, column = position.Position()
+	} else if in.positions != nil {
 		line, column = in.positions.lineColumn(offset)
 	} else {
 		line, column = lineColumn(in.data.Bytes(), offset)
@@ -293,14 +343,22 @@ func (in *inputs) current() (any, int) {
 	} else if in.data != nil {
 		end = int64(in.data.Len())
 	}
-	if in.stream != nil {
+	if in.events != nil {
+		end = in.events.InputOffset()
+	} else if in.stream != nil {
 		end = in.stream.InputOffset()
 	} else if in.rawReader != nil {
 		end = in.rawOffset
 	}
+	if in.events != nil {
+		return in.label, in.events.InputLine()
+	}
 	var name any = in.label
 	if in.label == "<stdin>" {
 		name = nil
+	}
+	if position, ok := in.stream.(interface{ InputLine() int }); ok {
+		return name, position.InputLine()
 	}
 	return name, in.lineAt(end)
 }
