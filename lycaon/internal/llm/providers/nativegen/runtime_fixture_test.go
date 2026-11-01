@@ -15,6 +15,7 @@ func runtimeFixture() {
 	var active beginRequest
 	generated := 0
 	measured := 0
+	begun := 0
 	for {
 		payload, err := readProtocolFrame(os.Stdin)
 		if err != nil {
@@ -55,6 +56,13 @@ func runtimeFixture() {
 			raw, err := json.Marshal(request.Command.Request)
 			if err != nil || json.Unmarshal(raw, &active) != nil {
 				os.Exit(3)
+			}
+			if os.Getenv("PW_NATIVEGEN_CONVERSATION_CACHE") == "1" {
+				want := []int{1, 0, 1}
+				if begun >= len(want) || active.CheckpointTokens != want[begun] {
+					os.Exit(5)
+				}
+				begun++
 			}
 			generated = 0
 			result = map[string]any{"kind": "begun", "request_id": active.RequestID, "reused_prefix_tokens": 0}
