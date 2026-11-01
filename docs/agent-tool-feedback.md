@@ -50,6 +50,10 @@ negative observation, a successful status does not disprove a refused effect,
 and an errno does not identify a repair. Unknown remedies omit Fix and Next.
 Concrete suggestions require the producer's typed cause and the recipient's
 current schema or offered-tool facts. Earlier effects never become a replay recipe.
+The executor freezes the actual invocation capability contract, including narrowed
+definitions. Child contracts stay attached to their own identities. A typed
+contract snapshot can supply local rendering facts without entering canonical
+rejection data or persisted JSON.
 
 ## Command result presentation
 

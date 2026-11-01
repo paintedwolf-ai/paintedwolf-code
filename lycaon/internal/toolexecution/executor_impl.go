@@ -59,6 +59,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 			contract = definition.Contract
 		}
 	}
+	tc.Invocation.Contract = contract
 	ctx = tools.WithRecoveryContract(ctx, qualifiedName, contract)
 	ctx = invocationContext(ctx, tc)
 	if retained, entry := e.programEntries[qualifiedName]; entry && (retained == nil || !retained(args)) {
