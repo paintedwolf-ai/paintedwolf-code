@@ -6,7 +6,7 @@ import { ContextMenu } from "../../components/ContextMenu.tsx";
 import { seedStockFrame } from "../../contributions/stock-frame-test.ts";
 import { filesContextMenuItems } from "../commands/project-files-context-menu.ts";
 import { loadedBuffer } from "../components/project-files-view-test-harness.ts";
-import { projectFilesState } from "../documents/files-buffer-state.ts";
+import { type FileBuffer, projectFilesState } from "../documents/files-buffer-state.ts";
 import { FilesEditorHeaderChrome, createEditorToolbarMenus } from "./FilesEditorChrome.tsx";
 import {
   FilesEditorContextMenus,
@@ -117,11 +117,11 @@ describe("files editor context menu a11y", () => {
       path: "src/app.ts",
       content: "const x = 1;\n",
     });
-    const buffer = {
+    const buffer: FileBuffer = {
       ...baseBuffer,
       mixedEol: true,
       encoding: "utf-16le" as const,
-      editorConfig: { indent_style: "space" as const, indent_size: 2, end_of_line: "lf" as const },
+      editorConfig: { indentStyle: "spaces", indentSize: 2, endOfLine: "lf" },
       diffPreview: {
         title: "Review diff",
         detail: "1 file changed",
@@ -141,8 +141,8 @@ describe("files editor context menu a11y", () => {
     const [picker, setPicker] = createSignal<DefinitionPickerState | null>({
       symbol: "resolveProjectRoot",
       candidates: [
-        { root_id: "r1", path: "src/a.ts", line: 4, column: 1, kind: "function", snippet: "function resolveProjectRoot()" },
-        { root_id: "r1", path: "src/b.ts", line: 9, column: 1, kind: "variable", snippet: "" },
+        { root_id: "r1", path: "src/a.ts", line: 4, kind: "function", snippet: "function resolveProjectRoot()" },
+        { root_id: "r1", path: "src/b.ts", line: 9, kind: "constant", snippet: "" },
       ],
       truncated: true,
       selected: 0,
@@ -154,7 +154,7 @@ describe("files editor context menu a11y", () => {
 
     const { unmount } = render(() => {
       const menus = createFilesEditorMenus({
-        projectId: "proj-menus",
+        projectId: () => "proj-menus",
         buffer: () => buffer,
         currentView: () => undefined,
         editable: () => true,
@@ -280,6 +280,7 @@ describe("files editor context menu a11y", () => {
                 path: "dir/file.ts",
                 enter: false,
                 facts: {
+                  count: 1,
                   now: [{ key: "n1", title: "Worker", fact: "Editing", target: { kind: "worker", workerId: "w1" } } as any],
                   changed: [],
                   findings: [],
