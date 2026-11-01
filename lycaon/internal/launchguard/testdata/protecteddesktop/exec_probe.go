@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	osexec "os/exec"
 	"strconv"
@@ -56,14 +57,17 @@ func execProbe(scratch string) ExecProbe {
 	_ = os.Setenv(exec.LaunchBrokerFDEnv, "6")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	fmt.Fprintln(os.Stderr, "protected_exec_probe=host")
 	out, hostStderr, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{Launch: exec.HostLaunch("toolchain_version_probe")})
 	probe.HostOutput, probe.HostCode = string(out), code
 	probe.HostError = launchError(err, hostStderr)
+	fmt.Fprintln(os.Stderr, "protected_exec_probe=host_execution")
 	out, hostStderr, code, err = exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{
 		Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "protected launch probe", &confine.Confinement{HostExecution: true}),
 	})
 	probe.HostExecOutput, probe.HostExecCode = string(out), code
 	probe.HostExecError = launchError(err, hostStderr)
+	fmt.Fprintln(os.Stderr, "protected_exec_probe=confined")
 	confinement := &confine.Confinement{Roots: []string{scratch}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
 	out, stderr, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{
 		Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "protected launch probe", confinement),
@@ -72,10 +76,15 @@ func execProbe(scratch string) ExecProbe {
 	if err != nil {
 		probe.ConfinedError = err.Error()
 	}
+	fmt.Fprintln(os.Stderr, "protected_exec_probe=prepared")
 	probe.PreparedOutput, probe.PreparedCode, probe.PreparedError = preparedProbe(ctx, exec.HostLaunch("toolchain_version_probe"))
+	fmt.Fprintln(os.Stderr, "protected_exec_probe=prepared_confined")
 	probe.PreparedConfinedOutput, probe.PreparedConfinedCode, probe.PreparedConfinedError = preparedProbe(ctx, exec.AgentLaunch(exec.LaunchLocalMCP, "protected prepared confined probe", confinement))
+	fmt.Fprintln(os.Stderr, "protected_exec_probe=terminal")
 	probe.TerminalSurvive, probe.TerminalError = terminalProbe(ctx)
+	fmt.Fprintln(os.Stderr, "protected_exec_probe=relay_loss")
 	probe.RelayLossEnded, probe.RelayLossError = relayLossProbe(ctx)
+	fmt.Fprintln(os.Stderr, "protected_exec_probe=browser_engine_loss")
 	probe.BrowserEngineLossEnded, probe.BrowserEngineLossError = browserEngineLossProbe(scratch)
 	return probe
 }
