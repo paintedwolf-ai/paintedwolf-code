@@ -417,7 +417,6 @@ func decodeDiscoveryOpenRouterRecords(r io.Reader) ([]discoveryCatalogRecord, er
 		out = append(out, discoveryCatalogRecord{
 			Thinking:            item.Thinking,
 			ID:                  strings.TrimSpace(item.ID),
-			Active:              item.Active,
 			ContextLength:       item.ContextLength,
 			InputPriceRaw:       strings.TrimSpace(item.Pricing.Prompt),
 			CacheReadPriceRaw:   strings.TrimSpace(item.Pricing.CacheRead),
