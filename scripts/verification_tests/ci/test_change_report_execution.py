@@ -203,8 +203,9 @@ class ChangedCoverageTests(unittest.TestCase):
         runs = {call.args[0]: (set(call.args[1]), set(call.args[2])) for call in measure.call_args_list}
         # The own pass links a's binary: a, its imports and its test imports, never the unreached q.
         self.assertEqual(runs["changes-go"], ({"m/a", "m/p"}, {"m/a"}))
-        # The importer pass runs only test binaries outside own, since own already instrumented p.
+        # The importer pass runs only binaries outside own; own already instrumented p.
         self.assertEqual(runs["changes-go-importers"], ({"m/q"}, {"m/b"}))
+        self.assertEqual(runs["changes-go"][0] | runs["changes-go-importers"][0], {"m/a", "m/p", "m/q"})
 
     def test_go_run_collects_child_counters_and_runs_uncached(self):
         with tempfile.TemporaryDirectory() as directory:

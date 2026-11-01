@@ -38,17 +38,17 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "multi-iter",
 		ToolCalls: []llm.MockToolCall{{
-			Name: "list_dir",
-			Args: map[string]any{"path": "."},
+			Name: "command",
+			Args: map[string]any{"command": "ls"},
 		}},
 		FollowUpText: "done",
 	}}}))
 	store := store.NewMemory()
 	reg := tools.NewStubRegistry()
-	if err := reg.Register("list_dir", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+	if err := reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "[]", nil
 	}); err != nil {
-		testutil.FailErr(t, "register list_dir", err)
+		testutil.FailErr(t, "register command", err)
 	}
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	projects := project.NewMemoryRegistry()
@@ -133,13 +133,17 @@ func TestWorkerLegInjectsEveryIteration(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "worker-multi",
 		ToolCalls: []llm.MockToolCall{{
-			Name: "read",
-			Args: map[string]any{"path": "go.mod"},
+			Name: "command",
+			Args: map[string]any{"command": "cat go.mod"},
 		}},
 		FollowUpText: "done",
 	}}}))
 	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	reg := tools.NewStubRegistry()
+	testutil.FailErr(t, "register worker command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "module fixture", nil
+	}))
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.Profiles.SetAgentRegistry(loadTestAgentRegistry(t))
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))

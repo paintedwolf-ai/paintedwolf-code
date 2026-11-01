@@ -45,3 +45,17 @@ func TestDiscoveryRequiresRuntimeAndSuccessfulAdmission(t *testing.T) {
 		t.Fatalf("invalid runtime advertised a model: %+v, %v", entries, err)
 	}
 }
+
+func TestProfileAdvertisesImplementedCacheAndThinkingControls(t *testing.T) {
+	profile := New("nativegen", Options{}).Profile()
+	if profile.Thinking != modelinfo.ThinkStyleNone || profile.ReasoningWire != providerprofile.ReasoningWireNone || profile.PromptCache.Mode != providerprofile.PromptCacheLocalKV {
+		t.Fatalf("native execution profile: %+v", profile)
+	}
+	if !profile.UtilitySingleFlight {
+		t.Fatal("native provider bypassed foreground/background admission")
+	}
+	entry := DefaultModelEntry()
+	if entry.Thinking.State != "unsupported" || entry.Capabilities.Reasoning.State != modelinfo.CapabilityUnsupported {
+		t.Fatal("native catalog advertised unsupported reasoning controls")
+	}
+}

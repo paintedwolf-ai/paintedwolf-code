@@ -148,11 +148,7 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		rec.Fidelity = FidelityStructured
 		rec.Survey = true
 		populateRecallRecord(projectDir, &rec, content)
-	case "skills_read":
-		// Skill paths are relative to the skill directory.
-		rec.Fidelity = FidelityStructured
-		captureRecordBody(&rec, content)
-	case "render_view", "verify", "preview_overlay", "promote_overlay", "reject_overlay":
+	case "skills_read", "render_view", "verify", "preview_overlay", "promote_overlay", "reject_overlay", "secret_generate", "secret_list", "secret_revoke":
 		// Result receipts do not establish observations of referenced file contents.
 		rec.Fidelity = FidelityStructured
 		captureRecordBody(&rec, content)
@@ -162,18 +158,10 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		rec.touchURL(stringArg(args, "url"))
 		populateURLFromPayload(&rec, content)
 		captureRecordBody(&rec, content)
-	case "terminal_snapshot":
-		rec.Fidelity = FidelityStructured
-		rec.Surface = SurfaceTUI
-		captureRecordBody(&rec, content)
 	case "measure_page":
 		rec.Fidelity = FidelityStructured
 		rec.touchURL(stringArg(args, "url"))
 		populateURLFromPayload(&rec, content)
-		captureRecordBody(&rec, content)
-	case "secret_generate", "secret_list", "secret_revoke":
-		// Secret lifecycle results contain metadata and managed references only.
-		rec.Fidelity = FidelityStructured
 		captureRecordBody(&rec, content)
 	case "http_request":
 		rec.Fidelity = FidelityStructured
@@ -181,7 +169,7 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		rec.touchURL(stringArg(args, "url"))
 		populateURLFromPayload(&rec, content)
 		captureRecordBody(&rec, content)
-	case "terminal_open", "terminal_send", "terminal_read", "terminal_close":
+	case "terminal_snapshot", "terminal_open", "terminal_send", "terminal_read", "terminal_close":
 		rec.Fidelity = FidelityStructured
 		rec.Surface = SurfaceTUI
 		captureRecordBody(&rec, content)

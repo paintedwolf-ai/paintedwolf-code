@@ -7,7 +7,9 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
+	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -15,8 +17,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
-	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
 )
 
 func TestReasoningBudgetCannotExceedExplicitOutputLimit(t *testing.T) {

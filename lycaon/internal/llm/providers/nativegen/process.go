@@ -138,7 +138,7 @@ func (p *rpcProcess) call(ctx context.Context, request command, kind string, pri
 	if err != nil {
 		return err
 	}
-	stop := context.AfterFunc(ctx, p.kill)
+	stop := p.watchCancellation(ctx, request.Method == "advance")
 	defer stop()
 	if err = writeProtocolFrame(p.input, payload); err != nil {
 		p.close()
@@ -155,11 +155,7 @@ func (p *rpcProcess) call(ctx context.Context, request command, kind string, pri
 		}
 		return err
 	}
-	if ctx.Err() != nil {
-		p.close()
-		return ctx.Err()
-	}
-	if !stop() {
+	if stop() {
 		p.close()
 		return ctx.Err()
 	}
@@ -180,6 +176,12 @@ func (p *rpcProcess) call(ctx context.Context, request command, kind string, pri
 		if !errors.As(err, &service) || service.Code == "device" || service.Code == "artifact" {
 			p.close()
 		}
+	}
+	if ctx.Err() != nil {
+		if request.Method != "advance" {
+			p.close()
+		}
+		return ctx.Err()
 	}
 	return err
 }

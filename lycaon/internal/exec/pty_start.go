@@ -61,9 +61,10 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 	}
 
 	return &ptySession{
-		main:    main,
-		cmd:     cmd,
-		guard:   guard,
-		cleanup: cleanup,
+		main:        main,
+		cmd:         cmd,
+		guard:       guard,
+		cleanup:     cleanup,
+		confinement: opts.Launch.Confinement,
 	}, nil
 }

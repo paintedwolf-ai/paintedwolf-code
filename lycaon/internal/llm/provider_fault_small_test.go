@@ -10,13 +10,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	openai "github.com/sashabaranov/go-openai"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-	openai "github.com/sashabaranov/go-openai"
 )
 
 func TestCloudflarePaidPlanRejectionCompleteAndStream(t *testing.T) {

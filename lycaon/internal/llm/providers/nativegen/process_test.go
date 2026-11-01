@@ -44,7 +44,10 @@ func processFixture() {
 		}
 		reply := map[string]any{"status": "ok", "id": request.ID, "result": map[string]any{"kind": "cleared"}}
 		switch request.Command.Method {
-		case "hang":
+		case "hang", "advance":
+			if request.Command.Method == "advance" && os.Getenv("PW_NATIVEGEN_STEP_HANG") != "1" {
+				break
+			}
 			// Reading another frame keeps the process alive without replying.
 			_, _ = readProtocolFrame(os.Stdin)
 			return
@@ -130,6 +133,16 @@ func (w *notifyingInput) Write(p []byte) (int, error) {
 }
 
 func TestProcessCancellationReapsBeforeReturning(t *testing.T) {
+	for _, method := range []string{"hang", "advance"} {
+		t.Run(method, func(t *testing.T) {
+			t.Setenv("PW_NATIVEGEN_STEP_HANG", "1")
+			assertCanceledProcessReaped(t, method)
+		})
+	}
+}
+
+func assertCanceledProcessReaped(t *testing.T, method string) {
+	t.Helper()
 	child, device, budget := fixtureProcess(t)
 	input := &notifyingInput{WriteCloser: child.input, wrote: make(chan struct{})}
 	child.input = input
@@ -137,7 +150,7 @@ func TestProcessCancellationReapsBeforeReturning(t *testing.T) {
 	defer cancel()
 	result := make(chan error, 1)
 	go func() {
-		result <- child.call(ctx, command{Method: "hang"}, "cleared", inference.Foreground, true, nil)
+		result <- child.call(ctx, command{Method: method}, "cleared", inference.Foreground, true, nil)
 	}()
 	<-input.wrote
 	if device.Snapshot().Active == nil || budget.Snapshot().ReservedBytes != 100 {

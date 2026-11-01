@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -74,6 +73,11 @@ func superviseCommand(cmd *exec.Cmd, cleanup func(), priority ProcessPriority) (
 		cleanup()
 		return nil, nil, err
 	}
+	layout := inheritedFileLayout(cmd.ExtraFiles)
+	if !validFileLayout(layout) {
+		cleanup()
+		return nil, nil, fmt.Errorf("command descriptor layout exceeds its transport bound")
+	}
 	read, write, err := os.Pipe()
 	if err != nil {
 		cleanup()
@@ -87,10 +91,9 @@ func superviseCommand(cmd *exec.Cmd, cleanup func(), priority ProcessPriority) (
 		return nil, nil, err
 	}
 	resolveRelayedProgram(cmd, protectedState())
-	count := len(cmd.ExtraFiles)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, read, statusWrite)
 	supervisorStarts.Store(cmd, supervisorStart{read: statusRead, write: statusWrite, target: cmd.Path})
-	cmd.Args = append([]string{self, supervisorCommand, strconv.Itoa(count), string(priority), cmd.Path}, cmd.Args...)
+	cmd.Args = append([]string{self, supervisorCommand, layout, string(priority), cmd.Path}, cmd.Args...)
 	cmd.Path = self
 	// Under the protected launch nothing the engine starts executes inside
 	// the protected namespace, whose processes may execute only the
@@ -135,32 +138,32 @@ func signalSupervisor(pid int, start int64, hard bool) bool {
 
 // supervisorTarget is the command the parent asked the supervisor to start.
 type supervisorTarget struct {
-	extraFiles int
-	priority   ProcessPriority
-	path       string
-	args       []string
+	descriptors string
+	priority    ProcessPriority
+	path        string
+	args        []string
 }
 
 func parseSupervisorTarget(args []string) (supervisorTarget, bool) {
 	if len(args) < 4 {
 		return supervisorTarget{}, false
 	}
-	count, err := strconv.Atoi(args[0])
-	if err != nil || count < 0 {
+	if !validFileLayout(args[0]) {
 		return supervisorTarget{}, false
 	}
-	return supervisorTarget{extraFiles: count, priority: ProcessPriority(args[1]), path: args[2], args: args[3:]}, true
+	return supervisorTarget{descriptors: args[0], priority: ProcessPriority(args[1]), path: args[2], args: args[3:]}, true
 }
 
 // command hands the target the descriptors its parent installed for it: the
 // standard streams at 0-2, then its extra files from 3.
 func (t supervisorTarget) command() *exec.Cmd {
 	cmd := &exec.Cmd{Path: t.path, Args: t.args, Env: os.Environ()}
-	cmd.Stdin = os.NewFile(0, "target-stdin")
-	cmd.Stdout = os.NewFile(1, "target-stdout")
-	cmd.Stderr = os.NewFile(2, "target-stderr")
-	for i := 0; i < t.extraFiles; i++ {
-		cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(3+i), "target-descriptor"))
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.ExtraFiles = make([]*os.File, len(t.descriptors))
+	for i := range t.descriptors {
+		if t.descriptors[i] == '1' {
+			cmd.ExtraFiles[i] = os.NewFile(uintptr(3+i), "target-descriptor")
+		}
 	}
 	cmd.SysProcAttr = foregroundTerminal(0, 0)
 	return cmd
@@ -249,7 +252,7 @@ func runCommandSupervisor(args []string) int {
 	_, termErr := unix.IoctlGetTermios(0, unix.TCGETS)
 	events := make(chan os.Signal, 4)
 	defer notifySupervisorSignals(events, termErr == nil)()
-	lifetime, status := 3+target.extraFiles, 4+target.extraFiles
+	lifetime, status := 3+len(target.descriptors), 4+len(target.descriptors)
 	// Exec cleared close-on-exec on the supervisor's own pipes; keep them from the target.
 	syscall.CloseOnExec(lifetime)
 	syscall.CloseOnExec(status)
@@ -265,7 +268,9 @@ func runCommandSupervisor(args []string) int {
 		_ = cmd.Process.Kill()
 	}
 	for _, file := range cmd.ExtraFiles {
-		_ = file.Close()
+		if file != nil {
+			_ = file.Close()
+		}
 	}
 	finished := make(chan error, 1)
 	go func() { finished <- cmd.Wait() }()

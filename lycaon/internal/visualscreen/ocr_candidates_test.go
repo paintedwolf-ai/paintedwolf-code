@@ -17,11 +17,14 @@ func TestParseTesseractTSVPopulatesWordCandidates(t *testing.T) {
 		"5\t1\t1\t1\t1\t1\t10\t20\t40\t12\t95.0\texport\n" +
 		"5\t1\t1\t1\t1\t2\t60\t20\t120\t12\t62.0\tTOKEN=blurred\n" +
 		"5\t1\t1\t1\t1\t2\t60\t20\t120\t12\t58.0\tTOKEN=AKIAQ7Z2M4N6P3R6T5V7\n" +
-		"5\t1\t1\t1\t1\t2\t60\t20\t120\t12\t55.0\tTOKEN=AK1AQ7Z2M4N6P3R6T5V7\n"
+		"5\t1\t1\t1\t1\t2\t60\t20\t120\t12\t55.0\tTOKEN=AK1AQ7Z2M4N6P3R6T5V7\n" +
+		"5\t1\t1\t1\t2\t1\t10\t40\t40\t12\t95.0\texport\n" +
+		"5\t1\t1\t1\t2\t2\t60\t40\t90\t12\t88.0\tSECRET=AKIAL6K4J2H/7G5F3D2S7T\n" +
+		"5\t1\t1\t1\t2\t3\t152\t40\t30\t12\t86.0\t41207\n"
 	spans, err := parseTesseractTSV([]byte(tsv), 200, 100)
 	testutil.FailErr(t, "parseTesseractTSV", err)
-	if len(spans) != 1 {
-		t.Fatalf("len(spans) = %d, want 1", len(spans))
+	if len(spans) != 2 {
+		t.Fatalf("len(spans) = %d, want 2", len(spans))
 	}
 	if spans[0].Text != "export TOKEN=blurred" {
 		t.Fatalf("Text = %q, want %q", spans[0].Text, "export TOKEN=blurred")
@@ -29,6 +32,7 @@ func TestParseTesseractTSVPopulatesWordCandidates(t *testing.T) {
 	wantCandidates := []string{
 		"export TOKEN=AKIAQ7Z2M4N6P3R6T5V7",
 		"export TOKEN=AK1AQ7Z2M4N6P3R6T5V7",
+		"exportTOKEN=blurred",
 	}
 	if len(spans[0].Candidates) != len(wantCandidates) {
 		t.Fatalf("Candidates = %#v, want %#v", spans[0].Candidates, wantCandidates)
@@ -37,6 +41,17 @@ func TestParseTesseractTSVPopulatesWordCandidates(t *testing.T) {
 		if spans[0].Candidates[i] != want {
 			t.Fatalf("Candidates[%d] = %q, want %q", i, spans[0].Candidates[i], want)
 		}
+	}
+	wantRepaired := "exportSECRET=AKIAL6K4J2H7G5F3D2S7T41207"
+	foundRepaired := false
+	for _, cand := range spans[1].Candidates {
+		if cand == wantRepaired {
+			foundRepaired = true
+			break
+		}
+	}
+	if !foundRepaired {
+		t.Fatalf("spans[1].Candidates = %#v, expected repaired candidate %q", spans[1].Candidates, wantRepaired)
 	}
 }
 
@@ -179,32 +194,54 @@ var twentyFourLiveOCRSecrets = []string{
 }
 
 func TestPlatformEngineOCRConfusionSecretCorpusAcrossFontSizes(t *testing.T) {
-	engine := platformEngine(t)
+	assertEngineOCRConfusionSecretCorpus(t, platformEngine(t))
+}
+
+func assertEngineOCRConfusionSecretCorpus(t *testing.T, engine OCREngine) {
+	t.Helper()
 	matcher := bundledMatcher(t)
 	pointSizes := []float64{18, 28, 40}
-
+	const numBatches = 4
 	totalRuns, totalExact, totalDetected := 0, 0, 0
 	for _, pt := range pointSizes {
 		exactAtSize, detectedAtSize := 0, 0
-		for _, secret := range twentyFourLiveOCRSecrets {
-			raw, _ := renderPNG(t, ocrfixture.Options{
-				Lines:     []string{"export SECRET=" + secret},
+		for b := 0; b < numBatches; b++ {
+			var batch []string
+			for i := b; i < len(twentyFourLiveOCRSecrets); i += numBatches {
+				batch = append(batch, twentyFourLiveOCRSecrets[i])
+			}
+			renderLines := make([]string, 0, len(batch)+1)
+			renderLines = append(renderLines, "Painted Wolf Code")
+			for _, secret := range batch {
+				renderLines = append(renderLines, "export SECRET="+secret)
+			}
+			raw, drawnLines := renderPNG(t, ocrfixture.Options{
+				Lines:     renderLines,
 				PointSize: pt,
 			})
-			scanned, err := NewScanner(engine).Scan(context.Background(), "image/png", raw)
-			testutil.FailErr(t, "Scan", err)
-			if strings.Contains(scanned.ExtractedText, secret) && len(matcher.Screen(scanned.ExtractedText)) > 0 {
-				exactAtSize++
-			}
-			var alerts []secretmatch.Alert
-			gate := NewGate(NewScanner(engine), matcher, decide(secretmatch.SendRedacted, &alerts))
-			outcome, err := gate.Screen(context.Background(), VisualScreenInput{
-				Mime:     "image/png",
-				RawBytes: raw,
-			})
-			testutil.FailErr(t, "gate.Screen", err)
-			if len(alerts) > 0 && outcome.Perception == PerceptionRedacted {
-				detectedAtSize++
+			spans := recognize(t, engine, raw)
+			for i, secret := range batch {
+				span, ok := matchSpanByVerticalCenter(spans, drawnLines[i+1])
+				if !ok {
+					t.Logf("[%.0fpt MISS] no span for line %d (%s)", pt, i+1, secret)
+					continue
+				}
+				if strings.Contains(span.Text, secret) && len(matcher.Screen(span.Text)) > 0 {
+					exactAtSize++
+				}
+				var alerts []secretmatch.Alert
+				lineEngine := &fakeOCR{spans: []TextSpan{span}}
+				gate := NewGate(NewScanner(lineEngine), matcher, decide(secretmatch.SendRedacted, &alerts))
+				outcome, err := gate.Screen(context.Background(), VisualScreenInput{
+					Mime:     "image/png",
+					RawBytes: raw,
+				})
+				testutil.FailErr(t, "gate.Screen", err)
+				if len(alerts) > 0 && outcome.Perception == PerceptionRedacted {
+					detectedAtSize++
+				} else {
+					t.Logf("[%.0fpt MISS] want=%q got=%q candidates=%q", pt, "export SECRET="+secret, span.Text, span.Candidates)
+				}
 			}
 		}
 		totalRuns += len(twentyFourLiveOCRSecrets)
@@ -232,6 +269,27 @@ func TestPlatformEngineOCRConfusionSecretCorpusAcrossFontSizes(t *testing.T) {
 		t.Errorf("overall detection rate = %.1f%% (%d/%d), want >= 90%%",
 			overallRate*100, totalDetected, totalRuns)
 	}
+}
+
+func matchSpanByVerticalCenter(spans []TextSpan, want ocrfixture.Line) (TextSpan, bool) {
+	wantY := want.BoundingBox[1] + want.BoundingBox[3]/2
+	bestIdx := -1
+	bestDist := 1.0
+	for i, s := range spans {
+		gotY := s.BoundingBox[1] + s.BoundingBox[3]/2
+		dist := gotY - wantY
+		if dist < 0 {
+			dist = -dist
+		}
+		if dist < bestDist && dist <= want.BoundingBox[3] {
+			bestDist = dist
+			bestIdx = i
+		}
+	}
+	if bestIdx < 0 {
+		return TextSpan{}, false
+	}
+	return spans[bestIdx], true
 }
 
 func TestPlatformEngineNonSecretScreenshotCorpusZeroFalsePositives(t *testing.T) {

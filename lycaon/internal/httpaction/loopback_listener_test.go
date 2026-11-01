@@ -43,162 +43,176 @@ func TestHTTPRequestLoopbackListenerAttributionOtherSessionAndReplacement(t *tes
 		t.Fatalf("register http_request: %v", err)
 	}
 
-	t.Run("other_session_holder_raises_guidance_code", func(t *testing.T) {
-		obs := &stubLoopbackObserver{
-			facts: []*api.LoopbackListenerFact{
-				{
-					Kind:             "other_session",
-					Address:          "127.0.0.1:8000",
-					ConnectedAddress: "127.0.0.1:8000",
-					PID:              401,
-					ProcessName:      "python3",
-					SessionID:        "session-ttt",
-					SessionTitle:     "Tic Tac Toe Game with AI",
-					ProjectID:        "proj-ttt",
-					ProjectName:      "Tic-Tac-Toe",
-					Handle:           "bg-1",
-					Command:          "python3 -m http.server 8000",
-					Background:       true,
-					Description:      "Port 8000 is served by `python3 -m http.server 8000`, a background command in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'.",
-					Holders: []api.LoopbackListenerHolder{
-						{
-							Kind:         "other_session",
-							Address:      "127.0.0.1:8000",
-							PID:          401,
-							ProcessName:  "python3",
-							SessionID:    "session-ttt",
-							SessionTitle: "Tic Tac Toe Game with AI",
-							ProjectID:    "proj-ttt",
-							ProjectName:  "Tic-Tac-Toe",
-							Handle:       "bg-1",
-							Command:      "python3 -m http.server 8000",
-							Background:   true,
-						},
-					},
-				},
-			},
-		}
-		outcome := &tools.ToolInvocationOut{}
-		raw, err := registry.Run(t.Context(), "http_request", map[string]any{
-			"url":                server.URL,
-			"capability_request": loopbackCapability(t, server.URL),
-		}, tools.ToolContext{
-			Identity: tools.InvocationIdentity{
-				SessionID: "session-current",
-				Agent:     toolprofiles.DefaultToolProfileID,
-			},
-			Local:   tools.InvocationLocal{LoopbackObserver: obs},
-			Effects: tools.InvocationEffects{Out: outcome},
-		})
-		if err != nil {
-			t.Fatalf("run http_request: %v", err)
-		}
-		var parsed result
-		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-			t.Fatalf("unmarshal result: %v", err)
-		}
-		if parsed.Listener == nil || parsed.Listener.Kind != "other_session" || parsed.Listener.SessionTitle != "Tic Tac Toe Game with AI" {
-			t.Fatalf("unexpected listener in result JSON: %+v", parsed.Listener)
-		}
-		if outcome.Listener == nil || outcome.Listener.Handle != "bg-1" {
-			t.Fatalf("unexpected sidecar listener: %+v", outcome.Listener)
-		}
-		if !outcome.Facts.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
-			t.Fatalf("expected %s to be raised, got %+v", toolrejection.HTTPRequestLoopbackOtherSessionCode, outcome.Facts)
-		}
-	})
+	for _, scenario := range []struct {
+		name string
+		run  func(*testing.T, *tools.DefaultRegistry, string)
+	}{
+		{"other_session_holder_raises_guidance_code", assertOtherSessionListenerGuidance},
+		{"listener_replaced_between_pre_and_post_is_marked_ambiguous", assertReplacedListenerAmbiguity},
+		{"container_mismatch_raises_guidance_code", assertContainerMismatchGuidance},
+	} {
+		t.Run(scenario.name, func(t *testing.T) { scenario.run(t, registry, server.URL) })
+	}
+}
 
-	t.Run("listener_replaced_between_pre_and_post_is_marked_ambiguous", func(t *testing.T) {
-		obs := &stubLoopbackObserver{
-			facts: []*api.LoopbackListenerFact{
-				{
-					Kind: "this_session",
-					PID:  500,
-					Holders: []api.LoopbackListenerHolder{
-						{Kind: "this_session", Address: "127.0.0.1:8000", PID: 500, SessionID: "session-current", Command: "node server.js"},
-					},
-				},
-				{
-					Kind: "other_session",
-					PID:  600,
-					Holders: []api.LoopbackListenerHolder{
-						{Kind: "other_session", Address: "127.0.0.1:8000", PID: 600, SessionID: "session-other", Command: "python3 -m http.server 8000"},
+func assertOtherSessionListenerGuidance(t *testing.T, registry *tools.DefaultRegistry, serverURL string) {
+	t.Helper()
+	obs := &stubLoopbackObserver{
+		facts: []*api.LoopbackListenerFact{
+			{
+				Kind:             "other_session",
+				Address:          "127.0.0.1:8000",
+				ConnectedAddress: "127.0.0.1:8000",
+				PID:              401,
+				ProcessName:      "python3",
+				SessionID:        "session-ttt",
+				SessionTitle:     "Tic Tac Toe Game with AI",
+				ProjectID:        "proj-ttt",
+				ProjectName:      "Tic-Tac-Toe",
+				Handle:           "bg-1",
+				Command:          "python3 -m http.server 8000",
+				Background:       true,
+				Description:      "Port 8000 is served by `python3 -m http.server 8000`, a background command in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'.",
+				Holders: []api.LoopbackListenerHolder{
+					{
+						Kind:         "other_session",
+						Address:      "127.0.0.1:8000",
+						PID:          401,
+						ProcessName:  "python3",
+						SessionID:    "session-ttt",
+						SessionTitle: "Tic Tac Toe Game with AI",
+						ProjectID:    "proj-ttt",
+						ProjectName:  "Tic-Tac-Toe",
+						Handle:       "bg-1",
+						Command:      "python3 -m http.server 8000",
+						Background:   true,
 					},
 				},
 			},
-		}
-		outcome := &tools.ToolInvocationOut{}
-		raw, err := registry.Run(t.Context(), "http_request", map[string]any{
-			"url":                server.URL,
-			"capability_request": loopbackCapability(t, server.URL),
-		}, tools.ToolContext{
-			Identity: tools.InvocationIdentity{
-				SessionID: "session-current",
-				Agent:     toolprofiles.DefaultToolProfileID,
-			},
-			Local:   tools.InvocationLocal{LoopbackObserver: obs},
-			Effects: tools.InvocationEffects{Out: outcome},
-		})
-		if err != nil {
-			t.Fatalf("run http_request: %v", err)
-		}
-		var parsed result
-		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-			t.Fatalf("unmarshal result: %v", err)
-		}
-		if parsed.Listener == nil || !parsed.Listener.Ambiguous || !parsed.Listener.Replaced {
-			t.Fatalf("expected ambiguous=true and replaced=true, got %+v", parsed.Listener)
-		}
-		if parsed.Listener.Kind != "" || parsed.Listener.PID != 0 || len(parsed.Listener.Holders) != 2 {
-			t.Fatalf("expected 2 holders without guessing single identity, got %+v", parsed.Listener)
-		}
-		if !outcome.Facts.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
-			t.Fatalf("expected %s when replaced holder includes other_session", toolrejection.HTTPRequestLoopbackOtherSessionCode)
-		}
+		},
+	}
+	outcome := &tools.ToolInvocationOut{}
+	raw, err := registry.Run(t.Context(), "http_request", map[string]any{
+		"url":                serverURL,
+		"capability_request": loopbackCapability(t, serverURL),
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{
+			SessionID: "session-current",
+			Agent:     toolprofiles.DefaultToolProfileID,
+		},
+		Local:   tools.InvocationLocal{LoopbackObserver: obs},
+		Effects: tools.InvocationEffects{Out: outcome},
 	})
+	if err != nil {
+		t.Fatalf("run http_request: %v", err)
+	}
+	var parsed result
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if parsed.Listener == nil || parsed.Listener.Kind != "other_session" || parsed.Listener.SessionTitle != "Tic Tac Toe Game with AI" {
+		t.Fatalf("unexpected listener in result JSON: %+v", parsed.Listener)
+	}
+	if outcome.Listener == nil || outcome.Listener.Handle != "bg-1" {
+		t.Fatalf("unexpected sidecar listener: %+v", outcome.Listener)
+	}
+	if !outcome.Facts.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
+		t.Fatalf("expected %s to be raised, got %+v", toolrejection.HTTPRequestLoopbackOtherSessionCode, outcome.Facts)
+	}
+}
 
-	t.Run("container_mismatch_raises_guidance_code", func(t *testing.T) {
-		obs := &stubLoopbackObserver{
-			facts: []*api.LoopbackListenerFact{
-				{
-					Kind:              "external_process",
-					Address:           "[::1]:8000",
-					PID:               777,
-					ProcessName:       "caddy",
-					ContainerMismatch: true,
-					PublishedContainer: &api.LoopbackPublishedContainer{
-						ContainerID:   "cid-1",
-						ContainerName: "web-1",
-						HostIP:        "127.0.0.1",
-						HostPort:      8000,
-						LoopbackOnly:  true,
-					},
-					Description: "Port 8000 is served by an external process `caddy` (PID 777). Container `web-1` from this chat publishes 127.0.0.1:8000->8000/tcp, while another listener also holds port 8000.",
-					Holders: []api.LoopbackListenerHolder{
-						{Kind: "external_process", Address: "[::1]:8000", PID: 777, ProcessName: "caddy"},
-					},
+func assertReplacedListenerAmbiguity(t *testing.T, registry *tools.DefaultRegistry, serverURL string) {
+	t.Helper()
+	obs := &stubLoopbackObserver{
+		facts: []*api.LoopbackListenerFact{
+			{
+				Kind: "this_session",
+				PID:  500,
+				Holders: []api.LoopbackListenerHolder{
+					{Kind: "this_session", Address: "127.0.0.1:8000", PID: 500, SessionID: "session-current", Command: "node server.js"},
 				},
 			},
-		}
-		outcome := &tools.ToolInvocationOut{}
-		if _, err := registry.Run(t.Context(), "http_request", map[string]any{
-			"url":                server.URL,
-			"capability_request": loopbackCapability(t, server.URL),
-		}, tools.ToolContext{
-			Identity: tools.InvocationIdentity{
-				SessionID: "session-current",
-				Agent:     toolprofiles.DefaultToolProfileID,
+			{
+				Kind: "other_session",
+				PID:  600,
+				Holders: []api.LoopbackListenerHolder{
+					{Kind: "other_session", Address: "127.0.0.1:8000", PID: 600, SessionID: "session-other", Command: "python3 -m http.server 8000"},
+				},
 			},
-			Local:   tools.InvocationLocal{LoopbackObserver: obs},
-			Effects: tools.InvocationEffects{Out: outcome},
-		}); err != nil {
-			t.Fatalf("run http_request: %v", err)
-		}
-		if outcome.Listener == nil || !outcome.Listener.ContainerMismatch || outcome.Listener.PublishedContainer == nil {
-			t.Fatalf("expected container_mismatch on listener fact, got %+v", outcome.Listener)
-		}
-		if !outcome.Facts.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
-			t.Fatalf("expected %s on container mismatch", toolrejection.HTTPRequestLoopbackOtherSessionCode)
-		}
+		},
+	}
+	outcome := &tools.ToolInvocationOut{}
+	raw, err := registry.Run(t.Context(), "http_request", map[string]any{
+		"url":                serverURL,
+		"capability_request": loopbackCapability(t, serverURL),
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{
+			SessionID: "session-current",
+			Agent:     toolprofiles.DefaultToolProfileID,
+		},
+		Local:   tools.InvocationLocal{LoopbackObserver: obs},
+		Effects: tools.InvocationEffects{Out: outcome},
 	})
+	if err != nil {
+		t.Fatalf("run http_request: %v", err)
+	}
+	var parsed result
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if parsed.Listener == nil || !parsed.Listener.Ambiguous || !parsed.Listener.Replaced {
+		t.Fatalf("expected ambiguous=true and replaced=true, got %+v", parsed.Listener)
+	}
+	if parsed.Listener.Kind != "" || parsed.Listener.PID != 0 || len(parsed.Listener.Holders) != 2 {
+		t.Fatalf("expected 2 holders without guessing single identity, got %+v", parsed.Listener)
+	}
+	if !outcome.Facts.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
+		t.Fatalf("expected %s when replaced holder includes other_session", toolrejection.HTTPRequestLoopbackOtherSessionCode)
+	}
+}
+
+func assertContainerMismatchGuidance(t *testing.T, registry *tools.DefaultRegistry, serverURL string) {
+	t.Helper()
+	obs := &stubLoopbackObserver{
+		facts: []*api.LoopbackListenerFact{
+			{
+				Kind:              "external_process",
+				Address:           "[::1]:8000",
+				PID:               777,
+				ProcessName:       "caddy",
+				ContainerMismatch: true,
+				PublishedContainer: &api.LoopbackPublishedContainer{
+					ContainerID:   "cid-1",
+					ContainerName: "web-1",
+					HostIP:        "127.0.0.1",
+					HostPort:      8000,
+					LoopbackOnly:  true,
+				},
+				Description: "Port 8000 is served by an external process `caddy` (PID 777). Container `web-1` from this chat publishes 127.0.0.1:8000->8000/tcp, while another listener also holds port 8000.",
+				Holders: []api.LoopbackListenerHolder{
+					{Kind: "external_process", Address: "[::1]:8000", PID: 777, ProcessName: "caddy"},
+				},
+			},
+		},
+	}
+	outcome := &tools.ToolInvocationOut{}
+	if _, err := registry.Run(t.Context(), "http_request", map[string]any{
+		"url":                serverURL,
+		"capability_request": loopbackCapability(t, serverURL),
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{
+			SessionID: "session-current",
+			Agent:     toolprofiles.DefaultToolProfileID,
+		},
+		Local:   tools.InvocationLocal{LoopbackObserver: obs},
+		Effects: tools.InvocationEffects{Out: outcome},
+	}); err != nil {
+		t.Fatalf("run http_request: %v", err)
+	}
+	if outcome.Listener == nil || !outcome.Listener.ContainerMismatch || outcome.Listener.PublishedContainer == nil {
+		t.Fatalf("expected container_mismatch on listener fact, got %+v", outcome.Listener)
+	}
+	if !outcome.Facts.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
+		t.Fatalf("expected %s on container mismatch", toolrejection.HTTPRequestLoopbackOtherSessionCode)
+	}
 }

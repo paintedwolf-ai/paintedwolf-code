@@ -156,4 +156,3 @@ const (
 	BackgroundProcessTerminationReasonWorkerCompleted BackgroundProcessTerminationReason = "worker_completed"
 	BackgroundProcessTerminationReasonWorkerCancelled BackgroundProcessTerminationReason = "worker_canceled"
 )
-

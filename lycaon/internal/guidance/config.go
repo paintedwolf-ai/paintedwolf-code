@@ -108,11 +108,11 @@ type HintEntryPolicy struct {
 
 // HintEntryExtensions holds rule lineage and host extension fields.
 type HintEntryExtensions struct {
-	Overrides     []string      `yaml:"overrides,omitempty"`
-	Status        string        `yaml:"status,omitempty"`
-	Related       []HintRelated `yaml:"related,omitempty"`
-	Successor     string        `yaml:"x-paintedwolf-successor,omitempty"`
-	XEmit         string        `yaml:"x-paintedwolf-emit,omitempty"`
+	Overrides []string      `yaml:"overrides,omitempty"`
+	Status    string        `yaml:"status,omitempty"`
+	Related   []HintRelated `yaml:"related,omitempty"`
+	Successor string        `yaml:"x-paintedwolf-successor,omitempty"`
+	XEmit     string        `yaml:"x-paintedwolf-emit,omitempty"`
 	// XAudience limits the tool profiles that can receive this rule.
 	XAudience      []string        `yaml:"x-paintedwolf-audience,omitempty"`
 	XCategory      string          `yaml:"x-paintedwolf-category,omitempty"`
