@@ -104,3 +104,14 @@
 +    config.define("PW_MLX_SYS_MANIFEST", manifest.join("Cargo.toml"));
 +    config
 +}
+--- a/src/mlx-c/CMakeLists.txt
++++ b/src/mlx-c/CMakeLists.txt
+@@ -35,7 +35,7 @@
+   FetchContent_Declare(
+     mlx
+     GIT_REPOSITORY "https://github.com/ml-explore/mlx.git"
+-    GIT_TAG v0.32.2)
++    GIT_TAG v0.32.4)
+   FetchContent_MakeAvailable(mlx)
+ endif()
+ 

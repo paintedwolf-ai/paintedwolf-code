@@ -4,11 +4,11 @@
     {
       "name": "mlx",
       "archive": "source.tar.gz",
-      "commit": "1f8e74e3f12f31365464a6867c6579f0e9b29d85",
+      "commit": "36969c094354086e15d2a327a9c50feb20b9cf11",
       "source_url": "https://github.com/ml-explore/mlx",
-      "tag": "v0.32.2",
-      "sha256": "cb988a5bdc38c798918d042b9b1c6edda3ccc5f23a2155138d3aa5c1b2acc301",
-      "directory": "mlx-1f8e74e3f12f31365464a6867c6579f0e9b29d85"
+      "tag": "v0.32.4",
+      "sha256": "391b1e41414cddebe7a4fb5c55bf193ea5edd70e26adcfb0e1d6a5e5e86ec34a",
+      "directory": "mlx-36969c094354086e15d2a327a9c50feb20b9cf11"
     },
     {
       "name": "fmt",
