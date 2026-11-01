@@ -332,7 +332,7 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 		`touch touched.txt && echo redirected > redirected.txt && printf 'teed\n' | tee teed.txt && ` +
 		`wc notes.txt teed.txt && ` +
 		`ps aux >/dev/null && env | grep -q '^PATH='; ` +
-		`sleep 30 & pid=$!; ps aux | grep -q running && kill $pid; wait; echo "sig:$?"`
+		`sleep 30 & pid=$!; ps aux | awk -v id="$pid" 'NR > 1 && $2 == id {seen=1} END {exit !seen}'; listed=$?; kill "$pid"; wait; echo "sig:$?"; test "$listed" = 0`
 	gitengine.TestingEnableBundledBinary()
 	s := newCommandProgramSession(t, prog, "")
 	bin, err := gitengine.BinaryPath()
@@ -353,7 +353,7 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 	gitRun("commit", "-q", "-m", "seed commit")
 	testutil.FailErr(t, "update notes", os.WriteFile(filepath.Join(s.dir, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-	result := s.result(t)
+	outcome, wasParked := settledCommandProgramOutcome(t, s)
 	for _, want := range []string{
 		`---`,
 		`--- section ---`,
@@ -367,11 +367,17 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 		`teed`,
 		`total`,
 		`sig:143`,
-		`"completed_effects": 3`,
 	} {
-		if !strings.Contains(result, want) {
-			t.Fatalf("missing %q in result: %s", want, result)
+		if !strings.Contains(outcome.Stdout, want) {
+			t.Fatalf("missing %q in stdout: %q", want, outcome.Stdout)
 		}
+	}
+	if outcome.CompletedEffects != 3 {
+		t.Fatalf("completed effects=%d", outcome.CompletedEffects)
+	}
+	expectedStates := []string{"completed"}
+	if wasParked {
+		expectedStates = append(expectedStates, "running", "waiting")
 	}
 	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read messages", err)
@@ -380,7 +386,7 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 	for _, m := range projected {
 		if m.Role == wire.MessageRoleTool && m.ToolResult != nil && m.ToolResult.Tool == "command" {
 			found = true
-			if m.Content == "" || m.ToolResult.CommandProgram == nil || m.ToolResult.CommandProgram.ID == "" || m.ToolResult.CommandProgram.State != "completed" {
+			if m.Content == "" || m.ToolResult.CommandProgram == nil || m.ToolResult.CommandProgram.ID != outcome.ProgramID || !slices.Contains(expectedStates, m.ToolResult.CommandProgram.State) {
 				t.Fatalf("projected tool message missing content or command_program receipt: content=%q tr=%+v", m.Content, m.ToolResult)
 			}
 		}
