@@ -43,3 +43,37 @@ func TestStressLargeCommandQueries(t *testing.T) {
 		}
 	}
 }
+
+func TestStressLargeCommandJSONQuery(t *testing.T) {
+	f := newPerfFixture(t, nil)
+	file, err := os.Create(filepath.Join(f.Dir, "large.json"))
+	if err != nil {
+		t.Fatalf("create JSON input: %v", err)
+	}
+	t.Cleanup(func() { _ = file.Close() })
+	write := func(value string) {
+		if _, err := file.WriteString(value); err != nil {
+			t.Fatalf("write JSON input: %v", err)
+		}
+	}
+	write("[")
+	block := strings.Repeat(`"`+strings.Repeat("x", 4096)+`",`, 16)
+	for range 1024 {
+		write(block)
+	}
+	write("0]")
+	if err := file.Close(); err != nil {
+		t.Fatalf("close JSON input: %v", err)
+	}
+	out, err := f.Call(t, t.Context(), `jq --stream 'select(length == 2 and .[0] == [16384]) | .[1]' large.json`)
+	if err != nil {
+		t.Fatalf("stream large JSON input: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("decode outcome: %v", err)
+	}
+	if result["state"] != "completed" || strings.TrimSpace(fmt.Sprint(result["stdout"])) != "0" {
+		t.Fatalf("large JSON query: %s", out)
+	}
+}
