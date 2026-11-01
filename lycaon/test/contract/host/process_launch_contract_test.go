@@ -25,9 +25,6 @@ func TestProcessLaunchesUseTheTypedDoor(t *testing.T) {
 			return walkErr
 		}
 		if d.IsDir() {
-			if d.Name() == "testdata" {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
@@ -42,13 +39,14 @@ func TestProcessLaunchesUseTheTypedDoor(t *testing.T) {
 		aliases := importAliases(f)
 		prepared := preparedCommandNames(f, aliases)
 		emptyErrorReturns := emptyOptionsErrorReturns(f)
-		allowRaw := strings.HasPrefix(slashRel, "lycaon/internal/exec/") ||
+		nativeStart := strings.HasPrefix(slashRel, "lycaon/internal/exec/") ||
 			strings.HasPrefix(slashRel, "lycaon/internal/confine/")
+		allowRaw := nativeStart || strings.Contains(slashRel, "/testdata/")
 		allowLowLevel := allowRaw || strings.HasPrefix(slashRel, "lycaon/internal/launchguard/")
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch node := n.(type) {
 			case *ast.CallExpr:
-				if !allowRaw && (isRawProcessStart(node.Fun, aliases) || isRawPreparedStart(node.Fun, prepared)) {
+				if !allowRaw && isRawProcessStart(node.Fun, aliases) || !nativeStart && isRawPreparedStart(node.Fun, prepared) {
 					findings = append(findings, positionFinding(fset, node.Pos(), rel, "raw os/exec process start"))
 				}
 				if !allowLowLevel && isLowLevelProcessStart(node.Fun, aliases) {
