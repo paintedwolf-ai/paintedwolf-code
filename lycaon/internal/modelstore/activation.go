@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
@@ -81,13 +82,8 @@ func (s *Store) activate(signed SignedManifest, repair bool) error {
 	if err := fssync.File(f); err != nil {
 		return fmt.Errorf("modelstore: journal sync: %w", err)
 	}
-	if dfd, err := os.Open(s.root); err != nil {
-		return fmt.Errorf("modelstore: journal dir: %w", err)
-	} else if err := fssync.File(dfd); err != nil {
-		dfd.Close()
-		return fmt.Errorf("modelstore: journal dir sync: %w", err)
-	} else if err := dfd.Close(); err != nil {
-		return fmt.Errorf("modelstore: journal dir close: %w", err)
+	if err := syncPublicationDirectories(root, ".", fseffect.SyncDirectory); err != nil {
+		return fmt.Errorf("modelstore: journal directories: %w", err)
 	}
 	return nil
 }
