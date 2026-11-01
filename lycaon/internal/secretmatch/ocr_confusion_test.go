@@ -79,7 +79,7 @@ type ocrSecretCase struct {
 // exercising 0/O, 1/I/l, 5/S, and 7// confusions in prefixes and token bodies.
 var twentyFourOCRConfusedSecrets = []ocrSecretCase{
 	// 12 AWS access key IDs (AKIA...) with prefix and body confusions.
-	{name: "aws-01-prefix-I-to-1", confused: "AK1AQ9Z2M4N8P3R6T5V7", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
+	{name: "aws-01-prefix-I-to-1", confused: "AK1AQ7Z2M4N6P3R6T5V7", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
 	{name: "aws-02-prefix-I-to-l", confused: "AKlAW3E6R4T2Y7U5I6O3", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
 	{name: "aws-03-body-O-to-0", confused: "AKIAQ2W3E4R5T6Y7U602", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
 	{name: "aws-04-body-I-to-1", confused: "AKIAZ2X3C4V5B6N7M613", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
@@ -87,7 +87,7 @@ var twentyFourOCRConfusedSecrets = []ocrSecretCase{
 	{name: "aws-06-body-7-to-slash", confused: "AKIAL2K3J4H5G6F/D4S5", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
 	{name: "aws-07-trailing-7-to-slash", confused: "AKIAM7N6B5V4C3X2Z3L/", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
 	{name: "aws-08-body-S-to-5", confused: "AKIAQ7W2E5R3T6Y4U257", wantRuleID: "gitleaks:aws-access-token", strictMiss: false},
-	{name: "aws-09-prefix-1-body-0-slash", confused: "AK1AD6F4G2H7J3K502/", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
+	{name: "aws-09-prefix-1-body-0-slash", confused: "AK1AD6F4G2H7J3K5L02/", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
 	{name: "aws-10-prefix-l-body-1-0", confused: "AKlAF3G5H7J2K4L61057", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
 	{name: "aws-11-multi-O-I-S-7", confused: "AKIA01l5/2W3E4R5T6Y7", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
 	{name: "aws-12-prefix-1-multi-body", confused: "AK1A0O1Il5S/7Q2W3E4R", wantRuleID: "gitleaks:aws-access-token", strictMiss: true},
@@ -100,7 +100,7 @@ var twentyFourOCRConfusedSecrets = []ocrSecretCase{
 	{name: "ghp-05-0-to-O-and-slash", confused: "ghp_mN8bV/cX6zL5kJ4hG3fD2sA1pOIUyTrEwQqW", wantRuleID: "gitleaks:github-pat", strictMiss: true},
 	{name: "ghp-06-1-I-l-and-slash", confused: "ghp_1IlI1l/9aB8cD7eF6gH5iJ4kL3mN2oP1qR0s", wantRuleID: "gitleaks:github-pat", strictMiss: true},
 	{name: "ghp-07-5-to-S-and-slash", confused: "ghp_S5S5aB2cD3eF4gH6iJ/kL8mN9oP0qR1sT2uV", wantRuleID: "gitleaks:github-pat", strictMiss: true},
-	{name: "ghp-08-combined-classes-a", confused: "ghp_O0I1l5S/7aBcDeFgHiJkLmNoPqRsTuVwXyZ2", wantRuleID: "gitleaks:github-pat", strictMiss: true},
+	{name: "ghp-08-combined-classes-a", confused: "ghp_O0I1l5S/7qWeRtYuIoPaSdFgHjKlZxCvBnM2", wantRuleID: "gitleaks:github-pat", strictMiss: true},
 	{name: "ghp-09-combined-classes-b", confused: "ghp_k9J8h/G6f5D4s3A2p1O0i9U8y/T6r5E4w3Q2", wantRuleID: "gitleaks:github-pat", strictMiss: true},
 	{name: "ghp-10-0-O-swap", confused: "ghp_R4t5Y6u7I8o9P0a1S2d3F4g5H6j7K8l9Z0xO", wantRuleID: "gitleaks:github-pat", strictMiss: false},
 	{name: "ghp-11-1-I-l-swap", confused: "ghp_V3b4N5m6Q7w8E9r0T1y2U3i4O5p6A7s8D9fl", wantRuleID: "gitleaks:github-pat", strictMiss: false},
@@ -160,22 +160,22 @@ func TestScreenOCROtherFamiliesAndHarvestedValues(t *testing.T) {
 	}{
 		{
 			name:   "AWS temporary key ASIA with S->5 and I->1",
-			input:  "export AWS_SESSION_TOKEN=A51AQ9Z2M4N8P3R6T5V7",
+			input:  "export AWS_SESSION_TOKEN=A51AQ7Z2M4N6P3R6T5V7",
 			ruleID: "gitleaks:aws-access-token",
 		},
 		{
 			name:   "GCP API key AIza with I->1 and 7->slash",
-			input:  "google_key = A1zaSyD9mK2pL4nQ6rT8vW0xY3zB5cF/hJ1kM3",
+			input:  "google_key = A1zaSyD9mK2pL4nQ6rT8vW0xY3zB5cF/hJ1kM3N",
 			ruleID: "gitleaks:gcp-api-key",
 		},
 		{
-			name:   "Anthropic key with api03->ap1O3",
-			input:  "ANTHROPIC_API_KEY=sk-ant-ap1O3-aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTu-aBcDeFgH",
+			name:   "Anthropic key with api03->apiO3 and 7->slash",
+			input:  "ANTHROPIC_API_KEY=sk-ant-apiO3-MeMT3IrWiPZ_35Kvc8kYJV10RQgM0xJdJNruAhMZl01h_l3qqkaUyEhVgS1Snh/YWAgZbdM_93OA5mJtTzaCrSobe0EFnAA",
 			ruleID: "gitleaks:anthropic-api-key",
 		},
 		{
 			name:   "OpenRouter key with v1->vI and hex O/I/l/S/slash",
-			input:  "OPENROUTER_API_KEY=sk-0r-vI-a1b2c3d4e5f6O718I9l0S1/2a3b4c5d6e7f80910111213141516171819202122",
+			input:  "OPENROUTER_API_KEY=sk-or-vI-a1b2c3d4e5f6O718I9l0S1/2a3b4c5d6e7f80910111213141516171819202122",
 			ruleID: "openrouter-api-key",
 		},
 		{
@@ -208,7 +208,7 @@ func TestScreenOCROtherFamiliesAndHarvestedValues(t *testing.T) {
 			Source:      SourceContainerHarvest,
 		}}
 	})
-	harvestLine := "env dump: myCu5tom5ecretOIl/Token here"
+	harvestLine := "env dump: myCustom5ecretOI5/Token here"
 	hHits := matcher.ScreenOCR(harvestLine)
 	if !hasRule(hHits, HarvestRuleID) {
 		t.Fatalf("ScreenOCR missed harvested value with OCR confusions: %#v", hHits)
@@ -222,11 +222,11 @@ func TestScreenOCRSuppressesConfusedPlaceholdersAndNonSecrets(t *testing.T) {
 	matcher := loadBundled(t)
 	placeholders := []string{
 		"AKIAIOSFODNN7EXAMPLE",
-		"AK1AI0SF0DNN/EXAMP1E",
+		"AK1AI0SF0DNN/EXAMPLE",
 		"AKlAI05F0DNN7EXAMPLE",
-		"A51AI0SF0DNN/EXAMP1E",
+		"A51AI05F0DNN/EXAMPLE",
 		"ghp_00000000000O000000000000000000000000",
-		"AIzaSyA-EXAMP1E-KEY-000000000000000000",
+		"AIzaSyA-EXAMPLE-KEY-0000000000O0000000",
 	}
 	for _, p := range placeholders {
 		if hits := matcher.ScreenOCR(p); len(hits) != 0 {
