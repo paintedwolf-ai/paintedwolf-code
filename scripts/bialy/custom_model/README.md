@@ -297,3 +297,9 @@ the supplied model license metadata.
 using a small signed packaging fixture and checks invalid input sets at
 evaluation. Its fixture key is test-only (seed bytes 0 through 31); its payload
 is not a model and must never be selected as a release resource.
+
+### Linux inference drivers
+
+The Nix application stages `generation/vulkan-drivers.json` with its immutable Mesa ICD paths. Generation inventory, the generation service and Bialy use the same host driver adapter. On NixOS the system graphics configuration supplies the drivers. Elsewhere, NVIDIA requires a loaded driver from series 580 or newer and matching, root-owned EGL, glsi, eglcore, glvkspirv and gpucomp libraries. The host prepares an ephemeral EGL Vulkan ICD and preloads only those vendor libraries into the inference child; generic libraries remain supplied by the application closure. Mesa remains available for other devices. Explicit `VK_DRIVER_FILES` selection is preserved.
+
+The adapter never installs a driver or changes the application's global library search path. Driver files come from the operating system, rather than the model artifact. The temporary ICD survives until the inference process exits, including cancellation and failed launches. NVIDIA's [component documentation](https://download.nvidia.com/XFree86/Linux-x86_64/580.119.02/README/installedcomponents.html) specifies the EGL Vulkan entry point used for inference without X11 dependencies.

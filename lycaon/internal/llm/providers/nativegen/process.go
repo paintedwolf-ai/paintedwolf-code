@@ -9,8 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/inference"
+	"github.com/lycaon/lycaon/internal/inference/driverenv"
 	"github.com/lycaon/lycaon/internal/modelstore"
 )
 
@@ -41,11 +43,18 @@ func startProcess(ctx context.Context, spec processSpec, lease *modelstore.Lease
 	if spec.pci != "" {
 		args = append(args, "--device-pci", spec.pci)
 	}
-	cmd, cleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), spec.binary, args, execpkg.ExecOpts{Launch: execpkg.HostLaunch("generation_engine"), NoTimeout: true})
+	environment, driverCleanup, err := driverenv.Prepare(configlayout.EngineRoot())
 	if err != nil {
 		lease.Release()
 		return nil, err
 	}
+	cmd, commandCleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), spec.binary, args, execpkg.ExecOpts{Launch: execpkg.HostLaunch("generation_engine"), NoTimeout: true, AppendEnv: environment})
+	if err != nil {
+		driverCleanup()
+		lease.Release()
+		return nil, err
+	}
+	cleanup := func() { commandCleanup(); driverCleanup() }
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Stderr = io.Discard
 	input, err := cmd.StdinPipe()

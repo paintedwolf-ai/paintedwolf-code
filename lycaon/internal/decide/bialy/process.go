@@ -13,9 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/decide"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/inference"
+	"github.com/lycaon/lycaon/internal/inference/driverenv"
 )
 
 // process is one running engine: requests go out on stdin as lines, replies
@@ -71,14 +73,21 @@ type response struct {
 }
 
 func startProcess(ctx context.Context, bin string, args []string, grant *startupGrant) (*process, error) {
+	environment, driverCleanup, err := driverenv.Prepare(configlayout.EngineRoot())
+	if err != nil {
+		return nil, fmt.Errorf("decide: prepare drivers: %w", err)
+	}
 	opts := execpkg.ExecOpts{
 		Launch:    execpkg.HostLaunch("decide_engine"),
 		NoTimeout: true,
+		AppendEnv: environment,
 	}
-	cmd, cleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), bin, args, opts)
+	cmd, commandCleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), bin, args, opts)
 	if err != nil {
+		driverCleanup()
 		return nil, fmt.Errorf("decide: prepare engine: %w", err)
 	}
+	cleanup := func() { commandCleanup(); driverCleanup() }
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cleanup()
