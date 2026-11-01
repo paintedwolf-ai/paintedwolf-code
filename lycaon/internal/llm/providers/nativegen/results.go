@@ -8,11 +8,12 @@ import (
 )
 
 type helloResult struct {
-	Kind           string                   `json:"kind"`
-	Protocol       uint32                   `json:"protocol"`
-	Backend        string                   `json:"backend"`
-	ArtifactID     string                   `json:"artifact_id"`
-	PhysicalDevice inference.PhysicalDevice `json:"physical_device"`
+	Kind            string                   `json:"kind"`
+	QuiescentMemory bool                     `json:"quiescent_memory"`
+	Protocol        uint32                   `json:"protocol"`
+	Backend         string                   `json:"backend"`
+	ArtifactID      string                   `json:"artifact_id"`
+	PhysicalDevice  inference.PhysicalDevice `json:"physical_device"`
 }
 
 type resourcePlan struct {

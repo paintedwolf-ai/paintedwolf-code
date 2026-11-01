@@ -45,12 +45,19 @@ func TestBialyStartupHoldsAdmissionUntilHelloOrReap(t *testing.T) {
 }
 
 func TestBialyStartupRejectsInvalidResourcePlans(t *testing.T) {
-	for _, kind := range []string{"missing", "identity", "unified", "overflow", "device-capacity", "missing-batch", "oversized-batch"} {
+	for _, kind := range []string{"missing", "identity", "unified", "overflow", "device-capacity", "missing-batch", "oversized-batch", "workspace-adapter", "workspace-size"} {
 		t.Run(kind, func(t *testing.T) {
 			cfg := fakeConfig(t)
 			cfg.Resources = sharedResources(t)
 			host := cfg.Resources.HostMemory
 			switch kind {
+			case "workspace-adapter":
+				cfg.Resources.PhysicalDevice = inference.PhysicalDevice{Kind: "pci", Address: "0000:03:00.0"}
+				cfg.Resources.WorkspaceBytes = 1
+			case "workspace-size":
+				cfg.Resources.PhysicalDevice = inference.PhysicalDevice{Kind: "apple_silicon"}
+				cfg.Resources.WorkspaceBytes = cfg.Resources.DeviceBytes
+
 			case "missing-batch":
 				cfg.Resources.MaxRows = 0
 			case "oversized-batch":
@@ -155,5 +162,16 @@ func TestBialyManagedDeviceUsesPhysicalAddress(t *testing.T) {
 	args := strings.Join(cfg.Args(), " ")
 	if !strings.Contains(args, "--device vulkan-pci:0000:03:00.0") || strings.Contains(args, "vulkan:9") || !strings.Contains(args, "--max-rows 2") {
 		t.Fatalf("managed device selection: %s", args)
+	}
+}
+
+func TestBialyManagedMLXArgumentsCarryBothMemoryGrants(t *testing.T) {
+	cfg := fakeConfig(t)
+	cfg.Resources = sharedResources(t)
+	cfg.Resources.WorkspaceBytes = 64
+	cfg.Resources.PhysicalDevice = inference.PhysicalDevice{Kind: "apple_silicon"}
+	args := strings.Join(cfg.Args(), " ")
+	if !strings.Contains(args, "--resident-bytes 192 --peak-bytes 256") {
+		t.Fatalf("missing native memory grants: %s", args)
 	}
 }

@@ -97,6 +97,7 @@ pub struct EngineOptions {
     pub heads: Vec<(String, PathBuf)>,
     /// Rows per forward pass; `0` means [`DEFAULT_MAX_ROWS`].
     pub max_rows: usize,
+    pub memory: crate::memory::Limits,
     /// Force a precision: `f16` or `f32`. Empty picks the device's own.
     pub dtype: String,
     /// Token budget for a question head (instructions plus every option); `0` keeps the
@@ -189,6 +190,7 @@ pub struct Engine {
     identity: Identity,
     pub(crate) physical_device: crate::device::PhysicalDevice,
     max_rows: usize,
+    memory: crate::memory::Limits,
 }
 
 impl std::fmt::Debug for Engine {
@@ -230,6 +232,7 @@ impl Engine {
         selected: Selected,
         opts: &EngineOptions,
     ) -> Result<Self> {
+        opts.memory.configure(&selected)?;
         let spec = LoadSpec {
             checkpoint: &prepared.checkpoint,
             config: &prepared.config,
@@ -252,6 +255,7 @@ impl Engine {
             heads.insert(name.clone(), head);
         }
 
+        opts.memory.finish()?;
         let model_id =
             if opts.model_id.is_empty() { config.encoder.clone() } else { opts.model_id.clone() };
         let identity = Identity {
@@ -284,6 +288,7 @@ impl Engine {
             identity,
             physical_device: selected.physical_device(),
             max_rows: if opts.max_rows == 0 { DEFAULT_MAX_ROWS } else { opts.max_rows },
+            memory: opts.memory,
         })
     }
 
@@ -414,7 +419,9 @@ impl Engine {
         let mut rows = Vec::with_capacity(items.len());
         for chunk in items.chunks(self.max_rows) {
             let batch = self.encoder.collate(chunk);
+            self.memory.begin()?;
             rows.extend(self.runtime.forward(head, &batch)?);
+            self.memory.finish()?;
         }
         Ok(rows)
     }

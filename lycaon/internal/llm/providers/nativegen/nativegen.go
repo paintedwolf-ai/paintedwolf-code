@@ -15,17 +15,18 @@ import (
 
 // RuntimeConfig binds the packaged adapter to host-owned resource admission.
 type RuntimeConfig struct {
-	ContextLimit   int
-	PrefillChunk   int
-	BinaryPath     string
-	MetalLibrary   string
-	Backend        string
-	PhysicalDevice inference.PhysicalDevice
-	Devices        *inference.Devices
-	HostMemory     *inference.MemoryBudget
-	DeviceMemory   *inference.MemoryBudget
-	UnifiedMemory  bool
-	ModelStore     *modelstore.Store
+	ContextLimit         int
+	PrefillChunk         int
+	BinaryPath           string
+	MetalLibrary         string
+	Backend              string
+	PhysicalDevice       inference.PhysicalDevice
+	Devices              *inference.Devices
+	HostMemory           *inference.MemoryBudget
+	DeviceMemory         *inference.MemoryBudget
+	UnifiedMemory        bool
+	SharedWorkspaceBytes uint64
+	ModelStore           *modelstore.Store
 }
 
 type Options struct {
@@ -60,6 +61,7 @@ type Runtime struct {
 	cancel     context.CancelFunc
 	gate       chan struct{}
 	loaded     *loadedProcess
+	prepared   *preparedPrompt
 	generation uint64
 	window     atomic.Int64
 }
@@ -130,6 +132,7 @@ func (p *Runtime) Close() error {
 }
 
 func (p *Runtime) unload() {
+	p.prepared = nil
 	if p.loaded != nil {
 		p.loaded.process.close()
 		p.loaded = nil
@@ -143,6 +146,9 @@ func (p *Runtime) validate() error {
 	}
 	if p.config.ContextLimit < 2 || p.config.ContextLimit > 65536 || p.config.PrefillChunk < 1 || p.config.PrefillChunk > 256 {
 		return errors.New("native generation: invalid execution limits")
+	}
+	if r.SharedWorkspaceBytes > 0 && r.Backend != "mlx" {
+		return errors.New("native generation: adapter cannot share transient workspace")
 	}
 	switch r.Backend {
 	case "mlx":

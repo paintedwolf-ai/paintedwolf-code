@@ -175,6 +175,9 @@ func (c Config) Args() []string {
 	}
 	if c.Resources != nil {
 		args = append(args, "--device", c.Resources.deviceArgument(), "--max-rows", strconv.Itoa(c.Resources.MaxRows))
+		if c.Resources.WorkspaceBytes > 0 {
+			args = append(args, "--resident-bytes", strconv.FormatUint(c.Resources.DeviceBytes-c.Resources.WorkspaceBytes, 10), "--peak-bytes", strconv.FormatUint(c.Resources.DeviceBytes, 10))
+		}
 	} else if c.Device != "" {
 		args = append(args, "--device", c.Device)
 	}

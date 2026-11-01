@@ -17,10 +17,10 @@ func memoryCheckpoint(t *testing.T) bialy.Config {
 	dir := t.TempDir()
 	testutil.FailErr(t, "create encoder directory", os.Mkdir(filepath.Join(dir, "encoder"), 0o700))
 	files := map[string]string{
-		"encoder/config.json": `{"model_type":"modernbert","hidden_size":768,"num_hidden_layers":22,"num_attention_heads":12,"intermediate_size":1152,"vocab_size":256000}`,
+		"encoder/config.json":  `{"model_type":"modernbert","hidden_size":768,"num_hidden_layers":22,"num_attention_heads":12,"intermediate_size":1152,"vocab_size":256000}`,
 		"rl_agent_config.json": `{"max_len":1024,"head_layers":2}`,
-		"model.safetensors": "weights",
-		"head.safetensors": "head",
+		"model.safetensors":    "weights",
+		"head.safetensors":     "head",
 	}
 	for name, content := range files {
 		testutil.FailErr(t, "write checkpoint fixture", os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
@@ -34,6 +34,9 @@ func TestMemoryPlanAccountsForResidentHeadsAndBatchWorkspace(t *testing.T) {
 		t.Run(backend, func(t *testing.T) {
 			plan, err := bialy.PlanMemory(cfg, backend, 2)
 			testutil.FailErr(t, "plan checkpoint", err)
+			if backend == "mlx" && (plan.WorkspaceBytes != 1<<30 || plan.DeviceBytes-plan.WorkspaceBytes != 11+(64<<20)) {
+				t.Fatalf("MLX resident and workspace grants: %+v", plan)
+			}
 			if plan.HostBytes == 0 || plan.MaxRows != 2 {
 				t.Fatalf("invalid plan: %+v", plan)
 			}
