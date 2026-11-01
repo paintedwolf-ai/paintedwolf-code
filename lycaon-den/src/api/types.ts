@@ -10275,12 +10275,26 @@ export interface components {
          * @enum {string}
          */
         ActivityStatus: "active" | "done";
+        CommandActivityStep: {
+            /** Format: uuid */
+            id: string;
+            command: string;
+            count: number;
+            running: number;
+            waiting: number;
+            failed: number;
+            refused: number;
+            interrupted: number;
+            state: string;
+            outcome: string;
+        };
         CommandActivitySpan: {
             source_ref: string;
             start_byte: number;
             end_byte: number;
         };
         CommandActivity: {
+            /** Format: uuid */
             id: string;
             group: string;
             label: string;
@@ -10292,17 +10306,19 @@ export interface components {
             /** @enum {string} */
             state: "running" | "waiting" | "completed" | "refused" | "failed" | "interrupted" | "unknown";
             status_code?: number;
-            /** @description Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate. */
-            merge_key?: string;
+            /** @description Number of executions of the primary structural operation. */
+            repetitions?: number;
+            /** @description All executions represented by this activity. */
+            execution_count?: number;
+            /** @description Executions reporting failure, refusal or interruption, independent of the enclosing outcome. */
+            failed_count?: number;
+            waiting_count?: number;
+            uncertain_effects?: number;
+            completed_effects?: number;
+            steps?: components["schemas"]["CommandActivityStep"][];
+            /** @description First execution of each structural step; use activity_id to page all member receipts. */
             execution_ids: string[];
             spans: components["schemas"]["CommandActivitySpan"][];
-        };
-        CommandActivityExecution: {
-            id: string;
-            /** @enum {string} */
-            state: "running" | "waiting" | "completed" | "refused" | "failed" | "interrupted" | "unknown";
-            outcome: string;
-            status_code?: number;
         };
         /** @description Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix. */
         CommandProgramOutputLimit: {
@@ -10362,17 +10378,13 @@ export interface components {
             started_at: string;
             /** Format: date-time */
             settled_at?: string;
-            /** @description Initial host activity identities. Details loading must not regroup these rows. */
+            /** @description Whole-program structural activities with complete repetition and outcome counts. Receipt paging does not change these rows. */
             activities?: components["schemas"]["CommandActivity"][];
-            /** @description Bounded live execution outcomes for rows whose presentation membership is already established. */
-            activity_executions?: components["schemas"]["CommandActivityExecution"][];
             /**
              * Format: int64
              * @description Monotonic receipt trace revision for live snapshot reconciliation.
              */
             activity_revision?: number;
-            activities_cursor?: string;
-            activities_omitted?: number;
             /** @description Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence. */
             outputs?: components["schemas"]["CommandProgramOutputWindow"][];
         };
@@ -17666,6 +17678,8 @@ export interface operations {
     getCommandProgramReceipt: {
         parameters: {
             query?: {
+                /** @description Restrict execution receipts to a host activity, including all repetitions. */
+                activity_id?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -30316,9 +30330,9 @@ export type SessionUiState = components["schemas"]["SessionUiState"];
 export type UpdateSessionRequest = components["schemas"]["UpdateSessionRequest"];
 export type ActivityKind = components["schemas"]["ActivityKind"];
 export type ActivityStatus = components["schemas"]["ActivityStatus"];
+export type CommandActivityStep = components["schemas"]["CommandActivityStep"];
 export type CommandActivitySpan = components["schemas"]["CommandActivitySpan"];
 export type CommandActivity = components["schemas"]["CommandActivity"];
-export type CommandActivityExecution = components["schemas"]["CommandActivityExecution"];
 export type CommandProgramOutputLimit = components["schemas"]["CommandProgramOutputLimit"];
 export type CommandProgramOutputWindow = components["schemas"]["CommandProgramOutputWindow"];
 export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
