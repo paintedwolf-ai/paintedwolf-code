@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -33,7 +34,7 @@ type Service struct {
 	policy             ModelPolicySource
 	windows            llm.ContextLengthLookup
 	fallback           ConfigSource
-	sessionLiveWindows map[string]int
+	sessionLiveWindows scopedstore.LRU[int]
 }
 
 func New(defaults settings.SessionLimits, roots Roots) *Service {
@@ -80,11 +81,8 @@ func (m *Service) LowerSessionLiveWindow(sessionID string, window int) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.sessionLiveWindows == nil {
-		m.sessionLiveWindows = make(map[string]int)
-	}
-	if cur, ok := m.sessionLiveWindows[sessionID]; !ok || window < cur {
-		m.sessionLiveWindows[sessionID] = window
+	if cur, ok := m.sessionLiveWindows.Load(sessionID); !ok || window < cur {
+		m.sessionLiveWindows.Store(sessionID, window)
 	}
 }
 
@@ -93,9 +91,7 @@ func (m *Service) SessionLiveWindow(sessionID string) (int, bool) {
 	if m == nil || sessionID == "" {
 		return 0, false
 	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	w, ok := m.sessionLiveWindows[sessionID]
+	w, ok := m.sessionLiveWindows.Load(sessionID)
 	return w, ok && w > 0
 }
 
