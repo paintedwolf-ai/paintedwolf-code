@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
+	bedrockprovider "github.com/lycaon/lycaon/internal/llm/providers/bedrock"
+	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
+	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
-	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
-	bedrockprovider "github.com/lycaon/lycaon/internal/llm/providers/bedrock"
-	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
-	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
 )
 
 // EndpointStyle describes the provider-specific meaning of base_url.
@@ -222,6 +222,7 @@ var providerKindSpecs = map[string]ProviderKindSpec{
 	"vertex":                {Kind: "vertex", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"vertex-express":        {Kind: "vertex-express", Protocol: ProtocolGeminiNative, ChatBaseURL: identityProviderBase},
 	"fireworks":             {Kind: "fireworks", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
+	"deepinfra":             {Kind: "deepinfra", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"together":              {Kind: "together", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"gemini":                {Kind: "gemini", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"openrouter":            {Kind: "openrouter", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},

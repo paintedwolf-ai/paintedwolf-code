@@ -43,6 +43,7 @@ func openAICompatConformanceCases() []openAICompatConformanceCase {
 		{kind: "openai", wantBearer: true, promptCache: promptCacheRequireKey},
 		{kind: "openai-compatible", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "fireworks", wantBearer: true, promptCache: promptCacheRequireKey},
+		{kind: "deepinfra", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "together", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "openrouter", wantBearer: true, promptCache: promptCacheRequireKey},
 		{kind: "gemini", wantBearer: true, promptCache: promptCacheForbidKey},

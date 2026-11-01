@@ -9,6 +9,7 @@ var feedProviderKeyByKind = map[string]string{
 	"together":   "togetherai",
 	"openrouter": "openrouter",
 	"fireworks":  "fireworks-ai",
+	"deepinfra":  "deepinfra",
 	"bedrock":    "amazon-bedrock",
 	"vertex":     "google-vertex",
 	"gemini":     "google",

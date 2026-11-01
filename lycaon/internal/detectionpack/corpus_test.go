@@ -248,6 +248,7 @@ func TestEgressPackMatches(t *testing.T) {
 	must("api.cloudflare.com", "paas-edge-control-plane")
 	must("app.terraform.io", "iac-remote-control-plane")
 	must("api.openai.com", "data-cloud-control-plane")
+	must("api.deepinfra.com", "data-cloud-control-plane")
 	must("xy12345.us-east-1.snowflakecomputing.com", "data-cloud-control-plane")
 	must("api.clickhouse.cloud", "data-cloud-control-plane")
 	must("cloud.getdbt.com", "data-cloud-control-plane")

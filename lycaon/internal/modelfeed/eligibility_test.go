@@ -55,6 +55,17 @@ func TestEligibleModelsDropsNonChat(t *testing.T) {
 	if ids["text-embedding-3-small"] || ids["gpt-image-1"] || ids["synthetic-embed-temp"] {
 		t.Fatalf("expected embeds/image dropped, got %v", ids)
 	}
+
+	deepinfraIDs := map[string]bool{}
+	for _, m := range loadFixtureDoc(t).EligibleModels("deepinfra") {
+		deepinfraIDs[m.ID] = true
+	}
+	if !deepinfraIDs["deepseek-ai/DeepSeek-V3.2"] {
+		t.Fatalf("expected deepinfra chat model kept, got %v", deepinfraIDs)
+	}
+	if deepinfraIDs["Qwen/Qwen3-Embedding-8B"] {
+		t.Fatalf("expected deepinfra embedding dropped, got %v", deepinfraIDs)
+	}
 }
 
 func TestConversationEligibleKeepsFreeAndUnpricedChatModels(t *testing.T) {

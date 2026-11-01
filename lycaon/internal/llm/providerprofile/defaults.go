@@ -70,6 +70,13 @@ func Fireworks() Profile {
 	return profile
 }
 
+func DeepInfra() Profile {
+	profile := OpenAI()
+	profile.ReasoningEffortOff = OpenAIReasoningEffortOff
+	profile.ReasoningWire = ReasoningWireContent
+	return profile
+}
+
 func Together() Profile {
 	profile := OpenAI()
 	profile.SystemPreambleOnly = true

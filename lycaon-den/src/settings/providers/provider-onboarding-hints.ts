@@ -20,6 +20,7 @@ export const PROVIDER_ONBOARDING_MODEL_HINTS = {
   "litellm-proxy": "Route the proxy to a strong upstream model with tools.",
   gemini: "Gemini 3.5 Flash or a Pro model work well.",
   fireworks: "Prefer Kimi K2.7 Code or K2.6, or another strong model with tools.",
+  deepinfra: "Prefer Kimi K2.7 Code or K2.6, or another strong model with tools.",
   bedrock: "Claude Sonnet or Opus with tool use work well.",
   vertex: "Gemini Flash or Pro models work well.",
   "vertex-express":

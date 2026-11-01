@@ -11,7 +11,7 @@ import (
 )
 
 func TestDeclaredReasoningOffSurvivesWireEncoding(t *testing.T) {
-	for _, profile := range []providerprofile.Profile{providerprofile.Fireworks(), providerprofile.OpenAIVendor(), providerprofile.Gemini()} {
+	for _, profile := range []providerprofile.Profile{providerprofile.Fireworks(), providerprofile.DeepInfra(), providerprofile.OpenAIVendor(), providerprofile.Gemini()} {
 		p := New("fixture", "https://example.invalid", "", []modelinfo.Entry{{ID: "hybrid", ReasoningEffort: "none"}}).WithProfile(profile)
 		for _, stream := range []bool{false, true} {
 			for _, structured := range []bool{false, true} {
