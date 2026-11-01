@@ -10,6 +10,11 @@ import (
 
 func lockFile(f *os.File) error { return syscall.Flock(int(f.Fd()), syscall.LOCK_EX) }
 
+func openBundlePayload(root *os.Root, name string) (*os.File, error) {
+	// A replaced FIFO must not block bundle inspection.
+	return root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
+}
+
 func defaultFreeBytes(path string) (int64, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(path, &stat); err != nil {
