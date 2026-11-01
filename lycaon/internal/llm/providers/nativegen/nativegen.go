@@ -26,6 +26,7 @@ type RuntimeConfig struct {
 	DeviceMemory         *inference.MemoryBudget
 	UnifiedMemory        bool
 	SharedWorkspaceBytes uint64
+	SeedDirectory        string
 	ModelStore           *modelstore.Store
 }
 

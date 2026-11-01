@@ -79,7 +79,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 			Backend: inventory.Backend, PhysicalDevice: device.PhysicalDevice,
 			Devices: resources.Devices, HostMemory: resources.GenerationHost,
 			DeviceMemory: resources.GenerationDevice, UnifiedMemory: device.UnifiedMemory,
-			ModelStore: store, SharedWorkspaceBytes: resources.SharedWorkspaceBytes,
+			ModelStore: store, SeedDirectory: options.Seed, SharedWorkspaceBytes: resources.SharedWorkspaceBytes,
 		}),
 	}, nil
 }
