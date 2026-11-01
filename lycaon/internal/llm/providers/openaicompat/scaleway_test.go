@@ -94,7 +94,7 @@ func TestScalewayStreamToolCallContinuationAndUsage(t *testing.T) {
 		t.Fatalf("ToolCalls = %+v", first.ToolCalls)
 	}
 	usage := first.Usage
-	if usage.InputTokens != 120 || usage.OutputTokens != 28 || usage.CacheReadInputTokens != 64 {
+	if usage.PromptTokens != 120 || usage.CompletionTokens != 28 || usage.CacheReadInputTokens != 64 {
 		t.Fatalf("usage = %+v", usage)
 	}
 
