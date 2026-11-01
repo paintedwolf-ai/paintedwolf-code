@@ -34,7 +34,7 @@ func TestMemoryPlanAccountsForResidentHeadsAndBatchWorkspace(t *testing.T) {
 		t.Run(backend, func(t *testing.T) {
 			plan, err := bialy.PlanMemory(cfg, backend, 2)
 			testutil.FailErr(t, "plan checkpoint", err)
-			if backend == "mlx" && (plan.WorkspaceBytes != 1<<30 || plan.DeviceBytes-plan.WorkspaceBytes != 11+(64<<20)) {
+			if backend == "mlx" && (plan.WorkspaceBytes != 512<<20 || plan.DeviceBytes-plan.WorkspaceBytes != 11+(64<<20)) {
 				t.Fatalf("MLX resident and workspace grants: %+v", plan)
 			}
 			if plan.HostBytes == 0 || plan.MaxRows != 2 {
