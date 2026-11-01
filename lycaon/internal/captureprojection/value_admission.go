@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // ValueStateAdmission reserves retained projection storage before allocation.
@@ -42,6 +43,7 @@ func (p *Projector) Value(ctx context.Context, scope Scope, label string, value 
 	if ctx == nil || options.MaximumNodes <= 0 || options.MaximumDepth <= 0 || b.InputBytes <= 0 || b.OutputBytes <= 0 || b.MemoryBytes <= 0 || b.DetectorWork <= 0 {
 		return nil, Metadata{}, nil, ErrUnavailable
 	}
+	ctx = toolcontract.WithMemoryPhase(ctx, toolcontract.InputScreening)
 	storage := &valueStorage{ctx: ctx, state: options.State}
 	if _, err := storage.reserve(128); err != nil {
 		return nil, Metadata{}, nil, err

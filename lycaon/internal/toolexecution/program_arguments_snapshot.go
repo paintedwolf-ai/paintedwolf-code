@@ -20,6 +20,7 @@ func prepareNativeArguments(ctx context.Context, admission *toolcontract.Program
 	if ctx == nil || admission == nil {
 		return nil, fmt.Errorf("native review inputs require retained state admission")
 	}
+	ctx = toolcontract.WithMemoryPhase(ctx, toolcontract.ArgumentSnapshot)
 	snapshot := &nativeArguments{}
 	value, err := snapshot.clone(ctx, admission, values, 0)
 	if err != nil {
