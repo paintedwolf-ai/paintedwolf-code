@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -73,7 +74,7 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 		}
 		var node, operation, scope string
 		err = tx.QueryRowContext(ctx, `SELECT node_id,operation_id,scope_json FROM invocation_program_executions WHERE program_id=? AND id=?`, program, receipts[0].ParentExecutionID).Scan(&node, &operation, &scope)
-		if err != nil && err != sql.ErrNoRows {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 		if err == nil {
