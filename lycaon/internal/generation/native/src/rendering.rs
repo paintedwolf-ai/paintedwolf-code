@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokenizers::Tokenizer;
 
+use crate::conversation::ConversationFormat;
 use crate::error::{Error, Result};
 
 const MAX_TEXT_BYTES: usize = 4 << 20;
@@ -35,6 +36,7 @@ pub struct Renderer {
     environment: Environment<'static>,
     tokenizer: Tokenizer,
     bos: String,
+    conversation: ConversationFormat,
 }
 
 fn tokenizer_error(error: impl std::fmt::Display) -> Error {
@@ -125,10 +127,12 @@ impl Renderer {
             1 << 20,
         )?)
         .map_err(tokenizer_error)?;
+        let conversation = ConversationFormat::load(&config, &template)?;
         Ok(Self {
             environment: environment(template)?,
             tokenizer,
             bos,
+            conversation,
         })
     }
 
@@ -152,6 +156,7 @@ impl Renderer {
                 "prompt dimensions exceed their bounds".into(),
             ));
         }
+        self.conversation.validate(&request.messages)?;
         let prompt_tokens = self.encode(&self.render_text(request, true)?)?;
         let input_tokens = prompt_tokens.len();
         if input_tokens > 65536 {
@@ -249,6 +254,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn versioned_conversation_preserves_ordered_tool_results() {
+        let environment =
+            environment(include_str!("../../templates/gemma4-code-v1.jinja").into()).unwrap();
+        let cases: Vec<Value> =
+            serde_json::from_str(include_str!("../../templates/gemma4-code-v1.cases.json")).unwrap();
+        for mut case in cases {
+            case["bos_token"] = Value::String("<bos>".into());
+            let actual = environment.get_template("chat").unwrap().render(&case);
+            if case["rejected"] == true {
+                assert!(actual.is_err(), "{}", case["name"]);
+            } else {
+                assert_eq!(
+                    actual.unwrap(),
+                    case["expected"].as_str().unwrap(),
+                    "{}",
+                    case["name"]
+                );
+            }
+        }
+    }
+
+    #[test]
     fn checkpoint_uses_only_a_matching_rendered_system_prefix() {
         use tokenizers::{
             models::wordlevel::WordLevel, pre_tokenizers::whitespace::WhitespaceSplit,
@@ -270,7 +297,7 @@ mod tests {
             .unwrap();
         let mut tokenizer = Tokenizer::new(model);
         tokenizer.with_pre_tokenizer(Some(WhitespaceSplit));
-        let mut renderer = Renderer { tokenizer, bos:"bos".into(), environment: environment("{{ bos_token }} {% for m in messages %}{{ m.content }} {% endfor %}{% if add_generation_prompt %}assistant{% endif %}".into()).unwrap() };
+        let mut renderer = Renderer { tokenizer, bos:"bos".into(), conversation: ConversationFormat::Canonical, environment: environment("{{ bos_token }} {% for m in messages %}{{ m.content }} {% endfor %}{% if add_generation_prompt %}assistant{% endif %}".into()).unwrap() };
         let request = RenderRequest {
             messages: vec![
                 serde_json::json!({"role":"system","content":"system"}),
