@@ -87,7 +87,9 @@ impl<B: Backend> Executor<B> {
             preparation.processed = end;
         }
         let complete = end == tokens.len();
-        if complete {
+        // Keep the shorter checkpoint when history can still change before submission.
+        let retains_ancestor = !self.prefix.is_empty() && tokens.starts_with(&self.prefix);
+        if complete && !retains_ancestor {
             self.backend.save_prefix()?;
             self.prefix.clone_from(tokens);
         }
