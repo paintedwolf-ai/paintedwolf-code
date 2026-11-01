@@ -14,7 +14,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from artifact_paths import artifact_root, bin_dir, compiler_cache_dir
-from sources import ensure_source
+from sources import ensure_source, source_identity
 import swift_toolchain
 import vulkan_tools
 from provenance import record_build, verified_build, file_digest
@@ -27,9 +27,9 @@ def paths(backend):
         return Path(__file__).parent / "swift-reference", compiler_cache_dir(ROOT) / "generation-swift"
     if backend == "reference-llama":
         pin = PINS["llama.cpp"]
-        source = bin_dir(ROOT) / "generation-sources" / pin["sha256"]
+        source = bin_dir(ROOT) / "generation-sources" / source_identity(pin)
         source_slot = hashlib.sha256(str(ROOT.resolve()).encode()).hexdigest()[:16]
-        build = compiler_cache_dir(ROOT) / "generation" / pin["revision"] / platform.system() / source_slot
+        build = compiler_cache_dir(ROOT) / "generation" / source_identity(pin) / platform.system() / source_slot
         return source, build
     return ROOT / "lycaon/internal/generation/native", compiler_cache_dir(ROOT) / "generation-rust"
 
@@ -181,7 +181,7 @@ def build(args):
 def test(args):
     if args.backend == "reference-llama":
         run([sys.executable, "-m", "unittest", "test_vulkan_tools", "test_provenance",
-             "test_swift_toolchain", "test_native_bench", "test_staging"], cwd=Path(__file__).parent)
+             "test_swift_toolchain", "test_native_bench", "test_sources", "test_staging"], cwd=Path(__file__).parent)
         return
     if args.backend == "reference-swift":
         source, output = paths(args.backend)
@@ -204,7 +204,7 @@ def test(args):
     source, output = paths("native")
     if sys.platform == "linux":
         build(argparse.Namespace(backend="reference-llama"))
-    run([sys.executable, "-m", "unittest", "test_native_bench"], cwd=Path(__file__).parent)
+    run([sys.executable, "-m", "unittest", "test_native_bench", "test_sources", "test_provenance"], cwd=Path(__file__).parent)
     environment, feature = native_environment(output)
     run(["cargo", "test", "--locked", "--release", "--features", feature,
          "--jobs", os.environ.get("PW_TEST_WORKERS", "1"), "--manifest-path", source / "Cargo.toml"],

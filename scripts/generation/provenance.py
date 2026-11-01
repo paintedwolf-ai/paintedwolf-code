@@ -33,11 +33,14 @@ def source_identity(backend):
         sources["runtime.py"] = file_digest(ROOT / "runtime.py")
         sources["provenance.py"] = file_digest(ROOT / "provenance.py")
         sources["sources.json"] = file_digest(ROOT / "sources.json")
+        sources["sources.py"] = file_digest(ROOT / "sources.py")
+        for path in sorted((ROOT / "llama-reference").glob("*.patch")):
+            sources[str(path.relative_to(ROOT))] = file_digest(path)
         sources["llama-reference/CMakeLists.txt"] = file_digest(ROOT / "llama-reference/CMakeLists.txt")
         return hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()
     directory = ROOT / ("swift-reference" if backend == "reference-swift" else "llama-reference")
     paths = sorted(p for p in directory.rglob("*") if p.is_file() and (
-        p.suffix in {".swift", ".cpp", ".h", ".resolved"} or p.name == "CMakeLists.txt"))
+        p.suffix in {".swift", ".cpp", ".h", ".resolved", ".patch"} or p.name == "CMakeLists.txt"))
     sources = {str(path.relative_to(ROOT)): file_digest(path) for path in paths}
     sources["sources.json"] = file_digest(ROOT / "sources.json")
     return hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()
