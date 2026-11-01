@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/modelstore/modelstore.Store",
+  "kind": "runtime_service",
+  "workstream": "local-model-store",
+  "disposition": "retain",
+  "reason": "Retain the store transaction boundary at 766 receiver lines and 32 methods. Activation, journal recovery, collection and repair share revision identity and cross-process leases; export preparation and signing remain independent functions. Splitting the receiver would distribute the same publication and reader-lifetime rules across competing entry points. Lease, repair, interrupted-import and journal fixtures support this boundary.",
+  "reviewed_commit": "ceefbfd8332db4db19206f08016bca0fe7874702",
+  "reviewed_shape": "e3dc6712e8271e43b0fc0850640e7979695481d99c7a76c551196d290850c553",
+  "ceiling": 32,
+  "boundaries": {
+    "lycaon/internal/modelstore/lifetime_test.go": "17084815f37662d3f1b72f2ecb0620d7e1a98fc56602eea9b769d259a33d61c7",
+    "lycaon/internal/modelstore/repair_test.go": "a3d9eb47ddcb8616b01e06c27b9d89333a25d61e4a172d54331e9beb98fdd583",
+    "lycaon/internal/modelstore/import_test.go": "485852352df3921e70ace2e435dcd0d1d4e08534ed28ad75f6fc2625cbafddbd",
+    "lycaon/internal/modelstore/store_test.go": "45027be3e76ea0bda1466d2191394a4e90d76eb133fa4565626f45a6c0375745"
+  }
+}
