@@ -6,7 +6,10 @@
 }:
 let
   generationSeed = if generationRelease == null then null
-    else callPackage ./generation-seed.nix ({ inherit source; } // generationRelease);
+    else callPackage ./generation-seed.nix {
+      inherit source;
+      inherit (generationRelease) manifest authority payloads license;
+    };
 in stdenvNoCC.mkDerivation {
   pname = "painted-wolf-code-resources";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
