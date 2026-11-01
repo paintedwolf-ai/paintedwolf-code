@@ -220,7 +220,6 @@ func TestOwnerSeamTerminalRefusalKeepsInvokedIsolationRejection(t *testing.T) {
 	}
 }
 
-
 func TestPortableProgramDoesNotScrapePrintedPathsIntoSourceEvidence(t *testing.T) {
 	calls := 0
 	loop := NewPromptLoop(PromptLoopDeps{Tools: ToolsDeps{CommitEvidenceToolResult: func(context.Context, string, *api.Session, string, map[string]any, string, string) (string, string, error) {

@@ -183,21 +183,10 @@ func (r *Terminal) startPTY(
 	r.jobs.mu.Unlock()
 
 	stage := req.Stages[0]
-	inlineEnv := req.InlineEnv
-	if len(stage.Env) > 0 {
-		merged := make(map[string]string, len(inlineEnv)+len(stage.Env))
-		for k, v := range inlineEnv {
-			merged[k] = v
-		}
-		for k, v := range stage.Env {
-			merged[k] = v
-		}
-		inlineEnv = merged
-	}
 	session, err := lycexec.StartPTY(runCtx, stage.Name, stage.Args, lycexec.PTYOpts{
 		Dir:            projectDir,
 		NoTimeout:      true,
-		InlineEnv:      inlineEnv,
+		InlineEnv:      lycexec.MergeInlineEnv(req.InlineEnv, stage.Env),
 		PathExtra:      req.PathExtra,
 		Launch:         req.Launch,
 		WinSize:        size,

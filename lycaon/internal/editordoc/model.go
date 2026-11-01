@@ -52,8 +52,8 @@ type DocumentBase struct {
 
 // DocumentState holds synchronization, epoch, and CRDT state.
 type DocumentState struct {
-	UpdatedAt  time.Time
-	Diverged   bool
+	UpdatedAt time.Time
+	Diverged  bool
 	// Absent says the path has no file on disk; the draft and saved base stay.
 	Absent            bool
 	Epoch             int64
