@@ -39,6 +39,8 @@ Prepare repository signing/package tools with
 For the signer alone, `./task setup-dev -- --ci-inputs repository-tools --signer
 <directory>` builds it from the repository's locked Nix input; prepend that
 directory's `bin` to `PATH` for verification.
+`--python <directory>` prepares the locked Python interpreter with pip for
+the pinned Python-package preparation when the host interpreter is unsuitable.
 
 Native search differential tests use the pinned ripgrep 15 reference. Prepare it
 with `./task setup-dev -- --ci-inputs search-reference <directory>` and prepend
