@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/app/execution"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
-	"github.com/lycaon/lycaon/internal/decide/bialy"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/project"
@@ -18,7 +17,7 @@ import (
 )
 
 func (b *serveBuilder) wireToolRuntime() error {
-	if err := b.decisions.Load(b.startup.cfg.TestDecider, bialy.ConfigFromEnvironment()); err != nil {
+	if err := b.decisions.Load(b.startup.cfg.TestDecider, b.localModels.Decision); err != nil {
 		return err
 	}
 	b.startup.resources.Track("decision-engine", 47, b.decisions.Close)
