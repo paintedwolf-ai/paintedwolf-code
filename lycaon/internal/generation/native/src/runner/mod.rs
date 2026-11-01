@@ -116,6 +116,9 @@ impl<B: Backend, F: FnMut(&Path, usize, usize, u64) -> Result<B>> Runner<B, F> {
                     .as_mut()
                     .ok_or_else(|| Error::Protocol("model is not loaded".into()))?;
                 match command {
+                    Command::Measure { request } => Ok(Output::Measured {
+                        measured: loaded.renderer.measure(&request)?,
+                    }),
                     Command::Render {
                         request,
                         max_prompt_tokens,
