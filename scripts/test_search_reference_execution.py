@@ -214,13 +214,13 @@ class RepositoryToolsInputsTest(unittest.TestCase):
     def test_signer_preparation_uses_the_repository_locked_nix_inputs(self):
         result, calls = self.run_profile("Linux", "--signer", "/fixture/signer with spaces")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(calls, [{"argv": ["nix", "build", "--inputs-from", str(runner_tests.SCRIPTS.parent),
+        self.assertEqual(calls, [{"argv": ["nix", "--extra-experimental-features", "nix-command flakes", "build", "--inputs-from", str(runner_tests.SCRIPTS.parent),
                                           "--no-write-lock-file", "nixpkgs#minisign", "--out-link", "/fixture/signer with spaces"]}])
 
     def test_python_preparation_keeps_pip_with_the_locked_interpreter(self):
         result, calls = self.run_profile("Linux", "--python", "/fixture/python with spaces")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(calls, [{"argv": ["nix", "build", "--inputs-from", str(runner_tests.SCRIPTS.parent),
+        self.assertEqual(calls, [{"argv": ["nix", "--extra-experimental-features", "nix-command flakes", "build", "--inputs-from", str(runner_tests.SCRIPTS.parent),
             "--no-write-lock-file", "--impure", "--expr",
             'let pkgs = (builtins.getFlake "nixpkgs").legacyPackages.${builtins.currentSystem}; in pkgs.python3.withPackages (p: [ p.pip ])',
             "--out-link", "/fixture/python with spaces"]}])
