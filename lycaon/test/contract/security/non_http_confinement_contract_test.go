@@ -225,21 +225,21 @@ func shortUnixTempDir(t *testing.T) string {
 func TestNonHTTPContractWitnessAndGrantKeyVaryWithBoundary(t *testing.T) {
 	t.Parallel()
 	base := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "true"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{
-			FSJailed: true,
-			Egress:   hitl.ContainedEgressProxy,
-			Roots:    []string{"/proj"},
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "true"},
 		},
-},
-}
+		Scope: hitl.ActionScope{
+			ProjectDir: "/proj",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed: true,
+				Egress:   hitl.ContainedEgressProxy,
+				Roots:    []string{"/proj"},
+			},
+		},
+	}
 	k0 := hitl.GrantKey(base)
 
 	withRoot := base

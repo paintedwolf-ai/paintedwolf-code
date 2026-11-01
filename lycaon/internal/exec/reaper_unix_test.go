@@ -80,6 +80,72 @@ func TestReaperHoldsAGroupTrackedTwiceUntilBothForgetIt(t *testing.T) {
 	}
 }
 
+func TestReaperKillsSurvivingSessionMembersAfterLeaderExitsAndSparesMismatchedStart(t *testing.T) {
+	dir := t.TempDir()
+	memberPIDFile := filepath.Join(dir, "member.pid")
+	grandchildPIDFile := filepath.Join(dir, "grandchild.pid")
+
+	script := fmt.Sprintf(
+		"set -m; sh -c 'echo $$ > %s; sleep 30 & echo $! > %s; wait' & exit 0",
+		strconv.Quote(memberPIDFile), strconv.Quote(grandchildPIDFile),
+	)
+	cmd := exec.Command("sh", "-c", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	testutil.FailErr(t, "start session leader", cmd.Start())
+	leaderInc, ok := osprocess.IncarnationOf(cmd.Process.Pid)
+	if !ok {
+		t.Fatal("failed to read leader incarnation")
+	}
+
+	memberPID := waitForPIDFile(t, memberPIDFile)
+	grandchildPID := waitForPIDFile(t, grandchildPIDFile)
+	t.Cleanup(func() {
+		_ = syscall.Kill(memberPID, syscall.SIGKILL)
+		_ = syscall.Kill(grandchildPID, syscall.SIGKILL)
+	})
+	memberInc, ok := osprocess.IncarnationOf(memberPID)
+	if !ok {
+		t.Fatal("failed to read surviving member incarnation")
+	}
+	testutil.FailErr(t, "reap exited leader", cmd.Wait())
+
+	bystander := exec.Command("cat")
+	stdin, err := bystander.StdinPipe()
+	testutil.FailErr(t, "bystander stdin", err)
+	defer func() { _ = stdin.Close() }()
+	testutil.FailErr(t, "start bystander", bystander.Start())
+	defer func() {
+		if bystander.ProcessState == nil {
+			_ = bystander.Process.Kill()
+			_ = bystander.Wait()
+		}
+	}()
+	bystanderInc, ok := osprocess.IncarnationOf(bystander.Process.Pid)
+	if !ok {
+		t.Fatal("failed to read bystander incarnation")
+	}
+
+	// Leader has exited and been forgotten (-g), while memberInc was transferred
+	// before leader reap and a stale registration for bystander's PID has a
+	// mismatched start timestamp.
+	reapLines(
+		fmt.Sprintf("+g%d:%d\n", leaderInc.PID, leaderInc.Start),
+		fmt.Sprintf("+m%d:%d:%d\n", leaderInc.PID, memberInc.PID, memberInc.Start),
+		fmt.Sprintf("-g%d\n", leaderInc.PID),
+		fmt.Sprintf("+p%d:%d\n", bystanderInc.PID, bystanderInc.Start-1),
+		fmt.Sprintf("+m%d:%d:%d\n", leaderInc.PID, bystanderInc.PID, bystanderInc.Start-1),
+	)
+
+	for _, pid := range []int{memberPID, grandchildPID} {
+		if err := waitForProcessGone(t.Context(), pid); err != nil {
+			testutil.FailErr(t, "surviving session member outlived reaper", err)
+		}
+	}
+	if !bystanderInc.Alive() {
+		t.Fatal("reaper killed process whose start time differed from its registration")
+	}
+}
+
 func TestReaperRemovesTrackedDirAfterKillingItsGroup(t *testing.T) {
 	leader, descendant := startGroup(t)
 	scratch := filepath.Join(t.TempDir(), "scratch")
@@ -113,11 +179,18 @@ func TestReaperSparesForgottenAndUnanchoredDirs(t *testing.T) {
 // A SIGKILLed engine runs no cleanup of its own; only the reaper ends its
 // groups and removes its scratch directories.
 func TestEngineKilledOutrightTakesItsTrackedGroupsWithIt(t *testing.T) {
+	for _, role := range []string{"engine", "engine-group"} {
+		t.Run(role, func(t *testing.T) { assertEngineDeathReapsOwnedGroup(t, role) })
+	}
+}
+
+func assertEngineDeathReapsOwnedGroup(t *testing.T, role string) {
+	t.Helper()
 	dir := t.TempDir()
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate test binary", err)
 	engine := exec.Command(self, "-test.run=^TestReaperHelperProcess$", "-test.v=false")
-	engine.Env = append(os.Environ(), reaperRoleEnv+"=engine:"+dir)
+	engine.Env = append(os.Environ(), reaperRoleEnv+"="+role+":"+dir)
 	engine.Stdout, engine.Stderr = io.Discard, io.Discard
 	testutil.FailErr(t, "start engine helper", engine.Start())
 	t.Cleanup(func() { _ = engine.Process.Kill(); _ = engine.Wait() })
@@ -154,7 +227,7 @@ func TestReaperHelperProcess(t *testing.T) {
 	switch role {
 	case "reaper":
 		os.Exit(RunReaper(os.Stdin))
-	case "engine":
+	case "engine", "engine-group":
 	default:
 		t.Skip("helper process for TestEngineKilledOutrightTakesItsTrackedGroupsWithIt")
 	}
@@ -170,12 +243,24 @@ func TestReaperHelperProcess(t *testing.T) {
 	}
 	script := fmt.Sprintf("echo $$ > %s; sleep 30 & echo $! > %s; sleep 30",
 		strconv.Quote(filepath.Join(dir, "leader.pid")), strconv.Quote(filepath.Join(dir, "descendant.pid")))
-	// StartPipelineAsync returns once the group is started and tracked.
-	if _, err := StartPipelineAsync(context.Background(), []Stage{{Name: "sh", Args: []string{"-c", script}}},
-		ExecOpts{Launch: HostLaunch("reaper test"), NoTimeout: true}, nil, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "start pipeline: %v\n", err)
+	if role == "engine-group" {
+		cmd, cleanup, err := PrepareCommand(context.Background(), "sh", []string{"-c", script}, ExecOpts{Launch: HostLaunch("asynchronous group reaper fixture")})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		group, err := StartInOwnGroup(t.Context(), cmd)
+		if err != nil {
+			cleanup()
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		go func() { _ = group.Wait(); cleanup() }()
+	} else if _, err := StartPipelineAsync(context.Background(), []Stage{{Name: "sh", Args: []string{"-c", script}}}, ExecOpts{Launch: HostLaunch("reaper test"), NoTimeout: true}, nil, nil); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+
 	scratch := filepath.Join(dir, "scratch")
 	if err := os.Mkdir(scratch, 0o700); err != nil {
 		os.Exit(1)

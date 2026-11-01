@@ -2,6 +2,7 @@ package loopguard
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/documentcore"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -12,15 +13,15 @@ import (
 func TestReadPrerequisiteRecoveryRequiresMatchingFrozenDocument(t *testing.T) {
 	for _, tc := range []struct {
 		name, code, document string
-		reads                map[string]int64
+		reads                map[string]documentcore.ReadBasis
 		allowed              bool
 	}{
-		{"matching read", "EDITOR_DOCUMENT_READ_REQUIRED", "doc", map[string]int64{"doc": 3}, true},
-		{"unrelated read", "EDITOR_DOCUMENT_READ_REQUIRED", "doc", map[string]int64{"other": 3}, false},
+		{"matching read", "EDITOR_DOCUMENT_READ_REQUIRED", "doc", map[string]documentcore.ReadBasis{"doc": {Revision: 3, Whole: true}}, true},
+		{"unrelated read", "EDITOR_DOCUMENT_READ_REQUIRED", "doc", map[string]documentcore.ReadBasis{"other": {Revision: 3, Whole: true}}, false},
 		{"no frozen read", "EDITOR_DOCUMENT_READ_REQUIRED", "doc", nil, false},
-		{"missing identity", "EDITOR_DOCUMENT_READ_REQUIRED", "", map[string]int64{"doc": 3}, false},
-		{"invalid revision", "EDITOR_DOCUMENT_READ_REQUIRED", "doc", map[string]int64{"doc": 0}, false},
-		{"unrelated refusal", "WRITE_SCOPE_DENIED", "doc", map[string]int64{"doc": 3}, false},
+		{"missing identity", "EDITOR_DOCUMENT_READ_REQUIRED", "", map[string]documentcore.ReadBasis{"doc": {Revision: 3, Whole: true}}, false},
+		{"invalid revision", "EDITOR_DOCUMENT_READ_REQUIRED", "doc", map[string]documentcore.ReadBasis{"doc": {Revision: 0, Whole: true}}, false},
+		{"unrelated refusal", "WRITE_SCOPE_DENIED", "doc", map[string]documentcore.ReadBasis{"doc": {Revision: 3, Whole: true}}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewMemoryDoomLoopGuard()
@@ -47,12 +48,12 @@ func TestReadPrerequisiteRecoveryRequiresMatchingFrozenDocument(t *testing.T) {
 func TestCurrentResponseReadCannotResolveFrozenPrerequisite(t *testing.T) {
 	g := NewMemoryDoomLoopGuard()
 	args := map[string]any{"path": "a.txt"}
-	completedReads := map[string]int64{}
+	completedReads := map[string]documentcore.ReadBasis{}
 	frozen := tools.NewAgentReadBases(completedReads)
 	for response := range DoomLoopMaxSameCodeRejects {
 		testutil.FailErr(t, "record prerequisite", g.RecordAttempt(t.Context(), "session", fmt.Sprint(response), "edit", args, &api.InvocationFailure{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Details: map[string]any{"document_id": "doc"}}, false))
 	}
-	completedReads["doc"] = 3
+	completedReads["doc"] = documentcore.ReadBasis{Revision: 3, Whole: true}
 	allowed, _, _, err := g.Check(t.Context(), "session", "current", "edit", args, true, frozen)
 	testutil.FailErr(t, "check current response", err)
 	if allowed {

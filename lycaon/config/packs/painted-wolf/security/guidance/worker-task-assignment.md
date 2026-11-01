@@ -23,7 +23,7 @@ Use `scan_query` with these `scan_ids`, `kind: sca`, `view: groups` and `offset:
 Leg assignment ({{ agent_type }}):
 {% if scope_mode %}Scope: {{ scope_mode }}{% if scope_mode == "write" %} (overlay){% endif %}.
 
-{% endif %}{% if scope_mode == "write" %}Your files are a private snapshot captured when this job starts. Sibling edits never appear here live. A missing producer module is not evidence that its API is absent: use shared context and peer findings, or request a decision. Resuming keeps this snapshot; the coordinator must start a fresh worker after promotion when newer files are needed.
+{% endif %}{% if scope_mode == "write" %}Your files are a private snapshot captured when this job starts. Sibling edits never appear here live. A missing producer module is not evidence that its API is absent: use shared context and peer findings, or request a decision. Resuming keeps this snapshot; the coordinator must start a fresh worker after promotion when newer files are needed.{% if linked_checkout %} This scope includes a linked worktree or submodule: it is a git checkout without VCS access in this workspace; history or branch work belongs to a read-scoped leg or the coordinator.{% endif %}
 
 {% endif %}{% if shared_context %}Shared context (coordinator assignment):
 {{ shared_context }}

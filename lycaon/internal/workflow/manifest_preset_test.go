@@ -41,7 +41,7 @@ func TestStartHumanAppliesRequestParameters(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	run, err := mgr.Starts.StartHuman(context.Background(), "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 		Parameters:      map[string]string{"research_depth": "none"},
 	})
 	testutil.FailErr(t, "start workflow with parameters", err)
@@ -62,7 +62,7 @@ func TestInvalidStartParameterDoesNotCreateBlueprint(t *testing.T) {
 	testutil.FailErr(t, "list blueprints before invalid start", err)
 	_, err = mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 		Parameters:      map[string]string{"research_depth": "impossible"},
 	})
 	if !errors.Is(err, workflowdef.ErrWorkflowParameterInvalid) {

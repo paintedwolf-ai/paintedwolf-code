@@ -91,7 +91,7 @@ func (s *History) ReadRestorableVersion(
 	if row.State == "absent" {
 		return out, nil
 	}
-	if row.State != "content" || row.CaptureState != "stored" || row.ContentSha256 == "" {
+	if (row.State != "content" && row.State != "link") || row.CaptureState != "stored" || row.ContentSha256 == "" {
 		return RestorableVersion{}, ErrVersionUnavailable
 	}
 	raw, found, err := s.retention.readVerifiedBlob(ctx, row.ContentSha256)

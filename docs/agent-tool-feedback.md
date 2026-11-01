@@ -25,12 +25,39 @@ anchor evaluations still read their own current occurrence state.
 
 On the wire, a tool result carries ordered `feedback` entries (`code`, typed `details`, optional `subject`), a producer-stated `dispatch` record for worker creation, and a producer-stated `completion` record for lifecycle work. `codes` is the compact ordered card-selection projection of `feedback`; it is never the only rejection data.
 
-Literal `echo` and `printf` output directed to a file uses `USE_WRITE_NATIVE`,
-including short log lines. The file-writing operation has the same recovery
-whether called directly or inside a shell wrapper. Ordinary stdout and arbitrary
-program output are unaffected. Exact replacement calls require representable
-paths and known output bytes; uncertain quoting, expansion, or output options
-retain recovery guidance without synthesized file content.
+Redirected output such as `printf ... > file` is an ordinary native write in
+the program; the host does not redirect it to a structured tool.
+
+## Native command failure attribution
+
+A reached native operation retains the actual `command` model call and its
+submitted argument object. `paintedwolf.native_operation` identifies the bound
+operation separately; operation inputs never replace `tool_args`.
+`paintedwolf.operation` is that bound operation beneath `command`, otherwise
+the actual tool. An operation-specific unit selects it
+(`selector: {paintedwolf.operation: [chmod]}`) so one rule serves the
+structured call and the native child without impersonating either; command
+text and rejection data cannot set it. A unit keeps a `tool` selector for a
+native operation only when the native grammar cannot produce its occurrence,
+and `TestBundledPolicyDispositionsForNativeOperations` records each such
+exception.
+Owner rejection codes and finer source coordinates survive supplementation;
+the enclosing command stage has separate `operation_source_*` coordinates.
+
+After receipt settlement, feedback reads binding and effect facts from one
+admitted database snapshot. It preserves completed and uncertain effects,
+executed reads, not-started and untaken work, progress settlement, evidence and
+recovery references, and exact child versus model identities. Whole oversized
+records are omitted with counts and durable references. Display compaction
+cannot turn uncertainty into success or authorize replay. A failed program is
+replayable only when its actual recorder proves zero execution and no effects;
+a successful last pipeline stage cannot erase an earlier producer failure.
+External stderr cannot select native rejection policy.
+
+These feedback ports do not by themselves establish connected runtime or
+installed-platform qualification. The command entry must settle the real
+operation, preserve its leases through delivery, and compose this observation
+with current capability and recovery admission.
 
 ## Internal tool-step notes
 
@@ -332,22 +359,53 @@ Matched results explain how to recover their public records when no body is pres
 
 ### Progress reconciliation
 
-`update_progress` reports `status: updated` or `status: unchanged`; this is a
-checklist write result, not gate admission. An identical write adds no revision
-or progress event and does not reset tool-repetition tracking. Rewording an
-all-terminal checklist retains the same repetition identity until intervening
-work changes the state. Pending rows permit implementation. Each user request
-starts its own checklist; a completed checklist from an earlier request remains in
-the transcript as `progress_complete` and does not cover the follow-up request.
-When the stored document has no checklist rows for the current request,
-`update_progress` requires at least one open `- [ ]` deliverable row before
-progress-gated tools may run. If no work remains for the follow-up turn, the
-coordinator continues without establishing a checklist. A successful worker
-finish can latch reconciliation before further dispatch or editing; an unchanged
-checklist does not clear that latch. Closeout recovery keeps unfinished rows
-pending and directs the coordinator to continue with tools. Completed work is
-recorded in a tool response before a separate, tool-free final response. A tool-free response ends the turn, so
-continuing progress updates use `surface_note`.
+`update_progress` returns the current bounded document snapshot, an opaque revision,
+`document_changed`, `state_changed`, `deliverable_closed`, and `reconciliation_status`.
+The revision includes the bound workflow run and persisted last-write identity;
+copy it into `expected_revision` when replacing the document. First creation
+may omit it; replacements without a revision return `PROGRESS_REVISION_REQUIRED`
+and the current snapshot without writing. A stale replacement
+returns `PROGRESS_REVISION_CHANGED` with the current state and writes nothing.
+Document replacement is atomic with its revision check. These are additive
+`agent-public` tool arguments and results; the stored Markdown and database shape
+are unchanged.
+
+Establish a checklist once before the first governed mutation. Pending rows permit
+continued implementation without another progress call. Identical submissions
+create no document revision or progress event and do not count as workflow
+advancement. The progress handler supplies typed advancement facts directly to
+invocation and batch settlement; transcript text does not determine them.
+Rewording labels is a document change, not a deliverable transition.
+Unrelated mutations do not erase the repetition history of a pending-checklist
+no-op. Material progress or a new user-request boundary renews that context.
+All-terminal checklists share a rewording-resistant bucket; an intervening world
+effect permits recording newly completed work without an invented pending update.
+Explicit finish tokens retain distinct operation identities. A typed revision or
+reconciliation rejection records its host-issued remedy, so a corrected retry
+reaches the progress handler even after repeated stale attempts. Diagnostic rejection totals
+remain intact; the handler revalidates the supplied basis before any write.
+Current root-session checklist, workflow and finish facts also release prior
+prerequisite refusals after resolution, without counting checklist establishment
+as deliverable advancement.
+
+`PROGRESS_RECONCILIATION_REQUIRED` names the explicit finish-acknowledgement
+prerequisite. `PROGRESS_ITEM_NOT_CLOSED` remains deprecated with its original
+checklist-change predicate and names the successor. The new rule overrides the
+legacy rule for matching occurrences; stored historical codes are unchanged.
+
+Successful worker finishes publish a reconciliation token and exact job IDs in
+the current snapshot. Submit `reconciliation_token` with `expected_revision`
+to acknowledge those finishes without closing unfinished rows or rewriting labels.
+Document transitions never consume worker-finish obligations; only the exact
+current token does. A stale token returns `PROGRESS_RECONCILIATION_CHANGED` and the current snapshot before a write.
+If finishes change during the document write, the result preserves the document's
+outcome and returns the new pending reconciliation state. Acknowledgement never
+creates a document revision by itself.
+
+Each request has its own checklist. Completed progress remains in the transcript as
+`progress_complete` and does not cover a follow-up request. Establishing a new
+checklist requires at least one pending deliverable. A tool-free response ends
+the turn; use `surface_note` for updates while continuing.
 
 ### Rejected source candidates
 
@@ -482,3 +540,19 @@ Rejected source mutations remain in these observations even when their handler
 started. The summary distinguishes rejection after invocation from a call that
 never executed; it does not infer whether a file exists, remains unchanged, or
 has partial effects. This distinction applies across supported languages.
+
+## Command operation feedback
+
+Command feedback retains the actual outer model call and distinct host execution
+identities. Ordinary status, complete output, publication eligibility and owner
+effects are independent observations. A successful final stage does not erase an
+earlier failed producer, and an unknown remote outcome does not permit replay.
+
+The invocation recorder supplies bounded program facts for feedback: completed
+and uncertain effects, executed children and reads, known static nodes not started
+or untaken, retained detail and progress references. Static node counts do not
+predict future loop iterations. Omitted details remain explicitly omitted. A
+reference identifies complete retained data; presentation never trims it into a
+different action or evidence identity. Whole-program resubmission requires the
+recorder's exact-source zero-execution proof and fresh admission. A completed
+progress update remains separate from shell-program effects.

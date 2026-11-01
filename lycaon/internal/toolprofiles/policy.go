@@ -53,10 +53,16 @@ func (p *ProfilePolicyEngine) Evaluate(ctx context.Context, eval platform.Policy
 	if profileID == "" {
 		profileID = DefaultToolProfileID
 	}
+	if eval.NativeOperation != nil {
+		return p.evaluateNativeOperation(ctx, profileID, eval)
+	}
 	if err := p.boundary.AssertToolAllowed(ctx, profileID, eval.ToolName, eval.ToolAccess); err != nil {
-		return &platform.PolicyDecision{ //nolint:nilerr // err.Error() carried as BlockReason
+		reject := policyBlockObservation(eval)
+		return &platform.PolicyDecision{ //nolint:nilerr // the profile refusal is the decision
 			Blocked:     true,
-			BlockReason: err.Error(),
+			RejectCode:  reject.Code,
+			RejectData:  reject.Data,
+			BlockReason: reject.Code,
 		}, nil
 	}
 	return &platform.PolicyDecision{

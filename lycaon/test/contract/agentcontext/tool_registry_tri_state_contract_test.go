@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -168,6 +169,14 @@ func TestToolRegistryTriStateHandlersMatchSchemas(t *testing.T) {
 
 	var missingHandler []string
 	for name := range schemas {
+		if toolcontract.IsCommandOperation(name) {
+			operation, found := reg.Operation(name)
+			_, exposed := reg.Definition(name)
+			if !found || operation.Handler != nil || exposed {
+				t.Errorf("command-only operation %q must retain metadata without a public tool handler", name)
+			}
+			continue
+		}
 		if _, ok := registered[name]; !ok {
 			if _, exempt := toolsSchemaExempt[name]; exempt {
 				continue
@@ -194,8 +203,9 @@ func TestToolRegistryTriStateProfilesReferenceRegisteredTools(t *testing.T) {
 		if strings.HasPrefix(name, "mcp_") {
 			continue
 		}
-		if !registered[name] {
-			violations = append(violations, "tool-profiles reference "+name+" but serve registry has no handler")
+		_, operation := reg.Operation(name)
+		if !registered[name] && !(toolcontract.IsCommandOperation(name) && operation) {
+			violations = append(violations, "tool-profiles reference "+name+" but serve registry has no tool or operation")
 		}
 	}
 	contractcheck.FailViolations(t, "tool-profiles reference unregistered tools", violations)

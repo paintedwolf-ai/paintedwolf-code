@@ -1,0 +1,73 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/drakkan/sftpgo"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/drakkan/sftpgo/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "2.5.0"
+      },
+      {
+       "fixed": "2.7.6"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-103028",
+  "GHSA-wwv9-g5x4-966q"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6802"
+ },
+ "details": "SFTPGo source-side file-pattern filter bypass during copy operations in github.com/drakkan/sftpgo",
+ "id": "GO-2026-6802",
+ "modified": "2026-10-19T21:08:35Z",
+ "published": "2026-10-19T21:08:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/drakkan/sftpgo/security/advisories/GHSA-wwv9-g5x4-966q"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-103028"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/drakkan/sftpgo/commit/dc8886bc079094b4ac2338df683f358b7676b5eb"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/drakkan/sftpgo/releases/tag/v2.7.6"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SFTPGo source-side file-pattern filter bypass during copy operations in github.com/drakkan/sftpgo"
+}

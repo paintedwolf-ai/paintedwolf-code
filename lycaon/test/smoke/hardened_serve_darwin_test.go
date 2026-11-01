@@ -99,4 +99,3 @@ func hardenedCall(t *testing.T, baseURL, token, method, path string, body any, w
 	}
 	testutil.FailErr(t, "decode "+path, json.Unmarshal(payload, out))
 }
-

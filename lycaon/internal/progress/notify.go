@@ -6,11 +6,12 @@ import (
 	"sync"
 )
 
-// WriteEvent is emitted after an update_progress write lands. Prev is the checklist content
-// immediately before the write, captured so observers can diff prev → current.
+// WriteEvent is emitted after a progress write commits. Before and After carry
+// the immutable snapshots from the committed transition.
 type WriteEvent struct {
 	SessionID string
-	Prev      string
+	Before    Snapshot
+	After     Snapshot
 }
 
 // WriteObserver runs after a successful progress write (revision bump, SSE, etc.).

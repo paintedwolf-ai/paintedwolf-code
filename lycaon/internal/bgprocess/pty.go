@@ -124,18 +124,24 @@ func (r *Terminal) startPTY(
 		SessionID:     sessionID,
 		ProjectID:     trim(projectID),
 		RootSessionID: trim(rootSessionID),
-		buffer:        NewRingBuffer(r.ringBufferBytes),
-		running:       true,
-		done:          make(chan struct{}),
-		cancel:        cancel,
 		kind:          processKindPTY,
-		ptyOutputDone: make(chan struct{}),
-		screen:        newPTYScreen(int(size.Cols), int(size.Rows)),
-		boundary:      confine.BoundaryOf(req.Launch.Confinement),
-		facts:         facts,
 		mode:          mode,
+		running:       true,
 		silent:        silent,
-		startedAt:     time.Now().UTC(),
+		processRuntimeState: processRuntimeState{
+			startedAt: time.Now().UTC(),
+			done:      make(chan struct{}),
+			cancel:    cancel,
+		},
+		processIOState: processIOState{
+			buffer:        NewRingBuffer(r.ringBufferBytes),
+			ptyOutputDone: make(chan struct{}),
+			screen:        newPTYScreen(int(size.Cols), int(size.Rows)),
+		},
+		processConfinementState: processConfinementState{
+			boundary: confine.BoundaryOf(req.Launch.Confinement),
+			facts:    facts,
+		},
 	}
 	if proc.RootSessionID == "" {
 		proc.RootSessionID = sessionID
@@ -143,11 +149,17 @@ func (r *Terminal) startPTY(
 	proc.Stages = hostcmd.StagePlaceholders(req.Stages)
 
 	r.jobs.mu.Lock()
-	if r.jobs.closed {
+	if r.jobs.closed || r.jobs.drains[sessionID] != nil {
 		r.jobs.mu.Unlock()
 		cancel()
 		proc.screen.Close()
 		return "", ErrRegistryClosed
+	}
+	if _, admitted := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, projectDir); !admitted {
+		r.jobs.mu.Unlock()
+		cancel()
+		proc.screen.Close()
+		return "", ErrTeardownInProgress
 	}
 	r.jobs.pruneCompletedLocked(sessionID)
 	if silent && r.jobs.countRunningAwaitedLocked(sessionID) >= r.jobs.maxAwaited {
@@ -168,6 +180,7 @@ func (r *Terminal) startPTY(
 		r.jobs.sessions[sessionID] = make(map[string]*Process)
 	}
 	r.jobs.sessions[sessionID][handle] = proc
+	r.jobs.workDirs[handle] = projectDir
 	r.jobs.mu.Unlock()
 
 	stage := req.Stages[0]
@@ -193,15 +206,25 @@ func (r *Terminal) startPTY(
 	})
 	if err != nil {
 		cancel()
-		r.jobs.remove(sessionID, handle)
-		return "", err
+		return "", r.jobs.failStart(proc, err)
 	}
 	r.jobs.mu.Lock()
 	proc.pty = session
+	if reason, admitted := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, projectDir); !admitted && !proc.stopped {
+		proc.stopped = true
+		proc.reason = reason
+	}
 	stopped := proc.stopped
+	startEvent, publish := r.jobs.indexProjectProcessLocked(proc)
 	r.jobs.mu.Unlock()
 	if stopped {
 		_ = session.Close()
+	}
+	if publish && r.Output.publishProject != nil {
+		r.Output.publishProject(context.WithoutCancel(ctx), startEvent)
+	}
+	if !silent && !stopped {
+		r.sweeper.onJobStarted()
 	}
 	// Forward terminal replies so interactive commands do not stall.
 	if proc.screen != nil {

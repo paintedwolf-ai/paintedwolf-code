@@ -3,13 +3,14 @@ id: CHMOD_SPECIAL_BIT_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chmod
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.operation
   - paintedwolf.mode
 when: paintedwolf.rejection_code == "CHMOD_SPECIAL_BIT_DENIED"
 effect: block

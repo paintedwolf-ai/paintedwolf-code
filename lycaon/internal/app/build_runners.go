@@ -56,7 +56,7 @@ func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 	}
 	if b.storage.Database != nil && b.storage.Database.IntegrityAuditDue() {
 		byName["store-integrity-audit"] = registration{run: func(ctx context.Context) error {
-			return db.RunIntegrityAudit(ctx, b.storage.Database)
+			return runStoreIntegrityAudit(ctx, b.storage.Database, b.storage.UpgradeReady)
 		}}
 	}
 	if b.security.Capabilities != nil {
@@ -114,6 +114,9 @@ func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 		entry, ok := byName[name]
 		if !ok {
 			continue
+		}
+		if b.storage.Database != nil && cleanupRequiresIntegrity(name) {
+			entry.run = afterIntegrityAudit(b.storage.Database, entry.run)
 		}
 		switch entry.mode {
 		case runnerStartupOnce:

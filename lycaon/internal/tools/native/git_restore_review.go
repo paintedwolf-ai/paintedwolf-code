@@ -14,10 +14,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (t *GitRestoreTool) reviewRestore(ctx context.Context, tc tools.ToolContext, files []git.RestoreFile) error {
-	return reviewGitFiles(ctx, tc, t.Boundary, "git_restore", files)
-}
-
 func reviewGitFiles(ctx context.Context, tc tools.ToolContext, boundary *sandbox.Boundary, tool string, files []git.RestoreFile) error {
 	changes := make([]tools.FileChange, 0, len(files))
 	for _, file := range files {
@@ -53,7 +49,10 @@ func reviewGitFiles(ctx context.Context, tc tools.ToolContext, boundary *sandbox
 				preview.PreviewNote = fmt.Sprintf("Conflict stage %d changes.", file.IndexStage)
 			}
 		}
-		if file.Before.SHA256 == file.After.SHA256 && file.Before.Mode != file.After.Mode {
+		if file.Before.ObjectID != "" || file.After.ObjectID != "" {
+			preview.PreviewNote = fmt.Sprintf("Index object changes from %s to %s.", file.Before.ObjectID, file.After.ObjectID)
+		}
+		if file.Before.Exists && file.After.Exists && file.Before.SHA256 == file.After.SHA256 && file.Before.Mode != file.After.Mode {
 			preview.PreviewNote = fmt.Sprintf("File mode changes from %s to %s.", file.Before.Mode, file.After.Mode)
 		}
 		changes = append(changes, tools.FileChange{Path: absolute, Preview: preview})

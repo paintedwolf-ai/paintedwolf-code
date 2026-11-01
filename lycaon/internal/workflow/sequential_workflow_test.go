@@ -14,16 +14,16 @@ func TestStartRejectsUntilExit(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	first, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman", err)
-	if _, err := mgr.Ambient.StartAmbient(ctx, sessionID, "plan", "1.0.0"); !errors.Is(err, runstate.ErrActiveRunExists) {
+	if _, err := mgr.Ambient.StartAmbient(ctx, sessionID, "plan", "1.0.1"); !errors.Is(err, runstate.ErrActiveRunExists) {
 		t.Fatalf("err = %v", err)
 	}
 	if _, err := mgr.Controls.Exit(ctx, sessionID, first.ID, first.Revision, "user_exit"); err != nil {
 		testutil.FailErr(t, "mgr.Exit failed", err)
 	}
-	second, err := startRun(ctx, mgr, sessionID, "plan", "1.0.0")
+	second, err := startRun(ctx, mgr, sessionID, "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	if second.ID == first.ID {
 		t.Fatal("expected new run after exit")
@@ -33,7 +33,7 @@ func TestStartRejectsUntilExit(t *testing.T) {
 func TestMessageStampDuringRun(t *testing.T) {
 	mgr, store, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	msg := api.Message{Role: api.MessageRoleUser, Content: "hello"}
 	if err := mgr.Transcript.StampAndAppendMessages(ctx, "sess-1", msg); err != nil {
@@ -55,7 +55,7 @@ func TestMessageStampDuringRun(t *testing.T) {
 func TestStartBoundaryMessageKind(t *testing.T) {
 	mgr, store, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	msgs, err := store.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "store.GetMessages failed", err)
@@ -79,7 +79,7 @@ func TestExitEndBoundaryAndPostureRestore(t *testing.T) {
 	_ = store.UpdateSession(ctx, "sess-1", func(s *api.Session) {
 		s.Posture = api.SessionPostureBuild
 	})
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	if err != nil {
 		testutil.FailErr(t, "startRun failed", err)
 	}

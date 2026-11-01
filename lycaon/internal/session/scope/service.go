@@ -29,11 +29,22 @@ type Service struct {
 	store    Store
 	projects Projects
 	trust    *settings.TrustSurfacesStore
+	// history records attachment changes; tool contexts capture its view.
+	history projectroot.History
 }
 
 func New(store Store) *Service                                 { return &Service{store: store} }
 func (m *Service) SetProjects(projects Projects)               { m.projects = projects }
 func (m *Service) SetTrust(trust *settings.TrustSurfacesStore) { m.trust = trust }
+
+// RootHistory is the engine's attachment change record shared by the
+// handlers that change roots and the tool contexts that resolve them.
+func (m *Service) RootHistory() *projectroot.History {
+	if m == nil {
+		return nil
+	}
+	return &m.history
+}
 
 var ErrWorktreeStale error = noticeerr.NewSentinel("this chat's worktree is missing or invalid", api.NoticeCodeWorktreeStale)
 

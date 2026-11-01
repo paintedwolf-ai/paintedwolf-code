@@ -62,6 +62,10 @@ var driverFactories = catalogruntime.NewFactorySet(
 			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
 				WithProfile(providerprofile.Fireworks()), nil
 		},
+		"deepinfra": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+				WithProfile(providerprofile.DeepInfra()), nil
+		},
 		"together": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
 			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
 				WithProfile(providerprofile.Together()), nil
@@ -91,6 +95,18 @@ var driverFactories = catalogruntime.NewFactorySet(
 			return openaicompat.NewCloudflare(
 				build.entry.ID, build.entry.BaseURL, build.entry.Models, build.apiKey, build.cloudflareUsage, build.discoveryClient,
 			), nil
+		},
+		"cerebras": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+				WithProfile(providerprofile.Cerebras()), nil
+		},
+		"scaleway": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+				WithProfile(providerprofile.Scaleway()), nil
+		},
+		"mistral": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+				WithProfile(providerprofile.Mistral()), nil
 		},
 	},
 	func(_ context.Context, build providerBuild) (modelcall.Provider, error) {

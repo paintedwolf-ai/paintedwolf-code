@@ -5,9 +5,8 @@ import hashlib
 import json
 import unittest
 
-from linux_release.installed_coverage import coverage
-from linux_release.support_matrix import CATALOG
-from linux_release.support_variants import variants
+from linux_release.installed_evidence import coverage
+from linux_release.support_matrix import CATALOG, variants
 
 
 class LinuxInstalledCoverageTests(unittest.TestCase):

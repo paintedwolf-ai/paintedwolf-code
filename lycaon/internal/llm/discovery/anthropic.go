@@ -99,7 +99,7 @@ type anthropicModelCapabilities struct {
 }
 
 func (m anthropicModelRecord) modelEntry(id string) modelinfo.Entry {
-	entry := modelinfo.Entry{ID: id, MaxTokens: m.MaxTokens, ContextLength: m.MaxInputTokens}
+	entry := modelinfo.Entry{ID: id, MaxTokens: m.MaxTokens, ProviderMaxTokens: m.MaxTokens, ContextLength: m.MaxInputTokens}
 	if m.Capabilities == nil || m.Capabilities.Thinking == nil {
 		return entry
 	}

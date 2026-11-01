@@ -1,0 +1,86 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/corazawaf/coraza"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/corazawaf/coraza/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/corazawaf/coraza/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "3.4.0"
+      },
+      {
+       "fixed": "3.8.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-41508",
+  "GHSA-r3rm-qphw-hh76"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6670"
+ },
+ "details": "Coraza: Truncated multipart body bypasses MULTIPART_STRICT_ERROR (rule 200003) via silent io.ErrUnexpectedEOF handling in github.com/corazawaf/coraza",
+ "id": "GO-2026-6670",
+ "modified": "2026-10-20T00:20:51Z",
+ "published": "2026-10-20T00:20:51Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/corazawaf/coraza/security/advisories/GHSA-r3rm-qphw-hh76"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/corazawaf/coraza/commit/f94c81bec209f658120c418448d0590a549b71df"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/corazawaf/coraza/releases/tag/v3.8.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Coraza: Truncated multipart body bypasses MULTIPART_STRICT_ERROR (rule 200003) via silent io.ErrUnexpectedEOF handling in github.com/corazawaf/coraza"
+}

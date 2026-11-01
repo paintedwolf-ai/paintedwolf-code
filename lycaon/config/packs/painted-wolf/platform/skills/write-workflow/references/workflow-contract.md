@@ -37,7 +37,7 @@ Parameterized prefixes (non-empty suffix required): `var_equals:`, `var_truthy:`
 
 Every `human_approval:` phase is Blueprint-backed; the manifest must declare `blueprint:` and approval binds the reviewed bytes. Approval readiness requires materialized Blueprint content, not the generated scaffold. Keep document frontmatter at `status: draft`; `approved`, `implementing`, and `done` are host-set lifecycle states.
 
-A phase that authors or revises the Blueprint declares `blueprint_write: true`. Every Blueprint-consuming workflow needs at least one declared writer phase, and each writer's resolved coordinator surface must include a Blueprint-capable write tool (`write`, `edit`, or `replace_lines`). A verdict-producing decision workflow writes its durable selection report before submitting the verdict or exposing approval.
+A phase that authors or revises the Blueprint declares `blueprint_write: true`. Every Blueprint-consuming workflow needs at least one declared writer phase, and each writer's resolved coordinator surface must include a Blueprint-capable write tool (mutating `command`, `edit`, or `replace_lines`). A verdict-producing decision workflow writes its durable selection report before submitting the verdict or exposing approval.
 
 Every `invoke_workflow:` block must declare `blueprint: inherit | own | none`. `inherit` requires an approved parent Blueprint, `own` creates one for the child, and `none` requires a documentless child. Children cannot invoke another workflow and must have a terminal child path. Use `child_complete_when:` plus optional `child_gates:` when the child needs a different completion proof, and `child_next:` on a looping phase when the child needs a finite exit while the root run keeps its ordinary contract.
 

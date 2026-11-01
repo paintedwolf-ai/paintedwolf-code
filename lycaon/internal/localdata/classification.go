@@ -67,6 +67,7 @@ var configRootRegistry = []ConfigRootEntry{
 	{Name: "model-policy.yaml", IsDir: false, Class: ClassDurableFile, IncludeInBackup: true, IncludeInDiagnostics: true, Reason: "model selection and routing policy"},
 	{Name: "settings.yaml", IsDir: false, Class: ClassDurableFile, IncludeInBackup: true, IncludeInDiagnostics: true, Reason: "general device settings override"},
 	{Name: "approvals.yaml", IsDir: false, Class: ClassDurableFile, IncludeInBackup: true, IncludeInDiagnostics: true, Reason: "user-granted tool and command approval rules"},
+	{Name: "command-programs.yaml", IsDir: false, Class: ClassDurableFile, IncludeInBackup: true, IncludeInDiagnostics: true, Reason: "configured external command program allowlist"},
 	{Name: "limits.yaml", IsDir: false, Class: ClassDurableFile, IncludeInBackup: true, IncludeInDiagnostics: true, Reason: "execution limits and resource budgets"},
 	{Name: "pricing.yaml", IsDir: false, Class: ClassDurableFile, IncludeInBackup: true, IncludeInDiagnostics: true, Reason: "device pricing model parameters"},
 	{Name: "security-scanners.yaml", IsDir: false, Class: ClassDurableFile, IncludeInBackup: true, IncludeInDiagnostics: true, Reason: "device security scanner configuration"},

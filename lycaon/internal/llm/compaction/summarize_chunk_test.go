@@ -446,6 +446,9 @@ func TestCompactToolWireSummarizeSpillsFullPack(t *testing.T) {
 	if !strings.Contains(out, "[summarize#3]") {
 		t.Fatal("handle prefix must survive")
 	}
+	if !strings.Contains(out, "; recall handle:summarize#3]") {
+		t.Fatalf("spill_summarize banner must include recall handle pointer: %s", out)
+	}
 	spillRel, _ := residueObj["wire_spill_path"].(string)
 	rawSpill, err := os.ReadFile(tooloutput.DiskPath(dir, spillRel))
 	testutil.FailErr(t, "read spill", err)

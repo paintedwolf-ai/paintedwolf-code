@@ -20,7 +20,25 @@ type rebuildObject struct {
 // must keep the source immutable until publication; the source is attached read-only.
 // The copy keeps the released shape so the registered migration remains the sole
 // schema transformer, but never visits chunks that transformation would discard.
-func copyRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan) (err error) {
+func copyRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan, progress func(migrations.Phase)) (retainedCopyResult, error) {
+	if _, err := os.Lstat(destination); err == nil { // #nosec G703
+		return retainedCopyResult{}, os.ErrExist
+	} else if !os.IsNotExist(err) {
+		return retainedCopyResult{}, err
+	}
+	if boundedRetainedRoute(plan) {
+		result, used, err := copyWholeRetainedStore(ctx, source, destination, plan)
+		if used || err != nil {
+			return result, err
+		}
+	}
+	if progress != nil {
+		progress(migrations.Migrating)
+	}
+	return retainedCopyResult{}, copyRetainedRows(ctx, source, destination, plan)
+}
+
+func copyRetainedRows(ctx context.Context, source, destination string, plan migrations.Plan) (err error) {
 	selection := plan.CopyPlan()
 	if selection == nil {
 		return fmt.Errorf("upgrade route does not define a retained copy")
@@ -32,13 +50,32 @@ func copyRetainedStore(ctx context.Context, source, destination string, plan mig
 	if err := file.Close(); err != nil {
 		return err
 	}
-	copyDB, err := sql.Open("sqlite", fileDSN(destination, "_pragma=synchronous(full)&_pragma=auto_vacuum(incremental)"))
+	query := "_pragma=synchronous(full)&_pragma=auto_vacuum(incremental)&_pragma=temp_store(file)&_pragma=threads(0)&_pragma=cache_size(-2000)"
+	if boundedRetainedRoute(plan) {
+		query += "&_pragma=journal_mode(off)"
+	}
+	copyDB, err := sql.Open("sqlite", fileDSN(destination, query))
 	if err != nil {
 		return err
 	}
 	copyDB.SetMaxOpenConns(1)
 	defer func() { err = errors.Join(err, copyDB.Close()) }()
-	restoreLimit, err := constrainRebuildCopy(ctx, copyDB, destination)
+	reserve := uint64(0)
+	if boundedRetainedRoute(plan) {
+		sourceReader, openErr := openReader(ctx, source)
+		if openErr != nil {
+			return openErr
+		}
+		reserve, err = plan.RetainedCopyScratch(ctx, sourceReader)
+		err = errors.Join(err, sourceReader.Close())
+		if err != nil {
+			return err
+		}
+		if err := checkUpgradeTempStorage(ctx, copyDB, reserve); err != nil {
+			return err
+		}
+	}
+	restoreLimit, err := constrainRebuildCopy(ctx, copyDB, destination, reserve)
 	if err != nil {
 		return err
 	}
@@ -67,6 +104,12 @@ func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, pl
 			}
 		}
 	}
+	if boundedRetainedRoute(plan) {
+		selection, err = prepareRebuildChunkInventory(ctx, tx, selection)
+		if err != nil {
+			return err
+		}
+	}
 	for _, object := range objects {
 		if object.kind != "table" || object.tableKind == "virtual" || object.name == "sqlite_sequence" {
 			continue
@@ -84,8 +127,18 @@ func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, pl
 			}
 		}
 	}
+	if boundedRetainedRoute(plan) {
+		if err := validateRebuildChunkInventory(ctx, tx); err != nil {
+			return err
+		}
+	}
 	if err := validateRebuildCounts(ctx, tx, objects, selection); err != nil {
 		return err
+	}
+	if boundedRetainedRoute(plan) {
+		if _, err := tx.ExecContext(ctx, "DROP TABLE _upgrade_retained_chunks"); err != nil {
+			return err
+		}
 	}
 	for _, statement := range selection.After {
 		if _, err := tx.ExecContext(ctx, statement); err != nil { // #nosec G701
@@ -99,7 +152,7 @@ func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, pl
 			}
 		}
 	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version=%d`, plan.Source.Revision)); err != nil {
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version=%d`, plan.Source.Revision)); err != nil { // #nosec G701
 		return err
 	}
 	actual, err := inspectSchema(ctx, tx)
@@ -108,6 +161,9 @@ func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, pl
 	}
 	if actual != plan.Source {
 		return fmt.Errorf("retained copy changed the released schema")
+	}
+	if err := prepareAuditState(ctx, tx, true); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -149,7 +205,7 @@ func copyRebuildTable(ctx context.Context, tx *sql.Tx, object rebuildObject, fro
 		return err
 	}
 	statement := "INSERT INTO " + rebuildIdentifier(object.name) + " (" + strings.Join(columns, ",") + ") SELECT " + strings.Join(selected, ",") + " " + from // #nosec G202
-	if _, err := tx.ExecContext(ctx, statement); err != nil { // #nosec G701
+	if _, err := tx.ExecContext(ctx, statement); err != nil {                                                                                                 // #nosec G701
 		return fmt.Errorf("copy retained table %s: %w", object.name, err)
 	}
 	return nil

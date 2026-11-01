@@ -32,6 +32,21 @@ def failures(root):
     return found
 
 
+def passed_stages(root):
+    """Stages whose receipts recorded a complete pass before the job stopped."""
+    passed = []
+    for receipt in sorted((root / "verification").glob("*/[0-9]*.json")):
+        if receipt.name.endswith(".progress.json"):
+            continue
+        record = json.loads(receipt.read_text())
+        for evidence in record.get("evidence", []):
+            results = evidence.get("results", {})
+            if results and all(result.get("status") == "passed" for result in results.values()):
+                if evidence["stage"] not in passed:
+                    passed.append(evidence["stage"])
+    return passed
+
+
 def excerpt(failure):
     """The digest's failure output, or the end of the stage log when no digest isolated one."""
     for key, tail in (("output", False), ("log", True)):
@@ -75,6 +90,9 @@ def report(status):
         failure["signature"] = failure_signature(failure)
     (root / "ci").mkdir(parents=True, exist_ok=True)
     (root / "ci" / "failures.json").write_text(json.dumps(found, indent=2) + "\n")
+    if record:
+        record["passed_stages"] = passed_stages(root)
+        path.write_text(json.dumps(record, indent=2) + "\n")
     lines = [f"### Verification: {status}", ""]
     if record:
         elapsed = (record.get("finished_at", time.time()) - record["started_at"]) / 60

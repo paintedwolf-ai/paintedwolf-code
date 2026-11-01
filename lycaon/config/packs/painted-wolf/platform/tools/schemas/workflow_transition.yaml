@@ -1,6 +1,5 @@
 description: >-
-  Fire choice leave by transition_id (Phase exit). Pending input latches block;
-  human_approval_awaiting does not.
+  Fire choice leave by transition_id (Phase exit). Answer pending questions first. Waiting for a person to approve a separate action does not block this transition.
 schema:
   type: object
   properties:

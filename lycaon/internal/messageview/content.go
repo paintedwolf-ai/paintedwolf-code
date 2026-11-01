@@ -53,8 +53,12 @@ func projectContent(msg api.Message) api.Message {
 			result.Content = ""
 		}
 		out.ToolResult = &result
-		// Tool output is carried only by ToolResult.
+		// Tool output is carried only by ToolResult; portable command programs
+		// also keep inline content on the message for API consumers.
 		out.Content, out.ContentParts = "", nil
+		if result.Tool == "command" || result.CommandProgram != nil {
+			out.Content = result.Content
+		}
 	}
 	return out
 }

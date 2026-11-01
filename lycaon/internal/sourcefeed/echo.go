@@ -34,7 +34,23 @@ var (
 
 // NoteHostWrite records the observed state for watcher echo suppression.
 func NoteHostWrite(absPath string) {
+	if absPath == "" {
+		return
+	}
 	noteHostWritePaths([]hostWriteTarget{{path: absPath}})
+}
+
+// NoteHostWrites records observed states for multiple paths in one batch.
+func NoteHostWrites(absPaths ...string) {
+	targets := make([]hostWriteTarget, 0, len(absPaths))
+	for _, p := range absPaths {
+		if p != "" {
+			targets = append(targets, hostWriteTarget{path: p})
+		}
+	}
+	if len(targets) > 0 {
+		noteHostWritePaths(targets)
+	}
 }
 
 func noteHostWritePaths(paths []hostWriteTarget) {

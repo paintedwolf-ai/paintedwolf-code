@@ -5,9 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -41,7 +39,7 @@ func (p *Provider) postChatCompletion(ctx context.Context, model string, body []
 
 // postChatWithHTTPRetry POSTs until a 2xx response or the http_retry budget is spent.
 func (p *Provider) postChatWithHTTPRetry(ctx context.Context, model string, body []byte, client *http.Client, reqHeaders map[string]string) (*http.Response, error) {
-	return providerretry.RunProviderAttempts(ctx, providerretry.ProviderAttempt{
+	resp, err := providerretry.RunProviderAttempts(ctx, providerretry.ProviderAttempt{
 		ProviderID:   p.id,
 		Model:        model,
 		RefusalCodes: providerprofile.ModelRefusalCodesFor(p.Profile()),
@@ -56,6 +54,12 @@ func (p *Provider) postChatWithHTTPRetry(ctx context.Context, model string, body
 			})
 		},
 	})
+	if err != nil {
+		if tooSmall, ok := failure.AsProviderContextTooSmall(err); ok && tooSmall != nil && tooSmall.MaxContext > 0 {
+			p.RecordContextWindow(model, tooSmall.MaxContext, tooSmall.Source, true)
+		}
+	}
+	return resp, err
 }
 
 func (p *Provider) postChat(ctx context.Context, model string, body []byte, client *http.Client, reqHeaders map[string]string) (*http.Response, error) {
@@ -194,9 +198,8 @@ func (p *Provider) streamChatCompletionFromResponse(ctx context.Context, req mod
 				}
 			}
 		}
-		if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-			// Preserve partial-stream failures as terminal errors.
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: failure.InterruptedResponse(ctx, p.id, p.ResolveModel(req), err), Done: true})
+		if err := failure.ClassifyStreamEnd(ctx, p.id, p.ResolveModel(req), scanner.Err(), sawTerminal, sawOutput || len(toolAcc) > 0, "stream ended before a terminal event", true); err != nil {
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Usage: usage, Done: true})
 			return
 		}
 		// Reasoning details are complete only at stream end.
@@ -204,39 +207,35 @@ func (p *Provider) streamChatCompletionFromResponse(ctx context.Context, req mod
 		if !reasoningAcc.empty() {
 			reasoningDetails = reasoningAcc.details()
 		}
-		if !sawTerminal {
-			if !sawOutput && len(toolAcc) == 0 {
-				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: &failure.ProviderEmptyCompletionError{
-					ProviderID: p.id,
-					Model:      p.ResolveModel(req),
-					Retryable:  true,
-					Reason:     "stream ended before a terminal event",
-				}, Usage: usage, Done: true})
-				return
-			}
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: failure.InterruptedResponse(ctx, p.id, p.ResolveModel(req), io.ErrUnexpectedEOF), Done: true})
-			return
-		}
+		model := p.ResolveModel(req)
+		entry, _ := p.ModelEntry(model)
+		maxTokens := p.resolveRequestControls(req, model, controlOpts{}).MaxTokens
 		if len(toolAcc) > 0 {
+			toolCalls := providerwire.CollectToolCalls(toolAcc, finishReason == string(openai.FinishReasonLength), true)
+			var truncErr error
+			if failure.IsOutputLimitFinishReason(finishReason) && modelcall.HasTruncatedToolCall(toolCalls) {
+				truncErr = modelcall.NewOutputTruncatedError(p.id, model, finishReason, usage, maxTokens, entry, toolCalls)
+			}
 			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
-				ToolCalls:        providerwire.CollectToolCalls(toolAcc, finishReason == string(openai.FinishReasonLength), true),
+				ToolCalls:        toolCalls,
 				ReasoningDetails: reasoningDetails,
 				Usage:            usage,
+				FinishReason:     finishReason,
 				Done:             true,
+				Err:              truncErr,
 			})
 			return
 		}
 		if !sawOutput {
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: &failure.ProviderEmptyCompletionError{
-				ProviderID: p.id,
-				Model:      p.ResolveModel(req),
-				Retryable:  EmptyCompletionRetryable(finishReason),
-				Reason:     finishReason,
-				Terminal:   finishReason != "",
-			}, Usage: usage, Done: true})
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
+				Err:          modelcall.EmptyOrTruncatedOutputError(p.id, model, finishReason, EmptyCompletionRetryable(finishReason), finishReason != "", usage, maxTokens, entry, nil),
+				Usage:        usage,
+				FinishReason: finishReason,
+				Done:         true,
+			})
 			return
 		}
-		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{ReasoningDetails: reasoningDetails, Usage: usage, Done: true, Err: modelcall.OutputTruncation(req, p.id, p.ResolveModel(req), finishReason, usage, false)})
+		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{ReasoningDetails: reasoningDetails, Usage: usage, FinishReason: finishReason, Done: true, Err: modelcall.OutputTruncation(req, p.id, model, finishReason, usage, false)})
 	}()
 	return ch, nil
 }

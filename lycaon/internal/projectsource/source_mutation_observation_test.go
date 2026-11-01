@@ -33,7 +33,7 @@ func pendingObservationWrite(t *testing.T, status sourceMutationStatus) (*Source
 	write, err := planProjectSourceWrite(p, SourceWriteRequest{RootID: p.Roots[0].ID, Path: "a.txt", Content: "in app", Encoding: textfile.UTF8, BaseSHA256: textfile.SHA256([]byte("before"))})
 	testutil.FailErr(t, "plan pending write", err)
 	now := time.Now().UTC()
-	row := &sourceMutationRow{ID: uuid.NewString(), ProjectID: p.ID, Kind: "write", InputDigest: "input", Status: status, CreatedAt: now, UpdatedAt: now,
+	row := &sourceMutationRow{memory: testSourceOperationMemory(t), ID: uuid.NewString(), ProjectID: p.ID, Kind: "write", InputDigest: "input", Status: status, CreatedAt: now, UpdatedAt: now,
 		Plan: sourceMutationPlan{
 			sourceMutationContent:     sourceMutationContent{Before: write.Result.Before, After: write.Result.After, BaseSHA256: write.BaseSHA256, AfterSHA: write.Result.SHA256},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID, WorkspaceID: p.WorkspaceID()},

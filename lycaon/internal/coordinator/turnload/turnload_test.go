@@ -7,11 +7,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolschema"
+	"path/filepath"
 )
 
 func TestBundledCatalogValidates(t *testing.T) {
@@ -291,9 +294,18 @@ func TestLookupSkills(t *testing.T) {
 }
 
 func TestToolAndSkillIdentifiersShareBoundaryMatching(t *testing.T) {
-	tools := []ToolCard{{Name: "read"}, {Name: "request_tools"}}
+	tools := []ToolCard{{Name: "git_commit"}, {Name: "read"}, {Name: "request_tools"}}
 	if got := ExactNames("Use REQUEST_TOOLS, then read the result", tools); strings.Join(got, ",") != "read,request_tools" {
 		t.Fatalf("tool identifiers = %v", got)
+	}
+	if got := ExactNames("git commit staged changes on branch", tools); strings.Join(got, ",") != "git_commit" {
+		t.Fatalf("space-separated multi-segment tool identifier = %v", got)
+	}
+	if got := ExactNames("run git-commit now", tools); strings.Join(got, ",") != "git_commit" {
+		t.Fatalf("hyphen-separated multi-segment tool identifier = %v", got)
+	}
+	if got := ResolveRequest(context.Background(), decide.Absent{}, RequestSpec{}, "git commit", tools); got.Abstained || strings.Join(got.Loaded(), ",") != "git_commit" {
+		t.Fatalf("exact space-separated ResolveRequest = %+v", got)
 	}
 	if got := ExactNames("request_tools_extra", tools); len(got) != 0 {
 		t.Fatalf("partial tool identifier = %v", got)
@@ -304,6 +316,27 @@ func TestToolAndSkillIdentifiersShareBoundaryMatching(t *testing.T) {
 	}
 	if got := ExactSkill("Use work-with-containers and work-with-containers-extra", skills); got != "" {
 		t.Fatalf("ambiguous skill identifiers = %q", got)
+	}
+}
+
+func TestGitCommitSchemaRequestCandidateLeadsWithBranchCommitAndPushOperation(t *testing.T) {
+	raw, err := config.Read(config.PlatformTools + "/schemas/git_commit.yaml")
+	testutil.FailErr(t, "read git_commit schema", err)
+	var desc string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "description:") {
+			desc = strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "description:")), `"`)
+			break
+		}
+	}
+	if desc == "" {
+		t.Fatal("git_commit.yaml missing description")
+	}
+	candidate := RequestCandidate(ToolCard{Name: "git_commit", Description: desc})
+	for _, want := range []string{"edited", "branch", "push", "Empty paths stages only files this session wrote"} {
+		if !strings.Contains(candidate, want) {
+			t.Fatalf("git_commit RequestCandidate %q missing %q within 60-word window", candidate, want)
+		}
 	}
 }
 
@@ -333,5 +366,49 @@ func TestRecallGuideOmissionRetainsItsAuditedToolAttachment(t *testing.T) {
 	decision = Decide(t.Context(), fake, catalog.Turn, State{User: "continue", Loaded: []string{"recall"}}, candidates)
 	if _, ok := decision.Omitted[unit.ID]; ok {
 		t.Fatal("recall use did not restore its attached guidance")
+	}
+}
+
+func TestCapturePageRequestCandidateCoversStaticPreviewAndBrowserInspection(t *testing.T) {
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configlayout.FindModuleRoot(), "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "load tool schemas", err)
+	meta, ok := schemas.ToolMeta("capture_page")
+	if !ok {
+		t.Fatal("missing capture_page schema")
+	}
+	if got := BoundDescription(meta.Description); got != strings.Join(strings.Fields(meta.Description), " ") {
+		t.Fatalf("capture_page description exceeds RequestCandidate bounds (%d words, %d runes): %q", len(strings.Fields(meta.Description)), len([]rune(meta.Description)), meta.Description)
+	}
+	candidate := RequestCandidate(ToolCard{Name: "capture_page", Description: meta.Description})
+	for _, phrase := range []string{
+		"static HTML/CSS/JS web files",
+		"project_dir",
+		"local static file and HTTP server replacement",
+		"headless browser",
+		"screenshot/filmstrip/timeline",
+		"DOM structure",
+		"console errors",
+	} {
+		if !strings.Contains(candidate, phrase) {
+			t.Fatalf("capture_page candidate missing %q: %s", phrase, candidate)
+		}
+	}
+	cards := []ToolCard{
+		{Name: "capture_page", Description: meta.Description},
+		{Name: "command", Description: "Run a host command"},
+	}
+	catalog, err := LoadCatalog()
+	testutil.FailErr(t, "load turn policy", err)
+	for _, need := range []string{
+		"browser environment to serve and capture static files",
+		"local static file server",
+		"simple http server for web files",
+		"open the local page and capture it",
+	} {
+		fake := &decidetest.Fake{Scores: []float64{catalog.Request.LoadAt + 0.5, 0.4}}
+		got := ResolveRequest(t.Context(), fake, catalog.Request, need, cards)
+		if got.Abstained || strings.Join(got.Loaded(), ",") != "capture_page" {
+			t.Fatalf("ResolveRequest(%q) = %+v, want capture_page", need, got)
+		}
 	}
 }

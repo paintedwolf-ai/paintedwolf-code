@@ -11,15 +11,15 @@ import (
 
 func TestCompoundPermissionCarriesEveryApprovedPart(t *testing.T) {
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-RootSessionID: "chat-1",
-ProjectID: "proj",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+			ProjectID:     "proj",
+		},
+	}
 	recipient := secretmatch.Recipient{ID: "origin", Label: "http://localhost:8080", Surface: secretmatch.SurfaceHTTPRequest, Kind: secretmatch.DestinationService}
 	grant := hitl.ApprovalGrant{ID: "secret-task", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: "chat-1", ProjectID: "proj",
 		Predicate:        hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategorySecret, Pattern: secretmatch.FingerprintDigest([]secretmatch.SecretFingerprint{"value"})},

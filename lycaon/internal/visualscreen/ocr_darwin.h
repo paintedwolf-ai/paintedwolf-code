@@ -5,6 +5,8 @@
 
 typedef struct {
     char* text;
+    char** candidates;
+    size_t candidate_count;
     float confidence;
     float x;
     float y;

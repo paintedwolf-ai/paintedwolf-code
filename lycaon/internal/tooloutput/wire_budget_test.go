@@ -68,7 +68,7 @@ func TestWireBudgetRetainsNestedSpillReferences(t *testing.T) {
 
 func TestWireSpillAcceptsAlreadyFittingStructuredResidue(t *testing.T) {
 	content := "{\n" + strings.Repeat(" ", 2000) + `"available":true,"sequence":9007199254740993}`
-	out := WireSpillToolOutput(t.TempDir(), Screened(content), 1000, 0)
+	out := WireSpillToolOutput(t.Context(), t.TempDir(), Screened(content), 1000, 0)
 	if out.RejectCode != "" || out.SpillPath == "" || len(out.Preview) > 1000 || !strings.Contains(out.Preview, "9007199254740993") {
 		t.Fatalf("fitting residue rejected or changed facts: %+v", out)
 	}

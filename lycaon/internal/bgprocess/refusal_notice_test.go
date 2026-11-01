@@ -12,7 +12,11 @@ func TestRefusalNoticePublishesOnlyUnshownRefusals(t *testing.T) {
 	r := NewRegistry(DefaultConfig(), Hooks{Refused: func(_ context.Context, notice RefusalNotice) {
 		notices = append(notices, notice)
 	}})
-	proc := &Process{Handle: "job", SessionID: "session", running: true, mode: JobModeBackground, originTool: "command", boundary: confine.Boundary{Applied: true}}
+	proc := &Process{
+		Handle: "job", SessionID: "session", running: true, mode: JobModeBackground,
+		processIOState:          processIOState{originTool: "command"},
+		processConfinementState: processConfinementState{boundary: confine.Boundary{Applied: true}},
+	}
 	r.jobs.sessions[proc.SessionID] = map[string]*Process{proc.Handle: proc}
 	refusals := confine.SandboxRefusals{Witness: confine.WitnessKernel, Refusals: []confine.SandboxRefusal{
 		{Operation: "network-bind", Target: "/tmp/first.sock", Count: 1, Recovery: confine.RecoverHostExecution},
@@ -43,7 +47,7 @@ func TestRefusalNoticeStaysQuietForInvisibleOrEndedJobs(t *testing.T) {
 	}{
 		{"awaited", &Process{running: true, silent: true, mode: JobModeAwaited}},
 		{"silent background", &Process{running: true, silent: true, mode: JobModeBackground}},
-		{"discarded", &Process{running: true, discarded: true}},
+		{"discarded", &Process{running: true, processRuntimeState: processRuntimeState{discarded: true}}},
 		{"ended", &Process{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

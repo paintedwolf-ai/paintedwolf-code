@@ -4,6 +4,7 @@ package contentblob
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -46,7 +47,7 @@ func RelPath(sha string) (string, error) {
 
 // Write returns the digest, plaintext size, and compressed size.
 // Existing objects with the same digest are reused.
-func Write(store blobstore.Store, plaintext []byte) (sha string, byteSize, storedSize int64, err error) {
+func Write(ctx context.Context, store blobstore.Store, plaintext []byte) (sha string, byteSize, storedSize int64, err error) {
 	if !store.Available() {
 		return "", 0, 0, blobstore.ErrNoStore
 	}
@@ -65,7 +66,7 @@ func Write(store blobstore.Store, plaintext []byte) (sha string, byteSize, store
 	if limit <= 0 {
 		limit = 1
 	}
-	if _, err := store.PutAt(rel, bytes.NewReader(plaintext), limit); err != nil {
+	if _, err := store.PutAt(ctx, rel, bytes.NewReader(plaintext), limit); err != nil {
 		return "", 0, 0, err
 	}
 	info, err := os.Stat(abs)

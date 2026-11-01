@@ -3,17 +3,22 @@ package capabilityadmin
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -43,6 +48,24 @@ func TestRevokeApprovalRemovesEveryProjection(t *testing.T) {
 			}))
 			s := &handler
 			path := filepath.Join(t.TempDir(), "outside")
+			socket := confine.SocketGrant{ApprovedPath: path, ResolvedPath: path}
+			var owner *socketref.Lease
+			if kind == hitl.AuthoritySocketChat {
+				root, err := os.MkdirTemp("/tmp", "rv-") //nolint:usetesting // Kernel Unix socket addresses are bounded.
+				testutil.FailErr(t, "revocation socket directory", err)
+				t.Cleanup(func() { _ = os.RemoveAll(root) })
+				t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
+				path = filepath.Join(root, "service")
+				listener, err := net.Listen("unix", path)
+				testutil.FailErr(t, "revocation listener", err)
+				t.Cleanup(func() { _ = listener.Close() })
+				socket, err = confine.ResolveSocketRequest(path)
+				testutil.FailErr(t, "revocation socket target", err)
+				owner, err = socketref.Capture(path)
+				testutil.FailErr(t, "revocation reference", err)
+				t.Cleanup(owner.Close)
+				socket.Binding = owner.Binding()
+			}
 			grant := hitl.ApprovalGrant{
 				ID: "grant_shared", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: "chat-a",
 				Predicate: hitl.ApprovalGrantPredicate{Category: "path", Pattern: path},
@@ -52,7 +75,7 @@ func TestRevokeApprovalRemovesEveryProjection(t *testing.T) {
 				GrantedPath: &hitl.GrantedPathDelta{Path: path, Write: true},
 				ReadPaths:   []string{path}, WriteRoots: []string{path},
 				ListenPorts: []uint16{19001}, ConnectPorts: []uint16{19002},
-				Sockets:       []hitl.ApprovalSocketTarget{{ApprovedPath: path, ResolvedPath: path}},
+				Sockets:       []hitl.ApprovalSocketTarget{{ApprovedPath: socket.ApprovedPath, ResolvedPath: socket.ResolvedPath, Binding: socket.Binding}},
 				DirectIPLease: &hitl.DirectIPLease{ActionDigest: "action", RequestDigest: "request", ConfinementDigest: "confinement"},
 			}
 			option := hitl.ApprovalOption{Authority: []hitl.ApprovalAuthorityDelta{
@@ -60,6 +83,9 @@ func TestRevokeApprovalRemovesEveryProjection(t *testing.T) {
 			}}
 			_, err = s.Installation.InstallApprovalOption(t.Context(), "checkpoint-a", option)
 			testutil.FailErr(t, "install all projections", err)
+			if owner != nil {
+				owner.Close()
+			}
 			if approvalRuntimeCount(s) != 1 {
 				t.Fatal("missing runtime authority before revoke")
 			}
@@ -80,6 +106,15 @@ func TestRevokeApprovalRemovesEveryProjection(t *testing.T) {
 			}
 			if approvalRuntimeCount(s) != 0 {
 				t.Fatal("one revocation left runtime authority active")
+			}
+			if owner != nil {
+				borrowed, err := socket.Binding.Acquire()
+				if !errors.Is(err, socketref.ErrUnbound) {
+					if borrowed != nil {
+						borrowed.Close()
+					}
+					t.Fatalf("revocation retained socket object: %v", err)
+				}
 			}
 		})
 	}

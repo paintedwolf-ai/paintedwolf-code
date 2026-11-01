@@ -283,7 +283,7 @@ func TestImplementSpawnInjectIncludesSpawnMatrix(t *testing.T) {
 		"plan-writer",
 		"Product edits only — dispatch with scope.mode write + paths; host rejects read/default. Read-only survey → repo-researcher",
 		"Bounded path, find, and grep code survey",
-		"(no command)",
+		"(command)",
 		fmt.Sprintf("**%d** in-flight", spawn.MaxInFlightTaskWorkers),
 	} {
 		if !strings.Contains(block, want) {

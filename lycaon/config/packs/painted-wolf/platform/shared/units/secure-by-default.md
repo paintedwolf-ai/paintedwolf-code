@@ -6,7 +6,7 @@ description: >-
   stacks.
 slot: conduct
 order: 10
-attaches: [write, edit, replace_lines, code_rewrite, jq_edit, secret_generate]
+attaches: [command, edit, replace_lines, code_rewrite, jq_edit, secret_generate]
 hosts: [coordinator, worker]
 ---
 **Security floor.** Match polish to the artifact; these rules do not relax for demos, fixtures, tests, or local stacks:

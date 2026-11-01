@@ -5,7 +5,7 @@ import { approvalOptionFixture, toolApprovalFixture } from "../../chat/checkpoin
 import { ApprovalCard } from "./ApprovalCard.tsx";
 
 describe("execution capability approval cards", () => {
-  it.each(["process_control", "host_execution"] as const)("uses the existing chat primary action for %s", (kind) => {
+  it.each(["process_control", "credential_store", "host_execution"] as const)("uses the existing chat primary action for %s", (kind) => {
     const checkpoint: PendingCheckpoint = {
       checkpointId: "execution-approval", sessionId: "chat", kind: "tool_approval",
       status: "pending", issuedAt: "2026-09-19T00:00:00Z",
@@ -24,7 +24,8 @@ describe("execution capability approval cards", () => {
     const view = render(() => <ApprovalCard projectId="project" checkpoint={checkpoint} onToolApproval={approve} onContentApply={vi.fn()} />);
     const primary = view.getByTestId("approval-approve-primary");
     const elevated = view.getByTestId("approval-elevated-access");
-    expect(elevated.getAttribute("data-tip")).toContain(kind === "host_execution" ? "host execution" : "process control");
+    const expectedLabel = kind === "host_execution" ? "host execution" : kind === "credential_store" ? "OS credential store access" : "process control";
+    expect(elevated.getAttribute("data-tip")).toContain(expectedLabel);
     expect(elevated.getAttribute("data-tip")).toContain("Allow once does not save access");
     fireEvent.click(view.getByTestId("approval-card-minimize"));
     expect(view.getByTestId("approval-elevated-access").getAttribute("data-tip")).toContain("unlock icon appears");

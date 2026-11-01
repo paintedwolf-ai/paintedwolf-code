@@ -17,11 +17,14 @@ func (r *Registry) ActiveExecutionJobs(sessionID string) []ActiveExecutionJob {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	var jobs []ActiveExecutionJob
-	for _, process := range r.jobs.sessions[trim(sessionID)] {
+	for _, process := range r.jobs.ownedProcessesLocked(trim(sessionID)) {
 		if process.hasExit {
 			continue
 		}
 		capability := ""
+		if process.boundary.CredentialStore {
+			capability = "credential_store"
+		}
 		if process.boundary.ProcessControl {
 			capability = "process_control"
 		}

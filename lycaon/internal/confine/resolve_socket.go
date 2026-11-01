@@ -1,11 +1,17 @@
 package confine
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/linuxbus"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/socketref"
 
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -77,7 +83,30 @@ func ResolveSocketRequest(path string) (SocketGrant, error) {
 }
 
 // RevalidateSocketGrant re-resolves ApprovedPath and requires it still equal ResolvedPath.
+// An empty binding is a freshly resolved grant that has not been captured yet: it
+// revalidates by pathname alone. An explicit binding revalidates through its own
+// realization — a retained object must still be acquirable, a pathname rule must
+// still resolve — and never falls back from one to the other.
 func RevalidateSocketGrant(g SocketGrant) error {
+	adapter := socketref.Platform()
+	switch g.Binding.Enforcement {
+	case "":
+		if adapter.Command == socketref.NoRealization {
+			return &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnsupported}
+		}
+	case socketref.KernelPathname:
+		if g.Binding.Mode() != socketref.KernelPathname {
+			return &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnsupported}
+		}
+	case socketref.RetainedObject:
+		lease, err := g.Binding.Acquire()
+		if err != nil {
+			return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: err}
+		}
+		lease.Close()
+	default:
+		return &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnsupported}
+	}
 	// Canonicalization alone cannot prove the socket still exists.
 	now := fspath.CanonicalPath(g.ApprovedPath)
 	if now != g.ResolvedPath {
@@ -87,5 +116,168 @@ func RevalidateSocketGrant(g SocketGrant) error {
 	if err != nil || fi.Mode()&os.ModeSocket == 0 {
 		return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: err}
 	}
+	if g.Binding.Enforcement == socketref.RetainedObject && !g.Binding.MatchesPath(now) {
+		return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: socketref.ErrUnbound}
+	}
 	return nil
+}
+
+// CaptureSocketGrant retains the destination for an invocation before review.
+// Inspection alone, including settings reads, never creates a reference.
+func CaptureSocketGrant(ctx context.Context, g SocketGrant) (SocketGrant, error) {
+	if g.Binding.Mode() == socketref.NoRealization {
+		return SocketGrant{}, &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnsupported}
+	}
+	if g.Binding.Mode() == socketref.KernelPathname {
+		return g, nil
+	}
+	if g.Binding.Mode() != socketref.RetainedObject {
+		return SocketGrant{}, &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnbound}
+	}
+	binding, err := socketref.CaptureForInvocation(ctx, g.ApprovedPath)
+	if err != nil {
+		return SocketGrant{}, &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: err}
+	}
+	resolved, err := binding.Path()
+	if err != nil || resolved != g.ResolvedPath {
+		return SocketGrant{}, &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: err}
+	}
+	g.Binding = binding
+	return g, nil
+}
+
+func validateSocketRealization(grants []SocketGrant, mode socketref.Enforcement) error {
+	for _, grant := range grants {
+		if grant.Binding.Mode() != mode {
+			return &SocketResolveError{Code: SocketResolveRefused, Path: grant.ApprovedPath, Err: socketref.ErrUnbound}
+		}
+	}
+	return nil
+}
+
+// ResolveCredentialStoreDBusSocket selects a filesystem session-bus endpoint
+// only after applying the command's protected-path and runtime-root floors.
+func ResolveCredentialStoreDBusSocket(lookupEnv func(string) (string, bool), uid int) (string, bool) {
+	if lookupEnv == nil {
+		lookupEnv = os.LookupEnv
+	}
+	if uid < 0 {
+		return "", false
+	}
+	session, err := linuxbus.SelectSession(lookupEnv, uid)
+	if err != nil {
+		return "", false
+	}
+	for _, address := range session.Addresses {
+		if !address.Abstract {
+			if path, ok := validateCredentialStoreDBusSocket(address.Path, uid); ok {
+				return path, true
+			}
+		}
+	}
+	return "", false
+}
+
+func isSessionDBusSocketTarget(target string) bool {
+	clean := filepath.Clean(strings.TrimSpace(target))
+	if clean == "" || !filepath.IsAbs(clean) {
+		return false
+	}
+	if address, ok := os.LookupEnv("DBUS_SESSION_BUS_ADDRESS"); ok && strings.TrimSpace(address) != "" {
+		if candidates, err := linuxbus.ParseAddresses(address); err == nil {
+			for _, candidate := range candidates {
+				if !candidate.Abstract && PathEqual(clean, candidate.Path) {
+					return true
+				}
+			}
+		}
+	}
+	if runtimeDir, ok := os.LookupEnv("XDG_RUNTIME_DIR"); ok && filepath.IsAbs(strings.TrimSpace(runtimeDir)) {
+		if PathEqual(clean, filepath.Join(strings.TrimSpace(runtimeDir), "bus")) {
+			return true
+		}
+	}
+	for _, prefix := range []string{"/run/user/", "/var/run/user/", "/private/var/run/user/"} {
+		if rest, ok := strings.CutPrefix(clean, prefix); ok {
+			uidStr, tail, ok := strings.Cut(rest, "/")
+			if ok && tail == "bus" && uidStr != "" {
+				if _, err := strconv.Atoi(uidStr); err == nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func validateCredentialStoreDBusSocket(candidate string, uid int) (string, bool) {
+	if socketPathSyntaxReason(candidate) != "" {
+		return "", false
+	}
+	cleanCandidate := filepath.Clean(candidate)
+	resolved := fspath.CanonicalPath(cleanCandidate)
+	if resolved == "" || socketPathSyntaxReason(resolved) != "" {
+		return "", false
+	}
+	checkPaths := []string{cleanCandidate, resolved}
+	if linkTarget, err := os.Readlink(cleanCandidate); err == nil && linkTarget != "" {
+		if !filepath.IsAbs(linkTarget) {
+			linkTarget = filepath.Join(filepath.Dir(cleanCandidate), linkTarget)
+		}
+		checkPaths = append(checkPaths, filepath.Clean(linkTarget))
+	}
+	for _, root := range resolveEach(controlPlaneReadDenyRoots()) {
+		for _, p := range checkPaths {
+			if PathAtOrUnder(p, root) {
+				return "", false
+			}
+		}
+	}
+	for _, root := range KeyMaterialReadDenyPaths() {
+		for _, p := range checkPaths {
+			if PathAtOrUnder(p, root) {
+				return "", false
+			}
+		}
+	}
+	for _, systemBusRoot := range []string{"/run/dbus", "/var/run/dbus", "/private/var/run/dbus"} {
+		for _, p := range checkPaths {
+			if PathAtOrUnder(p, systemBusRoot) {
+				return "", false
+			}
+		}
+	}
+	if !underAllowedDBusRuntimeRoot(resolved, uid) {
+		return "", false
+	}
+	fi, err := os.Lstat(resolved)
+	if err != nil || fi.Mode()&os.ModeSocket == 0 {
+		return "", false
+	}
+	return resolved, true
+}
+
+func underAllowedDBusRuntimeRoot(resolved string, uid int) bool {
+	var allowed []string
+	if uid >= 0 {
+		u := strconv.Itoa(uid)
+		allowed = append(allowed,
+			filepath.Join("/run/user", u),
+			filepath.Join("/var/run/user", u),
+			filepath.Join("/private/var/run/user", u),
+		)
+	}
+	allowed = append(allowed, "/tmp", "/private/tmp")
+	if tmp := strings.TrimSpace(os.TempDir()); filepath.IsAbs(tmp) {
+		allowed = append(allowed, filepath.Clean(tmp))
+		if canonTmp := fspath.CanonicalPath(tmp); canonTmp != "" {
+			allowed = append(allowed, canonTmp)
+		}
+	}
+	for _, root := range allowed {
+		if PathAtOrUnder(resolved, root) {
+			return true
+		}
+	}
+	return false
 }

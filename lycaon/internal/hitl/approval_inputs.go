@@ -1,6 +1,9 @@
 package hitl
 
-import "github.com/lycaon/lycaon/internal/secretmatch"
+import (
+	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/socketref"
+)
 
 const (
 	SocketAuthorityOutsideSandboxDaemon = "outside_sandbox_daemon"
@@ -19,6 +22,7 @@ type ApprovalExplanation struct {
 
 // SocketCapabilityTarget is one canonical approved/resolved AF_UNIX pair.
 type SocketCapabilityTarget struct {
+	Binding            socketref.Binding
 	ApprovedPath       string
 	ResolvedPath       string
 	AlreadyChatGranted bool

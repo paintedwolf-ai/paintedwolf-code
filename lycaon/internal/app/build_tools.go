@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
@@ -11,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -19,6 +21,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
@@ -36,11 +40,16 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 		waitConditions[profile.ID] = allowed
 	}
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
-	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions, loopwake.WaitToolDeps{
+	subscriptions := b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions
+	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
 		Store: waitStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
+	}
+	if commands := b.execution.Host.Commands; commands != nil {
+		commands.SetProgramParking(loopwake.ProgramParking{Subscriptions: subscriptions})
+		subscriptions.SetLostProgramResult(commands.ProgramReceiptResult)
 	}
 	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "agent-wait-leases", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
@@ -257,6 +266,19 @@ func (b *serveBuilder) wireMCP() error {
 		}
 		if b.interactions.Processes != nil {
 			b.interactions.Processes.Output.SetCaptureProjector(captureProjector)
+		}
+		if recorder, ok := b.sessions.Invocations.(*invocation.SQLRecorder); ok && b.execution.Host != nil && b.execution.Host.Commands != nil {
+			programSettings, err := settings.LoadCommandProgramsSettings()
+			if err != nil {
+				return err
+			}
+			if err := b.execution.Host.Commands.SetProgramServices(toolhost.ProgramServices{
+				Recorder: recorder, Blobs: blobstore.Store{Root: b.storage.Directory}, Projector: captureProjector,
+				Progress: b.sessions.Manager.Coordinator.Guards, Sessions: b.storage.Sessions,
+				SourceRuns: b.sessions.Manager.Verification, ExternalHidden: programSettings.ExternalHidden(),
+			}); err != nil {
+				return err
+			}
 		}
 		if b.interactions.Preview != nil {
 			b.interactions.Preview.SetCaptureProjector(captureProjector)

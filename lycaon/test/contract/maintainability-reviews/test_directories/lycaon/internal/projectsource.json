@@ -1,0 +1,18 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/projectsource",
+  "kind": "test_suite",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "Retain54 immediate test files beside the existing source operation owners. Recovery identity, quota, cancellation, restart, exact persisted fingerprint/manifest bytes and immutable attribution exercise actual storage and filesystem boundaries. The added page fixture gates real opened files to prove overlapping readers, joining cancellation and zero final shared memory; mixed large/small files preserve canonical bytes. The438-test projectsource suite and13 focused race tests pass on the reviewed implementation. Retain exact membership; growth or a new lifecycle requires renewed review.",
+  "reviewed_commit": "bf9c3ccddaf7e836691d7ef7035ccf5481c9166c",
+  "ceiling": 54,
+  "boundaries": {
+    "lycaon/internal/projectsource/agent_effect_batch_test.go": "f099695df91542d83d69f640651fa62788458f0af6d6bc6aa3b6e0f3b0467f54",
+    "lycaon/internal/projectsource/source_recovery_tree_test.go": "27e58737c400ad7411496bf1548290d46ce64c1b4e392babd4ca6459ac764386",
+    "lycaon/internal/projectsource/source_tree_walk_test.go": "ac4982e2962a6c2adbf848d4031db36a57fda3ae2cce9b4c33d311786975b109",
+    "lycaon/internal/projectsource/source_fingerprint_page_test.go": "d7163a9281168cac7b870f31988835bb4312596b3429ec72cd8aec1f756fc8c0",
+    "lycaon/internal/projectsource/source_fingerprint_test.go": "238dad0b8ad05f36accb378734c0c06d46c34a18a0391396862a5149051efb24"
+  },
+  "reviewed_shape": "2bdfc68623af0b9122a4f011c6705bf2ead6bab5031f8e83b7de7abd981ec9dd"
+}

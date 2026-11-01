@@ -3,7 +3,7 @@ id: GIT_ENGINE_UNAVAILABLE
 kind: invariant
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - git_status
     - git_diff
     - git_log
@@ -20,7 +20,7 @@ selector:
     - git_commit
 requires:
   profiles: [tool]
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.operation]
 when: paintedwolf.rejection_code == "GIT_ENGINE_UNAVAILABLE"
 effect: block
 copy:

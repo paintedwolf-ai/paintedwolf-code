@@ -57,8 +57,9 @@ func (p Producer) Has(want Producer) bool { return p&want == want }
 
 // Containment projects the same confinement result applied by the executor.
 type Containment struct {
-	ProcessControl bool
-	HostExecution  bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
 	// SpawnsProcess distinguishes confined child processes from native host tools.
 	SpawnsProcess bool
 	// FSJailed is true when the write jail is active.
@@ -104,13 +105,16 @@ const (
 
 // SecretHit carries match metadata and provenance without the matched bytes.
 type SecretHit struct {
-	Surface     string
-	RuleID      string
-	RuleTitle   string
-	Occurrences int
-	Source      SecretSource
-	SourceKind  string
-	SourceTool  string
+	// IssuerUnverified prevents recipient trust or prior releases from
+	// substituting for this invocation's response-value disclosure.
+	IssuerUnverified bool
+	Surface          string
+	RuleID           string
+	RuleTitle        string
+	Occurrences      int
+	Source           SecretSource
+	SourceKind       string
+	SourceTool       string
 	// DestinationTrusted is a standing device decision bound to the resolved
 	// transport identity; a repointed destination reports false.
 	DestinationTrusted bool

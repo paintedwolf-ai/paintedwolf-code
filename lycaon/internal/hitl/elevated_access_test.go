@@ -16,6 +16,7 @@ func TestElevatedGrantEffects(t *testing.T) {
 		{ApprovalGrantCategorySocketPath, "/service.sock", []api.ElevatedAccessEffect{api.ElevatedAccessEffectLocalService}},
 		{ApprovalGrantCategoryExecutionCapability, "host_execution", []api.ElevatedAccessEffect{api.ElevatedAccessEffectHostExecution}},
 		{ApprovalGrantCategoryExecutionCapability, "process_signal", []api.ElevatedAccessEffect{api.ElevatedAccessEffectProcessControl}},
+		{ApprovalGrantCategoryExecutionCapability, "credential_store", []api.ElevatedAccessEffect{api.ElevatedAccessEffectCredentialStore}},
 		{ApprovalGrantCategoryExecutionCapability, "process_list", nil},
 		{"host", "example.com", nil}, {"write_root", "/tmp", nil}, {"secret_redact", "", nil},
 		{"local_listen", "8080", nil}, {"loopback_connect", "8080", nil},
@@ -32,7 +33,7 @@ func TestElevatedGrantEffects(t *testing.T) {
 }
 
 func TestElevatedQuietClassification(t *testing.T) {
-	for _, subject := range []string{"direct_ip", "host_execution", "unconfined", "process_control", "native_process:signal", "socket:/var/run/test.sock"} {
+	for _, subject := range []string{"direct_ip", "host_execution", "unconfined", "process_control", "credential_store", "native_process:signal", "socket:/var/run/test.sock"} {
 		if len(elevatedQuietEffects(string(api.GateUnobservedChannel)+":"+subject)) != 1 {
 			t.Errorf("missing effect for %s", subject)
 		}
@@ -49,30 +50,30 @@ func TestElevatedQuietClassification(t *testing.T) {
 
 func TestExactActionRetainsEveryElevatedBoundary(t *testing.T) {
 	action := ProposedAction{
-Invocation: ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "run"},
-},
-Scope: ActionScope{
-SessionID: "chat",
-},
-Execution: ActionExecution{
-Contained: Contained{DirectIP: true, HostExecution: true, ProcessControl: true, SocketCount: 1},
-},
-}
+		Invocation: ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "run"},
+		},
+		Scope: ActionScope{
+			SessionID: "chat",
+		},
+		Execution: ActionExecution{
+			Contained: Contained{DirectIP: true, HostExecution: true, ProcessControl: true, CredentialStore: true, SocketCount: 1},
+		},
+	}
 	grant := ExactActionOfferAtScope(action, ApprovalGrantScopeChat).Grant
-	want := []api.ElevatedAccessEffect{api.ElevatedAccessEffectDirectNetwork, api.ElevatedAccessEffectHostExecution, api.ElevatedAccessEffectLocalService, api.ElevatedAccessEffectProcessControl}
+	want := []api.ElevatedAccessEffect{api.ElevatedAccessEffectCredentialStore, api.ElevatedAccessEffectDirectNetwork, api.ElevatedAccessEffectHostExecution, api.ElevatedAccessEffectLocalService, api.ElevatedAccessEffectProcessControl}
 	if got := ElevatedGrantEffects(grant); !slices.Equal(got, want) {
 		t.Fatalf("exact action lost authority: %v", got)
 	}
 	ordinary := ExactActionOfferAtScope(ProposedAction{
-Invocation: ActionInvocation{
-Tool: "read",
-},
-Scope: ActionScope{
-SessionID: "chat",
-},
-}, ApprovalGrantScopeChat).Grant
+		Invocation: ActionInvocation{
+			Tool: "read",
+		},
+		Scope: ActionScope{
+			SessionID: "chat",
+		},
+	}, ApprovalGrantScopeChat).Grant
 	if len(ordinary.ElevatedEffects) != 0 {
 		t.Fatal("ordinary exact action classified as elevated")
 	}

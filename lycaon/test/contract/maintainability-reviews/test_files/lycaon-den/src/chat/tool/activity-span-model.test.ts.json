@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon-den/src/chat/tool/activity-span-model.test.ts",
+  "kind": "test_suite",
+  "workstream": "command-activities",
+  "disposition": "retain",
+  "reason": "Retain the measured 594-line grouping contract suite within 620 lines. Scoped calls, user boundaries, file-edit anchors and consecutive command runs exercise one transcript algorithm with explicit fixtures.",
+  "reviewed_commit": "e200fa8a75b25f9a4fbc0ff4d992b7c3126aaede",
+  "ceiling": 620,
+  "boundaries": {
+    "lycaon-den/src/chat/tool/activity-span-model.ts": "0a7551e21d401798e76b2a8df3dee717e4ba7a51ff1a2839987121485c663e7a"
+  }
+}

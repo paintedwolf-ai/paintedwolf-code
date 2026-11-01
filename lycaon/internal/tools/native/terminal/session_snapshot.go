@@ -54,7 +54,7 @@ type SnapshotResult struct {
 // The empty id is intentional: no mutable terminal handle escapes the command.
 func CaptureFromScreen(
 	ctx context.Context, bg *bgprocess.Registry, tctx tools.ToolContext,
-	screen bgprocess.ScreenSnapshot, caption string,
+	screen bgprocess.ScreenSnapshot, caption string, runningAtCapture bool,
 ) SnapshotResult {
 	if safe, err := bg.Output.ProjectCapturedText(
 		ctx, tctx.Identity.ProjectID, tctx.Identity.ParentSessionID, tctx.Identity.SessionID,
@@ -69,7 +69,7 @@ func CaptureFromScreen(
 		Surface: "tui",
 		State: terminalSnapshotState{
 			Cols: screen.Cols, Rows: screen.Rows, CursorCol: screen.CursorCol,
-			CursorRow: screen.CursorRow, AltScreen: screen.AltScreen, Running: false,
+			CursorRow: screen.CursorRow, AltScreen: screen.AltScreen, Running: runningAtCapture,
 		},
 		Caption: caption,
 	}
