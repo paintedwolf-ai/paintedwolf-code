@@ -45,35 +45,40 @@ func activityOutcome(receipt api.CommandExecutionReceipt) (string, string) {
 	}
 }
 
-func readProgramActivities(ctx context.Context, tx *sql.Tx, program string, settled bool) ([]api.CommandActivity, error) {
-	groups, err := readActivityGroups(ctx, tx, program)
+func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandProgramReceipt) ([]api.CommandActivity, error) {
+	groups, err := readActivityGroups(ctx, tx, program.ID)
 	if err != nil {
 		return nil, err
 	}
-	return composeActivityGroups(groups, settled), nil
-}
-
-// ActivitySummary publishes row identities with the result, before detail reads.
-func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program string) (api.CommandProgramReceipt, error) {
-	page, err := r.ReadProgramPage(ctx, session, program, "", 32)
-	if err != nil {
-		return api.CommandProgramReceipt{}, err
-	}
-	page.Program.Activities = page.Activities
-	if len(page.Program.Activities) == 0 && page.Program.State != "running" && page.Program.State != "waiting" {
-		state := page.Program.State
+	settled := program.State != "running" && program.State != "waiting"
+	activities := composeActivityGroups(groups, settled)
+	if len(activities) == 0 && settled {
+		state := program.State
 		if state == "rejected" {
 			state = "refused"
 		}
-		normalized, outcome := activityOutcome(api.CommandExecutionReceipt{State: state, StatusCode: page.Program.StatusCode})
-		page.Program.Activities = []api.CommandActivity{{ID: page.Program.ID + ":result", Group: "Running commands", Label: "Run command", Subject: page.Program.StopCode, State: normalized, Outcome: outcome, StatusCode: page.Program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}}}
+		normalized, outcome := activityOutcome(api.CommandExecutionReceipt{State: state, StatusCode: program.StatusCode})
+		activities = []api.CommandActivity{{ID: program.ID + ":result", Group: "Running commands", Label: "Run command", Subject: program.StopCode, State: normalized, Outcome: outcome, StatusCode: program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Steps: []api.CommandActivityStep{}}}
 	}
-	for _, receipt := range page.Executions {
-		state, outcome := activityOutcome(receipt)
-		page.Program.ActivityExecutions = append(page.Program.ActivityExecutions, api.CommandActivityExecution{ID: receipt.ID, State: state, Outcome: outcome, StatusCode: receipt.StatusCode})
-	}
+	return activities, nil
+}
 
-	return page.Program, nil
+// ActivitySummary reads complete counts without paging execution bodies.
+func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program string) (api.CommandProgramReceipt, error) {
+	tx, err := r.beginProgramRead(ctx)
+	if err != nil {
+		return api.CommandProgramReceipt{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := readProgram(ctx, tx, session, program)
+	if err != nil {
+		return result, err
+	}
+	result.Activities, err = readProgramActivities(ctx, tx, result)
+	if err != nil {
+		return result, err
+	}
+	return result, tx.Commit()
 }
 
 type activityObserverKey struct{}

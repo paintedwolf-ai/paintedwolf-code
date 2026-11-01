@@ -52,13 +52,7 @@ func (r *SQLRecorder) readProgramPage(ctx context.Context, sessionID, programID,
 			return out, err
 		}
 	}
-	// Read one consistent snapshot without serializing the durable writer.
-	var tx *sql.Tx
-	if reader, ok := r.database.(db.ReadHandle); ok {
-		tx, err = reader.BeginReadTx(ctx)
-	} else {
-		tx, err = r.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	}
+	tx, err := r.beginProgramRead(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -71,7 +65,7 @@ func (r *SQLRecorder) readProgramPage(ctx context.Context, sessionID, programID,
 	if err != nil {
 		return out, err
 	}
-	out.Activities, err = readProgramActivities(ctx, tx, programID, out.Program.State != "running" && out.Program.State != "waiting")
+	out.Activities, err = readProgramActivities(ctx, tx, out.Program)
 	if err != nil {
 		return out, err
 	}
@@ -174,4 +168,14 @@ func readProgramProgress(ctx context.Context, tx *sql.Tx, programID string) (*ap
 		return nil, err
 	}
 	return &out, nil
+}
+
+func (r *SQLRecorder) beginProgramRead(ctx context.Context) (*sql.Tx, error) {
+	if r == nil || r.database == nil {
+		return nil, fmt.Errorf("invocation recorder is not configured")
+	}
+	if reader, ok := r.database.(db.ReadHandle); ok {
+		return reader.BeginReadTx(ctx)
+	}
+	return r.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 }
