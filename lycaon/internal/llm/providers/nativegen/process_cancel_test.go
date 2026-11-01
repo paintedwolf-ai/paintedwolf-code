@@ -49,7 +49,7 @@ func TestCanceledStepSettlesProgressBeforeRequestCleanup(t *testing.T) {
 	req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Compute 2 + 2"}}, MaxTokens: 2}
 	render, err := prepareRender(req)
 	testutil.FailErr(t, "render cancellation fixture", err)
-	cursor, err := runtime.prepare(t.Context(), render, nil, 2)
+	cursor, err := runtime.prepare(t.Context(), render, nil, 2, modelcall.CompositionConversation)
 	testutil.FailErr(t, "begin cancellation fixture", err)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

@@ -64,7 +64,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		return nil, ErrContextCapacityExceeded
 	}
 	req.RecordBudget(maximum, nil, nil)
-	cursor, err := p.runtime.prepare(ctx, render, schema, maximum)
+	cursor, err := p.runtime.prepare(ctx, render, schema, maximum, req.Composition)
 	if err != nil {
 		release()
 		return nil, err
@@ -79,7 +79,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 	return out, nil
 }
 
-func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json.RawMessage, maximum int) (*progressCursor, error) {
+func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json.RawMessage, maximum int, composition modelcall.RequestComposition) (*progressCursor, error) {
 	child := p.loaded.process
 	measured, err := p.measure(ctx, render)
 	if err != nil {
@@ -89,6 +89,10 @@ func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json
 		return nil, ErrContextCapacityExceeded
 	}
 	rendered := measured.renderedResult
+	// Utility calls preserve the retained conversation prefix.
+	if composition == modelcall.CompositionHostUtility {
+		rendered.CheckpointTokens = 0
+	}
 	var entropy [8]byte
 	if _, err := rand.Read(entropy[:]); err != nil {
 		return nil, err
