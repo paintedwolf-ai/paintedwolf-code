@@ -23,7 +23,7 @@ fn versioned_conversation_preserves_ordered_tool_results() {
 }
 
 #[test]
-fn checkpoint_uses_only_a_matching_rendered_system_prefix() {
+fn checkpoint_uses_only_a_matching_declared_message_prefix() {
     use tokenizers::{models::wordlevel::WordLevel, pre_tokenizers::whitespace::WhitespaceSplit};
     let model = WordLevel::builder()
         .vocab(
@@ -49,13 +49,25 @@ fn checkpoint_uses_only_a_matching_rendered_system_prefix() {
             serde_json::json!({"role":"user","content":"user"}),
         ],
         tools: vec![],
+        checkpoint_messages: 1,
     };
+    let mut changed = RenderRequest {
+        messages: request.messages.clone(),
+        tools: vec![],
+        checkpoint_messages: 0,
+    };
+    assert_eq!(renderer.measure(&changed).unwrap().rendered.checkpoint_tokens, 0);
+    changed.checkpoint_messages = 2;
+    assert_eq!(renderer.measure(&changed).unwrap().rendered.checkpoint_tokens, 3);
+    changed.checkpoint_messages = 3;
+    assert!(renderer.measure(&changed).is_err());
     let measured = renderer.measure(&request).unwrap();
     assert_eq!(measured.input_tokens, 4);
     assert_eq!(measured.rendered.prompt_tokens, [2, 3, 4, 5]);
     let oversized = RenderRequest {
         messages: vec![serde_json::json!({"role":"user","content":"user ".repeat(65536)})],
         tools: vec![],
+        checkpoint_messages: 1,
     };
     let measured = renderer.measure(&oversized).unwrap();
     assert_eq!(measured.input_tokens, 65538);
@@ -74,6 +86,7 @@ fn checkpoint_uses_only_a_matching_rendered_system_prefix() {
             serde_json::json!({"role":"user","content":"user"}),
         ],
         tools: vec![],
+        checkpoint_messages: 1,
     };
     let rendered = renderer.render(&large, 16384).unwrap();
     assert_eq!(rendered.checkpoint_tokens, 8193);
