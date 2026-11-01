@@ -76,13 +76,24 @@ func TestCredentialReadRequiresItsPolicyAndCannotDelegateOrChangeTransport(t *te
 
 func TestDecodePlanRefusesOtherVersions(t *testing.T) {
 	t.Parallel()
-	_, err := DecodePlan([]byte(fmt.Sprintf(`{"version":%d}`, PlanVersion+1)))
-	var unsupported *Unsupported
-	if !errors.As(err, &unsupported) || unsupported.Code != UnsupportedPlanVersion {
-		t.Fatalf("version %d: %v", PlanVersion+1, err)
+	for _, version := range []int{0, PlanVersion - 1, PlanVersion + 1} {
+		_, err := DecodePlan([]byte(fmt.Sprintf(`{"version":%d}`, version)))
+		var unsupported *Unsupported
+		if !errors.As(err, &unsupported) || unsupported.Code != UnsupportedPlanVersion {
+			t.Fatalf("version %d: %v", version, err)
+		}
 	}
 	if _, err := DecodePlan([]byte(`{`)); err == nil {
 		t.Fatal("malformed plan decoded")
+	}
+	for _, shape := range []string{
+		`{"version":%d,"credential_read":true}`,
+		`{"version":%d,"network":{"credential_reed":true}}`,
+		`{"version":%d} {}`,
+	} {
+		if _, err := DecodePlan([]byte(fmt.Sprintf(shape, PlanVersion))); err == nil {
+			t.Fatalf("unknown or ambiguous boundary shape decoded: %s", shape)
+		}
 	}
 }
 

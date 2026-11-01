@@ -4,8 +4,10 @@
 package linuxsandbox
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,7 +16,7 @@ import (
 )
 
 // PlanVersion is the plan shape this helper reads.
-const PlanVersion = 3
+const PlanVersion = 4
 
 // Plan is the typed boundary the helper applies. The host renders it from the
 // same policy inputs as the macOS profile; the helper never widens it.
@@ -190,8 +192,13 @@ func (p Plan) Encode() ([]byte, error) {
 // DecodePlan reads a plan the host rendered and checks its version.
 func DecodePlan(raw []byte) (Plan, error) {
 	var p Plan
-	if err := json.Unmarshal(raw, &p); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&p); err != nil {
 		return Plan{}, fmt.Errorf("decode boundary plan: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return Plan{}, fmt.Errorf("boundary plan must contain one object")
 	}
 	if p.Version != PlanVersion {
 		return Plan{}, &Unsupported{Code: UnsupportedPlanVersion, Detail: fmt.Sprintf("version %d, helper reads %d", p.Version, PlanVersion)}
