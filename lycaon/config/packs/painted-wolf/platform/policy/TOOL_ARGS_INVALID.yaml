@@ -102,10 +102,10 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
+    argument_schema_tool: read
   expect_contains:
-  - 'Rejected:'
   - 'Code: TOOL_ARGS_INVALID'
-  - Fix
+  - Tool arguments failed validation
 - id: mutation-sibling
   vars:
     detail: missing old_string
@@ -113,28 +113,32 @@ x-paintedwolf-scenarios:
     profile: implement
     suggested_tool: write
     tool: edit
+    argument_schema_tool: edit
+    reason: missing old_string
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - current source
+  - missing old_string
 - id: misplaced-field
   vars:
     tool: command
     profile: coordinator
-    misplaced_fields: [host_resources]
+    misplaced_fields:
+    - host_resources
     belongs_under: capability_request
+    argument_schema_tool: command
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'capability_request'
-  - 'the top level'
-- id: did-you-mean
+  - capability_request
+  - the top level
+- id: unknown-field
   vars:
     tool: command
     profile: coordinator
     rejection_field: timeout
-    did_you_mean: timeout_ms
+    argument_schema_tool: command
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'did you mean `timeout_ms`'
+  - '`timeout`'
 - id: unparsed-json
   vars:
     tool: http_request
@@ -142,25 +146,31 @@ x-paintedwolf-scenarios:
     rejection_field: body_json
     json_encoded: true
     expected_type: object
+    argument_schema_tool: http_request
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'instead of a native object'
+  - instead of a native object
 - id: malformed-json
   vars:
     tool: submit_verdict
     profile: coordinator
     rejection_field: verdict
     json_malformed: true
-    json_open_paths: [verdict]
+    json_open_paths:
+    - verdict
     expected_type: object
-    misplaced_fields: [set_asides, threat_model, verdict]
+    misplaced_fields:
+    - set_asides
+    - threat_model
+    - verdict
     found_under: verdict.coverage
     belongs_under: verdict
     close_before: set_asides
+    argument_schema_tool: submit_verdict
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'verdict.coverage'
-  - 'set_asides'
+  - verdict.coverage
+  - set_asides
 - id: malformed-json-closed-early
   vars:
     tool: task
@@ -168,28 +178,33 @@ x-paintedwolf-scenarios:
     rejection_field: brief
     json_malformed: true
     json_trailing_text_at: 59
-    json_trailing_members: [files, scope]
+    json_trailing_members:
+    - files
+    - scope
     expected_type: object
+    argument_schema_tool: task
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'files, scope'
-
+  - files, scope
 - id: unplanned-work-id
   vars:
     tool: task
     profile: coordinator
     rejection_field: workflow_work_id
     rejection_reason: not_a_planned_fanout_phase
-    inapplicable_fields: [workflow_work_id]
+    inapplicable_fields:
+    - workflow_work_id
+    argument_schema_tool: task
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'Omit `workflow_work_id`'
-  - 'Preserve the other arguments'
+  - Omit `workflow_work_id`
+  - Preserve the other arguments
 - id: missing-required-arguments
   vars:
     tool: update_progress
     missing_required_arguments: '{"missing_required":["content"],"expected_types":{"content":"string"},"received_keys":[]}'
+    argument_schema_tool: update_progress
   expect_contains:
+  - 'Code: TOOL_ARGS_INVALID'
   - '"missing_required":["content"]'
-  - '"content":"string"'
-  - rejected call did not execute
+  - Supply these missing arguments

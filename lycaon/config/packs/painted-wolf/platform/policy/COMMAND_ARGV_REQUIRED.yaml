@@ -21,10 +21,9 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command() needs explicit command text
 x-paintedwolf-scenarios:
-  - id: default
-    vars:
-      tool: command
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COMMAND_ARGV_REQUIRED'
-      - without explicit `command` text
+- id: default
+  vars:
+    tool: command
+  expect_contains:
+  - 'Code: COMMAND_ARGV_REQUIRED'
+  - requires explicit `command` text

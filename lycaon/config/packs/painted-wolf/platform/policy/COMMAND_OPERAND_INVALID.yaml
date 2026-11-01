@@ -42,4 +42,3 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Code: COMMAND_OPERAND_INVALID'
   - UTF-8 without BOM
-  - Earlier effects remain

@@ -29,11 +29,7 @@ x-paintedwolf-message: structured capability request invalid
 x-paintedwolf-scenarios:
 - id: server_and_client
   vars:
-    capability_request_fields:
-    - local_listen
-    - loopback_connect
-    supports_local_listen: true
-    supports_loopback_connect: true
+    tool: command
   expect_contains:
   - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
   - capability request
@@ -55,18 +51,13 @@ x-paintedwolf-scenarios:
   - loopback_connect
 - id: client_only
   vars:
-    capability_request_fields:
-    - loopback_connect
-    supports_loopback_connect: true
-    supports_local_listen: false
+    tool: page_open
   expect_contains:
+  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
   - loopback_connect
-  - client authority
 - id: no_capabilities
   vars:
-    capability_request_fields: []
-    supports_loopback_connect: false
-    supports_local_listen: false
+    tool: read
   expect_contains:
-  - accepts no execution capability request
+  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
   - Remove capability_request

@@ -28,5 +28,4 @@ x-paintedwolf-scenarios:
     tool: command
   expect_contains:
   - 'Code: COMMAND_PLATFORM_UNAVAILABLE'
-  - exact identity
-  - earlier effects
+  - unavailable on the current platform

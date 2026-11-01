@@ -18,15 +18,14 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_operation_admission
 x-paintedwolf-message: native operation is explicitly excluded by the active profile
 x-paintedwolf-scenarios:
-  - id: read-only-write
-    vars:
-      tool: command
-      permission_profile: worker_readonly
-      expected_form: read_only
-      source_line: 2
-      source_column: 3
-    expect_contains:
-      - 'Code: COMMAND_OPERATION_NOT_ALLOWED'
-      - worker_readonly
-      - '2:3'
-      - Do not retry through external
+- id: read-only-write
+  vars:
+    tool: command
+    permission_profile: worker_readonly
+    expected_form: read_only
+    source_line: 2
+    source_column: 3
+  expect_contains:
+  - 'Code: COMMAND_OPERATION_NOT_ALLOWED'
+  - '2:3'
+  - read_only

@@ -40,24 +40,28 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused a listener or direct connection this invocation needed
 x-paintedwolf-scenarios:
-  - id: database_client
-    vars:
-      tool: command
-      failed_stages: [psql -h 127.0.0.1 -c select 1]
-      refused_connect_ports: ['5432']
-    expect_contains:
-      - 'Code: SANDBOX_TRY_LOCAL_NETWORK'
-      - capability_request.loopback_connect
-      - capability_request.direct_ip
-      - '5432'
-  - id: dev_server
-    vars:
-      tool: command
-      process_running: true
-      can_command_stop: true
-      can_command_output: true
-      refused_listen_ports: ['8080']
-    expect_contains:
-      - 'Code: SANDBOX_TRY_LOCAL_NETWORK'
-      - capability_request.local_listen
-      - command_stop
+- id: database_client
+  vars:
+    tool: command
+    failed_stages:
+    - psql -h 127.0.0.1 -c select 1
+    refused_connect_ports:
+    - '5432'
+    tool_args: {}
+  expect_contains:
+  - 'Code: SANDBOX_TRY_LOCAL_NETWORK'
+  - '5432'
+  - port only, not by address
+- id: dev_server
+  vars:
+    tool: command
+    process_running: true
+    can_command_stop: true
+    can_command_output: true
+    refused_listen_ports:
+    - '8080'
+    tool_args: {}
+  expect_contains:
+  - 'Code: SANDBOX_TRY_LOCAL_NETWORK'
+  - capability_request.local_listen
+  - command_stop

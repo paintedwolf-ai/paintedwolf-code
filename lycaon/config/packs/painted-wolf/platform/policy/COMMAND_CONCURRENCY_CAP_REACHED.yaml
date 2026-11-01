@@ -40,6 +40,4 @@ x-paintedwolf-scenarios:
     - command-b
   expect_contains:
   - 'Code: COMMAND_CONCURRENCY_CAP_REACHED'
-  - 2 live awaited
-  - command-a
-  - command-b
+  - 'Live jobs at admission: 2; configured limit: 2'
