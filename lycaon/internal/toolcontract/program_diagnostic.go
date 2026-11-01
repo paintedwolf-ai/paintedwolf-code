@@ -20,10 +20,7 @@ const (
 
 const optionUnsupportedCode = "COMMAND_OPTION_UNSUPPORTED"
 
-// ProgramDiagnostic is the typed form of a parser, argv binder, expansion or
-// evaluator refusal (commandsurface.SyntaxDiagnostic, commandprogram.ArgvError,
-// ExpansionError and EvaluationRefusal map into it). Code keeps its public
-// meaning; Expected is the catalog's declared form, never prose to parse.
+// ProgramDiagnostic carries source coordinates and declared command forms.
 type ProgramDiagnostic struct {
 	Stage             ProgramDiagnosticStage
 	Code              string
