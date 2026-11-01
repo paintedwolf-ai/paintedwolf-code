@@ -251,16 +251,20 @@ class ChangedCoverageTests(unittest.TestCase):
             self.assertEqual(coverage_changes.read_go_profile(output, "example.com/m"),
                              {"lycaon/a.go": [("1.1", "2.2", 1, True)]})
 
-    def test_den_changed_run_asks_the_config_not_the_cli_to_ignore_rerun_triggers(self):
-        # Vitest's CLI rejects unknown options, so a rerun-trigger override must reach vitest.config.ts.
+    def test_den_coverage_executes_full_assertions_without_changed_only_or_fast_filters(self):
         changed = "lycaon-den/src/App.tsx"
-        with patch.object(coverage_changes.subprocess, "call", return_value=1) as call:
-            coverage_changes.run_den(change_report.Scope("base", "test", [changed]))
+        with patch.dict(os.environ, {"LYCAON_VITEST_FAST": "1", "PW_VITEST_CHANGED_ONLY": "1"}), \
+                patch.object(coverage_changes.subprocess, "call", return_value=1) as call:
+            findings, failed, _ = coverage_changes.run_den(change_report.Scope("base", "test", [changed]))
         command, env = call.call_args.args[0], call.call_args.kwargs["env"]
-        self.assertEqual(env["PW_VITEST_CHANGED_ONLY"], "1")
-        self.assertFalse([a for a in command if a.startswith("--forceRerunTriggers")])
-        config = (coverage_changes.ROOT / "lycaon-den" / "vitest.config.ts").read_text()
-        self.assertIn('process.env.PW_VITEST_CHANGED_ONLY === "1"', config)
+        self.assertTrue(failed)
+        self.assertEqual(findings[0].level, "error")
+        self.assertNotIn("PW_VITEST_CHANGED_ONLY", env)
+        self.assertNotIn("LYCAON_VITEST_FAST", env)
+        self.assertNotIn("--changed", command)
+        self.assertNotIn("--passWithNoTests", command)
+        self.assertIn("--coverage", command)
+        self.assertIn("--coverage.include=src/App.tsx", command)
 
     def test_policy_floors_are_read_from_the_policy_file(self):
         floor = coverage_policy.changed("go")

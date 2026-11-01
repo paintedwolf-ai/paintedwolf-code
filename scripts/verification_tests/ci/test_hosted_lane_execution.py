@@ -12,6 +12,11 @@ import verification_execute as execution
 
 
 class HostedExecutionTests(unittest.TestCase):
+    def setUp(self):
+        scope = patch('ci_policy.impact.go_scope', return_value=None)
+        scope.start()
+        self.addCleanup(scope.stop)
+
     def test_setup_timing_requires_an_observed_job_start(self):
         for marker, basis in [('1', 'setup-and-execution'), ('', 'execution'), ('invalid', 'execution')]:
             with tempfile.TemporaryDirectory() as directory, \
@@ -81,7 +86,7 @@ class HostedExecutionTests(unittest.TestCase):
                         patch.object(ci.subprocess, "call", return_value=code) as run:
                     self.assertEqual(ci.run_lane("frontend"), code)
                     run.assert_called_once()
-                    self.assertEqual(run.call_args.args[0], ["./task", "den:typecheck", "den:lint", "den:test"])
+                    self.assertEqual(run.call_args.args[0], ["./task", "den:typecheck", "den:lint", "den:coverage:changes"])
                     self.assertEqual(run.call_args.kwargs["cwd"], ci.ROOT)
                 record = json.loads((root / "ci/run.json").read_text())
                 self.assertEqual(record["status"], status)
@@ -109,13 +114,13 @@ class HostedExecutionTests(unittest.TestCase):
                 self.assertEqual(ci.run_lane("ready"), preflight_code)
                 self.assertEqual(run.call_args_list[0].args[0],
                                  ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
-                self.assertEqual(run.call_count, 4 if preflight_code == 0 else 1)
+                self.assertEqual(run.call_count, 2 if preflight_code == 0 else 1)
                 record = json.loads((Path(directory) / "ci/run.json").read_text())
                 self.assertEqual(record["preflight"]["exit_code"], preflight_code)
                 self.assertIn("finished_at", record["preflight"])
                 self.assertEqual(record["scope"], scope)
 
-    def test_native_compile_failure_stops_admission_before_general_checks(self):
+    def test_native_changes_reach_checks_without_duplicate_native_compilation(self):
         scope = dict(base='b' * 40, head='a' * 40, full=False,
                      paths=['lycaon-den/src-tauri/crates/desktop-settings-observer/src/main.rs'])
         with tempfile.TemporaryDirectory() as directory, \
@@ -123,7 +128,7 @@ class HostedExecutionTests(unittest.TestCase):
                 patch.object(ci, 'artifact_root', return_value=Path(directory)), \
                 patch.object(ci.subprocess, 'call', side_effect=[0, 1]) as run:
             self.assertEqual(ci.run_lane('ready'), 1)
-            self.assertEqual(run.call_args_list[1].args[0], ['./task', 'den:test:rust', '--', '--compile-only'])
+            self.assertEqual(run.call_args_list[1].args[0], ['./task', *hosted_plan.lanes()['ready']['targets']])
             self.assertEqual(run.call_count, 2)
             record = json.loads((Path(directory) / 'ci/run.json').read_text())
             self.assertEqual(record['phases'][0]['exit_code'], 1)

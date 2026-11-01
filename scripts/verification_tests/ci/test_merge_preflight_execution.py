@@ -18,17 +18,24 @@ from ci_policy import hosted_plan
 
 
 class MergePreflightTests(unittest.TestCase):
-    def test_fast_coverage_measurements_ignore_unrelated_paths(self):
+    def setUp(self):
+        scope = patch('ci_policy.impact.go_scope', return_value=None)
+        scope.start()
+        self.addCleanup(scope.stop)
+
+    def test_landing_frontend_and_script_assertions_run_without_changed_statements(self):
         import coverage_changes as coverage
         for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['scripts/example.sh'],
                       ['lycaon-den/src/model.test.ts', 'lycaon-den/src/style.css']):
-            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call') as call, \
+            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call', return_value=0) as call, \
                     patch.object(coverage.python_coverage, 'measure') as measure:
                 scope = SimpleNamespace(paths=paths)
-                self.assertEqual(coverage.run_den(scope), ([], False, 'no changed frontend source'))
-                self.assertEqual(coverage.run_python(scope), ([], False, 'no changed scripts Python'))
-                call.assert_not_called()
+                self.assertEqual(coverage.run_den(scope), ([], False, 'complete frontend tests; no changed source to measure'))
+                self.assertEqual(coverage.run_python(scope), ([], False, 'complete script tests; no changed source to measure'))
+                self.assertEqual(call.call_count, 2)
                 measure.assert_not_called()
+                self.assertNotIn('--changed', call.call_args_list[0].args[0])
+                self.assertIn('runner_tests.py', call.call_args_list[1].args[0][1])
 
     def history_state(self, failed=()):
         return {"failed_targets": list(failed), "passed_targets": [], "native_failed": [],
@@ -154,8 +161,8 @@ class MergePreflightTests(unittest.TestCase):
         from ci_policy import hosted_execution as execution
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
         targets = hosted_plan.lanes()['ready']['targets']
-        idx = targets.index('coverage:changes')
-        history = json.dumps({'failed_targets': ['coverage:changes'], 'passed_targets': targets[:idx],
+        idx = targets.index('test:short')
+        history = json.dumps({'failed_targets': ['test:short'], 'passed_targets': targets[:idx],
                               'native_passed': ['decide:test']}, separators=(',', ':'))
         compile_native, after_cmd, before_cmd = ['./task', 'decide:test', '--', '--compile-only'], ['./task', *targets[idx + 1:]], ['./task', *targets[:idx]]
         for after_verdict in (0, 1):
@@ -166,7 +173,7 @@ class MergePreflightTests(unittest.TestCase):
                     patch.dict(os.environ, GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=history), \
                     patch.object(execution.subprocess, 'call', side_effect=lambda cmd, **_: after_verdict if cmd == after_cmd else 0) as call:
                 self.assertEqual(execution.run_lane('ready'), after_verdict)
-                expected = [['./task', *hosted_plan.lanes()['ready']['preflight']], ['./task', 'coverage:changes'], after_cmd]
+                expected = [['./task', *hosted_plan.lanes()['ready']['preflight']], ['./task', 'test:short'], after_cmd]
                 if after_verdict == 0:
                     expected += [compile_native, before_cmd]
                 self.assertEqual([entry.args[0] for entry in call.call_args_list], expected)

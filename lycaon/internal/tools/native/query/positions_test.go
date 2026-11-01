@@ -71,6 +71,26 @@ type queryBytesWithFailure struct {
 	sent bool
 }
 
+func TestQueryInputBoundaryWithSmallLimit(t *testing.T) {
+	for _, text := range []string{" true", " true "} {
+		h := newHarness(t, nil)
+		in := &inputs{inv: &invocation{ctx: t.Context(), owners: h.owners, out: &output{}}, limit: 5, label: "input"}
+		positions, err := newInputPositions(in.inv, in.limit, in.label)
+		testutil.FailErr(t, "prepare bounded query positions", err)
+		in.positions = positions
+		in.stream = nativejq.NewValueStream(queryInputReader{input: strings.NewReader(text), owner: in})
+		value, ok := in.Next()
+		if len(text) == 5 {
+			if !ok || value != true || in.stop != nil {
+				t.Fatalf("at-limit query value=%v accepted=%t refusal=%v", value, ok, in.stop)
+			}
+		} else if reject := toolrejection.AsToolReject(in.stop); ok || reject == nil || reject.Code != "JQ_INPUT_TOO_LARGE" {
+			t.Fatalf("over-limit query value=%v accepted=%t refusal=%v", value, ok, in.stop)
+		}
+		in.close()
+	}
+}
+
 func (r *queryBytesWithFailure) Read(p []byte) (int, error) {
 	if r.sent {
 		return 0, io.EOF
