@@ -5,7 +5,7 @@
   "workstream": "local-model-store",
   "disposition": "retain",
   "reason": "Retain the store transaction boundary at 782 receiver lines and 33 methods. Repair reuse verifies immutable payloads under the same collection pins and revision lease as replacement; extracting another owner would separate verification from publication and reader lifetime. Export preparation and signing remain independent functions. The 80-result store fixture run covers missing-link inode reuse, same-size corruption, failed replacement, leases and interrupted import.",
-  "reviewed_commit": "1d8531b6ca",
+  "reviewed_commit": "1d8531b6cad23ceddbb943bc72ac1b7a915fe95c",
   "reviewed_shape": "e70b2ac49f887441b6db22a0c75f5422649e91bc142dae4f912a4cbf9b43af70",
   "ceiling": 33,
   "boundaries": {

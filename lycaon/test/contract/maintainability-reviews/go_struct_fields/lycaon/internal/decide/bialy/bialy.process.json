@@ -4,12 +4,13 @@
   "kind": "runtime_service",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain 14 fields for one decision process, pending replies and held device work. A caller deadline cannot release native admission; matching acknowledgement or reap completes it. Failure and admission fixtures verify that lifetime across partial writes, process exit and cancellation.",
-  "reviewed_commit": "7a48b783d843c4ec420d7fce2bf8e074cefd4ae6",
-  "reviewed_shape": "36bf945cdd1e5af510537357f4ab79c98606003e4632a2044e00b5714518c106",
+  "reason": "Retain 14 fields for one decision process, pending replies and physical device work. Priority scopes use the same process identity without owning physical permits. Matching acknowledgements or process reap release physical work; caller cancellation releases only scheduling priority. Admission and failure fixtures verify both lifetimes.",
+  "reviewed_commit": "699f658ddc0747eb30337008ffb4dd96c9e57e64",
+  "reviewed_shape": "a27fbff824980540d0391afc87611109f3fc561c5f2df5844026b275483d7be8",
   "ceiling": 14,
   "boundaries": {
     "lycaon/internal/decide/bialy/admission_test.go": "01de3964ea45c6b5526f821c2bb3407c41e498be517124959f3320c5c00b1798",
-    "lycaon/internal/decide/bialy/process_failure_test.go": "6d9dc3cdb2b334866ab9f4a2ed7dee7950790e3442c9b8ecb7dde2197a740f23"
+    "lycaon/internal/decide/bialy/process_failure_test.go": "6d9dc3cdb2b334866ab9f4a2ed7dee7950790e3442c9b8ecb7dde2197a740f23",
+    "lycaon/internal/inference/priority_test.go": "e43fdf5076531e2b3a9800f4fbf4fcef9decce4ec8c1ef4fbb110cf1b2cee28f"
   }
 }

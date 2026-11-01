@@ -31,6 +31,9 @@ func Prepare(root string) ([]string, func(), error) {
 	if explicit := os.Getenv("VK_DRIVER_FILES"); explicit != "" && explicit != defaults {
 		return nil, noop, nil
 	}
+	if explicit := os.Getenv("VK_ICD_FILENAMES"); explicit != "" {
+		return []string{"VK_DRIVER_FILES=" + explicit}, noop, nil
+	}
 	file, err := os.Open("/sys/module/nvidia/version")
 	if os.IsNotExist(err) {
 		return environment(*config, nil, "")
@@ -81,8 +84,8 @@ func nvidiaLibraries(version, root string, uid uint32) ([]string, error) {
 		return nil, fmt.Errorf("unsupported NVIDIA userspace architecture")
 	}
 	directories = append(directories, "/usr/lib64", "/usr/lib", "/lib64", "/lib")
-	// EGL supplies Vulkan without importing the host's X11 libraries.
-	names := []string{"libnvidia-glsi", "libnvidia-gpucomp", "libnvidia-eglcore", "libnvidia-glvkspirv", "libEGL_nvidia"}
+	// Preload driver components opened by name during Vulkan device creation.
+	names := []string{"libnvidia-glsi", "libnvidia-gpucomp", "libnvidia-eglcore", "libnvidia-glvkspirv", "libnvidia-rtcore", "libcuda", "libEGL_nvidia"}
 	var paths []string
 	for _, name := range names {
 		leaf := name + ".so." + version
