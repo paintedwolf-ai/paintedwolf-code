@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon-den/src/components/settings/providers/ProvidersPanel.test.tsx",
+  "kind": "test_suite",
+  "workstream": "included-model-settings",
+  "disposition": "retain",
+  "reason": "The existing remote-provider interaction suite shrank when included-model scenarios moved to their own readiness/recovery suite. Retain the remaining 592-line suite without splitting related configured-provider interactions.",
+  "reviewed_commit": "1668bbc7358a092317986a52060b4bee1fa5585b",
+  "ceiling": 592,
+  "boundaries": {
+    "lycaon-den/src/components/settings/providers/ProvidersPanel.local.test.tsx": "14604fa5c51fb7da41d6aeb8d75d83d785d1a29ba4708ccdfc37256c9edaf42e"
+  }
+}
