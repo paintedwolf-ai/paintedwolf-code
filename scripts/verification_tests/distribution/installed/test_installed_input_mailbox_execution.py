@@ -14,7 +14,7 @@ class NativeInputMailboxTests(unittest.TestCase):
         actor = mailbox.Mailbox.__new__(mailbox.Mailbox)
         actor.vm_id = 'owned-fedora'
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'marker.json'
+            path = Path(directory).resolve() / 'marker.json'
             for version in (1, True):
                 path.write_text('{"format_version":' + ('true' if version is True else '1') + ',"vm_id":"owned-fedora"}')
                 info = path.stat()
@@ -39,7 +39,7 @@ class NativeInputMailboxTests(unittest.TestCase):
 
     def selected(self, directory):
         selected = mailbox.Mailbox(self.execution, 'owned-fedora')
-        selected.path = Path(directory) / 'mailbox'
+        selected.path = Path(directory).resolve() / 'mailbox'
         selected.create()
         return selected
 
