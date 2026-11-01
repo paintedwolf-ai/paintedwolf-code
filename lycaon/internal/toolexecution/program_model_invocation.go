@@ -102,7 +102,6 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		return nil, err
 	}
 	lifetime.model = ProgramModelObservation{ToolName: model.ToolName, ToolCallID: tc.Identity.ToolCallID, CanonicalArguments: string(canonical)}
-	snapshot.values = nil
 	return lifetime, nil
 }
 
