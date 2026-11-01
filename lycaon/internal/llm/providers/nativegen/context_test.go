@@ -2,6 +2,7 @@ package nativegen
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/inference"
@@ -51,6 +52,47 @@ func TestWarmRefusesCapacityBelowMinimumContext(t *testing.T) {
 	}
 	if runtime.loaded != nil || runtime.config.DeviceMemory.Snapshot().ReservedBytes != 0 || runtime.config.HostMemory.Snapshot().ReservedBytes != 0 {
 		t.Fatal("refused load retained resources")
+	}
+}
+
+func TestContextAdmissionUsesAvailableCacheBlocks(t *testing.T) {
+	for _, limit := range []int{2, 4096, 32768, 65535, 65536} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			provider, runtime := fixtureProvider(t)
+			t.Setenv("PW_NATIVEGEN_CONTEXT_PLAN", "1")
+			runtime.config.ContextLimit = limit
+			const availableTokens = 40704
+			capacity := uint64(192<<20) + availableTokens*(16<<10) + (4 << 10)
+			runtime.config.DeviceMemory, _ = inference.NewMemoryBudget(capacity)
+			if err := runtime.Warm(t.Context(), DefaultModelID); err != nil {
+				t.Fatalf("warm: %v", err)
+			}
+			entry, _ := provider.ModelEntry(DefaultModelID)
+			if want := min(limit, availableTokens); entry.ContextLength != want {
+				t.Fatalf("context=%d, want %d", entry.ContextLength, want)
+			}
+			if err := runtime.Close(); err != nil {
+				t.Fatalf("close: %v", err)
+			}
+			if runtime.config.DeviceMemory.Snapshot().ReservedBytes != 0 || runtime.config.HostMemory.Snapshot().ReservedBytes != 0 {
+				t.Fatal("context search retained reservations")
+			}
+		})
+	}
+}
+
+func TestContextAdmissionUsesUnifiedHostCapacity(t *testing.T) {
+	_, runtime := fixtureProvider(t)
+	t.Setenv("PW_NATIVEGEN_CONTEXT_PLAN", "1")
+	runtime.config.ContextLimit = 65536
+	runtime.config.UnifiedMemory = true
+	runtime.config.DeviceMemory, _ = inference.NewMemoryBudget(2 << 30)
+	runtime.config.HostMemory, _ = inference.NewMemoryBudget((768+192)<<20 + 40704*(16<<10))
+	if err := runtime.Warm(t.Context(), DefaultModelID); err != nil {
+		t.Fatalf("warm unified context: %v", err)
+	}
+	if runtime.ContextWindow() != 40704 {
+		t.Fatalf("unified context=%d", runtime.ContextWindow())
 	}
 }
 
