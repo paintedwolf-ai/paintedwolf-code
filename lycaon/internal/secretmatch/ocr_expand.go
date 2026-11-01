@@ -43,7 +43,9 @@ func buildOCRDetector(base gconfig.Config, c ocrConfusionCatalog) *detect.Detect
 					}
 				}
 				if len(a.StopWords) > 0 {
-					clone.StopWords = expandOCRKeywords(a.StopWords, c)
+					if expanded := expandOCRKeywords(a.StopWords, c); expanded != nil {
+						clone.StopWords = expanded
+					}
 				}
 				allows[i] = &clone
 			}
@@ -251,7 +253,13 @@ func expandOCRKeywords(keywords []string, c ocrConfusionCatalog) []string {
 	}
 	for _, kw := range keywords {
 		lower := strings.ToLower(kw)
-		for _, v := range keywordVariants(lower, c) {
+		variants := keywordVariants(lower, c)
+		if len(variants) == 0 && lower != "" {
+			// A partial keyword prefilter would hide regex matches. Run the
+			// bounded regex without that prefilter when expansion is too large.
+			return nil
+		}
+		for _, v := range variants {
 			add(v)
 		}
 	}
@@ -266,26 +274,18 @@ func keywordVariants(lower string, c ocrConfusionCatalog) []string {
 		if len(partners) <= 1 {
 			continue
 		}
-		if len(results)*len(partners) <= maxOCRKeywordVariants {
-			next := make([]string, 0, len(results)*len(partners))
-			for _, prefix := range results {
-				pr := []rune(prefix)
-				for _, p := range partners {
-					pr[i] = p
-					next = append(next, string(pr))
-				}
-			}
-			results = next
-			continue
+		if len(results) > maxOCRKeywordVariants/len(partners) {
+			return nil
 		}
-		for _, p := range partners {
-			if p == r || len(results) >= maxOCRKeywordVariants {
-				continue
+		next := make([]string, 0, len(results)*len(partners))
+		for _, prefix := range results {
+			pr := []rune(prefix)
+			for _, p := range partners {
+				pr[i] = p
+				next = append(next, string(pr))
 			}
-			cp := append([]rune(nil), runes...)
-			cp[i] = p
-			results = append(results, string(cp))
 		}
+		results = next
 	}
 	return results
 }

@@ -2,11 +2,14 @@ package secretmatch
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	gconfig "github.com/zricethezav/gitleaks/v8/config"
+	"github.com/zricethezav/gitleaks/v8/detect"
 )
 
 func TestBundledOCRConfusionCatalogValidation(t *testing.T) {
@@ -253,5 +256,27 @@ func TestScreenOCRSuppressesConfusedPlaceholdersAndNonSecrets(t *testing.T) {
 	}
 	if hits := matcher.ScreenOCR(strings.Join(nonSecretScreenshotLines, "\n")); len(hits) != 0 {
 		t.Errorf("combined non-secret screenshot text produced false positives: %#v", hits)
+	}
+}
+
+func TestOCRKeywordWorkBoundCannotHideConfusedSecrets(t *testing.T) {
+	catalog, err := bundledOCRConfusions()
+	testutil.FailErr(t, "load OCR confusion catalog", err)
+	for _, length := range []int{1, 4, 8, 16} {
+		prefix := strings.Repeat("I", length)
+		base := gconfig.Config{Rules: map[string]gconfig.Rule{"fixture": {
+			RuleID: "fixture", Regex: regexp.MustCompile(prefix + `-[A-Z]{8}`), Keywords: []string{prefix},
+		}}, OrderedRules: []string{"fixture"}}
+		detector := buildOCRDetector(base, catalog)
+		if got := len(detector.Config.Rules["fixture"].Keywords); got > maxOCRKeywordVariants {
+			t.Fatalf("keyword expansion exceeded its work bound: %d", got)
+		}
+		for _, glyph := range []string{"1", "l", "I"} {
+			secret := strings.Repeat(glyph, length) + "-ABCDEFGH"
+			hits := detector.DetectContext(t.Context(), detect.Fragment{Raw: secret})
+			if len(hits) != 1 || hits[0].Secret != secret {
+				t.Fatalf("work bound hid an OCR-equivalent secret: length=%d glyph=%s hits=%+v", length, glyph, hits)
+			}
+		}
 	}
 }
