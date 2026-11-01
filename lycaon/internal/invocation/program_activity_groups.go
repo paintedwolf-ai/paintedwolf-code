@@ -88,7 +88,7 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 
 func groupActivity(g activityGroup) api.CommandActivity {
 	rule := activityPresentation(g.input)
-	state, outcome := activityOutcome(g.input.receipt)
+	state, outcome := "completed", "Finished"
 	if g.counts.waiting > 0 {
 		state, outcome = "waiting", "Waiting"
 	} else if g.counts.running > 0 {
@@ -99,8 +99,6 @@ func groupActivity(g activityGroup) api.CommandActivity {
 		state, outcome = "interrupted", "Interrupted"
 	} else if g.counts.failed > 0 {
 		state, outcome = "failed", "Failed"
-	} else {
-		state, outcome = "completed", "Finished"
 	}
 	if g.input.operation == "program &" && state == "completed" {
 		outcome = "Started"
