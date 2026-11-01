@@ -27,7 +27,7 @@ type Reference struct {
 	verify     func(net.Conn) error
 	invalid    atomic.Bool
 	endpointMu sync.Mutex
-	endpoint   serviceEndpoint
+	endpoints  map[string]serviceEndpoint
 }
 
 type serviceEndpoint interface {
@@ -43,8 +43,8 @@ func (r *Reference) Close() error {
 	r.endpointMu.Lock()
 	defer r.endpointMu.Unlock()
 	var endpointErr error
-	if r.endpoint != nil {
-		endpointErr = r.endpoint.Close()
+	for _, endpoint := range r.endpoints {
+		endpointErr = errors.Join(endpointErr, endpoint.Close())
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -63,6 +63,10 @@ func (r *Reference) Close() error {
 // DialContext connects while retaining the destination reference through the
 // kernel's destination lookup. It never retries through the requested pathname.
 func (r *Reference) DialContext(ctx context.Context) (net.Conn, error) {
+	return r.dialContext(ctx, "unix", "")
+}
+
+func (r *Reference) dialContext(ctx context.Context, network, local string) (net.Conn, error) {
 	if r == nil {
 		return nil, ErrUnbound
 	}
@@ -72,11 +76,14 @@ func (r *Reference) DialContext(ctx context.Context) (net.Conn, error) {
 		return nil, ErrUnbound
 	}
 	var dialer net.Dialer
+	if local != "" {
+		dialer.LocalAddr = &net.UnixAddr{Net: network, Name: local}
+	}
 	address := r.address
 	if address == "" {
 		address = descriptorPath(r.file)
 	}
-	conn, err := dialer.DialContext(ctx, "unix", address)
+	conn, err := dialer.DialContext(ctx, network, address)
 	if err != nil {
 		return nil, err
 	}
@@ -87,27 +94,34 @@ func (r *Reference) DialContext(ctx context.Context) (net.Conn, error) {
 			return nil, errors.Join(ErrUnbound, err)
 		}
 	}
+	if r.invalid.Load() {
+		_ = conn.Close()
+		return nil, ErrUnbound
+	}
 	return conn, nil
 }
 
 // Endpoint exposes the retained destination through a protected, bounded relay.
 // Closing the last authority closes and joins the relay before releasing it.
-func (r *Reference) Endpoint() (string, error) {
+func (r *Reference) Endpoint(network string) (string, error) {
 	r.endpointMu.Lock()
 	defer r.endpointMu.Unlock()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if r.file == nil || r.invalid.Load() {
+	if r.file == nil || r.invalid.Load() || network != "unix" && network != "unixgram" {
 		return "", ErrUnbound
 	}
-	if r.endpoint == nil {
+	if r.endpoints == nil {
+		r.endpoints = make(map[string]serviceEndpoint, 2)
+	}
+	if r.endpoints[network] == nil {
 		var err error
-		r.endpoint, err = newReferenceEndpoint(r)
+		r.endpoints[network], err = newReferenceEndpoint(r, network)
 		if err != nil {
 			return "", err
 		}
 	}
-	return r.endpoint.Path(), nil
+	return r.endpoints[network].Path(), nil
 }
 
 // Duplicate transfers an independently owned reference to an execution boundary.

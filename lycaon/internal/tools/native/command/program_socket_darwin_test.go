@@ -58,7 +58,7 @@ func TestProgramExternalSocketReferencesUseThePreparedLaunchDoor(t *testing.T) {
 	client := "external -- /usr/bin/curl -q --silent --show-error --max-time 5 --unix-socket "
 	for _, program := range []string{
 		client + strconv.Quote(reference) + " http://fixture.invalid/",
-		"SERVICE_SOCKET=" + strconv.Quote(reference) + " " + client + "\"$SERVICE_SOCKET\" http://fixture.invalid/",
+		"export SERVICE_SOCKET=" + strconv.Quote(reference) + "; " + client + "\"$SERVICE_SOCKET\" http://fixture.invalid/",
 	} {
 		out, err := f.CallArgs(t, t.Context(), socketProgramArgs(program, path))
 		testutil.FailErr(t, "run socket reference through command program", err)
@@ -130,12 +130,80 @@ func TestProgramSocketEndpointOutlivesTheForegroundCall(t *testing.T) {
 	defer cancel()
 	handle := f.registryHandle(t)
 	exit, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, handle)
-	if err != nil || !stopped || exit != 0 {
+	if err != nil || stopped || exit != 0 {
 		t.Fatalf("background socket operation exit=%d, stopped=%v, error=%v", exit, stopped, err)
 	}
 	snapshot, err := f.Background.Snapshot(ctx, f.Session, handle, 4096)
 	testutil.FailErr(t, "observe background socket operation", err)
 	if snapshot.Failure != nil || !strings.Contains(snapshot.Output, "fixture-response") || count.Load() != 1 {
 		t.Fatalf("background socket authority did not survive: snapshot=%+v, service requests=%d", snapshot, count.Load())
+	}
+}
+
+func TestProgramSocketDatagramFixture(t *testing.T) {
+	if os.Getenv("PW_SOCKET_DATAGRAM_FIXTURE") != "1" {
+		return
+	}
+	conn, err := net.DialUnix("unixgram", nil, &net.UnixAddr{Net: "unixgram", Name: os.Getenv("SERVICE_SOCKET")})
+	testutil.FailErr(t, "connect confined datagram fixture", err)
+	defer conn.Close()
+	for _, payload := range []string{"first", "", "last"} {
+		_, err := conn.Write([]byte(payload))
+		testutil.FailErr(t, "send confined datagram fixture message", err)
+	}
+	gate, err := os.Open(os.Getenv("PW_SOCKET_TEST_FIFO"))
+	testutil.FailErr(t, "open datagram completion gate", err)
+	defer gate.Close()
+	var done [1]byte
+	_, err = io.ReadFull(gate, done[:])
+	testutil.FailErr(t, "wait for service to observe fixture messages", err)
+}
+
+func TestProgramSocketDatagramsReachTheirRetainedService(t *testing.T) {
+	root, err := os.MkdirTemp("/tmp", "pw-program-dgram-") //nolint:usetesting // Unix socket addresses have a kernel byte limit.
+	testutil.FailErr(t, "create datagram launch fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), strings.Repeat("long-state-", 15)))
+	path := filepath.Join(root, "service")
+	service, err := net.ListenUnixgram("unixgram", &net.UnixAddr{Net: "unixgram", Name: path})
+	testutil.FailErr(t, "bind real datagram service", err)
+	defer service.Close()
+	testutil.FailErr(t, "bound datagram service fixture wait", service.SetDeadline(time.Now().Add(10*time.Second)))
+	f := newProgramFixture(t)
+	runtime := approvalstate.NewSocketCapabilityRuntime()
+	t.Cleanup(runtime.Close)
+	f.Runtime.Executor.Capabilities.SetSocketCapabilityRuntime(runtime)
+	f.Runtime.Executor.Capabilities.SetApprovalsDisabled(func(string) bool { return true })
+	fifo := filepath.Join(f.Dir, "datagram-completion")
+	testutil.FailErr(t, "create datagram completion gate", syscall.Mkfifo(fifo, 0600))
+	gate, err := os.OpenFile(fifo, os.O_RDWR|syscall.O_NONBLOCK, 0600)
+	testutil.FailErr(t, "hold datagram completion gate", err)
+	defer gate.Close()
+	finished := make(chan error, 1)
+	go func() {
+		defer func() { _, _ = gate.Write([]byte{1}) }()
+		for _, expected := range []string{"first", "", "last"} {
+			var data [32]byte
+			n, _, _, _, err := service.ReadMsgUnix(data[:], nil)
+			if err != nil {
+				finished <- err
+				return
+			}
+			if string(data[:n]) != expected {
+				finished <- fmt.Errorf("datagram changed: got=%q, want=%q", data[:n], expected)
+				return
+			}
+		}
+		finished <- nil
+	}()
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate datagram launch fixture", err)
+	reference := "{{paintedwolf-socket:unixgram:" + url.PathEscape(path) + "}}"
+	program := fmt.Sprintf("PW_SOCKET_DATAGRAM_FIXTURE=1 PW_SOCKET_TEST_FIFO=%s SERVICE_SOCKET=%s external -- %s -test.run=^TestProgramSocketDatagramFixture$", strconv.Quote(fifo), strconv.Quote(reference), strconv.Quote(self))
+	out, err := f.CallArgs(t, t.Context(), socketProgramArgs(program, path))
+	testutil.FailErr(t, "launch real confined datagram client", err)
+	testutil.FailErr(t, "observe all service datagrams", <-finished)
+	if result := decodeOutcome(t, out); result.Status != 0 {
+		t.Fatalf("bound datagram launch failed: %s", out)
 	}
 }

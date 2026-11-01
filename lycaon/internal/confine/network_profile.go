@@ -130,11 +130,14 @@ func writeSocketGrantRules(b *strings.Builder, c Confinement) {
 	}
 	b.WriteString("; exact AF_UNIX socket grants\n")
 	for _, g := range c.SocketGrants {
-		path := g.ResolvedPath
-		if endpoint := c.socketEndpoints[g.Binding.Key()]; endpoint != "" {
-			path = fspath.CanonicalPath(endpoint)
+		if len(c.socketEndpoints) == 0 {
+			b.WriteString("(allow network-outbound (literal " + sbplString(g.ResolvedPath) + "))\n")
+			continue
 		}
-		b.WriteString("(allow network-outbound (literal " + sbplString(path) + "))\n")
+		for _, network := range []string{"unix", "unixgram"} {
+			path := fspath.CanonicalPath(c.socketEndpoints[socketEndpointKey(g.Binding, network)])
+			b.WriteString("(allow network-outbound (literal " + sbplString(path) + "))\n")
+		}
 	}
 }
 

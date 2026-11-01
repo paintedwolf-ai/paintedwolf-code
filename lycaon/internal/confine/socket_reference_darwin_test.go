@@ -99,7 +99,7 @@ func TestShortSocketNamespaceIsProtectedWithoutAnySocketGrant(t *testing.T) {
 	owner, err := socketref.Capture(path)
 	testutil.FailErr(t, "capture protected address fixture", err)
 	defer owner.Close()
-	endpoint, err := owner.Endpoint()
+	endpoint, err := owner.Endpoint("unix")
 	testutil.FailErr(t, "create protected short address", err)
 	shortRoot := filepath.Dir(filepath.Dir(endpoint))
 	workspace := filepath.Join(root, "workspace")

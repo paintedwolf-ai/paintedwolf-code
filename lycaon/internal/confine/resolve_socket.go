@@ -155,7 +155,7 @@ func CaptureSocketGrant(ctx context.Context, g SocketGrant) (SocketGrant, error)
 func validateSocketRealization(grants []SocketGrant, mode socketref.Enforcement) error {
 	for _, grant := range grants {
 		if grant.Binding.Mode() != mode {
-			return &SocketResolveError{Code: SocketResolveRefused, Path: grant.ApprovedPath, Err: socketref.ErrUnbound}
+			return &SocketResolveError{Code: SocketResolveRefused, Path: grant.ApprovedPath, Err: fmt.Errorf("socket realization %q requires %q: %w", grant.Binding.Mode(), mode, socketref.ErrUnbound)}
 		}
 	}
 	return nil

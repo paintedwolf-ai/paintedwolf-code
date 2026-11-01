@@ -3,8 +3,10 @@
 package socketref
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,6 +19,8 @@ import (
 func Platform() Adapter { return Adapter{Command: RetainedObject, Native: RetainedObject} }
 
 func implicitBindingMode() Enforcement { return KernelPathname }
+
+func setUnixAddressLength(address *unix.RawSockaddrUnix, length uint32) { address.Len = uint8(length) }
 
 func shortReferencePrefix() string { return ".paintedwolf-socket-" + strconv.Itoa(os.Getuid()) + "-" }
 
@@ -99,7 +103,17 @@ func Open(path string) (*Reference, error) {
 	return &Reference{file: guard, path: resolved, address: filepath.Join(short, "socket"), release: release, verify: newPeerBinding()}, nil
 }
 
-func newReferenceEndpoint(r *Reference) (serviceEndpoint, error) {
+func newReferenceEndpoint(r *Reference, network string) (serviceEndpoint, error) {
+	if network == "unixgram" {
+		endpoint, err := startDatagramEndpoint(filepath.Join(filepath.Dir(r.address), "datagrams"), func(ctx context.Context, local string) (net.Conn, error) {
+			return r.dialContext(ctx, network, local)
+		})
+		if err != nil {
+			return nil, err
+		}
+		endpoint.remove = func() error { return unix.Unlinkat(int(r.file.Fd()), "datagrams", 0) }
+		return endpoint, nil
+	}
 	endpoint, err := startEndpoint(filepath.Join(filepath.Dir(r.address), "relay"), r.DialContext)
 	if err != nil {
 		return nil, err

@@ -180,13 +180,13 @@ func (b Binding) SameObject(other Binding) bool {
 }
 
 // Endpoint supplies a connection address without granting the original pathname.
-func (l *Lease) Endpoint() (string, error) {
+func (l *Lease) Endpoint(network string) (string, error) {
 	ref, release, err := l.operation()
 	if err != nil {
 		return "", err
 	}
 	defer release()
-	return ref.Endpoint()
+	return ref.Endpoint(network)
 }
 
 // DialContext holds an operation share until the kernel connect has finished.

@@ -75,21 +75,23 @@ func (l *ActionLease) bindSockets(c *Confinement) error {
 	if len(c.SocketGrants) == 0 {
 		return nil
 	}
-	endpoints := make(map[string]string, len(c.SocketGrants))
+	endpoints := make(map[string]string, 2*len(c.SocketGrants))
 	for _, grant := range c.SocketGrants {
 		owner, err := grant.Binding.Acquire()
 		if err != nil {
 			return &SocketResolveError{Code: SocketResolveChanged, Path: grant.ApprovedPath, Err: err}
 		}
 		l.socketOwners = append(l.socketOwners, owner)
-		path := grant.ResolvedPath
-		if runtime.GOOS == "darwin" {
-			path, err = owner.Endpoint()
-			if err != nil {
-				return &SocketResolveError{Code: SocketResolveRefused, Path: grant.ApprovedPath, Err: err}
+		for _, network := range []string{"unix", "unixgram"} {
+			path := grant.ResolvedPath
+			if runtime.GOOS == "darwin" {
+				path, err = owner.Endpoint(network)
+				if err != nil {
+					return &SocketResolveError{Code: SocketResolveRefused, Path: grant.ApprovedPath, Err: fmt.Errorf("prepare retained service endpoint: %w", err)}
+				}
 			}
+			endpoints[socketEndpointKey(grant.Binding, network)] = path
 		}
-		endpoints[grant.Binding.Key()] = path
 	}
 	c.socketEndpoints = endpoints
 	return nil
@@ -120,6 +122,10 @@ func (c *Confinement) SocketError() error {
 
 const socketReferencePrefix = "{{paintedwolf-socket:"
 
+func socketEndpointKey(binding socketref.Binding, network string) string {
+	return binding.Key() + "\x00" + network
+}
+
 // ResolveSocketArguments expands declared endpoint references after shell
 // evaluation and before the final argv/environment are captured for exec.
 // Ordinary path bytes never trigger rewriting.
@@ -131,7 +137,12 @@ func ResolveSocketArguments(c *Confinement, args, environment []string) ([]strin
 		if !strings.HasPrefix(value, socketReferencePrefix) || !strings.HasSuffix(value, "}}") {
 			return "", &SocketResolveError{Code: SocketResolveInvalid, Err: fmt.Errorf("a socket reference must occupy an entire argument or environment value")}
 		}
-		path, err := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(value, socketReferencePrefix), "}}"))
+		encoded := strings.TrimSuffix(strings.TrimPrefix(value, socketReferencePrefix), "}}")
+		network := "unix"
+		if rest, datagram := strings.CutPrefix(encoded, "unixgram:"); datagram {
+			network, encoded = "unixgram", rest
+		}
+		path, err := url.PathUnescape(encoded)
 		if err != nil || socketPathSyntaxReason(path) != "" {
 			return "", &SocketResolveError{Code: SocketResolveInvalid, Path: path, Err: err}
 		}
@@ -143,7 +154,7 @@ func ResolveSocketArguments(c *Confinement, args, environment []string) ([]strin
 				if err := c.SocketError(); err != nil {
 					return "", err
 				}
-				if endpoint := c.socketEndpoints[grant.Binding.Key()]; endpoint != "" {
+				if endpoint := c.socketEndpoints[socketEndpointKey(grant.Binding, network)]; endpoint != "" {
 					return endpoint, nil
 				}
 			}

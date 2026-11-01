@@ -470,8 +470,12 @@ environment or endpoint interface; unrelated file operands are preserved. A
 relay exposes the engine as the connecting client, so a service that requires a
 particular client PID or audit identity needs an appropriate native integration;
 the relay does not forge peer credentials. Stream bytes, half-closes and Unix
-file-descriptor messages are forwarded with bounded connection and message
-resources. Releasing the last authority cancels and joins forwarding before the
+file-descriptor messages are preserved. Datagram clients use the explicit
+`{{paintedwolf-socket:unixgram:/absolute/path}}` reference; message boundaries,
+empty messages, descriptor messages and reply associations are preserved. Each
+endpoint admits at most 16 stream connections or datagram associations. Descriptor
+custody is bounded across all relays, independently of the number of grants, and
+received descriptors become close-on-exec before another launch can inherit them. Releasing the last authority cancels and joins forwarding before the
 retained object and its address aliases are removed.
 
 Saved socket grants authorize declared use on each invocation. An invocation receives only the exact sockets it requests through its host-resource or socket capability; unrelated commands inherit none. Approval accounting subtracts each authorized member of the applied socket set, so two covered sockets do not produce a spurious unobserved-channel ask. A grant cannot cover a changed socket identity or an unrelated detection match on either platform.

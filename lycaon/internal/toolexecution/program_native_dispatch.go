@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -74,6 +75,8 @@ type NativeEffect struct {
 //
 //nolint:funlen // Linear reached-effect admission, review, and receipt settlement pipeline.
 func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
+	ctx, socketScope := socketref.WithScope(ctx)
+	defer socketScope.Close()
 	end, err := frame.beginUse()
 	if err != nil {
 		return result, err

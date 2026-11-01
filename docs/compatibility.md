@@ -372,6 +372,8 @@ reviewed live socket binding. Expansion occurs after command-language evaluation
 and before the final exec vectors are captured. Ordinary path operands, embedded
 source, executable selection and environment keys are never rewritten. Native
 socket arguments retain their ordinary path shape and their host-mediated dial.
+The `unixgram:` reference selector preserves Unix datagram message boundaries
+and uses the same reviewed socket object; the default selector is a stream.
 No database or wire fields change, and ephemeral endpoints are not backup data.
 
 Native exact Unix-socket requests on a platform reporting no retained-object realization are refused with the existing structured socket-path refusal and an approved service-endpoint recovery route. This is the Windows socket contract and changes the previous native pathname-dial behavior. Existing saved socket intent and credential/token data remain; there is no pathname fallback, implicit rebinding or new durable wire shape. The unavailable realization and recovery are structured refusal facts rather than inferred error prose.

@@ -78,7 +78,7 @@ func TestRetainedSocketAcrossActualMountedVolumes(t *testing.T) {
 	if retained.Dev != mounted.Dev {
 		t.Fatalf("service object was not retained on its own filesystem: service=%d, retained=%d", mounted.Dev, retained.Dev)
 	}
-	endpoint, err := owner.Endpoint()
+	endpoint, err := owner.Endpoint("unix")
 	testutil.FailErr(t, "bind separate-volume service endpoint", err)
 	client := endpointClient(t, endpoint)
 	response, err := bufio.NewReader(client).ReadString('\n')

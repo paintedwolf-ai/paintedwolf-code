@@ -12,7 +12,7 @@ func ControlPlanePathPattern() string { return "" }
 
 func Open(string) (*Reference, error) { return nil, ErrUnsupported }
 
-func newReferenceEndpoint(*Reference) (serviceEndpoint, error) { return nil, ErrUnsupported }
+func newReferenceEndpoint(*Reference, string) (serviceEndpoint, error) { return nil, ErrUnsupported }
 
 func descriptorPath(*os.File) string { return "" }
 

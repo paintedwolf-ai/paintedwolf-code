@@ -14,9 +14,11 @@ func Platform() Adapter { return Adapter{Command: RetainedObject, Native: Retain
 
 func implicitBindingMode() Enforcement { return RetainedObject }
 
+func setUnixAddressLength(*unix.RawSockaddrUnix, uint32) {}
+
 func ControlPlanePathPattern() string { return "" }
 
-func newReferenceEndpoint(*Reference) (serviceEndpoint, error) { return nil, ErrUnsupported }
+func newReferenceEndpoint(*Reference, string) (serviceEndpoint, error) { return nil, ErrUnsupported }
 
 // Open captures the socket object before its grant is offered for approval.
 // O_PATH retains the final object even if any original name is later replaced.

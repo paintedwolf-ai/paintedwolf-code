@@ -310,7 +310,7 @@ func renderSeatbeltProfile(c Confinement) (string, error) {
 			return "", err
 		}
 		for _, grant := range c.SocketGrants {
-			if c.socketEndpoints[grant.Binding.Key()] == "" {
+			if c.socketEndpoints[socketEndpointKey(grant.Binding, "unix")] == "" || c.socketEndpoints[socketEndpointKey(grant.Binding, "unixgram")] == "" {
 				return "", &SocketResolveError{Code: SocketResolveChanged, Path: grant.ApprovedPath, Err: socketref.ErrUnbound}
 			}
 		}

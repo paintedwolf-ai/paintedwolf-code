@@ -87,7 +87,7 @@ func TestRetainedEndpointCannotFollowPathReplacement(t *testing.T) {
 	defer owner.Close()
 	testutil.FailErr(t, "rename original service", os.Rename(path, filepath.Join(root, "original")))
 	testutil.FailErr(t, "replace original service name", os.Rename(decoy, path))
-	endpoint, err := owner.Endpoint()
+	endpoint, err := owner.Endpoint("unix")
 	testutil.FailErr(t, "bind retained service endpoint", err)
 	conn := endpointClient(t, endpoint)
 	response := bufio.NewReader(conn)
@@ -126,7 +126,7 @@ func TestRetainedEndpointHandlesLongStatePaths(t *testing.T) {
 	owner, err := Capture(path)
 	testutil.FailErr(t, "capture service with long state path", err)
 	defer owner.Close()
-	endpoint, err := owner.Endpoint()
+	endpoint, err := owner.Endpoint("unix")
 	testutil.FailErr(t, "create short service address", err)
 	if len(endpoint) >= 104 {
 		t.Fatalf("service address exceeds kernel bound: %d", len(endpoint))

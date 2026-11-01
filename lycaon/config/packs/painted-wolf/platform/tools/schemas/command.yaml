@@ -20,7 +20,7 @@ schema:
       description: Extra access this call needs.
       properties:
         host_resources: {type: array, minItems: 1, maxItems: 16, description: Service IDs., items: {type: string}}
-        socket_paths: {type: array, minItems: 1, maxItems: 8, items: {type: string}, description: "Exact service path. External argv or env values use a whole `{{paintedwolf-socket:/absolute/path}}` reference; native socket arguments use the path."}
+        socket_paths: {type: array, minItems: 1, maxItems: 8, items: {type: string}, description: "Exact service path. External argv or env values use a whole `{{paintedwolf-socket:/absolute/path}} (or {{paintedwolf-socket:unixgram:/absolute/path}} for datagrams)` reference; native socket arguments use the path."}
         process_control: {description: Process access., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
         credential_store: {type: boolean, enum: [true], description: Read-only access to the OS credential store.}
         host_execution: {description: Unsandboxed., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}

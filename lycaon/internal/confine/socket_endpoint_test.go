@@ -28,7 +28,7 @@ func TestSocketReferencesDoNotRewriteOrdinaryArgumentsOrEnvironment(t *testing.T
 	testutil.FailErr(t, "capture explicit socket reference", err)
 	defer owner.Close()
 	grant := SocketGrant{ApprovedPath: path, ResolvedPath: path, Binding: owner.Binding()}
-	boundary := &Confinement{SocketGrants: []SocketGrant{grant}, socketEndpoints: map[string]string{grant.Binding.Key(): "/bound/endpoint"}}
+	boundary := &Confinement{SocketGrants: []SocketGrant{grant}, socketEndpoints: map[string]string{socketEndpointKey(grant.Binding, "unix"): "/bound/endpoint", socketEndpointKey(grant.Binding, "unixgram"): "/bound/datagrams"}}
 	reference := socketReferencePrefix + url.PathEscape(path) + "}}"
 	args := []string{"/bin/rm", path, reference, "--socket=" + path}
 	env := []string{"PATH=/usr/bin:/bin", "ORIGINAL=" + path, "SERVICE=" + reference}

@@ -122,7 +122,7 @@ schema:
             type: string
           description: >-
             Exact AF_UNIX service paths. For an external program, use a whole
-            `{{paintedwolf-socket:/absolute/path}}` reference as an argv or
+            `{{paintedwolf-socket:/absolute/path}} (or {{paintedwolf-socket:unixgram:/absolute/path}} for datagrams)` reference as an argv or
             environment value. Inside code or configuration, read that environment
             variable. Native socket arguments take the ordinary path.
         process_control:

@@ -117,11 +117,9 @@ func TestEndpointPreservesHalfCloseAndResponse(t *testing.T) {
 func receiveEndpointFD(conn *net.UnixConn) (int, error) {
 	var data [1]byte
 	control := make([]byte, unix.CmsgSpace(4))
-	n, _, fds, err := readUnixMessage(conn, data[:], control)
+	n, _, fds, _, err := endpointDescriptors.read(conn, data[:], control)
 	if err != nil || n != 1 || len(fds) != 1 {
-		for _, fd := range fds {
-			_ = unix.Close(fd)
-		}
+		endpointDescriptors.release(fds)
 		return -1, io.ErrUnexpectedEOF
 	}
 	return fds[0], nil
@@ -156,7 +154,7 @@ func TestEndpointPreservesDescriptorCustodyInBothDirections(t *testing.T) {
 			finished <- err
 			return
 		}
-		defer unix.Close(fd)
+		defer endpointDescriptors.release([]int{fd})
 		finished <- writeUnixMessage(conn, []byte("r"), unix.UnixRights(fd))
 	}()
 	testutil.FailErr(t, "send descriptor through endpoint", writeUnixMessage(client, []byte("s"), unix.UnixRights(int(writer.Fd()))))
@@ -169,7 +167,7 @@ func TestEndpointPreservesDescriptorCustodyInBothDirections(t *testing.T) {
 	}
 	_, err = unix.Write(returned, []byte("round trip"))
 	testutil.FailErr(t, "write through returned descriptor", err)
-	testutil.FailErr(t, "release returned descriptor", unix.Close(returned))
+	endpointDescriptors.release([]int{returned})
 	testutil.FailErr(t, "release original descriptor", writer.Close())
 	testutil.FailErr(t, "finish descriptor service", <-finished)
 	testutil.FailErr(t, "finish descriptor request", client.Close())
