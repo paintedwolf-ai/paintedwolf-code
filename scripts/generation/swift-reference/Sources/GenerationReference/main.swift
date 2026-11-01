@@ -10,10 +10,11 @@ struct Specification: Decodable {
     let trials: Int
     let ple: String
     let prefill_chunk: Int
+    let kv_bits: Int
 }
 
 func measure(_ model: Gemma4TextModel, _ spec: Specification) throws -> [String: Any] {
-    let cache = try model.newCache(parameters: nil)
+    let cache = try referenceCache(model, bits: spec.kv_bits)
     Memory.peakMemory = 0
     var before = rusage()
     getrusage(RUSAGE_SELF, &before)
@@ -49,6 +50,7 @@ func measure(_ model: Gemma4TextModel, _ spec: Specification) throws -> [String:
     var after = rusage()
     getrusage(RUSAGE_SELF, &after)
     return ["prefill_step_max_seconds": prefillStepMax, "decode_step_max_seconds": decodeStepMax,
+            "kv_bits": spec.kv_bits, "cache_payload_bytes": cache.flatMap { $0.state }.reduce(0) { $0 + $1.nbytes },
             "prefill_seconds": prefill, "decode_seconds": decoding,
             "prompt_tps": Double(prompt.count) / prefill,
             "generation_tps": Double(spec.generation_tokens) / decoding,

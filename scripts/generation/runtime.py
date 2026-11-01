@@ -182,7 +182,7 @@ def bench(args):
             raise ValueError("rendered prompt exceeds its bounds")
         shutil.copyfile(args.messages, destination / "messages.json")
     specification = {"prompt_tokens": prompt, "generation_tokens": args.tokens,
-                     "trials": args.trials, "ple": args.ple, "prefill_chunk": args.prefill_chunk}
+                     "trials": args.trials, "ple": args.ple, "prefill_chunk": args.prefill_chunk, "kv_bits": args.kv_bits}
     input_path = destination / "input.json"
     input_path.write_text(json.dumps(specification) + "\n")
     build_receipt = None
@@ -235,9 +235,12 @@ def main():
     parser.add_argument("--prompt", type=int, default=512)
     parser.add_argument("--tokens", type=int, default=128)
     parser.add_argument("--prefill-chunk", type=int, default=256)
+    parser.add_argument("--kv-bits", type=int, choices=[8, 16], default=16)
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--ple", choices=["resident", "mapped"], default="mapped")
     args = parser.parse_args()
+    if args.kv_bits != 16 and args.backend != "reference-swift":
+        parser.error("quantized global KV is currently measured only by the native MLX candidate")
     if not 1 <= args.prefill_chunk <= 256 or not 1 <= args.prompt or not 1 <= args.tokens <= 4096 or args.prompt + args.tokens > 65536 or not 1 <= args.trials <= 20:
         parser.error("benchmark dimensions exceed their bounds")
     {"prepare": prepare, "build": build, "test": test, "bench": bench}[args.action](args)
