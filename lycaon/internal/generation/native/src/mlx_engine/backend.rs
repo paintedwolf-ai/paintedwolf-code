@@ -3,7 +3,7 @@ use crate::{
     error::{Error, Result},
     execution::{Backend, Sampling},
 };
-use mlx_rs::{memory, ops::indexing::*, Dtype};
+use mlx_rs::{Dtype, memory, ops::indexing::*};
 use std::path::Path;
 
 fn device_error(error: impl std::fmt::Display) -> Error {
@@ -28,7 +28,7 @@ impl Mlx {
         memory::reset_peak_memory().map_err(device_error)?;
         let engine = Self {
             model: Model::load(directory).map_err(device_error)?,
-            cache: Cache::default(),
+            cache: Cache::new(context).map_err(device_error)?,
             prefix: None,
             budget,
             idle_budget,
@@ -147,7 +147,7 @@ impl Backend for Mlx {
     }
 
     fn reset(&mut self) -> Result<()> {
-        self.cache = Cache::default();
+        self.cache.clear();
         self.quiescent()
     }
 

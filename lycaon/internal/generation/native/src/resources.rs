@@ -29,7 +29,7 @@ impl Plan {
         {
             return Err(Error::Capacity("invalid E4B resource dimensions".into()));
         }
-        let prefix = 4096.min(context - 1) as u64;
+        let prefix = (context - 1) as u64;
         let context = (context as u64).div_ceil(256) * 256;
         let prefix = prefix.div_ceil(256) * 256;
         // Four global and twenty sliding KV sources; keys and values use F16.
@@ -41,18 +41,11 @@ impl Plan {
         };
         let sliding = sliding_tokens * 20 * 2 * 2 * 256 * 2;
         let kv_capacity_bytes = global + sliding;
-        // MLX can overlap old and replacement global buffers during growth.
-        let growth = if unified {
-            context * 4 * 2 * 2 * 512 * 2
-        } else {
-            0
-        };
-        let workspace_floor = if unified {
+        let workspace_bytes = if unified {
             (384 << 20).max(chunk as u64 * (3 << 20))
         } else {
             768 << 20
         };
-        let workspace_bytes = workspace_floor + growth;
         let allocator_cache_bytes = if unified { 128 << 20 } else { 0 };
         let device_reservation_bytes =
             weights + kv_capacity_bytes + workspace_bytes + allocator_cache_bytes;
@@ -74,11 +67,11 @@ impl Plan {
 mod tests {
     use super::*;
     #[test]
-    fn mlx_workspace_scales_with_chunk_and_retains_growth_overlap() {
+    fn mlx_workspace_scales_with_chunk_without_cache_growth() {
         let small = Plan::e4b(2787934208, 2290089984, 8192, 128, true).unwrap();
         let large = Plan::e4b(2787934208, 2290089984, 8192, 256, true).unwrap();
-        assert_eq!(small.workspace_bytes, 512 << 20);
-        assert_eq!(large.workspace_bytes, 896 << 20);
+        assert_eq!(small.workspace_bytes, 384 << 20);
+        assert_eq!(large.workspace_bytes, 768 << 20);
         assert_eq!(small.host_reservation_bytes, 512 << 20);
         assert!(
             small.device_reservation_bytes + small.host_reservation_bytes + (2 << 30) < 6 << 30
@@ -89,7 +82,7 @@ mod tests {
 
     #[test]
     fn vulkan_sliding_capacity_includes_padded_active_and_retained_windows() {
-        let global = (8192 + 4096) * 4 * 2 * 2 * 512 * 2;
+        let global = (8192 + 8192) * 4 * 2 * 2 * 512 * 2;
         for chunk in [1, 16, 128, 256] {
             let plan = Plan::e4b(3 << 30, 2 << 30, 8192, chunk, false).unwrap();
             assert_eq!(plan.kv_capacity_bytes - global, 1280 * 20 * 2 * 2 * 256 * 2);
@@ -97,16 +90,16 @@ mod tests {
     }
 
     #[test]
-    fn accounts_for_prefix_and_growth_without_charging_the_entire_mapping() {
+    fn accounts_for_full_prefix_without_charging_the_entire_mapping() {
         let linux = Plan::e4b(3 << 30, 2 << 30, 65536, 256, false).unwrap();
         let mac = Plan::e4b(3 << 30, 2 << 30, 65536, 256, true).unwrap();
         assert_eq!(mac.kv_capacity_bytes - linux.kv_capacity_bytes, 10 << 20);
         assert_eq!(
             mac.device_reservation_bytes - linux.device_reservation_bytes,
-            (1 << 30) + (128 << 20) + (10 << 20)
+            (128 << 20) + (10 << 20)
         );
         assert!(linux.host_reservation_bytes < linux.mapped_ple_bytes);
-        assert!(linux.device_reservation_bytes < 5 << 30);
+        assert!(linux.device_reservation_bytes < 6 << 30);
         for (context, chunk) in [(0, 1), (65537, 1), (2, 0), (2, 257)] {
             assert!(Plan::e4b(3 << 30, 2 << 30, context, chunk, false).is_err());
         }
