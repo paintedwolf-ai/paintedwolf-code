@@ -3,6 +3,7 @@
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -17,17 +18,20 @@ def file_digest(path):
 
 
 def source_identity(backend):
-    if backend == "reference-rust":
+    if backend in {"reference-rust", "native"}:
         native = ROOT.parents[1] / "lycaon/internal/generation/native"
-        paths = sorted(native.glob("src/**/*.rs")) + [native / "Cargo.toml", native / "Cargo.lock"]
+        paths = sorted(native.glob("src/**/*.rs")) + sorted(native.glob("vulkan/*")) + [native / "Cargo.toml", native / "Cargo.lock", native / "build.rs"]
         sources = {str(path.relative_to(native)): file_digest(path) for path in paths}
         sources["mlx_pin"] = file_digest(ROOT.parents[1] / "third_party/mlx/pin.json")
         vendor = ROOT.parents[1] / "lycaon/internal/decide/native/vendor/mlx-sys"
         for path in sorted(vendor.rglob("*")):
-            if path.is_file() and (path.suffix == ".rs" or path.name == "Cargo.toml"):
+            if path.is_file() and (path.suffix in {".rs", ".c", ".cpp", ".h", ".hpp", ".cmake"} or path.name in {"Cargo.toml", "CMakeLists.txt"}):
                 sources["mlx-sys/" + str(path.relative_to(vendor))] = file_digest(path)
         sources["mlx-offline.cmake"] = file_digest(ROOT.parent / "toolchain/mlx-offline.cmake")
         sources["runtime.py"] = file_digest(ROOT / "runtime.py")
+        sources["provenance.py"] = file_digest(ROOT / "provenance.py")
+        sources["sources.json"] = file_digest(ROOT / "sources.json")
+        sources["llama-reference/CMakeLists.txt"] = file_digest(ROOT / "llama-reference/CMakeLists.txt")
         return hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()
     directory = ROOT / ("swift-reference" if backend == "reference-swift" else "llama-reference")
     paths = sorted(p for p in directory.rglob("*") if p.is_file() and (
@@ -45,25 +49,30 @@ def swift_identity():
 
 def build_identity(backend, directory, binary):
     identity = {"source_identity": source_identity(backend), "binary_sha256": file_digest(binary)}
-    if backend in {"reference-swift", "reference-rust"}:
+    if backend == "reference-swift":
         identity["metallib_sha256"] = file_digest(directory / "metal/mlx.metallib")
-        if backend == "reference-swift":
-            identity["toolchain"] = swift_identity()
-        else:
-            identity["toolchain"] = {name: subprocess.check_output([name, "--version"], text=True).strip()
-                                     for name in ("rustc", "cargo")}
+        identity["toolchain"] = swift_identity()
+    if backend in {"reference-rust", "native"}:
+        identity["toolchain"] = {name: subprocess.check_output([name, "--version"], text=True).strip()
+                                 for name in ("rustc", "cargo")}
+        if sys.platform == "darwin":
+            identity["metallib_sha256"] = file_digest(directory / "metal/mlx.metallib")
             identity["sdk"] = {name: subprocess.check_output(["xcrun", "--sdk", "macosx", flag], text=True).strip()
                                for name, flag in (("version", "--show-sdk-version"), ("path", "--show-sdk-path"))}
+        if backend == "native" and sys.platform == "linux":
+            identity["adapter_sha256"] = file_digest(binary.parent / "libnativegen_vulkan.so")
     return identity
 
 
 def record_build(backend, directory, binary):
     receipt = build_identity(backend, directory, binary)
-    (directory / "reference-build.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    receipts = directory / "build-receipts"
+    receipts.mkdir(exist_ok=True)
+    (receipts / (backend + ".json")).write_text(json.dumps(receipt, indent=2) + "\n")
 
 
 def verified_build(backend, directory, binary):
-    receipt = json.loads((directory / "reference-build.json").read_text())
+    receipt = json.loads((directory / "build-receipts" / (backend + ".json")).read_text())
     if receipt != build_identity(backend, directory, binary):
-        raise ValueError("reference executable differs from its build sources; rebuild before measuring")
+        raise ValueError("runtime executable differs from its build sources; rebuild before measuring")
     return receipt

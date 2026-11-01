@@ -1,6 +1,7 @@
 pub mod constraints;
 pub mod error;
 pub mod execution;
+pub mod inventory;
 pub mod protocol;
 pub mod rendering;
 pub mod rendering_stream;

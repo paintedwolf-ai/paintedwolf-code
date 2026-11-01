@@ -171,6 +171,7 @@ def build(args):
         if sys.platform == "linux":
             shutil.copyfile(Path(environment["PW_GENERATION_VULKAN_LIB_DIR"]) / "libnativegen_vulkan.so",
                             output / "release/libnativegen_vulkan.so")
+        record_build(args.backend, output, output / "release/nativegen")
     else:
         raise ValueError("the Python reference is prepared rather than compiled")
 
