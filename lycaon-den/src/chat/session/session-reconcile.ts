@@ -2,6 +2,7 @@ import type { RecentSession } from "../../../shared/app-state-types.ts";
 import type { Project } from "../../api/types.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import { refreshBoard } from "../actions/board-actions.ts";
+import { rememberSessionChatFromStore } from "./session-chat-cache.ts";
 import { applySessionTranscriptSnapshot } from "./session-transcript-hydrate.ts";
 import { isScanNotFoundError, isSessionNotFoundError } from "./session-not-found.ts";
 import type { SessionScope } from "./session-scope.ts";
@@ -171,6 +172,7 @@ export async function reconcileActiveScope(
     if (resumeVisible && hydrationLockAllows(appStore, sessionId)) {
       completeChatHydrationAndReplay(appStore);
     }
+    rememberSessionChatFromStore(appStore);
     void refreshBoard(appStore, client, projectDir, projects, sessionId, {
       includeGit: true,
     }).catch(() => undefined);
