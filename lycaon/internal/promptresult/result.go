@@ -6,7 +6,8 @@ type Outcome string
 
 const (
 	// OutcomeCompleted is the default normal turn outcome.
-	OutcomeCompleted Outcome = ""
+	OutcomeCompleted       Outcome = ""
+	OutcomeCloseoutBlocked Outcome = "closeout_blocked"
 	// OutcomeOutputTruncated marks a turn that ended cleanly after a recovery
 	// attempt also stopped on an output token limit with no usable content.
 	OutcomeOutputTruncated Outcome = "output_truncated"
@@ -28,13 +29,23 @@ type OutputTruncatedOutcome struct {
 	Notice              string `json:"notice,omitempty"`
 }
 
+// CloseoutBlocked records why a turn stopped at a gated closeout while the
+// workflow remains resumable at the named phase.
+type CloseoutBlocked struct {
+	Code           string   `json:"code"`
+	Phase          string   `json:"phase,omitempty"`
+	OpenGateLeaves []string `json:"open_gate_leaves,omitempty"`
+	Notice         string   `json:"notice,omitempty"`
+}
+
 // Result identifies the assistant message a prompt turn produced.
 type Result struct {
-	MessageID string  `json:"message_id,omitempty"`
+	MessageID string
 	Outcome   Outcome `json:"outcome,omitempty"`
 	// OutputTruncated describes the output-limit termination when Outcome is
 	// OutcomeOutputTruncated.
 	OutputTruncated *OutputTruncatedOutcome `json:"output_truncated,omitempty"`
+	CloseoutBlocked *CloseoutBlocked        `json:"closeout_blocked,omitempty"`
 	// OfferedTools are the tools the final model request could call. They are
 	// not persisted: a replayed or recovered result carries none.
 	OfferedTools []string `json:"-"`
@@ -46,4 +57,9 @@ func (r *Result) OfferedToolNames() []string {
 		return nil
 	}
 	return r.OfferedTools
+}
+
+// IsCloseoutBlocked reports whether the turn settled as closeout_blocked.
+func (r *Result) IsCloseoutBlocked() bool {
+	return r != nil && r.Outcome == OutcomeCloseoutBlocked
 }

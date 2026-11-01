@@ -271,11 +271,22 @@ func (m *Service) executePromptRun(
 
 	_ = m.History.ScheduleChunks(ctx, sess)
 	m.Status.PublishAssistant(ctx, sessionID, result.LastAssistantContent)
-	execution.Response = &promptresult.Result{
-		MessageID:       result.LastAssistantID,
-		Outcome:         result.Outcome,
-		OutputTruncated: result.OutputTruncated,
-		OfferedTools:    result.OfferedTools,
-	}
+	execution.Response = m.recordPromptOutcome(ctx, sessionID, result)
 	return execution, nil
+}
+
+func (m *Service) recordPromptOutcome(ctx context.Context, sessionID string, result *promptloop.PromptRunResult) *promptresult.Result {
+	if result.IsCloseoutBlocked() {
+		m.Settlement.NoteCloseoutBlocked(sessionID, result.CloseoutBlocked)
+		if m.Guidance != nil {
+			m.Guidance.Emit(ctx, sessionID, anchor.GateBlocked, anchor.Envelope{})
+		}
+	}
+	return &promptresult.Result{
+		MessageID:       result.LastAssistantID,
+		OfferedTools:    result.OfferedTools,
+		Outcome:         result.Outcome,
+		CloseoutBlocked: result.CloseoutBlocked,
+		OutputTruncated: result.OutputTruncated,
+	}
 }

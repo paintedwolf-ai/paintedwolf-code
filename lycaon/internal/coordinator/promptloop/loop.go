@@ -43,14 +43,11 @@ type PromptLoopDeps struct {
 }
 
 type PromptRunInput struct {
-	SessionID  string
-	TurnID     string
-	AttemptID  string
-	Session    *api.Session
-	History    []api.Message
-	ProfileID  string
-	UserPrompt string
-	HostTurn   bool
+	SessionID, TurnID, AttemptID string
+	Session                      *api.Session
+	History                      []api.Message
+	ProfileID, UserPrompt        string
+	HostTurn                     bool
 	// HostSignalID names the host kick a host turn delivers.
 	HostSignalID string
 	// ProseFinish is a forced closeout for the whole run.
@@ -71,6 +68,7 @@ type PromptRunResult struct {
 	TasksDispatchedCount int
 	Outcome              promptresult.Outcome
 	OutputTruncated      *promptresult.OutputTruncatedOutcome
+	CloseoutBlocked      *promptresult.CloseoutBlocked
 }
 
 type promptLoopSetup struct {
@@ -97,7 +95,7 @@ func (l *PromptLoop) Run(ctx context.Context, in PromptRunInput) (*PromptRunResu
 		result, err = l.runPreparedPromptLoop(ctx, in, setup)
 	}
 	if err != nil {
-		return nil, err
+		return l.Closeout.settleCloseoutBlocked(ctx, in, setup, err)
 	}
 	if err := l.Closeout.capturePromptRunCloseout(ctx, setup.state, result); err != nil {
 		return nil, err
