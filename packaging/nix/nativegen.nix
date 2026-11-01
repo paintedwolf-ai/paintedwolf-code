@@ -8,7 +8,7 @@ let
   llama = stdenv.mkDerivation {
     pname = "painted-wolf-generation-llama-source";
     version = pin.revision;
-    src = fetchurl { inherit (pin) url sha256; };
+    src = fetchurl { name = "llama-${pin.revision}.tar.gz"; inherit (pin) url sha256; };
     meta.license = lib.licenses.mit;
     dontConfigure = true;
     dontBuild = true;
