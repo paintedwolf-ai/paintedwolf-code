@@ -366,8 +366,10 @@ func TestReadinessAndRepairStates(t *testing.T) {
 		t.Fatalf("ready status: %+v", st)
 	}
 
-	// Corrupt the backing artifact on disk to verify repair detection.
 	artPath := filepath.Join(s.root, s.artifactRel(a.Digest))
+	if err := os.Chmod(artPath, 0o600); err != nil {
+		t.Fatalf("make corruption fixture writable: %v", err)
+	}
 	if err := os.WriteFile(artPath, []byte("corrupted"), 0o644); err != nil {
 		t.Fatalf("corrupt artifact: %v", err)
 	}
