@@ -175,6 +175,8 @@ const (
 	DiscoveryLiteLLM             DiscoveryStrategy = "litellm"
 	DiscoveryBedrock             DiscoveryStrategy = "bedrock"
 	DiscoveryVertex              DiscoveryStrategy = "vertex"
+	// DiscoveryNativeGeneration reads the admitted host runtime.
+	DiscoveryNativeGeneration DiscoveryStrategy = "native_generation"
 	// DiscoveryNone disables live discovery.
 	DiscoveryNone DiscoveryStrategy = "none"
 )

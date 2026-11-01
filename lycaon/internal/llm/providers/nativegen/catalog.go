@@ -66,3 +66,22 @@ func outputLimit(req modelcall.CompletionRequest) int {
 	}
 	return limit
 }
+
+// DiscoverModels publishes only a successfully admitted model.
+func (p *Runtime) DiscoverModels(ctx context.Context) ([]modelinfo.Entry, error) {
+	if p == nil {
+		return nil, errors.New("native generation: host runtime is unavailable")
+	}
+	ctx, release, err := p.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	if err := p.ensureLoaded(ctx, DefaultModelID); err != nil {
+		return nil, err
+	}
+	entry := DefaultModelEntry()
+	entry.ContextLength = p.ContextWindow()
+	entry.ContextLengthSource = "native-runtime"
+	return []modelinfo.Entry{entry}, nil
+}
