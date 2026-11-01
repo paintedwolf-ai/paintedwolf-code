@@ -7,11 +7,18 @@ import (
 )
 
 // PublishInvocationRecovery binds remedies to actual tool identity and arguments.
-func PublishInvocationRecovery(facts map[string]any, tool string, args map[string]any) {
+func PublishInvocationRecovery(facts map[string]any, tool string, args map[string]any, snapshot *toolcontract.ToolCapabilitySnapshot) {
 	schemaTool, _ := facts["paintedwolf.argument_schema_tool"].(string)
 	facts["paintedwolf.argument_schema_matches_tool"] = schemaTool != "" && schemaTool == tool
 	contract, known := toolcontract.Lookup(tool)
+	if snapshot != nil {
+		contract = toolcontract.Contract{Capabilities: snapshot.Capabilities}
+		known = snapshot.Tool == tool
+	}
 	fields := contract.CapabilityRequestFields()
+	if !known {
+		fields = nil
+	}
 	facts["paintedwolf.capability_contract_known"] = known
 	facts["paintedwolf.capability_request_fields"] = append([]string{}, fields...)
 	request, _ := args["capability_request"].(map[string]any)

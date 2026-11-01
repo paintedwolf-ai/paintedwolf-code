@@ -72,7 +72,7 @@ func TestCommandCatalogRefusalsHaveShellVoice(t *testing.T) {
 	}
 	for code, word := range map[string]string{
 		"SANDBOX_LOOPBACK_CONNECT_DENIED": "declined",
-		"COMMAND_NATIVE_FORM_UNSUPPORTED": "run this form",
+		"COMMAND_NATIVE_FORM_UNSUPPORTED": "cannot execute this form",
 		"GREP_MATCH_BUDGET":               "limit",
 	} {
 		var stderr bytes.Buffer

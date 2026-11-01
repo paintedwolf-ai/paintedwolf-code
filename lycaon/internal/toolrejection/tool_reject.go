@@ -3,11 +3,14 @@ package toolrejection
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,7 +24,8 @@ const (
 
 // ToolReject carries a structured tool-failure observation.
 type ToolReject struct {
-	ArgumentValidation bool `json:"-"`
+	CapabilityContract *toolcontract.ToolCapabilitySnapshot `json:"-"`
+	ArgumentValidation bool                                 `json:"-"`
 	Code               string
 	Observation        string // snake_case observation token (≠ Decision hint id)
 	Data               map[string]any
@@ -168,7 +172,15 @@ func RenderRejectBlock(
 	formatter *guidance.StaticRejectFormatter,
 ) error {
 	if formatter != nil {
-		if formatted, err := formatter.Format(code, data); err == nil {
+		renderData := data
+		if cause != nil && cause.CapabilityContract != nil {
+			renderData = maps.Clone(data)
+			if renderData == nil {
+				renderData = map[string]any{}
+			}
+			renderData[oarcopy.CapabilitySnapshotKey] = *cause.CapabilityContract
+		}
+		if formatted, err := formatter.Format(code, renderData); err == nil {
 			return guidance.NewRefusal(code, formatted).WithDetails(data, nil).WithCause(cause)
 		}
 	}
