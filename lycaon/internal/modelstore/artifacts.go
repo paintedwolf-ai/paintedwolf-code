@@ -51,6 +51,10 @@ func (s *Store) Stage(r io.Reader, want Artifact) error {
 		tmp.Close()
 		return fmt.Errorf("modelstore: digest mismatch: got %s want %s", got, want.Digest)
 	}
+	if err := tmp.Chmod(0o400); err != nil {
+		tmp.Close()
+		return fmt.Errorf("modelstore: seal payload: %w", err)
+	}
 	if err := fssync.File(tmp); err != nil {
 		tmp.Close()
 		return fmt.Errorf("modelstore: sync: %w", err)
