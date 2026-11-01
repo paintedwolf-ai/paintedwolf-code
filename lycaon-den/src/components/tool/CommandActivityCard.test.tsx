@@ -33,8 +33,12 @@ describe("compact command activity details", () => {
   expect(view.container.querySelector("pre")).toBeNull();
   expect(view.container.querySelectorAll("details")).toHaveLength(0);
   await waitFor(() => expect(view.container.textContent).toContain("Execution receipts and diagnostics"));
+  const status = view.container.querySelector('[role="status"]');
+  expect(status?.hasAttribute("hidden")).toBe(true);
   fireEvent.click(view.getByRole("button", { name: "Copy command" }));
   await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith(source));
+  await waitFor(() => expect(view.getByRole("status").textContent).toBe("Copied"));
+  expect(view.getByRole("status")).toBe(status);
  });
  it("keeps long source and output behind Files links", async () => {
   const value = part(); value.commandActivity!.calls[0]!.args = { command: "x".repeat(20000) };
