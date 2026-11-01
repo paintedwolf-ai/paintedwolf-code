@@ -1,17 +1,12 @@
 id: coordinator
 description: Coordinator tool surface — orchestration without product repo writes
+command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   recall: sticky
-  read: sticky
-  write: sticky
   edit: sticky
   replace_lines: sticky
-  grep: sticky
-  find: sticky
   summarize: sticky
   survey_repo: sticky
-  jq: sticky
-  list_dir: sticky
   pack_board: sticky
   delegate_dispatch: sticky
   update_progress: sticky
@@ -35,29 +30,12 @@ tools:
   fanout_plan: sticky
   submit_verdict: sticky
   state_start: sticky
-  git_status: sticky
-  git_diff: sticky
-  diff: sticky
-  git_log: sticky
-  git_show: sticky
-  git_blame: sticky
   source_history: true
-  git_ref: sticky
-  git_branches: sticky
-  git_compare: sticky
   git_checkout: sticky
   git_merge: sticky
   git_stash: sticky
-  git_stash_list: sticky
-  stat: sticky
-  wc: sticky
   chmod: sticky
-  delete: sticky
-  copy: sticky
-  move: sticky
-  mkdir: sticky
   chown: sticky
-  extract_archive: sticky
   code_rewrite: true
   jq_edit: true
   restore_version: true
@@ -71,7 +49,6 @@ tools:
   wait: sticky
   web_search: sticky
   fetch_url: sticky
-  http_request: sticky
   process_list: true
   process_signal: true
   command: sticky

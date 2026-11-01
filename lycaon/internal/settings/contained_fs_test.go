@@ -26,17 +26,17 @@ func TestContainedFSBlastAutoApproves(t *testing.T) {
 		"ssh deploy@host",
 	} {
 		res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": cmd},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": cmd},
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: proj,
+			},
+			Execution: hitl.ActionExecution{
+				Contained: contained,
+			},
+		})
 		testutil.FailErr(t, "evaluate Contained", err)
 		if !res.AutoApproved() || res.Required() {
 			t.Fatalf("Contained %q must auto-approve (FS/egress boundary): %+v", cmd, res)
@@ -44,34 +44,34 @@ Contained: contained,
 	}
 
 	escape, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "rm -rf /etc/nginx"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "rm -rf /etc/nginx"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: proj,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: contained,
+		},
+	})
 	testutil.FailErr(t, "evaluate contained command", err)
 	if !escape.AutoApproved() || escape.Required() {
 		t.Fatalf("contained command must not be classified from argv text: %+v", escape)
 	}
 
 	sudo, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "sudo id"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "sudo id"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: proj,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: contained,
+		},
+	})
 	testutil.FailErr(t, "evaluate sudo", err)
 	if !sudo.AutoApproved() || sudo.Required() {
 		t.Fatalf("host-side effect auto-approves when Contained (confinement contains the effect): %+v", sudo)

@@ -6,6 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+
+	"github.com/lycaon/lycaon/internal/agentpolicy"
+	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
@@ -13,13 +18,27 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"io"
-	"os"
 )
 
+func checkAgentMutationPolicies(ctx context.Context, tc tools.ToolContext, mutations ...agentMutation) error {
+	targets := make([]agentpolicy.Target, 0, 2*len(mutations))
+	for _, mutation := range mutations {
+		for _, path := range []string{mutation.AbsPath, mutation.FromAbsPath} {
+			if path != "" {
+				targets = append(targets, agentpolicy.Target{Path: path, Mutation: true})
+			}
+		}
+	}
+	return tc.CheckPolicyTargets(ctx, targets)
+}
+
 func prepareAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation agentMutation, target, from fseffect.Location, metadata bool) (sourceeffect.Pending, error) {
+	if err := checkAgentMutationPolicies(ctx, tctx, mutation); err != nil {
+		return nil, err
+	}
 	if tctx.Source.SourceMutations == nil {
 		return nil, nil
 	}
@@ -36,8 +55,16 @@ func prepareAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation 
 	return journal, err
 }
 
+func applyPreparedAgentMutation(ctx context.Context, tc tools.ToolContext, mutation agentMutation, journal sourceeffect.Pending, apply func() error) error {
+	err := checkAgentMutationPolicies(ctx, tc, mutation)
+	if err == nil {
+		err = apply()
+	}
+	return finishAgentMutation(ctx, tc, mutation, journal, err)
+}
+
 func finishAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation agentMutation, journal sourceeffect.Pending, effectErr error) error {
-	if effectErr == nil && !mutation.IsDir && mutation.Op != api.SourceChangeOpDelete {
+	if effectErr == nil && !mutation.IsDir && !mutation.IsLink && mutation.Op != api.SourceChangeOpDelete {
 		tctx.RecordModelAuthoredCredentials(ctx, mutation.AbsPath, mutation.After)
 	}
 	if journal != nil {
@@ -54,28 +81,36 @@ func finishAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation a
 }
 
 type agentMutation struct {
-	MetadataChange string
-	Op             api.SourceChangeOp
-	AbsPath        string
-	FromAbsPath    string
-	After          []byte
-	Before         []byte
-	BeforeSHA256   string
-	AfterSHA256    string
-	BeforeSize     int64
-	AfterSize      int64
-	IsDir          bool
+	Memory          *toolcontract.ProgramMemory
+	MetadataChange  string
+	Op              api.SourceChangeOp
+	AbsPath         string
+	FromAbsPath     string
+	After           []byte
+	Before          []byte
+	BeforeSHA256    string
+	AfterSHA256     string
+	BeforeSize      int64
+	AfterSize       int64
+	IsDir           bool
+	IsLink          bool
+	Recursive       bool
+	Unrecoverable   bool
+	RemovalSnapshot *sourceeffect.RemovalSnapshot
+	ReviewedFiles   []sourceeffect.ReviewedFile
 }
 
 type agentFileEvidence struct {
+	release func()
 	exists  bool
 	isDir   bool
+	isLink  bool
 	content []byte
 	sha256  string
 	size    int64
 }
 
-func captureAgentFileAt(loc fseffect.Location) (agentFileEvidence, error) {
+func captureAgentFileAt(loc fseffect.Location, ctx context.Context, memory *toolcontract.ProgramMemory, retainBody bool) (agentFileEvidence, error) {
 	f, err := fseffect.OpenRead(loc)
 	if os.IsNotExist(err) || errors.Is(err, os.ErrNotExist) {
 		return agentFileEvidence{}, nil
@@ -83,6 +118,11 @@ func captureAgentFileAt(loc fseffect.Location) (agentFileEvidence, error) {
 	if err != nil {
 		return agentFileEvidence{}, err
 	}
+	return captureAgentFile(ctx, f, memory, retainBody)
+}
+
+// captureAgentFile owns one already-open descriptor and its admitted snapshot.
+func captureAgentFile(ctx context.Context, f *os.File, memory *toolcontract.ProgramMemory, retainBody bool) (agentFileEvidence, error) {
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
@@ -91,13 +131,28 @@ func captureAgentFileAt(loc fseffect.Location) (agentFileEvidence, error) {
 	if !info.Mode().IsRegular() {
 		return agentFileEvidence{exists: true, isDir: info.IsDir()}, nil
 	}
-	h := sha256.New()
-	var captured revisionCapture
-	size, err := io.Copy(io.MultiWriter(h, &captured), f)
+	release, err := (ExecutionRevisions{Memory: memory}).reserveWorking(ctx, 36<<10)
 	if err != nil {
 		return agentFileEvidence{}, err
 	}
-	return agentFileEvidence{exists: true, content: captured.bytes(), sha256: hex.EncodeToString(h.Sum(nil)), size: size}, nil
+	defer release()
+	h := sha256.New()
+	captured := revisionCapture{ctx: ctx, memory: memory}
+	var output io.Writer = h
+	if retainBody {
+		output = io.MultiWriter(h, &captured)
+	}
+	scratch := make([]byte, 32<<10)
+	size, err := io.CopyBuffer(output, contextio.Reader{Context: ctx, Source: f}, scratch)
+	if err != nil {
+		captured.Close()
+		return agentFileEvidence{}, err
+	}
+	var content []byte
+	if retainBody {
+		content = captured.bytes()
+	}
+	return agentFileEvidence{release: captured.Close, exists: true, content: content, sha256: hex.EncodeToString(h.Sum(nil)), size: size}, nil
 }
 
 func hashExistingBytes(content []byte) string {
@@ -126,6 +181,10 @@ func commitAgentMutation(ctx context.Context, tctx tools.ToolContext, m agentMut
 
 // Paths outside attached roots produce no durable mutation.
 func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.RecordInput, sourcefeed.Change, bool) {
+	return agentCommitInputsWithWorkspace(tctx, m, "")
+}
+
+func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, workspaceID string) (sourceledger.RecordInput, sourcefeed.Change, bool) {
 	root, path, located := tctx.SourceLocation(m.AbsPath)
 	if tctx.Identity.ProjectID == "" || !located {
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
@@ -151,15 +210,18 @@ func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.Re
 		Turn:         tctx.Identity.UserTurn,
 		BeforeSHA256: m.BeforeSHA256, AfterSHA256: m.AfterSHA256, Before: m.Before, After: m.After,
 		BeforeSize: max(m.BeforeSize, int64(len(m.Before))), AfterSize: max(m.AfterSize, int64(len(m.After)))}
-	var isDir *bool
+	isDir := m.IsDir
 	if m.IsDir {
-		value := true
-		isDir = &value
 		in.EntryKind = sourceledger.EntryKindDirectory
+	} else if m.IsLink {
+		in.EntryKind = sourceledger.EntryKindLink
+	}
+	if workspaceID == "" {
+		workspaceID = sourceworkspace.ID(tctx.Identity.ProjectID, tctx.Source.Roots)
 	}
 	change := sourcefeed.Change{
 		ProjectID:     tctx.Identity.ProjectID,
-		WorkspaceID:   sourceworkspace.ID(tctx.Identity.ProjectID, tctx.Source.Roots),
+		WorkspaceID:   workspaceID,
 		WorkspaceKind: tctx.Source.SourceWorkspaceKind,
 		RootID:        root.ID,
 		Path:          path,
@@ -171,7 +233,7 @@ func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.Re
 		ToolCallID:    tctx.Identity.ToolCallID,
 		Turn:          tctx.Identity.UserTurn,
 		AfterSHA256:   m.AfterSHA256,
-		IsDir:         isDir,
+		IsDir:         &isDir,
 		AbsPath:       m.AbsPath,
 		FromAbsPath:   m.FromAbsPath,
 	}

@@ -9,11 +9,11 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_STUB_REQUIRED"
 effect: block
 copy:
   cause: Phase 1 plan stub required before Task(plan-writer)
-  why: 'Use native write on `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal,
+  why: 'Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal,
     ## Assumptions, ## Approach'
-  fix: 'Use native write on `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal,
+  fix: 'Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` with frontmatter research_depth and ## Goal,
     ## Assumptions, ## Approach'
-  instead: Write blueprint stub with write before Task researchers
+  instead: Write blueprint stub with a staged command redirect before Task researchers
   what: Phase 1 plan stub required before Task(plan-writer)
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: rule:spec

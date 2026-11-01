@@ -29,7 +29,6 @@ var RunTurnBusyWindowFaultForTest func()
 func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (resp *promptresult.Result, runErr error) {
 	ctx = m.Execution.Attach(ctx, id)
 	defer m.Execution.Cancel(id)
-
 	sess, err := m.store.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -150,6 +149,9 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	if !hostTurn {
 		m.PostTurn.EditFollowUp(ctx, sess, text)
 	}
+	if m.Preparation != nil && m.Preparation.Profiles != nil {
+		_ = m.Preparation.Profiles.EffectiveApprovalPosture(ctx, sess)
+	}
 	m.Settlement.Begin(id, m.Guidance.PendingIDs(ctx, id)...)
 	userPrompt := strings.TrimSpace(text)
 	if !hostTurn && (strings.TrimSpace(in.Text) != "" || len(in.ArtifactIDs) > 0) {
@@ -257,14 +259,34 @@ func (m *Service) executePromptRun(
 		execution.CloseoutID = result.Closeout.ID
 	}
 	if strings.TrimSpace(result.LastAssistantID) == "" {
+		if result.Outcome == promptresult.OutcomeOutputTruncated {
+			execution.Response = &promptresult.Result{
+				Outcome:         result.Outcome,
+				OutputTruncated: result.OutputTruncated,
+				OfferedTools:    result.OfferedTools,
+			}
+		}
 		return execution, nil
 	}
 
 	_ = m.History.ScheduleChunks(ctx, sess)
 	m.Status.PublishAssistant(ctx, sessionID, result.LastAssistantContent)
-	execution.Response = &promptresult.Result{
-		MessageID:    result.LastAssistantID,
-		OfferedTools: result.OfferedTools,
-	}
+	execution.Response = m.recordPromptOutcome(ctx, sessionID, result)
 	return execution, nil
+}
+
+func (m *Service) recordPromptOutcome(ctx context.Context, sessionID string, result *promptloop.PromptRunResult) *promptresult.Result {
+	if result.IsCloseoutBlocked() {
+		m.Settlement.NoteCloseoutBlocked(sessionID, result.CloseoutBlocked)
+		if m.Guidance != nil {
+			m.Guidance.Emit(ctx, sessionID, anchor.GateBlocked, anchor.Envelope{})
+		}
+	}
+	return &promptresult.Result{
+		MessageID:       result.LastAssistantID,
+		OfferedTools:    result.OfferedTools,
+		Outcome:         result.Outcome,
+		CloseoutBlocked: result.CloseoutBlocked,
+		OutputTruncated: result.OutputTruncated,
+	}
 }

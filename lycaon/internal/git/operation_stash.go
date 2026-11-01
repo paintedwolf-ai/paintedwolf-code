@@ -98,7 +98,7 @@ func (p *operationPlan) stashPaths(ctx context.Context, dir string) ([]string, e
 			return nil, err
 		}
 	}
-	untracked, err := optionalObject(ctx, dir, p.stashOID+"^3")
+	untracked, err := ResolveOptionalObject(ctx, dir, p.stashOID+"^3")
 	if err != nil {
 		return nil, err
 	}
@@ -128,13 +128,18 @@ func publishIndexDelta(ctx context.Context, dir string, opts gitexec.Opts, befor
 	if len(changed) == 0 {
 		return nil
 	}
-	head, err := resolveCommit(ctx, dir, "HEAD")
-	if err != nil {
-		return err
+	// Every changed path has an entry on one side, and every entry carries the
+	// repository's object width, so this also works before the first commit.
+	width := 0
+	for _, index := range []operationIndex{before, after} {
+		for _, entry := range index {
+			width = len(entry.oid)
+			break
+		}
 	}
 	var input strings.Builder
 	for _, path := range changed {
-		fmt.Fprintf(&input, "0 %s\t%s%c", strings.Repeat("0", len(head)), path, 0)
+		fmt.Fprintf(&input, "0 %s\t%s%c", strings.Repeat("0", width), path, 0)
 		for stage := 0; stage <= 3; stage++ {
 			entry, ok := after[operationIndexKey{path, stage}]
 			if !ok {
@@ -150,6 +155,11 @@ func publishIndexDelta(ctx context.Context, dir string, opts gitexec.Opts, befor
 		}
 	}
 	opts.Input = []byte(input.String())
-	_, err = restoreGit(ctx, dir, opts, "update-index", "-z", "--index-info")
-	return err
+	if _, err := restoreGit(ctx, dir, opts, "update-index", "-z", "--index-info"); err != nil {
+		return err
+	}
+	if opts.IndexFile == "" {
+		_, _, _ = gitexec.Run(ctx, dir, []string{"update-index", "-q", "--unmerged", "--refresh"}, hermeticOpts(0))
+	}
+	return nil
 }

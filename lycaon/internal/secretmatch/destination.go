@@ -59,6 +59,12 @@ func HTTPDestination(u *url.URL) (id, label string) {
 	return DestinationKey(strings.ToLower(strings.TrimSpace(u.Hostname())), origin), origin
 }
 
+// UnixDestination identifies the retained local service independently of its URL host.
+func UnixDestination(path, bindingKey string) (id, label string) {
+	label = "unix:" + path
+	return DestinationKey(label, "unix", path, bindingKey), label
+}
+
 // AmbientAuth is the credential configuration a destination applies to every
 // request, independent of the payload being screened.
 type AmbientAuth struct {

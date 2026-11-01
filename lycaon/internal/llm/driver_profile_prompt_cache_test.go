@@ -38,18 +38,22 @@ func TestShippedPromptCachePolicyPerKind(t *testing.T) {
 		{"openai", providerprofile.PromptCacheAutomaticPrefix, 10 * time.Minute},
 		{"azure", providerprofile.PromptCacheAutomaticPrefix, 10 * time.Minute},
 		{"fireworks", providerprofile.PromptCacheAutomaticPrefix, 6 * time.Minute},
+		{"deepinfra", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"openrouter", providerprofile.PromptCacheAutomaticPrefix, 10 * time.Minute},
 		{"gemini", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"together", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"vertex", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"vertex-express", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"cloudflare-workers-ai", providerprofile.PromptCacheAutomaticPrefix, 0},
+		{"scaleway", providerprofile.PromptCacheAutomaticPrefix, 0},
+		{"cerebras", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"litellm-proxy", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"bedrock", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"ollama", providerprofile.PromptCacheLocalKV, 0},
 		{"lmstudio", providerprofile.PromptCacheLocalKV, 0},
 		{"omlx", providerprofile.PromptCacheLocalKV, 0},
 		{"openai-compatible", providerprofile.PromptCacheLocalKV, 0},
+		{"mistral", providerprofile.PromptCacheNone, 0},
 	}
 	if len(cases) != len(policies) {
 		t.Fatalf("catalog has %d provider kinds, test covers %d", len(policies), len(cases))
@@ -116,7 +120,7 @@ func TestShippedPromptCacheModelRules(t *testing.T) {
 
 func TestNewProviderForEntryAttachesItsPromptCachePolicy(t *testing.T) {
 	policies := shippedPromptCache(t)
-	for _, kind := range []string{"ollama", "anthropic", "fireworks", "gemini", "openrouter", "openai", "bedrock", "cloudflare-workers-ai"} {
+	for _, kind := range []string{"ollama", "anthropic", "fireworks", "gemini", "openrouter", "openai", "bedrock", "cloudflare-workers-ai", "scaleway", "cerebras"} {
 		t.Run(kind, func(t *testing.T) {
 			entry := CatalogEntry{ID: "p", Kind: kind, BaseURL: "http://localhost:1234/v1", PromptCache: policies[kind]}
 			if kind == "cloudflare-workers-ai" {

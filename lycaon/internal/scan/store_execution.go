@@ -16,7 +16,7 @@ import (
 )
 
 // ClaimNext atomically claims the oldest pending scan for the runner.
-func (s *SQLStore) ClaimNext(ctx context.Context) (*api.CodeScan, error) {
+func (s *sqlRunStore) ClaimNext(ctx context.Context) (*api.CodeScan, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -63,12 +63,12 @@ func (s *SQLStore) ClaimNext(ctx context.Context) (*api.CodeScan, error) {
 }
 
 // CountRunning returns the number of in-flight scans.
-func (s *SQLStore) CountRunning(ctx context.Context) (int, error) {
+func (s *sqlRunStore) CountRunning(ctx context.Context) (int, error) {
 	n, err := s.queries.CountRunningScans(ctx)
 	return int(n), err
 }
 
-func (s *SQLStore) SetExecutionPolicy(ctx context.Context, claimed *api.CodeScan, policy scancatalog.RuntimePolicy, startedAt time.Time) (bool, error) {
+func (s *sqlRunStore) SetExecutionPolicy(ctx context.Context, claimed *api.CodeScan, policy scancatalog.RuntimePolicy, startedAt time.Time) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
@@ -91,7 +91,7 @@ func (s *SQLStore) SetExecutionPolicy(ctx context.Context, claimed *api.CodeScan
 	})
 }
 
-func (s *SQLStore) MarkLongRunning(ctx context.Context, claimed *api.CodeScan, at time.Time) (bool, error) {
+func (s *sqlRunStore) MarkLongRunning(ctx context.Context, claimed *api.CodeScan, at time.Time) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
@@ -104,7 +104,7 @@ func (s *SQLStore) MarkLongRunning(ctx context.Context, claimed *api.CodeScan, a
 }
 
 // MarkProgress commits progress, summary, and event only for the active claim.
-func (s *SQLStore) MarkProgress(ctx context.Context, claimed *api.CodeScan, progress api.ScanProgress) error {
+func (s *sqlRunStore) MarkProgress(ctx context.Context, claimed *api.CodeScan, progress api.ScanProgress) error {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return fmt.Errorf("scan claim token required")
 	}
@@ -124,7 +124,7 @@ func (s *SQLStore) MarkProgress(ctx context.Context, claimed *api.CodeScan, prog
 }
 
 // MarkDelta records what a path-scoped scan changed against its base.
-func (s *SQLStore) MarkDelta(ctx context.Context, claimed *api.CodeScan, delta api.ScanDelta) error {
+func (s *sqlRunStore) MarkDelta(ctx context.Context, claimed *api.CodeScan, delta api.ScanDelta) error {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return fmt.Errorf("scan claim token required")
 	}
@@ -143,7 +143,7 @@ func (s *SQLStore) MarkDelta(ctx context.Context, claimed *api.CodeScan, delta a
 
 // BaseSnapshotID is the generation a path-scoped scan's targets were diffed
 // from; empty for a full pass or a caller-supplied path list.
-func (s *SQLStore) BaseSnapshotID(ctx context.Context, scanID string) (string, error) {
+func (s *sqlRunStore) BaseSnapshotID(ctx context.Context, scanID string) (string, error) {
 	base, err := s.queries.GetScanBaseSnapshot(ctx, strings.TrimSpace(scanID))
 	if db.IsNoRows(err) {
 		return "", nil
@@ -152,7 +152,7 @@ func (s *SQLStore) BaseSnapshotID(ctx context.Context, scanID string) (string, e
 }
 
 // MarkComplete atomically commits a result for the active claim.
-func (s *SQLStore) MarkComplete(ctx context.Context, claimed *api.CodeScan, result *scanoutput.Result) (bool, error) {
+func (s *sqlRunStore) MarkComplete(ctx context.Context, claimed *api.CodeScan, result *scanoutput.Result) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
@@ -174,7 +174,7 @@ func (s *SQLStore) MarkComplete(ctx context.Context, claimed *api.CodeScan, resu
 }
 
 // MarkPendingSuperseded redirects consumers to compatible evidence.
-func (s *SQLStore) MarkPendingSuperseded(ctx context.Context, id, replacementScanID string) (bool, error) {
+func (s *sqlRunStore) MarkPendingSuperseded(ctx context.Context, id, replacementScanID string) (bool, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, fmt.Errorf("scan id required")

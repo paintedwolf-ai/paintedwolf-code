@@ -75,7 +75,7 @@ func TestCoordinatorUnitsKeepLoadedToolsAndWebGate(t *testing.T) {
 			Prompts:          pe,
 			WebSearchEnabled: func() bool { return webEnabled },
 			LoadedTools: func(string) map[string]bool {
-				return map[string]bool{"http_request": true, "fetch_url": true}
+				return map[string]bool{"secret_generate": true, "fetch_url": true}
 			},
 		})
 		sess := &api.Session{ID: "loaded", AgentType: "coordinator", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
@@ -83,8 +83,8 @@ func TestCoordinatorUnitsKeepLoadedToolsAndWebGate(t *testing.T) {
 		out, _, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
 			map[string]any{"root_count": 1, "project_dir": sess.WorkspacePath})
 		testutil.FailErr(t, "render loaded tool guidance", err)
-		if !strings.Contains(out, "Use `http_request` for APIs") {
-			t.Fatal("loaded HTTP tool guidance missing")
+		if !strings.Contains(out, "For new random material use `secret_generate`") {
+			t.Fatal("loaded secret_generate tool guidance missing")
 		}
 		if strings.Contains(out, "Use `fetch_url` for readable web research") != webEnabled {
 			t.Fatalf("fetch guidance does not match web enabled=%v", webEnabled)

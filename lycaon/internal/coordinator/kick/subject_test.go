@@ -58,3 +58,43 @@ func TestPendingKickIDsDropsClearedSubjects(t *testing.T) {
 		t.Fatal("job-b's open request was dropped with job-a's answered one")
 	}
 }
+
+func TestProcessFinishedKicksQueuePerHandleAndSurviveClearPendingOnTurnAbort(t *testing.T) {
+	engine := &stubEngine{render: func(name string, data map[string]any) (string, error) {
+		return name + ":" + data["command_completion"].(string), nil
+	}}
+	kicks := &KickEngine{}
+	kicks.SetPromptEngine(engine)
+
+	kicks.QueueDeferred("s1", "coordinator-gate-blocked")
+	kicks.QueueDeferred("s1", "coordinator-process-finished",
+		WithSubject("bg-1"),
+		WithCommandCompletion("handle=bg-1 termination=stopped_by_user\ncommand=npm run dev"),
+	)
+	kicks.QueueDeferred("s1", "coordinator-process-finished",
+		WithSubject("bg-2"),
+		WithCommandCompletion("handle=bg-2 termination=stopped_by_user\ncommand=tail -f app.log"),
+	)
+
+	// Stage the first kick, then abort the turn (ClearPending).
+	_ = kicks.TakePendingKickID("s1")
+	kicks.ClearPending("s1")
+
+	var rendered []string
+	for kicks.TakePendingKickID("s1") != "" {
+		text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
+		if err != nil || !ok {
+			t.Fatalf("render = %v %v", ok, err)
+		}
+		rendered = append(rendered, text)
+		kicks.AckPendingNudge("s1", lease)
+	}
+	want := []string{
+		"coordinator-process-finished:handle=bg-1 termination=stopped_by_user\ncommand=npm run dev",
+		"coordinator-process-finished:handle=bg-2 termination=stopped_by_user\ncommand=tail -f app.log",
+	}
+	if !slices.Equal(rendered, want) {
+		t.Fatalf("rendered after ClearPending = %v, want %v", rendered, want)
+	}
+}
+

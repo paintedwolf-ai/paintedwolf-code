@@ -3,10 +3,10 @@ id: HTTP_REQUEST_RESPONSE_PATH_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool: [http_request]
+  paintedwolf.operation: [http_request]
 requires:
   profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.http_responses_received, paintedwolf.http_last_status]
+  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.http_responses_received, paintedwolf.http_last_status, paintedwolf.operation]
 when: paintedwolf.rejection_code == "HTTP_REQUEST_RESPONSE_PATH_DENIED"
 effect: block
 copy:

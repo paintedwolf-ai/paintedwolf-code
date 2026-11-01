@@ -88,7 +88,7 @@ func TestUpgradeRequiresRecoveryBeforeAnyMutation(t *testing.T) {
 			testutil.FailErr(t, "read initial bytes", err)
 			hooks := UpgradeHooks{}
 			if captureFails {
-				hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return errors.New("disk full") }
+				hooks.Before = func(context.Context, UpgradeSource, migrations.Plan) error { return errors.New("disk full") }
 			}
 			if err := upgradeExistingUsing(t.Context(), path, hooks, false, registry); !errors.Is(err, ErrStoreIncompatible) {
 				t.Fatalf("upgrade error = %v, want recoverable refusal", err)
@@ -112,7 +112,7 @@ func TestUpgradeRefusesConfirmedDamageBeforeCapture(t *testing.T) {
 	testutil.FailErr(t, "close marker fixture", w.Close())
 	before, err := os.ReadFile(path)
 	testutil.FailErr(t, "read initial bytes", err)
-	hooks := UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error {
+	hooks := UpgradeHooks{Before: func(context.Context, UpgradeSource, migrations.Plan) error {
 		t.Fatal("recovery capture ran on a store with confirmed damage")
 		return nil
 	}}
@@ -134,11 +134,11 @@ func TestUpgradeSkippedReleasesPreservesHistoryAndSnapshot(t *testing.T) {
 	var phases []migrations.Phase
 	committed := false
 	hooks := UpgradeHooks{
-		Before: func(ctx context.Context, source *sql.DB, got migrations.Plan) error {
+		Before: func(ctx context.Context, source UpgradeSource, got migrations.Plan) error {
 			if got.Source != plan.Source || got.Target != plan.Target {
 				t.Fatal("capture received another route")
 			}
-			return CreateSnapshot(ctx, source, snapshot)
+			return CreateSnapshot(ctx, source.DB, snapshot)
 		},
 		After:    func(ctx context.Context, got migrations.Plan) error { committed = true; return nil },
 		Progress: func(phase migrations.Phase) { phases = append(phases, phase) },
@@ -227,7 +227,7 @@ func TestUpgradeRefusesAFullVolumeWithoutTouchingTheStore(t *testing.T) {
 	before, err := os.ReadFile(path)
 	testutil.FailErr(t, "read initial bytes", err)
 	space := &InsufficientSpaceError{NeededBytes: 3 << 30, AvailableBytes: 1 << 30}
-	hooks := UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error {
+	hooks := UpgradeHooks{Before: func(context.Context, UpgradeSource, migrations.Plan) error {
 		return fmt.Errorf("capture: %w", space)
 	}}
 	err = upgradeExistingUsing(t.Context(), path, hooks, false, registry)
@@ -258,7 +258,7 @@ func TestUpgradeOperationalFailurePreservesSource(t *testing.T) {
 			path, registry, _ := upgradeFixture(t)
 			before, err := os.ReadFile(path)
 			testutil.FailErr(t, "read source before failed capture", err)
-			err = upgradeExistingUsing(t.Context(), path, UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error {
+			err = upgradeExistingUsing(t.Context(), path, UpgradeHooks{Before: func(context.Context, UpgradeSource, migrations.Plan) error {
 				return fmt.Errorf("capture: %w", test.cause)
 			}}, false, registry)
 			var failure *StoreIncompatibleError

@@ -61,15 +61,14 @@ func startProcess(ctx context.Context, spec processSpec, lease *modelstore.Lease
 		lease.Release()
 		return nil, err
 	}
-	if err = cmd.Start(); err != nil {
+	if err = execpkg.StartPrepared(ctx, cmd); err != nil {
 		cleanup()
 		input.Close()
 		output.Close()
 		lease.Release()
 		return nil, err
 	}
-	untrack := execpkg.TrackProcess(cmd.Process.Pid)
-	child := &rpcProcess{cleanup: func() { untrack(); cleanup() }, cmd: cmd, input: input, output: output, done: make(chan struct{}), device: device, owner: owner, generation: generation, lease: lease}
+	child := &rpcProcess{cleanup: cleanup, cmd: cmd, input: input, output: output, done: make(chan struct{}), device: device, owner: owner, generation: generation, lease: lease}
 	go child.reap()
 	return child, nil
 }

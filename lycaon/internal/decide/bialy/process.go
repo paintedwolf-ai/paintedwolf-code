@@ -90,17 +90,15 @@ func startProcess(ctx context.Context, bin string, args []string, grant *startup
 		return nil, fmt.Errorf("decide: engine stdout: %w", err)
 	}
 	cmd.Stderr = stderrLogger{}
-	if err := cmd.Start(); err != nil {
+	if err := execpkg.StartPrepared(ctx, cmd); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("decide: start engine: %w", err)
 	}
-	untrack := execpkg.TrackProcess(cmd.Process.Pid)
 	lifetime, reaped := context.WithCancel(context.Background())
 	proc := &process{
 		lifetime: lifetime, reaped: reaped, generation: processSequence.Add(1),
 		cmd: cmd,
 		cleanup: func() {
-			untrack()
 			cleanup()
 		},
 		stdin:    stdin,

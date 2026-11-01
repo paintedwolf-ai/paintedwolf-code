@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/settings/approvals.go",
+  "kind": "runtime_service",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "The configuration store owns atomic validation, persistence and publication of grants and rules. Its focused socket ownership helper acquires incoming leases before a write, retains old authority on failure, then releases displaced owners after successful commit. Restart loads intent without recapture. Keep this atomic store boundary with a measured ceiling rather than add an independent lease writer. Freeze this reviewed shape at 842 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 842,
+  "boundaries": {
+    "lycaon/internal/settings/socket_grant_ownership_test.go": "b35151153c449b1e0eff5e19651fb5e6eea613bbc2df0ba8382c2e4e6d0e7e14",
+    "lycaon/internal/app/configuration/socket_lifetime_test.go": "6e5c6341dd41536cac08103ca93bd7212534f2067cf8175bac53677a3792ba37"
+  }
+}

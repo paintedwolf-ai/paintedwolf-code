@@ -1,0 +1,30 @@
+oar: '1.0'
+id: COMMAND_JOB_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "COMMAND_JOB_UNKNOWN"
+effect: block
+copy:
+  what: The job reference names no job of this session.
+  cause: kill, wait and jobs address only the background jobs this session started with a trailing &.
+  why: Session job references never reach host processes, so a PID or another session's job is not a target.
+  fix: Run jobs to list this session's jobs, then use %N, %% or the handle $! printed when the job started.
+  instead: Use jobs and a %N job number or $!; do not signal host processes
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: the job reference names no job of this session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_JOB_UNKNOWN'

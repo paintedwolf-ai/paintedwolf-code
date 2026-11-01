@@ -2,69 +2,75 @@ package progress
 
 import api "github.com/lycaon/lycaon/pkg/api"
 
-// DiffSteps matches exact labels, then pairs unmatched rows as relabels.
-func DiffSteps(prev, next []api.ProgressStep) []api.ProgressChange {
-	prevByLabel := make(map[string][]int, len(prev))
-	for i, p := range prev {
-		prevByLabel[p.Label] = append(prevByLabel[p.Label], i)
+// DiffSteps compares visible items across immutable snapshots by their stable item IDs.
+func DiffSteps(before, after Snapshot) []api.ProgressChange {
+	prevVisible := visibleItems(before.Items())
+	nextVisible := visibleItems(after.Items())
+
+	prevByID := make(map[string]Item, len(prevVisible))
+	for _, item := range prevVisible {
+		if item.ID != "" {
+			prevByID[item.ID] = item
+		}
 	}
-	prevMatched := make([]bool, len(prev))
+	nextIDs := make(map[string]struct{}, len(nextVisible))
+	for _, item := range nextVisible {
+		if item.ID != "" {
+			nextIDs[item.ID] = struct{}{}
+		}
+	}
 
 	var changes []api.ProgressChange
-	var newCreations []api.ProgressStep
-	for _, n := range next {
-		idxs := prevByLabel[n.Label]
-		if len(idxs) > 0 {
-			pi := idxs[0]
-			prevByLabel[n.Label] = idxs[1:]
-			prevMatched[pi] = true
-			if prev[pi].State != n.State {
-				changes = append(changes, api.ProgressChange{
-					Kind:  transitionKind(n.State),
-					Label: n.Label,
-					State: n.State,
-				})
+	for _, n := range nextVisible {
+		if n.ID != "" {
+			if p, ok := prevByID[n.ID]; ok {
+				if p.State != n.State {
+					changes = append(changes, api.ProgressChange{
+						Kind:  transitionKind(n.State),
+						Label: n.Label,
+						State: n.State,
+					})
+				} else if p.Label != n.Label {
+					changes = append(changes, api.ProgressChange{
+						Kind:      api.ProgressChangeUpdated,
+						Label:     n.Label,
+						PrevLabel: p.Label,
+						State:     n.State,
+					})
+				}
+				continue
 			}
-			continue
 		}
-		newCreations = append(newCreations, n)
-	}
-
-	var removals []api.ProgressStep
-	for i, matched := range prevMatched {
-		if !matched {
-			removals = append(removals, prev[i])
-		}
-	}
-
-	// Pair unmatched rows by position to represent a relabel.
-	paired := len(newCreations)
-	if len(removals) < paired {
-		paired = len(removals)
-	}
-	for i := 0; i < paired; i++ {
-		changes = append(changes, api.ProgressChange{
-			Kind:      api.ProgressChangeUpdated,
-			Label:     newCreations[i].Label,
-			PrevLabel: removals[i].Label,
-			State:     newCreations[i].State,
-		})
-	}
-	for _, c := range newCreations[paired:] {
 		changes = append(changes, api.ProgressChange{
 			Kind:  api.ProgressChangeCreated,
-			Label: c.Label,
-			State: c.State,
+			Label: n.Label,
+			State: n.State,
 		})
 	}
-	for _, r := range removals[paired:] {
+	for _, p := range prevVisible {
+		if p.ID != "" {
+			if _, ok := nextIDs[p.ID]; ok {
+				continue
+			}
+		}
 		changes = append(changes, api.ProgressChange{
 			Kind:  api.ProgressChangeRemoved,
-			Label: r.Label,
-			State: r.State,
+			Label: p.Label,
+			State: p.State,
 		})
 	}
 	return changes
+}
+
+func visibleItems(items []Item) []Item {
+	var out []Item
+	for _, item := range items {
+		if item.State == ProgressStateOptional {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func transitionKind(state string) api.ProgressChangeKind {

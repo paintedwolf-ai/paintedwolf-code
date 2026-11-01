@@ -17,8 +17,48 @@ var errTSVHeader = errors.New("tesseract tsv header missing")
 // tsvLine accumulates the words of one recognized line.
 type tsvLine struct {
 	words                    []string
+	wordSlots                map[string]int
+	wordAlts                 [][]string
 	left, top, right, bottom int
 	confidence               float64
+}
+
+func (l *tsvLine) addWord(wordNum, text string, conf float64) {
+	if l.wordSlots == nil {
+		l.wordSlots = map[string]int{}
+	}
+	if slot, exists := l.wordSlots[wordNum]; exists {
+		if l.words[slot] == text {
+			return
+		}
+		for _, alt := range l.wordAlts[slot] {
+			if alt == text {
+				return
+			}
+		}
+		l.wordAlts[slot] = append(l.wordAlts[slot], text)
+		return
+	}
+	slot := len(l.words)
+	l.wordSlots[wordNum] = slot
+	l.words = append(l.words, text)
+	l.wordAlts = append(l.wordAlts, nil)
+	l.confidence += max(conf, 0)
+}
+
+func (l *tsvLine) candidates() []string {
+	var out []string
+	for slot, alts := range l.wordAlts {
+		for _, alt := range alts {
+			if len(out) >= maxOCRCandidates-1 {
+				return out
+			}
+			words := append([]string(nil), l.words...)
+			words[slot] = alt
+			out = append(out, strings.Join(words, " "))
+		}
+	}
+	return out
 }
 
 // parseTesseractTSV groups word rows into line spans. Boxes are normalized to
@@ -69,12 +109,11 @@ func parseTesseractTSV(data []byte, width, height int) ([]TextSpan, error) {
 			lines[key] = line
 			order = append(order, key)
 		}
-		line.words = append(line.words, text)
+		line.addWord(fields[5], text, conf)
 		line.left = min(line.left, geom[0])
 		line.top = min(line.top, geom[1])
 		line.right = max(line.right, geom[0]+geom[2])
 		line.bottom = max(line.bottom, geom[1]+geom[3])
-		line.confidence += max(conf, 0)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("tesseract tsv: %w", err)
@@ -84,6 +123,7 @@ func parseTesseractTSV(data []byte, width, height int) ([]TextSpan, error) {
 		line := lines[key]
 		spans = append(spans, TextSpan{
 			Text:       strings.Join(line.words, " "),
+			Candidates: line.candidates(),
 			Confidence: line.confidence / float64(len(line.words)) / 100,
 			BoundingBox: [4]float64{
 				float64(line.left) / float64(width),

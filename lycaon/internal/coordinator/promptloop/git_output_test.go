@@ -21,7 +21,7 @@ func TestGitDiffRetainsOriginalHunksBeforeClipping(t *testing.T) {
 	diff := strings.Repeat("+observed before mutation\n", 1000)
 	raw, err := git.MarshalDiffToolResponse(git.DiffToolResponse{MaxBytes: 100, Files: []git.DiffToolEntry{{Path: "a.go", Diff: diff}, {Path: "b.go", Diff: "+later\n"}}, FilesTotal: 2}, nil)
 	testutil.FailErr(t, "marshal diff", err)
-	out, reject := projectGitDiff(dir, tooloutput.Screened(raw), 0)
+	out, reject := projectGitDiff(t.Context(), dir, tooloutput.Screened(raw), 0)
 	if reject != nil {
 		t.Fatalf("projection rejected: %+v", reject)
 	}
@@ -48,7 +48,7 @@ func TestGitDiffLargeHunksRetainExactObservation(t *testing.T) {
 	dir := t.TempDir()
 	diff := strings.Repeat("+captured original line\n", readcaps.MaxFileBytes/20)
 	file := git.DiffToolEntry{Path: "large.txt", Diff: diff}
-	if reject := retainDiffHunks(dir, &file, 0); reject != nil {
+	if reject := retainDiffHunks(t.Context(), dir, &file, 0); reject != nil {
 		t.Fatalf("retain large hunks: %+v", reject)
 	}
 	stored, err := os.ReadFile(tooloutput.DiskPath(dir, file.DiffSpillPath))
@@ -63,10 +63,10 @@ func TestGitDiffLargeHunksRetainExactObservation(t *testing.T) {
 func TestGitDiffDoesNotDiscardWithoutRecovery(t *testing.T) {
 	raw, err := git.MarshalDiffToolResponse(git.DiffToolResponse{MaxBytes: 10, Files: []git.DiffToolEntry{{Path: "a", Diff: strings.Repeat("x", 100)}}}, nil)
 	testutil.FailErr(t, "marshal diff", err)
-	if _, reject := projectGitDiff("", tooloutput.Screened(raw), 0); reject == nil {
+	if _, reject := projectGitDiff(t.Context(), "", tooloutput.Screened(raw), 0); reject == nil {
 		t.Fatal("clipped without recovery storage")
 	}
-	if _, reject := projectGitDiff(t.TempDir(), tooloutput.Screened(raw), 20); reject == nil {
+	if _, reject := projectGitDiff(t.Context(), t.TempDir(), tooloutput.Screened(raw), 20); reject == nil {
 		t.Fatal("ignored spill cap")
 	}
 }

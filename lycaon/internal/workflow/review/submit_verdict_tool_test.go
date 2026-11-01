@@ -173,7 +173,7 @@ func TestSubmitVerdictRejectsOffReviewLoopPhase(t *testing.T) {
 	reg := catalogRegistry(t)
 	testutil.FailErr(t, "workflowreview.RegisterSubmitVerdictTool", workflowreview.RegisterSubmitVerdictTool(reg, mgr.Verdicts))
 	ctx := context.Background()
-	_, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	_, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun", err)
 
 	out, err := reg.Run(ctx, "submit_verdict", map[string]any{

@@ -1,6 +1,7 @@
 package providerretry
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -97,5 +98,56 @@ func TestIsRequestRejectedGatesResponseFormatRetry(t *testing.T) {
 		Message:        "response_format json_schema not supported",
 	}) {
 		t.Fatal("5xx must not trigger format retry")
+	}
+}
+
+func TestOverflowCapacityDependsOnStructuredFieldsRatherThanDiagnostics(t *testing.T) {
+	for _, message := range []string{"", "maximum context length is 12 tokens; requested 999999 tokens", "n_ctx=1 n_prompt_tokens=2", "context window: 999999"} {
+		for _, structured := range []bool{false, true} {
+			envelope := map[string]any{"code": "context_length_exceeded", "message": message}
+			if structured {
+				envelope["n_ctx"], envelope["n_prompt_tokens"] = 8192, 9000
+			}
+			body, err := json.Marshal(map[string]any{"error": envelope})
+			if err != nil {
+				t.Fatalf("marshal fixture: %v", err)
+			}
+			parsed, ok := ParseOpenAICompatError(body)
+			if !ok {
+				t.Fatal("structured rejection was not parsed")
+			}
+			if _, overflow := parsed.IsContextOverflow(); !overflow {
+				t.Fatal("structured rejection lost overflow classification")
+			}
+			window, prompt := 0, 0
+			if structured {
+				window, prompt = 8192, 9000
+			}
+			if parsed.MaxContext != window || parsed.PromptTokens != prompt {
+				t.Fatalf("diagnostic changed facts: %+v", parsed)
+			}
+		}
+	}
+}
+
+func TestFormatOpenAIProviderError_FlatTopLevelErrorBody(t *testing.T) {
+	body := []byte(`{"message":"Model qwen-3-235b-a22b-instruct-2507 does not exist or you do not have access to it.","type":"not_found_error","param":"model","code":"model_not_found"}`)
+	err := FormatOpenAIProviderError(&openai.RequestError{
+		HTTPStatusCode: 404,
+		Body:           body,
+	})
+	var providerErr *ProviderHTTPError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("error = %T, want ProviderHTTPError", err)
+	}
+	if providerErr.Code != "model_not_found" || providerErr.Param != "model" || providerErr.Type != "not_found_error" {
+		t.Fatalf("structured fields = %+v", providerErr)
+	}
+	parsed, ok := ParseOpenAICompatError(body)
+	if !ok {
+		t.Fatal("expected ParseOpenAICompatError to succeed")
+	}
+	if got := ModelRefusalEvidenceFor(404, parsed, DefaultModelRefusalCodes()); got != RefusalEvidenceModelIdentity {
+		t.Fatalf("ModelRefusalEvidenceFor = %q, want %q", got, RefusalEvidenceModelIdentity)
 	}
 }

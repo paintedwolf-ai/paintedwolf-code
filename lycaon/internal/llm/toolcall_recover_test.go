@@ -322,4 +322,3 @@ func TestClassifyToolResponseDetectsAndRecoversXMLAndDeferredToolCalls(t *testin
 		t.Fatalf("recovered content not blanked: %q", recovered.Completion.Content)
 	}
 }
-

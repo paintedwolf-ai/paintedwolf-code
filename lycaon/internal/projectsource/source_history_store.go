@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/db"
-	"sort"
+	"errors"
+	"log/slog"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/db"
 )
 
-func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationPlan, entry *sourceHistoryEntry, now time.Time) error {
+func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationPlan, entry *sourceHistoryEntry, quotaBytes int64, now time.Time) error {
 	if plan.HistoryEntryID != "" {
 		from, to := historyTransitionStates(plan.HistoryTransition)
 		result, err := tx.ExecContext(ctx, `UPDATE source_history_entries SET state=?, updated_at=? WHERE id=? AND state=?`,
@@ -67,7 +69,23 @@ func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationP
 	if err != nil {
 		return err
 	}
-	return nil
+	return pruneSourceHistoryRecoveryQuotaTx(ctx, tx, entry.ProjectID, quotaBytes)
+}
+
+func reclaimEvictedRecovery(ctx context.Context, s *SourceMutationService) {
+	if s.History.db == nil {
+		if err := reclaimMemoryRecovery(ctx, s); err != nil && ctx.Err() == nil && !errors.Is(err, context.Canceled) {
+			slog.WarnContext(ctx, "source recovery reclamation", "error", err)
+		}
+		return
+	}
+	if err := reclaimMovedAsideRecovery(ctx, s); err != nil && ctx.Err() == nil && !errors.Is(err, context.Canceled) && !errors.Is(err, sql.ErrConnDone) && !isClosedDBErr(err) {
+		slog.WarnContext(ctx, "source recovery reclamation", "error", err)
+	}
+}
+
+func isClosedDBErr(err error) bool {
+	return err != nil && err.Error() == "sql: database is closed"
 }
 
 func (s *SourceHistory) commitSourceHistoryMemory(plan sourceMutationPlan, entry *sourceHistoryEntry) error {
@@ -114,22 +132,6 @@ func (s *SourceHistory) commitSourceHistoryMemory(plan sourceMutationPlan, entry
 	s.history[copy.ID] = &copy
 	s.pruneSourceHistoryMemory(copy.ProjectID)
 	return nil
-}
-
-func (s *SourceHistory) pruneSourceHistoryMemory(projectID string) {
-	entries := make([]*sourceHistoryEntry, 0)
-	for _, entry := range s.history {
-		if entry.ProjectID == projectID {
-			entries = append(entries, entry)
-		}
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Seq > entries[j].Seq })
-	if len(entries) <= sourceHistoryLimit {
-		return
-	}
-	for _, entry := range entries[sourceHistoryLimit:] {
-		delete(s.history, entry.ID)
-	}
 }
 
 func historyTransitionStates(transition string) (string, string) {

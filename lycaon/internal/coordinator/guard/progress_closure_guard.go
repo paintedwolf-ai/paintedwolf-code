@@ -8,14 +8,16 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const ProgressItemNotClosedCode = "PROGRESS_ITEM_NOT_CLOSED"
+const ProgressReconciliationRequiredCode = "PROGRESS_RECONCILIATION_REQUIRED"
 
 // ProgressClosureBaseline snapshots the checklist when the closure latch arms.
-// The latch clears on a closed-count advance or any content change since arm.
+// Only the reconciliation service acknowledges finished worker jobs.
 type ProgressClosureBaseline struct {
-	Closed  int    // done + n/a rows at arm time
-	Content string // stored checklist bytes at arm time
-	// Settled names the successful finishes the checklist has not absorbed.
+	Closed   int    // done + n/a rows at arm time
+	Content  string // stored checklist bytes at arm time
+	Revision string
+	JobIDs   []string
+	// Settled names worker finishes for rejection details.
 	Settled []string
 }
 
@@ -41,12 +43,11 @@ func ObserveProgressItemNotClosedBeforeDispatch(
 	gc.Progress.ProgressOpenItems = int64(pending)
 	closed := done + na
 	gc.Progress.ProgressClosedBeyondBaseline = closed > baseline.Closed
+	// Document changes do not consume worker-finish obligations.
 	gc.Progress.ProgressReconciledSinceArm = progressContent != baseline.Content
-	if pending > 0 && !gc.Progress.ProgressClosedBeyondBaseline && !gc.Progress.ProgressReconciledSinceArm {
-		gc.PutRejectData(ProgressItemNotClosedCode, map[string]any{
-			"tool":         strings.TrimSpace(tool),
-			"pending":      pending,
-			"settled_work": append([]string(nil), baseline.Settled...),
-		})
-	}
+	gc.PutRejectData(ProgressReconciliationRequiredCode, map[string]any{
+		"tool":         strings.TrimSpace(tool),
+		"pending":      pending,
+		"settled_work": append([]string(nil), baseline.Settled...),
+	})
 }

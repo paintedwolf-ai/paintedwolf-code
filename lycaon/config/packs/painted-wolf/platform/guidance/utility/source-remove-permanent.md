@@ -1,0 +1,1 @@
+Delete {{ path }} ({{ size }}, {{ files }} file{% if files != 1 %}s{% endif %}) permanently without recovery.{% if not recovery_known %} Recovery storage size is unavailable.{% elif recovery_bytes != content_bytes %} The tree uses {{ recovery_size }} of allocated storage.{% endif %}

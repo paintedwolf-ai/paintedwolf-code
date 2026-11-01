@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/components/tool/ActivitySpanCard.tsx",
+  "kind": "module",
+  "workstream": "command-activities",
+  "disposition": "retain",
+  "reason": "Retain the measured 310-line group disclosure shell within 330 lines. Accordion state, Find reveal and virtualized rows share one mounted disclosure lifecycle. Command projection has its own component and model; the shell receives presented entries and source running state.",
+  "reviewed_commit": "e200fa8a75b25f9a4fbc0ff4d992b7c3126aaede",
+  "ceiling": 330,
+  "boundaries": {
+    "lycaon-den/src/components/tool/ActivitySpanCard.test.tsx": "bfbf70a792708f79e328c8f9aa4495a883d1ffbaf10618a5bbad9d22f2707dc6",
+    "lycaon-den/src/components/tool/CommandActivitySpan.test.tsx": "3d0c121cd99b526cfd41087f3ccaf54f872d93a074a0e404e35c8912c35e726f"
+  }
+}

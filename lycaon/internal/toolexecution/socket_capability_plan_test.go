@@ -16,18 +16,18 @@ import (
 
 func socketPlanAction() hitl.ProposedAction {
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Presentation: hitl.ActionPresentation{
-Command: "docker version",
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-docker",
-ProjectDir: "/tmp/gitea",
-ProjectID: "proj-gitea",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "docker version",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-docker",
+			ProjectDir: "/tmp/gitea",
+			ProjectID:  "proj-gitea",
+		},
+	}
 }
 
 func socketPlanPresentation() (hitl.ApprovalPresentation, []api.ApprovalGate) {
@@ -109,14 +109,14 @@ func TestSocketGenericGrantOnlyDoesNotContinue(t *testing.T) {
 
 func TestCombinedDirectIPAuthorityMatchesPrimaryRung(t *testing.T) {
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "worker",
-RootSessionID: "root",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "worker",
+			RootSessionID: "root",
+		},
+	}
 	direct := directIPApprovalReview{Action: action, Lease: hitl.DirectIPLease{
 		ActionDigest: "action", RequestDigest: "request", ConfinementDigest: "confine",
 	}}

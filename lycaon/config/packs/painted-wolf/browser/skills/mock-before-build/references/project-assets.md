@@ -10,7 +10,7 @@ There is no pre-render asset inventory, and a wrong path fails the whole render.
 2. `docs/` for screenshots and marketing art; `brand/`, `design/`, `.github/` for logos.
 3. Name search for `logo`, `wordmark`, `favicon`, `icon`, `og-image`, `screenshot`.
 4. For stylesheets, the app's entry CSS (`src/styles/`, `app.css`, `main.css`, `index.css`) — not a preprocessor source (`.scss`/`.less` are not servable; use the built `.css` or write the delta yourself).
-5. Confirm the exact path exists (`find` or `ls` in `command`) before authoring.
+5. Confirm the exact path exists (use `command` with `find . -name NAME` or `ls PATH`) before authoring.
 
 ## Prefer real marks over placeholders
 

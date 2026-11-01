@@ -14,7 +14,7 @@ import (
 )
 
 // refreshBoard runs outside q.mu because board reads can re-enter the queue.
-func (q *InMemoryQueue) refreshBoard(ctx context.Context, task api.WorkerTask, projectID string) {
+func (q *memoryQueueCore) refreshBoard(ctx context.Context, task api.WorkerTask, projectID string) {
 	refreshWorkerTaskBoard(q.events, ctx, task, projectID)
 }
 
@@ -52,12 +52,12 @@ func enqueueScope(projectID string, task *api.WorkerTask) project.ProjectScope {
 }
 
 // Enqueue adds a worker task to the pending queue (any project when listing).
-func (q *InMemoryQueue) Enqueue(ctx context.Context, task api.WorkerTask) (string, error) {
+func (q *memoryQueueClaims) Enqueue(ctx context.Context, task api.WorkerTask) (string, error) {
 	return q.EnqueueWithProjectID(ctx, "", task)
 }
 
 // EnqueueWithProjectID enqueues a task scoped to a project id.
-func (q *InMemoryQueue) EnqueueWithProjectID(ctx context.Context, projectID string, task api.WorkerTask) (string, error) {
+func (q *memoryQueueClaims) EnqueueWithProjectID(ctx context.Context, projectID string, task api.WorkerTask) (string, error) {
 	var jobID string
 	err := q.WithTaskAdmission(ctx, task, func() error {
 		var enqueueErr error
@@ -67,7 +67,7 @@ func (q *InMemoryQueue) EnqueueWithProjectID(ctx context.Context, projectID stri
 	return jobID, err
 }
 
-func (q *InMemoryQueue) enqueueAdmitted(ctx context.Context, projectID string, task api.WorkerTask) (string, error) {
+func (q *memoryQueueClaims) enqueueAdmitted(ctx context.Context, projectID string, task api.WorkerTask) (string, error) {
 	if err := q.PrepareEnqueue(ctx, projectID, &task); err != nil {
 		return "", err
 	}
@@ -75,7 +75,7 @@ func (q *InMemoryQueue) enqueueAdmitted(ctx context.Context, projectID string, t
 	return task.ID, nil
 }
 
-func (q *InMemoryQueue) PrepareEnqueue(ctx context.Context, projectID string, task *api.WorkerTask) error {
+func (q *memoryQueueClaims) PrepareEnqueue(ctx context.Context, projectID string, task *api.WorkerTask) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -122,6 +122,17 @@ func (q *InMemoryQueue) PrepareEnqueue(ctx context.Context, projectID string, ta
 	if task.ID == "" {
 		task.ID = uuid.NewString()
 	}
+	assignMemoryTaskDefaults(task, defaultTarget)
+	if _, exists := q.jobs[task.ID]; exists {
+		return fmt.Errorf("worker job %s already exists", task.ID)
+	}
+	task.AfterWorkers = append([]string(nil), task.AfterWorkers...)
+	q.jobs[task.ID] = &queuedJob{task: *task, projectID: task.ProjectID}
+	q.pending = append(q.pending, task.ID)
+	return nil
+}
+
+func assignMemoryTaskDefaults(task *api.WorkerTask, defaultTarget api.ExecutionTarget) {
 	if task.EffectiveScope().IsWrite() && strings.TrimSpace(task.OverlayID) == "" {
 		task.OverlayID = task.ID
 	}
@@ -134,17 +145,9 @@ func (q *InMemoryQueue) PrepareEnqueue(ctx context.Context, projectID string, ta
 	if task.ExecutionTarget == "" {
 		task.ExecutionTarget = defaultTarget
 	}
-
-	if _, exists := q.jobs[task.ID]; exists {
-		return fmt.Errorf("worker job %s already exists", task.ID)
-	}
-	task.AfterWorkers = append([]string(nil), task.AfterWorkers...)
-	q.jobs[task.ID] = &queuedJob{task: *task, projectID: task.ProjectID}
-	q.pending = append(q.pending, task.ID)
-	return nil
 }
 
-func (q *InMemoryQueue) PublishEnqueued(ctx context.Context, jobID string) {
+func (q *memoryQueueClaims) PublishEnqueued(ctx context.Context, jobID string) {
 	q.mu.Lock()
 	job, ok := q.jobs[jobID]
 	_, published := q.published[jobID]

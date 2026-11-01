@@ -42,6 +42,8 @@ type Props = {
   sessionId?: string;
   projectId?: string;
   rootRefs?: readonly ResolveProjectRoot[];
+  /** The owning card presents the call's arguments itself. */
+  omitArgs?: boolean;
 };
 
 function FactsGrid(props: {
@@ -234,11 +236,7 @@ function Section(props: {
         <BackgroundProcessSection
           sessionId={props.sessionId}
           section={
-            props.section as {
-              kind: "background_process";
-              handle: string;
-              running: boolean;
-            }
+            props.section as Extract<StructuredToolSection, { kind: "background_process" }>
           }
         />
       </Match>
@@ -293,7 +291,7 @@ function CompactionSection(props: {
 
 function BackgroundProcessSection(props: {
   sessionId?: string;
-  section: { handle: string; running: boolean };
+  section: Extract<StructuredToolSection, { kind: "background_process" }>;
 }) {
   return (
     <Show when={props.sessionId?.trim()} keyed>
@@ -302,6 +300,7 @@ function BackgroundProcessSection(props: {
           sessionId={id}
           processId={props.section.handle}
           initialRunning={props.section.running}
+          terminationReason={props.section.terminationReason}
         />
       )}
     </Show>
@@ -428,7 +427,7 @@ export function StructuredToolBody(props: Props) {
           </div>
         )}
       </Show>
-      <Show when={view().argsFacts.length > 0}>
+      <Show when={!props.omitArgs && view().argsFacts.length > 0}>
         <div class="den-tool-part-card-section">
           <p class="den-tool-part-card-section-label">Input</p>
           <FactsGrid
@@ -441,7 +440,7 @@ export function StructuredToolBody(props: Props) {
           />
         </div>
       </Show>
-      <Show when={props.part.argsReference}><RetainedToolContent field="args" /></Show>
+      <Show when={!props.omitArgs && props.part.argsReference}><RetainedToolContent field="args" /></Show>
       <Show when={props.part.tool === "request_tools" || props.part.tool === "skills_read"}>
         <ToolResolutionFacts part={props.part} />
       </Show>
@@ -481,6 +480,7 @@ export function StructuredToolBody(props: Props) {
       </Show>
       <Show
         when={
+          !props.omitArgs &&
           view().sections.length === 0 &&
           view().argsFacts.length === 0 &&
           !view().evidenceHandle &&

@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostresources"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 func sortedHostResourceIDs(states map[string]hostresources.State) []string {
@@ -35,12 +36,12 @@ func (e *Capabilities) permitCoveredHostResourceSockets(
 		return false, missing
 	}
 	for _, grant := range missing {
-		if !socketMatchesRealization(grant, tc.Host.RealizationSockets) {
+		if grant.Binding.Mode() != socketref.KernelPathname || !socketMatchesRealization(grant, tc.Host.RealizationSockets) {
 			extras = append(extras, grant)
 			continue
 		}
 		if e.socketRuntime != nil {
-			e.socketRuntime.IssuePermit(tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, grant)
+			e.socketRuntime.IssuePermit(tc.ChatSessionID(), tc.PermitIdentity(), actionDigest, grant)
 		}
 		e.recordCapabilityDecision(ctx, tc, action.Invocation.Tool, grant, true, authzledger.AuthorizationSourceLease)
 	}

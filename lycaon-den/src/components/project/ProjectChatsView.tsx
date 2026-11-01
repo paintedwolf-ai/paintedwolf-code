@@ -17,8 +17,13 @@ import type { AttentionIndex } from "../../attention/attention-model.ts";
 import { attentionReasonLabel } from "../../attention/attention-model.ts";
 import {
   getLycaonClient,
+  onProjectBackgroundEvent,
   onSessionEvent,
 } from "../../platform/connection/app-connection.ts";
+import {
+  backgroundRunningLabel,
+  sessionRunningBackgroundCount,
+} from "../../project/project-background-store.ts";
 import { confirmChatDelete } from "../../session/confirm-chat-delete.ts";
 import { exportSessionTranscript } from "../../settings/storage/data-backup-actions.ts";
 import { sessionLifecycleMenuItems } from "../../session/session-lifecycle-menu.ts";
@@ -51,6 +56,7 @@ type Props = {
   onSetArchived: (row: SessionSummary, archived: boolean) => Promise<boolean>;
   onSetPinned: (row: SessionSummary, pinned: boolean) => Promise<boolean>;
   onDeleteSession: (row: SessionSummary) => Promise<boolean>;
+  onOpenRunning?: () => void;
   /** Set when a routed jump (Crossbar go-to, card CTA) landed here. */
   back?: StageBack | null;
 };
@@ -123,12 +129,17 @@ export function ProjectChatsView(props: Props) {
 
   let sseTimer: ReturnType<typeof setTimeout> | undefined;
   createResidentActivity(() => {
-  const detachSse = onSessionEvent(() => {
+  const schedule = () => {
     clearTimeout(sseTimer);
     sseTimer = setTimeout(() => void refetch(), SSE_REFETCH_DEBOUNCE_MS);
+  };
+  const detachSse = onSessionEvent(schedule);
+  const detachBgSse = onProjectBackgroundEvent((ev) => {
+    if (ev.project_id === props.projectId) schedule();
   });
   return () => {
     detachSse();
+    detachBgSse();
     clearTimeout(sseTimer);
   };
   });
@@ -212,9 +223,26 @@ export function ProjectChatsView(props: Props) {
 
   const deleteChats = async (ids: readonly string[]) => {
     if (ids.length === 0) return;
-    if (!(await confirmChatDelete(ids.length))) return;
+    const targets = ids.map((id) => {
+      const row = rows().find((candidate) => candidate.id === id);
+      return { sessionId: id, title: row ? rowTitle(row) : sessionTitle(undefined) };
+    });
+    if (
+      !(await confirmChatDelete({
+        count: ids.length,
+        projectId: props.projectId,
+        chats: targets,
+        client: getLycaonClient(),
+        onOpenRunning: props.onOpenRunning,
+      }))
+    ) {
+      return;
+    }
     await runBatch(ids, (row) => props.onDeleteSession(row));
   };
+
+  const backgroundRunningFor = (row: SessionSummary) =>
+    sessionRunningBackgroundCount(props.projectId, row.id, row.background_running);
 
   const exportRow = (row: SessionSummary, format: "md" | "json") => {
     const client = getLycaonClient();
@@ -414,6 +442,15 @@ export function ProjectChatsView(props: Props) {
                         )}
                       </Show>
                       <span class="chat-list-row__name">{rowTitle(row)}</span>
+                      <Show when={backgroundRunningFor(row) > 0}>
+                        <span
+                          class="chat-list-row__background-running"
+                          role="img"
+                          aria-label={backgroundRunningLabel(backgroundRunningFor(row))}
+                          data-tip={backgroundRunningLabel(backgroundRunningFor(row))}
+                          data-testid={`chat-list-background-running-${row.id}`}
+                        />
+                      </Show>
                       <Show when={row.pin_rank != null}>
                         <span
                           class="chat-list-row__pin"

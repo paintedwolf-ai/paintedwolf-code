@@ -27,14 +27,24 @@ import (
 
 // Registry implements ProviderRegistry with catalog + credentials.
 type Registry struct {
+	registryCatalog
+}
+
+type registryCatalog struct {
+	registryDiscovery
+}
+
+type registryDiscovery struct {
+	registryRouting
+}
+
+type registryRouting struct {
+	registryCore
+}
+
+type registryCore struct {
+	registryState
 	localRuntime    *nativegen.Runtime
-	thinkingPolicy  atomic.Pointer[PolicyStore]
-	rateGate        *providerretry.ProviderRateGate
-	mutationMu      sync.Mutex
-	screenMu        sync.RWMutex
-	catalog         *ProviderCatalog
-	credentials     *providercredentials.Store
-	snapshot        atomic.Pointer[providerRegistrySnapshot]
 	discovery       *discovery.Cache
 	cloudflareUsage *openaicompat.CloudflareUsageCache
 	discoveryClient *http.Client
@@ -44,6 +54,16 @@ type Registry struct {
 	listCache *catalogruntime.SnapshotCache[[]api.ProviderMeta]
 	// outboundSecretScreen is the final provider boundary.
 	outboundSecretScreen OutboundSecretScreen
+}
+
+type registryState struct {
+	thinkingPolicy atomic.Pointer[PolicyStore]
+	rateGate       *providerretry.ProviderRateGate
+	mutationMu     sync.Mutex
+	screenMu       sync.RWMutex
+	catalog        *ProviderCatalog
+	credentials    *providercredentials.Store
+	snapshot       atomic.Pointer[providerRegistrySnapshot]
 }
 
 const providerListCacheTTL = 30 * time.Second
@@ -70,7 +90,7 @@ func (r *Registry) SetOutboundSecretScreen(screen OutboundSecretScreen) {
 }
 
 // ProviderKind returns the kind for a catalog instance.
-func (r *Registry) ProviderKind(instanceID string) (string, bool) {
+func (r *registryCore) ProviderKind(instanceID string) (string, bool) {
 	if r == nil {
 		return "", false
 	}
@@ -107,7 +127,7 @@ func (r *Registry) ModelFeed() *modelfeed.Feed {
 
 // resolveAPIKey returns the Settings-stored API key for the provider.
 // Catalog environment hints do not configure providers.
-func (r *Registry) resolveAPIKey(entry CatalogEntry) string {
+func (r *registryCore) resolveAPIKey(entry CatalogEntry) string {
 	if r.credentials == nil {
 		return ""
 	}
@@ -166,7 +186,7 @@ func (r *Registry) ConfiguredCount() int {
 }
 
 // IsConfigured reports whether a provider can make API calls.
-func (r *Registry) IsConfigured(id string) bool {
+func (r *registryCore) IsConfigured(id string) bool {
 	if r == nil {
 		return false
 	}

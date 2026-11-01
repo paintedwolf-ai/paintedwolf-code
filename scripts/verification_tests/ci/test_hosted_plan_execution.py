@@ -30,7 +30,7 @@ class HostedPlanTests(unittest.TestCase):
         # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
         self.assertLessEqual(release, check | platform)
         self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities",
-                                   "webkit-gtk", "confinement-arm64"})
+                                   "webkit-gtk", "confinement-arm64", "reference-userlands"})
         # Qualification runs the check gate, then release's platform lanes beside the platform gates.
         self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
@@ -112,7 +112,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
-                                   "den:webkit:atspi", "test:confine:linux", "nix:check",
+                                   "den:webkit:atspi", "test:confine:linux", "nix:check", "test:userlands", "test:conformance:live",
                                    "budgets", "coverage:changes", "den:coverage:changes", "scripts:coverage:changes",
                                    "build", "build:cross", "licenses:notices", "check:drift", "openapi:lint",
                                    "validate:workflows", "oar:verify", "lint:full", "test:fail-messages:check",
@@ -249,6 +249,16 @@ class HostedPlanTests(unittest.TestCase):
                     targets = ci.lanes()[row["lane"]]["targets"]
                     self.assertEqual(row["linux_launch"], any(ci.runs_protected_launch(target) for target in targets))
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
+
+    def test_lanes_learn_whether_they_need_the_reference_userlands(self):
+        for profile in ci.PROFILES:
+            for row in ci.matrix(profile)["include"]:
+                with self.subTest(profile=profile, lane=row["lane"]):
+                    self.assertEqual(row["userlands"], "test:userlands" in ci.lanes()[row["lane"]]["targets"])
+        for profile in ("integration", "nightly", "release"):
+            with self.subTest(profile=profile):
+                self.assertEqual([row["lane"] for row in ci.matrix(profile)["include"] if row["userlands"]],
+                                 ["reference-userlands"])
 
     def test_lanes_that_reach_the_protected_launch_leg_provision_its_display(self):
         # Catalog recipes over the whole tree reach internal/launchguard; scripted runs declare it.

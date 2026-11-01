@@ -27,10 +27,12 @@ type ActivityEvent struct {
 	Kind       ActivityKind   `json:"kind"`
 	Status     ActivityStatus `json:"status"`
 	StartedAt  time.Time      `json:"started_at"`
-	ToolName   string         `json:"tool_name,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
-	Progress   *ToolProgress  `json:"progress,omitempty"`
-	// Subscriptions that will end an awaiting_wake lease, in the host's own vocabulary (timer, next_worker_done, process_done, …). Present only on awaiting_wake, and what the client names rather than inferring a subject from the sleep reason.
+	// The running tool, or on awaiting_wake the tool call that parked the session (`wait`, or `command` whose program waits). Absent on a host-armed awaiting_wake lease.
+	ToolName string `json:"tool_name,omitempty"`
+	// The call tool_name names. On awaiting_wake it binds the lease to the parked call, whose result carries completion state parked.
+	ToolCallID string        `json:"tool_call_id,omitempty"`
+	Progress   *ToolProgress `json:"progress,omitempty"`
+	// Subscriptions that will end an awaiting_wake lease, in the host's own vocabulary (timer, next_worker_done, process_done, …). Present only on awaiting_wake, and what the client names rather than inferring a subject from the sleep reason. A parked command's lease subscribes to program_done, which only the host arms.
 	WaitTriggers []string `json:"wait_triggers,omitempty"`
 	// What asked the local decision engine. Present only on deciding, which the host opens only while an available engine is answering; the answer arrives as a turn_load event.
 	DecisionTrigger TurnLoadTrigger `json:"decision_trigger,omitempty"`
@@ -271,7 +273,7 @@ type ApprovalGrant struct {
 	ID       string                `json:"id"`
 	Scope    ApprovalGrantScope    `json:"scope"`
 	Category ApprovalGrantCategory `json:"category"`
-	// Searchable host label. For socket_path this mirrors approved_path; authority matching uses approved_path and resolved_path. Secret releases expose only a count label; their fingerprints stay host-only.
+	// Searchable host label. For socket_path this mirrors approved_path; authority matching also checks the host-owned enforcement mode and live socket binding. Secret releases expose only a count label; their fingerprints stay host-only.
 	Pattern string `json:"pattern"`
 	// Host-rendered bounded-lease label.
 	Title string `json:"title"`
@@ -286,7 +288,7 @@ type ApprovalGrant struct {
 	ProjectID string `json:"project_id,omitempty"`
 	// A folder the lease was granted from, for display only. Absent for a project with no folders attached.
 	ProjectDir string `json:"project_dir,omitempty"`
-	// True when the granted target no longer exists on this host — a write_root whose path fails Lstat, or a socket_path whose approved path no longer resolves to a usable socket. Display and bulk-clear only; never auto-revoked.
+	// True when the granted target no longer exists on this host — a write_root whose path fails Lstat, or a socket_path whose approved path no longer resolves to a usable socket, or whose retained binding is unavailable after replacement or engine restart. Saved intent is preserved until renewed or revoked.
 	Unavailable bool `json:"unavailable,omitempty"`
 	// Number of exact actions an action_set lease covers. Exact action identities are host-only opaque digests and never cross the wire.
 	ActionCount int `json:"action_count,omitempty"`
@@ -309,7 +311,7 @@ type ApprovalGrant struct {
 	ChatSessionID string `json:"chat_session_id,omitempty"`
 	// Chat title on chat-scoped rows, for grouping in Settings.
 	SessionTitle string `json:"session_title,omitempty"`
-	// Host copy for revoke consequences. Socket grants use "Applies to the next command or terminal. Already-running processes retain access."
+	// Host copy for revoke consequences. Socket grants use "Applies to the next local-service operation. Already-running processes and admitted requests retain access."
 	RevokeAppliesTo string `json:"revoke_applies_to,omitempty"`
 }
 
@@ -653,11 +655,12 @@ type AttentionView struct {
 
 // BackgroundProcess
 type BackgroundProcess struct {
-	Output    *BackgroundProcessOutput `json:"output,omitempty"`
-	ProcessID string                   `json:"process_id"`
-	Running   bool                     `json:"running"`
-	Stages    []BackgroundProcessStage `json:"stages,omitempty"`
-	ExitCode  *int                     `json:"exit_code,omitempty"`
+	Output            *BackgroundProcessOutput           `json:"output,omitempty"`
+	ProcessID         string                             `json:"process_id"`
+	Running           bool                               `json:"running"`
+	Stages            []BackgroundProcessStage           `json:"stages,omitempty"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
 }
 
 // BackgroundProcessChunk
@@ -675,10 +678,11 @@ type BackgroundProcessEvent struct {
 	Stream    string `json:"stream"`
 	Text      string `json:"text,omitempty"`
 	// Byte offset just past the process output this event reflects; 0 for a held call, which has no byte stream.
-	EndOffset int64 `json:"end_offset"`
-	Running   bool  `json:"running"`
-	ExitCode  *int  `json:"exit_code,omitempty"`
-	Truncated bool  `json:"truncated,omitempty"`
+	EndOffset         int64                              `json:"end_offset"`
+	Running           bool                               `json:"running"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
+	Truncated         bool                               `json:"truncated,omitempty"`
 	// Replace previously projected text instead of appending it.
 	Reset bool `json:"reset,omitempty"`
 }
@@ -694,8 +698,9 @@ type BackgroundProcessOutput struct {
 	Chunks    []BackgroundProcessChunk `json:"chunks"`
 	Running   bool                     `json:"running"`
 	// Earlier output was evicted from the host buffer or cut from this snapshot.
-	Truncated bool `json:"truncated,omitempty"`
-	ExitCode  *int `json:"exit_code,omitempty"`
+	Truncated         bool                               `json:"truncated,omitempty"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
 }
 
 // BackgroundProcessStage
@@ -715,8 +720,9 @@ type BackgroundProcessStopResult struct {
 	// The host requested termination; this does not assert process exit.
 	StopRequested bool `json:"stop_requested"`
 	// True until the host has observed terminal process state. Wait for the process event instead of repeating stop.
-	Running  bool `json:"running"`
-	ExitCode *int `json:"exit_code,omitempty"`
+	Running           bool                               `json:"running"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
 }
 
 // BackupCapabilities
@@ -1274,6 +1280,102 @@ type CodeScanPage struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// CommandActivity
+type CommandActivity struct {
+	ID      string `json:"id"`
+	Group   string `json:"group"`
+	Label   string `json:"label"`
+	Subject string `json:"subject"`
+	// Registered session-owned background job started by this activity.
+	JobHandle  string `json:"job_handle,omitempty"`
+	Directory  string `json:"directory,omitempty"`
+	Outcome    string `json:"outcome"`
+	State      string `json:"state"`
+	StatusCode *int   `json:"status_code,omitempty"`
+	// Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate.
+	MergeKey     string                `json:"merge_key,omitempty"`
+	ExecutionIDs []string              `json:"execution_ids"`
+	Spans        []CommandActivitySpan `json:"spans"`
+}
+
+// CommandActivityExecution
+type CommandActivityExecution struct {
+	ID         string `json:"id"`
+	State      string `json:"state"`
+	Outcome    string `json:"outcome"`
+	StatusCode *int   `json:"status_code,omitempty"`
+}
+
+// CommandActivitySpan
+type CommandActivitySpan struct {
+	SourceRef string `json:"source_ref"`
+	StartByte int    `json:"start_byte"`
+	EndByte   int    `json:"end_byte"`
+}
+
+// CommandExecutionOutput
+type CommandExecutionOutput struct {
+	Stream string `json:"stream"`
+	// Retained output handle owned by the program receipt.
+	Ref       string `json:"ref"`
+	SizeBytes int64  `json:"size_bytes"`
+	// The stream reached its end; false is a retained prefix.
+	Complete bool `json:"complete"`
+	Redacted bool `json:"redacted"`
+	// Leading screened bytes of the retained stream as UTF-8. Never the authoritative body.
+	Preview          string `json:"preview"`
+	PreviewTruncated bool   `json:"preview_truncated"`
+}
+
+// CommandExecutionReceipt Host dynamic execution. It has no assistant message or model tool-call identity.
+type CommandExecutionReceipt struct {
+	ID        string `json:"id"`
+	ProgramID string `json:"program_id"`
+	// Host syntax node identity within its program.
+	NodeID                          string   `json:"node_id"`
+	ParentExecutionID               string   `json:"parent_execution_id"`
+	Owner                           string   `json:"owner"`
+	Lifecycle                       string   `json:"lifecycle"`
+	DefinitionDigest                string   `json:"definition_digest"`
+	ArgumentsRepresentation         string   `json:"arguments_representation,omitempty"`
+	ArgumentsDigest                 string   `json:"arguments_digest"`
+	ReviewedArgumentsRepresentation string   `json:"reviewed_arguments_representation,omitempty"`
+	ReviewedArgumentsDigest         string   `json:"reviewed_arguments_digest,omitempty"`
+	ReviewedArgumentsRef            string   `json:"reviewed_arguments_ref,omitempty"`
+	NativeCommand                   string   `json:"native_command,omitempty"`
+	EffectMode                      string   `json:"effect_mode,omitempty"`
+	EffectClasses                   []string `json:"effect_classes,omitempty"`
+	ArgumentsRef                    string   `json:"arguments_ref"`
+	// Compact display only. Not authority or replay input.
+	Command string `json:"command"`
+	State   string `json:"state"`
+	// Durable before-owner marker; host loss can precede actual invocation.
+	OwnerStarted bool `json:"owner_started"`
+	// Actual invocation observed by the admission caller. Absence after a start marker is unknown.
+	OwnerInvoked        bool   `json:"owner_invoked"`
+	StatusCode          *int   `json:"status_code,omitempty"`
+	StopCode            string `json:"stop_code,omitempty"`
+	HostStopCode        string `json:"host_stop_code,omitempty"`
+	Complete            bool   `json:"complete"`
+	PublicationEligible bool   `json:"publication_eligible"`
+	OutputPublishable   bool   `json:"output_publishable"`
+	EffectCertainty     string `json:"effect_certainty"`
+	EvidenceKind        string `json:"evidence_kind,omitempty"`
+	EvidenceRef         string `json:"evidence_ref,omitempty"`
+	OwnerRef            string `json:"owner_ref,omitempty"`
+	RecoveryRef         string `json:"recovery_ref,omitempty"`
+	HeldVersionID       string `json:"held_version_id,omitempty"`
+	AcceptedRevision    string `json:"accepted_revision,omitempty"`
+	PublishedRevision   string `json:"published_revision,omitempty"`
+	DetailRef           string `json:"detail_ref"`
+	ApprovalRef         string `json:"approval_ref,omitempty"`
+	// Host background job this child started, for the existing background process views.
+	JobHandle string `json:"job_handle,omitempty"`
+	// Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing.
+	Outputs          []CommandExecutionOutput `json:"outputs,omitempty"`
+	RevisionConflict *CommandRevisionConflict `json:"revision_conflict,omitempty"`
+}
+
 // CommandInvokeContext Structured invocation coordinates. The host resolves and verifies these against machine state; a Den boolean is never authority.
 type CommandInvokeContext struct {
 	RootID           string `json:"root_id,omitempty"`
@@ -1317,6 +1419,111 @@ type CommandInvokeResponse struct {
 	// Tool result text for completed MCP tool calls.
 	Output string              `json:"output,omitempty"`
 	Error  *CommandInvokeError `json:"error,omitempty"`
+}
+
+// CommandProgramNode
+type CommandProgramNode struct {
+	// Host syntax node identity within its program.
+	ID string `json:"id"`
+	// Captured syntax unit identity within its program.
+	SourceUnitID string `json:"source_unit_id"`
+	StartByte    int64  `json:"start_byte"`
+	EndByte      int64  `json:"end_byte"`
+	Line         int    `json:"line"`
+	Column       int    `json:"column"`
+	State        string `json:"state"`
+}
+
+// CommandProgramOutputLimit Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix.
+type CommandProgramOutputLimit struct {
+	Code     string `json:"code"`
+	LimitID  string `json:"limit_id"`
+	Maximum  int64  `json:"maximum"`
+	Observed int64  `json:"observed"`
+}
+
+// CommandProgramOutputWindow
+type CommandProgramOutputWindow struct {
+	Stream string `json:"stream"`
+	Ref    string `json:"ref"`
+	// Session output address of the retained stream copy.
+	OutputPath string `json:"output_path"`
+	// Bytes in the saved stream. For an incomplete stream the final total is unknown.
+	TotalBytes int64 `json:"total_bytes"`
+	// Lines in the saved stream. For an incomplete stream the final total is unknown.
+	TotalLines        int                        `json:"total_lines"`
+	Complete          bool                       `json:"complete"`
+	Truncated         bool                       `json:"truncated"`
+	HeadEndByte       int64                      `json:"head_end_byte"`
+	HeadEndLine       int                        `json:"head_end_line"`
+	TailStartByte     int64                      `json:"tail_start_byte"`
+	TailStartLine     int                        `json:"tail_start_line"`
+	OmittedBytes      int64                      `json:"omitted_bytes"`
+	OmittedLines      int                        `json:"omitted_lines"`
+	InlineBudgetBytes int                        `json:"inline_budget_bytes"`
+	Limit             *CommandProgramOutputLimit `json:"limit,omitempty"`
+}
+
+// CommandProgramProgressReceipt Existing progress owner's envelope invocation, independent of shell effects.
+type CommandProgramProgressReceipt struct {
+	ExecutionID             string `json:"execution_id"`
+	ProgramID               string `json:"program_id"`
+	RootSessionID           string `json:"root_session_id"`
+	State                   string `json:"state"`
+	OwnerInvoked            bool   `json:"owner_invoked"`
+	ArgumentsRepresentation string `json:"arguments_representation,omitempty"`
+	ArgumentsDigest         string `json:"arguments_digest"`
+	ArgumentsRef            string `json:"arguments_ref"`
+	DetailRef               string `json:"detail_ref"`
+}
+
+// CommandProgramReceipt
+type CommandProgramReceipt struct {
+	ID              string     `json:"id"`
+	ParentReceiptID string     `json:"parent_receipt_id"`
+	LanguageVersion int        `json:"language_version"`
+	CatalogDigest   string     `json:"catalog_digest"`
+	SourceDigest    string     `json:"source_digest"`
+	SourceRef       string     `json:"source_ref"`
+	State           string     `json:"state"`
+	StatusCode      *int       `json:"status_code,omitempty"`
+	StopCode        string     `json:"stop_code,omitempty"`
+	DetailRef       string     `json:"detail_ref"`
+	ProgressState   string     `json:"progress_state"`
+	ProgressRef     string     `json:"progress_ref,omitempty"`
+	StartedAt       time.Time  `json:"started_at"`
+	SettledAt       *time.Time `json:"settled_at,omitempty"`
+	// Initial host activity identities. Details loading must not regroup these rows.
+	Activities []CommandActivity `json:"activities,omitempty"`
+	// Bounded live execution outcomes for rows whose presentation membership is already established.
+	ActivityExecutions []CommandActivityExecution `json:"activity_executions,omitempty"`
+	// Monotonic receipt trace revision for live snapshot reconciliation.
+	ActivityRevision  int64  `json:"activity_revision,omitempty"`
+	ActivitiesCursor  string `json:"activities_cursor,omitempty"`
+	ActivitiesOmitted int    `json:"activities_omitted,omitempty"`
+	// Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence.
+	Outputs []CommandProgramOutputWindow `json:"outputs,omitempty"`
+}
+
+// CommandProgramReceiptPage
+type CommandProgramReceiptPage struct {
+	Program    CommandProgramReceipt          `json:"program"`
+	Progress   *CommandProgramProgressReceipt `json:"progress,omitempty"`
+	Executions []CommandExecutionReceipt      `json:"executions"`
+	// Known static nodes only; never speculative future loop iterations.
+	Nodes []CommandProgramNode `json:"nodes"`
+	// Host-composed work for this bounded execution page, in first-touch order. Supporting operations retain their execution identities.
+	Activities        []CommandActivity `json:"activities,omitempty"`
+	ExecutionsOmitted int               `json:"executions_omitted"`
+	NodesOmitted      int               `json:"nodes_omitted"`
+	NextCursor        string            `json:"next_cursor,omitempty"`
+}
+
+// CommandRevisionConflict Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed.
+type CommandRevisionConflict struct {
+	Path             string `json:"path"`
+	ExpectedRevision string `json:"expected_revision"`
+	ObservedRevision string `json:"observed_revision"`
 }
 
 // CommandUIEffect Closed typed UI effect returned by host-validated presentation actions.
@@ -3187,10 +3394,23 @@ type FireWorkflowTransitionRequest struct {
 // FolderDetect
 type FolderDetect struct {
 	Path string `json:"path"`
-	// The project that already holds this folder as a root, when there is one. Absent for a folder no project covers. Opening a folder that carries this reopens that project; minting a second one over the same tree would lose its trust state.
+	// The most recently opened single-root project for this folder, when one exists. Absent when no project covers this folder or when matching projects include additional attached folders.
 	ProjectID string `json:"project_id,omitempty"`
+	// Existing projects that include this folder as a root, ordered with single-root matches before multi-root matches and most recently opened first within each group.
+	Projects []FolderDetectProject `json:"projects,omitempty"`
 	// Install choices available before opening the project.
 	ExtensionSuggestions *ExtensionSuggestionsResponse `json:"extension_suggestions,omitempty"`
+}
+
+// FolderDetectProject
+type FolderDetectProject struct {
+	ID string `json:"id"`
+	// Display name for the project (explicit name or primary folder basename).
+	Name  string        `json:"name"`
+	Roots []ProjectRoot `json:"roots"`
+	// True when the detected folder is the project's only attached root.
+	IsSingleRoot bool      `json:"is_single_root"`
+	LastOpenedAt time.Time `json:"last_opened_at"`
 }
 
 // FullScanRequest A complete pass of every admitted file by the named scanners, or by every selected scanner when none are named. The only way a full pass starts; automatic scanning is incremental.
@@ -3792,6 +4012,56 @@ type LogDigestTimeSpan struct {
 	EndAt   string `json:"end_at"`
 }
 
+// LoopbackListenerFact Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address.
+type LoopbackListenerFact struct {
+	Kind               string                      `json:"kind,omitempty"`
+	Address            string                      `json:"address,omitempty"`
+	ConnectedAddress   string                      `json:"connected_address,omitempty"`
+	PID                int                         `json:"pid,omitempty"`
+	ProcessName        string                      `json:"process_name,omitempty"`
+	SessionID          string                      `json:"session_id,omitempty"`
+	SessionTitle       string                      `json:"session_title,omitempty"`
+	ProjectID          string                      `json:"project_id,omitempty"`
+	ProjectName        string                      `json:"project_name,omitempty"`
+	Handle             string                      `json:"handle,omitempty"`
+	Command            string                      `json:"command,omitempty"`
+	Background         bool                        `json:"background,omitempty"`
+	ContainerID        string                      `json:"container_id,omitempty"`
+	ContainerName      string                      `json:"container_name,omitempty"`
+	Ambiguous          bool                        `json:"ambiguous,omitempty"`
+	Replaced           bool                        `json:"replaced,omitempty"`
+	Holders            []LoopbackListenerHolder    `json:"holders,omitempty"`
+	ContainerMismatch  bool                        `json:"container_mismatch,omitempty"`
+	PublishedContainer *LoopbackPublishedContainer `json:"published_container,omitempty"`
+	Description        string                      `json:"description,omitempty"`
+}
+
+// LoopbackListenerHolder
+type LoopbackListenerHolder struct {
+	Kind          string `json:"kind"`
+	Address       string `json:"address,omitempty"`
+	PID           int    `json:"pid,omitempty"`
+	ProcessName   string `json:"process_name,omitempty"`
+	SessionID     string `json:"session_id,omitempty"`
+	SessionTitle  string `json:"session_title,omitempty"`
+	ProjectID     string `json:"project_id,omitempty"`
+	ProjectName   string `json:"project_name,omitempty"`
+	Handle        string `json:"handle,omitempty"`
+	Command       string `json:"command,omitempty"`
+	Background    bool   `json:"background,omitempty"`
+	ContainerID   string `json:"container_id,omitempty"`
+	ContainerName string `json:"container_name,omitempty"`
+}
+
+// LoopbackPublishedContainer
+type LoopbackPublishedContainer struct {
+	ContainerID   string `json:"container_id,omitempty"`
+	ContainerName string `json:"container_name,omitempty"`
+	HostIP        string `json:"host_ip,omitempty"`
+	HostPort      int    `json:"host_port"`
+	LoopbackOnly  bool   `json:"loopback_only,omitempty"`
+}
+
 // MakeProjectSourceEditableRequest Human request to add owner-write permission to the exact file bytes shown in the editor.
 type MakeProjectSourceEditableRequest struct {
 	// Root-relative path of the existing regular file.
@@ -4308,6 +4578,8 @@ type PowerSettingsResponse struct {
 	ActiveWorkCount int `json:"active_work_count"`
 	// Most recent assertion failure, omitted after a successful acquisition.
 	LastError string `json:"last_error,omitempty"`
+	// Live background commands currently running across all projects that quitting Painted Wolf Code will terminate.
+	BackgroundProcesses []ProjectBackgroundProcess `json:"background_processes,omitempty"`
 }
 
 // PreflightEvent Host readiness changed while the app was running. Device-scoped: the report is about the machine, not one project, even when a probe's result names the projects it is about.
@@ -4537,6 +4809,48 @@ type ProjectAgentContext struct {
 	Skills              []AgentContextSkill       `json:"skills"`
 }
 
+// ProjectBackgroundEvent Project-scoped background command lifecycle or listening port change.
+type ProjectBackgroundEvent struct {
+	ProjectID         string                             `json:"project_id"`
+	ProcessID         string                             `json:"process_id"`
+	SessionID         string                             `json:"session_id"`
+	Action            string                             `json:"action"`
+	Revision          int64                              `json:"revision"`
+	Running           bool                               `json:"running"`
+	Ports             []string                           `json:"ports,omitempty"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
+	Process           *ProjectBackgroundProcess          `json:"process,omitempty"`
+}
+
+// ProjectBackgroundProcess One running or recently ended background command in a project, with live session metadata and attributed listening endpoints.
+type ProjectBackgroundProcess struct {
+	ProcessID string `json:"process_id"`
+	ProjectID string `json:"project_id,omitempty"`
+	// Display name of the owning project when listing across projects.
+	ProjectName     string `json:"project_name,omitempty"`
+	SessionID       string `json:"session_id"`
+	SessionTitle    string `json:"session_title,omitempty"`
+	SessionArchived bool   `json:"session_archived"`
+	Command         string `json:"command"`
+	RootID          string `json:"root_id,omitempty"`
+	// Working directory relative to the matched project root.
+	WorkingDir        string                             `json:"working_dir"`
+	Ports             []string                           `json:"ports"`
+	StartedAt         time.Time                          `json:"started_at"`
+	EndedAt           *time.Time                         `json:"ended_at,omitempty"`
+	Running           bool                               `json:"running"`
+	ExitCode          *int                               `json:"exit_code,omitempty"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
+}
+
+// ProjectBackgroundProcessListResponse
+type ProjectBackgroundProcessListResponse struct {
+	Processes []ProjectBackgroundProcess `json:"processes"`
+	// Monotonic per-project background command revision.
+	Revision int64 `json:"revision"`
+}
+
 // ProjectCostReport
 type ProjectCostReport struct {
 	Total                int         `json:"total"`
@@ -4592,6 +4906,8 @@ type ProjectRemovalAssessment struct {
 	Complete          bool                      `json:"complete"`
 	Checks            []ProjectRemovalCheck     `json:"checks"`
 	Extensions        []ProjectRemovalExtension `json:"extensions"`
+	// Active background commands running in this project that removing the project will terminate.
+	BackgroundProcesses []ProjectBackgroundProcess `json:"background_processes,omitempty"`
 }
 
 // ProjectRemovalCheck
@@ -4647,6 +4963,8 @@ type ProjectRemovalResult struct {
 	Sessions     int                       `json:"sessions"`
 	Workers      int                       `json:"workers"`
 	Overlays     int                       `json:"overlays"`
+	// Running background commands in this project that blocked an unforced removal.
+	BackgroundProcesses []ProjectBackgroundProcess `json:"background_processes,omitempty"`
 }
 
 // ProjectRoot
@@ -6190,9 +6508,11 @@ type SessionSummary struct {
 	Status        SessionStatus  `json:"status"`
 	ArchivedAt    *time.Time     `json:"archived_at,omitempty"`
 	// Order among the project's pinned chats, lowest first; omitted when unpinned
-	PinRank      *int      `json:"pin_rank,omitempty"`
-	MessageCount int       `json:"message_count"`
-	CreatedAt    time.Time `json:"created_at"`
+	PinRank      *int `json:"pin_rank,omitempty"`
+	MessageCount int  `json:"message_count"`
+	// Count of live background commands (JobModeBackground) attributed to this session; omitted when 0.
+	BackgroundRunning int       `json:"background_running,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
 	// When the transcript last gained a visible message, or the creation time before that
 	ActivityAt time.Time `json:"activity_at"`
 }
@@ -7906,13 +8226,15 @@ type ToolCall struct {
 	ExtraContent map[string]any `json:"extra_content,omitempty"`
 }
 
-// ToolCompletion
+// ToolCompletion A call's lifecycle outcome as its producer states it. State `parked` with resource_kind `wait` means the call ended its turn on the session's wait lease (resource_id): a `wait` call, or a `command` call whose program keeps running while it waits. The lease's awaiting_wake activity carries the call's tool_call_id; when that activity closes, the wait has ended and the call's outcome arrives in a later message.
 type ToolCompletion struct {
 	Operation    string `json:"operation"`
 	State        string `json:"state"`
 	ResourceKind string `json:"resource_kind,omitempty"`
 	ResourceID   string `json:"resource_id,omitempty"`
 	ResultHandle string `json:"result_handle,omitempty"`
+	// What a parked call waits on: the wait's stated reason, or the statement a parked command's program waits at (`sleep 30`, `wait %1`). Present only with state parked.
+	Reason string `json:"reason,omitempty"`
 }
 
 // ToolDescriptor
@@ -7934,15 +8256,17 @@ type ToolProcessHandle struct {
 	// Live background handle, a command job or a held call, to poll, wait on, or stop.
 	Handle string `json:"handle"`
 	// The host's view when the result was written. It never flips on exit; the session process mirror reports that.
-	Running bool `json:"running"`
+	Running           bool                               `json:"running"`
+	TerminationReason BackgroundProcessTerminationReason `json:"termination_reason,omitempty"`
 }
 
 // ToolProgress Measured discovery work. Counts are observations, not a completion estimate.
 type ToolProgress struct {
-	Phase         string `json:"phase"`
-	FilesSearched int    `json:"files_searched"`
-	FilesSkipped  int    `json:"files_skipped"`
-	Matches       int    `json:"matches"`
+	CommandProgram *CommandProgramReceipt `json:"command_program,omitempty"`
+	Phase          string                 `json:"phase"`
+	FilesSearched  int                    `json:"files_searched"`
+	FilesSkipped   int                    `json:"files_skipped"`
+	Matches        int                    `json:"matches"`
 }
 
 // ToolResult
@@ -7954,6 +8278,8 @@ type ToolResult struct {
 	// Host-resolved readable target retained with the result and screened before title formatting. Exact routing identifiers remain in tool_args.
 	DisplaySubject string             `json:"display_subject,omitempty"`
 	Invocation     *InvocationReceipt `json:"invocation,omitempty"`
+	// Host portable-program receipt. Its presence excludes legacy stdout fingerprinting; only explicitly confirmed delivered source mappings establish native source observations. Execution pins are not reads.
+	CommandProgram *CommandProgramReceipt `json:"command_program,omitempty"`
 	// Name of the tool that produced this result. Carried on the result row so Den renders completed tool cards after the host replaces the assistant tool_calls batch on a reused row.
 	Tool string `json:"tool,omitempty"`
 	// ID of the tool call this result answers, anchoring search reveal to the originating tool chicklet.
@@ -7987,6 +8313,8 @@ type ToolResult struct {
 	Process *ToolProcessHandle `json:"process,omitempty"`
 	// Set when submit_verdict recorded a review_loop verdict. The card renders these stated facts, never the result prose.
 	Verdict *VerdictOutcome `json:"verdict,omitempty"`
+	// Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address.
+	Listener *LoopbackListenerFact `json:"listener,omitempty"`
 }
 
 // TranscriptOrdBounds Oldest and newest message ordinals a transcript holds at read time

@@ -17,6 +17,7 @@ type auditControl struct {
 	cancel             context.CancelCauseFunc
 	frameLimit         uint64
 	background         chan struct{}
+	completed          chan struct{}
 	maintenanceWaiting int
 }
 

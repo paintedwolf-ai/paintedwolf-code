@@ -3,12 +3,13 @@ id: JQ_EDIT_ENCODE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - jq_edit
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.path
     - paintedwolf.format

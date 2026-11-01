@@ -3,6 +3,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -54,17 +55,17 @@ while not os.path.exists(path):
 time.sleep(60)
 `, strconv.Quote(filepath.Join(dir, "daemon.pid")))
 	cmd, cleanup, err := PrepareCommand(context.Background(), python, []string{"-c", script}, ExecOpts{
-		Launch: AgentLaunch(LaunchAgentCommand, "engine loss fixture", box), Dir: dir,
+		Launch: AgentLaunch(LaunchAgentCommand, "engine loss fixture", box).WithPathAuthority(confine.NativeLaunchPaths(dir)), Dir: dir,
 	})
 	testutil.FailErr(t, "prepare owned engine loss command", err)
 	defer cleanup()
-	testutil.FailErr(t, "run owned engine loss command", RunInOwnGroup(cmd))
+	testutil.FailErr(t, "run owned engine loss command", RunInOwnGroup(context.Background(), cmd))
 }
 
 func TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands(t *testing.T) {
 	other, otherCleanup, otherPath := supervisedDaemonCommand(t)
 	defer otherCleanup()
-	testutil.FailErr(t, "start unrelated command", other.Start())
+	testutil.FailErr(t, "start unrelated command", StartPreparedWith(t.Context(), other, other.Start, TrackProcessGroup))
 	otherPID := waitForPIDFile(t, otherPath)
 	_, otherStart, ok := procStat(otherPID)
 	if !ok {
@@ -78,18 +79,21 @@ func TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands(t *testing.T) {
 			dir := t.TempDir()
 			engine := exec.CommandContext(t.Context(), self, "-test.run=^TestEngineLossFixtureProcess$")
 			engine.Env = append(os.Environ(), engineLossModeEnv+"="+mode, engineLossDirEnv+"="+dir)
-			engine.Stderr = os.Stderr
+			var output bytes.Buffer
+			engine.Stdout, engine.Stderr = &output, &output
 			testutil.FailErr(t, "start fixture engine", engine.Start())
-			defer func() { _ = engine.Process.Kill(); _ = engine.Wait() }()
+			done := make(chan struct{})
+			go func() { _ = engine.Wait(); close(done) }()
+			defer func() { _ = engine.Process.Kill(); <-done }()
 			// The daemon's PID is namespace-local; ownership comes from this engine's host tree.
-			_ = waitForPIDFile(t, filepath.Join(dir, "daemon.pid"))
+			awaitEngineDaemon(t, filepath.Join(dir, "daemon.pid"), engine, done, &output)
 			owned := commandDescendants(engine.Process.Pid)
 			if len(owned) < 2 {
 				t.Fatalf("engine owned only %d processes before SIGKILL", len(owned))
 			}
 			defer killFixtureDescendants(owned)
 			testutil.FailErr(t, "SIGKILL fixture engine", engine.Process.Kill())
-			_ = engine.Wait()
+			<-done
 			status := engine.ProcessState.Sys().(syscall.WaitStatus)
 			if !status.Signaled() || status.Signal() != syscall.SIGKILL {
 				t.Fatalf("engine exit status = %v, want SIGKILL", status)
@@ -99,6 +103,31 @@ func TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands(t *testing.T) {
 				t.Fatal("engine loss affected an unrelated command")
 			}
 		})
+	}
+}
+
+func awaitEngineDaemon(t *testing.T, path string, engine *exec.Cmd, done <-chan struct{}, output *bytes.Buffer) {
+	t.Helper()
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	poll := time.NewTicker(20 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-done:
+			t.Fatalf("fixture engine exited before daemon readiness: %v; %s", engine.ProcessState, output.String())
+		case <-deadline.C:
+			_ = engine.Process.Kill()
+			<-done
+			t.Fatalf("fixture engine never published daemon readiness: %s", output.String())
+		case <-poll.C:
+			raw, err := os.ReadFile(path)
+			if err == nil {
+				if pid, err := strconv.Atoi(string(raw)); err == nil && pid > 0 {
+					return
+				}
+			}
+		}
 	}
 }
 

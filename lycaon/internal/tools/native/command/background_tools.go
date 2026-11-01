@@ -46,7 +46,7 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 		}
 		return "", err
 	}
-	out := commandOutputOf(snapshot.Output)
+	out := commandOutputOf(snapshot.Output, snapshot.TerminationReason)
 	capBackgroundOutput(&out, 0)
 	payload := observeBackgroundOutput(tctx, out, snapshot.Boundary, snapshot.Facts, snapshot.TerminationReason)
 	payload.ExecFailure = snapshot.Failure
@@ -61,24 +61,26 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 // commandOutput is command_output's view of retained output, in the tool's
 // handle and cursor vocabulary.
 type commandOutput struct {
-	Handle     string                  `json:"handle"`
-	Cursor     string                  `json:"cursor"`
-	NextCursor string                  `json:"next_cursor"`
-	Chunks     []bgprocess.OutputChunk `json:"chunks"`
-	Running    bool                    `json:"running"`
-	Truncated  bool                    `json:"truncated,omitempty"`
-	ExitCode   *int                    `json:"exit_code,omitempty"`
+	Handle            string                      `json:"handle"`
+	Cursor            string                      `json:"cursor"`
+	NextCursor        string                      `json:"next_cursor"`
+	Chunks            []bgprocess.OutputChunk     `json:"chunks"`
+	Running           bool                        `json:"running"`
+	Truncated         bool                        `json:"truncated,omitempty"`
+	ExitCode          *int                        `json:"exit_code,omitempty"`
+	TerminationReason bgprocess.TerminationReason `json:"termination_reason,omitempty"`
 }
 
-func commandOutputOf(raw bgprocess.RawOutput) commandOutput {
+func commandOutputOf(raw bgprocess.RawOutput, reason bgprocess.TerminationReason) commandOutput {
 	return commandOutput{
-		Handle:     raw.Handle,
-		Cursor:     strconv.FormatInt(raw.From, 10),
-		NextCursor: strconv.FormatInt(raw.Next, 10),
-		Chunks:     raw.Chunks,
-		Running:    raw.Running,
-		Truncated:  raw.Truncated,
-		ExitCode:   raw.ExitCode,
+		Handle:            raw.Handle,
+		Cursor:            strconv.FormatInt(raw.From, 10),
+		NextCursor:        strconv.FormatInt(raw.Next, 10),
+		Chunks:            raw.Chunks,
+		Running:           raw.Running,
+		Truncated:         raw.Truncated,
+		ExitCode:          raw.ExitCode,
+		TerminationReason: reason,
 	}
 }
 
@@ -133,7 +135,7 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 	}
 	subject, _ := t.Registry.CommandLine(tctx.Identity.SessionID, handle)
 	tctx.SetDisplaySubject(subject)
-	out, err := t.Registry.Lifecycle.Stop(tctx.Identity.SessionID, handle)
+	out, err := t.Registry.Lifecycle.Stop(tctx.Identity.SessionID, handle, bgprocess.TerminationStoppedByAgent)
 	if err != nil {
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
 			return "", missingCommandHandleReject(t.Registry, tctx.Identity.SessionID, handle)
@@ -142,6 +144,7 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 	}
 	encoded, err := surveyjson.Marshal(toolkit.ProcessStopResult{
 		Handle: handle, StopRequested: out.StopRequested, Running: out.Running, ExitCode: out.ExitCode,
+		TerminationReason: string(out.TerminationReason),
 	})
 	if err != nil {
 		return "", fmt.Errorf("command_stop encode: %w", err)
@@ -232,7 +235,7 @@ func runCommandBackground(
 	}
 	profile := tctx.ProfileID()
 	req := hostcmd.Request{
-		Launch:     agentCommandLaunch(tctx, toolName, confinement),
+		Launch:     agentCommandLaunch(tctx, toolName, confinement, egressLease, commandLine),
 		ProjectDir: cwd,
 		ProfileID:  profile,
 		Stages:     stages,
@@ -280,9 +283,6 @@ func runCommandBackground(
 	exitCtx := context.WithoutCancel(ctx)
 	registry.Lifecycle.OnExit(tctx.Identity.SessionID, handle, func() {
 		networkLife.complete(exitCtx)
-		if snap, snapErr := registry.Snapshot(exitCtx, tctx.Identity.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
-			recordContainerLaunch(tctx, snap)
-		}
 	})
 	window.closeOnExit(ctx, registry, tctx.Identity.SessionID, handle)
 	result := hostcmd.BackgroundStartResult{
@@ -305,9 +305,6 @@ func runCommandBackground(
 		var terminationReason bgprocess.TerminationReason
 		if snap, snapErr := registry.Snapshot(ctx, tctx.Identity.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
 			terminationReason = snap.TerminationReason
-			recordContainerLaunch(tctx, snap)
-		} else {
-			recordContainerLaunch(tctx, bgprocess.Snapshot{Tail: tail, Output: tail})
 		}
 		if confinement != nil {
 			stamped := confine.StampRefusal(toolName, tctx.Identity.SessionID,

@@ -15,7 +15,7 @@ import (
 func TestPlanCritiqueLeaveSurvivesFinalize(t *testing.T) {
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	m, err := reg.Get("plan", "1.0.0")
+	m, err := reg.Get("plan", "1.0.1")
 	testutil.FailErr(t, "Get plan", err)
 	review, ok := m.PhaseByID("review")
 	if !ok {
@@ -50,7 +50,7 @@ func TestPlanCritiqueFireFromApprove(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)

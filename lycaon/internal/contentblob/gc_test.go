@@ -44,7 +44,7 @@ func TestRunGCBatchReclaimsUnreferencedBlob(t *testing.T) {
 	testdbseed.InsertSession(t, database, sessionID, projectID)
 
 	store := contentblob.StoreFor(dataDir, projectID)
-	sha, byteSize, storedSize, err := contentblob.Write(store, []byte("body that will become unreferenced"))
+	sha, byteSize, storedSize, err := contentblob.Write(t.Context(), store, []byte("body that will become unreferenced"))
 	testutil.FailErr(t, "write blob", err)
 
 	q := db.New(database)
@@ -99,7 +99,7 @@ func TestRunGCBatchSkipsStillReferencedBlob(t *testing.T) {
 	testdbseed.InsertSession(t, database, sessionID, projectID)
 
 	store := contentblob.StoreFor(dataDir, projectID)
-	sha, byteSize, storedSize, err := contentblob.Write(store, []byte("body that stays referenced"))
+	sha, byteSize, storedSize, err := contentblob.Write(t.Context(), store, []byte("body that stays referenced"))
 	testutil.FailErr(t, "write blob", err)
 
 	q := db.New(database)

@@ -18,6 +18,19 @@ func resolveCommit(ctx context.Context, dir, ref string) (string, error) {
 	if err := validateGitRef(ref, "ref"); err != nil {
 		return "", err
 	}
+	if ctx.Err() == nil {
+		if validObjectID(ref) {
+			if kind, _, ok := readLooseGitObject(dir, ref); ok && kind == "commit" {
+				return ref, nil
+			}
+		} else if ref == "HEAD" {
+			if state, err := readRepositoryMetadata(ctx, dir); err == nil && validObjectID(state.Head) {
+				if kind, _, ok := readLooseGitObject(dir, state.Head); ok && kind == "commit" {
+					return state.Head, nil
+				}
+			}
+		}
+	}
 	out, err := restoreGit(ctx, dir, hermeticOpts(0), "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
 	if err != nil {
 		return "", err
@@ -68,7 +81,7 @@ func historyRevision(ctx context.Context, dir, ref string) (string, error) {
 	return strings.Join(parts, separator), nil
 }
 
-func (m *Manager) Log(ctx context.Context, projectDir string, opts GitLogOpts) ([]GitCommit, error) {
+func (m *gitCommitManager) Log(ctx context.Context, projectDir string, opts GitLogOpts) ([]GitCommit, error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -143,7 +156,7 @@ type GitComparison struct {
 	MergeBases []string `json:"merge_bases"`
 }
 
-func (m *Manager) Compare(ctx context.Context, projectDir, base, head string) (GitComparison, error) {
+func (m *gitCommitManager) Compare(ctx context.Context, projectDir, base, head string) (GitComparison, error) {
 	result := GitComparison{BaseRef: base, HeadRef: head, MergeBases: []string{}}
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {

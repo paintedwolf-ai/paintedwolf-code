@@ -23,3 +23,19 @@ func StartTime(pid int) (int64, bool) {
 	}
 	return int64(record.StartTime), true
 }
+
+// CommandName returns the kernel-recorded executable name of pid.
+func CommandName(pid int) (string, bool) {
+	if pid <= 0 {
+		return "", false
+	}
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return "", false
+	}
+	record, err := ParseLinuxStat(raw)
+	if err != nil || record.PID != pid {
+		return "", false
+	}
+	return record.Command, record.Command != ""
+}

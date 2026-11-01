@@ -17,6 +17,6 @@ func platformCacheDataRoots(home string) []string {
 	}
 }
 
-func preparePackageCacheDataRoots(Confinement, func(fseffect.Location, os.FileMode) error) error {
+func preparePackageCacheDataRoots(Confinement, func(fseffect.Location, os.FileMode) (int, error)) error {
 	return nil
 }

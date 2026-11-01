@@ -113,7 +113,8 @@ func TestExecuteChecksIntegrityBeforeCommit(t *testing.T) {
 	testutil.FailErr(t, "open migration fixture", err)
 	defer func() { _ = database.Close() }()
 	database.SetMaxOpenConns(1)
-	_, err = database.Exec(`CREATE TABLE history(body TEXT CHECK(body != 'invalid'));
+	_, err = database.Exec(`CREATE TABLE store_meta(key TEXT PRIMARY KEY,value TEXT);
+ CREATE TABLE history(body TEXT CHECK(body != 'invalid'));
  INSERT INTO history VALUES('retained');
  CREATE TABLE schema_migrations(id TEXT, checksum TEXT, from_revision INTEGER, to_revision INTEGER, applied_at TEXT);
  PRAGMA user_version=1`)
@@ -152,6 +153,11 @@ func TestExecuteChecksIntegrityBeforeCommit(t *testing.T) {
 	testutil.FailErr(t, "read rolled-back insert", database.QueryRow(`SELECT count(*) FROM history WHERE body='invalid'`).Scan(&count))
 	if count != 0 {
 		t.Fatal("invalid migration data escaped rollback")
+	}
+	var pending int
+	testutil.FailErr(t, "read rolled-back audit obligation", database.QueryRow(`SELECT count(*) FROM store_meta`).Scan(&pending))
+	if pending != 0 {
+		t.Fatal("failed migration committed audit metadata")
 	}
 }
 

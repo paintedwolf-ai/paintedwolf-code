@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/source_write.go",
+  "kind": "algorithm",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "The 748 code lines retain the single native write-door transaction from preimage and review through revision validation, intent, checked publication and settlement. Text, stream, metadata and removal paths share that authority; bounded stream publication returns actual individual completion facts and agentStreamStage owns stage lifetime. Partial publication/restart and memory contracts support this measured ceiling. Future separation should move the complete staged stream lifecycle beside agentStreamStage, not add a forwarding service.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 748,
+  "boundaries": {
+    "lycaon/internal/tools/native/source_write_evidence_test.go": "07cb5c1f59afd8c929fe6ce7724641bd3a8a3a342a002df6072713982af296de",
+    "lycaon/internal/tools/native/mutation/copy_batch_test.go": "7667086cbfb76723dce85396f1367e4bd428dbfe4155f538e701bfc1419b0452",
+    "lycaon/internal/projectsource/agent_effect_batch_test.go": "f099695df91542d83d69f640651fa62788458f0af6d6bc6aa3b6e0f3b0467f54"
+  }
+}

@@ -27,7 +27,7 @@ func TestLaunchFromBlueprintCopiesFile(t *testing.T) {
 	mgr, sessionID, projectDir := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	blueprintMgr, ok := mgr.Blueprints.Getter.(*blueprint.Manager)
@@ -67,7 +67,7 @@ func TestLaunchFromBlueprintDeferStartArmsPendingPath(t *testing.T) {
 	mgr, sessionID, projectDir := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	blueprintMgr, ok := mgr.Blueprints.Getter.(*blueprint.Manager)
@@ -101,7 +101,7 @@ func TestLaunchFromBlueprintDeferStartArmsPendingPath(t *testing.T) {
 	}
 
 	started, err := mgr.Starts.StartHuman(ctx, sess2.ID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman after defer", err)
 	if started.BlueprintPath != seed.Path {

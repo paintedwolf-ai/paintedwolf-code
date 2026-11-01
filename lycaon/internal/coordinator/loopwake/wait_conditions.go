@@ -106,7 +106,7 @@ func resolveConditions(raw any) (waitSubscription, error) {
 			}
 			condition = parsed
 		case WaitTriggerTimer, WaitTriggerNextWorkerDone, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote,
-			WaitTriggerScanDone, WaitTriggerProcessDone:
+			WaitTriggerScanDone, WaitTriggerProcessDone, WaitTriggerProgramDone:
 		}
 		conditions = append(conditions, condition)
 		triggers = append(triggers, trigger)
@@ -130,7 +130,7 @@ func validateConditionShape(trigger WaitTrigger, obj map[string]any) error {
 	case WaitTriggerPortReady:
 		allowed["host"] = true
 		allowed["port"] = true
-	case WaitTriggerTimer, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote, WaitTriggerScanDone:
+	case WaitTriggerTimer, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote, WaitTriggerScanDone, WaitTriggerProgramDone:
 	}
 	for field := range obj {
 		if !allowed[field] {
@@ -225,7 +225,7 @@ func conditionsFromTriggers(triggers []WaitTrigger, processHandles, workerHandle
 		case WaitTriggerNextWorkerDone:
 			condition.Handles = append([]string(nil), workerHandles...)
 		case WaitTriggerTimer, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote, WaitTriggerScanDone,
-			WaitTriggerHTTPReady, WaitTriggerPortReady:
+			WaitTriggerHTTPReady, WaitTriggerPortReady, WaitTriggerProgramDone:
 		}
 		out = append(out, condition)
 	}

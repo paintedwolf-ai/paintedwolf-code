@@ -11,11 +11,11 @@ import (
 // LastAssistantMessageContent returns the newest assistant message body, or
 // "" when the session has none. It reads one row from the transcript tail
 // rather than the whole history.
-func (s *SQL) LastAssistantMessageContent(ctx context.Context, sessionID string) (string, error) {
+func (s *sqlTranscript) LastAssistantMessageContent(ctx context.Context, sessionID string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	content, err := s.queries.LastAssistantMessageContent(ctx, sessionID)
+	content, err := s.core.queries.LastAssistantMessageContent(ctx, sessionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -24,11 +24,11 @@ func (s *SQL) LastAssistantMessageContent(ctx context.Context, sessionID string)
 
 // LastTurnMessageContent returns the newest user or assistant message body,
 // or "" when the session has neither.
-func (s *SQL) LastTurnMessageContent(ctx context.Context, sessionID string) (string, error) {
+func (s *sqlTranscript) LastTurnMessageContent(ctx context.Context, sessionID string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	content, err := s.queries.LastTurnMessageContent(ctx, sessionID)
+	content, err := s.core.queries.LastTurnMessageContent(ctx, sessionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -36,16 +36,16 @@ func (s *SQL) LastTurnMessageContent(ctx context.Context, sessionID string) (str
 }
 
 // LastAssistantMessageContent scans the in-memory transcript from its tail.
-func (s *Memory) LastAssistantMessageContent(ctx context.Context, sessionID string) (string, error) {
-	return s.lastContentByRole(ctx, sessionID, api.MessageRoleAssistant)
+func (s *memoryTranscript) LastAssistantMessageContent(ctx context.Context, sessionID string) (string, error) {
+	return lastContentByRole(ctx, s.core, sessionID, api.MessageRoleAssistant)
 }
 
 // LastTurnMessageContent scans the in-memory transcript from its tail.
-func (s *Memory) LastTurnMessageContent(ctx context.Context, sessionID string) (string, error) {
-	return s.lastContentByRole(ctx, sessionID, api.MessageRoleUser, api.MessageRoleAssistant)
+func (s *memoryTranscript) LastTurnMessageContent(ctx context.Context, sessionID string) (string, error) {
+	return lastContentByRole(ctx, s.core, sessionID, api.MessageRoleUser, api.MessageRoleAssistant)
 }
 
-func (s *Memory) lastContentByRole(ctx context.Context, sessionID string, roles ...api.MessageRole) (string, error) {
+func lastContentByRole(ctx context.Context, s *memoryCore, sessionID string, roles ...api.MessageRole) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

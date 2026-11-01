@@ -114,7 +114,13 @@ func withPerceptionFact(m api.Message, artifactID string, outcome PerceptionOutc
 		Image      string            `json:"image"`
 		Reason     PerceptionOutcome `json:"reason,omitempty"`
 		ArtifactID string            `json:"artifact_id,omitempty"`
-	}{Image: "not_attached", Reason: outcome, ArtifactID: strings.TrimSpace(artifactID)}
+		Evidence   string            `json:"evidence,omitempty"`
+	}{
+		Image:      "not_attached",
+		Reason:     outcome,
+		ArtifactID: strings.TrimSpace(artifactID),
+		Evidence:   messageEvidenceHandle(m),
+	}
 	if outcome == PerceptionAttached {
 		fact.Image, fact.Reason = string(PerceptionAttached), ""
 	}
@@ -157,8 +163,12 @@ func ToolImageCaption(m api.Message, wireCallID string) string {
 	caption := struct {
 		ToolCallID string `json:"tool_call_id,omitempty"`
 		Tool       string `json:"tool,omitempty"`
+		Evidence   string `json:"evidence,omitempty"`
 		ArtifactID string `json:"artifact_id,omitempty"`
-	}{ToolCallID: strings.TrimSpace(wireCallID)}
+	}{
+		ToolCallID: strings.TrimSpace(wireCallID),
+		Evidence:   messageEvidenceHandle(m),
+	}
 	if m.ToolResult != nil {
 		caption.Tool = strings.TrimSpace(m.ToolResult.Tool)
 		if m.ToolResult.Visual != nil {
@@ -174,4 +184,18 @@ func ToolImageCaption(m api.Message, wireCallID string) string {
 		Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted,
 		Source: toolImageSource,
 	}})
+}
+
+func messageEvidenceHandle(m api.Message) string {
+	for _, h := range m.EvidenceHandles {
+		if h = strings.TrimSpace(h); h != "" {
+			return h
+		}
+	}
+	if m.ToolResult != nil && m.ToolResult.Visual != nil {
+		if h := strings.TrimSpace(m.ToolResult.Visual.EvidenceHandle); h != "" {
+			return h
+		}
+	}
+	return ""
 }

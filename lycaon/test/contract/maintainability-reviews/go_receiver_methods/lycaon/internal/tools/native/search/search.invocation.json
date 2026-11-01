@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/tools/native/search/search.invocation",
+  "kind": "runtime_service",
+  "workstream": "command-search-throughput",
+  "disposition": "retain",
+  "reason": "Retain the existing invocation boundary at 334 source lines, 16 methods and 18 fields. It couples command I/O, path authority, observation hooks and resource admission for one utility call. Output now preflights length and streams parts directly, removing an intermediate gather buffer without changing authority or publication ownership. Moving individual methods behind forwarding services would spread this call lifecycle. Focused transformed-output and aggregate-bound contracts support retaining this measured boundary.",
+  "reviewed_commit": "d36f6ab1de7811aa1c7f569da5003181edc005e9",
+  "ceiling": 16,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/grep_record_test.go": "11a75b866acae9b6b08723aef01d63d0675fe19b3b582c6f53b459818ba924ad",
+    "lycaon/internal/tools/native/search/grep_parallel_bounds_test.go": "71bf71f82c028ed1173a08b61ca8d573407af1b8f81262ff18e0d5d834e0a188"
+  },
+  "reviewed_shape": "208ef6e56a71a7ab607909f697734eb0772079cad2dca8ba4f7604e8dd427561"
+}
