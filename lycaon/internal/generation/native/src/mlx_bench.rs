@@ -74,8 +74,10 @@ fn compare_logits(model: &Model, spec: &Specification) -> Result<()> {
             .ok_or("missing pruned-cache logits")?;
         full_cache.evaluate_with(&[&full])?;
         prefill_cache.evaluate_with(&[&pruned])?;
-        let equal = full.equal(&pruned)?.all(None)?;
-        if !equal.try_item_exact::<bool>()? || full_cache.bytes() != prefill_cache.bytes() {
+        let full = full.as_dtype(mlx_rs::Dtype::Float32)?;
+        let pruned = pruned.as_dtype(mlx_rs::Dtype::Float32)?;
+        let equal = full.as_slice::<f32>() == pruned.as_slice::<f32>();
+        if !equal || full_cache.bytes() != prefill_cache.bytes() {
             return Err("cache-only prefill changed subsequent logits or cache storage".into());
         }
         token = argmax(full.index((0, -1, ..)), None)?.try_item_cast::<i32>()?;
