@@ -12,7 +12,7 @@ import {
   rememberSessionChatFromStore,
   restoreCachedSessionChat,
 } from "./session-chat-cache.ts";
-import { toSessionChatSnapshot, toSessionChatSnapshotWire } from "./session-chat-persist.ts";
+import { toSessionChatSnapshot, trimSnapshotForPersist } from "./session-chat-persist.ts";
 import { applyMessageEvent } from "../transcript/projection/message-events.ts";
 import { advanceTranscriptAnnouncement } from "../transcript/presentation/transcript-live-announcement.ts";
 import type { SessionChatSnapshot } from "./session-chat-snapshot.ts";
@@ -278,7 +278,7 @@ describe("session-chat-cache", () => {
     expect(cached?.messages.map((m) => m.id)).toEqual(["u1", "a1"]);
     expect(cached?.messages[1]?.content).toBe("Completed answer");
 
-    const restored = toSessionChatSnapshot(toSessionChatSnapshotWire(cached!));
+    const restored = toSessionChatSnapshot(trimSnapshotForPersist(cached!));
     expect(restored).not.toBeNull();
     const initial = advanceTranscriptAnnouncement(
       undefined,

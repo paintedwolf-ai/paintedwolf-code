@@ -299,7 +299,7 @@ describe("resumeChatSession cache", () => {
       listCheckpoints: vi.fn(async () => []),
     });
 
-    await reconcileActiveScope(appStore, client, { projectId: "proj-1", sessionId: "sess-a" }, emptyProjects);
+    await reconcileActiveScope(appStore, client, emptyProjects);
     expect(getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" })?.messages.map((m) => m.id)).toEqual(["m1", "a1"]);
 
     tracked = advanceTranscriptAnnouncement(tracked.state, "sess-a", appStore.state.messages);
