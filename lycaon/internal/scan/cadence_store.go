@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -33,6 +34,10 @@ type SeriesRow struct {
 	LastSuccessfulScanID            string
 	LastCoveredSnapshotID           string
 	LastCoveredExecutionFingerprint string
+	ConsecutiveFailures             int
+	UnavailableReason               scancatalog.ConfigFaultReason
+	UnavailableDetail               string
+	UnavailableContractIdentity     string
 	UpdatedAt                       time.Time
 }
 
@@ -115,7 +120,7 @@ func (s *SQLStore) GetSeries(ctx context.Context, canonicalPath, scannerID strin
 	if err != nil {
 		return nil, err
 	}
-	out := seriesFromRow(row)
+	out := seriesFromDB(s, row)
 	return &out, nil
 }
 
@@ -126,7 +131,7 @@ func (s *SQLStore) ListSeriesForPath(ctx context.Context, canonicalPath string) 
 	}
 	out := make([]SeriesRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, seriesFromRow(row))
+		out = append(out, seriesFromDB(s, row))
 	}
 	return out, nil
 }
@@ -140,7 +145,7 @@ func (s *SQLStore) ListDueSeries(ctx context.Context, now time.Time) ([]SeriesRo
 	}
 	out := make([]SeriesRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, seriesFromRow(row))
+		out = append(out, seriesFromDB(s, row))
 	}
 	return out, nil
 }
@@ -152,7 +157,7 @@ func (s *SQLStore) ListActiveSeries(ctx context.Context) ([]SeriesRow, error) {
 	}
 	out := make([]SeriesRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, seriesFromRow(row))
+		out = append(out, seriesFromDB(s, row))
 	}
 	return out, nil
 }
@@ -165,7 +170,7 @@ func (s *SQLStore) SeriesByActiveScan(ctx context.Context, scanID string) (*Seri
 	if err != nil {
 		return nil, err
 	}
-	out := seriesFromRow(row)
+	out := seriesFromDB(s, row)
 	return &out, nil
 }
 
@@ -182,9 +187,10 @@ func (s *SQLStore) HeartbeatClaim(ctx context.Context, row SeriesRow, at time.Ti
 }
 
 func (s *SQLStore) DeleteSeries(ctx context.Context, canonicalPath, scannerID string) error {
-	return s.queries.DeleteScanSeries(ctx, db.DeleteScanSeriesParams{
+	err := s.queries.DeleteScanSeries(ctx, db.DeleteScanSeriesParams{
 		CanonicalPath: canonicalPath, ScannerID: scannerID,
 	})
+	return finishDeleteSeries(s, canonicalPath, scannerID, err)
 }
 
 func (s *SQLStore) UpsertSeries(ctx context.Context, row SeriesRow) error {
@@ -206,10 +212,7 @@ func (s *SQLStore) UpsertSeries(ctx context.Context, row SeriesRow) error {
 		LastCoveredSnapshotID:           row.LastCoveredSnapshotID,
 		LastCoveredExecutionFingerprint: row.LastCoveredExecutionFingerprint, UpdatedAt: formatCadenceTime(row.UpdatedAt),
 	})
-	if err == nil {
-		s.SeriesChanged.Notify()
-	}
-	return err
+	return finishUpsertSeries(s, row, err)
 }
 
 // DispatchClaimTTL bounds a persisted dispatch lease without a heartbeat.

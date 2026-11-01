@@ -65,14 +65,14 @@ func TestInvariantClaimTokenConservationAndDesireSettlement(t *testing.T) {
 	}
 	book.requeueDispatches(t.Context(), recovered)
 
-	// Advance past due time, dispatch via Tick, complete scans, and verify all leases and desires settle.
-	clock.Advance(cfg.WriteBurstSettle() + time.Second)
+	// Advance past exponential backoff due time, dispatch via Tick, complete scans, and verify all leases and desires settle.
+	clock.Advance(2*cfg.WriteBurstSettle() + time.Second)
 	cadence.Tick(t.Context())
 	completeCadenceScans(t, cadence, store)
 	settled, err := store.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "series after terminal settlement", err)
 	for _, row := range settled {
-		if row.DispatchToken != "" || !row.ClaimHeartbeatAt.IsZero() || len(row.DesiredPaths) != 0 || row.DesiredTrigger != "" || row.DesiredPassID != "" || !row.DueAt.IsZero() {
+		if row.DispatchToken != "" || !row.ClaimHeartbeatAt.IsZero() || len(row.DesiredPaths) != 0 || row.DesiredTrigger != "" || row.DesiredPassID != "" || !row.DueAt.IsZero() || row.ConsecutiveFailures != 0 {
 			t.Fatalf("settled series %s retained lease or desire: %+v", row.ScannerID, row)
 		}
 	}
