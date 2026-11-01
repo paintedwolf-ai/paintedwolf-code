@@ -5,8 +5,6 @@ import (
 	"errors"
 	"runtime"
 	"sync"
-
-	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 const (
