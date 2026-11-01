@@ -167,7 +167,7 @@ func TestAbortAllWorkersBoundsSlowWorkerAndPollerSettlesLateExit(t *testing.T) {
 			// While the worker goroutine is still unwinding, the job remains running with
 			// cancellation requested and maintenance does not block or double-settle it.
 			during, ok := q.Get(id)
-			if !ok || during.Status != api.WorkerStatusRunning || !isJobCancellationRequested(q, id) {
+			if !ok || during.Status != api.WorkerStatusRunning || !isJobCancellationRequested(t.Context(), q, id) {
 				t.Fatalf("worker during slow unwind = %+v, want running with cancellation requested", during)
 			}
 			expireCancellationClaim(t, q, id)
@@ -225,7 +225,7 @@ func TestRunStopServiceBoundsSlowWorkflowWorkerAndPollerSettlesLateExit(t *testi
 	testutil.FailErr(t, "SettleWorkerCancellationsByRunID after timeout", svc.SettleWorkerCancellationsByRunID(t.Context(), "run-slow", "workflow stopped"))
 
 	during, ok := q.Get(id)
-	if !ok || during.Status != api.WorkerStatusRunning || !isJobCancellationRequested(q, id) {
+	if !ok || during.Status != api.WorkerStatusRunning || !isJobCancellationRequested(t.Context(), q, id) {
 		t.Fatalf("workflow worker during slow unwind = %+v, want running with cancellation requested", during)
 	}
 

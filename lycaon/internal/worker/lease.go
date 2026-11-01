@@ -34,7 +34,7 @@ func recoverExpiredWorkerJobs(ctx context.Context, queue WorkerQueue, ids []stri
 	var errs []error
 	for _, id := range ids {
 		task, ok := queue.Get(id)
-		if !ok || task.Status != api.WorkerStatusRunning || isJobCancellationRequested(queue, id) || task.LeaseExpiresAt == nil || task.LeaseExpiresAt.After(time.Now()) {
+		if !ok || task.Status != api.WorkerStatusRunning || isJobCancellationRequested(ctx, queue, id) || task.LeaseExpiresAt == nil || task.LeaseExpiresAt.After(time.Now()) {
 			continue
 		}
 		var won bool
@@ -128,7 +128,7 @@ func queueHasActiveExecution(queue WorkerQueue, jobID string) bool {
 	return fn != nil && fn(jobID)
 }
 
-func isJobCancellationRequested(queue WorkerQueue, jobID string) bool {
+func isJobCancellationRequested(ctx context.Context, queue WorkerQueue, jobID string) bool {
 	switch q := queue.(type) {
 	case *InMemoryQueue:
 		if q == nil {
@@ -143,9 +143,9 @@ func isJobCancellationRequested(queue WorkerQueue, jobID string) bool {
 		if q == nil || q.store == nil {
 			return false
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), sqlQueueGetTimeout)
+		queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sqlQueueGetTimeout)
 		defer cancel()
-		row, err := q.store.queries.GetWorkerJob(ctx, jobID)
+		row, err := q.store.queries.GetWorkerJob(queryCtx, jobID)
 		if err != nil {
 			return false
 		}

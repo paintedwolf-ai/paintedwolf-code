@@ -270,13 +270,7 @@ func (p *LocalWorkerPoller) HasActiveExecution(taskID string) bool {
 	p.cancelMu.Lock()
 	execution := p.cancels[strings.TrimSpace(taskID)]
 	p.cancelMu.Unlock()
-	if execution == nil {
-		return false
-	}
-	if isJobCancellationRequested(p.Queue, taskID) {
-		execution.cancel(context.Canceled)
-	}
-	return true
+	return execution != nil
 }
 
 func (p *LocalWorkerPoller) activeExecutionForClaim(taskID, claimToken string) *pollerExecution {
@@ -289,11 +283,11 @@ func (p *LocalWorkerPoller) activeExecutionForClaim(taskID, claimToken string) *
 	return execution
 }
 
-func (p *LocalWorkerPoller) isCancellationRequested(task *api.WorkerTask) bool {
+func (p *LocalWorkerPoller) isCancellationRequested(ctx context.Context, task *api.WorkerTask) bool {
 	if p == nil || task == nil {
 		return false
 	}
-	return isJobCancellationRequested(p.Queue, task.ID)
+	return isJobCancellationRequested(ctx, p.Queue, task.ID)
 }
 
 func (p *LocalWorkerPoller) registerExecution(parent context.Context, task *api.WorkerTask) (context.Context, *pollerExecution) {
@@ -323,7 +317,7 @@ func (p *LocalWorkerPoller) renewActiveClaims(ctx context.Context) {
 	for _, claim := range claims {
 		renewed, err := p.Queue.RenewClaim(ctx, claim.id, claim.token)
 		if err != nil || !renewed {
-			if isJobCancellationRequested(p.Queue, claim.id) {
+			if isJobCancellationRequested(ctx, p.Queue, claim.id) {
 				claim.execution.cancel(context.Canceled)
 			} else {
 				claim.execution.cancel(ErrClaimLost)
@@ -363,7 +357,7 @@ func (p *LocalWorkerPoller) execute(parentCtx context.Context, task *api.WorkerT
 	}
 	renewed, err := p.Queue.RenewClaim(parentCtx, task.ID, task.ClaimToken)
 	if err != nil || !renewed {
-		if p.isCancellationRequested(task) {
+		if p.isCancellationRequested(parentCtx, task) {
 			settleCtx, cancel := terminalOutcomeContext(parentCtx)
 			defer cancel()
 			p.settleCancellation(settleCtx, task, nil)
@@ -398,7 +392,7 @@ func (p *LocalWorkerPoller) execute(parentCtx context.Context, task *api.WorkerT
 	if cause := context.Cause(execCtx); errors.Is(cause, ErrClaimLost) || errors.Is(cause, context.Canceled) || errors.Is(cause, lifecycle.ErrStopping) {
 		err = cause
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, lifecycle.ErrStopping) || (err == nil && result.Status == "canceled") || p.isCancellationRequested(task) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, lifecycle.ErrStopping) || (err == nil && result.Status == "canceled") || p.isCancellationRequested(parentCtx, task) {
 		settleCtx, cancel := terminalOutcomeContext(parentCtx)
 		defer cancel()
 		var report *api.WorkerResult
@@ -425,7 +419,7 @@ func (p *LocalWorkerPoller) execute(parentCtx context.Context, task *api.WorkerT
 	}
 	if strings.TrimSpace(result.Status) == "waiting" {
 		if won, parkErr := p.Queue.Park(parentCtx, task); parkErr != nil || !won {
-			if errors.Is(parkErr, lifecycle.ErrStopping) || p.isCancellationRequested(task) {
+			if errors.Is(parkErr, lifecycle.ErrStopping) || p.isCancellationRequested(parentCtx, task) {
 				settleCtx, cancel := terminalOutcomeContext(parentCtx)
 				defer cancel()
 				p.settleCancellation(settleCtx, task, nil)
@@ -475,7 +469,7 @@ func (p *LocalWorkerPoller) execute(parentCtx context.Context, task *api.WorkerT
 // Cancellation releases retained runtime after execution exits and before workspace cleanup.
 func (p *LocalWorkerPoller) settleCancellation(ctx context.Context, task *api.WorkerTask, result *api.WorkerResult) {
 	// An active Abort call that is still waiting on this execution owns inline runtime release and settlement.
-	if execution := p.activeExecutionForClaim(task.ID, task.ClaimToken); execution != nil && execution.claimInlineJoin() && p.isCancellationRequested(task) {
+	if execution := p.activeExecutionForClaim(task.ID, task.ClaimToken); execution != nil && execution.claimInlineJoin() && p.isCancellationRequested(ctx, task) {
 		return
 	}
 	// Only the current cancellation owner releases runtime and records the result.
@@ -509,7 +503,7 @@ func (p *LocalWorkerPoller) claimCancellationSettlement(ctx context.Context, tas
 	if !ok || cur == nil {
 		return false, nil
 	}
-	return cur.Status == api.WorkerStatusRunning && cur.ClaimToken == task.ClaimToken && isJobCancellationRequested(p.Queue, task.ID), nil
+	return cur.Status == api.WorkerStatusRunning && cur.ClaimToken == task.ClaimToken && isJobCancellationRequested(ctx, p.Queue, task.ID), nil
 }
 
 func (p *LocalWorkerPoller) commitTerminal(
@@ -527,7 +521,7 @@ func (p *LocalWorkerPoller) commitTerminal(
 			return false, err
 		}
 		if err == nil {
-			if !won && action != "cancellation intent" && action != "cancellation" && p.isCancellationRequested(task) {
+			if !won && action != "cancellation intent" && action != "cancellation" && p.isCancellationRequested(ctx, task) {
 				p.settleCancellation(ctx, task, nil)
 			}
 			return won, nil
@@ -575,7 +569,7 @@ func (p *LocalWorkerPoller) workerClaimContext(parent context.Context, task *api
 			case <-ticker.C:
 				renewed, err := p.Queue.RenewClaim(ctx, task.ID, task.ClaimToken)
 				if err != nil || !renewed {
-					if p.isCancellationRequested(task) {
+					if p.isCancellationRequested(ctx, task) {
 						cancel(context.Canceled)
 					} else {
 						cancel(ErrClaimLost)
@@ -606,7 +600,7 @@ func (p *LocalWorkerPoller) recoverExecute(ctx context.Context, task *api.Worker
 	)
 	settleCtx, cancel := terminalOutcomeContext(ctx)
 	defer cancel()
-	if p.isCancellationRequested(task) {
+	if p.isCancellationRequested(settleCtx, task) {
 		p.settleCancellation(settleCtx, task, nil)
 		return
 	}
