@@ -43,7 +43,7 @@ class HostedSelectionTests(unittest.TestCase):
 
     def test_dispatch_inputs_become_one_selection_bound_to_the_checkout(self):
         with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary) / 'selection.json'
+            output = Path(temporary).resolve() / 'selection.json'
             arguments = ['--checkout', '/controller', '--architecture', 'arm64', '--candidate-run-id', '12',
                          '--candidate-artifact-id', '34', '--candidate-controller-commit', 'f' * 40,
                          '--source-commit', '1' * 40, '--source-tree', '2' * 40, '--output', str(output)]
@@ -55,7 +55,7 @@ class HostedSelectionTests(unittest.TestCase):
                 plan.main(arguments)
             with patch.object(plan, 'observed_controller', return_value=('a' * 40, 'b' * 40)), \
                     self.assertRaises(SystemExit):
-                plan.main([*arguments[:-1], str(Path(temporary) / 'other.json'), '--architecture', 'riscv64'])
+                plan.main([*arguments[:-1], str(Path(temporary).resolve() / 'other.json'), '--architecture', 'riscv64'])
 
 
 class HostedRuntimeEntryTests(unittest.TestCase):
@@ -66,7 +66,7 @@ class HostedRuntimeEntryTests(unittest.TestCase):
     def test_retention_fails_the_step_unless_the_campaign_or_diagnosis_is_accepted(self):
         from linux_release.hosted import diagnostic
         with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
+            directory = Path(temporary).resolve()
             with patch.object(runtime, 'selection', return_value=selected()), patch.object(runtime, 'read', return_value={}):
                 for accepted, code in ((True, 0), (False, 2)):
                     report = {'complete_matrix_accepted': accepted, 'case_counts': {'passed': 1, 'failed': 0, 'unverified': 1}}
@@ -96,7 +96,7 @@ class HostedRuntimeCustodyTests(unittest.TestCase):
 
     def test_snapshot_freeze_is_independent_preleaf_preparation_and_cannot_be_reused(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             home = root / 'home'
             original = home / 'native-bootstrap'
             original.mkdir(parents=True, mode=0o700)
@@ -137,7 +137,7 @@ class HostedRuntimeCustodyTests(unittest.TestCase):
 
     def test_existing_runtime_refuses_before_package_or_system_changes(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / 'existing'
+            root = Path(temporary).resolve() / 'existing'
             root.mkdir()
             (root / 'owner').write_text('preserve')
             with patch.object(runtime, 'context'), patch.object(runtime, 'ROOT', root), patch.object(runtime, 'command') as command:
@@ -154,8 +154,8 @@ class HostedRuntimeCustodyTests(unittest.TestCase):
                         {**producer, 'source': {'source_commit': '0' * 40, 'source_tree': '2' * 40}},
                         {**producer, 'provenance': {**producer['provenance'], 'artifact_id': 35}}):
             with tempfile.TemporaryDirectory() as temporary, patch.object(runtime, 'context'), \
-                    patch.object(runtime, 'ROOT', Path(temporary) / 'fresh'), \
-                    patch.object(runtime, 'INSTALL', Path(temporary) / 'absent'), \
+                    patch.object(runtime, 'ROOT', Path(temporary).resolve() / 'fresh'), \
+                    patch.object(runtime, 'INSTALL', Path(temporary).resolve() / 'absent'), \
                     patch.object(runtime, 'read', side_effect=[{}, changed]), patch.object(runtime, 'command') as command:
                 with self.assertRaises(ValueError):
                     runtime.prepare(selected(), Path('/controller'), Path('/candidate'), {})

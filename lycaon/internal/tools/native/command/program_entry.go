@@ -364,7 +364,7 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 		return err
 	}
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
-	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
+	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: invocation.MaximumProgramInputBytes, OutputBytes: invocation.MaximumProgramInputBytes, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
 		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, screening)
 		if err != nil {
@@ -376,7 +376,16 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 		}
 		return nil
 	}
-	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
+	maximumNodes := 0
+	for _, limit := range run.catalog.Language.Limits {
+		if limit.ID == "expanded_fields" {
+			maximumNodes = 10*int(limit.Maximum) + 64
+		}
+	}
+	if maximumNodes == 0 {
+		return fmt.Errorf("command catalog has no expanded-field bound")
+	}
+	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: maximumNodes, MaximumDepth: 64}
 	return nil
 }
 
@@ -560,91 +569,6 @@ func evaluatedResult(outcome commandprogram.ProgramOutcome) toolcontract.Produce
 		return outcome.Stop.Result
 	}
 	return toolcontract.ProducerResult{Status: outcome.Status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: outcome.Status == 0, EffectCertainty: toolcontract.EffectUnknown}
-}
-
-// feedback renders the first native owner rejection through the program
-// feedback boundary, with the program's completed and uncertain effects.
-func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, stderr io.Writer, evalErr error) (refusal *ProgramRefusal, release func(), err error) {
-	defer func() {
-		if release == nil {
-			release = func() {}
-		}
-	}()
-	rejection := dispatcher.firstRejection()
-
-	if rejection == nil {
-		var rejection *toolrejection.ToolReject
-		var evaluationRefusal *commandprogram.EvaluationRefusal
-		if errors.As(evalErr, &evaluationRefusal) {
-			span := evaluationRefusal.Node.Span
-			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": evaluationRefusal.Expected, "expected_form": evaluationRefusal.Expected, "reason": evaluationRefusal.Expected}
-			var expansion *commandprogram.ExpansionError
-			if errors.As(evaluationRefusal.Cause, &expansion) && expansion.Limit != "" {
-				data["limit_id"], data["maximum"], data["observed"] = expansion.Limit, expansion.Maximum, expansion.ObservedValue()
-			}
-			if evaluationRefusal.Command != "" {
-				data["command"], data["word"], data["expected_form"] = evaluationRefusal.Command, evaluationRefusal.Option, evaluationRefusal.Form
-			}
-			rejection = toolrejection.RejectInvalidArguments(evaluationRefusal.Code, data)
-			original := toolrejection.AsToolReject(tools.CommandResourceRejection(evaluationRefusal.Cause))
-			if original != nil && original.Code == evaluationRefusal.Code {
-				copy := *original
-				copy.Data = data
-				for key, value := range original.Data {
-					copy.Data[key] = value
-				}
-				rejection = &copy
-			}
-			enrichProgramReject(rejection, evaluationRefusal.Command, span)
-			if rejection.Code == "COMMAND_LIMIT_EXCEEDED" && dispatcher.claimStopLine() {
-				writeLimitRefusal(stderr, "command", "", rejection)
-			}
-		} else if rejection = toolrejection.AsToolReject(evalErr); rejection != nil {
-			enrichProgramReject(rejection, "", run.root.Span)
-		} else {
-			return nil, nil, evalErr
-		}
-		delivery, err := run.executor.Rejections.RenderProgramRefusal(ctx, run.frame, run.memory, run.capture, run.tc, errors.Join(rejection, evalErr), nil)
-		if err != nil {
-			return nil, nil, errors.Join(evalErr, err)
-		}
-		refusal = &ProgramRefusal{Code: delivery.Code, Details: delivery.Details, DeliveryFailure: delivery.Failure}
-		if delivery.Feedback != nil {
-			refusal.Feedback = delivery.Feedback.Error()
-		}
-		return refusal, delivery.Close, nil
-	}
-
-	reject := toolrejection.AsToolReject(rejection.cause)
-	enrichProgramReject(reject, rejection.operation.Command(), rejection.operation.Invocation().Span)
-	failedDelivery := func(cause error) (*ProgramRefusal, func(), error) {
-		var capacity *toolcontract.ProgramMemoryLimitError
-		if !errors.As(cause, &capacity) && !errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
-			return nil, nil, errors.Join(rejection.cause, cause)
-		}
-		delivery, err := run.executor.Rejections.RenderProgramRefusal(ctx, run.frame, run.memory, run.capture, run.tc, rejection.cause, cause)
-		if err != nil {
-			return nil, nil, errors.Join(rejection.cause, err)
-		}
-		return &ProgramRefusal{Code: delivery.Code, DeliveryFailure: delivery.Failure}, delivery.Close, nil
-	}
-	prepared, err := toolexecution.PrepareProgramFailure(ctx, run.frame, run.recorder, run.memory, run.capture, run.tc, rejection.operation, rejection.cause)
-	if err != nil {
-		return failedDelivery(err)
-	}
-	if prepared == nil {
-		return nil, nil, rejection.cause
-	}
-	release = prepared.Close
-	rendered := run.executor.Rejections.RenderProgramFailure(ctx, run.frame, run.tc, prepared)
-	if rendered != nil && toolrejection.AsToolReject(rendered) == nil {
-		prepared.Close()
-		return failedDelivery(rendered)
-	}
-	if rendered == nil {
-		rendered = toolrejection.RenderReject(prepared.Rejection, nil)
-	}
-	return &ProgramRefusal{Code: reject.Code, Feedback: rendered.Error(), Details: prepared.Rejection.Data}, release, nil
 }
 
 func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (*invocation.ProgramOutputRetention, error) {

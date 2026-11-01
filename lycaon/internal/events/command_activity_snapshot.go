@@ -16,11 +16,8 @@ func cloneCommandActivityProgram(input *api.CommandProgramReceipt) *api.CommandP
 		activity := &result.Activities[i]
 		activity.ExecutionIDs = slices.Clone(activity.ExecutionIDs)
 		activity.Spans = slices.Clone(activity.Spans)
+		activity.Steps = slices.Clone(activity.Steps)
 		activity.StatusCode = cloneActivityStatus(activity.StatusCode)
-	}
-	result.ActivityExecutions = slices.Clone(input.ActivityExecutions)
-	for i := range result.ActivityExecutions {
-		result.ActivityExecutions[i].StatusCode = cloneActivityStatus(result.ActivityExecutions[i].StatusCode)
 	}
 	result.Outputs = slices.Clone(input.Outputs)
 	for i := range result.Outputs {

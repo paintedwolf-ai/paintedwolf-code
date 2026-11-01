@@ -172,6 +172,44 @@ boolean as validation proof; the identity check itself applies no progress.
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
 
+### Command review storage
+
+Native operation review retains exact, domain-tagged canonical inputs. Encoding
+writes that representation incrementally; decoding builds admitted result
+containers directly, without a second representation tree. The durable format,
+raw-byte string identity, sorted keys and numeric spellings remain unchanged.
+Transient codec frames follow nesting depth. Retained containers, payloads and
+screened projections follow their actual capacities and lifetimes. Secret
+screening and execution keep separate values; inspection never becomes execution
+authority. Retained input bodies have the invocation store's 8 MiB bound, and
+native review node admission covers each option's structured fields and derives
+from the catalog's expanded-field ceiling.
+
+### Large JSON query inputs
+
+JSON query input is a pull parser. Streaming mode retains only open container
+keys, the current scalar and one delivered event. Ordinary mode admits one
+complete value before evaluation; its lease lasts until the next input unless
+an aggregate explicitly retains it. Slurp holds those input leases through the
+aggregate evaluation and admits its own result container. Scalar size, nesting,
+working memory, total throughput and aggregate value size have separate bounds.
+Input positions come from the parser cursor rather than a growing copy or index
+of the consumed stream. Raw lines retain their record bounds; YAML and explicit
+whole-input operations retain their materialization contracts. Query event
+parsing preserves object order, numeric spelling, empty containers and closure
+events while cancellation and reader failures remain terminal host facts.
+
+### Batched command resources
+
+Batch-producing commands plan child argument bytes and fields against the
+remaining program resources and declared parallelism. Explicit item, line and
+exact-size constraints retain their command semantics. A resource refusal stops
+admission before effects; it never triggers replay of an attempted child.
+Input revision membership uses independently admitted fixed-capacity pages so a
+large file set does not require a second complete membership table during growth.
+Search releases completed pin pages after durable recording. Parallel pin events
+retain their leases until ordered reduction or cancellation discards them.
+
 ### Complete byte streams
 
 `commandprogram.BytePipe` uses unbuffered `io.Pipe` backpressure and an explicit
@@ -332,6 +370,9 @@ on the bounded backtracking engine; it is never RE2. A construct outside a
 dialect refuses with `GREP_REGEX_UNSUPPORTED`, never a reinterpretation. rg's
 default dialect is RE2. Each record search is metered against the catalog
 regex ceilings, and an overrun refuses with `GREP_MATCH_BUDGET`.
+Native rg JSON uses stream-backed ripgrep 15 record semantics. Reference checks
+use `--no-mmap` because file mapping changes binary records and searched-byte
+statistics on some platforms. Input pins and offsets retain the original bytes.
 
 Traversal walks the invocation's held roots in unsigned byte order. Every
 listed name counts against `traversal_visits`, and every file read is pinned
@@ -985,7 +1026,7 @@ For a known command, `wait(until_complete=true, conditions=[{"kind":"process_don
 
 A wait lease is durable: it persists the addressed session, optional worker job, active profile, optional deadline, conditions, and exact loopback ports, and restart reconstructs subscriptions and probes. The first condition or deadline settles it. Worker waits return through the durable worker queue, coordinator waits keep coordinator workflow gating, and direct agent modes re-enter the same session. Delivery uses the lease id as an idempotent receipt; live delivery retries with bounded backoff, and restart recovery can replay a settled wake without duplicating an admitted one.
 
-A `command` call whose program is only waiting parks on the same lease. The evaluator reports a typed wait state when every live statement and job is blocked: the waiting statement, the earliest timer wake, and exact job handles. A call whose next wake falls more than ten seconds after it started, or whose program still waits only on jobs at that point, settles as `parked` with the waiting statement as its reason. Its turn ends and releases the worker slot, while the program keeps running under supervision; the lease subscribes to `program_done`, which only the host arms, and the program's end resumes the turn with exactly the result an unparked call returns. Shorter waits stay inline. The call's `timeout_ms`, or the catalog's `program_lifetime_ms` when the call names none, remains the program's outer bound: a single wait that cannot end within it refuses with `COMMAND_LIMIT_EXCEEDED` before the program parks. Anything else that ends the wait interrupts the program at its waiting statement while its `&` jobs keep running: user input or a stop opens the next turn with the interrupted result, and a replacement wait does the same. A restart cannot resume a program, so recovery resolves its lease with the program's receipts, interrupted, and the turn resumes with them; nothing is replayed.
+A `command` call whose program is only waiting parks on the same lease. The evaluator reports a typed wait state when every live statement and job is blocked: the waiting statement, the earliest timer wake, and exact job handles. A known wait whose next wake falls more than ten seconds after that wait starts settles as `parked` with the waiting statement as its reason. Job-only waits park once the call's initial ten-second budget expires. Short polling intervals remain inline even when the program spans several intervals. Its turn ends and releases the worker slot, while the program keeps running under supervision; the lease subscribes to `program_done`, which only the host arms, and the program's end resumes the turn with exactly the result an unparked call returns. Shorter waits stay inline. The call's `timeout_ms`, or the catalog's `program_lifetime_ms` when the call names none, remains the program's outer bound: a single wait that cannot end within it refuses with `COMMAND_LIMIT_EXCEEDED` before the program parks. Anything else that ends the wait interrupts the program at its waiting statement while its `&` jobs keep running: user input or a stop opens the next turn with the interrupted result, and a replacement wait does the same. A restart cannot resume a program, so recovery resolves its lease with the program's receipts, interrupted, and the turn resumes with them; nothing is replayed.
 
 Coordinator wakes retain their event identity, target, batch, and workflow revision while queued. One consumer drains a session's queue; each successful model request acknowledges the facts captured for it, and failed requests do not consume wakes. A matching event settles the lease and delivers its result even when optional workflow gates would suppress an ambient turn; a fresh permitted workflow interruption ends the lease before model execution starts; unrelated process events leave the selected handle's wait armed.
 

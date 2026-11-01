@@ -239,7 +239,7 @@ func outputPolicyEvaluator(t *testing.T, pipeline *oar.GuardPipeline) func(conte
 			return nil, false, "", false
 		}
 		decision := result.Decision
-		body, err := guidance.RenderPolicyCopy(ctx, decision.Code, string(decision.Effect), decision.Copy)
+		body, err := guidance.RenderPolicyCopy(ctx, decision.Code, string(decision.Effect), decision.Copy, decision.Data)
 		testutil.FailErr(t, "render output policy", err)
 		return guidance.NewRefusal(decision.Code, body).WithPolicyCopy(decision.Copy).WithDetails(decision.Data, nil), true, "", false
 	}

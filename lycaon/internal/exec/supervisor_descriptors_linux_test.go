@@ -55,7 +55,7 @@ func TestSupervisorDescriptorLayoutFixture(t *testing.T) {
 			t.Fatalf("declared descriptor was not released: %v", err)
 		}
 		runtime.GC()
-		_, err = writer.Write([]byte("x"))
+		_, err = writer.WriteString("x")
 		testutil.FailErr(t, "write unrelated descriptor after handoff cleanup", err)
 		var one [1]byte
 		_, err = io.ReadFull(reader, one[:])

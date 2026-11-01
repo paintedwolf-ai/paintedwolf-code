@@ -101,7 +101,7 @@ func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *test
 	ctx, observation, release, err := prepareProgramPolicyObservation(t.Context(), frame, memory, tc, nil)
 	testutil.FailErr(t, "admit actual policy observation", err)
 	if observation.submitted["command"] != "cat input" || memory.InUse().State <= baseline {
-		t.Fatal("policy observation lost actual envelope or decoded-state admission")
+		t.Fatal("policy observation lost actual envelope or snapshot admission")
 	}
 	cause := &toolrejection.ToolReject{Code: "READ_PATH_DENIED", Data: map[string]any{"path": "input"}}
 	executor := NewExecutor(nil, nil, "fixture")
@@ -113,7 +113,7 @@ func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *test
 	}
 	release()
 	if memory.InUse().State != baseline {
-		t.Fatal("decoded observation lease leaked")
+		t.Fatal("policy observation lease leaked")
 	}
 	tc.Identity.ToolCallID = "another-model-call"
 	if _, _, err := programModelArguments(t.Context(), frame, memory, tc); err == nil || memory.InUse().State != baseline {

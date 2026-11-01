@@ -74,8 +74,7 @@ class UnittestSelectionTests(unittest.TestCase):
                          f"expected one actual runner recipe; stdout={result.stdout!r}; "
                          f"stderr={result.stderr!r}")
         command = shlex.split(lines[0].partition("] ")[2])
-        self.assertEqual(command, ["python3", "-m", "unittest", "discover", "-s", "scripts",
-                                   "-p", "test_*execution.py", *flags])
+        self.assertEqual(command, ["python3", str(ROOT / "scripts/ci_policy/runner_tests.py"), *flags])
 
     def test_actual_task_runner_recipe_forwards_patterns_without_changing_default(self):
         for flags in ([], ["-k", "*Terminal*", "-k", "crash receipt"]):

@@ -28,6 +28,42 @@ On the wire, a tool result carries ordered `feedback` entries (`code`, typed `de
 Redirected output such as `printf ... > file` is an ordinary native write in
 the program; the host does not redirect it to a structured tool.
 
+## Command recovery design
+
+Command feedback starts with the observed failure and execution state. It offers
+a next step only when the host can establish that it is applicable. Parser diagnostics retain their own explanation and source
+coordinates. Typed categories identify incomplete constructs, invalid encoding,
+unsupported forms and resource limits; diagnostic prose never selects recovery.
+A parser rejection applies to one complete source unit. It does not establish
+that a parent program has performed no operations.
+
+Recovery keeps the submitted operation intact. Source diagnostics offer no guessed
+repairs or option-prefix substitutions. Validated structural argument repairs
+retain their existing schema checks and require explicit submission. Examples are labeled examples,
+not executable replacement calls. Unknown causes, missing bytes and uncertain
+effects remain unknown. Permission failures name the approval boundary; runtime
+failures preserve native status and stderr. A corrected invocation still crosses
+normal admission and authorization.
+
+Recovery copy states only what its occurrence proves. A missing fact is not a
+negative observation, a successful status does not disprove a refused effect,
+and an errno does not identify a repair. Unknown remedies omit Fix and Next.
+Concrete suggestions require the producer's typed cause and the recipient's
+current schema or offered-tool facts. Earlier effects never become a replay recipe.
+The executor freezes the actual invocation capability contract, including narrowed
+definitions. Child contracts stay attached to their own identities. A typed
+contract snapshot can supply local rendering facts without entering canonical
+rejection data or persisted JSON.
+
+## Command result presentation
+
+Model delivery separates a command refusal's explanation and native stream text
+from its JSON metadata. Projection requires matching host invocation and program
+receipts; a JSON object printed by a program supplies no host identity. Every
+projected part remains non-authoritative data. The retained result, receipts,
+source identities and output references remain unchanged. Unsupported shapes
+retain their original presentation. Repeated projection is idempotent.
+
 ## Native command failure attribution
 
 A reached native operation retains the actual `command` model call and its

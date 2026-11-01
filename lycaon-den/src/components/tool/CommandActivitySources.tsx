@@ -1,14 +1,11 @@
-import { For, Show, createSignal } from "solid-js";
+import { Show, createSignal } from "solid-js";
 import type { CommandActivityView } from "../../chat/tool/command-activity-model.ts";
-import { commandSourceSegments } from "../../chat/tool/command-activity-model.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import { useToolContent } from "../../chat/tool/tool-content.tsx";
 import { writeClipboardText } from "../../utils/clipboard.ts";
 import { KeyedIndex } from "../keyed-index.tsx";
-import { RedactedText } from "../transcript/RedactionMark.tsx";
 import { ToolContentLink } from "./ToolContentLink.tsx";
 
-const PREVIEW_CHARS = 480;
 const command = (call: ToolPartView) => typeof call.args?.command === "string" ? call.args.command : undefined;
 
 type CallProps = { call: ToolPartView; activity: CommandActivityView; projectId?: string };
@@ -35,15 +32,9 @@ function CallOutputLink(props: CallProps) {
 
 function CommandSource(props: CallProps & { text: string; copy: (text: string) => void }) {
   const content = useToolContent();
-  const segments = () => {
-    const program = props.call.commandProgram;
-    if (!program) return [{ text: props.text.slice(0, PREVIEW_CHARS), highlighted: false }];
-    const spans = { ...props.activity.fact, spans: props.activity.members.flatMap(member => member.spans) };
-    return commandSourceSegments(props.text.slice(0, PREVIEW_CHARS), program, spans, !!props.call.argsRedaction);
-  };
   const revealingInput = () => content?.revealedCallId?.() === props.call.toolCallId && content.argsOffset() !== undefined;
   return <div class="den-command-activity-source">
-    <pre class="den-command-activity-command"><Show when={props.call.argsRedaction} keyed fallback={<For each={segments()}>{segment => segment.highlighted ? <mark>{segment.text}</mark> : segment.text}</For>}>{redaction => <RedactedText message={{host_secret_redaction:redaction.meta}} field={`${redaction.fieldPrefix}.command`} text={props.text.slice(0,PREVIEW_CHARS)} />}</Show>{props.text.length > PREVIEW_CHARS ? "…" : ""}</pre>
+
     <div class="den-command-activity-paging">
       <button type="button" class="den-chat-content-link" onClick={() => props.copy(props.text)}>Copy command</button>
       <ToolContentLink pane={`activity:${props.activity.fact.id}:original:${props.call.id}`} label="Full original command"

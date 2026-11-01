@@ -73,6 +73,21 @@ Deleting bytes must produce an explainable unavailable state, not make a durable
 
 ## Portable command records
 
+Command diagnostic categories and recovery actions are additive `agent-public`
+facts. Existing rejection codes retain their meanings. Explanations and bounded
+source context are co-shipped `bundle` presentation; they do not authorize an
+operation, repair source, or establish replay eligibility. Execution and effect
+claims remain projections of the invocation recorder. This work changes no
+persisted schema or command language version.
+
+Recovery availability and diagnostic-knowledge facts are additive host facts in
+the `paintedwolf` namespace. They distinguish missing observations from the
+standard typed zero values without changing OAR defaults. Structural argument
+repairs carry the validating tool identity; unrelated operation schemas do not
+authorize a replacement outer call. Unproven name guesses and remedies are not
+part of the recovery contract. Canonical rejection identities remain readable.
+
+
 The compiled catalog freezes the language, operation definitions and limits for each invocation. The model call owns the aggregate receipt; child identities are host operations. Persistence and wire consumers follow the classifications below.
 
 Command limit identifiers are `agent-public` vocabulary. The shared text-search
@@ -108,6 +123,7 @@ as errors rather than publishing a result under a changed frame.
 | Session job/listener/resource handles and lifecycle events | Live registry entries ephemeral, PID optional. Retained receipt/resource identity is `durable-db`; UI/event shapes are `bundle`. Session ownership survives wrappers/functions; host loss interrupts rather than resumes instructions. | Process supervision, resource registry and generated wire consumers |
 | Variables, functions, expansion state, pipe buffers/spill staging, live capabilities, one-use permits | Ephemeral only. Bound allocations obey the versioned ceilings. No serialized instruction pointer, interpreter checkpoint, whole-program retry or crash replay. Spill retained as history follows the output rules above. | Evaluator, stream and admission owners |
 | Agent-visible command names, syntax version, status/rejection meaning, output-handle vocabulary | `agent-public`. Retire with a named successor; never reuse a meaning. DTO additions are `bundle`, authored through OpenAPI and generated together. | Catalog, operation owners and generated wire consumers |
+| Command result presentation and receipt-bound compaction provenance | Readable refusal/stream framing is `agent-public` presentation. The detached compaction descriptor is ephemeral and excluded from serialization. Canonical history, receipt identities, source bytes and output references are unchanged. | Transcript projection and compaction |
 
 Host-loss recovery reconciles existing mutation journals and releases process/network resources, settles the aggregate interrupted, and preserves completed child outcomes. A later cancellation, refusal or stream error cannot rewrite a prior publication or HTTP effect. The invocation recorder records owner facts and cannot reclassify them. The evaluator delegates remaining obligations to existing workflow/grounding authority rather than inferring completion from stdout.
 

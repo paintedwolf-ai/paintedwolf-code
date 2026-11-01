@@ -4,12 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
-	"math"
-	"strings"
 )
+
+const nativeValueMaxDepth = 1024
 
 type NativeValueDomain string
 
@@ -47,83 +45,49 @@ func NewNativeValue(ctx context.Context, state ReviewStateAdmission, domain Nati
 	if ctx == nil || state == nil || !domain.valid() {
 		return NativeValue{}, nil, fmt.Errorf("native value requires context, admission and a known domain")
 	}
-	leases := &reviewLeases{}
-	encoded, err := encodeReviewValue(ctx, state, leases, value)
-	if err != nil {
-		leases.close()
+	ctx = WithMemoryPhase(ctx, ReviewEncoding)
+	writer := nativeValueWriter{ctx: ctx, state: state}
+	defer writer.close()
+	if err := writer.text(`["` + string(domain) + `",1,`); err != nil {
 		return NativeValue{}, nil, err
 	}
-	bound, err := nativeJSONBound(encoded)
-	if err != nil {
-		leases.close()
+	if err := writer.value(value, 0); err != nil {
 		return NativeValue{}, nil, err
 	}
-	// Marshal's buffer, returned bytes, and immutable string coexist during publication.
-	releaseJSON, err := state.ReserveProgramState(ctx, 3*bound)
-	if err != nil {
-		leases.close()
-		return NativeValue{}, nil, err
-	}
-	if releaseJSON == nil {
-		leases.close()
-		return NativeValue{}, nil, fmt.Errorf("native encoding requires retained admission")
-	}
-	defer releaseJSON()
-	defer leases.close()
-	raw, err := json.Marshal([]any{string(domain), 1, encoded})
-	if err != nil {
+	if err := writer.text("]"); err != nil {
 		return NativeValue{}, nil, err
 	}
 	retained := &reviewLeases{}
-	if err := retained.reserve(ctx, state, int64(len(raw))); err != nil {
+	if err := retained.reserve(ctx, state, int64(len(writer.bytes))); err != nil {
 		return NativeValue{}, nil, err
 	}
-	sum := sha256.Sum256(raw)
-	return NativeValue{domain: domain, digest: hex.EncodeToString(sum[:]), canonical: string(raw), valid: true}, retained.release(), nil
+	sum := sha256.Sum256(writer.bytes)
+	return NativeValue{domain: domain, digest: hex.EncodeToString(sum[:]), canonical: string(writer.bytes), valid: true}, retained.release(), nil
 }
 
-// Value decodes only this value's exact versioned domain. The detached raw
-// value has its own lease and is never silently interpreted as owner inputs.
+// Value decodes admitted containers directly from the canonical representation.
 func (v NativeValue) Value(ctx context.Context, state ReviewStateAdmission) (any, func(), error) {
 	if ctx == nil || state == nil || !v.Valid() {
 		return nil, nil, fmt.Errorf("admitted native value required")
 	}
-	leases := &reviewLeases{}
-	defer func() {
-		if leases != nil {
-			leases.close()
-		}
-	}()
-	if int64(len(v.canonical)) > (math.MaxInt64-2048)/64 {
-		return nil, nil, fmt.Errorf("native value restore bound overflow")
-	}
-	// The parser bound covers boxed scalars, container growth, and decoder buffers.
-	// Its scratch lease ends before the decoded values leave this method.
-	parsing := &reviewLeases{}
-	defer parsing.close()
-	if err := parsing.reserve(ctx, state, int64(len(v.canonical))*64); err != nil {
+	ctx = WithMemoryPhase(ctx, ReviewDecoding)
+	reader := nativeValueReader{ctx: ctx, state: state, source: v.canonical, leases: &reviewLeases{}}
+	prefix := `["` + string(v.domain) + `",1,`
+	if err := reader.take(prefix); err != nil {
 		return nil, nil, err
 	}
-	decoder := json.NewDecoder(strings.NewReader(v.canonical))
-	decoder.UseNumber()
-	var envelope []any
-	if err := decoder.Decode(&envelope); err != nil {
-		return nil, nil, err
+	value, err := reader.value(0)
+	if err == nil {
+		err = reader.take("]")
 	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return nil, nil, fmt.Errorf("native value has trailing data")
+	if err == nil && reader.at != len(reader.source) {
+		err = fmt.Errorf("native value has trailing data")
 	}
-	if len(envelope) != 3 || envelope[0] != string(v.domain) || envelope[1] != json.Number("1") {
-		return nil, nil, fmt.Errorf("unknown native value envelope")
-	}
-	value, err := decodeReviewValue(ctx, state, leases, envelope[2])
 	if err != nil {
+		reader.leases.close()
 		return nil, nil, err
 	}
-	release := leases.release()
-	leases = nil
-	return value, release, nil
+	return value, reader.leases.release(), nil
 }
 
 // RestoreNativeValue returns validated canonical bytes and their admitted decoded tree.
