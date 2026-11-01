@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 
 from ci_policy import search_reference as reference
+from ci_policy import runner_tests
 
 
 def release_fixture(kind=tarfile.REGTYPE, extra=False):
@@ -137,6 +138,27 @@ class SearchReferenceInputsTest(unittest.TestCase):
         with mock.patch.object(reference, "host_release", return_value=release), mock.patch.object(reference, "ensure", return_value=self.destination / "rg") as ensure, mock.patch("builtins.print"):
             reference.main([str(self.destination)])
         ensure.assert_called_once_with(str(self.destination), release)
+
+
+class VerificationPythonInputsTest(unittest.TestCase):
+    def test_discovery_loads_pinned_yaml_and_preserves_selection(self):
+        with mock.patch.object(runner_tests.python_tools, "prepared", return_value=Path("/fixture/packages")), mock.patch.object(runner_tests.unittest, "main") as run, mock.patch.object(runner_tests.sys, "path", []):
+            runner_tests.main(["-k", "chosen case"])
+            self.assertEqual(runner_tests.sys.path[0], "/fixture/packages")
+        self.assertEqual(run.call_args.kwargs["argv"][-2:], ["-k", "chosen case"])
+        self.assertEqual(run.call_args.kwargs["module"], None)
+
+    def test_missing_preparation_fails_before_discovery(self):
+        with mock.patch.object(runner_tests.python_tools, "prepared", side_effect=ValueError("not prepared")), mock.patch.object(runner_tests.unittest, "main") as run:
+            with self.assertRaises(SystemExit):
+                runner_tests.main([])
+        run.assert_not_called()
+
+    def test_unsupported_interpreter_fails_before_dependency_loading(self):
+        with mock.patch.object(runner_tests.sys, "version_info", (3, 9)), mock.patch.object(runner_tests.python_tools, "prepared") as prepare:
+            with self.assertRaises(SystemExit):
+                runner_tests.main([])
+        prepare.assert_not_called()
 
 
 if __name__ == "__main__":
