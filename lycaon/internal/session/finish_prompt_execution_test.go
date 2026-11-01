@@ -141,7 +141,11 @@ func setupPlanTripartiteFixture(t *testing.T) coordinatorPromptFixture {
 
 	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.0"}); err != nil {
+	plan, ok := manifestReg.FindTriggerMatch("/plan")
+	if !ok {
+		t.Fatal("missing current /plan workflow")
+	}
+	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: plan.Manifest.ID, WorkflowVersion: plan.Manifest.Version}); err != nil {
 		testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 	}
 	return coordinatorPromptFixture{mgr: mgr, rec: rec, wfMgr: wfMgr, sess: sess}

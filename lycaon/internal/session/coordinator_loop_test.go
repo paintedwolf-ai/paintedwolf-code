@@ -150,8 +150,12 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 
 	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
+	plan, ok := manifestRegistry.FindTriggerMatch("/plan")
+	if !ok {
+		t.Fatal("missing current /plan workflow")
+	}
 	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "Exercise the coordinator loop",
+		WorkflowID: plan.Manifest.ID, WorkflowVersion: plan.Manifest.Version, Request: "Exercise the coordinator loop",
 	}); err != nil {
 		testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 	}
