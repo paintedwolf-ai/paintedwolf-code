@@ -41,7 +41,7 @@
     "@codemirror/view": "^6.43.6",
     "@replit/codemirror-emacs": "6.1.0",
     "@replit/codemirror-vim": "6.4.0",
-    "@tanstack/solid-virtual": "^3.13.48",
+    "@tanstack/solid-virtual": "^3.13.49",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-notification": "^2",
@@ -66,7 +66,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
-    "@redocly/cli": "2.65.1",
+    "@redocly/cli": "2.71.0",
     "@solidjs/testing-library": "^0.8.10",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2",
@@ -87,7 +87,7 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.0",
     "undici": "^8.12.3",
-    "vite": "^8.3.4",
+    "vite": "^8.3.5",
     "vite-plugin-solid": "^2.11.14",
     "vitest": "^5.0.5",
     "yaml": "^2.8.1"
