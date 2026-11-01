@@ -1,10 +1,5 @@
-//! The Vulkan runtime, through Burn (`--device vulkan:N`, a candidate for `auto`): which GPUs
-//! there are, where their compiled kernels persist, and the precision each runs at. The model
-//! itself is in [`model`], over the backbone in [`modernbert`].
-//!
-//! Burn panics on device faults rather than returning errors, so enumeration, loading and every
-//! forward pass run under [`guard`], which turns a panic into [`Error::Device`]. A faulty GPU
-//! then costs its candidacy, not the engine.
+//! Vulkan device selection, precision and persistent kernel caches.
+//! Device faults become errors at enumeration, load and forward boundaries.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
@@ -28,15 +23,13 @@ pub(crate) struct Gpu {
     pub index: usize,
     /// The name the driver gives the part.
     pub name: String,
-    /// The part, its kernel target, and its bus address: a new card, driver target, or slot is
-    /// new hardware to measure.
+    /// Part, kernel target and bus address identify the qualification cache.
     pub key: String,
     pub pci_address: Option<String>,
     device: Device,
 }
 
-/// Point the kernel and autotune caches at `dir`, or keep them in memory when there is none.
-/// Takes effect only before the first device opens.
+/// Select persistent caches before opening a device.
 pub(crate) fn configure_cache(dir: Option<&Path>) {
     let mut config = CubeClRuntimeConfig::default();
     match dir {
@@ -49,8 +42,7 @@ pub(crate) fn configure_cache(dir: Option<&Path>) {
     CubeClRuntimeConfig::try_set(config);
 }
 
-/// The GPUs Vulkan reports, in its order. Software rasterizers are left out: they are no card,
-/// and the CPU runtime serves a CPU better.
+/// Enumerate hardware Vulkan devices in driver order.
 pub(crate) fn gpus() -> &'static [Gpu] {
     static GPUS: OnceLock<Vec<Gpu>> = OnceLock::new();
     GPUS.get_or_init(|| guard("enumerating Vulkan GPUs", || enumerate(false)).unwrap_or_default())
@@ -108,8 +100,7 @@ pub(crate) fn dtype_for(gpu: &Gpu, requested: &str) -> Result<DType> {
     }
 }
 
-/// The first GPU, else a software rasterizer, so the parity tests run wherever Mesa's lavapipe
-/// is installed.
+/// Parity fixtures may use a software Vulkan device.
 #[cfg(test)]
 fn test_gpu() -> Gpu {
     gpus().first().cloned().unwrap_or_else(|| {
