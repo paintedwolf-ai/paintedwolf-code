@@ -1,7 +1,6 @@
 package toolcontract
 
 import (
-	"errors"
 	"slices"
 	"strings"
 	"testing"
