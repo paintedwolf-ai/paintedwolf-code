@@ -42,7 +42,7 @@ func TestRgJSONMatchLimitsKeepExactBinaryAndContextExtents(t *testing.T) {
 						}
 					}
 					if err := json.Unmarshal([]byte(line), &event); err != nil {
-						t.Fatal(err)
+						t.Fatalf("decode JSON event: %v", err)
 					}
 					if event.Type == "end" {
 						ended = true
