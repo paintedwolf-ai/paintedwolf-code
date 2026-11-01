@@ -116,7 +116,10 @@ impl Mlx {
     }
 
     pub fn cache_bytes(&self) -> usize {
-        self.cache.bytes() + self.prefix.as_ref().map_or(0, Cache::bytes)
+        self.prefix.as_ref().map_or_else(
+            || self.cache.bytes(),
+            |prefix| self.cache.resident_bytes_with(prefix),
+        )
     }
 }
 
