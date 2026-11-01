@@ -23,6 +23,7 @@ impl Mlx {
         let plan = Self::plan(directory, context, chunk)?;
         let idle_budget = (plan.device_reservation_bytes - plan.workspace_bytes) as usize;
         memory::set_memory_limit(budget).map_err(device_error)?;
+        memory::set_wired_limit(budget).map_err(device_error)?;
         memory::set_cache_limit(128 << 20).map_err(device_error)?;
         memory::reset_peak_memory().map_err(device_error)?;
         let engine = Self {
@@ -161,7 +162,9 @@ impl Backend for Mlx {
 
     fn release(self) -> Result<()> {
         drop(self);
-        memory::clear_cache().map_err(device_error)
+        memory::clear_cache().map_err(device_error)?;
+        memory::set_wired_limit(0).map_err(device_error)?;
+        Ok(())
     }
 
     fn clear_prefix(&mut self) -> Result<()> {
