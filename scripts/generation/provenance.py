@@ -24,13 +24,20 @@ def source_identity(backend):
     return hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()
 
 
+def build_identity(backend, directory, binary):
+    identity = {"source_identity": source_identity(backend), "binary_sha256": file_digest(binary)}
+    if backend == "reference-swift":
+        identity["metallib_sha256"] = file_digest(directory / "metal/mlx.metallib")
+    return identity
+
+
 def record_build(backend, directory, binary):
-    receipt = {"source_identity": source_identity(backend), "binary_sha256": file_digest(binary)}
+    receipt = build_identity(backend, directory, binary)
     (directory / "reference-build.json").write_text(json.dumps(receipt, indent=2) + "\n")
 
 
 def verified_build(backend, directory, binary):
     receipt = json.loads((directory / "reference-build.json").read_text())
-    if receipt != {"source_identity": source_identity(backend), "binary_sha256": file_digest(binary)}:
+    if receipt != build_identity(backend, directory, binary):
         raise ValueError("reference executable differs from its build sources; rebuild before measuring")
     return receipt

@@ -52,7 +52,8 @@ def prepare(args):
                 raise ValueError("conversion requires --output and --artifact-identity (source SHA256)")
             run(["uv", "run", "--frozen", "--no-sync", "--project", project, "python",
                  project / "convert_mlx.py", "--source", args.model, "--output", args.output,
-                 "--source-sha256", args.artifact_identity], env=python_environment())
+                 "--source-sha256", args.artifact_identity,
+                 *(["--precision", args.precision] if args.precision else [])], env=python_environment())
             return
         if args.refresh_lock:
             run(["uv", "lock", "--project", project])
@@ -72,10 +73,31 @@ def python_environment():
     return environment
 
 
+def swift_shaders(output):
+    dependency = output / "checkouts/mlx-swift/Source/Cmlx"
+    shaders = output / "metal"
+    shaders.mkdir(parents=True, exist_ok=True)
+    run(["cmake", "-S", dependency / "mlx", "-B", shaders,
+         "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0",
+         "-DMLX_BUILD_TESTS=OFF", "-DMLX_BUILD_EXAMPLES=OFF", "-DMLX_METAL_JIT=ON",
+         "-DMLX_METAL_PATH=" + str(shaders),
+         "-DFETCHCONTENT_SOURCE_DIR_METAL_CPP=" + str(dependency / "metal-cpp"),
+         "-DFETCHCONTENT_SOURCE_DIR_JSON=" + str(dependency / "json"),
+         "-DFETCHCONTENT_SOURCE_DIR_FMT=" + str(dependency / "fmt")])
+    run(["cmake", "--build", shaders, "--parallel", os.environ.get("PW_TEST_WORKERS", "1"),
+         "--target", "mlx-metallib"])
+    return shaders / "mlx.metallib"
+
+
+def swift_environment(output):
+    return {**os.environ, "PW_REFERENCE_METALLIB": str(output / "metal/mlx.metallib")}
+
+
 def build(args):
     source, output = paths(args.backend)
     workers = os.environ.get("PW_TEST_WORKERS", "1")
     if args.backend == "reference-swift":
+        swift_shaders(output)
         run([swift_toolchain.executable(bin_dir(ROOT)), "build", "--package-path", source, "--scratch-path", output,
              "--configuration", "release", "--jobs", workers, "--product", "generation-swift-reference"])
         record_build(args.backend, output, output / "release/generation-swift-reference")
@@ -106,8 +128,10 @@ def build(args):
 def test(args):
     if args.backend == "reference-swift":
         source, output = paths(args.backend)
+        swift_shaders(output)
         run([swift_toolchain.executable(bin_dir(ROOT)), "test", "--package-path", source, "--scratch-path", output,
-             "--configuration", "release", "--jobs", os.environ.get("PW_TEST_WORKERS", "1")])
+             "--configuration", "release", "--jobs", os.environ.get("PW_TEST_WORKERS", "1")],
+            env=swift_environment(output))
         return
     if args.backend == "reference-mlx":
         run(["uv", "run", "--frozen", "--no-sync", "--project", Path(__file__).parent,
@@ -140,7 +164,7 @@ def bench(args):
         binary = build / "generation-reference" if args.backend == "reference-llama" else build / "release/generation-swift-reference"
         build_receipt = verified_build(args.backend, build, binary)
         command = [str(binary), str(args.model.resolve()), str(input_path)]
-        environment = os.environ
+        environment = swift_environment(build) if args.backend == "reference-swift" else os.environ
     elif args.backend == "reference-mlx":
         command = ["uv", "run", "--frozen", "--no-sync", "--project", str(Path(__file__).parent),
                    "python", str(Path(__file__).with_name("mlx_bench.py")),
@@ -178,6 +202,7 @@ def main():
     parser.add_argument("--model", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--artifact-identity")
+    parser.add_argument("--precision", type=Path)
     parser.add_argument("--prompt", type=int, default=512)
     parser.add_argument("--tokens", type=int, default=128)
     parser.add_argument("--trials", type=int, default=3)

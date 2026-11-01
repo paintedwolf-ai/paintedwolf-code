@@ -12,6 +12,7 @@ final class MappedPLE: Embedding {
     private let tensors: [Tensor]
     private let rows: Int
     private let width: Int
+    private let bits: Int
 
     private struct Tensor {
         let offset: Int
@@ -20,7 +21,8 @@ final class MappedPLE: Embedding {
         var rowBytes: Int { columns * dtype.size }
     }
 
-    init(url: URL, prefix: String) throws {
+    init(url: URL, prefix: String, bits: Int = 4) throws {
+        guard [4, 6, 8].contains(bits) else { throw ReferenceFailure("Unsupported PLE precision") }
         let file = try FileHandle(forReadingFrom: url)
         defer { try? file.close() }
         guard let first = try file.read(upToCount: 8), first.count == 8 else {
@@ -55,14 +57,16 @@ final class MappedPLE: Embedding {
             rowCount = shape[0]
             entries.append(Tensor(offset: 8 + size + offsets[0], columns: shape[1], dtype: dtype))
         }
-        guard entries[0].columns * 8 / 64 == entries[1].columns,
+        guard entries[0].columns * 32 % bits == 0,
+              entries[0].columns * 32 / bits == entries[1].columns * 64,
               entries[1].columns == entries[2].columns else {
             throw ReferenceFailure("Inconsistent PLE quantization")
         }
         self.mapped = data
         self.tensors = entries
         self.rows = rowCount
-        self.width = entries[0].columns * 8
+        self.width = entries[0].columns * 32 / bits
+        self.bits = bits
         super.init(weight: MLXArray.zeros([1, 1]))
     }
 
@@ -85,7 +89,7 @@ final class MappedPLE: Embedding {
             }
             return MLXArray(selected, [indices.count, tensor.columns], dtype: tensor.dtype)
         }
-        return dequantized(arrays[0], scales: arrays[1], biases: arrays[2], groupSize: 64, bits: 4)
+        return dequantized(arrays[0], scales: arrays[1], biases: arrays[2], groupSize: 64, bits: bits)
             .reshaped(ids.shape + [width])
     }
 }

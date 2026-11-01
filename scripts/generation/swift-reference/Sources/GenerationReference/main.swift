@@ -50,6 +50,9 @@ func measure(_ model: Gemma4TextModel, _ spec: Specification) throws -> [String:
 }
 
 do {
+    if let path = ProcessInfo.processInfo.environment["PW_REFERENCE_METALLIB"] {
+        GPU.metallib = URL(fileURLWithPath: path)
+    }
     guard CommandLine.arguments.count == 3 else {
         throw ReferenceFailure("Expected model and benchmark input paths")
     }

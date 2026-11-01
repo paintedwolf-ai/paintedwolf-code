@@ -28,3 +28,21 @@ class ProvenanceTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "rebuild"):
                         provenance.verified_build("reference-llama", root, binary)
                     path.write_bytes(original)
+
+    def test_swift_shader_changes_require_a_new_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "swift-reference").mkdir()
+            (root / "swift-reference/Package.swift").write_text("package")
+            (root / "sources.json").write_text("{}")
+            (root / "metal").mkdir()
+            shader = root / "metal/mlx.metallib"
+            shader.write_bytes(b"shader")
+            binary = root / "runner"
+            binary.write_bytes(b"executable")
+            with patch.object(provenance, "ROOT", root):
+                provenance.record_build("reference-swift", root, binary)
+                provenance.verified_build("reference-swift", root, binary)
+                shader.write_bytes(b"changed shader")
+                with self.assertRaisesRegex(ValueError, "rebuild"):
+                    provenance.verified_build("reference-swift", root, binary)

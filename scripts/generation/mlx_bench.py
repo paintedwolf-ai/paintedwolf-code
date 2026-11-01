@@ -58,6 +58,7 @@ def main():
     if any(type(t) is not int or not 0 <= t < 262144 for t in prompt):
         raise ValueError("invalid input token")
     mx.set_cache_limit(128 << 20)
+    loading_start = time.perf_counter()
     model, tokenizer, config = load(args.model, lazy=True, return_config=True, trust_remote_code=False)
     text = config.get("text_config", config)
     if text.get("num_hidden_layers") != 42 or text.get("hidden_size") != 2560:
@@ -65,9 +66,12 @@ def main():
     if ple == "mapped":
         replace_ple(model, args.model, config)
     mx.eval(model.parameters())
+    loading = {"load_seconds": time.perf_counter() - loading_start,
+               "load_peak_mlx_bytes": mx.get_peak_memory(),
+               "load_peak_process_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
     for trial in range(trials + 1):
         result = measure(model, prompt, generated)
-        print(json.dumps({"trial": trial, "warmup": trial == 0, "ple": ple, **result}), flush=True)
+        print(json.dumps({"trial": trial, "warmup": trial == 0, "ple": ple, **loading, **result}), flush=True)
         mx.clear_cache()
 
 

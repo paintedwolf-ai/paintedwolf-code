@@ -22,7 +22,7 @@ def digest(path):
     return result.hexdigest()
 
 
-def layout(source, config):
+def layout(source, config, precision):
     text = config["text_config"]
     if (text["num_hidden_layers"], text["hidden_size"], text["hidden_size_per_layer_input"], text["num_kv_shared_layers"]) != (42, 2560, 256, 18):
         raise ValueError("conversion requires the E4B text architecture")
@@ -54,8 +54,10 @@ def layout(source, config):
                 or 8 + size + end > source.stat().st_size):
             raise ValueError("invalid source tensor " + name)
         quantized = len(shape) == 2 and name.endswith(".weight") and shape[-1] % 64 == 0
+        family = "ple_bits" if relative == "embed_tokens_per_layer.weight" else "embedding_bits" if relative == "embed_tokens.weight" else "weight_bits"
         result.append({"name": "language_model.model." + relative, "source": spec,
-                       "offset": 8 + size + start, "dtype": dtype, "quantized": quantized})
+                       "offset": 8 + size + start, "dtype": dtype, "quantized": quantized,
+                       "bits": precision[family]})
     if not result:
         raise ValueError("checkpoint has no E4B text tensors")
     return result
@@ -69,7 +71,7 @@ def output_layout(tensors):
         entries = [(name, "F16", shape)]
         if tensor["quantized"]:
             base = name.removesuffix(".weight")
-            entries = [(name, "U32", [shape[0], shape[1] // 8]),
+            entries = [(name, "U32", [shape[0], shape[1] * tensor["bits"] // 32]),
                        (base + ".scales", "F16", [shape[0], shape[1] // 64]),
                        (base + ".biases", "F16", [shape[0], shape[1] // 64])]
         tensor["outputs"] = [entry[0] for entry in entries]
@@ -97,7 +99,7 @@ def write_tensor(output, source, tensor, header, data_start):
         if not np.isfinite(half).all():
             raise ValueError("source tensor exceeds float16 range")
         if tensor["quantized"]:
-            arrays = mx.quantize(mx.array(half), group_size=64, bits=4)
+            arrays = mx.quantize(mx.array(half), group_size=64, bits=tensor["bits"])
             mx.eval(arrays)
             chunks = [np.array(array) for array in arrays]
         else:
@@ -110,14 +112,18 @@ def write_tensor(output, source, tensor, header, data_start):
     del mapped
 
 
-def convert(source, destination, expected):
+def convert(source, destination, expected, precision=None):
+    precision = precision or {"weight_bits": 4, "ple_bits": 4, "embedding_bits": 4}
+    if set(precision) != {"weight_bits", "ple_bits", "embedding_bits"} or any(
+            type(bits) is not int or bits not in {4, 6, 8} for bits in precision.values()):
+        raise ValueError("precision requires weight_bits, ple_bits and embedding_bits in 4, 6, 8")
     if destination.exists():
         raise ValueError("conversion requires a new output directory")
     weights = source / "model.safetensors"
     if digest(weights) != expected:
         raise ValueError("source checkpoint digest mismatch")
     config = json.loads((source / "config.json").read_text())
-    tensors = layout(weights, config)
+    tensors = layout(weights, config, precision)
     header, raw, data_bytes = output_layout(tensors)
     destination.parent.mkdir(parents=True, exist_ok=True)
     if shutil.disk_usage(destination.parent).free < data_bytes + (1 << 30):
@@ -134,13 +140,16 @@ def convert(source, destination, expected):
             for tensor in tensors:
                 write_tensor(output, weights, tensor, header, 8 + len(raw))
                 print(tensor["name"], flush=True)
-        config["quantization"] = {"group_size": 64, "bits": 4, "mode": "affine"}
+        config["quantization"] = {"group_size": 64, "bits": precision["weight_bits"], "mode": "affine"}
+        for name, key in [("embed_tokens", "embedding_bits"), ("embed_tokens_per_layer", "ple_bits")]:
+            config["quantization"]["language_model.model." + name] = {
+                "group_size": 64, "bits": precision[key], "mode": "affine"}
         config["dtype"] = config["text_config"]["dtype"] = "float16"
         (destination / "config.json").write_text(json.dumps(config, indent=2) + "\n")
         for name in ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja", "generation_config.json"]:
             shutil.copyfile(source / name, destination / name)
         manifest = {"schema": "paintedwolf-mlx-conversion/1", "source_sha256": expected,
-                    "recipe": "affine-q4-group64-f16", "source_tile_bytes": TILE_BYTES,
+                    "recipe": "affine-group64-f16", "precision": precision, "source_tile_bytes": TILE_BYTES,
                     "weights_sha256": digest(target), "weights_bytes": target.stat().st_size}
         (destination / "conversion.json").write_text(json.dumps(manifest, indent=2) + "\n")
     except BaseException:
@@ -153,5 +162,7 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--source-sha256", required=True)
+    parser.add_argument("--precision", type=Path)
     args = parser.parse_args()
-    convert(args.source, args.output, args.source_sha256)
+    precision = json.loads(args.precision.read_text()) if args.precision else None
+    convert(args.source, args.output, args.source_sha256, precision)

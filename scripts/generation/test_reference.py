@@ -51,6 +51,23 @@ class ReferenceTests(unittest.TestCase):
             np.testing.assert_array_equal(np.array(tensors[self.prefix + "." + name]), np.array(expected))
         self.assertEqual(mapped.parameters(), {})
 
+    def test_mixed_precision_embeddings_preserve_selected_rows(self):
+        for bits in (6, 8):
+            with self.subTest(bits=bits):
+                destination = self.root / f"precision-{bits}"
+                precision = {"weight_bits": 4, "ple_bits": bits, "embedding_bits": 8}
+                convert(self.source, destination, digest(self.source / "model.safetensors"), precision)
+                mapped = MappedPLE(destination, self.prefix, 64, bits)
+                packed, scales, biases = mx.quantize(mx.array(self.values.astype(np.float16)), group_size=64, bits=bits)
+                reference = mx.dequantize(packed, scales, biases, group_size=64, bits=bits)
+                ids = mx.array([[2, 0, 2]])
+                np.testing.assert_array_equal(np.array(mapped(ids)), np.array(reference[ids]))
+                config = json.loads((destination / "config.json").read_text())
+                self.assertEqual(config["quantization"]["bits"], 4)
+                self.assertEqual(config["quantization"][self.prefix]["bits"], bits)
+                record = json.loads((destination / "conversion.json").read_text())
+                self.assertEqual(record["precision"], precision)
+
     def test_mapped_lookup_rejects_unbounded_and_invalid_tokens(self):
         mapped = self.converted()
         for ids in [mx.array([[4]]), mx.array([[-1]]), mx.zeros((1, 257), dtype=mx.int32)]:

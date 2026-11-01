@@ -12,8 +12,8 @@ import numpy as np
 class MappedPLE(nn.Module):
     def __init__(self, directory, prefix, group_size, bits):
         super().__init__()
-        if group_size != 64 or bits != 4:
-            raise ValueError("the comparison PLE reader requires affine q4 group-64")
+        if group_size != 64 or bits not in {4, 6, 8}:
+            raise ValueError("the comparison PLE reader requires affine 4/6/8-bit group-64")
         self._group_size, self._bits = group_size, bits
         tensors = {}
         wanted = {prefix + "." + name for name in ("weight", "scales", "biases")}
@@ -43,7 +43,9 @@ class MappedPLE(nn.Module):
         self._packed = tensors[prefix + ".weight"]
         self._scales = tensors[prefix + ".scales"]
         self._biases = tensors[prefix + ".biases"]
-        width = self._packed.shape[1] * 8
+        width = self._packed.shape[1] * 32 // bits
+        if self._packed.shape[1] * 32 % bits or width % 64:
+            raise ValueError("invalid PLE packing width")
         if self._scales.shape != (self._packed.shape[0], width // 64) or self._biases.shape != self._scales.shape:
             raise ValueError("inconsistent PLE quantization shapes")
         self._width = width
