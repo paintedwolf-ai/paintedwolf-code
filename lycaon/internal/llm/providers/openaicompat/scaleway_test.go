@@ -148,6 +148,7 @@ func TestScalewayStreamToolCallContinuationAndUsage(t *testing.T) {
 func TestScalewayStreamCancellationAndFaultClassification(t *testing.T) {
 	t.Run("cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"partial\"}}]}\n\n")
@@ -164,8 +165,9 @@ func TestScalewayStreamCancellationAndFaultClassification(t *testing.T) {
 			Model:    "qwen3-235b-a22b-instruct-2507",
 			Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hello"}},
 		})
-		testutil.FailErr(t, "Stream start", err)
-		_, _, err = modelcall.CollectStream(ch)
+		if err == nil {
+			_, _, err = modelcall.CollectStream(ch)
+		}
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("err = %v, want context.Canceled", err)
 		}
