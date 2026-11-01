@@ -131,7 +131,10 @@ func TestProgramFailureLoopAdmitsObservedWorkspaceSourceChange(t *testing.T) {
 	}
 
 	testutil.FailErr(t, "write ready.txt", os.WriteFile(filepath.Join(f.Dir, "ready.txt"), []byte("ok\n"), 0o600))
-	repochange.Notify(t.Context(), repochange.Event{ProjectDir: f.Dir, Kind: repochange.WorktreeChanged, Paths: []string{filepath.Join(f.Dir, "ready.txt")}, Source: repochange.SourceWatcher})
+	repochange.Notify(t.Context(), repochange.Event{
+		ProjectDir: f.Dir, Kind: repochange.WorktreeChanged, Source: repochange.SourceWatcher,
+		Changes: []repochange.WorktreeChange{{Path: "ready.txt", Kind: repochange.WorktreeChangeStructural}},
+	})
 	out, err := f.call(t, t.Context(), "test -f ready.txt")
 	testutil.FailErr(t, "retry after admitted source change", err)
 	if outcome := decodeOutcome(t, out); outcome.Status != 0 {

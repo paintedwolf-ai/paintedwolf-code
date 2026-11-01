@@ -476,7 +476,7 @@ func TestValidateCallArgumentsIntrospectionMultipleMisnestedFields(t *testing.T)
 		t.Fatal("command schema missing")
 	}
 
-	// Both fields belong to the same declared capability object.
+	// Move misplaced capability fields into the canonical request.
 	args := map[string]any{
 		"command":        "colima start",
 		"host_resources": []any{"colima"},
@@ -501,7 +501,7 @@ func TestValidateCallArgumentsIntrospectionMultipleMisnestedFields(t *testing.T)
 		t.Fatalf("replacement_args missing capability_request map: %#v", rep)
 	}
 	if direct, ok := capReq["direct_ip"].(map[string]any); !ok || len(direct) != 0 {
-		t.Errorf("capability_request.direct_ip = %#v, want the supplied empty object", capReq["direct_ip"])
+		t.Errorf("capability_request.direct_ip = %#v, want an empty request object", capReq["direct_ip"])
 	}
 	res, ok := capReq["host_resources"].([]any)
 	if !ok || len(res) != 1 || res[0] != "colima" {
