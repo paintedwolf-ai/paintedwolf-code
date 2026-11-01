@@ -121,7 +121,7 @@ func (m *Cancellations) Append(ctx context.Context, parentID string, in Cancella
 		if feedback.Code != in.Result.HintCode {
 			return fmt.Errorf("canceled worker feedback code does not match hint_code")
 		}
-		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy)
+		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy, feedback.Details)
 		if err != nil {
 			return fmt.Errorf("render canceled worker feedback: %w", err)
 		}

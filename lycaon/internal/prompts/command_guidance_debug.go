@@ -28,6 +28,7 @@ func CommandGuidanceFactKeys() []string {
 		"profile_has_process_list",
 		"profile_has_process_signal",
 		"profile_has_terminal_open",
+		"profile_has_terminal_send",
 		"profile_has_verify",
 		"profile_has_wait",
 		"profile_mutation_capable",

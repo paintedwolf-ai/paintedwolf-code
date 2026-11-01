@@ -1292,18 +1292,19 @@ type CommandActivity struct {
 	Outcome    string `json:"outcome"`
 	State      string `json:"state"`
 	StatusCode *int   `json:"status_code,omitempty"`
-	// Host authorization to append a newly observed read to an adjacent activity with the same reviewed target and scope. Existing rows must never regroup. Captured revisions remain separate.
-	MergeKey     string                `json:"merge_key,omitempty"`
+	// Number of executions of the primary structural operation.
+	Repetitions int `json:"repetitions,omitempty"`
+	// All executions represented by this activity.
+	ExecutionCount int `json:"execution_count,omitempty"`
+	// Executions reporting failure, refusal or interruption, independent of the enclosing outcome.
+	FailedCount      int                   `json:"failed_count,omitempty"`
+	WaitingCount     int                   `json:"waiting_count,omitempty"`
+	UncertainEffects int                   `json:"uncertain_effects,omitempty"`
+	CompletedEffects int                   `json:"completed_effects,omitempty"`
+	Steps            []CommandActivityStep `json:"steps,omitempty"`
+	// First execution of each structural step; use activity_id to page all member receipts.
 	ExecutionIDs []string              `json:"execution_ids"`
 	Spans        []CommandActivitySpan `json:"spans"`
-}
-
-// CommandActivityExecution
-type CommandActivityExecution struct {
-	ID         string `json:"id"`
-	State      string `json:"state"`
-	Outcome    string `json:"outcome"`
-	StatusCode *int   `json:"status_code,omitempty"`
 }
 
 // CommandActivitySpan
@@ -1311,6 +1312,20 @@ type CommandActivitySpan struct {
 	SourceRef string `json:"source_ref"`
 	StartByte int    `json:"start_byte"`
 	EndByte   int    `json:"end_byte"`
+}
+
+// CommandActivityStep
+type CommandActivityStep struct {
+	ID          string `json:"id"`
+	Command     string `json:"command"`
+	Count       int    `json:"count"`
+	Running     int    `json:"running"`
+	Waiting     int    `json:"waiting"`
+	Failed      int    `json:"failed"`
+	Refused     int    `json:"refused"`
+	Interrupted int    `json:"interrupted"`
+	State       string `json:"state"`
+	Outcome     string `json:"outcome"`
 }
 
 // CommandExecutionOutput
@@ -1493,14 +1508,10 @@ type CommandProgramReceipt struct {
 	ProgressRef     string     `json:"progress_ref,omitempty"`
 	StartedAt       time.Time  `json:"started_at"`
 	SettledAt       *time.Time `json:"settled_at,omitempty"`
-	// Initial host activity identities. Details loading must not regroup these rows.
+	// Whole-program structural activities with complete repetition and outcome counts. Receipt paging does not change these rows.
 	Activities []CommandActivity `json:"activities,omitempty"`
-	// Bounded live execution outcomes for rows whose presentation membership is already established.
-	ActivityExecutions []CommandActivityExecution `json:"activity_executions,omitempty"`
 	// Monotonic receipt trace revision for live snapshot reconciliation.
-	ActivityRevision  int64  `json:"activity_revision,omitempty"`
-	ActivitiesCursor  string `json:"activities_cursor,omitempty"`
-	ActivitiesOmitted int    `json:"activities_omitted,omitempty"`
+	ActivityRevision int64 `json:"activity_revision,omitempty"`
 	// Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence.
 	Outputs []CommandProgramOutputWindow `json:"outputs,omitempty"`
 }

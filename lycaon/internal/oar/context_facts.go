@@ -1,8 +1,12 @@
 package oar
 
-import "sync"
+import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"sync"
+)
 
 type InvocationFacts struct {
+	CapabilityContract              *toolcontract.ToolCapabilitySnapshot
 	Tool                            string
 	ToolArgs                        map[string]any
 	ToolArgsFingerprint             string

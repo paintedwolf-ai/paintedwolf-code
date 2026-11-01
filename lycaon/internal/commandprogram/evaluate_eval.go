@@ -42,7 +42,9 @@ func (f *frame) eval(ctx context.Context, s commandsurface.Statement, fields Fie
 		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_SYNTAX_UNSUPPORTED", EffectCertainty: toolcontract.NoEffect}, err)
 		var refusal *EvaluationRefusal
 		if errors.As(err, &refusal) {
-			return signal{}, f.refuse(refusal.Node, refusal.Code, refusal.Expected, nil)
+			rejected := f.refuse(refusal.Node, refusal.Code, refusal.Expected, nil)
+			rejected.SourceUnitID = unitID
+			return signal{}, rejected
 		}
 		return signal{}, err
 	}

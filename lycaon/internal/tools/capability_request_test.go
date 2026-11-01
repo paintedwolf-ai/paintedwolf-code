@@ -40,7 +40,7 @@ func TestCapabilityContractIsCatalogCompiled(t *testing.T) {
 			t.Fatalf("command lacks capability %d", capability)
 		}
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(command, map[string]any{
+	if reject := capabilityrequest.ValidateCapabilityContract("command", command, map[string]any{
 		"capability_request": map[string]any{"loopback_connect": map[string]any{}},
 	}); reject != nil {
 		t.Fatalf("command loopback_connect reject = %+v", reject)
@@ -49,12 +49,12 @@ func TestCapabilityContractIsCatalogCompiled(t *testing.T) {
 	if !ok {
 		t.Fatal("verify contract missing")
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(verify, map[string]any{
+	if reject := capabilityrequest.ValidateCapabilityContract("verify", verify, map[string]any{
 		"capability_request": map[string]any{"local_listen": map[string]any{}},
 	}); reject != nil {
 		t.Fatalf("verify local-listen reject = %+v", reject)
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(verify, map[string]any{
+	if reject := capabilityrequest.ValidateCapabilityContract("verify", verify, map[string]any{
 		"capability_request": map[string]any{"write_root": filepath.Join(t.TempDir(), "cache")},
 	}); reject != nil {
 		t.Fatalf("verify write_root reject = %+v", reject)
@@ -338,7 +338,7 @@ func TestParseCapabilityRequestCredentialStore(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing contract %q", toolName)
 		}
-		if reject := capabilityrequest.ValidateCapabilityContract(contract, map[string]any{
+		if reject := capabilityrequest.ValidateCapabilityContract("fixture", contract, map[string]any{
 			"capability_request": map[string]any{"credential_store": true},
 		}); reject != nil {
 			t.Fatalf("%s credential_store reject = %+v", toolName, reject)
@@ -349,7 +349,7 @@ func TestParseCapabilityRequestCredentialStore(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing contract %q", toolName)
 		}
-		reject := capabilityrequest.ValidateCapabilityContract(contract, map[string]any{
+		reject := capabilityrequest.ValidateCapabilityContract("fixture", contract, map[string]any{
 			"capability_request": map[string]any{"credential_store": true},
 		})
 		if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
