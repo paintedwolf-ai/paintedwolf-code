@@ -51,6 +51,10 @@ func TestGateScreensOCRCandidatesAndConfusionClassesWithBoundingBoxRedaction(t *
 		span TextSpan
 	}{
 		{
+			name: "empty primary retains nonempty candidate and its pixel bounds",
+			span: TextSpan{Text: " \t", Candidates: []string{" ", "export AWS_KEY=AKlAQ7Z2M4N6P3R6T5V/"}, BoundingBox: lines[1].BoundingBox},
+		},
+		{
 			name: "primary text with OCR confusions in prefix and trailing slash",
 			span: TextSpan{
 				Text:        "export AWS_KEY=AK1AQ7Z2M4N6P3R6T5V/",

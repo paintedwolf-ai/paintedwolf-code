@@ -224,6 +224,14 @@ type textBuilder struct {
 func (b *textBuilder) add(seg segment, line string) {
 	trimmedLeft := strings.TrimLeft(line, " \t\r\n")
 	trimmed := strings.TrimRight(trimmedLeft, " \t\r\n")
+	if trimmed == "" && (seg.ocr || seg.kind == segmentOCR) {
+		for _, candidate := range seg.candidates {
+			if text := strings.TrimSpace(candidate); text != "" {
+				trimmed = text
+				break
+			}
+		}
+	}
 	if trimmed == "" {
 		return
 	}
