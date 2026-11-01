@@ -36,6 +36,7 @@ func TestRecoveryContractSurvivesChildContextsAndMetadata(t *testing.T) {
 }
 
 func TestTypedCapabilitySnapshotIsLocalToPresentation(t *testing.T) {
+	stockBlockPlane(t)
 	catalog, err := guidance.LoadHintConfigStock()
 	if err != nil {
 		t.Fatal(err)
