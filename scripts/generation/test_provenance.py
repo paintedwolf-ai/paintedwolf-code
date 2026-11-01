@@ -9,6 +9,28 @@ import provenance
 
 
 class ProvenanceTests(unittest.TestCase):
+    def test_rust_identity_includes_patched_bindings_and_build_recipe(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scripts = root / "scripts/generation"
+            inputs = ["lycaon/internal/generation/native/src/mlx_engine/mod.rs",
+                      "lycaon/internal/generation/native/Cargo.toml",
+                      "lycaon/internal/generation/native/Cargo.lock",
+                      "lycaon/internal/decide/native/vendor/mlx-sys/paintedwolf_inputs.rs",
+                      "third_party/mlx/pin.json", "scripts/toolchain/mlx-offline.cmake",
+                      "scripts/generation/runtime.py"]
+            for name in inputs:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("original")
+            with patch.object(provenance, "ROOT", scripts):
+                identity = provenance.source_identity("reference-rust")
+                for name in inputs:
+                    path = root / name
+                    path.write_text("changed")
+                    self.assertNotEqual(identity, provenance.source_identity("reference-rust"), name)
+                    path.write_text("original")
+
     def test_changed_sources_or_executable_require_a_new_build(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

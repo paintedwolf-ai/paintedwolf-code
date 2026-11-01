@@ -38,7 +38,7 @@ def run(command, **kwargs):
 
 def prepare(args):
     if args.install_build_tools:
-        if args.backend == "reference-swift" and sys.platform == "darwin":
+        if args.backend in {"reference-swift", "reference-rust"} and sys.platform == "darwin":
             run(["xcodebuild", "-downloadComponent", "MetalToolchain"])
         elif args.backend == "reference-llama" and sys.platform == "linux":
             run(["sudo", "-n", "apt-get", "update"])
@@ -76,6 +76,8 @@ def prepare(args):
         run(["uv", "sync", "--frozen", "--project", project], env=python_environment())
     else:
         source, _ = paths(args.backend)
+        if args.refresh_lock:
+            run(["cargo", "generate-lockfile", "--manifest-path", source / "Cargo.toml"])
         run(["cargo", "fetch", "--locked", "--manifest-path", source / "Cargo.toml"])
 
 
@@ -103,6 +105,13 @@ def swift_shaders(output):
 
 def swift_environment(output):
     return {**os.environ, "PW_REFERENCE_METALLIB": str(output / "metal/mlx.metallib")}
+
+
+def rust_environment(output):
+    return {**os.environ, "CARGO_TARGET_DIR": str(output),
+            "MLX_RS_METAL_PATH": str(output / "metal"),
+            "PW_REFERENCE_METALLIB": str(output / "metal/mlx.metallib"),
+            "MACOSX_DEPLOYMENT_TARGET": "14.0"}
 
 
 def build(args):
@@ -134,6 +143,10 @@ def build(args):
              "-DLLAMA_SOURCE_DIR=" + str(source), *options])
         run(["cmake", "--build", output, "--parallel", workers, "--target", "generation-reference"])
         record_build(args.backend, output, output / "generation-reference")
+    elif args.backend == "reference-rust":
+        run(["cargo", "build", "--locked", "--release", "--features", "mlx", "--jobs", workers,
+             "--bin", "nativegen-bench", "--manifest-path", source / "Cargo.toml"], env=rust_environment(output))
+        record_build(args.backend, output, output / "release/nativegen-bench")
     elif args.backend == "native":
         run(["cargo", "build", "--locked", "--release", "--manifest-path", source / "Cargo.toml"],
             env={**os.environ, "CARGO_TARGET_DIR": str(output)})
@@ -157,6 +170,11 @@ def test(args):
         run(["uv", "run", "--frozen", "--no-sync", "--project", Path(__file__).parent,
              "python", "-m", "unittest", "discover", "-s", Path(__file__).parent,
              "-p", "test_*.py"], env=python_environment())
+        return
+    if args.backend == "reference-rust":
+        source, output = paths(args.backend)
+        run(["cargo", "test", "--locked", "--features", "mlx", "--manifest-path", source / "Cargo.toml"],
+            env=rust_environment(output))
         return
     source, output = paths("native")
     run(["cargo", "test", "--locked", "--manifest-path", source / "Cargo.toml"],
@@ -195,6 +213,12 @@ def bench(args):
         build_receipt = verified_build(args.backend, build, binary)
         command = [str(binary), str(args.model.resolve()), str(input_path)]
         environment = swift_environment(build) if args.backend == "reference-swift" else os.environ
+    elif args.backend == "reference-rust":
+        _, build = paths(args.backend)
+        binary = build / "release/nativegen-bench"
+        build_receipt = verified_build(args.backend, build, binary)
+        command = [str(binary), str(args.model.resolve()), str(input_path)]
+        environment = rust_environment(build)
     elif args.backend == "reference-mlx":
         command = ["uv", "run", "--frozen", "--no-sync", "--project", str(Path(__file__).parent),
                    "python", str(Path(__file__).with_name("mlx_bench.py")),
@@ -227,7 +251,7 @@ def bench(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["prepare", "build", "test", "bench"])
-    parser.add_argument("--backend", choices=["native", "reference-llama", "reference-mlx", "reference-swift"], default="native")
+    parser.add_argument("--backend", choices=["native", "reference-llama", "reference-mlx", "reference-swift", "reference-rust"], default="native")
     parser.add_argument("--refresh-lock", action="store_true")
     parser.add_argument("--install-build-tools", action="store_true")
     parser.add_argument("--model", type=Path)
@@ -242,8 +266,10 @@ def main():
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--ple", choices=["resident", "mapped"], default="mapped")
     args = parser.parse_args()
+    if args.backend == "reference-rust" and (sys.platform != "darwin" or platform.machine() != "arm64"):
+        parser.error("the Rust MLX candidate requires Apple silicon")
     if args.kv_bits != 16 and args.backend != "reference-swift":
-        parser.error("quantized global KV is currently measured only by the native MLX candidate")
+        parser.error("quantized global KV is currently measured only by the Swift MLX candidate")
     if not 1 <= args.prefill_chunk <= 256 or not 1 <= args.prompt or not 1 <= args.tokens <= 4096 or args.prompt + args.tokens > 65536 or not 1 <= args.trials <= 20:
         parser.error("benchmark dimensions exceed their bounds")
     {"prepare": prepare, "build": build, "test": test, "bench": bench}[args.action](args)

@@ -12,3 +12,6 @@ pub use cache::Cache;
 pub use decoder::Decoder;
 pub use error::{Error, Result};
 pub use service::Service;
+
+#[cfg(feature = "mlx")]
+pub mod mlx_engine;
