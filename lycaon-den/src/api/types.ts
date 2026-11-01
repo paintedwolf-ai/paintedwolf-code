@@ -10179,6 +10179,7 @@ export interface components {
          */
         ActivityStatus: "active" | "done";
         CommandActivityStep: {
+            /** Format: uuid */
             id: string;
             command: string;
             count: number;
@@ -10196,6 +10197,7 @@ export interface components {
             end_byte: number;
         };
         CommandActivity: {
+            /** Format: uuid */
             id: string;
             group: string;
             label: string;
@@ -10211,7 +10213,7 @@ export interface components {
             repetitions?: number;
             /** @description All executions represented by this activity. */
             execution_count?: number;
-            /** @description Executions reporting failure */
+            /** @description Executions reporting failure, refusal or interruption, independent of the enclosing outcome. */
             failed_count?: number;
             waiting_count?: number;
             uncertain_effects?: number;
