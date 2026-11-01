@@ -38,12 +38,15 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused a local socket connection this invocation needed
 x-paintedwolf-scenarios:
-  - id: container_engine
-    vars:
-      tool: command
-      failed_stages: [docker build -t app .]
-      refused_socket_paths: [/Users/person/.colima/default/docker.sock]
-    expect_contains:
-      - 'Code: SANDBOX_TRY_SOCKET_PATH'
-      - capability_request.socket_paths
-      - /Users/person/.colima/default/docker.sock
+- id: container_engine
+  vars:
+    tool: command
+    failed_stages:
+    - docker build -t app .
+    refused_socket_paths:
+    - /Users/person/.colima/default/docker.sock
+    tool_args: {}
+  expect_contains:
+  - 'Code: SANDBOX_TRY_SOCKET_PATH'
+  - capability_request.socket_paths
+  - /Users/person/.colima/default/docker.sock

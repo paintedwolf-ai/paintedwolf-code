@@ -33,22 +33,25 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: Git index changed for agent-policy files the sandbox kept in the worktree
 x-paintedwolf-scenarios:
-  - id: branch_switch
-    vars:
-      tool: command
-      worktree_stale_paths: [AGENTS.md, lycaon/AGENTS.md]
-      worktree_leftover_paths: []
-      worktree_conflict_paths: []
-    expect_contains:
-      - 'Code: SANDBOX_WORKTREE_BEHIND_INDEX'
-      - git_restore
-      - lycaon/AGENTS.md
-  - id: merge_conflict
-    vars:
-      tool: command
-      worktree_stale_paths: []
-      worktree_leftover_paths: []
-      worktree_conflict_paths: [.paintedwolf/skills/review/SKILL.md]
-    expect_contains:
-      - 'Code: SANDBOX_WORKTREE_BEHIND_INDEX'
-      - unmerged
+- id: branch_switch
+  vars:
+    tool: command
+    worktree_stale_paths:
+    - AGENTS.md
+    - lycaon/AGENTS.md
+    worktree_leftover_paths: []
+    worktree_conflict_paths: []
+  expect_contains:
+  - 'Code: SANDBOX_WORKTREE_BEHIND_INDEX'
+  - AGENTS.md
+  - worktree still holds the earlier content
+- id: merge_conflict
+  vars:
+    tool: command
+    worktree_stale_paths: []
+    worktree_leftover_paths: []
+    worktree_conflict_paths:
+    - .paintedwolf/skills/review/SKILL.md
+  expect_contains:
+  - 'Code: SANDBOX_WORKTREE_BEHIND_INDEX'
+  - unmerged

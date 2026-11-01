@@ -51,7 +51,7 @@ x-paintedwolf-scenarios:
   - 'Code: SANDBOX_TRY_HOST_EXECUTION'
   - capability_request.host_execution
   - command_stop
-  - may never finish
+  - still running
   - user-v2_fd.sock
 - id: finished_failure
   vars:

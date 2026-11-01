@@ -27,4 +27,5 @@ x-paintedwolf-scenarios:
     tool: command
   expect_contains:
   - 'Code: TOOL_OWNER_INTERRUPTED'
-  - completed effects
+  - program admission closed
+  - does not establish completion

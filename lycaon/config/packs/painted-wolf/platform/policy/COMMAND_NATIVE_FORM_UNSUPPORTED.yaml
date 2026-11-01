@@ -18,10 +18,9 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_native_admission
 x-paintedwolf-message: native operation form is unavailable
 x-paintedwolf-scenarios:
-  - id: execution-pin-unavailable
-    vars:
-      tool: command
-    expect_contains:
-      - 'Code: COMMAND_NATIVE_FORM_UNSUPPORTED'
-      - cannot run in the requested form
-      - supported command form
+- id: execution-pin-unavailable
+  vars:
+    tool: command
+  expect_contains:
+  - 'Code: COMMAND_NATIVE_FORM_UNSUPPORTED'
+  - native

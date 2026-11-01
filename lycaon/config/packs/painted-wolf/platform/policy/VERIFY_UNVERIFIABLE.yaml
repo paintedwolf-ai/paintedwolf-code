@@ -32,4 +32,5 @@ x-paintedwolf-scenarios:
     tool: verify
   expect_contains:
   - 'Code: VERIFY_UNVERIFIABLE'
-  - verification
+  - unverifiable
+  - no verdict

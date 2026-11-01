@@ -17,10 +17,11 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_write_publication
 x-paintedwolf-message: command stopped after an accepted edit could not be saved
 x-paintedwolf-scenarios:
-  - id: save-failed
-    vars:
-      tool: command
-      path: config/app.json
-    expect_contains:
-      - 'Code: COMMAND_PUBLICATION_PENDING'
-      - config/app.json holds an accepted edit that is not saved to disk
+- id: save-failed
+  vars:
+    tool: command
+    path: config/app.json
+  expect_contains:
+  - 'Code: COMMAND_PUBLICATION_PENDING'
+  - not published to disk at config/app.json
+  - do not repeat it
