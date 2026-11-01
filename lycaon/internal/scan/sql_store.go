@@ -25,10 +25,11 @@ type SQLStore struct {
 }
 
 type sqlCore struct {
-	SecretIgnores SecretIgnoreSource
-	db            db.Handle
-	queries       *db.Queries
-	outbox        scanEventOutbox
+	seriesRuntimeStates sync.Map
+	SecretIgnores       SecretIgnoreSource
+	db                  db.Handle
+	queries             *db.Queries
+	outbox              scanEventOutbox
 	// QueueChanged wakes the execution runner when queued scans change.
 	QueueChanged WorkSignal
 	// SeriesChanged wakes the cadence loop when a scan series changes.
@@ -41,7 +42,6 @@ type sqlFindingStore struct {
 
 type sqlRunStore struct {
 	*sqlCore
-	seriesRuntimeStates sync.Map
 }
 
 type sqlIgnoreStore struct {

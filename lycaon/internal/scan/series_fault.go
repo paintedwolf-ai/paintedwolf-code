@@ -34,13 +34,13 @@ func (row *SeriesRow) ClearUnavailable() {
 	row.UnavailableContractIdentity = ""
 }
 
-func seriesFromDB(s *sqlRunStore, row db.ScanSeries) SeriesRow {
+func seriesFromDB(s *sqlCore, row db.ScanSeries) SeriesRow {
 	out := seriesFromRow(row)
 	applySeriesRuntimeState(s, &out)
 	return out
 }
 
-func applySeriesRuntimeState(s *sqlRunStore, row *SeriesRow) {
+func applySeriesRuntimeState(s *sqlCore, row *SeriesRow) {
 	if s == nil || row == nil {
 		return
 	}
@@ -57,7 +57,7 @@ func applySeriesRuntimeState(s *sqlRunStore, row *SeriesRow) {
 	row.UnavailableContractIdentity = state.unavailableContractIdentity
 }
 
-func storeSeriesRuntimeState(s *sqlRunStore, row SeriesRow) {
+func storeSeriesRuntimeState(s *sqlCore, row SeriesRow) {
 	if s == nil {
 		return
 	}
@@ -76,7 +76,7 @@ func storeSeriesRuntimeState(s *sqlRunStore, row SeriesRow) {
 	})
 }
 
-func finishDeleteSeries(s *sqlRunStore, canonicalPath, scannerID string, err error) error {
+func finishDeleteSeries(s *sqlCore, canonicalPath, scannerID string, err error) error {
 	if err == nil && s != nil {
 		s.seriesRuntimeStates.Delete(seriesRuntimeKey{
 			canonicalPath: canonicalPath, scannerID: scannerID,
@@ -85,7 +85,7 @@ func finishDeleteSeries(s *sqlRunStore, canonicalPath, scannerID string, err err
 	return err
 }
 
-func finishUpsertSeries(s *sqlRunStore, row SeriesRow, err error) error {
+func finishUpsertSeries(s *sqlCore, row SeriesRow, err error) error {
 	if err == nil && s != nil {
 		storeSeriesRuntimeState(s, row)
 		s.SeriesChanged.Notify()

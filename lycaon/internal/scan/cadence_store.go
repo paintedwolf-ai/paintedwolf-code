@@ -120,11 +120,11 @@ func (s *sqlRunStore) GetSeries(ctx context.Context, canonicalPath, scannerID st
 	if err != nil {
 		return nil, err
 	}
-	out := seriesFromDB(s, row)
+	out := seriesFromDB(s.sqlCore, row)
 	return &out, nil
 }
 
-func (s *sqlRunStore) ListSeriesForPath(ctx context.Context, canonicalPath string) ([]SeriesRow, error) {
+func (s *sqlCore) ListSeriesForPath(ctx context.Context, canonicalPath string) ([]SeriesRow, error) {
 	rows, err := s.queries.ListScanSeriesForPath(ctx, canonicalPath)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func (s *sqlRunStore) ListDueSeries(ctx context.Context, now time.Time) ([]Serie
 	}
 	out := make([]SeriesRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, seriesFromDB(s, row))
+		out = append(out, seriesFromDB(s.sqlCore, row))
 	}
 	return out, nil
 }
@@ -157,7 +157,7 @@ func (s *sqlRunStore) ListActiveSeries(ctx context.Context) ([]SeriesRow, error)
 	}
 	out := make([]SeriesRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, seriesFromDB(s, row))
+		out = append(out, seriesFromDB(s.sqlCore, row))
 	}
 	return out, nil
 }
@@ -170,7 +170,7 @@ func (s *sqlRunStore) SeriesByActiveScan(ctx context.Context, scanID string) (*S
 	if err != nil {
 		return nil, err
 	}
-	out := seriesFromDB(s, row)
+	out := seriesFromDB(s.sqlCore, row)
 	return &out, nil
 }
 
@@ -190,7 +190,7 @@ func (s *sqlRunStore) DeleteSeries(ctx context.Context, canonicalPath, scannerID
 	err := s.queries.DeleteScanSeries(ctx, db.DeleteScanSeriesParams{
 		CanonicalPath: canonicalPath, ScannerID: scannerID,
 	})
-	return finishDeleteSeries(s, canonicalPath, scannerID, err)
+	return finishDeleteSeries(s.sqlCore, canonicalPath, scannerID, err)
 }
 
 func (s *sqlRunStore) UpsertSeries(ctx context.Context, row SeriesRow) error {
@@ -212,7 +212,7 @@ func (s *sqlRunStore) UpsertSeries(ctx context.Context, row SeriesRow) error {
 		LastCoveredSnapshotID:           row.LastCoveredSnapshotID,
 		LastCoveredExecutionFingerprint: row.LastCoveredExecutionFingerprint, UpdatedAt: formatCadenceTime(row.UpdatedAt),
 	})
-	return finishUpsertSeries(s, row, err)
+	return finishUpsertSeries(s.sqlCore, row, err)
 }
 
 // DispatchClaimTTL bounds a persisted dispatch lease without a heartbeat.
