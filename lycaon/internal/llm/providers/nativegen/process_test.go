@@ -13,6 +13,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv("PW_NATIVEGEN_PROCESS_FIXTURE") == "3" {
+		inventoryFixture()
+		os.Exit(0)
+	}
 	if os.Getenv("PW_NATIVEGEN_PROCESS_FIXTURE") == "2" {
 		runtimeFixture()
 		os.Exit(0)
