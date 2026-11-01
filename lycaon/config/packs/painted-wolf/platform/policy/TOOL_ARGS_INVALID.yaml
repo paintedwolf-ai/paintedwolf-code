@@ -15,7 +15,6 @@ requires:
   - paintedwolf.found_under
   - paintedwolf.belongs_under
   - paintedwolf.close_before
-  - paintedwolf.did_you_mean
   - paintedwolf.json_encoded
   - paintedwolf.json_malformed
   - paintedwolf.json_open_paths
@@ -27,26 +26,75 @@ requires:
   - paintedwolf.expected_type
   - paintedwolf.conflict_keys
   - paintedwolf.replacement_args_json
+  - paintedwolf.argument_schema_tool
+  - paintedwolf.argument_schema_matches_tool
 when: paintedwolf.rejection_code == "TOOL_ARGS_INVALID"
 effect: block
 copy:
-  what: '{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{% else %}{% if paintedwolf.did_you_mean %}Unknown argument `{{ paintedwolf.rejection_field }}`: did you mean `{{ paintedwolf.did_you_mean }}`?{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
-  cause: '{% if paintedwolf.json_malformed %}{% if paintedwolf.json_open_paths %}The text ends with `{{ paintedwolf.json_open_paths }}` still open{% else %}{% if paintedwolf.json_unterminated_string_at %}The string starting at byte {{ paintedwolf.json_unterminated_string_at }} is never closed{% else %}{% if paintedwolf.json_trailing_text_at %}{% if paintedwolf.json_trailing_members %}`{{ paintedwolf.rejection_field }}` closes at byte {{ paintedwolf.json_trailing_text_at }}; the text continues with `{{ paintedwolf.json_trailing_members }}`, which the schema declares under {% if paintedwolf.json_trailing_belongs_under %}`{{ paintedwolf.json_trailing_belongs_under }}`{% else %}the top level{% endif %}{% else %}Text continues after the complete value, at byte {{ paintedwolf.json_trailing_text_at }}{% endif %}{% else %}Parsing stops at byte {{ paintedwolf.json_unexpected_token_at }} on a token JSON does not allow there{% endif %}{% endif %}{% endif %}.{% if paintedwolf.misplaced_fields %} As written, `{{ paintedwolf.misplaced_fields }}` sit inside {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; the schema declares them under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}.{% endif %}{% else %}{% if paintedwolf.json_encoded %}The tool schema expects a structured JSON {{ paintedwolf.expected_type }}, but received a string literal containing escaped JSON.{% if paintedwolf.misplaced_fields %} The schema also declares `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}, not {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}.{% endif %}{% else %}{% if paintedwolf.misplaced_fields %}The schema declares `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %} and does not accept them under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}.{% else %}{% if paintedwolf.did_you_mean %}The property `{{ paintedwolf.rejection_field }}` is not defined on this tool; `{{ paintedwolf.did_you_mean }}` is declared.{% else %}{% if paintedwolf.conflict_keys %}The supplied arguments violate mutual exclusivity.{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
-  why: The published tool schema defines field names, types, required values, and structure. Intrinsic diagnostics identify the violated field, misplaced nesting, or conflicting parameters.
-  fix: |
-    {% if paintedwolf.missing_required_arguments %}Required argument observations: {{ paintedwolf.missing_required_arguments }}
-    Supply the missing arguments using the offered schema; the rejected call did not execute.
+  what: '{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native {{ paintedwolf.expected_type
+    }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type
+    }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under
+    }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{%
+    else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{%
+    if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif
+    %}'
+  cause: '{% if paintedwolf.json_malformed %}{% if paintedwolf.json_open_paths %}The JSON value has unclosed containers{% else %}{% if paintedwolf.json_unterminated_string_at
+    %}The string starting at byte {{ paintedwolf.json_unterminated_string_at }} is never closed{% else %}{% if paintedwolf.json_trailing_text_at %}{% if paintedwolf.json_trailing_members
+    %}`{{ paintedwolf.rejection_field }}` closes at byte {{ paintedwolf.json_trailing_text_at }}; the text continues with `{{ paintedwolf.json_trailing_members }}`,
+    which the schema declares under {% if paintedwolf.json_trailing_belongs_under %}`{{ paintedwolf.json_trailing_belongs_under }}`{% else %}the top level{% endif
+    %}{% else %}Text continues after the complete value, at byte {{ paintedwolf.json_trailing_text_at }}{% endif %}{% else %}Parsing stops at byte {{ paintedwolf.json_unexpected_token_at
+    }} on a token JSON does not allow there{% endif %}{% endif %}{% endif %}.{% if paintedwolf.misplaced_fields %} As written, `{{ paintedwolf.misplaced_fields }}`
+    sit inside {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; the schema declares them under {% if paintedwolf.belongs_under
+    %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}.{% endif %}{% else %}{% if paintedwolf.json_encoded %}The tool schema expects a structured
+    JSON {{ paintedwolf.expected_type }}, but received a string literal containing escaped JSON.{% if paintedwolf.misplaced_fields %} The schema also declares `{{
+    paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}, not {% if paintedwolf.found_under
+    %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}.{% endif %}{% else %}{% if paintedwolf.misplaced_fields %}The schema declares `{{ paintedwolf.misplaced_fields
+    }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %} and does not accept them under {% if paintedwolf.found_under
+    %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}.{% else %}{% if paintedwolf.conflict_keys %}The supplied arguments violate mutual exclusivity.{%
+    else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason
+    }}{% endif %}{% endif %}{% endif %}{% endif %}'
+  why: The published tool schema defines field names, types, required values, and structure. Intrinsic diagnostics identify the violated field, misplaced nesting,
+    or conflicting parameters.
+  fix: '{% if paintedwolf.argument_schema_matches_tool %}{% if paintedwolf.missing_required_arguments %}Required argument observations: {{ paintedwolf.missing_required_arguments
+    }}
+
+    Supply these missing arguments for the refused operation using its schema.
+
     {% endif %}
-    {% if paintedwolf.inapplicable_fields %}Omit `{{ paintedwolf.inapplicable_fields }}`: these fields do not apply in the current host state. Preserve the other arguments and retry only the rejected call.
+
+    {% if paintedwolf.inapplicable_fields %}Omit `{{ paintedwolf.inapplicable_fields }}`: these fields do not apply in the current host state. Preserve the other
+    arguments and submit only the remaining operation.
+
     {% else %}{% if paintedwolf.replacement_args_json %}Reissue the call with repaired arguments:
+
     ```json
+
     {{ paintedwolf.replacement_args_json }}
+
     ```
-    {% else %}{% if paintedwolf.json_malformed %}{% if paintedwolf.json_trailing_members %}Move `{{ paintedwolf.json_trailing_members }}` under {% if paintedwolf.json_trailing_belongs_under %}`{{ paintedwolf.json_trailing_belongs_under }}`{% else %}the top level{% endif %}, then resend `{{ paintedwolf.rejection_field }}` as a native {{ paintedwolf.expected_type }}.{% else %}{% if paintedwolf.close_before %}Close {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %} before `{{ paintedwolf.close_before }}`, then resend `{{ paintedwolf.rejection_field }}` as a native {{ paintedwolf.expected_type }}.{% else %}{% if paintedwolf.misplaced_fields %}Move `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}, then resend `{{ paintedwolf.rejection_field }}` as a native {{ paintedwolf.expected_type }}.{% else %}Resend `{{ paintedwolf.rejection_field }}` as one complete native {{ paintedwolf.expected_type }}.{% endif %}{% endif %}{% endif %}{% else %}{% if paintedwolf.json_encoded %}Resend `{{ paintedwolf.rejection_field }}` as a native {{ paintedwolf.expected_type }}, not a string.{% else %}{% if paintedwolf.misplaced_fields %}Move `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %} and retry only the rejected call.{% else %}{% if paintedwolf.did_you_mean %}Use `{{ paintedwolf.did_you_mean }}` instead of `{{ paintedwolf.rejection_field }}`.{% else %}Correct the field type, required value, or structure named in the diagnostic, then retry only the rejected call. For an edit, read the current source before reconstructing an unknown or mismatched old_string; a schema repair does not resolve an earlier source mismatch.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}
-  instead: Repair the rejected argument object and retry; preserve any source-read prerequisite from an earlier rejection.
+
+    {% else %}{% if paintedwolf.json_malformed %}{% if paintedwolf.json_trailing_members %}Move `{{ paintedwolf.json_trailing_members }}` under {% if paintedwolf.json_trailing_belongs_under
+    %}`{{ paintedwolf.json_trailing_belongs_under }}`{% else %}the top level{% endif %}, then resend `{{ paintedwolf.rejection_field }}` as a native {{ paintedwolf.expected_type
+    }}.{% else %}{% if paintedwolf.close_before %}Close {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %} before `{{
+    paintedwolf.close_before }}`, then resend `{{ paintedwolf.rejection_field }}` as a native {{ paintedwolf.expected_type }}.{% else %}{% if paintedwolf.misplaced_fields
+    %}Move `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}, then
+    resend `{{ paintedwolf.rejection_field }}` as a native {{ paintedwolf.expected_type }}.{% else %}Resend `{{ paintedwolf.rejection_field }}` as one complete native
+    {{ paintedwolf.expected_type }}.{% endif %}{% endif %}{% endif %}{% else %}{% if paintedwolf.json_encoded %}Resend `{{ paintedwolf.rejection_field }}` as a native
+    {{ paintedwolf.expected_type }}, not a string.{% else %}{% if paintedwolf.misplaced_fields %}Move `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under
+    %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %} and submit only the remaining operation.{% else %}{% if paintedwolf.conflict_keys %}Supply
+    only one of {{ paintedwolf.conflict_keys }}.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}
+
+    {% endif %}'
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool_args
-x-paintedwolf-message: '{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{% else %}{% if paintedwolf.did_you_mean %}Unknown argument `{{ paintedwolf.rejection_field }}`: did you mean `{{ paintedwolf.did_you_mean }}`?{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
+x-paintedwolf-message: '{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native
+  {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a
+  native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under
+  %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else
+  %}the top level{% endif %}{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool
+  arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{%
+  endif %}{% endif %}{% endif %}'
 x-paintedwolf-scenarios:
 - id: default
   vars:
@@ -54,10 +102,10 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
+    argument_schema_tool: read
   expect_contains:
-  - 'Rejected:'
   - 'Code: TOOL_ARGS_INVALID'
-  - Fix
+  - Tool arguments failed validation
 - id: mutation-sibling
   vars:
     detail: missing old_string
@@ -65,28 +113,32 @@ x-paintedwolf-scenarios:
     profile: implement
     suggested_tool: write
     tool: edit
+    argument_schema_tool: edit
+    reason: missing old_string
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - current source
+  - missing old_string
 - id: misplaced-field
   vars:
     tool: command
     profile: coordinator
-    misplaced_fields: [host_resources]
+    misplaced_fields:
+    - host_resources
     belongs_under: capability_request
+    argument_schema_tool: command
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'capability_request'
-  - 'the top level'
-- id: did-you-mean
+  - capability_request
+  - the top level
+- id: unknown-field
   vars:
     tool: command
     profile: coordinator
     rejection_field: timeout
-    did_you_mean: timeout_ms
+    argument_schema_tool: command
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'did you mean `timeout_ms`'
+  - '`timeout`'
 - id: unparsed-json
   vars:
     tool: http_request
@@ -94,25 +146,31 @@ x-paintedwolf-scenarios:
     rejection_field: body_json
     json_encoded: true
     expected_type: object
+    argument_schema_tool: http_request
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'instead of a native object'
+  - instead of a native object
 - id: malformed-json
   vars:
     tool: submit_verdict
     profile: coordinator
     rejection_field: verdict
     json_malformed: true
-    json_open_paths: [verdict]
+    json_open_paths:
+    - verdict
     expected_type: object
-    misplaced_fields: [set_asides, threat_model, verdict]
+    misplaced_fields:
+    - set_asides
+    - threat_model
+    - verdict
     found_under: verdict.coverage
     belongs_under: verdict
     close_before: set_asides
+    argument_schema_tool: submit_verdict
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'verdict.coverage'
-  - 'set_asides'
+  - verdict.coverage
+  - set_asides
 - id: malformed-json-closed-early
   vars:
     tool: task
@@ -120,28 +178,33 @@ x-paintedwolf-scenarios:
     rejection_field: brief
     json_malformed: true
     json_trailing_text_at: 59
-    json_trailing_members: [files, scope]
+    json_trailing_members:
+    - files
+    - scope
     expected_type: object
+    argument_schema_tool: task
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'files, scope'
-
+  - files, scope
 - id: unplanned-work-id
   vars:
     tool: task
     profile: coordinator
     rejection_field: workflow_work_id
     rejection_reason: not_a_planned_fanout_phase
-    inapplicable_fields: [workflow_work_id]
+    inapplicable_fields:
+    - workflow_work_id
+    argument_schema_tool: task
   expect_contains:
   - 'Code: TOOL_ARGS_INVALID'
-  - 'Omit `workflow_work_id`'
-  - 'Preserve the other arguments'
+  - Omit `workflow_work_id`
+  - Preserve the other arguments
 - id: missing-required-arguments
   vars:
     tool: update_progress
     missing_required_arguments: '{"missing_required":["content"],"expected_types":{"content":"string"},"received_keys":[]}'
+    argument_schema_tool: update_progress
   expect_contains:
+  - 'Code: TOOL_ARGS_INVALID'
   - '"missing_required":["content"]'
-  - '"content":"string"'
-  - rejected call did not execute
+  - Supply these missing arguments

@@ -1,6 +1,10 @@
 package oarcopy
 
-import "testing"
+import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"slices"
+	"testing"
+)
 
 func TestFactsFromDataPublishesReasonFieldAndPath(t *testing.T) {
 	got := FactsFromData(map[string]any{
@@ -29,8 +33,8 @@ func TestFactsFromDataPublishesReasonFieldAndPath(t *testing.T) {
 	if got["paintedwolf.worker_leg"] != true {
 		t.Fatalf("worker_leg = %#v", got["paintedwolf.worker_leg"])
 	}
-	if _, present := got["paintedwolf.capability_request_fields"]; present {
-		t.Fatal("copy facts invented capabilities absent from the invocation")
+	if fields, _ := got["paintedwolf.capability_request_fields"].([]string); len(fields) != 0 || got["paintedwolf.capability_contract_known"] != false {
+		t.Fatal("copy facts invented a capability contract for an unknown invocation")
 	}
 }
 
@@ -52,11 +56,14 @@ func TestParserReasonFlagsRemainExact(t *testing.T) {
 	}
 }
 
-func TestFactsFromDataPreservesMeasuredCapabilityFields(t *testing.T) {
-	got := FactsFromData(map[string]any{"capability_request_fields": []string{"loopback_connect.ports"}})
-	fields, ok := got["paintedwolf.capability_request_fields"].([]string)
-	if !ok || len(fields) != 1 || fields[0] != "loopback_connect.ports" {
-		t.Fatalf("invocation fields changed: %#v", got)
+func TestCapabilityFactsRequireReceivingToolIdentity(t *testing.T) {
+	for _, tool := range []string{"", "unknown_tool", "http_request", "command"} {
+		got := FactsFromData(map[string]any{"tool": tool, "capability_request_fields": []string{"invented"}, "supports_host_execution": true})
+		contract, known := toolcontract.Lookup(tool)
+		fields, _ := got["paintedwolf.capability_request_fields"].([]string)
+		if !slices.Equal(fields, contract.CapabilityRequestFields()) || got["paintedwolf.capability_contract_known"] != known {
+			t.Fatalf("diagnostic metadata replaced the %q contract: %#v", tool, got)
+		}
 	}
 }
 

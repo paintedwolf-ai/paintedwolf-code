@@ -37,7 +37,7 @@ func RejectFromGuardErr(ctx context.Context, err error) *guidance.Refusal {
 	}
 	var nudge *guidance.ErrGroundingNudge
 	if errors.As(err, &nudge) && nudge != nil {
-		body, renderErr := guidance.RenderPolicyCopy(ctx, nudge.Code, string(oar.EffectBlock), nudge.Copy)
+		body, renderErr := guidance.RenderPolicyCopy(ctx, nudge.Code, string(oar.EffectBlock), nudge.Copy, nudge.Data)
 		if renderErr != nil {
 			body = nudge.Code
 		}

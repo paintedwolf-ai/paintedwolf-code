@@ -38,6 +38,8 @@ func CommandRejectVars(profileID, displayCommand, rawCommand string, argFields [
 		"scratch_var":             syntax != nil && syntax.Var == exec.ScratchDirEnv,
 		"use_background_param":    useBackground,
 		"env_assignment":          envAssignment,
+		"use_env_param":           envAssignment && carries["env"],
+		"use_cwd_param":           carries["cwd"],
 		"directory_change":        errors.Is(err, ErrDirectoryChangeCommand),
 		"sequence_unsupported":    sequenceUnsupported,
 		"reissue_via_command": sequenceUnsupported ||

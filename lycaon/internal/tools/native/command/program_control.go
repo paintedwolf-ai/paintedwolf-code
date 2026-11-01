@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcommand"
 	"io"
+	"maps"
 	"strings"
 	"sync"
 
@@ -168,6 +170,9 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 		return
 	}
 	reject := toolrejection.AsToolReject(report.Cause)
+	if syntax := toolcommand.ProgramSyntaxObservation("command", report.Cause); syntax != nil {
+		reject = syntax
+	}
 	if reject == nil {
 		reject = &toolrejection.ToolReject{Code: report.Code}
 	}
@@ -181,5 +186,12 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 	if refusal, ok := guidance.RefusalFromError(report.Cause); ok {
 		policyCopy = refusal.Copy
 	}
-	writeShellRefusal(w, report.Operation, report.Operand, reject.Code, policyCopy, map[string]any{"expected_form": report.Expected})
+	facts := maps.Clone(reject.Data)
+	if facts == nil {
+		facts = map[string]any{}
+	}
+	if _, present := facts["expected_form"]; !present {
+		facts["expected_form"] = report.Expected
+	}
+	writeShellRefusal(w, report.Operation, report.Operand, reject.Code, policyCopy, facts)
 }

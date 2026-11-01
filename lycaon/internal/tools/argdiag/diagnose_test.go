@@ -75,6 +75,9 @@ func rejectArgs(t *testing.T, schema, args map[string]any) map[string]any {
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("expected TOOL_ARGS_INVALID, got %#v", reject)
 	}
+	if reject.Data["argument_schema_tool"] != "submit_verdict" {
+		t.Fatalf("schema diagnostic lost its validator identity: %#v", reject.Data)
+	}
 	return reject.Data
 }
 
@@ -275,7 +278,7 @@ func commandCapabilitySchema() map[string]any {
 	}
 }
 
-func TestDiagnoseRelocatesBooleanCapabilityFlagAsEmptyObject(t *testing.T) {
+func TestRelocationDoesNotGuessMissingCapabilityStructure(t *testing.T) {
 	schema := commandCapabilitySchema()
 	for _, field := range []string{"direct_ip", "local_listen", "loopback_connect"} {
 		t.Run(field, func(t *testing.T) {
@@ -284,33 +287,23 @@ func TestDiagnoseRelocatesBooleanCapabilityFlagAsEmptyObject(t *testing.T) {
 				field:     true,
 			})
 			assertMisplaced(t, data, []string{field}, "", "capability_request")
-			rep, _ := data["replacement_args"].(map[string]any)
-			if rep == nil {
-				t.Fatalf("expected replacement_args for %s, got nil", field)
-			}
-			capReq, _ := rep["capability_request"].(map[string]any)
-			nested, ok := capReq[field].(map[string]any)
-			if !ok || len(nested) != 0 {
-				t.Fatalf("capability_request.%s = %#v, want empty object", field, capReq[field])
-			}
-			if err := tools.ValidateToolArgs(schema, rep); err != nil {
-				t.Fatalf("replacement_args failed validation: %v", err)
+			if data["replacement_args"] != nil || data["replacement_args_json"] != nil {
+				t.Fatalf("relocation invented capability structure: %#v", data)
 			}
 		})
 	}
 }
 
-func TestDiagnoseSuggestsNestedCapabilityPropertyForNearMissesAndSynonyms(t *testing.T) {
+func TestDiagnosisDoesNotGuessArgumentNamesOrCardinality(t *testing.T) {
 	schema := commandCapabilitySchema()
 	cases := []struct {
 		input string
 		value any
-		want  string
 	}{
-		{input: "read_paths", value: []any{"/tmp"}, want: "capability_request.read_path"},
-		{input: "write_paths", value: []any{"/tmp"}, want: "capability_request.write_root"},
-		{input: "write_roots", value: []any{"/tmp"}, want: "capability_request.write_root"},
-		{input: "socket_path", value: "/tmp/daemon.sock", want: "capability_request.socket_paths"},
+		{input: "read_paths", value: []any{"/tmp"}},
+		{input: "write_paths", value: []any{"/tmp"}},
+		{input: "write_roots", value: []any{"/tmp"}},
+		{input: "socket_path", value: "/tmp/daemon.sock"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
@@ -318,9 +311,35 @@ func TestDiagnoseSuggestsNestedCapabilityPropertyForNearMissesAndSynonyms(t *tes
 				"command": "ls /tmp",
 				tc.input:  tc.value,
 			})
-			if data["field"] != tc.input || data["did_you_mean"] != tc.want {
-				t.Fatalf("field=%v did_you_mean=%v, want field=%q did_you_mean=%q",
-					data["field"], data["did_you_mean"], tc.input, tc.want)
+			if data["did_you_mean"] != nil || data["replacement_args"] != nil || data["replacement_args_json"] != nil {
+				t.Fatalf("unknown intent became an argument repair: %#v", data)
+			}
+		})
+	}
+}
+
+func TestRelocationPreservesSchemaAcceptedValues(t *testing.T) {
+	for _, value := range []any{true, false, []any{"udp://example.test:123"}, map[string]any{}} {
+		encoded, _ := json.Marshal(value)
+		t.Run(string(encoded), func(t *testing.T) {
+			union := map[string]any{"oneOf": []any{
+				map[string]any{"type": "boolean"},
+				map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				map[string]any{"type": "object", "additionalProperties": false},
+			}}
+			schema := map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
+				"access": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"network": union}},
+			}}
+			args := map[string]any{"network": value}
+			data := rejectArgs(t, schema, args)
+			replacement, ok := data["replacement_args"].(map[string]any)
+			if !ok {
+				t.Fatalf("missing validated replacement: %#v", data)
+			}
+			got, _ := json.Marshal(replacement["access"].(map[string]any)["network"])
+			original, _ := json.Marshal(args["network"])
+			if string(got) != string(encoded) || string(original) != string(encoded) {
+				t.Fatalf("relocation changed the value: got %s, input %s, want %s", got, original, encoded)
 			}
 		})
 	}
