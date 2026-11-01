@@ -27,6 +27,10 @@ fn run(args: Args) -> nativegen::Result<()> {
         mlx_engine::backend::Mlx,
         runner::{Identity, Runner, wire::PhysicalDevice},
     };
+    if std::env::var_os("MLX_METAL_RESIDENCY_REFRESH_INTERVAL_MS").is_none() {
+        // Configure residency before MLX starts its runtime threads.
+        unsafe { std::env::set_var("MLX_METAL_RESIDENCY_REFRESH_INTERVAL_MS", "1000") };
+    }
     let shader = args
         .metallib
         .ok_or_else(|| Error::Protocol("Metal library path is required".into()))?;
