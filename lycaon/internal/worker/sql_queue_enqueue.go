@@ -161,9 +161,14 @@ func (q *sqlQueueClaims) StopExecution(ctx context.Context, jobID string) error 
 	if task.Status.IsTerminal() {
 		return nil
 	}
-	requested, err := q.RequestCancellation(context.WithoutCancel(ctx), jobID)
-	if err != nil || !requested {
-		return err
+	fenceCtx, cancel := cancellationFenceContext(ctx)
+	defer cancel()
+	requested, err := q.RequestCancellation(fenceCtx, jobID)
+	if err != nil {
+		return &cancellationFenceError{err: err}
+	}
+	if !requested {
+		return nil
 	}
 	// Re-read after fencing: a pending task may have been claimed meanwhile.
 	task, ok = q.Get(jobID) //nolint:contextcheck // Get has internal sqlQueueGetTimeout

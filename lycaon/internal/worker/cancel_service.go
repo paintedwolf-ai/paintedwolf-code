@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -87,7 +88,9 @@ func (s *CancelService) AbortWorkersForRoot(ctx context.Context, projectID, root
 	if !ok {
 		return nil
 	}
-	tasks, err := s.Queue.List(context.WithoutCancel(ctx), projectID,
+	fenceCtx, cancel := cancellationFenceContext(ctx)
+	defer cancel()
+	tasks, err := s.Queue.List(fenceCtx, projectID,
 		api.WorkerStatusPending, api.WorkerStatusRunning, api.WorkerStatusWaiting, api.WorkerStatusHeld)
 	if err != nil {
 		return err
@@ -111,8 +114,10 @@ func (s *CancelService) AbortAllWorkers(ctx context.Context, sessionID, projectI
 	if sessionID == "" {
 		return nil
 	}
+	fenceCtx, cancel := cancellationFenceContext(ctx)
+	defer cancel()
 	tasks, err := s.Queue.ListBySession(
-		context.WithoutCancel(ctx),
+		fenceCtx,
 		projectID,
 		sessionID,
 		api.WorkerStatusPending,
@@ -143,7 +148,8 @@ func (s *CancelService) abortTasks(ctx context.Context, tasks []api.WorkerTask, 
 // requestWorkerCancellations fences the whole batch before waiting for any one
 // worker to exit.
 func requestWorkerCancellations(ctx context.Context, queue WorkerQueue, tasks []api.WorkerTask) error {
-	fenceCtx := context.WithoutCancel(ctx)
+	fenceCtx, cancel := cancellationFenceContext(ctx)
+	defer cancel()
 	var errs []error
 	for _, task := range tasks {
 		if _, err := queue.RequestCancellation(fenceCtx, task.ID); err != nil {
@@ -242,7 +248,29 @@ func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTas
 	}, nil
 }
 
+type cancellationFenceError struct {
+	err error
+}
+
+func (e *cancellationFenceError) Error() string {
+	return "request worker cancellation: " + e.err.Error()
+}
+func (e *cancellationFenceError) Unwrap() error { return e.err }
+
+// Fencing survives caller cancellation but retains the release deadline.
+func cancellationFenceContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	deadline := time.Now().Add(defaultRunStopReleaseTimeout)
+	if callerDeadline, ok := ctx.Deadline(); ok && callerDeadline.Before(deadline) {
+		deadline = callerDeadline
+	}
+	return context.WithDeadline(context.WithoutCancel(ctx), deadline)
+}
+
 func isWorkerReleaseTimeout(ctx context.Context, err error) bool {
+	var fenceError *cancellationFenceError
+	if errors.As(err, &fenceError) {
+		return false
+	}
 	return errors.Is(err, errWorkerReleaseTimeout) || (errors.Is(err, context.DeadlineExceeded) && ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded))
 }
 

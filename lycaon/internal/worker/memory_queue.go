@@ -202,9 +202,14 @@ func (q *memoryQueueClaims) Cancel(ctx context.Context, jobID string, result *ap
 
 // StopExecution retains the workspace until runtime has released it.
 func (q *memoryQueueClaims) StopExecution(ctx context.Context, jobID string) error {
-	requested, err := q.RequestCancellation(context.WithoutCancel(ctx), jobID)
-	if err != nil || !requested {
-		return err
+	fenceCtx, cancel := cancellationFenceContext(ctx)
+	defer cancel()
+	requested, err := q.RequestCancellation(fenceCtx, jobID)
+	if err != nil {
+		return &cancellationFenceError{err: err}
+	}
+	if !requested {
+		return nil
 	}
 	q.mu.Lock()
 	job := q.jobs[jobID]
