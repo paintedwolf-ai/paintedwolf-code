@@ -28,10 +28,13 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_revision_pin
 x-paintedwolf-message: command stopped to preserve a file revision or unsaved editor changes
 x-paintedwolf-scenarios:
-  - id: destination-moved
-    vars:
-      tool: command
-      path: config/app.json
-    expect_contains:
-      - 'Code: COMMAND_REVISION_CONFLICT'
-      - config/app.json changed after the program captured it
+- id: destination-moved
+  vars:
+    tool: command
+    path: config/app.json
+    expected_revision: revision-a
+    observed_revision: revision-b
+  expect_contains:
+  - 'Code: COMMAND_REVISION_CONFLICT'
+  - config/app.json no longer matches its captured revision
+  - current read basis

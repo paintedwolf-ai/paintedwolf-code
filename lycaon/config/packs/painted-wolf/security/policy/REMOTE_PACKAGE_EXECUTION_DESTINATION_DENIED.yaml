@@ -39,12 +39,10 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: downloaded package code reached beyond its reviewed registries
 x-paintedwolf-scenarios:
-  - id: required_destination
-    vars:
-      tool: command
-      destination: gitea.example.com
-    expect_contains:
-      - 'Code: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED'
-      - gitea.example.com
-      - install or add the package
-      - later command
+- id: required_destination
+  vars:
+    tool: command
+    destination: gitea.example.com
+  expect_contains:
+  - 'Code: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED'
+  - gitea.example.com

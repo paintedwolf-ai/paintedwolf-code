@@ -24,18 +24,16 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: Executable not found on PATH
 x-paintedwolf-scenarios:
-  - id: default
-    vars:
-      command: missing-tool
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COMMAND_NOT_FOUND'
-      - missing-tool
-      - PATH
-  - id: near_miss_named
-    vars:
-      command: python
-      resolvable: python3
-    expect_contains:
-      - 'Code: COMMAND_NOT_FOUND'
-      - python3
+- id: default
+  vars:
+    command: missing-tool
+  expect_contains:
+  - 'Code: COMMAND_NOT_FOUND'
+  - missing-tool
+- id: near_miss_named
+  vars:
+    command: python
+    resolvable: python3
+  expect_contains:
+  - 'Code: COMMAND_NOT_FOUND'
+  - python

@@ -33,17 +33,17 @@ x-paintedwolf-scenarios:
     tool: command
     pattern: '**/*.go'
     glob_limit: matches
-    max: '1000'
+    max: 1000
   expect_contains:
   - 'Code: COMMAND_GLOB_BUDGET_EXCEEDED'
   - '**/*.go'
-  - quote it
+  - '1000'
 - id: entries
   vars:
     tool: command
     pattern: '**'
     glob_limit: entries
-    max: '50000'
+    max: 50000
   expect_contains:
   - 'Code: COMMAND_GLOB_BUDGET_EXCEEDED'
-  - 50000 entries
+  - '50000'

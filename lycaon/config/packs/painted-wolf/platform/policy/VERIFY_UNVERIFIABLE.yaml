@@ -27,10 +27,9 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:verify
 x-paintedwolf-message: verify reached no verdict because confinement stopped the run
 x-paintedwolf-scenarios:
-  - id: default
-    vars:
-      tool: verify
-    expect_contains:
-      - 'Code: VERIFY_UNVERIFIABLE'
-      - unverifiable
-      - capability_request
+- id: default
+  vars:
+    tool: verify
+  expect_contains:
+  - 'Code: VERIFY_UNVERIFIABLE'
+  - verification

@@ -61,7 +61,7 @@ func TestEvaluatedRuleWithoutCopyDoesNotConsultFallbackCatalog(t *testing.T) {
 	}
 	rendered, err := NewRenderer(stubFmt{}, stubFmt{}).Render(t.Context(), StagePostTool, &decision)
 	testutil.FailErr(t, "render omitted rule copy", err)
-	if len(rendered) != 1 || !strings.Contains(rendered[0].Text, "Code: FIXTURE") || strings.Contains(rendered[0].Text, "Fix:") {
+	if len(rendered) != 1 || !strings.Contains(rendered[0].Text, "Code: FIXTURE") || rendered[0].Text == "Rejected:\nCode: FIXTURE" || strings.Contains(rendered[0].Text, "Fix:") {
 		t.Fatalf("unexpected code-only presentation: %#v", rendered)
 	}
 }

@@ -31,7 +31,7 @@ x-paintedwolf-scenarios:
     cwd: /project
     pwd: /project/subdir
   expect_contains:
-  - 'Rejected:'
   - 'Code: COMMAND_PWD_NOT_CWD'
   - env.PWD
-  - 'cwd:'
+  - /project/subdir
+  - /project

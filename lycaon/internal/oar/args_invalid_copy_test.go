@@ -154,7 +154,7 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 			if !strings.Contains(cause, tc.wantCause) {
 				t.Errorf("copy.cause = %q, want to contain %q", cause, tc.wantCause)
 			}
-			fix := copyObj["fix"]
+			fix := strings.TrimSpace(copyObj["fix"])
 			if (tc.wantFix == "" && fix != "") || !strings.Contains(fix, tc.wantFix) {
 				t.Errorf("copy.fix = %q, want to contain %q", fix, tc.wantFix)
 			}

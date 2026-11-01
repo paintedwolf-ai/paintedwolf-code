@@ -38,11 +38,14 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused a signal to a process outside the boundary
 x-paintedwolf-scenarios:
-  - id: stop_server
-    vars:
-      tool: command
-      failed_stages: [kill 4121]
-      refused_signals: [signal (kill)]
-    expect_contains:
-      - 'Code: SANDBOX_TRY_PROCESS_CONTROL'
-      - capability_request.process_control
+- id: stop_server
+  vars:
+    tool: command
+    failed_stages:
+    - kill 4121
+    refused_signals:
+    - signal (kill)
+    tool_args: {}
+  expect_contains:
+  - 'Code: SANDBOX_TRY_PROCESS_CONTROL'
+  - capability_request.process_control

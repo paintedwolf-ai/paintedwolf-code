@@ -40,4 +40,5 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Code: COMMAND_LIMIT_EXCEEDED'
   - ast_nodes
-  - Check the recorded results
+  - '8192'
+  - '8193'

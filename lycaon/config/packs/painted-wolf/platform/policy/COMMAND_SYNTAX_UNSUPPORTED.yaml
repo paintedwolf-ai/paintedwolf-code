@@ -39,4 +39,4 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Code: COMMAND_SYNTAX_UNSUPPORTED'
   - '3:7'
-  - Earlier commands that finished still count.
+  - supported syntax

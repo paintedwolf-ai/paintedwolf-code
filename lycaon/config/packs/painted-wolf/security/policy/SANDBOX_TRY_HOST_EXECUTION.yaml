@@ -38,25 +38,29 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused an operation no sandbox capability admits
 x-paintedwolf-scenarios:
-  - id: vm_network_socket
-    vars:
-      tool: command
-      process_running: true
-      can_command_stop: true
-      can_command_output: true
-      unsandboxed_refusals:
-        - network-bind /Users/person/.colima/_lima/_networks/user-v2/user-v2_fd.sock (limactl)
-    expect_contains:
-      - 'Code: SANDBOX_TRY_HOST_EXECUTION'
-      - capability_request.host_execution
-      - command_stop
-      - may never finish
-      - user-v2_fd.sock
-  - id: finished_failure
-    vars:
-      tool: verify
-      failed_stages: [make install]
-      unsandboxed_refusals: [iokit-open AppleUSBHostDevice (make)]
-    expect_contains:
-      - 'Code: SANDBOX_TRY_HOST_EXECUTION'
-      - capability_request.host_execution
+- id: vm_network_socket
+  vars:
+    tool: command
+    process_running: true
+    can_command_stop: true
+    can_command_output: true
+    unsandboxed_refusals:
+    - network-bind /Users/person/.colima/_lima/_networks/user-v2/user-v2_fd.sock (limactl)
+    tool_args: {}
+  expect_contains:
+  - 'Code: SANDBOX_TRY_HOST_EXECUTION'
+  - capability_request.host_execution
+  - command_stop
+  - may never finish
+  - user-v2_fd.sock
+- id: finished_failure
+  vars:
+    tool: verify
+    failed_stages:
+    - make install
+    unsandboxed_refusals:
+    - iokit-open AppleUSBHostDevice (make)
+    tool_args: {}
+  expect_contains:
+  - 'Code: SANDBOX_TRY_HOST_EXECUTION'
+  - capability_request.host_execution

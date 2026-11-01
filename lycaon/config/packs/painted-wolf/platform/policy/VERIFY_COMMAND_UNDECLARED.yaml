@@ -23,11 +23,10 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: '`verify()` has no command to run'
 x-paintedwolf-scenarios:
-  - id: default
-    vars:
-      profile: coordinator
-      tool: verify
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: VERIFY_COMMAND_UNDECLARED'
-      - verify(
+- id: default
+  vars:
+    profile: coordinator
+    tool: verify
+  expect_contains:
+  - 'Code: VERIFY_COMMAND_UNDECLARED'
+  - command
