@@ -3,6 +3,7 @@ package nativegen
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/inference"
@@ -10,8 +11,9 @@ import (
 )
 
 type prefixRequest struct {
-	RequestID    uint64   `json:"request_id"`
-	PromptTokens []uint32 `json:"prompt_tokens"`
+	RequestID        uint64   `json:"request_id"`
+	PromptTokens     []uint32 `json:"prompt_tokens"`
+	CheckpointTokens int      `json:"checkpoint_tokens"`
 }
 
 type preparationResult struct {
@@ -34,6 +36,7 @@ func (p *Provider) PrepareContext(ctx context.Context, req modelcall.CompletionR
 	if err != nil || render.KnownPrefixMessages == 0 {
 		return modelcall.ContextPreparation{}, err
 	}
+	standingMessages := render.CheckpointMessages
 	render.CheckpointMessages = render.KnownPrefixMessages
 	model := p.ResolveModel(req)
 	if _, ok := p.ModelEntry(model); !ok {
@@ -55,10 +58,25 @@ func (p *Provider) PrepareContext(ctx context.Context, req modelcall.CompletionR
 	if measured.CheckpointTokens >= p.runtime.ContextWindow() {
 		return modelcall.ContextPreparation{}, ErrContextCapacityExceeded
 	}
-	return p.runtime.prefill(ctx, measured.PromptTokens[:measured.CheckpointTokens])
+	checkpoint := measured.CheckpointTokens
+	if standingMessages != render.KnownPrefixMessages {
+		checkpoint = 0
+		if standingMessages > 0 {
+			render.CheckpointMessages = standingMessages
+			standing, err := p.runtime.measure(ctx, render)
+			if err != nil {
+				return modelcall.ContextPreparation{}, err
+			}
+			if !slices.Equal(standing.PromptTokens, measured.PromptTokens) || standing.CheckpointTokens > measured.CheckpointTokens {
+				return modelcall.ContextPreparation{}, errors.New("native generation: inconsistent preparation boundaries")
+			}
+			checkpoint = standing.CheckpointTokens
+		}
+	}
+	return p.runtime.prefill(ctx, measured.PromptTokens[:measured.CheckpointTokens], checkpoint)
 }
 
-func (p *Runtime) prefill(ctx context.Context, tokens []uint32) (modelcall.ContextPreparation, error) {
+func (p *Runtime) prefill(ctx context.Context, tokens []uint32, checkpoint int) (modelcall.ContextPreparation, error) {
 	p.loaded.request++
 	id := p.loaded.request
 	child := p.loaded.process
@@ -78,7 +96,7 @@ func (p *Runtime) prefill(ctx context.Context, tokens []uint32) (modelcall.Conte
 		}
 	}()
 	var begun begunResult
-	if err := child.call(ctx, command{Method: "prepare", Request: prefixRequest{id, tokens}}, "begun", inference.Background, true, &begun); err != nil {
+	if err := child.call(ctx, command{Method: "prepare", Request: prefixRequest{RequestID: id, PromptTokens: tokens, CheckpointTokens: checkpoint}}, "begun", inference.Background, true, &begun); err != nil {
 		return modelcall.ContextPreparation{}, err
 	}
 	if begun.RequestID != id || begun.ReusedPrefixTokens < 0 || begun.ReusedPrefixTokens > len(tokens) {
@@ -93,6 +111,9 @@ func (p *Runtime) prefill(ctx context.Context, tokens []uint32) (modelcall.Conte
 		}
 		next := result.Progress
 		expected := min(processed+p.config.PrefillChunk, len(tokens))
+		if processed < checkpoint {
+			expected = min(expected, checkpoint)
+		}
 		if next.RequestID != id || next.Processed != expected || next.Reused != begun.ReusedPrefixTokens || next.Canceled || next.Complete != (expected == len(tokens)) {
 			child.close()
 			return modelcall.ContextPreparation{}, errors.New("native generation: invalid preparation progress")
