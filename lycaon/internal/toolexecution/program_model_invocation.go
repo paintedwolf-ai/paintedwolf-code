@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -47,10 +46,7 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	// Reserve the root map and scalar attribution before the addressed map is
-	// allocated. The fixed feedback allowance survives effects so a reached
-	// refusal can still deliver a bounded failure descriptor. Strings remain
-	// immutable host values; this accounts retention.
+	// Keep feedback capacity available after effects reach a refusal.
 	bound := int64(4096 + programFeedbackAllowance)
 	add := func(value string) bool {
 		if int64(len(value)) > (math.MaxInt64-bound)/8 {
@@ -91,10 +87,6 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		return nil, err
 	}
 	lifetime.arguments = snapshot
-	if !modelJSONUTF8(snapshot.values) {
-		lifetime.close()
-		return nil, fmt.Errorf("submitted model arguments require valid JSON text strings")
-	}
 	canonical, releaseCanonical, err := toolcontract.CaptureModelJSON(ctx, admission, snapshot.values)
 	if err != nil {
 		lifetime.close()
@@ -171,34 +163,6 @@ func (l *programFrameLifetime) clear() {
 		l.releases[i]()
 	}
 	l.releases = nil
-}
-
-// The model protocol is JSON text. Native operation operands use the separate
-// lossless review representation; they do not pass through this outer snapshot.
-func modelJSONUTF8(value any) bool {
-	switch v := value.(type) {
-	case string:
-		return utf8.ValidString(v)
-	case map[string]any:
-		for key, item := range v {
-			if !utf8.ValidString(key) || !modelJSONUTF8(item) {
-				return false
-			}
-		}
-	case []any:
-		for _, item := range v {
-			if !modelJSONUTF8(item) {
-				return false
-			}
-		}
-	case []string:
-		for _, item := range v {
-			if !utf8.ValidString(item) {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 // beginUse retains the actual frame facts throughout one admission/owner call.
