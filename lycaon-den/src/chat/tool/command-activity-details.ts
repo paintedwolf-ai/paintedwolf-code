@@ -10,6 +10,7 @@ export function commandActivityFacts(view: CommandActivityView, executions: read
   if (fact.execution_count) facts.push({ label: "Executions", value: fact.execution_count.toLocaleString() });
   if (fact.failed_count) facts.push({ label: "Reported failures", value: String(fact.failed_count) });
   const program = view.calls.find(call => call.commandProgram)?.commandProgram;
+  if (program?.stop_code) facts.push({ label: "Command stop", value: program.stop_code });
   if (program) facts.push({ label: "Enclosing command", value: `${program.state}${program.status_code !== undefined ? ` · exit ${program.status_code}` : ""}` });
   if (fact.uncertain_effects || executions.some(row => row.effect_certainty === "attempted" || row.effect_certainty === "unknown")) {
     facts.push({ label: "Effects", value: fact.completed_effects || executions.some(row => row.effect_certainty === "completed") ? "Partial effects; unknown outcome" : "Unknown outcome" });

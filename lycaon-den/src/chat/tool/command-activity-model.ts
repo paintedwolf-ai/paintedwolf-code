@@ -36,7 +36,7 @@ export function createCommandActivityProjection() {
       const observed = live(entry.part);
       let program = observed && (!canonical || (observed.activity_revision ?? 0) >= (canonical.activity_revision ?? 0)) ? observed : canonical;
       const previous = remembered.get(entry.part.toolCallId);
-      if (program && previous?.id === program.id && !program.activities && previous.activities) {
+      if (program && previous?.id === program.id && !program.activities && previous.activities?.length) {
         program = { ...program, activities: previous.activities.map(fact =>
           fact.state === "running" || fact.state === "waiting"
             ? { ...fact, state: "unknown" as const, outcome: "Outcome unavailable", status_code: undefined }

@@ -28,6 +28,7 @@ describe("compact command activity details", () => {
   expect(get).not.toHaveBeenCalled();
   fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
   await waitFor(() => expect(get).toHaveBeenCalledOnce());
+  expect(get).toHaveBeenCalledWith("activity-card-test", "program", {limit:6,cursor:undefined,activity_id:"test"});
   expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy();
   expect(view.container.querySelector("mark")?.textContent).toContain("cargo test");
   expect(view.container.querySelectorAll("details")).toHaveLength(0);

@@ -35,6 +35,7 @@ function CommandActivityDetails(props: Props) {
   const content = useToolContent();
   const [callPage, setCallPage] = createSignal(0);
   const [stepPage, setStepPage] = createSignal(0);
+  const [wholeCommand, setWholeCommand] = createSignal(false);
   const [receiptCursors, setReceiptCursors] = createSignal<string[]>([]);
   createEffect(() => {
     const target = content?.revealedCallId?.();
@@ -50,7 +51,7 @@ function CommandActivityDetails(props: Props) {
     const requests = [...new Map(calls().flatMap(call => call.commandProgram ? [[call.commandProgram.id, call.commandProgram] as const] : [])).values()];
     const cursor = receiptCursor();
     const limit = 6;
-    const activityId = activity().fact.execution_ids.length ? activity().fact.id : undefined;
+    const activityId = !wholeCommand() && activity().fact.execution_ids.length ? activity().fact.id : undefined;
     const key = JSON.stringify([requests.map(program => [program.id, program.state, program.settled_at]), activity().fact.state, activity().fact.execution_count, activity().fact.failed_count, activityId, cursor, limit]);
     return { client, sessionId: props.sessionId, requests, cursor, limit, activityId, key };
   }, undefined, { equals: (a,b) => a?.client === b?.client && a?.sessionId === b?.sessionId && a?.key === b?.key });
@@ -64,7 +65,7 @@ function CommandActivityDetails(props: Props) {
   });
   const facts = createMemo(() => {
     const feedback = activity().fact.execution_ids.length === 0 ? props.part.feedback : props.part.feedback?.filter(entry => executions().some(row => row.stop_code === entry.code || row.host_stop_code === entry.code));
-    const result = commandActivityFacts(activity(), executions(), feedback);
+    const result = commandActivityFacts(activity(), wholeCommand() ? [] : executions(), feedback);
     const stop = loaded()[0]?.program.stop_code;
     if (activity().fact.execution_ids.length === 0 && stop && !result.some(fact => fact.value === stop)) result.push({ label: "Code", value: stop });
     return result;
@@ -90,6 +91,10 @@ function CommandActivityDetails(props: Props) {
     <Show when={executions().length > 0}>
       <section class="den-tool-part-card-section" aria-label="Execution records">
         <h4 class="den-tool-part-card-section-label">Execution records</h4>
+        <Show when={activity().fact.execution_ids.length}><div class="den-command-activity-paging" role="group" aria-label="Receipt scope">
+          <button type="button" class="den-chat-content-link" aria-pressed={!wholeCommand()} onClick={() => {setWholeCommand(false);setReceiptCursors([]);}}>This activity</button>
+          <button type="button" class="den-chat-content-link" aria-pressed={wholeCommand()} onClick={() => {setWholeCommand(true);setReceiptCursors([]);}}>Whole command</button>
+        </div></Show>
         <KeyedIndex each={executions().slice(0, 6)} keyOf={execution => execution.id}>{execution => <div class="den-command-activity-step"><code>{execution().command.slice(0, 192)}{execution().command.length > 192 ? "…" : ""}</code><span>{execution().state}{execution().status_code !== undefined ? ` · exit ${execution().status_code}` : ""}</span></div>}</KeyedIndex>
         <Show when={executions().length > 6}><p class="den-tool-part-card-note">{executions().length} steps in this activity</p></Show>
         <Show when={receiptCursors().length > 0 || loaded()[0]?.executions_omitted}><div class="den-command-activity-paging" role="group" aria-label="Execution pages">
