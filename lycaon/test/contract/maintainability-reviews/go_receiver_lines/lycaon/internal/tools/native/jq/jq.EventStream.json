@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/tools/native/jq/jq.EventStream",
+  "kind": "algorithm",
+  "workstream": "large-query-inputs",
+  "disposition": "retain",
+  "reason": "Retain one incremental JSON state machine below 340 receiver lines. Container transitions, scalar scanning, path emission, reader position and admitted leases describe one cursor. The ordinary value decoder consumes the same lexical primitives without collecting events. Pull delivery, terminal reader errors, scalar/depth limits and constant-memory scale contracts support this boundary.",
+  "reviewed_commit": "fcfb6a5619246fc303b894b98d6b8fb4e817aa4a",
+  "ceiling": 340,
+  "boundaries": {
+    "lycaon/internal/tools/native/jq/event_stream_test.go": "735173bd5b1706f1a22daa58d7f9db5fe52e7450c6f0b5239fa8958792ff7e48",
+    "lycaon/internal/tools/native/jq/value_decoder_test.go": "eadc78b8563085a761537517a838f2a046cbf2812ab9aed83f0e4e2f3743ed06",
+    "lycaon/internal/tools/native/jq/event_stream_stress_test.go": "087db3fb119a811ae3144e563a57f30c838231efe9b5540052bccc6846a931a6"
+  },
+  "reviewed_shape": "67d1e87154abee09b99bb87ad2b4d1bafe6e2cfcea20f6cae06e0c720efb9a98"
+}
