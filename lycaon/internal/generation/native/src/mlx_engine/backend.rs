@@ -3,7 +3,7 @@ use crate::{
     error::{Error, Result},
     execution::{Backend, Sampling},
 };
-use mlx_rs::{Dtype, memory, ops::indexing::*};
+use mlx_rs::{memory, ops::indexing::*, Dtype};
 use std::path::Path;
 
 fn device_error(error: impl std::fmt::Display) -> Error {
@@ -66,14 +66,20 @@ impl Mlx {
         }
         memory::reset_peak_memory().map_err(device_error)?;
         let ids: Vec<_> = tokens.iter().map(|token| *token as i32).collect();
+        let output = if sampling.is_some() {
+            Logits::Last
+        } else {
+            Logits::None
+        };
         let logits = self
             .model
-            .forward(&ids, &mut self.cache, Logits::Last)
+            .forward(&ids, &mut self.cache, output)
             .map_err(device_error)?;
         let Some(sampling) = sampling else {
             self.cache.evaluate().map_err(device_error)?;
             return self.completed(None);
         };
+        let logits = logits.ok_or_else(|| device_error("missing requested logits"))?;
         let logits = logits.index((0, -1, ..));
         if sampling.temperature == 0.0 && sampling.constraint.is_none() {
             let token = argmax(&logits, None).map_err(device_error)?;
