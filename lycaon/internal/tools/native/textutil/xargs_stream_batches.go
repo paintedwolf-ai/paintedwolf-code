@@ -20,18 +20,20 @@ type xargsBatcher struct {
 	pending             *xargsItem
 	lineHasItems, ended bool
 	batches             int64
+	budget              commandprogram.BatchBudget
 }
 
 func newXargsBatcher(input *xargsInput, plan xargsPlan) (*xargsBatcher, error) {
 	inv := input.inv
-	if err := inv.reserve(2*inv.limit("argv_bytes") + 128*inv.limit("expanded_fields")); err != nil {
+	budget := commandprogram.NewBatchBudget(inv.ports.Memory, inv.request.Invocation.Scope.Directory, inv.limit("argv_bytes"), inv.limit("expanded_fields"), int64(plan.parallel))
+	if err := inv.reserve(2*budget.ArgumentBytes + 128*budget.Fields); err != nil {
 		return nil, err
 	}
 	command := inv.operands()
 	if len(command) == 0 {
 		command = commandprogram.Fields{{Value: "echo", Span: inv.request.Invocation.Span}}
 	}
-	b := &xargsBatcher{inv: inv, plan: plan, input: input, command: command, at: len(command)}
+	b := &xargsBatcher{inv: inv, plan: plan, input: input, command: command, at: len(command), budget: budget}
 	if plan.join != "" {
 		for i, word := range command[1:] {
 			if word.Value == plan.join {
@@ -72,15 +74,23 @@ func (b *xargsBatcher) next() (commandprogram.Fields, error) {
 				return b.accept(argv[0])
 			}
 			next := int64(len(item.value))
-			tooLarge := b.size+next > b.plan.maxChars || int64(len(b.command)+len(b.items)+1) > b.inv.limit("expanded_fields")
+			fields := int64(len(b.command) + len(b.items) + 1)
+			resourceFull := !b.budget.Fits(b.size+next, fields)
+			tooLarge := b.size+next > b.plan.maxChars || fields > b.inv.limit("expanded_fields") || resourceFull
 			if tooLarge && len(b.items) > 0 {
 				if b.plan.count > 0 && b.plan.exact {
+					if resourceFull {
+						return nil, b.budget.Refusal(b.size+next, fields)
+					}
 					return nil, tools.CommandLimitExceeded("argv_bytes", b.plan.maxChars, b.size+next)
 				}
 				b.pending = &item
 				return b.flush()
 			}
 			if tooLarge {
+				if resourceFull {
+					return nil, b.budget.Refusal(b.size+next, fields)
+				}
 				return nil, tools.CommandLimitExceeded("argv_bytes", b.plan.maxChars, b.size+next)
 			}
 			b.items = append(b.items, commandprogram.Field{Value: item.value, Span: b.inv.request.Invocation.Span})
@@ -117,6 +127,13 @@ func (b *xargsBatcher) flush() (commandprogram.Fields, error) {
 }
 
 func (b *xargsBatcher) accept(argv commandprogram.Fields) (commandprogram.Fields, error) {
+	size := int64(0)
+	for _, word := range argv {
+		size += int64(len(word.Value))
+	}
+	if !b.budget.Fits(size, int64(len(argv))) {
+		return nil, b.budget.Refusal(size, int64(len(argv)))
+	}
 	b.batches++
 	if maximum := b.inv.limit("child_executions"); b.batches > maximum {
 		return nil, tools.CommandLimitExceeded("child_executions", maximum, b.batches)

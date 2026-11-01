@@ -41,6 +41,8 @@ func CatalogProgramMemoryLimits() (ProgramMemoryLimits, error) {
 type ProgramMemoryLimitError struct {
 	Account           string
 	Maximum, Observed int64
+	Held, Requested   int64
+	Phase             MemoryPhase
 }
 
 func (e *ProgramMemoryLimitError) Error() string {
@@ -144,7 +146,7 @@ func (m *ProgramMemory) reserve(ctx context.Context, n int64, state bool) (func(
 		used, maximum, account = &m.state, m.limits.State, "state"
 	}
 	if n > maximum-*used {
-		return nil, &ProgramMemoryLimitError{Account: account, Maximum: maximum, Observed: *used + n}
+		return nil, &ProgramMemoryLimitError{Account: account, Maximum: maximum, Observed: *used + n, Held: *used, Requested: n, Phase: memoryPhase(ctx)}
 	}
 	*used += n
 	m.reservations++

@@ -2,49 +2,70 @@ package literal
 
 import (
 	"context"
+	"hash/fnv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// revisionIndex is invocation-local membership, not another source owner.
-// 1024 bytes per entry covers key/header capacity, spare load and overlapping
-// old/new map tables; retained variable strings are charged separately. The
-// geometric lease is acquired before growth and released once at invocation end.
+const revisionPageEntries = 64
+
+// revisionIndex keeps exact membership in fixed-capacity pages.
 type revisionIndex struct {
-	entries        map[toolcontract.ExecutionRevision]struct{}
-	used, capacity int64
-	release        func()
+	buckets []*revisionPage
+	release func()
+}
+type revisionPage struct {
+	entries  map[toolcontract.ExecutionRevision]struct{}
+	next     *revisionPage
+	releases []func()
 }
 
 func (r *revisionIndex) remember(ctx context.Context, memory *toolcontract.ProgramMemory, revision toolcontract.ExecutionRevision) (bool, error) {
-	if _, seen := r.entries[revision]; seen {
-		return true, nil
-	}
+	ctx = toolcontract.WithMemoryPhase(ctx, toolcontract.InputProvenance)
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	needed := r.used + 1024 + int64(len(revision.Role)+len(revision.Mode)+len(revision.Basis)+len(revision.RootID)+len(revision.Path)+len(revision.DocumentID)+len(revision.DiskSHA256)+len(revision.Representation)+len(revision.ContentSHA256))
-	if needed > r.capacity {
-		capacity := max(64<<10, max(needed, 2*r.capacity))
+	if len(r.buckets) == 0 {
+		if memory != nil {
+			release, err := memory.ReserveProgramState(ctx, 4096)
+			if err != nil {
+				return false, err
+			}
+			r.release = release
+		}
+		r.buckets = make([]*revisionPage, 256)
+	}
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(revision.RootID))
+	_, _ = hash.Write([]byte(revision.Path))
+	index := hash.Sum64() % uint64(len(r.buckets))
+	page := r.buckets[index]
+	for current := page; current != nil; current = current.next {
+		if _, ok := current.entries[revision]; ok {
+			return true, nil
+		}
+	}
+	if page == nil || len(page.entries) == revisionPageEntries {
 		release := func() {}
 		if memory != nil {
 			var err error
-			release, err = memory.ReserveProgramState(ctx, capacity)
+			release, err = memory.ReserveProgramState(ctx, revisionPageEntries*512)
 			if err != nil {
 				return false, err
 			}
 		}
-		if r.release != nil {
-			r.release()
+		page = &revisionPage{entries: make(map[toolcontract.ExecutionRevision]struct{}, revisionPageEntries), next: page, releases: []func(){release}}
+		r.buckets[index] = page
+	}
+	size := int64(len(revision.Role) + len(revision.Mode) + len(revision.Basis) + len(revision.RootID) + len(revision.Path) + len(revision.DocumentID) + len(revision.DiskSHA256) + len(revision.Representation) + len(revision.ContentSHA256))
+	if memory != nil {
+		release, err := memory.ReserveProgramState(ctx, size+128)
+		if err != nil {
+			return false, err
 		}
-		r.capacity, r.release = capacity, release
+		page.releases = append(page.releases, release)
 	}
-	if r.entries == nil {
-		r.entries = make(map[toolcontract.ExecutionRevision]struct{})
-	}
-	// Own the exact string backing charged above; a sliced path must not keep
-	// a larger caller allocation alive behind a short map key.
 	revision.Role = toolcontract.ExecutionRevisionRole(strings.Clone(string(revision.Role)))
 	revision.Mode = toolcontract.ExecutionRevisionMode(strings.Clone(string(revision.Mode)))
 	revision.Basis = toolcontract.ExecutionRevisionBasis(strings.Clone(string(revision.Basis)))
@@ -54,15 +75,21 @@ func (r *revisionIndex) remember(ctx context.Context, memory *toolcontract.Progr
 	revision.DiskSHA256 = strings.Clone(revision.DiskSHA256)
 	revision.Representation = toolcontract.SourceRepresentation(strings.Clone(string(revision.Representation)))
 	revision.ContentSHA256 = strings.Clone(revision.ContentSHA256)
-	r.entries[revision] = struct{}{}
-	r.used = needed
+	page.entries[revision] = struct{}{}
 	return false, nil
 }
 func (r *revisionIndex) close() {
-	r.entries = nil
+	for _, page := range r.buckets {
+		for page != nil {
+			for _, release := range page.releases {
+				release()
+			}
+			page = page.next
+		}
+	}
+	r.buckets = nil
 	if r.release != nil {
 		r.release()
 		r.release = nil
 	}
-	r.used, r.capacity = 0, 0
 }

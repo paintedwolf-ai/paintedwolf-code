@@ -231,6 +231,8 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 	defer close(job.events)
 	inv := p.invocation
 	inv.ctx, inv.pins, inv.flushedPins, inv.releases = p.ctx, nil, 0, nil
+	inv.pinReleases = nil
+	defer inv.closePins()
 	inv.status = 0
 	writer := &grepFileWriter{sink: &grepEventSink{ctx: p.ctx, events: job.events, buffers: p.buffers}}
 	defer writer.close()
