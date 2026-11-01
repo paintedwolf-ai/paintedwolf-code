@@ -93,7 +93,7 @@ fn steps_stop_at_checkpoint_and_chunk_boundaries() {
     assert_eq!(done.stop_reason, Some(StopReason::MaxTokens));
     assert_eq!(done.token, Some(20));
     assert!(runner.advance(1).is_err());
-    assert!(runner.backend.tokens.is_empty());
+    assert_eq!(runner.backend.tokens, [2, 5, 6, 7, 8, 9, 20, 20]);
 }
 
 #[test]
@@ -213,4 +213,35 @@ fn unretained_request_preserves_the_conversation_checkpoint() {
     assert_eq!(runner.backend.prefix, [2, 5, 6]);
     assert_eq!(runner.begin(request(3), None).unwrap(), 3);
     assert_eq!(runner.backend.tokens, [2, 5, 6]);
+}
+
+#[test]
+fn continuation_reuses_only_tokens_already_evaluated() {
+    let mut runner = executor();
+    runner.begin(request(1), None).unwrap();
+    while runner.advance(1).unwrap().stop_reason.is_none() {}
+    let calls = runner.backend.calls.len();
+    let mut next = request(2);
+    next.prompt_tokens.extend([20, 20, 20, 106, 7]);
+    assert_eq!(runner.begin(next, None).unwrap(), 8);
+    assert_eq!(runner.advance(2).unwrap().reused_prefix_tokens, 8);
+    assert_eq!(runner.backend.calls[calls], [20, 106]);
+    runner.cancel(2).unwrap();
+    assert!(runner.evaluated.is_empty());
+    assert_eq!(runner.begin(request(3), None).unwrap(), 3);
+}
+
+#[test]
+fn changed_continuation_replays_from_the_stable_checkpoint() {
+    let mut runner = executor();
+    runner.begin(request(1), None).unwrap();
+    while runner.advance(1).unwrap().stop_reason.is_none() {}
+    let mut next = request(2);
+    next.prompt_tokens.extend([21, 20, 20, 106, 7]);
+    assert_eq!(runner.begin(next, None).unwrap(), 3);
+    runner.cancel(2).unwrap();
+    runner.clear_prefix().unwrap();
+    assert!(runner.evaluated.is_empty());
+    assert!(runner.backend.tokens.is_empty());
+    assert_eq!(runner.begin(request(3), None).unwrap(), 0);
 }

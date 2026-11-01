@@ -96,6 +96,7 @@ pub struct Executor<B> {
     chunk: usize,
     eos: Vec<u32>,
     prefix: Vec<u32>,
+    evaluated: Vec<u32>,
     active: Option<Generation>,
     last_request: u64,
 }
@@ -116,6 +117,7 @@ impl<B: Backend> Executor<B> {
             chunk,
             eos,
             prefix: Vec::new(),
+            evaluated: Vec::new(),
             active: None,
             last_request: 0,
         })
@@ -156,7 +158,16 @@ impl<B: Backend> Executor<B> {
             && self.prefix.len() < request.prompt_tokens.len()
             && request.prompt_tokens.starts_with(&self.prefix)
             && request.checkpoint_tokens == self.prefix.len();
-        let reused = if matching && self.backend.restore_prefix()? {
+        let continuation = !self.evaluated.is_empty()
+            && self.evaluated.len() < request.prompt_tokens.len()
+            && request.prompt_tokens.starts_with(&self.evaluated);
+        if !continuation {
+            self.evaluated.clear();
+        }
+        let reused = if continuation {
+            self.evaluated.len()
+        } else if matching && self.backend.restore_prefix()? {
+            self.evaluated.clone_from(&self.prefix);
             self.prefix.len()
         } else {
             if matching {
@@ -198,12 +209,11 @@ impl<B: Backend> Executor<B> {
             Ok(progress) => {
                 if progress.stop_reason.is_none() {
                     self.active = Some(generation);
-                } else {
-                    self.backend.reset()?;
                 }
                 Ok(progress)
             }
             Err(error) => {
+                self.evaluated.clear();
                 self.backend.reset()?;
                 self.backend.clear_prefix()?;
                 self.prefix.clear();
@@ -223,6 +233,8 @@ impl<B: Backend> Executor<B> {
                 &g.request.prompt_tokens[g.processed..end],
                 final_chunk.then_some(&mut g.sampling),
             )?;
+            self.evaluated
+                .extend_from_slice(&g.request.prompt_tokens[g.processed..end]);
             g.processed = end;
             if end == g.request.checkpoint_tokens {
                 self.backend.save_prefix()?;
@@ -236,11 +248,12 @@ impl<B: Backend> Executor<B> {
             let previous = g
                 .last_token
                 .ok_or_else(|| Error::Device("missing decode input".into()))?;
-            Some(
-                self.backend
-                    .forward(&[previous], Some(&mut g.sampling))?
-                    .ok_or_else(|| Error::Device("missing sampled token".into()))?,
-            )
+            let next = self
+                .backend
+                .forward(&[previous], Some(&mut g.sampling))?
+                .ok_or_else(|| Error::Device("missing sampled token".into()))?;
+            self.evaluated.push(previous);
+            Some(next)
         };
         let mut token = next;
         let mut stop = None;
@@ -288,6 +301,7 @@ impl<B: Backend> Executor<B> {
             return Err(Error::Protocol("request is not active".into()));
         }
         let generation = self.active.take().unwrap();
+        self.evaluated.clear();
         self.backend.reset()?;
         Ok(Progress {
             request_id,
@@ -303,6 +317,8 @@ impl<B: Backend> Executor<B> {
         if self.active.is_some() {
             return Err(Error::Protocol("a request is active".into()));
         }
+        self.evaluated.clear();
+        self.backend.reset()?;
         self.backend.clear_prefix()?;
         self.prefix.clear();
         Ok(())
