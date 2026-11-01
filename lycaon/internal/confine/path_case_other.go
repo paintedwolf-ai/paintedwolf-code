@@ -84,11 +84,10 @@ func revalidateSocketListener(_ string, _ string, _ os.FileInfo, pinned SocketLi
 
 type socketRelayLease struct{}
 
-func (*socketRelayLease) bindFeed(*refusalFeed)          {}
-func (*socketRelayLease) close()                         {}
-func (*socketRelayLease) refusal() *SocketResolveError   { return nil }
-func ForgetSocketSession(string)                         {}
-func claimCommandSocketRelays(Confinement) func()        { return func() {} }
+func (*socketRelayLease) bindFeed(*refusalFeed)        {}
+func (*socketRelayLease) close()                       {}
+func (*socketRelayLease) refusal() *SocketResolveError { return nil }
+func ForgetSocketSession(string)                       {}
 func openActionSocketRelays(*Confinement, string) (*socketRelayLease, error) {
 	return nil, nil
 }

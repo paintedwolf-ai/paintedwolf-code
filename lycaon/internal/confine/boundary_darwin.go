@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 )
@@ -166,7 +165,7 @@ func openActionSocketRelays(c *Confinement, sessionID string) (*socketRelayLease
 		}
 		g.Listener = effectiveSocketListener(g)
 		relayPath := filepath.Join(dir, fmt.Sprintf("s%d.sock", i))
-		ln, listenErr := net.Listen("unix", relayPath)
+		ln, listenErr := net.ListenUnix("unix", &net.UnixAddr{Name: relayPath, Net: "unix"})
 		if listenErr != nil {
 			lease.close()
 			return nil, fmt.Errorf("listen socket relay: %w", listenErr)
@@ -212,28 +211,27 @@ func handleRelayConn(lease *socketRelayLease, ln net.Listener, clientConn net.Co
 		refuse()
 		return
 	}
-	upstreamConn, err := net.DialTimeout("unix", g.ResolvedPath, 2*time.Second)
-	if err != nil || !lease.trackConn(upstreamConn) {
+	unixConn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: g.ResolvedPath, Net: "unix"})
+	if err != nil || !lease.trackConn(unixConn) {
 		return
 	}
 	defer func() {
-		lease.untrackConn(upstreamConn)
-		_ = upstreamConn.Close()
+		lease.untrackConn(unixConn)
+		_ = unixConn.Close()
 	}()
 	fiAfter, err := os.Lstat(g.ResolvedPath)
-	unixConn, ok := upstreamConn.(*net.UnixConn)
-	if err != nil || !ok || fiAfter.Mode()&os.ModeSocket == 0 || socketHardLinked(fiAfter) || verifyConnectedSocketPeer(unixConn, fiAfter, g) != nil {
+	if err != nil || fiAfter.Mode()&os.ModeSocket == 0 || socketHardLinked(fiAfter) || verifyConnectedSocketPeer(unixConn, fiAfter, g) != nil {
 		refuse()
 		return
 	}
 	done := make(chan struct{}, 2)
 	go func() {
-		_, _ = io.Copy(upstreamConn, clientConn)
+		_, _ = io.Copy(unixConn, clientConn)
 		_ = unixConn.CloseWrite()
 		done <- struct{}{}
 	}()
 	go func() {
-		_, _ = io.Copy(clientConn, upstreamConn)
+		_, _ = io.Copy(clientConn, unixConn)
 		if uc, ok := clientConn.(*net.UnixConn); ok {
 			_ = uc.CloseWrite()
 		}
