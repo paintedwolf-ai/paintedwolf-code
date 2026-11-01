@@ -46,6 +46,9 @@ func (s *Store) importRevision(ctx context.Context, signed SignedManifest, sourc
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if repair && s.reusableArtifact(ctx, a) {
+			continue
+		}
 		reader, err := source(ctx, a)
 		if err != nil {
 			return err
@@ -121,4 +124,19 @@ func (s *Store) pinImport(m Manifest, repair bool) ([]*os.File, error) {
 		}
 	}
 	return pins, nil
+}
+
+// Reuse requires content verification while the import holds its collection pin.
+func (s *Store) reusableArtifact(ctx context.Context, artifact Artifact) bool {
+	root, err := s.openRoot()
+	if err != nil {
+		return false
+	}
+	defer root.Close()
+	name := s.artifactRel(artifact.Digest)
+	info, err := root.Lstat(name)
+	if err != nil || info.Mode().Perm()&0o222 != 0 {
+		return false
+	}
+	return auditFile(ctx, root, name, artifact) == nil
 }
