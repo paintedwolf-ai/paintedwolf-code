@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 from pathlib import Path, PurePosixPath
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import urllib.request
@@ -35,13 +36,27 @@ def unpack(archive, destination):
                 target.chmod(0o755 if member.mode & 0o111 else 0o644)
 
 
+def source_identity(pin):
+    patches = pin.get("patches", [])
+    if not patches:
+        return pin["sha256"]
+    digest = hashlib.sha256(pin["sha256"].encode())
+    for patch in patches:
+        path = Path(__file__).parent / patch["path"]
+        if hashlib.sha256(path.read_bytes()).hexdigest() != patch["sha256"]:
+            raise ValueError("runtime patch digest mismatch")
+        digest.update(bytes.fromhex(patch["sha256"]))
+    return digest.hexdigest()
+
+
 def ensure_source(pin, cache):
     cache.mkdir(parents=True, exist_ok=True)
-    destination = cache / pin["sha256"]
-    with (cache / (pin["sha256"] + ".lock")).open("a") as lock:
+    identity = source_identity(pin)
+    destination = cache / identity
+    with (cache / (identity + ".lock")).open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if (destination / ".source-sha256").is_file():
-            if (destination / ".source-sha256").read_text().strip() != pin["sha256"]:
+            if (destination / ".source-sha256").read_text().strip() != identity:
                 raise ValueError("runtime source cache identity mismatch")
             return destination
         with tempfile.TemporaryDirectory(prefix=".source-", dir=cache) as temporary:
@@ -60,6 +75,9 @@ def ensure_source(pin, cache):
             tree = temporary / "tree"
             tree.mkdir()
             unpack(archive, tree)
-            (tree / ".source-sha256").write_text(pin["sha256"] + "\n")
+            for patch in pin.get("patches", []):
+                subprocess.run(["patch", "--batch", "--forward", "--fuzz=0", "-p1", "-i",
+                                str(Path(__file__).parent / patch["path"])], cwd=tree, check=True)
+            (tree / ".source-sha256").write_text(identity + "\n")
             tree.rename(destination)
     return destination

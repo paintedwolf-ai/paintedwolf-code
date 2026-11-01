@@ -9,6 +9,11 @@ let
     pname = "painted-wolf-generation-llama-source";
     version = pin.revision;
     src = fetchurl { name = "llama-${pin.revision}.tar.gz"; inherit (pin) url sha256; };
+    patches = map (patch:
+      let path = source + "/scripts/generation/${patch.path}";
+      in assert builtins.hashFile "sha256" path == patch.sha256; path
+    ) pin.patches;
+    patchFlags = [ "-p1" "--fuzz=0" ];
     meta.license = lib.licenses.mit;
     dontConfigure = true;
     dontBuild = true;
