@@ -42,12 +42,17 @@ impl Plan {
         } else {
             0
         };
-        let workspace_bytes = (768 << 20) + growth;
+        let workspace_floor = if unified {
+            (384 << 20).max(chunk as u64 * (3 << 20))
+        } else {
+            768 << 20
+        };
+        let workspace_bytes = workspace_floor + growth;
         let allocator_cache_bytes = if unified { 128 << 20 } else { 0 };
         let device_reservation_bytes =
             weights + kv_capacity_bytes + workspace_bytes + allocator_cache_bytes;
         // Tokenizer, grammar compilation, IPC and mapped rows share host memory.
-        let host_reservation_bytes = 768 << 20;
+        let host_reservation_bytes = if unified { 512 << 20 } else { 768 << 20 };
         Ok(Self {
             resident_weights_bytes: weights,
             mapped_ple_bytes: mapped,
@@ -63,6 +68,18 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mlx_workspace_scales_with_chunk_and_retains_growth_overlap() {
+        let small = Plan::e4b(2787934208, 2290089984, 8192, 128, true).unwrap();
+        let large = Plan::e4b(2787934208, 2290089984, 8192, 256, true).unwrap();
+        assert_eq!(small.workspace_bytes, 512 << 20);
+        assert_eq!(large.workspace_bytes, 896 << 20);
+        assert_eq!(small.host_reservation_bytes, 512 << 20);
+        assert!(small.device_reservation_bytes + small.host_reservation_bytes + (2 << 30) < 6 << 30);
+        let tiny = Plan::e4b(2787934208, 2290089984, 8192, 1, true).unwrap();
+        assert_eq!(tiny.workspace_bytes, small.workspace_bytes);
+    }
+
     #[test]
     fn accounts_for_prefix_and_growth_without_charging_the_entire_mapping() {
         let linux = Plan::e4b(3 << 30, 2 << 30, 65536, 256, false).unwrap();

@@ -17,22 +17,14 @@ type StaticModelRouter struct {
 	scope        SettingsScope
 	projectDir   string
 	projectDirs  []string
-	localDefault bool
+	localDefault func() bool
 }
 
 // WithLocalDefault enables bundled local-model fallback for unset coordinator and lite roles.
-func (r *StaticModelRouter) WithLocalDefault(localAvailable bool) *StaticModelRouter {
+func (r *StaticModelRouter) WithLocalDefault(localAvailable func() bool) *StaticModelRouter {
 	cp := *r
 	cp.localDefault = localAvailable
 	return &cp
-}
-
-// SetLocalDefault updates whether unset coordinator and lite roles fall back to the bundled local model.
-func (r *StaticModelRouter) SetLocalDefault(localAvailable bool) {
-	if r == nil {
-		return
-	}
-	r.localDefault = localAvailable
 }
 
 // NewStaticModelRouter constructs a router bound to the policy store.
@@ -42,11 +34,10 @@ func NewStaticModelRouter(policy *PolicyStore) *StaticModelRouter {
 	pool := NewPoolSelector(p)
 	pools.Store(string(SettingsScopeGlobal)+"\x00", pool)
 	return &StaticModelRouter{
-		policy:       policy,
-		pool:         pool,
-		pools:        pools,
-		scope:        SettingsScopeGlobal,
-		localDefault: IncludedProviderAvailable(),
+		policy: policy,
+		pool:   pool,
+		pools:  pools,
+		scope:  SettingsScopeGlobal,
 	}
 }
 
@@ -118,7 +109,7 @@ func (r *StaticModelRouter) Coordinator(ctx context.Context) (*ModelSelection, e
 	if err != nil {
 		return nil, err
 	}
-	ref := CoordinatorRefWithLocalDefault(p, r.localDefault)
+	ref := CoordinatorRefWithLocalDefault(p, r.localDefault != nil && r.localDefault())
 	return selectionFromRef(ref, ModelRoleCoordinator, false), nil
 }
 
@@ -131,7 +122,7 @@ func (r *StaticModelRouter) Lite(ctx context.Context) (*ModelSelection, error) {
 	if err != nil {
 		return nil, err
 	}
-	ref := SummarizerRefWithLocalDefault(p, r.localDefault)
+	ref := SummarizerRefWithLocalDefault(p, r.localDefault != nil && r.localDefault())
 	return selectionFromRef(ref, ModelRoleLite, false), nil
 }
 

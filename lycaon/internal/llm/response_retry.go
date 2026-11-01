@@ -437,6 +437,6 @@ func (p *responseRetryProvider) admitEmptyResponseRecovery(ctx context.Context, 
 	}
 	budget.MinimumOutput = max(budget.MinimumOutput, modelcall.MinimumCompletionOutput(req))
 	reserve := max(budget.Output, budget.MinimumOutput)
-	return budget.Window > 0 && budget.Input > 0 && reserve > 0 && budget.Headroom >= 0 &&
+	return budget.Err == nil && budget.Window > 0 && budget.Input > 0 && reserve > 0 && budget.Headroom >= 0 &&
 		budget.Output >= budget.MinimumOutput && budget.Input+reserve+budget.Headroom <= budget.Window
 }

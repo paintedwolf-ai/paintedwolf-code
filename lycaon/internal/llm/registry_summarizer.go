@@ -164,7 +164,7 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 }
 
 func (r *RegistrySummarizer) localDefaultAvailable() bool {
-	return r != nil && r.Registry != nil && r.Registry.IsConfigured(IncludedProviderID)
+	return r != nil && r.Registry != nil && r.Registry.IncludedModelAvailable()
 }
 
 func (r *RegistrySummarizer) coordinatorProvider() (modelcall.Provider, string, error) {

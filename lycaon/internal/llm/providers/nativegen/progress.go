@@ -12,6 +12,7 @@ type progressCursor struct {
 	chunk     int
 	cancel    bool
 	terminal  bool
+	schema    bool
 }
 
 // validate settles one bounded step before its device permit is returned.
@@ -41,7 +42,7 @@ func (r *progressResult) validate() error {
 			return invalid
 		}
 		switch stop {
-		case "eos", "stop_token":
+		case "eos":
 			if p.Token != nil {
 				return invalid
 			}
@@ -50,7 +51,7 @@ func (r *progressResult) validate() error {
 				return invalid
 			}
 		case "structured_output":
-			if p.Token == nil {
+			if p.Token == nil || !e.schema {
 				return invalid
 			}
 		case "":

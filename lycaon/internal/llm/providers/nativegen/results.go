@@ -8,11 +8,12 @@ import (
 )
 
 type helloResult struct {
-	Kind           string                   `json:"kind"`
-	Protocol       uint32                   `json:"protocol"`
-	Backend        string                   `json:"backend"`
-	ArtifactID     string                   `json:"artifact_id"`
-	PhysicalDevice inference.PhysicalDevice `json:"physical_device"`
+	Kind            string                   `json:"kind"`
+	QuiescentMemory bool                     `json:"quiescent_memory"`
+	Protocol        uint32                   `json:"protocol"`
+	Backend         string                   `json:"backend"`
+	ArtifactID      string                   `json:"artifact_id"`
+	PhysicalDevice  inference.PhysicalDevice `json:"physical_device"`
 }
 
 type resourcePlan struct {
@@ -41,39 +42,10 @@ func (p resourcePlan) validate() error {
 		}
 		total += bytes
 	}
-	if total != p.DeviceReservationBytes {
+	if total != p.DeviceReservationBytes || p.HostReservationBytes > math.MaxUint64-total {
 		return errors.New("native generation: inconsistent memory plan")
 	}
 	return nil
-}
-
-func (p resourcePlan) reserve(host, device *inference.MemoryBudget) ([]*inference.Reservation, error) {
-	if err := p.validate(); err != nil {
-		return nil, err
-	}
-	if host == nil || device == nil {
-		return nil, errors.New("native generation: memory admission is unavailable")
-	}
-	if host == device {
-		if p.HostReservationBytes > math.MaxUint64-p.DeviceReservationBytes {
-			return nil, inference.ErrCapacity
-		}
-		reservation, err := host.Reserve(p.HostReservationBytes + p.DeviceReservationBytes)
-		if err != nil {
-			return nil, err
-		}
-		return []*inference.Reservation{reservation}, nil
-	}
-	hostReservation, err := host.Reserve(p.HostReservationBytes)
-	if err != nil {
-		return nil, err
-	}
-	deviceReservation, err := device.Reserve(p.DeviceReservationBytes)
-	if err != nil {
-		hostReservation.Release()
-		return nil, err
-	}
-	return []*inference.Reservation{hostReservation, deviceReservation}, nil
 }
 
 type samplingDefaults struct {

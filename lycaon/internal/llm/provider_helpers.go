@@ -181,11 +181,12 @@ func PlatformsSupportedHere(platforms []string) bool {
 type ProviderProtocol string
 
 const (
-	ProtocolOpenAICompat ProviderProtocol = "openai_compatible"
-	ProtocolAnthropic    ProviderProtocol = "anthropic_messages"
-	ProtocolOllama       ProviderProtocol = "ollama_chat"
-	ProtocolBedrock      ProviderProtocol = "bedrock_converse"
-	ProtocolGeminiNative ProviderProtocol = "gemini_generate_content"
+	ProtocolOpenAICompat     ProviderProtocol = "openai_compatible"
+	ProtocolAnthropic        ProviderProtocol = "anthropic_messages"
+	ProtocolOllama           ProviderProtocol = "ollama_chat"
+	ProtocolNativeGeneration ProviderProtocol = "native_generation"
+	ProtocolBedrock          ProviderProtocol = "bedrock_converse"
+	ProtocolGeminiNative     ProviderProtocol = "gemini_generate_content"
 )
 
 type ProviderKindSpec struct {
@@ -213,6 +214,7 @@ func azureV1Base(raw string) string {
 }
 
 var providerKindSpecs = map[string]ProviderKindSpec{
+	"nativegen":             {Kind: "nativegen", Protocol: ProtocolNativeGeneration, ChatBaseURL: func(string) string { return "" }},
 	"cerebras":              {Kind: "cerebras", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"mistral":               {Kind: "mistral", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"scaleway":              {Kind: "scaleway", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
@@ -237,6 +239,9 @@ var providerKindSpecs = map[string]ProviderKindSpec{
 
 func ValidateProviderProtocolBase(kind, raw string) error {
 	spec, exists := providerKindSpecs[strings.TrimSpace(kind)]
+	if exists && spec.Protocol == ProtocolNativeGeneration && strings.TrimSpace(raw) != "" {
+		return fmt.Errorf("native generation does not accept a network endpoint")
+	}
 	if !exists || !spec.ResourceRootOnly {
 		return nil
 	}

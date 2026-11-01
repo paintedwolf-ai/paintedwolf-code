@@ -10,6 +10,11 @@ struct Tensor {
 }
 
 pub fn safetensors(path: &Path) -> Result<(u64, u64)> {
+    let (values, payload) = read_header(path)?;
+    inventory_values(values, payload)
+}
+
+pub fn read_header(path: &Path) -> Result<(BTreeMap<String, serde_json::Value>, u64)> {
     let mut file = File::open(path)?;
     let metadata = file.metadata()?;
     if !metadata.is_file() || metadata.len() > 64 << 30 {
@@ -23,12 +28,21 @@ pub fn safetensors(path: &Path) -> Result<(u64, u64)> {
     }
     let mut header = vec![0; size as usize];
     file.read_exact(&mut header)?;
-    inventory(&header, metadata.len() - size - 8)
+    let values = serde_json::from_slice(&header).map_err(|_| invalid())?;
+    Ok((values, metadata.len() - size - 8))
 }
 
+#[cfg(test)]
 fn inventory(header: &[u8], payload: u64) -> Result<(u64, u64)> {
-    let mut values: BTreeMap<String, serde_json::Value> =
+    let values: BTreeMap<String, serde_json::Value> =
         serde_json::from_slice(header).map_err(|_| invalid())?;
+    inventory_values(values, payload)
+}
+
+fn inventory_values(
+    mut values: BTreeMap<String, serde_json::Value>,
+    payload: u64,
+) -> Result<(u64, u64)> {
     values.remove("__metadata__");
     if values.is_empty() || values.len() > 2048 {
         return Err(invalid());

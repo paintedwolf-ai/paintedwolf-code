@@ -1,4 +1,4 @@
-use super::{Cache, Model};
+use super::{Cache, Logits, Model};
 use crate::{
     error::{Error, Result},
     execution::{Backend, Sampling},
@@ -15,10 +15,13 @@ pub struct Mlx {
     cache: Cache,
     prefix: Option<Cache>,
     budget: usize,
+    idle_budget: usize,
 }
 
 impl Mlx {
-    pub fn load(directory: &Path, budget: usize) -> Result<Self> {
+    pub fn load(directory: &Path, context: usize, chunk: usize, budget: usize) -> Result<Self> {
+        let plan = Self::plan(directory, context, chunk)?;
+        let idle_budget = (plan.device_reservation_bytes - plan.workspace_bytes) as usize;
         memory::set_memory_limit(budget).map_err(device_error)?;
         memory::set_cache_limit(128 << 20).map_err(device_error)?;
         memory::reset_peak_memory().map_err(device_error)?;
@@ -27,46 +30,36 @@ impl Mlx {
             cache: Cache::default(),
             prefix: None,
             budget,
+            idle_budget,
         };
         engine.completed(None)?;
+        engine.quiescent()?;
         Ok(engine)
     }
 
-    fn completed(&self, token: Option<u32>) -> Result<Option<u32>> {
-        if self.allocated_bytes()? > self.budget
-            || memory::peak_memory().map_err(device_error)? > self.budget
-        {
-            return Err(device_error("execution exceeded its memory reservation"));
+    fn quiescent(&self) -> Result<()> {
+        // Both default streams may hold buffers after evaluated arrays are dropped.
+        for stream in [mlx_rs::Stream::cpu(), mlx_rs::Stream::gpu()] {
+            if unsafe { mlx_sys::mlx_synchronize(stream.as_ptr()) } != 0 {
+                return Err(device_error("stream synchronization failed"));
+            }
         }
-        Ok(token)
+        if self.allocated_bytes()? > self.idle_budget {
+            memory::clear_cache().map_err(device_error)?;
+        }
+        if self.allocated_bytes()? > self.idle_budget {
+            return Err(device_error(
+                "idle allocation exceeded its resident reservation",
+            ));
+        }
+        Ok(())
     }
 
-    pub fn allocated_bytes(&self) -> Result<usize> {
-        Ok(memory::active_memory().map_err(device_error)?
-            + memory::cache_memory().map_err(device_error)?)
-    }
-
-    pub fn cache_bytes(&self) -> usize {
-        self.cache.bytes() + self.prefix.as_ref().map_or(0, Cache::bytes)
-    }
-}
-
-impl Backend for Mlx {
-    fn plan(directory: &Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
-        let config =
-            super::config::read(directory).map_err(|e| Error::Checkpoint(e.to_string()))?;
-        let bits = super::weights::quantization_bits(
-            &config["quantization"],
-            "model.embed_tokens_per_layer",
-        )
-        .map_err(|e| Error::Checkpoint(e.to_string()))?;
-        super::ple::MappedPLE::open(&directory.join("model.safetensors"), bits)
-            .map_err(|e| Error::Checkpoint(e.to_string()))?;
-        let (weights, mapped) =
-            crate::tensor_inventory::safetensors(&directory.join("model.safetensors"))?;
-        crate::resources::Plan::e4b(weights, mapped, context, chunk, true)
-    }
-    fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
+    fn evaluate_step(
+        &mut self,
+        tokens: &[u32],
+        sampling: Option<&mut Sampling>,
+    ) -> Result<Option<u32>> {
         if tokens.iter().any(|token| *token >= 262144) {
             return Err(device_error("invalid input token"));
         }
@@ -74,7 +67,7 @@ impl Backend for Mlx {
         let ids: Vec<_> = tokens.iter().map(|token| *token as i32).collect();
         let logits = self
             .model
-            .forward(&ids, &mut self.cache)
+            .forward(&ids, &mut self.cache, Logits::Last)
             .map_err(device_error)?;
         let Some(sampling) = sampling else {
             self.cache.evaluate().map_err(device_error)?;
@@ -101,9 +94,54 @@ impl Backend for Mlx {
         }
     }
 
+    fn completed(&self, token: Option<u32>) -> Result<Option<u32>> {
+        if self.allocated_bytes()? > self.budget
+            || memory::peak_memory().map_err(device_error)? > self.budget
+        {
+            return Err(device_error("execution exceeded its memory reservation"));
+        }
+        Ok(token)
+    }
+
+    pub fn allocated_bytes(&self) -> Result<usize> {
+        Ok(memory::active_memory().map_err(device_error)?
+            + memory::cache_memory().map_err(device_error)?)
+    }
+
+    pub fn cache_bytes(&self) -> usize {
+        self.cache.bytes() + self.prefix.as_ref().map_or(0, Cache::bytes)
+    }
+}
+
+impl Backend for Mlx {
+    fn plan(directory: &Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
+        let config =
+            super::config::read(directory).map_err(|e| Error::Checkpoint(e.to_string()))?;
+        super::layout::validate(
+            &directory.join("model.safetensors"),
+            &config["quantization"],
+        )
+        .map_err(|e| Error::Checkpoint(e.to_string()))?;
+        let bits = super::weights::quantization_bits(
+            &config["quantization"],
+            "model.embed_tokens_per_layer",
+        )
+        .map_err(|e| Error::Checkpoint(e.to_string()))?;
+        super::ple::MappedPLE::open(&directory.join("model.safetensors"), bits)
+            .map_err(|e| Error::Checkpoint(e.to_string()))?;
+        let (weights, mapped) =
+            crate::tensor_inventory::safetensors(&directory.join("model.safetensors"))?;
+        crate::resources::Plan::e4b(weights, mapped, context, chunk, true)
+    }
+    fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
+        let token = self.evaluate_step(tokens, sampling)?;
+        self.quiescent()?;
+        Ok(token)
+    }
+
     fn reset(&mut self) -> Result<()> {
         self.cache = Cache::default();
-        Ok(())
+        self.quiescent()
     }
 
     fn save_prefix(&mut self) -> Result<()> {
@@ -128,6 +166,6 @@ impl Backend for Mlx {
 
     fn clear_prefix(&mut self) -> Result<()> {
         self.prefix = None;
-        Ok(())
+        self.quiescent()
     }
 }

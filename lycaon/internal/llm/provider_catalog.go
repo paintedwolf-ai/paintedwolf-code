@@ -2,7 +2,6 @@ package llm
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,63 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"gopkg.in/yaml.v3"
 )
-
-const (
-	// IncludedProviderID identifies the bundled local inference provider.
-	IncludedProviderID = "nativegen"
-	// IncludedProviderLabel is the display label for the bundled local provider.
-	IncludedProviderLabel = "Painted Wolf Code (included)"
-	// IncludedModelID is the bundled custom Gemma 4 E4B model identifier.
-	IncludedModelID = "gemma4-e4b-paintedwolf"
-	// IncludedContextWindowTokens is the single fixed context window for the bundled local model.
-	IncludedContextWindowTokens = 65536
-)
-
-// ErrCannotRemoveIncludedProvider rejects deletion of the bundled local provider.
-var ErrCannotRemoveIncludedProvider = errors.New("included provider cannot be removed")
-
-// IsIncludedProvider reports whether id names the bundled local provider.
-func IsIncludedProvider(id string) bool {
-	return strings.TrimSpace(id) == IncludedProviderID
-}
-
-// IncludedProviderEntry returns the catalog definition for the bundled local provider.
-func IncludedProviderEntry() ProviderEntry {
-	requiresKey := false
-	return ProviderEntry{
-		ID:             IncludedProviderID,
-		Kind:           IncludedProviderID,
-		Label:          IncludedProviderLabel,
-		EndpointStyle:  EndpointStyleDerived,
-		RequiresAPIKey: &requiresKey,
-		LocalFree:      true,
-		Platforms:      []string{"darwin/arm64"},
-		Models: []modelinfo.Entry{
-			{
-				ID:            IncludedModelID,
-				ContextLength: IncludedContextWindowTokens,
-				MaxTokens:     4096,
-			},
-		},
-	}
-}
-
-// IncludedProviderAvailable reports whether the bundled local provider is available on this host.
-func IncludedProviderAvailable() bool {
-	entry := IncludedProviderEntry()
-	if !PlatformsSupportedHere(entry.Platforms) {
-		return false
-	}
-	if strings.TrimSpace(os.Getenv("LYCAON_NATIVEGEN_BIN")) != "" || strings.TrimSpace(os.Getenv("LYCAON_NATIVEGEN_MODEL_DIR")) != "" {
-		return true
-	}
-	if root := strings.TrimSpace(os.Getenv("LYCAON_MODELSTORE_ROOT")); root != "" {
-		if info, err := os.Stat(filepath.Join(root, "active.json")); err == nil && !info.IsDir() {
-			return true
-		}
-	}
-	return false
-}
 
 // CatalogEntry is a live AI provider instance (from providers.local.yaml).
 type CatalogEntry struct {
@@ -160,6 +102,7 @@ type ProviderCatalog struct {
 	mu         sync.RWMutex
 	mutationMu sync.Mutex
 	localPath  string
+	included   bool
 	templates  *catalogruntime.Catalog[ProviderEntry]
 	entries    *catalogruntime.Catalog[CatalogEntry]
 	capacity   CapacityPolicy
@@ -182,7 +125,11 @@ func NewProviderCatalog() (*ProviderCatalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewProviderCatalogAt(localPath)
+	c := &ProviderCatalog{localPath: localPath, included: PlatformsSupportedHere(IncludedProviderEntry().Platforms)}
+	if err := c.Reload(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // Reload reads templates and local instances.
@@ -270,7 +217,7 @@ func (c *ProviderCatalog) Reload() error {
 			ID: entry.ID, Spec: entry,
 		})
 	}
-	if !hasIncluded && IncludedProviderAvailable() {
+	if !hasIncluded && c.included {
 		entry, err := resolveLocalEntry(IncludedProviderEntry(), shipByKind)
 		if err != nil {
 			return err
@@ -700,18 +647,6 @@ func (c *ProviderCatalog) Put(entry ProviderEntry) error {
 		return err
 	}
 	return replacePrivateConfig(c.localPath, data)
-}
-
-// InstallIncludedProvider persists and reloads the bundled local provider definition.
-func (c *ProviderCatalog) InstallIncludedProvider(baseURL string) error {
-	entry := IncludedProviderEntry()
-	if trimmed := strings.TrimSpace(baseURL); trimmed != "" {
-		entry.BaseURL = trimmed
-	}
-	if err := c.Put(entry); err != nil {
-		return err
-	}
-	return c.Reload()
 }
 
 func providerEntryKind(entry ProviderEntry) string {

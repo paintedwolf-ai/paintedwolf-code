@@ -90,9 +90,8 @@ func TestPrepareRenderRefusesIncompleteHistoryAndUnknownFormats(t *testing.T) {
 }
 
 func TestRequestBudgetUsesRuntimeWindowAndNativeOutputReserve(t *testing.T) {
-	runtime := NewRuntime(RuntimeConfig{ContextLimit: 8192})
-	t.Cleanup(func() { _ = runtime.Close() })
-	provider := New("local", Options{Runtime: runtime})
+	provider, runtime := fixtureProvider(t)
+	runtime.config.ContextLimit = 8192
 	for _, requested := range []int{0, 1024, 99999} {
 		req := modelcall.CompletionRequest{MaxTokens: requested}
 		budget := provider.RequestBudget(t.Context(), req)
@@ -100,7 +99,7 @@ func TestRequestBudgetUsesRuntimeWindowAndNativeOutputReserve(t *testing.T) {
 		if requested > 0 {
 			want = min(requested, MaxOutputReserveTokens)
 		}
-		if budget.Window != 8192 || budget.Output != want {
+		if budget.Err != nil || !budget.Exact || budget.Input != 3 || budget.Headroom != 0 || budget.Window != 8192 || budget.Output != want {
 			t.Fatalf("request %d budget = %+v", requested, budget)
 		}
 	}

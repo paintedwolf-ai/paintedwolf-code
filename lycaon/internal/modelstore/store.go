@@ -139,17 +139,6 @@ type Store struct {
 	mu sync.Mutex
 }
 
-// DefaultRoot returns the host model store directory.
-func DefaultRoot() string {
-	if dir := os.Getenv("LYCAON_MODEL_STORE_DIR"); dir != "" {
-		return dir
-	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		return filepath.Join(home, ".local", "share", "lycaon", "models")
-	}
-	return filepath.Join(os.TempDir(), "lycaon-models")
-}
-
 func New(root string, signer Signer) *Store {
 	return &Store{
 		root:      root,

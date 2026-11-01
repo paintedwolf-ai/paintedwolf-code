@@ -28,6 +28,9 @@ pub enum Command {
         device_budget_bytes: u64,
         host_budget_bytes: u64,
     },
+    Measure {
+        request: RenderRequest,
+    },
     Render {
         request: RenderRequest,
         max_prompt_tokens: usize,
@@ -51,6 +54,7 @@ pub enum Command {
 pub enum Output {
     Hello {
         protocol: u32,
+        quiescent_memory: bool,
         backend: &'static str,
         artifact_id: String,
         physical_device: PhysicalDevice,
@@ -62,6 +66,10 @@ pub enum Output {
         context_tokens: usize,
         prefill_chunk: usize,
         sampling: super::settings::SamplingDefaults,
+    },
+    Measured {
+        #[serde(flatten)]
+        measured: crate::rendering::Measurement,
     },
     Rendered {
         #[serde(flatten)]

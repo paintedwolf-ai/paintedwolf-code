@@ -14,6 +14,7 @@ func runtimeFixture() {
 	}
 	var active beginRequest
 	generated := 0
+	measured := 0
 	for {
 		payload, err := readProtocolFrame(os.Stdin)
 		if err != nil {
@@ -31,9 +32,23 @@ func runtimeFixture() {
 		case "hello":
 			result = map[string]any{"kind": "hello", "protocol": 1, "artifact_id": artifact, "backend": "vulkan", "physical_device": map[string]string{"kind": "pci", "address": "0000:03:00.0"}}
 		case "inspect":
-			result = map[string]any{"kind": "resources", "plan": resourcePlan{ResidentWeightsBytes: 128 << 20, MappedPLEBytes: 2 << 30, KVCapacityBytes: 64 << 20, WorkspaceBytes: 64 << 20, DeviceReservationBytes: 256 << 20, HostReservationBytes: startupHostBytes}}
+			plan := resourcePlan{ResidentWeightsBytes: 128 << 20, MappedPLEBytes: 2 << 30, KVCapacityBytes: 64 << 20, WorkspaceBytes: 64 << 20, DeviceReservationBytes: 256 << 20, HostReservationBytes: 768 << 20}
+			if os.Getenv("PW_NATIVEGEN_SMALL_HOST_PLAN") == "1" {
+				plan.HostReservationBytes = 512 << 20
+			}
+			if os.Getenv("PW_NATIVEGEN_CONTEXT_PLAN") == "1" {
+				plan.KVCapacityBytes = uint64(request.Command.ContextTokens) * (16 << 10)
+				plan.DeviceReservationBytes = plan.ResidentWeightsBytes + plan.WorkspaceBytes + plan.KVCapacityBytes
+			}
+			result = map[string]any{"kind": "resources", "plan": plan}
 		case "load":
 			result = map[string]any{"kind": "loaded", "context_tokens": request.Command.ContextTokens, "prefill_chunk": request.Command.PrefillChunk, "sampling": samplingDefaults{Temperature: 0, TopP: 1}}
+		case "measure":
+			measured++
+			if measured > 1 && os.Getenv("PW_NATIVEGEN_MEASURE_ONCE") == "1" {
+				return
+			}
+			result = map[string]any{"kind": "measured", "input_tokens": 3, "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
 		case "render":
 			result = map[string]any{"kind": "rendered", "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
 		case "begin":
@@ -44,6 +59,11 @@ func runtimeFixture() {
 			generated = 0
 			result = map[string]any{"kind": "begun", "request_id": active.RequestID, "reused_prefix_tokens": 0}
 		case "advance", "cancel":
+			fault := os.Getenv("PW_NATIVEGEN_RESPONSE_FAULT")
+			if request.Command.Method == "advance" && (fault == "before_output" || fault == "after_output" && generated > 0) {
+				_, _ = os.Stdout.Write([]byte{0, 0})
+				return
+			}
 			text := ""
 			var token *uint32
 			var stop *string
@@ -52,7 +72,7 @@ func runtimeFixture() {
 				stop = &value
 			} else {
 				generated++
-				if generated == 1 {
+				if generated == 1 && fault != "empty_eos" {
 					value := uint32(236812)
 					token, text = &value, "4"
 					if active.MaxNewTokens == 1 {

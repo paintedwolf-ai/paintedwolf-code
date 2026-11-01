@@ -5,6 +5,7 @@ mod activation;
 pub mod backend;
 mod cache;
 mod config;
+mod layout;
 mod ple;
 mod weights;
 
@@ -14,6 +15,11 @@ use ple::MappedPLE;
 use weights::{Linear, Weights};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+pub enum Logits {
+    All,
+    Last,
+}
 
 fn norm(x: &Array, weight: &Array) -> Result<Array> {
     Ok(fast::rms_norm(x, Some(weight), 1e-6)?)
@@ -58,6 +64,13 @@ struct Attention {
     k_norm: Option<Array>,
 }
 
+struct AttentionStep<'a> {
+    layer: usize,
+    query_offset: i32,
+    source_tokens: i32,
+    mask: Option<&'a Array>,
+}
+
 impl Attention {
     fn load(w: &mut Weights, prefix: &str, layer: usize) -> Result<Self> {
         Ok(Self {
@@ -82,13 +95,8 @@ impl Attention {
         })
     }
 
-    fn forward(
-        &self,
-        x: &Array,
-        layer: usize,
-        cache: &mut Cache,
-        mask: Option<&Array>,
-    ) -> Result<Array> {
+    fn forward(&self, x: &Array, cache: &mut Cache, step: &AttentionStep<'_>) -> Result<Array> {
+        let layer = step.layer;
         let sliding = layer % 6 != 5;
         let dimension = if sliding { 256 } else { 512 };
         let count = x.shape()[1];
@@ -96,7 +104,11 @@ impl Attention {
             &self.q.forward(x)?.reshape(&[1, count, 8, dimension])?,
             &self.q_norm,
         )?;
-        let q = rotary(&q.transpose_axes(&[0, 2, 1, 3])?, sliding, cache.offset)?;
+        let q = rotary(
+            &q.transpose_axes(&[0, 2, 1, 3])?,
+            sliding,
+            step.query_offset,
+        )?;
         let kv = if let (Some(k), Some(v), Some(kn)) = (&self.k, &self.v, &self.k_norm) {
             let k = norm(&k.forward(x)?.reshape(&[1, count, 2, dimension])?, kn)?;
             let k = rotary(&k.transpose_axes(&[0, 2, 1, 3])?, sliding, cache.offset)?;
@@ -107,10 +119,10 @@ impl Attention {
             )?;
             cache.update(layer, k, v.transpose_axes(&[0, 2, 1, 3])?)?
         } else {
-            cache.get(if sliding { 22 } else { 23 }, count)?
+            cache.get(if sliding { 22 } else { 23 }, step.source_tokens)?
         };
         let masking = if sliding {
-            mask.map(fast::ScaledDotProductAttentionMask::Array)
+            step.mask.map(fast::ScaledDotProductAttentionMask::Array)
         } else {
             (count > 1).then_some(fast::ScaledDotProductAttentionMask::Causal)
         };
@@ -162,14 +174,13 @@ impl Layer {
         &self,
         x: &Array,
         ple: &Array,
-        i: usize,
         cache: &mut Cache,
-        mask: Option<&Array>,
+        step: &AttentionStep<'_>,
         activation: &Activation,
     ) -> Result<Array> {
         let h = norm(x, &self.input_norm)?;
         let x = x.add(norm(
-            &self.attention.forward(&h, i, cache, mask)?,
+            &self.attention.forward(&h, cache, step)?,
             &self.attention_norm,
         )?)?;
         let h = norm(&x, &self.feedforward_norm)?;
@@ -203,6 +214,8 @@ impl Model {
         let quantization = config["quantization"].clone();
         let bits = weights::quantization_bits(&quantization, "model.embed_tokens_per_layer")?;
         let path = directory.join("model.safetensors");
+        crate::tensor_inventory::safetensors(&path)?;
+        layout::validate(&path, &quantization)?;
         let ple = MappedPLE::open(&path, bits)?;
         let mut weights = Weights::load(&path, quantization)?;
         Ok(Self {
@@ -218,7 +231,7 @@ impl Model {
         })
     }
 
-    pub fn forward(&self, ids: &[i32], cache: &mut Cache) -> Result<Array> {
+    pub fn forward(&self, ids: &[i32], cache: &mut Cache, output: Logits) -> Result<Array> {
         if ids.is_empty()
             || ids.len() > 256
             || ids.iter().any(|id| !(0..262144).contains(id))
@@ -244,15 +257,29 @@ impl Model {
                 &[count, old + count],
             )
         });
+        let last_mask = mask.as_ref().map(|mask| mask.index((count - 1..count, ..)));
         for (i, layer) in self.layers.iter().enumerate() {
-            h = layer.forward(
-                &h,
-                &ple.index((.., .., i as i32, ..)),
-                i,
-                cache,
-                mask.as_ref(),
-                &self.activation,
-            )?;
+            let last_only = i >= 24 && matches!(output, Logits::Last);
+            if i == 24 && last_only {
+                // Shared-KV layers need only the query whose logits will be sampled.
+                h = h.index((.., count - 1..count, ..));
+            }
+            let layer_ple = if last_only {
+                ple.index((.., count - 1..count, i as i32, ..))
+            } else {
+                ple.index((.., .., i as i32, ..))
+            };
+            let step = AttentionStep {
+                layer: i,
+                query_offset: cache.offset + if last_only { count - 1 } else { 0 },
+                source_tokens: count,
+                mask: if last_only {
+                    last_mask.as_ref()
+                } else {
+                    mask.as_ref()
+                },
+            };
+            h = layer.forward(&h, &layer_ple, cache, &step, &self.activation)?;
         }
         cache.offset += count;
         let logits = self.embedding.forward(&norm(&h, &self.final_norm)?)?;
