@@ -111,30 +111,6 @@ export function createCommandActivityProjection() {
   };
 }
 
-export type CommandSourceSegment = { text: string; highlighted: boolean };
-
-/** Parser byte coordinates apply only to the exact unredacted root source. */
-export function commandSourceSegments(source: string, program: CommandProgramReceipt, fact: CommandActivity, redacted = false): CommandSourceSegment[] {
-  if (redacted) return [{ text: source, highlighted: false }];
-  const bytes = new TextEncoder().encode(source);
-  const spans = fact.spans.filter(span => span.source_ref === program.source_ref && span.start_byte >= 0 && span.end_byte <= bytes.length && span.end_byte >= span.start_byte)
-    .sort((a, b) => a.start_byte - b.start_byte);
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  const result: CommandSourceSegment[] = [];
-  let offset = 0;
-  try {
-    for (const span of spans) {
-      const start = Math.max(offset, span.start_byte);
-      if (span.end_byte <= offset) continue;
-      if (start > offset) result.push({ text: decoder.decode(bytes.subarray(offset, start)), highlighted: false });
-      result.push({ text: decoder.decode(bytes.subarray(start, span.end_byte)), highlighted: true });
-      offset = span.end_byte;
-    }
-    if (offset < bytes.length) result.push({ text: decoder.decode(bytes.subarray(offset)), highlighted: false });
-    return result;
-  } catch { return [{ text: source, highlighted: false }]; }
-}
-
 /** The first activity anchors the group title. */
 export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], fallback: string): string {
  const activities = entries.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity ? [entry.part.commandActivity.fact] : []);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
-import { commandActivityHeadline, commandSourceSegments, createCommandActivityProjection } from "./command-activity-model.ts";
+import { commandActivityHeadline, createCommandActivityProjection } from "./command-activity-model.ts";
 
 function fact(id: string, overrides: Partial<CommandActivity> = {}): CommandActivity {
   return { id, group: "Exploring project files", label: "Read source", subject: "source.rs", state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], ...overrides };
@@ -54,23 +54,6 @@ describe("command activity composition", () => {
   expect(project([row])).toHaveLength(0);
   const rows = parts(project([row], () => ({ id: "live", activities: [fact("live")], state: "running" }) as CommandProgramReceipt));
   expect(rows[0]!.id).toBe("a");
- });
-});
-
-describe("original command spans", () => {
- const program = { source_ref: "root" } as CommandProgramReceipt;
- it("uses byte offsets with Unicode and preserves the whole command", () => {
-  const source = "echo 🐺 && cargo test";
-  const start = new TextEncoder().encode("echo 🐺 && ").length;
-  const segments = commandSourceSegments(source, program, fact("test", { spans: [{ source_ref: "root", start_byte: start, end_byte: new TextEncoder().encode(source).length }] }));
-  expect(segments.map(segment => segment.text).join("")).toBe(source);
-  expect(segments.find(segment => segment.highlighted)?.text).toBe("cargo test");
- });
- it("does not apply foreign, malformed or redacted coordinates", () => {
-  const value = fact("x", { spans: [{ source_ref: "other", start_byte: 0, end_byte: 4 }] });
-  expect(commandSourceSegments("echo", program, value).some(segment => segment.highlighted)).toBe(false);
-  expect(commandSourceSegments("echo", program, { ...value, spans: [{ source_ref: "root", start_byte: 0, end_byte: 999 }] }).some(segment => segment.highlighted)).toBe(false);
-  expect(commandSourceSegments("echo", program, value, true)).toEqual([{ text: "echo", highlighted: false }]);
  });
 });
 
