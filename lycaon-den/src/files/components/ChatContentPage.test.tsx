@@ -25,6 +25,20 @@ describe("chat content Files pane", () => {
     expect(get).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps an unavailable execution document out of Copy contents", async () => {
+    const notices = createNoticeStore(); registerNoticePublisher(notices);
+    try {
+      const view = render(() => <ChatContentPage projectId="project" client={null} document={{
+        kind:"tool",sessionId:"session",messageId:"message",toolCallId:"call",pane:"receipts",title:"Execution records",
+        content:{kind:"command_receipts",programs:[{id:"program"}],context:"{}"},
+      }} />);
+      await waitFor(() => expect(view.container.querySelector(".cm-content")?.textContent).toContain("Execution records are unavailable"));
+      fireEvent.click(view.getByRole("button", {name:"Copy contents"}));
+      const rows = selectProjectNoticeGroups(notices.index()).find(group => group.projectId === "project")?.notices ?? [];
+      expect(rows.some(row => row.code === "chat_content_copy_failed")).toBe(true);
+    } finally { registerNoticePublisher(null); }
+  });
+
   it("opens prepared large output in a read-only CodeMirror with the Files editor controls", async () => {
     const getRows=vi.fn();
     const view=render(()=><ChatContentPage projectId="project" client={stubClient({getChatContent:getRows})} document={{
