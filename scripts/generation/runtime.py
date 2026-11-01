@@ -2,6 +2,7 @@
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -27,7 +28,8 @@ def paths(backend):
     if backend == "reference-llama":
         pin = PINS["llama.cpp"]
         source = bin_dir(ROOT) / "generation-sources" / pin["sha256"]
-        build = compiler_cache_dir(ROOT) / "generation" / pin["revision"] / platform.system()
+        source_slot = hashlib.sha256(str(ROOT.resolve()).encode()).hexdigest()[:16]
+        build = compiler_cache_dir(ROOT) / "generation" / pin["revision"] / platform.system() / source_slot
         return source, build
     return ROOT / "lycaon/internal/generation/native", compiler_cache_dir(ROOT) / "generation-rust"
 
@@ -200,6 +202,8 @@ def test(args):
             env=rust_environment(output))
         return
     source, output = paths("native")
+    if sys.platform == "linux":
+        build(argparse.Namespace(backend="reference-llama"))
     run([sys.executable, "-m", "unittest", "test_native_bench"], cwd=Path(__file__).parent)
     environment, feature = native_environment(output)
     run(["cargo", "test", "--locked", "--release", "--features", feature,
