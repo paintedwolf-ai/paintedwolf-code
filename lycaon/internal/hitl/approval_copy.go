@@ -161,10 +161,12 @@ const (
 )
 
 const (
-	ProcessControlWhat    = "This command can signal processes outside its sandbox. Filesystem and network restrictions remain applied; individual signal targets are not observed."
-	ProcessControlIfWrong = "It can interrupt processes your account may signal, including Painted Wolf Code and other tasks."
-	HostExecutionWhat     = "This command runs outside the command sandbox. Filesystem access, network destinations, and process effects are not restricted by that sandbox."
-	HostExecutionIfWrong  = "It can change files and services outside this project, including Painted Wolf Code itself, and read the app's settings and credentials. Programs such as sudo may obtain additional operating-system privileges."
+	ProcessControlWhat      = "This command can signal processes outside its sandbox. Filesystem and network restrictions remain applied; individual signal targets are not observed."
+	ProcessControlIfWrong   = "It can interrupt processes your account may signal, including Painted Wolf Code and other tasks."
+	CredentialStoreWhat     = "This command can read credentials from the operating system's credential store. Filesystem, write, and network restrictions remain applied."
+	CredentialStoreIfWrong  = "It can read saved logins and tokens that your account's credential store permits without an interactive prompt."
+	HostExecutionWhat       = "This command runs outside the command sandbox. Filesystem access, network destinations, and process effects are not restricted by that sandbox."
+	HostExecutionIfWrong    = "It can change files and services outside this project, including Painted Wolf Code itself, and read the app's settings and credentials. Programs such as sudo may obtain additional operating-system privileges."
 )
 
 const (
@@ -177,7 +179,8 @@ const (
 )
 
 const (
-	HostExecutionTitle  = "Run outside the command sandbox"
-	ProcessControlTitle = "Run with process control"
-	ExecutionAllowLine  = "the described process or execution access for the selected duration"
+	HostExecutionTitle   = "Run outside the command sandbox"
+	ProcessControlTitle  = "Run with process control"
+	CredentialStoreTitle = "Read from the OS credential store"
+	ExecutionAllowLine   = "the described process or execution access for the selected duration"
 )

@@ -3,12 +3,13 @@ id: REPLACE_LINES_BEYOND_EOF
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - replace_lines
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.end_line
   - paintedwolf.path

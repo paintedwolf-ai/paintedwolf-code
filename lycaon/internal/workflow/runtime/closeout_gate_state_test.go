@@ -38,7 +38,7 @@ func newCloseoutGateHarness(t *testing.T) (*workflow.RunManager, *api.Session, *
 	workflow.WireBlueprintDepsForTest(mgr, dir)
 
 	// plan@ research declares gated closeout with research_satisfied.
-	run, err := startRun(ctx, mgr, sess.ID, "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, sess.ID, "plan", "1.0.1")
 	testutil.FailErr(t, "start plan run", err)
 	if run.CurrentPhase != "research" {
 		t.Fatalf("phase = %q want research", run.CurrentPhase)

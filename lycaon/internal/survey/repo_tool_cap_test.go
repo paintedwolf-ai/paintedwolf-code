@@ -12,7 +12,7 @@ import (
 )
 
 func TestEncodeRepoResponseFitsSnapshotAsValidJSON(t *testing.T) {
-	resp := repoResponse{
+	resp := RepoResponse{
 		Bundle:    "large",
 		Path:      ".",
 		View:      repoViewDigest,
@@ -36,7 +36,7 @@ func TestEncodeRepoResponseFitsSnapshotAsValidJSON(t *testing.T) {
 	if len(out) > surveyRepoMaxResponseBytes {
 		t.Fatalf("response bytes = %d want <= %d", len(out), surveyRepoMaxResponseBytes)
 	}
-	var decoded repoResponse
+	var decoded RepoResponse
 	testutil.FailErr(t, "decode repo response", json.Unmarshal([]byte(out), &decoded))
 	if !decoded.Truncated {
 		t.Fatal("expected truncated snapshot")

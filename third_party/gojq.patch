@@ -1,0 +1,1877 @@
+--- a/builtin.go
++++ b/builtin.go
+@@ -58,7 +58,7 @@
+ 		"strings": {{Name: "strings", Body: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "select", Args: []*Query{{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "type"}}}, Right: &Query{Term: &Term{Type: TermTypeString, Str: &String{Str: "string"}}}, Op: OpEq}}}}}}},
+ 		"sub": {{Name: "sub", Args: []string{"$re", "str"}, Body: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "sub", Args: []*Query{{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$re"}}}, {Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "str"}}}, {Term: &Term{Type: TermTypeNull}}}}}}}, {Name: "sub", Args: []string{"$re", "str", "$flags"}, Body: &Query{Left: &Query{Term: &Term{Type: TermTypeReduce, Reduce: &Reduce{Query: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "match", Args: []*Query{{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$re"}}}, {Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$flags"}}}}}}}, Pattern: &Pattern{Object: []*PatternObject{{Key: "$offset"}, {Key: "$length"}, {Key: "$captures"}}}, Start: &Query{Term: &Term{Type: TermTypeObject, Object: &Object{KeyVals: []*ObjectKeyVal{{Key: "s", Val: &Query{Term: &Term{Type: TermTypeIdentity}}}, {Key: "r", Val: &Query{Term: &Term{Type: TermTypeArray, Array: &Array{}}}}}}}}, Update: &Query{Left: &Query{Term: &Term{Type: TermTypeReduce, Reduce: &Reduce{Query: &Query{Term: &Term{Type: TermTypeQuery, Query: &Query{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$captures"}}}, Right: &Query{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "_captures"}}}, Right: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "str"}}}, Op: OpPipe}, Op: OpPipe}}}, Pattern: &Pattern{Name: "$s"}, Start: &Query{Left: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "i"}}}, Right: &Query{Term: &Term{Type: TermTypeNumber, Number: "0"}}, Op: OpAssign}, Update: &Query{Left: &Query{Left: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "r"}, SuffixList: []*Suffix{{Index: &Index{Start: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "i"}}}}}}}}, Right: &Query{Left: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "s"}, SuffixList: []*Suffix{{Index: &Index{Start: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "next"}}}, End: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$offset"}}}, IsSlice: true}}}}}, Right: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$s"}}}, Op: OpAdd}, Op: OpUpdateAdd}, Right: &Query{Left: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "i"}}}, Right: &Query{Term: &Term{Type: TermTypeNumber, Number: "1"}}, Op: OpUpdateAdd}, Op: OpPipe}}}}, Right: &Query{Left: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "next"}}}, Right: &Query{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$offset"}}}, Right: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$length"}}}, Op: OpAdd}, Op: OpAssign}, Op: OpPipe}}}}, Right: &Query{Left: &Query{Left: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "r"}, SuffixList: []*Suffix{{Iter: true}}}}, Right: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "s"}, SuffixList: []*Suffix{{Index: &Index{Start: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "next"}}}, IsSlice: true}}}}}, Op: OpAdd}, Right: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Name: "s"}}}, Op: OpAlt}, Op: OpPipe}}},
+ 		"test": {{Name: "test", Args: []string{"$re"}, Body: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "test", Args: []*Query{{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$re"}}}, {Term: &Term{Type: TermTypeNull}}}}}}}, {Name: "test", Args: []string{"$re", "$flags"}, Body: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "_match", Args: []*Query{{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$re"}}}, {Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$flags"}}}, {Term: &Term{Type: TermTypeTrue}}}}}}}},
+-		"to_entries": {{Name: "to_entries", Body: &Query{Term: &Term{Type: TermTypeArray, Array: &Array{Query: &Query{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "keys"}, SuffixList: []*Suffix{{Iter: true}}}}, Right: &Query{Term: &Term{Type: TermTypeObject, Object: &Object{KeyVals: []*ObjectKeyVal{{Key: "key", Val: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$k"}}}}, {Key: "value", Val: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Start: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$k"}}}}}}}}}}}, Patterns: []*Pattern{{Name: "$k"}}, Op: OpPipe}}}}}},
++		"to_entries": {{Name: "to_entries", Body: &Query{Term: &Term{Type: TermTypeArray, Array: &Array{Query: &Query{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "keys_unsorted"}, SuffixList: []*Suffix{{Iter: true}}}}, Right: &Query{Term: &Term{Type: TermTypeObject, Object: &Object{KeyVals: []*ObjectKeyVal{{Key: "key", Val: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$k"}}}}, {Key: "value", Val: &Query{Term: &Term{Type: TermTypeIndex, Index: &Index{Start: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$k"}}}}}}}}}}}, Patterns: []*Pattern{{Name: "$k"}}, Op: OpPipe}}}}}},
+ 		"todate": {{Name: "todate", Body: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "todateiso8601"}}}}},
+ 		"todateiso8601": {{Name: "todateiso8601", Body: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "strftime", Args: []*Query{{Term: &Term{Type: TermTypeString, Str: &String{Str: "%Y-%m-%dT%H:%M:%SZ"}}}}}}}}},
+ 		"tostream": {{Name: "tostream", Body: &Query{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "path", Args: []*Query{{FuncDefs: []*FuncDef{{Name: "r", Body: &Query{Left: &Query{Term: &Term{Type: TermTypeQuery, Query: &Query{Left: &Query{Term: &Term{Type: TermTypeIdentity, SuffixList: []*Suffix{{Iter: true}, {Optional: true}}}}, Right: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "r"}}}, Op: OpPipe}}}, Right: &Query{Term: &Term{Type: TermTypeIdentity}}, Op: OpComma}}}, Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "r"}}}}}}}, Right: &Query{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "getpath", Args: []*Query{{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$p"}}}}}}}, Right: &Query{Term: &Term{Type: TermTypeReduce, Reduce: &Reduce{Query: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "path", Args: []*Query{{Term: &Term{Type: TermTypeIdentity, SuffixList: []*Suffix{{Iter: true}, {Optional: true}}}}}}}}, Pattern: &Pattern{Name: "$q"}, Start: &Query{Term: &Term{Type: TermTypeArray, Array: &Array{Query: &Query{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$p"}}}, Right: &Query{Term: &Term{Type: TermTypeIdentity}}, Op: OpComma}}}}, Update: &Query{Term: &Term{Type: TermTypeArray, Array: &Array{Query: &Query{Left: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$p"}}}, Right: &Query{Term: &Term{Type: TermTypeFunc, Func: &Func{Name: "$q"}}}, Op: OpAdd}}}}}}}, Op: OpPipe}, Patterns: []*Pattern{{Name: "$p"}}, Op: OpPipe}}},
+--- a/builtin.jq
++++ b/builtin.jq
+@@ -9,7 +9,7 @@
+ def recurse(f): def r: ., (f | r); r;
+ def recurse(f; cond): def r: ., (f | select(cond) | r); r;
+ 
+-def to_entries: [keys[] as $k | {key: $k, value: .[$k]}];
++def to_entries: [keys_unsorted[] as $k | {key: $k, value: .[$k]}];
+ def from_entries: map({ (.key // .Key // .name // .Name):
+   if has("value") then .value else .Value end }) | add // {};
+ def with_entries(f): to_entries | map(f) | from_entries;
+--- a/compare.go
++++ b/compare.go
+@@ -33,13 +33,15 @@
+ 			}
+ 			return cmp.Compare(len(l), len(r))
+ 		},
+-		func(l, r map[string]any) int {
++		func(l, r *OrderedObject) int {
+ 			lk, rk := funcKeys(l), funcKeys(r)
+ 			if cmp := Compare(lk, rk); cmp != 0 {
+ 				return cmp
+ 			}
+ 			for _, k := range lk.([]any) {
+-				if cmp := Compare(l[k.(string)], r[k.(string)]); cmp != 0 {
++				lv, _ := l.Get(k.(string))
++				rv, _ := r.Get(k.(string))
++				if cmp := Compare(lv, rv); cmp != 0 {
+ 					return cmp
+ 				}
+ 			}
+@@ -70,7 +72,7 @@
+ 		return 4
+ 	case []any:
+ 		return 5
+-	case map[string]any:
++	case *OrderedObject:
+ 		return 6
+ 	}
+ }
+--- a/compiler.go
++++ b/compiler.go
+@@ -146,7 +146,7 @@
+ 		if moduleLoader, ok := c.moduleLoader.(interface {
+ 			LoadJSONWithMeta(string, map[string]any) (any, error)
+ 		}); ok {
+-			if vals, err = moduleLoader.LoadJSONWithMeta(path, i.Meta.ToValue()); err != nil {
++			if vals, err = moduleLoader.LoadJSONWithMeta(path, i.Meta.ToValue().toMap()); err != nil {
+ 				return err
+ 			}
+ 		} else if moduleLoader, ok := c.moduleLoader.(interface {
+@@ -168,7 +168,7 @@
+ 	if moduleLoader, ok := c.moduleLoader.(interface {
+ 		LoadModuleWithMeta(string, map[string]any) (*Query, error)
+ 	}); ok {
+-		if q, err = moduleLoader.LoadModuleWithMeta(path, i.Meta.ToValue()); err != nil {
++		if q, err = moduleLoader.LoadModuleWithMeta(path, i.Meta.ToValue().toMap()); err != nil {
+ 			return err
+ 		}
+ 	} else if moduleLoader, ok := c.moduleLoader.(interface {
+@@ -895,11 +895,11 @@
+ 			}
+ 			return nil
+ 		} else if e.Name == "$ENV" || e.Name == "env" {
+-			env := make(map[string]any)
++			env := NewObject(0)
+ 			if c.environLoader != nil {
+ 				for _, kv := range c.environLoader() {
+ 					if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
+-						env[k] = v
++						env.Set(k, v)
+ 					}
+ 				}
+ 			}
+@@ -1238,10 +1238,10 @@
+ 	}
+ 	meta := q.Meta.ToValue()
+ 	if meta == nil {
+-		meta = make(map[string]any)
++		meta = NewObject(2)
+ 	}
+-	meta["defs"] = listModuleDefs(q)
+-	meta["deps"] = listModuleDeps(q)
++	meta.Set("defs", listModuleDefs(q))
++	meta.Set("deps", listModuleDeps(q))
+ 	return meta
+ }
+ 
+@@ -1272,17 +1272,17 @@
+ 	for j, i := range q.Imports {
+ 		v := i.Meta.ToValue()
+ 		if v == nil {
+-			v = make(map[string]any)
++			v = NewObject(3)
+ 		}
+ 		relpath := i.ImportPath
+ 		if relpath == "" {
+ 			relpath = i.IncludePath
+ 		}
+-		v["relpath"] = relpath
++		v.Set("relpath", relpath)
+ 		if i.ImportAlias != "" {
+-			v["as"] = strings.TrimPrefix(i.ImportAlias, "$")
++			v.Set("as", strings.TrimPrefix(i.ImportAlias, "$"))
+ 		}
+-		v["is_data"] = strings.HasPrefix(i.ImportAlias, "$")
++		v.Set("is_data", strings.HasPrefix(i.ImportAlias, "$"))
+ 		deps[j] = v
+ 	}
+ 	return deps
+@@ -1295,7 +1295,7 @@
+ func (c *compiler) compileObject(e *Object) error {
+ 	c.appendCodeInfo(e)
+ 	if len(e.KeyVals) == 0 {
+-		c.append(&code{op: opconst, v: map[string]any{}})
++		c.append(&code{op: opconst, v: NewObject(0)})
+ 		return nil
+ 	}
+ 	defer c.newScopeDepth()()
+@@ -1320,9 +1320,9 @@
+ 			return nil
+ 		}
+ 	}
+-	w := make(map[string]any, l)
++	w := NewObject(l)
+ 	for i := range l {
+-		w[c.codes[pc+i*3].v.(string)] = c.codes[pc+i*3+2].v
++		w.Set(c.codes[pc+i*3].v.(string), c.codes[pc+i*3+2].v)
+ 	}
+ 	c.codes[pc-1] = &code{op: opconst, v: w}
+ 	c.codes = c.codes[:pc]
+--- a/decoder.go
++++ b/decoder.go
+@@ -0,0 +1,147 @@
++package gojq
++
++import (
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"strings"
++)
++
++// Decoder reads consecutive JSON values as jq reads its inputs: objects keep
++// their key order (a repeated key keeps its first position and last value),
++// and numbers keep their literal in decNumber's canonical scientific form, so
++// an unmodified 2.0 prints as 2.0 and 1e3 as 1E+3.
++type Decoder struct {
++	dec *json.Decoder
++}
++
++// NewDecoder reads JSON values from r.
++func NewDecoder(r io.Reader) *Decoder {
++	dec := json.NewDecoder(r)
++	dec.UseNumber()
++	return &Decoder{dec: dec}
++}
++
++// Decode returns the next complete value, io.EOF after the last one, or
++// io.ErrUnexpectedEOF when the input ends inside a value.
++func (d *Decoder) Decode() (any, error) {
++	tok, err := d.dec.Token()
++	if err != nil {
++		return nil, err
++	}
++	v, err := d.value(tok)
++	if errors.Is(err, io.EOF) {
++		err = io.ErrUnexpectedEOF
++	}
++	return v, err
++}
++
++// InputOffset is the number of input bytes consumed so far.
++func (d *Decoder) InputOffset() int64 { return d.dec.InputOffset() }
++
++func (d *Decoder) value(tok json.Token) (any, error) {
++	switch tok := tok.(type) {
++	case json.Delim:
++		switch tok {
++		case '{':
++			o := NewObject(0)
++			for d.dec.More() {
++				key, err := d.dec.Token()
++				if err != nil {
++					return nil, err
++				}
++				k, ok := key.(string)
++				if !ok {
++					return nil, fmt.Errorf("object key %v is not a string", key)
++				}
++				next, err := d.dec.Token()
++				if err != nil {
++					return nil, err
++				}
++				v, err := d.value(next)
++				if err != nil {
++					return nil, err
++				}
++				o.Set(k, v)
++			}
++			if _, err := d.dec.Token(); err != nil {
++				return nil, err
++			}
++			return o, nil
++		case '[':
++			a := []any{}
++			for d.dec.More() {
++				next, err := d.dec.Token()
++				if err != nil {
++					return nil, err
++				}
++				v, err := d.value(next)
++				if err != nil {
++					return nil, err
++				}
++				a = append(a, v)
++			}
++			if _, err := d.dec.Token(); err != nil {
++				return nil, err
++			}
++			return a, nil
++		}
++		return nil, fmt.Errorf("unexpected delimiter %v", tok)
++	case json.Number:
++		return CanonicalNumber(tok)
++	case string, bool, nil:
++		return tok, nil
++	}
++	return nil, fmt.Errorf("unexpected token %v", tok)
++}
++
++var errNumberLiteral = errors.New("invalid number literal")
++
++// CanonicalNumber returns a JSON number literal in decNumber's
++// to-scientific-string form, the representation jq prints for a number it
++// read and did not change.
++func CanonicalNumber(n json.Number) (json.Number, error) {
++	s := string(n)
++	negative := strings.HasPrefix(s, "-")
++	s = strings.TrimPrefix(s, "-")
++	mantissa, exponentText, hasExponent := strings.Cut(strings.ToLower(s), "e")
++	exponent := 0
++	if hasExponent {
++		if _, err := fmt.Sscan(exponentText, &exponent); err != nil {
++			return "", errNumberLiteral
++		}
++	}
++	whole, fraction, _ := strings.Cut(mantissa, ".")
++	coefficient := strings.TrimLeft(whole+fraction, "0")
++	if coefficient == "" {
++		coefficient = "0"
++	}
++	exponent -= len(fraction)
++	adjusted := exponent + len(coefficient) - 1
++	var out string
++	switch {
++	case exponent <= 0 && adjusted >= -6:
++		if exponent == 0 {
++			out = coefficient
++		} else if point := len(coefficient) + exponent; point > 0 {
++			out = coefficient[:point] + "." + coefficient[point:]
++		} else {
++			out = "0." + strings.Repeat("0", -point) + coefficient
++		}
++	default:
++		out = coefficient[:1]
++		if len(coefficient) > 1 {
++			out += "." + coefficient[1:]
++		}
++		sign := "+"
++		if adjusted < 0 {
++			sign, adjusted = "-", -adjusted
++		}
++		out += fmt.Sprintf("E%s%d", sign, adjusted)
++	}
++	if negative {
++		out = "-" + out
++	}
++	return json.Number(out), nil
++}
+--- a/encoder.go
++++ b/encoder.go
+@@ -7,16 +7,16 @@
+ 	"io"
+ 	"math"
+ 	"math/big"
+-	"sort"
+ 	"strconv"
+ 	"strings"
++	"unicode/utf16"
+ 	"unicode/utf8"
+ )
+ 
+ // Marshal returns the jq-flavored JSON encoding of v.
+ //
+ // This method accepts only limited types (nil, bool, int, float64, *big.Int,
+-// json.Number, string, []any, and map[string]any) because these are the
++// json.Number, string, []any, and *OrderedObject) because these are the
+ // possible types a gojq iterator can emit. This method marshals NaN to null,
+ // truncates infinities to (+|-) math.MaxFloat64, uses \b and \f in strings,
+ // and does not escape '<', '>', '&', '\u2028', and '\u2029'. These behaviors
+@@ -28,6 +28,25 @@
+ 	return b.Bytes(), nil
+ }
+ 
++// MarshalOptions selects jq's output layout flags.
++type MarshalOptions struct {
++	// Pretty puts each array element and object member on its own line,
++	// nested by Indent per level; otherwise output is compact.
++	Pretty bool
++	Indent string
++	// SortKeys prints object keys in codepoint order (--sort-keys).
++	SortKeys bool
++	// ASCII escapes every non-ASCII character as \uXXXX (--ascii-output).
++	ASCII bool
++}
++
++// MarshalWith is Marshal with jq's layout flags.
++func MarshalWith(v any, options MarshalOptions) ([]byte, error) {
++	var b bytes.Buffer
++	(&encoder{w: &b, sortKeys: options.SortKeys, ascii: options.ASCII, pretty: options.Pretty, indent: options.Indent}).encode(v)
++	return b.Bytes(), nil
++}
++
+ func jsonMarshal(v any) string {
+ 	var sb strings.Builder
+ 	(&encoder{w: &sb}).encode(v)
+@@ -44,9 +63,25 @@
+ 		io.ByteWriter
+ 		io.StringWriter
+ 	}
+-	buf [64]byte
++	buf      [64]byte
++	sortKeys bool
++	ascii    bool
++	pretty   bool
++	indent   string
++	depth    int
+ }
+ 
++// newline starts a line at the current depth in indented output.
++func (e *encoder) newline() {
++	if !e.pretty {
++		return
++	}
++	e.w.WriteByte('\n')
++	for range e.depth {
++		e.w.WriteString(e.indent)
++	}
++}
++
+ func (e *encoder) encode(v any) {
+ 	switch v := v.(type) {
+ 	case nil:
+@@ -58,44 +93,77 @@
+ 			e.w.WriteString("false")
+ 		}
+ 	case int:
++		if v > maxExactInt || v < -maxExactInt {
++			e.encodeFloat64(float64(v))
++			return
++		}
+ 		e.w.Write(strconv.AppendInt(e.buf[:0], int64(v), 10))
+ 	case float64:
+ 		e.encodeFloat64(v)
+ 	case *big.Int:
+-		e.w.Write(v.Append(e.buf[:0], 10))
++		e.encodeFloat64(bigToFloat(v))
+ 	case json.Number:
+ 		e.w.WriteString(v.String())
+ 	case string:
+ 		e.encodeString(v)
+ 	case []any:
+ 		e.encodeArray(v)
+-	case map[string]any:
++	case *OrderedObject:
+ 		e.encodeObject(v)
+ 	default:
+ 		panic(fmt.Sprintf("invalid type: %[1]T (%[1]v)", v))
+ 	}
+ }
+ 
+-// ref: floatEncoder in encoding/json
++// encodeFloat64 prints a double as jq does (jvp_dtoa_fmt): the shortest
++// digits that round-trip, in exponent form when the decimal point falls four
++// or more places left of the digits or more than fifteen places past them.
+ func (e *encoder) encodeFloat64(f float64) {
+ 	if math.IsNaN(f) {
+ 		e.w.WriteString("null")
+ 		return
+ 	}
+ 	f = min(max(f, -math.MaxFloat64), math.MaxFloat64)
+-	format := byte('f')
+-	if x := math.Abs(f); x != 0 && x < 1e-6 || x >= 1e21 {
+-		format = 'e'
++	if f == 0 {
++		if math.Signbit(f) {
++			e.w.WriteString("-0")
++		} else {
++			e.w.WriteString("0")
++		}
++		return
+ 	}
+-	buf := strconv.AppendFloat(e.buf[:0], f, format, -1, 64)
+-	if format == 'e' {
+-		// clean up e-09 to e-9
+-		if n := len(buf); n >= 4 && buf[n-4] == 'e' && buf[n-3] == '-' && buf[n-2] == '0' {
+-			buf[n-2] = buf[n-1]
+-			buf = buf[:n-1]
++	sci := strconv.AppendFloat(e.buf[:0], f, 'e', -1, 64)
++	negative := sci[0] == '-'
++	if negative {
++		sci = sci[1:]
++	}
++	mantissa, exponent, _ := strings.Cut(string(sci), "e")
++	digits := strings.Replace(mantissa, ".", "", 1)
++	exp, _ := strconv.Atoi(exponent)
++	point := exp + 1
++	var out strings.Builder
++	if negative {
++		out.WriteByte('-')
++	}
++	switch {
++	case point <= -4 || point > len(digits)+15:
++		out.WriteString(digits[:1])
++		if len(digits) > 1 {
++			out.WriteString("." + digits[1:])
+ 		}
++		sign := "+"
++		if exp < 0 {
++			sign, exp = "-", -exp
++		}
++		out.WriteString(fmt.Sprintf("e%s%02d", sign, exp))
++	case point <= 0:
++		out.WriteString("0." + strings.Repeat("0", -point) + digits)
++	case point >= len(digits):
++		out.WriteString(digits + strings.Repeat("0", point-len(digits)))
++	default:
++		out.WriteString(digits[:point] + "." + digits[point:])
+ 	}
+-	e.w.Write(buf)
++	e.w.WriteString(out.String())
+ }
+ 
+ // ref: encodeState#string in encoding/json
+@@ -146,6 +214,20 @@
+ 			start = i
+ 			continue
+ 		}
++		if e.ascii {
++			if start < i {
++				e.w.WriteString(s[start:i])
++			}
++			if c > 0xFFFF {
++				r1, r2 := utf16.EncodeRune(c)
++				e.w.WriteString(fmt.Sprintf(`\u%04x\u%04x`, r1, r2))
++			} else {
++				e.w.WriteString(fmt.Sprintf(`\u%04x`, c))
++			}
++			i += size
++			start = i
++			continue
++		}
+ 		i += size
+ 	}
+ 	if start < len(s) {
+@@ -156,37 +238,48 @@
+ 
+ func (e *encoder) encodeArray(vs []any) {
+ 	e.w.WriteByte('[')
++	if len(vs) == 0 {
++		e.w.WriteByte(']')
++		return
++	}
++	e.depth++
+ 	for i, v := range vs {
+ 		if i > 0 {
+ 			e.w.WriteByte(',')
+ 		}
++		e.newline()
+ 		e.encode(v)
+ 	}
++	e.depth--
++	e.newline()
+ 	e.w.WriteByte(']')
+ }
+ 
+-func (e *encoder) encodeObject(vs map[string]any) {
++func (e *encoder) encodeObject(vs *OrderedObject) {
+ 	e.w.WriteByte('{')
+-	type keyVal struct {
+-		key string
+-		val any
++	keys := vs.Keys()
++	if e.sortKeys {
++		keys = vs.SortedKeys()
+ 	}
+-	kvs := make([]keyVal, len(vs))
+-	var i int
+-	for k, v := range vs {
+-		kvs[i] = keyVal{k, v}
+-		i++
++	if len(keys) == 0 {
++		e.w.WriteByte('}')
++		return
+ 	}
+-	sort.Slice(kvs, func(i, j int) bool {
+-		return kvs[i].key < kvs[j].key
+-	})
+-	for i, kv := range kvs {
++	e.depth++
++	for i, k := range keys {
+ 		if i > 0 {
+ 			e.w.WriteByte(',')
+ 		}
+-		e.encodeString(kv.key)
++		e.newline()
++		e.encodeString(k)
+ 		e.w.WriteByte(':')
+-		e.encode(kv.val)
++		if e.pretty {
++			e.w.WriteByte(' ')
++		}
++		v, _ := vs.Get(k)
++		e.encode(v)
+ 	}
++	e.depth--
++	e.newline()
+ 	e.w.WriteByte('}')
+ }
+--- a/error.go
++++ b/error.go
+@@ -11,28 +11,42 @@
+ 	Value() any
+ }
+ 
++// expectedObjectError and expectedArrayError report an index whose key the
++// value cannot take, in jq's words. key is the index when the site knows it.
+ type expectedObjectError struct {
+-	v any
++	v, key any
+ }
+ 
+ func (err *expectedObjectError) Error() string {
+-	return "expected an object but got: " + typeErrorPreview(err.v)
++	return indexErrorMessage(err.v, err.key, "string")
+ }
+ 
+ type expectedArrayError struct {
+-	v any
++	v, key any
+ }
+ 
+ func (err *expectedArrayError) Error() string {
+-	return "expected an array but got: " + typeErrorPreview(err.v)
++	return indexErrorMessage(err.v, err.key, "number")
+ }
+ 
++func indexErrorMessage(v, key any, fallback string) string {
++	with := fallback
++	switch k := key.(type) {
++	case nil:
++	case string:
++		with = "string " + jsonMarshal(k)
++	default:
++		with = TypeOf(k)
++	}
++	return "Cannot index " + TypeOf(v) + " with " + with
++}
++
+ type iteratorError struct {
+ 	v any
+ }
+ 
+ func (err *iteratorError) Error() string {
+-	return "cannot iterate over: " + typeErrorPreview(err.v)
++	return "Cannot iterate over " + typeErrorPreview(err.v)
+ }
+ 
+ type arrayIndexNegativeError struct {
+@@ -40,7 +54,7 @@
+ }
+ 
+ func (err *arrayIndexNegativeError) Error() string {
+-	return "array index should not be negative: " + Preview(err.v)
++	return "Out of bounds negative array index"
+ }
+ 
+ type arrayIndexTooLargeError struct {
+@@ -73,7 +87,7 @@
+ }
+ 
+ func (err *arrayIndexNotNumberError) Error() string {
+-	return "expected a number for indexing an array but got: " + typeErrorPreview(err.v)
++	return "Array/string slice indices must be integers"
+ }
+ 
+ type stringIndexNotNumberError struct {
+@@ -81,15 +95,16 @@
+ }
+ 
+ func (err *stringIndexNotNumberError) Error() string {
+-	return "expected a number for indexing a string but got: " + typeErrorPreview(err.v)
++	return "Array/string slice indices must be integers"
+ }
+ 
++// expectedStartEndError is an object index without slice bounds on v.
+ type expectedStartEndError struct {
+ 	v any
+ }
+ 
+ func (err *expectedStartEndError) Error() string {
+-	return `expected "start" and "end" for slicing but got: ` + typeErrorPreview(err.v)
++	return "Cannot index " + TypeOf(err.v) + " with object"
+ }
+ 
+ type lengthMismatchError struct{}
+@@ -118,6 +133,18 @@
+ }
+ 
+ func (err *func0TypeError) Error() string {
++	switch err.name {
++	case "length":
++		return typeErrorPreview(err.v) + " has no length"
++	case "keys", "keys_unsorted":
++		return typeErrorPreview(err.v) + " has no keys"
++	case "sort":
++		return typeErrorPreview(err.v) + " cannot be sorted, as it is not an array"
++	case "abs":
++		return typeErrorPreview(err.v) + " cannot be negated"
++	case "@csv", "@tsv":
++		return typeErrorPreview(err.v) + " cannot be " + err.name[1:] + "-formatted, only array"
++	}
+ 	return err.name + " cannot be applied to: " + typeErrorPreview(err.v)
+ }
+ 
+@@ -127,6 +154,12 @@
+ }
+ 
+ func (err *func1TypeError) Error() string {
++	if err.name == "has" {
++		return "Cannot check whether " + TypeOf(err.v) + " has a " + TypeOf(err.w) + " key"
++	}
++	if matchFunctions[err.name] {
++		return typeErrorPreview(err.v) + " cannot be matched, as it is not a string"
++	}
+ 	return err.name + "(" + Preview(err.w) + ") cannot be applied to: " + typeErrorPreview(err.v)
+ }
+ 
+@@ -135,7 +168,13 @@
+ 	v, w, x any
+ }
+ 
++// matchFunctions are the regex builtins jq reports as one match failure.
++var matchFunctions = map[string]bool{"test": true, "match": true, "capture": true, "scan": true, "splits": true, "sub": true, "gsub": true}
++
+ func (err *func2TypeError) Error() string {
++	if matchFunctions[err.name] {
++		return typeErrorPreview(err.v) + " cannot be matched, as it is not a string"
++	}
+ 	return err.name + "(" + Preview(err.w) + "; " + Preview(err.x) + ") cannot be applied to: " + typeErrorPreview(err.v)
+ }
+ 
+@@ -146,6 +185,9 @@
+ }
+ 
+ func (err *func0WrapError) Error() string {
++	if err.name == "tonumber" {
++		return typeErrorPreview(err.v) + " cannot be parsed as a number"
++	}
+ 	return err.name + " cannot be applied to " + Preview(err.v) + ": " + err.err.Error()
+ }
+ 
+@@ -156,6 +198,9 @@
+ }
+ 
+ func (err *func1WrapError) Error() string {
++	if pathFunctions[err.name] {
++		return err.err.Error()
++	}
+ 	return err.name + "(" + Preview(err.w) + ") cannot be applied to " + Preview(err.v) + ": " + err.err.Error()
+ }
+ 
+@@ -165,7 +210,13 @@
+ 	err     error
+ }
+ 
++// pathFunctions report the failing step itself, as jq does.
++var pathFunctions = map[string]bool{"getpath": true, "setpath": true, "delpaths": true}
++
+ func (err *func2WrapError) Error() string {
++	if pathFunctions[err.name] {
++		return err.err.Error()
++	}
+ 	return err.name + "(" + Preview(err.w) + "; " + Preview(err.x) + ") cannot be applied to " + Preview(err.v) + ": " + err.err.Error()
+ }
+ 
+@@ -233,6 +284,9 @@
+ }
+ 
+ func (err *unaryTypeError) Error() string {
++	if err.name == "negate" {
++		return typeErrorPreview(err.v) + " cannot be negated"
++	}
+ 	return "cannot " + err.name + ": " + typeErrorPreview(err.v)
+ }
+ 
+@@ -241,8 +295,13 @@
+ 	l, r any
+ }
+ 
++var binopVerbs = map[string]string{
++	"add": "added", "subtract": "subtracted", "multiply": "multiplied",
++	"divide": "divided", "modulo": "divided (remainder)",
++}
++
+ func (err *binopTypeError) Error() string {
+-	return "cannot " + err.name + ": " + typeErrorPreview(err.l) + " and " + typeErrorPreview(err.r)
++	return typeErrorPreview(err.l) + " and " + typeErrorPreview(err.r) + " cannot be " + binopVerbs[err.name]
+ }
+ 
+ type zeroDivisionError struct {
+@@ -250,7 +309,7 @@
+ }
+ 
+ func (err *zeroDivisionError) Error() string {
+-	return "cannot divide " + typeErrorPreview(err.l) + " by: " + typeErrorPreview(err.r)
++	return typeErrorPreview(err.l) + " and " + typeErrorPreview(err.r) + " cannot be divided because the divisor is zero"
+ }
+ 
+ type zeroModuloError struct {
+@@ -258,7 +317,7 @@
+ }
+ 
+ func (err *zeroModuloError) Error() string {
+-	return "cannot modulo " + typeErrorPreview(err.l) + " by: " + typeErrorPreview(err.r)
++	return typeErrorPreview(err.l) + " and " + typeErrorPreview(err.r) + " cannot be divided (remainder) because the divisor is zero"
+ }
+ 
+ type formatNotFoundError struct {
+@@ -275,7 +334,7 @@
+ }
+ 
+ func (err *formatRowError) Error() string {
+-	return "@" + err.typ + " cannot format an array including: " + typeErrorPreview(err.v)
++	return typeErrorPreview(err.v) + " is not valid in a csv row"
+ }
+ 
+ type tooManyVariableValuesError struct{}
+@@ -334,7 +393,7 @@
+ }
+ 
+ func (err *invalidPathError) Error() string {
+-	return "invalid path against: " + typeErrorPreview(err.v)
++	return "Invalid path expression with result " + truncatedDump(err.v, 30)
+ }
+ 
+ type invalidPathIterError struct {
+@@ -342,7 +401,7 @@
+ }
+ 
+ func (err *invalidPathIterError) Error() string {
+-	return "invalid path on iterating against: " + typeErrorPreview(err.v)
++	return "Invalid path expression near attempt to iterate through " + truncatedDump(err.v, 30)
+ }
+ 
+ type queryParseError struct {
+@@ -371,13 +430,22 @@
+ 	return "invalid json: " + err.fname + ": " + err.err.Error()
+ }
+ 
++// typeErrorPreview is jq's "type (value)" error operand: the encoded value,
++// cut to 11 bytes and an ellipsis past 14 bytes as jq's
++// jv_dump_string_trunc does.
+ func typeErrorPreview(v any) string {
+-	switch v.(type) {
+-	case nil:
+-		return "null"
+-	case Iter:
++	if _, ok := v.(Iter); ok {
+ 		return "gojq.Iter"
+-	default:
+-		return TypeOf(v) + " (" + Preview(v) + ")"
+ 	}
++	return TypeOf(v) + " (" + truncatedDump(v, 15) + ")"
++}
++
++// truncatedDump is jv_dump_string_trunc into a buffer of size bytes: a
++// dump that does not fit keeps size-4 bytes and an ellipsis.
++func truncatedDump(v any, size int) string {
++	dump := jsonMarshal(v)
++	if len(dump) > size-1 {
++		dump = dump[:size-4] + "..."
++	}
++	return dump
+ }
+--- a/execute.go
++++ b/execute.go
+@@ -4,7 +4,6 @@
+ 	"context"
+ 	"math"
+ 	"reflect"
+-	"sort"
+ )
+ 
+ func (env *env) execute(bc *Code, v any, vars ...any) Iter {
+@@ -58,17 +57,20 @@
+ 				break loop
+ 			}
+ 			n := code.v.(int)
+-			m := make(map[string]any, n)
+-			for range n {
+-				v, k := env.pop(), env.pop()
+-				s, ok := k.(string)
++			// Pairs pop in reverse; insert them as written, the last value
++			// of a repeated key winning at its first position.
++			pairs := make([]any, 2*n)
++			for i := n - 1; i >= 0; i-- {
++				pairs[2*i+1], pairs[2*i] = env.pop(), env.pop()
++			}
++			m := NewObject(n)
++			for i := 0; i < n; i++ {
++				s, ok := pairs[2*i].(string)
+ 				if !ok {
+-					err = &objectKeyNotStringError{k}
++					err = &objectKeyNotStringError{pairs[2*i]}
+ 					break loop
+ 				}
+-				if _, ok := m[s]; !ok {
+-					m[s] = v
+-				}
++				m.Set(s, pairs[2*i+1])
+ 			}
+ 			env.push(m)
+ 		case opappend:
+@@ -152,7 +154,7 @@
+ 			p, v := code.v, env.pop()
+ 			if code.op == opindexarray && v != nil {
+ 				if _, ok := v.([]any); !ok {
+-					err = &expectedArrayError{v}
++					err = &expectedArrayError{v: v, key: p}
+ 					break loop
+ 				}
+ 			}
+@@ -203,7 +205,7 @@
+ 							break loop
+ 						}
+ 						env.paths.push(pathValue{
+-							path:  map[string]any{"start": args[2], "end": args[1]},
++							path:  ObjectOf("start", args[2], "end", args[1]),
+ 							value: w,
+ 						})
+ 					case "getpath":
+@@ -281,22 +283,18 @@
+ 				for i, v := range v {
+ 					xs[i] = pathValue{path: i, value: v}
+ 				}
+-			case map[string]any:
++			case *OrderedObject:
+ 				if !env.paths.empty() && env.expdepth == 0 && !env.pathIntact(v) {
+ 					err = &invalidPathIterError{v}
+ 					break loop
+ 				}
+-				if len(v) == 0 {
++				if v.Len() == 0 {
+ 					break loop
+ 				}
+-				xs = make([]pathValue, len(v))
+-				var i int
+-				for k, v := range v {
+-					xs[i] = pathValue{path: k, value: v}
+-					i++
+-				}
+-				sort.Slice(xs, func(i, j int) bool {
+-					return xs[i].path.(string) < xs[j].path.(string)
++				xs = make([]pathValue, 0, v.Len())
++				v.Range(func(k string, value any) bool {
++					xs = append(xs, pathValue{path: k, value: value})
++					return true
+ 				})
+ 			case Iter:
+ 				if w, ok := v.Next(); ok {
+@@ -413,9 +411,11 @@
+ func (env *env) pathIntact(v any) bool {
+ 	w := env.paths.top().(pathValue).value
+ 	switch v := v.(type) {
+-	case []any, map[string]any:
+-		switch w.(type) {
+-		case []any, map[string]any:
++	case *OrderedObject:
++		w, ok := w.(*OrderedObject)
++		return ok && v == w
++	case []any:
++		if w, ok := w.([]any); ok {
+ 			v, w := reflect.ValueOf(v), reflect.ValueOf(w)
+ 			return v.Pointer() == w.Pointer() && v.Len() == w.Len()
+ 		}
+--- a/func.go
++++ b/func.go
+@@ -7,7 +7,6 @@
+ 	"fmt"
+ 	"io"
+ 	"iter"
+-	"maps"
+ 	"math"
+ 	"math/big"
+ 	"net/url"
+@@ -60,6 +59,7 @@
+ 		"length":         argFunc0(funcLength),
+ 		"utf8bytelength": argFunc0(funcUtf8ByteLength),
+ 		"keys":           argFunc0(funcKeys),
++		"keys_unsorted":  argFunc0(funcKeysUnsorted),
+ 		"has":            argFunc1(funcHas),
+ 		"add":            argFunc0(funcAdd),
+ 		"toboolean":      argFunc0(funcToBoolean),
+@@ -333,8 +333,8 @@
+ 		return len([]rune(v))
+ 	case []any:
+ 		return len(v)
+-	case map[string]any:
+-		return len(v)
++	case *OrderedObject:
++		return v.Len()
+ 	default:
+ 		return &func0TypeError{"length", v}
+ 	}
+@@ -356,9 +356,9 @@
+ 			w[i] = i
+ 		}
+ 		return w
+-	case map[string]any:
+-		w := make([]any, len(v))
+-		for i, k := range keys(v) {
++	case *OrderedObject:
++		w := make([]any, v.Len())
++		for i, k := range v.SortedKeys() {
+ 			w[i] = k
+ 		}
+ 		return w
+@@ -367,14 +367,16 @@
+ 	}
+ }
+ 
+-func keys(v map[string]any) []string {
+-	w := make([]string, len(v))
+-	var i int
+-	for k := range v {
++// funcKeysUnsorted lists an object's keys in insertion order.
++func funcKeysUnsorted(v any) any {
++	o, ok := v.(*OrderedObject)
++	if !ok {
++		return funcKeys(v)
++	}
++	w := make([]any, o.Len())
++	for i, k := range o.Keys() {
+ 		w[i] = k
+-		i++
+ 	}
+-	sort.Strings(w)
+ 	return w
+ }
+ 
+@@ -382,10 +384,10 @@
+ 	switch v := v.(type) {
+ 	case []any:
+ 		return v, true
+-	case map[string]any:
+-		vs := make([]any, len(v))
+-		for i, k := range keys(v) {
+-			vs[i] = v[k]
++	case *OrderedObject:
++		vs := make([]any, v.Len())
++		for i, k := range v.Keys() {
++			vs[i], _ = v.Get(k)
+ 		}
+ 		return vs, true
+ 	default:
+@@ -399,9 +401,9 @@
+ 		if x, ok := toInt(x); ok {
+ 			return 0 <= x && x < len(v)
+ 		}
+-	case map[string]any:
++	case *OrderedObject:
+ 		if x, ok := x.(string); ok {
+-			_, ok := v[x]
++			_, ok := v.Get(x)
+ 			return ok
+ 		}
+ 	case nil:
+@@ -446,13 +448,13 @@
+ 				v = append(w, x...)
+ 				continue
+ 			}
+-		case map[string]any:
++		case *OrderedObject:
+ 			switch w := v.(type) {
+ 			case nil:
+-				v = maps.Clone(x)
++				v = x.Clone(0)
+ 				continue
+-			case map[string]any:
+-				maps.Copy(w, x)
++			case *OrderedObject:
++				x.Range(func(k string, xv any) bool { w.Set(k, xv); return true })
+ 				continue
+ 			}
+ 		}
+@@ -502,8 +504,18 @@
+ 	}
+ }
+ 
++// toNumber is a program number literal. jq keeps a literal's text until an
++// operation changes it, so a literal whose canonical text is not its
++// integer's (1.0, 1e3, 100000000000000000001) stays a json.Number.
+ func toNumber(v string) any {
+-	return parseNumber(json.Number(v))
++	n := parseNumber(json.Number(v))
++	if i, ok := n.(int); ok && strconv.Itoa(i) == v {
++		return i
++	}
++	if canonical, err := CanonicalNumber(json.Number(v)); err == nil {
++		return canonical
++	}
++	return n
+ }
+ 
+ func funcToString(v any) any {
+@@ -547,16 +559,17 @@
+ 			}
+ 			return true
+ 		},
+-		func(l, r map[string]any) any {
+-			if len(l) < len(r) {
++		func(l, r *OrderedObject) any {
++			if l.Len() < r.Len() {
+ 				return false
+ 			}
+-			for k, r := range r {
+-				if l, ok := l[k]; !ok || funcContains(l, r) != true {
+-					return false
+-				}
+-			}
+-			return true
++			contained := true
++			r.Range(func(k string, rv any) bool {
++				lv, ok := l.Get(k)
++				contained = ok && funcContains(lv, rv) == true
++				return contained
++			})
++			return contained
+ 		},
+ 		func(l, r any) any {
+ 			if l == r {
+@@ -840,13 +853,12 @@
+ 	if !ok {
+ 		return &func0TypeError{"fromjson", v}
+ 	}
+-	var w any
+-	dec := json.NewDecoder(strings.NewReader(s))
+-	dec.UseNumber()
+-	if err := dec.Decode(&w); err != nil {
++	dec := NewDecoder(strings.NewReader(s))
++	w, err := dec.Decode()
++	if err != nil {
+ 		return &func0WrapError{"fromjson", v, err}
+ 	}
+-	if _, err := dec.Token(); err != io.EOF {
++	if _, err := dec.Decode(); err != io.EOF {
+ 		return &func0TypeError{"fromjson", v}
+ 	}
+ 	return w
+@@ -949,7 +961,7 @@
+ 	ss := make([]string, len(vs))
+ 	for i, v := range vs {
+ 		switch v := v.(type) {
+-		case []any, map[string]any:
++		case []any, *OrderedObject:
+ 			return &formatRowError{typ, v}
+ 		case string:
+ 			ss[i] = escape(v)
+@@ -993,10 +1005,11 @@
+ 		switch v := v.(type) {
+ 		case nil:
+ 			return nil
+-		case map[string]any:
+-			return v[x]
++		case *OrderedObject:
++			value, _ := v.Get(x)
++			return value
+ 		default:
+-			return &expectedObjectError{v}
++			return &expectedObjectError{v: v, key: x}
+ 		}
+ 	case int, float64, *big.Int, json.Number:
+ 		i, _ := toInt(x)
+@@ -1006,9 +1019,9 @@
+ 		case []any:
+ 			return index(v, i)
+ 		case string:
+-			return indexString(v, i)
++			return &expectedArrayError{v: v, key: x}
+ 		default:
+-			return &expectedArrayError{v}
++			return &expectedArrayError{v: v, key: x}
+ 		}
+ 	case []any:
+ 		switch v := v.(type) {
+@@ -1017,19 +1030,19 @@
+ 		case []any:
+ 			return indices(v, x)
+ 		default:
+-			return &expectedArrayError{v}
++			return &expectedArrayError{v: v, key: x}
+ 		}
+-	case map[string]any:
++	case *OrderedObject:
+ 		if v == nil {
+ 			return nil
+ 		}
+-		start, ok := x["start"]
++		start, ok := x.Get("start")
+ 		if !ok {
+-			return &expectedStartEndError{x}
++			return &expectedStartEndError{v}
+ 		}
+-		end, ok := x["end"]
++		end, ok := x.Get("end")
+ 		if !ok {
+-			return &expectedStartEndError{x}
++			return &expectedStartEndError{v}
+ 		}
+ 		return funcSlice(nil, v, end, start)
+ 	default:
+@@ -1052,19 +1065,6 @@
+ 	return nil
+ }
+ 
+-func indexString(s string, i int) any {
+-	l := len([]rune(s))
+-	i = clampIndex(i, -1, l)
+-	if 0 <= i && i < l {
+-		for _, r := range s {
+-			if i--; i < 0 {
+-				return string(r)
+-			}
+-		}
+-	}
+-	return nil
+-}
+-
+ func funcSlice(_, v, e, s any) (r any) {
+ 	switch v := v.(type) {
+ 	case nil:
+@@ -1074,7 +1074,7 @@
+ 	case string:
+ 		return sliceString(v, e, s)
+ 	default:
+-		return &expectedArrayError{v}
++		return &expectedArrayError{v: v, key: NewObject(0)}
+ 	}
+ }
+ 
+@@ -1484,8 +1484,8 @@
+ 	return ok
+ }
+ 
+-func (a allocator) makeObject(l int) map[string]any {
+-	v := make(map[string]any, l)
++func (a allocator) makeObject(l int) *OrderedObject {
++	v := NewObject(l)
+ 	if a != nil {
+ 		a[reflect.ValueOf(v).Pointer()] = struct{}{}
+ 	}
+@@ -1548,7 +1548,7 @@
+ 	for _, q := range paths {
+ 		path, ok := q.([]any)
+ 		if !ok {
+-			return &func1WrapError{"delpaths", v, p, &expectedArrayError{q}}
++			return &func1WrapError{"delpaths", v, p, &expectedArrayError{v: q}}
+ 		}
+ 		u, err = update(u, path, empty, a)
+ 		if err != nil {
+@@ -1567,12 +1567,12 @@
+ 		switch v := v.(type) {
+ 		case nil:
+ 			return updateObject(nil, p, path[1:], n, a)
+-		case map[string]any:
++		case *OrderedObject:
+ 			return updateObject(v, p, path[1:], n, a)
+ 		case struct{}:
+ 			return v, nil
+ 		default:
+-			return nil, &expectedObjectError{v}
++			return nil, &expectedObjectError{v: v, key: p}
+ 		}
+ 	case int, float64, *big.Int, json.Number:
+ 		i, _ := toInt(p)
+@@ -1584,9 +1584,9 @@
+ 		case struct{}:
+ 			return v, nil
+ 		default:
+-			return nil, &expectedArrayError{v}
++			return nil, &expectedArrayError{v: v, key: p}
+ 		}
+-	case map[string]any:
++	case *OrderedObject:
+ 		switch v := v.(type) {
+ 		case nil:
+ 			return updateArraySlice(nil, p, path[1:], n, a)
+@@ -1595,7 +1595,7 @@
+ 		case struct{}:
+ 			return v, nil
+ 		default:
+-			return nil, &expectedArrayError{v}
++			return nil, &expectedArrayError{v: v, key: p}
+ 		}
+ 	default:
+ 		switch v.(type) {
+@@ -1607,8 +1607,8 @@
+ 	}
+ }
+ 
+-func updateObject(v map[string]any, k string, path []any, n any, a allocator) (any, error) {
+-	x, ok := v[k]
++func updateObject(v *OrderedObject, k string, path []any, n any, a allocator) (any, error) {
++	x, ok := v.Get(k)
+ 	if !ok && n == struct{}{} {
+ 		if v == nil {
+ 			return nil, nil
+@@ -1619,13 +1619,13 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	if a.allocated(v) {
+-		v[k] = u
++	if v != nil && a.allocated(v) {
++		v.Set(k, u)
+ 		return v, nil
+ 	}
+-	w := a.makeObject(len(v) + 1)
+-	maps.Copy(w, v)
+-	w[k] = u
++	w := a.makeObject(v.Len() + 1)
++	v.Range(func(key string, value any) bool { w.Set(key, value); return true })
++	w.Set(k, u)
+ 	return w, nil
+ }
+ 
+@@ -1677,14 +1677,14 @@
+ 	return w, nil
+ }
+ 
+-func updateArraySlice(v []any, m map[string]any, path []any, n any, a allocator) (any, error) {
+-	s, ok := m["start"]
++func updateArraySlice(v []any, m *OrderedObject, path []any, n any, a allocator) (any, error) {
++	s, ok := m.Get("start")
+ 	if !ok {
+-		return nil, &expectedStartEndError{m}
++		return nil, &expectedStartEndError{v}
+ 	}
+-	e, ok := m["end"]
++	e, ok := m.Get("end")
+ 	if !ok {
+-		return nil, &expectedStartEndError{m}
++		return nil, &expectedStartEndError{v}
+ 	}
+ 	var start, end int
+ 	if s != nil {
+@@ -1738,7 +1738,7 @@
+ 		}
+ 		return w, nil
+ 	default:
+-		return nil, &expectedArrayError{u}
++		return nil, &expectedArrayError{v: u}
+ 	}
+ }
+ 
+@@ -1746,12 +1746,12 @@
+ 	switch v := v.(type) {
+ 	case struct{}:
+ 		return nil
+-	case map[string]any:
+-		for k, w := range v {
+-			if w == struct{}{} {
+-				delete(v, k)
++	case *OrderedObject:
++		for _, k := range append([]string(nil), v.Keys()...) {
++			if w, _ := v.Get(k); w == struct{}{} {
++				v.remove(k)
+ 			} else {
+-				v[k] = deleteEmpty(w)
++				v.Set(k, deleteEmpty(w))
+ 			}
+ 		}
+ 		return v
+@@ -1780,7 +1780,7 @@
+ 	u := v
+ 	for _, x := range path {
+ 		switch v.(type) {
+-		case nil, []any, map[string]any:
++		case nil, []any, *OrderedObject:
+ 			v = funcIndex2(nil, v, x)
+ 			if err, ok := v.(error); ok {
+ 				return &func1WrapError{"getpath", u, p, err}
+@@ -2018,27 +2018,16 @@
+ 				name = n
+ 			}
+ 			if x[j*2] < 0 {
+-				captures[j-1] = map[string]any{
+-					"name":   name,
+-					"offset": -1,
+-					"length": 0,
+-					"string": nil,
+-				}
++				captures[j-1] = ObjectOf("offset", -1, "length", 0, "string", nil, "name", name)
+ 				continue
+ 			}
+-			captures[j-1] = map[string]any{
+-				"name":   name,
+-				"offset": len([]rune(s[:x[j*2]])),
+-				"length": len([]rune(s[:x[j*2+1]])) - len([]rune(s[:x[j*2]])),
+-				"string": s[x[j*2]:x[j*2+1]],
+-			}
++			captures[j-1] = ObjectOf("offset", len([]rune(s[:x[j*2]])),
++				"length", len([]rune(s[:x[j*2+1]]))-len([]rune(s[:x[j*2]])),
++				"string", s[x[j*2]:x[j*2+1]], "name", name)
+ 		}
+-		res[i] = map[string]any{
+-			"offset":   len([]rune(s[:x[0]])),
+-			"length":   len([]rune(s[:x[1]])) - len([]rune(s[:x[0]])),
+-			"string":   s[x[0]:x[1]],
+-			"captures": captures,
+-		}
++		res[i] = ObjectOf("offset", len([]rune(s[:x[0]])),
++			"length", len([]rune(s[:x[1]]))-len([]rune(s[:x[0]])),
++			"string", s[x[0]:x[1]], "captures", captures)
+ 	}
+ 	return res
+ }
+@@ -2070,13 +2059,16 @@
+ func funcCaptures(v any) any {
+ 	captures, ok := v.([]any)
+ 	if !ok {
+-		return &expectedArrayError{v}
++		return &expectedArrayError{v: v}
+ 	}
+-	w := make(map[string]any, len(captures))
++	w := NewObject(len(captures))
+ 	for _, capture := range captures {
+-		if capture, ok := capture.(map[string]any); ok {
+-			if name, ok := capture["name"].(string); ok {
+-				w[name] = capture["string"]
++		if capture, ok := capture.(*OrderedObject); ok {
++			if name, ok := capture.Get("name"); ok {
++				if name, ok := name.(string); ok {
++					value, _ := capture.Get("string")
++					w.Set(name, value)
++				}
+ 			}
+ 		}
+ 	}
+@@ -2173,6 +2165,9 @@
+ 
+ func parseNumber(v json.Number) any {
+ 	if i, err := v.Int64(); err == nil && math.MinInt <= i && i <= math.MaxInt {
++		if i == 0 && strings.HasPrefix(v.String(), "-") {
++			return math.Copysign(0, -1)
++		}
+ 		return int(i)
+ 	}
+ 	if strings.ContainsAny(v.String(), ".eE") {
+@@ -2180,8 +2175,8 @@
+ 			return f
+ 		}
+ 	}
+-	if bi, ok := new(big.Int).SetString(v.String(), 10); ok {
+-		return bi
++	if f, err := strconv.ParseFloat(v.String(), 64); err == nil || errors.Is(err, strconv.ErrRange) {
++		return f
+ 	}
+ 	if strings.HasPrefix(v.String(), "-") {
+ 		return math.Inf(-1)
+--- a/go.mod
++++ b/go.mod
+@@ -2,16 +2,4 @@
+ 
+ go 1.24.0
+ 
+-require (
+-	github.com/google/go-cmp v0.7.0
+-	github.com/itchyny/go-yaml v0.0.0-20251001235044-fca9a0999f15
+-	github.com/itchyny/timefmt-go v0.1.8
+-	github.com/mattn/go-isatty v0.0.20
+-	github.com/mattn/go-runewidth v0.0.19
+-)
+-
+-require (
+-	github.com/clipperhouse/stringish v0.1.1 // indirect
+-	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
+-	golang.org/x/sys v0.38.0 // indirect
+-)
++require github.com/itchyny/timefmt-go v0.1.8
+--- a/go.sum
++++ b/go.sum
+@@ -1,17 +1,2 @@
+-github.com/clipperhouse/stringish v0.1.1 h1:+NSqMOr3GR6k1FdRhhnXrLfztGzuG+VuFDfatpWHKCs=
+-github.com/clipperhouse/stringish v0.1.1/go.mod h1:v/WhFtE1q0ovMta2+m+UbpZ+2/HEXNWYXQgCt4hdOzA=
+-github.com/clipperhouse/uax29/v2 v2.3.0 h1:SNdx9DVUqMoBuBoW3iLOj4FQv3dN5mDtuqwuhIGpJy4=
+-github.com/clipperhouse/uax29/v2 v2.3.0/go.mod h1:Wn1g7MK6OoeDT0vL+Q0SQLDz/KpfsVRgg6W7ihQeh4g=
+-github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+-github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
+-github.com/itchyny/go-yaml v0.0.0-20251001235044-fca9a0999f15 h1:m4jKsIK0QS9ihQzOxUN2zJcPdrACwqIWCwvdzv9skMQ=
+-github.com/itchyny/go-yaml v0.0.0-20251001235044-fca9a0999f15/go.mod h1:Tmbz8uw5I/I6NvVpEGuhzlElCGS5hPoXJkt7l+ul6LE=
+ github.com/itchyny/timefmt-go v0.1.8 h1:1YEo1JvfXeAHKdjelbYr/uCuhkybaHCeTkH8Bo791OI=
+ github.com/itchyny/timefmt-go v0.1.8/go.mod h1:5E46Q+zj7vbTgWY8o5YkMeYb4I6GeWLFnetPy5oBrAI=
+-github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
+-github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
+-github.com/mattn/go-runewidth v0.0.19 h1:v++JhqYnZuu5jSKrk9RbgF5v4CGUjqRfBm05byFGLdw=
+-github.com/mattn/go-runewidth v0.0.19/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
+-golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+-golang.org/x/sys v0.38.0 h1:3yZWxaJjBmCWXqhN1qh02AkOnCQ1poK6oF+a7xWL6Gc=
+-golang.org/x/sys v0.38.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
+--- a/object.go
++++ b/object.go
+@@ -0,0 +1,193 @@
++package gojq
++
++import "sort"
++
++// OrderedObject is a JSON object that keeps its keys in insertion order, as jq does:
++// construction, parsing and assignment append new keys, and encoding,
++// to_entries and keys_unsorted follow that order. keys, comparison and
++// sorted output still order keys by codepoint.
++//
++// An OrderedObject is a value: operations that change one return a new OrderedObject, and
++// an OrderedObject reachable from a value is never mutated after construction.
++type OrderedObject struct {
++	keys   []string
++	values map[string]any
++}
++
++// NewObject returns an empty object with room for n keys.
++func NewObject(n int) *OrderedObject {
++	return &OrderedObject{keys: make([]string, 0, n), values: make(map[string]any, n)}
++}
++
++// ObjectOf builds an object from alternating key and value arguments, in order.
++func ObjectOf(pairs ...any) *OrderedObject {
++	o := NewObject(len(pairs) / 2)
++	for i := 0; i+1 < len(pairs); i += 2 {
++		o.Set(pairs[i].(string), pairs[i+1])
++	}
++	return o
++}
++
++// Len is the number of keys.
++func (o *OrderedObject) Len() int {
++	if o == nil {
++		return 0
++	}
++	return len(o.keys)
++}
++
++// Get returns the value at k.
++func (o *OrderedObject) Get(k string) (any, bool) {
++	if o == nil {
++		return nil, false
++	}
++	v, ok := o.values[k]
++	return v, ok
++}
++
++// Keys returns the keys in insertion order. The slice must not be modified.
++func (o *OrderedObject) Keys() []string {
++	if o == nil {
++		return nil
++	}
++	return o.keys
++}
++
++// SortedKeys returns the keys in codepoint order.
++func (o *OrderedObject) SortedKeys() []string {
++	w := make([]string, len(o.keys))
++	copy(w, o.keys)
++	sort.Strings(w)
++	return w
++}
++
++// Set assigns k, appending it when new. Only an object still under
++// construction may be set.
++func (o *OrderedObject) Set(k string, v any) {
++	if _, ok := o.values[k]; !ok {
++		o.keys = append(o.keys, k)
++	}
++	o.values[k] = v
++}
++
++// Clone returns an independent copy with room for extra more keys.
++func (o *OrderedObject) Clone(extra int) *OrderedObject {
++	c := NewObject(o.Len() + extra)
++	for _, k := range o.Keys() {
++		c.Set(k, o.values[k])
++	}
++	return c
++}
++
++// Without returns a copy that omits k, keeping the remaining order.
++func (o *OrderedObject) Without(k string) *OrderedObject {
++	c := NewObject(o.Len())
++	for _, key := range o.Keys() {
++		if key != k {
++			c.Set(key, o.values[key])
++		}
++	}
++	return c
++}
++
++// Range calls f for each key in insertion order until it returns false.
++func (o *OrderedObject) Range(f func(k string, v any) bool) {
++	for _, k := range o.Keys() {
++		if !f(k, o.values[k]) {
++			return
++		}
++	}
++}
++
++// toMap is the shallow map form the module loader interfaces receive.
++func (o *OrderedObject) toMap() map[string]any {
++	if o == nil {
++		return nil
++	}
++	m := make(map[string]any, o.Len())
++	for _, k := range o.keys {
++		m[k] = o.values[k]
++	}
++	return m
++}
++
++// remove deletes k in place from an object still under construction.
++func (o *OrderedObject) remove(k string) {
++	if _, ok := o.values[k]; !ok {
++		return
++	}
++	delete(o.values, k)
++	for i, key := range o.keys {
++		if key == k {
++			o.keys = append(o.keys[:i], o.keys[i+1:]...)
++			break
++		}
++	}
++}
++
++// MarshalJSON encodes the object in insertion order with Marshal's jq
++// conventions, so encoding/json callers print what jq prints.
++func (o *OrderedObject) MarshalJSON() ([]byte, error) { return Marshal(o) }
++
++// FromGo converts Go JSON values to query values: each map[string]any becomes
++// an *OrderedObject with its keys in codepoint order, the order a Go map
++// cannot state. Arrays without maps are returned as they are.
++func FromGo(v any) any {
++	out, _ := fromGo(v)
++	return out
++}
++
++func fromGo(v any) (any, bool) {
++	switch v := v.(type) {
++	case map[string]any:
++		keys := make([]string, 0, len(v))
++		for k := range v {
++			keys = append(keys, k)
++		}
++		sort.Strings(keys)
++		o := NewObject(len(keys))
++		for _, k := range keys {
++			x, _ := fromGo(v[k])
++			o.Set(k, x)
++		}
++		return o, true
++	case []any:
++		var out []any
++		for i, x := range v {
++			y, changed := fromGo(x)
++			if changed && out == nil {
++				out = make([]any, len(v))
++				copy(out, v)
++			}
++			if out != nil {
++				out[i] = y
++			}
++		}
++		if out == nil {
++			return v, false
++		}
++		return out, true
++	}
++	return v, false
++}
++
++// ToGo converts query values back to Go JSON values: every *OrderedObject
++// becomes a map[string]any. Callers that need key order read it before
++// converting.
++func ToGo(v any) any {
++	switch v := v.(type) {
++	case *OrderedObject:
++		m := make(map[string]any, v.Len())
++		for _, k := range v.Keys() {
++			m[k] = ToGo(v.values[k])
++		}
++		return m
++	case []any:
++		out := make([]any, len(v))
++		for i, x := range v {
++			out[i] = ToGo(x)
++		}
++		return out
++	}
++	return v
++}
+--- a/operator.go
++++ b/operator.go
+@@ -2,7 +2,6 @@
+ 
+ import (
+ 	"encoding/json"
+-	"maps"
+ 	"math"
+ 	"math/big"
+ 	"strings"
+@@ -196,7 +195,7 @@
+ 	callbackBigInts func(_, _ *big.Int) T,
+ 	callbackStrings func(_, _ string) T,
+ 	callbackArrays func(_, _ []any) T,
+-	callbackMaps func(_, _ map[string]any) T,
++	callbackMaps func(_, _ *OrderedObject) T,
+ 	fallback func(_, _ any) T) T {
+ 	if n, ok := l.(json.Number); ok {
+ 		l = parseNumber(n)
+@@ -252,9 +251,9 @@
+ 		default:
+ 			return fallback(l, r)
+ 		}
+-	case map[string]any:
++	case *OrderedObject:
+ 		switch r := r.(type) {
+-		case map[string]any:
++		case *OrderedObject:
+ 			return callbackMaps(l, r)
+ 		default:
+ 			return fallback(l, r)
+@@ -281,11 +280,23 @@
+ 
+ func negate(v int) any {
+ 	if v == math.MinInt {
+-		return new(big.Int).Neg(big.NewInt(int64(v)))
++		return -float64(v)
+ 	}
+ 	return -v
+ }
+ 
++// maxExactInt is 2^53: jq numbers are doubles, so an integer result past it
++// takes the double's value.
++const maxExactInt = 1 << 53
++
++// intResult is an exact integer result as jq's double arithmetic yields it.
++func intResult(v int) any {
++	if v > maxExactInt || v < -maxExactInt {
++		return float64(v)
++	}
++	return v
++}
++
+ func funcOpNegate(v any) any {
+ 	switch v := v.(type) {
+ 	case int:
+@@ -308,10 +319,9 @@
+ 	return binopTypeSwitch(l, r,
+ 		func(l, r int) any {
+ 			if v := l + r; (v >= l) == (r >= 0) {
+-				return v
++				return intResult(v)
+ 			}
+-			x, y := big.NewInt(int64(l)), big.NewInt(int64(r))
+-			return x.Add(x, y)
++			return float64(l) + float64(r)
+ 		},
+ 		func(l, r float64) any { return l + r },
+ 		func(l, r *big.Int) any { return new(big.Int).Add(l, r) },
+@@ -328,16 +338,15 @@
+ 			copy(v[len(l):], r)
+ 			return v
+ 		},
+-		func(l, r map[string]any) any {
+-			if len(l) == 0 {
++		func(l, r *OrderedObject) any {
++			if l.Len() == 0 {
+ 				return r
+ 			}
+-			if len(r) == 0 {
++			if r.Len() == 0 {
+ 				return l
+ 			}
+-			m := make(map[string]any, len(l)+len(r))
+-			maps.Copy(m, l)
+-			maps.Copy(m, r)
++			m := l.Clone(r.Len())
++			r.Range(func(k string, v any) bool { m.Set(k, v); return true })
+ 			return m
+ 		},
+ 		func(l, r any) any {
+@@ -356,10 +365,9 @@
+ 	return binopTypeSwitch(l, r,
+ 		func(l, r int) any {
+ 			if v := l - r; (v <= l) == (r >= 0) {
+-				return v
++				return intResult(v)
+ 			}
+-			x, y := big.NewInt(int64(l)), big.NewInt(int64(r))
+-			return x.Sub(x, y)
++			return float64(l) - float64(r)
+ 		},
+ 		func(l, r float64) any { return l - r },
+ 		func(l, r *big.Int) any { return new(big.Int).Sub(l, r) },
+@@ -377,7 +385,7 @@
+ 			}
+ 			return v
+ 		},
+-		func(l, r map[string]any) any { return &binopTypeError{"subtract", l, r} },
++		func(l, r *OrderedObject) any { return &binopTypeError{"subtract", l, r} },
+ 		func(l, r any) any { return &binopTypeError{"subtract", l, r} },
+ 	)
+ }
+@@ -389,10 +397,9 @@
+ 				return negate(l)
+ 			}
+ 			if v := l * r; r == 0 || v/r == l {
+-				return v
++				return intResult(v)
+ 			}
+-			x, y := big.NewInt(int64(l)), big.NewInt(int64(r))
+-			return x.Mul(x, y)
++			return float64(l) * float64(r)
+ 		},
+ 		func(l, r float64) any { return l * r },
+ 		func(l, r *big.Int) any { return new(big.Int).Mul(l, r) },
+@@ -415,19 +422,19 @@
+ 	)
+ }
+ 
+-func deepMergeObjects(l, r map[string]any) any {
+-	m := make(map[string]any, len(l)+len(r))
+-	maps.Copy(m, l)
+-	for k, v := range r {
+-		if mk, ok := m[k]; ok {
+-			if mk, ok := mk.(map[string]any); ok {
+-				if w, ok := v.(map[string]any); ok {
++func deepMergeObjects(l, r *OrderedObject) any {
++	m := l.Clone(r.Len())
++	r.Range(func(k string, v any) bool {
++		if mk, ok := m.Get(k); ok {
++			if mk, ok := mk.(*OrderedObject); ok {
++				if w, ok := v.(*OrderedObject); ok {
+ 					v = deepMergeObjects(mk, w)
+ 				}
+ 			}
+ 		}
+-		m[k] = v
+-	}
++		m.Set(k, v)
++		return true
++	})
+ 	return m
+ }
+ 
+@@ -485,7 +492,7 @@
+ 			return vs
+ 		},
+ 		func(l, r []any) any { return &binopTypeError{"divide", l, r} },
+-		func(l, r map[string]any) any { return &binopTypeError{"divide", l, r} },
++		func(l, r *OrderedObject) any { return &binopTypeError{"divide", l, r} },
+ 		func(l, r any) any { return &binopTypeError{"divide", l, r} },
+ 	)
+ }
+@@ -520,7 +527,7 @@
+ 		},
+ 		func(l, r string) any { return &binopTypeError{"modulo", l, r} },
+ 		func(l, r []any) any { return &binopTypeError{"modulo", l, r} },
+-		func(l, r map[string]any) any { return &binopTypeError{"modulo", l, r} },
++		func(l, r *OrderedObject) any { return &binopTypeError{"modulo", l, r} },
+ 		func(l, r any) any { return &binopTypeError{"modulo", l, r} },
+ 	)
+ }
+--- a/preview.go
++++ b/preview.go
+@@ -8,7 +8,7 @@
+ //
+ // This method is used by error messages of built-in operators and functions,
+ // and accepts only limited types (nil, bool, int, float64, *big.Int,
+-// json.Number, string, []any, and map[string]any). Note that the maximum width
++// json.Number, string, []any, and *OrderedObject). Note that the maximum width
+ // and trailing strings on truncation may be changed in the future.
+ func Preview(v any) string {
+ 	bs := jsonLimitedMarshal(v, 32)
+@@ -19,7 +19,7 @@
+ 			trailing = ` ..."`
+ 		case []any:
+ 			trailing = " ...]"
+-		case map[string]any:
++		case *OrderedObject:
+ 			trailing = " ...}"
+ 		default:
+ 			trailing = " ..."
+--- a/query.go
++++ b/query.go
+@@ -451,7 +451,7 @@
+ 			ok = end != nil
+ 		}
+ 		if ok {
+-			return map[string]any{"start": start, "end": end}
++			return ObjectOf("start", start, "end", end)
+ 		}
+ 	}
+ 	return nil
+@@ -872,18 +872,18 @@
+ 	s.WriteString(" }")
+ }
+ 
+-// ToValue converts the object to map[string]any.
+-func (e *ConstObject) ToValue() map[string]any {
++// ToValue converts the object to an insertion-ordered object.
++func (e *ConstObject) ToValue() *OrderedObject {
+ 	if e == nil {
+ 		return nil
+ 	}
+-	v := make(map[string]any, len(e.KeyVals))
++	v := NewObject(len(e.KeyVals))
+ 	for _, e := range e.KeyVals {
+ 		key := e.Key
+ 		if key == "" {
+ 			key = e.KeyString
+ 		}
+-		v[key] = e.Val.toValue()
++		v.Set(key, e.Val.toValue())
+ 	}
+ 	return v
+ }
+--- a/type.go
++++ b/type.go
+@@ -10,7 +10,7 @@
+ //
+ // This method is used by built-in type/0 function, and accepts only limited
+ // types (nil, bool, int, float64, *big.Int, json.Number, string, []any, and
+-// map[string]any).
++// *OrderedObject).
+ func TypeOf(v any) string {
+ 	switch v.(type) {
+ 	case nil:
+@@ -23,7 +23,7 @@
+ 		return "string"
+ 	case []any:
+ 		return "array"
+-	case map[string]any:
++	case *OrderedObject:
+ 		return "object"
+ 	default:
+ 		panic(fmt.Sprintf("invalid type: %[1]T (%[1]v)", v))

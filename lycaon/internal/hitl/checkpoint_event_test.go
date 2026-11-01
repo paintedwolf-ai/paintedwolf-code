@@ -11,13 +11,13 @@ import (
 
 func storedPlan(command string, band api.ConsequenceBand, code api.ConsequenceCode) map[string]any {
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Presentation: hitl.ActionPresentation{
-Command: command,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: command,
+		},
+	}
 	presentation, reasons := approvalPlanPresentation()
 	presentation.Tool = "command"
 	presentation.Command = command

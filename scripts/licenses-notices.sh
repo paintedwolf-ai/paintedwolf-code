@@ -79,15 +79,31 @@ GO_IGNORE_DUAL_LICENSED=(
 )
 # This package list matches the staged executables.
 SHIPPED_GO_PACKAGES=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity ./cmd/pw-launch ./cmd/pw-launch-entry ./cmd/pw-generations)
+# Select entrypoints from Go's platform/build-tag facts. Linux launch helpers
+# have no source files on macOS or Windows and are not shipped there.
 (
   cd "${GO_DIR}"
-  "${GO_LICENSES}" check "${SHIPPED_GO_PACKAGES[@]}" \
+  go list -e -f '{{if or .GoFiles .CgoFiles}}{{.ImportPath}}{{end}}' "${SHIPPED_GO_PACKAGES[@]}" >"${TMP}/go-packages"
+)
+NOTICE_GO_PACKAGES=()
+while IFS= read -r package; do
+  if [[ -n "${package}" ]]; then
+    NOTICE_GO_PACKAGES+=("${package}")
+  fi
+done <"${TMP}/go-packages"
+if [[ ${#NOTICE_GO_PACKAGES[@]} -eq 0 ]]; then
+  echo "error: no shipped Go entrypoints are available for this target" >&2
+  exit 1
+fi
+(
+  cd "${GO_DIR}"
+  "${GO_LICENSES}" check "${NOTICE_GO_PACKAGES[@]}" \
     "${GO_IGNORE_FIRST_PARTY[@]}" \
     "${GO_IGNORE_UNCLASSIFIED[@]}" \
     "${GO_IGNORE_DUAL_LICENSED[@]}" \
     --disallowed_types=forbidden,restricted,unknown
   # Warnings/classifier misses go to stderr; CSV rows (including Unknown) to stdout.
-  "${GO_LICENSES}" csv "${SHIPPED_GO_PACKAGES[@]}" \
+  "${GO_LICENSES}" csv "${NOTICE_GO_PACKAGES[@]}" \
     "${GO_IGNORE_FIRST_PARTY[@]}" \
     >"${TMP}/go.csv" 2>"${TMP}/go-csv.err"
   if [[ ! -s "${TMP}/go.csv" ]]; then
@@ -95,7 +111,7 @@ SHIPPED_GO_PACKAGES=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity ./cmd/pw
     cat "${TMP}/go-csv.err" >&2 || true
     exit 1
   fi
-  "${GO_LICENSES}" save "${SHIPPED_GO_PACKAGES[@]}" \
+  "${GO_LICENSES}" save "${NOTICE_GO_PACKAGES[@]}" \
     "${GO_IGNORE_FIRST_PARTY[@]}" \
     "${GO_IGNORE_UNCLASSIFIED[@]}" \
     --save_path="${TMP}/go-save" \

@@ -28,6 +28,7 @@ func LogApplied(tool, sessionID string, c *Confinement) {
 	slog.Info("process boundary selected",
 		"host_execution", c.HostExecution,
 		"process_control", c.ProcessControl,
+		"credential_store", c.CredentialStore,
 		"component", "sandbox",
 		"tool", tool,
 		"session_id", sessionID,

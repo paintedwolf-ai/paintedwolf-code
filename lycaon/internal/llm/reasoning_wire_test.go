@@ -36,11 +36,14 @@ func TestShippedReasoningWireDefaults(t *testing.T) {
 	cfg, err := LoadProviderConfig()
 	testutil.FailErr(t, "load provider catalog", err)
 	wants := map[string]providerprofile.ReasoningWireStyle{
+		"cerebras":              providerprofile.ReasoningWireContent,
 		"cloudflare-workers-ai": providerprofile.ReasoningWireContent,
+		"deepinfra":             providerprofile.ReasoningWireContent,
 		"lmstudio":              providerprofile.ReasoningWireContent,
 		"omlx":                  providerprofile.ReasoningWireContent,
 		"openai-compatible":     providerprofile.ReasoningWireContent,
 		"openrouter":            providerprofile.ReasoningWireDetails,
+		"scaleway":              providerprofile.ReasoningWireContent,
 	}
 	for _, entry := range cfg.Providers {
 		if want, ok := wants[entry.ID]; ok {
@@ -56,10 +59,10 @@ func TestShippedReasoningWireDefaults(t *testing.T) {
 }
 
 func TestReasoningWireConfiguresCompatibleProviderKinds(t *testing.T) {
-	for _, kind := range []string{"custom", "openai-compatible", "lmstudio", "omlx", "openrouter", "cloudflare-workers-ai"} {
+	for _, kind := range []string{"custom", "openai-compatible", "lmstudio", "omlx", "openrouter", "cloudflare-workers-ai", "deepinfra", "scaleway", "cerebras"} {
 		provider, err := newProviderForEntry(t.Context(), CatalogEntry{
 			ID: "instance", Kind: kind, BaseURL: "https://example.test/v1", ReasoningWire: providerprofile.ReasoningWireContent,
-		}, "fixture", providerretry.ProviderHTTPRetry{}, nil, nil)
+		}, "fixture", providerretry.ProviderHTTPRetry{}, nil, nil, nil)
 		testutil.FailErr(t, "construct "+kind, err)
 		if provider.Profile().ReasoningWire != providerprofile.ReasoningWireContent {
 			t.Fatalf("%s did not apply reasoning_wire", kind)
@@ -90,7 +93,7 @@ func TestLocalProviderKindsReplayReasoningContentAcrossMultiStepToolLoop(t *test
 			Models: []modelinfo.Entry{{ID: "local-4b-instruct"}},
 		}, ship)
 		testutil.FailErr(t, "resolve "+kind, err)
-		provider, err := newProviderForEntry(t.Context(), entry, "", providerretry.ProviderHTTPRetry{}, nil, nil)
+		provider, err := newProviderForEntry(t.Context(), entry, "", providerretry.ProviderHTTPRetry{}, nil, nil, nil)
 		testutil.FailErr(t, "construct "+kind, err)
 		p := provider.(*openaicompat.Provider)
 		req := modelcall.CompletionRequest{
@@ -143,7 +146,7 @@ func TestReasoningContentStreamSurvivesNextRequest(t *testing.T) {
 	entry, err := resolveLocalEntry(ProviderEntry{ID: "custom", ReasoningWire: providerprofile.ReasoningWireContent}, nil)
 	testutil.FailErr(t, "resolve custom provider", err)
 	entry.BaseURL, entry.Models = srv.URL, []modelinfo.Entry{{ID: "model"}}
-	provider, err := newProviderForEntry(t.Context(), entry, "key", (&Registry{}).providerRetryPolicy(entry), nil, nil)
+	provider, err := newProviderForEntry(t.Context(), entry, "key", (&Registry{}).providerRetryPolicy(entry), nil, nil, nil)
 	testutil.FailErr(t, "construct configured transport", err)
 	p := provider.(*openaicompat.Provider)
 	req := modelcall.CompletionRequest{Model: "model", Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Inspect the release."}}, Tools: []tools.ToolMeta{{Name: "read"}}}

@@ -7,8 +7,8 @@ import json
 from scripts.linux_release import pacman_publication, release_repositories
 from scripts.linux_release.openpgp import selection
 from scripts.linux_release.repository_operations import identity
+from scripts.linux_release.repository_setup import package_identity
 from scripts.linux_release.repository_setup_admission import admit_setup
-from scripts.linux_release.repository_setup_identity import package_identity
 from scripts.linux_release.signing import CATALOG
 from scripts.linux_release.r2_objects import prefix as repository_prefix
 from scripts.nix_cache.admission import nar_sha256

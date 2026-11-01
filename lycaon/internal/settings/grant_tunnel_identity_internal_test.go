@@ -12,45 +12,45 @@ import (
 // tunnelEgressAction names the opaque destination's host, port, and transport.
 func tunnelEgressAction(host string, port uint16, transport egressproxy.Transport) hitl.ProposedAction {
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "network",
-Args: map[string]any{
-			"host": host, "transport": string(transport), "port": port,
+		Invocation: hitl.ActionInvocation{
+			Tool: "network",
+			Args: map[string]any{
+				"host": host, "transport": string(transport), "port": port,
+			},
 		},
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-tunnel",
-ProjectID: "proj-tunnel",
-ProjectDir: "/tmp/proj",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{
-			FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-tunnel",
+			ProjectID:  "proj-tunnel",
+			ProjectDir: "/tmp/proj",
 		},
-},
-}
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"},
+			},
+		},
+	}
 }
 
 // requestEgressAction is the ask for a readable request, which names no port.
 func requestEgressAction(host string) hitl.ProposedAction {
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "network",
-Args: map[string]any{
-			"host": host, "transport": string(egressproxy.TransportHTTPRequest),
+		Invocation: hitl.ActionInvocation{
+			Tool: "network",
+			Args: map[string]any{
+				"host": host, "transport": string(egressproxy.TransportHTTPRequest),
+			},
 		},
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-tunnel",
-ProjectID: "proj-tunnel",
-ProjectDir: "/tmp/proj",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{
-			FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-tunnel",
+			ProjectID:  "proj-tunnel",
+			ProjectDir: "/tmp/proj",
 		},
-},
-}
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"},
+			},
+		},
+	}
 }
 
 // Tunnel site leases retain the reviewed port.

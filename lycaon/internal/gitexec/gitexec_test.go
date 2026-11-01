@@ -535,7 +535,7 @@ func TestBuildEnvRestoresResolvedSSHAgentSocket(t *testing.T) {
 		agentSocketResolver = defaultAgentSocket
 	})
 	agentSocketResolver = func(context.Context) string { return "/private/tmp/launchd/agent.sock" }
-	env, err := buildEnv(t.Context(), "/bundle/bin/git", Opts{})
+	env, err := buildEnv(t.Context(), "/bundle/bin/git", Opts{Profile: ProfileNetwork})
 	testutil.FailErr(t, "buildEnv", err)
 	found := false
 	for _, entry := range env {

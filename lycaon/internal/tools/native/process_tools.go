@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
@@ -22,18 +23,57 @@ func (t *ProcessTools) List(ctx context.Context, args map[string]any, tc tools.T
 	if t.Service == nil || tc.Execution.ProcessReview == nil {
 		return "", safecmd.Reject(isolation.CodeApprovalUnavailable, nil)
 	}
+	query, listening, err := listenerQuery(args)
+	if err != nil {
+		return "", err
+	}
 	if err := tc.Execution.ProcessReview(ctx, "list", nil); err != nil {
 		return "", err
 	}
 	pid := toolkit.ClampIntArg(args, "pid", 0, 0, 1<<30)
 	after := toolkit.ClampIntArg(args, "after_pid", 0, 0, 1<<30)
 	limit := toolkit.ClampIntArg(args, "limit", 100, 1, 500)
+	if listening {
+		snapshot, err := t.Service.Listening(ctx, processSession(tc), query, pid, after, limit)
+		if err != nil {
+			return "", processError(err)
+		}
+		unattributed := snapshot.Unattributed
+		if unattributed == nil {
+			unattributed = []hostprocess.ListeningSocket{}
+		}
+		raw, err := surveyjson.Marshal(map[string]any{"processes": snapshot.Processes, "unattributed_listeners": unattributed, "next_after_pid": snapshot.NextAfterPID, "snapshot_complete": snapshot.NextAfterPID == 0})
+		return string(raw), err
+	}
 	snapshot, err := t.Service.List(ctx, processSession(tc), pid, after, limit)
 	if err != nil {
 		return "", processError(err)
 	}
 	raw, err := surveyjson.Marshal(map[string]any{"processes": snapshot.Processes, "next_after_pid": snapshot.NextAfterPID, "unavailable": snapshot.Unavailable, "snapshot_complete": snapshot.NextAfterPID == 0 && snapshot.Unavailable == 0})
 	return string(raw), err
+}
+
+// listenerQuery reads the listening_port and protocol filters. Either one
+// turns the listing into a listener view.
+func listenerQuery(args map[string]any) (lineage.ListenerQuery, bool, error) {
+	var query lineage.ListenerQuery
+	port := toolkit.BoundedIntArg(args, "listening_port", 0, 1, 65535)
+	if port.Requested != nil {
+		if port.Clamped {
+			return query, false, safecmd.Reject("PROCESS_REQUEST_INVALID", map[string]any{"reason": "listening_port must be between 1 and 65535"})
+		}
+		query.Port = uint16(port.Effective)
+	}
+	raw, present := args["protocol"]
+	if present {
+		switch protocol := lineage.Protocol(fmt.Sprint(raw)); protocol {
+		case lineage.ProtocolTCP, lineage.ProtocolUDP:
+			query.Protocols = []lineage.Protocol{protocol}
+		default:
+			return query, false, safecmd.Reject("PROCESS_REQUEST_INVALID", map[string]any{"reason": "protocol must be tcp or udp"})
+		}
+	}
+	return query, port.Requested != nil || present, nil
 }
 
 func (t *ProcessTools) Signal(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {

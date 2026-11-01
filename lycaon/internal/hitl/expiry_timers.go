@@ -76,5 +76,9 @@ func (m *Checkpoints) StopExpiryTimers(ctx context.Context) error {
 	if m == nil {
 		return nil
 	}
-	return m.expiries.stop(ctx)
+	err := m.expiries.stop(ctx)
+	if err == nil {
+		m.socketOwners.close()
+	}
+	return err
 }

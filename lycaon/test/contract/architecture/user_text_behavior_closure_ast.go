@@ -291,6 +291,10 @@ var coordinatorPongoBooleanGateRE = regexp.MustCompile(`\{%\s*(?:if|elif)\s+(?:n
 var bannedCoordinatorGateNameRE = regexp.MustCompile(`(?i)(greenfield|dispatch[_-]?hint|user[_-]?intent|(^|[_-])nl([_-]|$)|build[_-]?intent|chat[_-]?approv)`)
 
 var registeredCoordinatorBooleanGates = map[string]bool{
+	// Bounded grounding repair samples carry host-observed omitted counts.
+	"observed_handles_omitted":                     true,
+	"observed_paths_omitted":                       true,
+	"observed_urls_omitted":                        true,
 	"document_issues":                              true,
 	"agent_skills":                                 true,
 	"rating_questions":                             true,
@@ -410,7 +414,9 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"completed_ago":                true,
 	"worker_digest":                true,
 	"primary_changed":              true,
+	"changes":                      true, // projectroot.DiffRoots rows in RootsChangedKickData
 	"active_root":                  true, // projectroot.ActiveRoot in RootsChangedKickData
+	"reviews_confined_writes":      true, // gate.Posture.ReviewsConfinedWrites in PostureChangedKickData
 	"evidence_digest":              true,
 	"command_completion":           true,
 	"command_refusal":              true,
@@ -429,8 +435,21 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"spawnable_reviewers":          true,
 	"review_followup_attempts":     true,
 	// Roster ids from spawn_roster_surface.go, gated on being non-empty.
-	"spawn_read_agent_ids":  true,
-	"spawn_write_agent_ids": true,
+	"spawn_read_agent_ids":         true,
+	"spawn_write_agent_ids":        true,
+	"profile_command_mutation":     true,
+	"command_external_changed":     true,
+	"command_external_hidden":      true,
+	"command_external_shown":       true,
+	"platform_os":                  true,
+	"is_coordinator":               true,
+	"command_on_floor":             true,
+	"session_scratch_dir":          true,
+	"command_output_scratch_files": true,
+	"profile_has_process_list":     true,
+	"profile_has_process_signal":   true,
+	"profile_has_command_output":   true,
+	"profile_has_command_stop":     true,
 }
 
 func scanCoordinatorPongoBooleanGates(catalogRoot string) ([]string, error) {

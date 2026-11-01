@@ -27,6 +27,7 @@ class AppBuildExecutionTest(unittest.TestCase):
                 )
                 den = root / "lycaon-den"
                 den.mkdir()
+                (den / "node_modules").mkdir()
                 binaries = root / "bin"
                 binaries.mkdir()
                 build_log = root / "build.json"
@@ -70,6 +71,24 @@ profile = "debug" if "--debug" in sys.argv else "release"
                 self.assertNotIn("icon", config["bundle"])
                 expected = den / "src-tauri" / "target" / "test-host" / profile / "bundle" / "macos" / "Fixture.app"
                 self.assertEqual(open_log.read_text(), str(expected))
+
+    def test_missing_frontend_inputs_fail_before_preparation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            script = scripts / "den-build-app.sh"
+            shutil.copyfile(Path(__file__).resolve().parents[2] / "den-build-app.sh", script)
+            preparation = root / "prepared.txt"
+            for name in ("sync-den-versions.sh", "stage-engine.sh", "licenses-notices.sh"):
+                (scripts / name).write_text(f'#!/bin/sh\ntouch "{preparation}"\n')
+            env = dict(os.environ)
+            env.pop("LYCAON_OPENGREP_CANDIDATE", None)
+            result = subprocess.run(["bash", str(script), "--debug"], env=env,
+                                    text=True, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("./task setup-dev -- --frontend", result.stderr)
+            self.assertFalse(preparation.exists(), "missing inputs started native preparation")
 
     @unittest.skipUnless(os.name == "posix", "macOS tool requires POSIX descriptors")
     def test_asset_compiler_reopens_closed_stdin_and_preserves_result(self):

@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/decide/native/src/engine.rs",
+  "kind": "runtime_service",
+  "workstream": "local-inference",
+  "disposition": "retain",
+  "reason": "Retain the loaded backbone, selected device, heads and typed inference transitions together. Physical device identity adds two state-construction lines to the measured 539-line engine; admission remains in the Go host and no second lifecycle owner is introduced. The protocol fixtures cover identity publication and typed answers.",
+  "reviewed_commit": "2eaeeef545330b4612c7104d9ef5e5cd5733a159",
+  "ceiling": 550,
+  "boundaries": {
+    "lycaon/internal/decide/native/src/protocol.rs": "083f0ce3acd1f4701756f5698409bf57382296e35c60ed9939e23d110443b0c3"
+  }
+}

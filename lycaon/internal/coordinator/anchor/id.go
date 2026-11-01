@@ -38,6 +38,7 @@ const (
 	CoordinatorCitationGrounding ID = "coordinator.citation.grounding"
 	CoordinatorReportDocument    ID = "coordinator.report.document"
 	ProjectRootsChanged          ID = "project.roots.changed"
+	ProjectPostureChanged        ID = "project.posture.changed"
 	ProjectRootDetachCanceled    ID = "project.root.detach_canceled"
 	WorkerCloseout               ID = "worker.closeout"
 	WorkerIterationsLow          ID = "worker.iterations.low"

@@ -33,6 +33,38 @@ type fixedConfig struct{ cfg compaction.CompactionConfig }
 
 func (f fixedConfig) Config() compaction.CompactionConfig { return f.cfg }
 
+type observedContextWindows map[llm.ModelRef]int
+
+func (windows observedContextWindows) ContextLength(provider, model string) int {
+	return windows[llm.ModelRef{ProviderID: provider, Model: model}]
+}
+
+func TestCompactionFollowsCurrentProviderModelFactsWithoutSessionCarryover(t *testing.T) {
+	left := llm.ModelRef{ProviderID: "left", Model: "model"}
+	right := llm.ModelRef{ProviderID: "right", Model: "model"}
+	other := llm.ModelRef{ProviderID: "left", Model: "other"}
+	facts := observedContextWindows{left: 16000, right: 64000, other: 32000}
+	service := New(settings.DefaultSessionLimits(), nil)
+	service.SetModelSources(nil, facts)
+	session := &api.Session{ID: "same-session"}
+	check := func(selection llm.ModelRef, window int) {
+		t.Helper()
+		session.ProviderID, session.Model = selection.ProviderID, selection.Model
+		if actual := service.Compaction(t.Context(), session).ModelContextWindow; actual != window*75/100 {
+			t.Fatalf("compaction retained another selection's facts: %+v window=%d", selection, actual)
+		}
+	}
+	check(left, 16000)
+	facts[left] = 8000
+	check(left, 8000)
+	check(right, 64000)
+	check(other, 32000)
+	// Replacing the provider's current facts also replaces its old endpoint's
+	// observation; the session cannot retain a second authoritative limit.
+	service.SetModelSources(nil, observedContextWindows{left: 48000})
+	check(left, 48000)
+}
+
 func TestCompactionConfigFuncReapplies(t *testing.T) {
 	tmp := t.TempDir()
 	global := filepath.Join(tmp, "global.yaml")

@@ -23,7 +23,7 @@ func TestSourceFingerprintNeedsNoParentReadAccess(t *testing.T) {
 	testutil.FailErr(t, "seed dangling link", os.Symlink("missing", filepath.Join(parent, "link")))
 	want := map[string]string{}
 	for _, name := range []string{"file", "folder", "link"} {
-		value, err := sourceTreeFingerprint(t.Context(), filepath.Join(parent, name))
+		value, _, err := sourceTreeFingerprint(t.Context(), filepath.Join(parent, name), testSourceOperationMemory(t))
 		testutil.FailErr(t, "fingerprint accessible entry", err)
 		want[name] = value
 	}
@@ -34,7 +34,7 @@ func TestSourceFingerprintNeedsNoParentReadAccess(t *testing.T) {
 		t.Skip("process can bypass parent read permissions")
 	}
 	for name, expected := range want {
-		got, err := sourceTreeFingerprint(t.Context(), filepath.Join(parent, name))
+		got, _, err := sourceTreeFingerprint(t.Context(), filepath.Join(parent, name), testSourceOperationMemory(t))
 		testutil.FailErr(t, "fingerprint with unreadable parent", err)
 		if got != expected {
 			t.Fatalf("%s fingerprint = %s, want %s", name, got, expected)
@@ -50,9 +50,9 @@ func TestSourceFingerprintSeparatesFileBoundaries(t *testing.T) {
 	testutil.FailErr(t, "seed one file", os.WriteFile(filepath.Join(one, "a"), []byte(fmt.Sprintf("firstb\x00%d\x00second", 0o600)), 0o600))
 	testutil.FailErr(t, "seed first file", os.WriteFile(filepath.Join(two, "a"), []byte("first"), 0o600))
 	testutil.FailErr(t, "seed second file", os.WriteFile(filepath.Join(two, "b"), []byte("second"), 0o600))
-	a, err := sourceTreeFingerprint(t.Context(), one)
+	a, _, err := sourceTreeFingerprint(t.Context(), one, testSourceOperationMemory(t))
 	testutil.FailErr(t, "hash one file", err)
-	b, err := sourceTreeFingerprint(t.Context(), two)
+	b, _, err := sourceTreeFingerprint(t.Context(), two, testSourceOperationMemory(t))
 	testutil.FailErr(t, "hash two files", err)
 	if a == b {
 		t.Fatal("different trees share a structural fingerprint")
@@ -66,7 +66,7 @@ func TestSourceFingerprintRecordsFramedContentHash(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "renamed café 🐺.md")
 	testutil.FailErr(t, "seed file", os.WriteFile(path, []byte("# External lifecycle\n\nExternal change must survive until resolved.\n"), 0o644))
 	testutil.FailErr(t, "set recorded mode", os.Chmod(path, 0o644))
-	got, err := sourceTreeFingerprint(t.Context(), path)
+	got, _, err := sourceTreeFingerprint(t.Context(), path, testSourceOperationMemory(t))
 	testutil.FailErr(t, "fingerprint recorded content", err)
 	const want = "e81f3dbb078ad96111ec96b0e07315d7268272961eb6f5611ae633f2dc41401b"
 	if got != want {
@@ -81,14 +81,24 @@ func TestSourceFingerprintRejectsReplacedEntryBeforeReading(t *testing.T) {
 	testutil.FailErr(t, "seed replacement", os.WriteFile(replacement, []byte("must not be read"), 0o640))
 	info, err := os.Lstat(path)
 	testutil.FailErr(t, "stat original", err)
+	memory := testSourceOperationMemory(t)
+	releaseWorking, err := memory.Reserve(t.Context(), 36<<10)
+	testutil.FailErr(t, "admit actual read arena", err)
+	defer releaseWorking()
 	var output bytes.Buffer
-	err = fingerprintSourceEntry(t.Context(), &output, ".", info,
-		func() (*os.File, error) { return os.Open(replacement) },
-		func() (string, error) { t.Fatal("regular file read as symlink"); return "", nil }, newSourceWorkProgress(t.Context(), "verifying"))
+	page, err := newSourceFingerprintPage(t.Context(), &output,
+		func(string) (*os.File, error) { return os.Open(replacement) },
+		func(string) (string, error) { t.Fatal("regular file read as symlink"); return "", nil }, newSourceWorkProgress(t.Context(), "verifying"), &sourceTreeAllocation{known: true, memory: memory}, make([]byte, 32<<10))
+	testutil.FailErr(t, "construct actual fingerprint page", err)
+	defer page.Close()
+	err = page.Add(".", info)
+	if err == nil {
+		err = page.Flush()
+	}
 	if !errors.Is(err, ErrSourceMutationDiverged) {
 		t.Fatalf("replacement error = %v", err)
 	}
-	if bytes.Contains(output.Bytes(), []byte("must not be read")) {
-		t.Fatal("fingerprint read replacement content")
+	if output.Len() != 0 {
+		t.Fatal("fingerprint published replacement evidence")
 	}
 }

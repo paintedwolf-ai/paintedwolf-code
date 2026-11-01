@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -54,10 +53,9 @@ func (b *LocalNetworkCheckpointBroker) AwaitCombined(ctx context.Context, in too
 		return tools.LocalNetworkResult{Authorized: true}, nil
 	}
 
-	reach := connectCoGrant(ctx, b.Provenance, invokingSessionID, in.ProjectDir, listenPorts)
 	selfSpawned := len(connectPorts) > 0
 	for _, cp := range connectPorts {
-		if slices.Contains(reach, cp) || sessionOwnsPorts(ctx, b.Provenance, invokingSessionID, in.ProjectDir, []uint16{cp}) {
+		if sessionOwnsPorts(ctx, b.Provenance, invokingSessionID, in.ProjectDir, []uint16{cp}) {
 			continue
 		}
 		selfSpawned = false
@@ -76,11 +74,8 @@ func (b *LocalNetworkCheckpointBroker) AwaitCombined(ctx context.Context, in too
 	verdict, _ := gate.Evaluate(facts, b.posture(in.ProjectDir))
 	if verdict != gate.Ask {
 		b.Listen.GrantSessionPorts(rootSessionID, listenPorts)
-		b.Loopback.GrantSessionPorts(rootSessionID, connectPorts)
-		if len(reach) > 0 {
-			b.Loopback.GrantSessionPorts(rootSessionID, reach)
-		}
-		return tools.LocalNetworkResult{Authorized: true}, nil
+		derived := selfSpawned && !(loopbackGranted && portLeaseCovers(loopbackCovered, connectPorts))
+		return tools.LocalNetworkResult{Authorized: true, ListenPorts: listenPorts, ConnectPorts: connectPorts, ConnectRequiresOwnedListener: derived}, nil
 	}
 
 	if b.Checkpoints == nil {
@@ -166,11 +161,22 @@ func (b *LocalNetworkCheckpointBroker) buildCard(in tools.LocalNetworkAsk, invok
 			"connect_ports": listenPortInts(connectPorts),
 		}},
 	}
+	listenLead := applyPortHolderDetails(context.Background(), b.Provenance, invokingSessionID, in.ProjectDir, listenPorts, targets[0].Details)
+	connectLead := applyPortHolderDetails(context.Background(), b.Provenance, invokingSessionID, in.ProjectDir, connectPorts, targets[1].Details)
+	lead := listenLead
+	if connectLead != "" && connectLead != listenLead {
+		if lead != "" {
+			lead += " " + connectLead
+		} else {
+			lead = connectLead
+		}
+	}
 	primary, cited, reasons := hitl.PresentDecision(decision)
 	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectActionSet, Title: title, Targets: targets,
 	}, hitl.ApprovalPresentation{
 		Action: "Local server and local connections", Tool: strings.TrimSpace(in.ToolName), Command: summary,
+		Lead:      lead,
 		Impact:    hitl.LocalListenWhat + " " + hitl.LoopbackConnectWhat,
 		Who:       hitl.WhoAgentCommand,
 		IfWrong:   hitl.LocalListenIfWrong + " " + hitl.LoopbackConnectIfWrong,

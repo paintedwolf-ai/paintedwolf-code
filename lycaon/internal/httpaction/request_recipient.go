@@ -12,8 +12,7 @@ import (
 // Recipient identity includes routing overrides that can change the service reached.
 func requestDestination(spec requestSpec) (id, label string) {
 	if spec.socket != "" {
-		label = "unix:" + spec.socket
-		return secretmatch.DestinationKey(label, "unix", spec.socket), label
+		return secretmatch.UnixDestination(spec.socket, spec.socketBinding.Key())
 	}
 	id, label = secretmatch.HTTPDestination(spec.target)
 	overrides := spec.recipientOverrides()
@@ -39,8 +38,12 @@ func (spec requestSpec) recipientOverrides() []string {
 	if spec.socket == "" && spec.unixSocket == "" {
 		port, err := outboundhttp.EffectivePort(spec.target)
 		if err == nil {
-			if address, targetPort, applies := outboundhttp.MappedDial(spec.resolve, spec.target.Hostname(), port); applies {
-				facts = append(facts, "dial: "+address.String()+":"+strconv.Itoa(int(targetPort)))
+			if dial, applies := outboundhttp.MappedDial(spec.resolve, spec.target.Hostname(), port); applies {
+				destination := strings.ToLower(dial.Host)
+				if dial.Address.IsValid() {
+					destination = dial.Address.String()
+				}
+				facts = append(facts, "dial: "+destination+":"+strconv.Itoa(int(dial.Port)))
 			}
 		}
 	}

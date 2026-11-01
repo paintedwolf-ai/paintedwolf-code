@@ -163,7 +163,7 @@ func TestRegistryConfiguredFollowsCredentialMode(t *testing.T) {
     models: []
 `)
 	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
-	registry, err := NewRegistry(t.Context(), catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	brtypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	"github.com/aws/smithy-go"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -271,5 +272,53 @@ func TestBedrockValidationIsARejectionNotATransportFault(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("server calls = %d; an answered rejection must not take the transport schedule", calls.Load())
+	}
+}
+
+func TestBedrockInterruptedConverseResponseIsTypedFault(t *testing.T) {
+	srv, calls, _ := converseServer(t, func(w http.ResponseWriter) bool {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", "4096")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"output":{"message":{"role":"assistant","content":[{"text":"partial`))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		if hijacker, ok := w.(http.Hijacker); ok {
+			if conn, _, err := hijacker.Hijack(); err == nil {
+				if tcp, ok := conn.(*net.TCPConn); ok {
+					_ = tcp.SetLinger(0)
+				}
+				_ = conn.Close()
+			}
+		}
+		return true
+	})
+	policy := providerretry.ProviderHTTPRetry{Transport: &providerretry.ProviderTransportRetry{MaxRetries: 3, BackoffMs: []int{1}}}
+	p := transportProvider(srv.URL, policy, time.Minute)
+
+	_, err := p.Complete(t.Context(), converseRequest)
+	interrupted, ok := failure.AsProviderResponseInterrupted(err)
+	if !ok || interrupted.ProviderID != "bedrock-1" || interrupted.Model != "model-a" {
+		t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("server calls = %d; driver must leave replay to responseRetryProvider", calls.Load())
+	}
+
+	ch, streamErr := p.Stream(t.Context(), converseRequest)
+	if streamErr != nil {
+		t.Fatalf("open stream: %v", streamErr)
+	}
+	_, _, streamCollectErr := modelcall.CollectStream(ch)
+	if _, ok := failure.AsProviderResponseInterrupted(streamCollectErr); !ok {
+		t.Fatalf("stream err = %v, want ProviderResponseInterruptedError", streamCollectErr)
+	}
+
+	if !bedrockInterruptedResponse(&smithy.DeserializationError{Err: io.ErrUnexpectedEOF}) {
+		t.Fatal("deserialization error without status should be classified as interrupted")
+	}
+	if bedrockInterruptedResponse(&brtypes.ThrottlingException{}) {
+		t.Fatal("throttling exception must not be classified as interrupted")
 	}
 }

@@ -26,10 +26,13 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 	}{
 		{"ollama native", "ollama", "*ollama.Provider", providerprofile.DiscoveryOllama, modelinfo.ThinkStyleBooleanThink},
 		{"fireworks discovery", "fireworks", "*openaicompat.Provider", providerprofile.DiscoveryFireworks, modelinfo.ThinkStyleEffortLevels},
+		{"deepinfra discovery", "deepinfra", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 		{"together profile discovery", "together", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleReasoningToggle},
 		{"gemini native discovery", "gemini", "*openaicompat.Provider", providerprofile.DiscoveryGemini, modelinfo.ThinkStyleEffortLevels},
 		{"openrouter profile discovery", "openrouter", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleReasoningObject},
 		{"cloudflare workers ai catalog", "cloudflare-workers-ai", "*openaicompat.CloudflareProvider", providerprofile.DiscoveryCloudflareWorkersAI, modelinfo.ThinkStyleEffortLevels},
+		{"scaleway generative apis", "scaleway", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
+		{"mistral profile discovery", "mistral", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 		{"lmstudio native discovery", "lmstudio", "*openaicompat.Provider", providerprofile.DiscoveryLMStudio, modelinfo.ThinkStyleEffortLevels},
 		{"omlx native discovery", "omlx", "*openaicompat.Provider", providerprofile.DiscoveryOMLX, modelinfo.ThinkStyleEffortLevels},
 		{"litellm proxy native discovery", "litellm-proxy", "*openaicompat.Provider", providerprofile.DiscoveryLiteLLM, modelinfo.ThinkStyleEffortLevels},
@@ -39,6 +42,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 		{"vertex model garden discovery", "vertex", "*openaicompat.Provider", providerprofile.DiscoveryVertex, modelinfo.ThinkStyleEffortLevels},
 		{"vertex express native", "vertex-express", "*vertexexpress.Provider", providerprofile.DiscoveryVertexExpress, modelinfo.ThinkStyleBudgetTokens},
 		{"openai official", "openai", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
+		{"cerebras profile discovery", "cerebras", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 		{"openai-compatible default", "openai-compatible", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 		{"unknown kind falls back to openai", "totally-new", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 	}
@@ -50,7 +54,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 			}
 			reg, err := NewRegistry(t.Context(),
 				mustTestProviderCatalog(t, entry),
-				providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")),
+				providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil,
 			)
 			if err == nil {
 				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
@@ -58,7 +62,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewRegistry: %v", err)
 			}
-			p, err := newProviderForEntry(context.Background(), entry, "key", reg.providerRetryPolicy(entry), reg.cloudflareUsage, reg.discoveryClient)
+			p, err := newProviderForEntry(context.Background(), entry, "key", reg.providerRetryPolicy(entry), reg.cloudflareUsage, reg.discoveryClient, nil)
 			if err != nil {
 				t.Fatalf("newProviderForEntry: %v", err)
 			}
@@ -78,6 +82,14 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 				}
 				if !profile.DiscoveryProfile.RequirePositiveTokenPrice {
 					t.Fatal("unpriced models should be uncallable")
+				}
+			}
+			if tc.kind == "deepinfra" {
+				if profile.ReasoningWire != providerprofile.ReasoningWireContent {
+					t.Fatalf("deepinfra reasoning_wire = %q, want %q", profile.ReasoningWire, providerprofile.ReasoningWireContent)
+				}
+				if profile.ReasoningEffortOff != providerprofile.OpenAIReasoningEffortOff {
+					t.Fatalf("deepinfra reasoning_effort_off = %q, want %q", profile.ReasoningEffortOff, providerprofile.OpenAIReasoningEffortOff)
 				}
 			}
 		})

@@ -65,8 +65,9 @@ func (b *LoopbackCheckpointBroker) Await(ctx context.Context, in tools.LoopbackC
 	// cannot be skipped by a retry.
 	verdict, _ := gate.Evaluate(facts, b.posture(in.ProjectDir))
 	if verdict != gate.Ask {
-		b.Runtime.GrantSessionPorts(rootSessionID, ports)
-		return tools.LoopbackConnectResult{Authorized: true, Ports: ports}, nil
+		// An automatic ownership observation cannot become a sticky port lease.
+		// Independent explicit grants above retain their existing scope.
+		return tools.LoopbackConnectResult{Authorized: true, Ports: ports, RequiresOwnedListener: facts.CapabilityWidening.SelfSpawned}, nil
 	}
 
 	if b.Checkpoints == nil {
@@ -132,11 +133,13 @@ func (b *LoopbackCheckpointBroker) buildCard(in tools.LoopbackConnectAsk, invoki
 	title := "Allow a local service connection"
 	target := hitl.ApprovalTarget{Kind: "loopback_connect", Label: label,
 		Details: map[string]any{"connect_ports": listenPortInts(ports)}}
+	lead := applyPortHolderDetails(context.Background(), b.Provenance, invokingSessionID, in.ProjectDir, ports, target.Details)
 	primary, cited, reasons := hitl.PresentDecision(decision)
 	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectLoopbackConnect, Title: title, Targets: []hitl.ApprovalTarget{target},
 	}, hitl.ApprovalPresentation{
 		Action: "Local service connection", Tool: strings.TrimSpace(in.ToolName), Command: summary,
+		Lead:   lead,
 		Impact: hitl.LoopbackConnectWhat, Who: hitl.WhoAgentAction,
 		IfWrong: hitl.LoopbackConnectIfWrong, AllowLine: hitl.LoopbackConnectAllowLine,
 		Gate: primary, Cited: cited, ConsequenceBand: string(api.ConsequenceBandStandard),

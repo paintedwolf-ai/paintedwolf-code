@@ -172,7 +172,7 @@ type FullPassDraft struct {
 	RequestedAt   time.Time
 }
 
-func (s *SQLStore) InsertFullPass(ctx context.Context, draft FullPassDraft) error {
+func (s *sqlLedgerStore) InsertFullPass(ctx context.Context, draft FullPassDraft) error {
 	scannersJSON, err := surveyjson.Marshal(UniqueSortedStrings(draft.Scanners))
 	if err != nil {
 		return err
@@ -183,7 +183,7 @@ func (s *SQLStore) InsertFullPass(ctx context.Context, draft FullPassDraft) erro
 	})
 }
 
-func (s *SQLStore) ReadFullPassRequest(ctx context.Context, id string) (FullPassDraft, error) {
+func (s *sqlLedgerStore) ReadFullPassRequest(ctx context.Context, id string) (FullPassDraft, error) {
 	row, err := s.queries.GetFullPass(ctx, id)
 	if err != nil {
 		return FullPassDraft{}, fmt.Errorf("read full pass %s: %w", id, err)
@@ -199,7 +199,7 @@ func (s *SQLStore) ReadFullPassRequest(ctx context.Context, id string) (FullPass
 }
 
 // WidenFullPass sets a pass's scanners while it has not started; false once it has.
-func (s *SQLStore) WidenFullPass(ctx context.Context, id string, scanners []string) (bool, error) {
+func (s *sqlLedgerStore) WidenFullPass(ctx context.Context, id string, scanners []string) (bool, error) {
 	scannersJSON, err := surveyjson.Marshal(UniqueSortedStrings(scanners))
 	if err != nil {
 		return false, err
@@ -208,13 +208,13 @@ func (s *SQLStore) WidenFullPass(ctx context.Context, id string, scanners []stri
 	return changed > 0, err
 }
 
-func (s *SQLStore) MarkFullPassStarted(ctx context.Context, id string, at time.Time) error {
+func (s *sqlLedgerStore) MarkFullPassStarted(ctx context.Context, id string, at time.Time) error {
 	_, err := s.queries.MarkFullPassStarted(ctx, db.MarkFullPassStartedParams{StartedAt: db.FormatTime(at.UTC()), ID: id})
 	return err
 }
 
 // Requesters joining a running pass inherit its existing evidence bindings.
-func (s *SQLStore) BindFullPassRequester(ctx context.Context, passID string, bind FullScanContext) error {
+func (s *sqlLedgerStore) BindFullPassRequester(ctx context.Context, passID string, bind FullScanContext) error {
 	sessionID := strings.TrimSpace(bind.SessionID)
 	workflowRunID := strings.TrimSpace(bind.WorkflowRunID)
 	if sessionID == "" && workflowRunID == "" {
@@ -255,7 +255,7 @@ func (s *SQLStore) BindFullPassRequester(ctx context.Context, passID string, bin
 	})
 }
 
-func (s *SQLStore) BindFullPassScan(ctx context.Context, passID, scanID string) error {
+func (s *sqlLedgerStore) BindFullPassScan(ctx context.Context, passID, scanID string) error {
 	return s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		sessions, err := qtx.ListFullPassSessions(ctx, passID)
 		if err != nil {
@@ -289,7 +289,7 @@ func (s *SQLStore) BindFullPassScan(ctx context.Context, passID, scanID string) 
 }
 
 // FullPass reads one pass with its members' progress; nil when unknown.
-func (s *SQLStore) FullPass(ctx context.Context, id string) (*FullPass, error) {
+func (s *sqlLedgerStore) FullPass(ctx context.Context, id string) (*FullPass, error) {
 	row, err := s.queries.GetFullPass(ctx, strings.TrimSpace(id))
 	if db.IsNoRows(err) {
 		return nil, nil
@@ -305,7 +305,7 @@ func (s *SQLStore) FullPass(ctx context.Context, id string) (*FullPass, error) {
 }
 
 // FullPassesForPath returns a root's recent passes, newest first.
-func (s *SQLStore) FullPassesForPath(ctx context.Context, canonicalPath string) ([]FullPass, error) {
+func (s *sqlLedgerStore) FullPassesForPath(ctx context.Context, canonicalPath string) ([]FullPass, error) {
 	rows, err := s.queries.ListFullPassesForPath(ctx, db.ListFullPassesForPathParams{
 		CanonicalPath: canonicalPath, MaxPasses: recentFullPasses,
 	})
@@ -316,7 +316,7 @@ func (s *SQLStore) FullPassesForPath(ctx context.Context, canonicalPath string) 
 }
 
 // FullPassesForWorkflowRun returns the passes a workflow run asked for, newest first.
-func (s *SQLStore) FullPassesForWorkflowRun(ctx context.Context, workflowRunID string) ([]FullPass, error) {
+func (s *sqlLedgerStore) FullPassesForWorkflowRun(ctx context.Context, workflowRunID string) ([]FullPass, error) {
 	workflowRunID = strings.TrimSpace(workflowRunID)
 	if workflowRunID == "" {
 		return nil, nil
@@ -329,14 +329,14 @@ func (s *SQLStore) FullPassesForWorkflowRun(ctx context.Context, workflowRunID s
 }
 
 // FullPassOwed reports whether any scanner of the root still owes a pass its scan.
-func (s *SQLStore) FullPassOwed(ctx context.Context, canonicalPath string) (bool, error) {
+func (s *sqlLedgerStore) FullPassOwed(ctx context.Context, canonicalPath string) (bool, error) {
 	owed, err := s.queries.FullPassOwedForPath(ctx, canonicalPath)
 	return owed != 0, err
 }
 
 // FullPassOwedForSession reports whether a full pass the session requested still has
 // scanners waiting to start or finish.
-func (s *SQLStore) FullPassOwedForSession(ctx context.Context, sessionID string) (bool, error) {
+func (s *sqlLedgerStore) FullPassOwedForSession(ctx context.Context, sessionID string) (bool, error) {
 	owed, err := s.queries.FullPassOwedForSession(ctx, strings.TrimSpace(sessionID))
 	return owed != 0, err
 }
@@ -347,7 +347,7 @@ type fullPassRoot struct {
 	busy   map[string]bool
 }
 
-func (s *SQLStore) loadFullPassRoot(ctx context.Context, canonicalPath string) (fullPassRoot, error) {
+func (s *sqlLedgerStore) loadFullPassRoot(ctx context.Context, canonicalPath string) (fullPassRoot, error) {
 	series, err := s.ListSeriesForPath(ctx, canonicalPath)
 	if err != nil {
 		return fullPassRoot{}, err
@@ -366,7 +366,7 @@ func (s *SQLStore) loadFullPassRoot(ctx context.Context, canonicalPath string) (
 	return root, nil
 }
 
-func (s *SQLStore) fullPasses(ctx context.Context, rows []db.SecurityFullPasses) ([]FullPass, error) {
+func (s *sqlLedgerStore) fullPasses(ctx context.Context, rows []db.SecurityFullPasses) ([]FullPass, error) {
 	roots := make(map[string]fullPassRoot)
 	out := make([]FullPass, 0, len(rows))
 	for _, row := range rows {
@@ -387,7 +387,7 @@ func (s *SQLStore) fullPasses(ctx context.Context, rows []db.SecurityFullPasses)
 	return out, nil
 }
 
-func (s *SQLStore) readFullPass(ctx context.Context, row db.SecurityFullPasses, root fullPassRoot) (FullPass, error) {
+func (s *sqlLedgerStore) readFullPass(ctx context.Context, row db.SecurityFullPasses, root fullPassRoot) (FullPass, error) {
 	var scanners []string
 	if err := json.Unmarshal([]byte(row.ScannersJson), &scanners); err != nil {
 		return FullPass{}, fmt.Errorf("full pass %s scanners: %w", row.ID, err)

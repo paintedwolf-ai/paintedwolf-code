@@ -1,7 +1,6 @@
 package hitl
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -119,18 +118,7 @@ func (p *ApprovalPlan) WithHeld(held *HeldRelease) (*ApprovalPlan, error) {
 		return nil, err
 	}
 	candidate.ID = id
-	stored, err := json.Marshal(candidate)
-	if err != nil {
-		return nil, fmt.Errorf("copy approval plan: %w", err)
-	}
-	var plan ApprovalPlan
-	if err := json.Unmarshal(stored, &plan); err != nil {
-		return nil, fmt.Errorf("copy approval plan: %w", err)
-	}
-	if err := plan.Validate(); err != nil {
-		return nil, err
-	}
-	return &plan, nil
+	return detachApprovalPlan(candidate, p.native)
 }
 
 // NewUnlockPlan is the card that unlocks a chat for values whose
@@ -149,7 +137,7 @@ func NewUnlockPlan(action ProposedAction, held HeldRelease, screen *SecretScreen
 		Action: TitleUnlockForThisChat, Tool: action.Invocation.Tool, Impact: unlockImpact,
 		Gate: api.GateSecretOutbound, ConsequenceBand: string(api.ConsequenceBandHighRisk),
 		ConsequenceCode: string(api.ConsequenceCodeSecret),
-		Cited: []PresentedFact{{Gate: api.GateSecretOutbound, Key: "secret.custody", Value: "a value you stored", Source: "managed_secret"}},
+		Cited:           []PresentedFact{{Gate: api.GateSecretOutbound, Key: "secret.custody", Value: "a value you stored", Source: "managed_secret"}},
 	}
 	unlock := SendUnchangedOption()
 	unlock.ID, unlock.Title = unlockOptionID, TitleUnlockForThisChat

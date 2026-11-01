@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"os"
@@ -14,7 +15,7 @@ import (
 )
 
 func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, branch, modelPath string, op sandbox.PathOp) (Resolved, error) {
-	modelPath = strings.TrimSpace(modelPath)
+	// Keep operand bytes; whitespace may name a real entry.
 	if modelPath == "" {
 		return Resolved{}, fmt.Errorf("path required")
 	}
@@ -33,12 +34,15 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 		var err error
 		branchRel, displayPath, err = projectroot.WorkerBranchRelative(tctx.Source.Roots, tctx.Source.ActiveRootID, modelPath)
 		if err != nil {
-			return Resolved{}, mapResolveErr(err, modelPath)
+			return Resolved{}, rootResolveErr(tctx, err, modelPath)
 		}
 	}
 	scopeRel := filepath.ToSlash(filepath.Clean(branchRel))
 	if scopeRel == "." {
 		scopeRel = ""
+	}
+	if settingsoverlay.IsRecoveryRelPath(scopeRel) || settingsoverlay.HasRecoverySegment(scopeRel) {
+		return Resolved{}, mapResolveErr(fmt.Errorf("%w: %q", projectroot.ErrPathEscape, modelPath), modelPath)
 	}
 	if err := prepareBranchPath(ctx, tctx, scopeRel, op); err != nil {
 		return Resolved{}, err
@@ -53,12 +57,15 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 		}}, "worker-branch", branchRel)
 	}
 	if err != nil {
-		return Resolved{}, mapResolveErr(err, modelPath)
+		return Resolved{}, rootResolveErr(tctx, err, modelPath)
+	}
+	if op == sandbox.PathOpRead && settingsoverlay.IsRecoveryOnlyDir(abs) {
+		return Resolved{}, &os.PathError{Op: "stat", Path: modelPath, Err: os.ErrNotExist}
 	}
 	var root projectroot.RootRef
 	if len(tctx.Source.Roots) > 1 {
 		if _, _, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, displayPath); resolveErr != nil {
-			return Resolved{}, mapResolveErr(resolveErr, modelPath)
+			return Resolved{}, rootResolveErr(tctx, resolveErr, modelPath)
 		}
 	}
 	root = projectroot.RootRef{ID: "worker-branch", Path: branch, IsPrimary: true}
@@ -119,7 +126,7 @@ func prepareBranchPath(ctx context.Context, tctx tools.ToolContext, scopeRel str
 	if err := branch.ValidateMeta(ctx); err != nil {
 		return err
 	}
-	rel := strings.TrimSpace(scopeRel)
+	rel := scopeRel
 	if rel == "" || rel == "." {
 		return nil
 	}
@@ -130,7 +137,7 @@ func prepareBranchPath(ctx context.Context, tctx tools.ToolContext, scopeRel str
 }
 
 func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, cwdArg string) (abs, display string, err error) {
-	cwdArg = strings.TrimSpace(cwdArg)
+	// Cwd is an exact operand, not display text.
 	if cwdArg == "" {
 		return branch, ".", nil
 	}

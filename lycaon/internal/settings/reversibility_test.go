@@ -21,49 +21,49 @@ func TestClassifyTierUsesStructuredFacts(t *testing.T) {
 		{
 			name: "reversible edit in project",
 			action: hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "edit",
-Files: []string{"/proj/src/a.go"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-},
-},
+				Invocation: hitl.ActionInvocation{
+					Tool:  "edit",
+					Files: []string{"/proj/src/a.go"},
+				},
+				Scope: hitl.ActionScope{
+					ProjectDir: "/proj",
+				},
+			},
 			want: settings.TierReversible,
 		},
 		{
-			name:   "recoverable commit",
+			name: "recoverable commit",
 			action: hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "git_commit",
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-},
-},
-			want:   settings.TierRecoverable,
+				Invocation: hitl.ActionInvocation{
+					Tool: "git_commit",
+				},
+				Scope: hitl.ActionScope{
+					ProjectDir: "/proj",
+				},
+			},
+			want: settings.TierRecoverable,
 		},
 		{
 			name: "structured path escape",
 			action: hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "edit",
-Files: []string{"/etc/hosts"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-},
-},
+				Invocation: hitl.ActionInvocation{
+					Tool:  "edit",
+					Files: []string{"/etc/hosts"},
+				},
+				Scope: hitl.ActionScope{
+					ProjectDir: "/proj",
+				},
+			},
 			want: settings.TierIrreversible,
 		},
 		{
-			name:   "unknown tool",
+			name: "unknown tool",
 			action: hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "mystery_tool",
-},
-},
-			want:   settings.TierIrreversible,
+				Invocation: hitl.ActionInvocation{
+					Tool: "mystery_tool",
+				},
+			},
+			want: settings.TierIrreversible,
 		},
 	}
 	for _, tc := range cases {
@@ -103,17 +103,17 @@ func TestClassifyTierCommandUsesContainmentFact(t *testing.T) {
 		} {
 			t.Run(tc.name+"/"+command, func(t *testing.T) {
 				got := settings.ClassifyTier(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": command},
-},
-Scope: hitl.ActionScope{
-ProjectDir: dir,
-},
-Execution: hitl.ActionExecution{
-Contained: tc.contained,
-},
-})
+					Invocation: hitl.ActionInvocation{
+						Tool: "command",
+						Args: map[string]any{"command": command},
+					},
+					Scope: hitl.ActionScope{
+						ProjectDir: dir,
+					},
+					Execution: hitl.ActionExecution{
+						Contained: tc.contained,
+					},
+				})
 				if got != tc.want {
 					t.Fatalf("tier=%v, want %v", got, tc.want)
 				}
@@ -134,13 +134,13 @@ func TestCoordinatorInternalToolsNeverGate(t *testing.T) {
 	}
 	for _, tool := range internal {
 		if tier := settings.ClassifyTier(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-},
-}); tier == settings.TierIrreversible {
+			Invocation: hitl.ActionInvocation{
+				Tool: tool,
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: "/proj",
+			},
+		}); tier == settings.TierIrreversible {
 			t.Errorf("%s classifies irreversible", tool)
 		}
 	}
@@ -165,13 +165,13 @@ func TestPathEscapesWorkspaceCatchesRelativeWalkOut(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "proj")
 	escape := func(path string) bool {
 		return settings.PathEscapesWorkspace(hitl.ProposedAction{
-Scope: hitl.ActionScope{
-ProjectDir: project,
-},
-Invocation: hitl.ActionInvocation{
-Files: []string{path},
-},
-})
+			Scope: hitl.ActionScope{
+				ProjectDir: project,
+			},
+			Invocation: hitl.ActionInvocation{
+				Files: []string{path},
+			},
+		})
 	}
 	for _, path := range []string{"../outside.txt", "../../.ssh/authorized_keys", "a/../../b", "..", "./../x"} {
 		if !escape(path) {
@@ -194,17 +194,17 @@ func TestPathEscapesWorkspaceHonorsConfinementRoots(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "other-repo", "main.go")
 	worker := func(path string) hitl.ProposedAction {
 		return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "list_dir",
-Files: []string{path},
-},
-Scope: hitl.ActionScope{
-ProjectDir: project,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Roots: []string{branch}},
-},
-}
+			Invocation: hitl.ActionInvocation{
+				Tool:  "list_dir",
+				Files: []string{path},
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: project,
+			},
+			Execution: hitl.ActionExecution{
+				Contained: hitl.Contained{FSJailed: true, Roots: []string{branch}},
+			},
+		}
 	}
 	for _, path := range []string{branch, branch + "/ntp-health", project + "/notes.md"} {
 		if settings.PathEscapesWorkspace(worker(path)) {
@@ -222,14 +222,14 @@ Contained: hitl.Contained{FSJailed: true, Roots: []string{branch}},
 	// Confinement that did not apply contributes no roots, leaving the project_dir
 	// boundary exactly where it was.
 	unconfined := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "list_dir",
-Files: []string{branch},
-},
-Scope: hitl.ActionScope{
-ProjectDir: project,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:  "list_dir",
+			Files: []string{branch},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: project,
+		},
+	}
 	if !settings.PathEscapesWorkspace(unconfined) {
 		t.Error("PathEscapesWorkspace with no confinement roots must still measure project_dir")
 	}
@@ -242,14 +242,14 @@ func TestAliasOfARootIsNotACrossing(t *testing.T) {
 
 	// The person attached the alias; the tool named the resolved location.
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "read",
-Files: []string{filepath.Join(real, "main.go")},
-},
-Scope: hitl.ActionScope{
-ProjectDir: alias,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:  "read",
+			Files: []string{filepath.Join(real, "main.go")},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: alias,
+		},
+	}
 	if settings.PathEscapesWorkspace(action) {
 		t.Fatal("a file under the root's real location must not read as a crossing")
 	}

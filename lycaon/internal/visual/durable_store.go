@@ -271,4 +271,3 @@ func (s *DurableStore) StorageUsage(ctx context.Context, projectID string) (stor
 	usage.UsedBytes = used
 	return usage, nil
 }
-

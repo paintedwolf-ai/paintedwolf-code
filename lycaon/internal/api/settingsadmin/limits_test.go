@@ -2,10 +2,17 @@ package settingsadmin
 
 import (
 	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -122,5 +129,36 @@ func TestLimitsPatchPreservesOmissionsAndResetsToInheritedValues(t *testing.T) {
 	got := applyLimitsPatch(current, inherited, raw, patch)
 	if got.MaxIterations != inherited.MaxIterations || got.MaxCoordinatorLoopCycles != 0 || got.WorkerToolBudgetDefault != current.WorkerToolBudgetDefault {
 		t.Fatalf("merged limits = %+v", got)
+	}
+}
+
+func TestHandleUpdateApprovalsUpdatesGlobalAndProjectPosture(t *testing.T) {
+	deps := apitestdeps.Deps{}
+	apitestdeps.Fill(t, &deps)
+	proj, err := deps.Projects.Create(t.Context(), project.CreateParams{
+		Name:  "p",
+		Roots: []project.AttachRootParams{{Path: t.TempDir()}},
+	})
+	testutil.FailErr(t, "create project for approval settings update", err)
+	h := &Handler{
+		Deps: Deps{
+			Events:   deps.Events,
+			Projects: deps.Projects,
+			Sessions: deps.Sessions,
+			Service:  deps.Settings,
+		},
+		responses: &httpio.Responder{Logger: slog.New(slog.DiscardHandler)},
+	}
+	for _, target := range []string{
+		"/v1/settings/approvals",
+		"/v1/settings/approvals?scope=project&project_id=" + proj.ID,
+	} {
+		req := httptest.NewRequest(http.MethodPatch, target, strings.NewReader(`{"approval_posture":"strict"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.HandleUpdateApprovals(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("target=%s status=%d body=%s", target, rec.Code, rec.Body.String())
+		}
 	}
 }

@@ -3,12 +3,13 @@ id: CODE_REWRITE_PATTERN_TOO_BROAD
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - code_rewrite
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.operator
     - paintedwolf.path

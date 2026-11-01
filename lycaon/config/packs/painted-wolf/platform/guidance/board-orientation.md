@@ -4,7 +4,7 @@
 <!-- lycaon-board-orientation:v1 -->
 ## Pack board
 {% if worker_workspace_path %}
-Workspace: {{ worker_workspace_path }}
+Working folder: {{ worker_workspace_path }}
 {% if inventory_at %}File inventory observed at {{ inventory_at }}. Later tool receipts supersede this inventory.
 {% endif %}{% endif %}
 

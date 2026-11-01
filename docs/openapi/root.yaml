@@ -109,6 +109,8 @@ paths:
     $ref: paths/chat-content.yaml#/paths/~1v1~1sessions~1{id}~1messages~1{message_id}~1content
   /v1/sessions/{id}/messages/{message_id}/content/search:
     $ref: paths/chat-content.yaml#/paths/~1v1~1sessions~1{id}~1messages~1{message_id}~1content~1search
+  /v1/sessions/{id}/program-receipts/{program_id}:
+    $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1program-receipts~1{program_id}
   /v1/sessions/{id}/invocations:
     $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1invocations
   /v1/sessions/{id}/export:
@@ -217,6 +219,10 @@ paths:
     $ref: paths/projects/roots.yaml#/paths/~1v1~1projects~1{id}~1roots
   /v1/projects/{id}/roots/{root_id}:
     $ref: paths/projects/roots.yaml#/paths/~1v1~1projects~1{id}~1roots~1{root_id}
+  /v1/projects/{id}/background:
+    $ref: paths/projects/background.yaml#/paths/~1v1~1projects~1{id}~1background
+  /v1/projects/{id}/background/{process_id}/stop:
+    $ref: paths/projects/background.yaml#/paths/~1v1~1projects~1{id}~1background~1{process_id}~1stop
   /v1/projects/{id}/source/operations:
     $ref: paths/projects/source-operations.yaml#/paths/~1v1~1projects~1{id}~1source~1operations
   /v1/projects/{id}/source/operations/{operation_id}/cancel:
@@ -729,6 +735,8 @@ components:
       $ref: components/schemas/events.yaml#/components/schemas/LLMCallEvent
     ActivityEvent:
       $ref: components/schemas/events.yaml#/components/schemas/ActivityEvent
+    BackgroundProcessTerminationReason:
+      $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessTerminationReason
     BackgroundProcessEvent:
       $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessEvent
     BackgroundProcess:
@@ -747,6 +755,12 @@ components:
       $ref: components/schemas/events.yaml#/components/schemas/PreviewWatchResult
     BackgroundProcessStopResult:
       $ref: components/schemas/events.yaml#/components/schemas/BackgroundProcessStopResult
+    ProjectBackgroundProcess:
+      $ref: components/schemas/events.yaml#/components/schemas/ProjectBackgroundProcess
+    ProjectBackgroundProcessListResponse:
+      $ref: components/schemas/events.yaml#/components/schemas/ProjectBackgroundProcessListResponse
+    ProjectBackgroundEvent:
+      $ref: components/schemas/events.yaml#/components/schemas/ProjectBackgroundEvent
     ProviderEvent:
       $ref: components/schemas/events.yaml#/components/schemas/ProviderEvent
     ModelPolicyEvent:

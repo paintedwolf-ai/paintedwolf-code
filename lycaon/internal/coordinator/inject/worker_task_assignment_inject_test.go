@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -139,5 +141,26 @@ func TestWorkerAssignmentPagesLargeSubjects(t *testing.T) {
 	}
 	if len(binding.Subject.Facts.Obligations) != 51 {
 		t.Fatal("projection mutated stored subject")
+	}
+}
+
+func TestRenderWorkerTaskAssignmentLinkedCheckoutOrientation(t *testing.T) {
+	projectDir := t.TempDir()
+	wtDir := filepath.Join(projectDir, "worktree")
+	testutil.FailErr(t, "mkdir worktree", os.MkdirAll(wtDir, 0o755))
+	testutil.FailErr(t, "write worktree .git", os.WriteFile(filepath.Join(wtDir, ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
+
+	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		SessionID:    "sess-linked",
+		ProjectDir:   projectDir,
+		Charter:      testWorkerCharter("Update worktree/main.go"),
+		AgentType:    "implementer",
+		WorkerJobID:  "job-linked",
+		Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"worktree/main.go"}},
+		MaxToolLoops: 10,
+	})
+	testutil.FailErr(t, "RenderWorkerTaskAssignment", err)
+	if !strings.Contains(out, "without VCS access in this workspace") || !strings.Contains(out, "read-scoped leg or the coordinator") {
+		t.Fatalf("missing linked checkout orientation in assignment:\n%s", out)
 	}
 }

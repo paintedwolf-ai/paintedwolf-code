@@ -345,4 +345,3 @@ func mergeLineRanges(ranges []LineRange) []LineRange {
 	}
 	return out
 }
-

@@ -23,16 +23,16 @@ func TestEveryGateOffersTheFixedSlots(t *testing.T) {
 			continue
 		}
 		action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "fetch_url",
-Args: map[string]any{"url": "https://api.example.com"},
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-slots",
-ProjectID: "proj-slots",
-ProjectDir: "/tmp/proj",
-},
-}
+			Invocation: hitl.ActionInvocation{
+				Tool: "fetch_url",
+				Args: map[string]any{"url": "https://api.example.com"},
+			},
+			Scope: hitl.ActionScope{
+				SessionID:  "sess-slots",
+				ProjectID:  "proj-slots",
+				ProjectDir: "/tmp/proj",
+			},
+		}
 		decision := &gate.Decision{Primary: g, Posture: gate.PostureBalanced}
 		var offers []hitl.ApprovalGrantOffer
 		switch {
@@ -43,16 +43,16 @@ ProjectDir: "/tmp/proj",
 			offers = approvals.GrantOffers(policyAction, &hitl.ApprovalResult{Decision: decision})
 		case gate.IsFilesystem(g):
 			pathAction := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-Files: []string{"/tmp/other/a.txt"},
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-slots",
-ProjectID: "proj-slots",
-ProjectDir: "/tmp/proj",
-},
-}
+				Invocation: hitl.ActionInvocation{
+					Tool:  "write",
+					Files: []string{"/tmp/other/a.txt"},
+				},
+				Scope: hitl.ActionScope{
+					SessionID:  "sess-slots",
+					ProjectID:  "proj-slots",
+					ProjectDir: "/tmp/proj",
+				},
+			}
 			offers = settings.GrantedPathOffers(pathAction, gate.FileTarget{
 				Path: "/tmp/other/a.txt", Mode: gate.ModeWrite, OutsideRoots: true,
 			}, decision, nil)
@@ -99,14 +99,14 @@ func TestNoProjectKeepsTheDurableSlotDisabled(t *testing.T) {
 	t.Parallel()
 	approvals := settings.NewRuleApprovalGate(mustApprovalStore(t), settings.NoSources())
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "fetch_url",
-Args: map[string]any{"url": "https://api.example.com"},
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-noproj",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "fetch_url",
+			Args: map[string]any{"url": "https://api.example.com"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "sess-noproj",
+		},
+	}
 	offers := approvals.GrantOffers(action, &hitl.ApprovalResult{Decision: &gate.Decision{Primary: api.GateUserRule}})
 	found := false
 	for _, offer := range offers {
@@ -125,17 +125,17 @@ SessionID: "sess-noproj",
 func TestQuietIsOneRowOnEveryDiscretionaryGate(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-1",
-RootSessionID: "chat-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "echo",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "echo",
+		},
+	}
 	for _, g := range gate.All() {
 		decision := &gate.Decision{Primary: g, ReasonKey: string(g) + ":subject"}
 		quiet := hitl.QuietOptions(action, decision, nil, nil)

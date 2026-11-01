@@ -31,7 +31,18 @@ func New(publisher *events.Publisher, resources ResourceLifetime) *Runtime {
 	return &Runtime{publisher: publisher, resources: resources}
 }
 func (r *Runtime) Build(completed bgprocess.CompletionPublisher, refused bgprocess.RefusalPublisher, settled func(string, string), cleanup func(string, int, func(context.Context, string) error) error) error {
-	r.Processes = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{Publish: r.publisher.PublishProcess, Complete: completed, Refused: refused})
+	var publishProcess bgprocess.StreamPublisher
+	var publishProject bgprocess.ProjectBackgroundPublisher
+	if r.publisher != nil {
+		publishProcess = r.publisher.PublishProcess
+		publishProject = r.publisher.PublishProjectBackground
+	}
+	r.Processes = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{
+		Publish:        publishProcess,
+		PublishProject: publishProject,
+		Complete:       completed,
+		Refused:        refused,
+	})
 	processes := r.Processes
 	r.resources.Track("background-processes", 50, func(ctx context.Context) error {
 		closeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)

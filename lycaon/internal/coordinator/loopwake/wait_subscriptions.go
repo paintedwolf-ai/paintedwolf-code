@@ -24,14 +24,17 @@ type WaitSubscriptionsDeps struct {
 type WaitSubscriptions struct {
 	Policy *HostWakePolicy
 
-	depsMu     sync.RWMutex
-	deps       WaitSubscriptionsDeps
-	waitStore  *awaitstore.Store
-	Nudges     *Nudges
-	Facts      *SessionFacts
-	Deliveries *WaitDeliveries
-	Waits      *Waits
-	Cycles     *WorkerCycles
+	depsMu    sync.RWMutex
+	deps      WaitSubscriptionsDeps
+	waitStore *awaitstore.Store
+	// parkedPrograms holds each session's parked command call.
+	parkedPrograms    sync.Map
+	lostProgramResult func(ctx context.Context, sessionID, programID string) (string, error)
+	Nudges            *Nudges
+	Facts             *SessionFacts
+	Deliveries        *WaitDeliveries
+	Waits             *Waits
+	Cycles            *WorkerCycles
 }
 
 func (l *WaitSubscriptions) setDeps(deps WaitSubscriptionsDeps) {
@@ -108,6 +111,9 @@ func (l *WaitSubscriptions) settleDurableWaitWake(
 	var won bool
 	if matched {
 		won, err = store.SettleLease(ctx, lease.ID, "resolved", condition)
+	} else if _, parksProgram := leaseProgram(lease); parksProgram && l.interruptParkedProgram(ctx, sessionID, true) {
+		// The wake proceeds; its turn receives the interrupted program's result.
+		return false
 	} else {
 		won, err = store.SettleLease(ctx, lease.ID, "interrupted", awaitstore.Condition{})
 	}

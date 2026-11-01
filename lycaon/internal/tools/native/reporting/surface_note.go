@@ -139,15 +139,54 @@ func auditSurfaceNoteGrounding(
 	}
 
 	eval := guidance.EvaluateCloseoutCitations(roots, surfaceID, report, ev)
-	var offenders []string
-	if strings.TrimSpace(eval.Code) != "" {
-		offenders = append(offenders, eval.Offenders...)
+	if strings.TrimSpace(eval.Code) != "" || len(eval.Offenders) > 0 {
+		return nil, surfaceNoteHandleUnground, surfaceNoteRejectData(eval.Offenders, ev.Ledger)
 	}
-	offenders = append(offenders, eval.SurveyAdvisoryTokens...)
-	if len(offenders) > 0 {
-		return nil, surfaceNoteHandleUnground, guidance.GroundingHintData(offenders, ev.Ledger)
+	if len(eval.SurveyAdvisoryTokens) > 0 {
+		report.CitedEvidence = filterGroundedNoteEvidence(roots, surfaceID, report, ev)
+		if guidance.TypedCitationChannelsEmpty(len(report.CitedEvidence), len(report.CitedURLs)) {
+			return nil, surfaceNoteHandleUnground, surfaceNoteRejectData(eval.SurveyAdvisoryTokens, ev.Ledger)
+		}
+		eval = guidance.EvaluateCloseoutCitations(roots, surfaceID, report, ev)
 	}
 	return guidance.BuildCloseoutCitationGrounding(roots, surfaceID, report, ev, eval), "", nil
+}
+
+func filterGroundedNoteEvidence(
+	roots evidence.CitationRoots,
+	surfaceID string,
+	report guidance.CoordinatorCompletionReport,
+	ev guidance.CloseoutEvidence,
+) []guidance.CoordinatorCitedEvidence {
+	out := make([]guidance.CoordinatorCitedEvidence, 0, len(report.CitedEvidence))
+	for _, c := range report.CitedEvidence {
+		probe := guidance.CoordinatorCompletionReport{
+			Synthesis:     report.Synthesis,
+			CitedEvidence: []guidance.CoordinatorCitedEvidence{c},
+		}
+		probeEval := guidance.EvaluateCloseoutCitations(roots, surfaceID, probe, ev)
+		if strings.TrimSpace(probeEval.Code) == "" && len(probeEval.SurveyAdvisoryTokens) == 0 {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func surfaceNoteRejectData(offenders []string, ev evidence.Ledger) map[string]any {
+	data := guidance.GroundingHintData(offenders, ev)
+	var groundedHandles []string
+	for _, h := range evidence.HandlesSorted(ev) {
+		rec, ok := evidence.ResolveHandle(ev, h)
+		if !ok || rec.IsGate() || rec.Survey || evidence.CitationResolvesToVisualIntent(h, ev) {
+			continue
+		}
+		groundedHandles = append(groundedHandles, h)
+	}
+	handleReport := guidance.FormatOffenderReport(groundedHandles)
+	data["observed_handles_count"] = handleReport.Count
+	data["observed_handles_sample"] = handleReport.Sample
+	data["observed_handles_omitted"] = handleReport.Omitted
+	return data
 }
 
 func parseSurfaceNoteArgs(args map[string]any) (

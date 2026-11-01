@@ -1,5 +1,6 @@
 id: web_research
 description: External web research — search and URL fetch (no repo survey or writes)
+command_effects: [read_only, network_egress]
 tools:
   recall: sticky
   record_finding: sticky

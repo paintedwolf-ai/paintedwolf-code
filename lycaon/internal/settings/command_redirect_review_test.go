@@ -34,17 +34,17 @@ func TestCommandRedirectReviewAsksForProtectedTargets(t *testing.T) {
 	} {
 		args := map[string]any{"command": tc.line}
 		preSpawn, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tc.tool,
-Args: args,
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool: tc.tool,
+				Args: args,
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: proj,
+			},
+			Execution: hitl.ActionExecution{
+				Contained: contained,
+			},
+		})
 		testutil.FailErr(t, "evaluate "+tc.line, err)
 		if preSpawn.Required() {
 			t.Fatalf("%s: the contained command itself must stay silent: %+v", tc.line, preSpawn.Decision)
@@ -52,44 +52,44 @@ Contained: contained,
 
 		abs := filepath.Join(proj, filepath.FromSlash(tc.target))
 		review, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tc.tool,
-Args: args,
-Files: []string{abs},
-ResolvedFiles: []string{abs},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-Mutations: hitl.ActionMutations{
-FileChanges: []api.ApprovalFileChange{{Path: abs, Operation: "write", After: "x\n"}},
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool:          tc.tool,
+				Args:          args,
+				Files:         []string{abs},
+				ResolvedFiles: []string{abs},
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: proj,
+			},
+			Execution: hitl.ActionExecution{
+				Contained: contained,
+			},
+			Mutations: hitl.ActionMutations{
+				FileChanges: []api.ApprovalFileChange{{Path: abs, Operation: "write", After: "x\n"}},
+			},
+		})
 		testutil.FailErr(t, "evaluate review "+tc.line, err)
 		if !review.Required() || review.Gate() != api.GateSensitiveLocation {
 			t.Fatalf("%s: writing %s must ask as a protected subject like the write tool, got %+v",
 				tc.line, tc.target, review.Decision)
 		}
 		native, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-Args: map[string]any{"path": tc.target},
-Files: []string{abs},
-ResolvedFiles: []string{abs},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-Mutations: hitl.ActionMutations{
-FileChanges: []api.ApprovalFileChange{{Path: abs, Operation: "write", After: "x\n"}},
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool:          "write",
+				Args:          map[string]any{"path": tc.target},
+				Files:         []string{abs},
+				ResolvedFiles: []string{abs},
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: proj,
+			},
+			Execution: hitl.ActionExecution{
+				Contained: contained,
+			},
+			Mutations: hitl.ActionMutations{
+				FileChanges: []api.ApprovalFileChange{{Path: abs, Operation: "write", After: "x\n"}},
+			},
+		})
 		testutil.FailErr(t, "evaluate native "+tc.target, err)
 		if !native.Required() || native.Gate() != review.Gate() {
 			t.Fatalf("%s: command review gate %q differs from the write tool's %q", tc.target, review.Gate(), native.Gate())

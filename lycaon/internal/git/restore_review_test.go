@@ -14,6 +14,7 @@ import (
 )
 
 func TestRestoreReviewBoundsCombinedText(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gittest.Init(t, dir)
 	body := strings.Repeat("x", sourceledger.MaxRevisionContentBytes/2+1)
@@ -51,6 +52,7 @@ func TestRestoreReviewBoundsCombinedText(t *testing.T) {
 }
 
 func TestRestoreReviewExpandsDirectoryAndFreezesSource(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gittest.Init(t, dir)
 	testutil.FailErr(t, "create policy folder", os.Mkdir(filepath.Join(dir, "pkg"), 0o755))
@@ -84,6 +86,7 @@ func TestRestoreReviewExpandsDirectoryAndFreezesSource(t *testing.T) {
 }
 
 func TestRestoreReviewRejectsAndPreservesConcurrentEdits(t *testing.T) {
+	t.Parallel()
 	for _, race := range []bool{false, true} {
 		t.Run(map[bool]string{false: "rejected", true: "concurrent edit"}[race], func(t *testing.T) {
 			dir := t.TempDir()
@@ -114,6 +117,7 @@ func TestRestoreReviewRejectsAndPreservesConcurrentEdits(t *testing.T) {
 }
 
 func TestRestoreIndexPreviewUsesStoredBytes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gittest.Init(t, dir)
 	testutil.FailErr(t, "configure checkout conversion", os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("*.md text eol=crlf\n"), 0o644))
@@ -142,6 +146,7 @@ func TestRestoreIndexPreviewUsesStoredBytes(t *testing.T) {
 // Permission bits beyond the executable bit follow the umask, so a file Git
 // rewrites with 0664 instead of 0644 is not a change.
 func TestRestoreContentRecordsGitModes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for name, perm := range map[string]os.FileMode{"plain": 0o664, "script": 0o775} {
 		path := filepath.Join(dir, name)

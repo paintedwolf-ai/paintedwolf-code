@@ -55,7 +55,7 @@ func TestAdvanceUnregisteredCompleteWhenBlocked(t *testing.T) {
 func TestAdvanceBlockedByRegistryGate(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
@@ -72,7 +72,7 @@ func TestAdvanceBlockedByRegistryGate(t *testing.T) {
 func TestAdvanceAfterPlanStub(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
@@ -92,7 +92,7 @@ func TestAdvanceImplementPhaseCompletesRun(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 	ctx := workflowCaller(t, mgr)
 
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)

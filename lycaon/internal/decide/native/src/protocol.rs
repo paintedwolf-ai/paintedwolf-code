@@ -119,6 +119,8 @@ pub struct Response {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub engine: Option<Identity>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub physical_device: Option<crate::device::PhysicalDevice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub heads: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub answers: Option<IndexMap<String, Answer>>,
@@ -134,6 +136,7 @@ pub fn handle(engine: &Engine, req: &Request) -> Result<Response> {
     match req.method.as_str() {
         "hello" => {
             resp.engine = Some(engine.identity().clone());
+            resp.physical_device = Some(engine.physical_device.clone());
             resp.heads = Some(engine.head_labels().clone());
         }
         "decide" => {
@@ -259,9 +262,12 @@ mod tests {
             "method": "decide", "state": "hello world",
             "questions": {"tools": {"type": "multi", "independent": true,
                 "instructions": "which tool?", "options": {"command": "run a command"}}}
-        })).unwrap();
+        }))
+        .unwrap();
         let initial = handle(&engine, &request).unwrap().answers.unwrap()["tools"]
-            .probabilities.as_ref().unwrap()["command"];
+            .probabilities
+            .as_ref()
+            .unwrap()["command"];
         let options = request.questions["tools"].options.as_mut().unwrap();
         // Cross both the encoding budget and the inference batch boundary.
         for n in 0..71 {
@@ -345,6 +351,7 @@ mod tests {
         assert_eq!(replies[0]["engine"]["name"], "Bialy");
         assert_eq!(replies[0]["engine"]["model"], "tiny/model");
         assert_eq!(replies[0]["heads"], json!({}));
+        assert_eq!(replies[0]["physical_device"], json!({"kind": "cpu"}));
         assert_eq!(replies[1]["id"], 2);
         assert_eq!(replies[1]["answers"]["q"]["type"], "noul");
         assert!(replies[1]["answers"]["q"]["noul"].is_number());

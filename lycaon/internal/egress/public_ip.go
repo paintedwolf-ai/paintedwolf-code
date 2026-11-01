@@ -85,6 +85,36 @@ func IPPublic(addr netip.Addr) bool {
 	return true
 }
 
+// IPDirectAllowed reports whether addr is a non-loopback unicast address
+// reachable under an approved direct_ip capability, excluding loopback,
+// unspecified, link-local metadata (169.254.0.0/16, fe80::/10), and multicast.
+func IPDirectAllowed(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	if !addr.IsValid() {
+		return false
+	}
+	if addr.IsLoopback() || addr.IsUnspecified() ||
+		addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() ||
+		addr.IsMulticast() || addr.IsInterfaceLocalMulticast() {
+		return false
+	}
+	if addr.Is4() {
+		if netip.MustParsePrefix("0.0.0.0/8").Contains(addr) || addr == netip.MustParseAddr("255.255.255.255") {
+			return false
+		}
+		return true
+	}
+	switch {
+	case nat64Prefix.Contains(addr):
+		return IPDirectAllowed(v4Embedded(addr, 12))
+	case sixToFourPrefix.Contains(addr):
+		return IPDirectAllowed(v4Embedded(addr, 2))
+	case teredoPrefix.Contains(addr), discardPrefix.Contains(addr):
+		return false
+	}
+	return true
+}
+
 // ResolvePublicIPs resolves host and errors unless every address is public.
 func ResolvePublicIPs(ctx context.Context, host string) ([]netip.Addr, error) {
 	return ResolveIPsWithPolicy(ctx, host, IPPublic)

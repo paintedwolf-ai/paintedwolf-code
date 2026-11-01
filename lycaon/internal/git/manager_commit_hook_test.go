@@ -14,6 +14,7 @@ import (
 )
 
 func TestGitManagerCommitIgnoresRepoHooksPath(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
 	initCmd.Env = lyexec.LocalGitEnv()
@@ -56,6 +57,7 @@ func TestGitManagerCommitIgnoresRepoHooksPath(t *testing.T) {
 
 // Explicit author environment values outrank repository identity.
 func TestGitManagerCommitKeepsUserIdentity(t *testing.T) {
+	// Serial: uses t.Setenv for HOME, XDG_CONFIG_HOME, and GIT_CONFIG_GLOBAL.
 	dir := t.TempDir()
 	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
 	initCmd.Env = lyexec.LocalGitEnv()

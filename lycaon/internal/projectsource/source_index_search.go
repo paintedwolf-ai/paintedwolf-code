@@ -62,8 +62,18 @@ func SearchSourceIndex(ctx context.Context, snapshot SourceIndexSnapshot, query 
 		return nil, errors.New("source search page limit is outside its bounds")
 	}
 	q := strings.ToLower(strings.TrimSpace(query.Path))
+	preferred := ""
 	if query.Remote != nil {
-		q = snapshot.remoteFileQuery(ctx, *query.Remote, style)
+		remotePath := snapshot.remoteFileQuery(ctx, *query.Remote, style)
+		q = strings.ToLower(remotePath)
+		preferred = strings.TrimLeft(remotePath, "/")
+		for _, root := range snapshot.readers {
+			prefix := strings.TrimRight(style.slashes(root.path), "/") + "/"
+			if len(remotePath) >= len(prefix) && (strings.HasPrefix(remotePath, prefix) || style.Windows && strings.EqualFold(remotePath[:len(prefix)], prefix)) {
+				preferred = remotePath[len(prefix):]
+				break
+			}
+		}
 	}
 	if q == "" {
 		return browseSourceIndex(ctx, snapshot, rootID, after, limit)
@@ -76,7 +86,7 @@ func SearchSourceIndex(ctx context.Context, snapshot SourceIndexSnapshot, query 
 	}
 	paths := sourceRootPaths(roots, style)
 	for {
-		matches, err := searchSourcePath(ctx, roots, paths, q, after, limit)
+		matches, err := searchSourcePath(ctx, roots, paths, q, preferred, style.Windows, after, limit)
 		if err != nil || len(matches) > 0 {
 			return matches, err
 		}
@@ -86,7 +96,7 @@ func SearchSourceIndex(ctx context.Context, snapshot SourceIndexSnapshot, query 
 		}
 		// A later page that came back empty ended this level's results.
 		if after != nil {
-			if first, err := searchSourcePath(ctx, roots, paths, q, nil, 1); err != nil || len(first) > 0 {
+			if first, err := searchSourcePath(ctx, roots, paths, q, preferred, style.Windows, nil, 1); err != nil || len(first) > 0 {
 				return nil, err
 			}
 		}
@@ -94,10 +104,11 @@ func SearchSourceIndex(ctx context.Context, snapshot SourceIndexSnapshot, query 
 	}
 }
 
-func searchSourcePath(ctx context.Context, roots []sourceIndexReader, rootPaths map[string][]string, q string, after *SourceIndexEntry, limit int) ([]SourceIndexMatch, error) {
-	search := &sourceIndexSearch{readings: sourcePathReadings(q, rootPaths), limit: limit, after: after}
+func searchSourcePath(ctx context.Context, roots []sourceIndexReader, rootPaths map[string][]string, q, preferred string, foldPreferred bool, after *SourceIndexEntry, limit int) ([]SourceIndexMatch, error) {
+	search := &sourceIndexSearch{readings: sourcePathReadings(q, rootPaths), preferred: preferred, foldPreferred: foldPreferred, limit: limit, after: after}
 	if after != nil {
 		search.position, _ = rankSourceEntry(*after, search.readings)
+		search.prefer(&search.position)
 	}
 	literalTiers := []sourcecatalog.FilePathMatch{sourcecatalog.FileBasenamePrefix, sourcecatalog.FileBasenameContains, sourcecatalog.FilePathSubsequence}
 	for tier, match := range literalTiers {
@@ -127,16 +138,19 @@ func searchSourcePath(ctx context.Context, roots []sourceIndexReader, rootPaths 
 }
 
 type sourceIndexSearch struct {
-	readings []sourcePathReading
-	best     sourceFileHeap
-	limit    int
-	after    *SourceIndexEntry
-	position rankedSourceFile
+	readings      []sourcePathReading
+	preferred     string
+	foldPreferred bool
+	best          sourceFileHeap
+	limit         int
+	after         *SourceIndexEntry
+	position      rankedSourceFile
 }
 
 // offer keeps entry when reading is its best, so each file enters the heap once across scans.
 func (s *sourceIndexSearch) offer(entry SourceIndexEntry, reading int) {
 	item, ok := rankSourceEntry(entry, s.readings)
+	s.prefer(&item)
 	if !ok || item.reading != reading || (s.after != nil && compareSourceFile(item, s.position) <= 0) {
 		return
 	}
@@ -145,6 +159,12 @@ func (s *sourceIndexSearch) offer(entry SourceIndexEntry, reading int) {
 	} else if compareSourceFile(item, s.best[0]) < 0 {
 		s.best[0] = item
 		heap.Fix(&s.best, 0)
+	}
+}
+
+func (s *sourceIndexSearch) prefer(item *rankedSourceFile) {
+	if s.preferred != "" && (item.entry.Path == s.preferred || s.foldPreferred && strings.EqualFold(item.entry.Path, s.preferred)) {
+		item.tier, item.score = -1, 0
 	}
 }
 
@@ -249,7 +269,7 @@ func sourceRootPaths(roots []sourceIndexReader, style SourcePathStyle) map[strin
 			spellings = append(spellings, resolved)
 		}
 		for _, spelling := range spellings {
-			path := strings.TrimRight(style.normalize(spelling), "/")
+			path := strings.TrimRight(strings.ToLower(style.normalize(spelling)), "/")
 			if !slices.Contains(out[root.rootID], path) {
 				out[root.rootID] = append(out[root.rootID], path)
 			}

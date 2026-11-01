@@ -21,24 +21,34 @@ func TestRetainedCopyPreservesReleasedRowsAndHistory(t *testing.T) {
 	plan, err := PlanUpgrade(t.Context(), reader)
 	testutil.FailErr(t, "plan upgrade", err)
 	destination := filepath.Join(t.TempDir(), "rebuilt.db")
-	testutil.FailErr(t, "copy retained store", copyRetainedStore(t.Context(), source, destination, plan))
+	_, err = copyRetainedStore(t.Context(), source, destination, plan, nil)
+	testutil.FailErr(t, "copy retained store", err)
 	copyDB, err := sql.Open("sqlite", destination)
 	testutil.FailErr(t, "open retained copy", err)
 	defer func() { _ = copyDB.Close() }()
-	testutil.FailErr(t, "validate retained store", validateStoreIntegrity(t.Context(), copyDB))
+	testutil.FailErr(t, "validate retained store", auditSnapshot(t.Context(), copyDB, nil))
 	_, err = copyDB.Exec(`ATTACH DATABASE ? AS original`, fileDSN(source, "mode=ro"))
 	testutil.FailErr(t, "attach reference", err)
 	objects, err := readRebuildObjects(t.Context(), copyDB)
 	testutil.FailErr(t, "read source tables", err)
+	state, err := integrityAuditState(t.Context(), copyDB)
+	testutil.FailErr(t, "read reconstructed audit obligation", err)
+	if state != integrityAuditPendingValue {
+		t.Fatal("reconstructed image lost its deferred audit obligation")
+	}
 	for _, object := range objects {
 		if object.kind != "table" || object.tableKind == "virtual" || object.name == "source_blob_reclaim_queue" || plan.CopyPlan().Sources[object.name] != "" {
 			continue
 		}
 		t.Run(object.name, func(t *testing.T) {
 			name := rebuildIdentifier(object.name)
+			predicate := ""
+			if object.name == "store_meta" {
+				predicate = " WHERE key <> 'integrity_audit_failed'"
+			}
 			for _, pair := range [][2]string{{"main", "original"}, {"original", "main"}} {
 				var different int
-				query := "SELECT COUNT(*) FROM (SELECT * FROM " + pair[0] + "." + name + " EXCEPT SELECT * FROM " + pair[1] + "." + name + ")"
+				query := "SELECT COUNT(*) FROM (SELECT * FROM " + pair[0] + "." + name + predicate + " EXCEPT SELECT * FROM " + pair[1] + "." + name + predicate + ")"
 				testutil.FailErr(t, "compare unchanged rows", copyDB.QueryRow(query).Scan(&different))
 				if different != 0 {
 					t.Fatalf("%d unchanged rows differ", different)
@@ -105,12 +115,18 @@ func TestRetainedCopyDoesNotReadRetiredIndex(t *testing.T) {
 	testutil.FailErr(t, "close fixture bytes", file.Close())
 	reader, err = OpenReadOnly(t.Context(), source)
 	testutil.FailErr(t, "open damaged source", err)
-	if err := validateStoreIntegrity(t.Context(), reader); err == nil {
+	if err := auditSnapshot(t.Context(), reader, nil); err == nil {
 		t.Fatal("fixture did not damage the obsolete index")
+	}
+	plan, err = plan.PrepareRetainedStorage(t.Context(), reader)
+	testutil.FailErr(t, "measure primary records despite obsolete index damage", err)
+	if !plan.BoundedRetainedStorage() {
+		t.Fatal("damaged obsolete index lost reviewed resource proof")
 	}
 	testutil.FailErr(t, "close damaged source", reader.Close())
 	destination := filepath.Join(t.TempDir(), "rebuilt.db")
-	testutil.FailErr(t, "copy without obsolete index reads", copyRetainedStore(t.Context(), source, destination, plan))
+	_, err = copyRetainedStore(t.Context(), source, destination, plan, nil)
+	testutil.FailErr(t, "copy without obsolete index reads", err)
 	testutil.FailErr(t, "upgrade retained data", UpgradeStaged(t.Context(), destination))
 }
 
@@ -121,7 +137,7 @@ func TestRetainedCopyRefusesExistingDestination(t *testing.T) {
 	defer func() { _ = reader.Close() }()
 	plan, err := PlanUpgrade(t.Context(), reader)
 	testutil.FailErr(t, "plan upgrade", err)
-	if err := copyRetainedStore(t.Context(), source, source, plan); !os.IsExist(err) {
+	if _, err := copyRetainedStore(t.Context(), source, source, plan, nil); !os.IsExist(err) {
 		t.Fatalf("existing target error = %v", err)
 	}
 	actual, err := inspectSchema(t.Context(), reader)

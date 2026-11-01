@@ -17,7 +17,7 @@ type Runtime struct {
 	Power         *hostpower.Controller
 }
 
-func (b *Runtime) Load(cfg Config) error {
+func (b *Runtime) Load(cfg Config, resources ResourceLifetime) error {
 	var err error
 	b.SessionLimits = settings.DefaultSessionLimits()
 	if cfg.TestSessionLimits != nil {
@@ -29,6 +29,10 @@ func (b *Runtime) Load(cfg Config) error {
 		return fmt.Errorf("settings service: %w", err)
 	}
 	if b.Service != nil && b.Service.Approvals != nil {
+		if resources != nil {
+			store := b.Service.Approvals
+			resources.Track("approval-socket-references", 26, func(context.Context) error { store.Close(); return nil })
+		}
 		// Confinement reads durable write-root grants live.
 		confine.SetGrantedWriteRootsSource(b.Service.Approvals.WriteRootsForProject)
 	}

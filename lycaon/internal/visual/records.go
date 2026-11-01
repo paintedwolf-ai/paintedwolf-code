@@ -261,4 +261,3 @@ func (r *Records) ClaimedID(ctx context.Context, projectID, operationID, natural
 	}
 	return "", nil
 }
-

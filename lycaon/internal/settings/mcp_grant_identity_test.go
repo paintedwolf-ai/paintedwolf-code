@@ -11,21 +11,21 @@ import (
 
 func registeredMCPAction() hitl.ProposedAction {
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "mcp_protected_validation_credential_present",
-},
-Resources: hitl.ActionResources{
-ApprovalCategory: "mcp",
-ApprovalSubject: "Protected validation.credential_present",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-a",
-ProjectID: "project-a",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/project-a"}},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "mcp_protected_validation_credential_present",
+		},
+		Resources: hitl.ActionResources{
+			ApprovalCategory: "mcp",
+			ApprovalSubject:  "Protected validation.credential_present",
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "chat-a",
+			ProjectID: "project-a",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/project-a"}},
+		},
+	}
 }
 
 func TestRegisteredMCPGrantScopeBoundaries(t *testing.T) {

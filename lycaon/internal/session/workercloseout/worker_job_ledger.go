@@ -61,7 +61,22 @@ func (reader workerJobLedgerReader) LoadLedger(ctx context.Context, sessionID st
 func evidenceHandlesForMessages(messages []api.Message) map[string]struct{} {
 	handles := make(map[string]struct{})
 	for _, message := range messages {
+		if message.Role != "" && message.Role != api.MessageRoleTool {
+			continue
+		}
+		if len(message.EvidenceHandles) == 0 {
+			continue
+		}
 		for _, handle := range message.EvidenceHandles {
+			handle = strings.TrimSpace(handle)
+			if handle != "" {
+				handles[handle] = struct{}{}
+			}
+		}
+		if !allowsEmbeddedToolHandles(message) {
+			continue
+		}
+		for _, handle := range evidence.ExtractEmbeddedHandles(messagePayloadContent(message), message.EvidenceHandles...) {
 			handle = strings.TrimSpace(handle)
 			if handle != "" {
 				handles[handle] = struct{}{}
@@ -69,6 +84,26 @@ func evidenceHandlesForMessages(messages []api.Message) map[string]struct{} {
 		}
 	}
 	return handles
+}
+
+func allowsEmbeddedToolHandles(message api.Message) bool {
+	if message.ToolResult == nil {
+		return true
+	}
+	if message.ToolResult.CommandProgram != nil {
+		return false
+	}
+	return !strings.EqualFold(strings.TrimSpace(message.ToolResult.Tool), "command")
+}
+
+func messagePayloadContent(message api.Message) string {
+	if strings.TrimSpace(message.Content) != "" {
+		return message.Content
+	}
+	if message.ToolResult != nil {
+		return message.ToolResult.Content
+	}
+	return ""
 }
 
 func filterEvidenceLedger(ledger evidence.Ledger, handles map[string]struct{}) evidence.Ledger {

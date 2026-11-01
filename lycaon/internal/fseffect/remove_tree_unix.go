@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/fssync"
 	"golang.org/x/sys/unix"
 )
 
@@ -19,17 +18,17 @@ func RemoveTreeGuarded(loc Location, expected string) error {
 		return err
 	}
 	defer parent.close()
-	identity, err := fspath.EntryIdentityAt(int(parent.file.Fd()), parent.name)
+	identity, err := fspath.EntryIdentityAt(parent.fd, parent.name)
 	if err != nil {
 		return err
 	}
 	if expected == "" || identity != expected {
 		return ErrPostcondition
 	}
-	if err := removeTreeAt(int(parent.file.Fd()), parent.name); err != nil {
+	if err := removeTreeAt(parent.fd, parent.name); err != nil {
 		return err
 	}
-	return fssync.File(parent.file)
+	return fsyncFD(parent.fd)
 }
 
 func removeTreeAt(parent int, name string) error {

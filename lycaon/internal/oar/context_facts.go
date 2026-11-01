@@ -7,7 +7,6 @@ type InvocationFacts struct {
 	ToolArgs              map[string]any
 	ToolArgsFingerprint   string
 	ToolAllowedForProfile bool
-	HabitRedirectMatch    string
 	PatternParseOK        bool
 	ArgValidationErrors   []string
 	ArgValidationReason   string
@@ -18,8 +17,9 @@ type InvocationFacts struct {
 	ToolPayloadChunkable  bool
 	ToolIsHandoff         bool
 	PackRunnerTask        bool
-	CommandNotArgv        bool
-	HTTPRequestWebPage    bool
+	CommandNotArgv                  bool
+	HTTPRequestWebPage              bool
+	HTTPRequestLoopbackOtherSession bool
 }
 
 type SessionFacts struct {
@@ -146,18 +146,19 @@ type ExecutionFacts struct {
 }
 
 type RefusalsFacts struct {
-	RefusedWritePaths         []string
-	RefusedWriteGrants        []string
-	RefusedReadPaths          []string
-	RefusedReadGrants         []string
-	RefusedTerminalReadPaths  []string
-	RefusedTerminalWritePaths []string
-	SandboxRefusalWitness     string
-	RefusedSocketPaths        []string
-	RefusedConnectPorts       []string
-	RefusedListenPorts        []string
-	RefusedSignals            []string
-	UnsandboxedRefusals       []string
+	RefusedWritePaths           []string
+	RefusedWriteGrants          []string
+	RefusedReadPaths            []string
+	RefusedReadGrants           []string
+	RefusedCredentialStorePaths []string
+	RefusedTerminalReadPaths    []string
+	RefusedTerminalWritePaths   []string
+	SandboxRefusalWitness       string
+	RefusedSocketPaths          []string
+	RefusedConnectPorts         []string
+	RefusedListenPorts          []string
+	RefusedSignals              []string
+	UnsandboxedRefusals         []string
 }
 
 type SourceFacts struct {

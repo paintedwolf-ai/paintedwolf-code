@@ -66,6 +66,41 @@ func TestLogLLMRequestWritesJSONL(t *testing.T) {
 	}
 }
 
+func TestLogLLMRequestCapturesCommandGuidanceTemplatesAndFacts(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "requests.jsonl")
+	t.Setenv("LYCAON_LLM_DEBUG", "1")
+	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+	CloseLLMDebug()
+
+	LogLLMRequest("mock", "mock", "stream", []api.Message{{
+		Role:    api.MessageRoleUser,
+		Content: "run tests",
+	}}, nil, LLMRequestTiming{DurationMs: 12, TTFTMs: 5}, LLMUsageCapture{}, LLMRequestDebug{
+		SessionID: "sess-cmd",
+		ProfileID: "implement",
+		Surface:   "worker",
+		Iteration: 1,
+		CommandGuidance: &LLMCommandGuidanceCapture{
+			Templates: []string{"tools/schemas/command.yaml", "partials/command-surface.md", "units/runner-operating-procedure.md"},
+			Facts: map[string]any{
+				"profile_command_mutation": true,
+				"reviews_confined_writes":  false,
+				"command_external_hidden":  false,
+			},
+		},
+	}, nil, "")
+
+	rows := readJSONL[llmCaptureEntry](t, logPath)
+	if len(rows) != 1 || rows[0].CommandGuidance == nil {
+		t.Fatalf("expected 1 row with command_guidance, got %+v", rows)
+	}
+	cg := rows[0].CommandGuidance
+	if len(cg.Templates) != 3 || cg.Facts["profile_command_mutation"] != true || cg.Facts["reviews_confined_writes"] != false {
+		t.Fatalf("command_guidance = %+v", cg)
+	}
+}
+
 func TestLogLLMRequestWorkerIdentityAndManifest(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LYCAON_LLM_DEBUG", "1")

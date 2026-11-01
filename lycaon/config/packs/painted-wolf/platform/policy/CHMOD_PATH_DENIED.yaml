@@ -3,7 +3,7 @@ id: CHMOD_PATH_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chmod
 requires:
   profiles:
@@ -11,6 +11,7 @@ requires:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.operation
   - paintedwolf.path
 when: paintedwolf.rejection_code == "CHMOD_PATH_DENIED"
 effect: block

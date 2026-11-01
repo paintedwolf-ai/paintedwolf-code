@@ -309,7 +309,7 @@ anchors:
 
   - id: project.roots.changed
     title: Project roots changed
-    description: Project crosses from one folder to two or more (POST roots).
+    description: A project root was added, removed, moved, renamed or made primary.
     trigger_class: host_api
     surface: coordinator
     planes: [inform]
@@ -317,6 +317,18 @@ anchors:
       vars:
         folder: { type: string }
         roots: { type: "object[]" }
+
+  - id: project.posture.changed
+    title: Project approval posture changed
+    description: An approval posture change altered whether writes outside the project ask first.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        reviews_confined_writes: { type: bool, required: true }
+        command_external_changed: { type: bool }
+        command_external_hidden: { type: bool }
 
   - id: project.root.detach_canceled
     title: Root detach canceled work
@@ -574,6 +586,7 @@ anchors:
         skill_name: { type: "string", required: true }
         skill_body: { type: "string", required: true }
         trigger_tool: { type: "string", required: false }
+        skill_resources: { type: "string[]", required: false }
 
   - id: inject.skill_pointer
     title: Skill pointer
@@ -619,6 +632,7 @@ anchors:
     planes: [inform]
     envelope:
       vars:
+        progress_snapshot: { type: string }
         progress_missing: { type: bool }
         profile_has_update_progress: { type: bool }
         verify_required: { type: bool }

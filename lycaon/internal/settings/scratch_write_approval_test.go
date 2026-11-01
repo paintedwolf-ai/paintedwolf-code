@@ -24,16 +24,16 @@ func scratchGate(t *testing.T, posture gate.Posture) (hitl.ApprovalGate, string)
 
 func scratchAction(tool, project, path string) hitl.ProposedAction {
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-Files: []string{path},
-},
-Scope: hitl.ActionScope{
-ProjectID: "project",
-ProjectDir: project,
-SessionID: "task",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:  tool,
+			Files: []string{path},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:  "project",
+			ProjectDir: project,
+			SessionID:  "task",
+		},
+	}
 }
 
 func asksOutsideRoots(result *hitl.ApprovalResult) bool {

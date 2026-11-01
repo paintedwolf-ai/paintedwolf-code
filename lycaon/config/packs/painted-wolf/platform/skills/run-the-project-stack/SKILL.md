@@ -15,7 +15,7 @@ Use this workflow to operate the stack the repository itself defines. On a proce
 2. Bring up only what the task needs — `compose up -d <service…>` with the relevant profile — rather than the whole stack by default.
 3. Observe before acting. `compose ps` for state, `compose logs --tail` on the failing service for cause. Logs-first beats restart-first; a restart destroys the evidence.
 4. Rebuild only the changed service (`compose up -d --build <service>`). Rebuilding the world to fix one container wastes minutes and masks which change mattered.
-5. On a port conflict, report which process holds the port and let the user decide; never kill an unrelated listener to free it.
+5. On a port conflict, find the holder with `lsof -iTCP:PORT -sTCP:LISTEN` (`-iUDP:PORT` for UDP), report it, and let the user decide; never kill an unrelated listener to free it.
 6. Environment files referenced by the compose file may be absent from a fresh checkout. Say which file is missing and what variables it needs; never invent secret values to fill one.
 7. Record which services and containers were already running before the task. At handoff, stop only task-started services when cleanup is wanted; do not run `compose down` against a stack that predated the task. Never add `-v` without an explicit user request because volumes hold the user's data.
 

@@ -189,3 +189,98 @@ func findClosestPropertyMatch(unknownTopKeys, topPropKeys []string) (string, str
 	}
 	return bestMatch, bestUnk
 }
+
+func schemaAcceptsEmptyObject(propSchema map[string]any) bool {
+	if propSchema == nil {
+		return false
+	}
+	if isEmptyObjectBranch(propSchema) {
+		return true
+	}
+	for _, comb := range []string{"oneOf", "anyOf"} {
+		list, ok := propSchema[comb].([]any)
+		if !ok {
+			continue
+		}
+		for _, item := range list {
+			if branch, ok := item.(map[string]any); ok && isEmptyObjectBranch(branch) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isEmptyObjectBranch(schema map[string]any) bool {
+	if t, _ := schema["type"].(string); t != "object" {
+		return false
+	}
+	switch req := schema["required"].(type) {
+	case []any:
+		return len(req) == 0
+	case []string:
+		return len(req) == 0
+	}
+	return true
+}
+
+func coerceRelocatedValue(value any, propSchema map[string]any) any {
+	if b, ok := value.(bool); ok && b && schemaAcceptsEmptyObject(propSchema) {
+		return map[string]any{}
+	}
+	return value
+}
+
+var nestedPropertySynonyms = map[string]string{
+	"read_paths":  "read_path",
+	"read_root":   "read_path",
+	"read_roots":  "read_path",
+	"write_path":  "write_root",
+	"write_paths": "write_root",
+	"write_roots": "write_root",
+}
+
+func findClosestNestedPropertyMatch(unknownKeys []string, declared map[string]map[string]any) (string, string) {
+	ownerByProp := map[string]string{}
+	ambiguous := map[string]bool{}
+	children := make([]string, 0, len(declared))
+	for child := range declared {
+		children = append(children, child)
+	}
+	sort.Strings(children)
+	for _, child := range children {
+		childSchema := declared[child]
+		if !closedObject(childSchema) {
+			continue
+		}
+		for prop := range declaredProperties(childSchema) {
+			if prev, exists := ownerByProp[prop]; exists && prev != child {
+				ambiguous[prop] = true
+				continue
+			}
+			ownerByProp[prop] = child
+		}
+	}
+	var nestedProps []string
+	for prop := range ownerByProp {
+		if !ambiguous[prop] {
+			nestedProps = append(nestedProps, prop)
+		}
+	}
+	sort.Strings(nestedProps)
+	if len(nestedProps) == 0 {
+		return "", ""
+	}
+	for _, unk := range unknownKeys {
+		if target, ok := nestedPropertySynonyms[strings.ToLower(unk)]; ok {
+			if owner, exists := ownerByProp[target]; exists && !ambiguous[target] {
+				return joinArgPath(owner, target), unk
+			}
+		}
+	}
+	match, unk := findClosestPropertyMatch(unknownKeys, nestedProps)
+	if match == "" {
+		return "", ""
+	}
+	return joinArgPath(ownerByProp[match], match), unk
+}

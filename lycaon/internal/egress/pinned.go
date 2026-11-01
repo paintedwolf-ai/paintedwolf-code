@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/hostproxy"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"net"
 	"net/http"
 	"net/netip"
@@ -54,13 +55,19 @@ func PinnedTransport(target *url.URL, ips []netip.Addr, targetPort uint16) *http
 	return t
 }
 
-// UnixSocketTransport dials a local Unix domain socket, with proxies disabled.
-func UnixSocketTransport(socketPath string) *http.Transport {
+// UnixSocketTransport dials only a retained approved object, with proxies disabled.
+func UnixSocketTransport(binding socketref.Binding) *http.Transport {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = nil
-	d := net.Dialer{Timeout: 10 * time.Second}
 	t.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return d.DialContext(ctx, "unix", socketPath)
+		lease, err := binding.Acquire()
+		if err != nil {
+			return nil, err
+		}
+		defer lease.Close()
+		dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		return lease.DialContext(dialCtx)
 	}
 	return t
 }

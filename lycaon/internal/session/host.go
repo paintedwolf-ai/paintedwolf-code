@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -92,15 +94,36 @@ type Host struct {
 	Observations   *sessionobservation.Service
 	Submissions    *submissions.Service
 	Decisions      decisions.Store
+	loopbackProv   LoopbackProvenanceResolver
 }
 
-// SetLoopbackProvenance installs the provenance resolver for task container recording.
+// SetLoopbackProvenance installs host listener observation and provenance.
 func (m *Host) SetLoopbackProvenance(p LoopbackProvenanceResolver) {
 	if m != nil {
-
-		m.ToolContext.SetContainers(p)
-		m.Chats.SetLoopback(p)
+		m.loopbackProv = p
+		observer, _ := p.(tools.LoopbackEndpointObserver)
+		m.ToolContext.SetLoopbackObserver(observer)
+		if dp, ok := p.(*DefaultLoopbackProvenance); ok {
+			dp.SetHostSources(
+				m.Chats,
+				m.ToolContext.Project,
+				func() *bgprocess.Registry {
+					if m.Processes == nil {
+						return nil
+					}
+					return m.Processes.Background
+				},
+			)
+		}
 	}
+}
+
+// LoopbackProvenance returns the installed loopback provenance resolver.
+func (m *Host) LoopbackProvenance() LoopbackProvenanceResolver {
+	if m == nil {
+		return nil
+	}
+	return m.loopbackProv
 }
 
 // NewHost acquires the session domains and binds their shared resources.
@@ -211,12 +234,22 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	turnSettlement := turnsettlement.New(store, gate, &turnExecution.Prompt, turnStatus, m.Workspace, m.Coordinator.Batch)
 	m.Coordinator.Nudges = turnnudges.New(m.Coordinator.Loading.Ledger, workerResults, turnSpend)
 	turnInstructions := instructions.New(store, turnTranscript, captures, m.Coordinator.Guidance.DeliverPending)
+	turnInstructions.SetWaitEnds(func(sessionID string) []string {
+		var texts []string
+		for _, ended := range m.Coordinator.Runtime.CoordinatorLoop().Deliveries.TakeEndedWaits(sessionID) {
+			texts = append(texts, loopwake.WaitEndedText(ended))
+		}
+		return texts
+	})
 	m.Runner = turnexecution.New(store, svc, turnexecution.Components{Execution: turnExecution, Workspace: m.Workspace, Spend: turnSpend, Transcript: turnTranscript, Turns: turnTurns, Chats: m.Chats, SubmissionState: turnSubmissionState, Settlement: turnSettlement, Clocks: turnClocks, Closeouts: turnCloseouts, Guidance: m.Coordinator.Guidance, Curation: turnCuration, Status: turnStatus, Instructions: turnInstructions, Preparation: turnPreparation, Authorization: turnAuthorization, History: turnHistory, PostTurn: turnPostTurn})
 	m.Workers.Harness = workerharness.New(store, m.Profiles, m.ToolContext, m.Workers.Workspaces, m.Workspace, registry, m.Verification, OverlaySourceProof)
 	m.Admission.Bind(m.Runner, turnSettlement, m.Submissions)
 	m.Coordinator.Closeout = closeoutassembly.New(store, m.Workspace, workerState, m.Verification.Evidence)
 	m.Coordinator.Closeout.SetSourceVerification(m.Verification)
 	m.ProjectControl = projectcontrol.New(store, m.Stops, turnStatus, m.Admission, m.Coordinator.Batch, turnInstructions, turnTranscript)
+	m.ProjectControl.SetRootHistory(m.Workspace.RootHistory())
+	m.Profiles.SetPostureObserver(m.ProjectControl.ObserveSessionPosture)
+	m.Profiles.SetExternalObserver(m.ProjectControl.ObserveSessionCommandExternal)
 	m.Coordinator.Guards = turnguards.New(store, m.ToolPolicy, m.Verification, m.Coordinator.Feedback, workerState, m.Workers, m.Workspace, m.Coordinator.Batch, m.Coordinator.ProgressClosure, turnCloseouts, m.Profiles, m.Limits)
 	m.Coordinator.Loading.SetPolicy(m.Coordinator.Guards.Policy)
 	m.Resources.State.Settlement = turnSettlement

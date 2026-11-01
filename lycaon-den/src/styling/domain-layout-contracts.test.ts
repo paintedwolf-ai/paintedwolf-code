@@ -321,4 +321,52 @@ describe("domain layout CSS contracts", () => {
         .toMatch(/data-label=\{opt\.label\}/);
     });
   });
+
+  describe("git strip compose footer", () => {
+    const gitStripCss = readText("styling/chrome/git-strip.css");
+
+    it("lets the compose footer and AI action group wrap and shrink within narrow chat widths", () => {
+      const strip = extractCssRuleBlock(gitStripCss, ".git-strip");
+      const row = extractCssRuleBlock(gitStripCss, ".git-strip__row");
+      const compose = extractCssRuleBlock(gitStripCss, ".git-strip__compose");
+      const foot = extractCssRuleBlock(gitStripCss, ".git-strip__compose-foot");
+      const footCommit = extractCssRuleBlock(
+        gitStripCss,
+        ".git-strip__compose-foot .git-strip__commit",
+      );
+      const aiGroup = extractCssRuleBlock(gitStripCss, ".git-strip__ai-group");
+      const aiButton = extractCssRuleBlock(gitStripCss, ".git-strip__ai");
+      const actions = extractCssRuleBlock(gitStripCss, ".git-strip__actions");
+      const composeButtons = extractCssRuleBlock(
+        gitStripCss,
+        ".git-strip__row--compose .git-strip__ai,\n.git-strip__row--compose .git-strip__commit,\n.git-strip__row--compose .git-strip__stash,\n.git-strip__row--compose .git-strip__discard",
+      );
+
+      expect(strip).toMatch(/min-width:\s*0/);
+      expect(row).toMatch(/min-width:\s*0/);
+      expect(compose).toMatch(/min-width:\s*0/);
+      expect(foot).toMatch(/flex-wrap:\s*wrap/);
+      expect(foot).toMatch(/min-width:\s*0/);
+      expect(footCommit).toMatch(/max-width:\s*100%/);
+
+      expect(aiGroup).toMatch(/flex-wrap:\s*wrap/);
+      expect(aiGroup).toMatch(/flex:\s*0 1 auto/);
+      expect(aiGroup).toMatch(/min-width:\s*0/);
+      expect(aiGroup).toMatch(/max-width:\s*100%/);
+      expect(aiGroup).not.toMatch(/flex:\s*0 0 auto/);
+
+      expect(aiButton).toMatch(/min-width:\s*0/);
+      expect(aiButton).toMatch(/max-width:\s*100%/);
+      expect(aiButton).not.toMatch(/flex-shrink:\s*0/);
+
+      expect(actions).toMatch(/flex-wrap:\s*wrap/);
+      expect(actions).toMatch(/flex:\s*0 1 auto/);
+      expect(actions).toMatch(/min-width:\s*0/);
+
+      expect(composeButtons).toMatch(/min-width:\s*0/);
+      expect(composeButtons).toMatch(/max-width:\s*100%/);
+      expect(composeButtons).toMatch(/white-space:\s*normal/);
+      expect(composeButtons).toMatch(/overflow-wrap:\s*anywhere/);
+    });
+  });
 });
