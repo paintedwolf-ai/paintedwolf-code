@@ -40,7 +40,7 @@ func (s *Transcript) HandleGetCommandProgramReceipt(w http.ResponseWriter, r *ht
 		case errors.Is(err, pagecursor.ErrInvalid), errors.Is(err, pagecursor.ErrExpired):
 			s.responses.PageCursorError(w, r, "cursor", err)
 		case errors.Is(err, invocation.ErrProgramNotFound):
-			http.NotFound(w, r)
+			s.responses.Fail(w, wire.ApiErrorCodeCommandProgramNotFound, "command program not found")
 		default:
 			s.responses.InternalError(w, r, err)
 		}
