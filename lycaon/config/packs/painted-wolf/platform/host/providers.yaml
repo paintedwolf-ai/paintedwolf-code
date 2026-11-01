@@ -196,7 +196,7 @@ prompt_cache_profiles:
   litellm:
     mode: automatic_prefix
     marker: catalog
-  # Gemini 2.5 and later, Together, and Vertex cache prefixes on their own and
+  # Gemini 2.5 and later, Together, Vertex, and Cerebras cache prefixes on their own and
   # take no request control or documented lifetime.
   implicit:
     mode: automatic_prefix
@@ -623,3 +623,12 @@ providers:
     models: []
     http_retry_profile: hosted-standard
     prompt_cache_profile: none
+  - id: cerebras
+    reasoning_wire: reasoning_content
+    kind: cerebras
+    label: Cerebras
+    base_url: https://api.cerebras.ai/v1
+    api_key_env: CEREBRAS_API_KEY
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: implicit

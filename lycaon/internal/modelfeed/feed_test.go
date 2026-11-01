@@ -124,6 +124,7 @@ func TestFixtureProviderKeysPresent(t *testing.T) {
 		"amazon-bedrock", "google-vertex", "google", "azure", "cloudflare-workers-ai",
 		"scaleway",
 		"mistral",
+		"cerebras",
 	}
 	for _, key := range want {
 		if _, ok := doc.Providers[key]; !ok {

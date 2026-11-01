@@ -361,6 +361,7 @@ func mergeCatalogWithDiscovery(
 		byID[m.ID] = m
 		order = append(order, m.ID)
 	}
+	seenLive := make(map[string]struct{}, len(discovered))
 	for _, d := range discovered {
 		id := strings.TrimSpace(d.ID)
 		if id == "" {
@@ -368,10 +369,12 @@ func mergeCatalogWithDiscovery(
 		}
 		if existing, ok := byID[id]; ok {
 			byID[id] = enrichFromDiscovery(existing, d)
+			seenLive[id] = struct{}{}
 			continue
 		}
 		if matched, ok := lookupEquivalent(kind, byID, id); ok {
 			byID[matched] = enrichFromDiscovery(byID[matched], d)
+			seenLive[matched] = struct{}{}
 			continue
 		}
 		if d.Untyped {
@@ -381,7 +384,21 @@ func mergeCatalogWithDiscovery(
 		// Typed discovery may append conversation-filtered live ids.
 		entry := mergeDiscoveredModelEntry(kind, local, d)
 		byID[entry.ID] = entry
+		seenLive[entry.ID] = struct{}{}
 		order = append(order, entry.ID)
+	}
+	if kind == "cerebras" {
+		for _, m := range base {
+			if _, ok := seenLive[m.ID]; ok {
+				continue
+			}
+			if _, declared := declaredModelEntry(kind, local, m.ID); declared {
+				continue
+			}
+			entry := byID[m.ID]
+			entry.Callable = modelinfo.Evidence(modelinfo.CapabilityUnsupported, "provider-listing")
+			byID[m.ID] = entry
+		}
 	}
 	out := make([]modelinfo.Entry, 0, len(order))
 	seen := make(map[string]struct{}, len(order))

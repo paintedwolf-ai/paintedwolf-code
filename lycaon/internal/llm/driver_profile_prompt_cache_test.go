@@ -46,6 +46,7 @@ func TestShippedPromptCachePolicyPerKind(t *testing.T) {
 		{"vertex-express", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"cloudflare-workers-ai", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"scaleway", providerprofile.PromptCacheAutomaticPrefix, 0},
+		{"cerebras", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"litellm-proxy", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"bedrock", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"ollama", providerprofile.PromptCacheLocalKV, 0},
@@ -119,7 +120,7 @@ func TestShippedPromptCacheModelRules(t *testing.T) {
 
 func TestNewProviderForEntryAttachesItsPromptCachePolicy(t *testing.T) {
 	policies := shippedPromptCache(t)
-	for _, kind := range []string{"ollama", "anthropic", "fireworks", "gemini", "openrouter", "openai", "bedrock", "cloudflare-workers-ai", "scaleway"} {
+	for _, kind := range []string{"ollama", "anthropic", "fireworks", "gemini", "openrouter", "openai", "bedrock", "cloudflare-workers-ai", "scaleway", "cerebras"} {
 		t.Run(kind, func(t *testing.T) {
 			entry := CatalogEntry{ID: "p", Kind: kind, BaseURL: "http://localhost:1234/v1", PromptCache: policies[kind]}
 			if kind == "cloudflare-workers-ai" {

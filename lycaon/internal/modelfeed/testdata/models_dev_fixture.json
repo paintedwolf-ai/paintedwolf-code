@@ -911,5 +911,131 @@
         }
       }
     }
+  },
+  "cerebras": {
+    "id": "cerebras",
+    "name": "Cerebras",
+    "models": {
+      "gpt-oss-120b": {
+        "id": "gpt-oss-120b",
+        "name": "GPT OSS 120B",
+        "description": "OpenAI open-weight reasoning model for coding, tool use, and structured generation",
+        "family": "gpt-oss",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "release_date": "2025-08-05",
+        "last_updated": "2025-08-05",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 131072,
+          "output": 32768
+        },
+        "cost": {
+          "input": 0.25,
+          "output": 0.69
+        }
+      },
+      "llama3.1-8b": {
+        "id": "llama3.1-8b",
+        "name": "Llama 3.1 8B",
+        "description": "Compact Llama instruction model for low-latency chat and tool calling",
+        "family": "llama",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "release_date": "2024-07-23",
+        "last_updated": "2024-07-23",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 32768,
+          "output": 8192
+        },
+        "cost": {
+          "input": 0.1,
+          "output": 0.1
+        }
+      },
+      "qwen-3-235b-a22b-instruct-2507": {
+        "id": "qwen-3-235b-a22b-instruct-2507",
+        "name": "Qwen 3 235B A22B Instruct 2507",
+        "description": "Large Qwen mixture-of-experts model for complex coding and tool-use tasks",
+        "family": "qwen",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "release_date": "2025-07-22",
+        "last_updated": "2025-07-22",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 131072,
+          "output": 32768
+        },
+        "cost": {
+          "input": 0.6,
+          "output": 1.2
+        }
+      },
+      "zai-glm-4.7": {
+        "id": "zai-glm-4.7",
+        "name": "Z.AI GLM-4.7",
+        "description": "Frontier reasoning and coding model with tool calling and structured outputs",
+        "family": "glm",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "release_date": "2025-12-22",
+        "last_updated": "2025-12-22",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 131072,
+          "output": 40000
+        },
+        "cost": {
+          "input": 2.25,
+          "output": 2.75
+        }
+      }
+    }
   }
 }

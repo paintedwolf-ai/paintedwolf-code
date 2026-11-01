@@ -49,6 +49,12 @@ func OpenAIVendor() Profile {
 	return profile
 }
 
+func Cerebras() Profile {
+	profile := OpenAIVendor()
+	profile.DiscoveryProfile = discovery.CerebrasProfile()
+	return profile
+}
+
 func Ollama() Profile {
 	return LocalInference(Profile{
 		ToolCalls:            ToolCallsNative,

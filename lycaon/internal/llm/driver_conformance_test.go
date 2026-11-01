@@ -55,6 +55,7 @@ func openAICompatConformanceCases() []openAICompatConformanceCase {
 		{kind: "scaleway", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "vertex", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "mistral", wantBearer: true, promptCache: promptCacheForbidKey},
+		{kind: "cerebras", wantBearer: true, promptCache: promptCacheForbidKey},
 	}
 }
 

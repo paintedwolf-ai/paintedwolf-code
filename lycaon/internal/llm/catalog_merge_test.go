@@ -403,3 +403,72 @@ func TestMergeScalewayCatalogAndDedicatedOverrides(t *testing.T) {
 		t.Fatalf("embedding model must not appear in merged set: %v", ids)
 	}
 }
+
+func TestMergeCerebrasDistinguishesAccountModelsFromDedicatedCapacity(t *testing.T) {
+	doc := fixtureDoc(t)
+	discovered := []modelinfo.Entry{
+		{
+			ID:           "gpt-oss-120b",
+			Capabilities: modelinfo.ModelCapabilities{Chat: modelinfo.Evidence(modelinfo.CapabilitySupported, "provider-discovery")},
+			Callable:     modelinfo.Evidence(modelinfo.CapabilitySupported, "provider-listing"),
+		},
+		{
+			ID:           "llama3.1-8b",
+			Capabilities: modelinfo.ModelCapabilities{Chat: modelinfo.Evidence(modelinfo.CapabilitySupported, "provider-discovery")},
+			Callable:     modelinfo.Evidence(modelinfo.CapabilitySupported, "provider-listing"),
+		},
+		{
+			ID:           "dedicated-llama-3.3-70b",
+			Capabilities: modelinfo.ModelCapabilities{Chat: modelinfo.Evidence(modelinfo.CapabilitySupported, "provider-discovery")},
+			Callable:     modelinfo.Evidence(modelinfo.CapabilitySupported, "provider-listing"),
+		},
+	}
+	merged := mergeAssignableModels("cerebras", nil, discovered, nil, doc, modelfeed.StatusOK, true)
+	if !merged.CatalogAuthoritative {
+		t.Fatal("expected cerebras to be catalog-authoritative")
+	}
+	byID := map[string]modelinfo.Entry{}
+	for _, m := range merged.Models {
+		byID[m.ID] = m
+	}
+	if len(byID) != 3 {
+		t.Fatalf("assignable models = %+v, want 3 account-available models", merged.Models)
+	}
+	gptOSS, ok := byID["gpt-oss-120b"]
+	if !ok {
+		t.Fatal("missing gpt-oss-120b in assignable models")
+	}
+	if gptOSS.ContextLength != 131072 || gptOSS.MaxTokens != 32768 {
+		t.Fatalf("gpt-oss-120b limits = ctx:%d max:%d", gptOSS.ContextLength, gptOSS.MaxTokens)
+	}
+	if !modelinfo.Supported(gptOSS.Capabilities.Tools) || !modelinfo.Supported(gptOSS.Capabilities.Reasoning) {
+		t.Fatalf("gpt-oss-120b capabilities = %+v", gptOSS.Capabilities)
+	}
+	if gptOSS.Capabilities.Streaming.State != modelinfo.CapabilityUnknown {
+		t.Fatalf("gpt-oss-120b streaming = %+v, want unknown", gptOSS.Capabilities.Streaming)
+	}
+
+	dedicated, ok := byID["dedicated-llama-3.3-70b"]
+	if !ok {
+		t.Fatal("missing live-only dedicated model in assignable models")
+	}
+	if !modelinfo.Supported(dedicated.Capabilities.Chat) {
+		t.Fatalf("dedicated chat = %+v, want supported", dedicated.Capabilities.Chat)
+	}
+	if dedicated.Capabilities.Tools.State != "" && dedicated.Capabilities.Tools.State != modelinfo.CapabilityUnknown {
+		t.Fatalf("dedicated tools = %+v, want unknown", dedicated.Capabilities.Tools)
+	}
+
+	refusedIDs := map[string]bool{}
+	for _, m := range merged.Refused {
+		refusedIDs[m.ID] = true
+	}
+	if !refusedIDs["qwen-3-235b-a22b-instruct-2507"] || !refusedIDs["zai-glm-4.7"] {
+		t.Fatalf("expected dedicated-capacity catalog models in Refused, got %+v", merged.Refused)
+	}
+	svc := &Service{}
+	err := svc.unassignableModelError("cerebras", ModelRef{ProviderID: "cerebras", Model: "qwen-3-235b-a22b-instruct-2507"}, merged)
+	if err == nil || err.Error() != `provider "cerebras" lists model "qwen-3-235b-a22b-instruct-2507" but does not serve it` {
+		t.Fatalf("unexpected unassignable error for dedicated-capacity model: %v", err)
+	}
+}

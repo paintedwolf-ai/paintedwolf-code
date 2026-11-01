@@ -250,6 +250,7 @@ func TestEgressPackMatches(t *testing.T) {
 	must("api.openai.com", "data-cloud-control-plane")
 	must("api.deepinfra.com", "data-cloud-control-plane")
 	must("api.scaleway.ai", "data-cloud-control-plane")
+	must("api.cerebras.ai", "data-cloud-control-plane")
 	must("xy12345.us-east-1.snowflakecomputing.com", "data-cloud-control-plane")
 	must("api.clickhouse.cloud", "data-cloud-control-plane")
 	must("cloud.getdbt.com", "data-cloud-control-plane")

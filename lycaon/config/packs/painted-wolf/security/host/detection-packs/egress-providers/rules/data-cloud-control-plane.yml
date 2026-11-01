@@ -96,6 +96,7 @@ detection:
       - api.deepseek.com
       - api.deepinfra.com
       - api.scaleway.ai
+      - api.cerebras.ai
   selection_suffix:
     DestinationHostname|endswith:
       # Warehouses / analytics
@@ -206,4 +207,5 @@ detection:
       - .groq.com
       - .perplexity.ai
       - .scaleway.ai
+      - .cerebras.ai
   condition: selection_host or selection_suffix

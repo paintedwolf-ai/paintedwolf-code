@@ -11,25 +11,26 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
+type openAICompatErrorFields struct {
+	Message       string `json:"message"`
+	Status        string `json:"status"`
+	Type          string `json:"type"`
+	Param         string `json:"param"`
+	Code          any    `json:"code"`
+	NCtx          int    `json:"n_ctx"`
+	NPromptTokens int    `json:"n_prompt_tokens"`
+	MaxModelLen   int    `json:"max_model_len"`
+	ContextLength int    `json:"context_length"`
+	MaxContextLen int    `json:"max_context_length"`
+	PromptTokens  int    `json:"prompt_tokens"`
+	Details       []struct {
+		Reason string `json:"reason"`
+	} `json:"details"`
+}
+
 type openAICompatErrorBody struct {
-	Error struct {
-		Message       string `json:"message"`
-		Status        string `json:"status"`
-		Type          string `json:"type"`
-		Param         string `json:"param"`
-		Code          any    `json:"code"`
-		NCtx          int    `json:"n_ctx"`
-		NPromptTokens int    `json:"n_prompt_tokens"`
-		MaxModelLen   int    `json:"max_model_len"`
-		ContextLength int    `json:"context_length"`
-		MaxContextLen int    `json:"max_context_length"`
-		PromptTokens  int    `json:"prompt_tokens"`
-		Details       []struct {
-			Reason string `json:"reason"`
-		} `json:"details"`
-	} `json:"error"`
-	NCtx          int `json:"n_ctx"`
-	NPromptTokens int `json:"n_prompt_tokens"`
+	Error openAICompatErrorFields `json:"error"`
+	openAICompatErrorFields
 }
 
 // ProviderHTTPError preserves structured response fields.
@@ -187,14 +188,18 @@ func ParseOpenAICompatError(body []byte) (ParsedProviderError, bool) {
 }
 
 func fieldsFromErrorEnvelope(env openAICompatErrorBody) (ParsedProviderError, bool) {
-	msg := strings.TrimSpace(env.Error.Message)
-	code := providerErrorCode(env.Error.Code)
-	typ := strings.TrimSpace(env.Error.Type)
-	status := strings.TrimSpace(env.Error.Status)
+	fields := env.Error
+	if fields.Message == "" && fields.Code == nil && fields.Type == "" && fields.Status == "" {
+		fields = env.openAICompatErrorFields
+	}
+	msg := strings.TrimSpace(fields.Message)
+	code := providerErrorCode(fields.Code)
+	typ := strings.TrimSpace(fields.Type)
+	status := strings.TrimSpace(fields.Status)
 	if msg == "" && code == "" && typ == "" && status == "" {
 		return ParsedProviderError{}, false
 	}
-	for _, detail := range env.Error.Details {
+	for _, detail := range fields.Details {
 		reason := strings.TrimSpace(detail.Reason)
 		if reason == "" {
 			continue
@@ -209,11 +214,11 @@ func fieldsFromErrorEnvelope(env openAICompatErrorBody) (ParsedProviderError, bo
 	parsed := ParsedProviderError{
 		Message:      msg,
 		Code:         code,
-		Param:        strings.TrimSpace(env.Error.Param),
+		Param:        strings.TrimSpace(fields.Param),
 		Type:         typ,
 		Status:       status,
-		MaxContext:   firstPositiveInt(env.Error.NCtx, env.Error.MaxModelLen, env.Error.ContextLength, env.Error.MaxContextLen, env.NCtx),
-		PromptTokens: firstPositiveInt(env.Error.NPromptTokens, env.Error.PromptTokens, env.NPromptTokens),
+		MaxContext:   firstPositiveInt(fields.NCtx, fields.MaxModelLen, fields.ContextLength, fields.MaxContextLen, env.openAICompatErrorFields.NCtx),
+		PromptTokens: firstPositiveInt(fields.NPromptTokens, fields.PromptTokens, env.openAICompatErrorFields.NPromptTokens),
 	}
 	return parsed, true
 }

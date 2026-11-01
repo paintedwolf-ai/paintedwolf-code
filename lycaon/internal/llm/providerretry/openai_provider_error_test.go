@@ -129,3 +129,25 @@ func TestOverflowCapacityDependsOnStructuredFieldsRatherThanDiagnostics(t *testi
 		}
 	}
 }
+
+func TestFormatOpenAIProviderError_FlatTopLevelErrorBody(t *testing.T) {
+	body := []byte(`{"message":"Model qwen-3-235b-a22b-instruct-2507 does not exist or you do not have access to it.","type":"not_found_error","param":"model","code":"model_not_found"}`)
+	err := FormatOpenAIProviderError(&openai.RequestError{
+		HTTPStatusCode: 404,
+		Body:           body,
+	})
+	var providerErr *ProviderHTTPError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("error = %T, want ProviderHTTPError", err)
+	}
+	if providerErr.Code != "model_not_found" || providerErr.Param != "model" || providerErr.Type != "not_found_error" {
+		t.Fatalf("structured fields = %+v", providerErr)
+	}
+	parsed, ok := ParseOpenAICompatError(body)
+	if !ok {
+		t.Fatal("expected ParseOpenAICompatError to succeed")
+	}
+	if got := ModelRefusalEvidenceFor(404, parsed, DefaultModelRefusalCodes()); got != RefusalEvidenceModelIdentity {
+		t.Fatalf("ModelRefusalEvidenceFor = %q, want %q", got, RefusalEvidenceModelIdentity)
+	}
+}
