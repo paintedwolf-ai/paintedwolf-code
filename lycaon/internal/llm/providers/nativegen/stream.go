@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/inference"
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 )
 
@@ -127,6 +128,7 @@ func (p *Runtime) finishRequest(cursor *progressCursor) {
 
 func (p *Provider) generate(ctx context.Context, req modelcall.CompletionRequest, model string, cursor *progressCursor, out chan modelcall.StreamChunk) {
 	decoder := newOutputDecoder(req)
+	sawOutput := false
 	send := func(chunk modelcall.StreamChunk) bool {
 		chunk.ProviderID, chunk.Model = p.id, model
 		return sendGenerationChunk(ctx, out, chunk)
@@ -136,7 +138,7 @@ func (p *Provider) generate(ctx context.Context, req modelcall.CompletionRequest
 		err := p.runtime.loaded.process.call(ctx, command{Method: "advance", RequestID: cursor.requestID}, "progress", inference.Foreground, true, &result)
 		usage := modelcall.TokenUsage{Present: true, PromptTokens: cursor.processed, CompletionTokens: cursor.generated, CacheReadInputTokens: cursor.reused}
 		if err != nil {
-			send(modelcall.StreamChunk{Err: err, Done: true, Usage: usage})
+			send(modelcall.StreamChunk{Err: failure.InterruptedResponse(ctx, p.id, model, err), Done: true, Usage: usage})
 			return
 		}
 		text, err := decoder.step(result.Progress.Token, result.Text)
@@ -144,10 +146,14 @@ func (p *Provider) generate(ctx context.Context, req modelcall.CompletionRequest
 			send(modelcall.StreamChunk{Err: err, Done: true, Usage: usage})
 			return
 		}
+		sawOutput = sawOutput || text != ""
 		chunk := modelcall.StreamChunk{Content: text, Usage: usage, Done: cursor.terminal}
 		if cursor.terminal {
 			capped := result.Progress.StopReason != nil && *result.Progress.StopReason == "max_tokens"
 			chunk.ToolCalls, chunk.Err = decoder.finish(capped)
+			if chunk.Err == nil && !capped && !sawOutput && len(chunk.ToolCalls) == 0 {
+				chunk.Err = &failure.ProviderEmptyCompletionError{ProviderID: p.id, Model: model, Reason: "native_eos_without_output", Retryable: true}
+			}
 			if chunk.Err == nil && capped {
 				chunk.Err = modelcall.OutputTruncation(req, p.id, model, "length", usage, len(chunk.ToolCalls) > 0)
 			}

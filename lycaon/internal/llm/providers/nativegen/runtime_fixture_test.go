@@ -52,6 +52,11 @@ func runtimeFixture() {
 			generated = 0
 			result = map[string]any{"kind": "begun", "request_id": active.RequestID, "reused_prefix_tokens": 0}
 		case "advance", "cancel":
+			fault := os.Getenv("PW_NATIVEGEN_RESPONSE_FAULT")
+			if request.Command.Method == "advance" && (fault == "before_output" || fault == "after_output" && generated > 0) {
+				_, _ = os.Stdout.Write([]byte{0, 0})
+				return
+			}
 			text := ""
 			var token *uint32
 			var stop *string
@@ -60,7 +65,7 @@ func runtimeFixture() {
 				stop = &value
 			} else {
 				generated++
-				if generated == 1 {
+				if generated == 1 && fault != "empty_eos" {
 					value := uint32(236812)
 					token, text = &value, "4"
 					if active.MaxNewTokens == 1 {
