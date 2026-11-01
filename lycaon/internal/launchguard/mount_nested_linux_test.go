@@ -239,17 +239,17 @@ func checkNestedTopologyChanges(directory, root string, underlay int, pins *fixt
 	}
 	defer unix.Close(removed)
 	if err := unix.Unmount(filepath.Join(target, "added"), 0); !errors.Is(err, unix.EBUSY) {
-		return fmt.Errorf("pinned source ordinary unmount: expected EBUSY, got %v", err)
+		return errors.Join(errors.New("pinned source ordinary unmount must report EBUSY"), err)
 	}
 	began = lifecycleMonotonicNS()
 	if err := unix.Unmount(filepath.Join(target, "added"), unix.MNT_DETACH); err != nil {
 		return fmt.Errorf("detach added source mount: %w", err)
 	}
 	if raw, err := os.ReadFile(mountDescriptorPath(removed) + "/payload"); err != nil || string(raw) != "added" {
-		return fmt.Errorf("removed source pin lost its original payload: %q: %v", raw, err)
+		return errors.Join(fmt.Errorf("removed source pin lost its original payload: %q", raw), err)
 	}
 	if _, err := os.Stat(filepath.Join(target, "added", "payload")); !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("detached source payload remains visible: %v", err)
+		return errors.Join(errors.New("detached source payload remains visible"), err)
 	}
 	if _, err = awaitNestedView(sourceNS, desktopNS, pins, target, 2, added, group, began, deadline); err != nil {
 		return err
