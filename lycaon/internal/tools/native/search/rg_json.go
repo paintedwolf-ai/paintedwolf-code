@@ -44,7 +44,7 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 		file.printed += int64(len(line)) + 1
 		return inv.out.text(line, "\n")
 	}
-	lastSelectedEnd := 0
+	lastSelectedEnd, trailingLines := 0, 0
 	binaryOffset := bytes.IndexByte(content, 0)
 	var reader io.Reader = bytes.NewReader(content)
 	if binaryOffset >= 0 {
@@ -63,7 +63,7 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 		}
 		record := content[line.Start:line.End]
 		encodedLine := content[line.Start:end]
-		if end < len(content) && content[end] == 0 {
+		if line.End < len(content) && content[line.End] == 0 {
 			converted := &grepRecord{inv: inv}
 			defer converted.close()
 			if err := converted.data(record); err != nil {
@@ -80,6 +80,8 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 			kind = "match"
 			lastSelectedEnd = end
 			file.matchedLines++
+		} else if r.scan.MaxSelected > 0 && file.matchedLines >= int64(r.scan.MaxSelected) {
+			trailingLines++
 		}
 		output := &grepRecord{inv: inv}
 		defer output.close()
@@ -110,7 +112,7 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 		return err
 	}
 	file.searched = int64(len(content))
-	if r.scan.MaxSelected > 0 && n >= r.scan.MaxSelected {
+	if r.scan.MaxSelected > 0 && n >= r.scan.MaxSelected && trailingLines >= r.scan.After {
 		file.searched = int64(lastSelectedEnd)
 	}
 
