@@ -1,0 +1,15 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/commandprogram",
+  "kind": "module",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain the command language evaluator and its package-private grammar and execution contracts at 57 source members and 42 test members. Shared batch capacity is a pure planning calculation over the existing program ledger and catalog. Parsing, expansion and execution retain their existing authority boundaries. Resource sharing and evaluator limit contracts support this member set.",
+  "reviewed_commit": "abd7258eca3ad0cdf084a28196481237096744cd",
+  "ceiling": 57,
+  "boundaries": {
+    "lycaon/internal/commandprogram/batch_budget_test.go": "9a0c89b3fbf0bc99edc5e566085c1ed3dd2eccb068fc68763e9d7d850d169f4e",
+    "lycaon/internal/commandprogram/evaluate_bounds_test.go": "75e210f69044f8fbb943106a44c56e8eedb703c7f40c6b4edc8c8e1cde611ac6"
+  },
+  "reviewed_shape": "d9704c8d8dfb973f2e75e95b469967e660a3058d2d9a17e9a17119a9309a24f2"
+}

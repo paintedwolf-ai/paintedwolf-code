@@ -45,6 +45,7 @@ func NewNativeValue(ctx context.Context, state ReviewStateAdmission, domain Nati
 	if ctx == nil || state == nil || !domain.valid() {
 		return NativeValue{}, nil, fmt.Errorf("native value requires context, admission and a known domain")
 	}
+	ctx = WithMemoryPhase(ctx, ReviewEncoding)
 	writer := nativeValueWriter{ctx: ctx, state: state}
 	defer writer.close()
 	if err := writer.text(`["` + string(domain) + `",1,`); err != nil {
@@ -69,6 +70,7 @@ func (v NativeValue) Value(ctx context.Context, state ReviewStateAdmission) (any
 	if ctx == nil || state == nil || !v.Valid() {
 		return nil, nil, fmt.Errorf("admitted native value required")
 	}
+	ctx = WithMemoryPhase(ctx, ReviewDecoding)
 	reader := nativeValueReader{ctx: ctx, state: state, source: v.canonical, leases: &reviewLeases{}}
 	prefix := `["` + string(v.domain) + `",1,`
 	if err := reader.take(prefix); err != nil {

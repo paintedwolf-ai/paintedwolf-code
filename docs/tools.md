@@ -199,6 +199,17 @@ whole-input operations retain their materialization contracts. Query event
 parsing preserves object order, numeric spelling, empty containers and closure
 events while cancellation and reader failures remain terminal host facts.
 
+### Batched command resources
+
+Batch-producing commands plan child argument bytes and fields against the
+remaining program resources and declared parallelism. Explicit item, line and
+exact-size constraints retain their command semantics. A resource refusal stops
+admission before effects; it never triggers replay of an attempted child.
+Input revision membership uses independently admitted fixed-capacity pages so a
+large file set does not require a second complete membership table during growth.
+Search releases completed pin pages after durable recording. Parallel pin events
+retain their leases until ordered reduction or cancellation discards them.
+
 ### Complete byte streams
 
 `commandprogram.BytePipe` uses unbuffered `io.Pipe` backpressure and an explicit
