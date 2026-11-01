@@ -338,7 +338,7 @@ func TestCommandLargeAppendStreamsOriginalPrefix(t *testing.T) {
 	}
 }
 
-func TestCommandQueryStreamsTheDeclaredInputBoundary(t *testing.T) {
+func TestCommandQueryStreamsBeyondCapturedInputCapacity(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
@@ -389,7 +389,13 @@ func TestCommandQueryStreamsTheDeclaredInputBoundary(t *testing.T) {
 	out, err = env.Call(t, t.Context(), `jq . stream.json`)
 	testutil.FailErr(t, "env.Call failed", err)
 	result = decodePipeOutcome(t, out)
-	if result.Refusal == nil || result.Refusal.Code != "JQ_INPUT_TOO_LARGE" {
-		t.Fatalf("over-input query %+v", result)
+	if result.State != "completed" || result.Status != 0 || result.Stdout != "0\n" || result.Refusal != nil {
+		t.Fatalf("stream beyond captured-input capacity %+v", result)
+	}
+	if memory().Peak().State > 16<<20 {
+		t.Fatalf("query retained the larger stream %+v", memory().Peak())
+	}
+	if held := memory().InUse(); held.Working != 0 || held.State > 64<<10 {
+		t.Fatalf("larger query leases remain %+v", held)
 	}
 }
