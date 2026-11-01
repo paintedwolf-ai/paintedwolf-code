@@ -26,7 +26,7 @@ void pw_generation::save_prefix() {
     if (!cache) throw std::runtime_error("E4B requires separate global and sliding caches");
     cache->get_base()->seq_cp(0, 1, -1, -1);
     // Only live sliding rows may be pinned by the retained prefix.
-    cache->get_swa()->seq_cp(0, 1, std::max(0, static_cast<int>(position) - 512), -1);
+    cache->get_swa()->seq_cp(0, 1, std::max(0, static_cast<int>(position) - 511), -1);
     prefix_position = position;
     if (const auto debug = std::getenv("LLAMA_KV_CACHE_DEBUG"); debug && std::atoi(debug) > 0)
         diagnostic_prefix = pw_checkpoint::save(llama_get_memory(context.get()));
