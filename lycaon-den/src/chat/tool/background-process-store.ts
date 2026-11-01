@@ -90,19 +90,23 @@ export async function refreshBackgroundProcessSnapshots(client: BackgroundProces
 }
 
 function applyOutput(sessionId: string, output: BackgroundProcessOutput): void {
-  const id = key(sessionId, output.process_id);
-  const text = output.chunks.map(chunk => chunk.text).join("");
-  snapshots.set(id, { processId: output.process_id, sessionId, running: output.running, exitCode: output.exit_code,
+  const processId = output.process_id?.trim();
+  if (!processId) return;
+  const id = key(sessionId, processId);
+  const chunks = output.chunks ?? [];
+  const text = chunks.map(chunk => chunk.text ?? "").join("");
+  snapshots.set(id, { processId, sessionId, running: output.running, exitCode: output.exit_code,
     truncated: output.truncated || text.length > MAX_BACKGROUND_TEXT_CHARS });
   rememberText(id, text);
 }
 /** Replace a session's process mirror from its authoritative snapshot. */
-export function applyBackgroundProcessOutputs(sessionId: string, outputs: readonly BackgroundProcessOutput[]): void {
+export function applyBackgroundProcessOutputs(sessionId: string, outputs: readonly BackgroundProcessOutput[] | null | undefined): void {
   const sid = sessionId.trim(); if (!sid) return;
+  const list = outputs ?? [];
   refreshTokens.delete(sid);
-  const visible = new Set(outputs.map(output => key(sid, output.process_id)));
+  const visible = new Set(list.flatMap(output => output?.process_id?.trim() ? [key(sid, output.process_id.trim())] : []));
   for (const [id, snapshot] of snapshots) if (snapshot.sessionId === sid && !visible.has(id)) { snapshots.delete(id); textCache.delete(id); }
-  for (const output of outputs) applyOutput(sid, output);
+  for (const output of list) if (output) applyOutput(sid, output);
   hydratedSessions.add(sid); touchSession(sid); notify(sid);
 }
 /** Prepare a nearby card's bounded output; reject a response overtaken by events. */

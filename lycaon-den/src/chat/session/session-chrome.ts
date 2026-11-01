@@ -3,12 +3,18 @@ import { refreshFindings } from "../actions/findings-actions.ts";
 import { refreshQueue } from "../actions/queue-actions.ts";
 import { refreshProgress } from "../progress/progress-actions.ts";
 import { refreshCoordinatorContext } from "../workflow/coordinator-context-actions.ts";
-import { refreshBackgroundProcessSnapshots } from "../tool/background-process-store.ts";
-import { refreshLivePreviewSnapshots } from "../visual/preview-store.ts";
+import {
+  applyBackgroundProcessOutputs,
+  refreshBackgroundProcessSnapshots,
+} from "../tool/background-process-store.ts";
+import {
+  applyPreviewAttachment,
+  refreshLivePreviewSnapshots,
+} from "../visual/preview-store.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
-import type { SessionBootstrap } from "../../api/types.ts";
-import { applyBackgroundProcessOutputs } from "../tool/background-process-store.ts";
-import { applyPreviewAttachment } from "../visual/preview-store.ts";
+import type { Session, SessionBootstrap } from "../../api/types.ts";
+import { noticeReporterFor } from "../../platform/connection/app-connection.ts";
+import { APP_SCOPE, projectScope, sessionScope } from "../../notices/notice-scope.ts";
 
 type SessionChromeHydration = {
   epoch: number;
@@ -27,13 +33,16 @@ function trimHydrations(sessions: Map<string, SessionChromeHydration>): void {
   }
 }
 
-function hydrationFor(appStore: AppStore, sessionId: string): SessionChromeHydration {
+function hydrationForEpoch(
+  appStore: AppStore,
+  sessionId: string,
+  epoch: number,
+): SessionChromeHydration {
   let sessions = hydrationByStore.get(appStore);
   if (!sessions) {
     sessions = new Map();
     hydrationByStore.set(appStore, sessions);
   }
-  const epoch = appStore.state.sessionViewEpoch;
   let hydration = sessions.get(sessionId);
   if (!hydration || hydration.epoch !== epoch) {
     hydration = { epoch, hydrated: false, inflight: null };
@@ -44,20 +53,75 @@ function hydrationFor(appStore: AppStore, sessionId: string): SessionChromeHydra
   return hydration;
 }
 
+function hydrationFor(appStore: AppStore, sessionId: string): SessionChromeHydration {
+  return hydrationForEpoch(appStore, sessionId, appStore.state.sessionViewEpoch);
+}
+
+function reportAuxiliaryChromeError(session: Session, err: unknown): void {
+  const sessionId = session.id?.trim();
+  const projectId = session.project_id?.trim();
+  const scope =
+    projectId && sessionId
+      ? sessionScope(projectId, sessionId)
+      : projectId
+        ? projectScope(projectId)
+        : APP_SCOPE;
+  noticeReporterFor(scope).reportError(err);
+}
+
+/** Install store-backed bootstrap slices and return the resulting view epoch. */
+export function installSessionBootstrapChrome(
+  appStore: AppStore,
+  bootstrap: SessionBootstrap,
+  session = bootstrap.session,
+): number {
+  hydrationForEpoch(appStore, session.id, appStore.state.sessionViewEpoch + 1).hydrated = true;
+  appStore.actions.installSessionBootstrap(bootstrap, session);
+  hydrationFor(appStore, session.id).hydrated = true;
+  return appStore.state.sessionViewEpoch;
+}
+
+/** Apply auxiliary process and preview mirrors without blocking transcript hydration. */
+export function applySessionBootstrapAuxiliaryChrome(
+  appStore: AppStore,
+  bootstrap: SessionBootstrap,
+  session = bootstrap.session,
+): void {
+  let ok = true;
+  try {
+    applyBackgroundProcessOutputs(
+      bootstrap.session.id,
+      bootstrap.background_outputs,
+    );
+  } catch (err) {
+    ok = false;
+    reportAuxiliaryChromeError(session, err);
+  }
+  try {
+    for (const preview of bootstrap.previews ?? []) {
+      try {
+        applyPreviewAttachment(preview);
+      } catch (err) {
+        ok = false;
+        reportAuxiliaryChromeError(session, err);
+      }
+    }
+  } catch (err) {
+    ok = false;
+    reportAuxiliaryChromeError(session, err);
+  }
+  hydrationFor(appStore, session.id).hydrated = ok;
+}
+
 /** Apply bootstrap-supplied session views. */
 export function applySessionBootstrapChrome(
   appStore: AppStore,
   bootstrap: SessionBootstrap,
   session = bootstrap.session,
-): void {
-  appStore.actions.installSessionBootstrap(bootstrap, session);
-  applyBackgroundProcessOutputs(
-    bootstrap.session.id,
-    bootstrap.background_outputs,
-  );
-  for (const preview of bootstrap.previews) applyPreviewAttachment(preview);
-  const hydration = hydrationFor(appStore, session.id);
-  hydration.hydrated = true;
+): number {
+  const epoch = installSessionBootstrapChrome(appStore, bootstrap, session);
+  applySessionBootstrapAuxiliaryChrome(appStore, bootstrap, session);
+  return epoch;
 }
 
 /** Hydrates session views once per epoch. */

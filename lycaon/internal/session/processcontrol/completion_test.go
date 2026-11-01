@@ -2,6 +2,7 @@ package processcontrol
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/exec"
@@ -82,6 +83,47 @@ func TestBackgroundPreviewPreservesUTF8AndMostRecentOutput(t *testing.T) {
 	capBackgroundOutput(output, 3)
 	if !output.Truncated || len(output.Chunks) != 1 || output.Chunks[0].Text != "éz" {
 		t.Fatalf("bounded screened output=%+v", output)
+	}
+}
+
+func TestSilentRunningProcessSerializesEmptyChunksAcrossEndpoints(t *testing.T) {
+	bg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+	svc := &Service{Background: bg, Held: heldcall.New(nil, nil)}
+	handle, err := bg.StartPipeline(t.Context(), bgprocess.PipelineSpec{
+		SessionID: "s", ProjectID: "p", Mode: bgprocess.JobModeBackground, Runner: hostcmd.NewRunner(),
+		Request: hostcmd.Request{
+			Launch: exec.HostLaunch("silent process test"), ProjectDir: t.TempDir(),
+			Stages: []exec.Stage{{Name: "sh", Args: []string{"-c", "sleep 30"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("start silent process: %v", err)
+	}
+	t.Cleanup(func() { _, _ = bg.Lifecycle.Stop("s", handle) })
+
+	directOut, err := svc.GetBackgroundProcessOutput(t.Context(), "s", handle)
+	if err != nil {
+		t.Fatalf("get output: %v", err)
+	}
+	if directOut.Chunks == nil || len(directOut.Chunks) != 0 {
+		t.Fatalf("direct output chunks = %#v", directOut.Chunks)
+	}
+	directJSON, err := json.Marshal(directOut)
+	if err != nil || !strings.Contains(string(directJSON), `"chunks":[]`) {
+		t.Fatalf("direct output json = %s (err=%v)", directJSON, err)
+	}
+
+	listed := svc.ListBackgroundProcesses(t.Context(), "s")
+	if len(listed) != 1 || listed[0].Output == nil || listed[0].Output.Chunks == nil {
+		t.Fatalf("listed processes = %+v", listed)
+	}
+	listJSON, err := json.Marshal(api.BackgroundProcessListResponse{Processes: listed})
+	if err != nil || !strings.Contains(string(listJSON), `"chunks":[]`) {
+		t.Fatalf("list json = %s (err=%v)", listJSON, err)
+	}
+	bootstrapJSON, err := json.Marshal([]api.BackgroundProcessOutput{*listed[0].Output})
+	if err != nil || !strings.Contains(string(bootstrapJSON), `"chunks":[]`) {
+		t.Fatalf("bootstrap background_outputs json = %s (err=%v)", bootstrapJSON, err)
 	}
 }
 

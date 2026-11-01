@@ -218,6 +218,7 @@ func (r *Output) ReadOutput(ctx context.Context, sessionID, handle string) (api.
 	projection := r.projectWindow(ctx, proc)
 	proc.publishMu.Unlock()
 	if projection.Empty {
+		out.Chunks = []api.BackgroundProcessChunk{}
 		return out, nil
 	}
 	text := projection.Text
