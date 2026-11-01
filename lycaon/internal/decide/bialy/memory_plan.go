@@ -63,7 +63,7 @@ func PlanMemory(c Config, backend string, rows int) (MemoryPlan, error) {
 	switch backend {
 	case "mlx":
 		plan.HostBytes = 384 << 20
-		plan.DeviceBytes = weights + heads + (768 << 20)
+		plan.DeviceBytes = weights + heads + (1 << 30)
 		if rows == 8 {
 			plan.DeviceBytes += 1536 << 20
 		}
