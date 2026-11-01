@@ -51,6 +51,7 @@ fn request(id: u64) -> Begin {
         seed: 42,
         checkpoint_tokens: 3,
         stop_tokens: vec![],
+        output_schema: None,
     }
 }
 
@@ -61,7 +62,7 @@ fn executor() -> Executor<Fake> {
 #[test]
 fn steps_stop_at_checkpoint_and_chunk_boundaries() {
     let mut runner = executor();
-    runner.begin(request(1)).unwrap();
+    runner.begin(request(1), None).unwrap();
     for position in [2, 3, 5, 6] {
         assert_eq!(runner.advance(1).unwrap().processed_prompt_tokens, position);
     }
@@ -81,7 +82,7 @@ fn steps_stop_at_checkpoint_and_chunk_boundaries() {
 #[test]
 fn cancellation_keeps_only_the_exact_prefix_checkpoint() {
     let mut runner = executor();
-    runner.begin(request(1)).unwrap();
+    runner.begin(request(1), None).unwrap();
     runner.advance(1).unwrap();
     runner.advance(1).unwrap();
     runner.advance(1).unwrap();
@@ -90,14 +91,14 @@ fn cancellation_keeps_only_the_exact_prefix_checkpoint() {
         Some(StopReason::Canceled)
     );
     assert!(runner.backend.tokens.is_empty());
-    assert_eq!(runner.begin(request(2)).unwrap(), 3);
+    assert_eq!(runner.begin(request(2), None).unwrap(), 3);
     assert_eq!(runner.backend.tokens, [2, 5, 6]);
     assert!(runner.cancel(1).is_err());
     assert_eq!(runner.advance(2).unwrap().processed_prompt_tokens, 5);
     runner.cancel(2).unwrap();
     let mut mismatch = request(3);
     mismatch.prompt_tokens[1] = 10;
-    assert_eq!(runner.begin(mismatch).unwrap(), 0);
+    assert_eq!(runner.begin(mismatch, None).unwrap(), 0);
     assert!(runner.backend.tokens.is_empty());
 }
 
@@ -108,7 +109,7 @@ fn terminal_markers_are_counted_without_being_emitted() {
         runner.backend.samples.push_back(sample);
         let mut request = request(1);
         request.stop_tokens = vec![30];
-        runner.begin(request).unwrap();
+        runner.begin(request, None).unwrap();
         for _ in 0..3 {
             assert!(runner.advance(1).unwrap().stop_reason.is_none());
         }
@@ -132,19 +133,19 @@ fn invalid_or_stale_requests_do_not_touch_the_backend() {
     ] {
         let mut invalid = request(1);
         mutate(&mut invalid);
-        assert!(runner.begin(invalid).is_err());
+        assert!(runner.begin(invalid, None).is_err());
     }
     assert!(runner.backend.calls.is_empty());
-    runner.begin(request(1)).unwrap();
-    assert!(runner.begin(request(2)).is_err());
+    runner.begin(request(1), None).unwrap();
+    assert!(runner.begin(request(2), None).is_err());
     runner.cancel(1).unwrap();
-    assert!(runner.begin(request(1)).is_err());
+    assert!(runner.begin(request(1), None).is_err());
 }
 
 #[test]
 fn failed_step_discards_partial_state_and_checkpoint() {
     let mut runner = executor();
-    runner.begin(request(1)).unwrap();
+    runner.begin(request(1), None).unwrap();
     runner.advance(1).unwrap();
     runner.advance(1).unwrap();
     runner.backend.fail = true;
@@ -152,5 +153,5 @@ fn failed_step_discards_partial_state_and_checkpoint() {
     assert!(runner.backend.tokens.is_empty());
     assert!(runner.backend.prefix.is_empty());
     runner.backend.fail = false;
-    assert_eq!(runner.begin(request(2)).unwrap(), 0);
+    assert_eq!(runner.begin(request(2), None).unwrap(), 0);
 }

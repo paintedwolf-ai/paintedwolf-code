@@ -2,7 +2,6 @@ use super::{Cache, Model};
 use crate::{
     error::{Error, Result},
     execution::{Backend, Sampling},
-    sampler,
 };
 use mlx_rs::{Dtype, memory, ops::indexing::*};
 use std::path::Path;
@@ -82,7 +81,7 @@ impl Backend for Mlx {
             return self.completed(None);
         };
         let logits = logits.index((0, -1, ..));
-        if sampling.temperature == 0.0 {
+        if sampling.temperature == 0.0 && sampling.constraint.is_none() {
             let token = argmax(&logits, None).map_err(device_error)?;
             let finite = logits
                 .is_finite()
@@ -98,13 +97,7 @@ impl Backend for Mlx {
         } else {
             let logits = logits.as_dtype(Dtype::Float32).map_err(device_error)?;
             self.cache.evaluate_with(&[&logits]).map_err(device_error)?;
-            self.completed(Some(sampler::sample(
-                logits.as_slice::<f32>(),
-                sampling.temperature,
-                sampling.top_p,
-                sampling.top_k,
-                &mut sampling.rng,
-            )?))
+            self.completed(Some(sampling.sample(logits.as_slice::<f32>())?))
         }
     }
 

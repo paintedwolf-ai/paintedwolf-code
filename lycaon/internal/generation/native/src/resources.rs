@@ -46,8 +46,8 @@ impl Plan {
         let allocator_cache_bytes = if unified { 128 << 20 } else { 0 };
         let device_reservation_bytes =
             weights + kv_capacity_bytes + workspace_bytes + allocator_cache_bytes;
-        // Tokenizer, bounded IPC and recently accessed mapped rows share host memory.
-        let host_reservation_bytes = 384 << 20;
+        // Tokenizer, grammar compilation, IPC and mapped rows share host memory.
+        let host_reservation_bytes = 768 << 20;
         Ok(Self {
             resident_weights_bytes: weights,
             mapped_ple_bytes: mapped,

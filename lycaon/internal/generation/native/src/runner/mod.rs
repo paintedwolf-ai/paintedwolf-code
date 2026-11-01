@@ -22,6 +22,7 @@ struct Loaded<B> {
     executor: Executor<B>,
     renderer: Renderer,
     decoding: Option<StreamingText>,
+    grammars: Option<crate::constraints::Grammars>,
 }
 
 pub struct Runner<B, F> {
@@ -93,6 +94,7 @@ impl<B: Backend, F: FnMut(&Path, usize, usize, u64) -> Result<B>> Runner<B, F> {
                     executor,
                     renderer,
                     decoding: None,
+                    grammars: None,
                 });
                 Ok(Output::Loaded {
                     context_tokens,
@@ -122,7 +124,16 @@ impl<B: Backend, F: FnMut(&Path, usize, usize, u64) -> Result<B>> Runner<B, F> {
                     }),
                     Command::Begin { request } => {
                         let request_id = request.request_id;
-                        let reused_prefix_tokens = loaded.executor.begin(request)?;
+                        let constraint = if let Some(schema) = &request.output_schema {
+                            if loaded.grammars.is_none() {
+                                loaded.grammars =
+                                    Some(crate::constraints::Grammars::load(&self.directory)?);
+                            }
+                            Some(loaded.grammars.as_ref().unwrap().create(schema)?)
+                        } else {
+                            None
+                        };
+                        let reused_prefix_tokens = loaded.executor.begin(request, constraint)?;
                         loaded.decoding = Some(StreamingText::default());
                         Ok(Output::Begun {
                             request_id,

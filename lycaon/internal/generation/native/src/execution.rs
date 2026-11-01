@@ -9,6 +9,28 @@ pub struct Sampling {
     pub top_p: f32,
     pub top_k: usize,
     pub rng: Rng,
+    pub constraint: Option<llguidance::Matcher>,
+}
+
+impl Sampling {
+    pub fn sample(&mut self, logits: &[f32]) -> Result<u32> {
+        let masked = self
+            .constraint
+            .as_mut()
+            .map(|grammar| crate::constraints::mask_logits(grammar, logits))
+            .transpose()?;
+        let token = crate::sampler::sample(
+            masked.as_deref().unwrap_or(logits),
+            self.temperature,
+            self.top_p,
+            self.top_k,
+            &mut self.rng,
+        )?;
+        if let Some(grammar) = &mut self.constraint {
+            crate::constraints::consume(grammar, token)?;
+        }
+        Ok(token)
+    }
 }
 
 pub trait Backend {
@@ -45,6 +67,8 @@ pub struct Begin {
     pub checkpoint_tokens: usize,
     #[serde(default)]
     pub stop_tokens: Vec<u32>,
+    #[serde(default)]
+    pub output_schema: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -97,7 +121,11 @@ impl<B: Backend> Executor<B> {
         })
     }
 
-    pub fn begin(&mut self, request: Begin) -> Result<usize> {
+    pub fn begin(
+        &mut self,
+        request: Begin,
+        constraint: Option<llguidance::Matcher>,
+    ) -> Result<usize> {
         if self.active.is_some() {
             return Err(Error::Protocol("a request is active".into()));
         }
@@ -142,6 +170,7 @@ impl<B: Backend> Executor<B> {
             top_p: request.top_p,
             top_k: request.top_k,
             rng: Rng::new(request.seed),
+            constraint,
         };
         self.active = Some(Generation {
             request,
@@ -226,6 +255,15 @@ impl<B: Backend> Executor<B> {
             } else if g.request.stop_tokens.contains(&next) {
                 stop = Some(StopReason::StopToken);
                 token = None;
+            } else if g
+                .sampling
+                .constraint
+                .as_mut()
+                .map(crate::constraints::complete)
+                .transpose()?
+                .unwrap_or(false)
+            {
+                stop = Some(StopReason::StructuredOutput);
             } else if g.generated == g.request.max_new_tokens {
                 stop = Some(StopReason::MaxTokens);
             }
