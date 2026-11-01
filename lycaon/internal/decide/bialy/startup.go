@@ -16,6 +16,7 @@ type Resources struct {
 	UnifiedMemory  bool
 	HostBytes      uint64
 	DeviceBytes    uint64
+	MaxRows        int
 }
 
 type startupGrant struct {
@@ -28,6 +29,9 @@ type startupGrant struct {
 func (r *Resources) acquire(ctx context.Context) (*startupGrant, error) {
 	if r == nil {
 		return nil, nil
+	}
+	if r.MaxRows < 1 || r.MaxRows > 32 {
+		return nil, errors.New("decide: batch rows must be between 1 and 32")
 	}
 	if r.Devices == nil || r.HostMemory == nil || r.DeviceMemory == nil || r.HostBytes == 0 || r.DeviceBytes == 0 {
 		return nil, errors.New("decide: incomplete startup resource plan")

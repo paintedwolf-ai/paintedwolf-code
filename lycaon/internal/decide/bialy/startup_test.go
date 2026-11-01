@@ -45,12 +45,16 @@ func TestBialyStartupHoldsAdmissionUntilHelloOrReap(t *testing.T) {
 }
 
 func TestBialyStartupRejectsInvalidResourcePlans(t *testing.T) {
-	for _, kind := range []string{"missing", "identity", "unified", "overflow", "device-capacity"} {
+	for _, kind := range []string{"missing", "identity", "unified", "overflow", "device-capacity", "missing-batch", "oversized-batch"} {
 		t.Run(kind, func(t *testing.T) {
 			cfg := fakeConfig(t)
 			cfg.Resources = sharedResources(t)
 			host := cfg.Resources.HostMemory
 			switch kind {
+			case "missing-batch":
+				cfg.Resources.MaxRows = 0
+			case "oversized-batch":
+				cfg.Resources.MaxRows = 33
 			case "missing":
 				cfg.Resources.DeviceMemory = nil
 			case "identity":
@@ -149,7 +153,7 @@ func TestBialyManagedDeviceUsesPhysicalAddress(t *testing.T) {
 	cfg.Device = "vulkan:9"
 	cfg.Resources = sharedResources(t)
 	args := strings.Join(cfg.Args(), " ")
-	if !strings.Contains(args, "--device vulkan-pci:0000:03:00.0") || strings.Contains(args, "vulkan:9") {
+	if !strings.Contains(args, "--device vulkan-pci:0000:03:00.0") || strings.Contains(args, "vulkan:9") || !strings.Contains(args, "--max-rows 2") {
 		t.Fatalf("managed device selection: %s", args)
 	}
 }

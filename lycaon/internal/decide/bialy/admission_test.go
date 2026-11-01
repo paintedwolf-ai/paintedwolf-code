@@ -31,7 +31,7 @@ func sharedResources(t *testing.T) *bialy.Resources {
 	t.Cleanup(deviceMemory.Close)
 	return &bialy.Resources{Devices: sharedDevices(t),
 		PhysicalDevice: inference.PhysicalDevice{Kind: "pci", Address: "0000:03:00.0"},
-		HostMemory:     memory, DeviceMemory: deviceMemory, UnifiedMemory: true, HostBytes: 128, DeviceBytes: 256}
+		HostMemory:     memory, DeviceMemory: deviceMemory, UnifiedMemory: true, HostBytes: 128, DeviceBytes: 256, MaxRows: 2}
 }
 
 func TestBialyRejectsMissingPhysicalIdentityForSharedAdmission(t *testing.T) {
