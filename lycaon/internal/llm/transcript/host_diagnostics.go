@@ -26,7 +26,6 @@ var diagnosticFields = []string{
 	"program_executed_children", "program_executed_reads", "native_operation", "native_command",
 	"operation_source_unit_id", "operation_source_start_byte", "operation_source_end_byte", "operation_source_line", "operation_source_column",
 	"source_start_byte", "source_end_byte", "source_line", "source_column",
-	"parser_unclosed_quote", "parser_unclosed_heredoc", "parser_expected_closer", "parser_expected_following", "parser_utf8_bom", "parser_nul_byte", "parser_invalid_utf8", "parser_single_quote",
 	"diagnostic_top_level", "parser_kind", "parser_message", "parser_expected", "parser_found",
 	"parser_detected_line", "parser_detected_column", "parser_incomplete", "parser_details_omitted", "source_unit_id_omitted",
 	"source_excerpt", "source_excerpt_start_byte", "source_excerpt_end_byte", "source_excerpt_line", "source_excerpt_column",

@@ -56,6 +56,7 @@ func FactsFromData(data map[string]any) map[string]any {
 	for key, value := range data {
 		out[publishKey(key)] = value
 	}
+	publishParserFacts(out)
 	reason, _ := out["paintedwolf.rejection_reason"].(string)
 	if reason == "" {
 		if raw, ok := data["reason"]; ok {
