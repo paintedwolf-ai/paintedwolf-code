@@ -30,8 +30,8 @@ the program; the host does not redirect it to a structured tool.
 
 ## Command recovery design
 
-Command feedback starts with the observed failure, execution state, and one
-reachable next step. Parser diagnostics retain their own explanation and source
+Command feedback starts with the observed failure and execution state. It offers
+a next step only when the host can establish that it is applicable. Parser diagnostics retain their own explanation and source
 coordinates. Typed categories identify incomplete constructs, invalid encoding,
 unsupported forms and resource limits; diagnostic prose never selects recovery.
 A parser rejection applies to one complete source unit. It does not establish
