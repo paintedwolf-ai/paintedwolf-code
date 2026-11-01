@@ -101,7 +101,7 @@ impl Linear {
                 x,
                 weight,
                 scales.index((..rows, ..)),
-                biases.index((..rows, ..)),
+                &biases.index((..rows, ..)),
                 true,
                 64,
                 *bits,
