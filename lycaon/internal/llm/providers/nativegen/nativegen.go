@@ -99,6 +99,8 @@ func (p *Provider) ID() string { return p.id }
 
 func (p *Provider) Profile() providerprofile.Profile {
 	profile := providerprofile.LocalInference(providerprofile.Profile{
+		Thinking:      modelinfo.ThinkStyleNone,
+		PromptCache:   providerprofile.PromptCachePolicy{Mode: providerprofile.PromptCacheLocalKV},
 		ToolCalls:     providerprofile.ToolCallsNative,
 		Streaming:     providerprofile.StreamNative,
 		Discovery:     providerprofile.DiscoveryNativeGeneration,
