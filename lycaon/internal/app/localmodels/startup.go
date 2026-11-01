@@ -2,6 +2,7 @@ package localmodels
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"runtime"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/decide/bialy"
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 )
 
@@ -43,9 +45,9 @@ func Start(ctx context.Context, fixture bool) Startup {
 	}
 	result.Runtime, result.Issue = Build(ctx, Options{
 		Binary: binary, MetalLibrary: metal,
-		Authority: filepath.Join(root, "generation", "release-keys.json"),
-		Seed: filepath.Join(root, "generation", "models", backend),
-		StoreRoot: filepath.Join(config, "local-models"),
+		Authority:   filepath.Join(root, "generation", "release-keys.json"),
+		Seed:        filepath.Join(root, "generation", "models", backend),
+		StoreRoot:   filepath.Join(config, "local-models"),
 		PhysicalRAM: hostprocess.PhysicalMemoryBytes(), Decision: result.Decision,
 	})
 	if result.Runtime != nil {
@@ -54,11 +56,18 @@ func Start(ctx context.Context, fixture bool) Startup {
 	return result
 }
 
-func (s *Startup) Generation() *nativegen.Runtime {
-	if s.Runtime == nil {
+func (s *Startup) Generation() *nativegen.Availability {
+	if s.Runtime != nil {
+		return &nativegen.Availability{Runtime: s.Runtime.Generation}
+	}
+	if s.Issue == nil {
 		return nil
 	}
-	return s.Runtime.Generation
+	status := nativegen.Readiness{State: "unavailable", Action: "none", Detail: s.Issue.Error()}
+	if errors.Is(s.Issue, inference.ErrCapacity) {
+		status.State = "insufficient_memory"
+	}
+	return &nativegen.Availability{Initial: status}
 }
 
 func (s *Startup) CloseGeneration(context.Context) error {

@@ -128,7 +128,7 @@ func (b *Runtime) BindCurator() {
 }
 
 type Options struct {
-	LocalRuntime *nativegen.Runtime
+	LocalRuntime *nativegen.Availability
 	Client       modelcall.LLMClient
 	Pricer       cost.Pricer
 	Startup      startupprotocol.Sink

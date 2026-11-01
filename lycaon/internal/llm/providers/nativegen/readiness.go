@@ -20,6 +20,12 @@ type Readiness struct {
 	exited        <-chan struct{}
 }
 
+// Availability carries startup facts when no runtime could be allocated.
+type Availability struct {
+	Runtime *Runtime
+	Initial Readiness
+}
+
 // Readiness does not wait for inference or read model payloads.
 func (p *Runtime) Readiness() Readiness {
 	if p == nil {
