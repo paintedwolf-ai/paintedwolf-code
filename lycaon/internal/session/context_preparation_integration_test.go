@@ -1,6 +1,7 @@
 package session_test
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/contextpreparation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -58,5 +60,33 @@ func TestContextPreparationProjectsWithoutAdvancingChat(t *testing.T) {
 	testutil.FailErr(t, "skip busy chat", err)
 	if busy.Run != nil {
 		t.Fatal("busy chat admitted preparation")
+	}
+}
+
+func TestEngineShutdownJoinsContextPreparation(t *testing.T) {
+	fixture := setupContextualToolsFixture(t, api.SessionPostureSpec)
+	manager := fixture.Mgr
+	manager.ContextPreparation.Stop()
+	started, stopped := make(chan struct{}), make(chan struct{})
+	manager.ContextPreparation = contextpreparation.New(func(context.Context, string) (contextpreparation.Candidate, error) {
+		return contextpreparation.Candidate{Key: "candidate", Run: func(ctx context.Context) bool {
+			close(started)
+			<-ctx.Done()
+			close(stopped)
+			return false
+		}}, nil
+	})
+	manager.ContextPreparation.Focus(t.Context(), fixture.Sess.ID, fixture.Sess.ProjectID)
+	select {
+	case <-started:
+	case <-t.Context().Done():
+		t.Fatal("preparation did not start")
+	}
+	manager.BeginEngineShutdown()
+	testutil.FailErr(t, "join host shutdown", manager.WaitForEngineShutdown(t.Context()))
+	select {
+	case <-stopped:
+	default:
+		t.Fatal("host shutdown returned before preparation stopped")
 	}
 }
