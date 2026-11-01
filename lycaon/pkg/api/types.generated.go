@@ -3956,6 +3956,26 @@ type LocalDataStatus struct {
 	WorkspaceCaches []WorkspaceCacheStatus  `json:"workspace_caches"`
 }
 
+// LocalGenerationRepairResult
+type LocalGenerationRepairResult struct {
+	OK     bool                  `json:"ok"`
+	Status LocalGenerationStatus `json:"status"`
+}
+
+// LocalGenerationStatus
+type LocalGenerationStatus struct {
+	// Current host runtime state, independent of cached model discovery.
+	State string `json:"state"`
+	// Available recovery action selected from host facts.
+	RecoveryAction string `json:"recovery_action"`
+	// Diagnostic detail; recovery_action supplies the available action.
+	Detail string `json:"detail,omitempty"`
+	// Authenticated revision held by the admitted model process.
+	Revision string `json:"revision,omitempty"`
+	// Admitted context capacity of the ready process.
+	ContextTokens int `json:"context_tokens,omitempty"`
+}
+
 // LockVaultRequest
 type LockVaultRequest struct {
 	Reason string `json:"reason"`
@@ -5211,7 +5231,7 @@ type ProviderMeta struct {
 	// URL, SDK region, or empty derived value according to endpoint_style.
 	BaseURL       string `json:"base_url,omitempty"`
 	EndpointStyle string `json:"endpoint_style,omitempty"`
-	// True when the provider can make API calls. Keyed AI providers require a non-empty credential saved via PUT /v1/providers/{provider_id}/credential (environment variables do not configure). Local keyless providers are ready without credentials; ambient providers must resolve their declared credential chain. List membership is providers.local.yaml — Den does not keep a parallel hide allowlist.
+	// True when the provider can make API calls. Keyed AI providers require a non-empty credential saved via PUT /v1/providers/{provider_id}/credential (environment variables do not configure). Keyless providers need no credentials; bundled local generation also requires host admission. Ambient providers must resolve their declared credential chain. List membership is providers.local.yaml — Den does not keep a parallel hide allowlist.
 	Configured bool `json:"configured"`
 	// True when credentials are saved for this provider instance.
 	CredentialPresent bool `json:"credential_present"`
@@ -5237,7 +5257,8 @@ type ProviderMeta struct {
 	// True when this kind is mapped to models.dev and a usable modelfeed document is present (catalog-first merge).
 	CatalogAuthoritative bool `json:"catalog_authoritative,omitempty"`
 	// models.dev document freshness for catalog merge.
-	CatalogStatus string `json:"catalog_status,omitempty"`
+	CatalogStatus string                 `json:"catalog_status,omitempty"`
+	LocalRuntime  *LocalGenerationStatus `json:"local_runtime,omitempty"`
 	// Live /models discovery outcome for this list projection.
 	DiscoveryStatus string `json:"discovery_status,omitempty"`
 }

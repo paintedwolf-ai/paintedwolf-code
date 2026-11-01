@@ -265,6 +265,7 @@ var (
 	operationReloadEditorDocument               = generatedOperation{ID: "reloadEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/reload", Params: []string{"id", "document_id"}, RecordsPersonAction: true}
 	operationReloadExtensionPack                = generatedOperation{ID: "reloadExtensionPack", Method: "POST", Path: "/v1/extensions/packs/{pack_id}/reload", Params: []string{"pack_id"}, RecordsPersonAction: true}
 	operationRenameProjectSource                = generatedOperation{ID: "renameProjectSource", Method: "POST", Path: "/v1/projects/{id}/source/rename", Params: []string{"id"}, RecordsPersonAction: true}
+	operationRepairLocalGeneration              = generatedOperation{ID: "repairLocalGeneration", Method: "POST", Path: "/v1/providers/{provider_id}/repair", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationReplaceEditorDocument              = generatedOperation{ID: "replaceEditorDocument", Method: "PUT", Path: "/v1/projects/{id}/editor-documents/{document_id}", Params: []string{"id", "document_id"}}
 	operationReplaceEditorDocumentRetention     = generatedOperation{ID: "replaceEditorDocumentRetention", Method: "PUT", Path: "/v1/projects/{id}/editor-documents/retention", Params: []string{"id"}}
 	operationReplaceProjectManagedSecretValue   = generatedOperation{ID: "replaceProjectManagedSecretValue", Method: "PUT", Path: "/v1/projects/{id}/secrets/{secret_id}/value", Params: []string{"id", "secret_id"}, RecordsPersonAction: true}
@@ -603,6 +604,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationReloadEditorDocument,
 	operationReloadExtensionPack,
 	operationRenameProjectSource,
+	operationRepairLocalGeneration,
 	operationReplaceEditorDocument,
 	operationReplaceEditorDocumentRetention,
 	operationReplaceProjectManagedSecretValue,
