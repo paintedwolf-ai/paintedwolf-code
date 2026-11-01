@@ -27,11 +27,11 @@ const CALL_PAGE = 2;
 const STEP_CHARS = 80;
 
 export function CommandActivityCard(props: Props) {
-  return <ToolPartShell {...props}><CommandActivityDetails {...props} /><TurnLoadFootLine part={props.part} /></ToolPartShell>;
+  return <ToolPartShell {...props}><Show when={props.part.commandActivity}>{activity => <CommandActivityDetails {...props} activity={activity} />}</Show><TurnLoadFootLine part={props.part} /></ToolPartShell>;
 }
 
-function CommandActivityDetails(props: Props) {
-  const activity = () => props.part.commandActivity!;
+function CommandActivityDetails(props: Props & { activity: () => NonNullable<ToolPartView["commandActivity"]> }) {
+  const activity = props.activity;
   const content = useToolContent();
   const [callPage, setCallPage] = createSignal(0);
   const [wholeCommand, setWholeCommand] = createSignal(false);
@@ -69,7 +69,7 @@ function CommandActivityDetails(props: Props) {
     if (activity().fact.execution_ids.length === 0 && stop && !result.some(fact => fact.value === stop)) result.push({ label: "Code", value: stop });
     return result;
   });
-  const stepsLabel = createMemo(() => (activity().fact.steps?.length ?? 0) > 3 ? `All ${activity().fact.steps!.length} steps` : "Step details");
+  const stepsLabel = createMemo(() => (activity().fact.steps?.length ?? 0) > 3 ? `All ${activity().fact.steps?.length ?? 0} steps` : "Step details");
   const summary = createMemo(() => commandActivityFacts(activity(), wholeCommand() ? [] : executions(), undefined).filter(fact => ["Outcome", "Launch outcome", "Effects", "Command stop", "Enclosing command"].includes(fact.label)));
   return <div class="den-tool-part-card-structured den-command-activity-details" data-testid="command-activity-details">
     <section class="den-tool-part-card-section" aria-label="Outcome">
@@ -104,7 +104,7 @@ function CommandActivityDetails(props: Props) {
     <Show when={activity().decisions?.length}>
       <section class="den-tool-part-card-section" aria-label="Host decisions">
         <h4 class="den-tool-part-card-section-label">Host decisions</h4>
-        <ToolContentLink pane={`activity:${activity().fact.id}:decisions`} label={`${activity().decisions!.length} host decisions`} content={{ kind: "inline", text: (activity().decisions ?? []).map(decision => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") }} projectId={props.projectId} />
+        <ToolContentLink pane={`activity:${activity().fact.id}:decisions`} label={`${activity().decisions?.length ?? 0} host decisions`} content={{ kind: "inline", text: (activity().decisions ?? []).map(decision => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") }} projectId={props.projectId} />
       </section>
     </Show>
     <Show when={pages.state === "errored"}><p class="den-tool-part-card-note">Execution details are unavailable. The recorded activity is still shown.</p></Show>
