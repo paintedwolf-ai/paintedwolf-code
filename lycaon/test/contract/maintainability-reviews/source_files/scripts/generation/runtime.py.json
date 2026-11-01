@@ -4,11 +4,11 @@
   "kind": "construction",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "The task entrypoint selects the pinned backend, prepares and builds it, and records reproducible benchmark provenance. Retain the measured 314-line orchestration module. Native framed exchanges, source verification, conversion, and toolchain setup remain separate implementations. Benchmark fixtures exercise framed exchange and token accounting.",
-  "reviewed_commit": "cc64526ee43de3514e9616558f074da1b6a0c2cd",
+  "reason": "Retain the measured 314-line task orchestration module. It selects pinned backends and records reproducible builds and measurements; framed exchange, source provenance, conversion and toolchain setup remain separate implementations. Four focused protocol/accounting/CLI fixtures passed, including full-context checkpoint bounds. Backend-specific context validation remains in the runner.",
+  "reviewed_commit": "63ada06f6f",
   "ceiling": 314,
   "boundaries": {
-    "scripts/generation/test_native_bench.py": "433e469defd10cf0a3a00c784986dd94caf4c8a6df83e3944d4f054e2fa8de63",
+    "scripts/generation/test_native_bench.py": "275e94fbd419048bc4f51d20d296b14c04a583140ce34b5cdb5f5a43c4a2e63e",
     "scripts/generation/provenance.py": "f8230f6aa35c2eaeb54177238a515da695736dc31bc24362ce3bde336b553b9a"
   }
 }
