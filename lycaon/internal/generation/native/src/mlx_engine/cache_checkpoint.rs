@@ -128,8 +128,16 @@ mod tests {
     fn source() -> Cache {
         let mut cache = Cache::new(1024).unwrap();
         for (layer, dimension) in [(0, 256), (5, 512), (23, 512)] {
-            let values = Array::ones::<half::f16>(&[1, 2, 3, dimension]).unwrap();
-            cache.update(layer, values.clone(), values).unwrap();
+            let data: Vec<_> = (0..2 * 3 * dimension)
+                .map(|i| half::f16::from_f32(((i + layer as i32) % 127) as f32))
+                .collect();
+            let keys = Array::from_slice(&data, &[1, 2, 3, dimension]);
+            let values = keys
+                .add(Array::from_f32(128.0))
+                .unwrap()
+                .as_dtype(mlx_rs::Dtype::Float16)
+                .unwrap();
+            cache.update(layer, keys, values).unwrap();
         }
         cache.offset = 3;
         cache.evaluate().unwrap();
@@ -151,26 +159,32 @@ mod tests {
         assert_eq!(restored.offset, source.offset);
         assert_eq!(restored.capacity, source.capacity);
         assert_eq!(restored.bytes(), source.bytes());
-        assert!(
+        assert_eq!(
             restored.layers[0]
                 .as_ref()
                 .unwrap()
                 .keys
                 .try_as_slice::<half::f16>()
+                .unwrap(),
+            source.layers[0]
+                .as_ref()
                 .unwrap()
-                .iter()
-                .all(|v| *v == half::f16::ONE)
+                .keys
+                .try_as_slice::<half::f16>()
+                .unwrap()
         );
         for index in [0, 3] {
             let bank = restored.globals[index].as_ref().unwrap().borrow();
-            for array in [&bank.keys, &bank.values] {
+            let original = source.globals[index].as_ref().unwrap().borrow();
+            for (array, expected) in [
+                (&bank.keys, &original.keys),
+                (&bank.values, &original.values),
+            ] {
                 let saved = array.index((.., .., ..3, ..)).contiguous().unwrap();
-                assert!(
-                    saved
-                        .try_as_slice::<half::f16>()
-                        .unwrap()
-                        .iter()
-                        .all(|v| *v == half::f16::ONE)
+                let expected = expected.index((.., .., ..3, ..)).contiguous().unwrap();
+                assert_eq!(
+                    saved.try_as_slice::<half::f16>().unwrap(),
+                    expected.try_as_slice::<half::f16>().unwrap()
                 );
                 let empty = array.index((.., .., 3..4, ..)).contiguous().unwrap();
                 assert!(
