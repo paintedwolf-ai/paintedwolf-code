@@ -131,7 +131,7 @@ mod tests {
                 eps: 1e-5,
             };
             let input = Tensor::from_data(TensorData::new(values.clone(), [1, 2, 768]), (device, dtype));
-            let output = layer.forward(input).cast(DType::F32).into_data().to_vec::<f32>().unwrap();
+            let output = layer.forward(input).cast(DType::F32).into_data().try_to_vec::<f32>().unwrap();
             for (i, value) in output.iter().enumerate() {
                 let expected = if i % 2 == 0 { 1.0 } else { -1.0 };
                 assert!((value - expected).abs() < 0.002, "{dtype:?} at {i}: {value}");
