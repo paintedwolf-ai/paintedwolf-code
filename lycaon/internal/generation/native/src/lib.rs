@@ -1,5 +1,6 @@
 pub mod constraints;
 pub mod error;
+mod conversation;
 pub mod execution;
 pub mod inventory;
 pub mod protocol;
