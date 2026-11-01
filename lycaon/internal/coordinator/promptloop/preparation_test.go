@@ -18,8 +18,10 @@ func TestPreparationProjectsCallableToolsFromTheLivePlan(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{
 		Policy:        registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}, {Name: "request_tools"}, {Name: "command_output", Deferred: true}}},
 		LiveResources: func(string) toolcontract.ResourcePresence { return toolcontract.ResourcePresence{CommandJobs: live} },
-		ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) {
-			return "Known tool procedures", nil
+		ContextSurfaceDeps: ContextSurfaceDeps{
+			ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) {
+				return "Known tool procedures", nil
+			},
 		},
 	}})
 	sess := &api.Session{ID: "s1", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/project", Posture: api.SessionPostureBuild}
