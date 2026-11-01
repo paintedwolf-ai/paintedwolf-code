@@ -1211,6 +1211,40 @@ failures and retries only demonstrated infrastructure faults. Product assertions
 and races remain blocking; there is no new automatic quarantine or assertion
 retry policy.
 
+##### Admission performance follow-up
+
+These proposed experiments build on the failure-frontier and Git fixture work.
+They do not change admission, required checks, or the existing capacity envelope.
+Retain run-specific measurements and source revisions in each experiment's PR.
+
+1. Separate preparation, compiler execution, queue admission wait, test execution,
+   and evidence publication in the latency report. A parent task's elapsed time
+   can include a nested request's wait; do not attribute all of it to its tests.
+   Record the critical path and total runner-minutes alongside cache outcomes,
+   test-binary counts and instrumented package sets.
+2. Measure cold and warm native compilation with the existing pinned toolchains,
+   locked dependencies, features and target inventory. Improve compiler artifact
+   reuse where the current keys or publication leave work cold. Preserve every
+   required compile target and keep test-result reuse subject to complete input
+   accounting; a compiler cache hit is not a test receipt.
+3. Compare bounded job layouts for language coverage and affected native
+   compilation against the single ready job. Include duplicated setup and cache
+   transfer in runner cost, and preserve the admission reservation. Every shard
+   must finish on the same source before the aggregate check can pass; failure,
+   missing evidence or interruption must continue to block admission.
+4. Re-measure Git fixture construction and test execution after
+   fixture cloning and parallelization land. Use the resulting profile
+   to select the next expensive fixture or algorithm, preserving behavior and
+   machine-independent work/resource assertions. Do not duplicate that
+   work or introduce wall-clock test gates.
+
+Failure-frontier rotation improves time to a known failure while still running
+all required work on a successful candidate. Importer deduplication removes
+repeated test binaries while preserving the instrumented package union. Account
+for those existing changes before crediting a new experiment with either gain.
+Compare ordinary affected PRs and broad/full-scope changes separately. A higher
+execution deadline is a completion allowance, not evidence of faster admission.
+
 ##### Integration capacity experiment
 
 The capacity catalog in
