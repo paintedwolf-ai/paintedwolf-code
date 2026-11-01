@@ -2,6 +2,7 @@ package nativegen
 
 import (
 	"context"
+	"log/slog"
 	"errors"
 	"slices"
 	"time"
@@ -34,6 +35,7 @@ func (p *Provider) PrepareContext(ctx context.Context, req modelcall.CompletionR
 	}
 	render, err := prepareRender(req)
 	if err != nil || render.KnownPrefixMessages == 0 {
+		slog.DebugContext(ctx, "context preparation render skipped", "known_messages", render.KnownPrefixMessages, "error", err)
 		return modelcall.ContextPreparation{}, err
 	}
 	standingMessages := render.CheckpointMessages
@@ -44,15 +46,18 @@ func (p *Provider) PrepareContext(ctx context.Context, req modelcall.CompletionR
 	}
 	ctx, release, ok := p.runtime.acquirePreparation(ctx)
 	if !ok {
+		slog.DebugContext(ctx, "context preparation admission skipped")
 		return modelcall.ContextPreparation{}, nil
 	}
 	defer release()
 	// Preparation does not load or replace the user's active model.
 	if p.runtime.loaded == nil || p.runtime.loaded.model != model {
+		slog.DebugContext(ctx, "context preparation resident model unavailable", "model", model)
 		return modelcall.ContextPreparation{}, nil
 	}
 	measured, err := p.runtime.measure(ctx, render)
 	if err != nil || measured.CheckpointTokens == 0 {
+		slog.DebugContext(ctx, "context preparation boundary skipped", "input_count", measured.InputTokens, "error", err)
 		return modelcall.ContextPreparation{}, err
 	}
 	checkpoint := measured.CheckpointTokens
