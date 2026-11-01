@@ -187,6 +187,7 @@ pub struct Engine {
     encoder: Encoder,
     calibration: Calibration,
     identity: Identity,
+    pub(crate) physical_device: crate::device::PhysicalDevice,
     max_rows: usize,
 }
 
@@ -281,6 +282,7 @@ impl Engine {
             ),
             calibration: Calibration::from_config(config),
             identity,
+            physical_device: selected.physical_device(),
             max_rows: if opts.max_rows == 0 { DEFAULT_MAX_ROWS } else { opts.max_rows },
         })
     }

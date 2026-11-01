@@ -344,5 +344,13 @@ func (c *Client) handshake(ctx context.Context, bin string) (*process, decide.En
 		proc.stop()
 		return nil, decide.Engine{}, fmt.Errorf("%w: handshake carried no engine identity", decide.ErrEngine)
 	}
+	if c.cfg.Devices != nil {
+		device, err := c.cfg.Devices.Bind(hello.PhysicalDevice)
+		if err != nil {
+			proc.stop()
+			return nil, decide.Engine{}, fmt.Errorf("decide: bind physical device: %w", err)
+		}
+		proc.device = device
+	}
 	return proc, *hello.Engine, nil
 }
