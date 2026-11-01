@@ -57,6 +57,7 @@ func TestDriverTrustRejectsUserFilesAndLinks(t *testing.T) {
 
 func TestVersionedDriverLibraryResolution(t *testing.T) {
 	root := t.TempDir()
+	testutil.FailErr(t, "set trusted fixture root mode", os.Chmod(root, 0o700))
 	directory := filepath.Join(root, "usr/lib")
 	testutil.FailErr(t, "create system library fixture", os.MkdirAll(directory, 0o755))
 	version := "580.178.04"
