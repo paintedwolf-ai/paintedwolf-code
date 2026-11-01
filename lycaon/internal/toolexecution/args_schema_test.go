@@ -480,7 +480,7 @@ func TestValidateCallArgumentsIntrospectionMultipleMisnestedFields(t *testing.T)
 	args := map[string]any{
 		"command":        "colima start",
 		"host_resources": []any{"colima"},
-		"direct_ip":      true,
+		"direct_ip":      map[string]any{},
 	}
 	reject := tools.ValidateCallArguments("command", args, meta.ArgsSchema, tools.ToolContext{})
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
