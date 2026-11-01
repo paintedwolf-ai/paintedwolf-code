@@ -40,7 +40,7 @@ def prepare(args):
     if args.install_build_tools:
         if args.backend in {"reference-swift", "reference-rust"} and sys.platform == "darwin":
             run(["xcodebuild", "-downloadComponent", "MetalToolchain"])
-        elif args.backend == "reference-llama" and sys.platform == "linux":
+        elif args.backend in {"reference-llama", "native"} and sys.platform == "linux":
             run(["sudo", "-n", "apt-get", "update"])
             run(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends",
                  "cmake", "ninja-build", "libvulkan-dev"])
@@ -75,6 +75,9 @@ def prepare(args):
             print(f"Generated dependency lock: {retained}", flush=True)
         run(["uv", "sync", "--frozen", "--project", project], env=python_environment())
     else:
+        if args.backend == "native" and sys.platform == "linux":
+            vulkan_tools.prepare(bin_dir(ROOT))
+            ensure_source(PINS["llama.cpp"], bin_dir(ROOT) / "generation-sources")
         source, _ = paths(args.backend)
         if args.refresh_lock:
             run(["cargo", "generate-lockfile", "--manifest-path", source / "Cargo.toml"])
@@ -114,6 +117,17 @@ def rust_environment(output):
             "MACOSX_DEPLOYMENT_TARGET": "14.0"}
 
 
+def native_environment(output):
+    if sys.platform == "darwin" and platform.machine() == "arm64":
+        return rust_environment(output), "mlx"
+    if sys.platform == "linux":
+        _, library = paths("reference-llama")
+        return {**os.environ, "CARGO_TARGET_DIR": str(output),
+                "PW_GENERATION_VULKAN_LIB_DIR": str(library),
+                "LD_LIBRARY_PATH": str(library)}, "vulkan"
+    raise ValueError("native generation requires Apple silicon or Linux Vulkan")
+
+
 def build(args):
     source, output = paths(args.backend)
     workers = os.environ.get("PW_TEST_WORKERS", "1")
@@ -141,15 +155,22 @@ def build(args):
             raise ValueError("generation requires macOS or Linux")
         run(["cmake", "-S", Path(__file__).parent / "llama-reference", "-B", output,
              "-DLLAMA_SOURCE_DIR=" + str(source), *options])
-        run(["cmake", "--build", output, "--parallel", workers, "--target", "generation-reference"])
+        run(["cmake", "--build", output, "--parallel", workers, "--target", "generation-reference",
+             *(["nativegen_vulkan"] if sys.platform == "linux" else [])])
         record_build(args.backend, output, output / "generation-reference")
     elif args.backend == "reference-rust":
         run(["cargo", "build", "--locked", "--release", "--features", "mlx", "--jobs", workers,
              "--bins", "--manifest-path", source / "Cargo.toml"], env=rust_environment(output))
         record_build(args.backend, output, output / "release/nativegen-bench")
     elif args.backend == "native":
-        run(["cargo", "build", "--locked", "--release", "--manifest-path", source / "Cargo.toml"],
-            env={**os.environ, "CARGO_TARGET_DIR": str(output)})
+        if sys.platform == "linux":
+            build(argparse.Namespace(backend="reference-llama"))
+        environment, feature = native_environment(output)
+        run(["cargo", "build", "--locked", "--release", "--features", feature,
+             "--jobs", workers, "--bins", "--manifest-path", source / "Cargo.toml"], env=environment)
+        if sys.platform == "linux":
+            shutil.copyfile(Path(environment["PW_GENERATION_VULKAN_LIB_DIR"]) / "libnativegen_vulkan.so",
+                            output / "release/libnativegen_vulkan.so")
     else:
         raise ValueError("the Python reference is prepared rather than compiled")
 
@@ -178,8 +199,10 @@ def test(args):
             env=rust_environment(output))
         return
     source, output = paths("native")
-    run(["cargo", "test", "--locked", "--manifest-path", source / "Cargo.toml"],
-        env={**os.environ, "CARGO_TARGET_DIR": str(output)})
+    environment, feature = native_environment(output)
+    run(["cargo", "test", "--locked", "--release", "--features", feature,
+         "--jobs", os.environ.get("PW_TEST_WORKERS", "1"), "--manifest-path", source / "Cargo.toml"],
+        env=environment)
 
 
 def bench(args):

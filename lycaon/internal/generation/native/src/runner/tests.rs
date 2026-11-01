@@ -8,14 +8,18 @@ impl Backend for NoDevice {
     fn forward(&mut self, _: &[u32], _: Option<&mut Sampling>) -> Result<Option<u32>> {
         panic!("unexpected device work")
     }
-    fn reset(&mut self) {}
+    fn reset(&mut self) -> Result<()> {
+        Ok(())
+    }
     fn save_prefix(&mut self) -> Result<()> {
         Ok(())
     }
     fn restore_prefix(&mut self) -> Result<()> {
         Ok(())
     }
-    fn clear_prefix(&mut self) {}
+    fn clear_prefix(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 fn identity() -> Identity {

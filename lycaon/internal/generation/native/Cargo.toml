@@ -41,6 +41,7 @@ mlx-rs = { version = "0.32", optional = true }
 
 [features]
 default = []
+vulkan = []
 # Apple silicon acceleration.
 mlx = ["dep:mlx-rs"]
 

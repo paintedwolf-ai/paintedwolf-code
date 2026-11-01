@@ -7,16 +7,24 @@ use crate::sampler::Rng;
 pub struct Sampling {
     pub temperature: f32,
     pub top_p: f32,
+    pub top_k: usize,
     pub rng: Rng,
 }
 
 pub trait Backend {
     // Return only after the submitted device work completes.
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>>;
-    fn reset(&mut self);
+    fn reset(&mut self) -> Result<()>;
     fn save_prefix(&mut self) -> Result<()>;
     fn restore_prefix(&mut self) -> Result<()>;
-    fn clear_prefix(&mut self);
+    fn clear_prefix(&mut self) -> Result<()>;
+    fn release(self) -> Result<()>
+    where
+        Self: Sized,
+    {
+        drop(self);
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -27,6 +35,7 @@ pub struct Begin {
     pub max_new_tokens: usize,
     pub temperature: f32,
     pub top_p: f32,
+    pub top_k: usize,
     pub seed: u64,
     pub checkpoint_tokens: usize,
     #[serde(default)]
@@ -95,6 +104,7 @@ impl<B: Backend> Executor<B> {
                 .len()
                 .saturating_add(request.max_new_tokens)
                 > self.context
+            || request.checkpoint_tokens > 4096
             || request.checkpoint_tokens >= request.prompt_tokens.len()
             || request
                 .prompt_tokens
@@ -102,6 +112,7 @@ impl<B: Backend> Executor<B> {
                 .chain(&request.stop_tokens)
                 .any(|id| *id >= 262144)
             || request.stop_tokens.len() > 16
+            || request.top_k > 262144
             || !request.temperature.is_finite()
             || request.temperature < 0.0
             || !request.top_p.is_finite()
@@ -117,13 +128,14 @@ impl<B: Backend> Executor<B> {
             self.backend.restore_prefix()?;
             self.prefix.len()
         } else {
-            self.backend.reset();
+            self.backend.reset()?;
             0
         };
         self.last_request = request.request_id;
         let sampling = Sampling {
             temperature: request.temperature,
             top_p: request.top_p,
+            top_k: request.top_k,
             rng: Rng::new(request.seed),
         };
         self.active = Some(Generation {
@@ -152,13 +164,13 @@ impl<B: Backend> Executor<B> {
                 if progress.stop_reason.is_none() {
                     self.active = Some(generation);
                 } else {
-                    self.backend.reset();
+                    self.backend.reset()?;
                 }
                 Ok(progress)
             }
             Err(error) => {
-                self.backend.reset();
-                self.backend.clear_prefix();
+                self.backend.reset()?;
+                self.backend.clear_prefix()?;
                 self.prefix.clear();
                 Err(error)
             }
@@ -232,7 +244,7 @@ impl<B: Backend> Executor<B> {
             return Err(Error::Protocol("request is not active".into()));
         }
         let generation = self.active.take().unwrap();
-        self.backend.reset();
+        self.backend.reset()?;
         Ok(Progress {
             request_id,
             processed_prompt_tokens: generation.processed,
@@ -247,9 +259,13 @@ impl<B: Backend> Executor<B> {
         if self.active.is_some() {
             return Err(Error::Protocol("a request is active".into()));
         }
-        self.backend.clear_prefix();
+        self.backend.clear_prefix()?;
         self.prefix.clear();
         Ok(())
+    }
+
+    pub fn release(self) -> Result<()> {
+        self.backend.release()
     }
 
     pub fn backend(&self) -> &B {

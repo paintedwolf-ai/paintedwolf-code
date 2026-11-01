@@ -14,6 +14,8 @@ struct Args {
     artifact_id: String,
     #[arg(long)]
     metallib: Option<PathBuf>,
+    #[arg(long)]
+    device_pci: Option<String>,
 }
 
 #[cfg(all(feature = "mlx", target_os = "macos", target_arch = "aarch64"))]
@@ -44,7 +46,36 @@ fn run(args: Args) -> nativegen::Result<()> {
     runner.serve(std::io::stdin().lock(), std::io::stdout().lock())
 }
 
-#[cfg(not(all(feature = "mlx", target_os = "macos", target_arch = "aarch64")))]
+#[cfg(all(feature = "vulkan", target_os = "linux"))]
+fn run(args: Args) -> nativegen::Result<()> {
+    use nativegen::{
+        Error,
+        runner::{Identity, Runner, wire::PhysicalDevice},
+        vulkan::Vulkan,
+    };
+    let pci = args
+        .device_pci
+        .ok_or_else(|| Error::Protocol("Vulkan PCI device is required".into()))?;
+    Vulkan::probe(&pci)?;
+    let identity = Identity {
+        artifact_id: args.artifact_id,
+        backend: "vulkan",
+        physical_device: PhysicalDevice::Pci {
+            address: pci.clone(),
+        },
+    };
+    let mut runner = Runner::new(
+        args.model,
+        identity,
+        move |path: &std::path::Path, context, chunk| Vulkan::load(path, &pci, context, chunk),
+    )?;
+    runner.serve(std::io::stdin().lock(), std::io::stdout().lock())
+}
+
+#[cfg(not(any(
+    all(feature = "mlx", target_os = "macos", target_arch = "aarch64"),
+    all(feature = "vulkan", target_os = "linux")
+)))]
 fn run(_args: Args) -> nativegen::Result<()> {
     Err(nativegen::Error::Device(
         "no generation adapter was built for this platform".into(),

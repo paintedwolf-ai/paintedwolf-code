@@ -40,8 +40,14 @@ impl Rng {
 }
 
 /// Sample one token from logits. `top_p == 1.0` means plain temperature sampling.
-pub fn sample(logits: &[f32], temperature: f32, top_p: f32, rng: &mut Rng) -> Result<u32> {
-    if logits.is_empty() || logits.len() > 262144 {
+pub fn sample(
+    logits: &[f32],
+    temperature: f32,
+    top_p: f32,
+    top_k: usize,
+    rng: &mut Rng,
+) -> Result<u32> {
+    if logits.is_empty() || logits.len() > 262144 || top_k > 262144 {
         return Err(Error::Capacity("logit count exceeds its bounds".into()));
     }
     if !temperature.is_finite()
@@ -65,6 +71,10 @@ pub fn sample(logits: &[f32], temperature: f32, top_p: f32, rng: &mut Rng) -> Re
         .enumerate()
         .map(|(i, &l)| (i as u32, (l - max) / temperature))
         .collect();
+    if top_k > 0 && top_k < probs.len() {
+        probs.select_nth_unstable_by(top_k - 1, |a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        probs.truncate(top_k);
+    }
     for p in &mut probs {
         p.1 = p.1.exp();
     }
@@ -132,7 +142,7 @@ mod tests {
             vec![f32::INFINITY],
             vec![f32::NEG_INFINITY],
         ] {
-            assert!(sample(&logits, 1.0, 1.0, &mut rng).is_err());
+            assert!(sample(&logits, 1.0, 1.0, 0, &mut rng).is_err());
         }
         for (temperature, top_p) in [
             (f32::NAN, 1.0),
@@ -141,10 +151,10 @@ mod tests {
             (1.0, 1.1),
             (1.0, f32::NAN),
         ] {
-            assert!(sample(&[1.0], temperature, top_p, &mut rng).is_err());
+            assert!(sample(&[1.0], temperature, top_p, 0, &mut rng).is_err());
         }
         assert_eq!(
-            sample(&[f32::NEG_INFINITY, 2.0], 1.0, 1.0, &mut rng).unwrap(),
+            sample(&[f32::NEG_INFINITY, 2.0], 1.0, 1.0, 0, &mut rng).unwrap(),
             1
         );
     }
@@ -152,7 +162,19 @@ mod tests {
     #[test]
     fn zero_temperature_is_greedy() {
         let mut rng = Rng::new(7);
-        assert_eq!(sample(&[0.1, 5.0, 0.2], 0.0, 1.0, &mut rng).unwrap(), 1);
+        assert_eq!(sample(&[0.1, 5.0, 0.2], 0.0, 1.0, 0, &mut rng).unwrap(), 1);
+    }
+
+    #[test]
+    fn top_k_excludes_lower_logits_and_breaks_ties_by_token() {
+        let mut rng = Rng::new(4);
+        for _ in 0..100 {
+            assert_eq!(sample(&[3.0, 3.0, 2.0], 1.0, 1.0, 1, &mut rng).unwrap(), 0);
+            assert!(matches!(
+                sample(&[0.0, 3.0, 4.0, 2.0], 1.0, 0.95, 2, &mut rng).unwrap(),
+                1 | 2
+            ));
+        }
     }
 
     #[test]
@@ -167,7 +189,7 @@ mod tests {
         let mut rng = Rng::new(seed);
         let logits: Vec<f32> = (0..64).map(|i| (i % 7) as f32 * 0.25).collect();
         (0..16)
-            .map(|_| sample(&logits, 1.0, 0.9, &mut rng).unwrap())
+            .map(|_| sample(&logits, 1.0, 0.9, 0, &mut rng).unwrap())
             .collect()
     }
 }

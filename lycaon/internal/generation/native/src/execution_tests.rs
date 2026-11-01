@@ -19,8 +19,9 @@ impl Backend for Fake {
         }
         Ok(sampling.map(|_| self.samples.pop_front().unwrap_or(20)))
     }
-    fn reset(&mut self) {
+    fn reset(&mut self) -> Result<()> {
         self.tokens.clear();
+        Ok(())
     }
     fn save_prefix(&mut self) -> Result<()> {
         self.prefix = self.tokens.clone();
@@ -30,8 +31,9 @@ impl Backend for Fake {
         self.tokens = self.prefix.clone();
         Ok(())
     }
-    fn clear_prefix(&mut self) {
+    fn clear_prefix(&mut self) -> Result<()> {
         self.prefix.clear();
+        Ok(())
     }
 }
 
@@ -42,6 +44,7 @@ fn request(id: u64) -> Begin {
         max_new_tokens: 3,
         temperature: 0.0,
         top_p: 1.0,
+        top_k: 64,
         seed: 42,
         checkpoint_tokens: 3,
         stop_tokens: vec![],

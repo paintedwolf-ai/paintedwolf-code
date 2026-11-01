@@ -52,6 +52,7 @@ pub enum Output {
     Loaded {
         context_tokens: usize,
         prefill_chunk: usize,
+        sampling: super::settings::SamplingDefaults,
     },
     Rendered {
         prompt_tokens: Vec<u32>,

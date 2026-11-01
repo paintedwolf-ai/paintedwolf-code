@@ -8,6 +8,7 @@ use crate::{
     rendering::Renderer,
     rendering_stream::StreamingText,
 };
+mod settings;
 pub mod wire;
 use wire::{Code, Command, Envelope, Output, Response};
 
@@ -63,10 +64,10 @@ impl<B: Backend, F: FnMut(&Path, usize, usize) -> Result<B>> Runner<B, F> {
                 if !(2..=65536).contains(&context_tokens) || !(1..=256).contains(&prefill_chunk) {
                     return Err(Error::Capacity("invalid execution limits".into()));
                 }
-                let eos = stop_tokens(&self.directory)?;
+                let settings = settings::Settings::load(&self.directory)?;
                 let renderer = Renderer::load(&self.directory)?;
                 let backend = (self.factory)(&self.directory, context_tokens, prefill_chunk)?;
-                let executor = Executor::new(backend, context_tokens, prefill_chunk, eos)?;
+                let executor = Executor::new(backend, context_tokens, prefill_chunk, settings.eos)?;
                 self.loaded = Some(Loaded {
                     executor,
                     renderer,
@@ -75,10 +76,11 @@ impl<B: Backend, F: FnMut(&Path, usize, usize) -> Result<B>> Runner<B, F> {
                 Ok(Output::Loaded {
                     context_tokens,
                     prefill_chunk,
+                    sampling: settings.sampling,
                 })
             }
             Command::Unload {} | Command::Shutdown {} => {
-                self.loaded = None;
+                self.unload()?;
                 Ok(if matches!(command, Command::Shutdown {}) {
                     Output::Shutdown
                 } else {
@@ -145,10 +147,17 @@ impl<B: Backend, F: FnMut(&Path, usize, usize) -> Result<B>> Runner<B, F> {
         }
     }
 
+    fn unload(&mut self) -> Result<()> {
+        if let Some(loaded) = self.loaded.take() {
+            loaded.executor.release()?;
+        }
+        Ok(())
+    }
+
     pub fn serve(&mut self, input: impl Read, output: impl Write) -> Result<()> {
         let result = self.serve_frames(input, output);
-        self.loaded = None;
-        result
+        let released = self.unload();
+        result.and(released)
     }
 
     fn serve_frames(&mut self, input: impl Read, output: impl Write) -> Result<()> {
@@ -201,32 +210,4 @@ fn code(error: &Error) -> Code {
         Error::Checkpoint(_) | Error::Tokenizer(_) | Error::Io(_) => Code::Artifact,
         Error::Protocol(_) => Code::InvalidRequest,
     }
-}
-
-fn stop_tokens(directory: &Path) -> Result<Vec<u32>> {
-    let file = std::fs::File::open(directory.join("generation_config.json"))?;
-    if !file.metadata()?.is_file() || file.metadata()?.len() > 1 << 20 {
-        return Err(Error::Checkpoint(
-            "generation configuration exceeds its bound".into(),
-        ));
-    }
-    let config: serde_json::Value = serde_json::from_reader(file.take((1 << 20) + 1))
-        .map_err(|e| Error::Checkpoint(e.to_string()))?;
-    let tokens = match &config["eos_token_id"] {
-        serde_json::Value::Array(values) => values.clone(),
-        value => vec![value.clone()],
-    };
-    if tokens.is_empty() || tokens.len() > 16 {
-        return Err(Error::Checkpoint("invalid stop tokens".into()));
-    }
-    tokens
-        .iter()
-        .map(|value| {
-            value
-                .as_u64()
-                .filter(|n| *n < 262144)
-                .map(|n| n as u32)
-                .ok_or_else(|| Error::Checkpoint("invalid stop token".into()))
-        })
-        .collect()
 }

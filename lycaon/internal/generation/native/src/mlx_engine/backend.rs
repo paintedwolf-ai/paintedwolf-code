@@ -72,13 +72,15 @@ impl Backend for Mlx {
                 logits.as_slice::<f32>(),
                 sampling.temperature,
                 sampling.top_p,
+                sampling.top_k,
                 &mut sampling.rng,
             )?))
         }
     }
 
-    fn reset(&mut self) {
+    fn reset(&mut self) -> Result<()> {
         self.cache = Cache::default();
+        Ok(())
     }
 
     fn save_prefix(&mut self) -> Result<()> {
@@ -96,7 +98,13 @@ impl Backend for Mlx {
         Ok(())
     }
 
-    fn clear_prefix(&mut self) {
+    fn release(self) -> Result<()> {
+        drop(self);
+        memory::clear_cache().map_err(device_error)
+    }
+
+    fn clear_prefix(&mut self) -> Result<()> {
         self.prefix = None;
+        Ok(())
     }
 }
