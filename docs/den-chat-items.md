@@ -97,7 +97,7 @@ A diff row names a whole-file change in words, **New file** or **Deleted file** 
 
 Worker dispatches stay outside activity spans. Adjacent dispatches, including a single one, render one always-open compact worker group. Each compact row retains its task identity, status, progress tracks, and independent worker-drawer action.
 
-**Decision rows.** The decision engine's receipts (`SessionTranscriptPage.turn_loads` and the `turn_load` event, keyed by the user message that opened the turn) draw inside the span of the assistant row that first called a tool in that turn, ahead of its tool rows ([`turn-load-rows.ts`](../lycaon-den/src/chat/turnload/turn-load-rows.ts)). A turn decision draws one row naming the tools it offered beyond the floor. Each row is a tool card whose tool is the engine's name, so it takes the same chrome, disclosure, and accordion as the call it stands in for, and it joins the span with the bookkeeping role and zero weight, so it never names the span's work. A row draws only beside work: an abstained receipt, a turn whose model never called a tool, and a turn with no receipt all draw nothing, and the transcript never says whether an engine was present; its availability is the `decision_engine` preflight probe ([Dependencies](dependencies.md#decision-model)). Request and lookup receipts draw no row of their own; the `request_tools` and `skills_read` cards state at their foot how the text was matched, and every card for a tool the decision offered, or a request loaded, states that at its foot ([`turn-load-facts.ts`](../lycaon-den/src/chat/turnload/turn-load-facts.ts)).
+**Decision rows.** The decision engine's receipts (`SessionTranscriptPage.turn_loads` and the `turn_load` event, keyed by the user message that opened the turn) draw inside the span of the assistant row that first called a tool in that turn, ahead of its tool rows ([`turn-load-rows.ts`](../lycaon-den/src/chat/turnload/turn-load-rows.ts)). For command activities, turn decisions appear through a Files link in the activity details. Other tool spans draw one turn-decision row naming the tools offered beyond the floor. Each row is a tool card whose tool is the engine's name, so it takes the same chrome, disclosure, and accordion as the call it stands in for, and it joins the span with the bookkeeping role and zero weight, so it never names the span's work. A row draws only beside work: an abstained receipt, a turn whose model never called a tool, and a turn with no receipt all draw nothing, and the transcript never says whether an engine was present; its availability is the `decision_engine` preflight probe ([Dependencies](dependencies.md#decision-model)). Request and lookup receipts draw no row of their own; the `request_tools` and `skills_read` cards state at their foot how the text was matched, and every card for a tool the decision offered, or a request loaded, states that at its foot ([`turn-load-facts.ts`](../lycaon-den/src/chat/turnload/turn-load-facts.ts)).
 
 **Phase notes.** A `workflow_explain` row is the host's note for a phase it holds ([Workflows § Explain notes](workflows.md#explain-notes)). It renders as its own chicklet with the tool chicklet's shell: status dot, the name "About this step", the note's summary as title, and a keyed disclosure that starts closed. Like any row that is not a tool call, it ends the span before it, which is where a phase begins. Its dot follows the run it names: running while the run holds the note's phase, an error when the run fails there, done otherwise. When the note names a full scan pass, the collapsed row counts the pass's finished scanners and the open body draws `ScanProgressList` from the folder's security overview, the same record the Security page reads. The note reads that overview only while its phase is held or its body is open, and polls it on the Security page's cadence while the pass can still move; once a newer full pass replaces its pass, it stops drawing bars rather than showing another pass's progress. When the note names topology stages, it reads their legs from the run's `ui.topology_legs`, which a `delegation` event refreshes, and draws one row per leg with what it waits on; no extra read is needed. Both kinds of progress render through `ProgressRows`, the primitive the Security page's rows use. Progress updates change widths and text, never the row's height. A newly written note is announced to assistive technology by its summary; notes loaded from history are not.
 
@@ -136,7 +136,8 @@ Den fixes each row's key, label, subject and initial position when it appears.
 Repetitions update counts and outcomes in place. Group titles retain their first
 activity's description. Decision-engine receipts belong in host-decision details,
 not in the count of actions performed. Expanded details show whole-activity
-results, structural steps, paged execution records, output and exact input.
+results and at most three structural steps. Files links expose all steps,
+execution receipts, diagnostics, output and exact input.
 Receipt-page changes do not redefine the activity's result. Retained transcripts
 resolve host activity summaries before mounting rows when their stored snapshot
 has no structural steps. Failed detail reads preserve the recorded command.
@@ -144,9 +145,8 @@ has no structural steps. Failed detail reads preserve the recorded command.
 Den keeps the existing group, single-line activity and expanded-detail structure.
 Activity grouping does not add a disclosure level.
 Rows show the action, target and outcome. Expanded cards prioritize the outcome
-and bounded output, then the original submitted command with the activity's
-source spans highlighted. Long content remains available through the existing
-recorded-content view. Paths, identifiers and unbroken output wrap inside details;
+and a bounded step summary. Commands and output open in Files through the
+existing recorded-content view. Paths and identifiers wrap inside details;
 row targets ellipsize without displacing status or disclosure controls.
 
 ## The two clocks
