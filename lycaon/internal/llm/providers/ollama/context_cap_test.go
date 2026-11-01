@@ -1,7 +1,12 @@
 package ollama
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -46,5 +51,43 @@ func TestOllamaPromptCalibrationReplacesColdStartPadding(t *testing.T) {
 	}
 	if got := p.projectPromptTokens("unseen", 100); got != 150 {
 		t.Fatalf("unseen model projection = %d, want cold-start padding", got)
+	}
+}
+
+func TestOllamaCanceledContextDiscoveryCannotPoisonLaterRequests(t *testing.T) {
+	for _, duringProbe := range []bool{false, true} {
+		name := "before_probe"
+		if duringProbe {
+			name = "during_probe"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if duringProbe && calls.Add(1) == 1 {
+					cancel()
+					<-r.Context().Done()
+					return
+				}
+				_, _ = io.WriteString(w, `{"model_info":{"fixture.context_length":32768}}`)
+			}))
+			defer server.Close()
+			p := New("fixture", server.URL, "", nil)
+			if !duringProbe {
+				cancel()
+			}
+			if got := p.ContextLimit(ctx, "model"); got != 0 {
+				t.Fatalf("canceled discovery returned %d", got)
+			}
+			if _, cached := p.capCache["model"]; cached {
+				t.Fatal("canceled discovery cached an unknown context window")
+			}
+			for _, model := range []string{"model", "other", "model"} {
+				if got := p.ContextLimit(t.Context(), model); got != 32768 {
+					t.Fatalf("later discovery for %s = %d, want 32768", model, got)
+				}
+			}
+		})
 	}
 }
