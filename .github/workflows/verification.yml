@@ -15,6 +15,10 @@ on:
         description: Catalog profile (fast, integration, check, nightly, or release)
         required: true
         type: string
+      lane:
+        description: Diagnostic lane selection, permitted only for manual dispatch
+        type: string
+        default: ''
       affected:
         description: Resolve the event change base and narrow integration lanes
         default: false
@@ -60,6 +64,7 @@ jobs:
           SUITE: ${{ inputs.suite }}
           AFFECTED: ${{ inputs.affected }}
           PLATFORM: ${{ inputs.platform }}
+          LANE: ${{ inputs.lane }}
           # Reads main's nightly receipts; without actions read access the plan uses lane budgets.
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -69,6 +74,7 @@ jobs:
             echo "change-base=$PW_CHANGE_BASE" >> "$GITHUB_OUTPUT"
           fi
           args=()
+          if [[ -n "$LANE" ]]; then args+=(--lane "$LANE"); fi
           if [[ "$AFFECTED" == true ]]; then args+=(--affected); fi
           if [[ "$PLATFORM" == true ]]; then args+=(--platform); fi
           # The fast tier is one unsharded job, which measurements would not change.
