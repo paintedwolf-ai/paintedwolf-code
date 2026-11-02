@@ -125,18 +125,6 @@ static int watch_volume(GtkWidget *chooser, const char *payload, const char *ima
 }
 
 int main(int argc, char **argv) {
-    gchar *sandbox_output = NULL, *sandbox_error = NULL;
-    gint sandbox_status = 0;
-    GError *sandbox_spawn_error = NULL;
-    gchar *sandbox_argv[] = {"bwrap", "--unshare-all", "--ro-bind", "/", "/", "/usr/bin/true", NULL};
-    gboolean sandbox_started = g_spawn_sync(NULL, sandbox_argv, NULL, G_SPAWN_SEARCH_PATH,
-        NULL, NULL, &sandbox_output, &sandbox_error, &sandbox_status, &sandbox_spawn_error);
-    fprintf(stderr, "GTK nested sandbox diagnostic: started=%d wait_status=%d error=%s stderr=%s\n",
-        sandbox_started, sandbox_status, sandbox_spawn_error ? sandbox_spawn_error->message : "",
-        sandbox_error ? sandbox_error : "");
-    g_clear_error(&sandbox_spawn_error);
-    g_free(sandbox_output);
-    g_free(sandbox_error);
     if (argc == 3 && strcmp(argv[1],"--engine-read") == 0) return read_volume(argv[2],1) ? 0 : 14;
     if (argc != 3) return 2;
     const char *payload = argv[2];
