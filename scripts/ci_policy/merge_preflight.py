@@ -206,7 +206,13 @@ def package_phases(selected):
     records = list(json_stream(result.stdout))
     if not records or any(row.get("Error") or row.get("DepsErrors") for row in records):
         raise ValueError("merge preflight requires a complete package selection")
-    packages = sorted({row["ImportPath"] for row in records})
+    root = (ROOT / 'lycaon').resolve()
+    try:
+        directories = {Path(row['Dir']).resolve().relative_to(root).as_posix() for row in records}
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('merge preflight requires local module package directories') from error
+    # Relative selections retain captured-stage receipts and package result reuse.
+    packages = sorted('./' if path == '.' else './' + path for path in directories)
     contracts = [name for name in packages if "/test/contract/" in name or name.endswith("/test/contract")]
     behavior = [name for name in packages if name not in contracts]
     if not contracts:
