@@ -31,20 +31,19 @@ func (s *Store) lockJournal() (*journalLock, error) {
 		return nil, err
 	}
 	if err := lockFile(f); err != nil {
-		f.Close()
-		return nil, fmt.Errorf("modelstore: lock: %w", err)
+		return nil, fmt.Errorf("modelstore: lock: %w", errors.Join(err, f.Close()))
 	}
 	return &journalLock{f}, nil
 }
 
 func (l *journalLock) Unlock() { _ = l.f.Close() }
 
-func (s *Store) journalBytes() ([]byte, error) {
+func (s *Store) journalBytes() (data []byte, resultErr error) {
 	root, err := s.openRoot()
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	f, err := root.Open("journal.jsonl")
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -52,7 +51,7 @@ func (s *Store) journalBytes() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { resultErr = errors.Join(resultErr, f.Close()) }()
 	raw, err := io.ReadAll(io.LimitReader(f, MaxJournalBytes+1))
 	if err != nil {
 		return nil, err
@@ -97,7 +96,7 @@ func (s *Store) parseRecords(raw []byte) ([]Manifest, int, error) {
 }
 
 // recoverJournal preserves complete records and removes only an interrupted append.
-func (s *Store) recoverJournal() error {
+func (s *Store) recoverJournal() (resultErr error) {
 	raw, err := s.journalBytes()
 	if err != nil {
 		return err
@@ -110,12 +109,12 @@ func (s *Store) recoverJournal() error {
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	f, err := root.OpenFile("journal.jsonl", os.O_WRONLY, 0)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { resultErr = errors.Join(resultErr, f.Close()) }()
 	if err := f.Truncate(int64(end)); err != nil {
 		return err
 	}

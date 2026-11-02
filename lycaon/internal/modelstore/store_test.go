@@ -506,13 +506,11 @@ func TestActivateHoldsJournalLockAcrossVerificationAndPublication(t *testing.T) 
 		lock.Unlock()
 		t.Fatalf("openRoot: %v", err)
 	}
-	if err := root.Remove(s.artifactRel(art.Digest)); err != nil {
-		root.Close()
-		lock.Unlock()
+	err = errors.Join(root.Remove(s.artifactRel(art.Digest)), root.Close())
+	lock.Unlock()
+	if err != nil {
 		t.Fatalf("remove staged artifact under lock: %v", err)
 	}
-	root.Close()
-	lock.Unlock()
 
 	if err := <-activateErrCh; err == nil {
 		t.Fatal("expected Activate to fail when artifact was collected before journal lock acquisition")
