@@ -116,7 +116,7 @@ func (r *StaticModelRouter) Coordinator(ctx context.Context) (*ModelSelection, e
 	if err != nil {
 		return nil, err
 	}
-	ref := CoordinatorRefWithLocalDefault(p, r.localDefault != nil && r.localDefault())
+	ref := p.Coordinator
 	return selectionFromRef(ref, ModelRoleCoordinator, false), nil
 }
 
@@ -129,7 +129,7 @@ func (r *StaticModelRouter) Lite(ctx context.Context) (*ModelSelection, error) {
 	if err != nil {
 		return nil, err
 	}
-	ref := SummarizerRefWithLocalDefault(p, r.localDefault != nil && r.localDefault())
+	ref := p.Lite
 	return selectionFromRef(ref, ModelRoleLite, false), nil
 }
 
