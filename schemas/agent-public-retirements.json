@@ -83,7 +83,53 @@
         "COMMAND_NATIVE_FORM_UNSUPPORTED"
       ]
     },
-    "tools": {},
+    "tools": {
+      "chmod": [
+        "command"
+      ],
+      "chown": [
+        "command"
+      ],
+      "code_rewrite": [
+        "command"
+      ],
+      "edit": [
+        "command"
+      ],
+      "git_checkout": [
+        "command"
+      ],
+      "git_commit": [
+        "command"
+      ],
+      "git_merge": [
+        "command"
+      ],
+      "git_restore": [
+        "command"
+      ],
+      "git_stash": [
+        "command"
+      ],
+      "jq_edit": [
+        "command"
+      ],
+      "process_list": [
+        "command"
+      ],
+      "process_signal": [
+        "command"
+      ],
+      "replace_lines": [
+        "command"
+      ],
+      "summarize": [
+        "command"
+      ],
+      "survey_repo": [
+        "command"
+      ]
+    },
     "workflow_terms": {},
     "anchors": {},
     "themes": {}
