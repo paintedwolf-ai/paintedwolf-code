@@ -18,24 +18,35 @@ const SOURCE: &std::ffi::CStr = c"
 
 pub struct Activation(sys::mlx_fast_metal_kernel);
 
-fn checked(status: i32) -> Result<()> {
+fn checked(status: i32, operation: &str) -> Result<()> {
     if status != 0 {
-        return Err("Metal activation operation failed".into());
+        return Err(format!("Metal activation {operation} failed (MLX status {status})").into());
     }
     Ok(())
 }
 
 impl Activation {
     pub fn new() -> Result<Self> {
+        Self::create(c"e4b_gelu_product", SOURCE)
+    }
+
+    fn create(name: &std::ffi::CStr, source: &std::ffi::CStr) -> Result<Self> {
         let mut names = [c"gate".as_ptr(), c"up".as_ptr()];
         let input_names = unsafe { sys::mlx_vector_string_new_data(names.as_mut_ptr(), 2) };
         let output_names = unsafe { sys::mlx_vector_string_new_value(c"out".as_ptr()) };
+        if input_names.ctx.is_null() || output_names.ctx.is_null() {
+            unsafe {
+                sys::mlx_vector_string_free(input_names);
+                sys::mlx_vector_string_free(output_names);
+            }
+            return Err("Cannot allocate Metal activation argument names".into());
+        }
         let kernel = unsafe {
             sys::mlx_fast_metal_kernel_new(
-                c"e4b_gelu_product".as_ptr(),
+                name.as_ptr(),
                 input_names,
                 output_names,
-                SOURCE.as_ptr(),
+                source.as_ptr(),
                 c"".as_ptr(),
                 false,
                 false,
@@ -63,34 +74,42 @@ impl Activation {
         {
             return Err("E4B activation inputs exceed their bounds".into());
         }
-        let mut call = Call::new(gate, up);
+        let mut call = ProductDispatch::new(gate, up)?;
         unsafe {
-            checked(sys::mlx_fast_metal_kernel_config_add_output_arg(
-                call.config,
-                shape.as_ptr(),
-                shape.len(),
-                sys::mlx_dtype__MLX_FLOAT16,
-            ))?;
-            checked(sys::mlx_fast_metal_kernel_config_set_grid(
-                call.config,
-                gate.size() as i32,
-                1,
-                1,
-            ))?;
-            checked(sys::mlx_fast_metal_kernel_config_set_thread_group(
-                call.config, 256, 1, 1,
-            ))?;
-            checked(sys::mlx_fast_metal_kernel_apply(
-                &mut call.outputs,
-                self.0,
-                call.inputs,
-                call.config,
-                Stream::gpu().as_ptr(),
-            ))?;
+            checked(
+                sys::mlx_fast_metal_kernel_config_add_output_arg(
+                    call.config,
+                    shape.as_ptr(),
+                    shape.len(),
+                    sys::mlx_dtype__MLX_FLOAT16,
+                ),
+                "output configuration",
+            )?;
+            checked(
+                sys::mlx_fast_metal_kernel_config_set_grid(call.config, gate.size() as i32, 1, 1),
+                "grid configuration",
+            )?;
+            checked(
+                sys::mlx_fast_metal_kernel_config_set_thread_group(call.config, 256, 1, 1),
+                "threadgroup configuration",
+            )?;
+            checked(
+                sys::mlx_fast_metal_kernel_apply(
+                    &mut call.outputs,
+                    self.0,
+                    call.inputs,
+                    call.config,
+                    Stream::gpu().as_ptr(),
+                ),
+                "dispatch construction",
+            )?;
             let mut output = sys::mlx_array_new();
+            if output.ctx.is_null() {
+                return Err("Cannot allocate Metal activation result handle".into());
+            }
             let status = sys::mlx_vector_array_get(&mut output, call.outputs, 0);
             let output = Array::from_ptr(output);
-            checked(status)?;
+            checked(status, "result extraction")?;
             Ok(output)
         }
     }
@@ -102,26 +121,35 @@ impl Drop for Activation {
     }
 }
 
-struct Call {
+struct ProductDispatch {
     config: sys::mlx_fast_metal_kernel_config,
     inputs: sys::mlx_vector_array,
     outputs: sys::mlx_vector_array,
 }
 
-impl Call {
-    fn new(gate: &Array, up: &Array) -> Self {
+impl ProductDispatch {
+    fn new(gate: &Array, up: &Array) -> Result<Self> {
         let inputs = [gate.as_ptr(), up.as_ptr()];
-        unsafe {
+        let call = unsafe {
             Self {
                 config: sys::mlx_fast_metal_kernel_config_new(),
                 inputs: sys::mlx_vector_array_new_data(inputs.as_ptr(), inputs.len()),
                 outputs: sys::mlx_vector_array_new(),
             }
+        };
+        call.validate()?;
+        Ok(call)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.config.ctx.is_null() || self.inputs.ctx.is_null() || self.outputs.ctx.is_null() {
+            return Err("Cannot allocate Metal activation dispatch handles".into());
         }
+        Ok(())
     }
 }
 
-impl Drop for Call {
+impl Drop for ProductDispatch {
     fn drop(&mut self) {
         unsafe {
             sys::mlx_fast_metal_kernel_config_free(self.config);

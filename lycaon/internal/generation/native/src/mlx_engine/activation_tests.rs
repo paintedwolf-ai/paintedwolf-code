@@ -90,3 +90,35 @@ fn product_rejects_unsupported_shapes_and_precision() {
     assert!(activation.product(&float, &half).is_err());
     assert!(activation.product(&half, &other).is_err());
 }
+
+#[test]
+fn shader_compilation_errors_keep_the_underlying_diagnostic() {
+    let broken = Activation::create(
+        c"e4b_invalid_activation_fixture",
+        c"out[thread_position_in_grid.x] = unknown_activation_fixture_value;",
+    )
+    .unwrap();
+    let input = Array::ones::<half::f16>(&[1, 1, 256]).unwrap();
+    let output = broken.product(&input, &input).unwrap();
+    let error = output.eval().unwrap_err();
+    assert!(
+        error.what().contains("unknown_activation_fixture_value"),
+        "{error}"
+    );
+}
+
+#[test]
+fn dispatch_rejects_unallocated_handles_before_use() {
+    let empty = ProductDispatch {
+        config: sys::mlx_fast_metal_kernel_config {
+            ctx: std::ptr::null_mut(),
+        },
+        inputs: sys::mlx_vector_array {
+            ctx: std::ptr::null_mut(),
+        },
+        outputs: sys::mlx_vector_array {
+            ctx: std::ptr::null_mut(),
+        },
+    };
+    assert!(empty.validate().is_err());
+}
