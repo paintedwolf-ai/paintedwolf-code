@@ -54,3 +54,29 @@ func TestStreamRefusesOldNativeProtocolBeforeBegin(t *testing.T) {
 		t.Fatal("old protocol retained model")
 	}
 }
+
+func TestRejectedOrCappedEnvelopeDiscardsBufferedCalls(t *testing.T) {
+	for _, fault := range []string{"buffered_then_orphan", "buffered_then_cap"} {
+		t.Run(fault, func(t *testing.T) {
+			t.Setenv("PW_NATIVEGEN_RESPONSE_FAULT", fault)
+			provider, _ := fixtureProvider(t)
+			req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Fixture"}}, Tools: []tools.ToolMeta{{Name: "read"}}, MaxTokens: 4}
+			stream, err := provider.Stream(t.Context(), req)
+			if err != nil {
+				t.Fatalf("start stream: %v", err)
+			}
+			terminal := false
+			for chunk := range stream {
+				if len(chunk.ToolCalls) != 0 {
+					t.Fatal("failed envelope released buffered calls")
+				}
+				if chunk.Done {
+					terminal = chunk.Err != nil
+				}
+			}
+			if !terminal {
+				t.Fatal("missing terminal failure")
+			}
+		})
+	}
+}

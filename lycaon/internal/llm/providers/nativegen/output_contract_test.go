@@ -3,12 +3,15 @@ package nativegen
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestOutputContractCarriesExactOfferedNames(t *testing.T) {
@@ -85,7 +88,7 @@ func TestStructuredOutputSuppressesToolsAndThought(t *testing.T) {
 	if len(contract.AllowedTools) != 0 {
 		t.Fatal("schema offered tools")
 	}
-	for _, token := range []uint32{48, 100} {
+	for _, token := range []uint32{48, 52, 100} {
 		d := newOutputDecoder(req)
 		if _, err := d.step(&token, "<|channel>"); err == nil {
 			t.Fatal("schema accepted envelope")
@@ -99,5 +102,61 @@ func TestCappedMalformedHeaderRemainsFailure(t *testing.T) {
 	d.body.WriteString("call:invented")
 	if _, err := d.finish(true); err == nil {
 		t.Fatal("malformed header became truncation")
+	}
+}
+
+func TestOutputContractLimitsAndForbiddenTools(t *testing.T) {
+	req := modelcall.CompletionRequest{Tools: []tools.ToolMeta{{Name: "read"}}, ToolUse: modelcall.ToolUseForbidden}
+	contract, err := requestOutputContract(req)
+	testutil.FailErr(t, "forbidden contract", err)
+	if len(contract.AllowedTools) != 0 {
+		t.Fatal("forbidden request offered tools")
+	}
+	for _, size := range []int{8, 256} {
+		req = modelcall.CompletionRequest{}
+		for i := 0; i < 513; i++ {
+			name := fmt.Sprintf("%04d", i) + strings.Repeat("x", size-4)
+			req.Tools = append(req.Tools, tools.ToolMeta{Name: name})
+		}
+		if _, err := requestOutputContract(req); err == nil {
+			t.Fatalf("accepted overbound size %d", size)
+		}
+	}
+}
+
+func TestOutputProtocolKindsAreIndependentOfToolAvailability(t *testing.T) {
+	for _, callable := range []bool{false, true} {
+		req := modelcall.CompletionRequest{}
+		if callable {
+			req.Tools = []tools.ToolMeta{{Name: "read"}}
+		}
+		d := newOutputDecoder(req)
+		for reason, kind := range map[string]failure.OutputProtocolFailureKind{"unexpected_control": failure.MalformedEnvelope, "decoding_mismatch": failure.DecodeMismatch, "output_bound": failure.OutputBound} {
+			var protocol *failure.ProviderOutputProtocolError
+			if !errors.As(d.protocolError(reason), &protocol) || protocol.Kind != kind {
+				t.Fatalf("kind for %s = %+v", reason, protocol)
+			}
+		}
+	}
+}
+
+func TestQuoteControlRemainsLiteralOutsideCalls(t *testing.T) {
+	d := newOutputDecoder(modelcall.CompletionRequest{})
+	token := uint32(52)
+	text, err := d.step(&token, `<|"|>`)
+	testutil.FailErr(t, "literal quote control", err)
+	if text != `<|"|>` {
+		t.Fatalf("literal = %q", text)
+	}
+}
+
+func TestToolCallCountIsOutputBound(t *testing.T) {
+	d := newOutputDecoder(modelcall.CompletionRequest{Tools: []tools.ToolMeta{{Name: "read"}}})
+	d.calls = make([]api.ToolCall, 64)
+	token := uint32(48)
+	_, err := d.step(&token, "<|tool_call>")
+	var protocol *failure.ProviderOutputProtocolError
+	if !errors.As(err, &protocol) || protocol.Kind != failure.OutputBound {
+		t.Fatalf("call count failure = %v", err)
 	}
 }

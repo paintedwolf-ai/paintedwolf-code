@@ -67,10 +67,12 @@ func (d *outputDecoder) step(token *uint32, text string) (string, error) {
 	case 49:
 		marker = "<tool_call|>"
 	case 52:
-		if !d.inCall {
+		if d.schema {
 			return "", d.protocolError("unexpected_control")
 		}
-		marker = `<|"|>`
+		if d.inCall {
+			marker = `<|"|>`
+		}
 	case 0, 1, 2, 3, 4, 46, 47, 50, 51, 98, 100, 101, 105, 106:
 		return "", d.protocolError("unexpected_control")
 	}
@@ -84,7 +86,10 @@ func (d *outputDecoder) step(token *uint32, text string) (string, error) {
 	visible := d.text(prefix)
 	switch *token {
 	case 48:
-		if d.inCall || len(d.allowed) == 0 || len(d.calls) >= 64 {
+		if len(d.calls) >= 64 {
+			return "", d.protocolError("output_bound")
+		}
+		if d.inCall || len(d.allowed) == 0 {
 			return "", d.protocolError("tool_boundary")
 		}
 		d.inCall = true
