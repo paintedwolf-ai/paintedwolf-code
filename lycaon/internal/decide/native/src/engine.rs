@@ -232,12 +232,12 @@ impl Engine {
         selected: Selected,
         opts: &EngineOptions,
     ) -> Result<Self> {
-        opts.memory.configure(&selected)?;
         let spec = LoadSpec {
             checkpoint: &prepared.checkpoint,
             config: &prepared.config,
             encoder: &prepared.encoder,
             dtype: &opts.dtype,
+            memory: opts.memory,
             #[cfg(feature = "mlx")]
             metallib: opts.metallib.as_deref(),
         };
