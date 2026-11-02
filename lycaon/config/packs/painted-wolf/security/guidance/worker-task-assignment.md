@@ -55,7 +55,7 @@ Focus paths:
 {% for path in scope_paths %}- {{ path }}
 {% endfor %}{% endif %}{% if file_orientations %}
 
-File orientation (structural hints for suggested paths — not a substitute for survey first pass on layout or large files; for **edit** slices use `grep`→`ranges`):
+File orientation (structural hints for suggested paths — not a substitute for survey first pass on layout or large files; for edits, inspect exact source windows through `command`):
 {% for file in file_orientations %}- **{{ file.path }}** — {{ file.total_lines }} lines, {{ file.size_bytes }} bytes{% if file.symbols %} ({% for sym in file.symbols %}{{ sym.kind }} `{{ sym.name }}` L{{ sym.line }}{% if not forloop.Last %}; {% endif %}{% endfor %}{% if file.symbols_elided %}; +{{ file.symbols_elided }} more not listed{% endif %}){% endif %}
 {% endfor %}{% endif %}{% if attachments %}
 

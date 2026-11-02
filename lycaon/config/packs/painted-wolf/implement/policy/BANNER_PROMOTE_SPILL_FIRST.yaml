@@ -12,5 +12,5 @@ fix: Start with `preview_overlay(job_id="{{ paintedwolf.overlay_id }}")` and its
   Scope path=… when more detail is needed{% if paintedwolf.spill_path %}; fuller assessment bodies are at {{
   paintedwolf.spill_path }}{% endif %}. Compose merged content where required, after leg completion and current-revision
   evidence pass.
-instead: Never loop `read()` on primary for merge reconstruction when spill_path is present
+instead: Never repeatedly read the primary tree for merge reconstruction when spill_path is present
 id: BANNER_PROMOTE_SPILL_FIRST

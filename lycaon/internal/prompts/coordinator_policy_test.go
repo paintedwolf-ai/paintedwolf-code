@@ -178,7 +178,7 @@ func TestRequestableToolsTeachesOperationFirstWithoutHardcodedNames(t *testing.T
 	for _, want := range []string{
 		"### More tools",
 		"file and git changes",
-		"call `request_tools` with `need` describing one concrete operation and target",
+		"call `request_tools` with `need` describing one missing operation and target",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("requestable-tools.md missing %q: %s", want, out)

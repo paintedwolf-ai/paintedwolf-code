@@ -1,6 +1,6 @@
 ## command{% if is_coordinator %} (coordinator){% endif %}
 
-{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}Utilities run natively with GNU and BSD flags; use `CMD --help`. Shell state lasts for this program only.
+{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}Use `CMD --help` for supported native flags. Variables, `cd`, and `$!` last for one program; use returned job handles across calls.
 
 {% if workspace_roots %}Programs start in {{ project_dir }}; `pwd`, `$PWD` and `$OLDPWD` are absolute.{% if root_count > 1 %} `cd` moves between folders by absolute path or `@label`.{% endif %} Unquoted `@label/...` and `@scratch/...` expand in arguments and redirects (quote to pass literally):
 {% for r in workspace_roots %}- `@{{ r.label }}` → {{ r.path }}{% if r.is_primary %} (primary){% endif %}
