@@ -16,6 +16,7 @@ type modelOutputState struct {
 	sourceContext    *api.SourceContext
 	rejection        *guidance.Refusal
 	recovery         responserecovery.State
+	recoveryRejected bool
 	truncatedRetries int
 	truncatedOutcome *promptresult.OutputTruncatedOutcome
 }

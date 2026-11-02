@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -188,5 +189,24 @@ func TestResponseRecoveryPreservesModesAndCancellation(t *testing.T) {
 				t.Fatal("request contract changed")
 			}
 		})
+	}
+}
+
+func TestProseRejectionRequiresThisResponseRecoveryAdmission(t *testing.T) {
+	loop := NewPromptLoopForTest(PromptLoopDeps{Projection: ProjectionDeps{AppendMessages: func(context.Context, string, ...api.Message) error { return nil }}})
+	st := &promptLoopTurnState{}
+	st.output.recovery.Replaced()
+	unrelated := guidance.NewRefusal("TOOL_ACTION_IN_TEXT", "Use the tool channel")
+	_, reject, blocked, err := loop.Tools.tryRejectNoToolTurn(t.Context(), &api.Session{ID: "s"}, nil, "", "", "", nil, "s", "", st, false, unrelated)
+	testutil.FailErr(t, "unrelated refusal", err)
+	if blocked || reject != nil {
+		t.Fatal("prior recovery authorized unrelated prose rejection")
+	}
+	st.output.recoveryRejected = true
+	recovery := guidance.NewRefusal("MODEL_RESPONSE_INVALID", "Return a complete response")
+	_, reject, blocked, err = loop.Tools.tryRejectNoToolTurn(t.Context(), &api.Session{ID: "s"}, nil, "", "", "", nil, "s", "", st, false, recovery)
+	testutil.FailErr(t, "admitted refusal", err)
+	if !blocked || reject != recovery {
+		t.Fatal("admitted replacement was ignored on a prose turn")
 	}
 }
