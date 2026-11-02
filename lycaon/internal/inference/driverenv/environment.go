@@ -39,7 +39,7 @@ func readConfiguration(root string) (result *configuration, err error) {
 		return nil, err
 	}
 	if len(data) > 65536 {
-		return nil, fmt.Errorf("vulkan driver configuration exceeds its bound")
+		return nil, fmt.Errorf("driver configuration exceeds its bound")
 	}
 	var config configuration
 	decoder := json.NewDecoder(bytes.NewReader(data))

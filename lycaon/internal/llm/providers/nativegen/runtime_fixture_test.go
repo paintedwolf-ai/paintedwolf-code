@@ -128,7 +128,6 @@ func runtimeFixture() {
 }
 
 func runtimeFixtureProgress(active beginRequest, method string, generated, reused int) (map[string]any, int, bool) {
-
 	fault := os.Getenv("PW_NATIVEGEN_RESPONSE_FAULT")
 	if method == "advance" && (fault == "before_output" || fault == "after_output" && generated > 0) {
 		_, _ = os.Stdout.Write([]byte{0, 0})
