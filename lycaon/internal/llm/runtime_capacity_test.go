@@ -13,6 +13,16 @@ import (
 )
 
 func TestRegistryAliasesPreemptSharedBackgroundCapacity(t *testing.T) {
+	for _, debug := range []string{"", "1"} {
+		t.Run("debug="+debug, func(t *testing.T) {
+			t.Setenv("LYCAON_LLM_DEBUG", debug)
+			checkRegistryAliasCapacity(t)
+		})
+	}
+}
+
+func checkRegistryAliasCapacity(t *testing.T) {
+	t.Helper()
 	runtime := nativegen.NewRuntime(nativegen.RuntimeConfig{})
 	defer runtime.Close()
 	registry := &Registry{}
