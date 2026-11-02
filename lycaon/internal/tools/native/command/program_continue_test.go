@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
@@ -21,6 +22,10 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			f := programtest.New(t, programtest.Options{})
 			clock := programtest.NewManualClock()
 			f.Runtime.Clock = clock
+			out := &tools.ToolInvocationOut{}
+			f.Configure = func(tc *tools.ToolContext) { tc.Effects.Out = out }
+			runs := &recordedRuns{}
+			f.Runtime.SourceRuns = runs
 			entered, release, later := make(chan struct{}), make(chan struct{}), make(chan struct{})
 			f.Runtime.Evaluate = func(ctx context.Context, _ commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error) {
 				fmt.Fprint(ports.Streams.Output, "listening\n")
@@ -56,6 +61,12 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			if running.State != "running" || running.Handle == "" {
 				t.Fatalf("result %+v", running)
 			}
+			if out.SourceRun != nil || len(runs.recorded()) != 0 || out.CommandProgram == nil || out.CommandProgram.State != "running" {
+				t.Fatalf("running program claimed completion: %+v", out)
+			}
+			if _, err := f.Background.Snapshot(t.Context(), "another-session", running.Handle, 4096); err == nil {
+				t.Fatal("another session inspected the handle")
+			}
 			cancel()
 			select {
 			case <-later:
@@ -64,7 +75,7 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			}
 			snap, err := f.Background.Snapshot(t.Context(), f.Session, running.Handle, 4096)
 			testutil.FailErr(t, "inspect live output", err)
-			if snap.HasExit || snap.Output != "listening\n" {
+			if snap.HasExit || snap.Output != "stdout: listening\n" {
 				t.Fatalf("live snapshot %+v", snap)
 			}
 			if stop {
@@ -80,8 +91,23 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			}
 			snap, err = f.Background.Snapshot(t.Context(), f.Session, running.Handle, 4096)
 			testutil.FailErr(t, "inspect completed output", err)
-			if !stop && !strings.HasPrefix(snap.Output, "listening\nlater statement\n") {
+			if !stop && !strings.HasPrefix(snap.Output, "stdout: listening\nstdout: later statement\nstderr: {") {
 				t.Fatalf("output %q", snap.Output)
+			}
+			marker := strings.LastIndex(snap.Output, "stderr: {")
+			if marker < 0 {
+				t.Fatalf("missing final outcome: %s", snap.Output)
+			}
+			var final command.ProgramOutcome
+			testutil.FailErr(t, "read final outcome", json.Unmarshal([]byte(snap.Output[marker+len("stderr: "):]), &final))
+			if final.ProgramID != running.ProgramID || (!stop && final.Status != 7) {
+				t.Fatalf("final outcome %+v", final)
+			}
+			if out.SourceRun != nil || out.CommandProgram.State != "running" {
+				t.Fatal("completion changed returned call effects")
+			}
+			if len(runs.recorded()) != 1 {
+				t.Fatalf("completion recorded %d runs", len(runs.recorded()))
 			}
 			if stop {
 				select {

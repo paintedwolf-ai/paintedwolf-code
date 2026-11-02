@@ -368,6 +368,7 @@ func TestProgramEntryRunsManyProgramsWithinTheSessionSpillQuota(t *testing.T) {
 
 func TestProgramEntryLargeLoopsKeepTheSessionUsable(t *testing.T) {
 	f := newLoopFixture(t)
+	f.Runtime.Clock = programtest.NewManualClock()
 	const items = 12000
 	data := strings.Repeat("item\n", items)
 	testutil.FailErr(t, "write loop input", os.WriteFile(filepath.Join(f.Dir, "items.txt"), []byte(data), 0o600))
