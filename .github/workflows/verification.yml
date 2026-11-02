@@ -68,7 +68,7 @@ jobs:
           # Reads main's nightly receipts; without actions read access the plan uses lane budgets.
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+          if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch && -z "$LANE" ]]; then
             PW_CHANGE_BASE="$(PYTHONPATH=scripts python3 -m ci_policy.queue_dispatch)"
             export PW_CHANGE_BASE
             echo "change-base=$PW_CHANGE_BASE" >> "$GITHUB_OUTPUT"
@@ -136,6 +136,7 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/merge-group-watch
+        if: inputs.lane == ''
 
       - uses: ./.github/actions/setup-analysis
         if: matrix.setup == 'analysis'
