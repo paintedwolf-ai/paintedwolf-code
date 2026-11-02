@@ -2,15 +2,13 @@
   "category": "test_files",
   "artifact": "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go",
   "kind": "test_suite",
-  "workstream": "linux-module-view-fixtures",
+  "workstream": "protected-launch-fixtures",
   "disposition": "retain",
-  "reason": "Retain protected-launch fixture construction and instrumented root actor setup within 500 code-bearing lines. The same sealed generation and inherited descriptor frame drive the actual RunStage, broker and watcher paths. Identity-writable child counter directories, separate desktop payload and harness output descriptors, propagated deadlines, private mount cleanup, and inspection of the watcher's exclusive notification consumer form one actor lifecycle.",
-  "reviewed_commit": "548fc04d1f00b83135c674c3ba1c8b35d0166945",
-  "ceiling": 500,
+  "reason": "The 381-line fixture owns privileged installation, exact-generation selection and cleanup for the launch tests. Its dispatcher keeps those transactions explicit; the new GTK case delegates package helper selection to a separate GTK fixture owner. Retain this common lifecycle fixture below 385 lines, supported by upgrade/lifetime and catalog-derived GTK contracts.",
+  "reviewed_commit": "affecf0306df6a26da46928092e772d1ad055aa3",
+  "ceiling": 385,
   "boundaries": {
-    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "7f71a8795b7149ccab1030d557e307c9c365de61e7c68fb6322ec8352e4e3f99",
-    "lycaon/internal/launchguard/agent_linux_test.go": "13f93e3923da0f4bb827a5b4df9a00f7df0243afa37fcf8f1686ffe741761802",
-    "lycaon/internal/launchguard/modules_linux_test.go": "b15dd62d0c95a770bbb386710bcc2d89283feb9c1dcf00e121aca0952502c4b2",
-    "lycaon/internal/launchguard/protected_launch_linux_test.go": "782916c07cbd1f3fb4009aa13fa6516c8da93686cd3d80dd59cbbed1e7ba2a01"
+    "lycaon/internal/launchguard/protected_launch_upgrade_linux_test.go": "b60dccc0ea4476a4fcdf64b04dade89c4dc5701a4c18bfb8dc04f4260337009f",
+    "lycaon/internal/launchguard/gtk_generation_linux_test.go": "2a36f304f93eb8e80dccb348eeaeed9f01155117fe1034772cdae045ce2dbe00"
   }
 }

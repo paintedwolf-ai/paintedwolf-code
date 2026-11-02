@@ -73,7 +73,7 @@ cannot select a partial lane.
 
 For upgrade-corpus and applied platform diagnostics, dispatch the complete
 platform workflow with `gh workflow run platform-verification.yml --ref <branch>`.
-It retains both architecture-specific platform jobs and their evidence without
+It retains both platform jobs and their evidence without
 publishing a required `check` result.
 
 ### Where credentials live in development
