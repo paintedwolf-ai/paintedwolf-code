@@ -27,13 +27,6 @@ func registerCommandTools(
 	if err != nil {
 		return err
 	}
-	processTools := &native.ProcessTools{Service: service}
-	if err := reg.Register("process_list", processTools.List); err != nil {
-		return err
-	}
-	if err := reg.Register("process_signal", processTools.Signal); err != nil {
-		return err
-	}
 	ft := command.NewCommandFailureTracker()
 	hostUtilities, err := hostenv.NewOwners(hostos.Host{}, time.Now, boundary)
 
