@@ -231,9 +231,25 @@ func checkNestedTopologyChanges(directory, root string, underlay int, pins *fixt
 			return err
 		}
 	}
+	// A source reader can pin this mount while intake reconciles it. Exercise
+	// removal with that pin held instead of racing an ordinary unmount.
+	removed, err := openMountPoint(filepath.Join(target, "added"))
+	if err != nil {
+		return fmt.Errorf("pin removed source mount: %w", err)
+	}
+	defer unix.Close(removed)
+	if err := unix.Unmount(filepath.Join(target, "added"), 0); !errors.Is(err, unix.EBUSY) {
+		return errors.Join(errors.New("pinned source ordinary unmount must report EBUSY"), err)
+	}
 	began = lifecycleMonotonicNS()
-	if err := unix.Unmount(filepath.Join(target, "added"), 0); err != nil {
-		return err
+	if err := unix.Unmount(filepath.Join(target, "added"), unix.MNT_DETACH); err != nil {
+		return fmt.Errorf("detach added source mount: %w", err)
+	}
+	if raw, err := os.ReadFile(mountDescriptorPath(removed) + "/payload"); err != nil || string(raw) != "added" {
+		return errors.Join(fmt.Errorf("removed source pin lost its original payload: %q", raw), err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "added", "payload")); !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(errors.New("detached source payload remains visible"), err)
 	}
 	if _, err = awaitNestedView(sourceNS, desktopNS, pins, target, 2, added, group, began, deadline); err != nil {
 		return err
@@ -248,12 +264,9 @@ func checkNestedTopologyChanges(directory, root string, underlay int, pins *fixt
 	if err := checkNestedHiddenAndSymlink(sourceNS, desktopNS, pins, root, hiddenCover); err != nil {
 		return err
 	}
-	// The recursive publication owns the visible child separately in this namespace.
-	if err := unix.Unmount(filepath.Join(target, "child"), 0); err != nil {
-		return err
-	}
-	if err := unix.Unmount(target, 0); err != nil {
-		return err
+	// Detach the source subtree even while intake holds transient lookup pins.
+	if err := unix.Unmount(target, unix.MNT_DETACH); err != nil {
+		return fmt.Errorf("detach source subtree: %w", err)
 	}
 	for time.Now().Before(deadline) {
 		if err := nestedRolesAlive(pins); err != nil {
