@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -15,7 +16,7 @@ func TestToolOutputUsesTokenBoundariesAndPreservesLiteralBytes(t *testing.T) {
 		t.Helper()
 		visible, err := decoder.step(&token, text)
 		if err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "decode output token", err)
 		}
 		return visible
 	}
@@ -45,14 +46,14 @@ func TestToolOutputMarksIncompleteAndMalformedArguments(t *testing.T) {
 		decoder := newOutputDecoder(modelcall.CompletionRequest{Tools: []tools.ToolMeta{{Name: "read_file"}}})
 		start, ordinary, end := uint32(48), uint32(500), uint32(49)
 		if _, err := decoder.step(&start, "<|tool_call>"); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "start tool call", err)
 		}
 		if _, err := decoder.step(&ordinary, "call:read_file{path:"); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "decode tool arguments", err)
 		}
 		if !truncated {
 			if _, err := decoder.step(&end, "<tool_call|>"); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "end tool call", err)
 			}
 		}
 		calls, err := decoder.finish(truncated)

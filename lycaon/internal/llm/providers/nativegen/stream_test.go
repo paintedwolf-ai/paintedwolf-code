@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/modelstore"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,18 +25,18 @@ func fixtureProvider(t *testing.T) (*Provider, *Runtime) {
 	t.Setenv("PW_NATIVEGEN_PROCESS_FIXTURE", "2")
 	binary, err := os.Executable()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "locate fixture executable", err)
 	}
 	store := modelstore.New(t.TempDir(), fixtureAuthority{})
 	payload := []byte("fixture weights")
 	digest := sha256.Sum256(payload)
 	artifact := modelstore.Artifact{Name: "model.gguf", Digest: hex.EncodeToString(digest[:]), Format: "gguf", Bytes: int64(len(payload))}
 	if err := store.Stage(bytes.NewReader(payload), artifact); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "stage fixture artifact", err)
 	}
 	manifest := modelstore.Manifest{Model: DefaultModelID, Revision: "fixture", Device: "vulkan", Artifact: artifact}
 	if err := store.Activate(modelstore.SignedManifest{Manifest: manifest, Signature: "fixture"}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "activate fixture model", err)
 	}
 	devices, _ := inference.NewDevices(8)
 	host, _ := inference.NewMemoryBudget(1 << 30)
@@ -61,7 +62,7 @@ func TestProviderStreamOwnsLeaseAndReservationsUntilClose(t *testing.T) {
 	}
 	child := runtime.loaded.process
 	if err := runtime.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "close runtime", err)
 	}
 	select {
 	case <-child.done:

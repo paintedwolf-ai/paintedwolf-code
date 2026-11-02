@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type fragmentWriter struct{ bytes.Buffer }
@@ -21,7 +23,7 @@ func TestProtocolFramesHandleFragmentationAndBounds(t *testing.T) {
 	payload := []byte(`{"id":1,"message":"é"}`)
 	writer := new(fragmentWriter)
 	if err := writeProtocolFrame(writer, payload); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write protocol frame", err)
 	}
 	got, err := readProtocolFrame(&writer.Buffer)
 	if err != nil || !bytes.Equal(got, payload) {
@@ -63,7 +65,7 @@ func TestProtocolResponseRejectsAmbiguousOrStaleStates(t *testing.T) {
 	}
 	result, err := decodeResponse([]byte(`{"status":"ok","id":1,"result":{"kind":"loaded","extra":true}}`), 1, "loaded")
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode protocol response", err)
 	}
 	var loaded struct {
 		Kind string `json:"kind"`

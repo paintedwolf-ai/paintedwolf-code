@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -23,7 +24,7 @@ func TestPrepareRenderPreservesStructuredArgumentsAndToolIdentity(t *testing.T) 
 	}
 	wire, err := prepareRender(req)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "prepare tool history", err)
 	}
 	if len(wire.Messages) != 4 || len(wire.Tools) != 1 {
 		t.Fatalf("lost conversation structure: %+v", wire)
@@ -66,7 +67,7 @@ func TestPrepareRenderKeepsHostEventsInConversationOrder(t *testing.T) {
 	}}
 	wire, err := prepareRender(req)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "prepare host event", err)
 	}
 	if len(wire.Messages) != 3 || wire.Messages[0].Content != "First\n\nSecond" || wire.Messages[2].Role != "user" || wire.Messages[2].Content != "Current host event" {
 		t.Fatalf("moved host event into standing prefix: %+v", wire.Messages)
