@@ -147,3 +147,27 @@ func TestPrepareRenderUsesAssemblyBoundaryAfterProjection(t *testing.T) {
 		t.Fatalf("invented unmarked boundary: %+v, %v", rendered, err)
 	}
 }
+
+func TestNativeProjectionOmitsCapturedThoughtWithoutMutatingHistory(t *testing.T) {
+	for _, toolLoop := range []bool{false, true} {
+		reasoning := &api.ModelReasoning{ProviderID: "nativegen", Model: DefaultModelID, Text: "captured-thought"}
+		assistant := api.Message{Role: api.MessageRoleAssistant, Content: "Answer", ModelReasoning: reasoning}
+		next := api.Message{Role: api.MessageRoleUser, Content: "Next question"}
+		if toolLoop {
+			assistant.ToolCalls = []api.ToolCall{{ID: "call_1", Name: "read_file", Args: map[string]any{"path": "source.go"}}}
+			next = api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "read_file", ToolCallID: "call_1", Content: "result"}}
+		}
+		req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Question"}, assistant, next}, Tools: []tools.ToolMeta{{Name: "read_file"}}}
+		wire, err := prepareRender(req)
+		if err != nil {
+			t.Fatalf("project native history: %v", err)
+		}
+		raw, err := json.Marshal(wire)
+		if err != nil || strings.Contains(string(raw), "captured-thought") {
+			t.Fatalf("native wire replayed captured thought: %s, %v", raw, err)
+		}
+		if req.Messages[1].ModelReasoning != reasoning || reasoning.Text != "captured-thought" {
+			t.Fatal("projection mutated captured reasoning")
+		}
+	}
+}
