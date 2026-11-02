@@ -16,10 +16,12 @@ fn tokenizer() -> Tokenizer {
             .unwrap(),
     );
     tokenizer.with_decoder(Some(Fuse::new()));
-    tokenizer.add_special_tokens([
-        AddedToken::from("<|channel>", true),
-        AddedToken::from("<|tool_call>", true),
-    ]);
+    tokenizer
+        .add_special_tokens([
+            AddedToken::from("<|channel>", true),
+            AddedToken::from("<|tool_call>", true),
+        ])
+        .unwrap();
     tokenizer
 }
 
@@ -198,4 +200,36 @@ fn only_declared_terminal_ids_are_available() {
     assert!(!envelope.allowed(1));
     envelope.consume(101).unwrap();
     assert!(envelope.allowed(1));
+}
+
+#[test]
+fn maximum_catalog_and_output_length_keep_bounded_header_storage() {
+    let names = (0..512)
+        .map(|index| format!("{index:03}{}", "x".repeat(125)))
+        .collect();
+    let mut envelope = Contract {
+        allowed_tools: names,
+    }
+    .compile(&tokenizer(), false)
+    .unwrap();
+    let bytes = envelope.storage_bytes();
+    assert!(bytes <= HOST_BYTES as usize);
+    for _ in 0..4096 {
+        envelope.consume(400).unwrap();
+    }
+    assert_eq!(envelope.storage_bytes(), bytes);
+    let logits = vec![1.0; 262144];
+    envelope.consume(100).unwrap();
+    assert_eq!(envelope.candidates(&logits).count(), 1);
+}
+
+#[test]
+fn rejected_header_diagnostics_do_not_expose_ordinary_tokens() {
+    let mut envelope = Envelope::fixture();
+    envelope.consume(100).unwrap();
+    let ordinary = envelope.consume(123456).unwrap_err().to_string();
+    assert!(ordinary.contains("non-control token"));
+    assert!(!ordinary.contains("123456"));
+    let control = envelope.consume(101).unwrap_err().to_string();
+    assert!(control.contains("control token 101"));
 }
