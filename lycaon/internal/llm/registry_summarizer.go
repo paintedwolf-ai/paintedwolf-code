@@ -120,22 +120,9 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 	if err != nil {
 		return "", err
 	}
-	var rawMessages []api.Message
-	if prefix := compaction.SharedPrefixMessages(ctx); len(prefix) > 0 {
-		rawMessages = make([]api.Message, 0, len(prefix)+1)
-		rawMessages = append(rawMessages, prefix...)
-		rawMessages = append(rawMessages, api.Message{
-			Role:      api.MessageRoleUser,
-			Content:   today + "\n\n" + systemPrompt + "\n\n" + userPrompt,
-			Origin:    api.MessageOriginHost,
-			Authority: api.ContentAuthoritySystem,
-			TrustTier: api.ContentTrustTierTrusted,
-		})
-	} else {
-		rawMessages = []api.Message{
-			{Role: api.MessageRoleSystem, Content: today + "\n\n" + systemPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
-			{Role: api.MessageRoleUser, Content: userPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
-		}
+	rawMessages := []api.Message{
+		{Role: api.MessageRoleSystem, Content: today + "\n\n" + systemPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
+		{Role: api.MessageRoleUser, Content: userPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
 	}
 	req := modelcall.CompletionRequest{
 		Model:    model,
