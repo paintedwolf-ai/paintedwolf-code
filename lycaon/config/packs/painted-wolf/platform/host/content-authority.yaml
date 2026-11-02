@@ -31,4 +31,3 @@ checkpoint_approval: >-
   The approval resolves this tool invocation's access decision. Continue the
   original task from the tool result, checking any remaining deliverables and
   verification before reporting completion.
-
