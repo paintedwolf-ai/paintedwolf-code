@@ -87,6 +87,7 @@ func environment(config configuration, libraries []string, apiVersion string) ([
 		cleanup()
 		return nil, noop, err
 	}
+	// The ICD must enter through the Vulkan loader without interposing its symbols.
 	return []string{"VK_DRIVER_FILES=" + drivers + ":" + filepath.Join(resolved, "nvidia.json"),
-		"LD_PRELOAD=" + strings.Join(libraries, ":")}, cleanup, nil
+		"LD_PRELOAD=" + strings.Join(libraries[:len(libraries)-1], ":")}, cleanup, nil
 }
