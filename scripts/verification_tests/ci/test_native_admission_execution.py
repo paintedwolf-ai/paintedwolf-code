@@ -10,6 +10,7 @@ class NativeAdmissionTests(unittest.TestCase):
         for paths, expected in [(['docs/design.md'], []), (['lycaon/internal/session/a.go'], []),
                 (['lycaon-den/src-tauri/crates/desktop-settings-observer/src/main.rs'], ['den:test:rust']),
                 (['lycaon/internal/decide/native/src/main.rs'], ['decide:test']),
+                (['lycaon/internal/decide/native/vendor/wgpu-hal/src/vulkan/device.rs'], ['decide:test']),
                 (['lycaon-den/src-tauri/src/main.rs', 'lycaon/internal/decide/native/src/main.rs'],
                  ['den:test:rust', 'decide:test'])]:
             scope = {'full': False, 'paths': paths}
