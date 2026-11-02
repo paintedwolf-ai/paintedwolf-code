@@ -28,7 +28,7 @@ permissions:
 
 concurrency:
   # A delayed draft synchronize event must not cancel a ready-for-review run.
-    group: ci-${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/') && 'merge_group' || github.event_name }}-${{ github.ref }}-${{ github.event.pull_request.draft && github.event.action != 'ready_for_review' && 'draft' || 'ready' }}-${{ inputs.lane || 'all' }}
+  group: ci-${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/') && 'merge_group' || github.event_name }}-${{ github.ref }}-${{ github.event.pull_request.draft && github.event.action != 'ready_for_review' && 'draft' || 'ready' }}-${{ inputs.lane || 'all' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -73,7 +73,7 @@ jobs:
       platform: true
 
   check:
-    name: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check' }}
+    name: ${{ inputs.lane != '' && 'diagnostic-summary' || (github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check') }}
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() && inputs.lane == '' && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}
     needs: [fast, integration, platform, platform-lanes]
