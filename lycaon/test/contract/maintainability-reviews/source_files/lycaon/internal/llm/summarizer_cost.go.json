@@ -5,7 +5,7 @@
   "workstream": "local-runtime-capacity",
   "disposition": "retain",
   "reason": "Retain the utility call transaction within the inspected 327-line ceiling: admission, call budget, lifecycle edges, and usage receipt settlement. Shared admission now carries cancellation for dispensable title and compaction work through both blocking and streaming calls. Keep these operations together while the focused cancellation, ownership and cost contracts hold. Debug-on/off registry tests also preserve the same runtime lane through diagnostic capture.",
-  "reviewed_commit": "0a1550f9bf9",
+  "reviewed_commit": "0a1550f9bf9e0f31d1b5e0ae30b706c909710c8f",
   "ceiling": 327,
   "boundaries": {
     "lycaon/internal/llm/summarizer_cost_test.go": "75fb68a114666e881c591e482cae3f8d1abf8989f414d29d6af1c0f4ff012b5e",
