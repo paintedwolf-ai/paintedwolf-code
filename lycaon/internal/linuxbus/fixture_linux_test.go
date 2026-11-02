@@ -3,12 +3,12 @@
 package linuxbus
 
 import (
+	"bufio"
 	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -22,21 +22,28 @@ func fixtureBus(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(directory) })
 	path := filepath.Join(directory, "bus")
-	cmd := exec.Command("dbus-daemon", "--session", "--nofork", "--address=unix:path="+path)
+	cmd := exec.CommandContext(t.Context(), "dbus-daemon", "--session", "--nofork", "--address=unix:path="+path, "--print-address=1")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
+	ready, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("create isolated bus readiness pipe: %v", err)
+	}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start isolated bus: %v", err)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	for t.Context().Err() == nil {
-		if _, err := os.Stat(path); err == nil {
-			return path
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		if t.Failed() {
+			t.Logf("isolated bus stderr: %s", stderr.String())
 		}
-		time.Sleep(time.Millisecond)
+	})
+	// The daemon prints its address after initialization, when it can accept clients.
+	if _, err := bufio.NewReader(ready).ReadString('\n'); err != nil {
+		t.Fatalf("wait for isolated bus readiness: %v", err)
 	}
-	t.Fatalf("isolated bus did not start: %s", stderr.String())
-	return ""
+	return path
 }
 
 type fixtureLoginManager struct {
