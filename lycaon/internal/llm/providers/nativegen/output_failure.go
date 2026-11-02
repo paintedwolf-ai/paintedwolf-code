@@ -2,6 +2,7 @@ package nativegen
 
 import (
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/llm/failure"
 )
 
@@ -38,12 +39,14 @@ func (d *outputDecoder) protocolError(reason string) error {
 		}
 	}
 	diagnostic := &OutputProtocolError{ProviderID: d.provider, Model: d.model, Reason: reason, Phase: phase, Position: d.position, Controls: append([]OutputControl(nil), d.controls...)}
-	repairable := len(d.allowed) > 0 && !d.schema
+	kind := failure.DecodeMismatch
 	switch reason {
-	case "decoding_mismatch", "output_bound":
-		repairable = false
+	case "unexpected_control", "channel_boundary", "channel_header", "channel_control", "unsupported_channel", "tool_boundary", "tool_header", "tool_not_offered", "unfinished_channel", "unfinished_tool":
+		kind = failure.MalformedEnvelope
+	case "output_bound":
+		kind = failure.OutputBound
 	}
-	return &failure.ProviderOutputProtocolError{ProviderID: d.provider, Model: d.model, Reason: reason, Repairable: repairable, Cause: diagnostic}
+	return &failure.ProviderOutputProtocolError{ProviderID: d.provider, Model: d.model, Reason: reason, Kind: kind, Cause: diagnostic}
 }
 
 func (d *outputDecoder) observe(token *uint32) {

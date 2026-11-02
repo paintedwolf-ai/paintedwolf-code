@@ -1,11 +1,19 @@
 package failure
 
+type OutputProtocolFailureKind string
+
+const (
+	MalformedEnvelope OutputProtocolFailureKind = "malformed_envelope"
+	DecodeMismatch    OutputProtocolFailureKind = "decode_mismatch"
+	OutputBound       OutputProtocolFailureKind = "output_bound"
+)
+
 // ProviderOutputProtocolError identifies a rejected model-authored envelope.
 type ProviderOutputProtocolError struct {
 	ProviderID string
 	Model      string
 	Reason     string
-	Repairable bool
+	Kind       OutputProtocolFailureKind
 	Cause      error
 }
 

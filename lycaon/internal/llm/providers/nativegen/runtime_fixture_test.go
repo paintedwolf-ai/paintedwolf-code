@@ -37,6 +37,9 @@ func runtimeFixture() {
 		switch request.Command.Method {
 		case "hello":
 			result = map[string]any{"kind": "hello", "protocol": protocolVersion, "artifact_id": artifact, "backend": "vulkan", "physical_device": map[string]string{"kind": "pci", "address": "0000:03:00.0"}}
+			if os.Getenv("PW_NATIVEGEN_OLD_PROTOCOL") == "1" {
+				result["protocol"] = 1
+			}
 		case "inspect":
 			plan := resourcePlan{ResidentWeightsBytes: 128 << 20, MappedPLEBytes: 2 << 30, KVCapacityBytes: 64 << 20, WorkspaceBytes: 64 << 20, DeviceReservationBytes: 256 << 20, HostReservationBytes: 768 << 20}
 			if os.Getenv("PW_NATIVEGEN_SMALL_HOST_PLAN") == "1" {
@@ -124,6 +127,14 @@ func runtimeFixture() {
 				if generated == 1 && fault != "empty_eos" {
 					value := uint32(236812)
 					token, text = &value, "4"
+					switch fault {
+					case "orphan_channel":
+						value, text = 101, "<channel|>"
+					case "capped_channel":
+						value, text = 100, "<|channel>"
+					case "capped_tool":
+						value, text = 48, "<|tool_call>"
+					}
 					if active.MaxNewTokens == 1 {
 						value := "max_tokens"
 						stop = &value
