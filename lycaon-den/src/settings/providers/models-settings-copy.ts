@@ -132,7 +132,7 @@ export const MODELS_SETTINGS_COPY = {
   onboardingSummarizerLede:
     "Optional second model for smaller tasks.",
   onboardingSummarizerLocalSaveHint:
-    "A local model for summarizing can save money while your default model handles the hard work.",
+    "You can choose a different model for summaries and other small tasks.",
   onboardingSummarizerAddProvider: "Add another provider",
   onboardingSummarizerAddProviderHint:
     "If you want the summarizer to use a different provider.",
@@ -189,7 +189,7 @@ export const MODELS_SETTINGS_COPY = {
   liteSlotLabel: "Summarizer",
   /** Wraps the unset label: the hint names it as the picker shows it. */
   summarizerModelHintLead: "Optional override for compaction, context diet, and web search seeding.",
-  summarizerModelHintTail: "inherits the default model and tracks when it changes.",
+  summarizerModelHintTail: "uses the included model when available, otherwise your default model.",
   modelPolicyEmpty:
     "Configure at least one provider in Settings → AI providers, then choose models here.",
   workerSectionTitle: "Workers",
