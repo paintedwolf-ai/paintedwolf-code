@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// modelOutputState freezes a response's identity, policy and observed source.
+// modelOutputState tracks response validation and bounded recovery.
 type modelOutputState struct {
 	policyCheck      tools.AgentPolicyCheck
 	id               string
@@ -16,7 +16,7 @@ type modelOutputState struct {
 	sourceContext    *api.SourceContext
 	rejection        *guidance.Refusal
 	recovery         responserecovery.State
-	recoveryRejected bool
+	recoveryAdmitted bool
 	truncatedRetries int
 	truncatedOutcome *promptresult.OutputTruncatedOutcome
 }

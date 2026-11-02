@@ -334,7 +334,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx))
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	if st != nil {
-		st.output.recoveryRejected = false
+		st.output.recoveryAdmitted = false
 	}
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model

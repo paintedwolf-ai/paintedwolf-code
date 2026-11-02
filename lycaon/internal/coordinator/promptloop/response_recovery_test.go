@@ -202,7 +202,7 @@ func TestProseRejectionRequiresThisResponseRecoveryAdmission(t *testing.T) {
 	if blocked || reject != nil {
 		t.Fatal("prior recovery authorized unrelated prose rejection")
 	}
-	st.output.recoveryRejected = true
+	st.output.recoveryAdmitted = true
 	recovery := guidance.NewRefusal("MODEL_RESPONSE_INVALID", "Return a complete response")
 	_, reject, blocked, err = loop.Tools.tryRejectNoToolTurn(t.Context(), &api.Session{ID: "s"}, nil, "", "", "", nil, "s", "", st, false, recovery)
 	testutil.FailErr(t, "admitted refusal", err)
