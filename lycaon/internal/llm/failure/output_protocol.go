@@ -8,7 +8,7 @@ const (
 	OutputBound       OutputProtocolFailureKind = "output_bound"
 )
 
-// ProviderOutputProtocolError identifies a rejected model-authored envelope.
+// ProviderOutputProtocolError identifies an output boundary failure.
 type ProviderOutputProtocolError struct {
 	ProviderID string
 	Model      string

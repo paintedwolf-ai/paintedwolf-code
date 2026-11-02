@@ -67,10 +67,9 @@ func (d *outputDecoder) step(token *uint32, text string) (string, error) {
 	case 49:
 		marker = "<tool_call|>"
 	case 52:
-		if !d.inCall {
-			return "", d.protocolError("unexpected_control")
+		if d.inCall {
+			marker = `<|"|>`
 		}
-		marker = `<|"|>`
 	case 0, 1, 2, 3, 4, 46, 47, 50, 51, 98, 100, 101, 105, 106:
 		return "", d.protocolError("unexpected_control")
 	}

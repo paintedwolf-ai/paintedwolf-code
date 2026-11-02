@@ -7,7 +7,10 @@ import (
 func (d *outputDecoder) channelStep(token *uint32, text string) (bool, string, error) {
 	if token != nil && *token == 100 {
 		prefix, ok := strings.CutSuffix(text, "<|channel>")
-		if !ok || d.channel || d.inCall || d.schema {
+		if !ok {
+			return true, "", d.protocolError("decoding_mismatch")
+		}
+		if d.channel || d.inCall || d.schema {
 			return true, "", d.protocolError("channel_boundary")
 		}
 		d.channel, d.header = true, "thought\n"
