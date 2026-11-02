@@ -35,6 +35,16 @@ sys.stdout.buffer.flush()
             process.stdout.close()
             process.wait(timeout=5)
 
+    def test_e2b_is_limited_to_the_explicit_reference_backend(self):
+        flags = ["runtime", "bench", "--reference-model-size", "e2b"]
+        with mock.patch.object(sys, "argv", flags), mock.patch.object(runtime, "bench") as bench, contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                runtime.main()
+            bench.assert_not_called()
+        with mock.patch.object(sys, "argv", flags + ["--backend", "reference-llama"]), mock.patch.object(runtime, "bench") as bench:
+            runtime.main()
+            self.assertEqual(bench.call_args.args[0].reference_model_size, "e2b")
+
     def test_framed_exchange_and_rejected_responses(self):
         self.assertEqual(self.exchange("echo"), {"method": "hello"})
         for response in ({"id": 2, "status": "ok", "result": {}},

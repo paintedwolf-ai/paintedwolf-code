@@ -242,7 +242,7 @@ def bench(args):
         shutil.copyfile(args.prompt_file, destination / "rendered-prompt.json")
     specification = {"prompt_tokens": prompt, "generation_tokens": args.tokens,
                      "trials": args.trials, "ple": args.ple, "prefill_chunk": args.prefill_chunk, "kv_bits": args.kv_bits,
-                     "verify_last_logits": args.verify_last_logits}
+                     "verify_last_logits": args.verify_last_logits, "reference_model_size": args.reference_model_size}
     input_path = destination / "input.json"
     input_path.write_text(json.dumps(specification) + "\n")
     build_receipt = None
@@ -283,7 +283,8 @@ def bench(args):
                 "orchestrator_sha256": file_digest(Path(__file__)),
                 "python_sources": {name: file_digest(Path(__file__).with_name(name))
                                    for name in ("native_bench.py", "mlx_bench.py", "mapped_ple.py", "prompt.py", "pyproject.toml", "uv.lock")},
-                "artifact_identity": args.artifact_identity, "platform": platform.platform(),
+                "artifact_identity": args.artifact_identity, "reference_model_size": args.reference_model_size,
+                "platform": platform.platform(),
                 "machine": platform.machine(), "ple": args.ple, "input": str(input_path),
                 "load_average_before": os.getloadavg(),
                 "cache_condition": "uncontrolled OS page cache; warmup is not a cold-storage guarantee",
@@ -309,6 +310,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["prepare", "build", "test", "bench"])
     parser.add_argument("--backend", choices=["native", "reference-llama", "reference-mlx", "reference-swift", "reference-rust"], default="native")
+    parser.add_argument("--reference-model-size", choices=["e4b", "e2b"], default="e4b")
     parser.add_argument("--refresh-lock", action="store_true")
     parser.add_argument("--install-build-tools", action="store_true")
     parser.add_argument("--model", type=Path)
@@ -328,6 +330,8 @@ def main():
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--ple", choices=["resident", "mapped"], default="mapped")
     args = parser.parse_args()
+    if args.reference_model_size != "e4b" and args.backend != "reference-llama":
+        parser.error("E2B diagnostics require the reference-llama backend")
     if args.backend == "reference-rust" and (sys.platform != "darwin" or platform.machine() != "arm64"):
         parser.error("the Rust MLX candidate requires Apple silicon")
     if args.kv_bits != 16 and args.backend != "reference-swift":
