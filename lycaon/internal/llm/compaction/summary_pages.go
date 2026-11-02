@@ -34,7 +34,10 @@ func (c *SimpleCompactor) summaryBudget() SummaryBudget {
 // summarizePrefix accounts for every source even when synthesis is unavailable.
 func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo, prefix []ContextMessage) (compactionSummary, []messageview.ContinuationSource, error) {
 	summary := priorSummary(info.PriorContinuation)
-	sources, segments := continuationSegments(prefix, c.cfg.SummaryMessageTokens)
+	sources, segments, sourceErr := continuationSegments(prefix, c.cfg.SummaryMessageTokens)
+	if sourceErr != nil {
+		return summary, sources, sourceErr
+	}
 	if len(segments) == 0 {
 		return summary, sources, nil
 	}
@@ -109,15 +112,17 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 	return summary, sources, err
 }
 
-func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.ContinuationSource, []ContextMessage) {
+func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.ContinuationSource, []ContextMessage, error) {
 	var sources []messageview.ContinuationSource
 	var segments []ContextMessage
+	var sourceErr error
 	width := max(1, tokens*tokenest.DefaultDivisor)
 	for _, row := range rows {
 		if row.CompactionCheckpoint || isContinuationSummary(row) {
 			continue
 		}
-		content, _, _, _ := projectCompactionMessage(row)
+		content, err := sourceData(row)
+		sourceErr = errors.Join(sourceErr, err)
 		tool := row.ToolName
 		if tool == "" && len(row.ToolCalls) == 1 {
 			tool = row.ToolCalls[0].Name
@@ -130,11 +135,14 @@ func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.Cont
 			segment := row
 			segment.Content = string(runes[start:min(start+width, len(runes))])
 			segment.ContentParts = nil
+			segment.ToolCalls = nil
+			segment.ToolCallID = ""
+			segment.ToolName = ""
 			segment.Authority = api.ContentAuthorityNone
 			segments = append(segments, segment)
 		}
 	}
-	return sources, segments
+	return sources, segments, sourceErr
 }
 
 func priorSummary(record *messageview.Continuation) compactionSummary {
@@ -149,4 +157,3 @@ func summaryRecord(summary compactionSummary) messageview.ContinuationSummary {
 	return messageview.ContinuationSummary{Facts: summary.Facts, Completed: summary.Completed,
 		Pending: summary.Pending, Reacquire: summary.Reacquire, Constraints: summary.Constraints}
 }
-
