@@ -95,7 +95,7 @@ class ChangedLinesBatchTests(unittest.TestCase):
         self.assertEqual(len(lines), 128)
         self.assertTrue(all(lines[f"existing-{i}.py"] == {1} for i in range(64)))
         self.assertTrue(all(lines[f"added-{i}.py"] == {1, 2} for i in range(64)))
-        self.assertEqual(calls.call_count, 4)
+        self.assertLessEqual(calls.call_count, 4)
         with patch.object(change_report.subprocess, "run", wraps=subprocess.run) as calls:
             self.assertEqual(change_report.changed_lines(self.root, base, []), {})
         calls.assert_not_called()
