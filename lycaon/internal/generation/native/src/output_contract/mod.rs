@@ -111,7 +111,7 @@ impl Envelope {
         }
         match self.state {
             State::Text => {
-                self.is_terminal(token)
+                (self.is_terminal(token) && (token != 50 || self.calls > 0))
                     || token == 52
                     || token == 100
                     || (token == 48 && !self.tools.empty() && self.calls < 64)
@@ -119,7 +119,7 @@ impl Envelope {
             State::ThoughtBody => matches!(token, 52 | 101),
             State::ToolBody => matches!(token, 49 | 52),
             State::ToolQuoted => token == 52,
-            State::Structured => self.is_terminal(token),
+            State::Structured => token != 50 && self.is_terminal(token),
             State::ThoughtHeader(_) | State::ToolHeader(_) => false,
         }
     }

@@ -39,7 +39,7 @@ fn sampling(envelope: Envelope) -> Sampling {
 #[test]
 fn every_state_excludes_unmatched_controls_and_open_envelope_eos() {
     let cases = [
-        (vec![], vec![1, 48, 50, 52, 100, 106]),
+        (vec![], vec![1, 48, 52, 100, 106]),
         (vec![100], vec![200]),
         (vec![100, 200], vec![201]),
         (vec![100, 200, 201], vec![52, 101]),
@@ -258,4 +258,23 @@ fn candidate_size_is_exact_for_short_vocabularies_and_sparse_headers() {
             assert_eq!(candidates.next(), None);
         }
     }
+}
+
+#[test]
+fn tool_response_handoff_requires_a_completed_call() {
+    let mut envelope = Envelope::fixture();
+    assert!(envelope.allowed(1));
+    assert!(envelope.allowed(106));
+    assert!(!envelope.allowed(50));
+    for token in [48, 300, 301, 49] {
+        envelope.consume(token).unwrap();
+    }
+    assert!(envelope.allowed(50));
+    envelope.state = State::Structured;
+    assert!(!envelope.allowed(50));
+    assert!(envelope.allowed(1));
+    assert!(envelope.allowed(106));
+    envelope.state = State::Text;
+    envelope.set_terminals([1, 106].into_iter());
+    assert!(!envelope.allowed(50));
 }

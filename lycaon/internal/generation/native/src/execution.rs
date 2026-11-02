@@ -81,7 +81,7 @@ impl<B: Backend> Executor<B> {
     pub fn new(backend: B, context: usize, chunk: usize, eos: Vec<u32>) -> Result<Self> {
         if !(2..=65536).contains(&context)
             || !(1..=256).contains(&chunk)
-            || eos.is_empty()
+            || !eos.iter().any(|id| matches!(id, 1 | 106))
             || eos.len() > 16
             || eos.iter().any(|id| !crate::output_contract::terminal(*id))
         {
