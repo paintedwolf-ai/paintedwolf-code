@@ -151,6 +151,21 @@ describe("onboarding-gate-model continue helpers", () => {
 });
 
 describe("OnboardingGate setup page", () => {
+  it("accepts the host-resolved default without writing it to the overlay", () => {
+    const overlay: ModelPolicy = {
+      coordinator: { provider_id: "", model: "" },
+      lite: { provider_id: "", model: "" },
+      agent_pool: { selection: "first", models: [] },
+    };
+    const store = createSettingsStore({ providers: [readyProvider], modelPolicy: overlay,
+      effectiveModelPolicy: policyWithDefault });
+    const client = mockClient();
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
+    expect(screen.queryByTestId("onboarding-setup")).toBeNull();
+    expect(store.state.modelPolicy).toEqual(overlay);
+    expect(client.updateModelPolicySettings).not.toHaveBeenCalled();
+  });
+
   it("mounts setup with continue gated until provider + default model exist", () => {
     const settingsStore = createSettingsStore({
       providers: [],
