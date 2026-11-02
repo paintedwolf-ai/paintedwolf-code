@@ -4,6 +4,7 @@ package driverenv
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -21,7 +22,7 @@ type configuration struct {
 	MesaICDs      []string `json:"mesa_icds"`
 }
 
-func readConfiguration(root string) (*configuration, error) {
+func readConfiguration(root string) (result *configuration, err error) {
 	if root == "" {
 		return nil, nil
 	}
@@ -32,13 +33,13 @@ func readConfiguration(root string) (*configuration, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { err = errors.Join(err, file.Close()) }()
 	data, err := io.ReadAll(io.LimitReader(file, 65537))
 	if err != nil {
 		return nil, err
 	}
 	if len(data) > 65536 {
-		return nil, fmt.Errorf("Vulkan driver configuration exceeds its bound")
+		return nil, fmt.Errorf("vulkan driver configuration exceeds its bound")
 	}
 	var config configuration
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -76,10 +77,15 @@ func environment(config configuration, libraries []string, apiVersion string) ([
 		cleanup()
 		return nil, noop, err
 	}
-	payload, _ := json.Marshal(map[string]any{
-		"file_format_version": "1.0.0",
-		"ICD":                 map[string]string{"library_path": libraries[len(libraries)-1], "api_version": apiVersion},
-	})
+	payload, err := json.Marshal(struct {
+		Format string            `json:"file_format_version"`
+		ICD    map[string]string `json:"ICD"`
+	}{Format: "1.0.0", ICD: map[string]string{"library_path": libraries[len(libraries)-1], "api_version": apiVersion}})
+	if err != nil {
+		cleanup()
+		return nil, noop, err
+	}
+
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{
 		Location: fseffect.Location{Root: resolved, Rel: "nvidia.json"}, Source: bytes.NewReader(payload), Mode: 0o600,
 	})
