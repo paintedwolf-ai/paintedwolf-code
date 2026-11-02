@@ -20,11 +20,11 @@ func TestInternalStepProjectionKeepsCacheIdentityStable(t *testing.T) {
 	first := cacheRequestIdentity(req, policy)
 	req.Messages = transcript.Project(req.Messages)
 	if second := cacheRequestIdentity(req, policy); !first.valid || !reflect.DeepEqual(first, second) {
-		t.Fatal("repeated note framing changed cache identity")
+		t.Fatal("repeated projection changed cache identity")
 	}
 	last := &req.Messages[len(req.Messages)-1]
 	if !reflect.DeepEqual(last.ModelReasoning, canonical.ModelReasoning) {
-		t.Fatal("history framing lost rehydrated reasoning")
+		t.Fatal("history projection lost rehydrated reasoning")
 	}
 	last.ModelReasoning = &api.ModelReasoning{Text: "Check a different assertion."}
 	if changed := cacheRequestIdentity(req, policy); reflect.DeepEqual(first.history, changed.history) {
