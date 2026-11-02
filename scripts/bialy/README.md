@@ -150,6 +150,22 @@ turn set in 0.81 s against 1.32 s p50 on the same Apple GPU. Changing it means
 training the turn-load head and running the replay eval under each id on the
 held-out captures.
 
+## Callable vocabulary for training
+
+Training exports describe the host's callable surface. Native command operation
+identities are execution and receipt vocabulary, not additional preload or
+`request_tools` labels. Command is already available on routine floors; a need
+for an edit, search, summary, or Git operation does not create a deferred-tool
+training target.
+
+Keep recorded observations intact. Corpus admission must reject incompatible
+candidate vocabularies explicitly rather than relabel old calls as command or
+silently score them as unused tools. New collection uses the current callable
+roster for preload, request ranking, and instruction labels. Exported option
+texts for a new training run come from that roster; an installed release keeps
+its evaluated vocabulary until a newly trained and evaluated release replaces
+it.
+
 ## Corpus
 
 The host exports the corpus the decision scores; nothing here parses packs:
