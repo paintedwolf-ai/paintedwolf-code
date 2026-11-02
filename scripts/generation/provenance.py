@@ -54,6 +54,8 @@ def swift_identity():
 
 def build_identity(backend, directory, binary):
     identity = {"source_identity": source_identity(backend), "binary_sha256": file_digest(binary)}
+    if backend == "reference-llama" and (directory / "CMakeCache.txt").is_file():
+        identity["cmake_cache_sha256"] = file_digest(directory / "CMakeCache.txt")
     if backend == "reference-swift":
         identity["metallib_sha256"] = file_digest(directory / "metal/mlx.metallib")
         identity["toolchain"] = swift_identity()

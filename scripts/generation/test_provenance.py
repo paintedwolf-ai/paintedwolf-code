@@ -50,11 +50,13 @@ class ProvenanceTests(unittest.TestCase):
             (root / "sources.json").write_text("{}")
             binary = root / "generation-reference"
             binary.write_bytes(b"original executable")
+            cache = root / "CMakeCache.txt"
+            cache.write_text("GGML_AVX:BOOL=ON")
             with patch.object(provenance, "ROOT", root), patch.object(provenance, "swift_identity", return_value={"version": "fixture"}):
                 provenance.record_build("reference-llama", root, binary)
                 receipt = provenance.verified_build("reference-llama", root, binary)
                 self.assertEqual(receipt["binary_sha256"], provenance.file_digest(binary))
-                for path in (source, header, binary):
+                for path in (source, header, binary, cache):
                     original = path.read_bytes()
                     path.write_bytes(b"changed")
                     with self.assertRaisesRegex(ValueError, "rebuild"):

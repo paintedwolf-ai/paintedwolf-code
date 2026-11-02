@@ -45,6 +45,19 @@ sys.stdout.buffer.flush()
             runtime.main()
             self.assertEqual(bench.call_args.args[0].reference_model_size, "e2b")
 
+    def test_portable_cpu_is_an_explicit_reference_build(self):
+        for action, backend, accepted in (("build", "reference-llama", True),
+                                          ("bench", "reference-llama", False),
+                                          ("build", "native", False)):
+            with mock.patch.object(sys, "argv", ["runtime", action, "--backend", backend, "--reference-cpu", "portable"]), mock.patch.object(runtime, "build") as build, contextlib.redirect_stderr(io.StringIO()):
+                if accepted:
+                    runtime.main()
+                    self.assertEqual(build.call_args.args[0].reference_cpu, "portable")
+                else:
+                    with self.assertRaises(SystemExit):
+                        runtime.main()
+                    build.assert_not_called()
+
     def test_framed_exchange_and_rejected_responses(self):
         self.assertEqual(self.exchange("echo"), {"method": "hello"})
         for response in ({"id": 2, "status": "ok", "result": {}},
