@@ -155,8 +155,8 @@ func TestCheckFastGateMembership(t *testing.T) {
 		t.Fatal("check-fast:workspace must reject an unpinned source tree")
 	}
 	plan := verificationCatalog(t)
-	want := []string{"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast", "den:coverage:changes",
-		"test:short", "test:contract", "coverage:changes", "scripts:coverage:changes", "licenses:notices", "comments:check",
+	want := []string{"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast",
+		"test:short", "test:contract", "licenses:notices", "comments:check",
 		"test:fail-messages:check", "docs:links"}
 	if !slices.Equal(plan.Groups["check-fast"], want) {
 		t.Fatalf("check-fast stages = %v, want %v", plan.Groups["check-fast"], want)
@@ -186,12 +186,17 @@ func TestCheckFastGateMembership(t *testing.T) {
 	if !strings.Contains(checkWorkspace, "test-execution.py plan -- check") {
 		t.Fatal("check:workspace must use the declared verification plan")
 	}
-	for _, required := range []string{"test:runner", "test:full", "den:test", "den:test:rust"} {
+	for _, required := range []string{"test:full", "den:test:rust", "decide:test"} {
 		if !slices.Contains(plan.Groups["check:tests"], required) {
 			t.Fatalf("check:tests must include %s", required)
 		}
 	}
-	for _, forbidden := range []string{"den:test:fast", "test:short", "test:scanners"} {
+	for _, coverage := range []string{"coverage:changes", "den:coverage:changes", "scripts:coverage:changes"} {
+		if slices.Contains(plan.Groups["check-fast"], coverage) || !slices.Contains(plan.Groups["check"], coverage) {
+			t.Errorf("%s must qualify the full landing gate rather than readiness", coverage)
+		}
+	}
+	for _, forbidden := range []string{"den:test:fast", "test:short", "test:scanners", "den:test", "test:runner"} {
 		if slices.Contains(plan.Groups["check:tests"], forbidden) {
 			t.Fatalf("check:tests must not include %s", forbidden)
 		}

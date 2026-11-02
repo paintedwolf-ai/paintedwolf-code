@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from ci_policy import merge_preflight as preflight
 from ci_policy import hosted_plan
+import verification_plan
 
 
 class MergePreflightTests(unittest.TestCase):
@@ -294,11 +295,13 @@ class MergePreflightTests(unittest.TestCase):
     def test_packages_are_partitioned_once_with_contracts_first(self):
         packages = ["module/internal/a", "module/test/contract/hosted", "module/test/contract", "module/test/smoke"]
         with patch.object(preflight.subprocess, "run") as run:
-            run.return_value.stdout = "\n".join(json.dumps({"ImportPath": name}) for name in packages)
+            run.return_value.stdout = "\n".join(json.dumps({"ImportPath": name,
+                "Dir": str(preflight.ROOT / 'lycaon' / name.removeprefix('module/'))}) for name in packages)
             phases = preflight.package_phases(None)
-            self.assertEqual(phases[0], ["module/test/contract", "module/test/contract/hosted"])
-            self.assertEqual(sorted(sum(phases, [])), sorted(packages))
+            self.assertEqual(phases[0], ["./test/contract", "./test/contract/hosted"])
+            self.assertEqual(sorted(sum(phases, [])), sorted(name.replace('module/', './') for name in packages))
             self.assertEqual(len(sum(phases, [])), len(packages))
+            self.assertTrue(verification_plan.go_selection(sum(phases, []), 'test:full')['shareable'])
             self.assertEqual(run.call_args.args[0][-1], "./...")
             self.assertEqual(run.call_args.kwargs["env"]["GOPROXY"], "off")
             self.assertEqual(run.call_args.kwargs["env"]["GOTOOLCHAIN"], "local")
@@ -307,7 +310,8 @@ class MergePreflightTests(unittest.TestCase):
 
     def test_uncertain_or_incomplete_selection_cannot_skip_contracts(self):
         for payload in ("", '{"ImportPath":"module/internal/a"}',
-                        '{"ImportPath":"module/test/contract/a","DepsErrors":[{}]}'):
+                        '{"ImportPath":"module/test/contract/a","DepsErrors":[{}]}',
+                        json.dumps({'ImportPath': 'foreign/test/contract/a', 'Dir': '/outside/module'})):
             with self.subTest(payload=payload), patch.object(preflight.subprocess, "run") as run:
                 run.return_value.stdout = payload
                 with self.assertRaises(ValueError):
