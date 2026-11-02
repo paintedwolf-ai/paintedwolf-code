@@ -44,11 +44,14 @@ class PacmanCandidateTests(unittest.TestCase):
                 result = io.BytesIO()
                 with tarfile.open(fileobj=result, mode="w") as output:
                     for name, body in {".PKGINFO": metadata, ".BUILDINFO": "native build\n",
-                                       ".MTREE": "native inventory\n", "usr/bin/pw": "sealed bytes"}.items():
+                                       ".MTREE": "native inventory\n", "usr/bin/pw": "sealed bytes",
+                                       "usr/libexec/painted-wolf-code/pw-launch": "bootstrap bytes"}.items():
                         encoded = body.encode()
                         member = tarfile.TarInfo(name)
                         member.size = len(encoded)
                         member.mode = 0o755 if name == "usr/bin/pw" else 0o644
+                        if name.endswith('/pw-launch'):
+                            member.mode = 0o4755
                         output.addfile(member, io.BytesIO(encoded))
                 return result.getvalue()
 
@@ -57,6 +60,7 @@ class PacmanCandidateTests(unittest.TestCase):
                 fields = extract(package, work / "installed", root, "x86_64", "1.2.3")
             self.assertEqual(fields["depend"], ["glibc>=2.35"])
             self.assertEqual((work / "installed/usr/bin/pw").read_text(), "sealed bytes")
+            self.assertEqual((work / "installed/usr/libexec/painted-wolf-code/pw-launch").stat().st_mode & 0o7777, 0o4755)
             with patch("linux_release.arch_stage.subprocess.Popen", return_value=Decoder(archive_bytes(
                     expected.replace("glibc>=2.35", "glibc>=2.34")))), self.assertRaisesRegex(ValueError, "dependencies"):
                 extract(package, work / "wrong-dependency", root, "x86_64", "1.2.3")
@@ -220,6 +224,21 @@ class PacmanCandidateTests(unittest.TestCase):
                 with self.subTest(target=target), self.assertRaisesRegex(ValueError, "escapes"):
                     package_filter(member, root)
 
+    def test_only_the_root_owned_regular_bootstrap_retains_privileged_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for name, mode, uid, kind in [
+                    ('usr/libexec/painted-wolf-code/pw-launch', 0o4755, 0, tarfile.REGTYPE),
+                    ('usr/bin/other', 0o4755, 0, tarfile.REGTYPE),
+                    ('usr/libexec/painted-wolf-code/pw-launch', 0o6755, 0, tarfile.REGTYPE),
+                    ('usr/libexec/painted-wolf-code/pw-launch', 0o4755, 1000, tarfile.REGTYPE),
+                    ('usr/libexec/painted-wolf-code/pw-launch', 0o4755, 0, tarfile.DIRTYPE)]:
+                member = tarfile.TarInfo(name)
+                member.mode, member.uid, member.type = mode, uid, kind
+                with self.subTest(name=name, mode=mode, uid=uid, kind=kind):
+                    checked = package_filter(member, temporary)
+                    valid = name.endswith('/pw-launch') and mode == 0o4755 and uid == 0 and kind == tarfile.REGTYPE
+                    self.assertEqual(bool(checked.mode is not None and checked.mode & 0o6000), valid)
+
     def test_archive_escape_and_duplicate_paths_never_escape_extraction(self):
         class Decoder:
             def __init__(self, payload):
@@ -229,15 +248,19 @@ class PacmanCandidateTests(unittest.TestCase):
             def poll(self):
                 return 0
 
-        for names in [["../escape"], ["same", "same"]]:
-            with self.subTest(names=names), tempfile.TemporaryDirectory() as temporary:
+        cases = [(['../escape'], 0o644, 0), (['same', 'same'], 0o644, 0),
+                 (['usr/bin/other'], 0o4755, 0),
+                 (['usr/libexec/painted-wolf-code/pw-launch'], 0o6755, 0),
+                 (['usr/libexec/painted-wolf-code/pw-launch'], 0o4755, 1000)]
+        for names, mode, uid in cases:
+            with self.subTest(names=names, mode=mode, uid=uid), tempfile.TemporaryDirectory() as temporary:
                 work = Path(temporary)
                 archive = io.BytesIO()
                 with tarfile.open(fileobj=archive, mode="w") as output:
                     for name in names:
                         member = tarfile.TarInfo(name)
                         member.size = 1
-                        member.mode = 0o644
+                        member.mode, member.uid = mode, uid
                         output.addfile(member, io.BytesIO(b"x"))
                 package = work / "candidate.pkg.tar.zst"
                 package.write_bytes(b"selected archive")
