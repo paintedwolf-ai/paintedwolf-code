@@ -36,6 +36,12 @@ Together, local inference, and Gemini adapters project one leading system messag
 
 Mistral's `/v1/models` discovery reads `max_context_length` and the structured `capabilities` block (`completion_chat`, `function_calling`, `vision`), filtering rows that declare `completion_chat: false` while leaving omitted capability fields unknown. On the chat-completions wire, the Mistral profile (`ToolCallIDAlphanumeric9`) preserves 9-character ASCII alphanumeric wire tool-call IDs and deterministically normalizes non-conforming host or imported tool-call IDs to 9 alphanumeric characters across both `tool_calls[].id` and paired `tool_call_id` messages.
 
+### Native output contract
+
+The bundled native engine and Go adapter use co-versioned private protocol 2. Each generation request includes the exact callable tool names in `output_contract.allowed_tools`; structured output and prose-only requests carry an empty array. The sampler constrains control-token order and callable headers. The Go decoder independently validates envelopes and arguments; ordinary prose never becomes a tool call.
+
+A token cap inside a channel or partial tool header returns typed truncation without fabricated calls. Completed tool headers with incomplete arguments retain argument-truncation facts. Output failures expose a typed malformed-envelope, decoding-mismatch, or output-bound classification; recovery policy remains outside the adapter. Native diagnostics retain parser phase, sampled position, and at most 16 control-token IDs and positions, excluding generated text and ordinary token IDs.
+
 ## Catalog authority
 
 Catalog entries declare stable provider kind, model id, display metadata, context/output limits, feature flags, driver profile, utility eligibility, and optional pricing/feed keys.
