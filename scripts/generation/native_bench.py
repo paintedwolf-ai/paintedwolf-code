@@ -33,7 +33,7 @@ class Client:
 
     def call(self, method, **fields):
         self.sequence += 1
-        payload = json.dumps({"version": 1, "id": self.sequence,
+        payload = json.dumps({"version": 2, "id": self.sequence,
                               "command": {"method": method, **fields}}).encode()
         if not 0 < len(payload) <= MAX_FRAME:
             raise ValueError("benchmark request exceeds frame bound")
@@ -61,6 +61,7 @@ def trial(client, specification, request_id, checkpoint):
     started = time.perf_counter()
     begun = client.call("begin", request={
         "request_id": request_id, "prompt_tokens": prompt,
+        "output_contract": {"allowed_tools": specification.get("allowed_tools", [])},
         "max_new_tokens": specification["generation_tokens"],
         "temperature": 0, "top_p": 1, "top_k": 0, "seed": 0,
         "checkpoint_tokens": checkpoint,

@@ -70,7 +70,7 @@ impl Settings {
             .map(|value| {
                 value
                     .as_u64()
-                    .filter(|n| *n < 262144)
+                    .filter(|n| crate::output_contract::terminal(*n as u32) && *n < 262144)
                     .map(|n| n as u32)
                     .ok_or_else(invalid)
             })

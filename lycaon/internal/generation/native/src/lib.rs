@@ -3,6 +3,7 @@ pub mod error;
 mod conversation;
 pub mod execution;
 pub mod inventory;
+pub mod output_contract;
 pub mod protocol;
 pub mod rendering;
 pub mod rendering_stream;

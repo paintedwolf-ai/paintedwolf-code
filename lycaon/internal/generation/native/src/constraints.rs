@@ -36,7 +36,7 @@ impl Grammars {
         Self::from_environment(env)
     }
 
-    fn from_environment(env: TokEnv) -> Result<Self> {
+    pub(crate) fn from_environment(env: TokEnv) -> Result<Self> {
         let mut factory = ParserFactory::new_simple(&env).map_err(invalid)?;
         factory.quiet();
         let limits = factory.limits_mut();

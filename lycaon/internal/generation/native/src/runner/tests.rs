@@ -50,9 +50,9 @@ fn hello_and_shutdown_do_not_load_or_probe_the_model() {
     )
     .unwrap();
     let input = frames(&[
-        json!({"version":1,"id":1,"command":{"method":"hello"}}),
-        json!({"version":1,"id":2,"command":{"method":"advance","request_id":1}}),
-        json!({"version":1,"id":3,"command":{"method":"shutdown"}}),
+        json!({"version":2,"id":1,"command":{"method":"hello"}}),
+        json!({"version":2,"id":2,"command":{"method":"advance","request_id":1}}),
+        json!({"version":2,"id":3,"command":{"method":"shutdown"}}),
     ]);
     let mut output = Vec::new();
     runner.serve(Cursor::new(input), &mut output).unwrap();
@@ -73,10 +73,10 @@ fn hello_and_shutdown_do_not_load_or_probe_the_model() {
 #[test]
 fn malformed_version_sequence_and_fields_close_the_connection() {
     for envelope in [
-        json!({"version":2,"id":1,"command":{"method":"hello"}}),
-        json!({"version":1,"id":0,"command":{"method":"hello"}}),
-        json!({"version":1,"id":1,"command":{"method":"hello","extra":true}}),
-        json!({"version":1,"id":1,"command":{"method":"hello"},"extra":true}),
+        json!({"version":1,"id":1,"command":{"method":"hello"}}),
+        json!({"version":2,"id":0,"command":{"method":"hello"}}),
+        json!({"version":2,"id":1,"command":{"method":"hello","extra":true}}),
+        json!({"version":2,"id":1,"command":{"method":"hello"},"extra":true}),
     ] {
         let mut runner =
             Runner::new(PathBuf::new(), identity(), |_: &Path, _, _, _| Ok(NoDevice)).unwrap();
@@ -86,7 +86,7 @@ fn malformed_version_sequence_and_fields_close_the_connection() {
                 .is_err()
         );
     }
-    let duplicate = json!({"version":1,"id":1,"command":{"method":"hello"}});
+    let duplicate = json!({"version":2,"id":1,"command":{"method":"hello"}});
     let mut runner =
         Runner::new(PathBuf::new(), identity(), |_: &Path, _, _, _| Ok(NoDevice)).unwrap();
     assert!(
@@ -109,8 +109,8 @@ fn resource_inspection_and_rejection_precede_model_loading() {
     .unwrap();
     let mut output = Vec::new();
     runner.serve(Cursor::new(frames(&[
-        json!({"version":1,"id":1,"command":{"method":"inspect","context_tokens":4096,"prefill_chunk":128}}),
-        json!({"version":1,"id":2,"command":{"method":"load","context_tokens":4096,"prefill_chunk":128,"device_budget_bytes":1,"host_budget_bytes":1}}),
+        json!({"version":2,"id":1,"command":{"method":"inspect","context_tokens":4096,"prefill_chunk":128}}),
+        json!({"version":2,"id":2,"command":{"method":"load","context_tokens":4096,"prefill_chunk":128,"device_budget_bytes":1,"host_budget_bytes":1}}),
     ])), &mut output).unwrap();
     let mut output = Cursor::new(output);
     let plan: Value =

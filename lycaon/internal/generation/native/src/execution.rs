@@ -13,6 +13,7 @@ pub struct Sampling {
     pub top_k: usize,
     pub rng: Rng,
     pub constraint: Option<llguidance::Matcher>,
+    pub envelope: crate::output_contract::Envelope,
 }
 
 impl Sampling {
@@ -22,13 +23,18 @@ impl Sampling {
             .as_mut()
             .map(|grammar| crate::constraints::mask_logits(grammar, logits))
             .transpose()?;
+        let candidates = self.envelope.candidates(masked.as_deref().unwrap_or(logits));
+        if !candidates.clone().any(|(_, value)| value.is_finite()) {
+            return Err(Error::Protocol("output constraint has no finite supported token".into()));
+        }
         let token = crate::sampler::sample(
-            masked.as_deref().unwrap_or(logits),
+            candidates,
             self.temperature,
             self.top_p,
             self.top_k,
             &mut self.rng,
         )?;
+        self.envelope.consume(token)?;
         if let Some(grammar) = &mut self.constraint {
             crate::constraints::consume(grammar, token)?;
         }
@@ -61,6 +67,7 @@ pub trait Backend {
 #[serde(deny_unknown_fields)]
 pub struct Begin {
     pub request_id: u64,
+    pub output_contract: crate::output_contract::Contract,
     pub prompt_tokens: Vec<u32>,
     pub max_new_tokens: usize,
     pub temperature: f32,
@@ -132,6 +139,7 @@ impl<B: Backend> Executor<B> {
         &mut self,
         request: Begin,
         constraint: Option<llguidance::Matcher>,
+        envelope: crate::output_contract::Envelope,
     ) -> Result<usize> {
         if self.active.is_some() || self.preparing.is_some() {
             return Err(Error::Protocol("a request is active".into()));
@@ -150,6 +158,7 @@ impl<B: Backend> Executor<B> {
                 .iter()
                 .chain(&request.stop_tokens)
                 .any(|id| *id >= 262144)
+            || request.stop_tokens.iter().any(|id| crate::output_contract::reserved(*id) && !crate::output_contract::terminal(*id))
             || request.stop_tokens.len() > 16
             || request.top_k > 262144
             || !request.temperature.is_finite()
@@ -167,6 +176,7 @@ impl<B: Backend> Executor<B> {
             top_k: request.top_k,
             rng: Rng::new(request.seed),
             constraint,
+            envelope,
         };
         self.active = Some(Generation {
             request,
@@ -247,10 +257,10 @@ impl<B: Backend> Executor<B> {
             }
             g.generated += 1;
             g.last_token = Some(next);
-            if self.eos.contains(&next) {
+            if g.sampling.envelope.complete() && self.eos.contains(&next) {
                 stop = Some(StopReason::Eos);
                 token = None;
-            } else if g.request.stop_tokens.contains(&next) {
+            } else if g.sampling.envelope.complete() && g.request.stop_tokens.contains(&next) {
                 stop = Some(StopReason::StopToken);
                 token = None;
             } else if g
