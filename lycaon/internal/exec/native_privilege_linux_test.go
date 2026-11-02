@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -51,6 +52,7 @@ func TestNativePrivilegePayload(t *testing.T) {
 	}
 	filename, err := linuxPayloadExecfn()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "read native kernel filename:", err)
 		os.Exit(5)
 	}
 	if err := os.WriteFile(os.Args[3], []byte("native privileged effect\n"), 0644); err != nil {
