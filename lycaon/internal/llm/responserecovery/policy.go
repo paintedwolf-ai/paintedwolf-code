@@ -42,10 +42,13 @@ func (s *State) Decide(f Facts) Decision {
 		return Decision{}
 	}
 	var protocol *failure.ProviderOutputProtocolError
-	if errors.As(f.Cause, &protocol) && protocol.Kind == failure.MalformedEnvelope {
-		return Decision{Code: "MODEL_RESPONSE_INVALID", ProviderID: protocol.ProviderID, Model: protocol.Model}
+	if errors.As(f.Cause, &protocol) {
+		if protocol != nil && protocol.Kind == failure.MalformedEnvelope {
+			return Decision{Code: "MODEL_RESPONSE_INVALID", ProviderID: protocol.ProviderID, Model: protocol.Model}
+		}
+		return Decision{}
 	}
-	if dropped, ok := failure.AsProviderToolCallUnparsed(f.Cause); ok && f.NativeTools && !f.StructuredOutput {
+	if dropped, ok := failure.AsProviderToolCallUnparsed(f.Cause); ok && dropped != nil && f.NativeTools && !f.StructuredOutput {
 		return Decision{Code: "TOOL_CALL_UNPARSED", ProviderID: dropped.ProviderID, Model: dropped.Model, Diagnostic: dropped.Diagnostic}
 	}
 	return Decision{}

@@ -51,7 +51,9 @@ func (l *modelTurn) recoverRejectedResponse(
 	}
 	st.output.recovery.Replaced()
 	st.output.rejection = reject
-	completion.SourceContext = source.ForCompletion(completion)
+	if source != nil {
+		completion.SourceContext = source.ForCompletion(completion)
+	}
 	st.output.sourceContext = completion.SourceContext
 	return completion, nil
 }

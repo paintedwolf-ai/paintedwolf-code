@@ -23,6 +23,8 @@ func TestEligibilityUsesFailureAndCommitFacts(t *testing.T) {
 		{"no remaining call", func(f *Facts) { f.RemainingCalls = 0 }, ""},
 		{"decode disagreement", func(f *Facts) { f.Cause = &failure.ProviderOutputProtocolError{Kind: failure.DecodeMismatch} }, ""},
 		{"output bound", func(f *Facts) { f.Cause = &failure.ProviderOutputProtocolError{Kind: failure.OutputBound} }, ""},
+		{"nil protocol", func(f *Facts) { f.Cause = (*failure.ProviderOutputProtocolError)(nil) }, ""},
+		{"nil dropped", func(f *Facts) { f.Cause = (*failure.ProviderToolCallUnparsedError)(nil); f.NativeTools = true }, ""},
 		{"unknown error", func(f *Facts) { f.Cause = errors.New("unexpected control") }, ""},
 		{"dropped native call", func(f *Facts) { f.Cause = dropped; f.NativeTools = true }, "TOOL_CALL_UNPARSED"},
 		{"dropped without tools", func(f *Facts) { f.Cause = dropped }, ""},
