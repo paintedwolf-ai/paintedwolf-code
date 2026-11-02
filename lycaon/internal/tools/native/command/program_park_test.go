@@ -256,7 +256,7 @@ func TestProgramParkParksAJobWaitWhenTheInlineBudgetEnds(t *testing.T) {
 	done := f.start(t, map[string]any{"command": "long_job & wait %1"})
 	<-program.Blocked
 	clock.Advance(command.DefaultParkThreshold - time.Second)
-	if f.parking.count() != 0 || clock.Pending() != 1 {
+	if f.parking.count() != 0 || clock.Pending() != 2 {
 		t.Fatalf("job wait parked early: %d parks, %d timers", f.parking.count(), clock.Pending())
 	}
 	clock.Advance(time.Second)

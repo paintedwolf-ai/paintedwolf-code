@@ -3,6 +3,8 @@ description: Plan markdown writes only under plan_write scope
 command_effects: [read_only, mutation]
 tools:
   command: sticky
+  command_output: sticky
+  command_stop: sticky
   complete_leg: sticky
   recall: sticky
   record_finding: sticky

@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -39,9 +39,9 @@ func TestCalibratedPruningPreservesCoordinatorRequirements(t *testing.T) {
 		omitted[id] = true
 	}
 	selection := promptunit.Selection{Host: promptunit.HostCoordinator,
-		Offered: map[string]bool{"edit": true, "update_progress": true}, Omitted: omitted}
+		Offered: map[string]bool{"edit": true, "update_progress": true, "command": true}, Omitted: omitted}
 	rendered := catalog.Rendered(selection)
-	for _, id := range []string{"coordinator-progress-procedure", "visual-show-the-design"} {
+	for _, id := range []string{"coordinator-progress-procedure", "visual-show-the-design", "runner-operating-procedure"} {
 		found := false
 		for _, units := range rendered {
 			for _, unit := range units {
@@ -52,7 +52,7 @@ func TestCalibratedPruningPreservesCoordinatorRequirements(t *testing.T) {
 			t.Fatalf("calibrated pruning removed required unit %q", id)
 		}
 	}
-	block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "pruned", "coordinator", []string{"edit", "update_progress"}, omitted)
+	block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "pruned", "coordinator", []string{"edit", "update_progress", "command"}, omitted)
 	testutil.FailErr(t, "render pruned procedures", err)
 	if !strings.Contains(block, "Store the checklist") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") {
 		t.Fatalf("pruned surface lost progress requirements: %s", block)
@@ -70,6 +70,8 @@ func TestToolProceduresFollowOfferedSchemas(t *testing.T) {
 			page  bool
 		}{
 			{name: "discovery", tools: []string{"request_tools", "summarize"}},
+			{name: "command controls", tools: []string{"command", "command_output", "command_stop"}, want: true, http: true},
+			{name: "loadable command controls", tools: []string{"command", "request_tools"}, want: true, http: true},
 			{name: "command", tools: []string{"command"}, want: true, http: true},
 			{name: "terminal", tools: []string{"terminal_open"}, want: true},
 			{name: "verification", tools: []string{"verify"}, want: true},
@@ -120,8 +122,11 @@ func assertOfferedRunnerProcedures(t *testing.T, offered []string, block string)
 		return false
 	}
 	for marker, want := range map[string]bool{
-		"command(verification: true)":                        has("command"),
-		"VERIFY_UNVERIFIABLE":                                has("verify"),
+		"running handle":              has("command"),
+		"`command_output`":            has("command") && (has("command_output") || has("request_tools")),
+		"`command_stop`":              has("command") && (has("command_stop") || has("request_tools")),
+		"command(verification: true)": has("command"),
+		"VERIFY_UNVERIFIABLE":         has("verify"),
 		"Static `capture_page` in `project_dir` mode needs": (has("command") || has("terminal_open") || has("verify")) && has("capture_page"),
 	} {
 		if strings.Contains(block, marker) != want {
@@ -129,8 +134,8 @@ func assertOfferedRunnerProcedures(t *testing.T, offered []string, block string)
 		}
 	}
 	for marker, capability := range map[string]toolcontract.Capability{
-		"`local_listen`":                            toolcontract.CapabilityLocalListen,
-		"`socket_paths`":                            toolcontract.CapabilitySocket,
+		"`local_listen`": toolcontract.CapabilityLocalListen,
+		"`socket_paths`": toolcontract.CapabilitySocket,
 		"Do not combine `direct_ip` with `socks_proxy`": toolcontract.CapabilityDirectIP,
 	} {
 		want := false

@@ -226,7 +226,7 @@ func TestProportionalTrustBundleSingleHome(t *testing.T) {
 	})
 	testutil.FailErr(t, "render verify-before-close", err)
 	for _, want := range []string{
-		"Checklist rows describe delivered work",
+		"Record required validation and UI capture as explicit checklist work",
 		"selected test command is a default check",
 		"Listening and connecting require separate grants",
 		"declared_command_match",
