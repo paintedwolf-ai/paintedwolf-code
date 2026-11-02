@@ -8,7 +8,11 @@
       "source_url": "https://github.com/ml-explore/mlx",
       "tag": "v0.32.4",
       "sha256": "391b1e41414cddebe7a4fb5c55bf193ea5edd70e26adcfb0e1d6a5e5e86ec34a",
-      "directory": "mlx-36969c094354086e15d2a327a9c50feb20b9cf11"
+      "directory": "mlx-36969c094354086e15d2a327a9c50feb20b9cf11",
+      "patch": {
+        "file": "e4b-d512.patch",
+        "sha256": "fecfebec1a9d246d4c8b7dac8eb3dc19e53f3abb06ec4989850099cb7917e56c"
+      }
     },
     {
       "name": "fmt",

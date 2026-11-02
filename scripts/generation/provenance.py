@@ -25,6 +25,8 @@ def source_identity(backend):
         for path in sorted((native.parent / "templates").glob("*.jinja")):
             sources["templates/" + path.name] = file_digest(path)
         sources["mlx_pin"] = file_digest(ROOT.parents[1] / "third_party/mlx/pin.json")
+        for path in sorted((ROOT.parents[1] / "third_party/mlx").glob("*.patch")):
+            sources["mlx-patch/" + path.name] = file_digest(path)
         vendor = ROOT.parents[1] / "lycaon/internal/decide/native/vendor/mlx-sys"
         for path in sorted(vendor.rglob("*")):
             if path.is_file() and (path.suffix in {".rs", ".c", ".cpp", ".h", ".hpp", ".cmake"} or path.name in {"Cargo.toml", "CMakeLists.txt"}):

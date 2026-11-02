@@ -17,7 +17,7 @@ class ProvenanceTests(unittest.TestCase):
                       "lycaon/internal/generation/native/Cargo.toml",
                       "lycaon/internal/generation/native/Cargo.lock",
                       "lycaon/internal/decide/native/vendor/mlx-sys/paintedwolf_inputs.rs",
-                      "third_party/mlx/pin.json", "scripts/toolchain/mlx-offline.cmake",
+                      "third_party/mlx/pin.json", "third_party/mlx/e4b-d512.patch", "scripts/toolchain/mlx-offline.cmake",
                       "scripts/generation/runtime.py", "scripts/generation/provenance.py",
                       "scripts/generation/sources.json", "scripts/generation/sources.py",
                       "scripts/generation/llama-reference/cache-cursor.patch",
