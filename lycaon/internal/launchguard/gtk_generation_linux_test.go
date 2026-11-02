@@ -4,10 +4,15 @@ package launchguard
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/packagegeneration"
 )
 
 // GTK fixtures use the sealed package catalog's exact helper closure, including
@@ -42,17 +47,16 @@ func stageGTKFixtureGeneration(dir string, binaries []string) error {
 	}
 	for _, template := range catalog.Families["deb"].Executables {
 		path := strings.ReplaceAll(template, "{multiarch}", catalog.Architectures[runtime.GOARCH].Multiarch)
-		object, err := openRootControlled(path, false)
-		if os.IsNotExist(err) {
+		resolved, err := packagegeneration.ResolveSystemExecutable(path)
+		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("GTK system helper %s: %w", path, err)
 		}
-		if err := object.Close(); err != nil {
-			return err
+		if !slices.Contains(policy.SystemExecutables, resolved) {
+			policy.SystemExecutables = append(policy.SystemExecutables, resolved)
 		}
-		policy.SystemExecutables = append(policy.SystemExecutables, path)
 	}
 	raw, err = json.Marshal(policy)
 	if err != nil {
