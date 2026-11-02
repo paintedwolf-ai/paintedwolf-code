@@ -62,7 +62,7 @@ func TestStagePreservesSourceAndCleanupFailures(t *testing.T) {
 	})
 	err := store.Stage(reader, want)
 	var pathErr *os.PathError
-	if !errors.Is(err, io.ErrUnexpectedEOF) || !errors.As(err, &pathErr) || pathErr.Op != "remove" {
+	if !errors.Is(err, io.ErrUnexpectedEOF) || !errors.As(err, &pathErr) || pathErr.Op != "removeat" {
 		t.Fatalf("missing source or cleanup cause: %v", err)
 	}
 	if store.Verified(want.Digest) {
@@ -75,11 +75,13 @@ func TestManifestEqualityIncludesPayloadAndIdentity(t *testing.T) {
 	second := Artifact{Name: "second", Digest: "two", Format: "tokenizer", Bytes: 2}
 	base := Manifest{Model: "model", Revision: "revision", Device: "cpu", Artifact: first, Files: []Artifact{first, second}}
 	changes := map[string]func(*Manifest){
-		"model":    func(m *Manifest) { m.Model = "other" },
-		"revision": func(m *Manifest) { m.Revision = "other" },
-		"device":   func(m *Manifest) { m.Device = "other" },
-		"payload":  func(m *Manifest) { m.Artifact.Bytes++ },
-		"files":    func(m *Manifest) { m.Files = []Artifact{second, first} },
+		"model":        func(m *Manifest) { m.Model = "other" },
+		"revision":     func(m *Manifest) { m.Revision = "other" },
+		"device":       func(m *Manifest) { m.Device = "other" },
+		"payload":      func(m *Manifest) { m.Artifact.Bytes++ },
+		"files":        func(m *Manifest) { m.Files = []Artifact{second, first} },
+		"missing file": func(m *Manifest) { m.Files = []Artifact{first} },
+		"file content": func(m *Manifest) { changed := second; changed.Digest = "other"; m.Files = []Artifact{first, changed} },
 	}
 	if !sameManifest(base, base) {
 		t.Fatal("identical manifest differs")
