@@ -1,6 +1,17 @@
 --- a/mlx/backend/metal/scaled_dot_product_attention.cpp
 +++ b/mlx/backend/metal/scaled_dot_product_attention.cpp
-@@ -1028,7 +1028,13 @@
+@@ -1016,9 +1016,7 @@
+           << query_sequence_length << " and GQA factor " << gqa_factor << ".";
+       return {false, msg.str()};
+     }
+-    // Head dim 512 uses the generic vector kernel, reading K/V is its main
+-    // cost. By default, use it only for one query, GQA factor 8, and no array
+-    // mask.
++    // Limit D512 to single-query paths without array masks.
+     if (query_head_dim == 512) {
+       int min_key_sequence_length = env::get_var("MLX_SDPA_D512_MIN_KL", 1024);
+       bool always = (min_key_sequence_length == 0);
+@@ -1028,7 +1026,13 @@
              << query_sequence_length << ".";
          return {false, msg.str()};
        }
