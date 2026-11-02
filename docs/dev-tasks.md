@@ -89,6 +89,11 @@ This runs that lane's complete setup and every shard, and retains its receipts.
 A selected-lane run publishes no required `check` status and does not qualify
 the whole source. Lane selection is refused for PR and merge-group events.
 
+For upgrade-corpus and applied platform diagnostics, dispatch the complete
+platform workflow with `gh workflow run platform-verification.yml --ref <branch>`.
+It retains both platform jobs and their evidence without
+publishing a required `check` result.
+
 ### Where credentials live in development
 
 Every credential value lives in `{configdir}/credential-vault.age`, one age-encrypted document shared by provider keys, web-research keys, MCP OAuth tokens, the secret fingerprint key, and managed secrets. Development builds keep the matching age identity in `{configdir}/.credential-vault-development-identity` at `0600`; tests use the same isolated path and never touch Keychain or ask for a password.
