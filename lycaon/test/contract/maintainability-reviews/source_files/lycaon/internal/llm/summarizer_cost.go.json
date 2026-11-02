@@ -4,12 +4,12 @@
   "kind": "runtime_service",
   "workstream": "local-runtime-capacity",
   "disposition": "retain",
-  "reason": "The 327 measured lines retain the utility call transaction: admission, call budget, lifecycle edges, and usage receipt settlement. This change only selects the shared runtime lane and adds no file growth. Keep these operations together while the focused cancellation, ownership and cost contracts hold.",
+  "reason": "Retain the utility call transaction within the inspected 327-line ceiling: admission, call budget, lifecycle edges, and usage receipt settlement. Shared admission now carries cancellation for dispensable title and compaction work through both blocking and streaming calls. Keep these operations together while the focused cancellation, ownership and cost contracts hold.",
   "reviewed_commit": "4e82db8f2bedb088a57af6e1f2f8047df88f9f32",
   "ceiling": 327,
   "boundaries": {
     "lycaon/internal/llm/summarizer_cost_test.go": "75fb68a114666e881c591e482cae3f8d1abf8989f414d29d6af1c0f4ff012b5e",
     "lycaon/internal/llm/utility_lane_occupancy_contract_test.go": "888c7d11f809b2db1b07b97a60b4c0e6801463d780cc3b7e6fd3bd800b2507a4",
-    "lycaon/internal/llm/runtime_capacity_test.go": "52885c0569c962d0b070440e95e6383fdbe25ca9704ca37edd2c714ba3ea7895"
+    "lycaon/internal/llm/runtime_capacity_test.go": "727c4f6e1f74844827dcba80bcdd6b51e5c91d695cf6e9117a0aba242f2ad613"
   }
 }

@@ -80,14 +80,7 @@ func (r *RegistrySummarizer) completeUtility(ctx context.Context, p modelcall.Pr
 	if observe && r != nil && r.Plane != nil && !r.Plane.allowLite() {
 		return nil, ErrLiteUnavailable
 	}
-	callCtx := ctx
-	var release func()
-	var laneErr error
-	if class == UtilityClassBackground && r.Plane != nil {
-		callCtx, release, laneErr = r.Plane.lanes.acquireBackground(ctx, modelcall.CapacityKey(p), p.Profile().UtilitySingleFlight)
-	} else {
-		release, laneErr = r.planeAcquire(ctx, p, class)
-	}
+	callCtx, release, laneErr := r.planeAcquire(ctx, p, class)
 	if laneErr != nil {
 		return nil, laneErr
 	}
@@ -165,11 +158,15 @@ func (r *RegistrySummarizer) endLaneCall(ctx context.Context, occupy bool, callI
 	})
 }
 
-func (r *RegistrySummarizer) planeAcquire(ctx context.Context, p modelcall.Provider, class UtilityClass) (func(), error) {
+func (r *RegistrySummarizer) planeAcquire(ctx context.Context, p modelcall.Provider, class UtilityClass) (context.Context, func(), error) {
 	if r == nil || r.Plane == nil {
-		return func() {}, nil
+		return ctx, func() {}, nil
 	}
-	return r.Plane.acquireLane(ctx, p, class)
+	if class == UtilityClassBackground || class == UtilityClassGift {
+		return r.Plane.lanes.acquireBackground(ctx, modelcall.CapacityKey(p), p.Profile().UtilitySingleFlight)
+	}
+	release, err := r.Plane.acquireLane(ctx, p, class)
+	return ctx, release, err
 }
 
 func providerIDOf(p modelcall.Provider) string {
