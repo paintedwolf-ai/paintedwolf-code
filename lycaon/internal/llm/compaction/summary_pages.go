@@ -15,7 +15,9 @@ import (
 // SummaryBudget resolves the utility model independently of the receiver.
 type SummaryBudget struct{ Input, Output int }
 
-type summaryBudgetSource interface{ SummaryBudget(context.Context) SummaryBudget }
+type summaryBudgetSource interface {
+	SummaryBudget(context.Context) SummaryBudget
+}
 
 func (c *SimpleCompactor) summaryBudget(ctx context.Context) SummaryBudget {
 	budget := SummaryBudget{Input: c.cfg.SummaryInputTokens, Output: c.cfg.SummaryOutputTokens}

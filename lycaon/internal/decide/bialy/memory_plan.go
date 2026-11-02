@@ -80,12 +80,12 @@ func PlanMemory(c Config, backend string, rows int) (MemoryPlan, error) {
 	return plan, nil
 }
 
-func readPlanConfig(path string, target any) error {
+func readPlanConfig(path string, target any) (resultErr error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
 	info, err := file.Stat()
 	if err != nil {
 		return err

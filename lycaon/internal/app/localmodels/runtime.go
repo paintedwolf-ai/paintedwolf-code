@@ -78,12 +78,12 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	}, nil
 }
 
-func readAuthority(path string) (*modelstore.Authority, error) {
+func readAuthority(path string) (authority *modelstore.Authority, resultErr error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
 	raw, err := io.ReadAll(io.LimitReader(file, modelstore.MaxAuthorityBytes+1))
 	if err != nil {
 		return nil, err
