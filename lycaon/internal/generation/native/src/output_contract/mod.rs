@@ -130,7 +130,20 @@ impl Envelope {
             State::ToolHeader(node) => Some(self.tools.children(node)),
             _ => None,
         };
+        let remaining = match &header {
+            Some(children) => children
+                .clone()
+                .filter(|(_, token)| (*token as usize) < logits.len())
+                .count(),
+            None => {
+                logits.len()
+                    - (0..logits.len().min(107))
+                        .filter(|token| !self.allowed(*token as u32))
+                        .count()
+            }
+        };
         Candidates {
+            remaining,
             envelope: self,
             logits,
             header,
@@ -214,12 +227,18 @@ pub struct Candidates<'a> {
     logits: &'a [f32],
     header: Option<Children<'a>>,
     next: usize,
+    remaining: usize,
 }
 
 impl Iterator for Candidates<'_> {
     type Item = (u32, f32);
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
         if let Some(header) = &mut self.header {
+            self.remaining -= 1;
             return header.find_map(|(_, token)| {
                 self.logits.get(token as usize).map(|value| (token, *value))
             });
@@ -227,13 +246,20 @@ impl Iterator for Candidates<'_> {
         while self.next < self.logits.len() {
             let index = self.next;
             self.next += 1;
-            if self.envelope.allowed(index as u32) {
+            if index > 106 || self.envelope.allowed(index as u32) {
+                self.remaining -= 1;
                 return Some((index as u32, self.logits[index]));
             }
         }
         None
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining, Some(self.remaining))
+    }
 }
+
+impl ExactSizeIterator for Candidates<'_> {}
 
 #[cfg(test)]
 mod tests;

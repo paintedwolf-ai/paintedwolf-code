@@ -57,10 +57,13 @@ fn every_state_excludes_unmatched_controls_and_open_envelope_eos() {
             envelope.consume(token).unwrap();
         }
         let logits = vec![0.0; 512];
-        let actual: Vec<_> = envelope
-            .candidates(&logits)
-            .map(|(token, _)| token)
-            .collect();
+        let mut candidates = envelope.candidates(&logits);
+        let mut actual = Vec::new();
+        while let Some((token, _)) = candidates.next() {
+            actual.push(token);
+            assert_eq!(candidates.len(), candidates.clone().count());
+        }
+        assert_eq!(candidates.len(), 0);
         for token in controls {
             assert_eq!(
                 actual.contains(&token),
@@ -232,4 +235,27 @@ fn rejected_header_diagnostics_do_not_expose_ordinary_tokens() {
     assert!(!ordinary.contains("123456"));
     let control = envelope.consume(101).unwrap_err().to_string();
     assert!(control.contains("control token 101"));
+}
+
+#[test]
+fn candidate_size_is_exact_for_short_vocabularies_and_sparse_headers() {
+    for prefix in [vec![], vec![100], vec![100, 200], vec![48], vec![48, 300]] {
+        let mut envelope = Envelope::fixture();
+        for token in prefix {
+            envelope.consume(token).unwrap();
+        }
+        for length in [0, 1, 53, 101, 200, 201, 300, 301, 512] {
+            let logits = vec![1.0; length];
+            let mut candidates = envelope.candidates(&logits);
+            assert_eq!(
+                candidates.size_hint(),
+                (candidates.clone().count(), Some(candidates.clone().count()))
+            );
+            while candidates.next().is_some() {
+                assert_eq!(candidates.len(), candidates.clone().count());
+            }
+            assert_eq!(candidates.len(), 0);
+            assert_eq!(candidates.next(), None);
+        }
+    }
 }
