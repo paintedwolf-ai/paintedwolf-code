@@ -50,6 +50,12 @@ func TestNativePrivilegeAuxvProbe(t *testing.T) {
 	if os.Getenv("PW_NATIVE_AUXV_PROBE") != "1" {
 		return
 	}
+	if os.Getenv("PW_NATIVE_AUXV_NONDUMPABLE") == "1" {
+		if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(3)
+		}
+	}
 	filename, err := linuxPayloadExecfn()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -66,7 +72,7 @@ func TestNativePrivilegeAuxvSeparatesKernelFilenameFromArgvZero(t *testing.T) {
 	testutil.FailErr(t, "locate native auxiliary-vector fixture", err)
 	command := osexec.CommandContext(t.Context(), self, "-test.run=^TestNativePrivilegeAuxvProbe$")
 	command.Args[0] = "synthetic-argument-zero"
-	command.Env = append(os.Environ(), "PW_NATIVE_AUXV_PROBE=1")
+	command.Env = append(os.Environ(), "PW_NATIVE_AUXV_PROBE=1", "PW_NATIVE_AUXV_NONDUMPABLE=1")
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("observe actual native auxiliary vector: %v\n%s", err, output)
