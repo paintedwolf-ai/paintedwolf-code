@@ -4,13 +4,16 @@ package exec
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
+	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
@@ -72,5 +75,33 @@ func TestNativePrivilegeAuxvSeparatesKernelFilenameFromArgvZero(t *testing.T) {
 	testutil.FailErr(t, "decode native kernel filename", json.Unmarshal(output, &filename))
 	if filename != self {
 		t.Fatalf("kernel executable filename: got %q, want %q", filename, self)
+	}
+}
+
+func TestNativePrivilegeUnprivilegedPayloadThroughAgentDoor(t *testing.T) {
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate native privilege payload", err)
+	root := t.TempDir()
+	baselineEffect := filepath.Join(root, "baseline-effect")
+	baseline := nativePrivilegeBaseline(t, self, root, baselineEffect)
+	boundary := &confine.Confinement{HostExecution: true}
+	identity := confine.EgressCommand{SessionID: "synthetic-session", ToolCallID: "unprivileged-payload", ProjectDir: root, Image: self}
+	lease, err := confine.BindAction(boundary, identity)
+	testutil.FailErr(t, "admit unprivileged native fixture", err)
+	defer lease.Close(context.Background())
+	plan := AgentLaunch(LaunchAgentCommand, "native fixture environment", boundary)
+	plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
+	effect := filepath.Join(root, "prepared-effect")
+	cmd, cleanup, err := PrepareCommand(t.Context(), self, privilegeArguments(effect), privilegeOptions(plan, root))
+	testutil.FailErr(t, "prepare unprivileged native fixture", err)
+	defer cleanup()
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	testutil.FailErr(t, "execute unprivileged native fixture", RunPrepared(t.Context(), cmd))
+	var facts nativePrivilegeFacts
+	testutil.FailErr(t, "decode unprivileged native facts", json.Unmarshal(output.Bytes(), &facts))
+	requirePrivilegePayload(t, facts, self, root, effect)
+	if facts.Credentials.EffectiveUID != baseline.Credentials.EffectiveUID || facts.Credentials.EffectiveGID != baseline.Credentials.EffectiveGID {
+		t.Fatal("unprivileged fixture changed effective identity")
 	}
 }

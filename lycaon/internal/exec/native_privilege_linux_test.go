@@ -101,7 +101,7 @@ func TestLinuxNativePrivilegeQualification(t *testing.T) {
 			plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
-			cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(preparedEffect), ExecOpts{Launch: plan, Dir: root, Env: privilegeEnvironment()})
+			cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(preparedEffect), privilegeOptions(plan, root))
 			testutil.FailErr(t, "prepare native privileged invocation", err)
 			defer cleanup()
 			var output bytes.Buffer
@@ -126,6 +126,10 @@ func privilegeArguments(effect string) []string {
 	return []string{"-test.run=^TestNativePrivilegePayload$", "literal argument", effect}
 }
 func privilegeEnvironment() []string { return []string{"PATH=/usr/bin:/bin", privilegePayloadMarker} }
+
+func privilegeOptions(plan LaunchPlan, root string) ExecOpts {
+	return ExecOpts{Launch: plan, Dir: root, InlineEnv: map[string]string{"PW_NATIVE_PRIVILEGE_PAYLOAD": "1"}}
+}
 
 func preparePrivilegedFixture(t *testing.T, kind, entry string) {
 	t.Helper()
@@ -223,7 +227,7 @@ func assertRevokedPrivilegeLaunch(t *testing.T, plan LaunchPlan, lease *confine.
 	effect := filepath.Join(root, "revoked-effect")
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(effect), ExecOpts{Launch: plan, Dir: root, Env: privilegeEnvironment()})
+	cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(effect), privilegeOptions(plan, root))
 	testutil.FailErr(t, "capture currently admitted privileged image", err)
 	defer cleanup()
 	var output bytes.Buffer
