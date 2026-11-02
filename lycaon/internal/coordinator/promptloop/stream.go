@@ -347,7 +347,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 			}
 		}
 		recovered, rerr := handleStreamCollectError(ctx, l, req, collected, collectErr, func() (*modelcall.Completion, error) {
-			return l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish)
+			return l.recoverRejectedResponse(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, maxIter-iterIndex-1)
 		}, callFailed)
 		return recovered, nil, rerr
 	}
@@ -377,7 +377,10 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextActionTools}, "", nil)
 	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextActionTools)
 	if st != nil {
-		st.output.rejection, st.output.droppedToolCallStreak = nil, 0
+		st.output.rejection = nil
+		if !blocked {
+			st.output.recovery.Accepted()
+		}
 	}
 	if blocked {
 		if st == nil || len(response.TextActionTools) == 0 || reject == nil || reject.Code() != "TOOL_ACTION_IN_TEXT" {

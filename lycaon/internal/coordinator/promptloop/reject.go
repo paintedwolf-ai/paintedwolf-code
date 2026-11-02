@@ -65,7 +65,7 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 		state := l.Context.Deps.ImplementSessionState(ctx, sess)
 		workersIdle = state.WorkersInFlight == 0
 	}
-	if invokeAllowed {
+	if invokeAllowed || (st != nil && st.output.recovery.Consecutive() > 0) {
 		reject = outputRejection
 	}
 
