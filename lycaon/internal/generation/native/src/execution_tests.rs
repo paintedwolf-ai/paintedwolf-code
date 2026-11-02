@@ -1,4 +1,5 @@
 use super::*;
+use crate::output_contract::Envelope;
 use std::collections::VecDeque;
 
 #[derive(Default)]
@@ -22,13 +23,15 @@ impl Backend for Fake {
         if self.fail {
             return Err(Error::Device("fixture".into()));
         }
-        sampling.map(|sampling| {
-            self.sampling_calls += 1;
-            let token = self.samples.pop_front().unwrap_or(20);
-            let mut logits = vec![f32::NEG_INFINITY; 512];
-            logits[token as usize] = 1.0;
-            sampling.sample(&logits)
-        }).transpose()
+        sampling
+            .map(|sampling| {
+                self.sampling_calls += 1;
+                let token = self.samples.pop_front().unwrap_or(20);
+                let mut logits = vec![f32::NEG_INFINITY; 512];
+                logits[token as usize] = 1.0;
+                sampling.sample(&logits)
+            })
+            .transpose()
     }
     fn reset(&mut self) -> Result<()> {
         self.tokens.clear();
@@ -54,11 +57,14 @@ impl Backend for Fake {
 #[test]
 fn unavailable_checkpoint_recomputes_the_complete_prompt() {
     let mut runner = executor();
-    runner.begin(request(1), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     while runner.advance(1).unwrap().stop_reason.is_none() {}
     runner.backend.missing_prefix = true;
     runner.backend.calls.clear();
-    assert_eq!(runner.begin(request(2), None, crate::output_contract::Envelope::fixture()).unwrap(), 0);
+    assert_eq!(
+        runner.begin(request(2), None, Envelope::fixture()).unwrap(),
+        0
+    );
     while runner.advance(2).unwrap().stop_reason.is_none() {}
     assert_eq!(runner.backend.calls[0], [2, 5]);
     assert_eq!(runner.backend.prefix, [2, 5, 6]);
@@ -87,7 +93,7 @@ fn executor() -> Executor<Fake> {
 #[test]
 fn steps_stop_at_checkpoint_and_chunk_boundaries() {
     let mut runner = executor();
-    runner.begin(request(1), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     for position in [2, 3, 5, 6] {
         assert_eq!(runner.advance(1).unwrap().processed_prompt_tokens, position);
     }
@@ -107,7 +113,7 @@ fn steps_stop_at_checkpoint_and_chunk_boundaries() {
 #[test]
 fn cancellation_keeps_only_the_exact_prefix_checkpoint() {
     let mut runner = executor();
-    runner.begin(request(1), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     runner.advance(1).unwrap();
     runner.advance(1).unwrap();
     runner.advance(1).unwrap();
@@ -116,14 +122,20 @@ fn cancellation_keeps_only_the_exact_prefix_checkpoint() {
         Some(StopReason::Canceled)
     );
     assert!(runner.backend.tokens.is_empty());
-    assert_eq!(runner.begin(request(2), None, crate::output_contract::Envelope::fixture()).unwrap(), 3);
+    assert_eq!(
+        runner.begin(request(2), None, Envelope::fixture()).unwrap(),
+        3
+    );
     assert_eq!(runner.backend.tokens, [2, 5, 6]);
     assert!(runner.cancel(1).is_err());
     assert_eq!(runner.advance(2).unwrap().processed_prompt_tokens, 5);
     runner.cancel(2).unwrap();
     let mut mismatch = request(3);
     mismatch.prompt_tokens[1] = 10;
-    assert_eq!(runner.begin(mismatch, None, crate::output_contract::Envelope::fixture()).unwrap(), 0);
+    assert_eq!(
+        runner.begin(mismatch, None, Envelope::fixture()).unwrap(),
+        0
+    );
     assert!(runner.backend.tokens.is_empty());
 }
 
@@ -134,7 +146,7 @@ fn terminal_markers_are_counted_without_being_emitted() {
         runner.backend.samples.push_back(sample);
         let mut request = request(1);
         request.stop_tokens = vec![30];
-        runner.begin(request, None, crate::output_contract::Envelope::fixture()).unwrap();
+        runner.begin(request, None, Envelope::fixture()).unwrap();
         for _ in 0..3 {
             assert!(runner.advance(1).unwrap().stop_reason.is_none());
         }
@@ -158,19 +170,19 @@ fn invalid_or_stale_requests_do_not_touch_the_backend() {
     ] {
         let mut invalid = request(1);
         mutate(&mut invalid);
-        assert!(runner.begin(invalid, None, crate::output_contract::Envelope::fixture()).is_err());
+        assert!(runner.begin(invalid, None, Envelope::fixture()).is_err());
     }
     assert!(runner.backend.calls.is_empty());
-    runner.begin(request(1), None, crate::output_contract::Envelope::fixture()).unwrap();
-    assert!(runner.begin(request(2), None, crate::output_contract::Envelope::fixture()).is_err());
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
+    assert!(runner.begin(request(2), None, Envelope::fixture()).is_err());
     runner.cancel(1).unwrap();
-    assert!(runner.begin(request(1), None, crate::output_contract::Envelope::fixture()).is_err());
+    assert!(runner.begin(request(1), None, Envelope::fixture()).is_err());
 }
 
 #[test]
 fn failed_step_discards_partial_state_and_checkpoint() {
     let mut runner = executor();
-    runner.begin(request(1), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     runner.advance(1).unwrap();
     runner.advance(1).unwrap();
     runner.backend.fail = true;
@@ -178,7 +190,10 @@ fn failed_step_discards_partial_state_and_checkpoint() {
     assert!(runner.backend.tokens.is_empty());
     assert!(runner.backend.prefix.is_empty());
     runner.backend.fail = false;
-    assert_eq!(runner.begin(request(2), None, crate::output_contract::Envelope::fixture()).unwrap(), 0);
+    assert_eq!(
+        runner.begin(request(2), None, Envelope::fixture()).unwrap(),
+        0
+    );
 }
 
 #[test]
@@ -191,13 +206,16 @@ fn full_admitted_prefix_reuses_only_identical_tokens() {
         request.max_new_tokens = 1;
         request
     };
-    runner.begin(make(1), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(make(1), None, Envelope::fixture()).unwrap();
     while runner.advance(1).unwrap().stop_reason.is_none() {}
     assert_eq!(runner.backend.prefix.len(), 8192);
     let calls = runner.backend.calls.len();
     let mut second = make(2);
     second.prompt_tokens[8192] = 7;
-    assert_eq!(runner.begin(second, None, crate::output_contract::Envelope::fixture()).unwrap(), 8192);
+    assert_eq!(
+        runner.begin(second, None, Envelope::fixture()).unwrap(),
+        8192
+    );
     assert_eq!(
         runner.advance(2).unwrap().stop_reason,
         Some(StopReason::MaxTokens)
@@ -205,53 +223,62 @@ fn full_admitted_prefix_reuses_only_identical_tokens() {
     assert_eq!(runner.backend.calls.len(), calls + 1);
     let mut changed = make(3);
     changed.prompt_tokens[6000] = 8;
-    assert_eq!(runner.begin(changed, None, crate::output_contract::Envelope::fixture()).unwrap(), 0);
+    assert_eq!(runner.begin(changed, None, Envelope::fixture()).unwrap(), 0);
 }
 
 #[test]
 fn unretained_request_preserves_the_conversation_checkpoint() {
     let mut runner = executor();
-    runner.begin(request(1), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     while runner.advance(1).unwrap().stop_reason.is_none() {}
     let mut utility = request(2);
     utility.prompt_tokens = vec![2, 12, 13];
     utility.checkpoint_tokens = 0;
-    assert_eq!(runner.begin(utility, None, crate::output_contract::Envelope::fixture()).unwrap(), 0);
+    assert_eq!(runner.begin(utility, None, Envelope::fixture()).unwrap(), 0);
     while runner.advance(2).unwrap().stop_reason.is_none() {}
     assert_eq!(runner.backend.prefix, [2, 5, 6]);
-    assert_eq!(runner.begin(request(3), None, crate::output_contract::Envelope::fixture()).unwrap(), 3);
+    assert_eq!(
+        runner.begin(request(3), None, Envelope::fixture()).unwrap(),
+        3
+    );
     assert_eq!(runner.backend.tokens, [2, 5, 6]);
 }
 
 #[test]
 fn continuation_reuses_only_tokens_already_evaluated() {
     let mut runner = executor();
-    runner.begin(request(1), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     while runner.advance(1).unwrap().stop_reason.is_none() {}
     let calls = runner.backend.calls.len();
     let mut next = request(2);
     next.prompt_tokens.extend([20, 20, 20, 106, 7]);
-    assert_eq!(runner.begin(next, None, crate::output_contract::Envelope::fixture()).unwrap(), 8);
+    assert_eq!(runner.begin(next, None, Envelope::fixture()).unwrap(), 8);
     assert_eq!(runner.advance(2).unwrap().reused_prefix_tokens, 8);
     assert_eq!(runner.backend.calls[calls], [20, 106]);
     runner.cancel(2).unwrap();
     assert!(runner.evaluated.is_empty());
-    assert_eq!(runner.begin(request(3), None, crate::output_contract::Envelope::fixture()).unwrap(), 3);
+    assert_eq!(
+        runner.begin(request(3), None, Envelope::fixture()).unwrap(),
+        3
+    );
 }
 
 #[test]
 fn changed_continuation_replays_from_the_stable_checkpoint() {
     let mut runner = executor();
-    runner.begin(request(1), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     while runner.advance(1).unwrap().stop_reason.is_none() {}
     let mut next = request(2);
     next.prompt_tokens.extend([21, 20, 20, 106, 7]);
-    assert_eq!(runner.begin(next, None, crate::output_contract::Envelope::fixture()).unwrap(), 3);
+    assert_eq!(runner.begin(next, None, Envelope::fixture()).unwrap(), 3);
     runner.cancel(2).unwrap();
     runner.clear_prefix().unwrap();
     assert!(runner.evaluated.is_empty());
     assert!(runner.backend.tokens.is_empty());
-    assert_eq!(runner.begin(request(3), None, crate::output_contract::Envelope::fixture()).unwrap(), 0);
+    assert_eq!(
+        runner.begin(request(3), None, Envelope::fixture()).unwrap(),
+        0
+    );
 }
 
 #[path = "execution/preparation_tests.rs"]
@@ -263,11 +290,13 @@ fn capped_headers_and_cancel_do_not_inject_tokens_or_leak_envelope_state() {
     runner.backend.samples.extend([100, 200]);
     let mut first = request(1);
     first.max_new_tokens = 2;
-    runner.begin(first, None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(first, None, Envelope::fixture()).unwrap();
     let mut output = Vec::new();
     loop {
         let step = runner.advance(1).unwrap();
-        if let Some(token) = step.token { output.push(token); }
+        if let Some(token) = step.token {
+            output.push(token);
+        }
         if let Some(reason) = step.stop_reason {
             assert_eq!(reason, StopReason::MaxTokens);
             break;
@@ -276,11 +305,11 @@ fn capped_headers_and_cancel_do_not_inject_tokens_or_leak_envelope_state() {
     assert_eq!(output, [100, 200]);
     assert_eq!(runner.backend.sampling_calls, 2);
     runner.backend.samples.push_back(100);
-    runner.begin(request(2), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(request(2), None, Envelope::fixture()).unwrap();
     while runner.advance(2).unwrap().generated_tokens == 0 {}
     runner.cancel(2).unwrap();
     runner.backend.samples.push_back(20);
-    runner.begin(request(3), None, crate::output_contract::Envelope::fixture()).unwrap();
+    runner.begin(request(3), None, Envelope::fixture()).unwrap();
     while runner.advance(3).unwrap().generated_tokens == 0 {}
     assert_eq!(runner.active.as_ref().unwrap().last_token, Some(20));
 }

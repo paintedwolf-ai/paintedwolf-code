@@ -1,8 +1,9 @@
 use super::cache::checkpoint::Checkpoint;
 use super::{Cache, Logits, Model};
+use crate::sampler::Sampling;
 use crate::{
     error::{Error, Result},
-    execution::{Backend, Sampling},
+    execution::Backend,
 };
 use mlx_rs::{Dtype, memory, ops::indexing::*};
 use std::path::Path;

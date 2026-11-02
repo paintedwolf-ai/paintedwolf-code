@@ -2,45 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::protocol::StopReason;
-use crate::sampler::Rng;
+use crate::sampler::{Rng, Sampling};
 
 mod cache;
 pub mod preparation;
-
-pub struct Sampling {
-    pub temperature: f32,
-    pub top_p: f32,
-    pub top_k: usize,
-    pub rng: Rng,
-    pub constraint: Option<llguidance::Matcher>,
-    pub envelope: crate::output_contract::Envelope,
-}
-
-impl Sampling {
-    pub fn sample(&mut self, logits: &[f32]) -> Result<u32> {
-        let masked = self
-            .constraint
-            .as_mut()
-            .map(|grammar| crate::constraints::mask_logits(grammar, logits))
-            .transpose()?;
-        let candidates = self.envelope.candidates(masked.as_deref().unwrap_or(logits));
-        if !candidates.clone().any(|(_, value)| value.is_finite()) {
-            return Err(Error::Protocol("output constraint has no finite supported token".into()));
-        }
-        let token = crate::sampler::sample(
-            candidates,
-            self.temperature,
-            self.top_p,
-            self.top_k,
-            &mut self.rng,
-        )?;
-        self.envelope.consume(token)?;
-        if let Some(grammar) = &mut self.constraint {
-            crate::constraints::consume(grammar, token)?;
-        }
-        Ok(token)
-    }
-}
 
 pub trait Backend {
     fn plan(
@@ -118,7 +83,7 @@ impl<B: Backend> Executor<B> {
             || !(1..=256).contains(&chunk)
             || eos.is_empty()
             || eos.len() > 16
-            || eos.iter().any(|id| *id >= 262144)
+            || eos.iter().any(|id| !crate::output_contract::terminal(*id))
         {
             return Err(Error::Capacity("invalid execution limits".into()));
         }
@@ -139,7 +104,7 @@ impl<B: Backend> Executor<B> {
         &mut self,
         request: Begin,
         constraint: Option<llguidance::Matcher>,
-        envelope: crate::output_contract::Envelope,
+        mut envelope: crate::output_contract::Envelope,
     ) -> Result<usize> {
         if self.active.is_some() || self.preparing.is_some() {
             return Err(Error::Protocol("a request is active".into()));
@@ -158,7 +123,9 @@ impl<B: Backend> Executor<B> {
                 .iter()
                 .chain(&request.stop_tokens)
                 .any(|id| *id >= 262144)
-            || request.stop_tokens.iter().any(|id| crate::output_contract::reserved(*id) && !crate::output_contract::terminal(*id))
+            || request.stop_tokens.iter().any(|id| {
+                crate::output_contract::reserved(*id) && !crate::output_contract::terminal(*id)
+            })
             || request.stop_tokens.len() > 16
             || request.top_k > 262144
             || !request.temperature.is_finite()
@@ -168,6 +135,7 @@ impl<B: Backend> Executor<B> {
         {
             return Err(Error::Protocol("invalid generation request".into()));
         }
+        envelope.set_terminals(self.eos.iter().chain(&request.stop_tokens).copied());
         let reused = self.resume_prefix(&request.prompt_tokens, false)?;
         self.last_request = request.request_id;
         let sampling = Sampling {

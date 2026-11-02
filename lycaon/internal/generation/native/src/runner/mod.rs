@@ -142,7 +142,10 @@ impl<B: Backend, F: FnMut(&Path, usize, usize, u64) -> Result<B>> Runner<B, F> {
                     }),
                     Command::Begin { request } => {
                         let request_id = request.request_id;
-                        let envelope = request.output_contract.compile(loaded.renderer.tokenizer(), request.output_schema.is_some())?;
+                        let envelope = request.output_contract.compile(
+                            loaded.renderer.tokenizer(),
+                            request.output_schema.is_some(),
+                        )?;
                         let constraint = if let Some(schema) = &request.output_schema {
                             if loaded.grammars.is_none() {
                                 loaded.grammars =
@@ -152,7 +155,8 @@ impl<B: Backend, F: FnMut(&Path, usize, usize, u64) -> Result<B>> Runner<B, F> {
                         } else {
                             None
                         };
-                        let reused_prefix_tokens = loaded.executor.begin(request, constraint, envelope)?;
+                        let reused_prefix_tokens =
+                            loaded.executor.begin(request, constraint, envelope)?;
                         loaded.decoding = Some(StreamingText::default());
                         Ok(Output::Begun {
                             request_id,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::execution::Sampling;
+use crate::sampler::Sampling;
 use serde_json::{Value, json};
 use std::io::Cursor;
 
@@ -139,4 +139,12 @@ fn preparation_wire_is_bounded_to_tokens_and_explicit_lifecycle() {
         assert!(serde_json::from_value::<Command>(json!({"method":method,"request_id":1})).is_ok());
         assert!(serde_json::from_value::<Command>(json!({"method":method})).is_err());
     }
+}
+
+#[test]
+fn begin_requires_explicit_output_contract() {
+    let mut command = json!({"method":"begin","request":{"request_id":1,"prompt_tokens":[2,200],"max_new_tokens":4,"temperature":0,"top_p":1,"top_k":0,"seed":0,"checkpoint_tokens":0}});
+    assert!(serde_json::from_value::<Command>(command.clone()).is_err());
+    command["request"]["output_contract"] = json!({"allowed_tools":[]});
+    assert!(serde_json::from_value::<Command>(command).is_ok());
 }

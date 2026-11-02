@@ -1,4 +1,5 @@
 mod attention_probe;
+mod sampling_probe;
 
 use mlx_rs::{memory, ops::indexing::*};
 use nativegen::mlx_engine::{Cache, Logits, Model, Result};
@@ -194,6 +195,12 @@ fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
 
 fn run() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--sampling-probe") {
+        if args.len() != 3 {
+            return Err("Expected sampling probe model directory".into());
+        }
+        return sampling_probe::run(Path::new(&args[2])).map_err(|error| error.into());
+    }
     if let Ok(path) = std::env::var("PW_REFERENCE_METALLIB") {
         mlx_rs::metal::set_metallib_path(path)?;
     }
