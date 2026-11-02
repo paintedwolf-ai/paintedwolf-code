@@ -11,4 +11,10 @@ def targets(scope):
 
 
 def commands(scope):
-    return [['./task', target, '--', '--compile-only'] for target in targets(scope)]
+    result = [['./task', target, '--', '--compile-only'] for target in targets(scope)]
+    if scope is None or scope['full'] or any(
+            path.endswith('.go') or path in {'lycaon/go.mod', 'lycaon/go.sum', 'Taskfile.yml', 'task'}
+            or path.startswith(('.github/', 'scripts/')) for path in scope['paths']):
+        result.extend(['./task', 'test:digest', '--', *packages, '-tags=' + tag, '-run=^$']
+                      for tag, packages in catalog()['ci']['ready'].get('compile_go', {}).items())
+    return result

@@ -47,7 +47,7 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "priority",
-                        "platform", "arguments", "preflight", "timing_source", "early_targets", "contract_first", "compile_targets", "runtime_engines"}:
+                        "platform", "arguments", "preflight", "timing_source", "early_targets", "contract_first", "compile_targets", "compile_go", "runtime_engines"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
@@ -66,6 +66,17 @@ def lanes():
                        or any(not isinstance(root, str) or not root.endswith('/') or '..' in root for root in roots)
                        for roots in compilation.values())):
             raise ValueError(f"CI lane {name} has invalid native compilation targets")
+        go_compilation = lane.get('compile_go', {})
+        if (not isinstance(go_compilation, dict) or 'compile_go' in lane and name != 'ready'
+                or any(not isinstance(tag, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', tag)
+                       or not isinstance(packages, list) or not packages
+                       or any(not isinstance(package, str) for package in packages)
+                       or len(set(packages)) != len(packages)
+                       or any(not isinstance(package, str) or not package.startswith('./')
+                              or '..' in package or not (ROOT / 'lycaon' / package).is_dir()
+                              for package in packages)
+                       for tag, packages in go_compilation.items())):
+            raise ValueError(f'CI lane {name} has invalid tagged Go compilation targets')
         early = lane.get("early_targets", [])
         if (not isinstance(early, list) or len(set(early)) != len(early)
                 or not set(early).issubset(lane["targets"])):
