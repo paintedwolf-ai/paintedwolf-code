@@ -231,6 +231,7 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 	if p == nil {
 		return nil
 	}
+	capacity := modelcall.ProviderCapacity(p)
 	var entry CatalogEntry
 	var hasEntry bool
 	if snapshot != nil {
@@ -259,7 +260,7 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 		}
 	}
 	p = &secretScreenedProvider{inner: p, destination: destination, screen: screen}
-	return &lifecycleProvider{Provider: &reasoningMarkerProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}}}
+	return &lifecycleProvider{Provider: &reasoningMarkerProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}}, capacity: capacity}
 }
 
 // Catalog exposes the underlying catalog.

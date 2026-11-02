@@ -84,7 +84,7 @@ func (r *RegistrySummarizer) completeUtility(ctx context.Context, p modelcall.Pr
 	var release func()
 	var laneErr error
 	if class == UtilityClassBackground && r.Plane != nil {
-		callCtx, release, laneErr = r.Plane.lanes.acquireBackground(ctx, p.ID(), p.Profile().UtilitySingleFlight)
+		callCtx, release, laneErr = r.Plane.lanes.acquireBackground(ctx, modelcall.CapacityKey(p), p.Profile().UtilitySingleFlight)
 	} else {
 		release, laneErr = r.planeAcquire(ctx, p, class)
 	}

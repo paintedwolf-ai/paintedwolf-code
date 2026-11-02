@@ -58,6 +58,7 @@ type loadedProcess struct {
 
 // Runtime retains one model process across provider snapshots and roles.
 type Runtime struct {
+	capacity          *modelcall.CapacityGroup
 	config            RuntimeConfig
 	lifetime          context.Context
 	cancel            context.CancelFunc
@@ -80,7 +81,7 @@ func NewRuntime(config RuntimeConfig) *Runtime {
 		config.PrefillChunk = 128
 	}
 	lifetime, cancel := context.WithCancel(context.Background())
-	runtime := &Runtime{config: config, lifetime: lifetime, cancel: cancel, gate: make(chan struct{}, 1)}
+	runtime := &Runtime{capacity: modelcall.NewCapacityGroup(), config: config, lifetime: lifetime, cancel: cancel, gate: make(chan struct{}, 1)}
 	runtime.window.Store(int64(config.ContextLimit))
 	runtime.gate <- struct{}{}
 	return runtime
@@ -100,6 +101,13 @@ func (p *Runtime) Warm(ctx context.Context, model string) error {
 }
 
 func (p *Provider) ID() string { return p.id }
+
+func (p *Provider) CapacityGroup() *modelcall.CapacityGroup {
+	if p.runtime == nil {
+		return nil
+	}
+	return p.runtime.capacity
+}
 
 func (p *Provider) Profile() providerprofile.Profile {
 	profile := providerprofile.LocalInference(providerprofile.Profile{
