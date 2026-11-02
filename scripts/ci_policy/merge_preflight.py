@@ -130,12 +130,14 @@ def previous_plan(event, run_id, targets):
             matching = [artifact for artifact in artifacts
                         if artifact.get('name') == f"receipt-verification-fast-ready-{run['run_attempt']}"
                         and not artifact.get('expired') and artifact['size_in_bytes'] <= HISTORY_LIMIT]
+            if not matching:
+                continue  # Metadata/setup failures have no ready execution cursor.
             if len(matching) != 1:
                 return {}
             raw = subprocess.check_output(['gh', 'api', f"{repository()}/actions/artifacts/{matching[0]['id']}/zip"], timeout=30)
             state = receipt_state(raw, run, targets)
             if state is None:
-                return {}
+                continue
             if merged is None:
                 merged = state
             else:

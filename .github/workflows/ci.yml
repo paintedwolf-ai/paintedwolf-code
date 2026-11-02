@@ -33,6 +33,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      statuses: read
     uses: ./.github/workflows/verification.yml
     with:
       profile: fast
@@ -55,11 +56,21 @@ jobs:
     if: inputs.profile == 'check'
     uses: ./.github/workflows/platform-verification.yml
 
+  platform-lanes:
+    if: inputs.profile == 'check'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: release
+      platform: true
+
   check:
     name: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check' }}
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}
-    needs: [fast, integration, platform]
+    needs: [fast, integration, platform, platform-lanes]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -67,7 +78,7 @@ jobs:
       - name: Require this tier's verification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}
+          SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform,platform-lanes', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}
           DRAFT: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"
 

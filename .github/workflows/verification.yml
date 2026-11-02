@@ -78,6 +78,7 @@ jobs:
             echo "package-timings=$(jq -c '.packages // {}' "$RUNNER_TEMP/timings.json")" >> "$GITHUB_OUTPUT"
           fi
           if [[ "$PROFILE" == fast && "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            PYTHONPATH=scripts python3 -m ci_policy.admission_metadata
             early="$(PYTHONPATH=scripts python3 -m ci_policy.merge_preflight)"
             echo "early-target=$early" >> "$GITHUB_OUTPUT"
           fi
@@ -154,6 +155,13 @@ jobs:
       # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy
         if: ${{ matrix.setup == 'shell' }}
+
+      - name: Check completed commit certification before execution
+        if: inputs.profile == 'fast' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.admission_metadata
 
       - name: Run verification
         timeout-minutes: ${{ matrix.minutes }}

@@ -41,6 +41,14 @@ class MergePreflightTests(unittest.TestCase):
         return {"failed_targets": list(failed), "passed_targets": [], "native_failed": [],
                 "native_passed": [], "contract_failures": []}
 
+    def test_landing_assertion_failures_block_even_without_changed_statements(self):
+        import coverage_changes as coverage
+        with patch.object(coverage.subprocess, 'call', return_value=1):
+            for run in (coverage.run_den, coverage.run_python):
+                findings, failed, _ = run(SimpleNamespace(paths=[]))
+                self.assertTrue(failed)
+                self.assertEqual(findings[0].level, 'error')
+
     def history_archive(self, record=None, failures=None):
         record = record if record is not None else {
             'lane': 'ready', 'shard': '', 'status': 'failed',
@@ -89,9 +97,30 @@ class MergePreflightTests(unittest.TestCase):
                         {'workflow_runs': [run]}, {'artifacts': artifacts}]), \
                     patch.object(preflight.subprocess, 'check_output', return_value=raw):
                 self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
+
         with patch.object(preflight, 'repository', return_value='repos/o/r'), \
                 patch.object(preflight, 'api', side_effect=OSError):
             self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
+
+    def test_metadata_only_failure_preserves_the_previous_execution_cursor(self):
+        event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a'}}}
+        previous = dict(id=20, workflow_id=10, event='pull_request', pull_requests=[{'number': 7}],
+                        run_attempt=2, status='completed', conclusion='failure')
+        artifact = dict(id=40, name='receipt-verification-fast-ready-2', expired=False, size_in_bytes=200)
+        empty = io.BytesIO()
+        with zipfile.ZipFile(empty, 'w') as archive:
+            archive.writestr('ci/failures.json', '[]')
+        for artifacts, payloads in (([], [self.history_archive()]),
+                                    ([{**artifact, 'id': 41}], [empty.getvalue(), self.history_archive()])):
+            with self.subTest(artifacts=artifacts), patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                    patch.object(preflight, 'api', side_effect=[{'workflow_id': 10},
+                        {'workflow_runs': [{**previous, 'id': 21}, previous]},
+                        {'artifacts': artifacts}, {'artifacts': [artifact]}]), \
+                    patch.object(preflight.subprocess, 'check_output', side_effect=payloads):
+                state = preflight.previous_plan(event, '30', ['build', 'budgets'])
+            self.assertEqual(state['failed_targets'], ['budgets'])
+            phases = preflight.ready_commands(['build', 'budgets'], [], state)
+            self.assertEqual(phases, [['./task', 'budgets'], ['./task', 'build']])
 
     def test_branch_query_finds_history_behind_unrelated_workflow_traffic(self):
         run = dict(id=20, workflow_id=10, event='pull_request', pull_requests=[{'number': 7}],
