@@ -25,8 +25,8 @@ func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 	if _, ok := workflow.On["push"]; ok {
 		t.Error("the merge queue verifies what lands on main; a push run would repeat it")
 	}
-	if workflow.Concurrency.Cancel.Value != "${{ github.event_name == 'pull_request' }}" {
-		t.Errorf("only a pull request's newer push may cancel its CI, got %q", workflow.Concurrency.Cancel.Value)
+	if workflow.Concurrency.Cancel.Value != "${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' && inputs.lane != '' }}" {
+		t.Errorf("new pushes and replacement diagnostics may cancel their own lane; full and protected gates must remain intact, got %q", workflow.Concurrency.Cancel.Value)
 	}
 	var pullRequest struct {
 		Paths       []string
