@@ -4,11 +4,12 @@
   "kind": "test_suite",
   "workstream": "protected-launch-fixtures",
   "disposition": "retain",
-  "reason": "The 381-line fixture owns privileged installation, exact-generation selection and cleanup for the launch tests. Its dispatcher keeps those transactions explicit; the new GTK case delegates package helper selection to a separate GTK fixture owner. Retain this common lifecycle fixture below 385 lines, supported by upgrade/lifetime and catalog-derived GTK contracts.",
-  "reviewed_commit": "affecf0306df6a26da46928092e772d1ad055aa3",
+  "reason": "Retain the measured 381-line protected-launch fixture within its existing 385-line ceiling. It owns privileged installation, exact-generation selection and cleanup. The GTK fixture now delegates physical helper resolution to the production generation trust owner; it retains catalog-derived helpers and all GTK/FUSE assertions. Root-controlled alias tests support that selection boundary; real hosted GTK qualification remains required.",
+  "reviewed_commit": "dc67f34672fb71113a899ce880edc1b3df532628",
   "ceiling": 385,
   "boundaries": {
     "lycaon/internal/launchguard/protected_launch_upgrade_linux_test.go": "b60dccc0ea4476a4fcdf64b04dade89c4dc5701a4c18bfb8dc04f4260337009f",
-    "lycaon/internal/launchguard/gtk_generation_linux_test.go": "2a36f304f93eb8e80dccb348eeaeed9f01155117fe1034772cdae045ce2dbe00"
+    "lycaon/internal/launchguard/gtk_generation_linux_test.go": "62e62f29cbb0e3f318eb1b806530970876b195eb19326af66e73e6f6e00b2331",
+    "lycaon/internal/packagegeneration/system_paths_linux_test.go": "53bd6a88296530b457de31002a6e929e9a99d9853aec1b23fbbf35da0b3604e5"
   }
 }

@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/packagegeneration/packagegeneration.layout",
+  "kind": "runtime_service",
+  "workstream": "protected-launch-generation",
+  "disposition": "retain",
+  "reason": "Retain the measured 511 receiver lines within 525. Installation, trusted physical helper selection, generation admission and lifetime share the explicit anchor and owner. Alias resolution is a read-only selection step under that same trust boundary. Negative alias/ancestry cases, installer deduplication and trust contracts preserve controlled code and exact generation identity.",
+  "reviewed_commit": "dc67f34672fb71113a899ce880edc1b3df532628",
+  "ceiling": 525,
+  "reviewed_shape": "c5e4a51252759990c9487660a82553f2f99a4475f476e99379380cc6269db4df",
+  "boundaries": {
+    "lycaon/internal/packagegeneration/system_paths_linux_test.go": "53bd6a88296530b457de31002a6e929e9a99d9853aec1b23fbbf35da0b3604e5",
+    "lycaon/internal/packagegeneration/install_test.go": "79293ec8937a1aaf312543e04df7be6533dfb5ad0a0b0ef0119a056b667e896b",
+    "lycaon/internal/packagegeneration/trust_test.go": "3297a4577e1eef99942cd11b34fc338ed5db8c01a745f9008eb2ab595bfc60fb"
+  }
+}
