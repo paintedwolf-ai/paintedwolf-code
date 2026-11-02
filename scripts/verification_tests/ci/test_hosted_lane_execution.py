@@ -117,8 +117,7 @@ class HostedExecutionTests(unittest.TestCase):
                 self.assertEqual(run.call_count, 3 if preflight_code == 0 else 1)
                 if preflight_code == 0:
                     self.assertEqual(run.call_args_list[1].args[0],
-                                     ['./task', 'test:digest', '--', './internal/exec',
-                                      './internal/osprocess', '-tags=nativeprivileges', '-run=^$'])
+                                     ['./task', 'test:confine:linux', '--', 'supervisor'])
                 record = json.loads((Path(directory) / "ci/run.json").read_text())
                 self.assertEqual(record["preflight"]["exit_code"], preflight_code)
                 self.assertIn("finished_at", record["preflight"])
