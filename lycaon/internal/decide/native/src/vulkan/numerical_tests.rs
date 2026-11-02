@@ -22,8 +22,7 @@ fn agrees(actual: Vec<f32>, expected: Vec<f32>, dtype: DType) {
     }
 }
 
-#[test]
-fn production_width_projection_matches_cpu() {
+fn projection_matches_cpu(flat: bool, transposed: bool) {
     let gpu = super::test_gpu();
     for columns in [768, 2304] {
         let input = values(2 * 17 * 768, 11);
@@ -48,10 +47,42 @@ fn production_width_projection_matches_cpu() {
                 TensorData::new(weights.clone(), [1, 768, columns]),
                 (&gpu.device, DType::F32),
             ).cast(dtype);
-            let actual = x.matmul(w).cast(DType::F32).into_data().try_to_vec::<f32>().unwrap();
+            let w = if transposed {
+                let stored: Vec<f32> = (0..columns)
+                    .flat_map(|column| (0..768).map(move |row| (row, column)))
+                    .map(|(row, column)| weights[row * columns + column])
+                    .collect();
+                Tensor::<3>::from_data(
+                    TensorData::new(stored, [1, columns, 768]),
+                    (&gpu.device, DType::F32),
+                ).cast(dtype).swap_dims(1, 2)
+            } else {
+                w
+            };
+            let output = if flat {
+                x.reshape([34, 768]).matmul(w.reshape([768, columns])).reshape([2, 17, columns])
+            } else {
+                x.matmul(w)
+            };
+            let actual = output.cast(DType::F32).into_data().try_to_vec::<f32>().unwrap();
             agrees(actual, expected.clone(), dtype);
         }
     }
+}
+
+#[test]
+fn production_width_projection_matches_cpu() {
+    projection_matches_cpu(false, false);
+}
+
+#[test]
+fn flat_projection_matches_cpu() {
+    projection_matches_cpu(true, false);
+}
+
+#[test]
+fn transposed_projection_matches_cpu() {
+    projection_matches_cpu(false, true);
 }
 
 #[test]
