@@ -94,10 +94,17 @@ func (r *StaticModelRouter) scopedPool(policy ModelPolicy) *PoolSelector {
 }
 
 func (r *StaticModelRouter) effectivePolicy() (ModelPolicy, error) {
+	var policy ModelPolicy
+	var err error
 	if len(r.projectDirs) > 0 {
-		return r.policy.GetForProjectRoots(r.projectDirs)
+		policy, err = r.policy.GetForProjectRoots(r.projectDirs)
+	} else {
+		policy, err = r.policy.Get(r.scope, r.projectDir)
 	}
-	return r.policy.Get(r.scope, r.projectDir)
+	if err != nil {
+		return ModelPolicy{}, err
+	}
+	return ResolveModelPolicy(policy, r.localDefault != nil && r.localDefault()), nil
 }
 
 // Coordinator returns the coordinator model selection.
