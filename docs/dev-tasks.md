@@ -83,6 +83,12 @@ below use `BUILD_DIR="$(python3 scripts/artifact_paths.py build)"`.
 
 The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
 
+For an isolated hosted diagnostic, select an existing catalog lane, for example
+`gh workflow run ci.yml --ref <branch> -f profile=check -f lane=runner`.
+This runs that lane's complete setup and every shard, and retains its receipts.
+A selected-lane run publishes no required `check` status and does not qualify
+the whole source. Lane selection is refused for PR and merge-group events.
+
 ### Where credentials live in development
 
 Every credential value lives in `{configdir}/credential-vault.age`, one age-encrypted document shared by provider keys, web-research keys, MCP OAuth tokens, the secret fingerprint key, and managed secrets. Development builds keep the matching age identity in `{configdir}/.credential-vault-development-identity` at `0600`; tests use the same isolated path and never touch Keychain or ask for a password.
