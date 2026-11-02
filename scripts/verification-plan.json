@@ -1016,12 +1016,13 @@
         "--",
         "./test/contract/..."
       ],
-      "compile_go": {
-        "nativeprivileges": [
-          "./internal/exec",
-          "./internal/osprocess"
+      "admission_checks": [
+        [
+          "test:confine:linux",
+          "--",
+          "supervisor"
         ]
-      }
+      ]
     },
     "ready-lint": {
       "targets": [

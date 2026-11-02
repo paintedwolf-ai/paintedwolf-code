@@ -876,7 +876,9 @@ Each admission job retains the existing three-hour execution allowance. This is 
 conservative ceiling, not a measured duration; broad-change hosted timings are
 required before tightening it or claiming an admission latency improvement.
 
-Native compilation and execution occur together in the landing native lane;
+The real Linux supervisor/native-privilege leg runs early in admission for Go
+or CI changes, preserving required credential, effect and revocation assertions.
+Native Rust compilation and execution occur together in the landing native lane;
 ready admission does not repeat a compile-only copy. Standalone compile-only
 selection remains available for focused local diagnosis.
 
@@ -1207,7 +1209,7 @@ failures and retries only demonstrated infrastructure faults. Product assertions
 and races remain blocking; there is no new automatic quarantine or assertion
 retry policy.
 
-##### Admission performance follow-up
+##### Admission and scale execution
 
 Ready admission runs focused Go tests and frontend seam canaries after repository
 contracts. Broad changed-statement coverage and native compilation execute at the

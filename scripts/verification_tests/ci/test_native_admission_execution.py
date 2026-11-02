@@ -10,8 +10,7 @@ class NativeAdmissionTests(unittest.TestCase):
         for scope in (None, {'full': True}, {'full': False, 'paths': ['lycaon-den/src-tauri/src/main.rs']},
                       {'full': False, 'paths': ['lycaon/internal/decide/native/src/main.rs']}):
             self.assertEqual(native_admission.targets(scope), [])
-            expected = [['./task', 'test:digest', '--', './internal/exec', './internal/osprocess',
-                         '-tags=nativeprivileges', '-run=^$']] if scope is None or scope['full'] else []
+            expected = [['./task', 'test:confine:linux', '--', 'supervisor']] if scope is None or scope['full'] else []
             self.assertEqual(native_admission.commands(scope), expected)
             rows = hosted_plan.matrix('fast', scope=scope)['include']
             self.assertEqual({row['lane']: row['setup'] for row in rows},

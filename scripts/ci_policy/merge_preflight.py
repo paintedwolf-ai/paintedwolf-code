@@ -15,7 +15,7 @@ from verification_execute import json_stream
 ROOT = Path(__file__).resolve().parents[2]
 HISTORY_LIMIT = 32 * 1024 * 1024
 MAX_HISTORY_RUNS = 5
-NATIVE_TARGETS = ('den:test:rust', 'decide:test', 'test:digest')
+NATIVE_TARGETS = ('den:test:rust', 'decide:test', 'test:confine:linux')
 
 
 def rotate_cursor(items, failed, passed=()):
@@ -64,7 +64,7 @@ def receipt_state(raw, run, targets):
         if failure.get('status') != 'failed':
             continue
         stage = failure.get('stage')
-        if stage in NATIVE_TARGETS:
+        if stage in NATIVE_TARGETS or stage == 'test:confine:linux-supervisor':
             continue
         subject = failure.get('subject', '')
         if stage == 'test:contract' and subject.startswith('github.com/lycaon/lycaon/test/contract'):

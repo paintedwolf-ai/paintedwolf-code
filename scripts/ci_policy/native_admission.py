@@ -1,4 +1,4 @@
-"""Select native compilation before a pull request enters integration."""
+"""Select early native checks before a pull request enters integration."""
 from verification_plan import catalog
 
 
@@ -15,6 +15,5 @@ def commands(scope):
     if scope is None or scope['full'] or any(
             path.endswith('.go') or path in {'lycaon/go.mod', 'lycaon/go.sum', 'Taskfile.yml', 'task'}
             or path.startswith(('.github/', 'scripts/')) for path in scope['paths']):
-        result.extend(['./task', 'test:digest', '--', *packages, '-tags=' + tag, '-run=^$']
-                      for tag, packages in catalog()['ci']['ready'].get('compile_go', {}).items())
+        result.extend(['./task', *check] for check in catalog()['ci']['ready'].get('admission_checks', []))
     return result
