@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -48,6 +49,9 @@ func TestDumpsFixtureProcess(t *testing.T) {
 }
 
 func inspectOwnTarget(mode string) int {
+	// Linux ties ptrace operations to the tracer's OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	target := exec.Command(os.Args[0], "-test.run=^TestDumpsFixtureProcess$")
 	target.Env = append(os.Environ(), dumpsFixtureEnv+"="+mode)
 	input, err := target.StdinPipe()
@@ -58,7 +62,11 @@ func inspectOwnTarget(mode string) int {
 	if err != nil || target.Start() != nil {
 		return 2
 	}
-	defer func() { _ = input.Close(); _ = target.Wait() }()
+	defer func() {
+		_ = input.Close()
+		_ = target.Process.Kill()
+		_ = target.Wait()
+	}()
 	if line, err := bufio.NewReader(output).ReadString('\n'); err != nil || line != "ready\n" {
 		fmt.Printf("target: %q %v\n", line, err)
 		return 2
@@ -74,8 +82,14 @@ func inspectOwnTarget(mode string) int {
 	attached := unix.PtraceAttach(pid) == nil
 	if attached {
 		var status unix.WaitStatus
-		_, _ = unix.Wait4(pid, &status, 0, nil)
-		_ = unix.PtraceDetach(pid)
+		if _, err := unix.Wait4(pid, &status, 0, nil); err != nil || !status.Stopped() {
+			fmt.Printf("wait for ptrace stop: %v (status %v)\n", err, status)
+			return 2
+		}
+		if err := unix.PtraceDetach(pid); err != nil {
+			fmt.Printf("detach target: %v\n", err)
+			return 2
+		}
 	}
 	fmt.Printf("ptrace: %v\n", attached)
 	return 0
