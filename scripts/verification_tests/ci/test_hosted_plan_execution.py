@@ -61,6 +61,21 @@ class HostedPlanTests(unittest.TestCase):
         self.assertIn("test:short", stages)
         self.assertGreaterEqual(analysis["minutes"], ci.lanes()["lint"]["minutes"])
 
+    def test_script_coverage_keeps_repository_tools_without_host_runtime_engines(self):
+        for profile in ('check', 'integration', 'nightly'):
+            rows = ci.matrix(profile)['include']
+            runner = next(row for row in rows if row['lane'] == 'runner')
+            self.assertFalse(runner['runtime_engines'])
+            self.assertTrue(runner['repository_tools'])
+            behavior = next(row for row in rows if row['lane'] == 'behavior')
+            self.assertTrue(behavior['runtime_engines'])
+        for targets in (['test:full'], ['scripts:coverage:changes', 'test:full']):
+            data = copy.deepcopy(planning.catalog())
+            data['ci']['runner']['targets'] = targets
+            with self.subTest(targets=targets), patch.object(ci, 'catalog', return_value=data):
+                with self.assertRaisesRegex(ValueError, 'requires runtime engines'):
+                    ci.lanes()
+
     def test_scale_cases_run_at_landing_and_release_and_partition_nightly_once(self):
         lanes = ci.lanes()
         expected = set(planning.catalog()['go']['test:stress']['packages'])

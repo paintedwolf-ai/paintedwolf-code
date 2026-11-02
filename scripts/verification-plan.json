@@ -1128,7 +1128,8 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "priority": "reject"
+      "priority": "reject",
+      "runtime_engines": false
     },
     "behavior": {
       "targets": [
