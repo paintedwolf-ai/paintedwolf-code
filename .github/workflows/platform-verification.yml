@@ -4,6 +4,12 @@ name: Platform verification
 # confinement, and macOS confinement, browser-boundary, and Git engine checks.
 # The free plan runs five macOS jobs at once, so only what needs macOS runs there.
 on:
+  workflow_dispatch:
+    inputs:
+      source-sha:
+        description: Exact source commit to diagnose; blank uses the selected ref
+        type: string
+        default: ''
   workflow_call:
     inputs:
       source-sha:

@@ -71,6 +71,11 @@ ci.yml --ref <branch> -f profile=check -f lane=runner`. This preserves setup and
 every shard but publishes no required `check` status. PR and merge-group events
 cannot select a partial lane.
 
+For upgrade-corpus and applied platform diagnostics, dispatch the complete
+platform workflow with `gh workflow run platform-verification.yml --ref <branch>`.
+It retains both architecture-specific platform jobs and their evidence without
+publishing a required `check` result.
+
 ### Where credentials live in development
 
 Every credential value lives in `{configdir}/credential-vault.age`, one age-encrypted document shared by provider keys, web-research keys, MCP OAuth tokens, the secret fingerprint key, and managed secrets. Development builds keep the matching age identity in `{configdir}/.credential-vault-development-identity` at `0600`; tests use the same isolated path and never touch Keychain or ask for a password.
