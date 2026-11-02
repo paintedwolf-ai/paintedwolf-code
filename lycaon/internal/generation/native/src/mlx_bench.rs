@@ -1,4 +1,5 @@
 mod attention_probe;
+mod projection_probe;
 
 use mlx_rs::{memory, ops::indexing::*};
 use nativegen::mlx_engine::{Cache, Logits, Model, Result};
@@ -196,6 +197,9 @@ fn run() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
     if let Ok(path) = std::env::var("PW_REFERENCE_METALLIB") {
         mlx_rs::metal::set_metallib_path(path)?;
+    }
+    if args.get(1).map(String::as_str) == Some("--projection-probe") && args.len() == 3 {
+        return projection_probe::run(Path::new(&args[2]));
     }
     if args.get(1).map(String::as_str) == Some("--attention-probe") {
         return attention_probe::run();

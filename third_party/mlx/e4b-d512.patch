@@ -1,46 +1,17 @@
 --- a/mlx/backend/metal/scaled_dot_product_attention.cpp
 +++ b/mlx/backend/metal/scaled_dot_product_attention.cpp
-@@ -513,7 +513,7 @@
-       : (bd < 128 ? 32 : 16);
- 
-   int wm = 4;
--  int wn = (bd == 256) ? 2 : 1;
-+  int wn = (bd == 256 || bd == 512) ? 2 : 1;
- 
-   const bool align_Q = (qL % bq) == 0;
-   const bool align_K = (kL % bk) == 0;
-@@ -961,8 +961,13 @@
- 
-   std::ostringstream msg;
-   if (query_sequence_length > 8) {
--    const bool supports_d512 = metal::is_nax_available() &&
--        (env::enable_tf32() || q.dtype() != float32);
-+    const bool e4b_d512 = !metal::is_nax_available() &&
-+        env::get_var("PW_MLX_E4B_D512", 0) != 0 && q.dtype() == float16 &&
-+        q.shape(0) == 1 && num_query_heads == 8 && num_kv_heads == 2 &&
-+        query_sequence_length <= 256 && do_causal && !has_arr_mask &&
-+        !output_logsumexp;
-+    const bool supports_d512 = e4b_d512 || (metal::is_nax_available() &&
-+        (env::enable_tf32() || q.dtype() != float32));
-     const bool asymmetric = query_head_dim == 96 && value_head_dim == 64;
-     const bool supported_head_dim = asymmetric ||
-         (query_head_dim == value_head_dim &&
---- a/mlx/backend/metal/kernels/steel/attn/kernels/steel_attention.h
-+++ b/mlx/backend/metal/kernels/steel/attn/kernels/steel_attention.h
-@@ -128,7 +128,7 @@
-   constexpr short tgp_mem_0 = (BK + padK) * (BD);
-   constexpr short tgp_mem_1 = BK * (BV + padV);
-   constexpr short tgp_mem_s = tgp_mem_0 > tgp_mem_1 ? tgp_mem_0 : tgp_mem_1;
--  constexpr bool q_in_registers = (WN == 2) && (BK == 32 || sizeof(T) == 4);
-+  constexpr bool q_in_registers = (WN == 2) && (BK == 32 || BD == 512 || sizeof(T) == 4);
-   constexpr short q_tgp_mem_s = q_in_registers ? 1 : BQ * (BD + padQ);
- 
-   threadgroup T Q_smem[q_tgp_mem_s];
---- a/mlx/backend/metal/kernels/steel/attn/kernels/steel_attention.metal
-+++ b/mlx/backend/metal/kernels/steel/attn/kernels/steel_attention.metal
-@@ -33,4 +33,5 @@
- instantiate_attn_helper(bfloat16, bfloat16_t, 32, 16, 256, 256, 4, 2);
- instantiate_attn_helper(bfloat16, bfloat16_t, 32, 32, 256, 256, 4, 2);
- instantiate_attn_helper(float32, float, 32, 16, 256, 256, 4, 2);
-+instantiate_attn_helper(float16, half, 32, 16, 512, 512, 4, 2);
- // clang-format on
+@@ -1028,7 +1028,13 @@
+             << query_sequence_length << ".";
+         return {false, msg.str()};
+       }
+-      if (!always && gqa_factor != 8) {
++      // E4B uses the two-pass kernel at this length, avoiding the
++      // single-pass D512 kernel's thread limit on smaller GPUs.
++      const bool e4b_two_pass = !metal::is_nax_available() &&
++          q.dtype() == float16 && q.shape(0) == 1 &&
++          num_query_heads == 8 && num_kv_heads == 2 &&
++          query_sequence_length == 1 && key_sequence_length >= 4096;
++      if (!always && gqa_factor != 8 && !e4b_two_pass) {
+         msg << "the vector attention kernel for head dim 512 defaults to "
+                "GQA factor 8; got GQA factor "
+             << gqa_factor << ".";

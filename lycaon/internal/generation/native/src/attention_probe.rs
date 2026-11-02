@@ -12,24 +12,6 @@ fn input(shape: &[i32], seed: u64) -> Result<Array> {
 }
 
 fn attention(q: &Array, k: &Array, v: &Array) -> Result<Array> {
-    if q.shape()[3] == 512 && q.shape()[2] > 8
-        && std::env::var("PW_MLX_E4B_D512").as_deref() == Ok("1")
-    {
-        let empty = unsafe { Array::from_ptr(mlx_sys::mlx_array_new()) };
-        let mut output = unsafe { mlx_sys::mlx_array_new() };
-        let status = unsafe {
-            mlx_sys::mlx_fast_scaled_dot_product_attention(
-                &mut output, q.as_ptr(), k.as_ptr(), v.as_ptr(), 1.0,
-                c"causal".as_ptr(), empty.as_ptr(), empty.as_ptr(), true,
-                mlx_rs::Stream::gpu().as_ptr(),
-            )
-        };
-        if status != 0 {
-            unsafe { mlx_sys::mlx_array_free(output) };
-            return Err("fused attention rejected the probe geometry".into());
-        }
-        return Ok(unsafe { Array::from_ptr(output) });
-    }
     Ok(fast::scaled_dot_product_attention(q, k, v, 1.0,
         (q.shape()[2] > 1).then_some(fast::ScaledDotProductAttentionMask::Causal), None)?)
 }
@@ -54,7 +36,7 @@ pub fn run() -> Result<()> {
     memory::set_cache_limit(128 << 20)?;
     for dimension in [256, 512] {
         for count in [1, 128] {
-            for length in [1024, 8192, 35269] {
+            for length in [1024, 4095, 4096, 4097, 8192, 35269] {
                 let q = input(&[1, count, 8, dimension], 1)?.transpose_axes(&[0, 2, 1, 3])?;
                 let keys = input(&[1, 2, 49152, dimension], 2)?;
                 let values = input(&[1, 2, 49152, dimension], 3)?;
@@ -64,6 +46,9 @@ pub fn run() -> Result<()> {
                 v.eval()?;
                 let expected = reference(&q, &k, &v)?;
                 expected.eval()?;
+                if unsafe { mlx_sys::mlx_synchronize(mlx_rs::Stream::gpu().as_ptr()) } != 0 {
+                    return Err("attention probe synchronization failed".into());
+                }
                 let active = memory::active_memory()?;
                 for tile in [0, 8] {
                 if tile != 0 && (dimension != 512 || count == 1) { continue; }
@@ -99,7 +84,7 @@ pub fn run() -> Result<()> {
                     }
                     println!("{}", json!({"query_tile":tile,"dimension":dimension,"queries":count,"keys":length,
                         "trial":trial,"warmup":trial==0,"seconds":seconds,"max_absolute_error":maximum_error,
-                        "active_input_bytes":active,"peak_bytes":peak,"e4b_d512":std::env::var("PW_MLX_E4B_D512").ok(),
+                        "active_input_bytes":active,"peak_bytes":peak,
                         "q_strides":q.strides(),"k_strides":k.strides(),
                         "d512_min_kl":std::env::var("MLX_SDPA_D512_MIN_KL").ok()}));
                 }
