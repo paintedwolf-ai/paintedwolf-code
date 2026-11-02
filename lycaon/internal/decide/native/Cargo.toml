@@ -49,3 +49,9 @@ strip = "none"
 
 [patch.crates-io]
 mlx-sys = { path = "vendor/mlx-sys" }
+
+wgpu = { path = "vendor/wgpu" }
+wgpu-core = { path = "vendor/wgpu-core" }
+wgpu-hal = { path = "vendor/wgpu-hal" }
+wgpu-types = { path = "vendor/wgpu-types" }
+cubecl-wgpu = { path = "vendor/cubecl-wgpu" }
