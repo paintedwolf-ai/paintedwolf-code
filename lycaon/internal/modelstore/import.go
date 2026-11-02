@@ -23,7 +23,7 @@ func (s *Store) Repair(ctx context.Context, signed SignedManifest, source func(c
 	return s.importRevision(ctx, signed, source, true)
 }
 
-func (s *Store) importRevision(ctx context.Context, signed SignedManifest, source func(context.Context, Artifact) (io.ReadCloser, error), repair bool) error {
+func (s *Store) importRevision(ctx context.Context, signed SignedManifest, source func(context.Context, Artifact) (io.ReadCloser, error), repair bool) (resultErr error) {
 	if err := validate(signed.Manifest); err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (s *Store) importRevision(ctx context.Context, signed SignedManifest, sourc
 	}
 	defer func() {
 		for _, f := range pins {
-			_ = f.Close()
+			resultErr = errors.Join(resultErr, f.Close())
 		}
 	}()
 	for _, a := range manifestFiles(signed.Manifest) {
@@ -98,11 +98,10 @@ func (s *Store) pinImport(m Manifest, repair bool) ([]*os.File, error) {
 		}
 		held, err := filelock.TryExclusive(f)
 		if err != nil || !held {
-			f.Close()
-			if err != nil {
-				return nil, err
+			if err == nil {
+				err = ErrRevisionInUse
 			}
-			return nil, ErrRevisionInUse
+			return nil, errors.Join(err, f.Close())
 		}
 		pins = append(pins, f)
 	}
@@ -118,7 +117,7 @@ func (s *Store) pinImport(m Manifest, repair bool) ([]*os.File, error) {
 		}
 		if err != nil {
 			for _, pin := range pins {
-				_ = pin.Close()
+				err = errors.Join(err, pin.Close())
 			}
 			return nil, err
 		}
@@ -127,12 +126,16 @@ func (s *Store) pinImport(m Manifest, repair bool) ([]*os.File, error) {
 }
 
 // Reuse requires content verification while the import holds its collection pin.
-func (s *Store) reusableArtifact(ctx context.Context, artifact Artifact) bool {
+func (s *Store) reusableArtifact(ctx context.Context, artifact Artifact) (reusable bool) {
 	root, err := s.openRoot()
 	if err != nil {
 		return false
 	}
-	defer root.Close()
+	defer func() {
+		if err := root.Close(); err != nil {
+			reusable = false
+		}
+	}()
 	name := s.artifactRel(artifact.Digest)
 	info, err := root.Lstat(name)
 	if err != nil || info.Mode().Perm()&0o222 != 0 {

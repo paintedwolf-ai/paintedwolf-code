@@ -8,7 +8,7 @@ import (
 )
 
 // VerifyBundle checks a packaged seed without creating or changing a store.
-func VerifyBundle(ctx context.Context, directory string, authority *Authority, target Slot) (SignedManifest, error) {
+func VerifyBundle(ctx context.Context, directory string, authority *Authority, target Slot) (result SignedManifest, resultErr error) {
 	var empty SignedManifest
 	if err := ctx.Err(); err != nil {
 		return empty, err
@@ -20,7 +20,7 @@ func VerifyBundle(ctx context.Context, directory string, authority *Authority, t
 	if err != nil {
 		return empty, err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	signed, err := readBundleManifest(root)
 	if err != nil {
 		return empty, err

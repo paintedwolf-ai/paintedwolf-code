@@ -1,6 +1,7 @@
 package modelstore
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -100,5 +101,47 @@ func TestManifestEqualityIncludesPayloadAndIdentity(t *testing.T) {
 	empty.Files = []Artifact{}
 	if !sameManifest(base, empty) {
 		t.Fatal("omitted supplementary files differ")
+	}
+}
+
+type failingPayloadCloser struct {
+	io.Reader
+	failure error
+}
+
+func (r failingPayloadCloser) Close() error { return r.failure }
+
+func TestImportCloseFailurePreservesActivationAndReleasesPins(t *testing.T) {
+	for _, readFails := range []bool{false, true} {
+		name := "close"
+		if readFails {
+			name = "read and close"
+		}
+		t.Run(name, func(t *testing.T) {
+			store := newStore(t)
+			publish(t, store, "working", "working")
+			artifact := testArtifact(t, []byte("replacement"))
+			manifest := Manifest{Model: "e4b", Device: "mlx", Revision: "replacement", Artifact: artifact}
+			closeErr := errors.New("payload close failed")
+			var reader io.Reader = strings.NewReader("replacement")
+			if readFails {
+				reader = payloadReaderFunc(func([]byte) (int, error) { return 0, io.ErrUnexpectedEOF })
+			}
+			err := store.Import(context.Background(), SignedManifest{Manifest: manifest}, func(context.Context, Artifact) (io.ReadCloser, error) {
+				return failingPayloadCloser{Reader: reader, failure: closeErr}, nil
+			})
+			if !errors.Is(err, closeErr) || (readFails && !errors.Is(err, io.ErrUnexpectedEOF)) {
+				t.Fatalf("import causes: %v", err)
+			}
+			state := store.Status("e4b", "mlx")
+			if state.Active == nil || state.Active.Revision != "working" {
+				t.Fatalf("active revision changed: %+v", state)
+			}
+			_, err = store.Collect()
+			testutil.FailErr(t, "collect failed import", err)
+			if store.Verified(artifact.Digest) {
+				t.Fatal("failed import retained a collection pin")
+			}
+		})
 	}
 }
