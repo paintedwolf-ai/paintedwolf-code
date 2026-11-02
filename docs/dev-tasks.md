@@ -90,7 +90,7 @@ A selected-lane run publishes no required `check` status and does not qualify
 the whole source. Lane selection is refused for PR and merge-group events.
 
 For upgrade-corpus and applied platform diagnostics, dispatch the complete
-platform workflow with `gh workflow run platform-verification.yml --ref <branch>`.
+platform workflow with `gh workflow run ci.yml --ref <branch> -f profile=check -f lane=platform`.
 It retains both platform jobs and their evidence without
 publishing a required `check` result.
 

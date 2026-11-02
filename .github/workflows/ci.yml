@@ -45,7 +45,7 @@ jobs:
       affected: ${{ github.event_name == 'pull_request' }}
 
   integration:
-    if: ${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' }}
+    if: ${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' && inputs.lane != 'platform' }}
     # Its jobs cancel their own run once the merge queue removes the group.
     permissions:
       contents: read
@@ -59,7 +59,7 @@ jobs:
       affected: ${{ github.event_name == 'merge_group' || (inputs.profile == 'integration' && inputs.lane == '') }}
 
   platform:
-    if: inputs.profile == 'check' && inputs.lane == ''
+    if: inputs.profile == 'check' && (inputs.lane == '' || inputs.lane == 'platform')
     uses: ./.github/workflows/platform-verification.yml
 
   platform-lanes:
