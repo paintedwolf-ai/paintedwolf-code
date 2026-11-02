@@ -852,10 +852,14 @@ clients that require manual installation.
 
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
-`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-job, `ready`: it first runs the complete repository contract tree, then compiles
-the host and runs `lint:full`, size budgets, affected short Go tests, comment checks,
+`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier runs two jobs
+within its declared two-runner budget. `ready-lint` runs complete `lint:full`
+analysis while `ready` first runs the complete repository contract tree, then compiles
+the host and runs size budgets, affected short Go tests, comment checks,
 test failure-message checks, documentation links, Den typecheck, Den lint, and frontend seam canaries.
+The required aggregate waits for both jobs. Full lint has its own analysis setup;
+it does not repeat admission contracts. Catalog validation requires each fast
+assertion stage exactly once across the jobs.
 Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests.
 Admission uses `test:contract -- ./test/contract/...`
 without a test-name filter. Failure or interruption stops the lane before its
@@ -868,8 +872,7 @@ once against the checkout, sharing its compiler cache. It also checks the
 migration identities of every stable release tag; release CI adds the published
 preview releases it reads from GitHub.
 
-The admission execution budget is three hours, allowing the integration lint lane's existing
-ninety-minute allowance plus contracts and remaining checks. This is a
+Each admission job retains the existing three-hour execution allowance. This is a
 conservative ceiling, not a measured duration; broad-change hosted timings are
 required before tightening it or claiming an admission latency improvement.
 

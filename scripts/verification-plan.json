@@ -996,7 +996,6 @@
       "compile_targets": {},
       "targets": [
         "build",
-        "lint:full",
         "budgets",
         "den:typecheck",
         "den:lint",
@@ -1017,6 +1016,17 @@
         "--",
         "./test/contract/..."
       ]
+    },
+    "ready-lint": {
+      "targets": [
+        "lint:full"
+      ],
+      "minutes": 180,
+      "profiles": [
+        "fast"
+      ],
+      "suite": "all",
+      "setup": "analysis"
     },
     "limits": {
       "targets": [
@@ -1386,14 +1396,14 @@
     "runners": 20,
     "macos_runners": 5,
     "max_parallel": {
-      "fast": 1,
+      "fast": 2,
       "integration": 4,
       "check": 3,
       "nightly": 2,
       "release": 1
     },
     "footprints": {
-      "ci.yml": 1,
+      "ci.yml": 2,
       "qualification.yml": 3,
       "build-caches.yml": 1,
       "nightly.yml": 2,

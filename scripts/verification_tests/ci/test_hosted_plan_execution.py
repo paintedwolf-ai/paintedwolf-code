@@ -34,16 +34,21 @@ class HostedPlanTests(unittest.TestCase):
         # Qualification runs the check gate, then release's platform lanes beside the platform gates.
         self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
-    def test_ready_tier_is_one_runner_with_contracts_and_early_diagnostics(self):
+    def test_ready_tier_runs_complete_lint_beside_contracts_and_early_diagnostics(self):
         rows = ci.matrix("fast")["include"]
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(ci.max_parallel("fast"), 1)
-        stages = [stage["name"] for stage in planning.expand(ci.lanes()[rows[0]["lane"]]["targets"])]
+        self.assertEqual({row['lane'] for row in rows}, {'ready', 'ready-lint'})
+        self.assertEqual(ci.max_parallel("fast"), 2)
+        stages = [stage["name"] for row in rows
+                  for stage in planning.expand(ci.lanes()[row["lane"]]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
         self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast",
                                        "test:short",
                                        "comments:check", "test:fail-messages:check", "docs:links"})
         self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--", "./test/contract/..."])
+        analysis = next(row for row in rows if row['lane'] == 'ready-lint')
+        self.assertEqual(analysis['setup'], 'analysis')
+        self.assertEqual(ci.lanes()['ready-lint']['targets'], ['lint:full'])
+        self.assertNotIn('preflight', ci.lanes()['ready-lint'])
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
         self.assertFalse(set(stages) & {"coverage:changes", "den:coverage:changes", "scripts:coverage:changes"})
@@ -54,7 +59,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertNotIn("den:test", landing)
         self.assertNotIn("test:runner", landing)
         self.assertIn("test:short", stages)
-        self.assertGreaterEqual(rows[0]["minutes"], ci.lanes()["lint"]["minutes"])
+        self.assertGreaterEqual(analysis["minutes"], ci.lanes()["lint"]["minutes"])
 
     def test_scale_cases_run_at_landing_and_release_and_partition_nightly_once(self):
         lanes = ci.lanes()
@@ -74,8 +79,24 @@ class HostedPlanTests(unittest.TestCase):
         with patch.object(ci, 'catalog', return_value=data), self.assertRaisesRegex(ValueError, 'stress partition'):
             ci.lanes()
 
+    def test_parallel_analysis_cannot_replace_the_admission_contracts(self):
+        for change in ('contracts', 'scope', 'setup', 'preflight'):
+            data = copy.deepcopy(planning.catalog())
+            analysis = data['ci']['ready-lint']
+            if change == 'contracts':
+                del data['ci']['ready']['preflight']
+            elif change == 'scope':
+                analysis['targets'] = ['lint:fast']
+            elif change == 'setup':
+                analysis['setup'] = 'verification'
+            else:
+                analysis['preflight'] = ['test:contract', '--', './test/contract/...']
+            with self.subTest(change=change), patch.object(ci, 'catalog', return_value=data):
+                with self.assertRaises(ValueError):
+                    ci.matrix('fast')
+
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
-        for mutation in ("missing", "fast-outside", "fast-twice", "duplicate", "unknown", "unbounded"):
+        for mutation in ("missing", "fast-outside", "fast-twice", "fast-missing", "duplicate", "unknown", "unbounded"):
             with self.subTest(mutation=mutation):
                 data = copy.deepcopy(planning.catalog())
                 if mutation == "missing":
@@ -84,6 +105,8 @@ class HostedPlanTests(unittest.TestCase):
                     data["ci"]["ready"]["targets"].append("test:full")
                 elif mutation == "fast-twice":
                     data["ci"]["ready"]["targets"].append("budgets")
+                elif mutation == 'fast-missing':
+                    del data['ci']['ready-lint']
                 elif mutation == "duplicate":
                     data["ci"]["duplicate"] = data["ci"]["frontend"]
                 elif mutation == "unknown":
@@ -125,7 +148,7 @@ class HostedPlanTests(unittest.TestCase):
         data = copy.deepcopy(planning.catalog())
         data["ci"]["ready"]["preflight"] = ["test:contract", "--", "./test/contract/evidence"]
         with patch.object(ci, "catalog", return_value=data):
-            self.assertEqual(len(ci.matrix("fast")["include"]), 1)
+            self.assertEqual(len(ci.matrix("fast")["include"]), 2)
 
     def test_nightly_selection_includes_only_requested_and_unconditional_jobs(self):
         lanes = ci.lanes()
