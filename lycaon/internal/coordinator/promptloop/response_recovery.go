@@ -23,6 +23,7 @@ func (l *modelTurn) recoverRejectedResponse(
 	if st == nil {
 		return nil, cause
 	}
+	// Collection precedes dispatch of every call in this response.
 	decision := st.output.recovery.Decide(responserecovery.Facts{
 		Cause: cause, Commit: responserecovery.ResponseUncommitted,
 		Canceled: ctx.Err() != nil, RemainingCalls: remainingCalls,

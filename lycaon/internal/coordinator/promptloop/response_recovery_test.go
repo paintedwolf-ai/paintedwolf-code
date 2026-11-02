@@ -17,14 +17,23 @@ import (
 
 type recoverySequence struct {
 	modelcall.LLMClient
-	failures []error
-	requests []modelcall.CompletionRequest
+	failures      []error
+	requests      []modelcall.CompletionRequest
+	completedCall bool
 }
 
 func (c *recoverySequence) Stream(_ context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
 	index := len(c.requests)
 	c.requests = append(c.requests, req)
 	ch := make(chan modelcall.StreamChunk, 1)
+	if c.completedCall && index == 0 {
+		ch <- modelcall.StreamChunk{ToolCalls: []api.ToolCall{{ID: "completed", Name: "read", Args: map[string]any{}}}, Done: true}
+		close(ch)
+		return ch, nil
+	}
+	if c.completedCall {
+		index--
+	}
 	if index < len(c.failures) {
 		ch <- modelcall.StreamChunk{Content: "rejected draft", ToolCalls: []api.ToolCall{{ID: "never", Name: "read"}}, Err: c.failures[index], Done: true}
 	} else {
@@ -39,13 +48,15 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 	malformed := &failure.ProviderOutputProtocolError{Kind: failure.MalformedEnvelope, ProviderID: "p", Model: "m"}
 	dropped := &failure.ProviderToolCallUnparsedError{ProviderID: "p", Model: "m"}
 	for _, tc := range []struct {
-		name     string
-		failures []error
-		wantErr  bool
+		name          string
+		failures      []error
+		wantErr       bool
+		completedCall bool
 	}{
-		{"protocol", []error{malformed}, false},
-		{"mixed", []error{malformed, dropped}, false},
-		{"exhausted", []error{malformed, dropped, malformed}, true},
+		{"protocol", []error{malformed}, false, false},
+		{"mixed", []error{malformed, dropped}, false, false},
+		{"exhausted", []error{malformed, dropped, malformed}, true, false},
+		{"committed call", []error{malformed}, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
@@ -54,7 +65,7 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 				executed++
 				return "body", nil
 			}))
-			client := &recoverySequence{failures: tc.failures}
+			client := &recoverySequence{failures: tc.failures, completedCall: tc.completedCall}
 			var codes []string
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Context: ContextDeps{Tools: reg, Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() }, BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
@@ -82,7 +93,7 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 					t.Fatalf("result=%+v", result)
 				}
 			}
-			if executed != 0 {
+			if executed != boolInt(tc.completedCall) {
 				t.Fatalf("rejected calls executed %d", executed)
 			}
 			if len(codes) != min(len(tc.failures), 2) {
@@ -94,7 +105,7 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 					if m.Content == "Prior completed work" {
 						found = true
 					}
-					if m.ID == "never" || len(m.ToolCalls) > 0 {
+					if m.ID == "never" || (len(m.ToolCalls) > 0 && m.ToolCalls[0].ID != "completed") {
 						t.Fatal("rejected call reached retry history")
 					}
 				}
@@ -104,7 +115,7 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 				if req.Model != client.requests[0].Model || req.Think != client.requests[0].Think {
 					t.Fatal("request model controls changed")
 				}
-				if i > 0 {
+				if i > boolInt(tc.completedCall) {
 					feedback := false
 					for _, m := range req.Messages {
 						feedback = feedback || strings.Contains(m.Content, "Code: MODEL_RESPONSE_INVALID") || strings.Contains(m.Content, "Code: TOOL_CALL_UNPARSED")
@@ -113,6 +124,47 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 						t.Fatal("missing repair feedback")
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestResponseRecoveryPreservesModesAndCancellation(t *testing.T) {
+	pipeline := outputPolicyPipeline(t)
+	cause := &failure.ProviderOutputProtocolError{Kind: failure.MalformedEnvelope, ProviderID: "same", Model: "same-model"}
+	for _, tc := range []struct {
+		name      string
+		schema    bool
+		canceled  bool
+		remaining int
+	}{
+		{"no tools", false, false, 1}, {"schema", true, false, 1}, {"stopped", false, true, 1}, {"final admission", false, false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.canceled {
+				cancel()
+			}
+			req := modelcall.CompletionRequest{Model: "same-model"}
+			if tc.schema {
+				req.ResponseFormat = &modelcall.ResponseFormat{}
+			}
+			st := &promptLoopTurnState{}
+			turn := &modelTurn{Closeout: &turnCloseout{Deps: CloseoutDeps{EvaluateContentAnchor: outputPolicyEvaluator(t, pipeline())}}}
+			got, err := turn.recoverRejectedResponse(ctx, &api.Session{ID: t.Name()}, st, req, nil, &modelcall.Completion{Content: "partial", ToolCalls: []api.ToolCall{{ID: "pending", Name: "read"}}}, cause, tc.remaining)
+			if tc.canceled || tc.remaining == 0 {
+				if got != nil || !errors.Is(err, cause) || st.output.recovery.Consecutive() != 0 {
+					t.Fatalf("unexpected recovery: %+v %v", got, err)
+				}
+				return
+			}
+			testutil.FailErr(t, "recover", err)
+			if got.Content != "partial" || len(got.ToolCalls) != 0 || got.ProviderID != "same" || got.Model != "same-model" || st.output.rejection.Code() != "MODEL_RESPONSE_INVALID" {
+				t.Fatalf("recovery=%+v", got)
+			}
+			if req.ToolsCallable() || ((req.ResponseFormat != nil) != tc.schema) {
+				t.Fatal("request contract changed")
 			}
 		})
 	}
