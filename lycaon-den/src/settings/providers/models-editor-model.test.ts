@@ -1169,9 +1169,9 @@ describe("--- inherit / unset slots", () => {
     expect(MODELS_SETTINGS_COPY.unsetModel).toBe("---");
   });
 
-  it("copy describes summarizer inherit behavior", () => {
-    expect(MODELS_SETTINGS_COPY.summarizerModelHintTail).toContain("inherits");
-    expect(MODELS_SETTINGS_COPY.summarizerModelHintTail).toContain("tracks");
+  it("copy describes automatic summarizer selection", () => {
+    expect(MODELS_SETTINGS_COPY.summarizerModelHintTail).toContain("included model when available");
+    expect(MODELS_SETTINGS_COPY.summarizerModelHintTail).toContain("otherwise your default model");
   });
 
   it("empty project-style policy has no assignments", () => {
