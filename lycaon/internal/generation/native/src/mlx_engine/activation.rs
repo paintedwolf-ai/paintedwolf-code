@@ -104,13 +104,15 @@ impl Activation {
                 "dispatch construction",
             )?;
             let mut output = sys::mlx_array_new();
-            if output.ctx.is_null() {
-                return Err("Cannot allocate Metal activation result handle".into());
-            }
             let status = sys::mlx_vector_array_get(&mut output, call.outputs, 0);
-            let output = Array::from_ptr(output);
-            checked(status, "result extraction")?;
-            Ok(output)
+            if let Err(error) = checked(status, "result extraction") {
+                sys::mlx_array_free(output);
+                return Err(error);
+            }
+            if output.ctx.is_null() {
+                return Err("Metal activation result is unavailable".into());
+            }
+            Ok(Array::from_ptr(output))
         }
     }
 }
