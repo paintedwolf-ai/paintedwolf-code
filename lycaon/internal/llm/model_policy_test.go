@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"os"
@@ -567,7 +568,7 @@ func TestLocalDefaultRoleResolution(t *testing.T) {
 
 	// StaticModelRouter.WithLocalDefault routes unset slots to the bundled local model.
 	store := NewInMemoryPolicyStore(hybridPolicy)
-	router := NewStaticModelRouter(store).WithLocalDefault(func() bool { return true })
+	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) bool { return true })
 	coordSel, err := router.Coordinator(t.Context())
 	testutil.FailErr(t, "router coordinator", err)
 	if coordSel.ProviderID != remoteCoord.ProviderID || coordSel.Model != remoteCoord.Model {

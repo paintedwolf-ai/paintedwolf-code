@@ -50,7 +50,7 @@ func TestBundledCatalogIsHostDefinedOnBothPlatforms(t *testing.T) {
 func TestScopedRoutersObserveCurrentLocalAvailability(t *testing.T) {
 	var available atomic.Bool
 	remote := ModelRef{ProviderID: "remote", Model: "selected"}
-	router := NewStaticModelRouter(NewInMemoryPolicyStore(ModelPolicy{Coordinator: remote})).WithLocalDefault(available.Load)
+	router := NewStaticModelRouter(NewInMemoryPolicyStore(ModelPolicy{Coordinator: remote})).WithLocalDefault(func(context.Context) bool { return available.Load() })
 	scoped := router.WithScope(SettingsScopeProject, t.TempDir())
 	for _, present := range []bool{false, true, false} {
 		available.Store(present)

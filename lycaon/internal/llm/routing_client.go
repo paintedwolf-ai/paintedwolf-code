@@ -128,7 +128,7 @@ func (c *RoutingClient) openProviderStream(ctx context.Context, req modelcall.Co
 		return nil, nil, err
 	}
 	if _, frozen := thinkingPolicyFromContext(ctx); !frozen && c.router != nil {
-		policy, policyErr := c.router.effectivePolicy()
+		policy, policyErr := c.router.effectivePolicy(ctx)
 		if policyErr != nil {
 			return nil, nil, policyErr
 		}
