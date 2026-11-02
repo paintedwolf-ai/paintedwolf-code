@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestOutputContractCarriesExactOfferedNames(t *testing.T) {
@@ -146,5 +147,16 @@ func TestQuoteControlRemainsLiteralOutsideCalls(t *testing.T) {
 	testutil.FailErr(t, "literal quote control", err)
 	if text != `<|"|>` {
 		t.Fatalf("literal = %q", text)
+	}
+}
+
+func TestToolCallCountIsOutputBound(t *testing.T) {
+	d := newOutputDecoder(modelcall.CompletionRequest{Tools: []tools.ToolMeta{{Name: "read"}}})
+	d.calls = make([]api.ToolCall, 64)
+	token := uint32(48)
+	_, err := d.step(&token, "<|tool_call>")
+	var protocol *failure.ProviderOutputProtocolError
+	if !errors.As(err, &protocol) || protocol.Kind != failure.OutputBound {
+		t.Fatalf("call count failure = %v", err)
 	}
 }

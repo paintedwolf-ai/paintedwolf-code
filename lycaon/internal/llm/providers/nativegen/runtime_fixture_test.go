@@ -144,6 +144,19 @@ func runtimeFixture() {
 					stop = &value
 				}
 			}
+			if request.Command.Method == "advance" && (fault == "buffered_then_orphan" || fault == "buffered_then_cap") {
+				ids := []uint32{48, 500, 49, 101}
+				texts := []string{"<|tool_call>", "call:read{}", "<tool_call|>", "<channel|>"}
+				if fault == "buffered_then_cap" {
+					ids[3], texts[3] = 100, "<|channel>"
+				}
+				value := ids[generated-1]
+				token, text, stop = &value, texts[generated-1], nil
+				if generated == active.MaxNewTokens {
+					value := "max_tokens"
+					stop = &value
+				}
+			}
 			processed := reused
 			if generated > 0 {
 				processed = len(active.PromptTokens)

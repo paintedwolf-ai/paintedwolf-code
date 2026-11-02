@@ -83,7 +83,10 @@ func (d *outputDecoder) step(token *uint32, text string) (string, error) {
 	visible := d.text(prefix)
 	switch *token {
 	case 48:
-		if d.inCall || len(d.allowed) == 0 || len(d.calls) >= 64 {
+		if len(d.calls) >= 64 {
+			return "", d.protocolError("output_bound")
+		}
+		if d.inCall || len(d.allowed) == 0 {
 			return "", d.protocolError("tool_boundary")
 		}
 		d.inCall = true

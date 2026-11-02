@@ -18,10 +18,15 @@ type ProviderOutputProtocolError struct {
 }
 
 func (e *ProviderOutputProtocolError) Error() string {
-	if e.Cause != nil {
+	if e != nil && e.Cause != nil {
 		return e.Cause.Error()
 	}
 	return "provider output protocol violation"
 }
 
-func (e *ProviderOutputProtocolError) Unwrap() error { return e.Cause }
+func (e *ProviderOutputProtocolError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
