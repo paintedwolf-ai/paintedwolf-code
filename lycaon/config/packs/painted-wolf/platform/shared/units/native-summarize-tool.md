@@ -4,8 +4,8 @@ description: >-
   with the summarize tool and its anchors.
 slot: orientation
 order: 20
-attaches: [summarize]
+attaches: [command]
 hosts: [coordinator, worker]
 ---
-- **`summarize`** explains a named file or area, or inline `content` with no filesystem access. With no attached folders, pass `content` and omit `path`/`paths`. Start with `{"path":"path/to/area","task":"the user's question"}`; omit `task` for an overview. Task ranks semantically within scope. Use bounded `command` (`grep -n`, `sed -n`) for more detail.{% if profile_has_write_tools %} A complete exact source window matching the current shared document establishes an edit base for the next response. Otherwise, inspect exact target lines with a native file read in `command` before editing.{% endif %}
-- Cite returned source windows or anchors. Use `next_actions` only when more evidence is needed: call its `tool` with its `args` unchanged. Inspect results before requesting overlapping scopes; stop when the evidence answers the question.
+- Use `summarize --path PATH --focus 'question'` in `command` for a bounded source briefing; omit `--focus` for an overview. Use `repo-map --path DIR` for layout and `outline --path FILE` for file structure. Native `--help` lists supported forms.
+- Inspect exact source windows with `sed -n` or `cat` when a briefing is insufficient for a quote or edit. Cite the returned source evidence; a summary is not a complete source read. Follow up only where the evidence leaves the task unresolved.

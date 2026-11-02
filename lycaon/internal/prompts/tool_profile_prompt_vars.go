@@ -198,8 +198,11 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	hostRunner := orderedEnabledTools(HostRunnerToolOrder(), enabled)
 	mutationCapable := ProfileMutationCapable(data)
 	commandMutates := enabled["command"] && mutationCapable
+	if commandMutates {
+		writeTools = []string{"command"}
+	}
 	out := map[string]any{
-		"profile_has_write_tools":         len(writeTools) > 0,
+		"profile_has_write_tools":         len(writeTools) > 0 || commandMutates,
 		"profile_has_read_tools":          len(readTools) > 0,
 		"profile_mutation_capable":        mutationCapable,
 		"profile_has_command":             enabled["command"],
@@ -212,14 +215,14 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"has_find_tool":                   enabled["find"],
 		"profile_has_git_commit":          enabled["git_commit"],
 		"profile_has_grep":                enabled["grep"],
-		"profile_has_code_rewrite":        enabled["code_rewrite"],
+		"profile_has_code_rewrite":        commandMutates,
 		"native_edit_limit_mib":           readcaps.MaxMutationBytes >> 20,
 		"profile_has_list_dir":            enabled["list_dir"],
 		"profile_has_read":                enabled["read"],
 		"profile_has_jq":                  enabled["jq"],
-		"profile_has_jq_edit":             enabled["jq_edit"],
-		"profile_has_survey_repo":         enabled["survey_repo"],
-		"profile_has_summarize":           enabled["summarize"],
+		"profile_has_jq_edit":             commandMutates,
+		"profile_has_survey_repo":         enabled["command"],
+		"profile_has_summarize":           enabled["command"],
 		"profile_has_view_image":          enabled["view_image"],
 		"profile_has_view_video":          enabled["view_video"],
 		"profile_has_retrieval":           profileHasRetrievalTool(enabled),

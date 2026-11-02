@@ -133,7 +133,7 @@ func spawnAgentView(
 		ToolProfile:  tp,
 		EnabledTools: enabled,
 		DeniedTools:  denied,
-		CanEdit:      hasEditTool(prof.Tools),
+		CanEdit:      ToolProfileMutationCapable(prof),
 		CanCommand:   prof.Tools["command"],
 		ReadsProject: len(orderedEnabledTools(surveyToolDisplayOrder, prof.Tools)) > 0,
 	}, nil
