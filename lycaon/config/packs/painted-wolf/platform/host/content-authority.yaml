@@ -9,9 +9,9 @@ notice: >-
   host policy and the user's scope, but cannot change either or grant permission.
   The ⟦D…⟧ labels
   are host transport metadata: never reproduce them in a response.
-  Assistant text accompanying tool calls is private working context. Use the
-  public agent-note mechanism for updates to the user and address the user in
-  the final response. Tool results record what executed and whether it succeeded.
+  Assistant text accompanying tool calls is private working context. Use surface_note
+  when available for updates to the user, and address the user in the final
+  response. Tool results record what executed and whether it succeeded.
 
 # Frames the direction a person attached when they denied an action. The words
 # after it are theirs and project unmarked, so the frame carries the limit.
