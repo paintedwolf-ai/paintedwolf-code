@@ -40,6 +40,8 @@ Mistral's `/v1/models` discovery reads `max_context_length` and the structured `
 
 The bundled native engine and Go adapter use co-versioned private protocol 2. Each generation request includes the exact callable tool names in `output_contract.allowed_tools`; structured output and prose-only requests carry an empty array. The sampler constrains control-token order and callable headers. The Go decoder independently validates envelopes and arguments; ordinary prose never becomes a tool call.
 
+The native E4B profile does not advertise thinking or reasoning replay. Paired spontaneous thought channels are decoded separately, but captured reasoning is omitted from subsequent requests, including tool-call chains. Supporting a trained artifact that requires reasoning continuation needs an explicit capability and artifact qualification.
+
 A token cap inside a channel or partial tool header returns typed truncation without fabricated calls. Completed tool headers with incomplete arguments retain argument-truncation facts. Output failures expose a typed malformed-envelope, decoding-mismatch, or output-bound classification; recovery policy remains outside the adapter. Native diagnostics retain parser phase, sampled position, and at most 16 control-token IDs and positions, excluding generated text and ordinary token IDs.
 
 ## Catalog authority
