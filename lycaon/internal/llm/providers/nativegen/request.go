@@ -51,7 +51,7 @@ func prepareRender(req modelcall.CompletionRequest) (renderRequest, error) {
 	}
 	result := renderRequest{Tools: make([]renderTool, 0, len(req.Tools))}
 	for _, tool := range req.Tools {
-		if !req.ToolsCallable() {
+		if !req.ToolsCallable() || req.ResponseFormat != nil {
 			break
 		}
 		if tool.Name == "" {

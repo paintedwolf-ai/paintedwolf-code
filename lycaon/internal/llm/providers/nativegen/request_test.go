@@ -2,6 +2,7 @@ package nativegen
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -38,6 +39,21 @@ func TestPrepareRenderPreservesStructuredArgumentsAndToolIdentity(t *testing.T) 
 	wire, err = prepareRender(req)
 	if err != nil || len(wire.Tools) != 0 || len(wire.Messages[2].ToolCalls) != 1 {
 		t.Fatalf("no-call projection damaged history: %+v, %v", wire, err)
+	}
+	wantMessages := wire.Messages
+	req.ToolUse = modelcall.ToolUseAllowed
+	for _, format := range []*modelcall.ResponseFormat{
+		{Type: modelcall.ResponseFormatJSONObject},
+		modelcall.JSONSchemaFormat("answer", json.RawMessage(`{"type":"object"}`)),
+	} {
+		req.ResponseFormat = format
+		wire, err = prepareRender(req)
+		if err != nil || len(wire.Tools) != 0 || !reflect.DeepEqual(wire.Messages, wantMessages) {
+			t.Fatalf("structured-output projection changed history or offered tools: %+v, %v", wire, err)
+		}
+		if len(req.Tools) != 1 || req.Tools[0].Name != "read_file" {
+			t.Fatal("projection mutated request tools")
+		}
 	}
 }
 
