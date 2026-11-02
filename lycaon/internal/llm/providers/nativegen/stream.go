@@ -161,6 +161,10 @@ func (p *Provider) generate(ctx context.Context, req modelcall.CompletionRequest
 			}
 			if chunk.Err == nil && capped {
 				chunk.Err = modelcall.OutputTruncation(req, p.id, model, "length", usage, len(chunk.ToolCalls) > 0)
+				if decoder.channel || decoder.inCall {
+					chunk.ToolCalls = nil
+					chunk.Err = &failure.ProviderOutputTruncatedError{ProviderID: p.id, Model: model, FinishReason: "length", PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens}
+				}
 			}
 		}
 		if !send(chunk) || chunk.Done {

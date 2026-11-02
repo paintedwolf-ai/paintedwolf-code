@@ -1,6 +1,9 @@
 package nativegen
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/lycaon/lycaon/internal/llm/failure"
+)
 
 // OutputProtocolError contains only protocol state, never generated text.
 type OutputProtocolError struct {
@@ -34,7 +37,13 @@ func (d *outputDecoder) protocolError(reason string) error {
 			phase = "tool_string"
 		}
 	}
-	return &OutputProtocolError{ProviderID: d.provider, Model: d.model, Reason: reason, Phase: phase, Position: d.position, Controls: append([]OutputControl(nil), d.controls...)}
+	diagnostic := &OutputProtocolError{ProviderID: d.provider, Model: d.model, Reason: reason, Phase: phase, Position: d.position, Controls: append([]OutputControl(nil), d.controls...)}
+	repairable := len(d.allowed) > 0 && !d.schema
+	switch reason {
+	case "decoding_mismatch", "output_bound":
+		repairable = false
+	}
+	return &failure.ProviderOutputProtocolError{ProviderID: d.provider, Model: d.model, Reason: reason, Repairable: repairable, Cause: diagnostic}
 }
 
 func (d *outputDecoder) observe(token *uint32) {
