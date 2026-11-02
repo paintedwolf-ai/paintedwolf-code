@@ -10,6 +10,7 @@ import (
 )
 
 type hostedStep struct {
+	ID       string `yaml:"id"`
 	Name     string
 	Uses     string
 	Run      string

@@ -44,14 +44,14 @@ func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 		t.Error("ready pull requests, and only they or a dispatch asking for it, run the fast tier")
 	}
 	if integration.With["profile"] != "${{ (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'integration' || 'check' }}" ||
-		integration.If != "${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' }}" {
+		integration.If != "${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' && inputs.lane != 'platform' }}" {
 		t.Error("merge groups run the integration gate, and a full dispatch the check profile")
 	}
-	if platform.Uses != "./.github/workflows/platform-verification.yml" || platform.If != "inputs.profile == 'check' && inputs.lane == ''" {
+	if platform.Uses != "./.github/workflows/platform-verification.yml" || platform.If != "inputs.profile == 'check' && (inputs.lane == '' || inputs.lane == 'platform')" {
 		t.Error("a full dispatch must include platform qualification")
 	}
 	supplemental := jobs["platform-lanes"]
-	if supplemental.Uses != "./.github/workflows/verification.yml" || supplemental.If != platform.If ||
+	if supplemental.Uses != "./.github/workflows/verification.yml" || supplemental.If != "inputs.profile == 'check' && inputs.lane == ''" ||
 		supplemental.With["profile"] != "release" || supplemental.With["platform"] != "true" {
 		t.Error("a full dispatch must include the catalog's supplemental qualification lanes")
 	}

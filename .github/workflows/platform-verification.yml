@@ -4,12 +4,6 @@ name: Platform verification
 # confinement, and macOS confinement, browser-boundary, and Git engine checks.
 # The free plan runs five macOS jobs at once, so only what needs macOS runs there.
 on:
-  workflow_dispatch:
-    inputs:
-      source-sha:
-        description: Exact source commit to diagnose; blank uses the selected ref
-        type: string
-        default: ''
   workflow_call:
     inputs:
       source-sha:
@@ -52,27 +46,47 @@ jobs:
 
       - uses: ./.github/actions/setup-bialy
 
+      - name: Applied Linux launch boundary
+        id: launch
+        timeout-minutes: 90
+        run: ./task test:confine:linux -- launch
+
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: confinement-linux-launch-amd64-${{ github.run_attempt }}
+          status: ${{ steps.launch.outcome }}
+
       - name: Build sidecar
+        id: build
+        if: ${{ !cancelled() }}
         timeout-minutes: 60
         run: ./task build:lycaon-dev
 
       - name: Boot upgrade corpus fixtures
+        id: corpus
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 90
-        run: ./task upgrade:corpus:boot
+        run: |
+          set -euo pipefail
+          evidence="$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")/ci"
+          mkdir -p "$evidence"
+          ./task upgrade:corpus:boot 2>&1 | tee "$evidence/upgrade-corpus.log"
 
       - uses: ./.github/actions/verification-evidence
         if: always()
         timeout-minutes: 5
         with:
           name: upgrade-corpus-${{ github.run_attempt }}
-          status: ${{ job.status }}
+          status: ${{ steps.corpus.outcome }}
 
-      # The same target the arm64 lane runs, so both architectures cover one set.
+      # Together with the early launch leg, cover the same set as arm64 once.
       - name: Applied Linux confinement
         id: confinement
         if: ${{ !cancelled() }}
         timeout-minutes: 90
-        run: ./task test:confine:linux
+        run: ./task test:confine:linux -- sandbox supervisor browser helpers
 
       - uses: ./.github/actions/verification-evidence
         if: always()
