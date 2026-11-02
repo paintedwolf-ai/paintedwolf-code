@@ -21,6 +21,7 @@ class ProvenanceTests(unittest.TestCase):
                       "scripts/generation/runtime.py", "scripts/generation/provenance.py",
                       "scripts/generation/sources.json", "scripts/generation/sources.py",
                       "scripts/generation/llama-reference/cache-cursor.patch",
+                      "scripts/generation/llama-reference/shared-kv-prefill.patch",
                       "scripts/generation/llama-reference/CMakeLists.txt",
                       "lycaon/internal/generation/native/build.rs",
                       "lycaon/internal/generation/templates/gemma4-code-v1.jinja",

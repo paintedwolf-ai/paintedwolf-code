@@ -7,6 +7,10 @@
       {
         "path": "llama-reference/cache-cursor.patch",
         "sha256": "1993ec60d04f749934a746a508e15d107c99bf79825f61804d47d0322fe34389"
+      },
+      {
+        "path": "llama-reference/shared-kv-prefill.patch",
+        "sha256": "23157204a5be5960b91e2fc5a256c7c40b1841855a825b1cce70452ccf26556d"
       }
     ]
   },
