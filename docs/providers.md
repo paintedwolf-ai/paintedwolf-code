@@ -351,13 +351,25 @@ model_thinking:
 ```
 
 Content between the tags is reasoning. Reasoning that arrives in its own
-field settles the block: the open tag stood alone, whitespace after it is
+field or structured block settles the block: the open tag stood alone, whitespace after it is
 dropped, and the text that follows is the visible answer, as is anything after
 the close tag. Bytes that could still begin a tag wait for the next delta, so
 a tag split across deltas is still read as one. A tag that never completes is
 visible text, and an open block that never closes is reasoning. Each tag is a
 literal of at most 32 bytes, and the two must differ. A family with no rule,
 or a rule without markers, passes content through untouched.
+
+Compatible transports preserve answer and reasoning fields from one wire delta
+together. Structured blocks identify the reasoning channel even when their
+contents are encrypted; their full payload is retained at stream completion.
+This keeps streaming and complete-response classification consistent without
+interpreting the wording of an answer. A closing tag without a declared opening
+boundary does not authorize reclassifying earlier answer text.
+
+The [Fireworks chat-completions contract](https://docs.fireworks.ai/api-reference/post-chatcompletions)
+exposes reasoning separately as `reasoning_content`. That field remains separate
+from `content` on receipt; its existence does not establish an inline-marker
+grammar for every model served by the endpoint.
 
 #### Model cutoff
 

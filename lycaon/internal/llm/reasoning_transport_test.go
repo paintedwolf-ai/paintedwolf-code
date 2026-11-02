@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -23,6 +24,7 @@ func TestCompatibleTransportPreservesReasoningChannels(t *testing.T) {
 		{"coincident reasoning", "<think>\nAnswer", `"reasoning":"private"`, "Answer", "private"},
 		{"coincident reasoning content", "<think>\nAnswer", `"reasoning_content":"private"`, "Answer", "private"},
 		{"coincident reasoning details", "<think>\nAnswer", `"reasoning_details":[{"type":"reasoning.text","text":"private","index":0}]`, "Answer", "private"},
+		{"encrypted reasoning", "<think>\nAnswer", `"reasoning_details":[{"type":"reasoning.encrypted","data":"opaque","index":0}]`, "Answer", ""},
 		{"inline block", "<think>private</think>Answer", `"reasoning_content":""`, "Answer", "private"},
 		{"literal closing marker", "Quote </think> literally", `"reasoning_content":""`, "Quote </think> literally", ""},
 	} {
@@ -31,7 +33,9 @@ func TestCompatibleTransportPreservesReasoningChannels(t *testing.T) {
 			testutil.FailErr(t, "encode fixture text", err)
 			message := fmt.Sprintf(`{"content":%s,%s}`, text, tc.fields)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var request struct { Stream bool `json:"stream"` }
+				var request struct {
+					Stream bool `json:"stream"`
+				}
 				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 					t.Errorf("decode request: %v", err)
 					w.WriteHeader(http.StatusBadRequest)
@@ -59,7 +63,14 @@ func TestCompatibleTransportPreservesReasoningChannels(t *testing.T) {
 			streamed, _, err := modelcall.CollectStream(stream)
 			testutil.FailErr(t, "collect fixture", err)
 			for name, got := range map[string]*modelcall.Completion{"complete": completed, "stream": streamed} {
-				if got.Content != tc.visible || got.Reasoning != tc.reasoning {
+				wantReasoning := tc.reasoning
+				if name == "complete" && strings.Contains(tc.fields, "reasoning_details") {
+					wantReasoning = ""
+				}
+				if strings.Contains(tc.fields, "reasoning_details") && len(got.ReasoningDetails) != 1 {
+					t.Fatalf("%s lost reasoning blocks: %+v", name, got)
+				}
+				if got.Content != tc.visible || got.Reasoning != wantReasoning {
 					t.Fatalf("%s content=%q reasoning=%q, want content=%q reasoning=%q", name, got.Content, got.Reasoning, tc.visible, tc.reasoning)
 				}
 			}
