@@ -4,15 +4,17 @@
   "kind": "runtime_service",
   "workstream": "local-model-store",
   "disposition": "retain",
-  "reason": "Retain the store transaction boundary at 773 receiver lines and 33 methods. Artifact verification, revision publication, journal activation and reader leases must remain coordinated. Publication uses the existing filesystem effect owner and flushes directory ancestry before success, including retries; the focused helper adds no separate lifecycle owner. All 94 store results pass, covering flush-boundary failures, interrupted payloads, repair, leases and journal recovery.",
-  "reviewed_commit": "16fb1a1dfe3321094b4770445bc7d128443107dc",
-  "reviewed_shape": "5d9bd81775990cd3a868c28f1fad4cb8df783efa4ba7055b9aa6aff04c373a81",
-  "ceiling": 773,
+  "reason": "Retain one store transaction owner at 756 receiver lines and 33 methods. Journal activation, revision publication, collection pins and recovery share lock and durability ordering. Payload sealing owns close-before-publication without becoming a separate store lifecycle. Joined IO and cleanup failures remain visible without rolling back committed names. The 114 passing store results cover these failure paths, leases, repair, interrupted publication and recovery.",
+  "reviewed_commit": "be617a5161189d0efbc452ffc80dd612901e8da8",
+  "reviewed_shape": "61204477b811e5dea7391691b5732c1815761bf0042f2ef253f9b2e61f0657af",
+  "ceiling": 756,
   "boundaries": {
     "lycaon/internal/modelstore/lifetime_test.go": "17084815f37662d3f1b72f2ecb0620d7e1a98fc56602eea9b769d259a33d61c7",
     "lycaon/internal/modelstore/repair_test.go": "a1765b6567d7b1522132291452e760685947ea0e1a0c94947e4dbcc9079e097a",
     "lycaon/internal/modelstore/import_test.go": "485852352df3921e70ace2e435dcd0d1d4e08534ed28ad75f6fc2625cbafddbd",
-    "lycaon/internal/modelstore/store_test.go": "45027be3e76ea0bda1466d2191394a4e90d76eb133fa4565626f45a6c0375745",
-    "lycaon/internal/modelstore/publication_test.go": "7a240ce5188603feb69834c1244e53677e9e627b179953d230fa891a08f57e12"
+    "lycaon/internal/modelstore/store_test.go": "f739fd2edf4eb537cf26b31b61d34c235fe047bab9b8b6bf151f3ca394c88435",
+    "lycaon/internal/modelstore/publication_test.go": "7a240ce5188603feb69834c1244e53677e9e627b179953d230fa891a08f57e12",
+    "lycaon/internal/modelstore/io_errors_test.go": "e0011924b91b06970297c93a38a126d321ff5e10e3ae4ebc14946247103dcf0d",
+    "lycaon/internal/modelstore/platform_unix_test.go": "ab220af53004a294ef4ab3e131cabb82982f9bf0162241d72475d818ad1b0264"
   }
 }

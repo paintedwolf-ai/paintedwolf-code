@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/modelstore/store_test.go",
+  "kind": "test_suite",
+  "workstream": "local-model-store",
+  "disposition": "retain",
+  "reason": "Retain the 474-line store lifecycle suite. Its shared fixture exercises artifact verification, journal activation, interrupted writes, collection and revision retention together. The torn-journal fixture now checks its own write and close. Additional IO fault and arithmetic contracts live in focused sibling files; no new lifecycle scenarios were added to this suite. All 114 package results pass.",
+  "reviewed_commit": "be617a5161189d0efbc452ffc80dd612901e8da8",
+  "ceiling": 474,
+  "boundaries": {
+    "lycaon/internal/modelstore/store_test.go": "f739fd2edf4eb537cf26b31b61d34c235fe047bab9b8b6bf151f3ca394c88435"
+  }
+}
