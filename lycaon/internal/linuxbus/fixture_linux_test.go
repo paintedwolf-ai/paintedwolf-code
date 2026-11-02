@@ -5,6 +5,7 @@ package linuxbus
 import (
 	"bufio"
 	"bytes"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -116,12 +117,20 @@ func TestCurrentLoginSessionReadsTheSessionOwningThisProcess(t *testing.T) {
 	if got != want {
 		t.Fatalf("login session = %+v, want %+v", got, want)
 	}
-	manager.fail = true
+	if err := server.Export(&fixtureLoginManager{fail: true}, Login1Path, Login1Name+".Manager"); err != nil {
+		t.Fatalf("export manager without a session: %v", err)
+	}
 	if _, err := CurrentLoginSession(t.Context(), client); err == nil {
 		t.Fatal("a process outside every session resolved one")
 	}
-	delete(session.properties, "Id")
-	manager.fail = false
+	missingID := maps.Clone(session.properties)
+	delete(missingID, "Id")
+	if err := server.Export(&fixtureLoginSession{properties: missingID}, manager.sessionPath, "org.freedesktop.DBus.Properties"); err != nil {
+		t.Fatalf("export session without an identifier: %v", err)
+	}
+	if err := server.Export(manager, Login1Path, Login1Name+".Manager"); err != nil {
+		t.Fatalf("restore manager with a session: %v", err)
+	}
 	if _, err := CurrentLoginSession(t.Context(), client); err == nil {
 		t.Fatal("a session without an identifier was accepted")
 	}
