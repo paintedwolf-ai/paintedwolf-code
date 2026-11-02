@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -52,11 +53,15 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 		failures      []error
 		wantErr       bool
 		completedCall bool
+		noTools       bool
+		schema        bool
 	}{
-		{"protocol", []error{malformed}, false, false},
-		{"mixed", []error{malformed, dropped}, false, false},
-		{"exhausted", []error{malformed, dropped, malformed}, true, false},
-		{"committed call", []error{malformed}, false, true},
+		{"protocol", []error{malformed}, false, false, false, false},
+		{"mixed", []error{malformed, dropped}, false, false, false, false},
+		{"exhausted", []error{malformed, dropped, malformed}, true, false, false, false},
+		{"committed call", []error{malformed}, false, true, false, false},
+		{"no tools", []error{malformed}, false, false, true, false},
+		{"structured", []error{malformed}, false, false, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
@@ -71,7 +76,17 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 				Context: ContextDeps{Tools: reg, Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() }, BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 					return h, nil
 				}},
-				Model: ModelDeps{LLM: client}, Closeout: CloseoutDeps{EvaluateContentAnchor: outputPolicyEvaluator(t, pipeline())},
+				Model: ModelDeps{LLM: client, FitRequest: func(_ context.Context, _ *api.Session, _ []api.Message, req modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
+					req.Model = "selected-model"
+					if tc.noTools {
+						req.Tools = nil
+						req.ToolUse = modelcall.ToolUseForbidden
+					}
+					if tc.schema {
+						req.ResponseFormat = &modelcall.ResponseFormat{Type: modelcall.ResponseFormatJSONSchema, Name: "answer", Schema: []byte(`{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}`)}
+					}
+					return req, nil
+				}}, Closeout: CloseoutDeps{EvaluateContentAnchor: outputPolicyEvaluator(t, pipeline())},
 				Projection: ProjectionDeps{AppendDraftVersion: func(_ context.Context, _, _, body, code string) (int, error) {
 					if body != "rejected draft" {
 						t.Fatalf("draft=%q", body)
@@ -112,8 +127,14 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 				if !found {
 					t.Fatal("prior work lost")
 				}
-				if req.Model != client.requests[0].Model || req.Think != client.requests[0].Think {
+				if req.Model != "selected-model" || req.Think != client.requests[0].Think || !reflect.DeepEqual(req.ResponseFormat, client.requests[0].ResponseFormat) || !reflect.DeepEqual(req.Tools, client.requests[0].Tools) || req.ToolUse != client.requests[0].ToolUse {
 					t.Fatal("request model controls changed")
+				}
+				if tc.noTools && req.ToolsCallable() {
+					t.Fatal("replacement enabled tools")
+				}
+				if tc.schema && req.ResponseFormat == nil {
+					t.Fatal("replacement lost schema")
 				}
 				if i > boolInt(tc.completedCall) {
 					feedback := false

@@ -11,8 +11,8 @@ type ContentObservation struct {
 	Segments        []ContentSegment
 	TextActionTools []string
 	EmptyResponse   *EmptyResponseObservation
+	InvalidResponse bool
 	// ToolCallUnparsed records a native call the provider dropped as invalid JSON.
-	InvalidResponse    bool
 	ToolCallUnparsed   bool
 	ToolCallDiagnostic string
 }
