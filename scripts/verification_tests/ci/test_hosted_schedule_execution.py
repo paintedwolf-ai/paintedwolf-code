@@ -12,7 +12,7 @@ class HostedScheduleTests(unittest.TestCase):
         rows = hosted_plan.matrix("integration", timings=measured)["include"]
         self.assertEqual(measured, original)
         self.assertEqual({(row["lane"], row["shard"]) for row in rows[:4]},
-                         {("limits", ""), ("lint", ""), ("behavior", "1/2"), ("behavior", "2/2")})
+                         {("limits", ""), ("lint", ""), ("runner", ""), ("behavior", "1/2")})
         self.assertEqual({row["timing_basis"] for row in rows}, {"catalog-budget"})
         self.assertTrue(all(row["expected_seconds"] == row["minutes"] * 60 for row in rows))
         self.assertEqual(rows, hosted_plan.matrix("integration")["include"])
@@ -23,8 +23,9 @@ class HostedScheduleTests(unittest.TestCase):
         seconds = {row["timing_row"]: 600 for row in baseline}
         seconds.update({"behavior 1/2": 60, "behavior 2/2": 1500})
         rows = hosted_plan.matrix("integration", timings={"lanes": seconds})["include"]
-        self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
-        self.assertEqual([row["expected_seconds"] for row in rows[2:4]], [1500, 1500])
+        self.assertEqual([row["lane"] for row in rows[:3]], ["limits", "lint", "runner"])
+        self.assertEqual([row["lane"] for row in rows[3:5]], ["behavior", "behavior"])
+        self.assertEqual([row["expected_seconds"] for row in rows[3:5]], [1500, 1500])
         self.assertEqual({row["timing_basis"] for row in rows}, {"measured"})
         self.assertEqual(rows, hosted_plan.matrix("integration", timings={"lanes": seconds})["include"])
 
@@ -47,7 +48,8 @@ class HostedScheduleTests(unittest.TestCase):
         self.assertIn("Estimate basis: `catalog-budget`", summary)
         self.assertIn("`behavior 2/2`", summary)
         self.assertIn("Nightly timing sources: 30, 20", summary)
-        self.assertIn("| 3 | behavior | 1/2 | critical | 9000 |", summary)
+        self.assertIn("| 3 | runner |  | reject | 3600 |", summary)
+        self.assertIn("| 4 | behavior | 1/2 | critical | 9000 |", summary)
 
     def test_compile_promotion_preserves_work_and_predicted_completion(self):
         import itertools

@@ -406,7 +406,8 @@ class HostedPlanTests(unittest.TestCase):
         lanes = ci.lanes()
         rows = ci.matrix("integration")["include"]
         self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
-        self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
+        self.assertEqual(rows[2]["lane"], "runner")
+        self.assertEqual([row["lane"] for row in rows[3:5]], ["behavior", "behavior"])
         for profile in ci.PROFILES:
             rows = ci.matrix(profile)['include']
             ordinary = [row for row in rows if row['priority'] != 'compile']
