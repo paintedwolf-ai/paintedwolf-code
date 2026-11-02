@@ -77,7 +77,7 @@ jobs:
           if [[ -n "$LANE" ]]; then args+=(--lane "$LANE"); fi
           if [[ "$AFFECTED" == true ]]; then args+=(--affected); fi
           if [[ "$PLATFORM" == true ]]; then args+=(--platform); fi
-          # The fast tier is one unsharded job, which measurements would not change.
+          # Fast jobs start together; historical ordering affects the wider profiles.
           if [[ "$PROFILE" != fast ]]; then
             python3 scripts/ci_verification.py timings > "$RUNNER_TEMP/timings.json"
             args+=(--timings "$RUNNER_TEMP/timings.json")

@@ -107,6 +107,11 @@ def lanes():
         raise ValueError(f"CI {GATE} profile differs from the {GATE} gate: "
                          f"missing={expected - actual}, extra={actual - expected}")
     for name, lane in values.items():
+        if name == 'ready-lint':
+            if (lane['profiles'] != ['fast'] or lane['targets'] != ['lint:full']
+                    or lane['setup'] != 'analysis' or 'preflight' in lane):
+                raise ValueError('ready-lint must run complete analysis beside the admission contracts')
+            continue
         if "fast" in lane["profiles"] or "preflight" in lane:
             command = lane.get("preflight", [])
             if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
@@ -120,8 +125,9 @@ def lanes():
                 raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
                    for stage in expand(lane["targets"]))
-    extra = set(fast) - {stage["name"] for stage in expand([FAST_GATE])}
-    if not fast or extra or max(fast.values()) > 1:
+    expected_fast = Counter(stage['name'] for stage in expand([FAST_GATE])
+                            if stage['name'] not in {'test:contract', 'licenses:notices'})
+    if fast != expected_fast:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
     expected = Counter(stage["name"] for stage in expand([GATE]) if stage["name"] != "build:cross")
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and not supplemental(lane)
