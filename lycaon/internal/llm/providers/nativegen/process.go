@@ -143,7 +143,7 @@ func (p *rpcProcess) call(ctx context.Context, request command, kind string, pri
 		Version uint32  `json:"version"`
 		ID      uint64  `json:"id"`
 		Command command `json:"command"`
-	}{1, p.sequence, request})
+	}{protocolVersion, p.sequence, request})
 	if err != nil {
 		return err
 	}

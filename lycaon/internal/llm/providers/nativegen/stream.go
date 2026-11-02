@@ -22,6 +22,7 @@ type beginRequest struct {
 	TopK             uint32          `json:"top_k"`
 	Seed             uint64          `json:"seed"`
 	CheckpointTokens int             `json:"checkpoint_tokens"`
+	OutputContract   outputContract  `json:"output_contract"`
 	OutputSchema     json.RawMessage `json:"output_schema,omitempty"`
 }
 
@@ -40,6 +41,10 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		return nil, err
 	}
 	schema, err := outputSchema(req.ResponseFormat)
+	if err != nil {
+		return nil, err
+	}
+	contract, err := requestOutputContract(req)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +69,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		return nil, ErrContextCapacityExceeded
 	}
 	req.RecordBudget(maximum, nil, nil)
-	cursor, err := p.runtime.prepare(ctx, render, schema, maximum, req.Composition)
+	cursor, err := p.runtime.prepare(ctx, render, schema, maximum, req.Composition, contract)
 	if err != nil {
 		release()
 		return nil, err
@@ -79,7 +84,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 	return out, nil
 }
 
-func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json.RawMessage, maximum int, composition modelcall.RequestComposition) (*progressCursor, error) {
+func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json.RawMessage, maximum int, composition modelcall.RequestComposition, contract outputContract) (*progressCursor, error) {
 	child := p.loaded.process
 	measured, err := p.measure(ctx, render)
 	if err != nil {
@@ -99,7 +104,7 @@ func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json
 	}
 	p.loaded.request++
 	sampling := p.loaded.sampling
-	request := beginRequest{RequestID: p.loaded.request, PromptTokens: rendered.PromptTokens, MaxNewTokens: maximum, Temperature: sampling.Temperature, TopP: sampling.TopP, TopK: sampling.TopK, Seed: binary.LittleEndian.Uint64(entropy[:]), CheckpointTokens: rendered.CheckpointTokens, OutputSchema: schema}
+	request := beginRequest{RequestID: p.loaded.request, PromptTokens: rendered.PromptTokens, MaxNewTokens: maximum, Temperature: sampling.Temperature, TopP: sampling.TopP, TopK: sampling.TopK, Seed: binary.LittleEndian.Uint64(entropy[:]), CheckpointTokens: rendered.CheckpointTokens, OutputSchema: schema, OutputContract: contract}
 	var begun begunResult
 	if err := child.call(ctx, command{Method: "begin", Request: request}, "begun", inference.Foreground, true, &begun); err != nil {
 		return nil, err
@@ -126,6 +131,7 @@ func (p *Runtime) finishRequest(cursor *progressCursor) {
 
 func (p *Provider) generate(ctx context.Context, req modelcall.CompletionRequest, model string, cursor *progressCursor, out chan modelcall.StreamChunk) {
 	decoder := newOutputDecoder(req)
+	decoder.provider, decoder.model = p.id, model
 	sawOutput := false
 	send := func(chunk modelcall.StreamChunk) bool {
 		chunk.ProviderID, chunk.Model = p.id, model

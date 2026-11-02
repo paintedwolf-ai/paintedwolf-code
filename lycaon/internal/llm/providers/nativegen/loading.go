@@ -98,7 +98,7 @@ func (p *Runtime) initialize(ctx context.Context, child *rpcProcess, artifact st
 	if err := child.call(ctx, command{Method: "hello"}, "hello", inference.Foreground, false, &hello); err != nil {
 		return loadedResult{}, err
 	}
-	if (runtime.SharedWorkspaceBytes > 0 && !hello.QuiescentMemory) || hello.Protocol != 1 || hello.ArtifactID != artifact || hello.Backend != runtime.Backend {
+	if (runtime.SharedWorkspaceBytes > 0 && !hello.QuiescentMemory) || hello.Protocol != protocolVersion || hello.ArtifactID != artifact || hello.Backend != runtime.Backend {
 		return loadedResult{}, errors.New("native generation: runtime identity mismatch")
 	}
 	actual, err := runtime.Devices.Bind(hello.PhysicalDevice)

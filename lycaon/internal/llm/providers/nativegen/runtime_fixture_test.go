@@ -26,16 +26,17 @@ func runtimeFixture() {
 			return
 		}
 		var request struct {
+			Version uint32  `json:"version"`
 			ID      uint64  `json:"id"`
 			Command command `json:"command"`
 		}
-		if json.Unmarshal(payload, &request) != nil {
+		if json.Unmarshal(payload, &request) != nil || request.Version != protocolVersion {
 			os.Exit(2)
 		}
 		result := map[string]any{}
 		switch request.Command.Method {
 		case "hello":
-			result = map[string]any{"kind": "hello", "protocol": 1, "artifact_id": artifact, "backend": "vulkan", "physical_device": map[string]string{"kind": "pci", "address": "0000:03:00.0"}}
+			result = map[string]any{"kind": "hello", "protocol": protocolVersion, "artifact_id": artifact, "backend": "vulkan", "physical_device": map[string]string{"kind": "pci", "address": "0000:03:00.0"}}
 		case "inspect":
 			plan := resourcePlan{ResidentWeightsBytes: 128 << 20, MappedPLEBytes: 2 << 30, KVCapacityBytes: 64 << 20, WorkspaceBytes: 64 << 20, DeviceReservationBytes: 256 << 20, HostReservationBytes: 768 << 20}
 			if os.Getenv("PW_NATIVEGEN_SMALL_HOST_PLAN") == "1" {
@@ -94,7 +95,7 @@ func runtimeFixture() {
 			}}
 		case "begin":
 			raw, err := json.Marshal(request.Command.Request)
-			if err != nil || json.Unmarshal(raw, &active) != nil {
+			if err != nil || json.Unmarshal(raw, &active) != nil || active.OutputContract.AllowedTools == nil {
 				os.Exit(3)
 			}
 			if os.Getenv("PW_NATIVEGEN_CONVERSATION_CACHE") == "1" {
