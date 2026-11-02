@@ -104,9 +104,11 @@ func TestLinuxNativePrivilegeQualification(t *testing.T) {
 			cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(preparedEffect), privilegeOptions(plan, root))
 			testutil.FailErr(t, "prepare native privileged invocation", err)
 			defer cleanup()
-			var output bytes.Buffer
-			cmd.Stdout = &output
-			testutil.FailErr(t, "execute through typed native door", RunPrepared(t.Context(), cmd))
+			var output, diagnostic bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &output, &diagnostic
+			if err := RunPrepared(t.Context(), cmd); err != nil {
+				t.Fatalf("execute through typed native door: %v\n%s", err, diagnostic.String())
+			}
 			var prepared nativePrivilegeFacts
 			testutil.FailErr(t, "decode actual prepared native facts", json.Unmarshal(output.Bytes(), &prepared))
 			if !reflect.DeepEqual(prepared.Credentials, baseline.Credentials) {
