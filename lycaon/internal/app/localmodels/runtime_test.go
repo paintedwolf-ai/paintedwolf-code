@@ -47,9 +47,9 @@ func installedFixture(t *testing.T) localmodels.Options {
 	decisionDir := t.TempDir()
 	testutil.FailErr(t, "create decision encoder", os.Mkdir(filepath.Join(decisionDir, "encoder"), 0o700))
 	for name, body := range map[string]string{
-		"encoder/config.json": `{"model_type":"modernbert","hidden_size":768,"num_hidden_layers":22,"num_attention_heads":12,"intermediate_size":1152,"vocab_size":256000}`,
+		"encoder/config.json":  `{"model_type":"modernbert","hidden_size":768,"num_hidden_layers":22,"num_attention_heads":12,"intermediate_size":1152,"vocab_size":256000}`,
 		"rl_agent_config.json": `{"max_len":1024,"head_layers":2}`,
-		"model.safetensors": "decision fixture",
+		"model.safetensors":    "decision fixture",
 	} {
 		testutil.FailErr(t, "write decision fixture", os.WriteFile(filepath.Join(decisionDir, name), []byte(body), 0o600))
 	}
@@ -70,7 +70,7 @@ func TestBuildSharesDecisionResourcesBeforeInstallingSeed(t *testing.T) {
 	second, err := localmodels.Build(t.Context(), options)
 	testutil.FailErr(t, "reuse authenticated installed revision", err)
 	defer second.Resources.Close()
-	defer second.Generation.Close()
+	second.Generation.Close()
 }
 
 func TestBuildRejectsUntrustedAndUnsupportedInstallations(t *testing.T) {

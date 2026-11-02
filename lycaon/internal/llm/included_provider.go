@@ -1,9 +1,11 @@
 package llm
 
 import (
+	"context"
 	"errors"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 )
 
@@ -26,6 +28,16 @@ func IncludedProviderEntry() ProviderEntry {
 	}
 }
 
-func (r *registryDiscovery) IncludedModelAvailable() bool {
-	return r != nil && r.ModelExists(IncludedProviderID, nativegen.DefaultModelID)
+func (r *registryDiscovery) IncludedModelAvailable(ctx context.Context) bool {
+	if r == nil {
+		return false
+	}
+	result, refresh := r.modelSnapshot(ctx, IncludedProviderID)
+	refresh()
+	for _, model := range result.Models {
+		if modelinfo.EquivalentID(IncludedProviderID, model.ID, nativegen.DefaultModelID) {
+			return true
+		}
+	}
+	return false
 }

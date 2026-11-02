@@ -39,7 +39,7 @@ func (r *RegistrySummarizer) Curate(ctx context.Context, snapshot evidence.Ledge
 	}
 
 	total := countSnapshotCandidates(snapshot)
-	p, model, err := r.liteProvider()
+	p, model, err := r.liteProvider(ctx)
 	if err != nil || p == nil {
 		out := emptyCurationResult(total, true)
 		r.storeCuratorCache(key, out)

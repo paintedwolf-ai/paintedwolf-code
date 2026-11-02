@@ -23,9 +23,10 @@ func TestRankRetainsPriorityAcrossBatches(t *testing.T) {
 	for _, outcome := range []string{"success", "cancel", "invalid_scores", "engine_error"} {
 		t.Run(outcome, func(t *testing.T) {
 			second := `printf '{"id":%s,"scores":[2,3]}\n' "$id"`
-			if outcome == "invalid_scores" {
+			switch outcome {
+			case "invalid_scores":
 				second = `printf '{"id":%s,"scores":[2]}\n' "$id"`
-			} else if outcome == "engine_error" {
+			case "engine_error":
 				second = `printf '{"id":%s,"error":"fixture failure"}\n' "$id"`
 			}
 			client, device, fifo := batchEngine(t, func(gate string) string {

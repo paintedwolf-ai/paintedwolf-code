@@ -59,7 +59,7 @@ func (r *RegistrySummarizer) utilityClass() UtilityClass {
 
 func (r *RegistrySummarizer) summarize(ctx context.Context, systemPrompt, userPrompt string, maxTokens int, allowFallback bool) (string, error) {
 	class := r.utilityClass()
-	p, model, err := r.liteProvider()
+	p, model, err := r.liteProvider(ctx)
 	if err != nil || p == nil {
 		return r.degradeSummarize(ctx, systemPrompt, userPrompt, maxTokens, allowFallback, class, err)
 	}
@@ -80,7 +80,7 @@ func (r *RegistrySummarizer) summarize(ctx context.Context, systemPrompt, userPr
 		return "", liteErr
 	}
 	if class.AllowsCoordinatorFallback() {
-		if cp, cmodel, cerr := r.coordinatorProvider(); cerr == nil && cp != nil && (cp.ID() != p.ID() || cmodel != model) {
+		if cp, cmodel, cerr := r.coordinatorProvider(ctx); cerr == nil && cp != nil && (cp.ID() != p.ID() || cmodel != model) {
 			content, coordErr := r.summarizeWith(ctx, cp, cmodel, systemPrompt, userPrompt, maxTokens)
 			if coordErr == nil {
 				return content, nil
@@ -163,19 +163,19 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 	return resp.Content, nil
 }
 
-func (r *RegistrySummarizer) localDefaultAvailable() bool {
-	return r != nil && r.Registry != nil && r.Registry.IncludedModelAvailable()
+func (r *RegistrySummarizer) localDefaultAvailable(ctx context.Context) bool {
+	return r != nil && r.Registry != nil && r.Registry.IncludedModelAvailable(ctx)
 }
 
-func (r *RegistrySummarizer) coordinatorProvider() (modelcall.Provider, string, error) {
+func (r *RegistrySummarizer) coordinatorProvider(ctx context.Context) (modelcall.Provider, string, error) {
 	return r.slotProvider(func(p ModelPolicy) ModelRef {
-		return CoordinatorRefWithLocalDefault(p, r.localDefaultAvailable())
+		return CoordinatorRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
 	}, "coordinator model not configured")
 }
 
-func (r *RegistrySummarizer) liteProvider() (modelcall.Provider, string, error) {
+func (r *RegistrySummarizer) liteProvider(ctx context.Context) (modelcall.Provider, string, error) {
 	return r.slotProvider(func(p ModelPolicy) ModelRef {
-		return SummarizerRefWithLocalDefault(p, r.localDefaultAvailable())
+		return SummarizerRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
 	}, "lite model not configured")
 }
 
@@ -246,8 +246,8 @@ func (r *RegistrySummarizer) SummaryRevision() (string, error) {
 }
 
 // SummaryBudget reserves utility output and framing inside the selected window.
-func (r *RegistrySummarizer) SummaryBudget() compaction.SummaryBudget {
-	provider, model, err := r.liteProvider()
+func (r *RegistrySummarizer) SummaryBudget(ctx context.Context) compaction.SummaryBudget {
+	provider, model, err := r.liteProvider(ctx)
 	if err != nil || provider == nil {
 		return compaction.SummaryBudget{}
 	}

@@ -600,7 +600,7 @@ func TestIncludedProviderCannotBeRemoved(t *testing.T) {
 	}
 
 	removed, err := cat.Remove(IncludedProviderID)
-	if err != ErrCannotRemoveIncludedProvider || removed {
+	if !errors.Is(err, ErrCannotRemoveIncludedProvider) || removed {
 		t.Fatalf("Remove(%q) = (%v, %v), want (false, %v)", IncludedProviderID, removed, err, ErrCannotRemoveIncludedProvider)
 	}
 }
@@ -617,7 +617,7 @@ func TestServiceStartupRequiresAdmittedIncludedModel(t *testing.T) {
 	if _, ok := svc.Catalog.Get(IncludedProviderID); !ok {
 		t.Fatal("bundled provider missing from supported host catalog")
 	}
-	if svc.Registry.IncludedModelAvailable() {
+	if svc.Registry.IncludedModelAvailable(t.Context()) {
 		t.Fatal("environment path substituted for an admitted runtime")
 	}
 	selection, err := svc.Router.Coordinator(t.Context())

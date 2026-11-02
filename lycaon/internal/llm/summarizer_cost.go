@@ -76,7 +76,7 @@ func (r *RegistrySummarizer) completeUtility(ctx context.Context, p modelcall.Pr
 	defer func() { trainingcapture.ObserveUtility(ctx, r.Purpose, err) }()
 	req = r.utilityRequest(ctx, req)
 	class := r.utilityClass()
-	observe := r.observingLiteSlot(p)
+	observe := r.observingLiteSlot(ctx, p)
 	if observe && r != nil && r.Plane != nil && !r.Plane.allowLite() {
 		return nil, ErrLiteUnavailable
 	}
@@ -179,11 +179,11 @@ func providerIDOf(p modelcall.Provider) string {
 	return p.ID()
 }
 
-func (r *RegistrySummarizer) observingLiteSlot(p modelcall.Provider) bool {
+func (r *RegistrySummarizer) observingLiteSlot(ctx context.Context, p modelcall.Provider) bool {
 	if r == nil || p == nil {
 		return false
 	}
-	lite, _, err := r.liteProvider()
+	lite, _, err := r.liteProvider(ctx)
 	if err != nil || lite == nil {
 		return false
 	}

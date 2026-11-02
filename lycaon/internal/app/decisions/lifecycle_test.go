@@ -35,7 +35,7 @@ while IFS= read -r request; do :; done
 	testutil.FailErr(t, "device budget", err)
 	resources := &bialy.Resources{Devices: devices, HostMemory: host, DeviceMemory: device,
 		PhysicalDevice: inference.PhysicalDevice{Kind: "pci", Address: "0000:03:00.0"},
-		HostBytes: 128, DeviceBytes: 256, MaxRows: 2}
+		HostBytes:      128, DeviceBytes: 256, MaxRows: 2}
 	var runtime Runtime
 	testutil.FailErr(t, "load decision runtime", runtime.Load(nil, bialy.Config{Binary: binary, ModelDir: directory, Resources: resources}))
 	t.Cleanup(func() { _ = runtime.Close(context.Background()) })

@@ -108,8 +108,9 @@ func planFileBytes(path string, maximum int64) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maximum {
+	size := info.Size()
+	if !info.Mode().IsRegular() || size <= 0 || size > maximum {
 		return 0, errors.New("decide: checkpoint file exceeds its managed memory bound")
 	}
-	return uint64(info.Size()), nil
+	return uint64(size), nil
 }

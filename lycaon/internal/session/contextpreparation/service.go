@@ -46,7 +46,7 @@ func (s *Service) Focus(ctx context.Context, session, project string) {
 		s.suspended = false
 		s.ctx = context.WithoutCancel(ctx)
 	}
-	s.wakeLocked()
+	s.wakeLocked() //nolint:contextcheck // Preparation follows the retained focus lifetime, not the focus request.
 }
 
 // Changed invalidates only the focused scope; empty scope denotes device settings.
