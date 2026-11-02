@@ -1,11 +1,15 @@
 package llm
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
@@ -71,8 +75,65 @@ func TestCompactionFullRequestBudgetRefusesBeforeProvider(t *testing.T) {
 				output = 4096
 			}
 			_, err := summarizer.summarizeWith(compaction.WithSummaryFormat(t.Context()), provider, "model", system, source, output)
-			if err == nil || provider.last.Model != "" {
+			if !errors.Is(err, failure.ErrProviderContextTooSmall) || provider.last.Model != "" {
 				t.Fatal("over-budget request reached provider")
+			}
+		})
+	}
+}
+
+type compactionBudgetFixture struct {
+	summarizer         *RegistrySummarizer
+	provider           *captureProvider
+	attempts, refusals int
+	oversizedSystem    bool
+}
+
+func (f *compactionBudgetFixture) Summarize(ctx context.Context, system, source string, output int) (string, error) {
+	f.attempts++
+	if f.oversizedSystem {
+		system = strings.Repeat("x", 16384)
+	}
+	result, err := f.summarizer.summarizeWith(ctx, f.provider, "model", system, source, output)
+	if errors.Is(err, failure.ErrProviderContextTooSmall) {
+		f.refusals++
+	}
+	return result, err
+}
+func TestCompactionBudgetGuardReducesPagesOrRetainsReferences(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	for _, impossible := range []bool{false, true} {
+		t.Run(fmt.Sprint(impossible), func(t *testing.T) {
+			provider := &captureProvider{id: "bounded", response: `{"facts":["observed"],"completed":[],"pending":[],"reacquire":[],"constraints":[]}`}
+			registry := &Registry{}
+			registry.snapshot.Store(newProviderRegistrySnapshot(providerRegistrySnapshotInput{
+				Providers: map[string]modelcall.Provider{"bounded": provider},
+				Entries:   map[string]CatalogEntry{"bounded": {ID: "bounded", Models: []modelinfo.Entry{{ID: "model", ContextLength: 4096}}}},
+			}))
+			fixture := &compactionBudgetFixture{summarizer: &RegistrySummarizer{Registry: registry, Purpose: "compaction_turn"}, provider: provider, oversizedSystem: impossible}
+			cfg := testCompactionConfig()
+			cfg.ChunkTokenThreshold = 1000000
+			cfg.KeepRecentMessages = 1
+			cfg.ChunkMaxPerPass = 2
+			cfg.SummaryInputTokens = 4096
+			cfg.SummaryRetryInputTokens = 2048
+			cfg.SummaryMessageTokens = 64
+			cfg.SummaryOutputTokens = 128
+			var rows []compaction.ContextMessage
+			for i := range 60 {
+				rows = append(rows, compaction.ContextMessage{ID: fmt.Sprint(i), Ord: int64(i + 1), Role: "user", Content: strings.Repeat("evidence ", 100)})
+			}
+			rows = append(rows, compaction.ContextMessage{ID: "current", Ord: 61, Role: "user", Content: "continue"})
+			_, report, err := compaction.NewSimpleCompactor(cfg, fixture).Compact(t.Context(), compaction.SessionInfo{ID: "budget"}, rows, 120)
+			testutil.FailErr(t, "compact bounded source", err)
+			if !report.SessionCompacted || fixture.attempts != 2 || fixture.refusals < 1 {
+				t.Fatalf("missing bounded retry: attempts=%d refusals=%d report=%+v", fixture.attempts, fixture.refusals, report)
+			}
+			if impossible && provider.last.Model != "" {
+				t.Fatal("impossible envelope reached provider")
+			}
+			if !impossible && (fixture.refusals != 1 || provider.last.Model != "model") {
+				t.Fatal("smaller page did not reach provider")
 			}
 		})
 	}

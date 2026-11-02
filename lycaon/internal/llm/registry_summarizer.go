@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
@@ -146,7 +147,7 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 		}
 		estimated := modelcall.EstimateRequestInput(req) + tokenest.EstimateDefault(string(encoded))
 		if estimated+maxTokens+summaryRequestHeadroom > window {
-			return "", fmt.Errorf("summary request estimate exceeds model context window")
+			return "", &failure.ProviderContextTooSmallError{ProviderID: p.ID(), Model: model, PromptTokens: estimated + summaryRequestHeadroom, CompletionReserve: maxTokens, MaxContext: window, Source: "summary-request-estimate"}
 		}
 	}
 	resp, err := r.completeUtility(ctx, p, model, req)
