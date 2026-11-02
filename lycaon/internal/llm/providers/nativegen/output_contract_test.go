@@ -88,7 +88,7 @@ func TestStructuredOutputSuppressesToolsAndThought(t *testing.T) {
 	if len(contract.AllowedTools) != 0 {
 		t.Fatal("schema offered tools")
 	}
-	for _, token := range []uint32{48, 100} {
+	for _, token := range []uint32{48, 52, 100} {
 		d := newOutputDecoder(req)
 		if _, err := d.step(&token, "<|channel>"); err == nil {
 			t.Fatal("schema accepted envelope")
