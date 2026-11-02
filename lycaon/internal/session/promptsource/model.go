@@ -35,7 +35,7 @@ func (m *Model) Build() promptloop.ModelDeps {
 		deps.FitRequest = func(ctx context.Context, sess *api.Session, rows []api.Message, req modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
 			var budgets history.RequestBudgets
 			if m.LLMService != nil && m.LLMService.Registry != nil {
-				budgets = m.LLMService.Registry
+				budgets = m.LLMService
 			}
 			return m.History.FitRequest(ctx, sess, rows, req, budgets, m.PolicyIndex)
 		}
