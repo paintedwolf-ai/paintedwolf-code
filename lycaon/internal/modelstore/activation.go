@@ -15,7 +15,7 @@ func (s *Store) Activate(signed SignedManifest) error {
 	return s.activate(signed, false)
 }
 
-func (s *Store) activate(signed SignedManifest, repair bool) error {
+func (s *Store) activate(signed SignedManifest, repair bool) (resultErr error) {
 	if s.signer == nil {
 		return errors.New("modelstore: no manifest authority configured")
 	}
@@ -63,12 +63,12 @@ func (s *Store) activate(signed SignedManifest, repair bool) error {
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	f, err := root.OpenFile("journal.jsonl", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { resultErr = errors.Join(resultErr, f.Close()) }()
 	info, err := f.Stat()
 	if err != nil {
 		return err

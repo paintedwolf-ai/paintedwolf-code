@@ -1,6 +1,7 @@
 package modelstore
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/filelock"
 )
 
-// Collect recovers the journal and removes unreferenced artifacts, preserving active, previous compatible, and leased revisions.
-func (s *Store) Collect() ([]string, error) {
+// Collect removes unreferenced artifacts, retaining active, compatible previous and leased revisions.
+func (s *Store) Collect() (removed []string, resultErr error) {
 	lock, err := s.lockJournal()
 	if err != nil {
 		return nil, err
@@ -70,13 +71,14 @@ func (s *Store) Collect() ([]string, error) {
 		}
 		held, err := filelock.TryExclusive(f)
 		if err != nil {
-			f.Close()
-			return nil, err
+			return nil, errors.Join(err, f.Close())
 		}
 		if !held {
 			keepManifest(&m)
 		}
-		f.Close()
+		if err := f.Close(); err != nil {
+			return nil, err
+		}
 	}
 
 	for _, m := range records {
@@ -86,8 +88,7 @@ func (s *Store) Collect() ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			err = root.RemoveAll(rel)
-			root.Close()
+			err = errors.Join(root.RemoveAll(rel), root.Close())
 			if err != nil {
 				return nil, err
 			}
@@ -98,7 +99,7 @@ func (s *Store) Collect() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 
 	artifactsDir := filepath.Join(s.root, "artifacts")
 	prefixEntries, err := os.ReadDir(artifactsDir)
@@ -109,7 +110,6 @@ func (s *Store) Collect() ([]string, error) {
 		return nil, fmt.Errorf("modelstore: readdir artifacts: %w", err)
 	}
 
-	var removed []string
 	for _, prefixEntry := range prefixEntries {
 		if !prefixEntry.IsDir() {
 			continue
@@ -133,14 +133,13 @@ func (s *Store) Collect() ([]string, error) {
 			}
 			held, err := filelock.TryExclusive(pin)
 			if err != nil || !held {
-				pin.Close()
+				err = errors.Join(err, pin.Close())
 				if err != nil {
 					return nil, err
 				}
 				continue
 			}
-			err = root.Remove(filepath.Join("artifacts", prefix, name))
-			pin.Close()
+			err = errors.Join(root.Remove(filepath.Join("artifacts", prefix, name)), pin.Close())
 			if err != nil {
 				return nil, fmt.Errorf("modelstore: remove %s: %w", name, err)
 			}

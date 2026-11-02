@@ -1,13 +1,14 @@
 package modelstore
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -33,9 +34,8 @@ func (s *Store) RevisionDir(m Manifest) string {
 }
 
 func sameManifest(a, b Manifest) bool {
-	left, _ := json.Marshal(a)
-	right, _ := json.Marshal(b)
-	return bytes.Equal(left, right)
+	return a.Model == b.Model && a.Revision == b.Revision && a.Device == b.Device &&
+		a.Artifact == b.Artifact && slices.Equal(a.Files, b.Files)
 }
 
 func manifestFiles(m Manifest) map[string]Artifact {
@@ -47,12 +47,12 @@ func manifestFiles(m Manifest) map[string]Artifact {
 }
 
 // materializeRevision publishes a complete directory under the journal lock.
-func (s *Store) materializeRevision(m Manifest, repair bool) (string, error) {
+func (s *Store) materializeRevision(m Manifest, repair bool) (path string, resultErr error) {
 	root, err := s.openRoot()
 	if err != nil {
 		return "", err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	rel := s.revisionRel(m)
 	exists := false
 	if _, err := root.Lstat(rel); err == nil {
@@ -74,7 +74,7 @@ func (s *Store) materializeRevision(m Manifest, repair bool) (string, error) {
 	if err := root.Mkdir(tmp, 0o700); err != nil {
 		return "", err
 	}
-	defer root.RemoveAll(tmp)
+	defer func() { resultErr = errors.Join(resultErr, root.RemoveAll(tmp)) }()
 	seal := revisionSeal{Manifest: m, Files: make(map[string]fileSeal)}
 	for name, a := range manifestFiles(m) {
 		src := s.artifactRel(a.Digest)
@@ -98,12 +98,8 @@ func (s *Store) materializeRevision(m Manifest, repair bool) (string, error) {
 	if writeErr == nil {
 		writeErr = fssync.File(f)
 	}
-	closeErr := f.Close()
-	if writeErr != nil {
-		return "", writeErr
-	}
-	if closeErr != nil {
-		return "", closeErr
+	if err := errors.Join(writeErr, f.Close()); err != nil {
+		return "", err
 	}
 	if err := fseffect.SyncDirectory(root, tmp); err != nil {
 		return "", err
@@ -130,18 +126,18 @@ func (s *Store) materializeRevision(m Manifest, repair bool) (string, error) {
 }
 
 // checkRevision reads metadata only; payload hashes are checked at installation and audit.
-func (s *Store) checkRevision(m Manifest) (string, error) {
+func (s *Store) checkRevision(m Manifest) (path string, resultErr error) {
 	root, err := s.openRoot()
 	if err != nil {
 		return "", err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	rel := s.revisionRel(m)
 	f, err := root.Open(filepath.Join(rel, ".manifest.json"))
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { resultErr = errors.Join(resultErr, f.Close()) }()
 	var seal revisionSeal
 	if err := json.NewDecoder(io.LimitReader(f, 1<<20)).Decode(&seal); err != nil {
 		return "", err

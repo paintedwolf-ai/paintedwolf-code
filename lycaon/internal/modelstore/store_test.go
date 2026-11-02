@@ -170,8 +170,12 @@ func TestTornTailRecoversAndNextActivateSurvives(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	_, _ = f.Write([]byte(`{"model":"m","revi`))
-	_ = f.Close()
+	if _, err := f.WriteString(`{"model":"m","revi`); err != nil {
+		t.Fatalf("write torn journal: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close torn journal: %v", err)
+	}
 
 	m2 := Manifest{Model: "m", Revision: "r2", Device: "cpu", Artifact: a}
 	if err := s.Activate(SignedManifest{Manifest: m2}); err != nil {

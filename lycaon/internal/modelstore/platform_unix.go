@@ -4,6 +4,7 @@ package modelstore
 
 import (
 	"math"
+	"math/bits"
 	"os"
 	"syscall"
 )
@@ -20,11 +21,16 @@ func defaultFreeBytes(path string) (int64, error) {
 	if err := syscall.Statfs(path, &stat); err != nil {
 		return 0, err
 	}
-	if stat.Bsize <= 0 {
+	return availableDiskBytes(uint64(stat.Bavail), int64(stat.Bsize))
+}
+
+func availableDiskBytes(blocks uint64, blockSize int64) (int64, error) {
+	if blockSize <= 0 {
 		return 0, ErrInsufficientSpace
 	}
-	if uint64(stat.Bavail) > uint64(math.MaxInt64)/uint64(stat.Bsize) {
+	high, available := bits.Mul64(blocks, uint64(blockSize))
+	if high != 0 || available > math.MaxInt64 {
 		return math.MaxInt64, nil
 	}
-	return int64(stat.Bavail) * int64(stat.Bsize), nil
+	return int64(available), nil
 }
