@@ -3,6 +3,7 @@ package checkpoint
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -160,6 +161,7 @@ func sameHostTarget(a, b hostTargetImage) bool {
 func (host *HostPromotion) validateHostTargets(tx hostTransaction) error {
 	targets := tx.Targets
 	known := map[layeredfs.QualifiedPath]hostTargetImage{}
+	expectedSlots := map[string]bool{}
 	for _, target := range targets {
 		if !filepath.IsLocal(target.Path.Rel) || target.Path.Rel == "." {
 			return ErrInvalidManifest
@@ -170,6 +172,12 @@ func (host *HostPromotion) validateHostTargets(tx hostTransaction) error {
 		if err := host.validateRetainedSlot(target.Path, target.Before); err != nil {
 			return err
 		}
+		if target.Before.RetainedSlot != "" {
+			expectedSlots[target.Before.RetainedSlot] = true
+		}
+	}
+	if err := validateRetainedDirEntries(host.retainedDir(), expectedSlots); err != nil {
+		return err
 	}
 	for _, target := range targets {
 		current := known[target.Path]
@@ -184,6 +192,22 @@ func (host *HostPromotion) validateHostTargets(tx hostTransaction) error {
 	}
 	if len(known) != 0 {
 		return fmt.Errorf("checkpoint: cannot recover directory with unrecorded children")
+	}
+	return nil
+}
+
+func validateRetainedDirEntries(dir string, expected map[string]bool) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !expected[entry.Name()] {
+			return ErrInvalidManifest
+		}
 	}
 	return nil
 }

@@ -44,9 +44,7 @@ func (host *HostPromotion) captureHostTarget(path layeredfs.QualifiedPath) (host
 		if err != nil {
 			return image, err
 		}
-		if image.links > 1 {
-			image.HardLinkGroup = image.identity
-		}
+		image.HardLinkGroup = image.identity
 	}
 	image.Xattrs, err = readFileXattrs(file)
 	if err != nil {
@@ -136,12 +134,6 @@ func (host *HostPromotion) prepareHostTargets(preview *PromotionPreview) ([]host
 		}
 	}
 	paths := slices.SortedFunc(maps.Keys(after), func(a, b layeredfs.QualifiedPath) int { return strings.Compare(pathKey(a), pathKey(b)) })
-	inTargetCount := map[string]int{}
-	for _, path := range paths {
-		if image := before[path]; image.Kind == layeredfs.EntryRegular && image.identity != "" {
-			inTargetCount[path.RootID+"\x00"+image.identity]++
-		}
-	}
 	out := make([]hostTargetUndo, 0, len(paths))
 	origins := map[string]layeredfs.QualifiedPath{}
 	retainedSlots := map[string]string{}
@@ -155,7 +147,7 @@ func (host *HostPromotion) prepareHostTargets(preview *PromotionPreview) ([]host
 				image.RetainedSlot = retainedSlots[key]
 			} else {
 				origins[key] = path
-				slot, err := host.retainTargetInode(path, image, idx, inTargetCount[key], after)
+				slot, err := host.retainTargetInode(path, image, idx, after)
 				if err != nil {
 					return nil, err
 				}

@@ -2,14 +2,13 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/idset"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -138,27 +137,28 @@ func promoteRetainedSlot(relPath string) string {
 	return "slot-" + contentSHA256([]byte(relPath))
 }
 
-func retainPromoteOriginals(txPath string, promote PromoteRoots, task *api.WorkerTask, plans []promoteMutation) error {
+func retainPromoteOriginals(txPath string, promote PromoteRoots, task *api.WorkerTask, plans []promoteMutation) (map[string]string, error) {
 	retainedDir := promoteTransactionRetainedDir(txPath)
 	if retainedDir == "" {
-		return nil
+		return nil, nil
 	}
 	_ = os.RemoveAll(retainedDir)
+	identities := make(map[string]string, len(plans))
 	for _, plan := range plans {
 		if !plan.originalExists {
 			continue
 		}
 		primaryAbs, _, err := promote.fileAbs(task, plan.path)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		primaryRoot, err := promote.primaryRoot(task, primaryAbs)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		primaryRel, err := filepath.Rel(primaryRoot, primaryAbs)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		slot := promoteRetainedSlot(plan.path)
 		if err := fseffect.HardLink(fseffect.HardLinkRequest{
@@ -167,20 +167,30 @@ func retainPromoteOriginals(txPath string, promote PromoteRoots, task *api.Worke
 			DirMode:  0o700,
 			Replace:  true,
 		}); err != nil {
-			if errors.Is(err, syscall.EXDEV) {
-				continue
-			}
-			return err
+			return nil, err
 		}
-		content, exists, mode, err := readOptionalPromoteFile(filepath.Join(retainedDir, slot))
+		slotPath := filepath.Join(retainedDir, slot)
+		content, exists, mode, err := readOptionalPromoteFile(slotPath)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !promoteStateMatches(exists, mode, content, plan.originalExists, plan.originalMode, contentSHA256(plan.original)) {
-			return fmt.Errorf("primary changed while promoting %q", plan.path)
+			return nil, fmt.Errorf("primary changed while promoting %q", plan.path)
 		}
+		origID, err := fspath.EntryIdentity(primaryAbs)
+		if err != nil {
+			return nil, err
+		}
+		slotID, err := fspath.EntryIdentity(slotPath)
+		if err != nil {
+			return nil, err
+		}
+		if origID == "" || origID != slotID {
+			return nil, fmt.Errorf("primary changed while promoting %q", plan.path)
+		}
+		identities[plan.path] = slotID
 	}
-	return nil
+	return identities, nil
 }
 
 func validateRetainedPromoteOriginal(txPath string, mutation promoteJournalMutation) error {
@@ -190,11 +200,20 @@ func validateRetainedPromoteOriginal(txPath string, mutation promoteJournalMutat
 	}
 	slotPath := filepath.Join(retainedDir, promoteRetainedSlot(mutation.Path))
 	content, exists, mode, err := readOptionalPromoteFile(slotPath)
-	if err != nil || !exists {
+	if err != nil {
 		return err
+	}
+	if !exists {
+		return fmt.Errorf("cannot recover promote transaction: missing retained original for %q", mutation.Path)
 	}
 	if !promoteStateMatches(exists, mode, content, mutation.OriginalExists, os.FileMode(mutation.OriginalMode), contentSHA256(mutation.Original)) {
 		return fmt.Errorf("cannot recover promote transaction: %q original inode diverged", mutation.Path)
+	}
+	if mutation.OriginalIdentity != "" {
+		slotID, err := fspath.EntryIdentity(slotPath)
+		if err != nil || slotID != mutation.OriginalIdentity {
+			return fmt.Errorf("cannot recover promote transaction: %q original inode diverged", mutation.Path)
+		}
 	}
 	return nil
 }
@@ -207,11 +226,16 @@ func promoteInodeMatchesRetained(txPath, primaryAbs string, mutation promoteJour
 	slotPath := filepath.Join(retainedDir, promoteRetainedSlot(mutation.Path))
 	retInfo, err := os.Lstat(slotPath)
 	if err != nil {
-		return true
+		return false
 	}
 	primInfo, err := os.Lstat(primaryAbs)
 	if err != nil {
 		return false
+	}
+	if mutation.OriginalIdentity != "" {
+		if primID, idErr := fspath.EntryIdentity(primaryAbs); idErr != nil || primID != mutation.OriginalIdentity {
+			return false
+		}
 	}
 	return os.SameFile(retInfo, primInfo)
 }
@@ -220,35 +244,32 @@ func restorePromoteOriginalMutation(txPath string, promote PromoteRoots, task *a
 	retainedDir := promoteTransactionRetainedDir(txPath)
 	if plan.originalExists && retainedDir != "" {
 		slot := promoteRetainedSlot(plan.path)
-		slotPath := filepath.Join(retainedDir, slot)
-		if _, err := os.Lstat(slotPath); err == nil {
-			primaryAbs, _, err := promote.fileAbs(task, plan.path)
-			if err != nil {
-				return err
-			}
-			primaryRoot, err := promote.primaryRoot(task, primaryAbs)
-			if err != nil {
-				return err
-			}
-			primaryRel, err := filepath.Rel(primaryRoot, primaryAbs)
-			if err != nil {
-				return err
-			}
-			if err := fseffect.HardLink(fseffect.HardLinkRequest{
-				Source:       fseffect.Location{Root: retainedDir, Rel: slot},
-				Location:     fseffect.Location{Root: primaryRoot, Rel: primaryRel},
-				DirMode:      0o750,
-				Replace:      true,
-				BeforeCommit: verify,
-			}); err != nil {
-				return err
-			}
-			_, err = fseffect.UpdateMode(fseffect.ModeUpdateRequest{
-				Location: fseffect.Location{Root: primaryRoot, Rel: primaryRel},
-				Update:   func(os.FileMode) os.FileMode { return plan.originalMode.Perm() },
-			})
+		primaryAbs, _, err := promote.fileAbs(task, plan.path)
+		if err != nil {
 			return err
 		}
+		primaryRoot, err := promote.primaryRoot(task, primaryAbs)
+		if err != nil {
+			return err
+		}
+		primaryRel, err := filepath.Rel(primaryRoot, primaryAbs)
+		if err != nil {
+			return err
+		}
+		if err := fseffect.HardLink(fseffect.HardLinkRequest{
+			Source:       fseffect.Location{Root: retainedDir, Rel: slot},
+			Location:     fseffect.Location{Root: primaryRoot, Rel: primaryRel},
+			DirMode:      0o750,
+			Replace:      true,
+			BeforeCommit: verify,
+		}); err != nil {
+			return err
+		}
+		_, err = fseffect.UpdateMode(fseffect.ModeUpdateRequest{
+			Location: fseffect.Location{Root: primaryRoot, Rel: primaryRel},
+			Update:   func(os.FileMode) os.FileMode { return plan.originalMode.Perm() },
+		})
+		return err
 	}
 	return applyOriginalPromoteMutation(promote, task, plan, verify)
 }

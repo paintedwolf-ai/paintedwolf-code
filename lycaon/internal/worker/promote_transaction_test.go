@@ -58,6 +58,11 @@ func TestPromoteTransactionRecoversCommittedTargets(t *testing.T) {
 	alias := filepath.Join(root, "script_alias.sh")
 	testutil.FailErr(t, "seed primary", os.WriteFile(primary, []byte("old\n"), 0o755))
 	testutil.FailErr(t, "link alias", os.Link(primary, alias))
+	heldFD, err := os.Open(primary)
+	testutil.FailErr(t, "open held fd", err)
+	defer func() { _ = heldFD.Close() }()
+	origStat, err := heldFD.Stat()
+	testutil.FailErr(t, "stat held fd", err)
 
 	plans := []promoteMutation{{
 		path: "script.sh", original: []byte("old\n"), originalExists: true, originalMode: 0o755,
@@ -85,8 +90,32 @@ func TestPromoteTransactionRecoversCommittedTargets(t *testing.T) {
 	}
 	aliasInfo, err := os.Stat(alias)
 	testutil.FailErr(t, "stat alias", err)
-	if !os.SameFile(info, aliasInfo) {
-		t.Fatal("expected Stage-1 promoteTransaction recovery to restore hard-link identity")
+	if !os.SameFile(info, aliasInfo) || !os.SameFile(info, origStat) {
+		t.Fatal("expected Stage-1 promoteTransaction recovery to restore exact pre-promotion inode and hard-link identity")
+	}
+
+	// Re-apply and verify strict journal decoding and refusal when retained slot is replaced or missing.
+	tx2, err := beginPromoteTransaction(dataDir, task.ID, plans)
+	testutil.FailErr(t, "begin tx2", err)
+	testutil.FailErr(t, "apply tx2", tx2.apply(t.Context(), promote, task))
+	txPath := promoteTransactionPath(dataDir, task.ID)
+	validJournal, err := os.ReadFile(txPath)
+	testutil.FailErr(t, "read valid journal", err)
+	testutil.FailErr(t, "write unknown field journal", os.WriteFile(txPath, []byte(`{"version":1,"job_id":"job-recover","unknown":true}`), 0o600))
+	if _, err := recoverPromoteTransaction(dataDir, task.ID, promote, task); err == nil {
+		t.Fatal("expected unknown JSON field in promote journal to be rejected")
+	}
+	testutil.FailErr(t, "restore valid journal", os.WriteFile(txPath, validJournal, 0o600))
+
+	slotPath := filepath.Join(promoteTransactionRetainedDir(txPath), promoteRetainedSlot("script.sh"))
+	testutil.FailErr(t, "remove retained slot", os.Remove(slotPath))
+	testutil.FailErr(t, "replace retained slot with fresh inode", os.WriteFile(slotPath, []byte("old\n"), 0o755))
+	if _, err := recoverPromoteTransaction(dataDir, task.ID, promote, task); err == nil || !strings.Contains(err.Error(), "diverged") {
+		t.Fatalf("expected replaced retained slot to fail with diverged error, got %v", err)
+	}
+	testutil.FailErr(t, "delete retained slot", os.Remove(slotPath))
+	if _, err := recoverPromoteTransaction(dataDir, task.ID, promote, task); err == nil || !strings.Contains(err.Error(), "missing retained original") {
+		t.Fatalf("expected missing retained slot to fail with missing error, got %v", err)
 	}
 }
 

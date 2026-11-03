@@ -56,8 +56,12 @@ type hostRefUndo struct {
 }
 
 type hostPostimageRecord struct {
-	Index  int               `json:"index"`
-	Xattrs map[string][]byte `json:"xattrs,omitempty"`
+	Version      int                     `json:"version"`
+	CheckpointID string                  `json:"checkpoint_id"`
+	WorkerID     string                  `json:"worker_id"`
+	Index        int                     `json:"index"`
+	Path         layeredfs.QualifiedPath `json:"path"`
+	Xattrs       map[string][]byte       `json:"xattrs,omitempty"`
 }
 
 func (host *HostPromotion) retainedDir() string {
@@ -203,6 +207,9 @@ func (host *HostPromotion) loadHostTransaction() (hostTransaction, bool, error) 
 }
 
 func (host *HostPromotion) foldHostPostimages(tx *hostTransaction) error {
+	if tx.Version != 1 || !hostComponent(tx.CheckpointID) || !hostComponent(tx.WorkerID) {
+		return ErrInvalidManifest
+	}
 	entries, err := os.ReadDir(host.postimagesDir())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -211,21 +218,45 @@ func (host *HostPromotion) foldHostPostimages(tx *hostTransaction) error {
 		return err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			return ErrInvalidManifest
 		}
 		raw, err := os.ReadFile(filepath.Join(host.postimagesDir(), entry.Name()))
 		if err != nil {
 			return err
 		}
-		var rec hostPostimageRecord
-		if err := json.Unmarshal(raw, &rec); err != nil {
+		if err := applyHostPostimageSidecar(entry.Name(), raw, tx); err != nil {
 			return err
 		}
-		if rec.Index < 0 || rec.Index >= len(tx.Targets) {
-			return ErrInvalidManifest
-		}
-		tx.Targets[rec.Index].After.Xattrs = cloneXattrs(rec.Xattrs)
+	}
+	return nil
+}
+
+func applyHostPostimageSidecar(name string, raw []byte, tx *hostTransaction) error {
+	var rec hostPostimageRecord
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&rec); err != nil {
+		return ErrInvalidManifest
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return ErrInvalidManifest
+	}
+	if rec.Version != 1 || !hostComponent(rec.CheckpointID) || !hostComponent(rec.WorkerID) {
+		return ErrInvalidManifest
+	}
+	if rec.WorkerID != tx.WorkerID {
+		return ErrOwnershipMismatch
+	}
+	if rec.CheckpointID != tx.CheckpointID || rec.Index < 0 || rec.Index >= len(tx.Targets) {
+		return ErrInvalidManifest
+	}
+	if name != fmt.Sprintf("target-%06d.json", rec.Index) || rec.Path != tx.Targets[rec.Index].Path {
+		return ErrInvalidManifest
+	}
+	tx.Targets[rec.Index].After.Xattrs = cloneXattrs(rec.Xattrs)
+	if !validHostImage(tx.Targets[rec.Index].After) {
+		return ErrInvalidManifest
 	}
 	return nil
 }
@@ -280,7 +311,14 @@ func (host *HostPromotion) recordHostPostimage(path layeredfs.QualifiedPath, fil
 		return nil
 	}
 	target.After.Xattrs = cloneXattrs(attrs)
-	raw, err := json.Marshal(hostPostimageRecord{Index: idx, Xattrs: target.After.Xattrs})
+	raw, err := json.Marshal(hostPostimageRecord{
+		Version:      1,
+		CheckpointID: host.activeTx.CheckpointID,
+		WorkerID:     host.activeTx.WorkerID,
+		Index:        idx,
+		Path:         path,
+		Xattrs:       target.After.Xattrs,
+	})
 	if err != nil {
 		return err
 	}

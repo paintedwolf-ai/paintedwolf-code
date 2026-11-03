@@ -17,7 +17,6 @@ func (host *HostPromotion) retainTargetInode(
 	path layeredfs.QualifiedPath,
 	image hostTargetImage,
 	idx int,
-	inTargetGroupCount int,
 	after map[layeredfs.QualifiedPath]hostTargetImage,
 ) (string, error) {
 	rootDir := host.targets.roots[path.RootID]
@@ -32,11 +31,11 @@ func (host *HostPromotion) retainTargetInode(
 		Replace:  true,
 	})
 	if err != nil {
+		if errors.Is(err, syscall.EXDEV) && host.hasSurvivingInRootPeer(path.RootID, image.identity, after) {
+			return "", nil
+		}
 		if errors.Is(err, syscall.EXDEV) {
-			if image.links <= uint64(inTargetGroupCount) || host.hasSurvivingInRootPeer(path.RootID, image.identity, after) {
-				return "", nil
-			}
-			return "", fmt.Errorf("checkpoint: cannot retain hard-linked inode across filesystems for %s: %w", pathKey(path), err)
+			return "", fmt.Errorf("checkpoint: cannot retain target inode across filesystems for %s: %w", pathKey(path), err)
 		}
 		return "", err
 	}
@@ -91,13 +90,10 @@ func (host *HostPromotion) validateRetainedSlot(path layeredfs.QualifiedPath, be
 		return nil
 	}
 	retained, err := host.captureRetainedTarget(before.RetainedSlot)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
 	if err != nil {
-		return err
+		return fmt.Errorf("checkpoint: missing retained inode slot %s for %s: %w", before.RetainedSlot, pathKey(path), err)
 	}
-	if !sameHostTarget(retained, before) {
+	if !sameHostTarget(retained, before) || (before.HardLinkGroup != "" && retained.identity != before.HardLinkGroup) {
 		return fmt.Errorf("checkpoint: cannot recover diverged retained inode for %s", pathKey(path))
 	}
 	return nil
@@ -149,9 +145,11 @@ func (host *HostPromotion) targetMatchesBeforeInode(target hostTargetUndo, curre
 		return true
 	}
 	if before.RetainedSlot != "" {
-		if retained, err := host.captureRetainedTarget(before.RetainedSlot); err == nil {
-			return current.identity != "" && current.identity == retained.identity
+		retained, err := host.captureRetainedTarget(before.RetainedSlot)
+		if err != nil {
+			return false
 		}
+		return current.identity != "" && current.identity == retained.identity && (before.HardLinkGroup == "" || retained.identity == before.HardLinkGroup)
 	}
 	if before.HardLinkSource != nil {
 		if srcImg, err := host.captureHostTarget(*before.HardLinkSource); err == nil {
@@ -189,21 +187,21 @@ func (host *HostPromotion) restoreRegularTarget(target hostTargetUndo) error {
 			return err
 		}
 		if before.RetainedSlot != "" {
-			if retained, rErr := host.captureRetainedTarget(before.RetainedSlot); rErr == nil {
-				if !sameHostTarget(retained, before) {
-					return fmt.Errorf("checkpoint: retained inode diverged for %s", pathKey(target.Path))
-				}
-				if err := fseffect.HardLink(fseffect.HardLinkRequest{
-					Source:   fseffect.Location{Root: host.retainedDir(), Rel: before.RetainedSlot},
-					Location: fseffect.Location{Root: rootDir, Rel: target.Path.Rel},
-					Replace:  true,
-				}); err != nil {
-					return err
-				}
-				return restoreTargetFileMetadata(root, target.Path.Rel, before.Mode, before.Xattrs)
-			} else if !errors.Is(rErr, os.ErrNotExist) {
-				return rErr
+			retained, rErr := host.captureRetainedTarget(before.RetainedSlot)
+			if rErr != nil {
+				return fmt.Errorf("checkpoint: missing retained inode slot %s for %s: %w", before.RetainedSlot, pathKey(target.Path), rErr)
 			}
+			if !sameHostTarget(retained, before) || (before.HardLinkGroup != "" && retained.identity != before.HardLinkGroup) {
+				return fmt.Errorf("checkpoint: retained inode diverged for %s", pathKey(target.Path))
+			}
+			if err := fseffect.HardLink(fseffect.HardLinkRequest{
+				Source:   fseffect.Location{Root: host.retainedDir(), Rel: before.RetainedSlot},
+				Location: fseffect.Location{Root: rootDir, Rel: target.Path.Rel},
+				Replace:  true,
+			}); err != nil {
+				return err
+			}
+			return restoreTargetFileMetadata(root, target.Path.Rel, before.Mode, before.Xattrs)
 		}
 		if before.HardLinkGroup != "" {
 			if peerRel, pErr := host.findHardLinkPeer(root, target.Path.Rel, before); pErr != nil {
@@ -260,9 +258,14 @@ func (host *HostPromotion) restoreHostHardLinks(targets []hostTargetUndo) error 
 			}
 			srcLoc := fseffect.Location{Root: rootDir, Rel: source.Rel}
 			if target.Before.RetainedSlot != "" {
-				if _, rErr := host.captureRetainedTarget(target.Before.RetainedSlot); rErr == nil {
-					srcLoc = fseffect.Location{Root: host.retainedDir(), Rel: target.Before.RetainedSlot}
+				retained, rErr := host.captureRetainedTarget(target.Before.RetainedSlot)
+				if rErr != nil {
+					return fmt.Errorf("checkpoint: missing retained inode slot %s for %s: %w", target.Before.RetainedSlot, pathKey(target.Path), rErr)
 				}
+				if !sameHostTarget(retained, target.Before) || (target.Before.HardLinkGroup != "" && retained.identity != target.Before.HardLinkGroup) {
+					return fmt.Errorf("checkpoint: retained inode diverged for %s", pathKey(target.Path))
+				}
+				srcLoc = fseffect.Location{Root: host.retainedDir(), Rel: target.Before.RetainedSlot}
 			}
 			if err := fseffect.HardLink(fseffect.HardLinkRequest{
 				Source:   srcLoc,
