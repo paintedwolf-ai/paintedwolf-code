@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 // RootRef is a project folder root exposed to tools, prompts, and the path resolver.
@@ -250,4 +252,69 @@ func ScopeRel(root RootRef, abs string) string {
 		return abs
 	}
 	return filepath.ToSlash(rel)
+}
+
+// PathWithinRoot reports whether candidatePath resolves within rootPath after symlink evaluation.
+func PathWithinRoot(rootPath, candidatePath string) bool {
+	canonRoot, ok := canonicalizePath(rootPath)
+	if !ok {
+		return false
+	}
+	canonCandidate, ok := canonicalizePath(candidatePath)
+	if !ok {
+		return false
+	}
+	rel, err := filepath.Rel(canonRoot, canonCandidate)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+}
+
+// MatchRoot resolves candidatePath against the project's roots after symlink
+// evaluation and returns the most specific matching root and slash-normalized
+// relative path.
+func MatchRoot(roots []RootRef, candidatePath string) (RootRef, string, bool) {
+	canonCandidate, ok := canonicalizePath(candidatePath)
+	if !ok {
+		return RootRef{}, "", false
+	}
+	var match RootRef
+	var bestRel string
+	found := false
+	for _, r := range roots {
+		canonRoot, ok := canonicalizePath(r.Path)
+		if !ok {
+			continue
+		}
+		rel, err := filepath.Rel(canonRoot, canonCandidate)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		if !found || len(rel) < len(bestRel) {
+			match = r
+			bestRel = rel
+			found = true
+		}
+	}
+	if !found {
+		return RootRef{}, "", false
+	}
+	if bestRel == "" {
+		bestRel = "."
+	}
+	return match, filepath.ToSlash(bestRel), true
+}
+
+// Relative operands are anchored before asking the filesystem identity authority.
+func canonicalizePath(p string) (string, bool) {
+	if p == "" {
+		return "", false
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", false
+	}
+	canonical := fspath.CanonicalPath(abs)
+	return canonical, canonical != ""
 }

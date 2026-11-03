@@ -38,8 +38,6 @@ CREATE TABLE IF NOT EXISTS source_snapshot_roots (
     manifest_id TEXT NOT NULL REFERENCES source_manifests(id),
     PRIMARY KEY (snapshot_id, root_path)
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS idx_source_snapshot_roots_manifest
-    ON source_snapshot_roots(manifest_id);
 
 -- Content-defined runs of a manifest's entries in path order. Boundaries
 -- follow the paths themselves, so a change rewrites the runs around it
@@ -60,8 +58,6 @@ CREATE TABLE IF NOT EXISTS source_manifest_layout (
     chunk_id TEXT NOT NULL REFERENCES source_manifest_chunks(id),
     PRIMARY KEY (manifest_id, first_path)
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS idx_source_manifest_layout_chunk
-    ON source_manifest_layout(chunk_id);
 
 -- One admitted file as a generation identified it. identity says where the
 -- content id came from: 'index' is git's own blob id for a file clean against
@@ -96,7 +92,6 @@ CREATE TABLE IF NOT EXISTS source_manifest_staging (
     PRIMARY KEY (build_id, path)
 ) STRICT, WITHOUT ROWID;
 
-CREATE INDEX IF NOT EXISTS idx_source_manifest_entries_sha ON source_manifest_entries(sha256) WHERE sha256 != '';
 CREATE TRIGGER IF NOT EXISTS history_clock_source_manifest_chunks_insert AFTER INSERT ON source_manifest_chunks BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_source_manifest_chunks_delete AFTER DELETE ON source_manifest_chunks BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 

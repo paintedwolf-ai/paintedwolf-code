@@ -65,6 +65,7 @@ func (c *Service) Run(ctx context.Context) error {
 }
 
 func (d rootDispatcher) dueRoots(ctx context.Context) []string {
+	reconcileUnavailable(ctx, d.c)
 	due, err := d.c.Store.ListDueSeries(ctx, nowUTC(d.c))
 	if err != nil {
 		slog.WarnContext(ctx, "scan cadence list due", "error", err)

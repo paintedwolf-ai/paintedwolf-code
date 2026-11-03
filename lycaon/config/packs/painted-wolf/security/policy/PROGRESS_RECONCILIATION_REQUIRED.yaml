@@ -1,0 +1,46 @@
+oar: '1.0'
+id: PROGRESS_RECONCILIATION_REQUIRED
+overrides: [PROGRESS_ITEM_NOT_CLOSED]
+kind: policy
+anchor: coordinator.pre_invoke
+requires:
+  profiles:
+    - tool
+  facts:
+    - paintedwolf.pending
+    - paintedwolf.progress_closure_armed
+    - paintedwolf.progress_gated_tool
+    - paintedwolf.progress_open_items
+    - paintedwolf.settled_work
+when: paintedwolf.progress_closure_armed && paintedwolf.progress_gated_tool
+effect: block
+copy:
+  what: 'Worker finishes await acknowledgement before **`{{ tool }}`**{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}.'
+  cause: The worker finishes have not been acknowledged in current progress state.
+  why: The coordinator must review newly finished worker results before continuing governed work.
+  fix: >-
+    Review the listed worker results, then call `update_progress` with the current snapshot content,
+    reconciliation_token and expected_revision. Close only completed deliverables and keep unfinished rows pending.
+    An unchanged document can acknowledge its listed finishes with that exact token.
+    Then immediately retry the authorized `{{ tool }}` action.
+  instead: Acknowledge the listed worker finishes with the current reconciliation_token and expected_revision, then retry the authorized action
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Reconcile Progress rows before more progress-gated work
+x-paintedwolf-scenarios:
+  - id: not_closed
+    vars:
+      pending: 3
+      tool: task
+      settled_work:
+        - 'security-reviewer `job-1`: Loopback API authentication'
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: PROGRESS_RECONCILIATION_REQUIRED'
+      - update_progress
+      - Loopback API authentication
+      - unchanged
+      - reconciliation_token
+      - expected_revision
+      - unfinished rows pending
+      - immediately

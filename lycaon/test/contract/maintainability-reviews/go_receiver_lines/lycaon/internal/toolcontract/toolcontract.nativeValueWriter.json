@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/toolcontract/toolcontract.nativeValueWriter",
+  "kind": "algorithm",
+  "workstream": "large-command-review",
+  "disposition": "retain",
+  "reason": "Retain the bounded canonical writer at 378 receiver lines. Buffer admission and escaping serve two explicit grammars: lossless native values and model JSON. Keeping their scalar encoding together preserves exact number spellings and durable escaping without an intermediate value tree. Sorting scratch and recursion frames remain local to each traversal; no authority or lifecycle moves to the writer. Both canonical grammars require cleanup under refusal at every allocation boundary.",
+  "reviewed_commit": "3168a8b56581cde85b59910c8ad834587cd211ab",
+  "ceiling": 378,
+  "boundaries": {
+    "lycaon/internal/toolcontract/native_value_fault_test.go": "b4c9cdf80390e1f2a6784575f97b87d59b71c24817cb0694dabe33e2243e0140",
+    "lycaon/internal/toolcontract/native_value_scale_test.go": "275f843d419c539ceeefa355e6a28e43efe11135932014c4dd209b1a050d7d2e",
+    "lycaon/internal/toolcontract/model_json_test.go": "2184309a5ac34e68484e3a72edb65c34fe0d8f69711486f2566ce99408288a33"
+  },
+  "reviewed_shape": "87e4e95388e674b0c1a1c4ac598e7e7ccc6e373b79503e1a0cde2f1e1fd8a43e"
+}

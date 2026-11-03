@@ -79,6 +79,9 @@ func (m *Projection) Build() promptloop.ProjectionDeps {
 	}
 
 	deps.AdmitModelResponse = m.Sessions.AdmitModelResponse
+	deps.SettledModelOutputIteration = func(ctx context.Context, attemptID string) (int, error) {
+		return store.SettledModelOutputIteration(ctx, m.Sessions, attemptID)
+	}
 	deps.SettleModelOutput = func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error) {
 		if m == nil || m.Sessions == nil {
 			return store.ModelOutput{}, fmt.Errorf("session store not configured")

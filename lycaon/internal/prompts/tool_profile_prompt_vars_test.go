@@ -467,3 +467,34 @@ func TestHostRunnerToolOrderIncludesNativeTerminalThenArgv(t *testing.T) {
 		t.Fatalf("write must not be in host runner order: %v", order)
 	}
 }
+
+func TestMergeProfileRequestableVars(t *testing.T) {
+	prompts.MergeProfileRequestableVars("coordinator", []string{"command", "request_tools"}, nil)
+
+	for _, profile := range []string{"coordinator", "implementer", "implement"} {
+		vars := map[string]any{}
+		prompts.MergeProfileRequestableVars(profile, []string{"command", "request_tools"}, vars)
+		canRequest, _ := vars["profile_can_request"].(map[string]bool)
+		if !canRequest["capture_page"] || canRequest["command"] {
+			t.Fatalf("%s requestable map = %#v, want capture_page=true command=false", profile, canRequest)
+		}
+	}
+
+	for _, tc := range []struct {
+		profile string
+		offered []string
+	}{
+		{profile: "coordinator", offered: []string{"command"}},
+		{profile: "coordinator", offered: []string{"command", "request_tools", "capture_page"}},
+		{profile: "editor_file", offered: []string{"command", "request_tools"}},
+		{profile: "", offered: []string{"command", "request_tools"}},
+		{profile: "missing_profile", offered: []string{"command", "request_tools"}},
+	} {
+		vars := map[string]any{}
+		prompts.MergeProfileRequestableVars(tc.profile, tc.offered, vars)
+		canRequest, _ := vars["profile_can_request"].(map[string]bool)
+		if canRequest["capture_page"] {
+			t.Fatalf("%s/%v unexpectedly marked capture_page requestable: %#v", tc.profile, tc.offered, canRequest)
+		}
+	}
+}

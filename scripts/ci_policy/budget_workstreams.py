@@ -13,6 +13,10 @@ from .budget_snapshot import key, relative
 
 START = '<!-- paintedwolf-maintainability:v2 -->'
 SUPERSEDED = '<!-- paintedwolf-maintainability-superseded:'
+LEGACY_PREAMBLE = re.compile(
+    r'^Measured \d+; limit \d+\. \[Evidence\]\([^)\n]+\)\. Reduce this artifact along cohesive domain boundaries\.\s*')
+LEGACY_FOOTER = re.compile(
+    r'\s*Initial consolidation preserves historical observations from the individual issues\.[^\n]*\s*$')
 
 
 def module(row):
@@ -148,8 +152,11 @@ def body_for(issue, managed):
     body = issue.get('body') or ''
     marker = START if START in body else LEGACY_START
     if marker in body:
-        return body[:body.index(marker)] + managed + body[body.index(END) + len(END):]
-    return body.rstrip() + ('\n\n' if body.strip() else '') + managed
+        prefix = LEGACY_PREAMBLE.sub('', body[:body.index(marker)])
+        suffix = LEGACY_FOOTER.sub('', body[body.index(END) + len(END):])
+        return prefix + managed + suffix
+    prefix = LEGACY_PREAMBLE.sub('', body).rstrip()
+    return prefix + ('\n\n' if prefix.strip() else '') + managed
 
 
 def plan(issues, artifacts, observation, backfill=False, intake_keys=None, held=lambda row: False):
@@ -226,7 +233,9 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None, held=
             continue
         state = group_state(canonical)
         desired = 'open' if rows else 'closed'
-        same = state and area_digest(rows) == state['evidence_digest']
+        body = canonical.get('body') or ''
+        same = (state and area_digest(rows) == state['evidence_digest']
+                and body_for(canonical, body[body.index(START):body.index(END) + len(END)]) == body)
         # A dismissal retains its comparison evidence until facts renew intake.
         if state and not rows and canonical['state'] == 'closed' and canonical.get('state_reason') == 'not_planned':
             same = True

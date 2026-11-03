@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -114,8 +115,11 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 	}
 	m.cancelTreeTurns(ctx, tree)
 
+	workerCtx, cancelWorkers := m.workerReleaseContext(ctx)
+	defer cancelWorkers()
+
 	var errs []error
-	errs = m.stopTreeWorkers(ctx, tree, reason, errs)
+	errs = m.stopTreeWorkers(workerCtx, tree, reason, errs)
 
 	// Include children admitted before stop began.
 	if refreshed, refreshErr := m.store.SessionTreeMembers(ctx, rootID); refreshErr != nil {
@@ -146,18 +150,23 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 		}
 	}
 	// Catch workers admitted by turns already draining.
-	errs = m.stopTreeWorkers(ctx, tree, reason, errs)
-	if err := errors.Join(errs...); err != nil {
-		return err
-	}
+	errs = m.stopTreeWorkers(workerCtx, tree, reason, errs)
 	for _, sess := range tree {
 		if err := m.store.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle); err != nil {
-			return fmt.Errorf("mark session %s idle: %w", sess.ID, err)
+			errs = appendStopError(errs, "mark session idle", sess.ID, err)
 		}
 	}
 	m.status.PublishIdle(ctx, rootID, api.SessionIdleDispositionUserStopped)
 	m.QueueChecklistReconcileNudge(ctx, rootID)
-	return nil
+	return errors.Join(errs...)
+}
+
+func (m *Service) workerReleaseContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := DefaultWorkerReleaseTimeout
+	if m != nil && m.workerReleaseTimeout > 0 {
+		timeout = m.workerReleaseTimeout
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (m *Service) cancelTreeTurns(ctx context.Context, tree []store.SessionTreeMember) {
@@ -188,12 +197,22 @@ func (m *Service) stopTreeWorkers(ctx context.Context, tree []store.SessionTreeM
 // unwind and release its session before recording the stop without it.
 const DefaultTurnReleaseTimeout = 30 * time.Second
 
+// DefaultWorkerReleaseTimeout bounds how long session stop waits for fenced
+// workers to exit inline before leaving terminal cleanup to the worker poller.
+const DefaultWorkerReleaseTimeout = 5 * time.Second
+
 // stoppedTurnPoll is how often a stop re-tries the prompt lock while waiting.
 const stoppedTurnPoll = 10 * time.Millisecond
 
 func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember, preserveQueueSessionID string) error {
 	var errs []error
 	defer m.AcquireStoppedTurn(ctx, sess.ID)()
+	isWorkerChild := strings.TrimSpace(sess.ParentSessionID) != ""
+	fallback := bgprocess.TerminationStoppedByUser
+	if isWorkerChild {
+		fallback = bgprocess.TerminationWorkerCancelled
+	}
+	ctx = bgprocess.WithTerminationReason(ctx, fallback)
 	preserveQueue := sess.ID == preserveQueueSessionID
 	if m.store != nil {
 		if preserveQueue {
@@ -204,7 +223,11 @@ func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember,
 				m.store.InterruptPromptSubmissionsBySession(ctx, sess.ID))
 		}
 	}
-	errs = appendStopError(errs, "release runtime", sess.ID, m.chats.ReleaseRuntime(ctx, sess.ID))
+	if isWorkerChild {
+		errs = appendStopError(errs, "dispose runtime", sess.ID, m.chats.DisposeRuntime(ctx, sess.ID))
+	} else {
+		errs = appendStopError(errs, "release runtime", sess.ID, m.chats.ReleaseRuntime(ctx, sess.ID))
+	}
 	if m.queue != nil && !preserveQueue {
 		draft := m.queue.CancelAll(sess.ID)
 		m.drafts.Publish(ctx, sess.ID, draft.Revision)

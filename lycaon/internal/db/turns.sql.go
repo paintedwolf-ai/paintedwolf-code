@@ -617,6 +617,19 @@ func (q *Queries) MarkModelOutputProjected(ctx context.Context, arg MarkModelOut
 	return result.RowsAffected()
 }
 
+const maxSettledModelOutputIteration = `-- name: MaxSettledModelOutputIteration :one
+SELECT CAST(COALESCE(MAX(iteration), 0) AS INTEGER) AS max_iteration
+FROM model_outputs
+WHERE turn_attempt_id = ?
+`
+
+func (q *Queries) MaxSettledModelOutputIteration(ctx context.Context, turnAttemptID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, maxSettledModelOutputIteration, turnAttemptID)
+	var max_iteration int64
+	err := row.Scan(&max_iteration)
+	return max_iteration, err
+}
+
 const nextTurnAttempt = `-- name: NextTurnAttempt :one
 SELECT COALESCE(MAX(attempt), 0) + 1 FROM turn_attempts WHERE turn_id = ?
 `

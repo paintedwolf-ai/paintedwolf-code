@@ -1,77 +1,105 @@
 package llm
 
 import (
-	"context"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
-	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 )
 
-// ContextLength returns the usable context window for provider/model from
-// already-known ModelEntry data only (catalog YAML + discovery cache). It does
-// not perform live HTTP discovery.
-func (r *Registry) ContextLength(provider, model string) int {
+// ContextEntry returns the model entry with its resolved ContextLength and
+// ContextLengthSource for provider/model when known.
+func ContextEntry(r *Registry, provider, model string) (modelinfo.Entry, bool) {
 	if r == nil {
-		return 0
+		return modelinfo.Entry{}, false
 	}
 	provider = strings.TrimSpace(provider)
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return 0
+		return modelinfo.Entry{}, false
 	}
 	snapshot := r.snapshot.Load()
 	if snapshot == nil {
-		return 0
+		return modelinfo.Entry{}, false
 	}
 	entry, ok := snapshot.entries[provider]
 	if !ok {
-		return 0
+		return modelinfo.Entry{}, false
+	}
+	var p modelcall.Provider
+	if snapshot.providers != nil {
+		p = snapshot.providers[provider]
 	}
 	for _, m := range entry.Models {
 		if modelinfo.EquivalentID(entry.Kind, m.ID, model) && m.ContextLength > 0 {
-			return m.ContextLength
+			out := m
+			if out.ContextLengthSource == "" {
+				out.ContextLengthSource = "config"
+			}
+			if oa, ok := providerAdapter(p).(*openaicompat.Provider); ok {
+				if runtimeEntry, hasRuntime := oa.ModelEntry(model); hasRuntime && runtimeEntry.ContextLength > 0 && runtimeEntry.ContextLength < out.ContextLength {
+					return runtimeEntry, true
+				}
+			}
+			return out, true
+		}
+	}
+	if oa, ok := providerAdapter(p).(*openaicompat.Provider); ok {
+		if runtimeEntry, hasRuntime := oa.ModelEntry(model); hasRuntime && runtimeEntry.ContextLength > 0 {
+			return runtimeEntry, true
 		}
 	}
 	profile := providerprofile.Default()
-	if p := snapshot.providers[provider]; p != nil {
+	if p != nil {
 		profile = p.Profile()
+	}
+	if r.discovery == nil {
+		return modelinfo.Entry{}, false
 	}
 	cacheKey := discoveryCacheKey(provider, profile, entry.BaseURL, snapshot.credentialValues[provider])
 	if cached, ok, _ := r.discovery.Get(cacheKey); ok {
 		for _, m := range cached {
-			if modelinfo.EquivalentID(entry.Kind, m.ID, model) && m.ContextLength > 0 {
-				return m.ContextLength
+			if (m.ID == "*" || modelinfo.EquivalentID(entry.Kind, m.ID, model)) && m.ContextLength > 0 {
+				out := m
+				out.ID = model
+				return out, true
 			}
 		}
+	}
+	return modelinfo.Entry{}, false
+}
+
+// ContextLength returns the usable context window for provider/model from
+// ModelEntry data (catalog YAML, discovery cache, or observed serving window).
+// A declared context_length on the catalog entry wins over discovery.
+func (r *Registry) ContextLength(provider, model string) int {
+	if entry, ok := ContextEntry(r, provider, model); ok && entry.ContextLength > 0 {
+		return entry.ContextLength
 	}
 	return 0
 }
 
-func (r *Registry) RequestBudget(ctx context.Context, providerID string, req modelcall.CompletionRequest) modelcall.RequestBudget {
-	req.Messages = transcript.Project(req.Messages)
-	budget := modelcall.RequestBudget{Input: modelcall.EstimateRequestInput(req), Output: modelcall.CompletionTokenLimit(req, 0, modelcall.OrchestrationMaxTokens, req.Think, false), Headroom: 1024}
+func isLocalRegistryProvider(r *Registry, provider string) bool {
 	if r == nil {
-		return budget
+		return false
 	}
-	// Planning reads the adapter without dispatch middleware.
 	if snapshot := r.snapshot.Load(); snapshot != nil {
-		provider := snapshot.providers[providerID]
-		if provider != nil {
-			policy := thinkingPolicyProvider{Provider: provider, registry: r}
-			if prepared, err := policy.prepare(ctx, req, nil); err == nil {
-				req = prepared
-			}
-		}
-		if reporter, ok := provider.(modelcall.RequestBudgetReporter); ok {
-			budget = reporter.RequestBudget(ctx, req)
+		if p := snapshot.providers[strings.TrimSpace(provider)]; p != nil {
+			return p.Profile().Local
 		}
 	}
-	budget.MinimumOutput = max(budget.MinimumOutput, modelcall.MinimumCompletionOutput(req))
-	if limit := r.ContextLength(providerID, req.Model); limit > 0 && (budget.Window <= 0 || limit < budget.Window) {
-		budget.Window = limit
+	return false
+}
+
+// providerAdapter reads the actual adapter behind observation middleware.
+func providerAdapter(p modelcall.Provider) modelcall.Provider {
+	for {
+		if logger, ok := p.(*loggingProvider); ok {
+			p = logger.inner
+			continue
+		}
+		return p
 	}
-	return budget
 }

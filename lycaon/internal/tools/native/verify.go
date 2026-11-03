@@ -84,10 +84,10 @@ func verdictFor(res *hostcmd.Result) (VerifyOutcome, string) {
 	if res.BoundaryRefusal != "" {
 		return VerifyOutcomeUnverifiable, unverifiableReasonBoundary
 	}
-	switch res.TerminationReason {
-	case string(bgprocess.TerminationTimedOut):
+	switch {
+	case res.TerminationReason == string(bgprocess.TerminationTimedOut):
 		return VerifyOutcomeUnverifiable, unverifiableReasonDeadline
-	case string(bgprocess.TerminationStopped):
+	case bgprocess.TerminationReason(res.TerminationReason).IsStopped():
 		return VerifyOutcomeUnverifiable, unverifiableReasonStopped
 	}
 	if res.OK {

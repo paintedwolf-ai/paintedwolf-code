@@ -13,10 +13,9 @@ from unittest.mock import patch
 
 from scripts.linux_release.native_repositories import assemble
 from scripts.linux_release.openpgp import ephemeral
-from scripts.linux_release.repository_setup import build
+from scripts.linux_release.repository_setup import build, package_identity
 from scripts.linux_release.repository_setup_admission import admit_setup, snapshot
 from scripts.linux_release.repository_setup_archives import command, cpio, payload, rpm_files, tar_members
-from scripts.linux_release.repository_setup_identity import package_identity
 from scripts.linux_release.signing import digest, sign
 from scripts.verification_tests.distribution.native_repository_fixtures import (
     PACKAGE, TESTDATA, manifest, native_tools)

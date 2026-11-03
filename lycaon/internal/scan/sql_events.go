@@ -11,7 +11,7 @@ import (
 )
 
 // SetEventOutbox makes a scan transition and its wire event one commit.
-func (s *SQLStore) SetEventOutbox(outbox scanEventOutbox) {
+func (s *sqlCore) SetEventOutbox(outbox scanEventOutbox) {
 	if s != nil {
 		s.outbox = outbox
 	}
@@ -24,7 +24,7 @@ type scanEventOutbox interface {
 
 // emitScanTx publishes the scan summary and event in the mutation transaction.
 // The innermost attached root determines the event's project.
-func (s *SQLStore) emitScanTx(ctx context.Context, tx *sql.Tx, id string) error {
+func (s *sqlCore) emitScanTx(ctx context.Context, tx *sql.Tx, id string) error {
 	qtx := s.queries.WithTx(tx)
 	if err := refreshAssessmentRollups(ctx, qtx, id); err != nil {
 		return err
@@ -74,14 +74,14 @@ func (s *SQLStore) emitScanTx(ctx context.Context, tx *sql.Tx, id string) error 
 		})
 }
 
-func (s *SQLStore) notify() {
+func (s *sqlCore) notify() {
 	if s != nil && s.outbox != nil {
 		s.outbox.Notify()
 	}
 }
 
 // inTx commits the mutation and its staged event together, then wakes delivery.
-func (s *SQLStore) inTx(ctx context.Context, fn func(qtx *db.Queries, tx *sql.Tx) error) error {
+func (s *sqlCore) inTx(ctx context.Context, fn func(qtx *db.Queries, tx *sql.Tx) error) error {
 	return db.InTx(ctx, s.db, s.queries, func() {
 		s.notify()
 		s.QueueChanged.Notify()
@@ -90,7 +90,7 @@ func (s *SQLStore) inTx(ctx context.Context, fn func(qtx *db.Queries, tx *sql.Tx
 }
 
 // casInTx emits an event only for the winning transition.
-func (s *SQLStore) casInTx(ctx context.Context, id string, mutate func(qtx *db.Queries) (int64, error)) (bool, error) {
+func (s *sqlCore) casInTx(ctx context.Context, id string, mutate func(qtx *db.Queries) (int64, error)) (bool, error) {
 	won := false
 	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		n, err := mutate(qtx)

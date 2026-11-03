@@ -94,18 +94,19 @@ func (m *Service) Compaction(ctx context.Context, sess *api.Session) compaction.
 		paths = m.roots.SettingsRoots(ctx, sess)
 	}
 	cfg, _ := m.ResolveRoots(paths)
-	if sess == nil || sess.Model == "" {
+	if sess == nil {
 		return cfg
 	}
-	m.mu.RLock()
-	lookup := m.windows
-	m.mu.RUnlock()
-	policy := llm.ModelPolicy{Coordinator: llm.ModelRef{ProviderID: sess.ProviderID, Model: sess.Model}}
-	resolved, _, err := llm.ApplyLiveBudget(cfg, policy, lookup, modelinfo.DefaultModelContextWindows())
-	if err != nil {
-		return cfg
+	if sess.Model != "" {
+		m.mu.RLock()
+		lookup := m.windows
+		m.mu.RUnlock()
+		policy := llm.ModelPolicy{Coordinator: llm.ModelRef{ProviderID: sess.ProviderID, Model: sess.Model}}
+		if resolved, _, err := llm.ApplyLiveBudget(cfg, policy, lookup, modelinfo.DefaultModelContextWindows()); err == nil {
+			cfg = resolved
+		}
 	}
-	return resolved
+	return cfg
 }
 
 func (m *Service) ResolveRoots(projectDirs []string) (compaction.CompactionConfig, llm.SessionLimitFields) {

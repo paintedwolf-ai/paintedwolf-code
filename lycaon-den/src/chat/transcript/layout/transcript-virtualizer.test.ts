@@ -816,14 +816,17 @@ describe("createTranscriptVirtualizer", () => {
     const rowExtent = 72;
 
     function users(prefix: string, count: number): TranscriptItem[] {
-      return Array.from({ length: count }, (_, i) =>
-        item("user", `${prefix}-${i}`),
-      );
+      return Array.from({ length: count }, (_, i) => item("user", `${prefix}-${i}`));
     }
 
-    function anchoredVirtualizer(initial: TranscriptItem[], offset: number) {
+    function anchoredVirtualizer(
+      initial: TranscriptItem[],
+      offset: number,
+      unloadedInit = { before: 0, after: 0 },
+    ) {
       const scrollEl = mockScrollEl(400);
       const [items, setItems] = createSignal(initial);
+      const [unloaded, setUnloaded] = createSignal(unloadedInit);
       const shifts: number[] = [];
       let virtualizer!: ReturnType<typeof createTranscriptVirtualizer>;
       createRoot((dispose) => {
@@ -831,59 +834,42 @@ describe("createTranscriptVirtualizer", () => {
         virtualizer = createTestTranscriptVirtualizer({
           items,
           scrollElement: () => scrollEl,
+          unloadedOrds: unloaded,
           ...jsdomObservers(400, 400, offset),
-          shiftContent: (deltaY) => {
-            shifts.push(deltaY);
-            return deltaY;
-          },
+          shiftContent: (deltaY) => (shifts.push(deltaY), deltaY),
         });
       });
       expect(virtualizer.scrollOffset).toBe(offset);
-      return { virtualizer, items, setItems, shifts };
+      return { virtualizer, items, setItems, unloaded, setUnloaded, shifts };
     }
 
     it("keeps the reading row when older rows are prepended", async () => {
-      const { virtualizer, items, setItems, shifts } = anchoredVirtualizer(
-        users("u", 40),
-        1_000,
-      );
+      const { virtualizer, items, setItems, shifts } = anchoredVirtualizer(users("u", 40), 1_000);
       const reading = virtualizer.getVirtualItemForOffset(1_000)?.key;
 
       setItems([...users("old", 5), ...items()]);
 
       // The range follows at once; the scrollport once the rows have painted.
       expect(virtualizer.scrollOffset).toBe(1_000 + 5 * rowExtent);
-      expect(
-        virtualizer.getVirtualItemForOffset(virtualizer.scrollOffset!)?.key,
-      ).toBe(reading);
+      expect(virtualizer.getVirtualItemForOffset(virtualizer.scrollOffset!)?.key).toBe(reading);
       expect(shifts).toEqual([]);
       await Promise.resolve();
       expect(shifts).toEqual([5 * rowExtent]);
     });
 
     it("keeps the reading row when rows above it are evicted", async () => {
-      const { virtualizer, items, setItems, shifts } = anchoredVirtualizer(
-        users("u", 40),
-        1_000,
-      );
-
+      const { virtualizer, items, setItems, shifts } = anchoredVirtualizer(users("u", 40), 1_000);
       setItems(items().slice(3));
       await Promise.resolve();
-
       expect(shifts).toEqual([-3 * rowExtent]);
       expect(virtualizer.scrollOffset).toBe(1_000 - 3 * rowExtent);
     });
 
     it("carries successive row changes in one scrollport move", async () => {
-      const { virtualizer, items, setItems, shifts } = anchoredVirtualizer(
-        users("u", 40),
-        1_000,
-      );
-
+      const { virtualizer, items, setItems, shifts } = anchoredVirtualizer(users("u", 40), 1_000);
       setItems([...users("old", 2), ...items()]);
       setItems([...users("older", 3), ...items()]);
       await Promise.resolve();
-
       expect(shifts).toEqual([5 * rowExtent]);
       expect(virtualizer.scrollOffset).toBe(1_000 + 5 * rowExtent);
     });
@@ -904,27 +890,38 @@ describe("createTranscriptVirtualizer", () => {
 
       setItems([...users("old", 5), ...items()]);
       await Promise.resolve();
-
       expect(virtualizer.scrollOffset).toBe(1_100);
     });
 
     it("leaves the offset alone for rows appended below", () => {
-      const { items, setItems, shifts } = anchoredVirtualizer(
-        users("u", 40),
-        1_000,
-      );
-
+      const { items, setItems, shifts } = anchoredVirtualizer(users("u", 40), 1_000);
       setItems([...items(), ...users("new", 5)]);
-
       expect(shifts).toEqual([]);
     });
 
     it("does not carry an offset into an unrelated transcript", () => {
       const { setItems, shifts } = anchoredVirtualizer(users("u", 40), 1_000);
-
       setItems(users("other", 40));
-
       expect(shifts).toEqual([]);
+    });
+
+    it("clamps the scroll offset into the landed resident window after a disjoint runway seek", async () => {
+      const { virtualizer, setItems, setUnloaded, shifts } = anchoredVirtualizer(
+        users("tail", 10),
+        3_500,
+        { before: 400, after: 0 },
+      );
+
+      virtualizer.prepareLanding(3_500);
+      setUnloaded({ before: 0, after: 400 });
+      setItems(users("top", 10));
+      await Promise.resolve();
+
+      const extent = virtualizer.residentExtent();
+      expect(extent.startPx).toBe(0);
+      expect(extent.endPx).toBe(10 * rowExtent);
+      expect(virtualizer.scrollOffset).toBe(extent.endPx - 400);
+      expect(shifts).toEqual([extent.endPx - 400 - 3_500]);
     });
 
     it("applies above-fold measurement corrections as content shifts", () => {

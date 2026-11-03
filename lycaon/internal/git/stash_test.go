@@ -13,6 +13,7 @@ import (
 )
 
 func TestGitManagerInitCreatesRepo(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mgr := NewManager()
 
@@ -32,12 +33,9 @@ func TestGitManagerInitCreatesRepo(t *testing.T) {
 }
 
 func TestGitManagerCheckoutSwitchesBranch(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
+	initGitRepo(t, dir)
 	run := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
 		cmd.Env = lyexec.LocalGitEnv()
@@ -45,8 +43,6 @@ func TestGitManagerCheckoutSwitchesBranch(t *testing.T) {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
 	}
-	run("config", "user.email", "test@example.com")
-	run("config", "user.name", "Test")
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\n"), 0o644))
 	run("add", "README.md")
 	run("commit", "-m", "init")
@@ -93,14 +89,9 @@ func gitx(t *testing.T, dir string, args ...string) {
 }
 
 func TestGitManagerDiscardAllRevertsTree(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
-	gitx(t, dir, "config", "user.email", "test@example.com")
-	gitx(t, dir, "config", "user.name", "Test")
+	initGitRepo(t, dir)
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\n"), 0o644))
 	gitx(t, dir, "add", "README.md")
 	gitx(t, dir, "commit", "-m", "init")
@@ -125,6 +116,7 @@ func TestGitManagerDiscardAllRevertsTree(t *testing.T) {
 }
 
 func TestGitManagerPushPullAheadBehind(t *testing.T) {
+	t.Parallel()
 	bare := t.TempDir()
 	initCmd := exec.CommandContext(t.Context(), "git", "init", "--bare", bare)
 	initCmd.Env = lyexec.LocalGitEnv()
@@ -184,12 +176,9 @@ func TestGitManagerPushPullAheadBehind(t *testing.T) {
 }
 
 func TestGitManagerStashClearsWorkingTree(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
+	initGitRepo(t, dir)
 	git := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
 		cmd.Env = lyexec.LocalGitEnv()
@@ -197,8 +186,6 @@ func TestGitManagerStashClearsWorkingTree(t *testing.T) {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
 	}
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "Test")
 	testutil.FailErr(t, "write tracked", os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello\n"), 0o644))
 	git("add", "README.md")
 	git("commit", "-m", "init")

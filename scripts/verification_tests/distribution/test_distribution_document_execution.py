@@ -191,7 +191,7 @@ class DistributionSigningTests(DocumentFixture):
             self.prepare('foreign-registry')
 
     def test_preview_setup_names_from_native_identity_survive_document_signing(self):
-        from scripts.linux_release.repository_setup_identity import package_identity
+        from scripts.linux_release.repository_setup import package_identity
         preview = '1.2.4-rc.1'
         self.request['version'] = preview
         updater = json.loads(self.updater.read_text())

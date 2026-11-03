@@ -283,9 +283,15 @@ pub async fn install_update(
     if expected.is_none() && !app.state::<UpdateService>().automatic_install_ready().await {
         return Ok(false);
     }
-    let prepared = begin(app, false)
+    let prepared = begin(app, !launch)
         .map_err(|e| UpdateError::new(UpdateErrorCode::StateUnavailable, e))?
         .ok_or(UpdateError::from(UpdateErrorCode::InvalidTransition))?;
+    if !launch {
+        prepared
+            .confirm_quit()
+            .await
+            .map_err(|e| UpdateError::new(UpdateErrorCode::Cancelled, e))?;
+    }
     let wait = async {
         prepared
             .wait(!launch)

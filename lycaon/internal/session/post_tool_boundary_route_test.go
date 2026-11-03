@@ -1,16 +1,23 @@
 package session
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/indexwatch"
 	"github.com/lycaon/lycaon/internal/isolation"
+	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -134,6 +141,7 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 		refusal          confine.SandboxRefusal
 	}{
 		{"SANDBOX_TRY_READ_PATH", "read_path", confine.SandboxRefusal{Operation: "file-read-data", Target: "/protected/input", Grant: "/protected/input", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath}},
+		{"SANDBOX_TRY_CREDENTIAL_STORE", "credential_store", confine.SandboxRefusal{Operation: "file-read-data", Target: "/Users/person/Library/Keychains/login.keychain-db", Grant: "/Users/person/Library/Keychains/login.keychain-db", Layer: confine.FloorReadCredentialStore, Recovery: confine.RecoverCredentialStore}},
 		{"SANDBOX_TRY_WRITE_ROOT", "write_root", confine.SandboxRefusal{Operation: "file-write-data", Target: "/outside/output", Grant: "/outside", Layer: confine.FloorOutsideWriteRoots, Recovery: confine.RecoverWriteRoot}},
 		{"SANDBOX_TRY_SOCKET_PATH", "socket_paths", confine.SandboxRefusal{Operation: "network-outbound", Target: "/tmp/service.sock", Grant: "/tmp/service.sock", Recovery: confine.RecoverSocketPath}},
 		{"SANDBOX_TRY_LOCAL_NETWORK", "local_listen", confine.SandboxRefusal{Operation: "network-bind", Target: "local:*:8080", Recovery: confine.RecoverLocalListen}},
@@ -203,7 +211,7 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 func TestSilentRefusalGuidanceUsesObservedTermination(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)
 	statuses := []struct{ reason, want string }{
-		{"timed_out", "The command reached its host deadline"}, {"stopped", "The command was stopped"},
+		{"timed_out", "The command reached its host deadline"}, {"stopped_by_user", "The command was stopped"},
 		{"exited", "The command exited unsuccessfully"}, {"", "The invocation did not finish successfully"},
 		{"future_reason", "The invocation did not finish successfully"},
 	}
@@ -244,5 +252,116 @@ func TestSilentRefusalGuidanceUsesObservedTermination(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Rewind requires the checkpoint state root.
+func TestRewindRefusesWhenNoCheckpointRootIsConfigured(t *testing.T) {
+	mgr, sessionID, _ := newCheckpointTestSession(t)
+	mgr.SetDataDir("")
+	ctx := context.Background()
+
+	anchor := api.Message{
+		ID: "u-unsealed", Role: api.MessageRoleUser, Content: "change something",
+		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
+		TrustTier: api.ContentTrustTierTrusted,
+	}
+	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
+
+	if _, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID); !errors.Is(err, checkpointcontrol.ErrCheckpointRootUnset) {
+		t.Fatalf("RewindToPrompt err = %v, want checkpointcontrol.ErrCheckpointRootUnset", err)
+	}
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sessionID)
+	testutil.FailErr(t, "get messages", err)
+	if _, ok := rewindFixtureHasMessage(msgs, anchor.ID); !ok {
+		t.Fatal("a refused rewind must leave the transcript intact")
+	}
+}
+
+func TestRewindOfTranscriptOnlyTurnNeedsNoFileCheckpoint(t *testing.T) {
+	mgr, id, _ := newCheckpointTestSession(t)
+	anchor := appendRewindAsk(t, mgr, id)
+	result, err := rewindTest(t, mgr, t.Context(), uuid.NewString(), id, anchor)
+	testutil.FailErr(t, "rewind transcript only turn", err)
+	if result.TruncatedMessageCount != 1 || len(result.RestoredPaths) != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestRewindRestoredPromptIsUserInstructionOnly(t *testing.T) {
+	mgr, sessionID, dir := newCheckpointTestSession(t)
+	ctx := context.Background()
+
+	anchor := api.Message{
+		ID:        "u-attach",
+		Role:      api.MessageRoleUser,
+		Content:   "review this\n\n```attachment filename=\"main.go\" mime=\"text/plain\" truncated=\"false\"\n[User attached file: src/main.go]\n```",
+		Origin:    api.MessageOriginUser,
+		Authority: api.ContentAuthorityUser,
+		TrustTier: api.ContentTrustTierTrusted,
+		ContentParts: []api.MessageContentPart{
+			{
+				Content: "review this", Origin: api.MessageOriginUser,
+				Authority: api.ContentAuthorityUser, TrustTier: api.ContentTrustTierTrusted,
+			},
+			{
+				Content: "```attachment filename=\"main.go\" mime=\"text/plain\" truncated=\"false\"\n[User attached file: src/main.go]\n```",
+				Origin:  api.MessageOriginRetrieval, Authority: api.ContentAuthorityNone,
+				TrustTier: api.ContentTrustTierUntrusted,
+				Source:    "src/main.go", MediaType: "text/plain",
+			},
+		},
+		ArtifactIDs: []string{"art-1"},
+	}
+	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
+	_, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Open(t.Context(), sessionID, anchor.ID)
+	testutil.FailErr(t, "open checkpoint", err)
+
+	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID)
+	testutil.FailErr(t, "rewind", err)
+	if result.RestoredPrompt != "review this" {
+		t.Fatalf("RestoredPrompt = %q, want prose only", result.RestoredPrompt)
+	}
+	if len(result.RestoredContentParts) != 2 {
+		t.Fatalf("RestoredContentParts = %d, want 2", len(result.RestoredContentParts))
+	}
+	if len(result.RestoredArtifactIDs) != 1 || result.RestoredArtifactIDs[0] != "art-1" {
+		t.Fatalf("RestoredArtifactIDs = %#v", result.RestoredArtifactIDs)
+	}
+}
+
+type decisionWorkerJobs struct {
+	jobLister
+	job *api.WorkerTask
+}
+
+func (q decisionWorkerJobs) Get(id string) (*api.WorkerTask, bool) {
+	return q.job, q.job != nil && q.job.ID == id
+}
+
+func TestWorkerDecisionUsesBoundJobInsteadOfRenderedPreamble(t *testing.T) {
+	worker := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: "builder"}
+	job := &api.WorkerTask{ID: "job", ChildSessionID: worker.ID, ParentSessionID: worker.ParentSessionID, AgentType: worker.AgentType, Brief: "Add Docker support", Prompt: strings.Repeat("host instructions ", 200)}
+	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.SetWorkerQueue(decisionWorkerJobs{job: job})
+	history := []api.Message{{ID: "opening", WorkerID: job.ID, Content: strings.Repeat("host instructions ", 200)}}
+	for _, jobID := range []string{job.ID, ""} {
+		text, ok := mgr.Coordinator.Loading.WorkerRequest(worker, jobID, "opening", history)
+		if !ok || text != job.Brief {
+			t.Fatalf("worker request = %q, %v", text, ok)
+		}
+	}
+	job.LegID = "leg"
+	job.Prompt = "Add a Dockerfile and run the container"
+	if text, ok := mgr.Coordinator.Loading.WorkerRequest(worker, job.ID, "opening", history); !ok || text != job.Prompt {
+		t.Fatalf("delegation request = %q, %v", text, ok)
+	}
+	job.ChildSessionID = "another child"
+	if text, ok := mgr.Coordinator.Loading.WorkerRequest(worker, job.ID, "opening", history); ok || text != "" {
+		t.Fatalf("mismatched job supplied request = %q, %v", text, ok)
+	}
+	mgr.Coordinator.Loading.SetWorkers(nil)
+	if _, ok := mgr.Coordinator.Loading.WorkerRequest(worker, job.ID, "opening", history); ok {
+		t.Fatal("missing job ledger supplied a request")
 	}
 }

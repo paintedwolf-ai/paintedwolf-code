@@ -245,13 +245,19 @@ function parseContextNav(value: unknown): DenContextNavPrefs | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return undefined;
   }
-  const row = value as { visible?: unknown };
+  const row = value as { visible?: unknown; runningPinnedMigrated?: unknown };
   if (!("visible" in row)) return undefined;
   if (!Array.isArray(row.visible)) return undefined;
+  const visible = normalizeContextNavVisible(
+    row.visible.filter((id): id is string => typeof id === "string"),
+  );
+  const migrated = row.runningPinnedMigrated === true;
+  if (!migrated && visible.length > 0 && !visible.includes("running")) {
+    visible.push("running");
+  }
   return {
-    visible: normalizeContextNavVisible(
-      row.visible.filter((id): id is string => typeof id === "string"),
-    ),
+    visible,
+    runningPinnedMigrated: true,
   };
 }
 

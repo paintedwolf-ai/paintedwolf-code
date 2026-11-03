@@ -25,6 +25,7 @@ import type {
   PreflightEvent,
   PreviewEvent,
   ProgressEvent,
+  ProjectBackgroundEvent,
   ProjectEvent,
   ProviderEvent,
   QueueEvent,
@@ -61,6 +62,7 @@ export type EventPayloadMap = {
   progress: ProgressEvent;
   queue: QueueEvent;
   project: ProjectEvent;
+  project_background: ProjectBackgroundEvent;
   process: BackgroundProcessEvent;
   preview: PreviewEvent;
   attention: AttentionView;

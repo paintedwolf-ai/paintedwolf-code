@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
@@ -155,7 +156,7 @@ func TestAbortWithoutWorkerAbortHookStillMarksIdle(t *testing.T) {
 	}
 }
 
-func TestAbortReportsWorkerAbortErrorAndDoesNotPublishFalseIdle(t *testing.T) {
+func TestAbortReportsWorkerAbortErrorAndStillSettlesSessionIdle(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
@@ -174,8 +175,80 @@ func TestAbortReportsWorkerAbortErrorAndDoesNotPublishFalseIdle(t *testing.T) {
 	}
 	got, err := store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get session", err)
-	if got.Status == api.SessionStatusIdle {
-		t.Fatalf("status = %q, must not claim idle after incomplete teardown", got.Status)
+	if got.Status != api.SessionStatusIdle {
+		t.Fatalf("status = %q, want idle after stop step error", got.Status)
+	}
+}
+
+type failingCheckpointStop struct {
+	err error
+}
+
+func (f failingCheckpointStop) CancelPendingForSession(context.Context, string, string) error {
+	return f.err
+}
+
+func TestAbortCheckpointErrorStillSettlesSessionIdle(t *testing.T) {
+	ctx := context.Background()
+	st := store.NewMemory()
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	checkpointErr := errors.New("checkpoint cancel failed")
+	mgr.Stops.SetCheckpointStop(failingCheckpointStop{err: checkpointErr})
+
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+
+	err = mgr.Stops.Abort(ctx, sess.ID, "stop")
+	if !errors.Is(err, checkpointErr) {
+		t.Fatalf("Abort error = %v, want %v", err, checkpointErr)
+	}
+	got, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "get session", err)
+	if got.Status != api.SessionStatusIdle {
+		t.Fatalf("status = %q, want idle", got.Status)
+	}
+}
+
+type deadlineAwareWorkerAbort struct {
+	calls atomic.Int32
+}
+
+func (d *deadlineAwareWorkerAbort) AbortAllWorkers(ctx context.Context, _, _, _ string) error {
+	d.calls.Add(1)
+	<-ctx.Done()
+	return nil
+}
+
+func (d *deadlineAwareWorkerAbort) AbortWorkersForRoot(ctx context.Context, _, _ string, _ []projectroot.RootRef, _ string) error {
+	<-ctx.Done()
+	return nil
+}
+
+func TestAbortBoundsSlowWorkerReleaseWithTimeout(t *testing.T) {
+	ctx := context.Background()
+	st := store.NewMemory()
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Stops.SetWorkerReleaseTimeout(30 * time.Millisecond)
+	abort := &deadlineAwareWorkerAbort{}
+	mgr.SetSessionWorkerAbort(abort)
+
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+
+	start := time.Now()
+	testutil.FailErr(t, "abort with slow worker", mgr.Stops.Abort(ctx, sess.ID, "stop"))
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Abort took %v, want bounded by worker release timeout", elapsed)
+	}
+	if got := abort.calls.Load(); got != 2 {
+		t.Fatalf("AbortAllWorkers calls = %d, want 2", got)
+	}
+	got, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "get session", err)
+	if got.Status != api.SessionStatusIdle {
+		t.Fatalf("status = %q, want idle", got.Status)
 	}
 }
 

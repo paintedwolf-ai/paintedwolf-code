@@ -33,3 +33,22 @@ func TestSkillProcedureToolsMustBeReachable(t *testing.T) {
 		})
 	}
 }
+
+func TestSkillToolsOfferedGatesStockSkillsByNonOptionalTools(t *testing.T) {
+	stock := skills.Skill{
+		Name:          "review-accessibility",
+		Body:          "Use `measure_page` and `page_open` to inspect the page, and optionally `capture_page`.",
+		OptionalTools: []string{"capture_page"},
+	}
+	if toolvocab.SkillToolsOffered(stock, map[string]bool{"measure_page": true}) {
+		t.Fatal("stock skill with missing required tool was accepted")
+	}
+	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"measure_page": true, "page_open": true}) {
+		t.Fatal("stock skill with all required tools offered was rejected when optional tool was absent")
+	}
+	userSkill := stock
+	userSkill.UserProvided = true
+	if !toolvocab.SkillToolsOffered(userSkill, nil) {
+		t.Fatal("user-provided skill was restricted by offered tools")
+	}
+}

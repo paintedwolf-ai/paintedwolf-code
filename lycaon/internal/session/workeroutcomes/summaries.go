@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
@@ -109,7 +110,7 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 	}
 	body := ""
 	if feedback != nil {
-		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy)
+		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy, feedback.Details)
 		if err != nil {
 			return "", fmt.Errorf("render frozen worker policy feedback: %w", err)
 		}
@@ -233,7 +234,7 @@ func (m *Summaries) completeWorkerSummary(
 		return "", fmt.Errorf("merge worker secret-exposure state: %w", err)
 	}
 	// Completed child transcripts remain durable; turn state does not.
-	_ = m.resources.DisposeRuntime(ctx, draft.input.ChildSessionID)
+	_ = m.resources.DisposeRuntime(bgprocess.WithTerminationReason(ctx, bgprocess.TerminationWorkerCompleted), draft.input.ChildSessionID)
 	// Worker events refresh the parent without a session-status edge.
 	if m.grounding != nil && draft.input.DelegationID != "" {
 		m.grounding.Reset(parentID)

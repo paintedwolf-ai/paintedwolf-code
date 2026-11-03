@@ -25,7 +25,7 @@ type UpdateRequest struct {
 }
 
 // Update applies metadata changes to a non-revoked capability.
-func (s *Service) Update(ctx context.Context, req UpdateRequest) (Metadata, error) {
+func (s *secretAdminService) Update(ctx context.Context, req UpdateRequest) (Metadata, error) {
 	defer s.invalidateScreening(ctx, req.ProjectID)
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -65,7 +65,7 @@ func (s *Service) Update(ctx context.Context, req UpdateRequest) (Metadata, erro
 }
 
 // merge produces one complete update from a partial request.
-func (s *Service) merge(row db.ManagedSecrets, req UpdateRequest) (db.UpdateManagedSecretParams, error) {
+func (s *secretAdminService) merge(row db.ManagedSecrets, req UpdateRequest) (db.UpdateManagedSecretParams, error) {
 	target := db.UpdateManagedSecretParams{
 		Name: row.Name, Purpose: row.Purpose, Scope: row.Scope,
 		ChatSessionID: row.ChatSessionID, AgentUseEndsAt: row.AgentUseEndsAt,
@@ -127,7 +127,7 @@ func agentAuthoredOrigin(origin string) bool {
 // RevokeByAgent revokes a visible capability whose current bytes the host
 // supplied. Custody, not origin, decides: a protected detection, a replaced
 // value, and a held value all carry bytes a person handed over.
-func (s *Service) RevokeByAgent(ctx context.Context, projectID, chatSessionID, reference string) (Metadata, error) {
+func (s *secretAdminService) RevokeByAgent(ctx context.Context, projectID, chatSessionID, reference string) (Metadata, error) {
 	row, err := s.rowForReference(ctx, reference)
 	if err != nil {
 		return Metadata{}, err
@@ -140,7 +140,7 @@ func (s *Service) RevokeByAgent(ctx context.Context, projectID, chatSessionID, r
 
 // hostSupplied refuses unless the current bytes have chat or host custody.
 // No readable value means no custody to grant the agent authority.
-func (s *Service) hostSupplied(ctx context.Context, row db.ManagedSecrets) error {
+func (s *secretAdminService) hostSupplied(ctx context.Context, row db.ManagedSecrets) error {
 	current, ok, err := s.currentVersion(ctx, row.ID)
 	if err != nil {
 		return err
@@ -159,7 +159,7 @@ func (s *Service) hostSupplied(ctx context.Context, row db.ManagedSecrets) error
 }
 
 // RevokeProject disables any capability in the project on a person's request.
-func (s *Service) RevokeProject(ctx context.Context, projectID, reference, personID string) (Metadata, error) {
+func (s *secretAdminService) RevokeProject(ctx context.Context, projectID, reference, personID string) (Metadata, error) {
 	personID = strings.TrimSpace(personID)
 	if personID == "" {
 		return Metadata{}, fmt.Errorf("revoke managed secret: the revoking person is required")
@@ -186,7 +186,7 @@ type revoker struct {
 }
 
 // revokeRow serializes terminal state with other mutations.
-func (s *Service) revokeRow(ctx context.Context, row db.ManagedSecrets, by revoker) (Metadata, error) {
+func (s *secretAdminService) revokeRow(ctx context.Context, row db.ManagedSecrets, by revoker) (Metadata, error) {
 	defer s.invalidateScreening(ctx, row.ProjectID)
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -216,7 +216,7 @@ func (s *Service) revokeRow(ctx context.Context, row db.ManagedSecrets, by revok
 // that person's unlock. It is one-way, like promotion; a value already held
 // returns unchanged. A jar never takes a reviewed release, and a marked
 // file's bytes stay governed by the file, so neither can be held.
-func (s *Service) HoldValue(ctx context.Context, projectID, reference string) (Metadata, error) {
+func (s *secretAdminService) HoldValue(ctx context.Context, projectID, reference string) (Metadata, error) {
 	defer s.invalidateScreening(ctx, projectID)
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -259,7 +259,7 @@ func (s *Service) HoldValue(ctx context.Context, projectID, reference string) (M
 // releaseChatCustody re-records a promoted value as the host's: once later
 // chats can spend it, no one chat alone has held it. A failed rewrite leaves
 // the entry bound to its first chat, which only withholds the silent release.
-func (s *Service) releaseChatCustody(ctx context.Context, secretID string) error {
+func (s *secretAdminService) releaseChatCustody(ctx context.Context, secretID string) error {
 	current, ok, err := s.currentVersion(ctx, secretID)
 	if err != nil || !ok {
 		return err

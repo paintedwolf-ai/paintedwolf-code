@@ -6,12 +6,17 @@ import (
 	"io"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
 func (in *inputs) close() {
+	if in.stream != nil {
+		in.stream.Close()
+		in.stream = nil
+	}
 	if in.rawWork != nil {
 		in.rawWork.Close()
 		in.rawWork = nil
@@ -20,14 +25,9 @@ func (in *inputs) close() {
 		_ = in.currentCloser.Close()
 		in.currentCloser = nil
 	}
-	if in.positions != nil {
-		in.positions.close()
-		in.positions = nil
-	}
 }
 
-// openStream binds exactly the reached operand and delegates its physical read,
-// revision pin and representation to the existing native capture owner.
+// openStream binds the reached operand through native revision capture.
 func (in *inputs) openStream(operand commandprogram.Field) {
 	reader := in.inv.input
 	if operand.Value == "-" {
@@ -61,18 +61,22 @@ func (in *inputs) openStream(operand commandprogram.Field) {
 			reader = stream.Reader
 		}
 	}
-	positions, err := newInputPositions(in.inv, in.limit, in.label)
-	if err != nil {
-		in.stop = err
-		return
+	in.lastLine = 0
+	var memory nativejq.DecodeMemory
+	if in.inv.owners.Revisions.Memory != nil {
+		memory = in.inv.owners.Revisions.Memory
 	}
-	in.positions = positions
+	ctx := toolcontract.WithMemoryPhase(in.inv.ctx, toolcontract.QueryDecoding)
 	tracked := queryInputReader{input: reader, owner: in}
 	if in.raw {
 		in.rawReader = bufio.NewReader(tracked)
-		in.rawOffset = 0
+		in.rawLines = 0
 	} else {
-		in.stream = nativejq.NewValueStream(bufio.NewReader(tracked))
+		if in.eventMode {
+			in.stream = nativejq.NewEventStream(ctx, tracked, nativejq.DecodeLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory)
+		} else {
+			in.stream = nativejq.NewBoundedValueStream(ctx, tracked, nativejq.DecodeLimits{MaximumDepth: int(in.inv.owners.limit("query_depth")), MaximumScalarBytes: in.inv.owners.limit("query_value_bytes")}, memory, in.inv.owners.limit("query_value_bytes"))
+		}
 	}
 }
 
@@ -85,8 +89,7 @@ func (in *inputs) openFailure(operand string, err error) {
 	in.stop = err
 }
 
-// A source/limit failure remains terminal even if a decoder has already read a
-// complete value before surfacing that reader error on its next Decode.
+// Reader failures remain terminal even when a complete value is buffered.
 type queryInputReader struct {
 	input io.Reader
 	owner *inputs
@@ -95,7 +98,12 @@ type queryInputReader struct {
 func (r queryInputReader) Read(p []byte) (int, error) {
 	n, err := r.input.Read(p)
 	if n > 0 {
-		if _, failure := r.owner.positions.Write(p[:n]); failure != nil {
+		r.owner.readBytes += int64(n)
+		var failure error
+		if r.owner.readBytes > r.owner.limit {
+			failure = tools.CommandLimitExceeded("stream_throughput_bytes", r.owner.limit, r.owner.readBytes)
+		}
+		if failure != nil {
 			r.owner.stop = failure
 			return 0, failure
 		}
