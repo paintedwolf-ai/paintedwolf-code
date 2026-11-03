@@ -94,15 +94,12 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			}
 			snap, err = f.Background.Snapshot(t.Context(), f.Session, running.Handle, 4096)
 			testutil.FailErr(t, "inspect completed output", err)
-			if !stop && !strings.HasPrefix(snap.Output, "stdout: listening\nstdout: later statement\nstderr: {") {
-				t.Fatalf("output %q", snap.Output)
-			}
-			marker := strings.LastIndex(snap.Output, "stderr: {")
-			if marker < 0 {
-				t.Fatalf("missing final outcome: %s", snap.Output)
+			stdout, stderr := continuationStreams(t, f, running.Handle)
+			if !snap.OutputScreened || (!stop && stdout != "listening\nlater statement\n") {
+				t.Fatalf("screened=%t stdout=%q", snap.OutputScreened, stdout)
 			}
 			var final command.ProgramOutcome
-			testutil.FailErr(t, "read final outcome", json.Unmarshal([]byte(snap.Output[marker+len("stderr: "):]), &final))
+			testutil.FailErr(t, "read final outcome", json.Unmarshal([]byte(stderr), &final))
 			if final.ProgramID != running.ProgramID || (!stop && final.Status != 7) {
 				t.Fatalf("final outcome %+v", final)
 			}
@@ -234,7 +231,29 @@ func TestProgramContinuationRunsRemainingStatementsOnce(t *testing.T) {
 	testutil.FailErr(t, "join original evaluator", err)
 	snap, err = f.Background.Snapshot(t.Context(), f.Session, running.Handle, 4096)
 	testutil.FailErr(t, "inspect final output", err)
-	if status != 7 || calls != 1 || strings.Count(snap.Output, "stdout: later\n") != 1 {
+	stdout, _ := continuationStreams(t, f, running.Handle)
+	if status != 7 || calls != 1 || !snap.OutputScreened || stdout != "listening\nlater\n" {
 		t.Fatalf("status=%d calls=%d output=%s", status, calls, snap.Output)
 	}
+}
+
+func continuationStreams(t *testing.T, f *programtest.Fixture, handle string) (string, string) {
+	t.Helper()
+	snapshot, err := f.Background.Output.ReadCommandOutput(t.Context(), f.Session, handle, 0)
+	testutil.FailErr(t, "read screened continuation streams", err)
+	if snapshot.Output.Truncated {
+		t.Fatal("continuation capture lost output")
+	}
+	var stdout, stderr strings.Builder
+	for _, chunk := range snapshot.Output.Chunks {
+		switch chunk.Stream {
+		case "stdout":
+			stdout.WriteString(chunk.Text)
+		case "stderr":
+			stderr.WriteString(chunk.Text)
+		default:
+			t.Fatalf("unexpected continuation output stream %q", chunk.Stream)
+		}
+	}
+	return stdout.String(), stderr.String()
 }
