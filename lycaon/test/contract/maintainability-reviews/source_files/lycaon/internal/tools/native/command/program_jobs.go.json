@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/command/program_jobs.go",
+  "kind": "runtime_service",
+  "workstream": "shared-verification-runtime",
+  "disposition": "retain",
+  "reason": "Job registration, handle resolution, waiting and signals share the process registry and supervisor lifetime. Per-program provenance is bound at admission while session job state remains under one owner. Retained-origin and disposal contracts constrain that boundary; the callable polling canary checks published origin and capture scope. Retain the measured 445 ceiling; growth requires renewed review.",
+  "reviewed_commit": "303bd754eab8175f819ec3ecbf882f0612847259",
+  "ceiling": 445,
+  "boundaries": {
+    "lycaon/internal/tools/native/command/program_retention_test.go": "821759e8697b9626ac8b36a396ecae3ca2c28e61a7580c97db277076ac938c7c",
+    "lycaon/internal/httpaction/secret_canary_reference_tools_test.go": "97a44337e0598ac9b0ed6614a33f85293039678c78a0a7f76c3444dd8c4b535b"
+  }
+}

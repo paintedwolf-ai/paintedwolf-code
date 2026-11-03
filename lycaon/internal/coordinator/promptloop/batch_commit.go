@@ -271,16 +271,6 @@ func (l *toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string,
 	if msg == nil {
 		return nil
 	}
-	if sess != nil && toolName == "verify" && l.Tools.Deps.ConfirmVerifyResult != nil &&
-		msg.ToolResult != nil && msg.ToolResult.Outcome == api.ToolResultOutcomeCompleted {
-		content := strings.TrimSpace(msg.ToolResult.Content)
-		if content == "" {
-			content = strings.TrimSpace(msg.Content)
-		}
-		if stamped := l.Tools.Deps.ConfirmVerifyResult(sess, content); stamped != "" {
-			msg.ToolResult.Content = stamped
-		}
-	}
 	if msg.ToolResult != nil && msg.ToolResult.CommandProgram != nil {
 		// Portable command observations come only from confirmed source deliveries.
 		if len(msg.EvidenceHandles) > 0 {

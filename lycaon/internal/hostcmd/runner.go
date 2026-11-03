@@ -121,7 +121,7 @@ type Result struct {
 	Observation confine.Observation `json:"-"`
 }
 
-// BackgroundStartResult is returned when command/verify run with background:true.
+// BackgroundStartResult describes a process started under supervision.
 type BackgroundStartResult struct {
 	Background bool          `json:"background"`
 	Handle     string        `json:"handle"`

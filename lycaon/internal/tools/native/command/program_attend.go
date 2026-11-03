@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -33,8 +34,9 @@ type SourceRunRecorder interface {
 // ParkedProgramResult is a command call's result when its program parked: the
 // turn ends, and the program's complete result resumes it.
 type ParkedProgramResult struct {
-	ProgramID string `json:"program_id"`
-	State     string `json:"state"`
+	ResultVersion int    `json:"result_version,omitempty"`
+	ProgramID     string `json:"program_id"`
+	State         string `json:"state"`
 	// Reason is the statement the program waits at.
 	Reason  string `json:"reason"`
 	LeaseID string `json:"lease_id"`
@@ -143,6 +145,9 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		}
 	}
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
+	if run.tool == "verify" {
+		result.ResultVersion = 2
+	}
 	if !state.Until.IsZero() {
 		result.WakeAt = state.Until.UTC().Format(time.RFC3339)
 	}
@@ -186,7 +191,7 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 	if err != nil || sess == nil {
 		return
 	}
-	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, "command", *capture)
+	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for
@@ -204,6 +209,9 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 		ProgramID: programID, State: projection.Program.State, Status: 130, StopCode: projection.Program.StopCode,
 		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects,
 		UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps,
+	}
+	if projection.ParentTool == "verify" {
+		outcome.ResultVersion = 2
 	}
 	if status := projection.Program.StatusCode; status != nil {
 		outcome.Status = *status
@@ -264,6 +272,12 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	if settledNow {
 		recordProgramAttempt(r.FailureTracker, e.failureAttempt, ctx, outcome)
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
+		if run.tc.Execution.VerificationCheck && run.tc.Effects.Out.SourceRun != nil {
+			outcome.Outcome = run.tc.Effects.Out.SourceRun.Verdict
+		}
+	}
+	if run.tool == "verify" {
+		outcome.ResultVersion = 2
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
@@ -320,4 +334,7 @@ func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resol
 		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
 	}
 	tc.Effects.Out.SourceRun = run
+	if tc.Execution.VerificationCheck && verdict == api.SourceVerdictUnverifiable {
+		tc.Effects.Out.Facts = guidance.ToolResultFacts{}.WithCode(toolrejection.VerifyUnverifiableCode).Merge(tc.Effects.Out.Facts)
+	}
 }

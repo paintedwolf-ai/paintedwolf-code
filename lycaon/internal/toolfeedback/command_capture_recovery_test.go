@@ -25,7 +25,6 @@ func TestCommandRecoveryFollowsReceivingSchemaAndCaptureMode(t *testing.T) {
 	}{
 		{"capture sequence", "command", "tool; echo $?", "exit_code", true, commandsurface.ErrSequenceUnsupported},
 		{"capture pipe", "command", "tool | tee output", "exit_code", true, argv.ErrShellMetacharacters},
-		{"verify stage", "verify", "tool | head", "pipeline", false, argv.ErrShellMetacharacters},
 		{"terminal pipe", "terminal_open", "tool | tee output", "", false, argv.ErrShellMetacharacters},
 		{"terminal environment", "terminal_open", "VALUE=one tool", "env", false, argv.ErrEnvAssignmentCommand},
 		{"terminal directory", "terminal_open", "cd src && tool", "cwd", false, commandsurface.ErrDirectoryChangeCommand},
