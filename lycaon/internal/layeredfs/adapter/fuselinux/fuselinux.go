@@ -43,15 +43,17 @@ const (
 
 // Config configures the Linux FUSE worker workspace adapter.
 type Config struct {
-	HostOS             string
-	FusermountBin      string
-	FuseDevicePath     string
-	MountTimeout       time.Duration
-	ConfinementCheckFn func(ctx context.Context, probeCfg adapter.ProbeConfig) error
-	MountHookForTest   func(viewID, rootID, mountDir string) error
-	ClientSyncFn       func(path string) error
-	RemoveAllFn        func(path string) error
-	OnMutationHook     func(opcode uint32, rel string)
+	HostOS                string
+	FusermountBin         string
+	FuseDevicePath        string
+	MountTimeout          time.Duration
+	MaxConcurrentRequests int
+	MaxLockWaiters        int
+	ConfinementCheckFn    func(ctx context.Context, probeCfg adapter.ProbeConfig) error
+	MountHookForTest      func(viewID, rootID, mountDir string) error
+	ClientSyncFn          func(path string) error
+	RemoveAllFn           func(path string) error
+	OnMutationHook        func(opcode uint32, rel string)
 }
 
 // MountFacts records the concrete mount options, kernel mountinfo identity, and negotiated protocol capabilities.

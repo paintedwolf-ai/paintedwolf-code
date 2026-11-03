@@ -12,43 +12,6 @@ import (
 )
 
 const (
-	fuseOpLookup      = 1
-	fuseOpForget      = 2
-	fuseOpGetattr     = 3
-	fuseOpSetattr     = 4
-	fuseOpReadlink    = 5
-	fuseOpSymlink     = 6
-	fuseOpMknod       = 8
-	fuseOpMkdir       = 9
-	fuseOpUnlink      = 10
-	fuseOpRmdir       = 11
-	fuseOpRename      = 12
-	fuseOpLink        = 13
-	fuseOpOpen        = 14
-	fuseOpRead        = 15
-	fuseOpWrite       = 16
-	fuseOpStatfs      = 17
-	fuseOpRelease     = 18
-	fuseOpFsync       = 20
-	fuseOpSetxattr    = 21
-	fuseOpGetxattr    = 22
-	fuseOpListxattr   = 23
-	fuseOpRemovexattr = 24
-	fuseOpFlush       = 25
-	fuseOpInit        = 26
-	fuseOpOpendir     = 27
-	fuseOpReaddir     = 28
-	fuseOpReleasedir  = 29
-	fuseOpFsyncdir    = 30
-	fuseOpGetlk       = 31
-	fuseOpSetlk       = 32
-	fuseOpSetlkw      = 33
-	fuseOpAccess      = 34
-	fuseOpCreate      = 35
-	fuseOpBatchForget = 42
-	fuseOpRename2     = 45
-	fuseOpLseek       = 46
-
 	fuseCapPOSIXLocks   = 1 << 1
 	fuseCapAtomicOTrunc = 1 << 3
 	fuseCapBigWrites    = 1 << 5
@@ -65,7 +28,7 @@ const (
 	fattrMtimeNow = 1 << 8
 )
 
-func (s *Server) handleRequest(req []byte) {
+func (s *Server) handleRequest(req []byte, controlLane bool) {
 	opcode := binary.LittleEndian.Uint32(req[4:8])
 	unique := binary.LittleEndian.Uint64(req[8:16])
 	nodeID := binary.LittleEndian.Uint64(req[16:24])
@@ -74,6 +37,13 @@ func (s *Server) handleRequest(req []byte) {
 	if opcode == fuseOpForget || opcode == fuseOpBatchForget {
 		return
 	}
+	if opcode == fuseOpInterrupt {
+		handleInterrupt(s, body)
+		return
+	}
+
+	reqState := registerRequest(s, unique, opcode, nodeID, controlLane)
+	defer unregisterRequest(s, unique)
 
 	var payload []byte
 	var errno int32
@@ -115,7 +85,9 @@ func (s *Server) handleRequest(req []byte) {
 	case fuseOpGetlk:
 		payload, errno = s.opGetlk(nodeID, body)
 	case fuseOpSetlk, fuseOpSetlkw:
-		payload, errno = s.opSetlk(nodeID, body, opcode == fuseOpSetlkw)
+		payload, errno = s.opSetlk(reqState, nodeID, body, opcode == fuseOpSetlkw)
+	case fuseOpDestroy:
+		payload, errno = nil, 0
 	case fuseOpLseek:
 		payload, errno = nil, -int32(syscall.ENOSYS)
 	default:

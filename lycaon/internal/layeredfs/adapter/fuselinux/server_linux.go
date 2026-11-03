@@ -19,7 +19,6 @@ import (
 )
 
 const (
-	fuseHeaderInSize  = 40
 	fuseHeaderOutSize = 16
 	fuseMaxReadBuffer = 1024 * 1024
 )
@@ -153,11 +152,7 @@ func (s *Server) serveLoop() {
 		}
 		req := make([]byte, n)
 		copy(req, buf[:n])
-		s.wg.Add(1)
-		go func(r []byte) {
-			defer s.wg.Done()
-			s.handleRequest(r)
-		}(req)
+		dispatchIncomingRequest(s, req)
 	}
 }
 

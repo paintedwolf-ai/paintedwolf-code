@@ -228,14 +228,16 @@ func (a *Adapter) mountSingleRoot(
 	gid := uint32(os.Getgid())
 
 	srv, err := mountAndStartFUSEServer(ctx, a.cfg, ServerConfig{
-		ViewID:         viewID,
-		RootID:         grant.RootID,
-		MountPath:      canonMount,
-		FSName:         fsName,
-		MountOptions:   mountOpts,
-		OwnerUID:       uid,
-		OwnerGID:       gid,
-		OnMutationHook: a.cfg.OnMutationHook,
+		ViewID:                viewID,
+		RootID:                grant.RootID,
+		MountPath:             canonMount,
+		FSName:                fsName,
+		MountOptions:          mountOpts,
+		OwnerUID:              uid,
+		OwnerGID:              gid,
+		MaxConcurrentRequests: a.cfg.MaxConcurrentRequests,
+		MaxLockWaiters:        a.cfg.MaxLockWaiters,
+		OnMutationHook:        a.cfg.OnMutationHook,
 	}, core)
 	if err != nil {
 		return nil, err

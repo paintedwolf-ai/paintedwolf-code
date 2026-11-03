@@ -83,7 +83,10 @@ func (s *Server) opGetlk(nodeID uint64, body []byte) ([]byte, int32) {
 	return out, 0
 }
 
-func (s *Server) opSetlk(nodeID uint64, body []byte, wait bool) ([]byte, int32) {
+func (s *Server) opSetlk(reqState *fuseRequestState, nodeID uint64, body []byte, wait bool) ([]byte, int32) {
+	if reqState.IsCanceled() {
+		return nil, -int32(syscall.EINTR)
+	}
 	req, ok := parseFuseLockIn(body)
 	if !ok {
 		return nil, -int32(syscall.EINVAL)
@@ -91,15 +94,24 @@ func (s *Server) opSetlk(nodeID uint64, body []byte, wait bool) ([]byte, int32) 
 	s.lockMu.Lock()
 	defer s.lockMu.Unlock()
 	if req.typ == syscall.F_UNLCK {
-		s.applyLockChangeLocked(nodeID, req)
+		applyLockChangeLocked(s, nodeID, req)
 		s.lockCond.Broadcast()
 		return nil, 0
 	}
 	if req.typ != syscall.F_RDLCK && req.typ != syscall.F_WRLCK {
 		return nil, -int32(syscall.EINVAL)
 	}
+	waitRegistered := false
+	defer func() {
+		if waitRegistered {
+			s.lockWaiterCount--
+			if reqState != nil {
+				reqState.lockWaiting.Store(false)
+			}
+		}
+	}()
 	for {
-		if s.closed.Load() {
+		if s.closed.Load() || reqState.IsCanceled() {
 			return nil, -int32(syscall.EINTR)
 		}
 		conflict := false
@@ -115,14 +127,29 @@ func (s *Server) opSetlk(nodeID uint64, body []byte, wait bool) ([]byte, int32) 
 		if !wait {
 			return nil, -int32(syscall.EAGAIN)
 		}
+		if !waitRegistered {
+			if s.lockWaiterCount >= s.maxLockWaiters {
+				return nil, -int32(syscall.EAGAIN)
+			}
+			s.lockWaiterCount++
+			waitRegistered = true
+			if reqState != nil {
+				reqState.waitStart = req.start
+				reqState.waitEnd = req.end
+				reqState.lockWaiting.Store(true)
+			}
+		}
 		s.lockCond.Wait()
 	}
-	s.applyLockChangeLocked(nodeID, req)
+	if s.closed.Load() || reqState.IsCanceled() {
+		return nil, -int32(syscall.EINTR)
+	}
+	applyLockChangeLocked(s, nodeID, req)
 	s.lockCond.Broadcast()
 	return nil, 0
 }
 
-func (s *Server) applyLockChangeLocked(nodeID uint64, req fileLockEntry) {
+func applyLockChangeLocked(s *Server, nodeID uint64, req fileLockEntry) {
 	existing := s.fileLocks[nodeID]
 	if req.isFlock {
 		kept := make([]fileLockEntry, 0, len(existing)+1)
@@ -208,17 +235,17 @@ func coalescePOSIXRanges(intervals []fileLockEntry) []fileLockEntry {
 	return merged
 }
 
-func (s *Server) releasePOSIXLocksForOwner(nodeID, handleNodeID, lockOwner uint64) {
+func releasePOSIXLocksForOwner(s *Server, nodeID, handleNodeID, lockOwner uint64) {
 	if lockOwner == 0 {
 		return
 	}
 	s.lockMu.Lock()
 	defer s.lockMu.Unlock()
-	changed := s.filterNodeLocksLocked(nodeID, func(lk fileLockEntry) bool {
+	changed := filterNodeLocksLocked(s, nodeID, func(lk fileLockEntry) bool {
 		return !lk.isFlock && lk.owner == lockOwner
 	})
 	if handleNodeID != 0 && handleNodeID != nodeID {
-		if s.filterNodeLocksLocked(handleNodeID, func(lk fileLockEntry) bool {
+		if filterNodeLocksLocked(s, handleNodeID, func(lk fileLockEntry) bool {
 			return !lk.isFlock && lk.owner == lockOwner
 		}) {
 			changed = true
@@ -229,7 +256,7 @@ func (s *Server) releasePOSIXLocksForOwner(nodeID, handleNodeID, lockOwner uint6
 	}
 }
 
-func (s *Server) releaseLocksForHandle(fh, nodeID uint64, releaseFlags uint32, lockOwner uint64) {
+func releaseLocksForHandle(s *Server, fh, nodeID uint64, releaseFlags uint32, lockOwner uint64) {
 	s.lockMu.Lock()
 	defer s.lockMu.Unlock()
 	shouldDrop := func(lk fileLockEntry) bool {
@@ -246,10 +273,10 @@ func (s *Server) releaseLocksForHandle(fh, nodeID uint64, releaseFlags uint32, l
 	}
 	changed := false
 	if nodeID != 0 {
-		changed = s.filterNodeLocksLocked(nodeID, shouldDrop)
+		changed = filterNodeLocksLocked(s, nodeID, shouldDrop)
 	} else {
 		for nid := range s.fileLocks {
-			if s.filterNodeLocksLocked(nid, shouldDrop) {
+			if filterNodeLocksLocked(s, nid, shouldDrop) {
 				changed = true
 			}
 		}
@@ -259,7 +286,7 @@ func (s *Server) releaseLocksForHandle(fh, nodeID uint64, releaseFlags uint32, l
 	}
 }
 
-func (s *Server) filterNodeLocksLocked(nodeID uint64, drop func(fileLockEntry) bool) bool {
+func filterNodeLocksLocked(s *Server, nodeID uint64, drop func(fileLockEntry) bool) bool {
 	locks := s.fileLocks[nodeID]
 	if len(locks) == 0 {
 		return false

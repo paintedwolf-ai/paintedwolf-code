@@ -60,7 +60,7 @@ func handleLockHelperCommand(fds map[string]*os.File, fields []string) string {
 			return "ERR " + err.Error()
 		}
 		return "OK"
-	case "SETLK", "GETLK":
+	case "SETLK", "SETLKW", "GETLK":
 		return handlePOSIXLockCmd(fds[fields[1]], fields)
 	case "FLOCK":
 		return handleFlockCmd(fds[fields[1]], fields[2])
@@ -85,12 +85,19 @@ func handlePOSIXLockCmd(f *os.File, fields []string) string {
 		Start:  start,
 		Len:    length,
 	}
-	if fields[0] == "SETLK" {
-		err := syscall.FcntlFlock(f.Fd(), syscall.F_SETLK, &fl)
+	if fields[0] == "SETLK" || fields[0] == "SETLKW" {
+		cmdOp := syscall.F_SETLK
+		if fields[0] == "SETLKW" {
+			cmdOp = syscall.F_SETLKW
+		}
+		err := syscall.FcntlFlock(f.Fd(), cmdOp, &fl)
 		if err == nil {
 			return "OK"
 		}
-		if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EACCES) {
+		if errors.Is(err, syscall.EINTR) || errors.Is(err, syscall.Errno(512)) {
+			return "EINTR"
+		}
+		if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EBUSY) {
 			return "CONFLICT"
 		}
 		return "ERR " + err.Error()
@@ -165,19 +172,29 @@ func startLockWorkerProc(t *testing.T, name string) *lockWorkerProc {
 	return w
 }
 
-func (w *lockWorkerProc) exec(command string, wantPrefix string) string {
+func (w *lockWorkerProc) send(command string) {
 	w.t.Helper()
 	if _, err := fmt.Fprintln(w.stdin, command); err != nil {
 		w.t.Fatalf("[%s] send %q: %v", w.name, command, err)
 	}
+}
+
+func (w *lockWorkerProc) recv(wantPrefix string) string {
+	w.t.Helper()
 	if !w.stdout.Scan() {
-		w.t.Fatalf("[%s] EOF waiting for reply to %q (err=%v)", w.name, command, w.stdout.Err())
+		w.t.Fatalf("[%s] EOF waiting for reply (want %q, err=%v)", w.name, wantPrefix, w.stdout.Err())
 	}
 	got := strings.TrimSpace(w.stdout.Text())
 	if !strings.HasPrefix(got, wantPrefix) {
-		w.t.Fatalf("[%s] %q -> got %q, want prefix %q", w.name, command, got, wantPrefix)
+		w.t.Fatalf("[%s] got %q, want prefix %q", w.name, got, wantPrefix)
 	}
 	return got
+}
+
+func (w *lockWorkerProc) exec(command string, wantPrefix string) string {
+	w.t.Helper()
+	w.send(command)
+	return w.recv(wantPrefix)
 }
 
 func TestMountedPOSIXByteRangeLocksAndFlockSemanticsTwoProcesses(t *testing.T) {

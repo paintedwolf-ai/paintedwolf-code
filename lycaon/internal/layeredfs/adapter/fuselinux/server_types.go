@@ -16,14 +16,16 @@ const fuseRootID uint64 = 1
 
 // ServerConfig configures an in-process Linux FUSE v7.31 server instance for a mounted root.
 type ServerConfig struct {
-	ViewID         string
-	RootID         string
-	MountPath      string
-	FSName         string
-	MountOptions   string
-	OwnerUID       uint32
-	OwnerGID       uint32
-	OnMutationHook func(opcode uint32, rel string)
+	ViewID                string
+	RootID                string
+	MountPath             string
+	FSName                string
+	MountOptions          string
+	OwnerUID              uint32
+	OwnerGID              uint32
+	MaxConcurrentRequests int
+	MaxLockWaiters        int
+	OnMutationHook        func(opcode uint32, rel string)
 }
 
 type fuseNode struct {
@@ -78,9 +80,17 @@ type Server struct {
 	dirtyRels       map[string]struct{}
 	nextDirFH       uint64
 
-	lockMu    sync.Mutex
-	lockCond  *sync.Cond
-	fileLocks map[uint64][]fileLockEntry
+	lockMu          sync.Mutex
+	lockCond        *sync.Cond
+	fileLocks       map[uint64][]fileLockEntry
+	lockWaiterCount int
+	maxLockWaiters  int
+
+	workerSem       chan struct{}
+	controlSem      chan struct{}
+	reqMu           sync.Mutex
+	inFlightReqs    map[uint64]*fuseRequestState
+	interruptedReqs map[uint64]struct{}
 
 	gateMu        sync.Mutex
 	gateCond      *sync.Cond
@@ -89,6 +99,14 @@ type Server struct {
 }
 
 func newServerInstance(cfg ServerConfig, core *layeredfs.Core, fd int, stopPipe [2]int) *Server {
+	maxReq := cfg.MaxConcurrentRequests
+	if maxReq <= 0 {
+		maxReq = 64
+	}
+	maxWaiters := cfg.MaxLockWaiters
+	if maxWaiters <= 0 {
+		maxWaiters = maxReq
+	}
 	rootNode := &fuseNode{
 		fuseID:     fuseRootID,
 		generation: 1,
@@ -107,6 +125,11 @@ func newServerInstance(cfg ServerConfig, core *layeredfs.Core, fd int, stopPipe 
 		dirtyRels:       make(map[string]struct{}),
 		nextDirFH:       1 << 50,
 		fileLocks:       make(map[uint64][]fileLockEntry),
+		maxLockWaiters:  maxWaiters,
+		workerSem:       make(chan struct{}, maxReq),
+		controlSem:      make(chan struct{}, 32),
+		inFlightReqs:    make(map[uint64]*fuseRequestState),
+		interruptedReqs: make(map[uint64]struct{}),
 	}
 	s.lockCond = sync.NewCond(&s.lockMu)
 	s.gateCond = sync.NewCond(&s.gateMu)

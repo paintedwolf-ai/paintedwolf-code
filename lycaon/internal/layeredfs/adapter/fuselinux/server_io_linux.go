@@ -204,7 +204,7 @@ func (s *Server) opFlush(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) >= 24 {
 		lockOwner := binary.LittleEndian.Uint64(body[16:24])
 		h, _ := s.lookupHandle(fh)
-		s.releasePOSIXLocksForOwner(nodeID, h.fuseID, lockOwner)
+		releasePOSIXLocksForOwner(s, nodeID, h.fuseID, lockOwner)
 	}
 	return nil, 0
 }
@@ -230,7 +230,7 @@ func (s *Server) opRelease(nodeID uint64, body []byte) ([]byte, int32) {
 	if targetNode == 0 {
 		targetNode = nodeID
 	}
-	s.releaseLocksForHandle(fh, targetNode, releaseFlags, lockOwner)
+	releaseLocksForHandle(s, fh, targetNode, releaseFlags, lockOwner)
 	if ok && !h.isDir && h.hid != 0 {
 		_ = s.core.CloseHandle(h.hid)
 	}

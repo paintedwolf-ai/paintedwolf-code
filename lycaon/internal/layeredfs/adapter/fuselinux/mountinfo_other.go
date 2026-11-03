@@ -57,3 +57,7 @@ func mountAndStartFUSEServer(_ context.Context, _ Config, _ ServerConfig, _ *lay
 func notifyInvalInode(_ *Server, _ uint64) {}
 
 func notifyInvalEntry(_ *Server, _ uint64, _ string) {}
+
+func (s *Server) writeReply(_ uint64, _ int32, _ []byte) error { return nil }
+
+func (s *Server) handleRequest(_ []byte, _ bool) {}
