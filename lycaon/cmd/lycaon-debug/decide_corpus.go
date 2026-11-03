@@ -162,4 +162,3 @@ func runDecideCorpus(args []string) error {
 	}
 	return writeJSON(*outPath, out)
 }
-
