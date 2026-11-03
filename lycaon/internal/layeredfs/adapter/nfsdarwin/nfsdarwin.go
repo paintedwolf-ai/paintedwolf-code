@@ -88,6 +88,10 @@ type viewState struct {
 	quiesceHook     func(ctx context.Context, viewID string) error
 	flushHook       func(ctx context.Context, viewID string) error
 	privateGitMgr   *privategit.Manager
+	dirtyMu         sync.Mutex
+	dirtyRelPaths   map[string]map[string]struct{}
+	lastFilesSynced atomic.Int64
+	lastDirsSynced  atomic.Int64
 	accessCount     atomic.Int64
 	releasing       atomic.Bool
 	coreReleased    atomic.Bool
@@ -165,6 +169,39 @@ func (a *Adapter) SetConfigCallbacksForTest(clientSyncFn func(string) error, rem
 	a.cfg.ClientSyncFn = clientSyncFn
 	a.cfg.RemoveAllFn = removeAllFn
 	a.mu.Unlock()
+}
+
+// TrackDirtyClientPath registers a relative path under (viewID, rootID) to be synced on the next barrier flush.
+func (a *Adapter) TrackDirtyClientPath(viewID, rootID, relPath string) {
+	a.mu.RLock()
+	st := a.views[viewID]
+	a.mu.RUnlock()
+	if st == nil || strings.TrimSpace(relPath) == "" {
+		return
+	}
+	if rootID == "" {
+		rootID = st.primaryRoot
+	}
+	st.dirtyMu.Lock()
+	if st.dirtyRelPaths == nil {
+		st.dirtyRelPaths = make(map[string]map[string]struct{})
+	}
+	if st.dirtyRelPaths[rootID] == nil {
+		st.dirtyRelPaths[rootID] = make(map[string]struct{})
+	}
+	st.dirtyRelPaths[rootID][filepath.Clean(filepath.FromSlash(relPath))] = struct{}{}
+	st.dirtyMu.Unlock()
+}
+
+// LastFlushStatsForView returns the counts of regular files and directories synced during the most recent flush on viewID.
+func (a *Adapter) LastFlushStatsForView(viewID string) (filesSynced, dirsSynced int) {
+	a.mu.RLock()
+	st := a.views[viewID]
+	a.mu.RUnlock()
+	if st == nil {
+		return 0, 0
+	}
+	return int(st.lastFilesSynced.Load()), int(st.lastDirsSynced.Load())
 }
 
 // MountFactsForView returns the recorded MountFacts for the primary root of viewID.

@@ -40,6 +40,7 @@ type Server struct {
 	handles   *handleTable
 	dirs      *dirCache
 	stability *stabilityEngine
+	gate      *serverBarrierGate
 	workSem   chan struct{}
 	queue     chan func()
 	state     serverState
@@ -69,8 +70,8 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 	s := &Server{
 		core: core, cfg: cfg, listener: ln,
 		handles: newHandleTable(secret, cfg.MaxHandles), dirs: newDirCache(secret, DefaultMaxDirListings),
-		stability: newStabilityEngine(cfg), workSem: make(chan struct{}, DefaultMaxConcurrentRPCs),
-		queue: make(chan func(), DefaultMaxQueuedRPCs),
+		stability: newStabilityEngine(cfg), gate: newServerBarrierGate(),
+		workSem: make(chan struct{}, DefaultMaxConcurrentRPCs), queue: make(chan func(), DefaultMaxQueuedRPCs),
 		state: serverState{
 			cores: map[ViewID]*layeredfs.Core{core.ViewID(): core}, readOnly: make(map[ViewID]bool),
 			exportsByID: make(map[string]*exportEntry), exportsByVH: make(map[uint64][]*exportEntry),
@@ -178,6 +179,7 @@ func (s *Server) ReleaseExport(viewID ViewID) {
 		delete(s.state.exportsByID, e.cap.ExportPath)
 	}
 	s.state.mu.Unlock()
+	s.gate.releaseView(vHash, entries)
 	s.stability.ReleaseView(viewID)
 	s.dirs.ReleaseView(viewID)
 	s.handles.ReleaseView(viewCore, viewID)
@@ -246,6 +248,7 @@ func (s *Server) Close() error {
 	for _, v := range views {
 		s.handles.ReleaseView(coreForView(s, v), v)
 	}
+	s.gate.closeAll()
 	return err
 }
 

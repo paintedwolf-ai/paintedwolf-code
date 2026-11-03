@@ -73,6 +73,7 @@ func onSetAttr(s *Server, cs *connState, call rpcCallHeader) []byte {
 		postMeta, _ := statRecord(s, rec)
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, &postMeta, exp)
 	}
+	s.RecordDirtyCandidate(rec.viewID, rec.qpath)
 	postMeta, err := statRecord(s, rec)
 	if err != nil {
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, nil, exp)
@@ -213,6 +214,9 @@ func onAccess(s *Server, cs *connState, call rpcCallHeader) []byte {
 	} else {
 		if meta.Mode&0o200 != 0 || rec.ownerCreatedRO {
 			granted |= 0x0004 | 0x0008
+			if reqMask&(0x0004|0x0008|0x0010) != 0 {
+				s.RecordDirtyCandidate(rec.viewID, rec.qpath)
+			}
 		}
 		if meta.Mode&0o100 != 0 {
 			granted |= 0x0020 // EXECUTE

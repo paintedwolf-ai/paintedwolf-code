@@ -122,38 +122,22 @@ func readBaseFile(viewCore *layeredfs.Core, rec *handleRecord, offset uint64, co
 
 func onWrite(s *Server, cs *connState, call rpcCallHeader) []byte {
 	rawFH, err := readFileHandle(call.Body)
-	if err != nil {
-		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
-	}
+	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
 	offset, err := readUint64(call.Body)
-	if err != nil {
-		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
-	}
+	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
 	count, err := readUint32(call.Body)
-	if err != nil {
-		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
-	}
+	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
 	stableRaw, err := readUint32(call.Body)
-	if err != nil || stableRaw > uint32(FileSync) {
-		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
-	}
+	if err != nil || stableRaw > uint32(FileSync) { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
 	data, err := readOpaqueBounded(call.Body, s.cfg.MaxRequestBytes)
-	if err != nil {
-		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
-	}
-	if uint32(len(data)) > count {
-		data = data[:count]
-	}
+	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
+	if uint32(len(data)) > count { data = data[:count] }
 	stability := WriteStability(stableRaw)
 
 	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
-	if err != nil {
-		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, MapErrorToNFSStatus(err))
-	}
+	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, MapErrorToNFSStatus(err)) }
 	preMeta, err := statRecord(s, rec)
-	if err != nil {
-		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, MapErrorToNFSStatus(err))
-	}
+	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, MapErrorToNFSStatus(err)) }
 	if exp.cap.ReadOnly {
 		return encodeWccError(call.XID, nfs.NFSStatusROFS, &preMeta, &preMeta, exp)
 	}
@@ -195,6 +179,7 @@ func onWrite(s *Server, cs *connState, call rpcCallHeader) []byte {
 		curMeta, _ := statRecord(s, rec)
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, &curMeta, exp)
 	}
+	s.RecordDirtyCandidate(rec.viewID, rec.qpath)
 
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
@@ -253,6 +238,7 @@ func onCommit(s *Server, cs *connState, call rpcCallHeader) []byte {
 		curMeta, _ := statRecord(s, rec)
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, &curMeta, exp)
 	}
+	s.RecordDirtyCandidate(rec.viewID, rec.qpath)
 
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))

@@ -340,12 +340,8 @@ func snapshotTreeDigests(t *testing.T, root string) map[string]string {
 
 func assertTreesIdentical(t *testing.T, label string, before, after map[string]string) {
 	t.Helper()
-	if len(before) != len(after) {
-		t.Fatalf("%s: entry count changed: before=%d after=%d", label, len(before), len(after))
-	}
+	if len(before) != len(after) { t.Fatalf("%s: entry count changed: before=%d after=%d", label, len(before), len(after)) }
 	for k, v := range before {
-		if after[k] != v {
-			t.Fatalf("%s: path %q changed: before=%s after=%s", label, k, v, after[k])
-		}
+		if after[k] != v { t.Fatalf("%s: path %q changed: before=%s after=%s", label, k, v, after[k]) }
 	}
 }

@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -67,66 +67,119 @@ func verifyMountAndServerForBarrier(st *viewState, viewID, rootID string, m *roo
 	return nil
 }
 
-func (a *Adapter) syncClientPath(path string) error {
+func classifyBarrierReason(err error) adapter.ReasonCode {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return adapter.ReasonContextCanceled
+	}
+	return adapter.ReasonBarrierFailed
+}
+
+func (a *Adapter) syncClientPath(ctx context.Context, path string) (isFile, isDir bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return false, false, err
+	}
 	a.mu.RLock()
 	fn := a.cfg.ClientSyncFn
 	a.mu.RUnlock()
 	if fn != nil {
-		return fn(path)
+		if err := fn(path); err != nil {
+			return false, false, err
+		}
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, false, nil
+		}
+		return false, false, err
+	}
+	if info.Mode()&(os.ModeSymlink|os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0 {
+		return false, false, nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		if errors.Is(err, os.ErrNotExist) {
+			return false, false, nil
+		}
+		return false, false, err
 	}
 	syncErr := f.Sync()
 	closeErr := f.Close()
 	if syncErr != nil {
-		return syncErr
+		return false, false, syncErr
 	}
-	return closeErr
+	if closeErr != nil {
+		return false, false, closeErr
+	}
+	return !info.IsDir(), info.IsDir(), nil
 }
 
-func (a *Adapter) syncMountedRootFiles(ctx context.Context, core *layeredfs.Core, rootID, mountPath string) error {
-	seen := make(map[string]bool)
-	if core != nil {
-		if changes, err := core.EnumerateChanges(false); err == nil {
+func addCandidateWithAncestors(candidates map[string]struct{}, rel string) {
+	for cur := filepath.Clean(filepath.FromSlash(rel)); cur != "" && cur != "/" && cur != ".git"; cur = filepath.Dir(cur) {
+		if strings.HasPrefix(cur, ".git/") || strings.Contains(cur, "/.git/") || strings.HasSuffix(cur, "/.git") {
+			break
+		}
+		candidates[cur] = struct{}{}
+		if cur == "." {
+			break
+		}
+	}
+}
+
+func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, viewID, rootID string, m *rootMount) error {
+	candidates := map[string]struct{}{".": {}}
+	if st.core != nil {
+		if changes, err := st.core.EnumerateChanges(false); err == nil {
 			for _, ce := range changes {
-				if ce.Path.RootID != rootID || ce.Deleted || ce.Kind == layeredfs.EntryAbsent || ce.Kind == layeredfs.EntrySymlink {
+				if ce.Path.RootID != rootID || ce.Kind == layeredfs.EntrySymlink {
 					continue
 				}
-				p := filepath.Join(mountPath, filepath.FromSlash(ce.Path.Rel))
-				seen[p] = true
-				if err := a.syncClientPath(p); err != nil && !errors.Is(err, os.ErrNotExist) {
-					return err
+				if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
+					addCandidateWithAncestors(candidates, filepath.Dir(filepath.FromSlash(ce.Path.Rel)))
+				} else {
+					addCandidateWithAncestors(candidates, ce.Path.Rel)
 				}
 			}
 		}
 	}
-	walkErr := filepath.WalkDir(mountPath, func(path string, d fs.DirEntry, err error) error {
+	if m.server != nil {
+		for _, rel := range m.server.DirtyCandidatePaths(viewID, rootID) {
+			addCandidateWithAncestors(candidates, rel)
+		}
+	}
+	st.dirtyMu.Lock()
+	for rel := range st.dirtyRelPaths[rootID] {
+		addCandidateWithAncestors(candidates, rel)
+	}
+	st.dirtyMu.Unlock()
+
+	rels := make([]string, 0, len(candidates))
+	for rel := range candidates {
+		if rel != "." {
+			rels = append(rels, rel)
+		}
+	}
+	sort.Strings(rels)
+	rels = append(rels, ".")
+
+	var filesSynced, dirsSynced int64
+	for _, rel := range rels {
+		target := m.mountPath
+		if rel != "." {
+			target = filepath.Join(m.mountPath, rel)
+		}
+		isFile, isDir, err := a.syncClientPath(ctx, target)
 		if err != nil {
 			return err
 		}
-		if cErr := ctx.Err(); cErr != nil {
-			return cErr
+		if isFile {
+			filesSynced++
+		} else if isDir {
+			dirsSynced++
 		}
-		if d.Name() == ".git" {
-			if d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if d.Type()&fs.ModeSymlink != 0 || seen[path] {
-			return nil
-		}
-		seen[path] = true
-		return a.syncClientPath(path)
-	})
-	if walkErr != nil {
-		return walkErr
 	}
-	if !seen[mountPath] {
-		return a.syncClientPath(mountPath)
-	}
+	st.lastFilesSynced.Store(filesSynced)
+	st.lastDirsSynced.Store(dirsSynced)
 	return nil
 }
 

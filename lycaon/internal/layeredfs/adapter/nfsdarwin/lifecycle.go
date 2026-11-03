@@ -8,8 +8,20 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
+
+// NewBarrierProvider returns checkpoint.BarrierCallbacks that acquire and hold the adapter's
+// CheckpointBarrier (including the server's mutating RPC gate and Core barrier) across publication.
+func (a *Adapter) NewBarrierProvider(viewID string) checkpoint.BarrierCallbacks {
+	return checkpoint.BarrierCallbacks{
+		AcquireAdapterBarrier: func(ctx context.Context) (layeredfs.BarrierToken, func() error, error) {
+			rec, release, err := a.CheckpointBarrier(ctx, viewID)
+			return rec.Token, release, err
+		},
+	}
+}
 
 // SetBarrierHooks configures the QuiesceHook and FlushClientHook for viewID.
 func (a *Adapter) SetBarrierHooks(
@@ -141,11 +153,11 @@ func (a *Adapter) FlushClientData(ctx context.Context, viewID string) error {
 		if err := verifyMountAndServerForBarrier(st, viewID, rootID, m, "flush_client"); err != nil {
 			return err
 		}
-		if err := a.syncMountedRootFiles(ctx, st.core, rootID, m.mountPath); err != nil {
-			return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+		if err := a.syncMountedRootFiles(ctx, st, viewID, rootID, m); err != nil {
+			return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: classifyBarrierReason(err), Diagnostic: err.Error(), Cause: err}
 		}
 		if err := m.server.FlushForCheckpoint(ctx, viewID); err != nil {
-			return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+			return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: classifyBarrierReason(err), Diagnostic: err.Error(), Cause: err}
 		}
 	}
 	return nil
@@ -173,14 +185,14 @@ func (a *Adapter) CheckpointBarrier(ctx context.Context, viewID string) (adapter
 		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: "checkpoint barrier requires QuiesceHook to establish WritersQuiesced"}
 	}
 	if err := st.quiesceHook(ctx, viewID); err != nil {
-		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: classifyBarrierReason(err), Diagnostic: err.Error(), Cause: err}
 	}
 	receipt.WritersQuiesced = true
 	if st.flushHook == nil {
 		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: "checkpoint barrier requires FlushClientHook to establish WritableMappingsFlushed"}
 	}
 	if err := st.flushHook(ctx, viewID); err != nil {
-		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: classifyBarrierReason(err), Diagnostic: err.Error(), Cause: err}
 	}
 	receipt.WritableMappingsFlushed = true
 
@@ -191,14 +203,14 @@ func (a *Adapter) CheckpointBarrier(ctx context.Context, viewID string) (adapter
 		}
 	}
 	for rootID, m := range st.mounts {
-		if err := a.syncMountedRootFiles(ctx, st.core, rootID, m.mountPath); err != nil {
+		if err := a.syncMountedRootFiles(ctx, st, viewID, rootID, m); err != nil {
 			releaseGates()
-			return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+			return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: classifyBarrierReason(err), Diagnostic: err.Error(), Cause: err}
 		}
 		relGate, gErr := m.server.BeginBarrierDrain(ctx, viewID)
 		if gErr != nil {
 			releaseGates()
-			return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: gErr.Error(), Cause: gErr}
+			return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: classifyBarrierReason(gErr), Diagnostic: gErr.Error(), Cause: gErr}
 		}
 		gateReleases = append(gateReleases, relGate)
 	}
@@ -208,7 +220,7 @@ func (a *Adapter) CheckpointBarrier(ctx context.Context, viewID string) (adapter
 	token, err := st.core.BeginCheckpointBarrier(ctx)
 	if err != nil {
 		releaseGates()
-		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: classifyBarrierReason(err), Diagnostic: err.Error(), Cause: err}
 	}
 	receipt.Token = token
 	var released atomic.Bool

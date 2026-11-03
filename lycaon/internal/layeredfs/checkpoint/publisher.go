@@ -30,11 +30,12 @@ type MappedRegion struct {
 
 // BarrierCallbacks hooks adapter/process quiescing, dirty-page flushing, retention, and fault injection.
 type BarrierCallbacks struct {
-	QuiesceWorkers       func(ctx context.Context) error
-	FlushClientDirtyData func(ctx context.Context) error
-	ResumeWorkers        func(ctx context.Context, publishErr error)
-	CommitRetention      func(ctx context.Context, checkpointID string, blobs []string, gitObjects []string) error
-	FaultInjector        func(stage FaultStage) error
+	AcquireAdapterBarrier func(ctx context.Context) (layeredfs.BarrierToken, func() error, error)
+	QuiesceWorkers        func(ctx context.Context) error
+	FlushClientDirtyData  func(ctx context.Context) error
+	ResumeWorkers         func(ctx context.Context, publishErr error)
+	CommitRetention       func(ctx context.Context, checkpointID string, blobs []string, gitObjects []string) error
+	FaultInjector         func(stage FaultStage) error
 }
 
 // PublisherConfig configures a checkpoint Publisher for a worker view.
@@ -193,13 +194,26 @@ func (p *Publisher) executeBatch(ctx context.Context, batch []*pendingPublish) (
 		return PublishResult{}, fmt.Errorf("%w: %w", ErrFlushFailed, err)
 	}
 
-	token, err := p.cfg.Core.BeginCheckpointBarrier(ctx)
-	if err != nil {
-		return PublishResult{}, err
+	var (
+		token      layeredfs.BarrierToken
+		releaseBar func() error
+		err        error
+	)
+	if cb.AcquireAdapterBarrier != nil {
+		token, releaseBar, err = cb.AcquireAdapterBarrier(ctx)
+		if err != nil {
+			return PublishResult{}, err
+		}
+	} else {
+		token, err = p.cfg.Core.BeginCheckpointBarrier(ctx)
+		if err != nil {
+			return PublishResult{}, err
+		}
+		releaseBar = func() error { return p.cfg.Core.EndCheckpointBarrier(token) }
 	}
 	// Step 6: Release the barrier on EVERY path.
 	defer func() {
-		_ = p.cfg.Core.EndCheckpointBarrier(token)
+		_ = releaseBar()
 	}()
 
 	if err := inject(FaultAfterBarrier); err != nil {

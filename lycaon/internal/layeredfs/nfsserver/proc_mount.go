@@ -21,31 +21,95 @@ type MountHandshakeObservation struct {
 }
 
 type serverBarrierGate struct {
-	mu       sync.Mutex
-	cond     *sync.Cond
-	inFlight int
-	gatedVH  map[uint64]bool
+	mu           sync.Mutex
+	cond         *sync.Cond
+	inFlightByVH map[uint64]int
+	gatedVH      map[uint64]bool
+	dirtyByVH    map[uint64]map[layeredfs.QualifiedPath]struct{}
+	handshakes   map[string]MountHandshakeObservation
 }
 
-var mountHandshakes, serverGates sync.Map
-
-func getServerGate(s *Server) *serverBarrierGate {
-	if v, ok := serverGates.Load(s); ok { return v.(*serverBarrierGate) }
-	g := &serverBarrierGate{gatedVH: make(map[uint64]bool)}
+func newServerBarrierGate() *serverBarrierGate {
+	g := &serverBarrierGate{
+		inFlightByVH: make(map[uint64]int),
+		gatedVH:      make(map[uint64]bool),
+		dirtyByVH:    make(map[uint64]map[layeredfs.QualifiedPath]struct{}),
+		handshakes:   make(map[string]MountHandshakeObservation),
+	}
 	g.cond = sync.NewCond(&g.mu)
-	actual, _ := serverGates.LoadOrStore(s, g)
-	return actual.(*serverBarrierGate)
+	return g
+}
+
+func (g *serverBarrierGate) releaseView(vHash uint64, entries []*exportEntry) {
+	if g == nil { return }
+	g.mu.Lock()
+	delete(g.gatedVH, vHash); delete(g.inFlightByVH, vHash); delete(g.dirtyByVH, vHash)
+	for _, e := range entries { delete(g.handshakes, e.cap.ExportPath) }
+	g.cond.Broadcast(); g.mu.Unlock()
+}
+
+func (g *serverBarrierGate) closeAll() {
+	if g == nil { return }
+	g.mu.Lock()
+	clear(g.gatedVH); clear(g.inFlightByVH); clear(g.dirtyByVH); clear(g.handshakes)
+	g.cond.Broadcast(); g.mu.Unlock()
+}
+
+// RecordDirtyCandidate records a file or directory path touched by write-capable client activity on viewID.
+func (s *Server) RecordDirtyCandidate(viewID ViewID, qpath layeredfs.QualifiedPath) {
+	if s == nil || s.gate == nil || viewID == "" { return }
+	vHash := computeViewHash(viewID)
+	s.gate.mu.Lock()
+	if s.gate.dirtyByVH[vHash] == nil { s.gate.dirtyByVH[vHash] = make(map[layeredfs.QualifiedPath]struct{}) }
+	s.gate.dirtyByVH[vHash][qpath] = struct{}{}
+	s.gate.mu.Unlock()
+}
+
+// DirtyCandidatePaths returns the relative paths recorded as write-capable candidates for (viewID, rootID).
+func (s *Server) DirtyCandidatePaths(viewID ViewID, rootID RootID) []string {
+	if s == nil || s.gate == nil { return nil }
+	vHash := computeViewHash(viewID)
+	s.gate.mu.Lock()
+	var out []string
+	for qp := range s.gate.dirtyByVH[vHash] {
+		if qp.RootID == rootID { out = append(out, qp.Rel) }
+	}
+	s.gate.mu.Unlock()
+	return out
+}
+
+// GateStateForTest returns the counts of gated views, in-flight views, dirty candidate views, and mount handshakes on s.
+func (s *Server) GateStateForTest() (gatedViews, inFlightViews, dirtyViews, handshakes int) {
+	if s == nil || s.gate == nil { return 0, 0, 0, 0 }
+	s.gate.mu.Lock(); defer s.gate.mu.Unlock()
+	return len(s.gate.gatedVH), len(s.gate.inFlightByVH), len(s.gate.dirtyByVH), len(s.gate.handshakes)
 }
 
 // BeginBarrierDrain gates new mutating NFSv3 RPCs for viewID on s, waits for in-flight mutating
-// RPCs to finish, and flushes all staged UNSTABLE writes to Core before Core's barrier freezes mutations.
+// RPCs on viewID to finish (with context cancellation wakeups), and flushes all staged UNSTABLE writes.
 func (s *Server) BeginBarrierDrain(ctx context.Context, viewID ViewID) (func(), error) {
 	if err := ctx.Err(); err != nil { return nil, err }
-	vHash, g := computeViewHash(viewID), getServerGate(s)
+	vHash, g := computeViewHash(viewID), s.gate
 	g.mu.Lock()
 	if g.gatedVH[vHash] { g.mu.Unlock(); return nil, layeredfs.ErrBarrierActive }
 	g.gatedVH[vHash] = true
-	for g.inFlight > 0 { g.cond.Wait() }
+	if g.inFlightByVH[vHash] > 0 {
+		doneWait := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done(): g.mu.Lock(); g.cond.Broadcast(); g.mu.Unlock()
+			case <-doneWait:
+			}
+		}()
+		for g.inFlightByVH[vHash] > 0 {
+			if err := ctx.Err(); err != nil {
+				delete(g.gatedVH, vHash); g.mu.Unlock(); close(doneWait)
+				return nil, err
+			}
+			g.cond.Wait()
+		}
+		close(doneWait)
+	}
 	g.mu.Unlock()
 	release := func() { g.mu.Lock(); delete(g.gatedVH, vHash); g.mu.Unlock() }
 	if err := s.FlushForCheckpoint(ctx, viewID); err != nil { release(); return nil, err }
@@ -55,28 +119,26 @@ func (s *Server) BeginBarrierDrain(ctx context.Context, viewID ViewID) (func(), 
 
 // LastMountHandshake returns the most recent MOUNTPROC3_MNT/UMNT credential observation for exportPath on s.
 func (s *Server) LastMountHandshake(exportPath string) (MountHandshakeObservation, bool) {
-	if s != nil {
-		if v, ok := mountHandshakes.Load("/" + strings.Trim(exportPath, "/")); ok { return v.(MountHandshakeObservation), true }
+	if s != nil && s.gate != nil {
+		s.gate.mu.Lock()
+		obs, ok := s.gate.handshakes["/"+strings.Trim(exportPath, "/")]
+		s.gate.mu.Unlock()
+		return obs, ok
 	}
 	return MountHandshakeObservation{}, false
 }
 
 func dispatchMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	switch nfs.MountProcedure(call.Proc) {
-	case nfs.MountProcNull:
-		return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil)
-	case nfs.MountProcMount:
-		return onMount(s, cs, call)
-	case nfs.MountProcUmnt:
-		return onUmnt(s, cs, call)
-	case nfs.MountProcUmntAll:
-		return onUmntAll(s, cs, call)
+	case nfs.MountProcNull: return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil)
+	case nfs.MountProcMount: return onMount(s, cs, call)
+	case nfs.MountProcUmnt: return onUmnt(s, cs, call)
+	case nfs.MountProcUmntAll: return onUmntAll(s, cs, call)
 	case nfs.MountProcDump, nfs.MountProcExport:
 		var out bytes.Buffer
 		writeUint32(&out, 0)
 		return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, out.Bytes())
-	default:
-		return encodeAcceptedReply(call.XID, nfs.ResponseCodeProcUnavailable, nil)
+	default: return encodeAcceptedReply(call.XID, nfs.ResponseCodeProcUnavailable, nil)
 	}
 }
 
@@ -84,11 +146,14 @@ func allowMountCred(capCfg ExportCapability, cred authCred) bool {
 	return cred.Flavor == nfs.AuthFlavorUnix && ((cred.UID == capCfg.AllowedUID && cred.GID == capCfg.AllowedGID) || (cred.UID == 0 && cred.GID == 0))
 }
 
-func recordHandshake(dirPath string, capCfg ExportCapability, cred authCred, mounted bool) {
-	mountHandshakes.Store(dirPath, MountHandshakeObservation{
+func recordHandshake(s *Server, dirPath string, capCfg ExportCapability, cred authCred, mounted bool) {
+	if s == nil || s.gate == nil { return }
+	s.gate.mu.Lock()
+	s.gate.handshakes[dirPath] = MountHandshakeObservation{
 		ExportPath: dirPath, ViewID: capCfg.ViewID, Root: capCfg.Root,
 		ObservedUID: cred.UID, ObservedGID: cred.GID, AllowedUID: capCfg.AllowedUID, AllowedGID: capCfg.AllowedGID, Mounted: mounted,
-	})
+	}
+	s.gate.mu.Unlock()
 }
 
 func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
@@ -104,7 +169,7 @@ func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	entry.mounted = true
 	capCfg, viewCore := entry.cap, entry.core
 	s.state.mu.Unlock()
-	recordHandshake(dirPath, capCfg, call.Cred, true)
+	recordHandshake(s, dirPath, capCfg, call.Cred, true)
 	rootQPath := layeredfs.QualifiedPath{RootID: capCfg.Root, Rel: "."}
 	meta, err := viewCore.Lstat(rootQPath)
 	if err != nil { return encodeMountStatus(call.XID, nfs.MountStatusErrNoEnt) }
@@ -121,7 +186,7 @@ func onUmnt(s *Server, cs *connState, call rpcCallHeader) []byte {
 	dirPath = "/" + strings.Trim(dirPath, "/")
 	s.state.mu.Lock()
 	if entry, ok := s.state.exportsByID[dirPath]; ok && allowMountCred(entry.cap, call.Cred) {
-		entry.mounted = false; cs.clearView(entry.viewHash); recordHandshake(dirPath, entry.cap, call.Cred, false)
+		entry.mounted = false; cs.clearView(entry.viewHash); recordHandshake(s, dirPath, entry.cap, call.Cred, false)
 	}
 	s.state.mu.Unlock()
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil)
@@ -188,13 +253,13 @@ func dispatchNFS(s *Server, cs *connState, call rpcCallHeader) []byte {
 	fn, ok := nfsHandlers[proc]
 	if !ok { return encodeAcceptedReply(call.XID, nfs.ResponseCodeProcUnavailable, nil) }
 	if isMutatingNFSProc(proc) {
-		vh, g := peekCallViewHash(s, cs, call), getServerGate(s)
+		vh, g := peekCallViewHash(s, cs, call), s.gate
 		g.mu.Lock()
 		if g.gatedVH[vh] { g.mu.Unlock(); return encodeNFSError(call.XID, proc, nfs.NFSStatusJukebox) }
-		g.inFlight++; g.mu.Unlock()
+		g.inFlightByVH[vh]++; g.mu.Unlock()
 		defer func() {
 			g.mu.Lock()
-			if g.inFlight--; g.inFlight == 0 { g.cond.Broadcast() }
+			if g.inFlightByVH[vh] <= 1 { delete(g.inFlightByVH, vh); g.cond.Broadcast() } else { g.inFlightByVH[vh]-- }
 			g.mu.Unlock()
 		}()
 	}
@@ -215,10 +280,8 @@ func writeErrorFormattingTail(w *bytes.Buffer, proc nfs.NFSProcedure) {
 	case nfs.NFSProcedureSetAttr, nfs.NFSProcedureWrite, nfs.NFSProcedureCreate, nfs.NFSProcedureMkDir,
 		nfs.NFSProcedureSymlink, nfs.NFSProcedureMkNod, nfs.NFSProcedureRemove, nfs.NFSProcedureRmDir, nfs.NFSProcedureCommit:
 		writeUint64(w, 0)
-	case nfs.NFSProcedureLink:
-		writeUint32(w, 0); writeUint64(w, 0)
-	case nfs.NFSProcedureRename:
-		writeUint64(w, 0); writeUint64(w, 0)
+	case nfs.NFSProcedureLink: writeUint32(w, 0); writeUint64(w, 0)
+	case nfs.NFSProcedureRename: writeUint64(w, 0); writeUint64(w, 0)
 	}
 }
 
@@ -238,47 +301,34 @@ func joinChildPath(parent layeredfs.QualifiedPath, name string) (layeredfs.Quali
 	if name == "" || name == "." || name == ".." || strings.Contains(name, "/") || strings.ContainsRune(name, 0) {
 		return layeredfs.QualifiedPath{}, syscall.EINVAL
 	}
-	if len(name) > nfs.MNTNameLen {
-		return layeredfs.QualifiedPath{}, syscall.ENAMETOOLONG
-	}
-	if cleanRel(parent.Rel) != "." {
-		name = parent.Rel + "/" + name
-	}
+	if len(name) > nfs.MNTNameLen { return layeredfs.QualifiedPath{}, syscall.ENAMETOOLONG }
+	if cleanRel(parent.Rel) != "." { name = parent.Rel + "/" + name }
 	return layeredfs.QualifiedPath{RootID: parent.RootID, Rel: name}, nil
 }
 
 // PendingUnstableStats returns buffered unstable bytes and chunk count for viewID and total bytes on s.
 func PendingUnstableStats(s *Server, viewID ViewID) (viewBytes, viewChunks, totalBytes int) {
-	s.stability.mu.Lock()
-	defer s.stability.mu.Unlock()
+	s.stability.mu.Lock(); defer s.stability.mu.Unlock()
 	return pendingStatsLocked(s.stability, computeViewHash(viewID))
 }
 
 func compactAndInsertChunk(chunks []unstableChunk, added unstableChunk, flushingSeq uint64) []unstableChunk {
-	if len(added.data) == 0 {
-		return chunks
-	}
+	if len(added.data) == 0 { return chunks }
 	newStart, newEnd, next, inserted := added.offset, added.offset+uint64(len(added.data)), make([]unstableChunk, 0, len(chunks)+2), false
 	for _, ch := range chunks {
 		chStart, chEnd := ch.offset, ch.offset+uint64(len(ch.data))
-		if chEnd <= newStart {
-			next = append(next, ch); continue
-		}
+		if chEnd <= newStart { next = append(next, ch); continue }
 		if chStart < newEnd && chStart < newStart {
 			next = append(next, unstableChunk{seq: ch.seq, offset: chStart, data: append([]byte(nil), ch.data[:newStart-chStart]...)})
 		}
-		if !inserted {
-			next, inserted = append(next, added), true
-		}
+		if !inserted { next, inserted = append(next, added), true }
 		if chStart >= newEnd {
 			next = append(next, ch)
 		} else if chEnd > newEnd {
 			next = append(next, unstableChunk{seq: ch.seq, offset: newEnd, data: append([]byte(nil), ch.data[newEnd-chStart:]...)})
 		}
 	}
-	if !inserted {
-		next = append(next, added)
-	}
+	if !inserted { next = append(next, added) }
 	return coalesceAdjacentChunks(next, flushingSeq)
 }
 
