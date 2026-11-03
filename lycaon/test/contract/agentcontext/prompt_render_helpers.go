@@ -20,7 +20,7 @@ func renderSurfaceCardFor(t *testing.T, surfaceID string, sticky, deferred []str
 	t.Helper()
 	label, rule, err := prompts.LoadCoordinatorSurfaceCard(surfaceID)
 	contractcheck.FailErr(t, "load surface card for "+surfaceID, err)
-	vars := prompts.CoordinatorSurfaceCardVars(label, rule, sticky, deferred).TemplateVars()
+	vars := prompts.CoordinatorSurfaceCardVars(label, rule, sticky, deferred, prompts.CoordinatorSurfaceAllowsCommandMutation(surfaceID)).TemplateVars()
 	out, err := bundledPromptEngine().Render(context.Background(),
 		"partials/coordinator-surface-card.md", vars)
 	contractcheck.FailErr(t, "render surface card for "+surfaceID, err)

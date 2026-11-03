@@ -225,6 +225,9 @@ func (r *DefaultRegistry) ReplacePrefix(prefix string, definitions []Definition,
 	}
 	next := make(map[string]Definition, len(definitions))
 	for _, candidate := range definitions {
+		if r.catalog != nil && toolcontract.IsCommandOperation(candidate.Meta.Name) {
+			return fmt.Errorf("operation %q cannot publish a callable handler", candidate.Meta.Name)
+		}
 		def, err := validateDefinition(candidate)
 		if err != nil {
 			return err

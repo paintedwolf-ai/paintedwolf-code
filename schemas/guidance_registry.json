@@ -2749,7 +2749,7 @@
       "summary": "Delegation/implement tools are forbidden until the plan workflow is complete"
     },
     "SPEC_POSTURE_HANDOFF_FORBIDDEN": {
-      "branch_instruction": "Use command redirects or `edit` for blueprint files until approval/handoff",
+      "branch_instruction": "Use command redirects or scoped patches for blueprint files until approval/handoff",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Handoff tools blocked until plan workflow milestones are met"
@@ -2798,7 +2798,7 @@
       "summary": "Plan scope section required before research or critic Tasks"
     },
     "SPEC_POSTURE_STATE_FORBIDDEN": {
-      "branch_instruction": "Use command redirects or `edit` on the blueprint file; state tracking tools are build-only",
+      "branch_instruction": "Use command redirects or scoped patches on the blueprint file; state tracking tools are build-only",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "State tracking tools are forbidden in spec posture"
@@ -3169,6 +3169,12 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "No tool executed. The model provider could not parse the arguments of your last tool call as JSON and dropped the call."
+    },
+    "TOOL_COMMAND_OPERATION": {
+      "branch_instruction": "Do not request or invoke this operation as a separate tool.",
+      "category": "recoverable",
+      "emit": "guard:command_operation",
+      "summary": "\"{{ paintedwolf.need }}\" is a command operation, not a callable tool."
     },
     "TOOL_INVOKE_PROSE_TURN": {
       "branch_instruction": "Complete the current closeout without starting another execution arc",
