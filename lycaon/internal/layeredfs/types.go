@@ -160,6 +160,7 @@ type FaultHooks struct {
 	WriteAtFunc           func(qpath QualifiedPath, file *os.File, data []byte, offset int64) (int, error)
 	LowerXattrHook        func(qpath QualifiedPath) error
 	WorkingFileHashReader func(qpath QualifiedPath, r io.Reader) (io.Reader, error)
+	JournalSyncHook       func(phase string) error
 }
 
 type Config struct {

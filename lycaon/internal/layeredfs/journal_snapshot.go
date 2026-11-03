@@ -107,6 +107,13 @@ func isPathLogicallyChangedFastLocked(c *Core, qp QualifiedPath) bool {
 	return false
 }
 
+func runJournalSyncHook(c *Core, phase string) error {
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.JournalSyncHook != nil {
+		return c.cfg.FaultHooks.JournalSyncHook(phase)
+	}
+	return nil
+}
+
 // SnapshotJournal produces a versioned JournalSnapshot and persists it to the view's journal directory.
 func (c *Core) SnapshotJournal() (JournalSnapshot, error) {
 	return snapshotJournal(c)

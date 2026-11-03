@@ -1,6 +1,7 @@
 package layeredfs
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -191,6 +192,57 @@ func (c *Core) WriteViaNodeHandle(nodeID NodeID, gen Generation, data []byte, of
 	}
 	attr := nodeToAttrLocked(node)
 	return n, attr, wErr
+}
+
+// SyncViaNodeHandle flushes dirty data for a private node identified by (NodeID, Generation) to stable storage.
+func (c *Core) SyncViaNodeHandle(nodeID NodeID, gen Generation) error {
+	if err := c.barrier.enterOp(); err != nil {
+		return err
+	}
+	defer c.barrier.leaveOp()
+
+	c.mu.RLock()
+	if c.state.released {
+		c.mu.RUnlock()
+		return ErrViewReleased
+	}
+	node, ok := c.state.nodesByID[nodeID]
+	if !ok || node == nil || node.gen != gen || node.flags.unlinked {
+		c.mu.RUnlock()
+		return ErrStaleHandle
+	}
+	c.mu.RUnlock()
+
+	node.flags.ioMu.Lock()
+	defer node.flags.ioMu.Unlock()
+
+	c.mu.RLock()
+	if c.state.released {
+		c.mu.RUnlock()
+		return ErrViewReleased
+	}
+	if node.gen != gen || node.flags.unlinked {
+		c.mu.RUnlock()
+		return ErrStaleHandle
+	}
+	if node.kind != EntryRegular {
+		c.mu.RUnlock()
+		return syscall.EISDIR
+	}
+	if node.mode&0o200 == 0 && !node.flags.ownerCreatedRO {
+		c.mu.RUnlock()
+		return syscall.EACCES
+	}
+	backingName, backingPath := node.flags.backingName, node.flags.backingPath
+	c.mu.RUnlock()
+
+	wf, err := openBackingFileRW(int(c.backing.workDirFile.Fd()), backingName, backingPath)
+	if err != nil {
+		return err
+	}
+	syncErr := errors.Join(runJournalSyncHook(c, "node_sync"), syncFD(int(wf.Fd())))
+	closeErr := wf.Close()
+	return errors.Join(syncErr, closeErr)
 }
 
 // OpenBackingReader opens a read-only stream to a private node's backing content by NodeID and Generation.
