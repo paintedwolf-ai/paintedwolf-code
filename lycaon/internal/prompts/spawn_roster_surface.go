@@ -36,8 +36,14 @@ type SpawnRosterData struct {
 	MaxInFlight        int
 }
 
+// SpawnToolSurface supplies a variable agent's callable tools and command effects.
+type SpawnToolSurface struct {
+	Tools          []string
+	CommandMutates bool
+}
+
 // LoadSpawnRosterSurface uses committed device state when no catalog is supplied.
-func LoadSpawnRosterSurface(allowedAgentIDs []string, maxInFlight int, surfaceTools map[string][]string, catalog *extpacks.EffectiveCatalog, profiles []sandbox.ToolProfile) (SpawnRosterData, error) {
+func LoadSpawnRosterSurface(allowedAgentIDs []string, maxInFlight int, surfaceTools map[string]SpawnToolSurface, catalog *extpacks.EffectiveCatalog, profiles []sandbox.ToolProfile) (SpawnRosterData, error) {
 	if catalog == nil {
 		resolved, err := extpacks.CatalogForConsumers()
 		if err != nil {
@@ -113,7 +119,7 @@ func LoadSpawnRosterSurface(allowedAgentIDs []string, maxInFlight int, surfaceTo
 func spawnAgentView(
 	agent agentdef.Profile,
 	profiles map[string]sandbox.ToolProfile,
-	surfaceTools map[string][]string,
+	surfaceTools map[string]SpawnToolSurface,
 ) (SpawnAgentView, error) {
 	tp := strings.TrimSpace(agent.ToolProfile)
 	prof, ok := profiles[tp]
@@ -133,26 +139,15 @@ func spawnAgentView(
 		ToolProfile:  tp,
 		EnabledTools: enabled,
 		DeniedTools:  denied,
-		CanEdit:      hasEditTool(prof.Tools),
+		CanEdit:      ToolProfileMutationCapable(prof),
 		CanCommand:   prof.Tools["command"],
 		ReadsProject: len(orderedEnabledTools(surveyToolDisplayOrder, prof.Tools)) > 0,
 	}, nil
 }
 
-// editTools are the product-write tools; holding any one makes a write leg.
-var editTools = []string{"write", "edit", "replace_lines", "code_rewrite", "jq_edit"}
-
-func hasEditTool(enabled map[string]bool) bool {
-	for _, name := range editTools {
-		if enabled[name] {
-			return true
-		}
-	}
-	return false
-}
-
 // A surface-variable agent takes its tools from the turn surface, so no profile deny list applies.
-func surfaceVariableAgentView(agent agentdef.Profile, toolProfile string, tools []string) SpawnAgentView {
+func surfaceVariableAgentView(agent agentdef.Profile, toolProfile string, surface SpawnToolSurface) SpawnAgentView {
+	tools := surface.Tools
 	set := make(map[string]bool, len(tools))
 	enabled := make([]string, 0, len(tools))
 	for _, name := range tools {
@@ -170,7 +165,7 @@ func surfaceVariableAgentView(agent agentdef.Profile, toolProfile string, tools 
 		Description:     strings.TrimSpace(agent.Description),
 		ToolProfile:     toolProfile,
 		EnabledTools:    enabled,
-		CanEdit:         hasEditTool(set),
+		CanEdit:         set["restore_version"] || (set["command"] && surface.CommandMutates),
 		CanCommand:      set["command"],
 		ReadsProject:    len(orderedEnabledTools(surveyToolDisplayOrder, set)) > 0,
 		Delegates:       set["task"] || set["delegate_dispatch"],

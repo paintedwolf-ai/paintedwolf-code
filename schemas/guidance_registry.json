@@ -226,7 +226,7 @@
       "summary": "Scoped preview for {{ paintedwolf.path }} exposes {{ paintedwolf.hunk_count }} inline hunks (inline limit {{ paintedwolf.inline_threshold }})."
     },
     "BANNER_PROMOTE_SPILL_FIRST": {
-      "branch_instruction": "Never loop `read()` on primary for merge reconstruction when spill_path is present",
+      "branch_instruction": "Never repeatedly read the primary tree for merge reconstruction when spill_path is present",
       "category": "informational",
       "emit": "banner",
       "severity": "info",
@@ -1251,10 +1251,10 @@
       "summary": "The search pattern uses a construct outside its declared regex dialect."
     },
     "GREP_SCOPE_REQUIRED": {
-      "branch_instruction": "Branch on Code; re-emit grep with path or a narrowing path_glob",
+      "branch_instruction": "Branch on Code; repeat the search with a narrower directory or file filter",
       "category": "recoverable",
       "emit": "guard:grep",
-      "summary": "Open-root grep requires an expressed path or narrowing path_glob when the file count is unknown or meets the structural threshold."
+      "summary": "Open-root grep requires a selected directory or narrowing file filter when the file count is unknown or meets the structural threshold."
     },
     "HELD_CALL_CAP_REACHED": {
       "branch_instruction": "Free a held call before starting another",
@@ -2761,7 +2761,7 @@
       "summary": "Delegation/implement tools are forbidden until the plan workflow is complete"
     },
     "SPEC_POSTURE_HANDOFF_FORBIDDEN": {
-      "branch_instruction": "Use command redirects or `edit` for blueprint files until approval/handoff",
+      "branch_instruction": "Use command redirects or scoped patches for blueprint files until approval/handoff",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Handoff tools blocked until plan workflow milestones are met"
@@ -2810,7 +2810,7 @@
       "summary": "Plan scope section required before research or critic Tasks"
     },
     "SPEC_POSTURE_STATE_FORBIDDEN": {
-      "branch_instruction": "Use command redirects or `edit` on the blueprint file; state tracking tools are build-only",
+      "branch_instruction": "Use command redirects or scoped patches on the blueprint file; state tracking tools are build-only",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "State tracking tools are forbidden in spec posture"
@@ -3181,6 +3181,12 @@
       "emit": "guard:coordinator",
       "summary": "No tool executed. The model provider could not parse the arguments of your last tool call as JSON and dropped the call."
     },
+    "TOOL_COMMAND_OPERATION": {
+      "branch_instruction": "Do not request or invoke this operation as a separate tool.",
+      "category": "recoverable",
+      "emit": "guard:command_operation",
+      "summary": "\"{{ paintedwolf.need }}\" is a command operation, not a callable tool."
+    },
     "TOOL_INVOKE_PROSE_TURN": {
       "branch_instruction": "Complete the current closeout without starting another execution arc",
       "category": "recoverable",
@@ -3510,7 +3516,7 @@
       "branch_instruction": "Do not mark the leg complete without its required survey evidence; preserve any existing work and report the unresolved scope.",
       "category": "recoverable",
       "emit": "guard:worker_summary",
-      "summary": "Read scout marked leg complete without any successful survey tool (read, grep, find, list_dir, etc.)."
+      "summary": "Read scout marked leg complete without a successful source-survey observation."
     },
     "WORKER_SUMMARY_NO_ARTIFACT": {
       "branch_instruction": "Treat the implementation claim as unverified until the actual artifact evidence or no-change justification is established",

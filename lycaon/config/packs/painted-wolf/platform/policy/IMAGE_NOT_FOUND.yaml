@@ -17,7 +17,7 @@ copy:
   what: '{{ tool }} found no file at {{ paintedwolf.path }}.'
   cause: The path resolved inside the read scope, but nothing exists there.
   why: An image is inspected from its bytes; a missing file has none.
-  fix: Locate the image with find or list_dir, then pass its exact path.
+  fix: Locate the image with an offered file search, then pass its exact path.
   instead: Branch on Code IMAGE_NOT_FOUND; correct the path
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:view_image

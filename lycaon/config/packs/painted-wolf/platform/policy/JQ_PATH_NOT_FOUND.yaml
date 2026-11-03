@@ -19,7 +19,7 @@ copy:
   what: jq document {{ paintedwolf.path }} does not exist.
   cause: The path argument must name an existing structured document under the attached project roots.
   why: Structured rejects let agents branch without parsing free-form stat errors.
-  fix: Verify the repo-relative path with list_dir or find, then retry jq with a valid path.
+  fix: Locate the input with an offered listing or search capability, then retry the query with its observed path.
   instead: Branch on Code; pick an existing path before retrying jq
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:jq
