@@ -224,8 +224,8 @@ func TestFetchRepackNoBorrowedPackCopyAndPushEgressPolicy(t *testing.T) {
 	_, err = approvedExec.Repack(t.Context(), "-a", "-d")
 	testutil.FailErr(t, "approved Repack", err)
 
-	privGitDir, err := mgr.PrivateGitDir("view-net", ".")
-	testutil.FailErr(t, "PrivateGitDir", err)
+	privGitDir, err := readyPrivateGitDir(mgr, "view-net", ".")
+	testutil.FailErr(t, "readyPrivateGitDir", err)
 	storePacks, _ := os.ReadDir(filepath.Join(mgr.Store().ObjectsDir(), "pack"))
 	privPacks, _ := os.ReadDir(filepath.Join(privGitDir, "objects", "pack"))
 	storePackNames := make(map[string]bool)
@@ -250,97 +250,48 @@ func TestFetchRepackNoBorrowedPackCopyAndPushEgressPolicy(t *testing.T) {
 	}
 }
 
-func TestCrashRecoveryRefImportIdempotencyConflictAndDeletedRefSafety(t *testing.T) {
+func TestInjectedCaptureAndObjectRetentionFailuresPreserveRecovery(t *testing.T) {
 	t.Parallel()
 	fix := buildRichRepoFixture(t)
 	mgr := newTestManager(t, fix.tmpDir)
-	core := newMountedViewWithManager(t, mgr, "view-import", fix.trunkDir)
-	exec := NewGitExecutor(mgr, "view-import", RemotePolicy{})
+	idxPath := filepath.Join(fix.trunkDir, ".git", "index")
+	origIdx, err := os.ReadFile(idxPath)
+	testutil.FailErr(t, "read trunk index", err)
+	testutil.FailErr(t, "corrupt trunk index", os.WriteFile(idxPath, []byte("corrupt-index-bytes"), 0o644))
 
-	// Worker deletes `side-branch` privately, creates a new branch `worker-br`, a tag `v1-worker`, and a stash.
-	_, err := exec.Run(t.Context(), ".", "branch", "-D", "side-branch")
-	testutil.FailErr(t, "delete side-branch privately", err)
-	_, err = exec.Switch(t.Context(), "-c", "worker-br")
-	testutil.FailErr(t, "switch -c worker-br", err)
-	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "imported.txt"}, []byte("import-me\n"), 0o644)
-	testutil.FailErr(t, "write imported.txt", err)
-	_, _ = exec.Run(t.Context(), ".", "add", "imported.txt")
-	_, err = exec.Commit(t.Context(), "worker branch commit")
-	testutil.FailErr(t, "commit worker-br", err)
-	_, err = exec.Run(t.Context(), ".", "tag", "v1-worker")
-	testutil.FailErr(t, "tag v1-worker", err)
-	_, err = exec.Stash(t.Context(), "push", "-m", "checkpointed-stash")
-	testutil.FailErr(t, "stash push", err)
+	core := newMountedViewWithManager(t, mgr, "view-fail-recover", fix.trunkDir)
+	if _, _, _, pErr := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-fail-recover"); !errors.Is(pErr, ErrCorruptObjectStore) {
+		t.Fatalf("expected ErrCorruptObjectStore on corrupt source index capture, got %v", pErr)
+	}
+	if _, sErr := core.Stat(layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/HEAD"}); !errors.Is(sErr, layeredfs.ErrGitPending) {
+		t.Fatalf("expected ErrGitPending on Stat(.git/HEAD) while source index is corrupt, got %v", sErr)
+	}
 
-	cp, err := mgr.CaptureCheckpointGitState(t.Context(), "view-import", "cp-crash-1")
-	testutil.FailErr(t, "CaptureCheckpointGitState", err)
+	testutil.FailErr(t, "restore trunk index", os.WriteFile(idxPath, origIdx, 0o644))
+	wtDir, finish, managed, err := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-fail-recover")
+	testutil.FailErr(t, "PrepareViewGitOperation after index repair", err)
+	if !managed || wtDir == "" {
+		t.Fatalf("expected managed worktree after repair, got managed=%v wtDir=%q", managed, wtDir)
+	}
+	testutil.FailErr(t, "finish after repair", finish())
 
-	// Inject crashes at StageObjectsImported, StageMidRefPublish, and StageRefsPublished, then retry cleanly!
-	allOpts := RefImportOptionFlags{IncludeDetachedHead: true, IncludeTags: true, IncludeStashes: true}
-	for _, crashAt := range []ImportStage{StageObjectsImported, StageMidRefPublish, StageRefsPublished} {
-		simErr := errors.New("simulated crash at " + string(crashAt))
-		_, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
-			JobID: "job-crash", WorkerID: "worker-view-import", CheckpointID: "cp-crash-1",
-			TrunkDir: fix.trunkDir, Checkpoint: cp, Options: allOpts,
-			CrashHook: func(stage ImportStage) error {
-				if stage == crashAt {
-					return simErr
-				}
-				return nil
-			},
-		})
-		if !errors.Is(err, simErr) {
-			t.Fatalf("expected simulated crash at %s, got %v", crashAt, err)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "recover_me.txt"}, []byte("precious-worker-work\n"), 0o644)
+	testutil.FailErr(t, "write recover_me.txt", err)
+	injectedRetainErr := errors.New("injected retention failure")
+	mgr.cfg.FailObjectRetentionHook = func(vID, _ string) error {
+		if vID == "view-fail-recover" {
+			return injectedRetainErr
 		}
+		return nil
 	}
 
-	// Idempotent retry without crash hook must succeed and produce the exact namespaced refs.
-	res, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
-		JobID: "job-crash", WorkerID: "worker-view-import", CheckpointID: "cp-crash-1",
-		TrunkDir: fix.trunkDir, Checkpoint: cp, Options: allOpts,
-	})
-	testutil.FailErr(t, "idempotent ImportRefsToTrunk retry", err)
-
-	for _, wantRef := range []string{
-		"refs/paintedwolf/workers/job-crash/cp-crash-1/heads/worker-br",
-		"refs/paintedwolf/workers/job-crash/cp-crash-1/tags/v1-worker",
-		"refs/paintedwolf/workers/job-crash/cp-crash-1/stash/0",
-	} {
-		if res.ImportedRefs[wantRef] == "" {
-			t.Fatalf("missing expected imported ref %s in %+v", wantRef, res.ImportedRefs)
-		}
+	_, finFail, _, err := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-fail-recover")
+	testutil.FailErr(t, "PrepareViewGitOperation before finish failure", err)
+	if fErr := finFail(); !errors.Is(fErr, ErrCorruptObjectStore) {
+		t.Fatalf("expected finish() to propagate ErrCorruptObjectStore on retention failure, got %v", fErr)
 	}
-
-	// Prove private deletion of `side-branch` NEVER deleted `refs/heads/side-branch` in trunk!
-	trunkBranches := gittest.Run(t, fix.trunkDir, "branch", "--list", "side-branch")
-	if !strings.Contains(trunkBranches, "side-branch") {
-		t.Fatalf("private branch deletion must never delete trunk branch; got %q", trunkBranches)
-	}
-	// Prove importing commits did not apply `imported.txt` to trunk's working tree!
-	if _, err := os.Stat(filepath.Join(fix.trunkDir, "imported.txt")); !os.IsNotExist(err) {
-		t.Fatalf("ref import must not apply files to trunk working tree, got err=%v", err)
-	}
-
-	// Identity mismatch and destination ref conflict checks.
-	if _, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
-		JobID:        "job-crash",
-		WorkerID:     "wrong-worker-id",
-		CheckpointID: "cp-crash-1",
-		TrunkDir:     fix.trunkDir,
-		Checkpoint:   cp,
-	}); !errors.Is(err, ErrIdentityMismatch) {
-		t.Fatalf("expected ErrIdentityMismatch, got %v", err)
-	}
-
-	mainOID := strings.TrimSpace(gittest.Run(t, fix.trunkDir, "rev-parse", "refs/heads/main"))
-	gittest.Run(t, fix.trunkDir, "update-ref", "refs/paintedwolf/workers/job-conflict/cp-crash-1/heads/worker-br", mainOID)
-	if _, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
-		JobID:        "job-conflict",
-		WorkerID:     "worker-view-import",
-		CheckpointID: "cp-crash-1",
-		TrunkDir:     fix.trunkDir,
-		Checkpoint:   cp,
-	}); !errors.Is(err, ErrRefImportConflict) {
-		t.Fatalf("expected ErrRefImportConflict when destination ref has different OID, got %v", err)
-	}
+	mgr.cfg.FailObjectRetentionHook = nil
+	cp, err := mgr.CaptureCheckpointGitState(t.Context(), "view-fail-recover", "cp-recovered")
+	testutil.FailErr(t, "CaptureCheckpointGitState after clearing hook", err)
+	testutil.FailErr(t, "VerifyCheckpointHistory after recovery", mgr.VerifyCheckpointHistory(t.Context(), cp))
 }

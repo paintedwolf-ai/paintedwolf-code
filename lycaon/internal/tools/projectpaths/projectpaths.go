@@ -121,7 +121,7 @@ func recordPrimaryMutation(ctx context.Context, tctx tools.ToolContext, resolved
 // Git's own operations change it. Credential files are not refused here: their
 // writes reach the approval gate as protected subjects.
 func repositoryMetadataClass(path string) (string, bool) {
-	if class, denied := tools.IsGitInternalsWritePath(path); denied {
+	if class, denied, _ := tools.CheckNativeGitMetadataPath(path, true); denied {
 		return class, true
 	}
 	if tools.IsRepositoryMetadataPath(path) {
@@ -133,10 +133,7 @@ func repositoryMetadataClass(path string) (string, bool) {
 func gitInternalsWriteReject(path, class string) error {
 	return &toolrejection.ToolReject{
 		Code: "GIT_INTERNALS_WRITE_DENIED",
-		Data: map[string]any{
-			"path":  filepath.ToSlash(strings.TrimSpace(path)),
-			"class": class,
-		},
+		Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path)), "class": class},
 	}
 }
 

@@ -14,7 +14,7 @@ func registerGitOperationTools(reg *tools.DefaultRegistry, deps buildDeps, bound
 		"git_compare":    (&native.GitCompareTool{Git: deps.git}).Run,
 		"git_stash_list": (&native.GitStashListTool{Git: deps.git}).Run,
 	}
-	for _, kind := range []string{"checkout", "merge", "stash"} {
+	for _, kind := range []string{"checkout", "merge", "stash", "revert", "switch", "worktree", "submodule"} {
 		handlers["git_"+kind] = (&native.GitOperationTool{Git: deps.git, Boundary: boundary, Kind: kind}).Run
 	}
 	for name, handler := range handlers {

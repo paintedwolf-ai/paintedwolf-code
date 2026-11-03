@@ -1,9 +1,23 @@
 package toolcommand
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
+
+func TestMain(m *testing.M) {
+	gittestsetup.Enable()
+	os.Exit(m.Run())
+}
 
 func TestGitOperationCommandReplacements(t *testing.T) {
 	tests := []struct {
@@ -24,6 +38,9 @@ func TestGitOperationCommandReplacements(t *testing.T) {
 		{"git stash apply --index stash@{1}", "git_stash", map[string]any{"action": "apply", "reinstate_index": true, "ref": "stash@{1}"}},
 		{"git stash list", "git_stash_list", map[string]any{}},
 		{"git log --all", "git_log", map[string]any{"all": true}},
+		{"git revert HEAD", "git_revert", map[string]any{"ref": "HEAD"}},
+		{"git worktree list", "git_worktree", map[string]any{"action": "list"}},
+		{"git submodule status", "git_submodule", map[string]any{"action": "status"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.command, func(t *testing.T) {
@@ -41,3 +58,97 @@ func TestGitOperationCommandReplacements(t *testing.T) {
 		})
 	}
 }
+
+func TestPrivateGitCommandOperationsAndReplacementsAcrossAdapters(t *testing.T) {
+	for _, adapter := range []string{"fuselinux", "nfsdarwin", "eagercopy"} {
+		t.Run(adapter, func(t *testing.T) {
+			verifyPrivateGitCommandExecution(t, adapter)
+		})
+	}
+}
+
+func verifyPrivateGitCommandExecution(t *testing.T, adapter string) {
+	trunkDir := t.TempDir()
+	gittest.Init(t, trunkDir)
+	gittest.Run(t, trunkDir, "config", "user.name", "Test")
+	gittest.Run(t, trunkDir, "config", "user.email", "test@example.com")
+	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(trunkDir, "app.txt"), []byte("v1\n"), 0o644))
+	gittest.Run(t, trunkDir, "add", "--", "app.txt")
+	gittest.Run(t, trunkDir, "commit", "-m", "initial")
+	gittest.Run(t, trunkDir, "branch", "-M", "main")
+
+	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
+	testutil.FailErr(t, "new privategit manager", err)
+	viewID := "cmd-" + adapter
+	t.Cleanup(func() {
+		_ = mgr.ReleaseView(viewID)
+		_ = mgr.Store().Close()
+	})
+
+	var wtDir string
+	var writeViewFile func(rel, content string)
+	if adapter == "eagercopy" {
+		wtDir = filepath.Join(t.TempDir(), "materialized-wt")
+		_, err = mgr.InitializeMaterializedSeed(t.Context(), privategit.MaterializedSeedConfig{
+			ViewID: viewID, WorkerID: "worker-cmd", TrunkDir: trunkDir, TargetDir: wtDir,
+		})
+		testutil.FailErr(t, "init materialized seed", err)
+		writeViewFile = func(rel, content string) {
+			testutil.FailErr(t, "write materialized file", os.WriteFile(filepath.Join(wtDir, rel), []byte(content), 0o644))
+		}
+	} else {
+		core, cErr := layeredfs.New(layeredfs.Config{
+			ViewID: viewID, BackingDir: filepath.Join(t.TempDir(), "core-"+adapter), GitInterceptor: mgr,
+			Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunkDir, IsPrimary: true}},
+		})
+		testutil.FailErr(t, "layeredfs.New", cErr)
+		t.Cleanup(func() { _ = core.ReleaseView() })
+		wtDoubleDir := filepath.Join(t.TempDir(), "unit-wt-double-"+adapter)
+		testutil.FailErr(t, "mkdir wtDoubleDir", os.MkdirAll(wtDoubleDir, 0o755))
+		appBytes, rErr := os.ReadFile(filepath.Join(trunkDir, "app.txt"))
+		testutil.FailErr(t, "read trunk app.txt", rErr)
+		testutil.FailErr(t, "seed wtDoubleDir app.txt", os.WriteFile(filepath.Join(wtDoubleDir, "app.txt"), appBytes, 0o644))
+		testutil.FailErr(t, "MountedClaimWithBinding", mgr.MountedClaimWithBinding(privategit.MountedViewBinding{
+			ViewID: viewID, WorkerID: "worker-cmd", RootID: "primary",
+			TrunkDir: trunkDir, MountPath: wtDoubleDir, AdapterID: adapter,
+			Core: core, MountID: "unit-mount-" + adapter, Active: true,
+		}))
+		var finish func() error
+		wtDir, finish, _, err = privategit.PrepareManagerViewOperation(t.Context(), mgr, trunkDir, "worker-cmd")
+		testutil.FailErr(t, "PrepareManagerViewOperation", err)
+		_ = finish()
+		writeViewFile = func(rel, content string) {
+			_, wErr := core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: rel}, []byte(content), 0o644)
+			testutil.FailErr(t, "write core file", wErr)
+		}
+	}
+
+	writeViewFile("worker_only.txt", "only in view\n")
+	calls, ok := ExactCommandReplacement(t.Context(), "git diff worker_only.txt", trunkDir, "")
+	if !ok || len(calls) != 1 || calls[0].Tool != "git_diff" || !reflect.DeepEqual(calls[0].Args["paths"], []any{"worker_only.txt"}) {
+		t.Fatalf("expected git diff replacement to recognize private view path, got %+v (ok=%v)", calls, ok)
+	}
+
+	exec := privategit.NewGitExecutor(mgr, viewID, privategit.RemotePolicy{})
+	writeViewFile("app.txt", "v2\n")
+
+	for _, cmd := range []string{
+		"git status --short",
+		"git diff",
+		"git checkout -b cmd-branch",
+		"git commit -a -m 'cmd commit'",
+		"git log --oneline -2",
+		"git revert HEAD",
+		"git switch main",
+		"git switch --create cmd-branch-2",
+		"git worktree list",
+		"git submodule status",
+	} {
+		out, cmdErr := ExecutePrivateGitCommand(t.Context(), exec, cmd)
+		testutil.FailErr(t, cmd, cmdErr)
+		if cmd == "git log --oneline -2" && !strings.Contains(out, "cmd commit") {
+			t.Fatalf("expected cmd commit in log output: %s", out)
+		}
+	}
+}
+

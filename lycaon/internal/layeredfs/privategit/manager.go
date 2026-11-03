@@ -12,11 +12,12 @@ import (
 
 // ManagerConfig configures a private worker Git Manager.
 type ManagerConfig struct {
-	BackingDir           string
-	Store                *RetainedObjectStore
-	MaxCaptureRetries    int
-	CaptureAttemptHook   func(worktreeDir string, attempt int)
-	FailObjectImportHook func(viewID, repoRel string) error
+	BackingDir              string
+	Store                   *RetainedObjectStore
+	MaxCaptureRetries       int
+	CaptureAttemptHook      func(worktreeDir string, attempt int)
+	FailObjectImportHook    func(viewID, repoRel string) error
+	FailObjectRetentionHook func(viewID, repoRel string) error
 }
 
 type managedView struct {
@@ -40,9 +41,12 @@ type Manager struct {
 	cfg   ManagerConfig
 	store *RetainedObjectStore
 
-	mu          sync.RWMutex
-	views       map[string]*managedView
-	checkpoints map[string]*CheckpointGitState
+	mu              sync.RWMutex
+	views           map[string]*managedView
+	viewsByWorker   map[string]*managedView
+	viewsByWorktree map[string]*managedView
+	mountBindings   map[string]MountedViewBinding
+	checkpoints     map[string]*CheckpointGitState
 }
 
 // NewManager creates a private Git Manager backed by an engine-retained object store.
@@ -67,10 +71,13 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 	cfg.BackingDir = absBacking
 	cfg.Store = store
 	return &Manager{
-		cfg:         cfg,
-		store:       store,
-		views:       make(map[string]*managedView),
-		checkpoints: make(map[string]*CheckpointGitState),
+		cfg:             cfg,
+		store:           store,
+		views:           make(map[string]*managedView),
+		viewsByWorker:   make(map[string]*managedView),
+		viewsByWorktree: make(map[string]*managedView),
+		mountBindings:   make(map[string]MountedViewBinding),
+		checkpoints:     make(map[string]*CheckpointGitState),
 	}, nil
 }
 
@@ -80,7 +87,8 @@ func (m *Manager) Store() *RetainedObjectStore {
 }
 
 // MountedClaim binds a mounted layeredfs.Core view without scanning for or initializing
-// any repositories during workspace claim (#1671).
+// any repositories during workspace claim (#1671). A mounted worktree directory must be
+// bound via MountedClaimWithWorktree or BindMountedWorktree before running Git operations.
 func (m *Manager) MountedClaim(
 	viewID, workerID, rootID, trunkDir string,
 	core *layeredfs.Core,
@@ -89,43 +97,24 @@ func (m *Manager) MountedClaim(
 	if viewID == "" || trunkDir == "" || core == nil {
 		return fmt.Errorf("privategit: viewID, trunkDir, and core are required")
 	}
-	if rootID == "" {
-		rootID = "primary"
-	}
-	if workerID == "" {
-		workerID = viewID
-	}
 	absTrunk, err := filepath.Abs(trunkDir)
 	if err != nil {
 		return err
 	}
-	viewBacking := filepath.Join(m.cfg.BackingDir, "views", viewID)
-	worktreeStage := filepath.Join(viewBacking, "worktree")
-	if err := os.MkdirAll(worktreeStage, 0o755); err != nil {
-		return err
-	}
+	return registerMountedClaim(m, viewID, workerID, rootID, absTrunk, "", core, authorizedGitDirs...)
+}
 
+func registerManagedView(m *Manager, view *managedView) {
 	m.mu.Lock()
-	m.views[viewID] = &managedView{
-		viewID:            viewID,
-		workerID:          workerID,
-		rootID:            rootID,
-		trunkDir:          absTrunk,
-		worktreeDir:       worktreeStage,
-		materialized:      false,
-		core:              core,
-		authorizedGitDirs: append([]string(nil), authorizedGitDirs...),
-		accessOrigin:      OriginFilesystem,
-		repos:             make(map[string]*initializedRepo),
+	m.views[view.viewID] = view
+	if view.workerID != "" {
+		m.viewsByWorker[view.workerID] = view
+	}
+	if wt := canonicalCleanPath(view.worktreeDir); wt != "" {
+		m.viewsByWorktree[wt] = view
 	}
 	m.mu.Unlock()
-
-	return core.RegisterLowerProvider(rootID, &gitAwareLowerProvider{
-		mgr:      m,
-		viewID:   viewID,
-		rootID:   rootID,
-		trunkDir: absTrunk,
-	})
+	registerActiveView(m, view)
 }
 
 // InterceptGitAccess implements layeredfs.GitInterceptor to initialize private Git
@@ -150,6 +139,11 @@ func (m *Manager) InterceptGitAccess(
 	if origin == OriginNativeTool && writeIntent {
 		return layeredfs.GitInterceptOutcome{}, ErrNativeToolGitMutationForbidden
 	}
+	if !view.materialized {
+		if err := verifyActiveMountedView(m, view, "", ""); err != nil {
+			return layeredfs.GitInterceptOutcome{}, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, err)
+		}
+	}
 
 	if err := ensureViewRepoInitialized(context.Background(), m, view, repoRel); err != nil {
 		return layeredfs.GitInterceptOutcome{}, err
@@ -158,7 +152,7 @@ func (m *Manager) InterceptGitAccess(
 }
 
 // SetAccessOrigin sets the active confinement origin for a view (filesystem vs native_tool).
-func (m *Manager) SetAccessOrigin(viewID string, origin AccessOrigin) error {
+func SetAccessOrigin(m *Manager, viewID string, origin AccessOrigin) error {
 	view, err := getManagedView(m, viewID)
 	if err != nil {
 		return err
@@ -193,11 +187,6 @@ func (m *Manager) RepoMetrics(viewID, repoRel string) (InitMetrics, bool) {
 	return repo.metrics, true
 }
 
-// PrivateGitDir returns the initialized private .git directory path for repoRel in viewID.
-func (m *Manager) PrivateGitDir(viewID, repoRel string) (string, error) {
-	return readyPrivateGitDir(m, viewID, repoRel)
-}
-
 // ReleaseView releases active view leases from the retained store without invalidating
 // any retained checkpoint leases (#1671).
 func (m *Manager) ReleaseView(viewID string) error {
@@ -205,11 +194,19 @@ func (m *Manager) ReleaseView(viewID string) error {
 	view, ok := m.views[viewID]
 	if ok {
 		delete(m.views, viewID)
+		if view.workerID != "" {
+			delete(m.viewsByWorker, view.workerID)
+		}
+		if wt := canonicalCleanPath(view.worktreeDir); wt != "" {
+			delete(m.viewsByWorktree, wt)
+		}
+		delete(m.mountBindings, mountBindingKey(view.viewID, view.rootID))
 	}
 	m.mu.Unlock()
 	if !ok {
 		return nil
 	}
+	unregisterActiveView(view)
 	view.mu.Lock()
 	var leases []string
 	for _, r := range view.repos {

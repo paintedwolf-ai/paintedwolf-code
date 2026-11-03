@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/paginate"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
@@ -58,7 +59,11 @@ func gitDiffQueryFromArgs(args map[string]any) gitDiffQuery {
 func gitDiffHandler(m git.GitManager) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		q := gitDiffQueryFromArgs(args)
-		cwd := tctx.ActiveRootPath()
+		cwd, finish, _, prepErr := privategit.PrepareViewGitOperation(ctx, tools.HostWriteRoot(tctx), tctx.Identity.WorkerJobID)
+		if prepErr != nil {
+			return git.MarshalDiffToolResponse(git.DiffToolResponse{}, prepErr)
+		}
+		defer func() { _ = finish() }()
 		resp, err := gitDiffPage(ctx, m, cwd, q)
 		if err == nil {
 			for _, file := range resp.Files {
@@ -189,7 +194,12 @@ func gitLogHandler(m git.GitManager) tools.ToolHandler {
 		}
 		query := opts
 		query.Limit++
-		commits, err := m.Log(ctx, tctx.ActiveRootPath(), query)
+		cwd, finish, _, prepErr := privategit.PrepareViewGitOperation(ctx, tools.HostWriteRoot(tctx), tctx.Identity.WorkerJobID)
+		if prepErr != nil {
+			return git.MarshalHistoryPage(nil, opts, prepErr)
+		}
+		defer func() { _ = finish() }()
+		commits, err := m.Log(ctx, cwd, query)
 		return git.MarshalHistoryPage(commits, opts, err)
 	}
 }

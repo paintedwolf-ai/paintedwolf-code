@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -12,12 +13,13 @@ import (
 )
 
 type initializedRepo struct {
-	repoRel       string
-	worktreeDir   string
-	privateGitDir string
-	leaseID       string
-	initialRefs   map[string]string
-	metrics       InitMetrics
+	repoRel        string
+	worktreeDir    string
+	privateGitDir  string
+	leaseID        string
+	initialHeadOID string
+	initialRefs    map[string]string
+	metrics        InitMetrics
 }
 
 func initializePrivateRepo(
@@ -32,6 +34,11 @@ func initializePrivateRepo(
 	layout, err := resolveSourceRepoLayout(view.trunkDir, repoRel, view.authorizedGitDirs, forbidden)
 	if err != nil {
 		return nil, err
+	}
+	if !view.materialized {
+		if vErr := verifyActiveMountedView(mgr, view, layout.worktreeDir, targetWorktreeDir); vErr != nil {
+			return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, vErr)
+		}
 	}
 
 	stageBase := filepath.Join(mgr.cfg.BackingDir, "views", view.viewID, "git-staging")
@@ -75,19 +82,19 @@ func initializePrivateRepo(
 	tipOIDs, initRefs, err := collectCapturedRefAndIndexOIDs(ctx, stageGitDir)
 	if err != nil {
 		cleanupStage()
-		return nil, fmt.Errorf("%w: %v", layeredfs.ErrGitPending, err)
+		return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, err)
 	}
 	if mgr.cfg.FailObjectImportHook != nil {
 		if hErr := mgr.cfg.FailObjectImportHook(view.viewID, repoRel); hErr != nil {
 			cleanupStage()
-			return nil, fmt.Errorf("%w: %v", layeredfs.ErrGitPending, hErr)
+			return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, hErr)
 		}
 	}
 
 	importMetrics, reachableOIDs, err := mgr.store.ImportRepositoryObjects(ctx, layout.objectDirs, tipOIDs)
 	if err != nil {
 		cleanupStage()
-		return nil, fmt.Errorf("%w: %v", layeredfs.ErrGitPending, err)
+		return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, err)
 	}
 
 	leaseID, err := mgr.store.RetainForView(view.viewID+":"+repoRel, reachableOIDs)
@@ -120,25 +127,86 @@ func initializePrivateRepo(
 		cleanupStage()
 		return nil, err
 	}
-
-	if layout.isLinkedWT && layout.worktreeName != "" {
-		_ = setupPrivateLinkedWorktreeMetadata(finalGitDir, targetWorktreeDir, layout.worktreeName)
+	abortFinal := func(retErr error) (*initializedRepo, error) {
+		_ = mgr.store.ReleaseLease(leaseID)
+		_ = os.RemoveAll(finalGitDir)
+		return nil, retErr
 	}
 
-	// Refresh stat cache in private index without modifying staged/unstaged blob OIDs.
-	_, _, _ = gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{
+	if layout.isLinkedWT && layout.worktreeName != "" {
+		if err := setupPrivateLinkedWorktreeMetadata(finalGitDir, targetWorktreeDir, layout.worktreeName); err != nil {
+			return abortFinal(fmt.Errorf("%w: %v", layeredfs.ErrGitPending, err))
+		}
+	}
+
+	if _, sErr := os.Stat(filepath.Join(finalGitDir, "index")); sErr == nil {
+		uOut, uCode, uErr := gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{
+			Profile: gitexec.ProfileHermetic,
+		})
+		if (uErr != nil && uCode != 1) || uCode >= 128 || uCode < 0 {
+			return abortFinal(fmt.Errorf("%w: update-index refresh failed (exit %d): %v: %s", layeredfs.ErrGitPending, uCode, uErr, strings.TrimSpace(string(uOut))))
+		}
+	}
+
+	var initHeadOID string
+	if hOut, hCode, hErr := gitexec.Run(ctx, targetWorktreeDir, []string{"rev-parse", "--verify", "HEAD"}, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
-	})
+	}); hErr == nil && hCode == 0 {
+		initHeadOID = strings.TrimSpace(string(hOut))
+	}
 
 	importMetrics.Attempts = attempts
 	importMetrics.Duration = time.Since(start)
 	importMetrics.State = StateReady
 	return &initializedRepo{
-		repoRel:       repoRel,
-		worktreeDir:   targetWorktreeDir,
-		privateGitDir: finalGitDir,
-		leaseID:       leaseID,
-		initialRefs:   initRefs,
-		metrics:       importMetrics,
+		repoRel:        repoRel,
+		worktreeDir:    targetWorktreeDir,
+		privateGitDir:  finalGitDir,
+		leaseID:        leaseID,
+		initialHeadOID: initHeadOID,
+		initialRefs:    initRefs,
+		metrics:        importMetrics,
 	}, nil
+}
+
+func retainNewPrivateObjects(ctx context.Context, mgr *Manager, view *managedView, repoRel string) error {
+	if mgr == nil || view == nil {
+		return nil
+	}
+	repoRel = cleanSlashRel(repoRel)
+	if mgr.cfg.FailObjectRetentionHook != nil {
+		if hErr := mgr.cfg.FailObjectRetentionHook(view.viewID, repoRel); hErr != nil {
+			return fmt.Errorf("%w: %w", ErrCorruptObjectStore, hErr)
+		}
+	}
+	view.mu.Lock()
+	repo := view.repos[repoRel]
+	view.mu.Unlock()
+	if repo == nil || repo.privateGitDir == "" {
+		return nil
+	}
+	tipOIDs, _, err := collectCapturedRefAndIndexOIDs(ctx, repo.privateGitDir)
+	if err != nil {
+		return err
+	}
+	if len(tipOIDs) == 0 {
+		return nil
+	}
+	objDirs := []string{filepath.Join(repo.privateGitDir, "objects"), mgr.store.ObjectsDir()}
+	_, reachable, err := mgr.store.ImportRepositoryObjects(ctx, objDirs, tipOIDs)
+	if err != nil {
+		return err
+	}
+	newLeaseID, err := mgr.store.RetainForView(view.viewID+":"+repoRel, reachable)
+	if err != nil {
+		return err
+	}
+	view.mu.Lock()
+	oldLease := repo.leaseID
+	repo.leaseID = newLeaseID
+	view.mu.Unlock()
+	if oldLease != "" && oldLease != newLeaseID {
+		_ = mgr.store.ReleaseLease(oldLease)
+	}
+	return nil
 }

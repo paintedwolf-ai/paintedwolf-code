@@ -67,16 +67,28 @@ func captureCheckpointGitState(
 	repo := view.repos["."]
 	workerID := view.workerID
 	subHeads := make(map[string]string)
+	var subErr error
 	for rel, sr := range view.repos {
 		if rel != "." && sr != nil {
-			if _, hOID, _, hErr := resolveHeadState(sr.privateGitDir); hErr == nil && hOID != "" {
+			if _, hOID, _, hErr := resolveHeadState(sr.privateGitDir); hErr != nil {
+				subErr = hErr
+				break
+			} else if hOID != "" {
 				subHeads[rel] = hOID
 			}
 		}
 	}
 	view.mu.Unlock()
+	if subErr != nil {
+		return nil, subErr
+	}
 	if repo == nil {
 		return nil, layeredfs.ErrGitPending
+	}
+	if m.cfg.FailObjectRetentionHook != nil {
+		if err := m.cfg.FailObjectRetentionHook(viewID, "."); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCorruptObjectStore, err)
+		}
 	}
 
 	headSym, headOID, detached, err := resolveHeadState(repo.privateGitDir)
@@ -88,7 +100,10 @@ func captureCheckpointGitState(
 	if err != nil {
 		return nil, err
 	}
-	stashes := collectStashEntries(ctx, repo.worktreeDir, repo.privateGitDir)
+	stashes, err := collectStashEntries(ctx, repo.worktreeDir, repo.privateGitDir)
+	if err != nil {
+		return nil, err
+	}
 	for _, st := range stashes {
 		tipOIDs = append(tipOIDs, st.OID)
 	}
@@ -132,8 +147,14 @@ func captureCheckpointGitState(
 		initCopy[k] = v
 	}
 
-	idxBytes, _ := os.ReadFile(filepath.Join(repo.privateGitDir, "index"))
-	cfgBytes, _ := os.ReadFile(filepath.Join(repo.privateGitDir, "config"))
+	idxBytes, idxErr := os.ReadFile(filepath.Join(repo.privateGitDir, "index"))
+	if idxErr != nil && !errors.Is(idxErr, os.ErrNotExist) {
+		return nil, idxErr
+	}
+	cfgBytes, cfgErr := os.ReadFile(filepath.Join(repo.privateGitDir, "config"))
+	if cfgErr != nil && !errors.Is(cfgErr, os.ErrNotExist) {
+		return nil, cfgErr
+	}
 
 	cp := &CheckpointGitState{
 		ViewID:       viewID,
@@ -223,41 +244,42 @@ func resolveRefInGitDir(gitDir, refName string) string {
 	return ""
 }
 
-func collectStashEntries(ctx context.Context, worktreeDir, gitDir string) []StashEntry {
+func collectStashEntries(ctx context.Context, worktreeDir, gitDir string) ([]StashEntry, error) {
 	oid := resolveRefInGitDir(gitDir, "refs/stash")
 	if oid == "" {
-		return nil
+		return nil, nil
 	}
 	out, code, err := gitexec.Run(ctx, worktreeDir, []string{"log", "-g", "--format=%H|%gd|%gs", "refs/stash"}, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
 	})
+	if err != nil || code != 0 {
+		return nil, fmt.Errorf("privategit: collectStashEntries (code %d): %w: %s", code, err, strings.TrimSpace(string(out)))
+	}
 	var stashes []StashEntry
-	if err == nil && code == 0 {
-		for _, line := range bytes.Split(out, []byte{'\n'}) {
-			s := strings.TrimSpace(string(line))
-			if s == "" {
-				continue
+	for _, line := range bytes.Split(out, []byte{'\n'}) {
+		s := strings.TrimSpace(string(line))
+		if s == "" {
+			continue
+		}
+		parts := strings.SplitN(s, "|", 3)
+		if len(parts) >= 1 && len(parts[0]) == 40 && isHexString(parts[0]) {
+			ref := fmt.Sprintf("stash@{%d}", len(stashes))
+			if len(parts) >= 2 && strings.TrimSpace(parts[1]) != "" {
+				ref = strings.TrimSpace(parts[1])
 			}
-			parts := strings.SplitN(s, "|", 3)
-			if len(parts) >= 1 && len(parts[0]) == 40 && isHexString(parts[0]) {
-				ref := fmt.Sprintf("stash@{%d}", len(stashes))
-				if len(parts) >= 2 && strings.TrimSpace(parts[1]) != "" {
-					ref = strings.TrimSpace(parts[1])
-				}
-				msg := "stash"
-				if len(parts) == 3 && strings.TrimSpace(parts[2]) != "" {
-					msg = strings.TrimSpace(parts[2])
-				}
-				stashes = append(stashes, StashEntry{
-					Ref:     ref,
-					OID:     strings.ToLower(parts[0]),
-					Message: msg,
-				})
+			msg := "stash"
+			if len(parts) == 3 && strings.TrimSpace(parts[2]) != "" {
+				msg = strings.TrimSpace(parts[2])
 			}
+			stashes = append(stashes, StashEntry{
+				Ref:     ref,
+				OID:     strings.ToLower(parts[0]),
+				Message: msg,
+			})
 		}
 	}
 	if len(stashes) == 0 {
-		return []StashEntry{{Ref: "stash@{0}", OID: oid, Message: "stash"}}
+		return []StashEntry{{Ref: "stash@{0}", OID: oid, Message: "stash"}}, nil
 	}
-	return stashes
+	return stashes, nil
 }

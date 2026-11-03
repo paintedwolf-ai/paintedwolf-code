@@ -53,11 +53,16 @@ func NewRetainedObjectStore(rootDir string) (*RetainedObjectStore, error) {
 		objectsDir,
 		filepath.Join(objectsDir, "info"),
 		filepath.Join(objectsDir, "pack"),
+		filepath.Join(absRoot, "refs"),
 		importsDir,
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, fmt.Errorf("privategit: create store dir %s: %w", d, err)
 		}
+	}
+	headPath := filepath.Join(absRoot, "HEAD")
+	if _, err := os.Stat(headPath); os.IsNotExist(err) {
+		_ = os.WriteFile(headPath, []byte("ref: refs/heads/main\n"), 0o644)
 	}
 	s := &RetainedObjectStore{
 		rootDir:    absRoot,

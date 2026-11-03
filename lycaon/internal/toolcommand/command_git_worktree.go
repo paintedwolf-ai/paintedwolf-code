@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gitargv"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -49,6 +50,18 @@ func gitReplacement(args []string, projectDir string) (ReplacementCall, bool) {
 		}
 	case "restore":
 		return gitRestoreReplacement(args[1:])
+	case "revert":
+		if len(args) == 2 && !strings.HasPrefix(args[1], "-") {
+			return ReplacementCall{Tool: "git_revert", Args: map[string]any{"ref": args[1]}}, true
+		}
+	case "worktree":
+		if len(args) == 2 && args[1] == "list" {
+			return ReplacementCall{Tool: "git_worktree", Args: map[string]any{"action": "list"}}, true
+		}
+	case "submodule":
+		if len(args) == 2 && args[1] == "status" {
+			return ReplacementCall{Tool: "git_submodule", Args: map[string]any{"action": "status"}}, true
+		}
 	}
 	return ReplacementCall{}, false
 }
@@ -158,7 +171,7 @@ func gitDiffReplacement(args []string, projectDir string) (ReplacementCall, bool
 			mapped["staged"] = true
 		case strings.HasPrefix(arg, "-"):
 			return ReplacementCall{}, false
-		case confine.ProjectPathExists(arg, projectDir):
+		case projectOrPrivateViewPathExists(arg, projectDir):
 			paths = append(paths, arg)
 		case baseRef == "" && gitargv.ValidateRefArg(arg) == nil && !strings.Contains(arg, ".."):
 			baseRef = arg
@@ -239,3 +252,8 @@ func gitCommitSequence(elements []argv.SequenceElement) (ReplacementCall, bool) 
 	call := ReplacementCall{Tool: "git_commit", Args: map[string]any{"message": commit[2], "paths": stringsToAny(paths)}}
 	return call, replacementPathsRepresentable(call)
 }
+
+func projectOrPrivateViewPathExists(path, projectDir string) bool {
+	return confine.ProjectPathExists(path, projectDir) || privategit.ViewPathExists(projectDir, path)
+}
+

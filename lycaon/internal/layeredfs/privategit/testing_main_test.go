@@ -3,6 +3,8 @@ package privategit
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,52 +19,7 @@ import (
 
 func TestMain(m *testing.M) {
 	gittestsetup.Enable()
-	enableCommonWorktreeGitEngine()
 	os.Exit(m.Run())
-}
-
-func enableCommonWorktreeGitEngine() {
-	if os.Getenv("LYCAON_GIT_BINARY") != "" || os.Getenv("LYCAON_ENGINE_ROOT") != "" {
-		return
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return
-	}
-	for {
-		dotGit := filepath.Join(dir, ".git")
-		if raw, err := os.ReadFile(dotGit); err == nil {
-			line := strings.TrimSpace(string(raw))
-			if strings.HasPrefix(line, "gitdir:") {
-				gitDir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
-				if !filepath.IsAbs(gitDir) {
-					gitDir = filepath.Join(dir, gitDir)
-				}
-				commonDir := filepath.Clean(filepath.Join(gitDir, "..", ".."))
-				if rawCommon, cErr := os.ReadFile(filepath.Join(gitDir, "commondir")); cErr == nil {
-					rel := strings.TrimSpace(string(rawCommon))
-					if rel != "" {
-						if filepath.IsAbs(rel) {
-							commonDir = filepath.Clean(rel)
-						} else {
-							commonDir = filepath.Clean(filepath.Join(gitDir, rel))
-						}
-					}
-				}
-				mainRoot := filepath.Dir(commonDir)
-				engineRoot := filepath.Join(mainRoot, "lycaon-den", "src-tauri", "engine-root")
-				if st, sErr := os.Stat(filepath.Join(engineRoot, "gitengine")); sErr == nil && st.IsDir() {
-					_ = os.Setenv("LYCAON_ENGINE_ROOT", engineRoot)
-					return
-				}
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return
-		}
-		dir = parent
-	}
 }
 
 type repoFixture struct {
@@ -137,25 +94,63 @@ func newTestManager(t *testing.T, baseDir string) *Manager {
 	return mgr
 }
 
-func newMountedViewWithManager(
-	t *testing.T,
-	mgr *Manager,
-	viewID, trunkDir string,
-	authorized ...string,
-) *layeredfs.Core {
+// populateCopiedWorktreeTestDouble copies non-.git working-tree entries into a separate
+// unit-test double directory. This is a unit-test double for exercising privategit metadata
+// virtualization and MountedViewBinding enforcement, not a real kernel FUSE/NFS mount.
+func populateCopiedWorktreeTestDouble(t *testing.T, trunkDir, worktreeDoubleDir string) {
+	t.Helper()
+	testutil.FailErr(t, "mkdir worktreeDoubleDir", os.MkdirAll(worktreeDoubleDir, 0o755))
+	err := filepath.WalkDir(trunkDir, func(path string, d fs.DirEntry, wErr error) error {
+		if wErr != nil {
+			return wErr
+		}
+		rel, rErr := filepath.Rel(trunkDir, path)
+		if rErr != nil || rel == "." {
+			return rErr
+		}
+		if d.Name() == ".git" {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		dst := filepath.Join(worktreeDoubleDir, rel)
+		info, iErr := d.Info()
+		if iErr != nil {
+			return iErr
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			link, lErr := os.Readlink(path)
+			if lErr != nil {
+				return lErr
+			}
+			_ = os.RemoveAll(dst)
+			return os.Symlink(link, dst)
+		}
+		if d.IsDir() {
+			return os.MkdirAll(dst, info.Mode().Perm()|0o700)
+		}
+		return copyWorkingTreeFile(path, dst, info.Mode())
+	})
+	testutil.FailErr(t, "populateCopiedWorktreeTestDouble", err)
+}
+
+func newMountedViewWithManager(t *testing.T, mgr *Manager, viewID, trunkDir string, authorized ...string) *layeredfs.Core {
 	t.Helper()
 	backing := filepath.Join(mgr.cfg.BackingDir, "core-backing-"+viewID)
+	wtDoubleDir := filepath.Join(mgr.cfg.BackingDir, "unit-wt-double-"+viewID)
 	testutil.FailErr(t, "mkdir core backing", os.MkdirAll(backing, 0o700))
+	populateCopiedWorktreeTestDouble(t, trunkDir, wtDoubleDir)
 	core, err := layeredfs.New(layeredfs.Config{
-		ViewID:         viewID,
-		BackingDir:     backing,
-		GitInterceptor: mgr,
-		Roots: []layeredfs.RootSpec{
-			{ID: "primary", Label: "primary", TrunkPath: trunkDir, IsPrimary: true},
-		},
+		ViewID: viewID, BackingDir: backing, GitInterceptor: mgr,
+		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunkDir, IsPrimary: true}},
 	})
 	testutil.FailErr(t, "layeredfs.New", err)
-	testutil.FailErr(t, "MountedClaim", mgr.MountedClaim(viewID, "worker-"+viewID, "primary", trunkDir, core, authorized...))
+	testutil.FailErr(t, "MountedClaimWithBinding", mgr.MountedClaimWithBinding(MountedViewBinding{
+		ViewID: viewID, WorkerID: "worker-" + viewID, RootID: "primary",
+		TrunkDir: trunkDir, MountPath: wtDoubleDir, AdapterID: "fuselinux",
+		Core: core, MountID: "unit-mount-" + viewID, Active: true,
+	}, authorized...))
 	t.Cleanup(func() {
 		_ = mgr.ReleaseView(viewID)
 		_ = core.ReleaseView()
@@ -183,8 +178,12 @@ func snapshotDirectoryTreeDigests(t *testing.T, root string) map[string]string {
 			out[slash] = "symlink:" + link
 			return nil
 		}
+		info, iErr := d.Info()
+		if iErr != nil {
+			return iErr
+		}
 		if d.IsDir() {
-			out[slash] = "dir"
+			out[slash] = fmt.Sprintf("dir:%04o", info.Mode().Perm())
 			return nil
 		}
 		raw, readErr := os.ReadFile(path)
@@ -192,7 +191,7 @@ func snapshotDirectoryTreeDigests(t *testing.T, root string) map[string]string {
 			return readErr
 		}
 		sum := sha256.Sum256(raw)
-		out[slash] = hex.EncodeToString(sum[:])
+		out[slash] = fmt.Sprintf("mode=%04o:sha=%s", info.Mode().Perm(), hex.EncodeToString(sum[:]))
 		return nil
 	})
 	testutil.FailErr(t, "snapshotDirectoryTreeDigests", err)
@@ -211,5 +210,87 @@ func assertDigestMapsEqual(t *testing.T, label string, before, after map[string]
 			}
 			t.Fatalf("%s: path %q changed: before=%s after=%s", label, k, v, after[k])
 		}
+	}
+}
+
+func TestCrashRecoveryRefImportIdempotencyConflictAndDeletedRefSafety(t *testing.T) {
+	t.Parallel()
+	fix := buildRichRepoFixture(t)
+	mgr := newTestManager(t, fix.tmpDir)
+	core := newMountedViewWithManager(t, mgr, "view-import", fix.trunkDir)
+	exec := NewGitExecutor(mgr, "view-import", RemotePolicy{})
+
+	_, err := exec.Run(t.Context(), ".", "branch", "-D", "side-branch")
+	testutil.FailErr(t, "delete side-branch privately", err)
+	_, err = exec.Switch(t.Context(), "-c", "worker-br")
+	testutil.FailErr(t, "switch -c worker-br", err)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "imported.txt"}, []byte("import-me\n"), 0o644)
+	testutil.FailErr(t, "write imported.txt", err)
+	_, _ = exec.Run(t.Context(), ".", "add", "imported.txt")
+	_, err = exec.Commit(t.Context(), "worker branch commit")
+	testutil.FailErr(t, "commit worker-br", err)
+	_, err = exec.Run(t.Context(), ".", "tag", "v1-worker")
+	testutil.FailErr(t, "tag v1-worker", err)
+	_, err = exec.Stash(t.Context(), "push", "-m", "checkpointed-stash")
+	testutil.FailErr(t, "stash push", err)
+
+	cp, err := mgr.CaptureCheckpointGitState(t.Context(), "view-import", "cp-crash-1")
+	testutil.FailErr(t, "CaptureCheckpointGitState", err)
+
+	allOpts := RefImportOptionFlags{IncludeDetachedHead: true, IncludeTags: true, IncludeStashes: true}
+	for _, crashAt := range []ImportStage{StageObjectsImported, StageMidRefPublish, StageRefsPublished} {
+		simErr := errors.New("simulated crash at " + string(crashAt))
+		_, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
+			JobID: "job-crash", WorkerID: "worker-view-import", CheckpointID: "cp-crash-1",
+			TrunkDir: fix.trunkDir, Checkpoint: cp, Options: allOpts,
+			CrashHook: func(stage ImportStage) error {
+				if stage == crashAt {
+					return simErr
+				}
+				return nil
+			},
+		})
+		if !errors.Is(err, simErr) {
+			t.Fatalf("expected simulated crash at %s, got %v", crashAt, err)
+		}
+	}
+
+	res, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
+		JobID: "job-crash", WorkerID: "worker-view-import", CheckpointID: "cp-crash-1",
+		TrunkDir: fix.trunkDir, Checkpoint: cp, Options: allOpts,
+	})
+	testutil.FailErr(t, "idempotent ImportRefsToTrunk retry", err)
+
+	for _, wantRef := range []string{
+		"refs/paintedwolf/workers/job-crash/cp-crash-1/heads/worker-br",
+		"refs/paintedwolf/workers/job-crash/cp-crash-1/tags/v1-worker",
+		"refs/paintedwolf/workers/job-crash/cp-crash-1/stash/0",
+	} {
+		if res.ImportedRefs[wantRef] == "" {
+			t.Fatalf("missing expected imported ref %s in %+v", wantRef, res.ImportedRefs)
+		}
+	}
+
+	if !strings.Contains(gittest.Run(t, fix.trunkDir, "branch", "--list", "side-branch"), "side-branch") {
+		t.Fatalf("private branch deletion must never delete trunk branch")
+	}
+	if _, err := os.Stat(filepath.Join(fix.trunkDir, "imported.txt")); !os.IsNotExist(err) {
+		t.Fatalf("ref import must not apply files to trunk working tree, got err=%v", err)
+	}
+
+	if _, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
+		JobID: "job-crash", WorkerID: "wrong-worker-id", CheckpointID: "cp-crash-1",
+		TrunkDir: fix.trunkDir, Checkpoint: cp,
+	}); !errors.Is(err, ErrIdentityMismatch) {
+		t.Fatalf("expected ErrIdentityMismatch, got %v", err)
+	}
+
+	mainOID := strings.TrimSpace(gittest.Run(t, fix.trunkDir, "rev-parse", "refs/heads/main"))
+	gittest.Run(t, fix.trunkDir, "update-ref", "refs/paintedwolf/workers/job-conflict/cp-crash-1/heads/worker-br", mainOID)
+	if _, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
+		JobID: "job-conflict", WorkerID: "worker-view-import", CheckpointID: "cp-crash-1",
+		TrunkDir: fix.trunkDir, Checkpoint: cp,
+	}); !errors.Is(err, ErrRefImportConflict) {
+		t.Fatalf("expected ErrRefImportConflict when destination ref has different OID, got %v", err)
 	}
 }

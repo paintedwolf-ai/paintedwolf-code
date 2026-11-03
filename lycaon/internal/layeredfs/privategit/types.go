@@ -40,6 +40,10 @@ var (
 	// ErrCorruptObjectStore is returned when imported Git objects fail integrity or
 	// connectivity verification.
 	ErrCorruptObjectStore = errors.New("privategit: object integrity or connectivity check failed")
+
+	// ErrMountedWorktreeUnavailable is returned when a mounted view has no bound
+	// host-owned FUSE/NFS mounted workspace path or when the mounted path is not active.
+	ErrMountedWorktreeUnavailable = errors.New("privategit: mounted workspace worktree path is unavailable or not mounted")
 )
 
 // LeaseKind classifies an active object retention lease in the engine-retained store.
@@ -96,6 +100,22 @@ type RemotePolicy struct {
 	AllowPush       bool
 	ApprovedRemotes map[string]bool
 	CredentialCheck func(ctx context.Context, op, remote, targetURL string) error
+}
+
+// MountedViewBinding records the adapter/supervisor-owned mount identity and lifecycle
+// facts that bind a worker view, root, and layeredfs.Core to a mounted workspace path (#1671).
+type MountedViewBinding struct {
+	ViewID       string
+	WorkerID     string
+	RootID       string
+	TrunkDir     string
+	MountPath    string
+	AdapterID    string
+	Core         *layeredfs.Core
+	MountID      string
+	ConnectionID string
+	Active       bool
+	IsActive     func() bool
 }
 
 // SeedLimits bounds materialized fallback workspace seeding.
