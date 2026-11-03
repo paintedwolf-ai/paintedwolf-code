@@ -22,20 +22,20 @@ type CompositeWorkerContext struct {
 	MatcherFor func(*api.Session) PlaybookMatcherInterface
 }
 
-func (c *CompositeWorkerContext) BuildWorkerPromptContext(childID string, sess *api.Session) (inject.WorkerLegContext, error) {
+func (c *CompositeWorkerContext) BuildWorkerPromptContext(ctx context.Context, childID string, sess *api.Session) (inject.WorkerLegContext, error) {
 	if c != nil && c.Delegation != nil {
-		ctx, err := c.Delegation.BuildWorkerPromptContext(childID, sess)
+		leg, err := c.Delegation.BuildWorkerPromptContext(ctx, childID, sess)
 		if err == nil {
-			return ctx, nil
+			return leg, nil
 		}
 		if !errors.Is(err, errWorkerNotDelegated) {
 			return inject.WorkerLegContext{}, err
 		}
 	}
-	return buildTaskSpawnWorkerContext(c, sess)
+	return buildTaskSpawnWorkerContext(ctx, c, sess)
 }
 
-func buildTaskSpawnWorkerContext(c *CompositeWorkerContext, sess *api.Session) (inject.WorkerLegContext, error) {
+func buildTaskSpawnWorkerContext(ctx context.Context, c *CompositeWorkerContext, sess *api.Session) (inject.WorkerLegContext, error) {
 	if sess == nil || strings.TrimSpace(sess.ParentSessionID) == "" {
 		return inject.WorkerLegContext{}, fmt.Errorf("not a worker child session")
 	}
@@ -59,7 +59,7 @@ func buildTaskSpawnWorkerContext(c *CompositeWorkerContext, sess *api.Session) (
 			matcher = c.MatcherFor(sess)
 		}
 	}
-	out.LegTools = resolveLegTools(context.Background(), lister, agents, sess, agentType)
+	out.LegTools = resolveLegTools(ctx, lister, agents, sess, agentType)
 	if checklist, err := mergeTaskSpawnChecklist(matcher, agents, agentType, out.TopologyPattern); err != nil {
 		return out, err
 	} else if len(checklist) > 0 {
@@ -71,18 +71,18 @@ func buildTaskSpawnWorkerContext(c *CompositeWorkerContext, sess *api.Session) (
 		scans = c.Delegation.Scans
 		if c.Delegation.Tasks != nil {
 			// The task tool stamps the run on the job; the session carries none.
-			if task, ok := c.Delegation.Tasks.GetLatestByChildSessionID(context.Background(), sess.ID); ok && task != nil {
+			if task, ok := c.Delegation.Tasks.GetLatestByChildSessionID(ctx, sess.ID); ok && task != nil {
 				runID = task.WorkflowRunID
 			}
 		}
 	}
 	var err error
-	out, err = attachWorkerScanDigest(out, sess.WorkspacePath, runID, scans)
+	out, err = attachWorkerScanDigest(ctx, out, sess.WorkspacePath, runID, scans)
 	if err != nil {
 		return out, err
 	}
 	if c != nil && c.Delegation != nil {
-		block, err := c.Delegation.attachAgentsMDChain(context.Background(), sess, nil)
+		block, err := c.Delegation.attachAgentsMDChain(ctx, sess, nil)
 		if err != nil {
 			return out, err
 		}

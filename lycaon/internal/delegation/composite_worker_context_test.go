@@ -30,7 +30,7 @@ func TestCompositeWorkerContextFallsBackWithoutDelegation(t *testing.T) {
 		AgentType:       "plan-writer",
 	}
 	c.Delegation.Tasks = contextTaskLookup{task: workerTaskFor(sess)}
-	ctx, err := c.BuildWorkerPromptContext(sess.ID, sess)
+	ctx, err := c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
 	testutil.FailErr(t, "c.BuildWorkerPromptContext failed", err)
 	if ctx.AgentType != "plan-writer" {
 		t.Fatalf("agent_type = %q want plan-writer", ctx.AgentType)
@@ -47,7 +47,7 @@ func TestCompositeWorkerContextPropagatesDelegationFailure(t *testing.T) {
 	}})
 	testutil.FailErr(t, "create delegation", err)
 	c := &delegation.CompositeWorkerContext{Delegation: &delegation.WorkerContextLoader{Store: store, Tasks: contextTaskLookup{task: &api.WorkerTask{ID: "job-1", ChildSessionID: "child-1", ParentSessionID: "parent-1", AgentType: "security-reviewer", DelegationID: "delegation-1", LegID: "leg-1"}}}}
-	_, err = c.BuildWorkerPromptContext("child-1", &api.Session{
+	_, err = c.BuildWorkerPromptContext(t.Context(), "child-1", &api.Session{
 		ID: "child-1", ParentSessionID: "parent-1", AgentType: "security-reviewer",
 	})
 	if err == nil {
@@ -68,7 +68,7 @@ func TestCompositeWorkerContextFallbackAttachesRootAgentsMD(t *testing.T) {
 	c := &delegation.CompositeWorkerContext{Delegation: loader}
 	sess := &api.Session{ID: "child-root", ParentSessionID: "parent", AgentType: "plan-writer"}
 	c.Delegation.Tasks = contextTaskLookup{task: workerTaskFor(sess)}
-	ctx, err := c.BuildWorkerPromptContext(sess.ID, sess)
+	ctx, err := c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
 	testutil.FailErr(t, "BuildWorkerPromptContext", err)
 	if ctx.AgentsMDMessage.Content != "root policy" {
 		t.Fatalf("AgentsMDBlock = %q", ctx.AgentsMDMessage.Content)
@@ -90,7 +90,7 @@ func TestWorkerContextLoaderAttachesRootAgentsMDForUnscopedLeg(t *testing.T) {
 			return api.Message{Content: "root policy"}, nil
 		},
 	}
-	ctx, err := loader.BuildWorkerPromptContext("child-1", &api.Session{ID: "child-1", ParentSessionID: "parent-1", AgentType: "plan-writer"})
+	ctx, err := loader.BuildWorkerPromptContext(t.Context(), "child-1", &api.Session{ID: "child-1", ParentSessionID: "parent-1", AgentType: "plan-writer"})
 	testutil.FailErr(t, "BuildWorkerPromptContext", err)
 	if ctx.AgentsMDMessage.Content != "root policy" {
 		t.Fatalf("AgentsMDBlock = %q", ctx.AgentsMDMessage.Content)
@@ -120,7 +120,7 @@ func TestCompositeWorkerContextLegToolsFromLister(t *testing.T) {
 		AgentType:       orchestration.ProfileImplementer,
 	}
 	c.Delegation.Tasks = contextTaskLookup{task: workerTaskFor(sess)}
-	ctx, err := c.BuildWorkerPromptContext(sess.ID, sess)
+	ctx, err := c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
 	testutil.FailErr(t, "c.BuildWorkerPromptContext failed", err)
 	if !reflect.DeepEqual(ctx.LegTools, want) {
 		t.Fatalf("LegTools = %v want %v", ctx.LegTools, want)
@@ -147,7 +147,7 @@ func TestCompositeWorkerContextImplementerTaskSpawnChecklist(t *testing.T) {
 		AgentType:       orchestration.ProfileImplementer,
 	}
 	c.Delegation.Tasks = contextTaskLookup{task: workerTaskFor(sess)}
-	ctx, err := c.BuildWorkerPromptContext(sess.ID, sess)
+	ctx, err := c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
 	testutil.FailErr(t, "c.BuildWorkerPromptContext failed", err)
 	found := false
 	for _, item := range ctx.Checklist {
@@ -184,7 +184,7 @@ func TestCompositeWorkerContextUsesScopedAgentAndPlaybookResolvers(t *testing.T)
 	}
 	sess := &api.Session{ID: "child-scoped", ParentSessionID: "parent", AgentType: "team-reviewer"}
 	c.Delegation.Tasks = contextTaskLookup{task: workerTaskFor(sess)}
-	ctx, err := c.BuildWorkerPromptContext(sess.ID, sess)
+	ctx, err := c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
 	testutil.FailErr(t, "BuildWorkerPromptContext", err)
 	if len(ctx.Checklist) != 1 || ctx.Checklist[0] != "Use the team's review checklist" {
 		t.Fatalf("checklist = %v", ctx.Checklist)
@@ -209,7 +209,7 @@ func TestOrdinaryWorkerDoesNotInheritParentDelegation(t *testing.T) {
 				testutil.FailErr(t, "create earlier delegation", err)
 				sess := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: "skeptic"}
 				c := &delegation.CompositeWorkerContext{Delegation: &delegation.WorkerContextLoader{Store: store, Tasks: contextTaskLookup{workerTaskFor(sess)}}}
-				got, err := c.BuildWorkerPromptContext(sess.ID, sess)
+				got, err := c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
 				testutil.FailErr(t, "build ordinary worker context", err)
 				if got.LegID != "" || len(got.CompletionCriteria) != 0 {
 					t.Fatalf("unrelated leg context leaked: %+v", got)
@@ -244,7 +244,7 @@ func TestWorkerContextUsesExactJobBinding(t *testing.T) {
 					}
 					return api.Message{}, nil
 				}}
-				got, err := loader.BuildWorkerPromptContext(sess.ID, sess)
+				got, err := loader.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
 				testutil.FailErr(t, "build bound worker context", err)
 				if got.LegID != leg.ID || !reflect.DeepEqual(got.CompletionCriteria, leg.CompletionCriteria) {
 					t.Fatalf("wrong leg context: %+v", got)
@@ -281,7 +281,7 @@ func TestWorkerContextRejectsBrokenBindings(t *testing.T) {
 			_, err := store.Create(t.Context(), api.Delegation{ID: "bound", ProjectID: "project"}, "parent", []api.Leg{leg})
 			testutil.FailErr(t, "create delegation", err)
 			c := &delegation.CompositeWorkerContext{Delegation: &delegation.WorkerContextLoader{Store: store, Tasks: contextTaskLookup{job}}}
-			_, err = c.BuildWorkerPromptContext(sess.ID, sess)
+			_, err = c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error=%v, want rejection %q", err, tc.want)
 			}
@@ -289,7 +289,7 @@ func TestWorkerContextRejectsBrokenBindings(t *testing.T) {
 	}
 	for _, tasks := range []delegation.WorkerContextTasks{nil, contextTaskLookup{}} {
 		c := &delegation.CompositeWorkerContext{Delegation: &delegation.WorkerContextLoader{Store: delegation.NewMemoryStore(), Tasks: tasks}}
-		if _, err := c.BuildWorkerPromptContext("child", &api.Session{ID: "child", ParentSessionID: "parent", AgentType: "skeptic"}); err == nil {
+		if _, err := c.BuildWorkerPromptContext(t.Context(), "child", &api.Session{ID: "child", ParentSessionID: "parent", AgentType: "skeptic"}); err == nil {
 			t.Fatal("missing lookup silently fell back")
 		}
 	}
@@ -303,7 +303,7 @@ func TestWorkerContextRejectsAnotherParentsDelegation(t *testing.T) {
 	job := workerTaskFor(sess)
 	job.DelegationID, job.LegID = "bound", "leg"
 	c := &delegation.CompositeWorkerContext{Delegation: &delegation.WorkerContextLoader{Store: store, Tasks: contextTaskLookup{job}}}
-	if _, err = c.BuildWorkerPromptContext(sess.ID, sess); err == nil {
+	if _, err = c.BuildWorkerPromptContext(t.Context(), sess.ID, sess); err == nil {
 		t.Fatal("another parent's delegation was accepted")
 	}
 }

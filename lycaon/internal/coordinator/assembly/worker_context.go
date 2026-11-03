@@ -11,7 +11,7 @@ import (
 
 func (e *turnContextAssembler) appendWorkerLegInject(ctx context.Context, sess *api.Session, rendered string, turn *TurnAssemblyScratch) ([]api.Message, error) {
 	deps := e.deps
-	legCtx, err := deps.WorkerContext.BuildWorkerPromptContext(sess.ID, sess)
+	legCtx, err := deps.WorkerContext.BuildWorkerPromptContext(ctx, sess.ID, sess)
 	if err != nil {
 		return nil, err
 	}

@@ -296,7 +296,7 @@ type stubWorkerCtx struct {
 	leg inject.WorkerLegContext
 }
 
-func (s stubWorkerCtx) BuildWorkerPromptContext(_ string, _ *api.Session) (inject.WorkerLegContext, error) {
+func (s stubWorkerCtx) BuildWorkerPromptContext(_ context.Context, _ string, _ *api.Session) (inject.WorkerLegContext, error) {
 	return s.leg, nil
 }
 

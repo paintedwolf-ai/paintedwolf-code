@@ -23,7 +23,7 @@ type stubKickWorkerContext struct {
 	ctx inject.WorkerLegContext
 }
 
-func (s *stubKickWorkerContext) BuildWorkerPromptContext(_ string, _ *api.Session) (inject.WorkerLegContext, error) {
+func (s *stubKickWorkerContext) BuildWorkerPromptContext(_ context.Context, _ string, _ *api.Session) (inject.WorkerLegContext, error) {
 	return s.ctx, nil
 }
 
