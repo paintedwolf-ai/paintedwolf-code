@@ -75,8 +75,8 @@ func TestMergeCoordinatorSurfacePathVarsHasListDirOnInvestigate(t *testing.T) {
 	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"jq_edit": true}}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
-	if vars["profile_has_jq_edit"].(bool) {
-		t.Fatalf("profile_has_jq_edit = %v must remain false on a read-only command surface", vars["profile_has_jq_edit"])
+	if !vars["profile_has_jq_edit"].(bool) {
+		t.Fatalf("profile_has_jq_edit = %v want true for mutating command even without a standalone schema", vars["profile_has_jq_edit"])
 	}
 }
 

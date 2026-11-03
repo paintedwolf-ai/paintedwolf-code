@@ -4,7 +4,7 @@ import "strings"
 
 // Sticky members enable inline capabilities; deferred members require activation.
 var (
-	surfaceCardEditTools     = []string{"write", "edit", "replace_lines", "delete", "code_rewrite", "jq_edit"}
+	surfaceCardEditTools     = []string{"restore_version"}
 	surfaceCardDispatchTools = []string{"task", "delegate_dispatch"}
 )
 

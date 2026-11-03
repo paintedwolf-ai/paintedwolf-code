@@ -42,8 +42,8 @@ func TestSurfaceCardParkAndWrapup(t *testing.T) {
 	}
 
 	inv := renderSurfaceCard(t, "investigate", "Empty assistant text while tools run.", "investigate",
-		[]string{"recall", "read", "write", "edit", "replace_lines", "task"},
-		[]string{"command", "verify", "delete"})
+		[]string{"recall", "restore_version", "task"},
+		[]string{"command", "verify"})
 	for _, want := range []string{"exploring the project", "Empty assistant text", "edit", "dispatch"} {
 		if !strings.Contains(inv, want) {
 			t.Fatalf("investigate card missing %q: %q", want, inv)
@@ -53,10 +53,10 @@ func TestSurfaceCardParkAndWrapup(t *testing.T) {
 
 func TestSurfaceCardTracksRoster(t *testing.T) {
 	deferredWrite := renderSurfaceCard(t, "investigate", "Empty assistant text while tools run.", "investigate",
-		[]string{"recall", "read", "grep"},
-		[]string{"write", "edit", "command"})
+		[]string{"recall"},
+		[]string{"restore_version", "command"})
 	if strings.Contains(deferredWrite, "You may edit") {
-		t.Fatalf("card claimed inline edit while write/edit are deferred: %q", deferredWrite)
+		t.Fatalf("card claimed inline edit while mutations are deferred: %q", deferredWrite)
 	}
 	if !strings.Contains(deferredWrite, "not loaded yet") {
 		t.Fatalf("card must distinguish unloaded tools from missing user authorization: %q", deferredWrite)
@@ -67,13 +67,13 @@ func TestSurfaceCardTracksRoster(t *testing.T) {
 	}
 
 	stickyWrite := renderSurfaceCard(t, "investigate", "Empty assistant text while tools run.", "investigate",
-		[]string{"recall", "read", "write", "edit", "replace_lines"}, []string{"command"})
+		[]string{"recall", "restore_version"}, []string{"command"})
 	if !strings.Contains(stickyWrite, "You may edit inline") {
-		t.Fatalf("card must offer inline edit when write is sticky: %q", stickyWrite)
+		t.Fatalf("card must offer inline edit when restoration is sticky: %q", stickyWrite)
 	}
 
 	noDeferred := renderSurfaceCard(t, "investigate", "Empty assistant text while tools run.", "investigate",
-		[]string{"recall", "write"}, nil)
+		[]string{"recall", "restore_version"}, nil)
 	if strings.Contains(noDeferred, "request_tools") {
 		t.Fatalf("card must not offer request_tools with an empty deferred roster: %q", noDeferred)
 	}

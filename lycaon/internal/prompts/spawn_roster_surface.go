@@ -145,18 +145,6 @@ func spawnAgentView(
 	}, nil
 }
 
-// editTools are the product-write tools; holding any one makes a write leg.
-var editTools = []string{"write", "edit", "replace_lines", "code_rewrite", "jq_edit"}
-
-func hasEditTool(enabled map[string]bool) bool {
-	for _, name := range editTools {
-		if enabled[name] {
-			return true
-		}
-	}
-	return false
-}
-
 // A surface-variable agent takes its tools from the turn surface, so no profile deny list applies.
 func surfaceVariableAgentView(agent agentdef.Profile, toolProfile string, surface SpawnToolSurface) SpawnAgentView {
 	tools := surface.Tools
@@ -177,7 +165,7 @@ func surfaceVariableAgentView(agent agentdef.Profile, toolProfile string, surfac
 		Description:     strings.TrimSpace(agent.Description),
 		ToolProfile:     toolProfile,
 		EnabledTools:    enabled,
-		CanEdit:         hasEditTool(set) || (set["command"] && surface.CommandMutates),
+		CanEdit:         set["restore_version"] || (set["command"] && surface.CommandMutates),
 		CanCommand:      set["command"],
 		ReadsProject:    len(orderedEnabledTools(surveyToolDisplayOrder, set)) > 0,
 		Delegates:       set["task"] || set["delegate_dispatch"],
