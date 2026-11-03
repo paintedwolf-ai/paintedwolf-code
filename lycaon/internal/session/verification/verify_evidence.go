@@ -289,6 +289,9 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 		if currentRevision == "" || currentRootDigest == "" || revision != currentRevision || rootDigest != currentRootDigest {
 			continue
 		}
+		if m.checkStaleByObservation(ctx, sess, checkID) {
+			continue
+		}
 		cwd, _ := rec.Artifacts["cwd"].(string)
 		latest[commandsurface.CheckKey(cmd, cwd)] = rec.GateVerdict == string(evidence.GateVerdictPassed)
 	}

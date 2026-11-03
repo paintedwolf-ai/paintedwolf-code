@@ -8,9 +8,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -147,5 +150,101 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	)
 	if profile.SurfaceID != surface.SurfaceImplementOverlayPromote {
 		t.Fatalf("surface = %q want implement_overlay_promote after complete+pending", profile.SurfaceID)
+	}
+}
+
+func TestOverlaySourceProofInvalidatesStaleObservedDependenciesAndIncompleteAttribution(t *testing.T) {
+	ctx := context.Background()
+	primary, overlay, scope, baseline := overlaySourceFixture(t)
+	rev, rootDigest := invocation.SourceRevisionForRoot(overlay)
+	curRev := workercompletion.SourceRevision{Revision: rev, RootDigest: rootDigest}
+	msgs := []api.Message{currentVerifyPassedMessage(overlay)}
+
+	task := &api.WorkerTask{
+		ID:                    "job-obs-1665",
+		WorkspacePath:         primary,
+		WorkspaceRoot:         overlay,
+		ChildSessionID:        "child-obs-1665",
+		Scope:                 &scope,
+		WorkspaceBaselinePath: baseline,
+	}
+
+	facts := observation.LiveMountVisibilityFacts("fuse-linux", true, true, true, observation.CompletenessComplete)
+	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-overlay-1", Facts: facts})
+	testutil.FailErr(t, "NewTracker", err)
+
+	depPath := layeredfs.QualifiedPath{RootID: "secondary", Rel: "pkg/dep.py"}
+	tracker.RecordServerFSObservation(layeredfs.ObservationEvent{
+		Path:   depPath,
+		Layer:  layeredfs.LayerTrunk,
+		Kind:   layeredfs.ObserveRead,
+		Size:   10,
+		SHA256: "sha-dep-v1",
+	})
+	binding := tracker.BindVerificationReceipt("receipt-verify", "ckpt-1", []string{"primary", "secondary"})
+	session.RegisterOverlayObservationTracker(task.ID, tracker, binding, "ckpt-1")
+	t.Cleanup(func() {
+		session.UnregisterOverlayObservationTracker(task.ID)
+	})
+
+	// 1. Unrelated trunk change outside complete observed set keeps proof satisfied.
+	tracker.RecordTrunkChange(observation.TrunkChangeEvent{
+		Path:      layeredfs.QualifiedPath{RootID: "primary", Rel: "unrelated.py"},
+		Kind:      observation.TrunkWriteInPlace,
+		NewSHA256: "sha-unrelated-v2",
+		NewSize:   15,
+	})
+	proofFresh := session.OverlaySourceProof(ctx, task, msgs, "selected-check", curRev)
+	if status, _, _ := workercompletion.SourceEvidenceView(proofFresh); status != workercompletion.EvidenceStatusSatisfied {
+		t.Fatalf("expected unrelated trunk change to preserve satisfied proof, got %s", status)
+	}
+
+	// 2. Cross-root observed dependency change marks proof receipt stale.
+	tracker.RecordTrunkChange(observation.TrunkChangeEvent{
+		Path:      depPath,
+		Kind:      observation.TrunkAtomicReplace,
+		NewSHA256: "sha-dep-v2",
+		NewSize:   12,
+	})
+	proofStale := session.OverlaySourceProof(ctx, task, msgs, "selected-check", curRev)
+	if status, _, _ := workercompletion.SourceEvidenceView(proofStale); status == workercompletion.EvidenceStatusSatisfied {
+		t.Fatalf("expected cross-root dependency change to invalidate proof receipt, got %s", status)
+	}
+	assessment, ok := session.OverlayObservationAssessmentForTask(task)
+	if !ok || !assessment.Freshness.Stale || assessment.Freshness.StaleReason != observation.StaleReasonObservedDependencyChanged {
+		t.Fatalf("unexpected overlay assessment: %+v (ok=%v)", assessment, ok)
+	}
+	if assessment.TrunkChanged == nil || assessment.TrunkChanged.GrantsAuthority || assessment.TrunkChanged.EstablishesMergeBase {
+		t.Fatalf("unexpected trunk.changed notice: %+v", assessment.TrunkChanged)
+	}
+	if len(assessment.PreviewHints) == 0 || assessment.PreviewHints[0].SubstitutesExactBaseCheck {
+		t.Fatalf("unexpected promotion preview hints: %+v", assessment.PreviewHints)
+	}
+
+	// 3. Incomplete attribution refuses to certify freshness when scope generation advances.
+	partialFacts := observation.LiveMountVisibilityFacts("nfs-loopback", false, false, false, observation.CompletenessPartialKernelCached)
+	partialTracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-overlay-2", Facts: partialFacts})
+	testutil.FailErr(t, "NewTracker partial", err)
+	partialTracker.RecordServerFSObservation(layeredfs.ObservationEvent{
+		Path:   layeredfs.QualifiedPath{RootID: "primary", Rel: "game.py"},
+		Layer:  layeredfs.LayerTrunk,
+		Kind:   layeredfs.ObserveRead,
+		Size:   9,
+		SHA256: "sha-game-v1",
+	})
+	partialBinding := partialTracker.BindVerificationReceipt("receipt-verify", "ckpt-2", []string{"primary"})
+	partialTracker.RecordTrunkChange(observation.TrunkChangeEvent{
+		Path:      layeredfs.QualifiedPath{RootID: "primary", Rel: "unlogged_kernel_cached.py"},
+		Kind:      observation.TrunkWriteInPlace,
+		NewSHA256: "sha-unlogged-v2",
+		NewSize:   20,
+	})
+	baseProof := workercompletion.BuildWorkerCompletionProof(msgs, []string{"game.py"}, curRev)
+	evalProof, evalAssess := session.EvaluateOverlaySourceObservations(baseProof, partialTracker, partialBinding, "ckpt-2")
+	if !evalAssess.Freshness.Stale || evalAssess.Freshness.StaleReason != observation.StaleReasonIncompleteAttributionScopeAdvanced {
+		t.Fatalf("expected incomplete attribution with advanced scope generation to be stale, got %+v", evalAssess.Freshness)
+	}
+	if status, _, _ := workercompletion.SourceEvidenceView(evalProof); status == workercompletion.EvidenceStatusSatisfied {
+		t.Fatalf("expected incomplete attribution with advanced scope generation to invalidate proof receipt")
 	}
 }

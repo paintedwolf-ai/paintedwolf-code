@@ -14,11 +14,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 2
-
+const schemaVersion = 3
 const openLockShards = 32
 
 var openLocks [openLockShards]sync.Mutex
@@ -32,24 +33,37 @@ CREATE TABLE IF NOT EXISTS observed_files (
     size INTEGER NOT NULL CHECK (size >= 0),
     mode INTEGER NOT NULL,
     modified_ns INTEGER NOT NULL,
+    provenance TEXT NOT NULL DEFAULT 'server_fs_request',
+    completeness TEXT NOT NULL DEFAULT 'exact',
+    layer TEXT NOT NULL DEFAULT 'trunk',
+    uncertain INTEGER NOT NULL DEFAULT 0,
+    source_generation INTEGER NOT NULL DEFAULT 0,
+    ino INTEGER NOT NULL DEFAULT 0,
+    dev INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (root_path, path)
 ) STRICT, WITHOUT ROWID;
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;
 `
-
 const selectFile = `
-SELECT path, sha256, git_oid, size, mode, modified_ns
+SELECT path, sha256, git_oid, size, mode, modified_ns,
+       provenance, completeness, layer, uncertain, source_generation, ino, dev
 FROM observed_files WHERE root_path = ? AND path = ?`
 
-// File is one file's last verified digests and the stat tuple that vouches
-// for them.
+// File is one file's last verified digests, provenance, layer, and stat/inode facts.
 type File struct {
-	Path       string
-	SHA256     string
-	GitOID     string
-	Size       int64
-	Mode       int64
-	ModifiedNS int64
+	Path             string
+	SHA256           string
+	GitOID           string
+	Size             int64
+	Mode             int64
+	ModifiedNS       int64
+	Provenance       observation.ObservationProvenance
+	Completeness     observation.AttributionCompleteness
+	Layer            layeredfs.LayerSource
+	Uncertain        bool
+	SourceGeneration uint64
+	Ino              uint64
+	Dev              uint64
 }
 
 // Store is an explicitly rebuildable SQLite index separate from user history.
@@ -196,13 +210,26 @@ func (r *Reader) Close() error {
 
 func scanFile(row *sql.Row) (File, bool, error) {
 	var file File
-	err := row.Scan(&file.Path, &file.SHA256, &file.GitOID, &file.Size, &file.Mode, &file.ModifiedNS)
+	var prov, comp, layer string
+	var uncertain int64
+	var gen, ino, dev int64
+	err := row.Scan(
+		&file.Path, &file.SHA256, &file.GitOID, &file.Size, &file.Mode, &file.ModifiedNS,
+		&prov, &comp, &layer, &uncertain, &gen, &ino, &dev,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return File{}, false, nil
 	}
 	if err != nil {
 		return File{}, false, err
 	}
+	file.Provenance = observation.ObservationProvenance(prov)
+	file.Completeness = observation.AttributionCompleteness(comp)
+	file.Layer = layeredfs.LayerSource(layer)
+	file.Uncertain = uncertain != 0
+	file.SourceGeneration = uint64(gen)
+	file.Ino = uint64(ino)
+	file.Dev = uint64(dev)
 	return file, true, nil
 }
 
@@ -245,12 +272,22 @@ func (s *Store) Put(ctx context.Context, rootPath string, files []File) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, file := range files {
+		norm := normalizeFileDefaults(file)
+		uncertainInt := int64(0)
+		if norm.Uncertain {
+			uncertainInt = 1
+		}
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO observed_files (root_path, path, sha256, git_oid, size, mode, modified_ns)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO observed_files (root_path, path, sha256, git_oid, size, mode, modified_ns, provenance, completeness, layer, uncertain, source_generation, ino, dev)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(root_path, path) DO UPDATE SET
-sha256=excluded.sha256, git_oid=excluded.git_oid, size=excluded.size, mode=excluded.mode, modified_ns=excluded.modified_ns`,
-			rootPath, file.Path, file.SHA256, file.GitOID, file.Size, file.Mode, file.ModifiedNS); err != nil {
+sha256=excluded.sha256, git_oid=excluded.git_oid, size=excluded.size, mode=excluded.mode, modified_ns=excluded.modified_ns,
+provenance=excluded.provenance, completeness=excluded.completeness, layer=excluded.layer,
+uncertain=excluded.uncertain, source_generation=excluded.source_generation, ino=excluded.ino, dev=excluded.dev
+WHERE observed_files.layer != 'private' OR excluded.layer = 'private'`,
+			rootPath, norm.Path, norm.SHA256, norm.GitOID, norm.Size, norm.Mode, norm.ModifiedNS,
+			string(norm.Provenance), string(norm.Completeness), string(norm.Layer),
+			uncertainInt, int64(norm.SourceGeneration), int64(norm.Ino), int64(norm.Dev)); err != nil {
 			return err
 		}
 	}

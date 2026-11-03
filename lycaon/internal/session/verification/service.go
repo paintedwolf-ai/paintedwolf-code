@@ -3,9 +3,11 @@ package verification
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/transcript"
@@ -38,6 +40,10 @@ type Service struct {
 	sourceObservations *sourceledger.Inventory
 	verificationSource func(context.Context, string) (string, string)
 	dataDir            string
+	obsMu              sync.RWMutex
+	obsTrackers        map[string]*observation.Tracker
+	obsBindings        map[string]observation.VerificationBinding
+	obsCheckpoints     map[string]string
 }
 
 func New(store Store, workspace *sessionscope.Service, transcript *transcript.Service) *Service {
