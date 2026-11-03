@@ -2,6 +2,7 @@ package privategit
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,106 +17,134 @@ type activeViewEntry struct {
 }
 
 var (
-	activeViewsMu sync.RWMutex
-	activeViews   = make(map[string]activeViewEntry)
+	activeViewsMu         sync.RWMutex
+	activeViewsByID       = make(map[string]activeViewEntry)
+	activeViewsByWorker   = make(map[string]activeViewEntry)
+	activeViewsByWorktree = make(map[string]activeViewEntry)
 )
-
-func init() {
-	ensureCommonWorktreeGitEngine()
-}
-
-func ensureCommonWorktreeGitEngine() {
-	if os.Getenv("LYCAON_GIT_BINARY") != "" || os.Getenv("LYCAON_ENGINE_ROOT") != "" {
-		return
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return
-	}
-	for {
-		if raw, err := os.ReadFile(filepath.Join(dir, ".git")); err == nil {
-			if line := strings.TrimSpace(string(raw)); strings.HasPrefix(line, "gitdir:") {
-				gitDir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
-				if !filepath.IsAbs(gitDir) {
-					gitDir = filepath.Join(dir, gitDir)
-				}
-				commonDir := filepath.Clean(filepath.Join(gitDir, "..", ".."))
-				if rawCommon, cErr := os.ReadFile(filepath.Join(gitDir, "commondir")); cErr == nil {
-					if rel := strings.TrimSpace(string(rawCommon)); rel != "" {
-						if filepath.IsAbs(rel) {
-							commonDir = filepath.Clean(rel)
-						} else {
-							commonDir = filepath.Clean(filepath.Join(gitDir, rel))
-						}
-					}
-				}
-				engineRoot := filepath.Join(filepath.Dir(commonDir), "lycaon-den", "src-tauri", "engine-root")
-				if st, sErr := os.Stat(filepath.Join(engineRoot, "gitengine")); sErr == nil && st.IsDir() {
-					_ = os.Setenv("LYCAON_ENGINE_ROOT", engineRoot)
-					return
-				}
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return
-		}
-		dir = parent
-	}
-}
-
 
 func registerActiveView(mgr *Manager, view *managedView) {
 	if mgr == nil || view == nil || view.viewID == "" {
 		return
 	}
+	entry := activeViewEntry{mgr: mgr, view: view}
 	activeViewsMu.Lock()
-	activeViews[view.viewID] = activeViewEntry{mgr: mgr, view: view}
+	activeViewsByID[view.viewID] = entry
+	if view.workerID != "" {
+		activeViewsByWorker[view.workerID] = entry
+	}
+	if wt := canonicalCleanPath(view.worktreeDir); wt != "" {
+		activeViewsByWorktree[wt] = entry
+	}
 	activeViewsMu.Unlock()
 }
 
-func unregisterActiveView(viewID string) {
+func unregisterActiveView(view *managedView) {
+	if view == nil {
+		return
+	}
 	activeViewsMu.Lock()
-	delete(activeViews, viewID)
+	delete(activeViewsByID, view.viewID)
+	if cur, ok := activeViewsByWorker[view.workerID]; ok && cur.view == view {
+		delete(activeViewsByWorker, view.workerID)
+	}
+	if wt := canonicalCleanPath(view.worktreeDir); wt != "" {
+		if cur, ok := activeViewsByWorktree[wt]; ok && cur.view == view {
+			delete(activeViewsByWorktree, wt)
+		}
+	}
 	activeViewsMu.Unlock()
 }
 
-func lookupActiveView(rootOrBranchDir, workerID string) (*Manager, *managedView, bool) {
+func viewMatchesBoundary(view *managedView, cleanDir string) bool {
+	if view == nil {
+		return false
+	}
+	if cleanDir == "" {
+		return true
+	}
+	return canonicalCleanPath(view.worktreeDir) == cleanDir || canonicalCleanPath(view.trunkDir) == cleanDir
+}
+
+func lookupActiveView(rootOrBranchDir, workerID string) (*Manager, *managedView, bool, error) {
 	cleanDir := canonicalCleanPath(strings.TrimSpace(rootOrBranchDir))
 	cleanWorker := strings.TrimSpace(workerID)
 
 	activeViewsMu.RLock()
 	defer activeViewsMu.RUnlock()
 
-	if cleanWorker != "" {
-		if entry, ok := activeViews[cleanWorker]; ok {
-			return entry.mgr, entry.view, true
-		}
-		for _, entry := range activeViews {
-			if entry.view.workerID == cleanWorker || entry.view.viewID == cleanWorker {
-				if cleanDir == "" ||
-					canonicalCleanPath(entry.view.worktreeDir) == cleanDir ||
-					canonicalCleanPath(entry.view.trunkDir) == cleanDir {
-					return entry.mgr, entry.view, true
-				}
+	if cleanWorker == "" {
+		if cleanDir != "" {
+			if _, isPrivateWT := activeViewsByWorktree[cleanDir]; isPrivateWT {
+				return nil, nil, false, fmt.Errorf("%w: worker identity required for private worktree %q", ErrIdentityMismatch, rootOrBranchDir)
 			}
 		}
+		return nil, nil, false, nil
+	}
+
+	entry, ok := activeViewsByID[cleanWorker]
+	if !ok {
+		entry, ok = activeViewsByWorker[cleanWorker]
+	}
+	if ok {
+		if !viewMatchesBoundary(entry.view, cleanDir) {
+			return nil, nil, false, fmt.Errorf("%w: worker %q is not bound to %q", ErrIdentityMismatch, cleanWorker, rootOrBranchDir)
+		}
+		return entry.mgr, entry.view, true, nil
+	}
+
+	if cleanDir != "" {
+		if wtEntry, isPrivateWT := activeViewsByWorktree[cleanDir]; isPrivateWT {
+			return nil, nil, false, fmt.Errorf("%w: worktree %q is bound to worker %q, not %q", ErrIdentityMismatch, rootOrBranchDir, wtEntry.view.workerID, cleanWorker)
+		}
+	}
+	return nil, nil, false, nil
+}
+
+func lookupManagerView(mgr *Manager, rootOrBranchDir, workerID string) (*managedView, bool, error) {
+	if mgr == nil {
+		return nil, false, nil
+	}
+	cleanDir := canonicalCleanPath(strings.TrimSpace(rootOrBranchDir))
+	cleanWorker := strings.TrimSpace(workerID)
+
+	mgr.mu.RLock()
+	defer mgr.mu.RUnlock()
+
+	if cleanWorker == "" {
+		if cleanDir != "" {
+			if _, isPrivateWT := mgr.viewsByWorktree[cleanDir]; isPrivateWT {
+				return nil, false, fmt.Errorf("%w: worker identity required for private worktree %q", ErrIdentityMismatch, rootOrBranchDir)
+			}
+		}
+		return nil, false, nil
+	}
+
+	v, ok := mgr.views[cleanWorker]
+	if !ok {
+		v, ok = mgr.viewsByWorker[cleanWorker]
+	}
+	if ok {
+		if !viewMatchesBoundary(v, cleanDir) {
+			return nil, false, fmt.Errorf("%w: worker %q is not bound to %q", ErrIdentityMismatch, cleanWorker, rootOrBranchDir)
+		}
+		return v, true, nil
 	}
 	if cleanDir != "" {
-		for _, entry := range activeViews {
-			if canonicalCleanPath(entry.view.worktreeDir) == cleanDir {
-				return entry.mgr, entry.view, true
-			}
-		}
-		if cleanWorker != "" {
-			for _, entry := range activeViews {
-				if entry.view.workerID == cleanWorker {
-					return entry.mgr, entry.view, true
-				}
-			}
+		if wtView, isPrivateWT := mgr.viewsByWorktree[cleanDir]; isPrivateWT {
+			return nil, false, fmt.Errorf("%w: worktree %q is bound to worker %q, not %q", ErrIdentityMismatch, rootOrBranchDir, wtView.workerID, cleanWorker)
 		}
 	}
-	return nil, nil, false
+	return nil, false, nil
+}
+
+// ViewWorktreeDir returns the private worktree stage directory for viewID.
+func (m *Manager) ViewWorktreeDir(viewID string) string {
+	v, err := getManagedView(m, viewID)
+	if err != nil {
+		return ""
+	}
+	return v.worktreeDir
 }
 
 // PrepareViewGitOperation ensures private Git metadata is initialized on first use for an
@@ -126,7 +155,10 @@ func PrepareViewGitOperation(
 	rootOrBranchDir, workerID string,
 ) (worktreeDir string, finish func() error, managed bool, err error) {
 	noop := func() error { return nil }
-	mgr, view, ok := lookupActiveView(rootOrBranchDir, workerID)
+	mgr, view, ok, lErr := lookupActiveView(rootOrBranchDir, workerID)
+	if lErr != nil {
+		return "", noop, true, lErr
+	}
 	if !ok {
 		return rootOrBranchDir, noop, false, nil
 	}
@@ -139,20 +171,13 @@ func PrepareManagerViewOperation(
 	mgr *Manager,
 	rootOrBranchDir, workerID string,
 ) (worktreeDir string, finish func() error, managed bool, err error) {
+	noop := func() error { return nil }
 	if mgr != nil {
-		mgr.mu.RLock()
-		var matched *managedView
-		cleanDir := canonicalCleanPath(strings.TrimSpace(rootOrBranchDir))
-		cleanWorker := strings.TrimSpace(workerID)
-		for _, v := range mgr.views {
-			if (cleanWorker != "" && (v.viewID == cleanWorker || v.workerID == cleanWorker)) ||
-				(cleanDir != "" && (canonicalCleanPath(v.worktreeDir) == cleanDir || canonicalCleanPath(v.trunkDir) == cleanDir)) {
-				matched = v
-				break
-			}
+		matched, ok, lErr := lookupManagerView(mgr, rootOrBranchDir, workerID)
+		if lErr != nil {
+			return "", noop, true, lErr
 		}
-		mgr.mu.RUnlock()
-		if matched != nil {
+		if ok {
 			return prepareManagedViewOperation(ctx, mgr, matched)
 		}
 	}
@@ -160,7 +185,7 @@ func PrepareManagerViewOperation(
 }
 
 func prepareManagedViewOperation(
-	_ context.Context,
+	ctx context.Context,
 	mgr *Manager,
 	view *managedView,
 ) (string, func() error, bool, error) {
@@ -174,32 +199,41 @@ func prepareManagedViewOperation(
 	if err := syncCoreOverlayToWorktree(view); err != nil {
 		return "", noop, true, err
 	}
-	before := snapshotWorktreeDigests(view.worktreeDir)
+	if err := materializeCandidateRefDiffs(ctx, view, "."); err != nil {
+		return "", noop, true, err
+	}
+	before := captureWorktreeMutationBaseline(ctx, view, view.worktreeDir)
 	finish := func() error {
-		after := snapshotWorktreeDigests(view.worktreeDir)
-		return syncWorktreeDeltaToCore(view, ".", before, after)
+		_ = retainNewPrivateObjects(ctx, mgr, view, ".")
+		return syncWorktreeMutationsToCore(ctx, view, ".", before)
 	}
 	return view.worktreeDir, finish, true, nil
 }
 
-// LookupExecutor returns a GitExecutor bound to an active view matching rootOrBranchDir or workerID.
+// MaterializeViewPaths ensures that explicit relative paths are materialized in a mounted
+// view's sparse worktree stage and have --no-skip-worktree set prior to path-targeted Git commands (#1671).
+func MaterializeViewPaths(ctx context.Context, rootOrBranchDir, workerID string, relPaths ...string) error {
+	_, view, ok, err := lookupActiveView(rootOrBranchDir, workerID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	return materializeMountedPaths(ctx, view, ".", relPaths)
+}
+
+// LookupExecutor returns a GitExecutor bound to an active view matching rootOrBranchDir and workerID.
 func LookupExecutor(mgr *Manager, rootOrBranchDir, workerID string) (*GitExecutor, bool) {
 	if mgr != nil {
-		mgr.mu.RLock()
-		cleanDir := canonicalCleanPath(strings.TrimSpace(rootOrBranchDir))
-		cleanWorker := strings.TrimSpace(workerID)
-		for _, v := range mgr.views {
-			if (cleanWorker != "" && (v.viewID == cleanWorker || v.workerID == cleanWorker)) ||
-				(cleanDir != "" && (canonicalCleanPath(v.worktreeDir) == cleanDir || canonicalCleanPath(v.trunkDir) == cleanDir)) {
-				vid := v.viewID
-				mgr.mu.RUnlock()
-				return NewGitExecutor(mgr, vid, RemotePolicy{}), true
-			}
+		if matched, ok, err := lookupManagerView(mgr, rootOrBranchDir, workerID); err == nil && ok {
+			return NewGitExecutor(mgr, matched.viewID, RemotePolicy{}), true
+		} else if err != nil {
+			return nil, false
 		}
-		mgr.mu.RUnlock()
 	}
-	foundMgr, view, ok := lookupActiveView(rootOrBranchDir, workerID)
-	if !ok {
+	foundMgr, view, ok, err := lookupActiveView(rootOrBranchDir, workerID)
+	if err != nil || !ok {
 		return nil, false
 	}
 	return NewGitExecutor(foundMgr, view.viewID, RemotePolicy{}), true
@@ -223,8 +257,8 @@ func ViewPathExists(projectOrWorktreeDir, relPath string) bool {
 
 	activeViewsMu.RLock()
 	var views []*managedView
-	for _, entry := range activeViews {
-		if canonicalCleanPath(entry.view.worktreeDir) == cleanDir || canonicalCleanPath(entry.view.trunkDir) == cleanDir {
+	for _, entry := range activeViewsByID {
+		if viewMatchesBoundary(entry.view, cleanDir) {
 			views = append(views, entry.view)
 		}
 	}
@@ -237,6 +271,9 @@ func ViewPathExists(projectOrWorktreeDir, relPath string) bool {
 			}
 		}
 		if _, err := os.Lstat(filepath.Join(v.worktreeDir, filepath.FromSlash(cleanRel))); err == nil {
+			return true
+		}
+		if _, err := os.Lstat(filepath.Join(v.trunkDir, filepath.FromSlash(cleanRel))); err == nil {
 			return true
 		}
 	}

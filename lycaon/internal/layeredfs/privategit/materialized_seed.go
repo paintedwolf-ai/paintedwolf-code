@@ -26,13 +26,6 @@ func ensureViewRepoInitialized(
 	}
 	view.repos[repoRel] = &initializedRepo{metrics: InitMetrics{State: StatePending}}
 
-	if !view.materialized {
-		if err := seedMountedWorktreeStage(view, repoRel); err != nil {
-			view.repos[repoRel] = &initializedRepo{metrics: InitMetrics{State: StateFailed}}
-			return err
-		}
-	}
-
 	targetWT := view.worktreeDir
 	if repoRel != "." {
 		targetWT = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
@@ -46,12 +39,13 @@ func ensureViewRepoInitialized(
 	view.repos[repoRel] = repo
 
 	if repoRel == "." {
-		subRels := parseSubmodulePaths(filepath.Join(targetWT, ".gitmodules"))
+		gitmodulesPath := filepath.Join(targetWT, ".gitmodules")
+		if !view.materialized {
+			gitmodulesPath = filepath.Join(view.trunkDir, ".gitmodules")
+		}
+		subRels := parseSubmodulePaths(gitmodulesPath)
 		for _, subRel := range subRels {
 			subWT := filepath.Join(view.worktreeDir, filepath.FromSlash(subRel))
-			if !view.materialized {
-				_ = seedMountedWorktreeStage(view, subRel)
-			}
 			subRepo, sErr := initializePrivateRepo(ctx, mgr, view, subRel, subWT)
 			if sErr == nil {
 				view.repos[subRel] = subRepo
@@ -61,53 +55,6 @@ func ensureViewRepoInitialized(
 		}
 	}
 	return nil
-}
-
-func seedMountedWorktreeStage(view *managedView, repoRel string) error {
-	srcRoot := view.trunkDir
-	dstRoot := view.worktreeDir
-	if repoRel != "." {
-		srcRoot = filepath.Join(view.trunkDir, filepath.FromSlash(repoRel))
-		dstRoot = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
-	}
-	if _, err := os.Stat(srcRoot); os.IsNotExist(err) {
-		return nil
-	}
-	return filepath.WalkDir(srcRoot, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, rErr := filepath.Rel(srcRoot, path)
-		if rErr != nil {
-			return rErr
-		}
-		if rel == "." {
-			return os.MkdirAll(dstRoot, 0o755)
-		}
-		if d.Name() == ".git" {
-			if d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		dstPath := filepath.Join(dstRoot, rel)
-		if d.Type()&fs.ModeSymlink != 0 {
-			link, lErr := os.Readlink(path)
-			if lErr != nil {
-				return lErr
-			}
-			_ = os.Remove(dstPath)
-			return os.Symlink(link, dstPath)
-		}
-		if d.IsDir() {
-			return os.MkdirAll(dstPath, 0o755)
-		}
-		info, iErr := d.Info()
-		if iErr != nil {
-			return iErr
-		}
-		return copyWorkingTreeFile(path, dstPath, info.Mode())
-	})
 }
 
 // InitializeMaterializedSeed discovers repositories during materialized fallback seed
@@ -229,10 +176,7 @@ func initializeMaterializedSeed(
 		accessOrigin:      OriginFilesystem,
 		repos:             make(map[string]*initializedRepo),
 	}
-	m.mu.Lock()
-	m.views[cfg.ViewID] = view
-	m.mu.Unlock()
-	registerActiveView(m, view)
+	registerManagedView(m, view)
 
 	if cfg.Core != nil {
 		_ = cfg.Core.RegisterLowerProvider("primary", &gitAwareLowerProvider{

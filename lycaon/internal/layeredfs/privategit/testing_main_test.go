@@ -17,52 +17,7 @@ import (
 
 func TestMain(m *testing.M) {
 	gittestsetup.Enable()
-	enableCommonWorktreeGitEngine()
 	os.Exit(m.Run())
-}
-
-func enableCommonWorktreeGitEngine() {
-	if os.Getenv("LYCAON_GIT_BINARY") != "" || os.Getenv("LYCAON_ENGINE_ROOT") != "" {
-		return
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return
-	}
-	for {
-		dotGit := filepath.Join(dir, ".git")
-		if raw, err := os.ReadFile(dotGit); err == nil {
-			line := strings.TrimSpace(string(raw))
-			if strings.HasPrefix(line, "gitdir:") {
-				gitDir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
-				if !filepath.IsAbs(gitDir) {
-					gitDir = filepath.Join(dir, gitDir)
-				}
-				commonDir := filepath.Clean(filepath.Join(gitDir, "..", ".."))
-				if rawCommon, cErr := os.ReadFile(filepath.Join(gitDir, "commondir")); cErr == nil {
-					rel := strings.TrimSpace(string(rawCommon))
-					if rel != "" {
-						if filepath.IsAbs(rel) {
-							commonDir = filepath.Clean(rel)
-						} else {
-							commonDir = filepath.Clean(filepath.Join(gitDir, rel))
-						}
-					}
-				}
-				mainRoot := filepath.Dir(commonDir)
-				engineRoot := filepath.Join(mainRoot, "lycaon-den", "src-tauri", "engine-root")
-				if st, sErr := os.Stat(filepath.Join(engineRoot, "gitengine")); sErr == nil && st.IsDir() {
-					_ = os.Setenv("LYCAON_ENGINE_ROOT", engineRoot)
-					return
-				}
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return
-		}
-		dir = parent
-	}
 }
 
 type repoFixture struct {

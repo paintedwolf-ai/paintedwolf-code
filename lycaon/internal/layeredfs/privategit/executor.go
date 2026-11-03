@@ -3,6 +3,7 @@ package privategit
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"time"
@@ -146,7 +147,10 @@ func executeViewGitCommand(
 	if err := syncCoreOverlayToWorktree(view); err != nil {
 		return "", err
 	}
-	beforeTree := snapshotWorktreeDigests(targetWT)
+	if err := materializeCommandTargets(ctx, view, repoRel, normalizedArgs); err != nil {
+		return "", err
+	}
+	beforeTree := captureWorktreeMutationBaseline(ctx, view, targetWT)
 	privObjDir := filepath.Join(targetWT, ".git", "objects")
 	beforeObjBytes := measureDirBytes(privObjDir)
 
@@ -173,9 +177,23 @@ func executeViewGitCommand(
 		return string(out), fmt.Errorf("git %v failed (exit %d): %v: %s", normalizedArgs, code, runErr, strings.TrimSpace(string(out)))
 	}
 
-	afterTree := snapshotWorktreeDigests(targetWT)
-	if err := syncWorktreeDeltaToCore(view, repoRel, beforeTree, afterTree); err != nil {
+	_ = retainNewPrivateObjects(ctx, e.mgr, view, repoRel)
+	if err := syncWorktreeMutationsToCore(ctx, view, repoRel, beforeTree); err != nil {
 		return string(out), err
 	}
 	return string(out), nil
+}
+
+func measureDirBytes(dir string) int64 {
+	var total int64
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if info, iErr := d.Info(); iErr == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
 }

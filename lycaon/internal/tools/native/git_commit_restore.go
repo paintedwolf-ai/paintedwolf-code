@@ -52,6 +52,7 @@ func (t *GitRestoreTool) Run(ctx context.Context, args map[string]any, tctx tool
 		restored = append(restored, filepath.ToSlash(relPath))
 	}
 	opts.Paths = gitPaths
+	_ = privategit.MaterializeViewPaths(ctx, hostRoot, tctx.Identity.WorkerJobID, gitPaths...)
 	opts.Review = func(ctx context.Context, files []git.RestoreFile) error { return t.reviewRestore(ctx, tctx, files) }
 	if err := t.Git.Restore(ctx, gitRoot, opts); err != nil {
 		var reject *toolrejection.ToolReject
@@ -136,6 +137,7 @@ func (t *GitCommitTool) Run(ctx context.Context, args map[string]any, tctx tools
 		staged = append(staged, filepath.ToSlash(relPath))
 	}
 	staging.Paths = staged
+	_ = privategit.MaterializeViewPaths(ctx, tools.HostWriteRoot(tctx), tctx.Identity.WorkerJobID, staged...)
 	amend, _ := args["amend"].(bool)
 	ctx, historyErr := tools.GitHistoryContext(ctx, tctx)
 	if historyErr != nil {

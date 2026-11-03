@@ -84,6 +84,7 @@ func (t *GitBlameTool) Run(ctx context.Context, args map[string]any, tctx tools.
 		return git.MarshalBlameToolResponse(nil, prepErr)
 	}
 	defer func() { _ = finish() }()
+	_ = privategit.MaterializeViewPaths(ctx, tools.HostWriteRoot(tctx), tctx.Identity.WorkerJobID, path)
 	lines, err := t.Git.Blame(ctx, cwd, git.GitBlameOpts{
 		Path:      path,
 		StartLine: intArg(args, "start_line", 0),

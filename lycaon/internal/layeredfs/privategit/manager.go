@@ -40,9 +40,11 @@ type Manager struct {
 	cfg   ManagerConfig
 	store *RetainedObjectStore
 
-	mu          sync.RWMutex
-	views       map[string]*managedView
-	checkpoints map[string]*CheckpointGitState
+	mu              sync.RWMutex
+	views           map[string]*managedView
+	viewsByWorker   map[string]*managedView
+	viewsByWorktree map[string]*managedView
+	checkpoints     map[string]*CheckpointGitState
 }
 
 // NewManager creates a private Git Manager backed by an engine-retained object store.
@@ -67,10 +69,12 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 	cfg.BackingDir = absBacking
 	cfg.Store = store
 	return &Manager{
-		cfg:         cfg,
-		store:       store,
-		views:       make(map[string]*managedView),
-		checkpoints: make(map[string]*CheckpointGitState),
+		cfg:             cfg,
+		store:           store,
+		views:           make(map[string]*managedView),
+		viewsByWorker:   make(map[string]*managedView),
+		viewsByWorktree: make(map[string]*managedView),
+		checkpoints:     make(map[string]*CheckpointGitState),
 	}, nil
 }
 
@@ -117,10 +121,7 @@ func (m *Manager) MountedClaim(
 		accessOrigin:      OriginFilesystem,
 		repos:             make(map[string]*initializedRepo),
 	}
-	m.mu.Lock()
-	m.views[viewID] = view
-	m.mu.Unlock()
-	registerActiveView(m, view)
+	registerManagedView(m, view)
 
 	return core.RegisterLowerProvider(rootID, &gitAwareLowerProvider{
 		mgr:      m,
@@ -128,6 +129,19 @@ func (m *Manager) MountedClaim(
 		rootID:   rootID,
 		trunkDir: absTrunk,
 	})
+}
+
+func registerManagedView(m *Manager, view *managedView) {
+	m.mu.Lock()
+	m.views[view.viewID] = view
+	if view.workerID != "" {
+		m.viewsByWorker[view.workerID] = view
+	}
+	if wt := canonicalCleanPath(view.worktreeDir); wt != "" {
+		m.viewsByWorktree[wt] = view
+	}
+	m.mu.Unlock()
+	registerActiveView(m, view)
 }
 
 // InterceptGitAccess implements layeredfs.GitInterceptor to initialize private Git
@@ -203,16 +217,22 @@ func (m *Manager) PrivateGitDir(viewID, repoRel string) (string, error) {
 // ReleaseView releases active view leases from the retained store without invalidating
 // any retained checkpoint leases (#1671).
 func (m *Manager) ReleaseView(viewID string) error {
-	unregisterActiveView(viewID)
 	m.mu.Lock()
 	view, ok := m.views[viewID]
 	if ok {
 		delete(m.views, viewID)
+		if view.workerID != "" {
+			delete(m.viewsByWorker, view.workerID)
+		}
+		if wt := canonicalCleanPath(view.worktreeDir); wt != "" {
+			delete(m.viewsByWorktree, wt)
+		}
 	}
 	m.mu.Unlock()
 	if !ok {
 		return nil
 	}
+	unregisterActiveView(view)
 	view.mu.Lock()
 	var leases []string
 	for _, r := range view.repos {

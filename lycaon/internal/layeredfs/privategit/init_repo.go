@@ -3,8 +3,10 @@ package privategit
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -12,12 +14,13 @@ import (
 )
 
 type initializedRepo struct {
-	repoRel       string
-	worktreeDir   string
-	privateGitDir string
-	leaseID       string
-	initialRefs   map[string]string
-	metrics       InitMetrics
+	repoRel        string
+	worktreeDir    string
+	privateGitDir  string
+	leaseID        string
+	initialHeadOID string
+	initialRefs    map[string]string
+	metrics        InitMetrics
 }
 
 func initializePrivateRepo(
@@ -125,20 +128,83 @@ func initializePrivateRepo(
 		_ = setupPrivateLinkedWorktreeMetadata(finalGitDir, targetWorktreeDir, layout.worktreeName)
 	}
 
-	// Refresh stat cache in private index without modifying staged/unstaged blob OIDs.
-	_, _, _ = gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{
+	if !view.materialized {
+		if err := initializeMountedSparseWorktree(ctx, layout.worktreeDir, targetWorktreeDir, finalGitDir); err != nil {
+			_ = mgr.store.ReleaseLease(leaseID)
+			return nil, err
+		}
+	} else {
+		// Refresh stat cache in private index without modifying staged/unstaged blob OIDs.
+		_, _, _ = gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{
+			Profile: gitexec.ProfileHermetic,
+		})
+	}
+
+	var initHeadOID string
+	if hOut, hCode, hErr := gitexec.Run(ctx, targetWorktreeDir, []string{"rev-parse", "--verify", "HEAD"}, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
-	})
+	}); hErr == nil && hCode == 0 {
+		initHeadOID = strings.TrimSpace(string(hOut))
+	}
 
 	importMetrics.Attempts = attempts
 	importMetrics.Duration = time.Since(start)
 	importMetrics.State = StateReady
 	return &initializedRepo{
-		repoRel:       repoRel,
-		worktreeDir:   targetWorktreeDir,
-		privateGitDir: finalGitDir,
-		leaseID:       leaseID,
-		initialRefs:   initRefs,
-		metrics:       importMetrics,
+		repoRel:        repoRel,
+		worktreeDir:    targetWorktreeDir,
+		privateGitDir:  finalGitDir,
+		leaseID:        leaseID,
+		initialHeadOID: initHeadOID,
+		initialRefs:    initRefs,
+		metrics:        importMetrics,
 	}, nil
+}
+
+func retainNewPrivateObjects(ctx context.Context, mgr *Manager, view *managedView, repoRel string) error {
+	if mgr == nil || view == nil {
+		return nil
+	}
+	repoRel = cleanSlashRel(repoRel)
+	view.mu.Lock()
+	repo := view.repos[repoRel]
+	view.mu.Unlock()
+	if repo == nil || repo.privateGitDir == "" {
+		return nil
+	}
+	tipOIDs, _, err := collectCapturedRefAndIndexOIDs(ctx, repo.privateGitDir)
+	if err != nil || len(tipOIDs) == 0 {
+		return nil
+	}
+	objDirs := []string{filepath.Join(repo.privateGitDir, "objects"), mgr.store.ObjectsDir()}
+	_, reachable, err := mgr.store.ImportRepositoryObjects(ctx, objDirs, tipOIDs)
+	if err != nil {
+		return nil
+	}
+	_, _ = mgr.store.RetainForView(view.viewID+":"+repoRel, reachable)
+	return nil
+}
+
+func sparseMaterializedPaths(targetWT string) []string {
+	var out []string
+	_ = filepath.WalkDir(targetWT, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, rErr := filepath.Rel(targetWT, path)
+		if rErr != nil || rel == "." {
+			return nil
+		}
+		if d.Name() == ".git" {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !d.IsDir() {
+			out = append(out, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	return out
 }

@@ -1,6 +1,7 @@
 package privategit
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/fs"
@@ -12,13 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-func prepareAndAuthorizeGitArgs(
-	ctx context.Context,
-	view *managedView,
-	targetWT string,
-	policy RemotePolicy,
-	args []string,
-) ([]string, error) {
+func prepareAndAuthorizeGitArgs(ctx context.Context, view *managedView, targetWT string, policy RemotePolicy, args []string) ([]string, error) {
 	sub := args[0]
 	switch sub {
 	case "fetch", "pull", "ls-remote", "push":
@@ -39,19 +34,12 @@ func prepareAndAuthorizeGitArgs(
 			}
 		}
 	case "repack":
-		hasLocal := false
 		for _, a := range args[1:] {
-			if a == "-l" || a == "--local" || strings.Contains(a, "l") && strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") {
-				hasLocal = true
-				break
+			if a == "-l" || a == "--local" || (strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.Contains(a, "l")) {
+				return args, nil
 			}
 		}
-		if !hasLocal {
-			out := make([]string, 0, len(args)+1)
-			out = append(out, "repack", "-l")
-			out = append(out, args[1:]...)
-			return out, nil
-		}
+		return append([]string{"repack", "-l"}, args[1:]...), nil
 	}
 	return args, nil
 }
@@ -64,12 +52,8 @@ func resolveTargetRemote(ctx context.Context, targetWT string, restArgs []string
 			break
 		}
 	}
-	out, code, err := gitexec.Run(ctx, targetWT, []string{"config", "--get", "remote." + remote + ".url"}, gitexec.Opts{
-		Profile: gitexec.ProfileHermetic,
-	})
-	if err == nil && code == 0 {
-		url := strings.TrimSpace(string(out))
-		if url != "" {
+	if out, code, err := gitexec.Run(ctx, targetWT, []string{"config", "--get", "remote." + remote + ".url"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err == nil && code == 0 {
+		if url := strings.TrimSpace(string(out)); url != "" {
 			return remote, url
 		}
 	}
@@ -77,9 +61,6 @@ func resolveTargetRemote(ctx context.Context, targetWT string, restArgs []string
 }
 
 func isRemoteApproved(approved map[string]bool, remote, remoteURL string) bool {
-	if len(approved) == 0 {
-		return false
-	}
 	if approved[remote] || approved[remoteURL] {
 		return true
 	}
@@ -93,50 +74,57 @@ func isRemoteApproved(approved map[string]bool, remote, remoteURL string) bool {
 }
 
 func syncCoreOverlayToWorktree(view *managedView) error {
-	if view.core == nil {
-		return nil
-	}
-	changes, err := view.core.EnumerateChanges(false)
-	if err != nil {
-		return err
-	}
-	for _, ce := range changes {
-		if ce.Path.RootID != view.rootID {
-			continue
+	var touched []string
+	if view.core != nil {
+		changes, err := view.core.EnumerateChanges(false)
+		if err != nil {
+			return err
 		}
-		dstPath := filepath.Join(view.worktreeDir, filepath.FromSlash(ce.Path.Rel))
-		if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
-			_ = os.RemoveAll(dstPath)
-			continue
+		for _, ce := range changes {
+			if ce.Path.RootID != view.rootID {
+				continue
+			}
+			touched = append(touched, ce.Path.Rel)
+			dstPath := filepath.Join(view.worktreeDir, filepath.FromSlash(ce.Path.Rel))
+			if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
+				_ = os.RemoveAll(dstPath)
+				continue
+			}
+			switch ce.Kind {
+			case layeredfs.EntryDirectory:
+				if err := os.MkdirAll(dstPath, 0o755); err != nil {
+					return err
+				}
+			case layeredfs.EntrySymlink:
+				_ = os.RemoveAll(dstPath)
+				if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+					return err
+				}
+				if err := os.Symlink(ce.Final.LinkTarget, dstPath); err != nil {
+					return err
+				}
+			case layeredfs.EntryRegular:
+				raw, rErr := view.core.ReadFile(ce.Path)
+				if rErr != nil {
+					return rErr
+				}
+				if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+					return err
+				}
+				perm := ce.Final.Mode.Perm()
+				if perm == 0 {
+					perm = 0o644
+				}
+				if err := os.WriteFile(dstPath, raw, perm|0o200); err != nil {
+					return err
+				}
+			}
 		}
-		switch ce.Kind {
-		case layeredfs.EntryDirectory:
-			if err := os.MkdirAll(dstPath, 0o755); err != nil {
-				return err
-			}
-		case layeredfs.EntrySymlink:
-			_ = os.RemoveAll(dstPath)
-			if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
-				return err
-			}
-			if err := os.Symlink(ce.Final.LinkTarget, dstPath); err != nil {
-				return err
-			}
-		case layeredfs.EntryRegular:
-			raw, rErr := view.core.ReadFile(ce.Path)
-			if rErr != nil {
-				return rErr
-			}
-			if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
-				return err
-			}
-			perm := ce.Final.Mode.Perm()
-			if perm == 0 {
-				perm = 0o644
-			}
-			if err := os.WriteFile(dstPath, raw, perm|0o200); err != nil {
-				return err
-			}
+	}
+	if !view.materialized {
+		touched = append(touched, sparseMaterializedPaths(view.worktreeDir)...)
+		if len(touched) > 0 {
+			_ = updateIndexSkipWorktree(context.Background(), view.worktreeDir, "--no-skip-worktree", touched)
 		}
 	}
 	return nil
@@ -149,89 +137,111 @@ type worktreeEntryState struct {
 	linkTarget string
 }
 
-func snapshotWorktreeDigests(worktreeDir string) map[string]worktreeEntryState {
-	res := make(map[string]worktreeEntryState)
-	_ = filepath.WalkDir(worktreeDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		rel, rErr := filepath.Rel(worktreeDir, path)
-		if rErr != nil || rel == "." {
-			return nil
-		}
-		if d.Name() == ".git" {
-			if d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		slashRel := filepath.ToSlash(rel)
-		info, iErr := d.Info()
-		if iErr != nil {
-			return nil
-		}
-		if d.Type()&fs.ModeSymlink != 0 {
-			link, _ := os.Readlink(path)
-			res[slashRel] = worktreeEntryState{
-				kind:       layeredfs.EntrySymlink,
-				mode:       info.Mode(),
-				linkTarget: link,
-			}
-			return nil
-		}
-		if d.IsDir() {
-			return nil
-		}
-		sum, _, hErr := hashFileBytes(path)
-		if hErr == nil {
-			res[slashRel] = worktreeEntryState{
-				kind:   layeredfs.EntryRegular,
-				mode:   info.Mode(),
-				sha256: sum,
-			}
-		}
-		return nil
-	})
-	return res
+type worktreeMutationBaseline struct {
+	headOID    string
+	candidates map[string]worktreeEntryState
 }
 
-func syncWorktreeDeltaToCore(
-	view *managedView,
-	repoRel string,
-	before, after map[string]worktreeEntryState,
-) error {
-	if view.core == nil {
+func captureWorktreeMutationBaseline(ctx context.Context, view *managedView, targetWT string) *worktreeMutationBaseline {
+	if view == nil || view.core == nil {
+		return nil
+	}
+	base := &worktreeMutationBaseline{candidates: make(map[string]worktreeEntryState)}
+	if hOut, hCode, hErr := gitexec.Run(ctx, targetWT, []string{"rev-parse", "--verify", "HEAD"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); hErr == nil && hCode == 0 {
+		base.headOID = strings.TrimSpace(string(hOut))
+	}
+	for rel := range collectCandidateWorktreePaths(ctx, view, targetWT, "") {
+		if st, ok := statWorktreeEntry(targetWT, rel); ok {
+			base.candidates[rel] = st
+		}
+	}
+	return base
+}
+
+func collectCandidateWorktreePaths(ctx context.Context, view *managedView, targetWT, beforeHeadOID string) map[string]bool {
+	paths := make(map[string]bool)
+	if sOut, sCode, sErr := gitexec.Run(ctx, targetWT, []string{"--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); sErr == nil && sCode == 0 {
+		for _, p := range parsePorcelainZPaths(sOut) {
+			paths[cleanSlashRel(p)] = true
+		}
+	}
+	if beforeHeadOID != "" {
+		if hOut, hCode, hErr := gitexec.Run(ctx, targetWT, []string{"rev-parse", "--verify", "HEAD"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); hErr == nil && hCode == 0 {
+			if afterHead := strings.TrimSpace(string(hOut)); afterHead != "" && afterHead != beforeHeadOID {
+				if dtOut, dtCode, dtErr := gitexec.Run(ctx, targetWT, []string{"diff-tree", "-r", "--name-only", "-z", beforeHeadOID, afterHead}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); dtErr == nil && dtCode == 0 {
+					for _, tok := range bytes.Split(dtOut, []byte{0}) {
+						if len(tok) > 0 {
+							paths[cleanSlashRel(string(tok))] = true
+						}
+					}
+				}
+			}
+		}
+	}
+	if view.core != nil {
+		if changes, err := view.core.EnumerateChanges(false); err == nil {
+			for _, ce := range changes {
+				if ce.Path.RootID == view.rootID {
+					paths[cleanSlashRel(ce.Path.Rel)] = true
+				}
+			}
+		}
+	}
+	if !view.materialized {
+		for _, p := range sparseMaterializedPaths(targetWT) {
+			paths[p] = true
+		}
+	}
+	delete(paths, ".")
+	return paths
+}
+
+func statWorktreeEntry(worktreeDir, slashRel string) (worktreeEntryState, bool) {
+	abs := filepath.Join(worktreeDir, filepath.FromSlash(slashRel))
+	info, err := os.Lstat(abs)
+	if err != nil || info.IsDir() {
+		return worktreeEntryState{}, false
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		link, _ := os.Readlink(abs)
+		return worktreeEntryState{kind: layeredfs.EntrySymlink, mode: info.Mode(), linkTarget: link}, true
+	}
+	if sum, _, hErr := hashFileBytes(abs); hErr == nil {
+		return worktreeEntryState{kind: layeredfs.EntryRegular, mode: info.Mode(), sha256: sum}, true
+	}
+	return worktreeEntryState{}, false
+}
+
+func syncWorktreeMutationsToCore(ctx context.Context, view *managedView, repoRel string, base *worktreeMutationBaseline) error {
+	if view == nil || view.core == nil || base == nil {
 		return nil
 	}
 	targetWT := view.worktreeDir
 	if repoRel != "." {
 		targetWT = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
 	}
-	qualifyRel := func(rel string) string {
-		if repoRel == "." || repoRel == "" {
-			return rel
-		}
-		return cleanSlashRel(repoRel + "/" + rel)
+	candidates := collectCandidateWorktreePaths(ctx, view, targetWT, base.headOID)
+	for rel := range base.candidates {
+		candidates[rel] = true
 	}
-
-	for rel, bState := range before {
-		if _, exists := after[rel]; !exists {
-			qp := layeredfs.QualifiedPath{RootID: view.rootID, Rel: qualifyRel(rel)}
+	for rel := range candidates {
+		aState, exists := statWorktreeEntry(targetWT, rel)
+		bState, existed := base.candidates[rel]
+		fullRel := rel
+		if repoRel != "." && repoRel != "" {
+			fullRel = cleanSlashRel(repoRel + "/" + rel)
+		}
+		qp := layeredfs.QualifiedPath{RootID: view.rootID, Rel: fullRel}
+		if !exists {
 			_ = view.core.Unlink(qp, bState.kind == layeredfs.EntryDirectory)
+			continue
 		}
-	}
-
-	for rel, aState := range after {
-		bState, existed := before[rel]
 		if existed && bState == aState {
 			continue
 		}
-		fullRel := qualifyRel(rel)
 		if err := ensureCoreParentDirs(view.core, view.rootID, fullRel); err != nil {
 			return err
 		}
-		qp := layeredfs.QualifiedPath{RootID: view.rootID, Rel: fullRel}
-		absFile := filepath.Join(targetWT, filepath.FromSlash(rel))
 		switch aState.kind {
 		case layeredfs.EntrySymlink:
 			if existed {
@@ -241,7 +251,7 @@ func syncWorktreeDeltaToCore(
 				return err
 			}
 		case layeredfs.EntryRegular:
-			raw, err := os.ReadFile(absFile)
+			raw, err := os.ReadFile(filepath.Join(targetWT, filepath.FromSlash(rel)))
 			if err != nil {
 				return err
 			}
@@ -255,11 +265,7 @@ func syncWorktreeDeltaToCore(
 
 func ensureCoreParentDirs(core *layeredfs.Core, rootID, rel string) error {
 	parts := strings.Split(cleanSlashRel(rel), "/")
-	if len(parts) <= 1 {
-		return nil
-	}
-	cur := ""
-	for i := 0; i < len(parts)-1; i++ {
+	for i, cur := 0, ""; i < len(parts)-1; i++ {
 		if cur == "" {
 			cur = parts[i]
 		} else {
@@ -273,18 +279,4 @@ func ensureCoreParentDirs(core *layeredfs.Core, rootID, rel string) error {
 		}
 	}
 	return nil
-}
-
-func measureDirBytes(dir string) int64 {
-	var total int64
-	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		if info, iErr := d.Info(); iErr == nil {
-			total += info.Size()
-		}
-		return nil
-	})
-	return total
 }
