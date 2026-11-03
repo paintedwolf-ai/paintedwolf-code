@@ -8,7 +8,6 @@ import (
 )
 
 // Open resolves qpath and opens a view-scoped handle.
-// Opening a lower/parent file with write intent triggers coherent base capture and physical copy-up.
 func (c *Core) Open(qpath QualifiedPath, flags OpenFlags, mode os.FileMode) (HandleID, EntryAttr, error) {
 	writeIntent := flags.hasWriteIntent()
 	if writeIntent {
@@ -61,6 +60,7 @@ func openRootDirHandle(c *Core, qpath QualifiedPath) (HandleID, EntryAttr, error
 		qpath:  qpath,
 		flags:  OpenDirectory,
 		isDir:  true,
+		refs:   1,
 	}
 	return hid, nodeToAttrLocked(node), nil
 }
@@ -96,6 +96,7 @@ func openReadOnlyTarget(c *Core, targetPath QualifiedPath, flags OpenFlags) (Han
 			qpath:  res.qpath,
 			flags:  flags,
 			isDir:  true,
+			refs:   1,
 		}
 		return hid, res.attr, nil
 	}
@@ -119,6 +120,7 @@ func openReadOnlyTarget(c *Core, targetPath QualifiedPath, flags OpenFlags) (Han
 		gen:      res.attr.Generation,
 		qpath:    res.qpath,
 		flags:    flags,
+		refs:     1,
 		roReader: roReader,
 	}
 	c.mu.Unlock()
@@ -178,28 +180,42 @@ func openMutableTarget(c *Core, targetPath QualifiedPath, flags OpenFlags, mode 
 		return 0, EntryAttr{}, err
 	}
 
-	c.mu.Lock()
-	if c.state.released {
+	var node *privateNode
+	for {
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			return 0, EntryAttr{}, ErrViewReleased
+		}
+		var nErr error
+		node, nErr = ensureWritableNodeLocked(c, effPath, base, flags, mode)
 		c.mu.Unlock()
-		return 0, EntryAttr{}, ErrViewReleased
-	}
-
-	node, err := ensureWritableNodeLocked(c, effPath, base, flags, mode)
-	if err != nil {
+		if nErr != nil {
+			return 0, EntryAttr{}, nErr
+		}
+		node.flags.ioMu.Lock()
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			node.flags.ioMu.Unlock()
+			return 0, EntryAttr{}, ErrViewReleased
+		}
+		if !node.flags.unlinked && c.state.pathIndex[effPath] == node.id {
+			break
+		}
 		c.mu.Unlock()
-		return 0, EntryAttr{}, err
+		node.flags.ioMu.Unlock()
 	}
-
+	defer node.flags.ioMu.Unlock()
+	defer c.mu.Unlock()
 	wf, err := openBackingFileRW(int(c.backing.workDirFile.Fd()), node.flags.backingName, node.flags.backingPath)
 	if err != nil {
-		c.mu.Unlock()
 		return 0, EntryAttr{}, err
 	}
 
 	if flags&OpenTruncate != 0 && node.size > 0 {
 		if tErr := wf.Truncate(0); tErr != nil {
 			_ = wf.Close()
-			c.mu.Unlock()
 			return 0, EntryAttr{}, tErr
 		}
 		node.size = 0
@@ -217,11 +233,10 @@ func openMutableTarget(c *Core, targetPath QualifiedPath, flags OpenFlags, mode 
 		gen:    node.gen,
 		qpath:  effPath,
 		flags:  flags,
+		refs:   1,
 		file:   wf,
 	}
-	attr := nodeToAttrLocked(node)
-	c.mu.Unlock()
-	return hid, attr, nil
+	return hid, nodeToAttrLocked(node), nil
 }
 
 func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, flags OpenFlags, createMode os.FileMode) (*privateNode, error) {
@@ -287,11 +302,13 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 	}
 
 	workName, workPath := c.state.allocStorageFile(c.backing.workDir, "work")
-	wf, err := createExclusiveBackingFile(int(c.backing.workDirFile.Fd()), workName, workPath, 0o600)
+	workDirFD := int(c.backing.workDirFile.Fd())
+	wf, err := createExclusiveBackingFile(workDirFD, workName, workPath, 0o600)
 	if err != nil {
 		return nil, err
 	}
 	_ = wf.Close()
+	_ = syncFD(workDirFD)
 
 	now := time.Now()
 	nid, gen := c.state.allocNodeID()

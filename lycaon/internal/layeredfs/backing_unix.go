@@ -101,48 +101,74 @@ func cloneFileIfSupported(srcPath, dstPath string) (bool, error) {
 	return fileclone.Clone(srcPath, dstPath)
 }
 
-func listXattrPath(path string) (map[string][]byte, error) {
-	size, err := unix.Llistxattr(path, nil)
-	if ignorableXattrErr(err) || size <= 0 {
-		return nil, nil
+func listXattrAt(parentFD int, name string) (map[string][]byte, error) {
+	if name == "." {
+		return listXattrFD(parentFD)
 	}
-	if err != nil {
+	var stBefore unix.Stat_t
+	if err := unix.Fstatat(parentFD, name, &stBefore, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return nil, err
+	}
+	if stBefore.Mode&unix.S_IFMT == unix.S_IFLNK {
+		return readSymlinkXattrAt(parentFD, name, stBefore)
+	}
+	openFlags := unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK
+	if stBefore.Mode&unix.S_IFMT == unix.S_IFDIR {
+		openFlags |= unix.O_DIRECTORY
+	}
+	fd, err := unix.Openat(parentFD, name, openFlags, 0)
+	if err != nil {
+		if errors.Is(err, unix.ELOOP) {
+			return nil, ErrSymlinkEscape
+		}
+		return nil, err
+	}
+	defer func() { _ = unix.Close(fd) }()
+	var stAfter unix.Stat_t
+	if err := unix.Fstat(fd, &stAfter); err != nil {
+		return nil, err
+	}
+	if stAfter.Dev != stBefore.Dev || stAfter.Ino != stBefore.Ino || (stAfter.Mode&unix.S_IFMT) != (stBefore.Mode&unix.S_IFMT) {
+		return nil, ErrSourceChangedDuringCapture
+	}
+	return listXattrFD(fd)
+}
+
+func listXattrFD(fd int) (map[string][]byte, error) {
+	size, err := unix.Flistxattr(fd, nil)
+	if err != nil {
+		if isIgnorableXattrErr(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if size <= 0 {
+		return nil, nil
 	}
 	buf := make([]byte, size)
-	size, err = unix.Llistxattr(path, buf)
-	if ignorableXattrErr(err) || size <= 0 {
-		return nil, nil
-	}
+	size, err = unix.Flistxattr(fd, buf)
 	if err != nil {
+		if isIgnorableXattrErr(err) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	if size <= 0 {
+		return nil, nil
 	}
 	out := make(map[string][]byte)
 	for _, raw := range bytes.Split(buf[:size], []byte{0}) {
 		if len(raw) == 0 {
 			continue
 		}
-		name := string(raw)
-		vSize, gErr := unix.Lgetxattr(path, name, nil)
-		if ignorableXattrErr(gErr) || vSize < 0 {
-			continue
-		}
+		attr := string(raw)
+		val, ok, gErr := readOneXattrFD(fd, attr)
 		if gErr != nil {
 			return nil, gErr
 		}
-		if vSize == 0 {
-			out[name] = []byte{}
-			continue
+		if ok {
+			out[attr] = val
 		}
-		val := make([]byte, vSize)
-		vSize, gErr = unix.Lgetxattr(path, name, val)
-		if ignorableXattrErr(gErr) {
-			continue
-		}
-		if gErr != nil {
-			return nil, gErr
-		}
-		out[name] = val[:vSize]
 	}
 	if len(out) == 0 {
 		return nil, nil
@@ -150,14 +176,89 @@ func listXattrPath(path string) (map[string][]byte, error) {
 	return out, nil
 }
 
-func ignorableXattrErr(err error) bool {
-	return err == nil ||
-		errors.Is(err, unix.ENOTSUP) ||
+func readOneXattrFD(fd int, attr string) ([]byte, bool, error) {
+	vSize, err := unix.Fgetxattr(fd, attr, nil)
+	if err != nil {
+		if isIgnorableXattrErr(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	if vSize < 0 {
+		return nil, false, nil
+	}
+	if vSize == 0 {
+		return []byte{}, true, nil
+	}
+	val := make([]byte, vSize)
+	vSize, err = unix.Fgetxattr(fd, attr, val)
+	if err != nil {
+		if isIgnorableXattrErr(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return val[:vSize], true, nil
+}
+
+func listXattrSymlinkProcPath(procPath string) (map[string][]byte, error) {
+	size, err := unix.Llistxattr(procPath, nil)
+	if err != nil {
+		if isIgnorableXattrErr(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if size <= 0 {
+		return nil, nil
+	}
+	buf := make([]byte, size)
+	size, err = unix.Llistxattr(procPath, buf)
+	if err != nil {
+		if isIgnorableXattrErr(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := make(map[string][]byte)
+	for _, raw := range bytes.Split(buf[:size], []byte{0}) {
+		if len(raw) == 0 {
+			continue
+		}
+		attr := string(raw)
+		vSize, gErr := unix.Lgetxattr(procPath, attr, nil)
+		if gErr != nil {
+			if isIgnorableXattrErr(gErr) {
+				continue
+			}
+			return nil, gErr
+		}
+		if vSize <= 0 {
+			out[attr] = []byte{}
+			continue
+		}
+		val := make([]byte, vSize)
+		vSize, gErr = unix.Lgetxattr(procPath, attr, val)
+		if gErr != nil {
+			if isIgnorableXattrErr(gErr) {
+				continue
+			}
+			return nil, gErr
+		}
+		out[attr] = val[:vSize]
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+func isIgnorableXattrErr(err error) bool {
+	return errors.Is(err, unix.ENOTSUP) ||
 		errors.Is(err, unix.EOPNOTSUPP) ||
+		errors.Is(err, unix.ENOSYS) ||
 		errors.Is(err, unix.ENODATA) ||
-		errors.Is(err, syscall.Errno(93)) ||
-		errors.Is(err, unix.EPERM) ||
-		errors.Is(err, unix.EACCES)
+		errors.Is(err, syscall.Errno(93))
 }
 
 func statToLowerEntry(st unix.Stat_t) LowerEntry {
