@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -17,6 +18,10 @@ func BuildProgramObservation(tool string, receipt *api.CommandProgramReceipt, co
 		return Record{}
 	}
 	rec := Record{Kind: "command", Shape: ShapeCommand, SourceTool: tool, Fidelity: FidelityOpaque}
-	captureRecordBody(&rec, content)
+	body := fmt.Sprintf("program_id: %s\nstate: %s", receipt.ID, receipt.State)
+	if receipt.StatusCode != nil {
+		body += fmt.Sprintf("\nstatus_code: %d", *receipt.StatusCode)
+	}
+	captureRecordBody(&rec, body+"\n\n"+content)
 	return rec
 }
