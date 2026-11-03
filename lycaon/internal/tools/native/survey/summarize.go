@@ -114,7 +114,7 @@ type summarizePatternMatchSample struct {
 // maxSourcesTouched bounds the wire source list.
 const maxSourcesTouched = 64
 
-type summarizeResponse struct {
+type SummarizeResponse struct {
 	Task           string                 `json:"task"`
 	Coverage       api.SummarizeCoverage  `json:"coverage"`
 	Pack           summarizePack          `json:"pack"`
@@ -126,20 +126,45 @@ type summarizeResponse struct {
 	Rerank *decide.RerankReceipt `json:"rerank,omitempty"`
 }
 
+// SummarizeRequest is summarize's typed input from either interface: the
+// structured tool's arguments or the command built-in's --path/--focus.
+type SummarizeRequest struct {
+	Task, Content, Path, Pattern, Cursor string
+	Paths                                []string
+	// Observe sees every file the briefing opens, before it reads it.
+	Observe projectpaths.ReadObserver
+}
+
 func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	if err := ctx.Err(); err != nil {
+	req := SummarizeRequest{Task: summarizeStringArg(args, "task"), Content: summarizeStringArg(args, "content"), Path: summarizeStringArg(args, "path"),
+		Pattern: summarizeStringArg(args, "pattern"), Cursor: summarizeStringArg(args, "cursor"), Paths: summarizeStringsArg(args, "paths")}
+	resp, substance, err := t.Summarize(ctx, req, tctx)
+	if err != nil {
 		return "", err
 	}
+	raw, err := surveyjson.Marshal(resp)
+	if err != nil {
+		return "", fmt.Errorf("summarize encode: %w", err)
+	}
+	// Only the conversational tool delivers its windows as agent reads.
+	reads := projectpaths.NewReadSession(t.Boundary, tctx)
+	defer reads.Close()
+	rememberSummaryReads(ctx, reads, tctx, substance)
+	return string(raw), nil
+}
+
+// Summarize assembles the bounded briefing pack. It records no delivered
+// read; the returned substance windows are what a caller may deliver.
+func (t *SummarizeTool) Summarize(ctx context.Context, in SummarizeRequest, tctx tools.ToolContext) (SummarizeResponse, []summarize.PackWindow, error) {
+	if err := ctx.Err(); err != nil {
+		return SummarizeResponse{}, nil, err
+	}
 	if t == nil || t.Boundary == nil {
-		return "", fmt.Errorf("summarize: not configured")
+		return SummarizeResponse{}, nil, fmt.Errorf("summarize: not configured")
 	}
 
 	// Material is required; task only ranks it.
-	content := summarizeStringArg(args, "content")
-	pathArg := summarizeStringArg(args, "path")
-	pattern := summarizeStringArg(args, "pattern")
-	cursor := summarizeStringArg(args, "cursor")
-	paths := summarizeStringsArg(args, "paths")
+	content, pathArg, pattern, cursor, paths := in.Content, in.Path, in.Pattern, in.Cursor, in.Paths
 	// Promote an unambiguous comma-separated path list.
 	if pathArg != "" && len(paths) == 0 {
 		if split := splitCommaSeparatedPaths(pathArg); len(split) > 1 {
@@ -151,24 +176,24 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 		paths = append([]string{pathArg}, paths...)
 		pathArg = ""
 	}
-	task := summarize.DefaultTask(summarizeStringArg(args, "task"), pathArg, paths, content)
+	task := summarize.DefaultTask(in.Task, pathArg, paths, content)
 	hasRepo := pathArg != "" || len(paths) > 0
 	if hasRepo {
 		var err error
 		ctx, err = t.Boundary.WithToolProfileSnapshot(ctx, tctx.ProfileID())
 		if err != nil {
-			return "", err
+			return SummarizeResponse{}, nil, err
 		}
 	}
 
 	if pattern != "" && pathArg == "" && len(paths) == 0 {
-		return "", &toolrejection.ToolReject{
+		return SummarizeResponse{}, nil, &toolrejection.ToolReject{
 			Code: "SUMMARIZE_PATTERN_NEEDS_PATH",
 			Data: map[string]any{},
 		}
 	}
 	if content == "" && !hasRepo {
-		return "", &toolrejection.ToolReject{
+		return SummarizeResponse{}, nil, &toolrejection.ToolReject{
 			Code: "SUMMARIZE_NO_INPUT",
 			Data: map[string]any{
 				"need_one_of": []string{"path", "paths", "content"},
@@ -179,7 +204,7 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	if content != "" {
 		n := len(content)
 		if n > t.Caps.Gather.InlineMaxBytes {
-			return "", &toolrejection.ToolReject{Code: "SUMMARIZE_CONTENT_TOO_LARGE", Data: map[string]any{"bytes": n, "cap": t.Caps.Gather.InlineMaxBytes}}
+			return SummarizeResponse{}, nil, &toolrejection.ToolReject{Code: "SUMMARIZE_CONTENT_TOO_LARGE", Data: map[string]any{"bytes": n, "cap": t.Caps.Gather.InlineMaxBytes}}
 		}
 		// Preserve short unstructured content verbatim.
 		if n < t.Caps.Gather.InlineMinBytes && !hasRepo {
@@ -189,11 +214,7 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 				if outline.ParseFailure != nil {
 					observability.LogSummarizeCall(observability.SummarizeDebugCapture{Tool: "summarize", Task: task, Mode: "inline", Diagnostics: []tsparse.FileFailure{{Path: "inline", Phase: "source", Failure: outline.ParseFailure}}})
 				}
-				raw, err := surveyjson.Marshal(resp)
-				if err != nil {
-					return "", fmt.Errorf("summarize encode: %w", err)
-				}
-				return string(raw), nil
+				return resp, nil, nil
 			}
 		}
 	}
@@ -211,6 +232,7 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	rerank := t.Rerank.WithLedger(rerankLedger)
 	reads := projectpaths.NewReadSession(t.Boundary, tctx)
 	defer reads.Close()
+	reads.Observe(in.Observe)
 	gatherer := newSummarizeGatherer(t.Boundary, reads, t.Caps, tctx, t.Catalog, rerank)
 	defer gatherer.trees.closeTrees()
 	engine := summarize.NewEngine(gatherer, t.Caps)
@@ -236,16 +258,16 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	}
 	if err != nil {
 		if errors.Is(err, summarize.ErrNoMaterial) {
-			return "", &toolrejection.ToolReject{Code: "SUMMARIZE_NO_MATERIAL", Data: gatherer.sources.noMaterialData(req)}
+			return SummarizeResponse{}, nil, &toolrejection.ToolReject{Code: "SUMMARIZE_NO_MATERIAL", Data: gatherer.sources.noMaterialData(req)}
 		}
 		if errors.Is(err, summarize.ErrInvalidCursor) || errors.Is(err, sourcecatalog.ErrTreeCursor) {
-			return "", &toolrejection.ToolReject{Code: "SUMMARIZE_CURSOR_STALE", Data: map[string]any{"cursor": cursor}}
+			return SummarizeResponse{}, nil, &toolrejection.ToolReject{Code: "SUMMARIZE_CURSOR_STALE", Data: map[string]any{"cursor": cursor}}
 		}
-		return "", err
+		return SummarizeResponse{}, nil, err
 	}
 
 	if err := deliverSummaryCredentials(ctx, reads, tctx, res); err != nil {
-		return "", err
+		return SummarizeResponse{}, nil, err
 	}
 	res.NextActions = validateNextActions(ctx, t.Boundary, tctx, gatherer.sources.actionableSources(res.NextActions))
 	gatherer.stampWork(&res)
@@ -259,12 +281,7 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 
 	resp := buildSummarizeResponse(res)
 	resp.Rerank = rerankLedger.Receipt()
-	raw, err := surveyjson.Marshal(resp)
-	if err != nil {
-		return "", fmt.Errorf("summarize encode: %w", err)
-	}
-	rememberSummaryReads(ctx, reads, tctx, res.Pack.Substance)
-	return string(raw), nil
+	return resp, res.Pack.Substance, nil
 }
 
 // inlinePassthroughResult preserves short unstructured content.
@@ -334,8 +351,8 @@ func inlineOutlineHint(content string) string {
 
 const pyAsyncDefPrefix = "async def "
 
-func buildSummarizeResponse(res summarize.Result) summarizeResponse {
-	resp := summarizeResponse{
+func buildSummarizeResponse(res summarize.Result) SummarizeResponse {
+	resp := SummarizeResponse{
 		Task:           res.Task,
 		Coverage:       coverageWire(res.Coverage),
 		Pack:           packWire(res.Pack),

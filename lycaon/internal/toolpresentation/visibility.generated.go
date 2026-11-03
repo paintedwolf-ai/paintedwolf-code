@@ -177,7 +177,7 @@ var titleKeys = map[string][]string{
 	"chmod":                          {"paths", "mode"},
 	"chown":                          {"paths", "owner"},
 	"code_rewrite":                   {"pattern", "paths", "path"},
-	"command":                        {"command", "pipeline"},
+	"command":                        {"command"},
 	"command_output":                 {},
 	"command_stop":                   {},
 	"complete_leg":                   {"brief"},

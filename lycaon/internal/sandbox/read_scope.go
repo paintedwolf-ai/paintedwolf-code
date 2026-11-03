@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // ReadFilter applies read-profile rules to inventory paths.
@@ -46,6 +48,9 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 	globs := SubstituteScopeGlobs(prof.ReadGlobs, ScopeTokensFromContext(ctx))
 	filter := func(relSlash string, isDir bool) bool {
 		if strings.ContainsRune(relSlash, 0) {
+			return false
+		}
+		if settingsoverlay.IsRecoveryRelPath(relSlash) || settingsoverlay.HasRecoverySegment(relSlash) {
 			return false
 		}
 		if !inventoryPathWithinRoot(root, relSlash) {

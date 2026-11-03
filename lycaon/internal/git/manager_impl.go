@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ func validateGitRef(value, label string) error {
 }
 
 type Manager struct {
+	CommandReader
 	histories immutableCache[[]GitFileCommit]
 	commits   immutableCache[CommitDetails]
 	reviews   immutableCache[commitReviewSnapshot]
@@ -141,11 +143,14 @@ func (m *Manager) ChangedPaths(ctx context.Context, projectDir string) ([]string
 	seen := map[string]struct{}{}
 	var paths []string
 	for _, entry := range entries {
-		if _, ok := seen[entry.path]; ok {
-			continue
+		// A rename changes its source too; a copy leaves the source in place.
+		for _, path := range []string{entry.path, renameSource(entry)} {
+			if _, ok := seen[path]; ok || path == "" {
+				continue
+			}
+			seen[path] = struct{}{}
+			paths = append(paths, path)
 		}
-		seen[entry.path] = struct{}{}
-		paths = append(paths, entry.path)
 	}
 	return paths, nil
 }
@@ -305,23 +310,44 @@ func (m *Manager) LastTouchByPath(ctx context.Context, projectDir string) (map[s
 }
 
 func (m *Manager) Init(ctx context.Context, projectDir string) error {
-	dir, err := absProjectDir(projectDir)
-	if err != nil {
-		return err
-	}
-	release, err := gitlease.Path(ctx, dir)
-	if err != nil {
-		return err
-	}
-	defer release()
-	out, code, err := gitexec.Run(ctx, dir, []string{"init"}, hermeticOpts(0))
+	output, code, err := m.InitCommand(ctx, projectDir, "", nil, nil, io.Discard)
 	if err != nil {
 		return err
 	}
 	if code != 0 {
-		return fmt.Errorf("git init failed: %s", strings.TrimSpace(string(out)))
+		return fmt.Errorf("git init failed: %s", strings.TrimSpace(string(output)))
 	}
 	return nil
+}
+
+// InitCommand runs Git initialization under the path lease and returns its CLI result.
+func (m *Manager) InitCommand(ctx context.Context, projectDir, target string, config, options []string, stdout io.Writer) ([]byte, int, error) {
+	dir, err := absProjectDir(projectDir)
+	if err != nil {
+		return nil, -1, err
+	}
+	leaseDir := dir
+	if target != "" {
+		leaseDir, err = absProjectDir(target)
+		if err != nil {
+			return nil, -1, err
+		}
+	}
+	release, err := gitlease.Path(ctx, leaseDir)
+	if err != nil {
+		return nil, -1, err
+	}
+	defer release()
+	args := make([]string, 0, len(config)*2+len(options)+2)
+	for _, override := range config {
+		args = append(args, "-c", override)
+	}
+	args = append(args, "init")
+	args = append(args, options...)
+	if target != "" {
+		args = append(args, target)
+	}
+	return gitexec.RunTo(ctx, dir, args, hermeticOpts(0), stdout)
 }
 
 func (m *Manager) Clone(ctx context.Context, url, destDir string) error {
@@ -628,6 +654,13 @@ func notifyRepoChange(ctx context.Context, projectDir string, kind repochange.Ki
 }
 
 // Untracked directories expand to files for staging and invalidation.
+func renameSource(entry porcelainEntry) string {
+	if entry.status[0] == 'R' || entry.status[1] == 'R' {
+		return entry.from
+	}
+	return ""
+}
+
 func readPorcelainStatus(ctx context.Context, dir string, branch bool) (string, []porcelainEntry, error) {
 	args := []string{"status", "--porcelain=v1", "-z", "--untracked-files=all"}
 	if branch {

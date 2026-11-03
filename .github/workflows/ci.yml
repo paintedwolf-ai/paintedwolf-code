@@ -18,13 +18,17 @@ on:
         type: choice
         default: check
         options: [check, fast, integration]
+      lane:
+        description: Optional diagnostic lane; reports no required check
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
   # A delayed draft synchronize event must not cancel a ready-for-review run.
-  group: ci-${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/') && 'merge_group' || github.event_name }}-${{ github.ref }}-${{ github.event.pull_request.draft && github.event.action != 'ready_for_review' && 'draft' || 'ready' }}
+  group: ci-${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/') && 'merge_group' || github.event_name }}-${{ github.ref }}-${{ github.event.pull_request.draft && github.event.action != 'ready_for_review' && 'draft' || 'ready' }}-${{ inputs.lane || 'all' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -33,13 +37,15 @@ jobs:
     permissions:
       contents: read
       actions: read
+      statuses: read
     uses: ./.github/workflows/verification.yml
     with:
       profile: fast
+      lane: ${{ inputs.lane || '' }}
       affected: ${{ github.event_name == 'pull_request' }}
 
   integration:
-    if: ${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' }}
+    if: ${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' && inputs.lane != 'platform' }}
     # Its jobs cancel their own run once the merge queue removes the group.
     permissions:
       contents: read
@@ -49,17 +55,28 @@ jobs:
     uses: ./.github/workflows/verification.yml
     with:
       profile: ${{ (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'integration' || 'check' }}
-      affected: ${{ github.event_name == 'merge_group' || inputs.profile == 'integration' }}
+      lane: ${{ inputs.lane || '' }}
+      affected: ${{ github.event_name == 'merge_group' || (inputs.profile == 'integration' && inputs.lane == '') }}
 
   platform:
-    if: inputs.profile == 'check'
+    if: inputs.profile == 'check' && (inputs.lane == '' || inputs.lane == 'platform')
     uses: ./.github/workflows/platform-verification.yml
 
+  platform-lanes:
+    if: inputs.profile == 'check' && inputs.lane == ''
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: release
+      platform: true
+
   check:
-    name: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check' }}
+    name: ${{ inputs.lane != '' && 'diagnostic-summary' || (github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check') }}
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
-    if: ${{ !cancelled() && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}
-    needs: [fast, integration, platform]
+    if: ${{ !cancelled() && inputs.lane == '' && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}
+    needs: [fast, integration, platform, platform-lanes]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -67,14 +84,14 @@ jobs:
       - name: Require this tier's verification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}
+          SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform,platform-lanes', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}
           DRAFT: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"
 
   dispatched-check:
     # A pull request's checks leave out dispatch runs; report the required
     # check as a commit status instead.
-    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.lane == '' }}
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 5

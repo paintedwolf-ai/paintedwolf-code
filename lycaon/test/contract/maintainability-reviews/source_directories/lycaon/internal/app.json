@@ -2,14 +2,16 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/app",
   "kind": "module",
-  "workstream": "tool-prerequisite-recovery",
+  "workstream": "application-lifecycle",
   "disposition": "retain",
-  "reason": "Application construction and adapters remain a bounded 28-source-file composition module; P03 adds no source file or runtime dependency here. The new mixed contract uses real source capture, editor publication and one SQL aggregate settlement, proving preserved domain outcomes without a new coordinator owner or synthetic child calls. Existing adapter and mixed fixtures passed; renew the selected test boundary, not the source membership.",
-  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
-  "ceiling": 28,
+  "reason": "Retain exactly 29 application composition files. Integrity cleanup composition adds one adapter beside the existing runner registry: the database owns audit state and quarantine, persistence owns recovery finalization, and the application orders their runners. It introduces no second audit or persistence owner. Joined runner contracts preserve ordinary use and checkpoint/resource work while delaying irreversible cleanup; readiness returns with custody retained and retries finalization after audit success. Existing command-operation/editor adapters retain their domain ownership. Further membership growth renews review.",
+  "reviewed_commit": "562e6df86438543c9bc0bd3920427b21bbb764a2",
+  "ceiling": 29,
   "boundaries": {
-    "lycaon/internal/app/command_operation_contract_test.go": "bdb5c916997530e875414587959dd061d162d7a5bf523144502ea636ff9db12d",
-    "lycaon/internal/app/editor_documents_adapter_test.go": "38027a6ca3d2029a4f085e46a45ed05300920fcad952dffa3d6fcb74522edb90"
+    "lycaon/internal/app/command_operation_contract_test.go": "a20ae29d98fe211580d2f833e5c432e095cac9e6513add798606c8600952e5f8",
+    "lycaon/internal/app/editor_documents_adapter_test.go": "38027a6ca3d2029a4f085e46a45ed05300920fcad952dffa3d6fcb74522edb90",
+    "lycaon/internal/app/integrity_cleanup_test.go": "aebd5fe9a83b2b69a6b759c08fabbb1fec689a3aa31142ac97f0a488a97bb646",
+    "lycaon/internal/app/persistence/rebuild_recovery_test.go": "406884e5657a2ee372c547012a361586884f71b84d8fa200f60bdf3a88600972"
   },
-  "reviewed_shape": "cb83af53f96a45d2ba0b07b526b660853b1ce8061da9e48305c1dfb5be191e09"
+  "reviewed_shape": "ac9605fbb85365cd46fa73067b34facbe0dc11e6ca478cd08fceb01b9e15e024"
 }

@@ -3,10 +3,10 @@ id: SUMMARIZE_PATTERN_NEEDS_PATH
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - summarize
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.operation]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "SUMMARIZE_PATTERN_NEEDS_PATH"

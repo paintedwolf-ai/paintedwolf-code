@@ -21,11 +21,14 @@ func RenderToolProceduresBlock(
 	sort.Strings(names)
 	vars := prompts.VisibleToolsNativePartialVars(names)
 	vars["offered_tools"] = names
+	if !prompts.ScopeAllowsCommandMutation(profileID) {
+		prompts.ApplyReadOnlyCommandEffects(names, nil, vars)
+	}
 	mergeRunnerCapabilityVars(names, vars)
 	prompts.MergeHTTPActionVars(names, vars)
 	surface := "worker"
 	host := promptunit.HostWorker
-	if profileID == prompts.CoordinatorProfileID {
+	if profileID == prompts.CoordinatorProfileID || prompts.IsCoordinatorSurfaceID(profileID) {
 		surface = "coordinator"
 		host = promptunit.HostCoordinator
 	}

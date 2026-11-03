@@ -16,8 +16,24 @@ func observedURLs(secrets *secretcap.Resolution, finalURL string, hops []outboun
 		out = make([]outboundhttp.Hop, len(hops))
 		for i, hop := range hops {
 			hop.URL, hop.Location = render(hop.URL), render(hop.Location)
+			hop.Headers = renderHeaders(render, hop.Headers)
+			if hop.Wire != nil {
+				wire := *hop.Wire
+				wire.Headers = renderHeaders(render, wire.Headers)
+				hop.Wire = &wire
+			}
 			out[i] = hop
 		}
 	}
 	return render(finalURL), out
+}
+
+// renderHeaders presents redirect header values with resolved secrets shown
+// as their references, as hop URLs are.
+func renderHeaders(render func(string) string, headers []outboundhttp.Header) []outboundhttp.Header {
+	out := make([]outboundhttp.Header, len(headers))
+	for i, h := range headers {
+		out[i] = outboundhttp.Header{Name: h.Name, Value: render(h.Value)}
+	}
+	return out
 }

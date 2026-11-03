@@ -15,6 +15,10 @@ on:
         description: Catalog profile (fast, integration, check, nightly, or release)
         required: true
         type: string
+      lane:
+        description: Diagnostic lane selection, permitted only for manual dispatch
+        type: string
+        default: ''
       affected:
         description: Resolve the event change base and narrow integration lanes
         default: false
@@ -24,7 +28,7 @@ on:
         default: all
         type: string
       platform:
-        description: Run only the profile's platform lanes, beside a gate that covers the others
+        description: Run the profile's platform and scale supplements beside its ordinary gate
         default: false
         type: boolean
 
@@ -60,24 +64,27 @@ jobs:
           SUITE: ${{ inputs.suite }}
           AFFECTED: ${{ inputs.affected }}
           PLATFORM: ${{ inputs.platform }}
+          LANE: ${{ inputs.lane }}
           # Reads main's nightly receipts; without actions read access the plan uses lane budgets.
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+          if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch && -z "$LANE" ]]; then
             PW_CHANGE_BASE="$(PYTHONPATH=scripts python3 -m ci_policy.queue_dispatch)"
             export PW_CHANGE_BASE
             echo "change-base=$PW_CHANGE_BASE" >> "$GITHUB_OUTPUT"
           fi
           args=()
+          if [[ -n "$LANE" ]]; then args+=(--lane "$LANE"); fi
           if [[ "$AFFECTED" == true ]]; then args+=(--affected); fi
           if [[ "$PLATFORM" == true ]]; then args+=(--platform); fi
-          # The fast tier is one unsharded job, which measurements would not change.
+          # Fast jobs start together; historical ordering affects the wider profiles.
           if [[ "$PROFILE" != fast ]]; then
             python3 scripts/ci_verification.py timings > "$RUNNER_TEMP/timings.json"
             args+=(--timings "$RUNNER_TEMP/timings.json")
             echo "package-timings=$(jq -c '.packages // {}' "$RUNNER_TEMP/timings.json")" >> "$GITHUB_OUTPUT"
           fi
           if [[ "$PROFILE" == fast && "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            PYTHONPATH=scripts python3 -m ci_policy.admission_metadata
             early="$(PYTHONPATH=scripts python3 -m ci_policy.merge_preflight)"
             echo "early-target=$early" >> "$GITHUB_OUTPUT"
           fi
@@ -129,6 +136,7 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/merge-group-watch
+        if: inputs.lane == ''
 
       - uses: ./.github/actions/setup-analysis
         if: matrix.setup == 'analysis'
@@ -149,10 +157,18 @@ jobs:
           linux-launch: ${{ matrix.linux_launch }}
           repository-tools: ${{ matrix.repository_tools }}
           nix: ${{ matrix.nix }}
+          userlands: ${{ matrix.userlands }}
 
       # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy
         if: ${{ matrix.setup == 'shell' }}
+
+      - name: Check completed commit certification before execution
+        if: inputs.profile == 'fast' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.admission_metadata
 
       - name: Run verification
         timeout-minutes: ${{ matrix.minutes }}

@@ -37,7 +37,7 @@ func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {
 	tctx := toolContext("coordinator", "sess-1", projectDir)
 
 	_, err = reg.Run(ctx, "state_start", map[string]any{
-		"workflow_id": "plan", "workflow_version": "1.0.0",
+		"workflow_id": "plan", "workflow_version": "1.0.1",
 	}, tctx)
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL" {
@@ -50,7 +50,7 @@ func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {
 		}
 	}
 	_, err = mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 

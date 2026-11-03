@@ -53,7 +53,7 @@ func TestStateStartRequiresHumanApproval(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	_, err := mgr.Starts.Start(context.Background(), sessionID, api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 	})
 	if !errors.Is(err, runstate.ErrWorkflowStartRequiresHumanApproval) {
 		t.Fatalf("Start err = %v want WORKFLOW_START_REQUIRES_HUMAN_APPROVAL", err)
@@ -79,7 +79,7 @@ func TestSlashStartSupersedesReviewedCatalogRun(t *testing.T) {
 	ctx := context.Background()
 	first, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "mgr.StartHuman", err)
 
@@ -122,12 +122,12 @@ func TestHumanStartAfterProposal(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	_, err := mgr.Ambient.StartAmbient(context.Background(), sessionID, "implement", "1.0.0")
 	testutil.FailErr(t, "mgr.Ambient.StartAmbient failed", err)
-	if err := mgr.Blueprints.Scaffold.NoteWorkflowStartProposal(context.Background(), sessionID, "plan", "1.0.0"); err != nil {
+	if err := mgr.Blueprints.Scaffold.NoteWorkflowStartProposal(context.Background(), sessionID, "plan", "1.0.1"); err != nil {
 		testutil.FailErr(t, "mgr.Blueprints.Scaffold.NoteWorkflowStartProposal failed", err)
 	}
 	run, err := mgr.Starts.StartHuman(context.Background(), sessionID, api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "mgr.StartHuman failed", err)
 	if run.BlueprintPath == "" {
@@ -137,7 +137,7 @@ func TestHumanStartAfterProposal(t *testing.T) {
 
 func TestStateStartChatDoesNotGrantApproval(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
-	if err := mgr.Blueprints.Scaffold.NoteWorkflowStartProposal(context.Background(), sessionID, "plan", "1.0.0"); err != nil {
+	if err := mgr.Blueprints.Scaffold.NoteWorkflowStartProposal(context.Background(), sessionID, "plan", "1.0.1"); err != nil {
 		testutil.FailErr(t, "mgr.Blueprints.Scaffold.NoteWorkflowStartProposal failed", err)
 	}
 	for _, msg := range []string{"yes, start plan", "go ahead", "lgtm", "approved"} {
@@ -145,7 +145,7 @@ func TestStateStartChatDoesNotGrantApproval(t *testing.T) {
 	}
 	_, err := mgr.Starts.Start(context.Background(), sessionID, api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 	})
 	if !errors.Is(err, runstate.ErrWorkflowStartRequiresHumanApproval) {
 		t.Fatalf("Start err = %v want WORKFLOW_START_REQUIRES_HUMAN_APPROVAL after chat affirmation", err)

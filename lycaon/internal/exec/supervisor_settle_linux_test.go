@@ -193,9 +193,9 @@ func TestSupervisorExitPreservesThePrimaryStatus(t *testing.T) {
 	}
 }
 
-func TestParseSupervisorTargetRequiresDescriptorCountAndCommand(t *testing.T) {
-	target, ok := parseSupervisorTarget([]string{"2", string(ProcessPriorityBelowNormal), "/bin/sh", "sh", "-c", "true"})
-	if !ok || target.extraFiles != 2 || target.priority != ProcessPriorityBelowNormal || target.path != "/bin/sh" ||
+func TestParseSupervisorTargetRequiresDescriptorLayoutAndCommand(t *testing.T) {
+	target, ok := parseSupervisorTarget([]string{"11", string(ProcessPriorityBelowNormal), "/bin/sh", "sh", "-c", "true"})
+	if !ok || target.descriptors != "11" || target.priority != ProcessPriorityBelowNormal || target.path != "/bin/sh" ||
 		strings.Join(target.args, " ") != "sh -c true" {
 		t.Fatalf("target = %+v/%v", target, ok)
 	}
@@ -230,7 +230,7 @@ func TestSupervisorLaunchReportReachesTheParent(t *testing.T) {
 		t.Helper()
 		read, status, err := os.Pipe()
 		testutil.FailErr(t, "open startup status pipe", err)
-		cmd := &exec.Cmd{Args: []string{"engine", supervisorCommand, "0", "", missing}, ExtraFiles: []*os.File{status}}
+		cmd := &exec.Cmd{Args: []string{"engine", supervisorCommand, "", "", missing}, ExtraFiles: []*os.File{status}}
 		supervisorStarts.Store(cmd, supervisorStart{read: read, write: status, target: missing})
 		if report {
 			testutil.FailErr(t, "report launch", reportLaunch(status, started))

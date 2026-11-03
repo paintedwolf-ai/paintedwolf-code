@@ -2,22 +2,18 @@
 package confine
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // helperFlag marks the confined re-exec path.
@@ -185,6 +181,9 @@ type Confinement struct {
 	LoopbackConnectPorts []uint16
 	// Browser permits local listeners independently of LocalListen.
 	Browser bool
+	// Process sets resource limits and signal dispositions the target
+	// starts with; they narrow the process, never the boundary.
+	Process ProcessAttributes
 }
 
 // DefaultConfinement builds the boundary for a valid rooted request.
@@ -263,81 +262,7 @@ func BrowserConfinement(req Request) (*Confinement, bool) {
 // ErrNestedHelper rejects wrapping from a process that is already the confine helper.
 var ErrNestedHelper = errors.New("confine: this process is already applying a sandbox profile")
 
-// Command builds the process for the selected confinement boundary.
-func Command(
-	ctx context.Context,
-	self, name string,
-	args []string,
-	c Confinement,
-) (*exec.Cmd, func(), error) {
-	if IsHelperInvocation(os.Args) {
-		return nil, func() {}, ErrNestedHelper
-	}
-	if c.HostExecution {
-		return exec.CommandContext(ctx, name, args...), func() {}, nil
-	}
-	c, err := validateProfileInputs(c)
-	if err != nil {
-		return nil, func() {}, err
-	}
-	if err := preparePackageCacheDataRoots(c, fseffect.MkdirAll); err != nil {
-		return nil, func() {}, err
-	}
-	profile, err := renderProfile(c)
-	if err != nil {
-		return nil, func() {}, err
-	}
-	// An inherited pipe keeps the profile outside writable pathnames.
-	pr, pw, err := os.Pipe()
-	if err != nil {
-		return nil, func() {}, err
-	}
-	helperArgs := []string{helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD)}
-	// ExtraFiles[0] lands on helperProfileFD in the child.
-	extra := []*os.File{pr}
-	if marker := c.lineage.ChildFile(); marker != nil {
-		helperArgs = append(helperArgs, lineageFDFlag, strconv.Itoa(helperLineageFD))
-		extra = append(extra, marker)
-	}
-	reports, closeReports := refusalReport(c)
-	if reports != nil {
-		// A nil entry leaves the marker's descriptor closed when there is none.
-		for len(extra) < helperRefusalFD-helperProfileFD {
-			extra = append(extra, nil)
-		}
-		extra = append(extra, reports)
-		helperArgs = append(helperArgs, refusalFDFlag, strconv.Itoa(helperRefusalFD))
-	}
-	helperArgs = append(append(helperArgs, "--", name), args...)
-	cmd := exec.CommandContext(ctx, self, helperArgs...)
-	cmd.ExtraFiles = extra
-	go func() {
-		defer func() { _ = pw.Close() }()
-		_, _ = io.WriteString(pw, profile)
-	}()
-	// Releasing the host's own end lets the marker report end-of-file once the
-	// last descendant exits.
-	cleanup := func() {
-		_ = pr.Close()
-		closeReports()
-		c.lineage.Started()
-	}
-	return cmd, cleanup, nil
-}
-
-// BuildProfile renders the boundary the helper applies on this platform: the
-// Seatbelt profile on macOS, the boundary plan on Linux.
-func BuildProfile(c Confinement) (string, error) {
-	c, err := validateProfileInputs(c)
-	if err != nil {
-		return "", err
-	}
-	return renderProfile(c)
-}
-
-// BuildSeatbeltProfile renders the macOS profile for c. It is what BuildProfile
-// applies on macOS and renders on every platform, so the policy it expresses
-// can be read anywhere.
+// BuildSeatbeltProfile renders the macOS profile on every platform.
 func BuildSeatbeltProfile(c Confinement) (string, error) {
 	c, err := validateProfileInputs(c)
 	if err != nil {
@@ -370,6 +295,9 @@ func validateProfileInputs(c Confinement) (Confinement, error) {
 }
 
 func renderSeatbeltProfile(c Confinement) (string, error) {
+	if err := validateSocketRealization(c.SocketGrants, socketref.KernelPathname); err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	deny := denyReport(c.refusalTag)
 	b.WriteString("(version 1)\n")

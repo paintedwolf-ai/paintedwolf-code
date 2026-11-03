@@ -195,7 +195,7 @@ func TestWorkflowAdvanceRejectsHostAutoPhase(t *testing.T) {
 	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	reg := registerAdvanceToolTestRegistry(t, mgr)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
@@ -228,7 +228,7 @@ func TestWorkflowAdvanceRejectsArguments(t *testing.T) {
 	mgr, _, _, projectDir := testManagerWithRegistry(t)
 	reg := registerAdvanceToolTestRegistry(t, mgr)
 	ctx := context.Background()
-	if _, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0"); err != nil {
+	if _, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1"); err != nil {
 		testutil.FailErr(t, "startRun failed", err)
 	}
 	_, err := reg.Run(ctx, "workflow_advance", map[string]any{"force": true}, toolContext("coordinator", "sess-1", projectDir))

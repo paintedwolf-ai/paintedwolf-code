@@ -3,13 +3,14 @@ id: JQ_PARSE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - jq
     - jq_edit
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.detail
     - paintedwolf.format

@@ -10,7 +10,7 @@ import verification_plan as planning
 
 class HostedPlanTests(unittest.TestCase):
     def test_native_admission_cannot_omit_targets_or_accept_unsafe_roots(self):
-        for declaration in (None, {}, [], {'den:test:rust': ['lycaon-den/src-tauri/']},
+        for declaration in (None, [], {'unknown:test': ['lycaon-den/src-tauri/']},
                 {'den:test:rust': [], 'decide:test': ['lycaon/internal/decide/native/']},
                 {'den:test:rust': ['../outside/'], 'decide:test': ['lycaon/internal/decide/native/']}):
             data = copy.deepcopy(planning.catalog())
@@ -26,35 +26,60 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         check = {row["lane"] for row in ci.matrix("check")["include"]}
         release = {row["lane"] for row in ci.matrix("release")["include"]}
-        platform = {name for name, lane in lanes.items() if "platform" in lane}
+        platform = {name for name, lane in lanes.items() if ci.supplemental(lane)}
         # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
         self.assertLessEqual(release, check | platform)
         self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities",
-                                   "webkit-gtk", "confinement-arm64"})
+                                   "webkit-gtk", "confinement-arm64", "reference-userlands"})
         # Qualification runs the check gate, then release's platform lanes beside the platform gates.
         self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
-    def test_ready_tier_is_one_runner_with_contracts_and_early_diagnostics(self):
+    def test_ready_tier_runs_complete_lint_beside_contracts_and_early_diagnostics(self):
         rows = ci.matrix("fast")["include"]
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(ci.max_parallel("fast"), 1)
-        stages = [stage["name"] for stage in planning.expand(ci.lanes()[rows[0]["lane"]]["targets"])]
+        self.assertEqual({row['lane'] for row in rows}, {'ready', 'ready-lint'})
+        self.assertEqual(ci.max_parallel("fast"), 2)
+        stages = [stage["name"] for row in rows
+                  for stage in planning.expand(ci.lanes()[row["lane"]]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
         self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast",
-                                       "coverage:changes", "den:coverage:changes", "scripts:coverage:changes",
+                                       "test:short",
                                        "comments:check", "test:fail-messages:check", "docs:links"})
         self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--", "./test/contract/..."])
+        analysis = next(row for row in rows if row['lane'] == 'ready-lint')
+        self.assertEqual(analysis['setup'], 'analysis')
+        self.assertEqual(ci.lanes()['ready-lint']['targets'], ['lint:full'])
+        self.assertNotIn('preflight', ci.lanes()['ready-lint'])
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
-        # Changed coverage of every language admits here: a shortfall found only in the
-        # merge group ejects the group and rebuilds the one behind it.
-        self.assertLessEqual({"coverage:changes", "den:coverage:changes", "scripts:coverage:changes"}, set(stages))
-        # Product suites remain in the integration gate.
-        self.assertFalse(set(stages) & {"test:short", "test:contract"})
-        self.assertGreaterEqual(rows[0]["minutes"], ci.lanes()["lint"]["minutes"])
+        self.assertFalse(set(stages) & {"coverage:changes", "den:coverage:changes", "scripts:coverage:changes"})
+        landing = [target for lane in ci.lanes().values() if "integration" in lane["profiles"]
+                   for target in lane["targets"]]
+        for target in ("coverage:changes", "den:coverage:changes", "scripts:coverage:changes"):
+            self.assertEqual(landing.count(target), 1)
+        self.assertNotIn("den:test", landing)
+        self.assertNotIn("test:runner", landing)
+        self.assertIn("test:short", stages)
+        self.assertGreaterEqual(analysis["minutes"], ci.lanes()["lint"]["minutes"])
+
+
+    def test_parallel_analysis_cannot_replace_the_admission_contracts(self):
+        for change in ('contracts', 'scope', 'setup', 'preflight'):
+            data = copy.deepcopy(planning.catalog())
+            analysis = data['ci']['ready-lint']
+            if change == 'contracts':
+                del data['ci']['ready']['preflight']
+            elif change == 'scope':
+                analysis['targets'] = ['lint:fast']
+            elif change == 'setup':
+                analysis['setup'] = 'verification'
+            else:
+                analysis['preflight'] = ['test:contract', '--', './test/contract/...']
+            with self.subTest(change=change), patch.object(ci, 'catalog', return_value=data):
+                with self.assertRaises(ValueError):
+                    ci.matrix('fast')
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
-        for mutation in ("missing", "fast-outside", "fast-twice", "duplicate", "unknown", "unbounded"):
+        for mutation in ("missing", "fast-outside", "fast-twice", "fast-missing", "duplicate", "unknown", "unbounded"):
             with self.subTest(mutation=mutation):
                 data = copy.deepcopy(planning.catalog())
                 if mutation == "missing":
@@ -63,6 +88,8 @@ class HostedPlanTests(unittest.TestCase):
                     data["ci"]["ready"]["targets"].append("test:full")
                 elif mutation == "fast-twice":
                     data["ci"]["ready"]["targets"].append("budgets")
+                elif mutation == 'fast-missing':
+                    del data['ci']['ready-lint']
                 elif mutation == "duplicate":
                     data["ci"]["duplicate"] = data["ci"]["frontend"]
                 elif mutation == "unknown":
@@ -104,7 +131,7 @@ class HostedPlanTests(unittest.TestCase):
         data = copy.deepcopy(planning.catalog())
         data["ci"]["ready"]["preflight"] = ["test:contract", "--", "./test/contract/evidence"]
         with patch.object(ci, "catalog", return_value=data):
-            self.assertEqual(len(ci.matrix("fast")["include"]), 1)
+            self.assertEqual(len(ci.matrix("fast")["include"]), 2)
 
     def test_nightly_selection_includes_only_requested_and_unconditional_jobs(self):
         lanes = ci.lanes()
@@ -112,12 +139,12 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
-                                   "den:webkit:atspi", "test:confine:linux", "nix:check",
+                                   "den:webkit:atspi", "test:confine:linux", "nix:check", "test:userlands", "test:conformance:live",
                                    "budgets", "coverage:changes", "den:coverage:changes", "scripts:coverage:changes",
                                    "build", "build:cross", "licenses:notices", "check:drift", "openapi:lint",
                                    "validate:workflows", "oar:verify", "lint:full", "test:fail-messages:check",
-                                   "comments:check", "lint:vuln", "test:runner", "den:typecheck", "den:lint",
-                                   "den:test", "den:test:rust", "decide:test"})
+                                   "comments:check", "lint:vuln", "den:typecheck", "den:lint",
+                                   "den:test:rust", "decide:test"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
@@ -230,7 +257,7 @@ class HostedPlanTests(unittest.TestCase):
                 elif mutation in {"check", "fast"}:
                     platform["profiles"].append(mutation)
                 else:
-                    platform["targets"].append("den:test")
+                    platform["targets"].append("den:coverage:changes")
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.lanes()
 
@@ -249,6 +276,16 @@ class HostedPlanTests(unittest.TestCase):
                     targets = ci.lanes()[row["lane"]]["targets"]
                     self.assertEqual(row["linux_launch"], any(ci.runs_protected_launch(target) for target in targets))
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
+
+    def test_lanes_learn_whether_they_need_the_reference_userlands(self):
+        for profile in ci.PROFILES:
+            for row in ci.matrix(profile)["include"]:
+                with self.subTest(profile=profile, lane=row["lane"]):
+                    self.assertEqual(row["userlands"], "test:userlands" in ci.lanes()[row["lane"]]["targets"])
+        for profile in ("integration", "nightly", "release"):
+            with self.subTest(profile=profile):
+                self.assertEqual([row["lane"] for row in ci.matrix(profile)["include"] if row["userlands"]],
+                                 ["reference-userlands"])
 
     def test_lanes_that_reach_the_protected_launch_leg_provision_its_display(self):
         # Catalog recipes over the whole tree reach internal/launchguard; scripted runs declare it.
@@ -275,12 +312,12 @@ class HostedPlanTests(unittest.TestCase):
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["repository_tools"],
                                      bool({"test:runner", "scripts:coverage:changes"} & set(ci.lanes()[row["lane"]]["targets"])))
-        self.assertTrue(any(row["lane"] == "ready" and row["repository_tools"] for row in ci.matrix("fast")["include"]))
+        self.assertFalse(any(row["repository_tools"] for row in ci.matrix("fast")["include"]))
         self.assertIn("runner", [row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]])
 
         scope = {"base": "base", "head": "head", "paths": ["scripts/ci_policy/hosted_plan.py"], "full": False}
         self.assertEqual([row["lane"] for row in ci.matrix("fast", scope=scope)["include"]
-                          if row["repository_tools"]], ["ready"])
+                          if row["repository_tools"]], [])
         scope["paths"] = ["lycaon/internal/settings/settings.go"]
         self.assertFalse(any(row["repository_tools"] for row in ci.matrix("fast", scope=scope)["include"]))
         # A broad scope runs every scripts suite, and may carry no paths at all.
@@ -324,7 +361,7 @@ class HostedPlanTests(unittest.TestCase):
             with self.subTest(profile=profile):
                 rows = ci.matrix(profile, platform=True)["include"]
                 self.assertTrue(rows)
-                self.assertTrue(all("platform" in ci.lanes()[row["lane"]] for row in rows))
+                self.assertTrue(all(ci.supplemental(ci.lanes()[row["lane"]]) for row in rows))
         scope = dict(full=False, paths=["lycaon/internal/confine/boundary_linux.go"])
         self.assertEqual({row["lane"] for row in ci.matrix("integration", scope=scope, platform=True)["include"]},
                          {"confinement-arm64"})

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -57,5 +58,70 @@ func TestRecoveryWalkReleasesCursorBeforeCallbacksAcrossPages(t *testing.T) {
 	}
 	if err := store.Retention.WalkRecovery(ctx, "p1", "paged", count+1, false, func(RecoveryEntry) error { return nil }); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("incomplete manifest accepted: %v", err)
+	}
+}
+
+func TestRecoveryWriterDeduplicatesRepeatedObjectHashesAcrossPages(t *testing.T) {
+	store, ctx := openLedger(t)
+	dir := t.TempDir()
+	testutil.FailErr(t, "write a", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("aaa"), 0o600))
+	testutil.FailErr(t, "write b", os.WriteFile(filepath.Join(dir, "b.txt"), []byte("bbb"), 0o600))
+	scope, err := os.OpenRoot(dir)
+	testutil.FailErr(t, "open root", err)
+	defer func() { _ = scope.Close() }()
+
+	writer, err := store.Retention.BeginRecovery(ctx, "p1", "dedup")
+	testutil.FailErr(t, "begin recovery", err)
+	defer writer.Close()
+
+	// Append two entries with identical content and one with distinct content:
+	// the current page must queue only the two unique objects.
+	first, err := writer.Append(ctx, RecoveryEntry{Path: "f0", Mode: 0o600}, scope, "a.txt", nil)
+	testutil.FailErr(t, "append f0", err)
+	_, err = writer.Append(ctx, RecoveryEntry{Path: "f1", Mode: 0o600}, scope, "a.txt", nil)
+	testutil.FailErr(t, "append f1", err)
+	second, err := writer.Append(ctx, RecoveryEntry{Path: "f2", Mode: 0o600}, scope, "b.txt", nil)
+	testutil.FailErr(t, "append f2", err)
+	if len(writer.objects) != 2 {
+		t.Fatalf("page queued %d objects, want 2 unique captures", len(writer.objects))
+	}
+
+	// Fill the rest of the first page and spill into a second page using the
+	// already-seen content hashes.
+	const total = recoveryPageSize + 10
+	for i := 3; i < total; i++ {
+		src := "a.txt"
+		if i%2 == 1 {
+			src = "b.txt"
+		}
+		_, err := writer.Append(ctx, RecoveryEntry{Path: fmt.Sprintf("f%d", i), Mode: 0o600}, scope, src, nil)
+		testutil.FailErr(t, "append repeated", err)
+	}
+	if len(writer.objects) != 0 {
+		t.Fatalf("second page queued %d already-committed objects, want 0", len(writer.objects))
+	}
+
+	// Exercise the bounded committedObjects reset when full.
+	for i := range recoverySeenObjectMax {
+		writer.committedObjects[fmt.Sprintf("seed-%d", i)] = struct{}{}
+	}
+	testutil.FailErr(t, "write c", os.WriteFile(filepath.Join(dir, "c.txt"), []byte("ccc"), 0o600))
+	third, err := writer.Append(ctx, RecoveryEntry{Path: fmt.Sprintf("f%d", total), Mode: 0o600}, scope, "c.txt", nil)
+	testutil.FailErr(t, "append f_last", err)
+	testutil.FailErr(t, "flush final", writer.Flush(ctx))
+	if len(writer.committedObjects) != 1 {
+		t.Fatalf("committedObjects cap did not reset when full: len=%d", len(writer.committedObjects))
+	}
+
+	var objectRows, entryRows int
+	testutil.FailErr(t, "count recovery objects", store.sqlDB.QueryRowContext(ctx,
+		`SELECT count(*) FROM source_recovery_objects WHERE project_id='p1' AND recovery_id='dedup'`).Scan(&objectRows))
+	testutil.FailErr(t, "count recovery entries", store.sqlDB.QueryRowContext(ctx,
+		`SELECT count(*) FROM source_recovery_entries WHERE project_id='p1' AND recovery_id='dedup'`).Scan(&entryRows))
+	if objectRows != 3 || entryRows != total+1 {
+		t.Fatalf("recovery rows objects=%d entries=%d, want 3 and %d", objectRows, entryRows, total+1)
+	}
+	if first.SHA == "" || second.SHA == "" || third.SHA == "" || first.SHA == second.SHA {
+		t.Fatalf("unexpected entry hashes: %q %q %q", first.SHA, second.SHA, third.SHA)
 	}
 }

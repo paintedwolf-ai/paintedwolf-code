@@ -10,6 +10,9 @@ func (c ToolContext) RecordSourceLocation(target api.NavigationTarget) {
 	if c.Effects.Out == nil || target.ProjectID != c.Identity.ProjectID {
 		return
 	}
+	if c.Effects.Out.SourceContext != nil && c.Effects.Out.SourceContext.Truncated {
+		return
+	}
 	if !sourceref.Valid(target) {
 		return
 	}
@@ -34,6 +37,9 @@ func (c ToolContext) RecordSourceLocation(target api.NavigationTarget) {
 // RecordSourcePath resolves a structured producer path in its workspace.
 func (c ToolContext) RecordSourcePath(value string, kind api.NavigationEntryKind) {
 	if c.Effects.Out == nil || c.Identity.ProjectID == "" {
+		return
+	}
+	if c.Effects.Out.SourceContext != nil && c.Effects.Out.SourceContext.Truncated {
 		return
 	}
 	root, path, ok := c.SourceLocation(value)

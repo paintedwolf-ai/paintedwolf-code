@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -263,9 +264,13 @@ func TestLinuxUnixSocketGrantConnectsOnlyItsPath(t *testing.T) {
 	granted := greeter(t, "unix", filepath.Join(dir, "granted.sock"))
 	other := greeter(t, "unix", filepath.Join(dir, "other.sock"))
 	grantedPath := granted.Addr().String()
+	ctx, scope := socketref.WithScope(t.Context())
+	defer scope.Close()
+	grant, err := confine.CaptureSocketGrant(ctx, confine.SocketGrant{ApprovedPath: grantedPath, ResolvedPath: grantedPath})
+	testutil.FailErr(t, "capture reviewed command socket", err)
 	c, lease := boundConfinement(t, confine.Confinement{
 		Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
-		SocketGrants: []confine.SocketGrant{{ApprovedPath: grantedPath, ResolvedPath: grantedPath}},
+		SocketGrants: []confine.SocketGrant{grant},
 	})
 	out := probeLines(t, self, *c, "unixconnect", grantedPath, other.Addr().String())
 	if !strings.Contains(out, "connect "+grantedPath+": ok host") {

@@ -13,7 +13,7 @@ import (
 const ciGateStep = "python3 scripts/ci_verification.py gate"
 
 // A ready pull request runs the fast tier; the merge queue runs the integration gate on
-// the commit that lands; a dispatch runs either tier by hand. Each reports the required check.
+// the commit that lands; a full dispatch runs either tier by hand.
 func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 	t.Parallel()
 	workflow := hostedWorkflowFile(t, "ci")
@@ -44,14 +44,19 @@ func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 		t.Error("ready pull requests, and only they or a dispatch asking for it, run the fast tier")
 	}
 	if integration.With["profile"] != "${{ (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'integration' || 'check' }}" ||
-		integration.If != "${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' }}" {
+		integration.If != "${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' && inputs.lane != 'platform' }}" {
 		t.Error("merge groups run the integration gate, and a full dispatch the check profile")
 	}
-	if platform.Uses != "./.github/workflows/platform-verification.yml" || platform.If != "inputs.profile == 'check'" {
+	if platform.Uses != "./.github/workflows/platform-verification.yml" || platform.If != "inputs.profile == 'check' && (inputs.lane == '' || inputs.lane == 'platform')" {
 		t.Error("a full dispatch must include platform qualification")
 	}
-	requireHostedGate(t, jobs, "check", []string{"fast", "integration", "platform"})
-	const skipped = "${{ inputs.profile == 'check' && 'fast' || format('{0},platform', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}"
+	supplemental := jobs["platform-lanes"]
+	if supplemental.Uses != "./.github/workflows/verification.yml" || supplemental.If != "inputs.profile == 'check' && inputs.lane == ''" ||
+		supplemental.With["profile"] != "release" || supplemental.With["platform"] != "true" {
+		t.Error("a full dispatch must include the catalog's supplemental qualification lanes")
+	}
+	requireHostedGate(t, jobs, "check", []string{"fast", "integration", "platform", "platform-lanes"})
+	const skipped = "${{ inputs.profile == 'check' && 'fast' || format('{0},platform,platform-lanes', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}"
 	for _, step := range jobs["check"].Steps {
 		if strings.HasPrefix(step.Run, ciGateStep) && (step.Env["SKIPPED"] != skipped || !strings.Contains(step.Run, `--skipped "$SKIPPED"`)) {
 			t.Error("each event may excuse only the tiers it does not run")
@@ -66,7 +71,7 @@ func TestDispatchedRunsReportTheRequiredCheck(t *testing.T) {
 	jobs := hostedWorkflowFile(t, "ci").Jobs
 	report := jobs["dispatched-check"]
 	if needs := hostedNeeds(t, report); !slices.Equal(needs, []string{"check"}) ||
-		report.If != "${{ !cancelled() && github.event_name == 'workflow_dispatch' }}" {
+		report.If != "${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.lane == '' }}" {
 		t.Errorf("only a dispatch reports its check job's result, got needs %v if %q", needs, report.If)
 	}
 	if want := map[string]string{"statuses": "write"}; !maps.Equal(report.Permissions, want) {
@@ -78,7 +83,7 @@ func TestDispatchedRunsReportTheRequiredCheck(t *testing.T) {
 		t.Error("the dispatched check must report the check job's result as the check status on the dispatched commit, without running branch code")
 	}
 	for name, job := range jobs {
-		if name != "dispatched-check" && job.Permissions["statuses"] != "" {
+		if name != "dispatched-check" && job.Permissions["statuses"] == "write" {
 			t.Errorf("%s runs branch code and must not write commit statuses", name)
 		}
 	}
@@ -86,7 +91,7 @@ func TestDispatchedRunsReportTheRequiredCheck(t *testing.T) {
 
 // Drafts spend no verification runners, never pass the required check, and get
 // the fast tier once marked ready.
-func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
+func TestDraftAndDiagnosticRunsCannotSatisfyTheRequiredCheck(t *testing.T) {
 	t.Parallel()
 	workflow := hostedWorkflowFile(t, "ci")
 	var pullRequest struct{ Types []string }
@@ -101,12 +106,12 @@ func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
 		t.Error("draft pull requests must wait unless the event marks them ready")
 	}
 	const draftGroup = "-${{ github.event.pull_request.draft && github.event.action != 'ready_for_review' && 'draft' || 'ready' }}"
-	if !strings.HasSuffix(workflow.Concurrency.Group, draftGroup) {
+	if !strings.Contains(workflow.Concurrency.Group, draftGroup) {
 		t.Error("draft events must use a separate concurrency group so they cannot cancel ready verification")
 	}
-	const checkName = "${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check' }}"
+	const checkName = "${{ inputs.lane != '' && 'diagnostic-summary' || (github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check') }}"
 	if workflow.Jobs["check"].Name != checkName {
-		t.Error("a skipped draft aggregate must not satisfy the ready pull request's required check")
+		t.Error("skipped draft and diagnostic aggregates must not satisfy the required check")
 	}
 	refused := false
 	for _, step := range workflow.Jobs["check"].Steps {
@@ -126,7 +131,7 @@ func TestMergeGroupJobsStopWithTheirRemovedGroup(t *testing.T) {
 	if ci.Permissions["actions"] != "" {
 		t.Error("pull request CI runs unreviewed code and must not hold actions write")
 	}
-	if want := map[string]string{"contents": "read", "actions": "read"}; !maps.Equal(ci.Jobs["fast"].Permissions, want) {
+	if want := map[string]string{"contents": "read", "actions": "read", "statuses": "read"}; !maps.Equal(ci.Jobs["fast"].Permissions, want) {
 		t.Errorf("pull request CI reads its previous run's receipts and needs exactly %v, got %v", want, ci.Jobs["fast"].Permissions)
 	}
 	if want := map[string]string{"contents": "read", "actions": "write", "pull-requests": "read"}; !maps.Equal(ci.Jobs["integration"].Permissions, want) {

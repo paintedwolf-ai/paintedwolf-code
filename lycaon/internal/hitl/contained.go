@@ -88,6 +88,7 @@ type ActionConfineInputs struct {
 	Roots []string
 	// SessionScratchRoot is the session-owned scratch root.
 	SessionScratchRoot string
+	SessionOutputRoot  string
 	// OverlayWriteRoots contains chat-scoped write grants.
 	OverlayWriteRoots []string
 	PolicyWriteGrants []confine.ProtectedPathGrant
@@ -120,6 +121,7 @@ func ActionConfineRequest(in ActionConfineInputs) confine.Request {
 		ProjectID:            in.ProjectID,
 		Roots:                append([]string(nil), in.Roots...),
 		SessionScratchRoot:   in.SessionScratchRoot,
+		SessionOutputRoot:    in.SessionOutputRoot,
 		GrantedWriteRoots:    overlayRoots,
 		SocketGrants:         append([]confine.SocketGrant(nil), in.SocketGrants...),
 		ProtectedWriteGrants: protected,

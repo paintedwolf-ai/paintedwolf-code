@@ -60,7 +60,7 @@ func TestDetachThenReadDenied(t *testing.T) {
 		t.Fatalf("workspace_root_id = %q want empty", gotSess.WorkspaceRootID)
 	}
 
-	_, err = h.ToolRegistry.Run(t.Context(), "read", map[string]any{"path": "note.txt"}, tools.ToolContext{
+	_, err = h.ToolRegistry.Run(t.Context(), "command", map[string]any{"command": "cat note.txt"}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{ProjectID: project.ID,
 			SessionID: sess.ID},
 		Source: tools.InvocationSource{Roots: nil},

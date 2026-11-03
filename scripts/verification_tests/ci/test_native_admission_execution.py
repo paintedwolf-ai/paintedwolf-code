@@ -6,31 +6,19 @@ from ci_policy import native_admission, native_verify, hosted_plan
 
 
 class NativeAdmissionTests(unittest.TestCase):
-    def test_native_obligations_follow_changed_sources_and_unknown_scope(self):
-        for paths, expected in [(['docs/design.md'], []), (['lycaon/internal/session/a.go'], []),
-                (['lycaon-den/src-tauri/crates/desktop-settings-observer/src/main.rs'], ['den:test:rust']),
-                (['lycaon/internal/decide/native/src/main.rs'], ['decide:test']),
-                (['lycaon-den/src-tauri/src/main.rs', 'lycaon/internal/decide/native/src/main.rs'],
-                 ['den:test:rust', 'decide:test'])]:
-            scope = {'full': False, 'paths': paths}
-            self.assertEqual(native_admission.targets(scope), expected)
-            self.assertEqual(native_admission.commands(scope),
-                             [['./task', target, '--', '--compile-only'] for target in expected])
-        for scope in (None, {'full': True}):
-            self.assertEqual(native_admission.targets(scope), ['den:test:rust', 'decide:test'])
-
-    def test_admission_provisions_native_inputs_only_for_selected_compilation(self):
-        for scope, setup in [({'full': False, 'paths': ['docs/design.md']}, 'verification'),
-                ({'full': False, 'paths': ['lycaon-den/src-tauri/src/main.rs']}, 'shell'),
-                ({'full': True}, 'shell'), (None, 'shell')]:
+    def test_native_compilation_occurs_only_in_complete_landing_checks(self):
+        for scope in (None, {'full': True}, {'full': False, 'paths': ['lycaon-den/src-tauri/src/main.rs']},
+                      {'full': False, 'paths': ['lycaon/internal/decide/native/src/main.rs']}):
+            self.assertEqual(native_admission.targets(scope), [])
+            expected = [['./task', 'test:confine:linux', '--', 'supervisor']] if scope is None or scope['full'] else []
+            self.assertEqual(native_admission.commands(scope), expected)
             rows = hosted_plan.matrix('fast', scope=scope)['include']
-            self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]['setup'], setup)
-            self.assertTrue(rows[0]['runtime_engines'])
-        self.assertEqual(hosted_plan.max_parallel('fast'), 1)
-        rows = {row['lane']: row for row in hosted_plan.matrix('integration')['include']}
-        self.assertFalse(rows['native']['runtime_engines'])
-        self.assertTrue(rows['behavior']['runtime_engines'])
+            self.assertEqual({row['lane']: row['setup'] for row in rows},
+                             {'ready': 'verification', 'ready-lint': 'analysis'})
+        lanes = hosted_plan.lanes()
+        self.assertEqual(lanes['native']['targets'], ['den:test:rust', 'decide:test'])
+        self.assertIn('integration', lanes['native']['profiles'])
+        self.assertFalse(lanes['native']['runtime_engines'])
 
     def test_native_selection_is_checked_before_admission_and_cannot_reuse_full_tests(self):
         for target in ('den:test:rust', 'decide:test'):

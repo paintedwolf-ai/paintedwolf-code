@@ -6,7 +6,7 @@
 
 ### Discovery
 
-- Trust current receipts and any board `Files:` / `Top-level:` map instead of re-enumerating them. Board **`Repo: empty · no files yet · skip read scouts`** means there is nothing to survey — skip project-tree survey workers / `list_dir` / `summarize` on `.`; author files or ask. Exact leaf facts, quotes, and edits use bounded inline reads. **Layout unknown** (and not board-empty) — take the survey-ladder first step, or read scouts when inline survey is insufficient.
+- Trust current receipts and any board `Files:` / `Top-level:` map instead of re-enumerating them. Board **`Repo: empty · no files yet · skip read scouts`** means there is nothing to survey — skip project-tree survey workers / `command` / `summarize` on `.`; author files or ask. Exact leaf facts, quotes, and edits use bounded inline reads. **Layout unknown** (and not board-empty) — take the survey-ladder first step, or read scouts when inline survey is insufficient.
 
 {{ units.orientation }}
 

@@ -21,6 +21,7 @@ type SourceHeadReader interface {
 }
 
 type RecoveryStorage interface {
+	SweepBlobs(context.Context) error
 	HoldRecoveryReferences() func()
 	BeginRecovery(context.Context, string, string) (*sourceledger.RecoveryWriter, error)
 	CopyRecoveryFile(context.Context, string, io.Writer) error

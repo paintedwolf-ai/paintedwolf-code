@@ -62,7 +62,7 @@ func TestNativeWriteCreatesAnAbsentCacheRootThroughTheDescriptorDoor(t *testing.
 	testutil.FailErr(t, "create cache file", err)
 	file, err := fseffect.OpenRead(resolved.EffectLocation())
 	testutil.FailErr(t, "open cache file", err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(file)
 	testutil.FailErr(t, "read cache file", err)
 	if string(data) != "ready" || !resolved.External {

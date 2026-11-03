@@ -185,6 +185,13 @@ jobs:
         with:
           save: 'true'
 
+      # Lanes that run test:userlands restore these rather than rebuild each userland from its pins.
+      - name: Publish reference userland images
+        if: steps.state.outputs.prepare == 'true' && (runner.os == 'Linux' && github.ref == 'refs/heads/main')
+        uses: ./.github/actions/setup-reference-userlands
+        with:
+          save: 'true'
+
       # Lint lanes run on Linux. Findings on main do not stop warming; nightly reports them.
       - name: Record lint diagnostics
         if: steps.state.outputs.prepare == 'true' && steps.state.outputs.maintenance == 'true' && (runner.os == 'Linux')

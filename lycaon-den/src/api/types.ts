@@ -200,6 +200,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sessions/{id}/program-receipts/{program_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect bounded program and host child receipts */
+        get: operations["getCommandProgramReceipt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sessions/{id}/invocations": {
         parameters: {
             query?: never;
@@ -5843,10 +5860,12 @@ export interface components {
             status: components["schemas"]["ActivityStatus"];
             /** Format: date-time */
             started_at: string;
+            /** @description The running tool, or on awaiting_wake the tool call that parked the session (`wait`, or `command` whose program waits). Absent on a host-armed awaiting_wake lease. */
             tool_name?: string;
+            /** @description The call tool_name names. On awaiting_wake it binds the lease to the parked call, whose result carries completion state parked. */
             tool_call_id?: string;
             progress?: components["schemas"]["ToolProgress"];
-            /** @description Subscriptions that will end an awaiting_wake lease, in the host's own vocabulary (timer, next_worker_done, process_done, …). Present only on awaiting_wake, and what the client names rather than inferring a subject from the sleep reason. */
+            /** @description Subscriptions that will end an awaiting_wake lease, in the host's own vocabulary (timer, next_worker_done, process_done, …). Present only on awaiting_wake, and what the client names rather than inferring a subject from the sleep reason. A parked command's lease subscribes to program_done, which only the host arms. */
             wait_triggers?: string[];
             /** @description What asked the local decision engine. Present only on deciding, which the host opens only while an available engine is answering; the answer arrives as a turn_load event. */
             decision_trigger?: components["schemas"]["TurnLoadTrigger"];
@@ -6182,6 +6201,8 @@ export interface components {
             tool: string;
             /** @description Arguments accepted directly by the named tool */
             args: {
+                /** @description Complete portable command program for an inspection action */
+                command?: string;
                 path?: string;
                 paths?: string[];
                 task?: string;
@@ -7869,6 +7890,8 @@ export interface components {
             /** @description Host-resolved readable target retained with the result and screened before title formatting. Exact routing identifiers remain in tool_args. */
             display_subject?: string;
             invocation?: components["schemas"]["InvocationReceipt"];
+            /** @description Host portable-program receipt. Its presence excludes legacy stdout fingerprinting; only explicitly confirmed delivered source mappings establish native source observations. Execution pins are not reads. */
+            command_program?: components["schemas"]["CommandProgramReceipt"];
             /** @description Name of the tool that produced this result. Carried on the result row so Den renders completed tool cards after the host replaces the assistant tool_calls batch on a reused row. */
             tool?: string;
             /** @description ID of the tool call this result answers, anchoring search reveal to the originating tool chicklet. */
@@ -8855,7 +8878,7 @@ export interface components {
             id: string;
             scope: components["schemas"]["ApprovalGrantScope"];
             category: components["schemas"]["ApprovalGrantCategory"];
-            /** @description Searchable host label. For socket_path this mirrors approved_path; authority matching uses approved_path and resolved_path. Secret releases expose only a count label; their fingerprints stay host-only. */
+            /** @description Searchable host label. For socket_path this mirrors approved_path; authority matching also checks the host-owned enforcement mode and live socket binding. Secret releases expose only a count label; their fingerprints stay host-only. */
             pattern: string;
             /** @description Host-rendered bounded-lease label. */
             title: string;
@@ -8877,7 +8900,7 @@ export interface components {
             project_id?: string;
             /** @description A folder the lease was granted from, for display only. Absent for a project with no folders attached. */
             project_dir?: string;
-            /** @description True when the granted target no longer exists on this host — a write_root whose path fails Lstat, or a socket_path whose approved path no longer resolves to a usable socket. Display and bulk-clear only; never auto-revoked. */
+            /** @description True when the granted target no longer exists on this host — a write_root whose path fails Lstat, or a socket_path whose approved path no longer resolves to a usable socket, or whose retained binding is unavailable after replacement or engine restart. Saved intent is preserved until renewed or revoked. */
             unavailable?: boolean;
             /** @description Number of exact actions an action_set lease covers. Exact action identities are host-only opaque digests and never cross the wire. */
             action_count?: number;
@@ -8903,7 +8926,7 @@ export interface components {
             chat_session_id?: string;
             /** @description Chat title on chat-scoped rows, for grouping in Settings. */
             session_title?: string;
-            /** @description Host copy for revoke consequences. Socket grants use "Applies to the next command or terminal. Already-running processes retain access." */
+            /** @description Host copy for revoke consequences. Socket grants use "Applies to the next local-service operation. Already-running processes and admitted requests retain access." */
             revoke_applies_to?: string;
         };
         /** @enum {string} */
@@ -9978,7 +10001,7 @@ export interface components {
          * @description Closed machine-readable error identity emitted by the private Den-sidecar API.
          * @enum {string}
          */
-        ApiErrorCode: "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "delegation_not_found" | "delegation_leg_not_found" | "feedback_not_pending" | "feedback_response_required" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "write_root_is_filesystem_root" | "write_root_is_home" | "write_root_not_absolute" | "write_root_under_secret_store" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "project_policy_denied" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_closeout_exhausted" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "leg_not_pending" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
+        ApiErrorCode: "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "delegation_not_found" | "delegation_leg_not_found" | "feedback_not_pending" | "feedback_response_required" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "write_root_is_filesystem_root" | "write_root_is_home" | "write_root_not_absolute" | "write_root_under_secret_store" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "project_policy_denied" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_closeout_exhausted" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "leg_not_pending" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
         /** @enum {string} */
         NoticeAction: "open_ai_providers" | "retry_contribution_frame" | "prompt_retry" | "prompt_keep_going" | "prompt_rewind_and_retry";
         /** @enum {string} */
@@ -10556,6 +10579,67 @@ export interface components {
             /** Format: date-time */
             settled_at?: string;
         };
+        /** @description Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix. */
+        CommandProgramOutputLimit: {
+            /** @enum {string} */
+            code: "COMMAND_LIMIT_EXCEEDED";
+            limit_id: string;
+            /** Format: int64 */
+            maximum: number;
+            /** Format: int64 */
+            observed: number;
+        };
+        CommandProgramOutputWindow: {
+            /** @enum {string} */
+            stream: "stdout" | "stderr";
+            ref: string;
+            /** @description Session output address of the retained stream copy. */
+            output_path: string;
+            /**
+             * Format: int64
+             * @description Bytes in the saved stream. For an incomplete stream the final total is unknown.
+             */
+            total_bytes: number;
+            /** @description Lines in the saved stream. For an incomplete stream the final total is unknown. */
+            total_lines: number;
+            complete: boolean;
+            truncated: boolean;
+            /** Format: int64 */
+            head_end_byte: number;
+            head_end_line: number;
+            /** Format: int64 */
+            tail_start_byte: number;
+            tail_start_line: number;
+            /** Format: int64 */
+            omitted_bytes: number;
+            omitted_lines: number;
+            inline_budget_bytes: number;
+            limit?: components["schemas"]["CommandProgramOutputLimit"];
+        };
+        CommandProgramReceipt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            parent_receipt_id: string;
+            language_version: number;
+            catalog_digest: string;
+            source_digest: string;
+            source_ref: string;
+            /** @enum {string} */
+            state: "running" | "waiting" | "completed" | "rejected" | "failed" | "interrupted";
+            status_code?: number;
+            stop_code?: string;
+            detail_ref: string;
+            /** @enum {string} */
+            progress_state: "unchanged" | "committed" | "rejected" | "unknown";
+            progress_ref?: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            settled_at?: string;
+            /** @description Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence. */
+            outputs?: components["schemas"]["CommandProgramOutputWindow"][];
+        };
         /** @enum {string} */
         ToolResultOutcome: "completed" | "rejected" | "error";
         FeedbackSubject: {
@@ -10583,12 +10667,15 @@ export interface components {
             delegation_id?: string;
             leg_id?: string;
         };
+        /** @description A call's lifecycle outcome as its producer states it. State `parked` with resource_kind `wait` means the call ended its turn on the session's wait lease (resource_id): a `wait` call, or a `command` call whose program keeps running while it waits. The lease's awaiting_wake activity carries the call's tool_call_id; when that activity closes, the wait has ended and the call's outcome arrives in a later message. */
         ToolCompletion: {
             operation: string;
             state: string;
             resource_kind?: string;
             resource_id?: string;
             result_handle?: string;
+            /** @description What a parked call waits on: the wait's stated reason, or the statement a parked command's program waits at (`sleep 30`, `wait %1`). Present only with state parked. */
+            reason?: string;
         };
         FileEditReference: {
             /** Format: uuid */
@@ -11270,6 +11357,120 @@ export interface components {
         ChatContentSearchPage: {
             matches: components["schemas"]["ChatContentMatch"][];
             /** @description Opaque cursor for the next search page; absent when the search reached the end of the content. */
+            next_cursor?: string;
+        };
+        /** @description Existing progress owner's envelope invocation, independent of shell effects. */
+        CommandProgramProgressReceipt: {
+            /** Format: uuid */
+            execution_id: string;
+            /** Format: uuid */
+            program_id: string;
+            /** Format: uuid */
+            root_session_id: string;
+            /** @enum {string} */
+            state: "running" | "unchanged" | "committed" | "rejected" | "unknown";
+            owner_invoked: boolean;
+            arguments_representation?: string;
+            arguments_digest: string;
+            arguments_ref: string;
+            detail_ref: string;
+        };
+        CommandExecutionOutput: {
+            /** @enum {string} */
+            stream: "stdout" | "stderr";
+            /** @description Retained output handle owned by the program receipt. */
+            ref: string;
+            /** Format: int64 */
+            size_bytes: number;
+            /** @description The stream reached its end; false is a retained prefix. */
+            complete: boolean;
+            redacted: boolean;
+            /** @description Leading screened bytes of the retained stream as UTF-8. Never the authoritative body. */
+            preview: string;
+            preview_truncated: boolean;
+        };
+        /** @description Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed. */
+        CommandRevisionConflict: {
+            path: string;
+            expected_revision: string;
+            observed_revision: string;
+        };
+        /** @description Host dynamic execution. It has no assistant message or model tool-call identity. */
+        CommandExecutionReceipt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            program_id: string;
+            /** @description Host syntax node identity within its program. */
+            node_id: string;
+            /** Format: uuid */
+            parent_execution_id: string;
+            owner: string;
+            lifecycle: string;
+            definition_digest: string;
+            arguments_representation?: string;
+            arguments_digest: string;
+            reviewed_arguments_representation?: string;
+            reviewed_arguments_digest?: string;
+            reviewed_arguments_ref?: string;
+            native_command?: string;
+            effect_mode?: string;
+            effect_classes?: ("read_only" | "mutation" | "external_exec" | "network_egress")[];
+            arguments_ref: string;
+            /** @description Compact display only. Not authority or replay input. */
+            command: string;
+            /** @enum {string} */
+            state: "prepared" | "waiting" | "running" | "completed" | "refused" | "failed" | "interrupted";
+            /** @description Durable before-owner marker; host loss can precede actual invocation. */
+            owner_started: boolean;
+            /** @description Actual invocation observed by the admission caller. Absence after a start marker is unknown. */
+            owner_invoked: boolean;
+            status_code?: number;
+            stop_code?: string;
+            host_stop_code?: string;
+            complete: boolean;
+            publication_eligible: boolean;
+            output_publishable: boolean;
+            /** @enum {string} */
+            effect_certainty: "none" | "completed" | "attempted" | "unknown";
+            evidence_kind?: string;
+            evidence_ref?: string;
+            owner_ref?: string;
+            recovery_ref?: string;
+            /** Format: uuid */
+            held_version_id?: string;
+            accepted_revision?: string;
+            published_revision?: string;
+            detail_ref: string;
+            approval_ref?: string;
+            /** @description Host background job this child started, for the existing background process views. */
+            job_handle?: string;
+            /** @description Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing. */
+            outputs?: components["schemas"]["CommandExecutionOutput"][];
+            revision_conflict?: components["schemas"]["CommandRevisionConflict"];
+        };
+        CommandProgramNode: {
+            /** @description Host syntax node identity within its program. */
+            id: string;
+            /** @description Captured syntax unit identity within its program. */
+            source_unit_id: string;
+            /** Format: int64 */
+            start_byte: number;
+            /** Format: int64 */
+            end_byte: number;
+            line: number;
+            column: number;
+            /** @enum {string} */
+            state: "not_started" | "reached" | "untaken";
+        };
+        CommandProgramReceiptPage: {
+            program: components["schemas"]["CommandProgramReceipt"];
+            progress?: components["schemas"]["CommandProgramProgressReceipt"];
+            executions: components["schemas"]["CommandExecutionReceipt"][];
+            /** @description Known static nodes only; never speculative future loop iterations. */
+            nodes: components["schemas"]["CommandProgramNode"][];
+            executions_omitted: number;
+            nodes_omitted: number;
             next_cursor?: string;
         };
         InvocationReceiptList: {
@@ -17231,6 +17432,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatContentSearchPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getCommandProgramReceipt: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+                program_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable program facts and one bounded child page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandProgramReceiptPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -29843,6 +30075,9 @@ export type InvocationEvidence = components["schemas"]["InvocationEvidence"];
 export type InvocationFailure = components["schemas"]["InvocationFailure"];
 export type InvocationIsolation = components["schemas"]["InvocationIsolation"];
 export type InvocationReceipt = components["schemas"]["InvocationReceipt"];
+export type CommandProgramOutputLimit = components["schemas"]["CommandProgramOutputLimit"];
+export type CommandProgramOutputWindow = components["schemas"]["CommandProgramOutputWindow"];
+export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
 export type ToolResultOutcome = components["schemas"]["ToolResultOutcome"];
 export type FeedbackSubject = components["schemas"]["FeedbackSubject"];
 export type ToolFeedback = components["schemas"]["ToolFeedback"];
@@ -29920,6 +30155,12 @@ export type MessageNavigationResponse = components["schemas"]["MessageNavigation
 export type ChatContentPage = components["schemas"]["ChatContentPage"];
 export type ChatContentMatch = components["schemas"]["ChatContentMatch"];
 export type ChatContentSearchPage = components["schemas"]["ChatContentSearchPage"];
+export type CommandProgramProgressReceipt = components["schemas"]["CommandProgramProgressReceipt"];
+export type CommandExecutionOutput = components["schemas"]["CommandExecutionOutput"];
+export type CommandRevisionConflict = components["schemas"]["CommandRevisionConflict"];
+export type CommandExecutionReceipt = components["schemas"]["CommandExecutionReceipt"];
+export type CommandProgramNode = components["schemas"]["CommandProgramNode"];
+export type CommandProgramReceiptPage = components["schemas"]["CommandProgramReceiptPage"];
 export type InvocationReceiptList = components["schemas"]["InvocationReceiptList"];
 export type PromptRecovery = components["schemas"]["PromptRecovery"];
 export type PromptReferencePathFile = components["schemas"]["PromptReferencePathFile"];

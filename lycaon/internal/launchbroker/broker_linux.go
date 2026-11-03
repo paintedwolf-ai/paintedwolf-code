@@ -32,8 +32,9 @@ const (
 	MaxRequest = 256 << 10
 	// RequiredFiles are the call channel and the three standard streams.
 	RequiredFiles = 4
-	// MaxExtraFiles bounds the descriptors a program inherits beyond those.
-	MaxExtraFiles = 16
+	// MaxExtraFiles covers four helper slots, eight retained sockets, four
+	// pinned launch inputs and the supervisor's two lifetime/report pipes.
+	MaxExtraFiles = 4 + 8 + 4 + 2
 	// ControlSpace sizes a receive buffer for one request's descriptors.
 	controlSlack = 64
 )
@@ -57,6 +58,9 @@ type Request struct {
 	Detach bool `json:"detach,omitempty"`
 	// ExtraFiles counts the descriptors after the standard streams.
 	ExtraFiles int `json:"extra_files,omitempty"`
+	// ExtraFileLayout marks inherited slots as open (1) or closed (0).
+	// An omitted layout keeps every supplied slot open.
+	ExtraFileLayout string `json:"extra_file_layout,omitempty"`
 }
 
 // Event is one report on a call channel.
@@ -84,6 +88,11 @@ func (r Request) Validate() error {
 	}
 	if r.ExtraFiles < 0 || r.ExtraFiles > MaxExtraFiles {
 		return fmt.Errorf("broker request carries %d extra descriptors, at most %d", r.ExtraFiles, MaxExtraFiles)
+	}
+	if r.ExtraFileLayout != "" {
+		if len(r.ExtraFileLayout) != r.ExtraFiles || strings.Trim(r.ExtraFileLayout, "01") != "" {
+			return errors.New("broker descriptor layout must name every extra slot as open or closed")
+		}
 	}
 	for _, value := range append(append([]string{r.Dir}, r.Argv...), r.Environment...) {
 		if strings.ContainsRune(value, 0) {

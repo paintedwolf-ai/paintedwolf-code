@@ -209,8 +209,9 @@ func (m *Matcher) screenRaw(ctx context.Context, s string) []Match {
 	hits := m.catalogMatches(ctx, mask.text)
 	hits = append(hits, m.harvestMatches(ctx, mask.text)...)
 	hits = mask.outside(hits)
-	propagateNonDisclosable(hits)
-	return m.dropIgnored(ctx, mergeContainerEvidence(hits))
+	_ = propagateNonDisclosable(hits, nil)
+	hits, _ = mergeContainerEvidence(hits, nil)
+	return m.dropIgnored(ctx, hits)
 }
 
 // runCatalog scans every detector window.
@@ -290,36 +291,6 @@ func screenWindows(s string, window, overlap int) []screenSpan {
 		runeOffset += utf8.RuneCountInString(s[start:next])
 		start = next
 	}
-}
-
-// windowEnd prefers a line break and preserves rune boundaries.
-func windowEnd(s string, start, window int) int {
-	end := start + window
-	if end >= len(s) {
-		return len(s)
-	}
-	if nl := strings.LastIndexByte(s[start:end], '\n'); nl > 0 {
-		return start + nl + 1
-	}
-	for end > start && !utf8.RuneStart(s[end]) {
-		end--
-	}
-	return end
-}
-
-// windowNextStart preserves overlap while advancing the window.
-func windowNextStart(s string, start, end, overlap int) int {
-	next := end - overlap
-	if next <= start {
-		return end
-	}
-	if nl := strings.IndexByte(s[next:end], '\n'); nl >= 0 && next+nl+1 < end {
-		return next + nl + 1
-	}
-	for next < end && !utf8.RuneStart(s[next]) {
-		next++
-	}
-	return next
 }
 
 func findingToMatch(s string, f *report.Finding, lineIdx []int, m *Matcher) (Match, bool) {

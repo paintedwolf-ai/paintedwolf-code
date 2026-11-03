@@ -125,11 +125,6 @@ var compiledContracts = map[string]Contract{
 }
 
 var compiledFamilies = map[string][]string{
-	"command": {
-		"command",
-		"command_output",
-		"command_stop",
-	},
 	"held_call": {
 		"held_result",
 		"held_stop",
@@ -172,7 +167,6 @@ var compiledGrantIdentityNeutralArgs = map[string][]string{
 	"command": {
 		"terminal_capture",
 		"timeout_ms",
-		"wait_ms",
 	},
 	"fetch_url": {
 		"parallel",

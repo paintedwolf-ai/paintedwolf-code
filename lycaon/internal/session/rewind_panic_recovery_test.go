@@ -44,7 +44,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 
 	// Apply a.txt before injecting a panic on b.txt.
 	originalSource := mgr.Chats.Rewinds.SourceRewinds()
-	faultSource := &sourcerewind.Service{Planner: originalSource.Planner, Mutations: &rewindFaultJournal{delegate: originalSource.Mutations, before: func(entryIndex int) {
+	faultSource := &sourcerewind.Service{Planner: originalSource.Planner, Mutations: &rewindFaultJournal{Journal: originalSource.Mutations, before: func(entryIndex int) {
 		if entryIndex == 1 {
 			panic("boom: injected rewind apply panic")
 		}
@@ -94,9 +94,9 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 }
 
 type rewindFaultJournal struct {
-	delegate sourceeffect.Journal
-	before   func(int)
-	count    int
+	sourceeffect.Journal
+	before func(int)
+	count  int
 }
 
 func (j *rewindFaultJournal) PrepareEffect(ctx context.Context, p sourceeffect.Plan) (sourceeffect.Pending, error) {
@@ -105,9 +105,5 @@ func (j *rewindFaultJournal) PrepareEffect(ctx context.Context, p sourceeffect.P
 		j.count++
 		j.before(n)
 	}
-	return j.delegate.PrepareEffect(ctx, p)
-}
-
-func (j *rewindFaultJournal) RemoveEntry(ctx context.Context, r sourceeffect.Removal) (string, error) {
-	return j.delegate.RemoveEntry(ctx, r)
+	return j.Journal.PrepareEffect(ctx, p)
 }

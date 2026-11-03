@@ -1,0 +1,19 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/exec",
+  "kind": "test_suite",
+  "workstream": "portable-command-platforms",
+  "disposition": "retain",
+  "reason": "Retain exactly 39 immediate test files. Native capture, broker wrapping, supervisor registration, pipeline drains, PTYs and process-group settlement are distinct cases of the existing executor lifecycle. Same-package fixtures verify removed or consumed captures, current authority, cancellation, fixed helper probes and descriptor-prefix preservation without exposing launch bypasses. Focused Darwin lifecycle and launch-door contracts pass; Linux protected-launch and privilege fixtures are routed through the managed Linux campaign and remain platform qualification obligations. Additional membership requires renewed review.",
+  "reviewed_commit": "8395d0828259dac70fce0ec3ebb8d5e2e3ce7d7c",
+  "ceiling": 39,
+  "boundaries": {
+    "lycaon/internal/exec/own_group_launch_unix_test.go": "38f46cac228181bd1ebfcc85e442893de83333b916976fe2cccf884b83948704",
+    "lycaon/internal/exec/owned_group_unix_test.go": "82fc30fe0ae573ff409f3d003a5a0d40086675e71b96dafe7f7f055c9f39a1a1",
+    "lycaon/internal/exec/pipeline_test.go": "a1755106920ac66fbc3e559e6e6eedaf26d97a00d6beb13e18f5fc230be9ec78",
+    "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089",
+    "lycaon/internal/exec/protected_launch_linux_test.go": "9d342f8f0ce54a66f54271e72ca2265c500553be9d3198ceaa1e18f9da3baa27",
+    "lycaon/internal/exec/pty_test.go": "b449e3f47fbcef83b85a50c31cebe38115e2ee49090d7aa21d51fcf4f2e973e1"
+  },
+  "reviewed_shape": "8b1d4ffafe0aa9b4d88a12a2d60af04bc99afa2b9d4edfe7a55299e50f55cc67"
+}

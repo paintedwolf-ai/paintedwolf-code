@@ -1,0 +1,18 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/invocation/invocation.SQLRecorder",
+  "kind": "runtime_service",
+  "workstream": "portable-command-admission",
+  "disposition": "retain",
+  "reason": "Retain the invocation transaction owner at 1200 receiver lines and 39 methods. Prepared native and progress records encode immutable reviewed facts outside the writer; SQLRecorder commits input attachment, trace charges and owner start as one boundary. Prepared approval receipts, typed settlements and interruption recovery remain with this owner. The focused contracts verify one writer transaction, exact retained bytes, rollback, foreign-scope refusal, lost commit acknowledgement and cold recovery. Growth or changed contracts require renewed review.",
+  "reviewed_commit": "f8b6e619a71e2f6e228be09f97e1a3f65a9ddabb",
+  "ceiling": 1200,
+  "boundaries": {
+    "lycaon/internal/invocation/program_owner_input_test.go": "0e672ff81a6d6d80d60f4ad12681d990a882aa6949548ed745a39d13da968dc2",
+    "lycaon/internal/invocation/program_owner_commit_fault_test.go": "f895a9acda1814d7859db9b3e96b2974ca680b5e4ebf9653ac74c1a299467178",
+    "lycaon/internal/invocation/program_owner_recovery_test.go": "ab289f2c19f9290a9d9fe2a2379643fef642c91c2cb7bd3e94a9022a08e7268d",
+    "lycaon/internal/invocation/program_owner_scope_test.go": "36d716f3cab9a527da55d33a2aafc71f8b11a3489f45b7f2480f5b453cd3366d",
+    "lycaon/internal/invocation/program_input_capture_test.go": "ad917b63c46e2c828adadaf578887d5bc63673f23bb3fe75052414dfe7f328e5"
+  },
+  "reviewed_shape": "4b8b1e8978a87a002f7c302cea5137770458a60b8b4bca7e0c1aa9b5fccd3a7c"
+}

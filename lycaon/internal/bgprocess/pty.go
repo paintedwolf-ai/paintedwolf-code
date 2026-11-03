@@ -143,7 +143,7 @@ func (r *Terminal) startPTY(
 	proc.Stages = hostcmd.StagePlaceholders(req.Stages)
 
 	r.jobs.mu.Lock()
-	if r.jobs.closed {
+	if r.jobs.closed || r.jobs.drains[sessionID] != nil {
 		r.jobs.mu.Unlock()
 		cancel()
 		proc.screen.Close()

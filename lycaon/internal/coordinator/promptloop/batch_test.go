@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/documentcore"
 	"slices"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestToolContextForCallPreservesCompiledSurface(t *testing.T) {
 			},
 		},
 	})
-	base := tools.ToolContext{Source: tools.InvocationSource{EditorReadBases: tools.NewAgentReadBases(map[string]int64{"document": 7})}, Turn: tools.InvocationTurn{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate,
+	base := tools.ToolContext{Source: tools.InvocationSource{EditorReadBases: tools.NewAgentReadBases(map[string]documentcore.ReadBasis{"document": {Revision: 7, Whole: true}})}, Turn: tools.InvocationTurn{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate,
 		TurnToolPlan:         toolsurface.Compile([]string{"read"}, []string{"write", "verify"}),
 		TurnOfferedToolNames: []string{"read"},
 		TurnWritePinRootID:   "root-2",

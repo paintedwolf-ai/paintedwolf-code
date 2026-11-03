@@ -49,6 +49,7 @@ type toolCaptures struct {
 	skill            *api.SkillActivation
 	process          *api.ToolProcessHandle
 	verdict          *api.VerdictOutcome
+	commandProgram   *api.CommandProgramReceipt
 	sourceRun        *tools.SourceRunCapture
 	dispatch         *api.WorkerDispatch
 	completion       *api.ToolCompletion
@@ -345,7 +346,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 		if ownerInvoked || run.runErr == nil {
 			if l.Deps.EnrichToolOutput != nil {
 				content, facts := l.Deps.EnrichToolOutput(ctx, sess, run.call.Name, run.call.Args,
-					result.content, result.facts, run.doomPreCount+1)
+					result.content, result.facts, captures.completion, run.doomPreCount+1)
 				result.content, result.facts = content, facts
 			}
 			if result.facts.ContentReplaced {
@@ -423,7 +424,8 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		ownerRef:         out.OwnerRef, fileEdit: out.FileEdit, visual: out.Visual,
 		note: out.AgentNote, externalAccess: out.ExternalAccess,
 		skill: out.Skill, process: out.Process, verdict: out.Verdict,
-		sourceRun: out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
+		commandProgram: out.CommandProgram,
+		sourceRun:      out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
 		retrievedFrom: out.RetrievedFrom,
 		sourceReads:   out.SourceReads,
 	}
@@ -541,6 +543,9 @@ func applyToolResultSidecars(
 	}
 	if captures.verdict != nil {
 		tr.Verdict = captures.verdict
+	}
+	if captures.commandProgram != nil {
+		tr.CommandProgram = captures.commandProgram
 	}
 	if visualCap := captures.visual; visualCap != nil && store != nil && strings.TrimSpace(rootSessionID) != "" {
 		stamped, err := visual.AttachToolResult(ctx, store, rootSessionID, producerSessionID, tr.ToolCallID, tr, visualCap, toolContent)

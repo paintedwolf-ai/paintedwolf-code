@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/api/capabilityadmin/capabilityadmin.Installation",
+  "kind": "runtime_service",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Installation owns the serialized apply, rollback and replay of one human choice. Socket binding acquisition and unavailable-intent restoration extend this transaction owner without making saved intent active authority. A second installer would separate rollback and journal commitment. Freeze this reviewed shape at 373 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 373,
+  "boundaries": {
+    "lycaon/internal/api/capabilityadmin/socket_pending_restart_test.go": "8fb3f2cbf56291f2263ab73eaf4f1a01771ab4e2a75f624fe6a4c81f78297786",
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac",
+    "lycaon/internal/api/capabilityadmin/approval_revocation_test.go": "d39295d8e562e2b626d07828b1a03d90252a73c1943436212508ae3b722b059b"
+  },
+  "reviewed_shape": "44751b24c9a370365c8eec46ea94b320050c428065f2f8362385c28365272464"
+}

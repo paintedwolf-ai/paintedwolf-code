@@ -48,6 +48,8 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		err = nestFixtureGenerationStore(dir)
 	case "upgrade":
 		err = stageFixtureGeneration(dir, "1.0.1", strings.Split(os.Getenv(fixtureBinsEnv), ":"), []byte("generation-1.0.1\n"))
+	case "upgrade-gtk":
+		err = stageGTKFixtureGeneration(dir, strings.Split(os.Getenv(fixtureBinsEnv), ":"))
 	case "vault-server":
 		err = runVaultServer(dir, os.Getenv(fixtureVaultBinEnv), os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
 	case "seal-entry-parent":

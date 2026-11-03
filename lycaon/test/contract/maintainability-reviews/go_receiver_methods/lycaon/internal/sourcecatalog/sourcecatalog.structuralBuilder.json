@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/sourcecatalog/sourcecatalog.structuralBuilder",
+  "kind": "algorithm",
+  "workstream": "structural-ancestor-repair",
+  "disposition": "retain",
+  "reason": "The builder owns one mutable structural generation from observation through child summaries, pruning, coverage, revalidation, rebase and sealing. Repair is a separate algorithm phase in structural_repair.go. Retain the measured 670 receiver lines, 25 methods and 13 fields: splitting mutable generation authority would introduce competing repair or publication state. Memory and spill proxy contracts cover widths 2 and 129, depths 1 and 8, and four leaf updates after repair consumption. Every unrelated subtree remains opaque and each cached sibling summary stays unchanged. A separate 257-child parent range has an unreadable unrelated branch payload; full enumeration demonstrably fails while repeated affected-key repairs preserve that branch and exact aggregates. Partial, failure and pruned aggregates equal full bottom-up refresh, and publication contracts preserve concurrent foreground facts. No production field or persisted format changed.",
+  "reviewed_commit": "baff9bff59744678fd0e33fb776c9aa5a76bc217",
+  "ceiling": 25,
+  "boundaries": {
+    "lycaon/internal/sourcecatalog/structural_repair_test.go": "f19ed53c64a8093889fefa34aadc99e08ae31fb1abfec15c53d9ace2c9ea4202",
+    "lycaon/internal/sourcecatalog/structural_publication_test.go": "dcde54786e3a5cb20e2d567fceb99cef2c7f907620bd9b2b704e50dc58a4ace9",
+    "lycaon/internal/sourcecatalog/structural_directory_work_test.go": "1a358d376e15be5ad87e7462ba9d39253afb37120a8258d8a505697fbb6ae0c8",
+    "lycaon/internal/sourcecatalog/structural_repair_pages_test.go": "dc509018aee1cc2b9fc4ba78d26aa5fa9c91b5caf4376f8809c9cb01a23f27c2"
+  },
+  "reviewed_shape": "be42f2abb7cebd1c529f3d12db3d117c48b9acf69e054d304016ee11f5732289"
+}

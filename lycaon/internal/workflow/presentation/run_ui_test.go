@@ -16,7 +16,7 @@ import (
 func TestPendingWorkflowStartFromScaffold(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := context.Background()
-	if err := mgr.Blueprints.Scaffold.NoteWorkflowStartProposal(ctx, sessionID, "plan", "1.0.0"); err != nil {
+	if err := mgr.Blueprints.Scaffold.NoteWorkflowStartProposal(ctx, sessionID, "plan", "1.0.1"); err != nil {
 		testutil.FailErr(t, "NoteWorkflowStartProposal", err)
 	}
 	ui, err := mgr.Presentation.ComputeSessionUI(ctx, sessionID)
@@ -34,11 +34,11 @@ func TestPendingWorkflowStartFromScaffold(t *testing.T) {
 func TestPendingWorkflowStartClearsWhenRunStarts(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := context.Background()
-	if err := mgr.Blueprints.Scaffold.NoteWorkflowStartProposal(ctx, sessionID, "plan", "1.0.0"); err != nil {
+	if err := mgr.Blueprints.Scaffold.NoteWorkflowStartProposal(ctx, sessionID, "plan", "1.0.1"); err != nil {
 		testutil.FailErr(t, "NoteWorkflowStartProposal", err)
 	}
 	_, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	ui, err := mgr.Presentation.ComputeSessionUI(ctx, sessionID)
@@ -54,7 +54,7 @@ func TestComputeRunUIHumanApprovalNotAwaitingEmptyPlan(t *testing.T) {
 	mgr, sessStore, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
@@ -89,7 +89,7 @@ func TestComputeRunUIHumanApprovalAwaiting(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	if err != nil {
 		testutil.FailErr(t, "StartHuman", err)
@@ -120,7 +120,7 @@ func TestComputeRunUIHumanApprovalAwaitingWithoutTasksMarker(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	if err != nil {
 		testutil.FailErr(t, "StartHuman", err)
@@ -150,7 +150,7 @@ func TestComputeRunUIPlanRevisionAt(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	if err != nil {
 		testutil.FailErr(t, "StartHuman", err)
@@ -167,7 +167,7 @@ func TestComputeRunUIPlanRevisionAt(t *testing.T) {
 func TestPlanParametersAndTrigger(t *testing.T) {
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	plan, err := reg.Get("plan", "1.0.0")
+	plan, err := reg.Get("plan", "1.0.1")
 	testutil.FailErr(t, "Get plan", err)
 	if _, ok := plan.Parameters["auto_approve"]; !ok {
 		t.Fatal("plan must keep auto_approve parameter")
@@ -196,7 +196,7 @@ func TestRegistryUsesSemanticVersionOrder(t *testing.T) {
 func TestApplyAutoApproveEffectsSkipsApproval(t *testing.T) {
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	plan, err := reg.Get("plan", "1.0.0")
+	plan, err := reg.Get("plan", "1.0.1")
 	testutil.FailErr(t, "Get plan", err)
 	vars := runstate.ApplyMergedParams(nil, map[string]string{
 		"research_depth": "none",
