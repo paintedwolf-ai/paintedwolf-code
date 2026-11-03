@@ -1,14 +1,8 @@
 package layeredfs
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
-	"path/filepath"
 	"sort"
 	"time"
 )
@@ -122,9 +116,6 @@ func (c *Core) JournalOperations() []JournalOperation {
 func (c *Core) EnumerateChanges(logicalOnly bool) ([]ChangeEntry, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if c.state.released {
-		return nil, ErrViewReleased
-	}
 	paths := collectTouchedPathsLocked(c)
 	var result []ChangeEntry
 	for _, qp := range paths {
@@ -165,7 +156,10 @@ func buildChangeEntryLocked(c *Core, qp QualifiedPath, logicalOnly bool) (Change
 	if nid, ok := c.state.pathIndex[qp]; ok {
 		node := c.state.nodesByID[nid]
 		if node != nil && !node.flags.unlinked {
-			isLogical, contentChanged, metaChanged, sha := evaluateNodeLogicalChangeLocked(c, qp, node, base)
+			isLogical, contentChanged, metaChanged, sha, err := evaluateNodeLogicalChangeLocked(c, qp, node, base)
+			if err != nil {
+				return ChangeEntry{}, false, err
+			}
 			if logicalOnly && !isLogical {
 				return ChangeEntry{}, false, nil
 			}
@@ -226,17 +220,25 @@ func buildChangeEntryLocked(c *Core, qp QualifiedPath, logicalOnly bool) (Change
 	return ChangeEntry{}, false, nil
 }
 
-func evaluateNodeLogicalChangeLocked(c *Core, qp QualifiedPath, node *privateNode, base BaseCapture) (logical, contentChanged, metaChanged bool, sha string) {
+func evaluateNodeLogicalChangeLocked(
+	c *Core,
+	qp QualifiedPath,
+	node *privateNode,
+	base BaseCapture,
+) (logical, contentChanged, metaChanged bool, sha string, err error) {
 	if node.kind == EntryRegular && node.flags.backingName != "" {
-		sha = hashWorkingFileLocked(c, node.flags.backingName, node.flags.backingPath)
+		sha, err = hashWorkingFileLocked(c, qp, node.flags.backingName, node.flags.backingPath)
+		if err != nil {
+			return false, false, false, "", err
+		}
 	}
 	if !node.flags.physicalCopyUp || base.Kind == EntryAbsent || base.Kind != node.kind {
-		return true, true, node.flags.metadataChanged, sha
+		return true, true, node.flags.metadataChanged, sha, nil
 	}
 	if node.flags.namespaceAdded || len(node.paths) > 1 || (node.initial.originPath != nil && *node.initial.originPath != qp) {
 		contentChanged = node.flags.contentChanged && (sha != node.initial.sha256 || node.size != node.initial.size)
 		metaChanged = !metadataMatchesInitialLocked(node)
-		return true, contentChanged, metaChanged, sha
+		return true, contentChanged, metaChanged, sha, nil
 	}
 	switch node.kind {
 	case EntryRegular:
@@ -248,132 +250,5 @@ func evaluateNodeLogicalChangeLocked(c *Core, qp QualifiedPath, node *privateNod
 	}
 	metaChanged = !metadataMatchesInitialLocked(node)
 	logical = contentChanged || metaChanged
-	return logical, contentChanged, metaChanged, sha
-}
-
-func hashWorkingFileLocked(c *Core, bName, bPath string) string {
-	if c.backing.workDirFile == nil {
-		return ""
-	}
-	f, err := openBackingFileRO(int(c.backing.workDirFile.Fd()), bName, bPath)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	_, _ = io.Copy(h, f)
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-func countLogicalChangesLocked(c *Core) int {
-	count := 0
-	for _, qp := range collectTouchedPathsLocked(c) {
-		_, include, err := buildChangeEntryLocked(c, qp, true)
-		if err == nil && include {
-			count++
-		}
-	}
-	return count
-}
-
-// SnapshotJournal produces a versioned JournalSnapshot and persists it to the view's journal directory.
-func (c *Core) SnapshotJournal() (JournalSnapshot, error) {
-	return snapshotJournal(c)
-}
-
-func snapshotJournal(c *Core) (JournalSnapshot, error) {
-	changes, err := c.EnumerateChanges(false)
-	if err != nil {
-		return JournalSnapshot{}, err
-	}
-	c.mu.RLock()
-	ops := make([]JournalOperation, len(c.state.journal))
-	copy(ops, c.state.journal)
-	bases := make(map[string]BaseCapture, len(c.state.basesByPath))
-	for qp, b := range c.state.basesByPath {
-		bases[qp.RootID+":"+qp.Rel] = cloneBaseCapture(b)
-	}
-	journalDirFD := -1
-	if c.backing.journalDirFile != nil {
-		journalDirFD = int(c.backing.journalDirFile.Fd())
-	}
-	journalDir := c.backing.journalDir
-	c.mu.RUnlock()
-
-	snap := JournalSnapshot{
-		FormatVersion: FormatVersion,
-		ViewID:        c.cfg.ViewID,
-		Operations:    ops,
-		Changes:       changes,
-		Bases:         bases,
-	}
-	if journalDirFD >= 0 {
-		if err := persistJournalSnapshot(journalDirFD, journalDir, snap); err != nil {
-			return JournalSnapshot{}, err
-		}
-	}
-	return snap, nil
-}
-
-func persistJournalSnapshot(dirFD int, dirPath string, snap JournalSnapshot) error {
-	raw, err := json.MarshalIndent(snap, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmpName := "journal.json.tmp"
-	tmpPath := filepath.Join(dirPath, tmpName)
-	_ = unlinkBackingFile(dirFD, tmpName)
-	f, err := createExclusiveBackingFile(dirFD, tmpName, tmpPath, 0o600)
-	if err != nil {
-		return err
-	}
-	_, wErr := io.Copy(f, bytes.NewReader(raw))
-	sErr := syncFD(int(f.Fd()))
-	cErr := f.Close()
-	if wErr != nil || sErr != nil || cErr != nil {
-		_ = unlinkBackingFile(dirFD, tmpName)
-		if wErr != nil {
-			return wErr
-		}
-		if sErr != nil {
-			return sErr
-		}
-		return cErr
-	}
-	return renameBackingFile(dirFD, tmpName, "journal.json")
-}
-
-// ParseJournalSnapshot decodes and validates a persisted versioned journal payload.
-func ParseJournalSnapshot(raw []byte) (JournalSnapshot, error) {
-	var snap JournalSnapshot
-	if err := json.Unmarshal(raw, &snap); err != nil {
-		return JournalSnapshot{}, err
-	}
-	if snap.FormatVersion != FormatVersion {
-		return JournalSnapshot{}, fmt.Errorf("layeredfs: unsupported journal format version %d", snap.FormatVersion)
-	}
-	return snap, nil
-}
-
-// LoadPersistedJournal reads and validates the persisted journal from the view's backing directory.
-func (c *Core) LoadPersistedJournal() (JournalSnapshot, error) {
-	c.mu.RLock()
-	if c.state.released || c.backing.journalDirFile == nil {
-		c.mu.RUnlock()
-		return JournalSnapshot{}, ErrViewReleased
-	}
-	dirFD := int(c.backing.journalDirFile.Fd())
-	dirPath := c.backing.journalDir
-	c.mu.RUnlock()
-
-	f, err := openBackingFileRO(dirFD, "journal.json", filepath.Join(dirPath, "journal.json"))
-	if err != nil {
-		return JournalSnapshot{}, err
-	}
-	defer func() { _ = f.Close() }()
-	raw, err := io.ReadAll(f)
-	if err != nil {
-		return JournalSnapshot{}, err
-	}
-	return ParseJournalSnapshot(raw)
+	return logical, contentChanged, metaChanged, sha, nil
 }

@@ -20,6 +20,10 @@ type resolvedLayerEntry struct {
 
 // Stat resolves a path following symlinks within the root boundary and returns its attributes.
 func (c *Core) Stat(qpath QualifiedPath) (EntryAttr, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return EntryAttr{}, err
+	}
+	defer c.barrier.leaveOp()
 	res, err := resolvePath(c, qpath, true, false)
 	if err != nil {
 		return EntryAttr{}, err
@@ -38,6 +42,10 @@ func (c *Core) Stat(qpath QualifiedPath) (EntryAttr, error) {
 
 // Lstat resolves a path without following the final component if it is a symlink.
 func (c *Core) Lstat(qpath QualifiedPath) (EntryAttr, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return EntryAttr{}, err
+	}
+	defer c.barrier.leaveOp()
 	res, err := resolvePath(c, qpath, false, false)
 	if err != nil {
 		return EntryAttr{}, err
@@ -56,6 +64,10 @@ func (c *Core) Lstat(qpath QualifiedPath) (EntryAttr, error) {
 
 // Readlink reads the target of a symbolic link without following the final component.
 func (c *Core) Readlink(qpath QualifiedPath) (string, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return "", err
+	}
+	defer c.barrier.leaveOp()
 	res, err := resolvePath(c, qpath, false, false)
 	if err != nil {
 		return "", err
@@ -286,35 +298,14 @@ func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, err
 	if le.Kind == EntryAbsent {
 		return resolvedLayerEntry{}, fs.ErrNotExist
 	}
-	xattrs, _ := provider.ListXattr(qpath.Rel)
+	xattrs, xErr := provider.ListXattr(qpath.Rel)
+	if xErr != nil {
+		return resolvedLayerEntry{}, xErr
+	}
 	return resolvedLayerEntry{
 		qpath:      qpath,
 		layer:      LayerTrunk,
 		attr:       lowerEntryToAttr(qpath, le, xattrs),
 		lowerEntry: &le,
 	}, nil
-}
-
-func isMaskedByPrivateDeletionOrReplacementLocked(c *Core, qpath QualifiedPath) bool {
-	if _, deleted := c.state.deletedPaths[qpath]; deleted {
-		return true
-	}
-	rel := qpath.Rel
-	for rel != "." {
-		if _, del := c.state.deletedPaths[QualifiedPath{RootID: qpath.RootID, Rel: rel}]; del {
-			return true
-		}
-		if ancID, ok := c.state.pathIndex[QualifiedPath{RootID: qpath.RootID, Rel: rel}]; ok {
-			anc := c.state.nodesByID[ancID]
-			if anc != nil && (anc.kind != EntryDirectory || anc.flags.namespaceAdded) {
-				return true
-			}
-		}
-		slash := strings.LastIndexByte(rel, '/')
-		if slash < 0 {
-			break
-		}
-		rel = rel[:slash]
-	}
-	return false
 }

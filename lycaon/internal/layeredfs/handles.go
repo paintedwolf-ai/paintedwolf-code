@@ -2,22 +2,28 @@ package layeredfs
 
 import (
 	"os"
-	"path/filepath"
 	"syscall"
 	"time"
 )
 
 // Open resolves qpath and opens a view-scoped handle.
-// Opening a lower/parent file with write intent triggers coherent base capture and physical copy-up.
 func (c *Core) Open(qpath QualifiedPath, flags OpenFlags, mode os.FileMode) (HandleID, EntryAttr, error) {
-	writeIntent := flags.hasWriteIntent()
-	if writeIntent {
+	if flags.hasWriteIntent() {
 		if err := c.barrier.enterMutation(); err != nil {
 			return 0, EntryAttr{}, err
 		}
 		defer c.barrier.leaveMutation()
+	} else {
+		if err := c.barrier.enterOp(); err != nil {
+			return 0, EntryAttr{}, err
+		}
+		defer c.barrier.leaveOp()
 	}
+	return openAdmitted(c, qpath, flags, mode)
+}
 
+func openAdmitted(c *Core, qpath QualifiedPath, flags OpenFlags, mode os.FileMode) (HandleID, EntryAttr, error) {
+	writeIntent := flags.hasWriteIntent()
 	parentPath, name, err := resolveParentDir(c, qpath, writeIntent)
 	if err != nil {
 		if !writeIntent && cleanRelPath(qpath.Rel) == "." {
@@ -61,6 +67,7 @@ func openRootDirHandle(c *Core, qpath QualifiedPath) (HandleID, EntryAttr, error
 		qpath:  qpath,
 		flags:  OpenDirectory,
 		isDir:  true,
+		refs:   1,
 	}
 	return hid, nodeToAttrLocked(node), nil
 }
@@ -96,6 +103,7 @@ func openReadOnlyTarget(c *Core, targetPath QualifiedPath, flags OpenFlags) (Han
 			qpath:  res.qpath,
 			flags:  flags,
 			isDir:  true,
+			refs:   1,
 		}
 		return hid, res.attr, nil
 	}
@@ -119,6 +127,7 @@ func openReadOnlyTarget(c *Core, targetPath QualifiedPath, flags OpenFlags) (Han
 		gen:      res.attr.Generation,
 		qpath:    res.qpath,
 		flags:    flags,
+		refs:     1,
 		roReader: roReader,
 	}
 	c.mu.Unlock()
@@ -178,28 +187,42 @@ func openMutableTarget(c *Core, targetPath QualifiedPath, flags OpenFlags, mode 
 		return 0, EntryAttr{}, err
 	}
 
-	c.mu.Lock()
-	if c.state.released {
+	var node *privateNode
+	for {
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			return 0, EntryAttr{}, ErrViewReleased
+		}
+		var nErr error
+		node, nErr = ensureWritableNodeLocked(c, effPath, base, flags, mode)
 		c.mu.Unlock()
-		return 0, EntryAttr{}, ErrViewReleased
-	}
-
-	node, err := ensureWritableNodeLocked(c, effPath, base, flags, mode)
-	if err != nil {
+		if nErr != nil {
+			return 0, EntryAttr{}, nErr
+		}
+		node.flags.ioMu.Lock()
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			node.flags.ioMu.Unlock()
+			return 0, EntryAttr{}, ErrViewReleased
+		}
+		if !node.flags.unlinked && c.state.pathIndex[effPath] == node.id {
+			break
+		}
 		c.mu.Unlock()
-		return 0, EntryAttr{}, err
+		node.flags.ioMu.Unlock()
 	}
-
+	defer node.flags.ioMu.Unlock()
+	defer c.mu.Unlock()
 	wf, err := openBackingFileRW(int(c.backing.workDirFile.Fd()), node.flags.backingName, node.flags.backingPath)
 	if err != nil {
-		c.mu.Unlock()
 		return 0, EntryAttr{}, err
 	}
 
 	if flags&OpenTruncate != 0 && node.size > 0 {
 		if tErr := wf.Truncate(0); tErr != nil {
 			_ = wf.Close()
-			c.mu.Unlock()
 			return 0, EntryAttr{}, tErr
 		}
 		node.size = 0
@@ -217,117 +240,8 @@ func openMutableTarget(c *Core, targetPath QualifiedPath, flags OpenFlags, mode 
 		gen:    node.gen,
 		qpath:  effPath,
 		flags:  flags,
+		refs:   1,
 		file:   wf,
 	}
-	attr := nodeToAttrLocked(node)
-	c.mu.Unlock()
-	return hid, attr, nil
-}
-
-func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, flags OpenFlags, createMode os.FileMode) (*privateNode, error) {
-	if existingID, ok := c.state.pathIndex[qpath]; ok {
-		if existing := c.state.nodesByID[existingID]; existing != nil && !existing.flags.unlinked {
-			return existing, nil
-		}
-	}
-
-	_, wasDeleted := c.state.deletedPaths[qpath]
-	if !wasDeleted && base.Kind == EntryRegular {
-		c.mu.Unlock()
-		workName, workPath, err := initWorkingFromBase(c, base)
-		c.mu.Lock()
-		if err != nil {
-			return nil, err
-		}
-		if c.state.released {
-			_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
-			return nil, ErrViewReleased
-		}
-		if existingID, ok := c.state.pathIndex[qpath]; ok {
-			if existing := c.state.nodesByID[existingID]; existing != nil && !existing.flags.unlinked {
-				_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
-				return existing, nil
-			}
-		}
-		nid, gen := c.state.allocNodeID()
-		originCopy := qpath
-		node := &privateNode{
-			id:     nid,
-			gen:    gen,
-			kind:   EntryRegular,
-			mode:   base.Mode,
-			size:   base.Size,
-			atime:  base.ModTime,
-			mtime:  base.ModTime,
-			ctime:  base.ModTime,
-			xattrs: cloneXattrs(base.Xattrs),
-			paths:  map[QualifiedPath]struct{}{qpath: {}},
-			flags: nodeFlags{
-				physicalCopyUp: true,
-				backingName:    workName,
-				backingPath:    workPath,
-			},
-			initial: nodeInitialState{
-				sha256:     base.SHA256,
-				size:       base.Size,
-				mode:       base.Mode,
-				mtime:      base.ModTime,
-				xattrs:     cloneXattrs(base.Xattrs),
-				originPath: &originCopy,
-			},
-		}
-		c.state.nodesByID[nid] = node
-		c.state.pathIndex[qpath] = nid
-		c.counters.physicalCopyUps.Add(1)
-		return node, nil
-	}
-
-	if flags&OpenCreate == 0 {
-		return nil, os.ErrNotExist
-	}
-
-	workName, workPath := c.state.allocStorageFile(c.backing.workDir, "work")
-	wf, err := createExclusiveBackingFile(int(c.backing.workDirFile.Fd()), workName, workPath, 0o600)
-	if err != nil {
-		return nil, err
-	}
-	_ = wf.Close()
-
-	now := time.Now()
-	nid, gen := c.state.allocNodeID()
-	cleanMode := createMode.Perm() | (createMode & (os.ModeSetuid | os.ModeSetgid | os.ModeSticky))
-	if cleanMode == 0 {
-		cleanMode = 0o644
-	}
-	node := &privateNode{
-		id:    nid,
-		gen:   gen,
-		kind:  EntryRegular,
-		mode:  cleanMode,
-		atime: now,
-		mtime: now,
-		ctime: now,
-		paths: map[QualifiedPath]struct{}{qpath: {}},
-		flags: nodeFlags{
-			contentChanged: true,
-			namespaceAdded: true,
-			ownerCreatedRO: cleanMode&0o200 == 0,
-			backingName:    workName,
-			backingPath:    workPath,
-		},
-	}
-	delete(c.state.deletedPaths, qpath)
-	c.state.nodesByID[nid] = node
-	c.state.pathIndex[qpath] = nid
-	bumpParentDirGenLocked(c, qpath)
-	recordJournalLocked(c, JournalOpCreate, qpath, nil, node, 0)
-	return node, nil
-}
-
-func joinRel(parentRel, name string) string {
-	parentRel = cleanRelPath(parentRel)
-	if parentRel == "." {
-		return name
-	}
-	return filepath.ToSlash(parentRel + "/" + name)
+	return hid, nodeToAttrLocked(node), nil
 }

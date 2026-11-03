@@ -84,14 +84,14 @@ func linkPath(c *Core, oldPath, newPath QualifiedPath) (EntryAttr, error) {
 // Unlink removes a file or symlink (or empty directory when removeDir is true).
 // Open handles to an unlinked file remain valid for read/write/stat until closed (#1657).
 func (c *Core) Unlink(qpath QualifiedPath, removeDir bool) error {
-	return unlinkPath(c, qpath, removeDir)
-}
-
-func unlinkPath(c *Core, qpath QualifiedPath, removeDir bool) error {
 	if err := c.barrier.enterMutation(); err != nil {
 		return err
 	}
 	defer c.barrier.leaveMutation()
+	return unlinkPathAdmitted(c, qpath, removeDir)
+}
+
+func unlinkPathAdmitted(c *Core, qpath QualifiedPath, removeDir bool) error {
 
 	parentPath, name, err := resolveParentDir(c, qpath, true)
 	if err != nil {
@@ -128,8 +128,8 @@ func unlinkPath(c *Core, qpath QualifiedPath, removeDir bool) error {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.state.released {
+		c.mu.Unlock()
 		return ErrViewReleased
 	}
 	var removedNode *privateNode
@@ -154,18 +154,29 @@ func unlinkPath(c *Core, qpath QualifiedPath, removeDir bool) error {
 	}
 	bumpParentDirGenLocked(c, targetPath)
 	recordJournalLocked(c, JournalOpUnlink, targetPath, nil, removedNode, 0)
+	var workDirFD = -1
 	if orphanBacking != "" && c.backing.workDirFile != nil {
-		_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), orphanBacking)
+		workDirFD = int(c.backing.workDirFile.Fd())
+	}
+	c.mu.Unlock()
+	if orphanBacking != "" && workDirFD >= 0 && removedNode != nil {
+		removedNode.flags.ioMu.Lock()
+		_ = unlinkBackingFile(workDirFD, orphanBacking)
+		removedNode.flags.ioMu.Unlock()
 	}
 	return nil
 }
 
 // RemoveAll recursively removes a file or directory subtree, capturing bases only for the affected subtree (#1657).
 func (c *Core) RemoveAll(qpath QualifiedPath) error {
-	return removeAllPath(c, qpath)
+	if err := c.barrier.enterMutation(); err != nil {
+		return err
+	}
+	defer c.barrier.leaveMutation()
+	return removeAllPathAdmitted(c, qpath)
 }
 
-func removeAllPath(c *Core, qpath QualifiedPath) error {
+func removeAllPathAdmitted(c *Core, qpath QualifiedPath) error {
 	res, err := resolvePath(c, qpath, false, true)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -174,19 +185,19 @@ func removeAllPath(c *Core, qpath QualifiedPath) error {
 		return err
 	}
 	if res.attr.Kind != EntryDirectory {
-		return unlinkPath(c, res.qpath, false)
+		return unlinkPathAdmitted(c, res.qpath, false)
 	}
-	children, err := c.ReadDir(res.qpath)
+	children, err := readDirUnlocked(c, res.qpath)
 	if err != nil {
 		return err
 	}
 	for _, child := range children {
 		childPath := QualifiedPath{RootID: res.qpath.RootID, Rel: joinRel(res.qpath.Rel, child.Name)}
-		if err := removeAllPath(c, childPath); err != nil {
+		if err := removeAllPathAdmitted(c, childPath); err != nil {
 			return err
 		}
 	}
-	return unlinkPath(c, res.qpath, true)
+	return unlinkPathAdmitted(c, res.qpath, true)
 }
 
 func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *privateNode {

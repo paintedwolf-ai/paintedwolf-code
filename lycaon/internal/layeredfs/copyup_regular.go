@@ -1,12 +1,12 @@
 package layeredfs
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
-	"path/filepath"
 	"time"
 )
 
@@ -41,7 +41,13 @@ func tryCaptureTrunkOnce(
 		}, true, nil
 
 	case EntryDirectory:
-		xattrs, _ := provider.ListXattr(qpath.Rel)
+		xattrs, xErr := provider.ListXattr(qpath.Rel)
+		if xErr != nil {
+			if errors.Is(xErr, fs.ErrNotExist) || errors.Is(xErr, ErrSourceChangedDuringCapture) {
+				return BaseCapture{}, false, nil
+			}
+			return BaseCapture{}, false, xErr
+		}
 		if retryHook != nil {
 			retryHook(qpath, attempt)
 		}
@@ -69,7 +75,13 @@ func tryCaptureTrunkOnce(
 			}
 			return BaseCapture{}, false, lErr
 		}
-		xattrs, _ := provider.ListXattr(qpath.Rel)
+		xattrs, xErr := provider.ListXattr(qpath.Rel)
+		if xErr != nil {
+			if errors.Is(xErr, fs.ErrNotExist) || errors.Is(xErr, ErrSourceChangedDuringCapture) {
+				return BaseCapture{}, false, nil
+			}
+			return BaseCapture{}, false, xErr
+		}
 		if retryHook != nil {
 			retryHook(qpath, attempt)
 		}
@@ -134,21 +146,36 @@ func tryCaptureRegularOnce(
 	if wErr != nil {
 		return BaseCapture{}, false, wErr
 	}
+	baseDirFD := int(c.backing.baseDirFile.Fd())
 
-	xattrs, _ := provider.ListXattr(qpath.Rel)
+	xattrs, xErr := provider.ListXattr(qpath.Rel)
+	if xErr != nil {
+		_ = unlinkBackingFile(baseDirFD, baseName)
+		if errors.Is(xErr, fs.ErrNotExist) || errors.Is(xErr, ErrSourceChangedDuringCapture) {
+			return BaseCapture{}, false, nil
+		}
+		return BaseCapture{}, false, xErr
+	}
 	if retryHook != nil && before.Size == 0 {
 		retryHook(qpath, attempt)
 	}
 
 	c.counters.lowerLookups.Add(1)
-	baseDirFD := int(c.backing.baseDirFile.Fd())
 	after, aErr := provider.Lstat(qpath.Rel)
 	if aErr != nil || !sameLowerIdentity(before, after) || copiedSize != before.Size || copiedSize != after.Size {
 		_ = unlinkBackingFile(baseDirFD, baseName)
 		return BaseCapture{}, false, nil
 	}
 
-	if !verifySourceAndBaseDigest(provider, qpath.Rel, after, baseDirFD, baseName, basePath, copiedSize, sha) {
+	afterXattrs, axErr := provider.ListXattr(qpath.Rel)
+	if axErr != nil {
+		_ = unlinkBackingFile(baseDirFD, baseName)
+		if errors.Is(axErr, fs.ErrNotExist) || errors.Is(axErr, ErrSourceChangedDuringCapture) {
+			return BaseCapture{}, false, nil
+		}
+		return BaseCapture{}, false, axErr
+	}
+	if !sameXattrs(xattrs, afterXattrs) || !verifySourceAndBaseDigest(provider, qpath.Rel, after, baseDirFD, baseName, basePath, copiedSize, sha) {
 		_ = unlinkBackingFile(baseDirFD, baseName)
 		return BaseCapture{}, false, nil
 	}
@@ -166,6 +193,19 @@ func tryCaptureRegularOnce(
 		BackingFile: basePath,
 		CapturedAt:  time.Now(),
 	}, true, nil
+}
+
+func sameXattrs(a, b map[string][]byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		bv, ok := b[k]
+		if !ok || !bytes.Equal(v, bv) {
+			return false
+		}
+	}
+	return true
 }
 
 func verifySourceAndBaseDigest(
@@ -236,60 +276,4 @@ func sameLowerIdentity(a, b LowerEntry) bool {
 		a.ModTime.Equal(b.ModTime) &&
 		a.CtimeSec == b.CtimeSec &&
 		a.CtimeNsec == b.CtimeNsec
-}
-
-func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
-	c.mu.Lock()
-	if c.state.released {
-		c.mu.Unlock()
-		return "", "", ErrViewReleased
-	}
-	workName, workPath := c.state.allocStorageFile(c.backing.workDir, "work")
-	workDirFD := int(c.backing.workDirFile.Fd())
-	c.mu.Unlock()
-
-	if base.BackingFile != "" {
-		cloned, cloneErr := cloneFileIfSupported(base.BackingFile, workPath)
-		if cloneErr == nil && cloned {
-			return workName, workPath, nil
-		}
-		baseFile, err := openBackingFileRO(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile), base.BackingFile)
-		if err != nil {
-			return "", "", err
-		}
-		defer func() { _ = baseFile.Close() }()
-
-		wf, err := createExclusiveBackingFile(workDirFD, workName, workPath, 0o600)
-		if err != nil {
-			return "", "", err
-		}
-		_, copyErr := io.Copy(wf, baseFile)
-		closeErr := wf.Close()
-		if err := errors.Join(copyErr, closeErr); err != nil {
-			_ = unlinkBackingFile(workDirFD, workName)
-			return "", "", err
-		}
-		return workName, workPath, nil
-	}
-
-	wf, err := createExclusiveBackingFile(workDirFD, workName, workPath, 0o600)
-	if err != nil {
-		return "", "", err
-	}
-	if err := wf.Close(); err != nil {
-		_ = unlinkBackingFile(workDirFD, workName)
-		return "", "", err
-	}
-	return workName, workPath, nil
-}
-
-func cloneXattrs(in map[string][]byte) map[string][]byte {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string][]byte, len(in))
-	for k, v := range in {
-		out[k] = append([]byte(nil), v...)
-	}
-	return out
 }
