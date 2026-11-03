@@ -358,3 +358,25 @@ func TestVerifyGateStatePreservesSelectedBashSemantics(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifyGateRejectsIncompleteSourceEvidence(t *testing.T) {
+	for _, missing := range []string{"revision", "root", "verdict"} {
+		t.Run(missing, func(t *testing.T) {
+			mgr, sess, history := verifyGateHarness(t, "./task check")
+			run := statedRun("./task check", 0)
+			run.SourceRevision, run.SourceRootDigest = invocation.SourceRevisionForRoot(sess.WorkspacePath)
+			switch missing {
+			case "revision":
+				run.SourceRevision = ""
+			case "root":
+				run.SourceRootDigest = ""
+			case "verdict":
+				run.Verdict = ""
+			}
+			mgr.Verification.RecordSourceRunEvidence(t.Context(), sess.ID, sess, verification.ProducerVerify, run)
+			if passed, _, _ := mgr.Verification.GateState(t.Context(), sess, history); passed {
+				t.Fatalf("missing %s accepted as a current pass", missing)
+			}
+		})
+	}
+}
