@@ -86,12 +86,16 @@ func verifyPrivateGitCommandExecution(t *testing.T, adapter string) {
 	})
 
 	var wtDir string
+	var writeViewFile func(rel, content string)
 	if adapter == "eagercopy" {
 		wtDir = filepath.Join(t.TempDir(), "materialized-wt")
 		_, err = mgr.InitializeMaterializedSeed(t.Context(), privategit.MaterializedSeedConfig{
 			ViewID: viewID, WorkerID: "worker-cmd", TrunkDir: trunkDir, TargetDir: wtDir,
 		})
 		testutil.FailErr(t, "init materialized seed", err)
+		writeViewFile = func(rel, content string) {
+			testutil.FailErr(t, "write materialized file", os.WriteFile(filepath.Join(wtDir, rel), []byte(content), 0o644))
+		}
 	} else {
 		core, cErr := layeredfs.New(layeredfs.Config{
 			ViewID: viewID, BackingDir: filepath.Join(t.TempDir(), "core-"+adapter), GitInterceptor: mgr,
@@ -104,16 +108,20 @@ func verifyPrivateGitCommandExecution(t *testing.T, adapter string) {
 		wtDir, finish, _, err = privategit.PrepareManagerViewOperation(t.Context(), mgr, trunkDir, "worker-cmd")
 		testutil.FailErr(t, "PrepareManagerViewOperation", err)
 		_ = finish()
+		writeViewFile = func(rel, content string) {
+			_, wErr := core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: rel}, []byte(content), 0o644)
+			testutil.FailErr(t, "write core file", wErr)
+		}
 	}
 
-	testutil.FailErr(t, "write worker file", os.WriteFile(filepath.Join(wtDir, "worker_only.txt"), []byte("only in view\n"), 0o644))
+	writeViewFile("worker_only.txt", "only in view\n")
 	calls, ok := ExactCommandReplacement(t.Context(), "git diff worker_only.txt", trunkDir, "")
 	if !ok || len(calls) != 1 || calls[0].Tool != "git_diff" || !reflect.DeepEqual(calls[0].Args["paths"], []any{"worker_only.txt"}) {
 		t.Fatalf("expected git diff replacement to recognize private view path, got %+v (ok=%v)", calls, ok)
 	}
 
 	exec := privategit.NewGitExecutor(mgr, viewID, privategit.RemotePolicy{})
-	testutil.FailErr(t, "modify tracked file", os.WriteFile(filepath.Join(wtDir, "app.txt"), []byte("v2\n"), 0o644))
+	writeViewFile("app.txt", "v2\n")
 
 	for _, cmd := range []string{
 		"git status --short",

@@ -93,6 +93,9 @@ func (t *GitOperationTool) Run(ctx context.Context, args map[string]any, tc tool
 			"git_conflict_paths": append([]string(nil), result.After.Conflicts...),
 		}}
 	}
+	if finErr := finish(); finErr != nil {
+		return output, finErr
+	}
 	return output, nil
 }
 

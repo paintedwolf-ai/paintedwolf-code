@@ -3,6 +3,7 @@ package privategit
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -166,5 +167,87 @@ func assertDigestMapsEqual(t *testing.T, label string, before, after map[string]
 			}
 			t.Fatalf("%s: path %q changed: before=%s after=%s", label, k, v, after[k])
 		}
+	}
+}
+
+func TestCrashRecoveryRefImportIdempotencyConflictAndDeletedRefSafety(t *testing.T) {
+	t.Parallel()
+	fix := buildRichRepoFixture(t)
+	mgr := newTestManager(t, fix.tmpDir)
+	core := newMountedViewWithManager(t, mgr, "view-import", fix.trunkDir)
+	exec := NewGitExecutor(mgr, "view-import", RemotePolicy{})
+
+	_, err := exec.Run(t.Context(), ".", "branch", "-D", "side-branch")
+	testutil.FailErr(t, "delete side-branch privately", err)
+	_, err = exec.Switch(t.Context(), "-c", "worker-br")
+	testutil.FailErr(t, "switch -c worker-br", err)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "imported.txt"}, []byte("import-me\n"), 0o644)
+	testutil.FailErr(t, "write imported.txt", err)
+	_, _ = exec.Run(t.Context(), ".", "add", "imported.txt")
+	_, err = exec.Commit(t.Context(), "worker branch commit")
+	testutil.FailErr(t, "commit worker-br", err)
+	_, err = exec.Run(t.Context(), ".", "tag", "v1-worker")
+	testutil.FailErr(t, "tag v1-worker", err)
+	_, err = exec.Stash(t.Context(), "push", "-m", "checkpointed-stash")
+	testutil.FailErr(t, "stash push", err)
+
+	cp, err := mgr.CaptureCheckpointGitState(t.Context(), "view-import", "cp-crash-1")
+	testutil.FailErr(t, "CaptureCheckpointGitState", err)
+
+	allOpts := RefImportOptionFlags{IncludeDetachedHead: true, IncludeTags: true, IncludeStashes: true}
+	for _, crashAt := range []ImportStage{StageObjectsImported, StageMidRefPublish, StageRefsPublished} {
+		simErr := errors.New("simulated crash at " + string(crashAt))
+		_, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
+			JobID: "job-crash", WorkerID: "worker-view-import", CheckpointID: "cp-crash-1",
+			TrunkDir: fix.trunkDir, Checkpoint: cp, Options: allOpts,
+			CrashHook: func(stage ImportStage) error {
+				if stage == crashAt {
+					return simErr
+				}
+				return nil
+			},
+		})
+		if !errors.Is(err, simErr) {
+			t.Fatalf("expected simulated crash at %s, got %v", crashAt, err)
+		}
+	}
+
+	res, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
+		JobID: "job-crash", WorkerID: "worker-view-import", CheckpointID: "cp-crash-1",
+		TrunkDir: fix.trunkDir, Checkpoint: cp, Options: allOpts,
+	})
+	testutil.FailErr(t, "idempotent ImportRefsToTrunk retry", err)
+
+	for _, wantRef := range []string{
+		"refs/paintedwolf/workers/job-crash/cp-crash-1/heads/worker-br",
+		"refs/paintedwolf/workers/job-crash/cp-crash-1/tags/v1-worker",
+		"refs/paintedwolf/workers/job-crash/cp-crash-1/stash/0",
+	} {
+		if res.ImportedRefs[wantRef] == "" {
+			t.Fatalf("missing expected imported ref %s in %+v", wantRef, res.ImportedRefs)
+		}
+	}
+
+	if !strings.Contains(gittest.Run(t, fix.trunkDir, "branch", "--list", "side-branch"), "side-branch") {
+		t.Fatalf("private branch deletion must never delete trunk branch")
+	}
+	if _, err := os.Stat(filepath.Join(fix.trunkDir, "imported.txt")); !os.IsNotExist(err) {
+		t.Fatalf("ref import must not apply files to trunk working tree, got err=%v", err)
+	}
+
+	if _, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
+		JobID: "job-crash", WorkerID: "wrong-worker-id", CheckpointID: "cp-crash-1",
+		TrunkDir: fix.trunkDir, Checkpoint: cp,
+	}); !errors.Is(err, ErrIdentityMismatch) {
+		t.Fatalf("expected ErrIdentityMismatch, got %v", err)
+	}
+
+	mainOID := strings.TrimSpace(gittest.Run(t, fix.trunkDir, "rev-parse", "refs/heads/main"))
+	gittest.Run(t, fix.trunkDir, "update-ref", "refs/paintedwolf/workers/job-conflict/cp-crash-1/heads/worker-br", mainOID)
+	if _, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
+		JobID: "job-conflict", WorkerID: "worker-view-import", CheckpointID: "cp-crash-1",
+		TrunkDir: fix.trunkDir, Checkpoint: cp,
+	}); !errors.Is(err, ErrRefImportConflict) {
+		t.Fatalf("expected ErrRefImportConflict when destination ref has different OID, got %v", err)
 	}
 }

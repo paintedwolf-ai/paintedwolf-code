@@ -12,11 +12,12 @@ import (
 
 // ManagerConfig configures a private worker Git Manager.
 type ManagerConfig struct {
-	BackingDir           string
-	Store                *RetainedObjectStore
-	MaxCaptureRetries    int
-	CaptureAttemptHook   func(worktreeDir string, attempt int)
-	FailObjectImportHook func(viewID, repoRel string) error
+	BackingDir              string
+	Store                   *RetainedObjectStore
+	MaxCaptureRetries       int
+	CaptureAttemptHook      func(worktreeDir string, attempt int)
+	FailObjectImportHook    func(viewID, repoRel string) error
+	FailObjectRetentionHook func(viewID, repoRel string) error
 }
 
 type managedView struct {
@@ -90,45 +91,7 @@ func (m *Manager) MountedClaim(
 	core *layeredfs.Core,
 	authorizedGitDirs ...string,
 ) error {
-	if viewID == "" || trunkDir == "" || core == nil {
-		return fmt.Errorf("privategit: viewID, trunkDir, and core are required")
-	}
-	if rootID == "" {
-		rootID = "primary"
-	}
-	if workerID == "" {
-		workerID = viewID
-	}
-	absTrunk, err := filepath.Abs(trunkDir)
-	if err != nil {
-		return err
-	}
-	viewBacking := filepath.Join(m.cfg.BackingDir, "views", viewID)
-	worktreeStage := filepath.Join(viewBacking, "worktree")
-	if err := os.MkdirAll(worktreeStage, 0o755); err != nil {
-		return err
-	}
-
-	view := &managedView{
-		viewID:            viewID,
-		workerID:          workerID,
-		rootID:            rootID,
-		trunkDir:          absTrunk,
-		worktreeDir:       worktreeStage,
-		materialized:      false,
-		core:              core,
-		authorizedGitDirs: append([]string(nil), authorizedGitDirs...),
-		accessOrigin:      OriginFilesystem,
-		repos:             make(map[string]*initializedRepo),
-	}
-	registerManagedView(m, view)
-
-	return core.RegisterLowerProvider(rootID, &gitAwareLowerProvider{
-		mgr:      m,
-		viewID:   viewID,
-		rootID:   rootID,
-		trunkDir: absTrunk,
-	})
+	return m.MountedClaimWithWorktree(viewID, workerID, rootID, trunkDir, "", core, authorizedGitDirs...)
 }
 
 func registerManagedView(m *Manager, view *managedView) {

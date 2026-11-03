@@ -1,142 +1,217 @@
 package privategit
 
 import (
-	"bytes"
-	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
-	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-func initializeMountedSparseWorktree(
-	ctx context.Context,
-	srcWorktreeDir, targetWorktreeDir, privateGitDir string,
+// MountedClaimWithWorktree binds a mounted layeredfs.Core view and associates it with
+// mountWorktreeDir (the active mounted worktree path, or a hardlinked projection directory
+// when mountWorktreeDir is empty) without scanning or initializing repositories at claim time (#1671).
+func (m *Manager) MountedClaimWithWorktree(
+	viewID, workerID, rootID, trunkDir, mountWorktreeDir string,
+	core *layeredfs.Core,
+	authorizedGitDirs ...string,
 ) error {
-	dirtyPaths := make(map[string]bool)
-	statusOut, code, err := gitexec.Run(
-		ctx,
-		srcWorktreeDir,
-		[]string{
-			"--git-dir=" + privateGitDir,
-			"--work-tree=" + srcWorktreeDir,
-			"--no-optional-locks",
-			"status",
-			"--porcelain=v1",
-			"-z",
-			"--untracked-files=all",
-		},
-		gitexec.Opts{
-			Profile:   gitexec.ProfileHermetic,
-			IndexFile: filepath.Join(privateGitDir, "index"),
-		},
-	)
-	if err == nil && code == 0 {
-		for _, p := range parsePorcelainZPaths(statusOut) {
-			dirtyPaths[p] = true
-		}
+	if viewID == "" || trunkDir == "" || core == nil {
+		return fmt.Errorf("privategit: viewID, trunkDir, and core are required")
 	}
-	if _, sErr := os.Lstat(filepath.Join(srcWorktreeDir, ".gitmodules")); sErr == nil {
-		dirtyPaths[".gitmodules"] = true
+	if rootID == "" {
+		rootID = "primary"
 	}
-	for rel := range dirtyPaths {
-		if err := copySingleTrunkPath(srcWorktreeDir, targetWorktreeDir, rel); err != nil {
-			return err
-		}
+	if workerID == "" {
+		workerID = viewID
 	}
-	lsOut, lsCode, lsErr := gitexec.Run(ctx, targetWorktreeDir, []string{"ls-files", "-z"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	if lsErr == nil && lsCode == 0 {
-		var cleanTracked []string
-		for _, tok := range bytes.Split(lsOut, []byte{0}) {
-			if p := string(tok); p != "" && !dirtyPaths[p] {
-				cleanTracked = append(cleanTracked, p)
-			}
-		}
-		if len(cleanTracked) > 0 {
-			_ = updateIndexSkipWorktree(ctx, targetWorktreeDir, "--skip-worktree", cleanTracked)
-		}
-	}
-	_, _, _ = gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	return nil
-}
-
-func parsePorcelainZPaths(raw []byte) []string {
-	tokens := bytes.Split(raw, []byte{0})
-	var out []string
-	for i := 0; i < len(tokens); i++ {
-		tok := tokens[i]
-		if len(tok) < 4 {
-			continue
-		}
-		xy, path := string(tok[:2]), string(tok[3:])
-		if path != "" {
-			out = append(out, path)
-		}
-		if (strings.Contains(xy, "R") || strings.Contains(xy, "C")) && i+1 < len(tokens) && len(tokens[i+1]) > 0 {
-			out = append(out, string(tokens[i+1]))
-			i++
-		}
-	}
-	return out
-}
-
-func updateIndexSkipWorktree(ctx context.Context, worktreeDir, flag string, paths []string) error {
-	lsOut, lsCode, lsErr := gitexec.Run(ctx, worktreeDir, []string{"ls-files", "-z"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	if lsErr != nil || lsCode != 0 {
-		return nil
-	}
-	inIndex := make(map[string]bool)
-	for _, tok := range bytes.Split(lsOut, []byte{0}) {
-		if len(tok) > 0 {
-			inIndex[string(tok)] = true
-		}
-	}
-	var filtered []string
-	for _, p := range paths {
-		if inIndex[p] {
-			filtered = append(filtered, p)
-		}
-	}
-	const batchSize = 128
-	for i := 0; i < len(filtered); i += batchSize {
-		end := min(i+batchSize, len(filtered))
-		args := append([]string{"update-index", flag}, filtered[i:end]...)
-		_, _, _ = gitexec.Run(ctx, worktreeDir, args, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	}
-	return nil
-}
-
-func copySingleTrunkPath(srcRoot, dstRoot, slashRel string) error {
-	clean := cleanSlashRel(slashRel)
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean == ".git" || strings.HasPrefix(clean, ".git/") {
-		return nil
-	}
-	srcPath := filepath.Join(srcRoot, filepath.FromSlash(clean))
-	dstPath := filepath.Join(dstRoot, filepath.FromSlash(clean))
-	info, err := os.Lstat(srcPath)
+	absTrunk, err := filepath.Abs(trunkDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
 		return err
 	}
-	if info.Mode()&fs.ModeSymlink != 0 {
-		link, lErr := os.Readlink(srcPath)
-		if lErr != nil {
-			return lErr
+	worktreeDir := strings.TrimSpace(mountWorktreeDir)
+	if worktreeDir == "" {
+		worktreeDir = filepath.Join(m.cfg.BackingDir, "views", viewID, "worktree")
+	}
+	absWT, err := filepath.Abs(worktreeDir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(absWT, 0o755); err != nil {
+		return err
+	}
+
+	view := &managedView{
+		viewID:            viewID,
+		workerID:          workerID,
+		rootID:            rootID,
+		trunkDir:          absTrunk,
+		worktreeDir:       absWT,
+		materialized:      false,
+		core:              core,
+		authorizedGitDirs: append([]string(nil), authorizedGitDirs...),
+		accessOrigin:      OriginFilesystem,
+		repos:             make(map[string]*initializedRepo),
+	}
+	registerManagedView(m, view)
+
+	return core.RegisterLowerProvider(rootID, &gitAwareLowerProvider{
+		mgr:      m,
+		viewID:   viewID,
+		rootID:   rootID,
+		trunkDir: absTrunk,
+	})
+}
+
+// BindMountedWorktree updates the mounted worktree directory bound to viewID (#1671).
+func (m *Manager) BindMountedWorktree(viewID, mountWorktreeDir string) error {
+	if strings.TrimSpace(mountWorktreeDir) == "" {
+		return fmt.Errorf("privategit: mountWorktreeDir is required")
+	}
+	absWT, err := filepath.Abs(mountWorktreeDir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(absWT, 0o755); err != nil {
+		return err
+	}
+	view, err := getManagedView(m, viewID)
+	if err != nil {
+		return err
+	}
+	unregisterActiveView(view)
+	m.mu.Lock()
+	if oldWT := canonicalCleanPath(view.worktreeDir); oldWT != "" {
+		delete(m.viewsByWorktree, oldWT)
+	}
+	view.worktreeDir = absWT
+	if newWT := canonicalCleanPath(absWT); newWT != "" {
+		m.viewsByWorktree[newWT] = view
+	}
+	m.mu.Unlock()
+	registerActiveView(m, view)
+	return nil
+}
+
+// projectMountedWorktreeFromTrunk projects working-tree entries from srcWorktreeDir into
+// targetWorktreeDir using hardlinks for regular files (0 bytes copied, 0 SHA-256 passes)
+// while preserving .git metadata isolation and source index state (#1671).
+func projectMountedWorktreeFromTrunk(srcWorktreeDir, targetWorktreeDir string) (map[string]uint64, error) {
+	inodes := make(map[string]uint64)
+	err := filepath.WalkDir(srcWorktreeDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
-			return err
+		rel, rErr := filepath.Rel(srcWorktreeDir, path)
+		if rErr != nil || rel == "." {
+			return rErr
+		}
+		if d.Name() == ".git" {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		slashRel := filepath.ToSlash(rel)
+		dstPath := filepath.Join(targetWorktreeDir, rel)
+		info, iErr := d.Info()
+		if iErr != nil {
+			return iErr
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			link, lErr := os.Readlink(path)
+			if lErr != nil {
+				return lErr
+			}
+			if curLink, cErr := os.Readlink(dstPath); cErr == nil && curLink == link {
+				return nil
+			}
+			if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+				return err
+			}
+			_ = os.RemoveAll(dstPath)
+			return os.Symlink(link, dstPath)
+		}
+		if d.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode().Perm()|0o700)
+		}
+		ino := fileInode(info)
+		inodes[slashRel] = ino
+		return linkOrCopyTrunkFile(path, dstPath, info, ino)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return inodes, nil
+}
+
+func linkOrCopyTrunkFile(srcPath, dstPath string, srcInfo fs.FileInfo, srcIno uint64) error {
+	if dstInfo, err := os.Lstat(dstPath); err == nil {
+		if srcIno != 0 && fileInode(dstInfo) == srcIno {
+			return nil
 		}
 		_ = os.RemoveAll(dstPath)
-		return os.Symlink(link, dstPath)
 	}
-	if info.IsDir() {
-		return filepath.WalkDir(srcPath, func(p string, d fs.DirEntry, wErr error) error {
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.Link(srcPath, dstPath); err == nil {
+		return nil
+	}
+	return copyWorkingTreeFile(srcPath, dstPath, srcInfo.Mode())
+}
+
+func fileInode(info fs.FileInfo) uint64 {
+	if info == nil {
+		return 0
+	}
+	if st, ok := info.Sys().(*syscall.Stat_t); ok && st != nil {
+		return uint64(st.Ino)
+	}
+	return 0
+}
+
+func syncTrunkInodesToWorktree(view *managedView) error {
+	if view == nil || view.materialized {
+		return nil
+	}
+	coreTouched := make(map[string]bool)
+	if view.core != nil {
+		if changes, err := view.core.EnumerateChanges(false); err == nil {
+			for _, ce := range changes {
+				if ce.Path.RootID == view.rootID {
+					coreTouched[cleanSlashRel(ce.Path.Rel)] = true
+				}
+			}
+		}
+	}
+	view.mu.Lock()
+	repos := make([]*initializedRepo, 0, len(view.repos))
+	for _, r := range view.repos {
+		if r != nil && r.privateGitDir != "" {
+			repos = append(repos, r)
+		}
+	}
+	view.mu.Unlock()
+
+	for _, r := range repos {
+		srcDir := view.trunkDir
+		if r.repoRel != "." && r.repoRel != "" {
+			srcDir = filepath.Join(view.trunkDir, filepath.FromSlash(r.repoRel))
+		}
+		if r.trunkInodes == nil {
+			r.trunkInodes = make(map[string]uint64)
+		}
+		_ = filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, wErr error) error {
 			if wErr != nil {
-				return wErr
+				return nil
+			}
+			rel, rErr := filepath.Rel(srcDir, path)
+			if rErr != nil || rel == "." {
+				return nil
 			}
 			if d.Name() == ".git" {
 				if d.IsDir() {
@@ -144,149 +219,30 @@ func copySingleTrunkPath(srcRoot, dstRoot, slashRel string) error {
 				}
 				return nil
 			}
-			rel, rErr := filepath.Rel(srcRoot, p)
-			if rErr != nil {
-				return rErr
+			if d.IsDir() || d.Type()&fs.ModeSymlink != 0 {
+				return nil
 			}
-			if d.IsDir() {
-				return os.MkdirAll(filepath.Join(dstRoot, rel), 0o755)
+			slashRel := filepath.ToSlash(rel)
+			fullRel := slashRel
+			if r.repoRel != "." && r.repoRel != "" {
+				fullRel = cleanSlashRel(r.repoRel + "/" + slashRel)
 			}
-			return copySingleTrunkPath(srcRoot, dstRoot, filepath.ToSlash(rel))
+			if coreTouched[fullRel] {
+				return nil
+			}
+			info, iErr := d.Info()
+			if iErr != nil {
+				return nil
+			}
+			ino := fileInode(info)
+			prevIno, seen := r.trunkInodes[slashRel]
+			if !seen || (ino != 0 && prevIno != ino) {
+				dstPath := filepath.Join(r.worktreeDir, rel)
+				_ = linkOrCopyTrunkFile(path, dstPath, info, ino)
+				r.trunkInodes[slashRel] = ino
+			}
+			return nil
 		})
 	}
-	_, err = copyAndHashWorkingFile(srcPath, dstPath, info.Mode())
-	return err
-}
-
-func materializeMountedPaths(ctx context.Context, view *managedView, repoRel string, relPaths []string) error {
-	if view == nil || view.materialized || len(relPaths) == 0 {
-		return nil
-	}
-	repoRel = cleanSlashRel(repoRel)
-	srcDir, dstDir := view.trunkDir, view.worktreeDir
-	if repoRel != "." {
-		srcDir = filepath.Join(view.trunkDir, filepath.FromSlash(repoRel))
-		dstDir = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
-	}
-	var toUnskip []string
-	seen := make(map[string]bool, len(relPaths))
-	for _, rawRel := range relPaths {
-		clean := cleanSlashRel(rawRel)
-		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean == ".git" || strings.HasPrefix(clean, ".git/") || seen[clean] {
-			continue
-		}
-		seen[clean] = true
-		if _, err := os.Lstat(filepath.Join(dstDir, filepath.FromSlash(clean))); os.IsNotExist(err) {
-			if cErr := copySingleTrunkPath(srcDir, dstDir, clean); cErr != nil {
-				return cErr
-			}
-		}
-		toUnskip = append(toUnskip, clean)
-	}
-	if len(toUnskip) > 0 {
-		_ = updateIndexSkipWorktree(ctx, dstDir, "--no-skip-worktree", toUnskip)
-		_, _, _ = gitexec.Run(ctx, dstDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	}
 	return nil
-}
-
-func materializeCandidateRefDiffs(ctx context.Context, view *managedView, repoRel string) error {
-	if view == nil || view.materialized {
-		return nil
-	}
-	repoRel = cleanSlashRel(repoRel)
-	dstDir := view.worktreeDir
-	if repoRel != "." {
-		dstDir = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
-	}
-	headOut, hCode, hErr := gitexec.Run(ctx, dstDir, []string{"rev-parse", "--verify", "HEAD"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	if hErr != nil || hCode != 0 {
-		return nil
-	}
-	headOID := strings.TrimSpace(string(headOut))
-	refsOut, rCode, rErr := gitexec.Run(ctx, dstDir, []string{"for-each-ref", "--format=%(objectname)", "refs/heads", "refs/stash"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	if rErr != nil || rCode != 0 {
-		return nil
-	}
-	candidates := make(map[string]bool)
-	for _, line := range strings.Split(strings.TrimSpace(string(refsOut)), "\n") {
-		if oid := strings.TrimSpace(line); oid != "" && oid != headOID {
-			candidates[oid] = true
-		}
-	}
-	view.mu.Lock()
-	if r := view.repos[repoRel]; r != nil && r.initialHeadOID != "" && r.initialHeadOID != headOID {
-		candidates[r.initialHeadOID] = true
-		candidates["HEAD^"] = true
-	}
-	view.mu.Unlock()
-
-	var diffPaths []string
-	for other := range candidates {
-		dtOut, dtCode, dtErr := gitexec.Run(ctx, dstDir, []string{"diff-tree", "-r", "--name-only", "-z", headOID, other}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-		if dtErr == nil && dtCode == 0 {
-			for _, tok := range bytes.Split(dtOut, []byte{0}) {
-				if len(tok) > 0 {
-					diffPaths = append(diffPaths, string(tok))
-				}
-			}
-		}
-	}
-	return materializeMountedPaths(ctx, view, repoRel, diffPaths)
-}
-
-func materializeCommandTargets(ctx context.Context, view *managedView, repoRel string, args []string) error {
-	if view == nil || view.materialized || len(args) == 0 {
-		return nil
-	}
-	switch args[0] {
-	case "checkout", "switch", "stash", "merge", "rebase":
-		_ = materializeCandidateRefDiffs(ctx, view, repoRel)
-	case "revert", "cherry-pick":
-		dstDir := view.worktreeDir
-		if repoRel != "." {
-			dstDir = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
-		}
-		for _, a := range args[1:] {
-			if strings.HasPrefix(a, "-") || a == "" {
-				continue
-			}
-			for _, spec := range []string{a + "^", a} {
-				if dtOut, dtCode, dtErr := gitexec.Run(ctx, dstDir, []string{"diff-tree", "-r", "--name-only", "-z", "HEAD", spec}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); dtErr == nil && dtCode == 0 {
-					var paths []string
-					for _, tok := range bytes.Split(dtOut, []byte{0}) {
-						if len(tok) > 0 {
-							paths = append(paths, string(tok))
-						}
-					}
-					_ = materializeMountedPaths(ctx, view, repoRel, paths)
-				}
-			}
-		}
-	}
-	srcDir := view.trunkDir
-	if repoRel != "." {
-		srcDir = filepath.Join(view.trunkDir, filepath.FromSlash(repoRel))
-	}
-	var explicit []string
-	afterDash := false
-	for _, a := range args[1:] {
-		if a == "--" {
-			afterDash = true
-			continue
-		}
-		if !afterDash && strings.HasPrefix(a, "-") {
-			continue
-		}
-		clean := cleanSlashRel(a)
-		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
-			continue
-		}
-		if afterDash {
-			explicit = append(explicit, clean)
-		} else if _, err := os.Lstat(filepath.Join(srcDir, filepath.FromSlash(clean))); err == nil {
-			explicit = append(explicit, clean)
-		}
-	}
-	return materializeMountedPaths(ctx, view, repoRel, explicit)
 }

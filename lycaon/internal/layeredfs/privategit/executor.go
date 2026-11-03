@@ -2,6 +2,7 @@ package privategit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -147,10 +148,7 @@ func executeViewGitCommand(
 	if err := syncCoreOverlayToWorktree(view); err != nil {
 		return "", err
 	}
-	if err := materializeCommandTargets(ctx, view, repoRel, normalizedArgs); err != nil {
-		return "", err
-	}
-	beforeTree := captureWorktreeMutationBaseline(ctx, view, targetWT)
+	beforeTree := captureWorktreeMutationBaseline(view, targetWT)
 	privObjDir := filepath.Join(targetWT, ".git", "objects")
 	beforeObjBytes := measureDirBytes(privObjDir)
 
@@ -177,8 +175,9 @@ func executeViewGitCommand(
 		return string(out), fmt.Errorf("git %v failed (exit %d): %v: %s", normalizedArgs, code, runErr, strings.TrimSpace(string(out)))
 	}
 
-	_ = retainNewPrivateObjects(ctx, e.mgr, view, repoRel)
-	if err := syncWorktreeMutationsToCore(ctx, view, repoRel, beforeTree); err != nil {
+	syncErr := syncWorktreeMutationsToCore(view, repoRel, beforeTree)
+	retainErr := retainNewPrivateObjects(ctx, e.mgr, view, repoRel)
+	if err := errors.Join(syncErr, retainErr); err != nil {
 		return string(out), err
 	}
 	return string(out), nil

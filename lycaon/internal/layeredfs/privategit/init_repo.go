@@ -3,7 +3,6 @@ package privategit
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +19,7 @@ type initializedRepo struct {
 	leaseID        string
 	initialHeadOID string
 	initialRefs    map[string]string
+	trunkInodes    map[string]uint64
 	metrics        InitMetrics
 }
 
@@ -78,19 +78,19 @@ func initializePrivateRepo(
 	tipOIDs, initRefs, err := collectCapturedRefAndIndexOIDs(ctx, stageGitDir)
 	if err != nil {
 		cleanupStage()
-		return nil, fmt.Errorf("%w: %v", layeredfs.ErrGitPending, err)
+		return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, err)
 	}
 	if mgr.cfg.FailObjectImportHook != nil {
 		if hErr := mgr.cfg.FailObjectImportHook(view.viewID, repoRel); hErr != nil {
 			cleanupStage()
-			return nil, fmt.Errorf("%w: %v", layeredfs.ErrGitPending, hErr)
+			return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, hErr)
 		}
 	}
 
 	importMetrics, reachableOIDs, err := mgr.store.ImportRepositoryObjects(ctx, layout.objectDirs, tipOIDs)
 	if err != nil {
 		cleanupStage()
-		return nil, fmt.Errorf("%w: %v", layeredfs.ErrGitPending, err)
+		return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, err)
 	}
 
 	leaseID, err := mgr.store.RetainForView(view.viewID+":"+repoRel, reachableOIDs)
@@ -123,21 +123,34 @@ func initializePrivateRepo(
 		cleanupStage()
 		return nil, err
 	}
-
-	if layout.isLinkedWT && layout.worktreeName != "" {
-		_ = setupPrivateLinkedWorktreeMetadata(finalGitDir, targetWorktreeDir, layout.worktreeName)
+	abortFinal := func(retErr error) (*initializedRepo, error) {
+		_ = mgr.store.ReleaseLease(leaseID)
+		_ = os.RemoveAll(finalGitDir)
+		return nil, retErr
 	}
 
-	if !view.materialized {
-		if err := initializeMountedSparseWorktree(ctx, layout.worktreeDir, targetWorktreeDir, finalGitDir); err != nil {
-			_ = mgr.store.ReleaseLease(leaseID)
-			return nil, err
+	if layout.isLinkedWT && layout.worktreeName != "" {
+		if err := setupPrivateLinkedWorktreeMetadata(finalGitDir, targetWorktreeDir, layout.worktreeName); err != nil {
+			return abortFinal(fmt.Errorf("%w: %v", layeredfs.ErrGitPending, err))
 		}
-	} else {
-		// Refresh stat cache in private index without modifying staged/unstaged blob OIDs.
-		_, _, _ = gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{
+	}
+
+	var trunkInodes map[string]uint64
+	if !view.materialized {
+		inodes, pErr := projectMountedWorktreeFromTrunk(layout.worktreeDir, targetWorktreeDir)
+		if pErr != nil {
+			return abortFinal(fmt.Errorf("%w: %v", layeredfs.ErrGitPending, pErr))
+		}
+		trunkInodes = inodes
+	}
+
+	if _, sErr := os.Stat(filepath.Join(finalGitDir, "index")); sErr == nil {
+		uOut, uCode, uErr := gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{
 			Profile: gitexec.ProfileHermetic,
 		})
+		if (uErr != nil && uCode != 1) || uCode >= 128 || uCode < 0 {
+			return abortFinal(fmt.Errorf("%w: update-index refresh failed (exit %d): %v: %s", layeredfs.ErrGitPending, uCode, uErr, strings.TrimSpace(string(uOut))))
+		}
 	}
 
 	var initHeadOID string
@@ -157,6 +170,7 @@ func initializePrivateRepo(
 		leaseID:        leaseID,
 		initialHeadOID: initHeadOID,
 		initialRefs:    initRefs,
+		trunkInodes:    trunkInodes,
 		metrics:        importMetrics,
 	}, nil
 }
@@ -166,6 +180,11 @@ func retainNewPrivateObjects(ctx context.Context, mgr *Manager, view *managedVie
 		return nil
 	}
 	repoRel = cleanSlashRel(repoRel)
+	if mgr.cfg.FailObjectRetentionHook != nil {
+		if hErr := mgr.cfg.FailObjectRetentionHook(view.viewID, repoRel); hErr != nil {
+			return fmt.Errorf("%w: %w", ErrCorruptObjectStore, hErr)
+		}
+	}
 	view.mu.Lock()
 	repo := view.repos[repoRel]
 	view.mu.Unlock()
@@ -173,38 +192,27 @@ func retainNewPrivateObjects(ctx context.Context, mgr *Manager, view *managedVie
 		return nil
 	}
 	tipOIDs, _, err := collectCapturedRefAndIndexOIDs(ctx, repo.privateGitDir)
-	if err != nil || len(tipOIDs) == 0 {
+	if err != nil {
+		return err
+	}
+	if len(tipOIDs) == 0 {
 		return nil
 	}
 	objDirs := []string{filepath.Join(repo.privateGitDir, "objects"), mgr.store.ObjectsDir()}
 	_, reachable, err := mgr.store.ImportRepositoryObjects(ctx, objDirs, tipOIDs)
 	if err != nil {
-		return nil
+		return err
 	}
-	_, _ = mgr.store.RetainForView(view.viewID+":"+repoRel, reachable)
+	newLeaseID, err := mgr.store.RetainForView(view.viewID+":"+repoRel, reachable)
+	if err != nil {
+		return err
+	}
+	view.mu.Lock()
+	oldLease := repo.leaseID
+	repo.leaseID = newLeaseID
+	view.mu.Unlock()
+	if oldLease != "" && oldLease != newLeaseID {
+		_ = mgr.store.ReleaseLease(oldLease)
+	}
 	return nil
-}
-
-func sparseMaterializedPaths(targetWT string) []string {
-	var out []string
-	_ = filepath.WalkDir(targetWT, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		rel, rErr := filepath.Rel(targetWT, path)
-		if rErr != nil || rel == "." {
-			return nil
-		}
-		if d.Name() == ".git" {
-			if d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if !d.IsDir() {
-			out = append(out, filepath.ToSlash(rel))
-		}
-		return nil
-	})
-	return out
 }

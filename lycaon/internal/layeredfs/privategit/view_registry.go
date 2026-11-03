@@ -2,6 +2,7 @@ package privategit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -199,28 +200,13 @@ func prepareManagedViewOperation(
 	if err := syncCoreOverlayToWorktree(view); err != nil {
 		return "", noop, true, err
 	}
-	if err := materializeCandidateRefDiffs(ctx, view, "."); err != nil {
-		return "", noop, true, err
-	}
-	before := captureWorktreeMutationBaseline(ctx, view, view.worktreeDir)
+	before := captureWorktreeMutationBaseline(view, view.worktreeDir)
 	finish := func() error {
-		_ = retainNewPrivateObjects(ctx, mgr, view, ".")
-		return syncWorktreeMutationsToCore(ctx, view, ".", before)
+		syncErr := syncWorktreeMutationsToCore(view, ".", before)
+		retainErr := retainNewPrivateObjects(ctx, mgr, view, ".")
+		return errors.Join(syncErr, retainErr)
 	}
 	return view.worktreeDir, finish, true, nil
-}
-
-// MaterializeViewPaths ensures that explicit relative paths are materialized in a mounted
-// view's sparse worktree stage and have --no-skip-worktree set prior to path-targeted Git commands (#1671).
-func MaterializeViewPaths(ctx context.Context, rootOrBranchDir, workerID string, relPaths ...string) error {
-	_, view, ok, err := lookupActiveView(rootOrBranchDir, workerID)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
-	}
-	return materializeMountedPaths(ctx, view, ".", relPaths)
 }
 
 // LookupExecutor returns a GitExecutor bound to an active view matching rootOrBranchDir and workerID.
