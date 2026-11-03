@@ -164,7 +164,12 @@ func settleViewRelease(
 			return receipt, &AdapterError{AdapterID: adapterID, Op: "release", ReasonCode: ReasonCleanupFailed, Diagnostic: uErr.Error(), Cause: uErr}
 		}
 	}
-	if err := os.RemoveAll(view.RuntimeViewDir); err != nil {
+	for _, r := range view.Roots {
+		if r.WorkspacePath != "" {
+			makeDirsWritable(r.WorkspacePath)
+		}
+	}
+	if err := removeAllForceWritable(view.RuntimeViewDir); err != nil {
 		receipt.Settled = false
 		receipt.ReasonCode = ReasonCleanupFailed
 		receipt.Diagnostic = err.Error()

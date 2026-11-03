@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -199,4 +200,29 @@ func entryKindMatchesMode(kind layeredfs.EntryKind, mode fs.FileMode) bool {
 	default:
 		return false
 	}
+}
+
+func makeDirsWritable(root string) {
+	if root == "" {
+		return
+	}
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if info, iErr := d.Info(); iErr == nil && info.Mode().Perm()&0o700 != 0o700 {
+				_ = os.Chmod(p, info.Mode().Perm()|0o700)
+			}
+		}
+		return nil
+	})
+}
+
+func removeAllForceWritable(root string) error {
+	if root == "" {
+		return nil
+	}
+	makeDirsWritable(root)
+	return os.RemoveAll(root)
 }

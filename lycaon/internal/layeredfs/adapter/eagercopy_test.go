@@ -280,6 +280,18 @@ func TestEagerCopySeedMetadataFailureFailsClosedAndUnchangedCaptureIsClean(t *te
 	if err := os.Symlink("script.sh", filepath.Join(subDir, "link")); err != nil {
 		t.Fatal(err)
 	}
+	roDir := filepath.Join(srcRoot, "rodir")
+	if err := os.MkdirAll(roDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(roDir, "inside.txt"), []byte("read-only-dir-child\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(roDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(roDir, 0o755) })
+
 	xattrSupported := unix.Lsetxattr(scriptFile, "user.seedmeta", []byte("v1"), 0) == nil
 	if xattrSupported {
 		_ = unix.Lsetxattr(subDir, "user.dirmeta", []byte("d1"), 0)
@@ -287,9 +299,17 @@ func TestEagerCopySeedMetadataFailureFailsClosedAndUnchangedCaptureIsClean(t *te
 
 	adp := NewEagerCopyAdapter(ReasonMountDenied)
 	verifySeedMetadataFailuresCleanUp(t, ctx, adp, tmp, srcRoot, xattrSupported)
+	verifyPreservedModesAndIntentionalRoDirChmod(t, ctx, adp, tmp, srcRoot, xattrSupported)
+}
 
-	// Now run a clean Prepare and verify non-default permissions + xattrs are preserved and
-	// an unchanged CheckpointBarrier capture produces zero logical or physical changes.
+func verifyPreservedModesAndIntentionalRoDirChmod(
+	t *testing.T,
+	ctx context.Context,
+	adp *EagerCopyAdapter,
+	tmp, srcRoot string,
+	xattrSupported bool,
+) {
+	t.Helper()
 	view, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "meta-clean-view",
 		RuntimeDir: filepath.Join(tmp, "rt"),
@@ -304,6 +324,15 @@ func TestEagerCopySeedMetadataFailureFailsClosedAndUnchangedCaptureIsClean(t *te
 	if err != nil || dirInfo.Mode().Perm() != 0o775 {
 		t.Fatalf("expected seeded subdir mode 0775 on disk, err=%v mode=%v", err, dirInfo.Mode())
 	}
+	roDirPath := filepath.Join(view.PrimaryWorkPath, "rodir")
+	roDirInfo, err := os.Lstat(roDirPath)
+	if err != nil || roDirInfo.Mode().Perm() != 0o555 {
+		t.Fatalf("expected seeded rodir mode 0555 on disk, err=%v mode=%v", err, roDirInfo.Mode())
+	}
+	roBase, ok := view.Core.CapturedBase(layeredfs.QualifiedPath{RootID: "repo", Rel: "rodir"})
+	if !ok || roBase.Mode.Perm() != 0o555 {
+		t.Fatalf("expected CapturedBase for rodir mode 0555, ok=%v base=%+v", ok, roBase)
+	}
 	fileInfo, err := os.Lstat(filepath.Join(view.PrimaryWorkPath, "subdir", "script.sh"))
 	if err != nil || fileInfo.Mode().Perm() != 0o750 {
 		t.Fatalf("expected seeded script.sh mode 0750 on disk, err=%v mode=%v", err, fileInfo.Mode())
@@ -313,20 +342,43 @@ func TestEagerCopySeedMetadataFailureFailsClosedAndUnchangedCaptureIsClean(t *te
 	if err != nil {
 		t.Fatalf("unchanged CheckpointBarrier failed: %v", err)
 	}
-	defer func() { _ = relBarrier() }()
-
 	if !receipt.DirtyDataFlushed || view.Core.Stats().LogicalChanges != 0 {
+		_ = relBarrier()
 		t.Fatalf("expected DirtyDataFlushed and 0 LogicalChanges on unchanged capture, receipt=%+v stats=%+v", receipt, view.Core.Stats())
 	}
 	changes, err := view.Core.EnumerateChanges(false)
 	if err != nil || len(changes) != 0 {
+		_ = relBarrier()
 		t.Fatalf("expected 0 changes on unchanged capture, err=%v changes=%+v", err, changes)
 	}
 	if xattrSupported {
 		val, err := view.Core.GetXattr(layeredfs.QualifiedPath{RootID: "repo", Rel: "subdir/script.sh"}, "user.seedmeta", true)
 		if err != nil || string(val) != "v1" {
+			_ = relBarrier()
 			t.Fatalf("expected preserved seed xattr user.seedmeta=v1 in Core, err=%v val=%q", err, string(val))
 		}
+	}
+	if err := relBarrier(); err != nil {
+		t.Fatalf("relBarrier failed: %v", err)
+	}
+
+	// Intentional worker mode edit on rodir (0555 -> 0755) must be captured on the next CheckpointBarrier.
+	if err := os.Chmod(roDirPath, 0o755); err != nil {
+		t.Fatalf("chmod rodir to 0755 failed: %v", err)
+	}
+	_, relBarrier2, err := adp.CheckpointBarrier(ctx, view.ViewID)
+	if err != nil {
+		t.Fatalf("second CheckpointBarrier after rodir chmod failed: %v", err)
+	}
+	changes2, err := view.Core.EnumerateChanges(true)
+	_ = relBarrier2()
+	if err != nil || len(changes2) != 1 || changes2[0].Path.Rel != "rodir" ||
+		changes2[0].Base.Mode.Perm() != 0o555 || changes2[0].Final.Mode.Perm() != 0o755 {
+		t.Fatalf("expected rodir mode change 0555->0755 to be captured, err=%v changes=%+v", err, changes2)
+	}
+	relReceipt, err := adp.Release(ctx, view.ViewID)
+	if err != nil || !relReceipt.Settled {
+		t.Fatalf("Release after rodir test failed: receipt=%+v err=%v", relReceipt, err)
 	}
 }
 

@@ -93,13 +93,13 @@ func cleanupFailedPrepare(req PrepareRequest, runtimeViewDir string, out *seedOu
 	if core != nil {
 		_ = core.ReleaseView()
 	}
-	_ = os.RemoveAll(runtimeViewDir)
+	_ = removeAllForceWritable(runtimeViewDir)
 	if req.BackingDir != "" {
-		_ = os.RemoveAll(req.BackingDir)
+		_ = removeAllForceWritable(req.BackingDir)
 	}
 	for _, dir := range req.TargetRootDirs {
 		if strings.TrimSpace(dir) != "" {
-			_ = os.RemoveAll(dir)
+			_ = removeAllForceWritable(dir)
 		}
 	}
 }

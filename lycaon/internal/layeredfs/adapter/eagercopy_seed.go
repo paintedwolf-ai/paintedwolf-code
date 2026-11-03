@@ -32,6 +32,12 @@ type seedOutcome struct {
 	observedBytes   int64
 }
 
+type seededDirMode struct {
+	dstPath string
+	perm    fs.FileMode
+	modTime time.Time
+}
+
 type seedAccumulator struct {
 	ctx            context.Context
 	req            PrepareRequest
@@ -42,6 +48,7 @@ type seedAccumulator struct {
 	maxBytes       int64
 	gitStores      *gitStoreRegistry
 	gitReposBuilt  int
+	seededDirs     []seededDirMode
 	out            *seedOutcome
 }
 
@@ -96,7 +103,8 @@ func seedSelectedRoots(
 
 func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir string) error {
 	srcRoot := filepath.Clean(g.SourcePath)
-	return filepath.WalkDir(srcRoot, func(srcPath string, d fs.DirEntry, walkErr error) error {
+	a.seededDirs = a.seededDirs[:0]
+	walkErr := filepath.WalkDir(srcRoot, func(srcPath string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -122,6 +130,19 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir string) error {
 		}
 		return a.seedSingleEntry(g, rel, srcPath, filepath.Join(seedDir, relOS))
 	})
+	if walkErr != nil {
+		return walkErr
+	}
+	for i := len(a.seededDirs) - 1; i >= 0; i-- {
+		dm := a.seededDirs[i]
+		if err := os.Chtimes(dm.dstPath, dm.modTime, dm.modTime); err != nil {
+			return err
+		}
+		if err := chmodPath(dm.dstPath, dm.perm); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath string, d fs.DirEntry) error {
@@ -198,19 +219,22 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 		if err := a.chargeUsage(g.RootID, 1, 0); err != nil {
 			return err
 		}
-		dirPerm := mode.Perm() | 0o700
-		if err := os.MkdirAll(dstPath, dirPerm); err != nil {
+		tempPerm := mode.Perm() | 0o700
+		if err := os.MkdirAll(dstPath, tempPerm); err != nil {
 			return err
 		}
-		if err := chmodPath(dstPath, dirPerm); err != nil {
+		if err := os.Chmod(dstPath, tempPerm); err != nil {
 			return err
 		}
 		if err := writePathXattrs(dstPath, xattrs); err != nil {
 			return err
 		}
+		a.seededDirs = append(a.seededDirs, seededDirMode{
+			dstPath: dstPath, perm: mode.Perm(), modTime: info.ModTime(),
+		})
 		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryDirectory,
-			Mode: fs.ModeDir | dirPerm, ModTime: info.ModTime(), Xattrs: xattrs, CapturedAt: time.Now(),
+			Mode: mode, ModTime: info.ModTime(), Xattrs: xattrs, CapturedAt: time.Now(),
 		})
 		return nil
 
