@@ -30,6 +30,10 @@ type BaseCapture struct {
 // RegisterSeedBase records a pre-captured base for materialized views (#1658)
 // without re-reading the live trunk.
 func (c *Core) RegisterSeedBase(base BaseCapture) error {
+	if err := c.barrier.enterMutation(); err != nil {
+		return err
+	}
+	defer c.barrier.leaveMutation()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.state.released {

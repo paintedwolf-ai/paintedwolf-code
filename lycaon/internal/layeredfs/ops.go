@@ -21,18 +21,22 @@ func (c *Core) CreateFile(qpath QualifiedPath, mode fs.FileMode, exclusive bool)
 
 // WriteFile writes content atomically or in place to qpath through the layered core.
 func (c *Core) WriteFile(qpath QualifiedPath, data []byte, mode fs.FileMode) (EntryAttr, error) {
-	hid, _, err := c.Open(qpath, OpenWriteOnly|OpenCreate|OpenTruncate, mode)
+	if err := c.barrier.enterMutation(); err != nil {
+		return EntryAttr{}, err
+	}
+	defer c.barrier.leaveMutation()
+	hid, _, err := openAdmitted(c, qpath, OpenWriteOnly|OpenCreate|OpenTruncate, mode)
 	if err != nil {
 		return EntryAttr{}, err
 	}
 	if len(data) > 0 {
-		if _, wErr := c.WriteHandle(hid, data, 0); wErr != nil {
-			_ = c.CloseHandle(hid)
+		if _, wErr := writeHandleAdmitted(c, hid, data, 0); wErr != nil {
+			_ = closeHandleAdmitted(c, hid)
 			return EntryAttr{}, wErr
 		}
 	}
-	attr, sErr := c.StatHandle(hid)
-	closeErr := c.CloseHandle(hid)
+	attr, sErr := statHandleAdmitted(c, hid)
+	closeErr := closeHandleAdmitted(c, hid)
 	if sErr != nil {
 		return EntryAttr{}, sErr
 	}
@@ -41,11 +45,15 @@ func (c *Core) WriteFile(qpath QualifiedPath, data []byte, mode fs.FileMode) (En
 
 // ReadFile reads the entire contents of qpath from whichever layer owns it.
 func (c *Core) ReadFile(qpath QualifiedPath) ([]byte, error) {
-	hid, attr, err := c.Open(qpath, OpenReadOnly, 0)
+	if err := c.barrier.enterOp(); err != nil {
+		return nil, err
+	}
+	defer c.barrier.leaveOp()
+	hid, attr, err := openAdmitted(c, qpath, OpenReadOnly, 0)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = c.CloseHandle(hid) }()
+	defer func() { _ = closeHandleAdmitted(c, hid) }()
 	if attr.Kind != EntryRegular {
 		return nil, syscall.EISDIR
 	}
@@ -53,7 +61,7 @@ func (c *Core) ReadFile(qpath QualifiedPath) ([]byte, error) {
 	if attr.Size == 0 {
 		return buf, nil
 	}
-	n, rErr := c.ReadHandle(hid, buf, 0)
+	n, rErr := readHandleAdmitted(c, hid, buf, 0)
 	if rErr != nil && n == 0 {
 		return nil, rErr
 	}
@@ -62,10 +70,6 @@ func (c *Core) ReadFile(qpath QualifiedPath) ([]byte, error) {
 
 // Truncate changes the size of the file at qpath.
 func (c *Core) Truncate(qpath QualifiedPath, size int64) (EntryAttr, error) {
-	return truncatePath(c, qpath, size)
-}
-
-func truncatePath(c *Core, qpath QualifiedPath, size int64) (EntryAttr, error) {
 	if size < 0 {
 		return EntryAttr{}, syscall.EINVAL
 	}
@@ -73,6 +77,13 @@ func truncatePath(c *Core, qpath QualifiedPath, size int64) (EntryAttr, error) {
 		return EntryAttr{}, err
 	}
 	defer c.barrier.leaveMutation()
+	return truncatePathAdmitted(c, qpath, size)
+}
+
+func truncatePathAdmitted(c *Core, qpath QualifiedPath, size int64) (EntryAttr, error) {
+	if size < 0 {
+		return EntryAttr{}, syscall.EINVAL
+	}
 
 	res, err := resolvePath(c, qpath, true, true)
 	if err != nil {
