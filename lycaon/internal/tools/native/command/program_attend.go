@@ -34,8 +34,9 @@ type SourceRunRecorder interface {
 // ParkedProgramResult is a command call's result when its program parked: the
 // turn ends, and the program's complete result resumes it.
 type ParkedProgramResult struct {
-	ProgramID string `json:"program_id"`
-	State     string `json:"state"`
+	ResultVersion int    `json:"result_version,omitempty"`
+	ProgramID     string `json:"program_id"`
+	State         string `json:"state"`
 	// Reason is the statement the program waits at.
 	Reason  string `json:"reason"`
 	LeaseID string `json:"lease_id"`
@@ -139,6 +140,9 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		}
 	}
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
+	if run.tool == "verify" {
+		result.ResultVersion = 2
+	}
 	if !state.Until.IsZero() {
 		result.WakeAt = state.Until.UTC().Format(time.RFC3339)
 	}
@@ -200,6 +204,9 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 		ProgramID: programID, State: projection.Program.State, Status: 130, StopCode: projection.Program.StopCode,
 		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects,
 		UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps,
+	}
+	if projection.ParentTool == "verify" {
+		outcome.ResultVersion = 2
 	}
 	if status := projection.Program.StatusCode; status != nil {
 		outcome.Status = *status

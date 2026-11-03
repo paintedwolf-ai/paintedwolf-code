@@ -62,5 +62,5 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission *t
 }
 
 func (p *programPolicyObservation) evaluate(ctx context.Context, bp *toolfeedback.BlockPlane, anchor, profile string) error {
-	return bp.EvaluateProgram(ctx, anchor, profile, p.submitted, p.operation, p.frame.retainProgramFacts)
+	return bp.EvaluateProgram(ctx, anchor, p.frame.lifetime.model.ToolName, profile, p.submitted, p.operation, p.frame.retainProgramFacts)
 }

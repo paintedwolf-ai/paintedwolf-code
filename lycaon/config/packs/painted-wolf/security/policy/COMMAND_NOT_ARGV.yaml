@@ -5,7 +5,6 @@ anchor: tool.rejected
 selector:
   tool:
   - command
-  - verify
   - terminal_open
 requires:
   profiles:
@@ -31,7 +30,7 @@ effect: block
 copy:
   what: '{% if paintedwolf.shell_metacharacters %}command rejected — unquoted shell metacharacters in `{{ paintedwolf.command }}`{% else %}command `{{ paintedwolf.command }}` is not a single argv vector{% endif %}'
   cause: '{{ paintedwolf.rejection_reason }}'
-  why: '{% if paintedwolf.directory_change %}Each invocation starts in its own `cwd`; running `cd` cannot change the directory of later calls.{% else %}A captured or terminal invocation holds exactly one process; `verify` wires literal argv stages without substitutions or here-documents. Ordinary `command` program text, without capture, supports composition, variables, substitutions, and here-documents.{% endif %}'
+  why: '{% if paintedwolf.directory_change %}Each invocation starts in its own `cwd`; running `cd` cannot change the directory of later calls.{% else %}A captured or terminal invocation holds exactly one process. Ordinary `command` and `verify` program text supports composition, variables, substitutions, and here-documents.{% endif %}'
   fix: '{% if paintedwolf.directory_change %}
 
     Remove `cd` and its directory argument from `command`. Set `cwd` to that directory and start `command` with the executable. For the workspace root use `cwd: "."`; for a subdirectory use its workspace-relative path.
@@ -46,19 +45,19 @@ copy:
 
     {% else %}{% if paintedwolf.env_assignment %}
 
-    Put each environment variable in the `env` object of `verify` or `terminal_open`; start `command` with the executable. Use one literal argv invocation for capture. To use assignments in program text, call `command` without capture.
+    Put each environment variable in the `env` object of `terminal_open`; start `command` with the executable. Use one literal argv invocation for capture. To use assignments in program text, call `command` without capture.
 
     {% else %}{% if paintedwolf.use_pipeline_array %}
 
-    Use the `verify` tool''s `pipeline` array (e.g. `pipeline: ["git log --oneline", "head -20"]`) or write `|` inside its `command` text, with one argv vector per stage. For other composed execution, use `command` without capture.
+    Put the pipeline in ordinary `command` program text (e.g. `git log --oneline | head -20`). Capture accepts one executable; run composed programs without capture.
 
     {% else %}{% if paintedwolf.use_stdin_param %}
 
-    Pass the here-document body as the `verify` tool''s `stdin` (literal), or name a file with `< path` or its `stdin_from` argument. For composed programs with here-documents, use `command` without capture.
+    Put here-documents or `< path` input redirection in ordinary `command` program text. Use a literal executable invocation for terminal sessions and captures.
 
     {% else %}{% if paintedwolf.use_background_param %}
 
-    `&` detaches a command. Pass `background: true` to `verify` to run one check as a concurrent job and read its handle; use `&&` if you meant "run the next one after this succeeds". Ordinary `command` programs without capture support trailing `&` jobs.
+    `&` starts a concurrent job in ordinary `command` or `verify` program text. Use `wait` when the check must finish before continuing, or `&&` to run the next command only after success. Terminal sessions and captures take one executable invocation.
 
     {% else %}{% if paintedwolf.use_substitution_result %}
 
@@ -66,7 +65,7 @@ copy:
 
     {% else %}{% if paintedwolf.shell_metacharacters %}
 
-    Quote literal arguments that need shell characters inside one stage (e.g. `python3 -c "import x; print(x.Y)"`). The `verify` tool accepts `&&`, `||`, `;`, and `|` across argv stages; use `command` without capture for composed program text.
+    Quote literal arguments that need shell characters inside one stage (e.g. `python3 -c "import x; print(x.Y)"`). Use ordinary `command` or `verify` program text for `&&`, `||`, `;`, and `|` composition.
 
     {% else %}
 
@@ -114,7 +113,7 @@ x-paintedwolf-scenarios:
   - omit `terminal_capture`
   - capture the final program separately
 - id: substitution
-  tool: verify
+  tool: terminal_open
   vars:
     command: git checkout $(git rev-parse HEAD)
     profile_id: implement
@@ -127,7 +126,7 @@ x-paintedwolf-scenarios:
   - Nothing expands
   - literal argument
 - id: scratch_variable
-  tool: verify
+  tool: terminal_open
   vars:
     command: cat $SCRATCH_DIR/notes.txt
     profile_id: implement
@@ -141,7 +140,7 @@ x-paintedwolf-scenarios:
   - 'cat @scratch/notes.txt'
   - SCRATCH_DIR
 - id: background_operator
-  tool: verify
+  tool: terminal_open
   vars:
     command: python3 -m http.server 8000 &
     profile_id: implement
@@ -150,7 +149,7 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Rejected:'
   - 'Code: COMMAND_NOT_ARGV'
-  - 'background: true'
+  - 'Use `wait`'
 - id: environment_assignment
   tool: terminal_open
   vars:
@@ -163,7 +162,7 @@ x-paintedwolf-scenarios:
   - '`env` object'
   - start `command` with the executable
 - id: shell_metacharacters
-  tool: verify
+  tool: terminal_open
   vars:
     command: cat <<'EOF' > out.txt
     profile_id: implement
@@ -173,9 +172,9 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Rejected:'
   - 'Code: COMMAND_NOT_ARGV'
-  - stdin_from
+  - input redirection
 - id: pipeline_pipe
-  tool: verify
+  tool: terminal_open
   vars:
     command: git log --oneline | head -20
     profile_id: implement

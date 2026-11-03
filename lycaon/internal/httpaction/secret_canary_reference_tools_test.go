@@ -142,10 +142,15 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	runner := hostcmd.NewRunner()
 	command := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Programs: program.Runtime}
-	program.Runtime.Executor = executor
-	program.Runtime.Registry = registry
+	verifyExecutor := program.Runtime.Executor
+	verifyExecutor.Approvals.SetCheckpointManager(t.Context(), review, authority)
+	verifyExecutor.Secrets.SetSecretResolver(service)
+	verifyExecutor.Secrets.SetSecretMatcher(matcher)
+	verifyExecutor.Capabilities.SetLoopbackConnectGate(review)
+	verifyExecutor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
 	program.Runtime.Projector = captureprojection.New(matcher, nil)
-	executor.SetProgramEntry("verify", nil)
+	verifyExecutor.SetProgramEntry("verify", nil)
+	testutil.FailErr(t, "register program verify", program.Runtime.Registry.Register("verify", verify.Run))
 	testutil.FailErr(t, "register command", registry.Register("command", command.Run))
 	testutil.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	testutil.FailErr(t, "register terminal tools", native.RegisterTerminalSessionTools(registry, background))
@@ -232,7 +237,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 				var err error
 				if tool == "verify" {
 					out, err = program.Invoke(t, ctx, tool, call.args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-						return executor.Invoke(ctx, tool, args, tc)
+						return verifyExecutor.Invoke(ctx, tool, args, tc)
 					})
 				} else {
 					out, err = executor.Invoke(ctx, tool, call.args, tctx)

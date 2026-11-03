@@ -63,9 +63,9 @@ func (r *Rejections) RenderProgramFailure(ctx context.Context, frame ProgramFram
 	if r.blockPlane != nil {
 		var rejectErr error
 		if prepared.progress {
-			rejectErr = r.blockPlane.RejectObservation(ctx, "command", tc.Identity.Agent, submitted, prepared.Rejection)
+			rejectErr = r.blockPlane.RejectObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, prepared.Rejection)
 		} else {
-			rejectErr = r.blockPlane.RejectNativeObservation(ctx, tc.Identity.Agent, submitted, prepared.operation, prepared.Rejection)
+			rejectErr = r.blockPlane.RejectNativeObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, prepared.operation, prepared.Rejection)
 		}
 		if rejectErr != nil {
 			return rejectErr
@@ -259,13 +259,13 @@ func (r *Rejections) RenderProgramRefusal(ctx context.Context, frame ProgramFram
 	releases = append(releases, release)
 	clone := *rejected
 	clone.Data = screened
-	clone.Data["tool"] = "command"
+	clone.Data["tool"] = frame.lifetime.model.ToolName
 	delete(clone.Data, "native_operation")
 	delete(clone.Data, "native_command")
 	var rendered error
 	ctx = invocationContext(ctx, tc)
 	if r.blockPlane != nil {
-		rendered = r.blockPlane.RejectObservation(ctx, "command", tc.Identity.Agent, submitted, &clone)
+		rendered = r.blockPlane.RejectObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, &clone)
 	}
 	if rendered == nil {
 		rendered = r.renderReject(&clone)
