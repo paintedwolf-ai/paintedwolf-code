@@ -1,0 +1,259 @@
+package nfsserver
+
+import (
+	"bytes"
+	"os"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	nfs "github.com/willscott/go-nfs"
+)
+
+func onGetAttr(s *Server, cs *connState, call rpcCallHeader) []byte {
+	rawFH, err := readFileHandle(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureGetAttr, nfs.NFSStatusInval)
+	}
+	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureGetAttr, MapErrorToNFSStatus(err))
+	}
+	meta, err := statRecord(s, rec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureGetAttr, MapErrorToNFSStatus(err))
+	}
+
+	var body bytes.Buffer
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	_ = nfs.WritePostOpAttrs(&body, nodeMetaToFileAttr(&meta, exp.cap.AllowedUID, exp.cap.AllowedGID))
+	raw := body.Bytes()
+	var out bytes.Buffer
+	writeUint32(&out, uint32(nfs.NFSStatusOk))
+	_, _ = out.Write(raw[8:])
+	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, out.Bytes())
+}
+
+func onSetAttr(s *Server, cs *connState, call rpcCallHeader) []byte {
+	rawFH, err := readFileHandle(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSetAttr, nfs.NFSStatusInval)
+	}
+	attrs, err := readSattr3(call.Body, time.Now())
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSetAttr, nfs.NFSStatusInval)
+	}
+	checkGuard, err := readBool(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSetAttr, nfs.NFSStatusInval)
+	}
+	var guardSec, guardNsec uint32
+	if checkGuard {
+		if guardSec, err = readUint32(call.Body); err != nil {
+			return encodeNFSError(call.XID, nfs.NFSProcedureSetAttr, nfs.NFSStatusInval)
+		}
+		if guardNsec, err = readUint32(call.Body); err != nil {
+			return encodeNFSError(call.XID, nfs.NFSProcedureSetAttr, nfs.NFSStatusInval)
+		}
+	}
+	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSetAttr, MapErrorToNFSStatus(err))
+	}
+	preMeta, err := statRecord(s, rec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSetAttr, MapErrorToNFSStatus(err))
+	}
+	if checkGuard {
+		if ct := nfs.ToNFSTime(preMeta.CTime); ct.Seconds != guardSec || ct.Nseconds != guardNsec {
+			return encodeWccError(call.XID, nfs.NFSStatusNotSync, &preMeta, &preMeta, exp)
+		}
+	}
+	if err := applySattr3(s, rec, exp, preMeta, attrs); err != nil {
+		postMeta, _ := statRecord(s, rec)
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, &postMeta, exp)
+	}
+	postMeta, err := statRecord(s, rec)
+	if err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, nil, exp)
+	}
+	var body bytes.Buffer
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	writeWccData(&body, &preMeta, &postMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func applySattr3(s *Server, rec *handleRecord, exp *exportEntry, preMeta layeredfs.EntryAttr, attrs sattr3) error {
+	if exp.cap.ReadOnly {
+		return ErrReadOnlyExport
+	}
+	if rec.unlinked != nil {
+		return nil
+	}
+	if (attrs.HasUID && attrs.UID != exp.cap.AllowedUID && attrs.UID != 0xFFFFFFFF) ||
+		(attrs.HasGID && attrs.GID != exp.cap.AllowedGID && attrs.GID != 0xFFFFFFFF) {
+		return syscall.EPERM
+	}
+	if attrs.HasSize {
+		if preMeta.Mode.IsDir() {
+			return syscall.EISDIR
+		}
+		if err := truncateRecord(s, exp.core, rec, preMeta, attrs.Size); err != nil {
+			return err
+		}
+	}
+	if attrs.HasMode {
+		if _, err := exp.core.Chmod(rec.qpath, attrs.Mode); err != nil {
+			return err
+		}
+		if attrs.Mode&0o200 != 0 {
+			s.handles.SetOwnerCreatedRO(rec.key, false)
+		}
+	}
+	if attrs.HasAtime || attrs.HasMtime {
+		atime, mtime := preMeta.ATime, preMeta.ModTime
+		if attrs.HasAtime {
+			atime = attrs.Atime
+		}
+		if attrs.HasMtime {
+			mtime = attrs.Mtime
+		}
+		_, err := exp.core.Chtimes(rec.qpath, atime, mtime, true)
+		return err
+	}
+	return nil
+}
+
+func truncateRecord(s *Server, viewCore *layeredfs.Core, rec *handleRecord, preMeta layeredfs.EntryAttr, size uint64) error {
+	s.stability.DiscardKey(rec.key)
+	restoreRO := false
+	origPerm := preMeta.Mode & os.ModePerm
+	if origPerm&0o200 == 0 && rec.ownerCreatedRO {
+		if _, err := viewCore.Chmod(rec.qpath, origPerm|0o200); err != nil {
+			return err
+		}
+		restoreRO = true
+	}
+	defer func() {
+		if restoreRO {
+			_, _ = viewCore.Chmod(rec.qpath, origPerm)
+		}
+	}()
+	_, err := viewCore.Truncate(rec.qpath, int64(size))
+	return err
+}
+
+func onLookup(s *Server, cs *connState, call rpcCallHeader) []byte {
+	dirFH, name, err := readDirOpArg(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureLookup, nfs.NFSStatusInval)
+	}
+	dirRec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, dirFH)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureLookup, MapErrorToNFSStatus(err))
+	}
+	dirMeta, err := statRecord(s, dirRec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureLookup, MapErrorToNFSStatus(err))
+	}
+	if !dirMeta.Mode.IsDir() {
+		return encodePostOpError(call.XID, nfs.NFSStatusNotDir, &dirMeta, exp)
+	}
+	var childQPath layeredfs.QualifiedPath
+	switch name {
+	case ".":
+		childQPath = dirRec.qpath
+	case "..":
+		childQPath = dirRec.qpath
+		if idx := strings.LastIndexByte(dirRec.qpath.Rel, '/'); idx >= 0 {
+			childQPath.Rel = dirRec.qpath.Rel[:idx]
+		} else {
+			childQPath.Rel = "."
+		}
+	default:
+		if childQPath, err = joinChildPath(dirRec.qpath, name); err != nil {
+			return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
+		}
+	}
+	childMeta, err := exp.core.Lstat(childQPath)
+	if err != nil {
+		return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
+	}
+	childFH := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, cleanRel(childQPath.Rel) == ".", false)
+	if childRec, _ := s.handles.LookupByPath(dirRec.viewID, childQPath); childRec != nil {
+		childMeta = s.stability.EffectiveMeta(childRec.key, childMeta)
+	}
+
+	var body bytes.Buffer
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	writeOpaque(&body, childFH[:])
+	writePostOpAttr(&body, &childMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writePostOpAttr(&body, &dirMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func onAccess(s *Server, cs *connState, call rpcCallHeader) []byte {
+	rawFH, err := readFileHandle(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureAccess, nfs.NFSStatusInval)
+	}
+	reqMask, err := readUint32(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureAccess, nfs.NFSStatusInval)
+	}
+	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureAccess, MapErrorToNFSStatus(err))
+	}
+	meta, err := statRecord(s, rec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureAccess, MapErrorToNFSStatus(err))
+	}
+	var granted uint32
+	if meta.Mode&0o400 != 0 {
+		granted |= 0x0001 // READ
+	}
+	if meta.Mode.IsDir() {
+		granted |= 0x0002 // LOOKUP
+		if meta.Mode&0o200 != 0 {
+			granted |= 0x0004 | 0x0008 | 0x0010
+		}
+	} else {
+		if meta.Mode&0o200 != 0 || rec.ownerCreatedRO {
+			granted |= 0x0004 | 0x0008
+		}
+		if meta.Mode&0o100 != 0 {
+			granted |= 0x0020 // EXECUTE
+		}
+	}
+	var body bytes.Buffer
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	writePostOpAttr(&body, &meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeUint32(&body, granted&reqMask)
+	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func onReadlink(s *Server, cs *connState, call rpcCallHeader) []byte {
+	rawFH, err := readFileHandle(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureReadlink, nfs.NFSStatusInval)
+	}
+	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureReadlink, MapErrorToNFSStatus(err))
+	}
+	meta, err := statRecord(s, rec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureReadlink, MapErrorToNFSStatus(err))
+	}
+	target, err := exp.core.Readlink(rec.qpath)
+	if err != nil {
+		return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &meta, exp)
+	}
+	var body bytes.Buffer
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	writePostOpAttr(&body, &meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeString(&body, target)
+	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}

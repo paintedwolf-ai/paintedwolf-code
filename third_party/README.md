@@ -61,3 +61,15 @@ current archives and version before FetchContent can run. No crate API or
 version changes. Update the crate copy, patch, pin, notices and its Cargo lockfile
 together; verify offline builds, fresh-snapshot object reuse and warmed-cache
 mismatched-pin refusal through the existing task targets.
+
+## NFSv3 protocol dependency
+
+`go-nfs/` contains the complete Go module source for
+`github.com/willscott/go-nfs` v0.0.4, commit
+`209a01f82ba9283bb36ec312d3908210b0b1cc89` (Apache-2.0).
+
+Upstream module checksum: `h1:1vpOPAdECmoT2KmZ8u+ukO/jfvDjMEUNYhA2F1jGJtI=`.
+The upstream `LICENSE` and source notices remain in the module directory.
+`lycaon/internal/layeredfs/nfsserver` translates NFSv3 and MOUNTv3 RPCs against
+`lycaon/internal/layeredfs` using this pinned module.
+
