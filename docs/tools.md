@@ -1118,6 +1118,8 @@ program language as `command`. An omitted command resolves the selected check;
 a different command is refused while a selection exists. Targeted checks use
 `command` with `verification: true`. Native operations and external launches
 keep their own effect admission, while the initiating receipt remains `verify`.
+Background jobs retain that initiating tool, call ID and root session through
+completion and output publication.
 
 Verification program results use `result_version: 2`, the command program
 status/output fields, and an `outcome` only after settlement. The outcome remains
