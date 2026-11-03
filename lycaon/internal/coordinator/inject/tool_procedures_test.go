@@ -194,7 +194,9 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 			if !want {
 				continue
 			}
-			progressBlock, err := renderer.RenderUnit(t.Context(), progressRef, prompts.VisibleToolsNativePartialVars([]string{tool}))
+			vars := prompts.VisibleToolsNativePartialVars([]string{tool})
+			vars["offered_tools"] = []string{tool}
+			progressBlock, err := renderer.RenderUnit(t.Context(), progressRef, vars)
 			testutil.FailErr(t, "render isolated progress procedure", err)
 			for _, candidate := range gatedAndLifecycle {
 				wantCandidate := tool == candidate
