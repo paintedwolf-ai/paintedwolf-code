@@ -1,0 +1,180 @@
+package privategit
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/gitexec"
+)
+
+func buildPlannedImportRefs(
+	jobID, checkpointID string,
+	cp *CheckpointGitState,
+	req RefImportRequest,
+) (map[string]string, map[string]string, error) {
+	planned := make(map[string]string)
+	srcToDest := make(map[string]string)
+
+	filter := make(map[string]bool, len(req.RefFilter))
+	for _, rf := range req.RefFilter {
+		rf = strings.TrimSpace(rf)
+		if rf == "" {
+			continue
+		}
+		filter[rf] = true
+		if !strings.HasPrefix(rf, "refs/") && rf != "HEAD" {
+			filter["refs/heads/"+rf] = true
+		}
+	}
+
+	for ref, oid := range cp.Refs {
+		if len(filter) > 0 && !filter[ref] {
+			continue
+		}
+		if !req.Options.IncludeUnchanged && len(filter) == 0 {
+			if initOID, had := cp.InitialRefs[ref]; had && initOID == oid {
+				continue
+			}
+		}
+		dest, err := NamespacedRef(jobID, checkpointID, ref)
+		if err != nil {
+			return nil, nil, err
+		}
+		planned[dest] = oid
+		srcToDest[ref] = dest
+	}
+
+	if (cp.DetachedHead || req.Options.IncludeDetachedHead || len(planned) == 0) && cp.HeadOID != "" {
+		if len(filter) == 0 || filter["HEAD"] {
+			dest, err := NamespacedRef(jobID, checkpointID, "HEAD")
+			if err != nil {
+				return nil, nil, err
+			}
+			planned[dest] = cp.HeadOID
+			srcToDest["HEAD"] = dest
+		}
+	}
+
+	if req.Options.IncludeTags {
+		for tagRef, oid := range cp.Tags {
+			if len(filter) > 0 && !filter[tagRef] {
+				continue
+			}
+			dest, err := NamespacedRef(jobID, checkpointID, tagRef)
+			if err != nil {
+				return nil, nil, err
+			}
+			planned[dest] = oid
+			srcToDest[tagRef] = dest
+		}
+	}
+
+	if req.Options.IncludeStashes {
+		for idx, st := range cp.Stashes {
+			stashKey := fmt.Sprintf("stash/%d", idx)
+			dest, err := NamespacedRef(jobID, checkpointID, stashKey)
+			if err != nil {
+				return nil, nil, err
+			}
+			planned[dest] = st.OID
+			srcToDest[st.Ref] = dest
+		}
+	}
+
+	return planned, srcToDest, nil
+}
+
+func prepareImportJournalRecord(
+	journalPath, jobID, workerID, checkpointID, trunkDir string,
+	planned map[string]string,
+) (ImportJournalRecord, error) {
+	raw, err := os.ReadFile(journalPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ImportJournalRecord{
+				JobID:        jobID,
+				WorkerID:     workerID,
+				CheckpointID: checkpointID,
+				TrunkDir:     trunkDir,
+				Stage:        StageIntent,
+				PlannedRefs:  cloneStringMap(planned),
+				Published:    make(map[string]string),
+				UpdatedAt:    time.Now(),
+			}, nil
+		}
+		return ImportJournalRecord{}, err
+	}
+	var existing ImportJournalRecord
+	if err := json.Unmarshal(raw, &existing); err != nil {
+		return ImportJournalRecord{}, err
+	}
+	if len(existing.PlannedRefs) != len(planned) {
+		return ImportJournalRecord{}, fmt.Errorf("%w: journal planned ref count mismatch", ErrRefImportConflict)
+	}
+	for k, v := range planned {
+		if existing.PlannedRefs[k] != v {
+			return ImportJournalRecord{}, fmt.Errorf("%w: journal planned ref %s has %s, want %s", ErrRefImportConflict, k, existing.PlannedRefs[k], v)
+		}
+	}
+	if existing.Published == nil {
+		existing.Published = make(map[string]string)
+	}
+	return existing, nil
+}
+
+func checkTrunkRefConflicts(trunkDir string, planned map[string]string) error {
+	commonDir := resolveTrunkCommonGitDir(trunkDir)
+	for destRef, wantOID := range planned {
+		existing := resolveRefInGitDir(commonDir, destRef)
+		if existing != "" && existing != wantOID {
+			return fmt.Errorf("%w: destination ref %s already exists with %s (want %s)", ErrRefImportConflict, destRef, existing, wantOID)
+		}
+	}
+	return nil
+}
+
+func saveImportJournalRecord(journalPath string, rec ImportJournalRecord) error {
+	raw, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := journalPath + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, journalPath)
+}
+
+func verifyImportedTipsInTrunk(ctx context.Context, trunkDir string, planned map[string]string) error {
+	if len(planned) == 0 {
+		return nil
+	}
+	args := []string{"rev-list", "--objects"}
+	seen := make(map[string]struct{})
+	for _, oid := range planned {
+		if _, ok := seen[oid]; !ok {
+			seen[oid] = struct{}{}
+			args = append(args, oid)
+		}
+	}
+	out, code, err := gitexec.Run(ctx, trunkDir, args, gitexec.Opts{
+		Profile: gitexec.ProfileHermetic,
+	})
+	if err != nil || code != 0 {
+		return fmt.Errorf("%w: trunk object verification failed (exit %d): %v (%s)", ErrCorruptObjectStore, code, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func cloneStringMap(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
