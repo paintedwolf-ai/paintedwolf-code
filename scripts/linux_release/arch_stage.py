@@ -8,11 +8,23 @@ import subprocess
 import tarfile
 
 from release_semver import pacman_package_version, parse, parse_release_build
+from .payload import load as load_payload
+
+BOOTSTRAP = load_payload()['setuid_bootstrap']['path'].lstrip('/')
+
+
+def bootstrap_member(member):
+    return (PurePosixPath(member.name).as_posix() == BOOTSTRAP and member.isfile()
+            and member.mode == 0o4755 and member.uid == member.gid == 0)
 
 
 def package_filter(member, directory):
     if not member.issym():
-        return tarfile.data_filter(member, directory)
+        checked = tarfile.data_filter(member, directory)
+        # The shared package audit must observe the sealed bootstrap's real mode.
+        if bootstrap_member(member):
+            checked.mode = member.mode
+        return checked
     root = Path(directory).resolve()
     target = (root / member.name).parent / member.linkname
     if Path(member.linkname).is_absolute() or not target.resolve().is_relative_to(root):
@@ -36,7 +48,9 @@ def extract(package, destination, root, architecture, version):
             for member in archive:
                 name = PurePosixPath(member.name)
                 if (name.is_absolute() or ".." in name.parts or name.as_posix() in seen or
-                        (member.mode & 0o6000 or member.isfile() and member.mode & 0o002) or not (member.isfile() or member.isdir() or member.issym() or member.islnk())):
+                        (member.mode & 0o6000 and not bootstrap_member(member)
+                         or member.isfile() and member.mode & 0o002)
+                        or not (member.isfile() or member.isdir() or member.issym() or member.islnk())):
                     raise ValueError("pacman package contains an unsafe or repeated payload object")
                 seen.add(name.as_posix())
                 total += member.size
