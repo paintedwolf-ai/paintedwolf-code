@@ -2,13 +2,31 @@ package nfsdarwin
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
 	"sync/atomic"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
+
+// SetBarrierHooks configures the QuiesceHook and FlushClientHook for viewID.
+func (a *Adapter) SetBarrierHooks(
+	viewID string,
+	quiesceHook func(ctx context.Context, viewID string) error,
+	flushClientHook func(ctx context.Context, viewID string) error,
+) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	st, ok := a.views[viewID]
+	if !ok || st == nil {
+		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "set_barrier_hooks", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
+	}
+	st.quiesceHook = quiesceHook
+	st.flushHook = flushClientHook
+	return nil
+}
 
 // BindPrivateGit registers or updates a live MountedViewBinding in mgr for viewID so
 // privategit operations are bound to this mounted view and automatically revoked if the
@@ -24,11 +42,11 @@ func (a *Adapter) BindPrivateGit(
 	}
 	a.mu.Lock()
 	st, ok := a.views[viewID]
-	if ok {
+	if ok && st != nil {
 		st.privateGitMgr = mgr
 	}
 	a.mu.Unlock()
-	if !ok {
+	if !ok || st == nil {
 		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "bind_privategit", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
 	}
 	if workerID == "" {
@@ -39,19 +57,12 @@ func (a *Adapter) BindPrivateGit(
 		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "bind_privategit", ReasonCode: adapter.ReasonMountDenied, Diagnostic: "missing primary mount"}
 	}
 	binding := privategit.MountedViewBinding{
-		ViewID:       viewID,
-		WorkerID:     workerID,
-		RootID:       st.primaryRoot,
-		TrunkDir:     pm.grant.SourcePath,
-		MountPath:    pm.mountPath,
-		AdapterID:    string(adapter.AdapterNFSDarwin),
-		Core:         st.core,
-		MountID:      pm.facts.MountID,
-		ConnectionID: pm.facts.ConnectionID,
-		Active:       a.IsViewActive(viewID),
-		IsActive: func() bool {
-			return a.IsViewActive(viewID)
-		},
+		ViewID: viewID, WorkerID: workerID, RootID: st.primaryRoot,
+		TrunkDir: pm.grant.SourcePath, MountPath: pm.mountPath,
+		AdapterID: string(adapter.AdapterNFSDarwin), Core: st.core,
+		MountID: pm.facts.MountID, ConnectionID: pm.facts.ConnectionID,
+		Active:   a.IsViewActive(viewID),
+		IsActive: func() bool { return a.IsViewActive(viewID) },
 	}
 	_ = mgr.ReleaseView(viewID)
 	if err := mgr.RegisterMountedViewBinding(binding); err != nil {
@@ -60,19 +71,16 @@ func (a *Adapter) BindPrivateGit(
 	return mgr.MountedClaimWithBinding(binding, authorizedGitDirs...)
 }
 
-// IsViewActive reports whether viewID is currently mounted and its loopback NFS server is healthy.
+// IsViewActive reports whether viewID is currently mounted, not releasing, and its loopback NFS server is healthy.
 func (a *Adapter) IsViewActive(viewID string) bool {
 	a.mu.RLock()
 	st, ok := a.views[viewID]
 	a.mu.RUnlock()
-	if !ok || st == nil {
+	if !ok || st == nil || st.releasing.Load() {
 		return false
 	}
 	for _, m := range st.mounts {
-		if checkServerAlive(m) != nil {
-			return false
-		}
-		if !isMountOwnedAndActive(m, true) {
+		if m.unmounted.Load() || checkServerAlive(m) != nil || !isMountOwnedAndActive(m, true) {
 			return false
 		}
 	}
@@ -84,8 +92,11 @@ func (a *Adapter) CommandAccess(viewID string) (adapter.CommandAccessSpec, error
 	a.mu.RLock()
 	st, ok := a.views[viewID]
 	a.mu.RUnlock()
-	if !ok {
+	if !ok || st == nil {
 		return adapter.CommandAccessSpec{}, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "command_access", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
+	}
+	if st.releasing.Load() {
+		return adapter.CommandAccessSpec{}, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "command_access", ReasonCode: adapter.ReasonMountDenied, Diagnostic: "view " + viewID + " is releasing"}
 	}
 	for _, m := range st.mounts {
 		if err := checkServerAlive(m); err != nil {
@@ -101,20 +112,15 @@ func (a *Adapter) CommandAccess(viewID string) (adapter.CommandAccessSpec, error
 		rootPaths[r.RootID] = r.WorkspacePath
 	}
 	return adapter.CommandAccessSpec{
-		ViewID:           viewID,
-		AdapterID:        adapter.AdapterNFSDarwin,
-		PrimaryRootID:    st.view.PrimaryRootID,
-		WorkDir:          st.view.PrimaryWorkPath,
-		RootPaths:        rootPaths,
-		HiddenBackingDir: st.view.BackingDir,
-		DenyDirectSource: append([]string(nil), st.denySourcePaths...),
-		Facts:            a.facts,
-		AccessCount:      count,
+		ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin, PrimaryRootID: st.view.PrimaryRootID,
+		WorkDir: st.view.PrimaryWorkPath, RootPaths: rootPaths, HiddenBackingDir: st.view.BackingDir,
+		DenyDirectSource: append([]string(nil), st.denySourcePaths...), Facts: a.facts, AccessCount: count,
 	}, nil
 }
 
 // FlushClientData verifies that all mounted roots and loopback NFS servers for viewID are alive,
-// syncs the client mount directories, and flushes pending NFSv3 UNSTABLE writes to Core.
+// runs FlushClientHook to flush writable mappings/descriptors, syncs all mounted files and directories,
+// and flushes pending NFSv3 UNSTABLE writes to Core.
 func (a *Adapter) FlushClientData(ctx context.Context, viewID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -122,88 +128,99 @@ func (a *Adapter) FlushClientData(ctx context.Context, viewID string) error {
 	a.mu.RLock()
 	st, ok := a.views[viewID]
 	a.mu.RUnlock()
-	if !ok {
+	if !ok || st == nil || st.releasing.Load() {
 		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
 	}
+	if st.flushHook == nil {
+		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: "FlushClientHook is required to flush writable client mappings and descriptors"}
+	}
+	if err := st.flushHook(ctx, viewID); err != nil {
+		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+	}
 	for rootID, m := range st.mounts {
-		if err := checkServerAlive(m); err != nil {
-			if st.privateGitMgr != nil {
-				st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
-			}
+		if err := verifyMountAndServerForBarrier(st, viewID, rootID, m, "flush_client"); err != nil {
+			return err
+		}
+		if err := a.syncMountedRootFiles(ctx, st.core, rootID, m.mountPath); err != nil {
 			return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
-		}
-		if !isMountOwnedAndActive(m, true) {
-			if st.privateGitMgr != nil {
-				st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
-			}
-			return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: "mount ownership lost on " + m.mountPath}
-		}
-		if dirFile, oErr := os.Open(m.mountPath); oErr == nil {
-			_ = dirFile.Sync()
-			_ = dirFile.Close()
 		}
 		if err := m.server.FlushForCheckpoint(ctx, viewID); err != nil {
-			return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
-		}
-	}
-	if st.flushHook != nil {
-		if err := st.flushHook(ctx, viewID); err != nil {
 			return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
 		}
 	}
 	return nil
 }
 
-// CheckpointBarrier verifies mount/server health, runs the quiesce hook, acquires the
-// layeredfs.Core checkpoint barrier, and flushes client dirty data and server UNSTABLE buffers.
+// CheckpointBarrier coordinates writer quiescence, client file/mapping flush, server UNSTABLE write
+// drain + mutation gating, and final Core.BeginCheckpointBarrier freeze in strict order.
 func (a *Adapter) CheckpointBarrier(ctx context.Context, viewID string) (adapter.BarrierReceipt, func() error, error) {
+	receipt := adapter.BarrierReceipt{ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin}
 	if err := ctx.Err(); err != nil {
-		return adapter.BarrierReceipt{}, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonContextCanceled, Diagnostic: err.Error(), Cause: err}
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonContextCanceled, Diagnostic: err.Error(), Cause: err}
 	}
 	a.mu.RLock()
 	st, ok := a.views[viewID]
 	a.mu.RUnlock()
-	if !ok {
-		return adapter.BarrierReceipt{}, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
+	if !ok || st == nil || st.releasing.Load() {
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
 	}
 	for rootID, m := range st.mounts {
-		if err := checkServerAlive(m); err != nil {
-			if st.privateGitMgr != nil {
-				st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
-			}
-			return adapter.BarrierReceipt{}, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+		if err := verifyMountAndServerForBarrier(st, viewID, rootID, m, "checkpoint_barrier"); err != nil {
+			return receipt, nil, err
 		}
 	}
-	if st.quiesceHook != nil {
-		if err := st.quiesceHook(ctx, viewID); err != nil {
-			return adapter.BarrierReceipt{}, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+	if st.quiesceHook == nil {
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: "checkpoint barrier requires QuiesceHook to establish WritersQuiesced"}
+	}
+	if err := st.quiesceHook(ctx, viewID); err != nil {
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+	}
+	receipt.WritersQuiesced = true
+	if st.flushHook == nil {
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: "checkpoint barrier requires FlushClientHook to establish WritableMappingsFlushed"}
+	}
+	if err := st.flushHook(ctx, viewID); err != nil {
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+	}
+	receipt.WritableMappingsFlushed = true
+
+	var gateReleases []func()
+	releaseGates := func() {
+		for i := len(gateReleases) - 1; i >= 0; i-- {
+			gateReleases[i]()
 		}
 	}
+	for rootID, m := range st.mounts {
+		if err := a.syncMountedRootFiles(ctx, st.core, rootID, m.mountPath); err != nil {
+			releaseGates()
+			return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+		}
+		relGate, gErr := m.server.BeginBarrierDrain(ctx, viewID)
+		if gErr != nil {
+			releaseGates()
+			return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: gErr.Error(), Cause: gErr}
+		}
+		gateReleases = append(gateReleases, relGate)
+	}
+	receipt.OperationsDrained = true
+	receipt.DirtyDataFlushed = true
+
 	token, err := st.core.BeginCheckpointBarrier(ctx)
 	if err != nil {
-		return adapter.BarrierReceipt{}, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+		releaseGates()
+		return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
 	}
+	receipt.Token = token
 	var released atomic.Bool
 	var releaseErr error
 	releaseFn := func() error {
 		if released.CompareAndSwap(false, true) {
 			releaseErr = st.core.EndCheckpointBarrier(token)
+			releaseGates()
 		}
 		return releaseErr
 	}
-	if fErr := a.FlushClientData(ctx, viewID); fErr != nil {
-		_ = releaseFn()
-		return adapter.BarrierReceipt{}, nil, fErr
-	}
-	return adapter.BarrierReceipt{
-		ViewID:                  viewID,
-		AdapterID:               adapter.AdapterNFSDarwin,
-		Token:                   token,
-		WritersQuiesced:         true,
-		OperationsDrained:       true,
-		DirtyDataFlushed:        true,
-		WritableMappingsFlushed: true,
-	}, releaseFn, nil
+	return receipt, releaseFn, nil
 }
 
 // KillServerForView forcibly closes the loopback NFSv3 server for viewID to simulate a mid-session server crash.
@@ -211,7 +228,7 @@ func (a *Adapter) KillServerForView(viewID string) error {
 	a.mu.RLock()
 	st, ok := a.views[viewID]
 	a.mu.RUnlock()
-	if !ok {
+	if !ok || st == nil {
 		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "kill_server", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
 	}
 	for rootID, m := range st.mounts {
@@ -226,45 +243,57 @@ func (a *Adapter) KillServerForView(viewID string) error {
 	return nil
 }
 
-// Release revokes private-git bindings, verifies mount ownership before unmounting each root,
-// closes the loopback NFSv3 servers, and releases the layeredfs.Core view while preserving BackingDir.
+// Release revokes private-git bindings, unmounts each root while retaining view state on failure,
+// closes loopback NFSv3 servers only after unmount succeeds, releases Core, and removes RuntimeViewDir.
 func (a *Adapter) Release(ctx context.Context, viewID string) (adapter.ReleaseReceipt, error) {
 	a.mu.Lock()
 	st, ok := a.views[viewID]
-	if ok {
-		delete(a.views, viewID)
+	if ok && st != nil {
+		st.releasing.Store(true)
 	}
 	a.mu.Unlock()
-	if !ok {
+	if !ok || st == nil {
 		return adapter.ReleaseReceipt{ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin, Settled: false, ReasonCode: adapter.ReasonViewNotFound},
 			&adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "release", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
 	}
-	var firstErr error
 	for rootID, m := range st.mounts {
 		if st.privateGitMgr != nil {
 			st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
 		}
-		alive := checkServerAlive(m) == nil
-		if uErr := a.unmountOwnedRoot(ctx, m, alive); uErr != nil && firstErr == nil {
-			firstErr = uErr
+		if !m.unmounted.Load() {
+			alive := checkServerAlive(m) == nil
+			if uErr := a.unmountOwnedRoot(ctx, m, alive); uErr != nil {
+				return adapter.ReleaseReceipt{ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin, Settled: false, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: uErr.Error()}, uErr
+			}
+			m.unmounted.Store(true)
 		}
-		if m.server != nil {
-			m.server.ReleaseExport(viewID)
-			_ = m.server.Close()
+		if !m.serverClosed.Load() {
+			if m.server != nil {
+				m.server.ReleaseExport(viewID)
+				_ = m.server.Close()
+			}
+			m.serverClosed.Store(true)
 		}
 	}
-	if cErr := st.core.ReleaseView(); cErr != nil && firstErr == nil {
-		firstErr = &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "release", ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: cErr.Error(), Cause: cErr}
+	if !st.coreReleased.Load() {
+		if cErr := st.core.ReleaseView(); cErr != nil && !errors.Is(cErr, layeredfs.ErrViewReleased) {
+			aErr := &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "release", ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: cErr.Error(), Cause: cErr}
+			return adapter.ReleaseReceipt{ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin, Settled: false, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: aErr.Error()}, aErr
+		}
+		st.coreReleased.Store(true)
 	}
-	if firstErr != nil {
-		return adapter.ReleaseReceipt{ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin, Settled: false, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: firstErr.Error()}, firstErr
+	if !st.runtimeCleaned.Load() {
+		if rmErr := a.removeRuntimeDir(st.view.RuntimeViewDir); rmErr != nil {
+			aErr := &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "release", ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: fmt.Sprintf("remove runtime dir %s: %v", st.view.RuntimeViewDir, rmErr), Cause: rmErr}
+			return adapter.ReleaseReceipt{ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin, Settled: false, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: aErr.Error()}, aErr
+		}
+		st.runtimeCleaned.Store(true)
 	}
-	_ = os.RemoveAll(st.view.RuntimeViewDir)
+	a.mu.Lock()
+	delete(a.views, viewID)
+	a.mu.Unlock()
 	return adapter.ReleaseReceipt{
-		ViewID:       viewID,
-		AdapterID:    adapter.AdapterNFSDarwin,
-		Settled:      true,
-		ReasonCode:   adapter.ReasonNone,
-		CleanedPaths: []string{st.view.RuntimeViewDir},
+		ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin, Settled: true,
+		ReasonCode: adapter.ReasonNone, CleanedPaths: []string{st.view.RuntimeViewDir},
 	}, nil
 }

@@ -7,9 +7,26 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unsafe"
 )
 
 const mntNowait = 2
+
+func msyncMappedRegion(mapped []byte) error {
+	if len(mapped) == 0 {
+		return nil
+	}
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_MSYNC,
+		uintptr(unsafe.Pointer(&mapped[0])),
+		uintptr(len(mapped)),
+		uintptr(syscall.MS_SYNC),
+	)
+	if errno != 0 {
+		return errno
+	}
+	return nil
+}
 
 func statDeviceID(path string) (int32, error) {
 	info, err := os.Lstat(path)

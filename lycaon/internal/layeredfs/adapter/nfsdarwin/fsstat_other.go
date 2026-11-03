@@ -7,11 +7,15 @@ import (
 	"strings"
 )
 
-func statDeviceID(path string) (int32, error) {
+func msyncMappedRegion(_ []byte) error {
+	return nil
+}
+
+func statDeviceID(_ string) (int32, error) {
 	return 0, nil
 }
 
-func checkKernelMountTable(mountPath, expectedSource string) (found bool, matchesSource bool) {
+func checkKernelMountTable(_, _ string) (found bool, matchesSource bool) {
 	return false, false
 }
 
@@ -20,9 +24,8 @@ func canonicalPath(p string) string {
 	if p == "" {
 		return ""
 	}
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		return filepath.Clean(p)
+	if abs, err := filepath.Abs(p); err == nil {
+		return filepath.Clean(abs)
 	}
-	return filepath.Clean(abs)
+	return filepath.Clean(p)
 }

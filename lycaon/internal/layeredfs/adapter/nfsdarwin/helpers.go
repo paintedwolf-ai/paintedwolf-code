@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
@@ -21,7 +22,7 @@ func (a *Adapter) DisownMountForTest(viewID, unownedPath string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	st, ok := a.views[viewID]
-	if !ok {
+	if !ok || st == nil {
 		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "disown", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
 	}
 	m := st.mounts[st.primaryRoot]
@@ -32,6 +33,111 @@ func (a *Adapter) DisownMountForTest(viewID, unownedPath string) error {
 	m.facts.MountPath = m.mountPath
 	m.facts.ExportSource = "127.0.0.1:/views/unowned/primary/fake"
 	return nil
+}
+
+// SetUmountBinForTest updates UmountBin and DiskutilBin so tests can inject unmount failures and restore them on retry.
+func (a *Adapter) SetUmountBinForTest(umountBin, diskutilBin string) {
+	a.mu.Lock()
+	if umountBin != "" {
+		a.cfg.UmountBin = umountBin
+	} else {
+		a.cfg.UmountBin = DefaultUmountBin
+	}
+	if diskutilBin != "" {
+		a.cfg.DiskutilBin = diskutilBin
+	} else {
+		a.cfg.DiskutilBin = DefaultDiskutilBin
+	}
+	a.mu.Unlock()
+}
+
+func verifyMountAndServerForBarrier(st *viewState, viewID, rootID string, m *rootMount, op string) error {
+	if err := checkServerAlive(m); err != nil {
+		if st.privateGitMgr != nil {
+			st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
+		}
+		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: op, ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+	}
+	if !isMountOwnedAndActive(m, true) {
+		if st.privateGitMgr != nil {
+			st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
+		}
+		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: op, ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: "mount ownership lost on " + m.mountPath}
+	}
+	return nil
+}
+
+func (a *Adapter) syncClientPath(path string) error {
+	a.mu.RLock()
+	fn := a.cfg.ClientSyncFn
+	a.mu.RUnlock()
+	if fn != nil {
+		return fn(path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	syncErr := f.Sync()
+	closeErr := f.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
+}
+
+func (a *Adapter) syncMountedRootFiles(ctx context.Context, core *layeredfs.Core, rootID, mountPath string) error {
+	seen := make(map[string]bool)
+	if core != nil {
+		if changes, err := core.EnumerateChanges(false); err == nil {
+			for _, ce := range changes {
+				if ce.Path.RootID != rootID || ce.Deleted || ce.Kind == layeredfs.EntryAbsent || ce.Kind == layeredfs.EntrySymlink {
+					continue
+				}
+				p := filepath.Join(mountPath, filepath.FromSlash(ce.Path.Rel))
+				seen[p] = true
+				if err := a.syncClientPath(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+			}
+		}
+	}
+	walkErr := filepath.WalkDir(mountPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if cErr := ctx.Err(); cErr != nil {
+			return cErr
+		}
+		if d.Name() == ".git" {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 || seen[path] {
+			return nil
+		}
+		seen[path] = true
+		return a.syncClientPath(path)
+	})
+	if walkErr != nil {
+		return walkErr
+	}
+	if !seen[mountPath] {
+		return a.syncClientPath(mountPath)
+	}
+	return nil
+}
+
+func (a *Adapter) removeRuntimeDir(path string) error {
+	a.mu.RLock()
+	fn := a.cfg.RemoveAllFn
+	a.mu.RUnlock()
+	if fn != nil {
+		return fn(path)
+	}
+	return os.RemoveAll(path)
 }
 
 func checkServerAlive(m *rootMount) error {
@@ -59,40 +165,38 @@ func isMountOwnedAndActive(m *rootMount, _ bool) bool {
 }
 
 func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAlive bool) error {
-	if m == nil || m.mountPath == "" {
+	if m == nil || m.mountPath == "" || !isMountOwnedAndActive(m, serverAlive) {
 		return nil
 	}
-	if !isMountOwnedAndActive(m, serverAlive) {
-		return nil
-	}
+	a.mu.RLock()
+	umountBin, diskutilBin := a.cfg.UmountBin, a.cfg.DiskutilBin
+	a.mu.RUnlock()
 	uCtx := ctx
 	if uCtx == nil || uCtx.Err() != nil {
 		uCtx = context.Background()
 	}
 	if serverAlive {
 		tCtx, cancel := context.WithTimeout(uCtx, 3*time.Second)
-		err := exec.CommandContext(tCtx, a.cfg.UmountBin, m.mountPath).Run()
+		err := exec.CommandContext(tCtx, umountBin, m.mountPath).Run()
 		cancel()
 		if err == nil && !isMountOwnedAndActive(m, false) {
 			return nil
 		}
 	}
 	fCtx, fCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	out, fErr := exec.CommandContext(fCtx, a.cfg.UmountBin, "-f", m.mountPath).CombinedOutput()
+	out, fErr := exec.CommandContext(fCtx, umountBin, "-f", m.mountPath).CombinedOutput()
 	fCancel()
-	if fErr == nil || !isMountOwnedAndActive(m, false) {
+	if fErr == nil && !isMountOwnedAndActive(m, false) {
 		return nil
 	}
 	dCtx, dCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	dOut, dErr := exec.CommandContext(dCtx, a.cfg.DiskutilBin, "unmount", "force", m.mountPath).CombinedOutput()
+	dOut, dErr := exec.CommandContext(dCtx, diskutilBin, "unmount", "force", m.mountPath).CombinedOutput()
 	dCancel()
-	if dErr == nil || !isMountOwnedAndActive(m, false) {
+	if dErr == nil && !isMountOwnedAndActive(m, false) {
 		return nil
 	}
 	return &adapter.AdapterError{
-		AdapterID:  adapter.AdapterNFSDarwin,
-		Op:         "release",
-		ReasonCode: adapter.ReasonCleanupFailed,
+		AdapterID: adapter.AdapterNFSDarwin, Op: "release", ReasonCode: adapter.ReasonCleanupFailed,
 		Diagnostic: fmt.Sprintf("unmount %s failed: umount=%v (%s) diskutil=%v (%s)", m.mountPath, fErr, strings.TrimSpace(string(out)), dErr, strings.TrimSpace(string(dOut))),
 		Cause:      fErr,
 	}
@@ -119,11 +223,7 @@ func normalizeRootGrants(grants []adapter.RootGrant) ([]layeredfs.RootSpec, stri
 			label = g.RootID
 		}
 		coreRoots = append(coreRoots, layeredfs.RootSpec{
-			ID:        g.RootID,
-			Label:     label,
-			TrunkPath: absTrunk,
-			Subroot:   g.Subroot,
-			IsPrimary: isPrimary,
+			ID: g.RootID, Label: label, TrunkPath: absTrunk, Subroot: g.Subroot, IsPrimary: isPrimary,
 		})
 		denyPaths = append(denyPaths, absTrunk)
 	}

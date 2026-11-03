@@ -204,10 +204,12 @@ func TestBarrierFailsOnDeadServerAndPreservesEarlierCheckpoints(t *testing.T) {
 
 	const viewID = "view-dead-server"
 	prep, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
-		ViewID:     viewID,
-		BackingDir: backingDir,
-		RuntimeDir: runtimeDir,
-		Grants:     []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
+		ViewID:          viewID,
+		BackingDir:      backingDir,
+		RuntimeDir:      runtimeDir,
+		QuiesceHook:     nfsdarwin.NoopQuiesceHook,
+		FlushClientHook: nfsdarwin.NoWritableMappingsFlushHook,
+		Grants:          []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
 	})
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
@@ -323,6 +325,7 @@ func TestReleaseDoesNotUnmountUnownedPath(t *testing.T) {
 	if err := adp.DisownMountForTest(viewID, unownedDir); err != nil {
 		t.Fatalf("DisownMountForTest: %v", err)
 	}
+	_ = exec.Command("/sbin/umount", "-f", realMountPath).Run()
 	if _, err := adp.Release(t.Context(), viewID); err != nil {
 		t.Fatalf("Release with disowned path failed: %v", err)
 	}

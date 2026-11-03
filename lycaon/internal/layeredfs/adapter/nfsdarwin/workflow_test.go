@@ -73,11 +73,13 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	const workerID = "worker-mounted-e2e"
 
 	prep, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
-		ViewID:         viewID,
-		BackingDir:     backingDir,
-		RuntimeDir:     runtimeDir,
-		GitInterceptor: gitMgr,
-		Grants:         []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
+		ViewID:          viewID,
+		BackingDir:      backingDir,
+		RuntimeDir:      runtimeDir,
+		GitInterceptor:  gitMgr,
+		QuiesceHook:     nfsdarwin.NoopQuiesceHook,
+		FlushClientHook: nfsdarwin.NoWritableMappingsFlushHook,
+		Grants:          []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
 	})
 	if err != nil {
 		t.Fatalf("adp.Prepare: %v", err)
@@ -151,6 +153,20 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	workerHeadOID = strings.TrimSpace(workerHeadOID)
 	if workerHeadOID == "" || workerHeadOID == trunkInitialHead {
 		t.Fatalf("expected new worker commit OID distinct from trunk (%s), got %q", trunkInitialHead, workerHeadOID)
+	}
+
+	// Also exercise unrestricted shell `git` subprocesses directly inside mountPath (with cwd = mountPath
+	// and no --git-dir flags) to prove ordinary shell git commands traverse <mountPath>/.git over NFSv3.
+	shellGitCmd := exec.CommandContext(t.Context(), "/bin/sh", "-c",
+		"git --no-optional-locks status --porcelain=v1 && git rev-parse HEAD && git branch --list")
+	shellGitCmd.Dir = mountPath
+	shellGitOut, err := shellGitCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("unrestricted shell git in mountPath failed: %v\n%s", err, string(shellGitOut))
+	}
+	if !strings.Contains(string(shellGitOut), workerHeadOID) || !strings.Contains(string(shellGitOut), "worker/feature") {
+		t.Fatalf("expected unrestricted shell git in mountPath to see worker commit %s and branch worker/feature, got:\n%s",
+			workerHeadOID, string(shellGitOut))
 	}
 
 	// Verify canonical TrunkRoot (HEAD, refs, index, working tree) remained 100% untouched during mounted edits & commits.
