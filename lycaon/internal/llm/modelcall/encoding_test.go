@@ -22,7 +22,7 @@ func TestInternalAttemptControlsStayOutOfEncodedRequests(t *testing.T) {
 		ThinkingOverrideStyle: modelinfo.ThinkStyleEffortLevels,
 		ControlCapture:        &RequestControlCapture{},
 	}
-	chunk := StreamChunk{ResetReasoning: true, Content: "delta", Reasoning: "reason", Done: true}
+	chunk := StreamChunk{Reset: true, ResetReasoning: true, ReasoningPresent: true, Content: "delta", Reasoning: "reason", Done: true}
 	for _, codec := range []struct {
 		name   string
 		encode func(any) ([]byte, error)

@@ -137,7 +137,7 @@ type StreamChunk struct {
 	// Reasoning is a separate provider reasoning delta.
 	Reasoning string
 	// ReasoningPresent identifies a separate reasoning block without requiring text.
-	ReasoningPresent bool
+	ReasoningPresent bool `json:"-" yaml:"-"`
 	// ReasoningDetails carries terminal structured reasoning blocks.
 	ReasoningDetails []json.RawMessage
 	ToolCalls        []api.ToolCall
