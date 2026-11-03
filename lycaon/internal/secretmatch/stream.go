@@ -32,6 +32,9 @@ func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer,
 	}
 	originalCheck := check
 	check = func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if originalCheck != nil {
 			if err := originalCheck(); err != nil {
 				return err
