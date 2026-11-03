@@ -43,13 +43,9 @@ func cloneFileIfSupported(_, _ string) (bool, error) {
 	return false, nil
 }
 
-func listXattrPath(_ string) (map[string][]byte, error) {
-	return nil, nil
-}
-
 type osLowerProvider struct{}
 
-func newOSLowerProvider(_ string, _ func(rel, comp string)) (*osLowerProvider, error) {
+func newOSLowerProvider(_ string, _ func(rel, comp string), _ func(rel string) error) (*osLowerProvider, error) {
 	return nil, ErrUnsupportedOperation
 }
 

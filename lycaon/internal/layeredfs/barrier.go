@@ -46,7 +46,7 @@ func (c *Core) ResetStepStats() {
 	c.counters.lowerLookups.Store(0)
 }
 
-// ReleaseView invalidates all handles, closes held descriptors, and marks the view released.
+// ReleaseView invalidates all handles, waits for in-flight operations to drain, and closes descriptors.
 func (c *Core) ReleaseView() error {
 	c.mu.Lock()
 	if c.state.released {
@@ -60,19 +60,19 @@ func (c *Core) ReleaseView() error {
 		handles = append(handles, h)
 		delete(c.state.handles, id)
 	}
-	c.state.nodesByID = make(map[NodeID]*privateNode)
-	c.state.pathIndex = make(map[QualifiedPath]NodeID)
 	c.state.dirCookies = make(map[uint64]dirCookieState)
 	c.mu.Unlock()
 
 	for _, h := range handles {
-		if h.file != nil {
-			_ = h.file.Close()
-		}
-		if h.roReader != nil {
-			_ = h.roReader.Close()
-		}
+		_ = releaseHandleRef(c, h)
 	}
+	c.barrier.waitDrain()
+
+	c.mu.Lock()
+	c.state.nodesByID = make(map[NodeID]*privateNode)
+	c.state.pathIndex = make(map[QualifiedPath]NodeID)
+	c.mu.Unlock()
+
 	c.roots.close()
 	c.backing.close()
 	return nil
@@ -115,6 +115,14 @@ func (b *barrierCoordinator) leaveMutation() {
 	if b.inFlight <= 0 {
 		b.inFlight = 0
 		b.cond.Broadcast()
+	}
+	b.mu.Unlock()
+}
+
+func (b *barrierCoordinator) waitDrain() {
+	b.mu.Lock()
+	for b.inFlight > 0 {
+		b.cond.Wait()
 	}
 	b.mu.Unlock()
 }
@@ -183,26 +191,32 @@ func (c *Core) EndCheckpointBarrier(token BarrierToken) error {
 }
 
 func flushBackingState(c *Core) error {
-	c.mu.RLock()
+	c.mu.Lock()
 	if c.state.released {
-		c.mu.RUnlock()
+		c.mu.Unlock()
 		return ErrViewReleased
 	}
-	var files []*os.File
+	var held []*openHandle
 	for _, h := range c.state.handles {
 		if !h.closed && h.file != nil {
-			files = append(files, h.file)
+			h.refs++
+			held = append(held, h)
 		}
 	}
 	workFile := c.backing.workDirFile
 	baseFile := c.backing.baseDirFile
 	journalFile := c.backing.journalDirFile
-	c.mu.RUnlock()
+	c.mu.Unlock()
 
-	for _, f := range files {
-		if err := syncFD(int(f.Fd())); err != nil {
-			return err
+	var firstErr error
+	for _, h := range held {
+		if err := syncFD(int(h.file.Fd())); err != nil && firstErr == nil {
+			firstErr = err
 		}
+		_ = releaseHandleRef(c, h)
+	}
+	if firstErr != nil {
+		return firstErr
 	}
 	for _, df := range []*os.File{workFile, baseFile, journalFile} {
 		if df != nil {
