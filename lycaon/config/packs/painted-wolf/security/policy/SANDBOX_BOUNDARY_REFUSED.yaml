@@ -5,6 +5,7 @@ anchor: tool.post_invoke
 selector:
   tool:
     - command
+    - verify
     - command_output
     - terminal_open
     - terminal_send

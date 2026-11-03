@@ -36,9 +36,6 @@ func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	if r.commandTool != nil {
 		r.commandTool.Background = reg
 	}
-	if r.verifyTool != nil {
-		r.verifyTool.Background = reg
-	}
 	if r.commandOutputTool != nil {
 		r.commandOutputTool.Registry = reg
 	}
@@ -59,9 +56,6 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 	}
 	if r.commandTool != nil {
 		r.commandTool.WriteRootGate = writeRoot
-	}
-	if r.verifyTool != nil {
-		r.verifyTool.WriteRootGate = writeRoot
 	}
 	if r.paths != nil {
 		r.paths.SetSessionWriteRootOverlay(writeRoot.SessionWriteRoots)
@@ -178,6 +172,7 @@ func (r *CommandServices) setProgramExecutor(executor *toolexecution.Executor) {
 	if programs := r.programs(); programs != nil {
 		programs.Executor = executor
 		executor.SetProgramEntry("command", command.CaptureInvocation)
+		executor.SetProgramEntry("verify", nil)
 	}
 }
 

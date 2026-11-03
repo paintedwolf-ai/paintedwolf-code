@@ -28,7 +28,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		var evaluationRefusal *commandprogram.EvaluationRefusal
 		if errors.As(evalErr, &evaluationRefusal) {
 			span := evaluationRefusal.Node.Span
-			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": evaluationRefusal.Expected, "expected_form": evaluationRefusal.Expected, "reason": evaluationRefusal.Expected}
+			data := map[string]any{"tool": run.tool, "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": evaluationRefusal.Expected, "expected_form": evaluationRefusal.Expected, "reason": evaluationRefusal.Expected}
 			data["diagnostic_stage"] = string(toolcontract.EvaluationDiagnosticStage)
 			if evaluationRefusal.SourceUnitID != "" {
 				data["source_unit_id"] = evaluationRefusal.SourceUnitID
@@ -46,7 +46,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 					data["diagnostic_stage"] = string(toolcontract.OptionDiagnosticStage)
 				}
 			}
-			if syntax := toolcommand.ProgramSyntaxObservation("command", evaluationRefusal.Cause); syntax != nil {
+			if syntax := toolcommand.ProgramSyntaxObservation(run.tool, evaluationRefusal.Cause); syntax != nil {
 				for key, value := range syntax.Data {
 					data[key] = value
 				}
@@ -68,7 +68,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			}
 			enrichProgramReject(rejection, evaluationRefusal.Command, span)
 			if rejection.Code == "COMMAND_LIMIT_EXCEEDED" && dispatcher.claimStopLine() {
-				writeLimitRefusal(stderr, "command", "", rejection)
+				writeLimitRefusal(stderr, run.tool, "", rejection)
 			}
 		} else if rejection = toolrejection.AsToolReject(evalErr); rejection != nil {
 			enrichProgramReject(rejection, "", run.root.Span)

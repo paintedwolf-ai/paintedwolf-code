@@ -5,7 +5,6 @@ anchor: tool.rejected
 selector:
   tool:
   - command
-  - verify
   - terminal_open
 requires:
   profiles:
@@ -84,7 +83,7 @@ x-paintedwolf-scenarios:
   - one executable
   - literal arguments
 - id: substitution
-  tool: verify
+  tool: terminal_open
   vars:
     command: git checkout $(git rev-parse HEAD)
     profile_id: implement
@@ -96,7 +95,7 @@ x-paintedwolf-scenarios:
   - shell expansions are not evaluated
   - git checkout
 - id: scratch_variable
-  tool: verify
+  tool: terminal_open
   vars:
     command: cat $SCRATCH_DIR/notes.txt
     profile_id: implement
@@ -109,7 +108,7 @@ x-paintedwolf-scenarios:
   - shell expansions are not evaluated
   - $SCRATCH_DIR/notes.txt
 - id: background_operator
-  tool: verify
+  tool: terminal_open
   vars:
     command: python3 -m http.server 8000 &
     profile_id: implement
@@ -132,7 +131,7 @@ x-paintedwolf-scenarios:
   - '`env` object'
   - literal environment
 - id: shell_metacharacters
-  tool: verify
+  tool: terminal_open
   vars:
     command: cat <<'EOF' > out.txt
     profile_id: implement
@@ -143,7 +142,7 @@ x-paintedwolf-scenarios:
   - 'Code: COMMAND_NOT_ARGV'
   - literal input in `stdin`
 - id: pipeline_pipe
-  tool: verify
+  tool: terminal_open
   vars:
     command: git log --oneline | head -20
     profile_id: implement

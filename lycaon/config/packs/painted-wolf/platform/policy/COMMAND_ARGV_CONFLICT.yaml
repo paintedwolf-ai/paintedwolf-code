@@ -5,7 +5,6 @@ anchor: tool.rejected
 selector:
   tool:
     - command
-    - verify
 requires:
   facts: [paintedwolf.rejection_code]
   profiles:

@@ -1,15 +1,11 @@
 tags: [process, verification]
 description: >-
-  Run a verification check and report its terminal outcome. Bare verify runs
-  the selected project command. With no selected command, supply the documented
-  check appropriate to the task. A different command or pipeline is rejected
-  when a project command is selected; use command(verification: true) for
-  targeted checks. Selecting a command does not require it after every edit.
-  outcome is passed, failed, or unverifiable. declared_command_match identifies
-  the selected command, not its success. A live handle has no verdict; wait on
-  it without starting a duplicate. Both verify and command accept the same
-  reviewed capabilities. A boundary refusal does not explain every failure in
-  a mixed run. Report blocked validation when no justified recovery remains.
+  Run a verification check as a Bash program. Omit command to run the selected
+  project check; a different command is rejected while one is selected. Use
+  command with verification:true for targeted checks. Pipes, redirects and jobs
+  use command syntax. A running program has no verdict: wait for its check to
+  finish. Source-bound receipts report passed, failed or unverifiable; selecting
+  a check does not require repeating it after every edit.
 schema:
   type: object
   properties:
@@ -32,73 +28,10 @@ schema:
             type: string
             maxLength: 1024
           description: Exact HTTP origins (scheme, host, port), without paths, query parameters, or credentials.
-    command:
-      type: string
-      description: Optional command override. When omitted, the host runs the project's test command.
-    pipeline:
-      type: array
-      description: >-
-        Multi-stage runs: one argv line per stage, Go-wired `|` (not with
-        command).
-      items:
-        type: string
-    cwd:
-      type: string
-      description: >-
-        Repo-relative working directory for this call. Use `@label` or
-        `@label/sub/path` for a non-primary project root. On a write worker,
-        resolved under the private branch (subdir allowed). Empty = branch root
-        (or active root when not on a worker). Must be a directory inside a
-        project root. Do not use `cd` compounds — pass the directory here.
-    stdin:
-      type: string
-      description: >-
-        Bytes on the process stdin — not flags or operands. Put those on
-        command.
-    stdin_from:
-      type: string
-      description: Read-scope stdin path
-    env:
-      type: object
-      default: {}
-      additionalProperties:
-        type: string
-      description: Inline env
-    stdout_to:
-      type: string
-      description: Optional write-scope path for stdout. Omit to keep stdout in the tool result tail.
-    stderr_to:
-      type: string
-      description: Optional write-scope path for stderr. Omit to keep stderr in the tool result tail.
-    append:
-      type: boolean
-      default: false
-      description: Append redirect targets
-    background:
-      type: boolean
-      default: false
-      description: Explicit concurrent job; returns its command handle immediately.
-    wait_ms:
-      type: integer
-      minimum: 1
-      maximum: 30000
-      description: Inline response window before returning a live handle (default/max 30s); not a kill. Ignored with background:true.
-    timeout_ms:
-      type: integer
-      minimum: 1000
-      maximum: 7200000
-      description: Execution deadline (default 10m). Unlike wait_ms, expiry stops the check tree.
-    allow_concurrent:
-      type: boolean
-      default: false
-      description: Admit this awaited command beside an existing one. Exact live duplicates are still rejected.
-    socks_proxy:
-      type: boolean
-      default: false
-      description: >-
-        Inject ALL_PROXY for mediated non-HTTP TCP (SOCKS5h). HTTP(S) already uses
-        HTTP_PROXY under default confinement — omit this unless the client needs
-        SOCKS. Does not widen the sandbox.
+    command: {type: string, description: "Bash check source; omitted runs the selected project check."}
+    cwd: {type: string, description: "Folder path, `@label/...`, or `@scratch/...`."}
+    timeout_ms: {type: integer, minimum: 1000, maximum: 7200000, description: Deadline ms.}
+    socks_proxy: {type: boolean, default: false, description: SOCKS5h proxy.}
     capability_request:
       type: object
       description: >-
