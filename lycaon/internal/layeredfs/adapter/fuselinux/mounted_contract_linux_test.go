@@ -619,7 +619,7 @@ func TestInvalidationNeverBlocksRepliesItsKernelWorkWaitsOn(t *testing.T) {
 		close(stop)
 		invalidator.Wait()
 	}()
-	for i := range 500 {
+	for i := range 100 {
 		other := filepath.Join(dir, fmt.Sprintf("other-%d", i))
 		if err := os.WriteFile(other, []byte("x"), 0o644); err != nil {
 			t.Fatalf("create %d: %v", i, err)

@@ -33,6 +33,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 		t.Skip("real FUSE mount requires linux")
 	}
 
+	allowUndetachedGitEntry(t)
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")
 	backingDir := filepath.Join(tmp, "backing")
