@@ -70,7 +70,7 @@ func TestSocketRecoveryKeepsEndpointGuidanceAfterDeclaration(t *testing.T) {
 			gc.ObservationData = map[string]any{"refused_socket_paths": []string{"/run/service.sock"}, "supports_socket_paths": true}
 			text := oarcore.RenderCopy(hints.HintCodes["SANDBOX_TRY_SOCKET_PATH"].Fix, activation(gc))
 			supported := tool == "command" || tool == "verify"
-			if strings.Contains(text, "DOCKER_HOST") != supported {
+			if strings.Contains(text, "whole bound endpoint reference") != supported {
 				t.Fatalf("tool=%s declared=%t endpoint guidance=%q", tool, declared, text)
 			}
 			if strings.Contains(text, "Declare the exact service") != (supported && !declared) {
