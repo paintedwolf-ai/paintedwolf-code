@@ -248,6 +248,9 @@ func flushChunksToCore(
 				return layeredfs.EntryAttr{}, err
 			}
 		}
+		if err := core.SyncViaNodeHandle(curMeta.NodeID, curMeta.Generation); err != nil {
+			return layeredfs.EntryAttr{}, err
+		}
 		syncAppleDoubleForPath(core, rec.qpath)
 		if snapshotJournal {
 			if _, err := core.SnapshotJournal(); err != nil {

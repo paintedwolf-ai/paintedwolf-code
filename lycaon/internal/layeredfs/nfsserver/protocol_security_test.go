@@ -6,6 +6,9 @@ import (
 	"errors"
 	"io"
 	"net"
+	"path/filepath"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -277,4 +280,110 @@ func skipWcc(t *testing.T, r *bytes.Reader) {
 		_ = getU64(t, r)
 	}
 	_ = getPostOpAttr(t, r)
+}
+
+func TestOwnerCreatedReadOnlyWriteSyncAndFaultPropagation(t *testing.T) {
+	var (
+		nodeSyncCalls atomic.Int32
+		failNodeSync  atomic.Bool
+		failOnSync    atomic.Bool
+	)
+	env := newTestEnv(t, &nfsserver.FaultInjector{
+		OnSync: func(_ nfsserver.ViewID, _ layeredfs.QualifiedPath) error {
+			if failOnSync.Load() {
+				return syscall.EIO
+			}
+			return nil
+		},
+	})
+	viewCore, err := layeredfs.New(layeredfs.Config{
+		ViewID:     "view-ro-sync",
+		BackingDir: filepath.Join(env.StateDir, "view-ro-sync"),
+		Roots: []layeredfs.RootSpec{
+			{ID: nfsserver.ProjectRoot, Label: "project", TrunkPath: env.ProjDir, IsPrimary: true},
+			{ID: nfsserver.WorktreeRoot, Label: "worktree", TrunkPath: env.WorkDir},
+		},
+		FaultHooks: &layeredfs.FaultHooks{
+			JournalSyncHook: func(phase string) error {
+				if phase == "node_sync" {
+					nodeSyncCalls.Add(1)
+					if failNodeSync.Load() {
+						return syscall.EIO
+					}
+				}
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("layeredfs.New(view-ro-sync): %v", err)
+	}
+	t.Cleanup(func() { _ = viewCore.ReleaseView() })
+	nfsserver.BindViewCore(env.Server, "view-ro-sync", viewCore, false)
+	capCfg, err := env.Server.RegisterExport("view-ro-sync", nfsserver.ProjectRoot, "")
+	if err != nil {
+		t.Fatalf("RegisterExport: %v", err)
+	}
+
+	cli := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
+	_, rootFH := cli.mount(capCfg.ExportPath)
+	nst, roFH := cli.create(rootFH, "git-obj-0444.idx", 0o444, 0, [8]byte{})
+	if nst != nfs.NFSStatusOk {
+		t.Fatalf("CREATE git-obj-0444.idx: %v", nst)
+	}
+
+	// 1. DATA_SYNC write on owner-created 0444 file must invoke SyncViaNodeHandle ("node_sync").
+	if st, _, comm, _ := cli.write(roFH, 0, []byte("pack-header-"), nfsserver.DataSync); st != nfs.NFSStatusOk || comm != nfsserver.DataSync {
+		t.Fatalf("DATA_SYNC write: st=%v comm=%v", st, comm)
+	}
+	if got := nodeSyncCalls.Load(); got != 1 {
+		t.Fatalf("expected 1 node_sync call after DATA_SYNC write, got %d", got)
+	}
+
+	// 2. Injected SyncViaNodeHandle failure on FILE_SYNC write must reject stability acknowledgment.
+	failNodeSync.Store(true)
+	if st, _, _, _ := cli.write(roFH, 12, []byte("pack-body"), nfsserver.FileSync); st != nfs.NFSStatusIO {
+		t.Fatalf("expected NFSStatusIO when SyncViaNodeHandle fails on FILE_SYNC, got %v", st)
+	}
+	failNodeSync.Store(false)
+	if st, _, comm, _ := cli.write(roFH, 12, []byte("pack-body"), nfsserver.FileSync); st != nfs.NFSStatusOk || comm != nfsserver.FileSync {
+		t.Fatalf("FILE_SYNC retry: st=%v comm=%v", st, comm)
+	}
+	if got := nodeSyncCalls.Load(); got != 3 {
+		t.Fatalf("expected 3 node_sync calls after FILE_SYNC retry, got %d", got)
+	}
+	if st, attr := cli.getAttr(roFH); st != nfs.NFSStatusOk || attr.FileMode&0o777 != 0o444 {
+		t.Fatalf("expected 0444 mode preserved, got st=%v mode=%#o", st, attr.FileMode&0o777)
+	}
+
+	// 3. UNSTABLE write + COMMIT must invoke SyncViaNodeHandle and retain pending chunks if sync fails.
+	if st, _, _, _ := cli.write(roFH, 21, []byte("-trailer"), nfsserver.Unstable); st != nfs.NFSStatusOk {
+		t.Fatalf("UNSTABLE write: %v", st)
+	}
+	failNodeSync.Store(true)
+	if st, _ := cli.commit(roFH, 0, 29); st != nfs.NFSStatusIO {
+		t.Fatalf("expected NFSStatusIO when SyncViaNodeHandle fails on COMMIT, got %v", st)
+	}
+	if vb, vc, _ := nfsserver.PendingUnstableStats(env.Server, "view-ro-sync"); vb != 8 || vc != 1 {
+		t.Fatalf("expected pending chunk retained after SyncViaNodeHandle failure, got vb=%d vc=%d", vb, vc)
+	}
+	failNodeSync.Store(false)
+	failOnSync.Store(true)
+	if st, _ := cli.commit(roFH, 0, 29); st != nfs.NFSStatusIO {
+		t.Fatalf("expected NFSStatusIO when OnSync fails on COMMIT, got %v", st)
+	}
+	failOnSync.Store(false)
+	if st, _ := cli.commit(roFH, 0, 29); st != nfs.NFSStatusOk {
+		t.Fatalf("COMMIT retry: %v", st)
+	}
+	if got := nodeSyncCalls.Load(); got != 5 {
+		t.Fatalf("expected 5 total node_sync calls after COMMIT, got %d", got)
+	}
+	if st, data, _ := cli.read(roFH, 0, 64); st != nfs.NFSStatusOk || string(data) != "pack-header-pack-body-trailer" {
+		t.Fatalf("READ after COMMIT: st=%v data=%q", st, data)
+	}
+	snap, err := viewCore.LoadPersistedJournal()
+	if err != nil || len(snap.Changes) == 0 {
+		t.Fatalf("LoadPersistedJournal: changes=%d err=%v", len(snap.Changes), err)
+	}
 }
