@@ -14,19 +14,19 @@ var scanDrilldownTools = []string{"scan_summary", "scan_query"}
 
 // attachWorkerScanDigest gives a worker that can read scans its run's bound
 // scans, or the project's latest scan when its job belongs to no run.
-func attachWorkerScanDigest(out inject.WorkerLegContext, projectDir, workflowRunID string, list scan.WorkerScanLister) (inject.WorkerLegContext, error) {
+func attachWorkerScanDigest(ctx context.Context, out inject.WorkerLegContext, projectDir, workflowRunID string, list scan.WorkerScanLister) (inject.WorkerLegContext, error) {
 	if list == nil || strings.TrimSpace(projectDir) == "" || !holdsAny(out.LegTools, scanDrilldownTools) {
 		return out, nil
 	}
 	if workflowRunID = strings.TrimSpace(workflowRunID); workflowRunID != "" {
-		lines, err := scan.WorkflowWorkerScanDigest(context.Background(), list, workflowRunID)
+		lines, err := scan.WorkflowWorkerScanDigest(ctx, list, workflowRunID)
 		if err != nil {
 			return out, err
 		}
 		out.ScanDigest = lines
 		return out, nil
 	}
-	out.ScanDigest = scan.WorkerScanDigest(context.Background(), list, projectDir, time.Now().UTC())
+	out.ScanDigest = scan.WorkerScanDigest(ctx, list, projectDir, time.Now().UTC())
 	return out, nil
 }
 
