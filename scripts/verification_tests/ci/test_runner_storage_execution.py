@@ -63,11 +63,13 @@ class RunnerStorageTests(unittest.TestCase):
     def test_setup_reclaims_storage_before_toolchains_and_managed_work(self):
         import yaml
         root = Path(__file__).resolve().parents[3]
-        steps = yaml.safe_load((root / '.github/actions/setup-verification/action.yml').read_text())['runs']['steps']
-        index = next(i for i, step in enumerate(steps) if step.get('run') ==
-                     'PYTHONPATH=scripts python3 -m ci_policy.runner_storage')
-        self.assertEqual(index, 0)
-        self.assertIn("inputs.lookup-only != 'true'", steps[index]['if'])
+        for name in ('setup-verification', 'setup-analysis'):
+            steps = yaml.safe_load((root / f'.github/actions/{name}/action.yml').read_text())['runs']['steps']
+            index = next(i for i, step in enumerate(steps) if step.get('run') ==
+                         'PYTHONPATH=scripts python3 -m ci_policy.runner_storage')
+            self.assertEqual(index, 0, name)
+            if name == 'setup-verification':
+                self.assertIn("inputs.lookup-only != 'true'", steps[index]['if'])
 
     def test_cli_on_a_self_hosted_environment_is_read_only(self):
         root = Path(__file__).resolve().parents[3]
