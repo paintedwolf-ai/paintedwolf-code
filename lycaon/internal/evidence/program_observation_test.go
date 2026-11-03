@@ -14,7 +14,7 @@ func TestProgramObservationDoesNotInferSourceOrVisualEvidence(t *testing.T) {
 		if rec.Kind != "command" || rec.Shape != ShapeCommand || rec.SourceTool != tool || rec.Fidelity != FidelityOpaque || rec.SourceDelivery != nil || rec.IsGate() || rec.ArtifactID != "" || rec.URL != "" || len(IndexedPathsForRecord(rec)) != 0 || len(rec.LineRanges) != 0 {
 			t.Fatalf("%s inferred evidence: %+v", tool, rec)
 		}
-		if len(rec.Body) != 1 || rec.Body[0] != printed {
+		if len(rec.Body) != 1 || !strings.HasSuffix(rec.Body[0], printed) || !strings.Contains(rec.Body[0], "program_id: program") {
 			t.Fatalf("%s lost observed output: %+v", tool, rec)
 		}
 	}
@@ -35,5 +35,13 @@ func TestProgramObservationBoundsCapturedOutput(t *testing.T) {
 	rec := BuildProgramObservation("command", &api.CommandProgramReceipt{ID: "program", ParentReceiptID: "invocation"}, strings.Repeat("x", EvidenceCaptureBodyCapBytes+1))
 	if !rec.Truncated || len(rec.Body) != 1 || len(rec.Body[0]) != EvidenceCaptureBodyCapBytes {
 		t.Fatalf("unbounded command observation: %+v", rec)
+	}
+}
+
+func TestProgramObservationKeepsHostOutcomeWhenOutputIsEmpty(t *testing.T) {
+	status := 1
+	rec := BuildProgramObservation("command", &api.CommandProgramReceipt{ID: "program", ParentReceiptID: "invocation", State: "completed", StatusCode: &status}, "")
+	if len(rec.Body) != 1 || !strings.Contains(rec.Body[0], "state: completed") || !strings.Contains(rec.Body[0], "status_code: 1") {
+		t.Fatalf("lost host outcome: %+v", rec)
 	}
 }
