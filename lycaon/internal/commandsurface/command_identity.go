@@ -52,18 +52,18 @@ func CommandIdentity(line string) string {
 		prefix = "argv:"
 		syntax.Walk(tree, func(node syntax.Node) bool {
 			if word, ok := node.(*syntax.Word); ok {
-				literal, literalErr := expand.Literal(nil, word)
-				if literalErr != nil {
-					err = literalErr
+				literal, literalErr := expand.Fields(nil, word)
+				if literalErr != nil || len(literal) != 1 {
+					static = false
 					return false
 				}
 				// JSON encodes literal values for identity, never execution.
-				encoded, _ := json.Marshal(literal)
+				encoded, _ := json.Marshal(literal[0])
 				word.Parts = []syntax.WordPart{&syntax.Lit{Value: string(encoded)}}
 			}
 			return true
 		})
-		if err != nil {
+		if !static {
 			return ""
 		}
 	}
