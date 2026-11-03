@@ -47,7 +47,7 @@ func (s *Server) serveRequest(st *fuseRequestState, req []byte) {
 	case fuseOpReadlink:
 		payload, errno = s.opReadlink(nodeID)
 	case fuseOpOpen:
-		payload, errno = s.opOpen(st, nodeID, body)
+		payload, errno = s.opOpen(nodeID, body)
 	case fuseOpRead:
 		payload, errno = s.opRead(body)
 	case fuseOpStatfs:
@@ -81,15 +81,15 @@ func (s *Server) serveRequest(st *fuseRequestState, req []byte) {
 		payload, errno = pollUnsupported()
 	case fuseOpSetattr, fuseOpSymlink, fuseOpMknod, fuseOpMkdir, fuseOpUnlink, fuseOpRmdir, fuseOpRename,
 		fuseOpRename2, fuseOpLink, fuseOpWrite, fuseOpCreate, fuseOpSetxattr, fuseOpRemovexattr:
-		payload, errno = s.dispatchMutatingOp(st, opcode, nodeID, body)
+		payload, errno = s.dispatchMutatingOp(opcode, nodeID, body)
 	default:
 		payload, errno = nil, -int32(syscall.ENOSYS)
 	}
 	_ = s.writeReply(st.unique, errno, payload)
 }
 
-func (s *Server) dispatchMutatingOp(st *fuseRequestState, opcode uint32, nodeID uint64, body []byte) ([]byte, int32) {
-	if errno := s.gate.enter(st); errno != 0 {
+func (s *Server) dispatchMutatingOp(opcode uint32, nodeID uint64, body []byte) ([]byte, int32) {
+	if errno := s.gate.enter(); errno != 0 {
 		return nil, errno
 	}
 	defer s.gate.leave()

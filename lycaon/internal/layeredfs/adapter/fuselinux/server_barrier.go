@@ -28,21 +28,18 @@ func newMutationGate(closed *atomic.Bool) *mutationGate {
 }
 
 // enter admits a mutating request, holding it while a barrier is active. The barrier ends on
-// every path, and a held request stays cancellable by its own interrupt. Failing it instead
-// would surface EAGAIN from blocking calls and lose kernel writeback.
-func (g *mutationGate) enter(st *fuseRequestState) int32 {
+// every path, so the wait is bounded. Failing the request instead would surface EAGAIN or EINTR
+// from calls that do not expect them and lose kernel writeback.
+func (g *mutationGate) enter() int32 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.held++
 	defer func() { g.held-- }()
-	for g.active && !g.closed.Load() && !st.isCanceled() {
+	for g.active && !g.closed.Load() {
 		g.cond.Wait()
 	}
 	if g.closed.Load() {
 		return -int32(syscall.EIO)
-	}
-	if st.isCanceled() {
-		return -int32(syscall.EINTR)
 	}
 	g.inFlight++
 	return 0

@@ -298,9 +298,8 @@ func TestSaturatedWorkersStillServeUnlockInterruptAndRelease(t *testing.T) {
 	w, held, unblock := holdWorker(t)
 	w.seed("f", "x")
 	queued := w.send(fuseOpStatfs, fuseRootID, nil)
-	cancelled := w.send(fuseOpStatfs, fuseRootID, nil)
-	cancelInterrupt := w.nextUnique() | 1
-	w.sendWith(cancelInterrupt, fuseOpInterrupt, 0, u64(cancelled))
+	interruptedQueued := w.send(fuseOpStatfs, fuseRootID, nil)
+	w.sendWith(w.nextUnique()|1, fuseOpInterrupt, 0, u64(interruptedQueued))
 
 	// Every reply here arrives while the only worker is still held, because none of them needs it.
 	const node = fuseRootID
@@ -319,7 +318,8 @@ func TestSaturatedWorkersStillServeUnlockInterruptAndRelease(t *testing.T) {
 	unblock()
 	w.wantErrno("held mutation", w.reply(held), 0)
 	w.wantErrno("queued request", w.reply(queued), 0)
-	w.wantErrno("request interrupted while queued", w.reply(cancelled), syscall.EINTR)
+	// EINTR here would reach stat or open callers even with SA_RESTART.
+	w.wantErrno("non-lock request interrupted while queued still completes", w.reply(interruptedQueued), 0)
 }
 
 func TestCloseSettlesWaitersQueuedAndGatedRequests(t *testing.T) {
@@ -484,15 +484,16 @@ func TestBarrierHoldsMutationsAndUnknownOpcodesNeverReachTheGate(t *testing.T) {
 	w.await("both mutations held", func() bool { return w.srv.GatedMutationsForTest() == 2 })
 	w.wantErrno("reads continue during barrier", w.call(fuseOpStatfs, fuseRootID, nil), 0)
 
-	interrupt := w.nextUnique() | 1
-	w.sendWith(interrupt, fuseOpInterrupt, 0, u64(interrupted))
-	w.wantErrno("mutation interrupted at the gate", w.reply(interrupted), syscall.EINTR)
+	// A signal must not fail mkdir with EINTR: the request waits for the barrier like any other.
+	w.sendWith(w.nextUnique()|1, fuseOpInterrupt, 0, u64(interrupted))
+	w.wantErrno("reads continue after the interrupt", w.call(fuseOpStatfs, fuseRootID, nil), 0)
+	if got := w.srv.GatedMutationsForTest(); got != 2 {
+		t.Fatalf("interrupt released a held mutation: %d held", got)
+	}
 
 	release()
+	w.wantErrno("interrupted mutation after barrier", w.reply(interrupted), 0)
 	w.wantErrno("mutation after barrier", w.reply(held), 0)
-	if _, err := w.core.Lstat(layeredfs.QualifiedPath{RootID: "primary", Rel: "interrupted"}); !os.IsNotExist(err) {
-		t.Fatalf("interrupted mutation took effect: %v", err)
-	}
 }
 
 func TestDirectoryStreamSurvivesRemovalAndRewindRefreshes(t *testing.T) {

@@ -151,19 +151,17 @@ func (s *Server) ordinaryWorker() {
 		case <-s.stopCh:
 			return
 		case q := <-s.ordinaryQueue:
-			if q.state.isCanceled() {
-				_ = s.writeReply(q.state.unique, -int32(syscall.EINTR), nil)
-				s.requests.unregister(q.state.unique)
-				continue
-			}
 			s.serveRequest(q.state, q.req)
 		}
 	}
 }
 
-// handleInterrupt cancels only the identified request. An unknown target has already been
-// answered: the kernel discards EAGAIN for a finished request and requeues the interrupt
-// for one it still holds, so a reordered interrupt is retried rather than lost.
+// handleInterrupt cancels only the identified request, and only a blocked lock acts on that: the
+// kernel restarts an interrupted lock call. For any other request EINTR would reach the caller
+// even with SA_RESTART, and stat or open returning EINTR is not something programs handle. Those
+// requests run to completion, which the protocol allows. An unknown target has already been
+// answered: the kernel discards EAGAIN for a finished request and requeues the interrupt for one
+// it still holds, so a reordered interrupt is retried rather than lost.
 func (s *Server) handleInterrupt(interruptUnique uint64, body []byte) {
 	if len(body) < 8 {
 		return
@@ -180,6 +178,5 @@ func (s *Server) cancelRequest(unique uint64) bool {
 	s.locks.mu.Lock()
 	s.locks.cond.Broadcast()
 	s.locks.mu.Unlock()
-	s.gate.wake()
 	return true
 }

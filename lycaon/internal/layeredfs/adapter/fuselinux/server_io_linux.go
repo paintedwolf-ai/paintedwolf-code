@@ -13,7 +13,7 @@ import (
 
 const fuseWriteInHeaderSize = 40
 
-func (s *Server) opOpen(st *fuseRequestState, nodeID uint64, body []byte) ([]byte, int32) {
+func (s *Server) opOpen(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
@@ -28,7 +28,7 @@ func (s *Server) opOpen(st *fuseRequestState, nodeID uint64, body []byte) ([]byt
 	openFlags := translateOpenFlags(rawFlags)
 	mutating := openFlags != layeredfs.OpenReadOnly
 	if mutating {
-		if errno := s.gate.enter(st); errno != 0 {
+		if errno := s.gate.enter(); errno != 0 {
 			return nil, errno
 		}
 		defer s.gate.leave()
