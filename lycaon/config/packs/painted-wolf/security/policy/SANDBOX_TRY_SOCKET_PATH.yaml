@@ -19,6 +19,7 @@ requires:
   - paintedwolf.can_command_output
   - paintedwolf.refused_socket_paths
   - paintedwolf.missing_capability_socket_paths
+  - paintedwolf.supports_socket_paths
 when: >-
   paintedwolf.confine_applied
   && size(paintedwolf.refused_socket_paths) > 0
@@ -26,13 +27,9 @@ when: >-
 effect: warn
 copy:
   what: In `{{ tool }}`, the sandbox refused connections to the local sockets {{ paintedwolf.refused_socket_paths }}.
-  cause: A local socket is a separate capability; the boundary opens only the exact sockets an invocation declares.
+  cause: Declaring a socket permits access but does not configure an external client to use its bound endpoint.
   why: ''
-  fix: '{% if paintedwolf.process_running %}{% if paintedwolf.can_command_output %}Use command_output on this job''s handle to inspect its outcome. {% endif %}{%
-    if paintedwolf.can_command_stop %}If this job is no longer needed, request command_stop once and observe its exit. {% endif %}Do not start replacement work while
-    this job is running. {% endif %}{% if paintedwolf.missing_capability_socket_paths %}{% if paintedwolf.refused_socket_paths %}If the operation is still needed, submit only
-    the remaining work. Declare the exact service in `capability_request.socket_paths`. External clients use the whole bound endpoint reference documented in that
-    field''s schema; native socket arguments use the path. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
+  fix: '{% if paintedwolf.process_running %}{% if paintedwolf.can_command_output %}Use command_output on this job''s handle to inspect its outcome. {% endif %}{% if paintedwolf.can_command_stop %}If unneeded, request command_stop once and observe exit. {% endif %}Do not replace running work. {% endif %}{% if paintedwolf.supports_socket_paths %}{% if paintedwolf.refused_socket_paths %}{% if paintedwolf.missing_capability_socket_paths %}Declare the exact service in `capability_request.socket_paths`. {% endif %}For external clients, select the whole bound endpoint reference from that field''s schema (Docker: `DOCKER_HOST`); native socket arguments use the path. If already bound, inspect the refusal before retrying. Preserve completed effects and resolve uncertain outcomes first.{% endif %}{% endif %}'
   instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
