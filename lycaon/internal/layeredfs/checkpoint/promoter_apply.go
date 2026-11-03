@@ -13,24 +13,20 @@ import (
 // EffectStatus tracks whether a distinct promotion effect (files vs Git refs) has completed.
 type EffectStatus string
 
-const (
-	EffectPending   EffectStatus = "pending"
-	EffectCompleted EffectStatus = "completed"
-	EffectSkipped   EffectStatus = "skipped"
-)
-
 // PromotionState identifies the durable state of a promotion transaction in the journal.
 type PromotionState string
-const (
-	PromotionStateIntent   PromotionState = "intent"
-	PromotionStateApplying PromotionState = "applying"
-	PromotionStateApplied  PromotionState = "applied"
-	PromotionStateRejected PromotionState = "rejected"
-)
 
 // ApplyFaultStage identifies a fault-injection boundary during promotion Apply.
 type ApplyFaultStage string
+
 const (
+	EffectPending                  EffectStatus    = "pending"
+	EffectCompleted                EffectStatus    = "completed"
+	EffectSkipped                  EffectStatus    = "skipped"
+	PromotionStateIntent           PromotionState  = "intent"
+	PromotionStateApplying         PromotionState  = "applying"
+	PromotionStateApplied          PromotionState  = "applied"
+	PromotionStateRejected         PromotionState  = "rejected"
 	ApplyFaultNone                 ApplyFaultStage = ""
 	ApplyFaultMidFileApply         ApplyFaultStage = "mid_file_apply"
 	ApplyFaultAfterFilesBeforeRefs ApplyFaultStage = "after_files_before_refs"
@@ -93,21 +89,16 @@ func (pr *Promoter) Apply(ctx context.Context, req ApplyRequest) (*PromotionJour
 			refStatus = EffectPending
 		}
 		rec = PromotionJournalRecord{
-			TransactionID:       txID,
-			CheckpointID:        m.CheckpointID,
-			PreviewID:           req.Preview.PreviewID,
-			State:               PromotionStateIntent,
-			FilePromotionStatus: EffectPending,
-			RefImportStatus:     refStatus,
-			UpdatedAt:           time.Now().UTC(),
+			TransactionID: txID, CheckpointID: m.CheckpointID, PreviewID: req.Preview.PreviewID,
+			State: PromotionStateIntent, FilePromotionStatus: EffectPending, RefImportStatus: refStatus,
+			UpdatedAt: time.Now().UTC(),
 		}
 		if err := pr.savePromotionRecord(rec); err != nil {
 			return nil, err
 		}
 	}
 
-	rec.State = PromotionStateApplying
-	rec.UpdatedAt = time.Now().UTC()
+	rec.State, rec.UpdatedAt = PromotionStateApplying, time.Now().UTC()
 	if err := pr.savePromotionRecord(rec); err != nil {
 		return nil, err
 	}
@@ -131,8 +122,7 @@ func (pr *Promoter) Apply(ctx context.Context, req ApplyRequest) (*PromotionJour
 				}
 			}
 		}
-		rec.FilePromotionStatus = EffectCompleted
-		rec.UpdatedAt = time.Now().UTC()
+		rec.FilePromotionStatus, rec.UpdatedAt = EffectCompleted, time.Now().UTC()
 		if err := pr.savePromotionRecord(rec); err != nil {
 			return nil, err
 		}
@@ -152,15 +142,13 @@ func (pr *Promoter) Apply(ctx context.Context, req ApplyRequest) (*PromotionJour
 			}
 			rec.ImportedRefs = imported
 		}
-		rec.RefImportStatus = EffectCompleted
-		rec.UpdatedAt = time.Now().UTC()
+		rec.RefImportStatus, rec.UpdatedAt = EffectCompleted, time.Now().UTC()
 		if err := pr.savePromotionRecord(rec); err != nil {
 			return nil, err
 		}
 	}
 
-	rec.State = PromotionStateApplied
-	rec.UpdatedAt = time.Now().UTC()
+	rec.State, rec.UpdatedAt = PromotionStateApplied, time.Now().UTC()
 	if err := pr.savePromotionRecord(rec); err != nil {
 		return nil, err
 	}
@@ -173,13 +161,9 @@ func (pr *Promoter) Reject(_ context.Context, checkpointID, reason string) (*Pro
 		return nil, err
 	}
 	rec := PromotionJournalRecord{
-		TransactionID:       "tx-" + checkpointID,
-		CheckpointID:        checkpointID,
-		State:               PromotionStateRejected,
-		RejectionReason:     reason,
-		FilePromotionStatus: EffectSkipped,
-		RefImportStatus:     EffectSkipped,
-		UpdatedAt:           time.Now().UTC(),
+		TransactionID: "tx-" + checkpointID, CheckpointID: checkpointID, State: PromotionStateRejected,
+		RejectionReason: reason, FilePromotionStatus: EffectSkipped, RefImportStatus: EffectSkipped,
+		UpdatedAt: time.Now().UTC(),
 	}
 	if err := pr.savePromotionRecord(rec); err != nil {
 		return nil, err
@@ -216,9 +200,8 @@ func sameTargetObservation(a, b TargetObservation) bool {
 		return a.LinkTarget == b.LinkTarget
 	case layeredfs.EntryDirectory:
 		return a.DirEmpty == b.DirEmpty
-	default:
-		return false
 	}
+	return false
 }
 
 func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
@@ -234,12 +217,9 @@ func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
 	case ActionDelete:
 		return os.RemoveAll(targetAbs)
 	case ActionMkdir:
-		return os.MkdirAll(targetAbs, pickMode(ch.Mode, 0o755).Perm())
+		return applyTargetDir(targetAbs, ch.Mode, ch.Xattrs, false)
 	case ActionReplaceWithDirectory:
-		if err := os.RemoveAll(targetAbs); err != nil {
-			return err
-		}
-		return os.MkdirAll(targetAbs, pickMode(ch.Mode, 0o755).Perm())
+		return applyTargetDir(targetAbs, ch.Mode, ch.Xattrs, true)
 	case ActionReplaceDirWithRegular:
 		if err := os.RemoveAll(targetAbs); err != nil {
 			return err
@@ -251,22 +231,41 @@ func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
 		if err := os.MkdirAll(filepath.Dir(targetAbs), 0o755); err != nil {
 			return err
 		}
-		_ = os.RemoveAll(targetAbs)
+		if err := os.RemoveAll(targetAbs); err != nil {
+			return err
+		}
 		return os.Symlink(ch.LinkTarget, targetAbs)
 	case ActionHardLink:
 		if ch.HardLinkSource == nil {
 			return fmt.Errorf("checkpoint: missing hard-link source for %v", ch.Path)
 		}
-		srcRoot := pr.cfg.TargetRoots[ch.HardLinkSource.RootID]
-		srcAbs := filepath.Join(srcRoot, filepath.FromSlash(ch.HardLinkSource.Rel))
+		srcAbs := filepath.Join(pr.cfg.TargetRoots[ch.HardLinkSource.RootID], filepath.FromSlash(ch.HardLinkSource.Rel))
 		if err := os.MkdirAll(filepath.Dir(targetAbs), 0o755); err != nil {
 			return err
 		}
-		_ = os.RemoveAll(targetAbs)
+		if err := os.RemoveAll(targetAbs); err != nil {
+			return err
+		}
 		return os.Link(srcAbs, targetAbs)
 	default:
 		return fmt.Errorf("checkpoint: unsupported action %q", ch.Action)
 	}
+}
+
+func applyTargetDir(targetAbs string, rawMode os.FileMode, xattrs map[string][]byte, replace bool) error {
+	if replace {
+		if err := os.RemoveAll(targetAbs); err != nil {
+			return err
+		}
+	}
+	mode := pickMode(rawMode, 0o755).Perm()
+	if err := os.MkdirAll(targetAbs, mode); err != nil {
+		return err
+	}
+	if err := os.Chmod(targetAbs, mode); err != nil {
+		return err
+	}
+	return ApplyPathXattrs(targetAbs, xattrs)
 }
 
 func (pr *Promoter) writeTargetRegular(targetAbs string, ch PlannedChange) error {
@@ -278,15 +277,17 @@ func (pr *Promoter) writeTargetRegular(targetAbs string, ch PlannedChange) error
 		}
 		data = b
 	}
-	parentDir := filepath.Dir(targetAbs)
+	parentDir, mode := filepath.Dir(targetAbs), pickMode(ch.Mode, 0o644).Perm()
 	if err := os.MkdirAll(parentDir, 0o755); err != nil {
 		return err
 	}
-	mode := pickMode(ch.Mode, 0o644).Perm()
 	if err := writeAtomicJSONOrText(parentDir, filepath.Base(targetAbs), data, mode); err != nil {
 		return err
 	}
-	return os.Chmod(targetAbs, mode)
+	if err := os.Chmod(targetAbs, mode); err != nil {
+		return err
+	}
+	return ApplyPathXattrs(targetAbs, ch.Xattrs)
 }
 
 func hasPath(list []layeredfs.QualifiedPath, target layeredfs.QualifiedPath) bool {

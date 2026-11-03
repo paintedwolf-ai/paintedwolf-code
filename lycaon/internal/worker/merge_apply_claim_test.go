@@ -139,6 +139,10 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 	_, err = core.Symlink("app.go", linkLP)
 	testutil.FailErr(t, "Symlink link.txt", err)
 
+	testutil.FailErr(t, "MkdirAll primary .git/objects", os.MkdirAll(filepath.Join(primary, ".git", "objects"), 0o755))
+	featureOID, err := checkpoint.WriteLooseGitObject(filepath.Join(cpStoreDir, "objects"), "blob", []byte("feature-snapshot\n"))
+	testutil.FailErr(t, "WriteLooseGitObject", err)
+
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		WorkerID:         jobID,
 		TaskID:           jobID,
@@ -154,7 +158,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 		Trigger:      checkpoint.TriggerWorkerCompletion,
 		PrivateGit: checkpoint.PrivateGitSnapshot{
 			HeadRef: "refs/heads/feature",
-			Refs:    map[string]string{"refs/heads/feature": "deadbeef1234"},
+			Refs:    map[string]string{"refs/heads/feature": featureOID},
 		},
 	})
 	testutil.FailErr(t, "Publish", err)
@@ -215,8 +219,13 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 
 	gitRefBytes, err := os.ReadFile(filepath.Join(primary, ".git", "refs", "lycaon", "workers", jobID, "heads", "feature"))
 	testutil.FailErr(t, "ReadFile imported git ref", err)
-	if strings.TrimSpace(string(gitRefBytes)) != "deadbeef1234" {
-		t.Fatalf("imported git ref file = %q, want deadbeef1234", string(gitRefBytes))
+	if strings.TrimSpace(string(gitRefBytes)) != featureOID {
+		t.Fatalf("imported git ref file = %q, want %s", string(gitRefBytes), featureOID)
+	}
+	cpRefBytes, err := os.ReadFile(filepath.Join(primary, ".git", "refs", "lycaon", "checkpoints", "chk-promote-1", "heads", "feature"))
+	testutil.FailErr(t, "ReadFile imported checkpoint ref", err)
+	if strings.TrimSpace(string(cpRefBytes)) != featureOID {
+		t.Fatalf("imported checkpoint ref file = %q, want %s", string(cpRefBytes), featureOID)
 	}
 
 	rec, exists, err := cpStore.LoadPromotionRecord("tx-" + manifest.CheckpointID)
@@ -227,7 +236,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 	if rec.FilePromotionStatus != checkpoint.EffectCompleted || rec.RefImportStatus != checkpoint.EffectCompleted {
 		t.Fatalf("effects file=%q ref=%q", rec.FilePromotionStatus, rec.RefImportStatus)
 	}
-	if rec.ImportedRefs["refs/lycaon/workers/"+jobID+"/heads/feature"] != "deadbeef1234" {
+	if rec.ImportedRefs["refs/lycaon/workers/"+jobID+"/heads/feature"] != featureOID || rec.ImportedRefs["refs/lycaon/checkpoints/chk-promote-1/heads/feature"] != featureOID {
 		t.Fatalf("ImportedRefs = %v", rec.ImportedRefs)
 	}
 }

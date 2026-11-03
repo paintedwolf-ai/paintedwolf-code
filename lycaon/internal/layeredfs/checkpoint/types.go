@@ -30,6 +30,7 @@ var (
 	ErrGenerationMismatch        = errors.New("checkpoint: source generation mismatch")
 	ErrStalePreviewTargetChanged = errors.New("checkpoint: integration target changed since preview")
 	ErrUnresolvedConflict        = errors.New("checkpoint: unresolved promotion conflict")
+	ErrCheckpointRefConflict     = errors.New("checkpoint: destination git ref conflict")
 )
 
 // TriggerKind identifies the boundary that requested checkpoint publication.

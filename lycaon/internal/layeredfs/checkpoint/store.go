@@ -227,6 +227,9 @@ func (s *Store) writeRetentionRecord(rec RetentionRecord) error {
 }
 
 func writeAtomicJSONOrText(dir, name string, raw []byte, mode fs.FileMode) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
 	tmpPath := filepath.Join(dir, "."+name+".tmp")
 	_ = os.Remove(tmpPath)
 	f, err := os.OpenFile(tmpPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)

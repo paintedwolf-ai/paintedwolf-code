@@ -132,25 +132,33 @@ func trimmedLineEdit(base, mod []string, bStart, bEnd, mStart, mEnd int) (lineEd
 }
 
 func findSharedUniqueAnchors(base, mod []string) ([]int, []int) {
-	bCount := make(map[string]int, len(base))
-	mCount := make(map[string]int, len(mod))
-	mIndex := make(map[string]int, len(mod))
-	for _, s := range base {
-		bCount[s]++
+	n, m := len(base), len(mod)
+	dp := make([][]int, n+1)
+	for i := range dp {
+		dp[i] = make([]int, m+1)
 	}
-	for i, s := range mod {
-		mCount[s]++
-		mIndex[s] = i
+	for i := n - 1; i >= 0; i-- {
+		for j := m - 1; j >= 0; j-- {
+			if base[i] == mod[j] {
+				dp[i][j] = 1 + dp[i+1][j+1]
+			} else if dp[i+1][j] >= dp[i][j+1] {
+				dp[i][j] = dp[i+1][j]
+			} else {
+				dp[i][j] = dp[i][j+1]
+			}
+		}
 	}
 	var bOut, mOut []int
-	lastM := -1
-	for bIdx, s := range base {
-		if bCount[s] == 1 && mCount[s] == 1 {
-			if mIdx := mIndex[s]; mIdx > lastM {
-				bOut = append(bOut, bIdx)
-				mOut = append(mOut, mIdx)
-				lastM = mIdx
-			}
+	for i, j := 0, 0; i < n && j < m; {
+		if base[i] == mod[j] {
+			bOut = append(bOut, i)
+			mOut = append(mOut, j)
+			i++
+			j++
+		} else if dp[i+1][j] >= dp[i][j+1] {
+			i++
+		} else {
+			j++
 		}
 	}
 	return bOut, mOut

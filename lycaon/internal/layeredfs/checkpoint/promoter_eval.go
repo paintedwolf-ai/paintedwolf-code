@@ -140,6 +140,14 @@ func (pr *Promoter) evaluateDirectory(
 	if cur.Kind != layeredfs.EntryDirectory {
 		return PlannedChange{}, newConflict(entry, cur, ConflictDirectoryReplaced, "target is not a directory"), false, nil
 	}
+	if (entry.Final.Mode != 0 && cur.Mode.Perm() != entry.Final.Mode.Perm()) || len(entry.Final.Xattrs) > 0 {
+		return PlannedChange{
+			Path:   entry.Path,
+			Action: ActionMkdir,
+			Mode:   entry.Final.Mode,
+			Xattrs: cloneXattrs(entry.Final.Xattrs),
+		}, nil, false, nil
+	}
 	return PlannedChange{Path: entry.Path, Action: ActionNoop}, nil, false, nil
 }
 
@@ -190,6 +198,17 @@ func (pr *Promoter) evaluateRegular(
 	if entry.Base.Kind == layeredfs.EntryAbsent {
 		if cur.Kind != layeredfs.EntryAbsent {
 			if cur.Kind == layeredfs.EntryRegular && cur.SHA256 == entry.Final.SHA256 {
+				if (entry.Final.Mode != 0 && cur.Mode.Perm() != entry.Final.Mode.Perm()) || len(entry.Final.Xattrs) > 0 {
+					return PlannedChange{
+						Path:          entry.Path,
+						Action:        ActionWriteRegular,
+						Mode:          entry.Final.Mode,
+						MergedBytes:   workerBytes,
+						MergedSHA256:  entry.Final.SHA256,
+						HardLinkGroup: entry.Final.HardLinkGroup,
+						Xattrs:        cloneXattrs(entry.Final.Xattrs),
+					}, nil, false, nil
+				}
 				return PlannedChange{Path: entry.Path, Action: ActionNoop}, nil, false, nil
 			}
 			return PlannedChange{}, newConflict(entry, cur, ConflictAddAddDifference, "target also added path with different content"), false, nil
@@ -226,7 +245,7 @@ func (pr *Promoter) evaluateRegular(
 		return PlannedChange{}, newConflict(entry, cur, ConflictTypeMismatch, "target replaced regular file with non-regular entry"), false, nil
 	}
 
-	if cur.SHA256 == entry.Base.SHA256 {
+	if cur.SHA256 == entry.Base.SHA256 || cur.SHA256 == entry.Final.SHA256 {
 		if entry.Final.HardLinkGroup != "" {
 			groupPrimary[entry.Final.HardLinkGroup] = entry.Path
 		}

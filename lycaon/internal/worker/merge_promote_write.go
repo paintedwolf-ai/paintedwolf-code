@@ -45,18 +45,13 @@ func checkpointRefImporterFor(s *MergeService, jobID string) CheckpointRefImport
 	return refImportersByJob[jobID]
 }
 
-func markPreviewBindIntent(_ *MergeService, jobID string) {
-	session.MarkTaskCheckpointPreviewBindIntent(jobID)
-}
-
-func clearBoundCheckpointPreview(_ *MergeService, jobID string) {
-	session.ClearTaskCheckpointPreview(jobID)
-}
+func markPreviewBindIntent(_ *MergeService, jobID string)    { session.MarkTaskCheckpointPreviewBindIntent(jobID) }
+func clearBoundCheckpointPreview(_ *MergeService, jobID string) { session.ClearTaskCheckpointPreview(jobID) }
 
 func syncCheckpointBranchFiles(q MergeQueue, jobID string) {
 	if q != nil {
 		if task, ok := q.Get(jobID); ok {
-			session.SyncTaskCheckpointToWorkspace(task)
+			_ = session.SyncTaskCheckpointToWorkspace(task)
 		}
 	}
 }
@@ -69,8 +64,7 @@ func holdRehydratedCheckpointBranch(ctx context.Context, q MergeQueue, jobID str
 	if !ok || task == nil || session.CheckpointStoreDirForTask(task) == "" {
 		return nil, false
 	}
-	session.SyncTaskCheckpointToWorkspace(task)
-	if strings.TrimSpace(task.WorkspaceRoot) == "" {
+	if err := session.SyncTaskCheckpointToWorkspace(task); err != nil || strings.TrimSpace(task.WorkspaceRoot) == "" {
 		return nil, false
 	}
 	lease, err := LeaseExistingBranch(ctx, task)
@@ -274,9 +268,7 @@ func notifyMergeWorktreeChanged(ctx context.Context, task *api.WorkerTask, roots
 		add(task.WorkspacePath)
 	}
 	for _, dir := range dirs {
-		repochange.Notify(ctx, repochange.Event{
-			ProjectDir: dir, Kind: repochange.WorktreeChanged, Source: repochange.SourceGitHost,
-		})
+		repochange.Notify(ctx, repochange.Event{ProjectDir: dir, Kind: repochange.WorktreeChanged, Source: repochange.SourceGitHost})
 	}
 }
 
