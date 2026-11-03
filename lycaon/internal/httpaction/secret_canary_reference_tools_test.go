@@ -202,6 +202,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 		"verify": {
 			{scheme: "environment", args: map[string]any{"command": "TOKEN=" + meta.Reference + " SEEN=seen-verify.txt sh echo.sh"}, received: seen("seen-verify.txt")},
 			{scheme: "argument", args: map[string]any{"command": "SEEN=seen-verify-argument.txt sh echo.sh " + meta.Reference}, received: seen("seen-verify-argument.txt")},
+			{scheme: "pipeline", args: map[string]any{"command": `sh -c 'printf %s "$1"' canary ` + meta.Reference + ` | sh -c 'v=$(cat); printf %s "$v" > seen-pipeline.txt; printf %s "$v"'`}, received: seen("seen-pipeline.txt")},
 		},
 		"terminal_open": {
 			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-terminal-open.txt"}}, received: seen("seen-terminal-open.txt")},

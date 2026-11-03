@@ -3,6 +3,7 @@ package native_test
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/programtest"
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -134,10 +136,13 @@ func TestVerifyBindsEvidenceToSourceBeforeExecution(t *testing.T) {
 
 func TestVerifySchemaRefusesSeparatePipelineBeforeExecution(t *testing.T) {
 	f := programtest.New(t, programtest.Options{})
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "load tool schemas", err)
+	f.Runtime.Executor.Metadata.SetToolSchemas(schemas)
 	tool := &native.VerifyTool{Programs: f.Runtime, DeclaredCommand: func(string) string { return "true" }}
 	testutil.FailErr(t, "register verify", f.Runtime.Registry.Register("verify", tool.Run))
 	f.Runtime.Executor.SetProgramEntry("verify", nil)
-	_, err := f.Invoke(t, t.Context(), "verify", map[string]any{"pipeline": []any{"true"}}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+	_, err = f.Invoke(t, t.Context(), "verify", map[string]any{"pipeline": []any{"true"}}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
 		return f.Runtime.Executor.Invoke(ctx, "verify", args, tc)
 	})
 	if rejection := toolrejection.AsToolReject(err); rejection == nil || rejection.Code != "TOOL_ARGS_INVALID" || len(f.Programs(t)) != 0 {
