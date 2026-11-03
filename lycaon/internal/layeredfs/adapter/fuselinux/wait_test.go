@@ -1,14 +1,17 @@
 package fuselinux_test
 
 import (
+	"runtime"
 	"runtime/debug"
 	"testing"
 	"time"
 )
 
 // copyToMapping writes to a mapping of the mount from this process. A page fault cannot be
-// preempted and needs a server reply, so a stop-the-world during it would hang the test binary.
+// preempted and needs a server reply, so it needs another scheduler slot and no stop-the-world.
+// The engine never maps mount files; only these tests do.
 func copyToMapping(mapped, data []byte) {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(max(4, runtime.GOMAXPROCS(0))))
 	defer debug.SetGCPercent(debug.SetGCPercent(-1))
 	copy(mapped, data)
 }

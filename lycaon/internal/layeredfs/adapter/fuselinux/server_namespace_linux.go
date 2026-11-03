@@ -26,8 +26,8 @@ func (s *Server) opSymlink(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.nodes.ensureNode(childRel, attr)
-	return encodeEntryOut(s, fn.fuseID, attr), 0
+	fn := s.nodes.acquireNode(childRel, attr)
+	return encodeEntryOut(s, fn.fuseID, fn.ino, attr), 0
 }
 
 func (s *Server) opMknod(nodeID uint64, body []byte) ([]byte, int32) {
@@ -54,8 +54,8 @@ func (s *Server) opMknod(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, mapFUSEErrno(err)
 	}
 	_ = s.core.CloseHandle(hid)
-	fn := s.nodes.ensureNode(childRel, attr)
-	return encodeEntryOut(s, fn.fuseID, attr), 0
+	fn := s.nodes.acquireNode(childRel, attr)
+	return encodeEntryOut(s, fn.fuseID, fn.ino, attr), 0
 }
 
 func (s *Server) opMkdir(nodeID uint64, body []byte) ([]byte, int32) {
@@ -77,8 +77,8 @@ func (s *Server) opMkdir(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, mapFUSEErrno(err)
 	}
 	s.nodes.recordDirtyRel(childRel)
-	fn := s.nodes.ensureNode(childRel, attr)
-	return encodeEntryOut(s, fn.fuseID, attr), 0
+	fn := s.nodes.acquireNode(childRel, attr)
+	return encodeEntryOut(s, fn.fuseID, fn.ino, attr), 0
 }
 
 func (s *Server) opUnlink(nodeID uint64, body []byte) ([]byte, int32) {
@@ -177,9 +177,9 @@ func (s *Server) opLink(nodeID uint64, body []byte) ([]byte, int32) {
 	}
 	s.nodes.recordDirtyRel(oldRel)
 	s.nodes.recordDirtyRel(newRel)
-	s.nodes.ensureNode(oldRel, attr)
-	fn := s.nodes.ensureNode(newRel, attr)
-	return encodeEntryOut(s, fn.fuseID, attr), 0
+	s.nodes.refreshNode(oldNodeID, attr)
+	fn := s.nodes.acquireNode(newRel, attr)
+	return encodeEntryOut(s, fn.fuseID, fn.ino, attr), 0
 }
 
 func direntType(m fs.FileMode) uint32 {

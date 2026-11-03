@@ -41,11 +41,11 @@ func (s *Server) opOpen(st *fuseRequestState, nodeID uint64, body []byte) ([]byt
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.nodes.ensureNode(rel, attr)
+	s.nodes.refreshNode(nodeID, attr)
 	fh := uint64(hid)
 	s.nodes.storeOpenHandle(fh, openHandleEntry{
 		hid:      hid,
-		fuseID:   fn.fuseID,
+		fuseID:   nodeID,
 		rel:      cleanFuseRel(rel),
 		writable: openFlags&(layeredfs.OpenWriteOnly|layeredfs.OpenReadWrite) != 0,
 	})
@@ -78,7 +78,7 @@ func (s *Server) opCreate(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.nodes.ensureNode(childRel, attr)
+	fn := s.nodes.acquireNode(childRel, attr)
 	fh := uint64(hid)
 	s.nodes.storeOpenHandle(fh, openHandleEntry{
 		hid:      hid,
@@ -86,7 +86,7 @@ func (s *Server) opCreate(nodeID uint64, body []byte) ([]byte, int32) {
 		rel:      cleanFuseRel(childRel),
 		writable: true,
 	})
-	entryBytes := encodeEntryOut(s, fn.fuseID, attr)
+	entryBytes := encodeEntryOut(s, fn.fuseID, fn.ino, attr)
 	out := make([]byte, len(entryBytes)+16)
 	copy(out, entryBytes)
 	binary.LittleEndian.PutUint64(out[len(entryBytes):len(entryBytes)+8], fh)
@@ -167,10 +167,7 @@ func (s *Server) opRelease(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) >= 24 {
 		lockOwner = binary.LittleEndian.Uint64(body[16:24])
 	}
-	s.nodes.mu.Lock()
-	h, ok := s.nodes.openHandles[fh]
-	delete(s.nodes.openHandles, fh)
-	s.nodes.mu.Unlock()
+	h, ok := s.nodes.takeHandle(fh)
 	targetNode := h.fuseID
 	if targetNode == 0 {
 		targetNode = nodeID
@@ -197,12 +194,8 @@ func (s *Server) opOpendir(nodeID uint64) ([]byte, int32) {
 	s.nodes.mu.Lock()
 	fh := s.nodes.nextDirFH
 	s.nodes.nextDirFH++
-	s.nodes.openHandles[fh] = openHandleEntry{
-		fuseID: nodeID,
-		rel:    cleanFuseRel(rel),
-		isDir:  true,
-	}
 	s.nodes.mu.Unlock()
+	s.nodes.storeOpenHandle(fh, openHandleEntry{fuseID: nodeID, rel: cleanFuseRel(rel), isDir: true})
 	out := make([]byte, 16)
 	binary.LittleEndian.PutUint64(out[0:8], fh)
 	return out, 0
@@ -263,22 +256,18 @@ func (s *Server) snapshotDirectory(nodeID, fh uint64) ([]rawDirent, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
+	selfIno := fuseRootID
+	if self, ok := s.nodes.nodeIno(nodeID); ok {
+		selfIno = self
+	}
 	all := make([]rawDirent, 0, len(entries)+2)
 	all = append(all,
-		rawDirent{ino: nodeID, typ: syscall.DT_DIR, name: "."},
+		rawDirent{ino: selfIno, typ: syscall.DT_DIR, name: "."},
 		rawDirent{ino: fuseRootID, typ: syscall.DT_DIR, name: ".."},
 	)
+	// READDIR gives the kernel no reference, so listing must create no nodes.
 	for _, e := range entries {
-		fn := s.nodes.ensureNode(joinRel(rel, e.Name), layeredfs.EntryAttr{
-			NodeID:     e.NodeID,
-			Generation: e.Generation,
-			Layer:      e.Layer,
-			Kind:       e.Kind,
-			Mode:       e.Mode,
-			Size:       e.Size,
-			ModTime:    e.ModTime,
-		})
-		all = append(all, rawDirent{ino: fn.fuseID, typ: direntType(e.Mode), name: e.Name})
+		all = append(all, rawDirent{ino: s.nodes.direntIno(e), typ: direntType(e.Mode), name: e.Name})
 	}
 	s.nodes.mu.Lock()
 	s.nodes.dirSnapshots[fh] = all
@@ -291,9 +280,6 @@ func (s *Server) opReleasedir(body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.EINVAL)
 	}
 	fh := binary.LittleEndian.Uint64(body[0:8])
-	s.nodes.mu.Lock()
-	delete(s.nodes.openHandles, fh)
-	delete(s.nodes.dirSnapshots, fh)
-	s.nodes.mu.Unlock()
+	s.nodes.takeHandle(fh)
 	return nil, 0
 }

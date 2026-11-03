@@ -63,6 +63,7 @@ func (v *mountedView) shell(t *testing.T, script string) string {
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", script)
 	cmd.Dir = v.mnt
+	fuselinux.DetachMountEntry(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("shell %q: %v (%s)", script, err, out)
@@ -323,6 +324,7 @@ func TestBusyMountReleaseSettlesWithoutSignalingTheHolder(t *testing.T) {
 	v := prepareMountedView(t, fuselinux.Config{}, "view-busy", nil)
 	holder := exec.Command("/bin/sh", "-c", "read _; exit 0")
 	holder.Dir = v.mnt
+	fuselinux.DetachMountEntry(holder)
 	stdin, err := holder.StdinPipe()
 	if err != nil {
 		t.Fatalf("stdin: %v", err)
@@ -429,6 +431,145 @@ func TestMultiRootViewServesEachRootPrivatelyAndSettles(t *testing.T) {
 		if _, err := os.Stat(mountPath); !os.IsNotExist(err) {
 			t.Fatalf("root %s mount path survives Release: %v", rootID, err)
 		}
+	}
+}
+
+// TestKernelEvictionEmptiesTheNodeTable makes the real kernel drop entries with unprivileged
+// invalidation: fuse inodes are evicted on last reference, which sends the real FORGET. The table is
+// asserted by count; identities are asserted to behave across it.
+func TestKernelEvictionEmptiesTheNodeTable(t *testing.T) {
+	const files = 2000
+	v := prepareMountedView(t, fuselinux.Config{}, "view-eviction", nil)
+	sub := filepath.Join(v.trunk, "tree")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	names := make([]string, 0, files)
+	for i := range files {
+		name := fmt.Sprintf("tree/f-%04d", i)
+		names = append(names, name)
+		if err := os.WriteFile(filepath.Join(v.trunk, name), []byte("x"), 0o644); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+	srv := v.adp.ServerForView(v.viewID)
+	baseNodes, baseRel, _ := srv.NodeTableCountsForTest()
+
+	inoBefore := map[string]uint64{}
+	for _, name := range names {
+		var st unix.Stat_t
+		if err := unix.Lstat(filepath.Join(v.mnt, name), &st); err != nil {
+			t.Fatalf("lstat %s: %v", name, err)
+		}
+		inoBefore[name] = st.Ino
+	}
+	if entries, err := os.ReadDir(filepath.Join(v.mnt, "tree")); err != nil || len(entries) != files {
+		t.Fatalf("listing: %d entries err=%v", len(entries), err)
+	}
+	if nodes, _, _ := srv.NodeTableCountsForTest(); nodes != baseNodes+files+1 {
+		t.Fatalf("nodes after walk = %d, want %d", nodes, baseNodes+files+1)
+	}
+	firstID, _ := srv.NodeIDForTest(names[0])
+
+	// A held descriptor keeps its node through eviction of the rest.
+	held, err := os.Open(filepath.Join(v.mnt, names[1]))
+	if err != nil {
+		t.Fatalf("open held: %v", err)
+	}
+	for _, name := range names {
+		if err := v.adp.InvalidatePath(v.viewID, layeredfs.QualifiedPath{RootID: "primary", Rel: name}); err != nil {
+			t.Fatalf("invalidate %s: %v", name, err)
+		}
+	}
+	awaitCondition(t, "kernel FORGET for all but the held file", func() bool {
+		nodes, _, _ := srv.NodeTableCountsForTest()
+		return nodes == baseNodes+2 // the directory and the held file
+	})
+	buf := make([]byte, 1)
+	if _, err := held.ReadAt(buf, 0); err != nil || buf[0] != 'x' {
+		t.Fatalf("held descriptor after eviction: %q err=%v", buf, err)
+	}
+	if err := held.Close(); err != nil {
+		t.Fatalf("close held: %v", err)
+	}
+	if err := v.adp.InvalidatePath(v.viewID, layeredfs.QualifiedPath{RootID: "primary", Rel: names[1]}); err != nil {
+		t.Fatalf("invalidate held: %v", err)
+	}
+	if err := v.adp.InvalidatePath(v.viewID, layeredfs.QualifiedPath{RootID: "primary", Rel: "tree"}); err != nil {
+		t.Fatalf("invalidate tree: %v", err)
+	}
+	awaitCondition(t, "kernel FORGET for the rest", func() bool {
+		nodes, rels, _ := srv.NodeTableCountsForTest()
+		return nodes == baseNodes && rels == baseRel
+	})
+
+	// Lookups after eviction get fresh node IDs and the same inode numbers.
+	var st unix.Stat_t
+	if err := unix.Lstat(filepath.Join(v.mnt, names[0]), &st); err != nil {
+		t.Fatalf("lstat after eviction: %v", err)
+	}
+	if st.Ino != inoBefore[names[0]] {
+		t.Fatalf("st_ino changed across eviction: %d -> %d", inoBefore[names[0]], st.Ino)
+	}
+	if again, ok := srv.NodeIDForTest(names[0]); !ok || again <= firstID {
+		t.Fatalf("node ID after eviction = %d (ok=%v), must exceed %d", again, ok, firstID)
+	}
+}
+
+// TestGOMAXPROCSOneServesAMountedWorkflow runs a whole workflow in a child held to one scheduler
+// slot. The adapter must neither need more nor change the process setting.
+func TestGOMAXPROCSOneServesAMountedWorkflow(t *testing.T) {
+	if os.Getenv("LYCAON_FUSELINUX_ONE_PROC_HELPER") != "" {
+		runOneProcWorkflow(t)
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+	child := exec.CommandContext(t.Context(), exe, "-test.run=^TestGOMAXPROCSOneServesAMountedWorkflow$", "-test.v")
+	child.Env = append(os.Environ(), "LYCAON_FUSELINUX_ONE_PROC_HELPER=1", "GOMAXPROCS=1")
+	if out, err := child.CombinedOutput(); err != nil || !strings.Contains(string(out), "--- PASS") {
+		t.Fatalf("workflow at GOMAXPROCS=1: %v\n%s", err, out)
+	}
+}
+
+func runOneProcWorkflow(t *testing.T) {
+	if got := runtime.GOMAXPROCS(0); got != 1 {
+		t.Fatalf("helper GOMAXPROCS = %d, want 1", got)
+	}
+	v := prepareMountedView(t, fuselinux.Config{ConfinementCheckFn: confinementVerified}, "view-one-proc", map[string]string{"f": "seed\n"})
+	if got := runtime.GOMAXPROCS(0); got != 1 {
+		t.Fatalf("New or Prepare changed GOMAXPROCS to %d", got)
+	}
+	if got, err := os.ReadFile(filepath.Join(v.mnt, "f")); err != nil || string(got) != "seed\n" {
+		t.Fatalf("read: %q err=%v", got, err)
+	}
+	if err := os.MkdirAll(filepath.Join(v.mnt, "sub", "deep"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(v.mnt, "sub", "deep", "g"), []byte("native\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", "cat g && printf 'shell\\n' > h")
+	cmd.Dir = filepath.Join(v.mnt, "sub", "deep")
+	fuselinux.DetachMountEntry(cmd)
+	if out, err := cmd.CombinedOutput(); err != nil || string(out) != "native\n" {
+		t.Fatalf("shell: %q err=%v", out, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(v.mnt, "sub", "deep", "h")); err != nil || string(got) != "shell\n" {
+		t.Fatalf("read shell output: %q err=%v", got, err)
+	}
+	_, release, err := v.adp.CheckpointBarrier(t.Context(), v.viewID)
+	if err != nil {
+		t.Fatalf("barrier: %v", err)
+	}
+	_ = release()
+	if rec, err := v.adp.Release(t.Context(), v.viewID); err != nil || !rec.Settled {
+		t.Fatalf("Release: rec=%+v err=%v", rec, err)
+	}
+	if got := runtime.GOMAXPROCS(0); got != 1 {
+		t.Fatalf("GOMAXPROCS changed to %d", got)
 	}
 }
 
@@ -609,6 +750,7 @@ func TestEngineDeathLeavesReclaimableMountAndOnlyDeadOnesAreReclaimed(t *testing
 
 	bystander := exec.Command("/bin/sh", "-c", "read _; exit 0")
 	bystander.Dir = deadMount
+	fuselinux.DetachMountEntry(bystander)
 	bystanderIn, err := bystander.StdinPipe()
 	if err != nil {
 		t.Fatalf("stdin: %v", err)

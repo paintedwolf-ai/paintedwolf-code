@@ -125,6 +125,7 @@ func (s *Server) BeginBarrierDrain(ctx context.Context, viewID string) (func(), 
 		s.gate.open()
 		return nil, err
 	}
+	s.nodes.settleDirtyRels()
 	var once sync.Once
 	return func() { once.Do(s.gate.open) }, nil
 }

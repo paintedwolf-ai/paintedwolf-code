@@ -28,13 +28,6 @@ type kernelMountEntry struct {
 	superOptions  string
 }
 
-func msyncMappedRegion(region []byte) error {
-	if len(region) == 0 {
-		return nil
-	}
-	return unix.Msync(region, unix.MS_SYNC)
-}
-
 func statDeviceID(path string) (uint64, error) {
 	var st unix.Stat_t
 	if err := unix.Stat(path, &st); err != nil {
@@ -149,8 +142,7 @@ func checkKernelMountTable(mountPath, expectedFSName, expectedDev string) (bool,
 }
 
 // deadViewMountPaths returns this user's view mounts under runtimeRoot whose FUSE connection has
-// ended. statfs reaches the connection, unlike stat which the held root attributes can answer, and
-// ENOTCONN is the kernel's report that it is gone. A mount that does not answer within the probe
+// ended. statfs always reaches the connection, and ENOTCONN is the kernel's report that it is gone. A mount that does not answer within the probe
 // bound still has a server, however slow, and is left alone.
 func deadViewMountPaths(ctx context.Context, runtimeRoot string, uid uint32) ([]string, error) {
 	entries, err := readMountInfoEntries()

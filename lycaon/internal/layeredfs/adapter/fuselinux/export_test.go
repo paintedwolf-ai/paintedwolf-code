@@ -85,3 +85,21 @@ func (s *Server) GatedMutationsForTest() int64 {
 
 // PollRequestsForTest reports how many FUSE_POLL requests have reached the server.
 func (s *Server) PollRequestsForTest() int64 { return s.pollRequests.Load() }
+
+// NodeTableCountsForTest reports the sizes of the node table's identity maps.
+func (s *Server) NodeTableCountsForTest() (byFuseID, byRel, byPrivate int) {
+	s.nodes.mu.RLock()
+	defer s.nodes.mu.RUnlock()
+	return len(s.nodes.byFuseID), len(s.nodes.byRel), len(s.nodes.byCorePrivateID)
+}
+
+// NodeIDForTest returns the node ID currently serving rel.
+func (s *Server) NodeIDForTest(rel string) (uint64, bool) {
+	s.nodes.mu.RLock()
+	defer s.nodes.mu.RUnlock()
+	fn, ok := s.nodes.byRel[cleanFuseRel(rel)]
+	if !ok {
+		return 0, false
+	}
+	return fn.fuseID, true
+}

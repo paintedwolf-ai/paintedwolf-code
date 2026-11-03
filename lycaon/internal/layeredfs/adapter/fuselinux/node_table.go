@@ -21,12 +21,20 @@ type nodeTable struct {
 	dirSnapshots    map[uint64][]rawDirent
 	dirtyRels       map[string]struct{}
 	nextDirFH       uint64
+	// adoptedInos keeps the inode number a file had before its first copy-up, so it survives
+	// eviction of the node. One entry per copied-up object, the same order as Core's private nodes.
+	adoptedInos map[layeredfs.NodeID]uint64
 }
+
+// privateInoBase separates Core's small private node IDs from the root inode and from its
+// synthetic IDs for lower-layer entries, which have bit 62 set.
+const privateInoBase = uint64(1) << 61
 
 func newNodeTable() *nodeTable {
 	rootNode := &fuseNode{
 		fuseID:     fuseRootID,
 		generation: 1,
+		ino:        fuseRootID,
 		paths:      map[string]struct{}{".": {}},
 	}
 	return &nodeTable{
@@ -38,6 +46,7 @@ func newNodeTable() *nodeTable {
 		dirSnapshots:    make(map[uint64][]rawDirent),
 		dirtyRels:       make(map[string]struct{}),
 		nextDirFH:       1 << 50,
+		adoptedInos:     make(map[layeredfs.NodeID]uint64),
 	}
 }
 
@@ -86,15 +95,63 @@ func (t *nodeTable) resolveNodeRel(nodeID uint64) (string, bool) {
 	return "", false
 }
 
-func (t *nodeTable) ensureNode(rel string, attr layeredfs.EntryAttr) *fuseNode {
-	clean := cleanFuseRel(rel)
-	if clean == "." {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
-		return t.byFuseID[fuseRootID]
+// inoLocked returns the st_ino for a Core identity. Node IDs are per kernel reference and change
+// across eviction, so st_ino comes from Core: tools treat a changed inode as a replaced file.
+func (t *nodeTable) inoLocked(id layeredfs.NodeID, layer layeredfs.LayerSource) uint64 {
+	if layer != layeredfs.LayerPrivate {
+		return uint64(id)
 	}
+	if ino, ok := t.adoptedInos[id]; ok {
+		return ino
+	}
+	return privateInoBase | uint64(id)
+}
+
+func (t *nodeTable) nodeIno(nodeID uint64) (uint64, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	fn, ok := t.byFuseID[nodeID]
+	if !ok {
+		return 0, false
+	}
+	return fn.ino, true
+}
+
+func (t *nodeTable) direntIno(e layeredfs.DirEntry) uint64 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.inoLocked(e.NodeID, e.Layer)
+}
+
+// adoptLocked binds a lower-layer node to the private object Core created for it, keeping its identity.
+func (t *nodeTable) adoptLocked(fn *fuseNode, attr layeredfs.EntryAttr) {
+	if attr.Layer != layeredfs.LayerPrivate || attr.NodeID == 0 || fn.corePrivID != 0 || fn.fuseID == fuseRootID {
+		return
+	}
+	if _, taken := t.byCorePrivateID[attr.NodeID]; taken {
+		return
+	}
+	fn.corePrivID = attr.NodeID
+	t.byCorePrivateID[attr.NodeID] = fn
+	t.adoptedInos[attr.NodeID] = fn.ino
+}
+
+// acquireNode resolves the node for a reply that gives the kernel an entry, and counts that
+// reference. The count must rise before the reply is written, or a FORGET could evict the node
+// while the kernel still holds it. IDs are never reused, so generation stays constant.
+func (t *nodeTable) acquireNode(rel string, attr layeredfs.EntryAttr) *fuseNode {
+	clean := cleanFuseRel(rel)
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	fn := t.resolveForRefLocked(clean, attr)
+	fn.nlookup++
+	return fn
+}
+
+func (t *nodeTable) resolveForRefLocked(clean string, attr layeredfs.EntryAttr) *fuseNode {
+	if clean == "." {
+		return t.byFuseID[fuseRootID]
+	}
 	if attr.Layer == layeredfs.LayerPrivate && attr.NodeID != 0 {
 		if fn, ok := t.byCorePrivateID[attr.NodeID]; ok {
 			t.displaceRelLocked(clean, fn)
@@ -104,39 +161,82 @@ func (t *nodeTable) ensureNode(rel string, attr layeredfs.EntryAttr) *fuseNode {
 			return fn
 		}
 		if existing, ok := t.byRel[clean]; ok && existing.corePrivID == 0 {
-			existing.corePrivID = attr.NodeID
-			existing.paths[clean] = struct{}{}
+			t.adoptLocked(existing, attr)
 			existing.unlinked = false
-			t.byCorePrivateID[attr.NodeID] = existing
 			return existing
 		}
-		id := t.nextFuseID
-		t.nextFuseID++
-		fn := &fuseNode{
-			fuseID:     id,
-			generation: 1,
-			corePrivID: attr.NodeID,
-			paths:      map[string]struct{}{clean: {}},
-		}
-		t.byFuseID[id] = fn
-		t.byCorePrivateID[attr.NodeID] = fn
-		t.byRel[clean] = fn
-		return fn
-	}
-	if fn, ok := t.byRel[clean]; ok {
+	} else if fn, ok := t.byRel[clean]; ok {
 		fn.unlinked = false
 		return fn
 	}
-	id := t.nextFuseID
-	t.nextFuseID++
 	fn := &fuseNode{
-		fuseID:     id,
+		fuseID:     t.nextFuseID,
 		generation: 1,
+		ino:        t.inoLocked(attr.NodeID, attr.Layer),
 		paths:      map[string]struct{}{clean: {}},
 	}
-	t.byFuseID[id] = fn
+	t.nextFuseID++
+	t.displaceRelLocked(clean, fn)
+	t.byFuseID[fn.fuseID] = fn
 	t.byRel[clean] = fn
+	if attr.Layer == layeredfs.LayerPrivate && attr.NodeID != 0 {
+		fn.corePrivID = attr.NodeID
+		t.byCorePrivateID[attr.NodeID] = fn
+	}
 	return fn
+}
+
+// refreshNode records what a reply without a kernel reference learned about an existing node and
+// returns its st_ino. It never creates a node: only referenced nodes may exist.
+func (t *nodeTable) refreshNode(nodeID uint64, attr layeredfs.EntryAttr) uint64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	fn, ok := t.byFuseID[nodeID]
+	if !ok {
+		return t.inoLocked(attr.NodeID, attr.Layer)
+	}
+	t.adoptLocked(fn, attr)
+	return fn.ino
+}
+
+// forget applies the kernel's dropped references. A node still holding a descriptor stays until
+// the descriptor's release, which the kernel may deliver after FORGET.
+func (t *nodeTable) forget(nodeID, count uint64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	fn, ok := t.byFuseID[nodeID]
+	if !ok || nodeID == fuseRootID {
+		return
+	}
+	if count >= fn.nlookup {
+		fn.nlookup = 0
+	} else {
+		fn.nlookup -= count
+	}
+	t.evictIfUnreferencedLocked(fn)
+}
+
+func (t *nodeTable) evictIfUnreferencedLocked(fn *fuseNode) {
+	if fn.nlookup != 0 || fn.openCount != 0 || fn.fuseID == fuseRootID {
+		return
+	}
+	for p := range fn.paths {
+		if t.byRel[p] == fn {
+			delete(t.byRel, p)
+		}
+	}
+	if fn.corePrivID != 0 && t.byCorePrivateID[fn.corePrivID] == fn {
+		delete(t.byCorePrivateID, fn.corePrivID)
+	}
+	delete(t.byFuseID, fn.fuseID)
+}
+
+// settleDirtyRels forgets recorded paths once a flush covered them. Later flushes still reach
+// every private change through Core's change list, and every writable descriptor directly.
+func (t *nodeTable) settleDirtyRels() {
+	t.mu.Lock()
+	t.dirtyRels = make(map[string]struct{})
+	t.mu.Unlock()
 }
 
 // displaceRelLocked detaches rel from any other node it named. Otherwise a descriptor on the
@@ -213,10 +313,30 @@ func (t *nodeTable) recordRename(oldRel, newRel string) {
 func (t *nodeTable) storeOpenHandle(fh uint64, entry openHandleEntry) {
 	t.mu.Lock()
 	t.openHandles[fh] = entry
+	if fn, ok := t.byFuseID[entry.fuseID]; ok {
+		fn.openCount++
+	}
 	if entry.writable && entry.rel != "" {
 		t.dirtyRels[entry.rel] = struct{}{}
 	}
 	t.mu.Unlock()
+}
+
+// takeHandle removes a released descriptor and any stream snapshot, then settles its node.
+func (t *nodeTable) takeHandle(fh uint64) (openHandleEntry, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	h, ok := t.openHandles[fh]
+	delete(t.openHandles, fh)
+	delete(t.dirSnapshots, fh)
+	if !ok {
+		return h, false
+	}
+	if fn, tracked := t.byFuseID[h.fuseID]; tracked {
+		fn.openCount--
+		t.evictIfUnreferencedLocked(fn)
+	}
+	return h, true
 }
 
 func (t *nodeTable) lookupHandle(fh uint64) (openHandleEntry, bool) {

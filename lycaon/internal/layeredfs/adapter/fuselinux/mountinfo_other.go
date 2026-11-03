@@ -20,10 +20,6 @@ type kernelMountEntry struct {
 	superOptions  string
 }
 
-func msyncMappedRegion(_ []byte) error {
-	return fmt.Errorf("fuselinux: msync requires linux")
-}
-
 func statDeviceID(_ string) (uint64, error) {
 	return 0, fmt.Errorf("fuselinux: statDeviceID requires linux")
 }

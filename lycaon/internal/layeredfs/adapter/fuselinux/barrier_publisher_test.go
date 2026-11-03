@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"golang.org/x/sys/unix"
 )
 
 func seedBoundedFlushFixture(t *testing.T, trunkDir, untouchedDir string) []byte {
@@ -83,6 +84,7 @@ func TestBoundedTrackedPathClientFlushSkipsUntouchedUnreadableAndFIFOEntries(t *
 	}
 	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", "printf 'from-shell\\n' > shell.txt")
 	cmd.Dir = prep.PrimaryWorkPath
+	fuselinux.DetachMountEntry(cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("shell write failed: %v (%s)", err, string(out))
 	}
@@ -108,7 +110,7 @@ func TestBoundedTrackedPathClientFlushSkipsUntouchedUnreadableAndFIFOEntries(t *
 		return nil
 	}, nil)
 	_ = adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := fuselinux.SyncMappedRegion(mappedSlice); err != nil {
+		if err := unix.Msync(mappedSlice, unix.MS_SYNC); err != nil {
 			return err
 		}
 		return mf.Sync()
@@ -259,7 +261,7 @@ func TestPublisherHoldsAdapterServerBarrierDuringCaptureAndPreservesPriorCheckpo
 	copyToMapping(mappedSlice, wantCP1)
 
 	_ = adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := fuselinux.SyncMappedRegion(mappedSlice); err != nil {
+		if err := unix.Msync(mappedSlice, unix.MS_SYNC); err != nil {
 			return err
 		}
 		return mf.Sync()

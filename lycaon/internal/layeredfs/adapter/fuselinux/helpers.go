@@ -150,7 +150,7 @@ func (a *Adapter) syncClientPath(ctx context.Context, mountRoot, targetPath stri
 	return mode.IsDir(), true, nil
 }
 
-func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) []string {
+func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) ([]string, error) {
 	relSet := map[string]struct{}{".": {}}
 	addRel := func(rel string) {
 		cur := cleanFuseRel(rel)
@@ -165,18 +165,20 @@ func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) []stri
 		relSet["."] = struct{}{}
 	}
 	if st.core != nil {
-		if changes, err := st.core.EnumerateChanges(false); err == nil {
-			for _, ce := range changes {
-				if ce.Path.RootID != rootID {
-					continue
-				}
-				if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
-					addRel(path.Dir(cleanFuseRel(ce.Path.Rel)))
-					continue
-				}
-				if ce.Kind != layeredfs.EntrySymlink {
-					addRel(ce.Path.Rel)
-				}
+		changes, err := st.core.EnumerateChanges(false)
+		if err != nil {
+			return nil, err
+		}
+		for _, ce := range changes {
+			if ce.Path.RootID != rootID {
+				continue
+			}
+			if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
+				addRel(path.Dir(cleanFuseRel(ce.Path.Rel)))
+				continue
+			}
+			if ce.Kind != layeredfs.EntrySymlink {
+				addRel(ce.Path.Rel)
 			}
 		}
 	}
@@ -203,11 +205,15 @@ func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) []stri
 		out = append(out, filepath.Join(m.mountPath, filepath.FromSlash(r)))
 	}
 	out = append(out, m.mountPath)
-	return out
+	return out, nil
 }
 
 func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootID string, m *rootMount) (filesSynced, dirsSynced int, err error) {
-	for _, p := range collectBoundedFlushPaths(st, rootID, m) {
+	paths, err := collectBoundedFlushPaths(st, rootID, m)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, p := range paths {
 		isDir, synced, sErr := a.syncClientPath(ctx, m.mountPath, p)
 		if sErr != nil {
 			return filesSynced, dirsSynced, sErr

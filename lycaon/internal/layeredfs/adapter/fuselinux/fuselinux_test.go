@@ -190,6 +190,7 @@ func TestImmediateCoherenceAndBackgroundProcessStability(t *testing.T) {
 	bgCmd := exec.CommandContext(bgCtx, "/bin/sh", "-c",
 		"while [ ! -f stop.flag ]; do if [ -f watch.in ]; then cp watch.in watch.out; fi; sleep 0.02; done")
 	bgCmd.Dir = mnt
+	fuselinux.DetachMountEntry(bgCmd)
 	if err := bgCmd.Start(); err != nil {
 		t.Fatalf("start background process: %v", err)
 	}
@@ -205,6 +206,7 @@ func TestImmediateCoherenceAndBackgroundProcessStability(t *testing.T) {
 	shCmd := exec.CommandContext(t.Context(), "/bin/sh", "-c",
 		"cat hello.txt && printf 'CCCC\n' > hello.txt && ln hello.txt hardlink.txt && ln -s hello.txt symlink.txt")
 	shCmd.Dir = mnt
+	fuselinux.DetachMountEntry(shCmd)
 	out, err := shCmd.CombinedOutput()
 	if err != nil || string(out) != "BBBB\n" {
 		t.Fatalf("shell coherence failed: err=%v out=%q", err, string(out))

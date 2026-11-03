@@ -40,7 +40,6 @@ const (
 	fuseOpGetlk       = 31
 	fuseOpSetlk       = 32
 	fuseOpSetlkw      = 33
-	fuseOpAccess      = 34
 	fuseOpCreate      = 35
 	fuseOpInterrupt   = 36
 	fuseOpDestroy     = 38
@@ -92,7 +91,13 @@ func (s *Server) dispatchRequest(req []byte) {
 	unique := binary.LittleEndian.Uint64(req[8:16])
 	body := req[fuseHeaderInSize:]
 	switch opcode {
-	case fuseOpForget, fuseOpBatchForget:
+	case fuseOpForget:
+		if len(body) >= 8 {
+			s.nodes.forget(binary.LittleEndian.Uint64(req[16:24]), binary.LittleEndian.Uint64(body[0:8]))
+		}
+		return
+	case fuseOpBatchForget:
+		s.forgetBatch(body)
 		return
 	case fuseOpInterrupt:
 		s.handleInterrupt(unique, body)
@@ -124,6 +129,18 @@ func (s *Server) dispatchRequest(req []byte) {
 		case s.ordinaryQueue <- queuedRequest{state: st, req: req}:
 		case <-s.stopCh:
 		}
+	}
+}
+
+func (s *Server) forgetBatch(body []byte) {
+	if len(body) < 8 {
+		return
+	}
+	count := int(binary.LittleEndian.Uint32(body[0:4]))
+	entries := body[8:]
+	for i := 0; i < count && len(entries) >= 16; i++ {
+		s.nodes.forget(binary.LittleEndian.Uint64(entries[0:8]), binary.LittleEndian.Uint64(entries[8:16]))
+		entries = entries[16:]
 	}
 }
 

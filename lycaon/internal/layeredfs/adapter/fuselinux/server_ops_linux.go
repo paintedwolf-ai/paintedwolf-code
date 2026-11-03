@@ -169,28 +169,27 @@ func (s *Server) opLookup(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.ENOENT)
 	}
 	if s.pollProbeActive.Load() && nodeID == fuseRootID && name == pollProbeName {
-		return encodeEntryOut(s, pollProbeNodeID, pollProbeAttr()), 0
+		return encodeEntryOut(s, pollProbeNodeID, pollProbeNodeID, pollProbeAttr()), 0
 	}
 	childRel := joinRel(parentRel, name)
 	attr, err := s.core.Lstat(s.qpath(childRel))
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.nodes.ensureNode(childRel, attr)
-	return encodeEntryOut(s, fn.fuseID, attr), 0
+	fn := s.nodes.acquireNode(childRel, attr)
+	return encodeEntryOut(s, fn.fuseID, fn.ino, attr), 0
 }
 
 func (s *Server) opGetattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if nodeID == pollProbeNodeID {
-		return encodeAttrOut(s, nodeID, pollProbeAttr()), 0
+		return encodeAttrOut(s, pollProbeNodeID, pollProbeAttr()), 0
 	}
 	if rel, ok := s.nodes.resolveNodeRel(nodeID); ok {
 		attr, err := s.core.Lstat(s.qpath(rel))
 		if err != nil {
 			return nil, mapFUSEErrno(err)
 		}
-		fn := s.nodes.ensureNode(rel, attr)
-		return encodeAttrOut(s, fn.fuseID, attr), 0
+		return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
 	}
 	var fh uint64
 	if len(body) >= 16 {
@@ -201,7 +200,7 @@ func (s *Server) opGetattr(nodeID uint64, body []byte) ([]byte, int32) {
 		if err != nil {
 			return nil, mapFUSEErrno(err)
 		}
-		return encodeAttrOut(s, nodeID, attr), 0
+		return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
 	}
 	return nil, -int32(syscall.ENOENT)
 }
@@ -257,8 +256,7 @@ func (s *Server) opSetattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.nodes.ensureNode(rel, attr)
-	return encodeAttrOut(s, fn.fuseID, attr), 0
+	return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
 }
 
 func (s *Server) opReadlink(nodeID uint64) ([]byte, int32) {

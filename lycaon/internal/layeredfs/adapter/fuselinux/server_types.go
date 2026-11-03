@@ -37,6 +37,9 @@ type fuseNode struct {
 	fuseID     uint64
 	generation uint64
 	corePrivID layeredfs.NodeID
+	ino        uint64
+	nlookup    uint64
+	openCount  int
 	paths      map[string]struct{}
 	unlinked   bool
 }
