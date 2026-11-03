@@ -17,7 +17,7 @@ func TestConcurrentProgramsKeepTheirOwnBareWaitJobs(t *testing.T) {
 	supervisor := &ProgramSupervisor{Background: registry}
 	jobs := supervisor.Jobs("session", "project")
 	start := func(id string) (context.Context, string) {
-		admitted, err := jobs.BeginProgram(t.Context())
+		admitted, err := jobs.BeginProgram(t.Context(), ProgramJobOrigin{Tool: "command", ToolCallID: id, RootSessionID: "session"})
 		testutil.FailErr(t, "begin overlapping program", err)
 		root := toolcontract.OperationInvocation{SessionID: "session", Identity: toolcontract.ExecutionIdentity{ProgramID: id, ExecutionID: id}}
 		var handle string
@@ -48,7 +48,7 @@ func TestConcurrentProgramsKeepTheirOwnBareWaitJobs(t *testing.T) {
 			t.Fatalf("wait set %v, want only %s", got, check.handle)
 		}
 	}
-	nextCtx, err := jobs.BeginProgram(t.Context())
+	nextCtx, err := jobs.BeginProgram(t.Context(), ProgramJobOrigin{Tool: "command", ToolCallID: "inspect", RootSessionID: "session"})
 	testutil.FailErr(t, "begin inspection program", err)
 	got, err := jobs.Unwaited(nextCtx)
 	testutil.FailErr(t, "read session wait set", err)
