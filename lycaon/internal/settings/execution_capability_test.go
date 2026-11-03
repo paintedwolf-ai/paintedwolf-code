@@ -14,18 +14,18 @@ import (
 func TestTaskExecutionPermissionCoversDifferentCommandsAndRevokes(t *testing.T) {
 	approvals := ladderGate(t)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "sudo -n id"},
-},
-Scope: hitl.ActionScope{
-SessionID: "task",
-ProjectID: "project",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{HostExecution: true},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "sudo -n id"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "task",
+			ProjectID: "project",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{HostExecution: true},
+		},
+	}
 	decision := &gate.Decision{Posture: gate.PostureBalanced, Primary: api.GateUnobservedChannel, ReasonKey: "unobserved_channel:host_execution", Cited: []gate.Fact{{Gate: api.GateUnobservedChannel, Key: "boundary.execution", Value: "host_execution", Source: "host"}}}
 	offers := approvals.GrantOffers(action, &hitl.ApprovalResult{Decision: decision})
 	if len(offers) != 3 {

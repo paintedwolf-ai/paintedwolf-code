@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"golang.org/x/sys/unix"
 )
 
 const privilegePayloadMarker = "PW_NATIVE_PRIVILEGE_PAYLOAD=1"
@@ -27,43 +26,6 @@ type nativePrivilegeFacts struct {
 	Credentials               osprocess.ProcessSecurity
 	Arguments                 []string
 	Directory, KernelFilename string
-}
-
-func TestNativePrivilegePayload(t *testing.T) {
-	if os.Getenv("PW_NATIVE_PRIVILEGE_PAYLOAD") != "1" {
-		return
-	}
-	if len(os.Args) != 4 {
-		os.Exit(2)
-	}
-	security, err := osprocess.ProcessCredentials(os.Getpid())
-	if err != nil {
-		os.Exit(3)
-	}
-	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
-	var native [2]unix.CapUserData
-	if unix.Capget(&header, &native[0]) != nil || security.Linux == nil || security.Linux.Effective != (uint64(native[0].Effective)|uint64(native[1].Effective)<<32) {
-		os.Exit(9)
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		os.Exit(4)
-	}
-	filename, err := linuxPayloadExecfn()
-	if err != nil {
-		os.Exit(5)
-	}
-	if err := os.WriteFile(os.Args[3], []byte("native privileged effect\n"), 0644); err != nil {
-		os.Exit(6)
-	}
-	if err := os.Chmod(os.Args[3], 0644); err != nil {
-		os.Exit(8)
-	}
-	facts := nativePrivilegeFacts{security, os.Args, cwd, filename}
-	if json.NewEncoder(os.Stdout).Encode(facts) != nil {
-		os.Exit(7)
-	}
-	os.Exit(0)
 }
 
 func TestLinuxNativePrivilegeQualification(t *testing.T) {
@@ -76,8 +38,7 @@ func TestLinuxNativePrivilegeQualification(t *testing.T) {
 	if initial.EffectiveUID == 0 || initial.EffectiveGID == 0 || initial.Linux == nil || initial.Linux.NoNewPrivileges || initial.Linux.Effective&(1<<10) != 0 {
 		t.Fatal("NATIVE_PRIVILEGE_SETUP_UNAVAILABLE: baseline must be unprivileged and permit a native transition")
 	}
-	self, err := os.Executable()
-	testutil.FailErr(t, "locate synthetic native image", err)
+	self := buildNativePrivilegePayload(t)
 	image, err := os.ReadFile(self)
 	testutil.FailErr(t, "capture synthetic native image", err)
 	for _, kind := range []string{"setuid", "setgid", "file capability"} {
@@ -99,12 +60,14 @@ func TestLinuxNativePrivilegeQualification(t *testing.T) {
 			plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
-			cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(preparedEffect), ExecOpts{Launch: plan, Dir: root, Env: privilegeEnvironment()})
+			cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(preparedEffect), privilegeOptions(plan, root))
 			testutil.FailErr(t, "prepare native privileged invocation", err)
 			defer cleanup()
-			var output bytes.Buffer
-			cmd.Stdout = &output
-			testutil.FailErr(t, "execute through typed native door", RunPrepared(t.Context(), cmd))
+			var output, diagnostic bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &output, &diagnostic
+			if err := RunPrepared(t.Context(), cmd); err != nil {
+				t.Fatalf("execute through typed native door: %v\n%s", err, diagnostic.String())
+			}
 			var prepared nativePrivilegeFacts
 			testutil.FailErr(t, "decode actual prepared native facts", json.Unmarshal(output.Bytes(), &prepared))
 			if !reflect.DeepEqual(prepared.Credentials, baseline.Credentials) {
@@ -124,6 +87,10 @@ func privilegeArguments(effect string) []string {
 	return []string{"-test.run=^TestNativePrivilegePayload$", "literal argument", effect}
 }
 func privilegeEnvironment() []string { return []string{"PATH=/usr/bin:/bin", privilegePayloadMarker} }
+
+func privilegeOptions(plan LaunchPlan, root string) ExecOpts {
+	return ExecOpts{Launch: plan, Dir: root, InlineEnv: map[string]string{"PW_NATIVE_PRIVILEGE_PAYLOAD": "1"}}
+}
 
 func preparePrivilegedFixture(t *testing.T, kind, entry string) {
 	t.Helper()
@@ -221,7 +188,7 @@ func assertRevokedPrivilegeLaunch(t *testing.T, plan LaunchPlan, lease *confine.
 	effect := filepath.Join(root, "revoked-effect")
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(effect), ExecOpts{Launch: plan, Dir: root, Env: privilegeEnvironment()})
+	cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(effect), privilegeOptions(plan, root))
 	testutil.FailErr(t, "capture currently admitted privileged image", err)
 	defer cleanup()
 	var output bytes.Buffer

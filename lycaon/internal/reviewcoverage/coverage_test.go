@@ -46,9 +46,11 @@ func TestReviewRequiresCurrentEvidenceForEveryObligationAndGap(t *testing.T) {
 		"duplicate":               func(r *api.CoverageReview) { r.Assessments[1] = r.Assessments[0] },
 		"unsupported disposition": func(r *api.CoverageReview) { r.Assessments[1].Disposition = "ignored" },
 		"unanchored":              func(r *api.CoverageReview) { r.Assessments[1].CitedEvidence = nil },
-		"line without path":       func(r *api.CoverageReview) { r.Assessments[1].CitedEvidence = []api.CitationGroundingCitedEvidence{{Handle: "file#1", Line: 3}} },
-		"unmapped":                func(r *api.CoverageReview) { r.Assessments[1].Obligations = nil },
-		"invented obligation":     func(r *api.CoverageReview) { r.Assessments[1].Obligations = []string{"other"} },
+		"line without path": func(r *api.CoverageReview) {
+			r.Assessments[1].CitedEvidence = []api.CitationGroundingCitedEvidence{{Handle: "file#1", Line: 3}}
+		},
+		"unmapped":            func(r *api.CoverageReview) { r.Assessments[1].Obligations = nil },
+		"invented obligation": func(r *api.CoverageReview) { r.Assessments[1].Obligations = []string{"other"} },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {

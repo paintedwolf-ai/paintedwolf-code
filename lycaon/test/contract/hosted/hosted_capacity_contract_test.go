@@ -360,9 +360,9 @@ func TestTriggeredWorkflowsHoldBoundedRunners(t *testing.T) {
 	}
 }
 
-// A ready pull request's CI run holds one runner at a time: plan, its one fast job, then the check.
+// Readiness runs complete analysis beside behavior; the aggregate follows both jobs.
 // Its merge-group and dispatch jobs never run for a pull request (see the admission contract).
-func TestPullRequestCIHoldsOneRunner(t *testing.T) {
+func TestPullRequestCIHoldsTwoBoundedRunners(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
 	jobs := plan.workflows["ci.yml"].Jobs
@@ -370,8 +370,8 @@ func TestPullRequestCIHoldsOneRunner(t *testing.T) {
 	if needs := capacityNeeds(t, jobs["check"].Needs); !slices.Contains(needs, "fast") {
 		t.Fatalf("the check aggregate must follow the fast tier, got needs %v", needs)
 	}
-	if declared := plan.capacity.Footprints["ci.yml"]; fast.total > declared || declared != 1 {
-		t.Errorf("a pull request's CI run must hold one runner, declared %d, can hold %d", declared, fast.total)
+	if declared := plan.capacity.Footprints["ci.yml"]; fast.total != declared || declared != 2 {
+		t.Errorf("readiness must fit its two-runner budget, declared %d, can hold %d", declared, fast.total)
 	}
 }
 

@@ -49,6 +49,13 @@ The reviewed revision-4 retained route inventories only primary trees needed by 
 
 The SQL registry transforms database contents only. Archive manifests, local recovery manifests, worker manifests, committed overlays, and device files have their own format versions and decoder owners. A release that changes one of those formats, or the exact backup replacement scope, supplies its versioned decoder and staged transformer with a released fixture proving the conversion. Unsupported versions are refused without mutation; no reader ships for a shape that no release wrote.
 
+Archive format 2 adds `command-programs.yaml` to the complete replacement scope.
+The format 1 reader accepts its exact released file and directory sets, then
+stages the absence of configured command programs as part of the restore.
+Any current file is captured in the transaction's recovery pre-image before
+publication. Unknown scopes and versions remain refused; released ZIP bytes
+are never rewritten.
+
 Release rehearsal requires a healthy candidate whose semantic content survives ordinary APIs, a second startup, and restoration of the released archive into another configuration root. The retained-history fixture covers transcript content, preferences, a durable approval grant, artifact media, source versions, checkpoint pre-images, a completed worker's baseline and overlay, and collaborative editing state (host draft and saved base, CRDT checkpoint and pending update, undo/redo, authorship, save receipts and reservations), which both the host and the shipped editor codecs read. An incompatible released fixture entering recovery fails the gate; separate tests prove non-destructive refusal of unsupported or corrupt stores, and synthetic migrations exercise skipped revisions, snapshot failure, cancellation, and rollback without adding obsolete production readers.
 
 Confirmed damage offers recovery actions. Capacity, permission, and I/O failures offer retry without suggesting that the user discard or restore intact history.

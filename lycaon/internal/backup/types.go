@@ -10,7 +10,7 @@ import (
 
 const (
 	// FormatVersion is the current archive manifest format.
-	FormatVersion = 1
+	FormatVersion = 2
 )
 
 var (

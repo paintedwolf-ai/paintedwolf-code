@@ -31,6 +31,23 @@ inspect Git repositories. This downloads and verifies the pinned Git bundle.
 Verification copies the staged bundle into its captured tree; it does not
 provision a missing bundle.
 
+Script verification uses Python 3.11 or newer and the pinned workflow Python
+packages prepared by `./task setup-dev -- --ci-inputs analysis`. The runner
+loads those packages directly rather than inheriting a global Python install.
+Prepare repository signing/package tools with
+`./task setup-dev -- --ci-inputs repository-tools` on macOS or apt-based Linux.
+For the signer alone, `./task setup-dev -- --ci-inputs repository-tools --signer
+<directory>` builds it from the repository's locked Nix input; prepend that
+directory's `bin` to `PATH` for verification.
+`--python <directory>` prepares the locked Python interpreter with pip for
+the pinned Python-package preparation when the host interpreter is unsuitable.
+
+Native search differential tests use the pinned ripgrep 15 reference. Prepare it
+with `./task setup-dev -- --ci-inputs search-reference <directory>` and prepend
+that directory to `PATH` for the verification request. This uses the same
+archive pins and verification as hosted setup; an arbitrary installed version
+can have different JSON semantics.
+
 Hosted shell preparation uses `./task setup-dev -- --shell-resources` to write
 qualified notices into the build checkout. `licenses:notices` is the isolated
 verification check; its snapshot outputs do not prepare a subsequent invocation.
@@ -65,6 +82,17 @@ directory owned by that run. Print a location from the repository root with
 below use `BUILD_DIR="$(python3 scripts/artifact_paths.py build)"`.
 
 The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
+
+For an isolated hosted diagnostic, select an existing catalog lane, for example
+`gh workflow run ci.yml --ref <branch> -f profile=check -f lane=runner`.
+This runs that lane's complete setup and every shard, and retains its receipts.
+A selected-lane run publishes no required `check` status and does not qualify
+the whole source. Lane selection is refused for PR and merge-group events.
+
+For upgrade-corpus and applied platform diagnostics, dispatch the complete
+platform workflow with `gh workflow run ci.yml --ref <branch> -f profile=check -f lane=platform`.
+It retains both platform jobs and their evidence without
+publishing a required `check` result.
 
 ### Where credentials live in development
 
@@ -648,8 +676,8 @@ Gate composition lives in `scripts/verification-plan.json`.
 
 | Task | Composition |
 |------|-------------|
-| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, `coverage:changes`, `scripts:coverage:changes`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
-| `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `scripts:coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
+| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `test:short`, `test:contract`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
+| `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test:rust`, `decide:test`), with complete script/frontend assertions supplied by coverage stages, `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `scripts:coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
 | `check:drift` | Internal to `check`: every `codegen:*:check`, `openapi:bundle:check`, `db:sqlc:check`, `db:sqlc:vet`, the vendored-corpus checks (`oar:vendor:check`, `scan:rules:vendor:check`, `secret-mint:vendor:check`, `lint:vuln:vendor:check`), and `docs:links`. A stale generated surface fails here, not at compile time |
 | `check:digest` | Summarized local pass — build, `lint:fast`, unit/component Go tests, `den:test:fast`, and the harness canary. `FULL=1` delegates to `test:full`, including integration tags and required bundled scanners |
 | Contention controls | Up to eight batches overlap across checkouts; stages within a request and across requests overlap wherever resource locks and worker slots allow. Shared operations reserve slots within a global budget of three quarters of host CPUs, rounded down and bounded between one and eight workers; `PW_TEST_HOST=dedicated` (hosted CI) uses every CPU and lets shared operations reserve all of it. `PW_TEST_WORKERS` caps each invocation; runner-specific settings may reduce it. Scheduler-dependent waits and lint deadlines scale 1×–4× from host load, with `PW_TEST_TIMEOUT_SCALE` as an explicit override |
@@ -832,6 +860,11 @@ each Vitest filter must match a test file under `lycaon-den/src`, and each
 Playwright filter a web-project spec under `lycaon-den/e2e`, by the same rules
 those tools apply. Arguments that passthrough targets and non-catalog targets
 forward are still parsed by their own scripts when the run starts.
+
+Go lint accepts repeatable `--scope <package-pattern>` arguments, for example
+`./task lint:full -- --scope ./internal/launchguard`. Both Go vet and golangci-lint
+receive that scope; full mode retains its whole-program deadcode check. Without
+`--scope`, analysis still covers `./...`. Other golangci-lint flags remain forwarded.
 
 ### Health and queue advisories
 

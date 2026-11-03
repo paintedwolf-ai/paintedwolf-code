@@ -85,19 +85,24 @@ class NativeBootstrapTests(unittest.TestCase):
             self.assertTrue(journal['observations']['recovery_required'])
 
     def test_supervisor_captures_real_exit_and_bounds_output(self):
+        kill = os.killpg
+        signals = []
+        def fixture_group(pid, number):
+            exited = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+            signals.append((number, exited is not None))
+            if exited is None:
+                return kill(pid, number)
+            # These children never fork; a waitable leader has no live group members.
+            self.assertEqual(number, signal.SIGKILL)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            kill = os.killpg
-            def held_group(pid, number):
-                self.assertIsNotNone(os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT))
-                self.assertEqual(number, signal.SIGKILL)
-                return kill(pid, number)
-            with patch.object(supervisor.os, 'killpg', side_effect=held_group):
+            with patch.object(supervisor.os, 'killpg', side_effect=fixture_group):
                 self.assertEqual(supervisor.captured_child([sys.executable, '-c', 'print("observed");raise SystemExit(7)'], root, root), 7)
+            self.assertEqual(signals, [(signal.SIGKILL, True)])
             self.assertEqual((root / 'bootstrap-supervision.stdout').read_bytes(), b'observed\n')
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            with self.assertRaises(ValueError):
+            with patch.object(supervisor.os, 'killpg', side_effect=fixture_group), self.assertRaises(ValueError):
                 supervisor.captured_child([sys.executable, '-c', 'import sys;sys.stdout.write("x"*100000)'], root, root)
             self.assertEqual((root / 'bootstrap-supervision.stdout').stat().st_size, 65536)
 

@@ -27,7 +27,8 @@
     "suites": {
       "test:runner": {
         "start": "scripts",
-        "pattern": "test_*execution.py"
+        "pattern": "test_*execution.py",
+        "requirements": "scripts/workflow_lint/requirements.txt"
       },
       "coordinator benchmark": {
         "start": "scripts/coordinator-benchmark",

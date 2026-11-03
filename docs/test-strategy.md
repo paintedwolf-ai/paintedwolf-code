@@ -268,8 +268,8 @@ join the permanent corpus.
 Agents write code and prompt copy fast. These checks shape it through
 feedback an agent meets while it works: a warning as something approaches
 its limit, then a stop for a change that leaves a touched artifact past it.
-`check-fast` and `check` run them, and CI runs them in the ready tier and the merge group's `limits` lane with
-the same rules and the same words, so CI says nothing `check-fast` did not.
+Both gates enforce size budgets. `check` and exact-landing CI enforce changed
+coverage; focused ready checks run before queue admission.
 
 ### Size budgets
 
@@ -813,7 +813,7 @@ Run every task from the repository root through `./task`.
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
 | `./task coverage:changes` / `./task den:coverage:changes` / `./task scripts:coverage:changes` | Coverage of the Go, Den, and scripts Python statements a change adds or modifies |
-| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, changed coverage, notices, comment and failure-message checks, and documentation links |
+| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, notices, comment and failure-message checks, and documentation links |
 | `./task check` | Full local and qualification gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 
 Each gate runs once per change. A pushed change runs affected-scope integration in CI and daily full nightly verification, so it runs neither local gate first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
@@ -852,10 +852,14 @@ clients that require manual installation.
 
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
-`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-job, `ready`: it first runs the complete repository contract tree, then compiles
-the host and runs `lint:full`, size budgets, Go, Den, and scripts changed coverage, comment checks,
+`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier runs two jobs
+within its declared two-runner budget. `ready-lint` runs complete `lint:full`
+analysis while `ready` first runs the complete repository contract tree, then compiles
+the host and runs size budgets, affected short Go tests, comment checks,
 test failure-message checks, documentation links, Den typecheck, Den lint, and frontend seam canaries.
+The required aggregate waits for both jobs. Full lint has its own analysis setup;
+it does not repeat admission contracts. Catalog validation requires each fast
+assertion stage exactly once across the jobs.
 Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests.
 Admission uses `test:contract -- ./test/contract/...`
 without a test-name filter. Failure or interruption stops the lane before its
@@ -868,28 +872,22 @@ once against the checkout, sharing its compiler cache. It also checks the
 migration identities of every stable release tag; release CI adds the published
 preview releases it reads from GitHub.
 
-The execution budget is two hours, allowing the integration lint lane's existing
-ninety-minute allowance plus the contracts and remaining checks. This is a
+Each admission job retains the existing three-hour execution allowance. This is a
 conservative ceiling, not a measured duration; broad-change hosted timings are
 required before tightening it or claiming an admission latency improvement.
 
-Admission also compiles affected native test targets without running them. The
-`ready` lane's `compile_targets` maps native source roots to existing managed
-verification targets. A broad or unknown scope compiles both the Den workspace
-and decision engine; ordinary Go, frontend, and prose changes add no native
-compilation. The Den workspace includes operational binaries and examples, so
-an observer compilation failure is visible before enqueueing. Compilation uses
-`--compile-only` on the normal test targets, preserving locked dependencies,
-features, resources, and all test targets. The single admission job provisions
-shell inputs only when Den compilation is selected. This adds real compilation
-cost to affected PRs; it does not claim a full native build is inexpensive.
+The real Linux supervisor/native-privilege leg runs early in admission for Go
+or CI changes, preserving required credential, effect and revocation assertions.
+Native Rust compilation and execution occur together in the landing native lane;
+ready admission does not repeat a compile-only copy. Standalone compile-only
+selection remains available for focused local diagnosis.
 
-The merge queue repeats changed coverage on the landing commit and runs the complete affected integration
-selection. Its `limits` and `lint` lanes start first, and the group stops at its
-first failure. The PR's pass does not replace verification of the landing commit.
-The `limits` lane has the same two-hour ceiling as admission: broad Go changes
-run both changed-package and importer coverage passes before Den and scripts
-coverage. This accommodates broad changes without reducing the coverage selection.
+The merge queue measures changed coverage on its exact source and executes the
+complete affected integration selection. Frontend and scripts assertions execute
+once through their coverage stages; distinct short-covered and integration-tagged
+Go recipes retain their separate modes. The group stops at its first failure.
+The limits lane keeps its existing two-hour completion allowance, independent of
+the under-hour performance objective.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on twenty
@@ -1210,6 +1208,25 @@ cache hits alone do not establish a test pass. Existing recovery retains first
 failures and retries only demonstrated infrastructure faults. Product assertions
 and races remain blocking; there is no new automatic quarantine or assertion
 retry policy.
+
+##### Admission and scale execution
+
+Ready admission runs focused Go tests and frontend seam canaries after repository
+contracts. Broad changed-statement coverage and native compilation execute at the
+exact landing source. Frontend and script coverage stages supply the complete
+assertion suites, avoiding a second uncovered execution in the same qualification.
+The failed/unverified/previously-passed frontier changes order, never the complete
+successful-path inventory. Unknown source scope still selects the complete recipe.
+
+Full-size program retention and query default-limit cases run in the command-scale
+qualification lane and nightly. Routine checks keep small mechanism cases, including
+bounded query input and durable receipt/session reuse. The full-size assertions and
+shipped limits remain intact. Nightly's other stress packages run separately so the
+same scale binaries do not execute twice in that profile.
+
+The performance objective is under an hour for the complete stable ready-to-main
+path. Execution deadlines retain their existing headroom; no one-hour cutoff is
+introduced. Compiler cache hits never substitute for executed test receipts.
 
 ##### Integration capacity experiment
 
