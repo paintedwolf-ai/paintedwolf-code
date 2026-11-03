@@ -3,6 +3,11 @@ package native
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -11,10 +16,6 @@ import (
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 // Native mutations replace whole-file states; every replaced state must fit

@@ -3,6 +3,10 @@ package app
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -10,9 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil"
-	"io"
-	"strings"
-	"testing"
 )
 
 type deliveredCommandBytes struct {

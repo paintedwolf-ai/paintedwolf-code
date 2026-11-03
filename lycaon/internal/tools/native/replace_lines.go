@@ -1,9 +1,10 @@
 package native
 
 import (
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
-	"strings"
 )
 
 // spliceLineRange replaces an inclusive 1-based line range. Retained lines keep

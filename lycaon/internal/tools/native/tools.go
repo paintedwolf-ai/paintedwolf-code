@@ -3,15 +3,16 @@ package native
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
-	"io"
-	"os"
-	"strings"
 )
 
 const coordinatorProfileID = "coordinator"

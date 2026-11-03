@@ -3,16 +3,17 @@ package native
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestWriteToolRejectsBinaryContent(t *testing.T) {

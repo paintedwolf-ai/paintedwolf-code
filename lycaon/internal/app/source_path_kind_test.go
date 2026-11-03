@@ -3,6 +3,10 @@ package app
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -12,9 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/pkg/api"
 	"golang.org/x/sys/unix"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 func TestSourcePathKindsRejectedConsistently(t *testing.T) {

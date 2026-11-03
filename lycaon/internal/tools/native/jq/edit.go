@@ -3,12 +3,10 @@ package jq
 import (
 	"context"
 	"errors"
+
 	"github.com/itchyny/gojq"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
-
-// EditToolName identifies structured-document writes.
-const EditToolName = "jq_edit"
 
 // EditRequest is one jq transformation of a structured document's text.
 type EditRequest struct {

@@ -1,10 +1,11 @@
 package native
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 func TestReplaceLineRange(t *testing.T) {

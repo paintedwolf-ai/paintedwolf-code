@@ -3,6 +3,11 @@ package app
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -14,10 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestDocumentReadResolvesIdenticalRejectedEdit(t *testing.T) {

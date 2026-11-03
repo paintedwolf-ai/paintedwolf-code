@@ -2,6 +2,11 @@ package native
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -10,10 +15,6 @@ import (
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 type presenceRecorder struct {

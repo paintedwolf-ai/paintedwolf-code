@@ -3,6 +3,11 @@ package session
 import (
 	"context"
 	"database/sql"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
@@ -14,10 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"sync"
-	"testing"
 )
 
 type workerBranchLedgerCapture struct {

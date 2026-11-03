@@ -2,14 +2,15 @@ package native
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 func writeEditorConfig(t *testing.T, dir, body string) {

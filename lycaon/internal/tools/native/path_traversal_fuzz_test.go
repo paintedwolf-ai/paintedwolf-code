@@ -2,16 +2,17 @@ package native
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 )
 
 // TestNativePathArgsRejectTraversal checks path rejection and error redaction.

@@ -4,16 +4,17 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"sync"
-	"testing"
 )
 
 type agentFeedCap struct {

@@ -3,6 +3,11 @@ package native
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/structrewrite"
@@ -13,10 +18,6 @@ import (
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tsparse"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestMutationTimeoutPreservesFileAndReportsHostCause(t *testing.T) {

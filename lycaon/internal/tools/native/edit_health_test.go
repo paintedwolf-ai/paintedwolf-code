@@ -3,14 +3,15 @@ package native
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/syntaxhealth"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/syntaxhealth"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 const cleanGoFixture = "package p\n\nfunc A() int {\n\treturn 1\n}\n\nfunc B() int {\n\treturn 2\n}\n"

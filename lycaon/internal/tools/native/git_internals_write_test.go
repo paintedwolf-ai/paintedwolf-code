@@ -3,12 +3,13 @@ package native
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 func TestWriteGitInternalsDenied(t *testing.T) {

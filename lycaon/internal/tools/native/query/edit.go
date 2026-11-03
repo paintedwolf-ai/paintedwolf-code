@@ -1,15 +1,12 @@
 package query
 
 import (
-	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"strings"
+
+	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 )
 
-// runJqEdit runs the structured jq_edit's format-preserving edit over the
-// pinned accepted text and publishes the result at the captured destination
-// revision. A lossy rewrite refuses (JQ_EDIT_LOSSY); a moved source or
-// destination conflicts and nothing is refreshed or rerun. Unlike a plain
-// jq redirect, unchanged literals, key order and comments survive.
+// runJqEdit preserves document formatting and publishes at the captured revision.
 func runJqEdit(inv *invocation) error {
 	if operands := inv.argv.Operands().Values(); len(operands) > 0 {
 		return inv.usage(operands[0], "no operands")

@@ -4,6 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -13,10 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 // fakeSourceLedger supplies recording and history fixtures without a database.

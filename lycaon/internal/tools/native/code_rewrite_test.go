@@ -2,10 +2,11 @@ package native
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 func TestRewriteSourceAcrossLanguages(t *testing.T) {

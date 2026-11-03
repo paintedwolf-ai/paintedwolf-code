@@ -3,16 +3,17 @@ package native
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"sync"
-	"testing"
 )
 
 // Every mutating native tool lands an attributed row. A write without one reaches

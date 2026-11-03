@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+
 	"github.com/lycaon/lycaon/internal/structrewrite"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"

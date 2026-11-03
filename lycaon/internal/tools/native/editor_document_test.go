@@ -4,6 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/summarize"
@@ -16,10 +21,6 @@ import (
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 // fakeEditorDocuments is the open-document view a test controls: which

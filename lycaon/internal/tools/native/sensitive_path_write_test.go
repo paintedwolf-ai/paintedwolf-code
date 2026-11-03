@@ -3,14 +3,15 @@ package native
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 // Declined credential reviews leave the file unchanged.

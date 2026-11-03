@@ -5,15 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 var implicitTextEncodings = testutil.SelfIdentifyingTextEncodings()
