@@ -66,7 +66,7 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 	spawnAllowlist := append([]string(nil), input.SpawnAllowlist...)
 	flags := Derive(input.RootCount, resolvedTools, spawnAllowlist)
 
-	surfaceToolOverride := coordinatorSurfaceToolOverride(spawnAllowlist, resolvedTools)
+	surfaceToolOverride := coordinatorSurfaceToolOverride(spawnAllowlist, resolvedTools, prompts.CoordinatorSurfaceAllowsCommandMutation(surfaceID))
 	maxInFlight := input.MaxInFlight
 	if maxInFlight <= 0 {
 		maxInFlight = spawn.MaxInFlightTaskWorkers
@@ -113,11 +113,11 @@ func (s CapabilitySurface) MergeSpawnInjectVars() map[string]any {
 	return vars
 }
 
-func coordinatorSurfaceToolOverride(allowedAgents []string, resolvedTools []string) map[string][]string {
+func coordinatorSurfaceToolOverride(allowedAgents []string, resolvedTools []string, commandMutates bool) map[string]prompts.SpawnToolSurface {
 	if !containsAgentID(allowedAgents, coordinatorAgentID) {
 		return nil
 	}
-	return map[string][]string{coordinatorAgentID: append([]string(nil), resolvedTools...)}
+	return map[string]prompts.SpawnToolSurface{coordinatorAgentID: {Tools: append([]string(nil), resolvedTools...), CommandMutates: commandMutates}}
 }
 
 func containsAgentID(ids []string, want string) bool {

@@ -132,6 +132,11 @@ func (e *Executor) validateInvocation(
 	args map[string]any,
 	tc *tools.ToolContext,
 ) *toolrejection.ToolReject {
+	if _, registered := e.definitionFor(qualifiedName); !registered {
+		if reject := tools.CommandOperationReject(qualifiedName); reject != nil {
+			return reject
+		}
+	}
 	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName), *tc); reject != nil {
 		return reject
 	}

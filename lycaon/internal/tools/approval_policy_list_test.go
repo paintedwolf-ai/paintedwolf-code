@@ -44,7 +44,7 @@ func TestApprovalPolicyEvaluateForListDelegatesAskTools(t *testing.T) {
 	}
 }
 
-func TestApprovalPolicyEvaluateForListChmodAutoApprove(t *testing.T) {
+func TestApprovalPolicyEvaluateForListWriteAutoApprove(t *testing.T) {
 	t.Parallel()
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	approvalStore := isolatedApprovalStore(t)
@@ -54,17 +54,17 @@ func TestApprovalPolicyEvaluateForListChmodAutoApprove(t *testing.T) {
 	ctx := context.Background()
 	eval := platform.PolicyContext{
 		ProfileID: "implement",
-		ToolName:  "chmod",
+		ToolName:  "write",
 	}
 	decision, err := wrapped.EvaluateForList(ctx, eval)
 	testutil.FailErr(t, "EvaluateForList", err)
 	if decision == nil || !decision.Allowed {
-		t.Fatalf("chmod should be list-visible; got %+v", decision)
+		t.Fatalf("write should be list-visible; got %+v", decision)
 	}
 	invoke, err := wrapped.Evaluate(ctx, eval)
 	testutil.FailErr(t, "Evaluate", err)
 	if invoke == nil || !invoke.Allowed {
-		t.Fatalf("chmod invoke should auto-approve; got %+v", invoke)
+		t.Fatalf("write invoke should auto-approve; got %+v", invoke)
 	}
 }
 
@@ -75,7 +75,7 @@ func TestApprovalPolicyListIncludesDeleteOnExecutor(t *testing.T) {
 	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	reg := tools.NewDefaultRegistry()
-	for _, name := range []string{"chmod", "delete", "write"} {
+	for _, name := range []string{"delete", "write"} {
 		n := name
 		if err := reg.Register(n, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 			return n, nil
@@ -90,7 +90,7 @@ func TestApprovalPolicyListIncludesDeleteOnExecutor(t *testing.T) {
 	for _, meta := range listed {
 		names[meta.Name] = struct{}{}
 	}
-	for _, want := range []string{"chmod", "delete", "write"} {
+	for _, want := range []string{"delete", "write"} {
 		if _, ok := names[want]; !ok {
 			t.Fatalf("List missing %q; have %v", want, names)
 		}
