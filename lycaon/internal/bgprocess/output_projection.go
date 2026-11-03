@@ -189,7 +189,7 @@ func (r *Output) safeOutput(ctx context.Context, proc *Process) (body string, ev
 	if !projection.Screened {
 		return "", projection.Truncated, tailFailed
 	}
-	return projection.Text, projection.Truncated, tailScreened
+	return RenderChunks(projection.Chunks), projection.Truncated, tailScreened
 }
 
 // screenedOrSuppressed withholds text whose screening was attempted and failed.

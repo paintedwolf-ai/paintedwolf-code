@@ -131,3 +131,25 @@ func TestCommandOutputReleasesProjectionMemoryAndCoalescesWithheldRanges(t *test
 		t.Fatalf("snapshot projection: %+v %v", snapshot, err)
 	}
 }
+
+func TestCommandOutputAdmissionFailureReleasesScratchAndSuppressesBytes(t *testing.T) {
+	h := commandEchoHarness(t, DefaultRingBufferBytes)
+	h.write("stdout", projectionSecret)
+	memory, err := h.reg.Output.screenMemory()
+	if err != nil {
+		t.Fatalf("projection memory: %v", err)
+	}
+	reserved := memory.AvailableWorking() - 100
+	release, err := memory.Reserve(t.Context(), reserved)
+	if err != nil {
+		t.Fatalf("occupy projection memory: %v", err)
+	}
+	snapshot, err := h.reg.Output.ReadCommandOutput(t.Context(), "s1", "h1", 0)
+	if err != nil || joinOutputChunks(snapshot.Output.Chunks) != captureUnavailableText || memory.InUse().Working != reserved {
+		t.Fatalf("admission failure exposed bytes or retained scratch: err=%v output=%+v usage=%+v", err, snapshot.Output, memory.InUse())
+	}
+	release()
+	if memory.InUse().Working != 0 {
+		t.Fatalf("projection memory retained: %+v", memory.InUse())
+	}
+}
