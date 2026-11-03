@@ -2,9 +2,9 @@ package native
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/syntaxhealth"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 func rejectIfSyntaxUnhealthy(ctx context.Context, tool, path string, before *string, after string) error {
