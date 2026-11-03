@@ -154,6 +154,9 @@ func enrichTrunkObservationLocked(t *Tracker, obs *SourceObservation, ev layered
 		obs.SourceGeneration = held.SourceGeneration
 		return
 	}
+	if t.facts.UntouchedVisibility != VisibilityLive {
+		return
+	}
 	if st, ok := t.coherence.trunkState[obs.Path]; ok && !st.deleted {
 		if obs.Ino == 0 {
 			obs.Ino = st.ino
@@ -204,6 +207,9 @@ func buildBaseObservationLocked(
 	if layer == "" {
 		layer = layeredfs.LayerTrunk
 	}
+	if completeness == "" {
+		completeness = t.facts.AttributionCompleteness
+	}
 	obs := SourceObservation{
 		ObservationID:    obsID,
 		Path:             qpath,
@@ -221,14 +227,40 @@ func buildBaseObservationLocked(
 		enrichTrunkObservationLocked(t, &obs, ev)
 	}
 	if obs.Kind == layeredfs.ObserveRead && obs.SHA256 == "" {
-		obs.Completeness = CompletenessPartialKernelCached
 		obs.Uncertain = true
 	}
 	if reasons := t.coherence.overflowByRoot[qpath.RootID]; len(reasons) > 0 && layer == layeredfs.LayerTrunk && prov != ProvenanceExactNativeRead {
 		obs.Uncertain = true
 		obs.Provenance = ProvenanceUncertainOverflow
 	}
+	if layer == layeredfs.LayerTrunk {
+		hasDigest := obs.Kind != layeredfs.ObserveRead || obs.SHA256 != ""
+		obs.Completeness = effectiveObservationCompleteness(completeness, hasDigest, obs.Provenance, obs.Uncertain)
+	} else if obs.Completeness == "" {
+		obs.Completeness = t.facts.AttributionCompleteness
+	}
 	return obs
+}
+
+func effectiveObservationCompleteness(
+	adapterCompleteness AttributionCompleteness,
+	hasDigest bool,
+	prov ObservationProvenance,
+	uncertain bool,
+) AttributionCompleteness {
+	if prov == ProvenanceIndexDerived {
+		return CompletenessPartialKernelCached
+	}
+	if adapterCompleteness == "" {
+		adapterCompleteness = CompletenessUnknown
+	}
+	if adapterCompleteness != CompletenessComplete {
+		return adapterCompleteness
+	}
+	if !hasDigest || uncertain {
+		return CompletenessPartialKernelCached
+	}
+	return CompletenessComplete
 }
 
 func appendObservationLocked(t *Tracker, obs SourceObservation) SourceObservation {

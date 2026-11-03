@@ -36,6 +36,8 @@ type WorkspaceObservationState struct {
 	JobID, ChildSessionID, WorkspacePath, BranchRoot, CheckpointID string
 	Roots                                                          []projectroot.RootRef
 	Tracker                                                        *observation.Tracker
+	CapabilitiesBound                                              bool
+	ViewCapabilities                                               observation.ViewCapabilityDescriptor
 	Bindings                                                       map[string]observation.VerificationBinding
 	LatestBinding                                                  observation.VerificationBinding
 	HasBinding                                                     bool
@@ -43,9 +45,11 @@ type WorkspaceObservationState struct {
 
 // WorkspaceTrackerRegistry owns scoped *observation.Tracker instances per worker workspace.
 type WorkspaceTrackerRegistry struct {
-	svc      *Service
-	obsMu    sync.RWMutex
-	trackers map[string]*WorkspaceObservationState
+	svc          *Service
+	obsMu        sync.RWMutex
+	trackers     map[string]*WorkspaceObservationState
+	boundCaps    map[string]observation.ViewCapabilityDescriptor
+	capsResolver func(jobID, childSessionID, workspacePath, branchRoot string) (observation.ViewCapabilityDescriptor, bool)
 }
 
 // EnsureTracker provisions or updates a scoped *observation.Tracker for the given worker identity keys.
@@ -71,9 +75,13 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 	if st == nil && jobID == "" && childSessionID == "" && branchRoot == "" {
 		st = lookupStateLocked(r, workspacePath)
 	}
+	caps, hasCaps := resolveCapabilitiesLocked(r, st, jobID, childSessionID, workspacePath, branchRoot)
 	if st == nil {
-		viewID := firstNonEmpty(jobID, childSessionID, branchRoot, workspacePath, "workspace-view")
-		facts := observation.LiveMountVisibilityFacts("workspace-overlay", true, true, true, observation.CompletenessComplete)
+		viewID := firstNonEmpty(caps.ViewID, jobID, childSessionID, branchRoot, workspacePath, "workspace-view")
+		facts := observation.UnknownVisibilityFacts("unbound")
+		if hasCaps {
+			facts = observation.VisibilityFactsFromDescriptor(caps)
+		}
 		rootSpecs := buildRootSpecs(workspacePath, roots)
 		tr, err := observation.NewTracker(observation.TrackerConfig{
 			ViewID: viewID,
@@ -84,13 +92,20 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 			return nil
 		}
 		st = &WorkspaceObservationState{
-			Tracker:  tr,
-			Bindings: make(map[string]observation.VerificationBinding),
+			Tracker:           tr,
+			CapabilitiesBound: hasCaps,
+			ViewCapabilities:  caps,
+			Bindings:          make(map[string]observation.VerificationBinding),
 		}
 	} else if st.Tracker != nil {
 		rootSpecs := buildRootSpecs(firstNonEmpty(workspacePath, st.WorkspacePath), roots)
 		if len(rootSpecs) > 0 {
 			st.Tracker.BindCore(nil, rootSpecs...)
+		}
+		if hasCaps {
+			_ = st.Tracker.SetVisibilityFacts(observation.VisibilityFactsFromDescriptor(caps))
+			st.CapabilitiesBound = true
+			st.ViewCapabilities = caps
 		}
 	}
 
@@ -110,6 +125,9 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 		st.Roots = append([]projectroot.RootRef(nil), roots...)
 	}
 	indexStateLocked(r, st)
+	if st.CapabilitiesBound {
+		indexCapabilitiesLocked(r, st.ViewCapabilities, st.JobID, st.ChildSessionID, st.BranchRoot)
+	}
 	return st.Tracker
 }
 
@@ -152,12 +170,14 @@ func (r *WorkspaceTrackerRegistry) CleanupTracker(keys ...string) {
 		k = strings.TrimSpace(k)
 		if k != "" {
 			delete(r.trackers, k)
+			delete(r.boundCaps, k)
 		}
 	}
 	if st != nil {
 		for _, k := range []string{st.JobID, st.ChildSessionID, st.BranchRoot} {
 			if k != "" {
 				delete(r.trackers, k)
+				delete(r.boundCaps, k)
 			}
 		}
 	}

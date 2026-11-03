@@ -95,6 +95,11 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	testutil.FailErr(t, "EnqueueWithProjectID other", err)
 	otherTask, _ := q.Get(otherJobID)
 	otherCtx := workercontext.WithJob(ctx, otherJobID)
+	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
+		observation.MountedAdapterViewCapabilities(otherJobID, "fuselinux", true, true, true, observation.CompletenessComplete),
+		otherJobID,
+	)
+	testutil.FailErr(t, "BindViewCapabilities other", err)
 	otherTctx, err := mgr.Workers.Workspaces.Enrich(otherCtx, otherChild, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: otherChild.ID, WorkerJobID: otherJobID},
 	})
@@ -120,6 +125,15 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	if tracker == nil {
 		t.Fatal("expected Enrich to provision a scoped observation.Tracker on mgr.Workers.Workspaces")
 	}
+	unboundFacts := tracker.Facts()
+	if unboundFacts.Mode != observation.VisibilityModeUnknown || unboundFacts.LiveVisible || unboundFacts.SupportsInvalidation || unboundFacts.Completeness != observation.CompletenessUnknown {
+		t.Fatalf("expected unbound tracker to default to conservative unknown visibility/completeness, got %+v", unboundFacts)
+	}
+	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
+		observation.MountedAdapterViewCapabilities(jobID, "fuselinux", true, true, true, observation.CompletenessComplete),
+		jobID,
+	)
+	testutil.FailErr(t, "BindViewCapabilities job", err)
 
 	// Execute ordinary ReadTool calls (without workerharness.Service.Read and without calling ObserveReadPath).
 	_, err = reg.Run(workerCtx, "read", map[string]any{"path": "game.py"}, tctx)
@@ -258,6 +272,25 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 	// Write mutated bytes on disk BEFORE calling ObserveReadWithFacts / RecordUpperWriteWithFacts
 	// to prove neither method re-reads the file with os.ReadFile.
 	testutil.FailErr(t, "WriteFile mutated", os.WriteFile(diskFile, []byte("disk-bytes-never-read-by-worker\n"), 0o644))
+
+	// Before view capabilities are bound, a native read digest alone must not claim CompletenessComplete or LiveVisible.
+	unboundObs, ok := svc.ObserveReadWithFacts("job-unbound", "sess-unbound", dir, "", nil, tools.WorkerFileObservationFacts{
+		RootID:   "primary",
+		RelPath:  "mutated.py",
+		AbsPath:  diskFile,
+		SHA256:   "sha-exact-from-read-stream",
+		Size:     14,
+		Complete: true,
+	})
+	if !ok || unboundObs.Completeness != observation.CompletenessUnknown {
+		t.Fatalf("expected unbound tracker observation to report CompletenessUnknown despite native read digest, got %+v (ok=%v)", unboundObs, ok)
+	}
+
+	_, err := svc.BindViewCapabilities(
+		observation.MountedAdapterViewCapabilities("job-facts", "fuselinux", true, true, true, observation.CompletenessComplete),
+		"job-facts",
+	)
+	testutil.FailErr(t, "BindViewCapabilities job-facts", err)
 
 	obs, ok := svc.ObserveReadWithFacts("job-facts", "sess-facts", dir, "", nil, tools.WorkerFileObservationFacts{
 		RootID:   "primary",

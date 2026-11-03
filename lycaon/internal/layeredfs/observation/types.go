@@ -6,7 +6,6 @@ package observation
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -17,84 +16,52 @@ var (
 	ErrNilCore                = errors.New("observation: layeredfs Core is not bound")
 )
 
-// UntouchedVisibilityMode declares whether untouched paths resolve against live trunk or a fixed seed.
+// UntouchedVisibilityMode declares whether untouched paths resolve against live trunk,
+// a fixed materialized seed, or an unbound/unknown view.
 type UntouchedVisibilityMode string
 
+// VisibilityMode is an alias for UntouchedVisibilityMode.
+type VisibilityMode = UntouchedVisibilityMode
+
 const (
-	VisibilityLive  UntouchedVisibilityMode = "live"
-	VisibilityFixed UntouchedVisibilityMode = "fixed"
+	VisibilityLive    UntouchedVisibilityMode = "live"
+	VisibilityFixed   UntouchedVisibilityMode = "fixed"
+	VisibilityUnknown UntouchedVisibilityMode = "unknown"
+
+	VisibilityModeLiveMount        UntouchedVisibilityMode = VisibilityLive
+	VisibilityModeMaterializedSeed UntouchedVisibilityMode = VisibilityFixed
+	VisibilityModeUnknown          UntouchedVisibilityMode = VisibilityUnknown
 )
 
-// AttributionCompleteness declares whether server read observations capture all reads
-// or only a partial subset due to kernel page caching.
+// AttributionCompleteness declares whether server read observations capture all reads,
+// a kernel-cached partial subset, a materialized snapshot, or an unbound/unknown view.
 type AttributionCompleteness string
 
 // ObservationCompleteness is an alias for AttributionCompleteness for observation records.
 type ObservationCompleteness = AttributionCompleteness
 
 const (
-	CompletenessComplete            AttributionCompleteness = "exact"
-	CompletenessPartialKernelCached AttributionCompleteness = "kernel_cached_partial"
-	CompletenessPartial             AttributionCompleteness = CompletenessPartialKernelCached
+	CompletenessComplete             AttributionCompleteness = "exact"
+	CompletenessPartialKernelCached  AttributionCompleteness = "kernel_cached_partial"
+	CompletenessPartial              AttributionCompleteness = CompletenessPartialKernelCached
+	CompletenessMaterializedSnapshot AttributionCompleteness = "materialized_snapshot"
+	CompletenessUnknown              AttributionCompleteness = "unknown"
 )
 
 // VisibilityFacts declares adapter cache and revalidation capabilities as explicit typed facts.
 // Consumers must never infer visibility or cache behavior from runtime.GOOS or OS name strings.
 type VisibilityFacts struct {
 	AdapterName                        string                  `json:"adapter_name"`
+	Mode                               UntouchedVisibilityMode `json:"mode"`
 	UntouchedVisibility                UntouchedVisibilityMode `json:"untouched_visibility"`
+	LiveVisible                        bool                    `json:"live_visible"`
+	SupportsInvalidation               bool                    `json:"supports_invalidation"`
 	SupportsInvalidationUpcall         bool                    `json:"supports_invalidation_upcall"`
 	SupportsNegativeLookupInvalidation bool                    `json:"supports_negative_lookup_invalidation"`
 	SupportsDirCookieInvalidation      bool                    `json:"supports_dir_cookie_invalidation"`
+	InvalidationVerified               bool                    `json:"invalidation_verified"`
+	Completeness                       AttributionCompleteness `json:"completeness"`
 	AttributionCompleteness            AttributionCompleteness `json:"attribution_completeness"`
-}
-
-// ValidateVisibilityFacts verifies that adapter visibility facts are explicitly declared.
-func ValidateVisibilityFacts(facts VisibilityFacts) error {
-	switch facts.UntouchedVisibility {
-	case VisibilityLive, VisibilityFixed:
-	default:
-		return fmt.Errorf("%w: unsupported untouched_visibility %q", ErrInvalidVisibilityFacts, facts.UntouchedVisibility)
-	}
-	switch facts.AttributionCompleteness {
-	case CompletenessComplete, CompletenessPartialKernelCached:
-	default:
-		return fmt.Errorf("%w: unsupported attribution_completeness %q", ErrInvalidVisibilityFacts, facts.AttributionCompleteness)
-	}
-	return nil
-}
-
-// LiveMountVisibilityFacts returns explicit visibility facts for a live mounted adapter.
-func LiveMountVisibilityFacts(
-	adapterName string,
-	invalidationUpcall bool,
-	negativeLookupInvalidation bool,
-	dirCookieInvalidation bool,
-	completeness AttributionCompleteness,
-) VisibilityFacts {
-	return VisibilityFacts{
-		AdapterName:                        adapterName,
-		UntouchedVisibility:                VisibilityLive,
-		SupportsInvalidationUpcall:         invalidationUpcall,
-		SupportsNegativeLookupInvalidation: negativeLookupInvalidation,
-		SupportsDirCookieInvalidation:      dirCookieInvalidation,
-		AttributionCompleteness:            completeness,
-	}
-}
-
-// MaterializedSeedVisibilityFacts returns explicit visibility facts for materialized fallback views.
-func MaterializedSeedVisibilityFacts(adapterName string) VisibilityFacts {
-	if adapterName == "" {
-		adapterName = "materialized-fallback"
-	}
-	return VisibilityFacts{
-		AdapterName:                        adapterName,
-		UntouchedVisibility:                VisibilityFixed,
-		SupportsInvalidationUpcall:         false,
-		SupportsNegativeLookupInvalidation: false,
-		SupportsDirCookieInvalidation:      false,
-		AttributionCompleteness:            CompletenessPartialKernelCached,
-	}
 }
 
 // InvalidationKind identifies the target of an adapter cache invalidation event.

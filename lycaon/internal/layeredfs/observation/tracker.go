@@ -87,7 +87,8 @@ func NewTracker(cfg TrackerConfig) (*Tracker, error) {
 	if cfg.ViewID == "" {
 		return nil, errors.New("observation: ViewID is required")
 	}
-	if err := ValidateVisibilityFacts(cfg.Facts); err != nil {
+	facts := NormalizeVisibilityFacts(cfg.Facts)
+	if err := ValidateVisibilityFacts(facts); err != nil {
 		return nil, err
 	}
 	clock := cfg.Clock
@@ -104,7 +105,7 @@ func NewTracker(cfg TrackerConfig) (*Tracker, error) {
 	}
 	t := &Tracker{
 		viewID:    cfg.ViewID,
-		facts:     cfg.Facts,
+		facts:     facts,
 		core:      cfg.Core,
 		rootsByID: rootsByID,
 		clock:     clock,
@@ -135,7 +136,9 @@ func NewTracker(cfg TrackerConfig) (*Tracker, error) {
 func (t *Tracker) BindCore(core *layeredfs.Core, roots ...layeredfs.RootSpec) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.core = core
+	if core != nil {
+		t.core = core
+	}
 	for _, r := range roots {
 		if r.ID != "" {
 			t.rootsByID[r.ID] = r
@@ -144,6 +147,29 @@ func (t *Tracker) BindCore(core *layeredfs.Core, roots ...layeredfs.RootSpec) {
 			}
 		}
 	}
+}
+
+// SetVisibilityFacts updates the tracker's adapter visibility and attribution facts.
+func (t *Tracker) SetVisibilityFacts(facts VisibilityFacts) error {
+	facts = NormalizeVisibilityFacts(facts)
+	if err := ValidateVisibilityFacts(facts); err != nil {
+		return err
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.facts = facts
+	for i := range t.store.observations {
+		obs := &t.store.observations[i]
+		if obs.Layer == layeredfs.LayerTrunk {
+			obs.Completeness = effectiveObservationCompleteness(facts.AttributionCompleteness, obs.SHA256 != "", obs.Provenance, obs.Uncertain)
+		}
+	}
+	return nil
+}
+
+// BindViewCapabilities updates the tracker's visibility facts from a ViewCapabilityDescriptor.
+func (t *Tracker) BindViewCapabilities(desc ViewCapabilityDescriptor) error {
+	return t.SetVisibilityFacts(VisibilityFactsFromDescriptor(desc))
 }
 
 // Facts returns the declared adapter visibility and cache capability facts.
@@ -221,7 +247,7 @@ func (t *Tracker) RecordExactNativeObservation(
 		ModTimeNS:  attr.ModTime.UnixNano(),
 		SHA256:     digest,
 	}
-	obs := buildBaseObservationLocked(t, qpath, ev, ProvenanceExactNativeRead, CompletenessComplete)
+	obs := buildBaseObservationLocked(t, qpath, ev, ProvenanceExactNativeRead, t.facts.AttributionCompleteness)
 	obs.SHA256 = digest
 	obs.Size = int64(len(data))
 	return appendObservationLocked(t, obs)

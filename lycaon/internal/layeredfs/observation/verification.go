@@ -21,9 +21,14 @@ func (v *VerificationTracker) BindVerificationReceipt(
 	copy(observed, t.store.observations)
 
 	completeness := t.facts.AttributionCompleteness
+	if completeness == "" {
+		completeness = CompletenessUnknown
+	}
 	for _, obs := range observed {
 		if obs.Layer == layeredfs.LayerTrunk && (obs.Completeness != CompletenessComplete || obs.Provenance == ProvenanceIndexDerived || obs.Uncertain) {
-			completeness = CompletenessPartialKernelCached
+			if completeness == CompletenessComplete {
+				completeness = CompletenessPartialKernelCached
+			}
 			break
 		}
 	}
@@ -240,6 +245,9 @@ func trunkChangedSinceObservationLocked(t *Tracker, qpath layeredfs.QualifiedPat
 		return true
 	}
 	if obs.Size != st.size {
+		return true
+	}
+	if t.facts.UntouchedVisibility == VisibilityFixed && st.generation > 1 {
 		return true
 	}
 	return st.generation > obs.SourceGeneration
