@@ -25,7 +25,10 @@ func TestReleasePropagatesHashReadAndWriteFailuresAndRecoversOnRetry(t *testing.
 		var blockFirstAttempt atomic.Bool
 		hookEntered := make(chan struct{})
 		unblockHook := make(chan struct{})
+		waiterJoined := make(chan struct{})
 		var enterOnce sync.Once
+		var unblockOnce sync.Once
+		var joinedOnce sync.Once
 
 		c, err := New(Config{
 			ViewID:     "view-r4-hash-eio",
@@ -46,12 +49,18 @@ func TestReleasePropagatesHashReadAndWriteFailuresAndRecoversOnRetry(t *testing.
 					}
 					return r, nil
 				},
+				ReleaseWaitHook: func(stage string) {
+					if stage == "joined" {
+						joinedOnce.Do(func() { close(waiterJoined) })
+					}
+				},
 			},
 		})
 		testutil.FailErr(t, "new core", err)
 		t.Cleanup(func() {
 			injectHashEIO.Store(false)
 			blockFirstAttempt.Store(false)
+			unblockOnce.Do(func() { close(unblockHook) })
 			_ = c.ReleaseView()
 		})
 
@@ -73,14 +82,18 @@ func TestReleasePropagatesHashReadAndWriteFailuresAndRecoversOnRetry(t *testing.
 			t.Fatalf("timed out waiting for ReleaseView hash hook")
 		}
 
-		// Launch a second concurrent ReleaseView caller that joins the active release attempt.
+		// Launch a second concurrent ReleaseView caller and wait for the explicit joined-attempt handshake.
 		errCh2 := make(chan error, 1)
 		go func() {
 			errCh2 <- c.ReleaseView()
 		}()
-		time.Sleep(15 * time.Millisecond)
+		select {
+		case <-waiterJoined:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for concurrent ReleaseView caller to join attempt")
+		}
 		blockFirstAttempt.Store(false)
-		close(unblockHook)
+		unblockOnce.Do(func() { close(unblockHook) })
 
 		err1 := <-errCh1
 		err2 := <-errCh2

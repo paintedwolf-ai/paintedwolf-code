@@ -1,6 +1,7 @@
 package layeredfs
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"syscall"
@@ -177,6 +178,71 @@ func isMaskedByPrivateDeletionOrReplacementLocked(c *Core, qpath QualifiedPath) 
 			break
 		}
 		rel = rel[:slash]
+	}
+	return false
+}
+
+var errNamespaceRetry = errors.New("layeredfs: namespace generation changed; retry transaction")
+
+func currentNamespaceGen(c *Core) (uint64, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.state.released {
+		return 0, ErrViewReleased
+	}
+	return c.state.nsGen, nil
+}
+
+func runNamespacePreCommitHook(c *Core, op string, qpath QualifiedPath) {
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.NamespacePreCommitHook != nil {
+		c.cfg.FaultHooks.NamespacePreCommitHook(op, qpath)
+	}
+}
+
+func isParentDirValidLocked(c *Core, qpath QualifiedPath) bool {
+	slash := strings.LastIndexByte(qpath.Rel, '/')
+	rel := "."
+	if slash >= 0 {
+		rel = qpath.Rel[:slash]
+	}
+	for {
+		anc := QualifiedPath{RootID: qpath.RootID, Rel: rel}
+		if _, del := c.state.deletedPaths[anc]; del {
+			return false
+		}
+		if nid, ok := c.state.pathIndex[anc]; ok {
+			n := c.state.nodesByID[nid]
+			if n == nil || n.flags.unlinked || n.kind != EntryDirectory {
+				return false
+			}
+		}
+		if rel == "." {
+			break
+		}
+		slash = strings.LastIndexByte(rel, '/')
+		if slash < 0 {
+			rel = "."
+		} else {
+			rel = rel[:slash]
+		}
+	}
+	return true
+}
+
+func hasPrivateChildrenLocked(c *Core, dirPath QualifiedPath) bool {
+	prefix := ""
+	if dirPath.Rel != "." {
+		prefix = dirPath.Rel + "/"
+	}
+	for qp, nid := range c.state.pathIndex {
+		if qp.RootID != dirPath.RootID || qp.Rel == "." || qp.Rel == dirPath.Rel {
+			continue
+		}
+		if prefix == "" || strings.HasPrefix(qp.Rel, prefix) {
+			if n := c.state.nodesByID[nid]; n != nil && !n.flags.unlinked {
+				return true
+			}
+		}
 	}
 	return false
 }
