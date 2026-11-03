@@ -4,13 +4,11 @@
   "kind": "runtime_service",
   "workstream": "large-command-resources",
   "disposition": "retain",
-  "reason": "Retain the existing dispatcher at 1159 receiver lines and 48 methods. It binds each reached child, retains reviewed inputs, invokes the established admission boundary and settles typed outcomes in that order. Native owners and the executor keep their operation authority. Structured allocation diagnostics belong to the existing child-failure translation. Resource, model-identity and policy-scope contracts support this bounded orchestration.",
-  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
-  "ceiling": 1159,
+  "reason": "Retain reached-child preparation, review, execution and failure translation in the dispatcher. The added wiring passes reviewed value sinks into typed external request reconstruction while preserving captured cwd and stage attribution. The reconstruction helper owns value validation, not operation authority. Exact argument/process boundaries and changed-shape refusal contracts support this boundary.",
+  "reviewed_commit": "1da0705c31dcb167e8a38f16761ff8a4b8e1f033",
+  "ceiling": 1177,
   "boundaries": {
-    "lycaon/internal/tools/native/command/program_resource_limits_test.go": "efa071232fba618fd89d5c374ce46142907e6bbcbb770f4fe432811bf8a9dd9a",
-    "lycaon/internal/tools/native/command/program_policy_scope_test.go": "ebea2dd668bccd6aea9b80e4eccacb02106952acf46eb782b5c6f187b43b7642",
-    "lycaon/internal/toolexecution/program_model_invocation_test.go": "73da4def333754d6ea8e7a68e4cfc476a5774b8bdfc5880633f327a81a490a3b"
+    "lycaon/internal/tools/native/command/program_external_values_test.go": "7e8b072a74b2682508fa3d6fb39825a924a24f78e9ffd10478c22ee7e058cf8c"
   },
-  "reviewed_shape": "fae82661ad2c0c94e54f1f4bbcd7902c161b1f9764d3166fb310a4b19c85c4d2"
+  "reviewed_shape": "3707bea0e7f2ff71426bf76662f9e81801ba74afea7cfd633c2cdea38253faba"
 }

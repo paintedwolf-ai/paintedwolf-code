@@ -4,13 +4,11 @@
   "kind": "runtime_service",
   "workstream": "command-output-publication",
   "disposition": "retain",
-  "reason": "Output owns retained process publication under the process publication lock. Polling, events and completion tails share whole-window screening, raw cursor mapping and eviction withholding; extracting a second owner would split that state. Encoded matching remains in secretmatch and stream admission in captureprojection. Retain the measured 463 lines and 18 methods with bounded shared memory and focused cursor, eviction and unavailable-screen contracts.",
-  "reviewed_commit": "d8fe211662db810e7c40a6986f128d3bc79e62c6",
+  "reason": "Retain process publication under its existing publication lock. Polling, events and completion tails share bounded whole-window managed-echo screening before cursor selection. Raw offsets, stream labels, eviction withholding and cleanup retain one custody boundary; project lifecycle and stop attribution stay with their current collaborators. Chunk, cursor, failed-admission and projection-memory contracts support this composition.",
+  "reviewed_commit": "1da0705c31dcb167e8a38f16761ff8a4b8e1f033",
   "ceiling": 18,
   "boundaries": {
-    "lycaon/internal/bgprocess/output_command_echo_test.go": "b29dbe32b7f66e1f431bb3ddfdf70fb0ca6a8a7e498dc66586e29cd2479f7eab",
-    "lycaon/internal/bgprocess/registry_projection_test.go": "d95f0160cfafd6b5f333c60c2944c3db914e4438cd55c99f069bea237352b3a4",
-    "lycaon/internal/bgprocess/snapshot_output_test.go": "fda6a87b24f02aceb9b864d54ae09f0f9b328c9bf1883c0b4f53efda4d00ee32"
+    "lycaon/internal/bgprocess/output_command_echo_test.go": "b29dbe32b7f66e1f431bb3ddfdf70fb0ca6a8a7e498dc66586e29cd2479f7eab"
   },
-  "reviewed_shape": "0ca847a35e0a01c8a8d1313797567f224f0076f83062d6a3a72fc4d8b417bef5"
+  "reviewed_shape": "5ae8c8ecdc581461bc8e2bc1c5855e2e6b66cea0112c0bdfcd3f3b1b6924e572"
 }
