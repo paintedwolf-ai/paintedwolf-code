@@ -174,3 +174,109 @@ func settleViewRelease(
 	receipt.CleanedPaths = []string{view.RuntimeViewDir}
 	return receipt, nil
 }
+
+// ActiveViewRecovery describes the preserved state of an active view after adapter failure.
+type ActiveViewRecovery struct {
+	ViewID                           string                    `json:"view_id"`
+	OriginalAdapterID                AdapterID                 `json:"original_adapter_id"`
+	Mutated                          bool                      `json:"mutated"`
+	RequiresCheckpointReconstruction bool                      `json:"requires_checkpoint_reconstruction"`
+	PreservedSnapshot                layeredfs.JournalSnapshot `json:"preserved_snapshot"`
+	PreservedChanges                 []layeredfs.ChangeEntry   `json:"preserved_changes"`
+	TransitionedView                 *PreparedView             `json:"transitioned_view,omitempty"`
+}
+
+type activeViewEntry struct {
+	view    *PreparedView
+	adapter Adapter
+	failed  bool
+	reason  ReasonCode
+}
+
+// ActiveViewRegistry enforces selection immutability for active views and preserves mutated state on failure.
+type ActiveViewRegistry struct {
+	mu    sync.RWMutex
+	views map[string]*activeViewEntry
+}
+
+// NewActiveViewRegistry creates an ActiveViewRegistry.
+func NewActiveViewRegistry() *ActiveViewRegistry {
+	return &ActiveViewRegistry{views: make(map[string]*activeViewEntry)}
+}
+
+// Register binds a PreparedView to its selected Adapter.
+func (r *ActiveViewRegistry) Register(view *PreparedView, adp Adapter) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.views[view.ViewID] = &activeViewEntry{view: view, adapter: adp}
+}
+
+// AdapterForView returns the fixed adapter and view for viewID if registered.
+func (r *ActiveViewRegistry) AdapterForView(viewID string) (Adapter, *PreparedView, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	e, ok := r.views[viewID]
+	if !ok {
+		return nil, nil, false
+	}
+	return e.adapter, e.view, true
+}
+
+// RecoverOrTransition handles adapter failure on an active view without erasing mutated worker data (#1658, #1666).
+func (r *ActiveViewRegistry) RecoverOrTransition(
+	ctx context.Context,
+	viewID string,
+	failureReason ReasonCode,
+	replacement Adapter,
+	allowCheckpointReconstruction bool,
+) (*ActiveViewRecovery, error) {
+	r.mu.Lock()
+	entry, ok := r.views[viewID]
+	if !ok {
+		r.mu.Unlock()
+		return nil, &AdapterError{Op: "recover_or_transition", ReasonCode: ReasonViewNotFound, Diagnostic: fmt.Sprintf("active view %q not found", viewID)}
+	}
+	entry.failed = true
+	entry.reason = failureReason
+	view, adp := entry.view, entry.adapter
+	r.mu.Unlock()
+
+	snap, err := view.Core.SnapshotJournal()
+	if err != nil {
+		return nil, err
+	}
+	changes, err := view.Core.EnumerateChanges(true)
+	if err != nil {
+		return nil, err
+	}
+	mutated := len(changes) > 0 || len(snap.Operations) > 0
+	recovery := &ActiveViewRecovery{
+		ViewID:                           viewID,
+		OriginalAdapterID:                adp.ID(),
+		Mutated:                          mutated,
+		RequiresCheckpointReconstruction: mutated,
+		PreservedSnapshot:                snap,
+		PreservedChanges:                 changes,
+	}
+	if mutated && !allowCheckpointReconstruction {
+		return recovery, &AdapterError{
+			AdapterID:  adp.ID(),
+			Op:         "recover_or_transition",
+			ReasonCode: ReasonActiveViewMutated,
+			Diagnostic: "refusing to switch mutated worker view to a fresh workspace without #1666 checkpoint reconstruction",
+		}
+	}
+	if replacement != nil {
+		probeRes, pErr := replacement.Probe(ctx, ProbeConfig{RuntimeDir: filepath.Dir(view.RuntimeViewDir)})
+		if pErr != nil || !probeRes.Supported {
+			return recovery, &AdapterError{
+				AdapterID:  replacement.ID(),
+				Op:         "recover_or_transition",
+				ReasonCode: probeRes.ReasonCode,
+				Diagnostic: "replacement adapter is unsupported; active worker data remains preserved in Core",
+				Cause:      pErr,
+			}
+		}
+	}
+	return recovery, nil
+}

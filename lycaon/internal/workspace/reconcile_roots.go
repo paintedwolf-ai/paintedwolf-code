@@ -7,13 +7,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
 // ResolveDispatchWorkspaceSelection validates an explicit adapter.WorkspaceSelection against attached
@@ -48,6 +46,27 @@ func ResolveDispatchWorkspaceSelection(
 		})
 	}
 	return narrowedGrants, narrowedRefs, nil
+}
+
+// ReconcileSelectedSandboxRoots validates an explicit WorkspaceSelection against attached project roots
+// and reconciles branches and seeds against the narrowed root set while keeping taskPathHints separate (#1658).
+func ReconcileSelectedSandboxRoots(
+	ctx context.Context,
+	branchRoot, seedRoot string,
+	attached []projectroot.RootRef,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	loadRetainedJobs func(context.Context) (map[string]struct{}, error),
+) (int, error) {
+	_, narrowedRefs, err := ResolveDispatchWorkspaceSelection(attached, selection, taskPathHints)
+	if err != nil {
+		return 0, err
+	}
+	liveDirs := make([]string, 0, len(narrowedRefs))
+	for _, r := range narrowedRefs {
+		liveDirs = append(liveDirs, r.Path)
+	}
+	return ReconcileSandboxRoots(ctx, branchRoot, seedRoot, liveDirs, loadRetainedJobs)
 }
 
 // ReconcileSandboxRoots removes unreferenced branches and seeds of detached roots.
@@ -224,68 +243,4 @@ func reconcileSeedRoots(ctx context.Context, seedRoot string, live map[string]st
 		slog.InfoContext(ctx, "removed worker seed of an unregistered project", "path", candidate.path)
 	}
 	return removed, errors.Join(errs...)
-}
-
-// ListSeedCaches inventories valid published bridge caches.
-func ListSeedCaches(ctx context.Context, seedRoot string) ([]SeedCacheStatus, error) {
-	if strings.TrimSpace(seedRoot) == "" {
-		return nil, nil
-	}
-	candidates, err := seedEvictionCandidates(seedRoot, "")
-	if err != nil {
-		return nil, err
-	}
-	statuses := make([]SeedCacheStatus, 0, len(candidates))
-	for _, candidate := range candidates {
-		_, tree, manifest := loadCurrentSeed(candidate.path)
-		if tree == "" || strings.TrimSpace(manifest.SourceRoot) == "" {
-			continue
-		}
-		allocated, err := treeAllocatedBytes(ctx, candidate.path)
-		if err != nil {
-			return nil, err
-		}
-		statuses = append(statuses, SeedCacheStatus{
-			ID:             candidate.key,
-			SourceRoot:     manifest.SourceRoot,
-			LogicalBytes:   regularBytes(manifest),
-			AllocatedBytes: allocated,
-			LastUsed:       candidate.lastUsed,
-		})
-	}
-	sort.Slice(statuses, func(i, j int) bool { return statuses[i].LastUsed.After(statuses[j].LastUsed) })
-	return statuses, nil
-}
-
-// RemoveSeedByID removes one rebuildable bridge cache under an exclusive lease.
-func RemoveSeedByID(ctx context.Context, seedRoot, id string) error {
-	if strings.TrimSpace(seedRoot) == "" {
-		return fmt.Errorf("worker cache storage is unavailable")
-	}
-	if !validSeedKey(id) {
-		return fmt.Errorf("invalid worker cache id")
-	}
-	release, err := lockSeedAcrossProcesses(ctx, seedRoot, id, true)
-	if err != nil {
-		return err
-	}
-	defer release()
-	return os.RemoveAll(filepath.Join(seedRoot, id))
-}
-
-func treeAllocatedBytes(ctx context.Context, root string) (int64, error) {
-	var total int64
-	err := sandbox.SurveyWalk(ctx, root, sandbox.SurveyOptions{IncludeHidden: true},
-		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
-			if entry.IsDir {
-				return sandbox.SurveyContinue, nil
-			}
-			info, err := entry.DirEntry.Info()
-			if err != nil {
-				return sandbox.SurveyContinue, nil
-			}
-			total += max(allocatedFileBytes(info), 0)
-			return sandbox.SurveyContinue, nil
-		})
-	return total, err
 }

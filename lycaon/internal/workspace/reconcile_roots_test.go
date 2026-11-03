@@ -185,5 +185,38 @@ func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t 
 	); err == nil {
 		t.Fatal("expected unauthorized root selection to fail")
 	}
+
+	// Verify real Manager.CreateWorkerWorkspaceSelected and ReconcileSelectedSandboxRoots wire WorkspaceSelection.
+	testutil.FailErr(t, "write api handler", os.WriteFile(filepath.Join(rootA, "services", "api", "handler.go"), []byte("package api\n"), 0o644))
+	testutil.FailErr(t, "write billing invoice", os.WriteFile(filepath.Join(rootA, "services", "billing", "invoice.go"), []byte("package billing\n"), 0o644))
+	testutil.FailErr(t, "write docs readme", os.WriteFile(filepath.Join(rootB, "README.md"), []byte("# docs\n"), 0o644))
+
+	branches := t.TempDir()
+	seeds := t.TempDir()
+	mgr := workspace.NewManager(branches, seeds)
+	narrowSel := adapter.WorkspaceSelection{
+		RootIDs:  []string{"primary"},
+		Subroots: map[string]string{"primary": "services/api"},
+	}
+	binding, layout, err := mgr.CreateWorkerWorkspaceSelected(
+		t.Context(), attached, attached, narrowSel,
+		[]string{"docs/README.md", "primary/services/billing/invoice.go"},
+		"primary", "selected-job",
+	)
+	testutil.FailErr(t, "CreateWorkerWorkspaceSelected", err)
+	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+
+	if len(layout.Roots) != 1 || layout.Roots[0].ID != "primary" {
+		t.Fatalf("expected narrowed layout to contain only primary, got %+v", layout.Roots)
+	}
+	if _, err := os.Stat(filepath.Join(binding.Root, "handler.go")); err != nil {
+		t.Fatalf("expected narrowed subroot file handler.go in worker workspace: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(binding.Root, "invoice.go")); !os.IsNotExist(err) {
+		t.Fatalf("unselected sibling subroot file must not exist in narrowed workspace: %v", err)
+	}
+	if _, err := workspace.ReconcileSelectedSandboxRoots(t.Context(), branches, seeds, attached, narrowSel, nil, retainedJobIDs(map[string]struct{}{"selected-job": {}})); err != nil {
+		testutil.FailErr(t, "ReconcileSelectedSandboxRoots", err)
+	}
 }
 

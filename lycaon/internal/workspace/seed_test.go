@@ -347,5 +347,11 @@ func TestSelectWorkspaceAdapterAndPrepareMaterializedSeedView(t *testing.T) {
 	if limErr == nil || !strings.Contains(limErr.Error(), string(adapter.ReasonWorkspacePreparationLimit)) {
 		t.Fatalf("expected workspace_preparation_limit from cached seed estimate, got %v", limErr)
 	}
+
+	// Real Manager.provisionRoot / CreateWorkerWorkspace also enforces preparation limits via WithWorkspaceLimits.
+	limCtx := WithWorkspaceLimits(ctx, 100, 128)
+	if _, mgrErr := mgr.CreateWorkerWorkspace(limCtx, primary, "seed-est-limit-mgr"); mgrErr == nil || !strings.Contains(mgrErr.Error(), string(adapter.ReasonWorkspacePreparationLimit)) {
+		t.Fatalf("expected Manager.CreateWorkerWorkspace to enforce workspace_preparation_limit, got %v", mgrErr)
+	}
 }
 

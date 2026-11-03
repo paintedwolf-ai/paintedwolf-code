@@ -8,12 +8,15 @@ import (
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
 type eagerViewState struct {
 	view            *PreparedView
 	seedRecords     map[layeredfs.QualifiedPath]layeredfs.BaseCapture
 	denySourcePaths []string
+	gitStore        *privategit.RetainedObjectStore
+	gitLeases       []string
 	quiesceHook     func(ctx context.Context, viewID string) error
 	flushHook       func(ctx context.Context, viewID string) error
 	accessCount     atomic.Int64
@@ -21,9 +24,10 @@ type eagerViewState struct {
 
 // EagerCopyAdapter implements the bounded materialized fallback workspace adapter (#1658).
 type EagerCopyAdapter struct {
-	facts AdapterFacts
-	mu    sync.RWMutex
-	views map[string]*eagerViewState
+	facts     AdapterFacts
+	mu        sync.RWMutex
+	views     map[string]*eagerViewState
+	gitStores *gitStoreRegistry
 }
 
 // NewEagerCopyAdapter constructs a materialized EagerCopyAdapter with an optional FallbackReason.
@@ -51,7 +55,8 @@ func NewEagerCopyAdapter(fallbackReason ReasonCode) *EagerCopyAdapter {
 			SupportsCheckpointBarrier: true,
 			FallbackReason:            fallbackReason,
 		},
-		views: make(map[string]*eagerViewState),
+		views:     make(map[string]*eagerViewState),
+		gitStores: newGitStoreRegistry(),
 	}
 }
 
@@ -61,6 +66,7 @@ func (a *EagerCopyAdapter) WithFallbackReason(reason ReasonCode) *EagerCopyAdapt
 	defer a.mu.Unlock()
 	clone := NewEagerCopyAdapter(reason)
 	clone.views = a.views
+	clone.gitStores = a.gitStores
 	return clone
 }
 
@@ -125,8 +131,15 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		return nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
 
-	outcome, err := seedSelectedRoots(ctx, req, runtimeViewDir, narrowed, selectedIDs, maxEntries, maxBytes)
+	gitStore, err := a.gitStores.storeForPrepare(req.RuntimeDir, narrowed)
 	if err != nil {
+		_ = os.RemoveAll(runtimeViewDir)
+		return nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
+	}
+
+	outcome, err := seedSelectedRoots(ctx, req, runtimeViewDir, narrowed, selectedIDs, maxEntries, maxBytes, gitStore)
+	if err != nil {
+		releaseGitLeases(gitStore, outcomeLeases(outcome))
 		_ = os.RemoveAll(runtimeViewDir)
 		if req.BackingDir != "" {
 			_ = os.RemoveAll(req.BackingDir)
@@ -152,13 +165,22 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		ObservationSink: req.ObservationSink,
 	})
 	if err != nil {
+		releaseGitLeases(gitStore, outcome.gitLeases)
 		_ = os.RemoveAll(runtimeViewDir)
 		return nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
+	}
+
+	if err := registerSeededLowerProviders(core, outcome.preparedRoots, outcome.bases, outcome.filePaths); err != nil {
+		releaseGitLeases(gitStore, outcome.gitLeases)
+		_ = core.ReleaseView()
+		_ = os.RemoveAll(runtimeViewDir)
+		return nil, err
 	}
 
 	seedMap := make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture, len(outcome.bases))
 	for _, b := range outcome.bases {
 		if rErr := core.RegisterSeedBase(b); rErr != nil {
+			releaseGitLeases(gitStore, outcome.gitLeases)
 			_ = core.ReleaseView()
 			_ = os.RemoveAll(runtimeViewDir)
 			return nil, rErr
@@ -187,6 +209,8 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		view:            view,
 		seedRecords:     seedMap,
 		denySourcePaths: outcome.denyPaths,
+		gitStore:        gitStore,
+		gitLeases:       outcome.gitLeases,
 		quiesceHook:     req.QuiesceHook,
 		flushHook:       req.FlushClientHook,
 	}
@@ -251,5 +275,6 @@ func (a *EagerCopyAdapter) Release(ctx context.Context, viewID string) (ReleaseR
 		return ReleaseReceipt{ViewID: viewID, AdapterID: AdapterEagerCopy, Settled: false, ReasonCode: ReasonViewNotFound},
 			&AdapterError{AdapterID: AdapterEagerCopy, Op: "release", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
+	releaseGitLeases(st.gitStore, st.gitLeases)
 	return settleViewRelease(ctx, AdapterEagerCopy, st.view, nil)
 }

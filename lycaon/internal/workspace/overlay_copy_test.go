@@ -191,7 +191,9 @@ func TestMaterializeBoundedWorkspaceGitIsolationAndLimitEnforcement(t *testing.T
 	ctx := context.Background()
 	primary := t.TempDir()
 	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(primary, ".git", "objects", "ab"), 0o755))
+	testutil.FailErr(t, "mkdir submodule gitdir", os.MkdirAll(filepath.Join(primary, ".git", "modules", "sub"), 0o755))
 	testutil.FailErr(t, "write HEAD", os.WriteFile(filepath.Join(primary, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	testutil.FailErr(t, "write sub HEAD", os.WriteFile(filepath.Join(primary, ".git", "modules", "sub", "HEAD"), []byte("ref: refs/heads/sub\n"), 0o644))
 	testutil.FailErr(t, "mkdir sub", os.MkdirAll(filepath.Join(primary, "sub"), 0o755))
 	testutil.FailErr(t, "write gitlink", os.WriteFile(filepath.Join(primary, "sub", ".git"), []byte("gitdir: ../.git/modules/sub\n"), 0o644))
 	testutil.FailErr(t, "write code", os.WriteFile(filepath.Join(primary, "sub", "code.go"), []byte("package sub\n"), 0o644))
@@ -229,6 +231,13 @@ func TestMaterializeBoundedWorkspaceGitIsolationAndLimitEnforcement(t *testing.T
 	}
 	if _, err := os.Stat(filepath.Join(view.PrimaryWorkPath, "sub", "code.go")); err != nil {
 		t.Fatalf("sibling materialized view was disrupted: %v", err)
+	}
+
+	// Verify real Manager.CreateWorkerWorkspace enforces entry/byte limits and cleans partial branch.
+	branchBase := t.TempDir()
+	mgr := workspace.NewManager(branchBase, t.TempDir()).WithPreparationLimits(1, 4)
+	if _, mgrErr := mgr.CreateWorkerWorkspace(ctx, primary, "mgr-limit-fail"); !errors.As(mgrErr, &prepLim) || prepLim.ReasonCode != adapter.ReasonWorkspacePreparationLimit || !prepLim.CleanedIncompleteSeed {
+		t.Fatalf("expected Manager.CreateWorkerWorkspace to fail with workspace_preparation_limit, got %v", mgrErr)
 	}
 }
 

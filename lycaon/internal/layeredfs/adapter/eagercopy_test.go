@@ -59,7 +59,7 @@ func createFixtureRepoWithSubmodule(t *testing.T, srcRoot string) string {
 	if err := os.WriteFile(filepath.Join(srcRoot, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcRoot, ".git", "objects", "aa", "112233"), []byte("git-object-payload"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcRoot, ".git", "objects", "aa", "11223344556677889900112233445566778899"), []byte("git-object-payload"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, ".git", "modules", "sub", "HEAD"), []byte("ref: refs/heads/sub-branch\n"), 0o644); err != nil {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
 // AdapterID uniquely identifies a workspace adapter implementation.
@@ -150,14 +151,18 @@ type FallbackProgress struct {
 
 // SeedGitRepoSpec describes a source repository (.git dir or gitlink) discovered during seed traversal.
 type SeedGitRepoSpec struct {
-	ViewID         string
-	RootID         string
-	RepoRelPath    string
-	GitEntryRel    string
-	SourceGitPath  string
-	PrivateGitDir  string
-	IsGitlink      bool
-	GitlinkContent string
+	ViewID            string
+	RootID            string
+	RepoRelPath       string
+	GitEntryRel       string
+	SourceGitPath     string
+	PrivateGitDir     string
+	IsGitlink         bool
+	GitlinkContent    string
+	AuthorizedGitDirs []string
+	MaxEntries        int64
+	MaxBytes          int64
+	RetainedStore     *privategit.RetainedObjectStore
 }
 
 // SeedGitInitResult reports the private metadata/object retention built for a discovered repo.
@@ -165,8 +170,12 @@ type SeedGitInitResult struct {
 	PrivateMetaDir string `json:"private_meta_dir"`
 	HeadRef        string `json:"head_ref"`
 	ObjectCount    int64  `json:"object_count"`
+	ObjectsReused  int64  `json:"objects_reused,omitempty"`
+	BytesImported  int64  `json:"bytes_imported,omitempty"`
+	BytesReused    int64  `json:"bytes_reused,omitempty"`
 	AddedEntries   int64  `json:"added_entries"`
 	AddedBytes     int64  `json:"added_bytes"`
+	LeaseID        string `json:"lease_id,omitempty"`
 }
 
 // SeedGitInitializer builds private Git metadata/object retention during materialized seeding.

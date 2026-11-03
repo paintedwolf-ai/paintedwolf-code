@@ -4,15 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
 type seedOutcome struct {
@@ -22,91 +23,25 @@ type seedOutcome struct {
 	primaryID       string
 	primaryPath     string
 	bases           []layeredfs.BaseCapture
+	filePaths       map[layeredfs.QualifiedPath]string
 	seededRepos     map[string]SeedGitInitResult
 	gitInterceptMap map[layeredfs.QualifiedPath]layeredfs.QualifiedPath
+	gitLeases       []string
 	observedEntries int64
 	observedBytes   int64
 }
 
 type seedAccumulator struct {
-	ctx             context.Context
-	req             PrepareRequest
-	runtimeViewDir  string
-	selectedIDs     []string
-	narrowed        []RootGrant
-	maxEntries      int64
-	maxBytes        int64
-	observedEntries int64
-	observedBytes   int64
-	gitReposBuilt   int
-	bases           []layeredfs.BaseCapture
-	seededRepos     map[string]SeedGitInitResult
-	gitInterceptMap map[layeredfs.QualifiedPath]layeredfs.QualifiedPath
-}
-
-func resolvePrepareLimits(maxEntries, maxBytes int64) (int64, int64) {
-	if maxEntries <= 0 {
-		maxEntries = DefaultMaxEntries
-	}
-	if maxBytes <= 0 {
-		maxBytes = DefaultMaxBytes
-	}
-	return maxEntries, maxBytes
-}
-
-func collectGrantIDs(grants []RootGrant) []string {
-	ids := make([]string, 0, len(grants))
-	for _, g := range grants {
-		ids = append(ids, g.RootID)
-	}
-	return ids
-}
-
-func checkSourceIndexEstimates(viewID string, narrowed []RootGrant, selectedIDs []string, maxEntries, maxBytes int64) error {
-	var totalEntries, totalBytes int64
-	for _, g := range narrowed {
-		if g.Estimate == nil {
-			continue
-		}
-		totalEntries += g.Estimate.EstimatedEntries
-		totalBytes += g.Estimate.EstimatedBytes
-		if g.Estimate.EstimatedEntries > maxEntries || g.Estimate.EstimatedBytes > maxBytes ||
-			totalEntries > maxEntries || totalBytes > maxBytes {
-			return &PreparationLimitError{
-				ReasonCode:                ReasonWorkspacePreparationLimit,
-				ViewID:                    viewID,
-				RootID:                    g.RootID,
-				SelectedRoots:             selectedIDs,
-				ObservedEntries:           totalEntries,
-				ObservedBytes:             totalBytes,
-				MaxEntries:                maxEntries,
-				MaxBytes:                  maxBytes,
-				EstimatedRejection:        true,
-				CleanedIncompleteSeed:     true,
-				RetryWithSmallerSelection: true,
-				SuggestedSubroots:         suggestSubroots(narrowed),
-				Diagnostic:                "source-index estimate exceeds workspace preparation limit",
-			}
-		}
-	}
-	return nil
-}
-
-func suggestSubroots(grants []RootGrant) []string {
-	var suggestions []string
-	for _, g := range grants {
-		entries, err := os.ReadDir(g.SourcePath)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() && e.Name() != ".git" && !strings.HasPrefix(e.Name(), ".") {
-				suggestions = append(suggestions, g.RootID+":"+e.Name())
-			}
-		}
-	}
-	sort.Strings(suggestions)
-	return suggestions
+	ctx            context.Context
+	req            PrepareRequest
+	runtimeViewDir string
+	selectedIDs    []string
+	narrowed       []RootGrant
+	maxEntries     int64
+	maxBytes       int64
+	gitStore       *privategit.RetainedObjectStore
+	gitReposBuilt  int
+	out            *seedOutcome
 }
 
 func seedSelectedRoots(
@@ -116,27 +51,25 @@ func seedSelectedRoots(
 	narrowed []RootGrant,
 	selectedIDs []string,
 	maxEntries, maxBytes int64,
+	gitStore *privategit.RetainedObjectStore,
 ) (*seedOutcome, error) {
-	acc := &seedAccumulator{
-		ctx:             ctx,
-		req:             req,
-		runtimeViewDir:  runtimeViewDir,
-		selectedIDs:     selectedIDs,
-		narrowed:        narrowed,
-		maxEntries:      maxEntries,
-		maxBytes:        maxBytes,
+	out := &seedOutcome{
+		filePaths:       make(map[layeredfs.QualifiedPath]string),
 		seededRepos:     make(map[string]SeedGitInitResult),
 		gitInterceptMap: make(map[layeredfs.QualifiedPath]layeredfs.QualifiedPath),
 	}
-	out := &seedOutcome{seededRepos: acc.seededRepos, gitInterceptMap: acc.gitInterceptMap}
+	acc := &seedAccumulator{
+		ctx: ctx, req: req, runtimeViewDir: runtimeViewDir, selectedIDs: selectedIDs,
+		narrowed: narrowed, maxEntries: maxEntries, maxBytes: maxBytes, gitStore: gitStore, out: out,
+	}
 
 	for _, g := range narrowed {
 		seedDir := filepath.Join(runtimeViewDir, "seeds", g.RootID)
 		if err := os.MkdirAll(seedDir, 0o700); err != nil {
-			return nil, err
+			return out, err
 		}
 		if err := acc.walkAndSeedRoot(g, seedDir); err != nil {
-			return nil, err
+			return out, err
 		}
 		out.rootSpecs = append(out.rootSpecs, layeredfs.RootSpec{
 			ID: g.RootID, Label: g.Label, TrunkPath: seedDir, Subroot: g.Subroot, IsPrimary: g.IsPrimary,
@@ -149,14 +82,11 @@ func seedSelectedRoots(
 			out.primaryID, out.primaryPath = g.RootID, seedDir
 		}
 	}
-	if len(acc.gitInterceptMap) > 0 {
+	if len(out.gitInterceptMap) > 0 {
 		out.rootSpecs = append(out.rootSpecs, layeredfs.RootSpec{
 			ID: "__privategit__", Label: "privategit", TrunkPath: filepath.Join(runtimeViewDir, "privategit"),
 		})
 	}
-	out.bases = acc.bases
-	out.observedEntries = acc.observedEntries
-	out.observedBytes = acc.observedBytes
 	return out, nil
 }
 
@@ -194,9 +124,21 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 	}
 	privGitRel := filepath.ToSlash(filepath.Join(g.RootID, gitRel))
 	privGitDir := filepath.Join(a.runtimeViewDir, "privategit", filepath.FromSlash(privGitRel))
+	authDirs := make([]string, 0, len(a.req.Grants)+len(a.narrowed))
+	for _, rg := range a.req.Grants {
+		authDirs = append(authDirs, rg.SourcePath)
+	}
+	for _, rg := range a.narrowed {
+		authDirs = append(authDirs, rg.SourcePath)
+	}
 	spec := SeedGitRepoSpec{
 		ViewID: a.req.ViewID, RootID: g.RootID, RepoRelPath: repoRel, GitEntryRel: gitRel,
 		SourceGitPath: srcGitPath, PrivateGitDir: privGitDir, IsGitlink: !d.IsDir(),
+		AuthorizedGitDirs: authDirs, MaxEntries: max(a.maxEntries-a.out.observedEntries, 1),
+		MaxBytes: max(a.maxBytes-a.out.observedBytes, 1), RetainedStore: a.gitStore,
+	}
+	if d.Type()&fs.ModeSymlink != 0 {
+		return &AdapterError{AdapterID: AdapterEagerCopy, Op: "seed_git", ReasonCode: ReasonUnauthorizedRoot, Diagnostic: ".git symlink is forbidden", Cause: privategit.ErrUnauthorizedGitTarget}
 	}
 	if spec.IsGitlink {
 		raw, err := os.ReadFile(srcGitPath)
@@ -211,14 +153,21 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 	}
 	res, err := initFn(a.ctx, spec)
 	if err != nil {
+		if errors.Is(err, privategit.ErrSeedLimitExceeded) {
+			entries := max(res.AddedEntries, a.maxEntries-a.out.observedEntries+1)
+			return a.chargeUsage(g.RootID, entries, max(res.AddedBytes, 0))
+		}
 		return err
+	}
+	if res.LeaseID != "" {
+		a.out.gitLeases = append(a.out.gitLeases, res.LeaseID)
 	}
 	a.gitReposBuilt++
 	if err := a.chargeUsage(g.RootID, res.AddedEntries, res.AddedBytes); err != nil {
 		return err
 	}
-	a.seededRepos[g.RootID+":"+repoRel] = res
-	a.gitInterceptMap[layeredfs.QualifiedPath{RootID: g.RootID, Rel: gitRel}] = layeredfs.QualifiedPath{
+	a.out.seededRepos[g.RootID+":"+repoRel] = res
+	a.out.gitInterceptMap[layeredfs.QualifiedPath{RootID: g.RootID, Rel: gitRel}] = layeredfs.QualifiedPath{
 		RootID: "__privategit__", Rel: privGitRel,
 	}
 	return nil
@@ -231,6 +180,7 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 	}
 	qp := layeredfs.QualifiedPath{RootID: g.RootID, Rel: rel}
 	mode := info.Mode()
+	xattrs, _ := readPathXattrs(srcPath)
 
 	switch {
 	case mode.IsDir():
@@ -240,9 +190,9 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 		if err := os.MkdirAll(dstPath, mode.Perm()|0o700); err != nil {
 			return err
 		}
-		a.bases = append(a.bases, layeredfs.BaseCapture{
+		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryDirectory,
-			Mode: mode, ModTime: info.ModTime(), CapturedAt: time.Now(),
+			Mode: mode, ModTime: info.ModTime(), Xattrs: xattrs, CapturedAt: time.Now(),
 		})
 		return nil
 
@@ -257,38 +207,38 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 		if err := os.Symlink(target, dstPath); err != nil {
 			return err
 		}
-		a.bases = append(a.bases, layeredfs.BaseCapture{
+		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntrySymlink,
-			Mode: mode, Size: int64(len(target)), ModTime: info.ModTime(), LinkTarget: target, CapturedAt: time.Now(),
+			Mode: mode, Size: int64(len(target)), ModTime: info.ModTime(), LinkTarget: target, Xattrs: xattrs, CapturedAt: time.Now(),
 		})
 		return nil
 
 	case mode.IsRegular():
-		return a.seedRegularFile(g.RootID, qp, srcPath, dstPath, info)
+		return a.seedRegularFile(g.RootID, qp, srcPath, dstPath, info, xattrs)
 
 	default:
 		return nil
 	}
 }
 
-func (a *seedAccumulator) seedRegularFile(rootID string, qp layeredfs.QualifiedPath, srcPath, dstPath string, info fs.FileInfo) error {
+func (a *seedAccumulator) seedRegularFile(rootID string, qp layeredfs.QualifiedPath, srcPath, dstPath string, info fs.FileInfo, xattrs map[string][]byte) error {
 	if err := a.chargeUsage(rootID, 1, 0); err != nil {
 		return err
 	}
-	remainingBytes := a.maxBytes - a.observedBytes
+	remainingBytes := a.maxBytes - a.out.observedBytes
 	in, err := os.Open(srcPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = in.Close() }()
 
-	out, err := os.OpenFile(dstPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm()|0o600)
+	outFile, err := os.OpenFile(dstPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm()|0o600)
 	if err != nil {
 		return err
 	}
 	h := sha256.New()
-	n, copyErr := io.Copy(io.MultiWriter(out, h), io.LimitReader(in, remainingBytes+1))
-	_ = out.Close()
+	n, copyErr := io.Copy(io.MultiWriter(outFile, h), io.LimitReader(in, remainingBytes+1))
+	_ = outFile.Close()
 	if copyErr != nil {
 		return copyErr
 	}
@@ -296,27 +246,28 @@ func (a *seedAccumulator) seedRegularFile(rootID string, qp layeredfs.QualifiedP
 		return err
 	}
 	_ = os.Chtimes(dstPath, info.ModTime(), info.ModTime())
-	a.bases = append(a.bases, layeredfs.BaseCapture{
+	a.out.filePaths[qp] = dstPath
+	a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 		Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryRegular,
 		Mode: info.Mode(), Size: n, ModTime: info.ModTime(), SHA256: hex.EncodeToString(h.Sum(nil)),
-		BackingFile: dstPath, CapturedAt: time.Now(),
+		Xattrs: xattrs, CapturedAt: time.Now(),
 	})
 	return nil
 }
 
 func (a *seedAccumulator) chargeUsage(rootID string, entries, bytesDelta int64) error {
-	a.observedEntries += entries
-	a.observedBytes += bytesDelta
+	a.out.observedEntries += entries
+	a.out.observedBytes += bytesDelta
 	if a.req.ProgressFn != nil {
 		a.req.ProgressFn(FallbackProgress{
-			ViewID: a.req.ViewID, RootID: rootID, ObservedEntries: a.observedEntries,
-			ObservedBytes: a.observedBytes, MaxEntries: a.maxEntries, MaxBytes: a.maxBytes, GitReposBuilt: a.gitReposBuilt,
+			ViewID: a.req.ViewID, RootID: rootID, ObservedEntries: a.out.observedEntries,
+			ObservedBytes: a.out.observedBytes, MaxEntries: a.maxEntries, MaxBytes: a.maxBytes, GitReposBuilt: a.gitReposBuilt,
 		})
 	}
-	if a.observedEntries > a.maxEntries || a.observedBytes > a.maxBytes {
+	if a.out.observedEntries > a.maxEntries || a.out.observedBytes > a.maxBytes {
 		return &PreparationLimitError{
 			ReasonCode: ReasonWorkspacePreparationLimit, ViewID: a.req.ViewID, RootID: rootID,
-			SelectedRoots: a.selectedIDs, ObservedEntries: a.observedEntries, ObservedBytes: a.observedBytes,
+			SelectedRoots: a.selectedIDs, ObservedEntries: a.out.observedEntries, ObservedBytes: a.out.observedBytes,
 			MaxEntries: a.maxEntries, MaxBytes: a.maxBytes, EstimatedRejection: false,
 			CleanedIncompleteSeed: true, RetryWithSmallerSelection: true, SuggestedSubroots: suggestSubroots(a.narrowed),
 			Diagnostic: "actual seed traversal exceeded configured workspace preparation limit",

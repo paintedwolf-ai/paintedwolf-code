@@ -1,17 +1,85 @@
 package adapter
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
+
+var sharedRootGitStores sync.Map // map[string]*privategit.RetainedObjectStore
+
+type gitStoreRegistry struct {
+	mu     sync.Mutex
+	byRoot map[string]*privategit.RetainedObjectStore
+}
+
+func newGitStoreRegistry() *gitStoreRegistry {
+	return &gitStoreRegistry{byRoot: make(map[string]*privategit.RetainedObjectStore)}
+}
+
+func (r *gitStoreRegistry) storeForPrepare(runtimeDir string, grants []RootGrant) (*privategit.RetainedObjectStore, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := canonicalGitPath(runtimeDir)
+	for _, g := range grants {
+		if g.IsPrimary {
+			key = canonicalGitPath(g.SourcePath)
+			break
+		}
+	}
+	if s, ok := r.byRoot[key]; ok && storeDirExists(s) {
+		return s, nil
+	}
+	if v, ok := sharedRootGitStores.Load(key); ok {
+		if s, ok := v.(*privategit.RetainedObjectStore); ok && storeDirExists(s) {
+			r.byRoot[key] = s
+			return s, nil
+		}
+	}
+	storeDir := filepath.Join(runtimeDir, "retained-git-store")
+	s, err := privategit.NewRetainedObjectStore(storeDir)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.Close()
+	r.byRoot[key] = s
+	sharedRootGitStores.Store(key, s)
+	return s, nil
+}
+
+func storeDirExists(s *privategit.RetainedObjectStore) bool {
+	if s == nil || s.RootDir() == "" {
+		return false
+	}
+	st, err := os.Stat(s.ObjectsDir())
+	return err == nil && st.IsDir()
+}
+
+func outcomeLeases(out *seedOutcome) []string {
+	if out == nil {
+		return nil
+	}
+	return out.gitLeases
+}
+
+func releaseGitLeases(store *privategit.RetainedObjectStore, leases []string) {
+	if store == nil {
+		return
+	}
+	for _, lid := range leases {
+		if lid != "" {
+			_ = store.ReleaseLease(lid)
+		}
+	}
+}
 
 type seededGitInterceptor struct {
 	redirects map[layeredfs.QualifiedPath]layeredfs.QualifiedPath
@@ -50,167 +118,156 @@ func defaultSeedGitInitializer(ctx context.Context, spec SeedGitRepoSpec) (SeedG
 	if err := ctx.Err(); err != nil {
 		return SeedGitInitResult{}, &AdapterError{AdapterID: AdapterEagerCopy, Op: "seed_git", ReasonCode: ReasonContextCanceled, Diagnostic: err.Error(), Cause: err}
 	}
-	if err := os.MkdirAll(spec.PrivateGitDir, 0o700); err != nil {
+	gitDir, commonDir, objDirs, err := resolveAndValidateGitSpec(spec)
+	if err != nil {
+		return SeedGitInitResult{}, err
+	}
+	entries, bytesCount, err := surveyGitDirsWithinLimits(ctx, gitDir, commonDir, objDirs, spec.MaxEntries, spec.MaxBytes)
+	if err != nil {
+		return SeedGitInitResult{AddedEntries: entries, AddedBytes: bytesCount}, err
+	}
+
+	parentDir := filepath.Dir(spec.PrivateGitDir)
+	if err := os.MkdirAll(parentDir, 0o700); err != nil {
+		return SeedGitInitResult{}, err
+	}
+	stageDir, err := os.MkdirTemp(parentDir, ".git-stage-*")
+	if err != nil {
+		return SeedGitInitResult{}, err
+	}
+	cleanupStage := func() { _ = os.RemoveAll(stageDir) }
+
+	headRef, err := populateSanitizedPrivateGitMetadata(gitDir, commonDir, stageDir)
+	if err != nil {
+		cleanupStage()
 		return SeedGitInitResult{}, err
 	}
 
-	res := SeedGitInitResult{
+	store := spec.RetainedStore
+	if store == nil {
+		store, err = privategit.NewRetainedObjectStore(filepath.Join(parentDir, ".retained-store"))
+		if err != nil {
+			cleanupStage()
+			return SeedGitInitResult{}, err
+		}
+	}
+	metrics, reachable, err := store.ImportRepositoryObjects(ctx, objDirs, nil)
+	_ = store.Close()
+	if err != nil {
+		cleanupStage()
+		return SeedGitInitResult{}, err
+	}
+	holder := spec.ViewID + ":" + spec.RootID + ":" + spec.RepoRelPath
+	leaseID, err := store.RetainForView(holder, reachable)
+	if err != nil {
+		cleanupStage()
+		return SeedGitInitResult{}, err
+	}
+	altPath := filepath.Join(stageDir, "objects", "info", "alternates")
+	if err := os.WriteFile(altPath, []byte(store.ObjectsDir()+"\n"), 0o600); err != nil {
+		_ = store.ReleaseLease(leaseID)
+		cleanupStage()
+		return SeedGitInitResult{}, err
+	}
+	_ = os.RemoveAll(spec.PrivateGitDir)
+	if err := os.Rename(stageDir, spec.PrivateGitDir); err != nil {
+		_ = store.ReleaseLease(leaseID)
+		cleanupStage()
+		return SeedGitInitResult{}, err
+	}
+	return SeedGitInitResult{
 		PrivateMetaDir: spec.PrivateGitDir,
-		HeadRef:        "ref: refs/heads/main\n",
-		AddedEntries:   1,
+		HeadRef:        headRef,
+		ObjectCount:    metrics.ObjectsImported + metrics.ObjectsReused,
+		ObjectsReused:  metrics.ObjectsReused,
+		BytesImported:  metrics.BytesImported,
+		BytesReused:    metrics.BytesReused,
+		AddedEntries:   entries,
+		AddedBytes:     bytesCount,
+		LeaseID:        leaseID,
+	}, nil
+}
+
+func resolveAndValidateGitSpec(spec SeedGitRepoSpec) (string, string, []string, error) {
+	worktreeDir := filepath.Dir(spec.SourceGitPath)
+	allowed := make([]string, 0, len(spec.AuthorizedGitDirs)+1)
+	for _, a := range spec.AuthorizedGitDirs {
+		if c := canonicalGitPath(a); c != "" {
+			allowed = append(allowed, c)
+		}
+	}
+	if len(allowed) == 0 {
+		if c := canonicalGitPath(worktreeDir); c != "" {
+			allowed = append(allowed, c)
+		}
 	}
 
-	srcGitDir := spec.SourceGitPath
+	gitDir := canonicalGitPath(spec.SourceGitPath)
 	if spec.IsGitlink {
-		target := strings.TrimSpace(strings.TrimPrefix(spec.GitlinkContent, "gitdir:"))
-		if target != "" {
-			if !filepath.IsAbs(target) {
-				target = filepath.Join(filepath.Dir(spec.SourceGitPath), target)
-			}
-			if st, err := os.Stat(target); err == nil && st.IsDir() {
-				srcGitDir = target
-			}
+		line := strings.TrimSpace(spec.GitlinkContent)
+		if !strings.HasPrefix(line, "gitdir:") {
+			return "", "", nil, unauthorizedGitError("invalid gitlink syntax")
+		}
+		target := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
+		if target == "" || strings.ContainsRune(target, 0) {
+			return "", "", nil, unauthorizedGitError("empty gitlink target")
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(worktreeDir, target)
+		}
+		linfo, err := os.Lstat(target)
+		if err != nil || !linfo.IsDir() || linfo.Mode()&fs.ModeSymlink != 0 {
+			return "", "", nil, unauthorizedGitError("unresolved or invalid gitlink target")
+		}
+		gitDir = canonicalGitPath(target)
+		if !isPathUnderAllowed(gitDir, allowed) {
+			return "", "", nil, unauthorizedGitError("external gitlink target is outside granted roots")
+		}
+	} else {
+		linfo, err := os.Lstat(spec.SourceGitPath)
+		if err != nil || !linfo.IsDir() || linfo.Mode()&fs.ModeSymlink != 0 {
+			return "", "", nil, unauthorizedGitError("invalid .git directory")
 		}
 	}
 
-	if st, err := os.Stat(srcGitDir); err == nil && st.IsDir() {
-		entries, bytesCopied, headRef, objCount, cErr := copyPrivateGitRetention(ctx, srcGitDir, spec.PrivateGitDir)
-		if cErr != nil {
-			return SeedGitInitResult{}, cErr
-		}
-		res.AddedEntries += entries
-		res.AddedBytes += bytesCopied
-		res.ObjectCount = objCount
-		if headRef != "" {
-			res.HeadRef = headRef
-		}
-		return res, nil
+	commonDir, err := resolveValidatedCommonDir(gitDir, allowed)
+	if err != nil {
+		return "", "", nil, err
 	}
-
-	headPath := filepath.Join(spec.PrivateGitDir, "HEAD")
-	if err := os.WriteFile(headPath, []byte(res.HeadRef), 0o600); err != nil {
-		return SeedGitInitResult{}, err
+	objDirs, err := resolveValidatedObjectDirs(commonDir, gitDir, allowed)
+	if err != nil {
+		return "", "", nil, err
 	}
-	res.AddedEntries++
-	res.AddedBytes += int64(len(res.HeadRef))
-	return res, nil
+	return gitDir, commonDir, objDirs, nil
 }
 
-func copyPrivateGitRetention(ctx context.Context, srcGitDir, dstGitDir string) (int64, int64, string, int64, error) {
-	var entries, totalBytes, objCount int64
-	var headRef string
-	err := filepath.WalkDir(srcGitDir, func(p string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if err := ctx.Err(); err != nil {
-			return &AdapterError{AdapterID: AdapterEagerCopy, Op: "seed_git", ReasonCode: ReasonContextCanceled, Diagnostic: err.Error(), Cause: err}
-		}
-		rel, err := filepath.Rel(srcGitDir, p)
-		if err != nil || rel == "." {
-			return err
-		}
-		dst := filepath.Join(dstGitDir, rel)
-		if d.IsDir() {
-			entries++
-			return os.MkdirAll(dst, 0o700)
-		}
-		raw, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-			return err
-		}
-		if err := os.WriteFile(dst, raw, 0o600); err != nil {
-			return err
-		}
-		entries++
-		totalBytes += int64(len(raw))
-		slashRel := filepath.ToSlash(rel)
-		if slashRel == "HEAD" {
-			headRef = strings.TrimSpace(string(raw))
-		}
-		if strings.HasPrefix(slashRel, "objects/") && !strings.HasPrefix(slashRel, "objects/info") {
-			objCount++
-		}
-		return nil
-	})
-	return entries, totalBytes, headRef, objCount, err
-}
-
-func syncMaterializedTreeToCore(view *PreparedView, seedRecords map[layeredfs.QualifiedPath]layeredfs.BaseCapture) error {
-	seenOnDisk := make(map[layeredfs.QualifiedPath]bool, len(seedRecords))
-	for _, r := range view.Roots {
-		if err := syncSingleMaterializedRoot(view.Core, r, seedRecords, seenOnDisk); err != nil {
-			return err
-		}
+func resolveValidatedCommonDir(gitDir string, allowed []string) (string, error) {
+	p := filepath.Join(gitDir, "commondir")
+	linfo, err := os.Lstat(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return gitDir, nil
 	}
-	for qp, base := range seedRecords {
-		if !seenOnDisk[qp] && base.Kind != layeredfs.EntryDirectory {
-			_ = view.Core.Unlink(qp, false)
-		}
+	if err != nil || linfo.Mode()&fs.ModeSymlink != 0 {
+		return "", unauthorizedGitError("invalid commondir")
 	}
-	return nil
-}
-
-func syncSingleMaterializedRoot(
-	core *layeredfs.Core,
-	r PreparedRoot,
-	seedRecords map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
-	seenOnDisk map[layeredfs.QualifiedPath]bool,
-) error {
-	rootDir := filepath.Clean(r.WorkspacePath)
-	return filepath.WalkDir(rootDir, func(p string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relOS, err := filepath.Rel(rootDir, p)
-		if err != nil || relOS == "." {
-			return err
-		}
-		qp := layeredfs.QualifiedPath{RootID: r.RootID, Rel: filepath.ToSlash(relOS)}
-		seenOnDisk[qp] = true
-		info, err := os.Lstat(p)
-		if err != nil {
-			return err
-		}
-		base, hadSeed := seedRecords[qp]
-		if info.IsDir() {
-			if !hadSeed {
-				_, _ = core.Mkdir(qp, info.Mode().Perm())
-			}
-			return nil
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			target, err := os.Readlink(p)
-			if err != nil {
-				return err
-			}
-			if !hadSeed || base.Kind != layeredfs.EntrySymlink || base.LinkTarget != target {
-				_, _ = core.Symlink(target, qp)
-			}
-			return nil
-		}
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-		raw, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		sum := sha256.Sum256(raw)
-		sha := hex.EncodeToString(sum[:])
-		if hadSeed && base.Kind == layeredfs.EntryRegular && base.SHA256 == sha && base.Size == int64(len(raw)) {
-			return nil
-		}
-		if existing, rErr := core.ReadFile(qp); rErr == nil && bytes.Equal(existing, raw) && hadSeed {
-			// Check if Core already has this mutation recorded.
-			if attr, sErr := core.Lstat(qp); sErr == nil && attr.Layer == layeredfs.LayerPrivate {
-				return nil
-			}
-		}
-		_, err = core.WriteFile(qp, raw, info.Mode().Perm())
-		return err
-	})
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		return "", err
+	}
+	val := strings.TrimSpace(string(raw))
+	if val == "" {
+		return "", unauthorizedGitError("empty commondir")
+	}
+	if !filepath.IsAbs(val) {
+		val = filepath.Join(gitDir, val)
+	}
+	st, err := os.Lstat(val)
+	if err != nil || !st.IsDir() || st.Mode()&fs.ModeSymlink != 0 {
+		return "", unauthorizedGitError("unresolved commondir target")
+	}
+	commonDir := canonicalGitPath(val)
+	if !isPathUnderAllowed(commonDir, allowed) {
+		return "", unauthorizedGitError("commondir escapes granted roots")
+	}
+	return commonDir, nil
 }

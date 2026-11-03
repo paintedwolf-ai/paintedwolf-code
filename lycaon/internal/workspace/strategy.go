@@ -2,20 +2,65 @@ package workspace
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
+
+// CachedSeedEstimate returns a SourceIndexEstimate from a published bridge seed manifest when available (#1658).
+func CachedSeedEstimate(seedRoot, sourceRoot string) *adapter.SourceIndexEstimate {
+	if strings.TrimSpace(seedRoot) == "" || strings.TrimSpace(sourceRoot) == "" {
+		return nil
+	}
+	seedDir := enginepaths.ProjectSeedDir(seedRoot, sourceRoot)
+	_, tree, manifest := loadCurrentSeed(seedDir)
+	if tree == "" || len(manifest.Entries) == 0 {
+		return nil
+	}
+	return &adapter.SourceIndexEstimate{
+		EstimatedEntries: int64(len(manifest.Entries)),
+		EstimatedBytes:   regularBytes(manifest),
+	}
+}
+
+// PrepareMaterializedSeedView prepares a bounded materialized workspace view using adapter.EagerCopyAdapter,
+// populating missing root estimates from published bridge seed manifests and reporting preparation progress (#1658).
+func PrepareMaterializedSeedView(
+	ctx context.Context,
+	seedRoot string,
+	req adapter.PrepareRequest,
+	fallbackReason adapter.ReasonCode,
+) (*adapter.PreparedView, error) {
+	grants := make([]adapter.RootGrant, len(req.Grants))
+	copy(grants, req.Grants)
+	for i := range grants {
+		if grants[i].Estimate == nil && grants[i].Subroot == "" {
+			grants[i].Estimate = CachedSeedEstimate(seedRoot, grants[i].SourcePath)
+		}
+	}
+	req.Grants = grants
+	prevProgress := req.ProgressFn
+	req.ProgressFn = func(fp adapter.FallbackProgress) {
+		reportPreparation(ctx, PreparationProgress{
+			Strategy:   ProvisionMaterializedEagerCopy,
+			Stage:      "materializing_seed",
+			Files:      fp.ObservedEntries,
+			Bytes:      fp.ObservedBytes,
+			TotalBytes: fp.MaxBytes,
+		})
+		if prevProgress != nil {
+			prevProgress(fp)
+		}
+	}
+	adp := adapter.NewEagerCopyAdapter(fallbackReason)
+	return adp.Prepare(ctx, req)
+}
 
 // Adapter-backed ProvisionStrategy constants (#1658).
 const (
@@ -26,11 +71,11 @@ const (
 
 // WorkspaceStrategySelection pairs a selected workspace adapter with its structured facts and probe result (#1658).
 type WorkspaceStrategySelection struct {
-	AdapterID adapter.AdapterID     `json:"adapter_id"`
-	Strategy  ProvisionStrategy     `json:"strategy"`
-	Facts     adapter.AdapterFacts  `json:"facts"`
-	Probe     adapter.ProbeResult   `json:"probe"`
-	Adapter   adapter.Adapter       `json:"-"`
+	AdapterID adapter.AdapterID    `json:"adapter_id"`
+	Strategy  ProvisionStrategy    `json:"strategy"`
+	Facts     adapter.AdapterFacts `json:"facts"`
+	Probe     adapter.ProbeResult  `json:"probe"`
+	Adapter   adapter.Adapter      `json:"-"`
 }
 
 // DefaultWorkspaceSelector returns the standard platform capability selector (fuselinux, nfsdarwin, eagercopy).
@@ -83,7 +128,7 @@ func SelectWorkspaceAdapter(
 	}, nil
 }
 
-func (m *Manager) chooseProvisionStrategy(ctx context.Context, sourceRoot, branchRoot string) (ProvisionStrategy, error) {
+func chooseProvisionStrategy(ctx context.Context, m *Manager, sourceRoot, branchRoot string) (ProvisionStrategy, error) {
 	if strings.TrimSpace(m.branchRoot) == "" {
 		return "", fmt.Errorf("worker branch root is unavailable")
 	}
@@ -164,80 +209,4 @@ func probeClone(src, dstDir string) (bool, error) {
 		return false, removeErr
 	}
 	return cloned, nil
-}
-
-func regularBytes(manifest seedManifest) int64 {
-	var total int64
-	for _, entry := range manifest.Entries {
-		if entry.Kind == "regular" && entry.Size > 0 {
-			total += entry.Size
-		}
-	}
-	return total
-}
-
-func changedRegularBytes(next, current seedManifest) uint64 {
-	var total uint64
-	for rel, entry := range next.Entries {
-		if entry.Kind != "regular" || entry.Size <= 0 {
-			continue
-		}
-		if old, ok := current.Entries[rel]; ok && old == entry {
-			continue
-		}
-		total += uint64(entry.Size)
-	}
-	return total
-}
-
-func logMirrorProgress(
-	ctx context.Context,
-	done <-chan struct{},
-	phase, source string,
-	files, bytes *atomic.Int64,
-) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-done:
-			return
-		case <-ticker.C:
-			slog.InfoContext(ctx, "preparing isolated worker workspace",
-				"phase", phase, "source", source, "files", files.Load(), "bytes", bytes.Load())
-		}
-	}
-}
-
-func finalizeDirectoryMetadata(queue []directoryMetadata) error {
-	for i := len(queue) - 1; i >= 0; i-- {
-		entry := queue[i]
-		if err := os.Chmod(entry.dst, entry.mode.Perm()); err != nil {
-			return err
-		}
-		if err := copyExtendedMetadata(entry.src, entry.dst); err != nil {
-			return err
-		}
-		if err := os.Chtimes(entry.dst, entry.modTime, entry.modTime); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func sourceChangeSkippable(err error) bool {
-	return errors.Is(err, fs.ErrNotExist)
-}
-
-func mirrorSymlink(src, dst string) error {
-	target, err := os.Readlink(src)
-	if err != nil {
-		return err
-	}
-	if err := os.Symlink(target, dst); err != nil && !errors.Is(err, fs.ErrExist) {
-		return err
-	}
-	return nil
 }
