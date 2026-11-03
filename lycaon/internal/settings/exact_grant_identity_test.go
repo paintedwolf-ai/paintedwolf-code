@@ -13,14 +13,14 @@ func TestExactPathGrantCoversAllDeclaredTargets(t *testing.T) {
 	for _, path := range []string{"/project/file.txt", "/project/file*.txt", "/project/file?.txt", "/project/file[ab].txt"} {
 		t.Run(path, func(t *testing.T) {
 			action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-Files: []string{path},
-},
-Scope: hitl.ActionScope{
-ProjectID: "project",
-},
-}
+				Invocation: hitl.ActionInvocation{
+					Tool:  "write",
+					Files: []string{path},
+				},
+				Scope: hitl.ActionScope{
+					ProjectID: "project",
+				},
+			}
 			predicate := GrantPredicateForAction(action)
 			grant := hitl.ApprovalGrant{ProjectID: action.Scope.ProjectID,
 				Predicate: hitl.ApprovalGrantPredicate{Category: string(predicate.Category), Pattern: predicate.Pattern}}
@@ -49,13 +49,13 @@ ProjectID: "project",
 
 func TestToolGrantsDoNotInterpretPatternSyntax(t *testing.T) {
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "read",
-},
-Scope: hitl.ActionScope{
-ProjectID: "project",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "read",
+		},
+		Scope: hitl.ActionScope{
+			ProjectID: "project",
+		},
+	}
 	for _, pattern := range []string{"*", "r*", "r?ad", "r[ea]ad", ""} {
 		grant := hitl.ApprovalGrant{ProjectID: action.Scope.ProjectID,
 			Predicate: hitl.ApprovalGrantPredicate{Category: string(ApprovalCategoryTool), Pattern: pattern}}
@@ -82,15 +82,15 @@ func TestRelativePathGrantRetainsItsOriginatingRoot(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-Files: []string{tc.path},
-},
-Scope: hitl.ActionScope{
-ProjectID: grant.ProjectID,
-ProjectDir: tc.root,
-},
-}
+				Invocation: hitl.ActionInvocation{
+					Tool:  "write",
+					Files: []string{tc.path},
+				},
+				Scope: hitl.ActionScope{
+					ProjectID:  grant.ProjectID,
+					ProjectDir: tc.root,
+				},
+			}
 			if covered := grantMatchesAction(grant, action); covered != tc.covered {
 				t.Fatalf("covered=%t, want %t for %s in %s", covered, tc.covered, tc.path, tc.root)
 			}
@@ -123,16 +123,16 @@ func TestPathGrantsUsePhysicalInvocationTargets(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "read",
-Files: tc.declared,
-ResolvedFiles: tc.resolved,
-},
-Scope: hitl.ActionScope{
-ProjectID: grant.ProjectID,
-ProjectDir: grant.ProjectDir,
-},
-}
+				Invocation: hitl.ActionInvocation{
+					Tool:          "read",
+					Files:         tc.declared,
+					ResolvedFiles: tc.resolved,
+				},
+				Scope: hitl.ActionScope{
+					ProjectID:  grant.ProjectID,
+					ProjectDir: grant.ProjectDir,
+				},
+			}
 			if got := grantMatchesAction(grant, action); got != tc.covered {
 				t.Fatalf("physical target coverage=%t, want %t", got, tc.covered)
 			}
@@ -160,21 +160,21 @@ func TestWorkerWriteGrantCoversReadAtTheSamePhysicalTarget(t *testing.T) {
 	branch, project := t.TempDir(), t.TempDir()
 	path := filepath.Join(branch, "literal[ab].txt")
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-Files: []string{path},
-ResolvedFiles: []string{path},
-},
-Scope: hitl.ActionScope{
-ProjectID: "project",
-ProjectDir: project,
-SessionID: "worker",
-RootSessionID: "chat",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{branch}},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:          "write",
+			Files:         []string{path},
+			ResolvedFiles: []string{path},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:     "project",
+			ProjectDir:    project,
+			SessionID:     "worker",
+			RootSessionID: "chat",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{branch}},
+		},
+	}
 	first, err := approvals.Evaluate(t.Context(), action)
 	testutil.FailErr(t, "evaluate prepared write", err)
 	if !first.Required() {

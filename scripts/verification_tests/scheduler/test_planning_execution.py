@@ -243,8 +243,8 @@ class PlanningTests(unittest.TestCase):
         self.assertEqual(planning.stage_key(fast[0]), planning.stage_key(full[0]))
         self.assertNotEqual(planning.stage_key(next(s for s in fast if s["name"] == "test:short")),
                             planning.stage_key(next(s for s in full if s["name"] == "test:full")))
-        self.assertIn("scripts:coverage:changes", [s["name"] for s in full])
-        self.assertNotIn("test:runner", [s["name"] for s in full])
+        self.assertEqual([s['name'] for s in full].count('scripts:coverage:changes'), 1)
+        self.assertNotIn('test:runner', [s['name'] for s in full])
         self.assertNotIn("check:tests", [s["name"] for s in full])
 
     def test_short_scope_excludes_external_tiers_and_keeps_unit_helpers(self):

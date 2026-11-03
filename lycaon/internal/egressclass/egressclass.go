@@ -46,10 +46,10 @@ const (
 type Transport string
 
 const (
-	HTTPBounded     Transport = "http_bounded"
-	HTTPStreaming   Transport = "http_streaming"
-	HTTPDownload    Transport = "http_download"
-	GitCLI          Transport = "git_cli"
+	HTTPBounded   Transport = "http_bounded"
+	HTTPStreaming Transport = "http_streaming"
+	HTTPDownload  Transport = "http_download"
+	GitCLI        Transport = "git_cli"
 )
 
 // Class is one app-level outbound request purpose.

@@ -43,6 +43,14 @@ class Capability:
         self.file.flush()
 
 
+def _same_live_owner(entry):
+    pid = os.getpid()
+    if entry.get("pid") != pid:
+        return False
+    expected = entry.get("owner_identity")
+    return expected is None or ownership(pid, expected, process_snapshot(pid)) == "present"
+
+
 class TerminalSettlement:
     def __init__(self, queue, capability, child):
         if child.poll() is None:
@@ -56,8 +64,7 @@ class TerminalSettlement:
         """Queue lock + live-owner guard cover the entire retire/reacquire interval."""
         cap = self.capability
         with self.queue.locked():
-            if cap.entry.get("pid") != os.getpid() or ownership(
-                    cap.entry.get("pid"), cap.entry.get("owner_identity"), process_snapshot(os.getpid())) != "present":
+            if not _same_live_owner(cap.entry):
                 raise OSError("Terminal capability owner identity is unavailable")
             replacement = cap.path.open("r+")
             info = os.fstat(replacement.fileno())
@@ -84,8 +91,7 @@ class TerminalSettlement:
     def signal_holders(self, signum):
         with self.queue.locked():
             cap = self.capability
-            if cap.entry.get("pid") != os.getpid() or ownership(
-                    cap.entry.get("pid"), cap.entry.get("owner_identity"), process_snapshot(os.getpid())) != "present":
+            if not _same_live_owner(cap.entry):
                 raise OSError("Terminal capability owner identity is unavailable")
             pids = custody.lease_holders(cap.path) - {os.getpid()}
             if not pids:

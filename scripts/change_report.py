@@ -85,30 +85,65 @@ def added_and_removed(root, base, head=None):
     return sorted(added), sorted(removed)
 
 
+def tree_blobs(root, revision):
+    entries = git(root, "ls-tree", "-r", "-z", revision).stdout
+    return {path: metadata.split()[2] for entry in entries.split("\0") if entry
+            for metadata, path in [entry.split("\t", 1)] if metadata.split()[1] == "blob"}
+
+
+def blob_line_counts(root, objects):
+    """Read committed additions in one process, without putting paths in a line protocol."""
+    if not objects:
+        return {}
+    result = subprocess.run(["git", "-C", str(root), "cat-file", "--batch"],
+                            input="".join(oid + "\n" for oid in objects.values()).encode(),
+                            capture_output=True, check=True)
+    counts, offset = {}, 0
+    for path, oid in objects.items():
+        end = result.stdout.index(b"\n", offset)
+        identity, kind, size = result.stdout[offset:end].split()
+        if identity.decode() != oid or kind != b"blob":
+            raise RuntimeError("git cat-file returned an unexpected object")
+        offset = end + 1
+        length = int(size)
+        counts[path] = len(result.stdout[offset:offset + length].decode(errors="replace").splitlines())
+        offset += length + 1
+    return counts
+
+
 def changed_lines(root, base, paths, head=None):
-    """Line numbers each path adds or changes relative to base; new files count whole."""
-    out = {}
-    for path in paths:
-        if git(root, "cat-file", "-e", f"{base}:{path}", check=False).returncode != 0:
-            if head:
-                shown = git(root, "show", f"{head}:{path}", check=False)
-                text = shown.stdout if shown.returncode == 0 else None
-            else:
-                file = Path(root) / path
-                text = file.read_text(errors="replace") if file.is_file() else None
-            if text is not None:
-                out[path] = set(range(1, len(text.splitlines()) + 1))
-            continue
-        lines = set()
-        diff = git(root, "diff", "--no-color", "--no-ext-diff", "--no-renames", "-U0", base,
-                   *filter(None, [head]), "--", path).stdout
-        for line in diff.splitlines():
-            match = HUNK.match(line)
-            if match:
-                start, count = int(match.group(1)), int(match.group(2) or "1")
-                lines.update(range(start, start + count))
-        if lines:
-            out[path] = lines
+    """Measure one complete diff; process count stays bounded as the change grows."""
+    if not paths:
+        return {}
+    selected, out = set(paths), {}
+    base_paths = tree_blobs(root, base)
+    diff = git(root, "diff", "--raw", "-z", "--patch", "--no-color", "--no-ext-diff",
+               "--no-renames", "--submodule=short", "-U0", base, *filter(None, [head])).stdout
+    if diff:
+        raw, separator, patch_text = diff.partition("\0\0")
+        records = raw.split("\0")
+        patches = re.split(r"(?m)^diff --git ", patch_text)[1:]
+        if not separator or len(records) != 2 * len(patches):
+            raise RuntimeError("git diff returned an unexpected raw/patch inventory")
+        for path, patch_text in zip(records[1::2], patches):
+            if path not in selected or path not in base_paths:
+                continue
+            lines = set()
+            for line in patch_text.splitlines():
+                match = HUNK.match(line)
+                if match:
+                    start, count = int(match.group(1)), int(match.group(2) or "1")
+                    lines.update(range(start, start + count))
+            if lines:
+                out[path] = lines
+    additions = selected - base_paths.keys()
+    if head:
+        blobs = tree_blobs(root, head)
+        counts = blob_line_counts(root, {path: blobs[path] for path in sorted(additions) if path in blobs})
+    else:
+        counts = {path: len((Path(root) / path).read_text(errors="replace").splitlines())
+                  for path in additions if (Path(root) / path).is_file()}
+    out.update({path: set(range(1, count + 1)) for path, count in counts.items()})
     return out
 
 

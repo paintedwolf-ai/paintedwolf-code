@@ -56,6 +56,7 @@ func (p *Provider) probeShell(ctx context.Context) (string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = nil
 
+	closeOnExecInherited()
 	// ErrWaitDelay preserves the successful shell's captured output.
 	if err := p.run(ctx, cmd); err != nil && !errors.Is(err, osexec.ErrWaitDelay) {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -196,4 +197,7 @@ func defaultStat(path string) (fs.FileInfo, error) { return os.Stat(path) }
 
 // defaultRun kills the shell and any profile helpers as one group on timeout,
 // after answering, or with the engine; interactive shells ignore SIGTERM.
-func defaultRun(ctx context.Context, cmd *osexec.Cmd) error { return execpkg.RunInOwnGroup(ctx, cmd) }
+func defaultRun(ctx context.Context, cmd *osexec.Cmd) error {
+	closeOnExecInherited()
+	return execpkg.RunInOwnGroup(ctx, cmd)
+}

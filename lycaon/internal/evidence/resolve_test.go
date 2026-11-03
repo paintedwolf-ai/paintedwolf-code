@@ -274,4 +274,3 @@ func TestResolveReanchorPrecedesOtherPathGuard(t *testing.T) {
 		t.Fatalf("LineCorrectedFrom = %d want 10", got.LineCorrectedFrom)
 	}
 }
-
