@@ -28,7 +28,7 @@ describe("verification result presentation", () => {
   });
 
   it("does not invent a verdict for an unsettled program", () => {
-    const view = buildStructuredToolPresentation(verification({ result_version: 2, state: "waiting_for_jobs", status: 0 }));
+    const view = buildStructuredToolPresentation(verification({ result_version: 2, state: "parked", lease_id: "lease", reason: "sleep 120" }));
     const facts = view.sections.flatMap((section) => section.kind === "facts" ? section.facts : []);
     expect(facts.some((fact) => fact.label === "Outcome" || fact.label === "Verification")).toBe(false);
   });

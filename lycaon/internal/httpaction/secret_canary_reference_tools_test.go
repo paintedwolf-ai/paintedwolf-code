@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -148,7 +149,27 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	verifyExecutor.Secrets.SetSecretMatcher(matcher)
 	verifyExecutor.Capabilities.SetLoopbackConnectGate(review)
 	verifyExecutor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
-	program.Runtime.Projector = captureprojection.New(matcher, nil)
+	var evidenceMu sync.Mutex
+	var evidence []secretmatch.HarvestedValue
+	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
+		evidenceMu.Lock()
+		defer evidenceMu.Unlock()
+		return append([]secretmatch.HarvestedValue(nil), evidence...)
+	})
+	program.Runtime.Projector = captureprojection.New(matcher, func(ctx context.Context, projectID, chatID string) error {
+		values, err := service.ScreeningValues(ctx, projectID, chatID)
+		if err != nil {
+			return err
+		}
+		evidenceMu.Lock()
+		defer evidenceMu.Unlock()
+		evidence = nil
+		for _, value := range values {
+			evidence = append(evidence, secretmatch.HarvestedValue{Name: value.Name, Container: value.Origin, Secret: value.Secret, RuleID: value.RuleID, Title: value.Title, Source: value.Source, Reference: value.Reference, Retired: value.Retired, NonDisclosable: value.NonDisclosable})
+		}
+		return nil
+	})
+	program.Runtime.Projector.SetManagedSecretGeneration(service.ScreeningGeneration)
 	verifyExecutor.SetProgramEntry("verify", nil)
 	testutil.FailErr(t, "register program verify", program.Runtime.Registry.Register("verify", verify.Run))
 	testutil.FailErr(t, "register command", registry.Register("command", command.Run))
