@@ -272,4 +272,3 @@ func ensureAllDirsTest(c *Core, rootID, rel string) error {
 	_, err := c.Mkdir(QualifiedPath{RootID: rootID, Rel: rel}, 0o755)
 	return err
 }
-
