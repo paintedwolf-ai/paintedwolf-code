@@ -3,7 +3,9 @@ package workerworkspace
 import (
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
+	"github.com/lycaon/lycaon/internal/workspace"
 )
 
 // ViewCapabilityDescriptor describes the selected workspace view adapter and its
@@ -23,8 +25,47 @@ func (r *WorkspaceTrackerRegistry) SetViewCapabilitiesResolver(
 	r.capsResolver = resolver
 }
 
-// BindViewCapabilities binds the selected adapter's ViewCapabilityDescriptor (e.g. eagercopy
-// materialized seed or mounted fuse/nfs adapter) to the workspace tracker for keys.
+// BindPreparedView binds a host-prepared *adapter.PreparedView (#1658) and its Core/AdapterFacts
+// to the workspace tracker for keys.
+func (r *WorkspaceTrackerRegistry) BindPreparedView(
+	view *adapter.PreparedView,
+	keys ...string,
+) (*observation.Tracker, error) {
+	if r == nil || view == nil {
+		return nil, nil
+	}
+	allKeys := append([]string{view.ViewID}, keys...)
+	tr, err := r.BindViewCapabilities(observation.ViewCapabilitiesFromPreparedView(view), allKeys...)
+	if err != nil {
+		return nil, err
+	}
+	if tr != nil && view.Core != nil {
+		tr.BindCore(view.Core)
+	}
+	return tr, nil
+}
+
+// BindPreparedBranch resolves any prepared workspace view or durable AdapterFacts recorded
+// for branchRoot (#1658) and binds its capability facts to the workspace tracker.
+func (r *WorkspaceTrackerRegistry) BindPreparedBranch(
+	branchRoot string,
+	keys ...string,
+) (*observation.Tracker, error) {
+	if r == nil || strings.TrimSpace(branchRoot) == "" {
+		return nil, nil
+	}
+	view, facts, viewID, ok := workspace.LookupBranchPreparedView(branchRoot)
+	if !ok {
+		return nil, nil
+	}
+	allKeys := append([]string{branchRoot, viewID}, keys...)
+	if view != nil {
+		return r.BindPreparedView(view, allKeys...)
+	}
+	return r.BindViewCapabilities(observation.ViewCapabilitiesFromAdapterFacts(viewID, facts), allKeys...)
+}
+
+// BindViewCapabilities binds the selected adapter's ViewCapabilityDescriptor to the workspace tracker for keys.
 func (r *WorkspaceTrackerRegistry) BindViewCapabilities(
 	caps observation.ViewCapabilityDescriptor,
 	keys ...string,
@@ -113,6 +154,22 @@ func (r *WorkspaceTrackerRegistry) BindVisibilityFacts(
 	}, keys...)
 }
 
+func resolvePreparedBranchViewCapabilities(
+	jobID, childSessionID, workspacePath, branchRoot string,
+) (observation.ViewCapabilityDescriptor, bool) {
+	for _, candidate := range []string{branchRoot, workspacePath} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		_, facts, viewID, ok := workspace.LookupBranchPreparedView(candidate)
+		if ok {
+			return observation.ViewCapabilitiesFromAdapterFacts(firstNonEmpty(jobID, viewID, childSessionID), facts), true
+		}
+	}
+	return observation.ViewCapabilityDescriptor{}, false
+}
+
 func resolveCapabilitiesLocked(
 	r *WorkspaceTrackerRegistry,
 	st *WorkspaceObservationState,
@@ -140,7 +197,7 @@ func resolveCapabilitiesLocked(
 			return caps, true
 		}
 	}
-	return observation.ViewCapabilityDescriptor{}, false
+	return resolvePreparedBranchViewCapabilities(jobID, childSessionID, workspacePath, branchRoot)
 }
 
 func indexCapabilitiesLocked(

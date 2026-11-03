@@ -9,8 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
+
+var sharedBranchViews sync.Map // map[string]branchViewState
 
 // ErrWorkspaceStorageExhausted identifies a branch or seed write that failed
 // because the central application-data volume cannot accept more data.
@@ -179,10 +182,13 @@ func (m *Manager) recordBranchViews(branchRoot string, sel WorkspaceStrategySele
 	if m.views == nil {
 		m.views = make(map[string]branchViewState)
 	}
-	m.views[filepath.Clean(branchRoot)] = branchViewState{
+	clean := filepath.Clean(branchRoot)
+	st := branchViewState{
 		selection: sel,
 		views:     append([]*adapter.PreparedView(nil), views...),
 	}
+	m.views[clean] = st
+	sharedBranchViews.Store(clean, st)
 }
 
 func (m *Manager) lookupBranchViews(branchRoot string) (WorkspaceStrategySelection, *adapter.PreparedView, bool) {
@@ -203,6 +209,7 @@ func (m *Manager) releaseBranchViews(branchRoot string) {
 		delete(m.views, key)
 	}
 	m.viewsMu.Unlock()
+	sharedBranchViews.Delete(key)
 	if !ok || st.selection.Adapter == nil {
 		return
 	}
@@ -211,6 +218,35 @@ func (m *Manager) releaseBranchViews(branchRoot string) {
 			_, _ = st.selection.Adapter.Release(context.Background(), v.ViewID)
 		}
 	}
+}
+
+// LookupBranchPreparedView returns the active PreparedView (when in-process) and its
+// durable AdapterFacts and ViewID for a prepared worker branch root (#1658/#1665).
+func LookupBranchPreparedView(branchRoot string) (*adapter.PreparedView, adapter.AdapterFacts, string, bool) {
+	clean, err := cleanBranchRoot(branchRoot)
+	if err != nil {
+		return nil, adapter.AdapterFacts{}, "", false
+	}
+	if raw, ok := sharedBranchViews.Load(clean); ok {
+		st := raw.(branchViewState)
+		if len(st.views) > 0 && st.views[0] != nil {
+			v := st.views[0]
+			facts := v.Facts
+			if facts.AdapterID == "" {
+				facts = st.selection.Facts
+			}
+			return v, facts, v.ViewID, true
+		}
+	}
+	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(clean))
+	if err != nil || !meta.SnapshotComplete || meta.AdapterFacts == nil || meta.AdapterFacts.AdapterID == "" {
+		return nil, adapter.AdapterFacts{}, "", false
+	}
+	viewID := strings.TrimSpace(meta.PreparedViewID)
+	if viewID == "" {
+		viewID = jobIDForBranch(clean)
+	}
+	return nil, *meta.AdapterFacts, viewID, true
 }
 
 // WithPreparationLimits configures bounded workspace preparation entry and byte limits on the Manager (#1658).

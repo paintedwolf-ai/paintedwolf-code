@@ -3,6 +3,8 @@ package observation
 import (
 	"fmt"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
 
 // ViewCapabilityDescriptor describes the selected workspace view adapter and its
@@ -23,8 +25,15 @@ type ViewCapabilityDescriptor struct {
 	AttributionCompleteness            AttributionCompleteness `json:"attribution_completeness,omitempty"`
 }
 
+func normalizeCompletenessValue(c AttributionCompleteness) AttributionCompleteness {
+	if c == "partial_kernel_cached" {
+		return CompletenessPartialKernelCached
+	}
+	return c
+}
+
 // NormalizeVisibilityFacts synchronizes Mode/UntouchedVisibility, Completeness/AttributionCompleteness,
-// and invalidation capability fields on VisibilityFacts.
+// and invalidation capability fields on VisibilityFacts without inventing verified status.
 func NormalizeVisibilityFacts(facts VisibilityFacts) VisibilityFacts {
 	if facts.UntouchedVisibility == "" && facts.Mode != "" {
 		facts.UntouchedVisibility = facts.Mode
@@ -32,6 +41,8 @@ func NormalizeVisibilityFacts(facts VisibilityFacts) VisibilityFacts {
 	if facts.Mode == "" && facts.UntouchedVisibility != "" {
 		facts.Mode = facts.UntouchedVisibility
 	}
+	facts.Completeness = normalizeCompletenessValue(facts.Completeness)
+	facts.AttributionCompleteness = normalizeCompletenessValue(facts.AttributionCompleteness)
 	if facts.AttributionCompleteness == "" && facts.Completeness != "" {
 		facts.AttributionCompleteness = facts.Completeness
 	}
@@ -46,9 +57,7 @@ func NormalizeVisibilityFacts(facts VisibilityFacts) VisibilityFacts {
 	}
 	if facts.UntouchedVisibility == VisibilityLive {
 		facts.LiveVisible = true
-		if facts.SupportsInvalidation && !facts.InvalidationVerified {
-			facts.InvalidationVerified = true
-		}
+		facts.InvalidationVerified = facts.InvalidationVerified && facts.SupportsInvalidation
 	} else {
 		facts.LiveVisible = false
 		facts.SupportsInvalidation = false
@@ -77,6 +86,7 @@ func ValidateVisibilityFacts(facts VisibilityFacts) error {
 }
 
 // LiveMountVisibilityFacts returns explicit visibility facts for a live mounted adapter.
+// Capability support is distinct from verified invalidation (InvalidationVerified defaults to false).
 func LiveMountVisibilityFacts(
 	adapterName string,
 	invalidationUpcall bool,
@@ -88,7 +98,7 @@ func LiveMountVisibilityFacts(
 		adapterName = "live-mount"
 	}
 	if completeness == "" {
-		completeness = CompletenessPartialKernelCached
+		completeness = CompletenessUnknown
 	}
 	return NormalizeVisibilityFacts(VisibilityFacts{
 		AdapterName:                        adapterName,
@@ -97,9 +107,9 @@ func LiveMountVisibilityFacts(
 		LiveVisible:                        true,
 		SupportsInvalidation:               invalidationUpcall,
 		SupportsInvalidationUpcall:         invalidationUpcall,
-		SupportsNegativeLookupInvalidation: negativeLookupInvalidation,
-		SupportsDirCookieInvalidation:      dirCookieInvalidation,
-		InvalidationVerified:               invalidationUpcall,
+		SupportsNegativeLookupInvalidation: invalidationUpcall && negativeLookupInvalidation,
+		SupportsDirCookieInvalidation:      invalidationUpcall && dirCookieInvalidation,
+		InvalidationVerified:               false,
 		Completeness:                       completeness,
 		AttributionCompleteness:            completeness,
 	})
@@ -108,7 +118,7 @@ func LiveMountVisibilityFacts(
 // MaterializedSeedVisibilityFacts returns explicit visibility facts for materialized fallback views.
 func MaterializedSeedVisibilityFacts(adapterName string) VisibilityFacts {
 	if strings.TrimSpace(adapterName) == "" {
-		adapterName = "eagercopy"
+		adapterName = string(adapter.AdapterEagerCopy)
 	}
 	return NormalizeVisibilityFacts(VisibilityFacts{
 		AdapterName:                        adapterName,
@@ -145,23 +155,12 @@ func UnknownVisibilityFacts(adapterName string) VisibilityFacts {
 	})
 }
 
-// EagerCopyViewCapabilities returns a ViewCapabilityDescriptor for an eagercopy materialized fallback view.
+// EagerCopyViewCapabilities returns a ViewCapabilityDescriptor from EagerCopyAdapter's typed facts.
 func EagerCopyViewCapabilities(viewID string) ViewCapabilityDescriptor {
-	return ViewCapabilityDescriptor{
-		ViewID:                  viewID,
-		AdapterName:             "eagercopy",
-		PreparationKind:         "materialized",
-		Mode:                    VisibilityModeMaterializedSeed,
-		UntouchedVisibility:     VisibilityFixed,
-		LiveVisible:             false,
-		SupportsInvalidation:    false,
-		InvalidationVerified:    false,
-		Completeness:            CompletenessMaterializedSnapshot,
-		AttributionCompleteness: CompletenessMaterializedSnapshot,
-	}
+	return ViewCapabilitiesFromAdapterFacts(viewID, adapter.NewEagerCopyAdapter(adapter.ReasonNone).Facts())
 }
 
-// MountedAdapterViewCapabilities returns a ViewCapabilityDescriptor for a mounted adapter (e.g., fuse or nfs).
+// MountedAdapterViewCapabilities returns a ViewCapabilityDescriptor for a mounted adapter.
 func MountedAdapterViewCapabilities(
 	viewID string,
 	adapterName string,
@@ -171,77 +170,129 @@ func MountedAdapterViewCapabilities(
 	completeness AttributionCompleteness,
 ) ViewCapabilityDescriptor {
 	if completeness == "" {
-		completeness = CompletenessPartialKernelCached
+		completeness = CompletenessUnknown
 	}
 	return ViewCapabilityDescriptor{
 		ViewID:                             viewID,
 		AdapterName:                        adapterName,
-		PreparationKind:                    "mount",
+		PreparationKind:                    string(adapter.PreparationMounted),
 		Mode:                               VisibilityModeLiveMount,
 		UntouchedVisibility:                VisibilityLive,
 		LiveVisible:                        true,
 		SupportsInvalidation:               supportsInvalidation,
 		SupportsInvalidationUpcall:         supportsInvalidation,
-		SupportsNegativeLookupInvalidation: negativeLookupInvalidation,
-		SupportsDirCookieInvalidation:      dirCookieInvalidation,
-		InvalidationVerified:               supportsInvalidation,
+		SupportsNegativeLookupInvalidation: supportsInvalidation && negativeLookupInvalidation,
+		SupportsDirCookieInvalidation:      supportsInvalidation && dirCookieInvalidation,
+		InvalidationVerified:               false,
 		Completeness:                       completeness,
 		AttributionCompleteness:            completeness,
 	}
 }
 
-// VisibilityFactsFromDescriptor constructs VisibilityFacts from a bound ViewCapabilityDescriptor.
+// ViewCapabilitiesFromAdapterFacts converts shared adapter.AdapterFacts (#1658) into a ViewCapabilityDescriptor.
+func ViewCapabilitiesFromAdapterFacts(viewID string, facts adapter.AdapterFacts) ViewCapabilityDescriptor {
+	var mode UntouchedVisibilityMode
+	switch facts.UntouchedSourceVisibility {
+	case adapter.VisibilityLive:
+		mode = VisibilityLive
+	case adapter.VisibilityFixed:
+		mode = VisibilityFixed
+	default:
+		mode = VisibilityUnknown
+	}
+	completeness := normalizeCompletenessValue(AttributionCompleteness(strings.TrimSpace(facts.AttributionCompleteness)))
+	if completeness == "" {
+		completeness = CompletenessUnknown
+	}
+	invalidation := mode == VisibilityLive && facts.CacheRevalidation.ExplicitInvalidation
+	verified := invalidation && facts.CacheRevalidation.InvalidationVerified
+	return ViewCapabilityDescriptor{
+		ViewID:                             strings.TrimSpace(viewID),
+		AdapterName:                        string(facts.AdapterID),
+		PreparationKind:                    string(facts.PreparationKind),
+		Mode:                               mode,
+		UntouchedVisibility:                mode,
+		LiveVisible:                        mode == VisibilityLive,
+		SupportsInvalidation:               invalidation,
+		SupportsInvalidationUpcall:         invalidation,
+		SupportsNegativeLookupInvalidation: invalidation && facts.CacheRevalidation.NegativeLookupInvalidation,
+		SupportsDirCookieInvalidation:      invalidation && facts.CacheRevalidation.DirCookieInvalidation,
+		InvalidationVerified:               verified,
+		Completeness:                       completeness,
+		AttributionCompleteness:            completeness,
+	}
+}
+
+// ViewCapabilitiesFromPreparedView extracts the ViewCapabilityDescriptor from a prepared adapter.PreparedView (#1658).
+func ViewCapabilitiesFromPreparedView(view *adapter.PreparedView) ViewCapabilityDescriptor {
+	if view == nil {
+		return ViewCapabilityDescriptor{}
+	}
+	return ViewCapabilitiesFromAdapterFacts(view.ViewID, view.Facts)
+}
+
+// VisibilityFactsFromDescriptor constructs VisibilityFacts strictly from explicit typed binding fields,
+// never inferring visibility from adapter-name spelling or upgrading unknown completeness/verification.
 func VisibilityFactsFromDescriptor(desc ViewCapabilityDescriptor) VisibilityFacts {
 	adapterName := strings.TrimSpace(desc.AdapterName)
-	mode := desc.Mode
+	mode := desc.UntouchedVisibility
 	if mode == "" {
-		mode = desc.UntouchedVisibility
+		mode = desc.Mode
 	}
-	completeness := desc.Completeness
-	if completeness == "" {
-		completeness = desc.AttributionCompleteness
-	}
-	prep := strings.ToLower(strings.TrimSpace(desc.PreparationKind))
-	lowerAdapter := strings.ToLower(adapterName)
-
-	isMaterialized := mode == VisibilityModeMaterializedSeed ||
-		prep == "materialized" ||
-		prep == "eagercopy" ||
-		lowerAdapter == "eagercopy" ||
-		lowerAdapter == "materialized-fallback" ||
-		completeness == CompletenessMaterializedSnapshot
-
-	if isMaterialized {
-		facts := MaterializedSeedVisibilityFacts(adapterName)
-		if completeness == CompletenessPartialKernelCached || completeness == CompletenessMaterializedSnapshot {
-			facts.Completeness = completeness
-			facts.AttributionCompleteness = completeness
+	if mode == "" {
+		switch adapter.PreparationKind(strings.ToLower(strings.TrimSpace(desc.PreparationKind))) {
+		case adapter.PreparationMaterialized:
+			mode = VisibilityFixed
+		case adapter.PreparationMounted, "mount":
+			mode = VisibilityLive
+		default:
+			if desc.LiveVisible {
+				mode = VisibilityLive
+			} else {
+				mode = VisibilityUnknown
+			}
 		}
-		return facts
+	}
+	completeness := normalizeCompletenessValue(desc.AttributionCompleteness)
+	if completeness == "" {
+		completeness = normalizeCompletenessValue(desc.Completeness)
+	}
+	if completeness == "" {
+		completeness = CompletenessUnknown
 	}
 
-	isLiveMount := mode == VisibilityModeLiveMount ||
-		desc.LiveVisible ||
-		prep == "mount" ||
-		strings.Contains(lowerAdapter, "fuse") ||
-		strings.Contains(lowerAdapter, "nfs") ||
-		strings.Contains(lowerAdapter, "fskit")
-
-	if isLiveMount {
-		if completeness == "" || completeness == CompletenessUnknown {
-			completeness = CompletenessPartialKernelCached
+	switch mode {
+	case VisibilityFixed:
+		if adapterName == "" {
+			adapterName = string(adapter.AdapterEagerCopy)
+		}
+		return NormalizeVisibilityFacts(VisibilityFacts{
+			AdapterName:             adapterName,
+			Mode:                    VisibilityModeMaterializedSeed,
+			UntouchedVisibility:     VisibilityFixed,
+			Completeness:            completeness,
+			AttributionCompleteness: completeness,
+		})
+	case VisibilityLive:
+		if adapterName == "" {
+			adapterName = "live-mount"
 		}
 		invalidation := desc.SupportsInvalidation || desc.SupportsInvalidationUpcall
-		facts := LiveMountVisibilityFacts(
-			adapterName,
-			invalidation,
-			desc.SupportsNegativeLookupInvalidation,
-			desc.SupportsDirCookieInvalidation,
-			completeness,
-		)
-		facts.InvalidationVerified = desc.InvalidationVerified || invalidation
-		return facts
+		verified := desc.InvalidationVerified && invalidation
+		return NormalizeVisibilityFacts(VisibilityFacts{
+			AdapterName:                        adapterName,
+			Mode:                               VisibilityModeLiveMount,
+			UntouchedVisibility:                VisibilityLive,
+			LiveVisible:                        true,
+			SupportsInvalidation:               invalidation,
+			SupportsInvalidationUpcall:         invalidation,
+			SupportsNegativeLookupInvalidation: invalidation && desc.SupportsNegativeLookupInvalidation,
+			SupportsDirCookieInvalidation:      invalidation && desc.SupportsDirCookieInvalidation,
+			InvalidationVerified:               verified,
+			Completeness:                       completeness,
+			AttributionCompleteness:            completeness,
+		})
+	default:
+		return UnknownVisibilityFacts(adapterName)
 	}
-
-	return UnknownVisibilityFacts(adapterName)
 }

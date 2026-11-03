@@ -16,22 +16,25 @@ import (
 
 // MountedAdapterConfig configures a mounted workspace adapter (fuselinux or nfsdarwin) or test fixture.
 type MountedAdapterConfig struct {
-	AdapterID             AdapterID
-	TargetOS              string
-	MountProbeFn          func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error)
-	VerifyBackingDenialFn func(ctx context.Context, backingDir string) (bool, error)
-	MountViewFn           func(ctx context.Context, viewID string, roots []PreparedRoot) error
-	UnmountViewFn         func(ctx context.Context, viewID string, runtimeDir string) error
-	FlushClientFn         func(ctx context.Context, viewID string) error
+	AdapterID                  AdapterID
+	TargetOS                   string
+	InvalidationVerified       bool
+	NegativeLookupInvalidation bool
+	DirCookieInvalidation      bool
+	AttributionCompleteness    string
+	MountProbeFn               func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error)
+	VerifyBackingDenialFn      func(ctx context.Context, backingDir string) (bool, error)
+	MountViewFn                func(ctx context.Context, viewID string, roots []PreparedRoot) error
+	UnmountViewFn              func(ctx context.Context, viewID string, runtimeDir string) error
+	FlushClientFn              func(ctx context.Context, viewID string) error
 }
 
 type mountedViewState struct {
-	view            *PreparedView
-	denySourcePaths []string
-	quiesceHook     func(ctx context.Context, viewID string) error
-	flushHook       func(ctx context.Context, viewID string) error
-	accessCount     atomic.Int64
-	mountCount      int64
+	view                        *PreparedView
+	denySourcePaths             []string
+	quiesceHook, flushHook      func(ctx context.Context, viewID string) error
+	accessCount                 atomic.Int64
+	mountCount                  int64
 }
 
 // MountedAdapter implements Adapter for mounted workspace backends (fuselinux and nfsdarwin).
@@ -44,22 +47,20 @@ type MountedAdapter struct {
 
 // NewFUSELinuxAdapter creates the Linux FUSE mounted workspace adapter.
 func NewFUSELinuxAdapter() *MountedAdapter {
-	return NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterFUSELinux,
-		TargetOS:  "linux",
-	})
+	return NewMountedAdapter(MountedAdapterConfig{AdapterID: AdapterFUSELinux, TargetOS: "linux"})
 }
 
 // NewNFSDarwinAdapter creates the macOS built-in NFSv3 loopback mounted workspace adapter.
 func NewNFSDarwinAdapter() *MountedAdapter {
-	return NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterNFSDarwin,
-		TargetOS:  "darwin",
-	})
+	return NewMountedAdapter(MountedAdapterConfig{AdapterID: AdapterNFSDarwin, TargetOS: "darwin"})
 }
 
 // NewMountedAdapter constructs a MountedAdapter from explicit configuration.
 func NewMountedAdapter(cfg MountedAdapterConfig) *MountedAdapter {
+	completeness := strings.TrimSpace(cfg.AttributionCompleteness)
+	if completeness == "" {
+		completeness = "kernel_cached_partial"
+	}
 	return &MountedAdapter{
 		cfg: cfg,
 		facts: AdapterFacts{
@@ -67,10 +68,14 @@ func NewMountedAdapter(cfg MountedAdapterConfig) *MountedAdapter {
 			PreparationKind:           PreparationMounted,
 			UntouchedSourceVisibility: VisibilityLive,
 			CacheRevalidation: CacheRevalidation{
-				Mode:                 "strict_generation_revalidation",
-				ExplicitInvalidation: true,
-				AttributeTTL:         0,
+				Mode:                       "strict_generation_revalidation",
+				ExplicitInvalidation:       true,
+				InvalidationVerified:       cfg.InvalidationVerified,
+				NegativeLookupInvalidation: cfg.NegativeLookupInvalidation,
+				DirCookieInvalidation:      cfg.DirCookieInvalidation,
+				AttributeTTL:               0,
 			},
+			AttributionCompleteness: completeness,
 			MetadataCapabilities: MetadataCapabilities{
 				SupportsSymlinks:   true,
 				SupportsHardLinks:  true,

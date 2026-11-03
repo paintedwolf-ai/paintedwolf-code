@@ -179,6 +179,9 @@ func (t *Tracker) Facts() VisibilityFacts {
 	return t.facts
 }
 
+// VisibilityFacts returns the declared adapter visibility and cache capability facts.
+func (t *Tracker) VisibilityFacts() VisibilityFacts { return t.Facts() }
+
 // RegisterInvalidationSink registers an adapter sink to receive targeted cache invalidations.
 func (t *Tracker) RegisterInvalidationSink(sink InvalidationSink) {
 	if sink == nil {

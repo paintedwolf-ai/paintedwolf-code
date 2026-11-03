@@ -83,6 +83,7 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 			return tctx, err
 		}
 		tctx.Source.BranchWorkspace = branchState
+		_, _ = m.BindPreparedBranch(root, task.ID, sess.ID)
 	}
 	m.EnsureTracker(task.ID, sess.ID, firstNonEmpty(task.WorkspacePath, sess.WorkspacePath), strings.TrimSpace(task.WorkspaceRoot), tctx.Source.Roots)
 	return tctx, nil
@@ -205,6 +206,7 @@ func (m *Service) EnsureBranch(ctx context.Context, tctx tools.ToolContext) (too
 		return tctx, err
 	}
 	tctx.Source.BranchWorkspace = branchState
+	_, _ = m.BindPreparedBranch(root, jobID)
 	m.EnsureTracker(jobID, "", task.WorkspacePath, root, tctx.Source.Roots)
 	return tctx, nil
 }

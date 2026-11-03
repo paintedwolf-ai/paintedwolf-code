@@ -45,6 +45,7 @@ func New(sessions Sessions, workspace Workspace, branchState func(string) (tools
 	s := &Service{store: sessions, workspace: workspace, branchState: branchState, Touches: NewTouchLedger()}
 	s.WorkspaceTrackerRegistry.svc = s
 	s.WorkspaceObservationOps.svc = s
+	s.SetViewCapabilitiesResolver(resolvePreparedBranchViewCapabilities)
 	s.unregisterRepoObserver = repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
 		handleWorkspaceRepoChange(s, ctx, ev)
 	})

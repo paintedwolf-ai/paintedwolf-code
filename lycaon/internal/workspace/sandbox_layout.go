@@ -208,7 +208,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 		}
 		binding.View = view
 		m.recordBranchViews(branchRoot, choice, view)
-		return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+		return markSnapshotCompleteWithView(enginepaths.MetaDirForBranchRoot(branchRoot), view, choice.Facts)
 	}
 
 	if len(sources) == 1 {
@@ -219,7 +219,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 		}
 		binding.View = view
 		m.recordBranchViews(branchRoot, choice, view)
-		return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+		return markSnapshotCompleteWithView(enginepaths.MetaDirForBranchRoot(branchRoot), view, choice.Facts)
 	}
 	var views []*adapter.PreparedView
 	for _, source := range sources {
@@ -238,7 +238,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 		}
 	}
 	m.recordBranchViews(branchRoot, choice, views...)
-	return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+	return markSnapshotCompleteWithView(enginepaths.MetaDirForBranchRoot(branchRoot), binding.View, choice.Facts)
 }
 
 // jobIDForBranch is the branch directory name: the worker job id.
