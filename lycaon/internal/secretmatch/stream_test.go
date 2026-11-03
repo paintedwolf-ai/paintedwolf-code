@@ -24,7 +24,7 @@ func TestStreamCatalogMatchesWholePolicy(t *testing.T) {
 			raw := strings.Repeat("safe data\n", 48000) + " " + encoded + " " + strings.Repeat("ordinary inert line\n", 18000)
 			want := m.RedactString(context.Background(), raw)
 			var out bytes.Buffer
-			result, err := m.ScreenBytes(t.Context(), strings.NewReader(raw), &out, "", StreamBounds{InputBytes: 64 << 20, OutputBytes: 64 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 40}, nil, nil, nil)
+			result, err := m.ScreenBytes(t.Context(), strings.NewReader(raw), &out, "", StreamPolicy{}, StreamBounds{InputBytes: 64 << 20, OutputBytes: 64 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 40}, nil, nil, nil)
 			if err != nil || out.String() != want || !result.Redacted {
 				t.Fatalf("catalog policy differs: err=%v equal=%v result=%+v", err, out.String() == want, result)
 			}
@@ -52,7 +52,7 @@ func TestScreenBytesRejectsNilContextBeforeReadingOrWriting(t *testing.T) {
 	input := bytes.NewBufferString("untouched source")
 	var output bytes.Buffer
 	m := &Matcher{}
-	result, err := m.ScreenBytes(nil, input, &output, "", StreamBounds{InputBytes: 1024, OutputBytes: 1024, MemoryBytes: 8192, DetectorWork: 1024}, nil, nil, nil) //nolint:staticcheck // SA1012: nil is the deliberately malformed context this contract rejects.
+	result, err := m.ScreenBytes(nil, input, &output, "", StreamPolicy{}, StreamBounds{InputBytes: 1024, OutputBytes: 1024, MemoryBytes: 8192, DetectorWork: 1024}, nil, nil, nil) //nolint:staticcheck // SA1012: nil is the deliberately malformed context this contract rejects.
 	if err == nil || input.String() != "untouched source" || output.Len() != 0 || result.InputBytes != 0 || result.OutputBytes != 0 {
 		t.Fatalf("nil context admitted screening: err=%v input=%q output=%q result=%+v", err, input.String(), output.String(), result)
 	}
