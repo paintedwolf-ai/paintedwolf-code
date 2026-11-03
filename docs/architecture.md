@@ -46,7 +46,13 @@ The durable database is not sharded per project. Session, workflow, source, auth
 | **Phase** | A named workflow state with a tool surface, obligations, and declared ways to leave. |
 | **Gate** | A typed proof or human event required for a transition. A gate is evaluated from machine state. |
 | **Coordinator** | The root agent turn that investigates, divides work, integrates worker results, and reports to the human. |
-| **Worker** | One bounded worker job. Jobs may reuse a child session for conversational continuity, but every turn, message, progress record, result, and grounding audit is keyed to exactly one job. A write worker uses a private overlay until the host promotes it. |
+| **Worker** | One bounded worker job. Jobs may reuse a child session for conversational continuity, but every turn, message, progress record, result, and grounding audit is keyed to exactly one job. A write worker uses an engine-managed layered view (or materialized fallback workspace) whose published checkpoints the host promotes. |
+| **View spec** | Worker and project identities, selected root mappings, source generation, adapter, private storage, and retained parent checkpoint IDs. |
+| **Working storage** | Mutable private content and a journal of namespace changes. It is not a published checkpoint. |
+| **Base** | The captured bytes, absence, or namespace state against which a particular mutation is integrated. File content and its private initial copy come from the same capture. |
+| **Checkpoint** | An immutable private change set, its bases and metadata, repository state, object-retention references, and source observations, published durably under one ID. |
+| **Source observation** | What the host actually observed, with its version and provenance. An index timestamp does not prove which bytes a command read. |
+| **Promotion** | The host transaction that previews and applies one checkpoint against an integration target. |
 | **Tool** | A structured capability published with schema, execution policy, a subsystem owner, and lifecycle. |
 | **Owner** | The single named subsystem whose contract determines the authoritative outcome of an invoked host operation. |
 | **Receipt** | Durable record of a tool invocation and its settled outcome. |
@@ -275,13 +281,61 @@ Parallel work uses distinct data planes because they contain different facts and
 
 Native file tools prepare source attribution in the shared source-mutation journal before applying their confined filesystem effect. Attribution, its source event, and journal completion commit together; an applied file change whose recording fails returns an explicit applied-effect error. Recovery records confirmed effects without replaying agent edits, and an interrupted effect that cannot be confirmed is marked diverged.
 
-Workers receive explicit task envelopes and do not share scratch transcript or write trees. A write worker changes a private overlay; the coordinator and host inspect, verify, and promote it. This allows parallelism without letting concurrent writes silently become one workspace state.
-
-Worker baselines are immutable manifests over the shared source content store, captured from the prepared branch so stacked workers inherit their parent's actual starting state. A completed write worker seals a second manifest, the overlay: every path it changed, with full bodies and tombstones. From then on the branch tree is a cache: the host reclaims it by idle age or under a device-wide byte budget, least recently used first, and every consumer of a branch goes through one lease call that rebuilds a reclaimed tree from baseline plus overlay and holds it on disk until the read is over. Running, held, and unsealed work is never reclaimed. The budget and idle age live in `config/runtime/storage/worker-branches.yaml`; the trees appear as one clearable bucket under Settings → Advanced → Cache.
+Workers receive explicit task envelopes and do not share scratch transcript or write trees. Write-worker preparation is independent of the number of files in the project on mounted adapters: each write worker receives an engine-managed layered view where untouched paths follow the trunk, mutations stay in private working storage, and promotion consumes a durable, immutable checkpoint. Private Git is part of the workspace on every adapter. This allows parallelism without full-tree copying at claim time or letting concurrent writes silently become one workspace state.
 
 Search and file navigation read bounded pages of persisted metadata under a pinned generation. A scan reads its generation's manifest and materializes verified bytes in an isolated execution tree; later live edits belong to a successor generation. Watcher errors invalidate their root and withdraw complete coverage, so an incomplete projection reports itself as incomplete. No host-initiated walk costs more than the tree it admits: source capture decides admission at the directory under the source scope and publishes later generations from the watcher's delta, the catalog orders source ahead of generated trees and yields between batches, explicit observation caps record what they refused, and engines receive explicit file lists in bounded chunks ([Scan findings § Source scope](scan-findings.md#source-scope)). What is not observed is recorded, never guessed. Long metadata discoveries publish a readable generation as they go, and a generation that does not yet cover the tree says so rather than reading as an empty one. Page sizes, continuation tokens, and per-surface scope rules belong to [Search](search.md) and [Files live](files-live.md).
 
 Repository orientation is a slow-moving fact: how large a repository is, in which languages, shaped how. It binds to the index generation it was computed from rather than to the tree's change epoch, carries an explicit freshness flag until the walk covers the tree, and re-measures only when discovery completes, when it ages past its revalidation window, or when a root is attached. The catalog admits build artifacts, dependencies, and hidden project files rather than filtering by a name list, so what a surface excludes is that surface's declared scope. Exclusions declared in `.paintedwolf/source-scope.yaml` govern agent capture and its context consumers; they do not hide files from human navigation or search, and a human search filter never changes agent policy. Persisted orientation and language observations are rebuildable, bounded in size, and included in the source-observations local-data clearing control.
+
+### Layered worker workspaces
+
+Filesystem semantics for write workers live in `lycaon/internal/layeredfs`. Linux serves the worker view through FUSE (`fuselinux`); macOS serves it through the built-in NFS client and an engine NFSv3 server (`nfsdarwin`). When a mounted view is unavailable, `eagercopy` provides a materialized private workspace under bounded entry and byte limits. Platform effects stay in the adapters and the existing confinement and file-cloning packages (`internal/confine`, `internal/fileclone`, `internal/fseffect`, `internal/fspath`, `internal/fssync`), while workflow, promotion, retention, and permissions keep their existing host authority.
+
+Six terms define the workspace and integration lifecycle across [`architecture.md`](architecture.md), [`coordination.md`](coordination.md#worker-workspace-and-promotion), [`security.md`](security.md#layered-worker-workspaces-and-mount-boundaries), and [`compatibility.md`](compatibility.md#layered-worker-workspaces-checkpoints-and-retention):
+
+- **View spec:** worker and project identities, selected root mappings, source generation, adapter, private storage, and retained parent checkpoint IDs.
+- **Working storage:** mutable private content and a journal of namespace changes. It is not a published checkpoint.
+- **Base:** the captured bytes, absence, or namespace state against which a particular mutation is integrated. File content and its private initial copy come from the same capture.
+- **Checkpoint:** an immutable private change set, its bases and metadata, repository state, object-retention references, and source observations, published durably under one ID.
+- **Source observation:** what the host actually observed, with its version and provenance. An index timestamp does not prove which bytes a command read.
+- **Promotion:** the host transaction that previews and applies one checkpoint against an integration target.
+
+Every filesystem effect, checkpoint, promotion, and cleanup action maps to a single responsible host component:
+
+| Component | Responsibility |
+|-----------|----------------|
+| `lycaon/internal/layeredfs` | Platform-neutral layered path resolution (private working layer → retained parent checkpoints → live trunk roots), view-scoped node identities and generations, descriptor-relative exact copy-up (`Base` capture from the opened source descriptor via clone or validated streaming with bounded retry before private mutation), versioned namespace and metadata `MutationJournal`, and hooks for `.git` interception and source observations. |
+| `lycaon/internal/layeredfs/adapter` | Typed adapter contract (`Probe`, `Prepare`, `CommandAccess`, `CheckpointBarrier`, `Release`, `Facts`), explicit workspace root and subroot selection, adapter selection (`fuselinux`, `nfsdarwin`, `eagercopy`), and the `eagercopy` materialized fallback adapter with configurable entry and byte limits (default 200,000 entries and 5 GiB). |
+| `lycaon/internal/layeredfs/adapter/fuselinux` | Linux mounted adapter serving one FUSE view per live worker via `/dev/fuse` and `fusermount3` (`nosuid,nodev`), feeding mounted roots into `internal/confine`, and flushing client dirty data and writable mappings at checkpoint barriers. |
+| `lycaon/internal/layeredfs/nfsserver` and `third_party/go-nfs` | Loopback-only NFSv3 and MOUNTv3 server backed by `layeredfs`, with unguessable per-view export capabilities, authenticated view-scoped handles, explicit directory cookie verifiers, owner-created read-only loose-object write rule for Git, honest `UNSTABLE`/`DATA_SYNC`/`FILE_SYNC` write stability and write verifiers, and `._*` AppleDouble and extended-attribute preservation. |
+| `lycaon/internal/layeredfs/adapter/nfsdarwin` | macOS mounted adapter using the built-in NFS client over loopback TCP (`nodev,nosuid`, negative-name-cache suppression), Seatbelt confinement over the worker mount, and client-side COMMIT flushing across checkpoint barriers. |
+| `lycaon/internal/layeredfs/privategit` | Private worker Git metadata (`HEAD`, refs, index, reflogs, rewritten `gitdir`/`commondir`/`worktree`/submodule links), lazy `.git` initialization on mounted views and seed-time initialization on `eagercopy`, engine-retained content-addressed Git object store, and namespaced ref import (`refs/paintedwolf/workers/<job>/<checkpoint>/<ref>`). |
+| `lycaon/internal/layeredfs/observation` | Live-trunk visibility, cache invalidation, structured `Source observation` provenance (distinguishing native content reads, server-observed filesystem requests, and index-derived inventory), `trunk.changed` notices, and verification receipt validity. |
+| `lycaon/internal/layeredfs/checkpoint`, `lycaon/internal/worker`, and `lycaon/internal/session` | Writer quiescence and checkpoint barrier orchestration, atomic publication of immutable `Checkpoint` manifests and retention references, exact-base conflict detection, and journaled `Promotion` transactions. |
+| `lycaon/internal/workspace` | `O(selected roots)` mounted worker claim, format-v2 branch metadata (`View spec`), startup recovery, surviving-writer settlement, stacked worker checkpoint layering, and retention-governed eviction and cleanup. |
+
+A mounted worker workspace is live: untouched paths reflect outside edits on the trunk, while privately changed paths remain private until the worker modifies them again or starts another result. An open file descriptor can continue to refer to the object it opened after its pathname is replaced, and that descriptor's observed version is distinct from a later lookup of the same path. A checkpoint freezes the worker's private changes, bases, repository state, and observations, not every untouched file in the project; verification receipts bind to the checkpoint and recorded source observations and never describe a checkpoint as a whole-project snapshot.
+
+Both mounted adapters (`fuselinux` and `nfsdarwin`) and the materialized adapter (`eagercopy`) implement the same private-result, private-Git, checkpoint, and promotion contracts. Their preparation cost (`O(attached roots)` for mounted views versus bounded seed traversal for `eagercopy`, plus separate visible costs for first use of uncached Git history on mounted views and seed-time Git initialization on `eagercopy`) and untouched-source visibility (live trunk versus fixed seed snapshot) are published as explicit typed adapter facts (`AdapterFacts`). Workspace consumers branch on those typed facts, never on operating-system names.
+
+Full-tree copying and baseline hashing on mounted claims, raw backing-directory access from live native tools, OS selection in workspace consumers, inferred merge bases, and mutable working-directory scans as promotion authority are absent from this architecture. Kernel OverlayFS, per-command overlay mounts, overlay whiteouts and `user.overlay.*` extended attributes, volatile-upper recovery, and namespace holders are not used, and no parallel implementations of those mechanisms are kept. Only explicitly disposable caches may live on temporary storage (`tmpfs`); durable view metadata, working journals, bases, checkpoints, retained Git objects, and transition journals live on persistent storage.
+
+| Concern | Implementation issue |
+|---------|----------------------|
+| Resolver, copy-up, namespace journal, and metadata | [#1657](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1657) |
+| Adapter interface, selection, materialized fallback, and workspace selection | [#1658](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1658) |
+| Linux FUSE mount and confinement | [#1659](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1659) |
+| NFS protocol server and transport boundary | [#1660](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1660) |
+| macOS mount, cache coherence, and confinement | [#1661](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1661) |
+| Worker claim, metadata, host facts, and Den presentation | [#1662](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1662) |
+| Checkpoint publication, exact bases, and promotion transaction | [#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663) |
+| Orientation, survey, search, evidence, and source consumers | [#1664](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1664) |
+| Trunk visibility, observations, and verification validity | [#1665](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1665) |
+| Recovery, cancellation, retention, and stacked workers | [#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666) |
+| Platform conformance and measured acceptance | [#1667](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1667) |
+| Private Git, object retention, and ref import | [#1671](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1671) |
+
+[#1667](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1667) records deterministic conformance and actual measured performance on both mounted adapters (`fuselinux` and `nfsdarwin`) alongside `eagercopy`. No prototype or fallback timing is represented as qualification of a mounted adapter.
 
 Details: [Coordination](coordination.md) · [Tools](tools.md#worker-scope-coordination) · [Worker result contract](worker-result-contract.md).
 
@@ -391,6 +445,7 @@ Each area has one home. The sidecar's import rules are in [Package layering](pac
 | Workflows | `lycaon/internal/workflow` runs; `workflow/definition` parses and validates manifests |
 | Models | `lycaon/internal/llm`, with one package per provider protocol ([LLM packages](package-layering.md#llm-packages)) |
 | Scanning | `lycaon/internal/scan` and its subpackages ([scan packages](package-layering.md#scan-packages)) |
+| Layered workspaces | `lycaon/internal/layeredfs` (core, `adapter`, `fuselinux`, `nfsserver`, `nfsdarwin`, `checkpoint`, `privategit`, `observation`), `lycaon/internal/workspace`, and `third_party/go-nfs` |
 | Tools | `lycaon/internal/tools` (invocation contracts and registry), `internal/toolexecution` (execution domains), `internal/toolrejection` and `internal/toolfeedback` (refusals), `tools/native` and its families, and `internal/toolhost` (tool service composition) |
 | Wire DTOs | `lycaon/pkg/api` |
 | Contract tests | `lycaon/test/contract/<domain>/` ([Test strategy](test-strategy.md#contract-organization)) |
