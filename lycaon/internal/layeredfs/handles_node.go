@@ -1,7 +1,7 @@
 package layeredfs
 
 import (
-	"fmt"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -132,6 +132,10 @@ func joinRel(parentRel, name string) string {
 // WriteViaNodeHandle supports protocol-level writes (like NFSv3 WRITE on an owner-created 0444 file)
 // identified by (NodeID, Generation) without requiring a stateful open handle.
 func (c *Core) WriteViaNodeHandle(nodeID NodeID, gen Generation, data []byte, offset int64) (int, EntryAttr, error) {
+	return writeViaNodeHandle(c, nodeID, gen, data, offset)
+}
+
+func writeViaNodeHandle(c *Core, nodeID NodeID, gen Generation, data []byte, offset int64) (int, EntryAttr, error) {
 	if err := c.barrier.enterMutation(); err != nil {
 		return 0, EntryAttr{}, err
 	}
@@ -204,6 +208,61 @@ func (c *Core) WriteViaNodeHandle(nodeID NodeID, gen Generation, data []byte, of
 	return n, attr, wErr
 }
 
+// SyncViaNodeHandle flushes dirty data for a private node identified by (NodeID, Generation) to stable storage.
+func (c *Core) SyncViaNodeHandle(nodeID NodeID, gen Generation) error {
+	return syncViaNodeHandle(c, nodeID, gen)
+}
+
+func syncViaNodeHandle(c *Core, nodeID NodeID, gen Generation) error {
+	if err := c.barrier.enterOp(); err != nil {
+		return err
+	}
+	defer c.barrier.leaveOp()
+
+	c.mu.RLock()
+	if c.state.released {
+		c.mu.RUnlock()
+		return ErrViewReleased
+	}
+	node, ok := c.state.nodesByID[nodeID]
+	if !ok || node == nil || node.gen != gen || node.flags.unlinked {
+		c.mu.RUnlock()
+		return ErrStaleHandle
+	}
+	c.mu.RUnlock()
+
+	node.flags.ioMu.Lock()
+	defer node.flags.ioMu.Unlock()
+
+	c.mu.RLock()
+	if c.state.released {
+		c.mu.RUnlock()
+		return ErrViewReleased
+	}
+	if node.gen != gen || node.flags.unlinked {
+		c.mu.RUnlock()
+		return ErrStaleHandle
+	}
+	if node.kind != EntryRegular {
+		c.mu.RUnlock()
+		return syscall.EISDIR
+	}
+	if node.mode&0o200 == 0 && !node.flags.ownerCreatedRO {
+		c.mu.RUnlock()
+		return syscall.EACCES
+	}
+	backingName, backingPath := node.flags.backingName, node.flags.backingPath
+	c.mu.RUnlock()
+
+	wf, err := openBackingFileRW(int(c.backing.workDirFile.Fd()), backingName, backingPath)
+	if err != nil {
+		return err
+	}
+	syncErr := errors.Join(runJournalSyncHook(c, "node_sync"), syncFD(int(wf.Fd())))
+	closeErr := wf.Close()
+	return errors.Join(syncErr, closeErr)
+}
+
 // OpenBackingReader opens a read-only stream to a private node's backing content by NodeID and Generation.
 func (c *Core) OpenBackingReader(nodeID NodeID, gen Generation) (io.ReadCloser, error) {
 	if err := c.barrier.enterOp(); err != nil {
@@ -223,88 +282,4 @@ func (c *Core) OpenBackingReader(nodeID NodeID, gen Generation) (io.ReadCloser, 
 	bName, bPath := node.flags.backingName, node.flags.backingPath
 	c.mu.RUnlock()
 	return openBackingFileRO(int(c.backing.workDirFile.Fd()), bName, bPath)
-}
-
-func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *privateNode {
-	if nid, ok := c.state.pathIndex[qpath]; ok {
-		if n := c.state.nodesByID[nid]; n != nil && !n.flags.unlinked {
-			return n
-		}
-	}
-	nid, gen := c.state.allocNodeID()
-	node := &privateNode{
-		id:     nid,
-		gen:    gen,
-		kind:   EntryDirectory,
-		mode:   attr.Mode,
-		atime:  attr.ATime,
-		mtime:  attr.ModTime,
-		ctime:  attr.CTime,
-		xattrs: cloneXattrs(attr.Xattrs),
-		paths:  map[QualifiedPath]struct{}{qpath: {}},
-	}
-	c.state.nodesByID[nid] = node
-	c.state.pathIndex[qpath] = nid
-	return node
-}
-
-func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*privateNode, error) {
-	res, err := lookupExactComponent(c, qpath)
-	if err != nil {
-		return nil, err
-	}
-	base, err := ensureBaseCaptured(c, qpath)
-	if err != nil {
-		return nil, err
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state.released {
-		return nil, ErrViewReleased
-	}
-	if c.state.nsGen != expectedGen {
-		return nil, errNamespaceRetry
-	}
-	if nid, ok := c.state.pathIndex[qpath]; ok {
-		if n := c.state.nodesByID[nid]; n != nil && !n.flags.unlinked {
-			return n, nil
-		}
-	}
-	switch res.attr.Kind {
-	case EntryRegular:
-		return ensureWritableNodeLocked(c, qpath, base, OpenWriteOnly, res.attr.Mode, expectedGen)
-	case EntryDirectory:
-		return ensurePrivateDirNodeLocked(c, qpath, res.attr), nil
-	case EntrySymlink:
-		nid, gen := c.state.allocNodeID()
-		originCopy := qpath
-		node := &privateNode{
-			id:     nid,
-			gen:    gen,
-			kind:   EntrySymlink,
-			mode:   res.attr.Mode,
-			size:   int64(len(res.attr.LinkTarget)),
-			atime:  res.attr.ATime,
-			mtime:  res.attr.ModTime,
-			ctime:  res.attr.CTime,
-			xattrs: cloneXattrs(res.attr.Xattrs),
-			paths:  map[QualifiedPath]struct{}{qpath: {}},
-			flags: nodeFlags{
-				physicalCopyUp: true,
-				linkTarget:     res.attr.LinkTarget,
-			},
-			initial: nodeInitialState{
-				mode:       res.attr.Mode,
-				mtime:      res.attr.ModTime,
-				xattrs:     cloneXattrs(res.attr.Xattrs),
-				originPath: &originCopy,
-			},
-		}
-		c.state.nodesByID[nid] = node
-		c.state.pathIndex[qpath] = nid
-		c.counters.physicalCopyUps.Add(1)
-		return node, nil
-	default:
-		return nil, fmt.Errorf("unsupported entry kind %s", res.attr.Kind)
-	}
 }

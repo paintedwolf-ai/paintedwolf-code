@@ -201,3 +201,75 @@ func TestReleaseViewRetryOvertakingWaiterPreservesAttemptError(t *testing.T) {
 		t.Fatalf("attempt 1 joined waiter expected attempt 1 EIO despite retry B overtaking, got %v", err)
 	}
 }
+
+func TestSyncViaNodeHandleOwnerCreatedReadOnlyAndErrors(t *testing.T) {
+	rootDir, backingDir := t.TempDir(), t.TempDir()
+	lowerRO := filepath.Join(rootDir, "lower_ro.txt")
+	testutil.FailErr(t, "write lower_ro.txt", os.WriteFile(lowerRO, []byte("base\n"), 0o444))
+
+	var nodeSyncCalls atomic.Int32
+	var failNodeSync atomic.Bool
+	c, err := New(Config{
+		ViewID:     "view-r8-node-sync",
+		BackingDir: backingDir,
+		Roots:      []RootSpec{{ID: "r0", Label: "r0", TrunkPath: rootDir, IsPrimary: true}},
+		FaultHooks: &FaultHooks{
+			JournalSyncHook: func(op string) error {
+				if op == "node_sync" {
+					nodeSyncCalls.Add(1)
+					if failNodeSync.Load() {
+						return syscall.EIO
+					}
+				}
+				return nil
+			},
+		},
+	})
+	testutil.FailErr(t, "new core", err)
+	t.Cleanup(func() { _ = c.ReleaseView() })
+
+	qpOwnerRO := QualifiedPath{RootID: "r0", Rel: "objects/pack/tmp_pack_ro"}
+	testutil.FailErr(t, "mkdir objects/pack", ensureAllDirsTest(c, "r0", "objects/pack"))
+	hid, st, err := c.CreateFile(qpOwnerRO, 0o444, true)
+	testutil.FailErr(t, "CreateFile 0444", err)
+	testutil.FailErr(t, "CloseHandle 0444", c.CloseHandle(hid))
+
+	n, stAfterWrite, err := c.WriteViaNodeHandle(st.NodeID, st.Generation, []byte("pack-bytes"), 0)
+	testutil.FailErr(t, "WriteViaNodeHandle", err)
+	if n != 10 || stAfterWrite.Mode.Perm() != 0o444 {
+		t.Fatalf("expected 10 bytes and mode 0444, got n=%d mode=%o", n, stAfterWrite.Mode.Perm())
+	}
+
+	testutil.FailErr(t, "SyncViaNodeHandle success", c.SyncViaNodeHandle(st.NodeID, st.Generation))
+	if nodeSyncCalls.Load() != 1 {
+		t.Fatalf("expected 1 node_sync hook call, got %d", nodeSyncCalls.Load())
+	}
+
+	failNodeSync.Store(true)
+	if sErr := c.SyncViaNodeHandle(st.NodeID, st.Generation); !errors.Is(sErr, syscall.EIO) {
+		t.Fatalf("expected SyncViaNodeHandle to propagate EIO, got %v", sErr)
+	}
+	failNodeSync.Store(false)
+
+	if sErr := c.SyncViaNodeHandle(st.NodeID, st.Generation+1); !errors.Is(sErr, ErrStaleHandle) {
+		t.Fatalf("expected ErrStaleHandle on generation mismatch, got %v", sErr)
+	}
+
+	// Copy up non-owner-created 0444 lower file via SetXattr and verify SyncViaNodeHandle returns EACCES.
+	qpLowerRO := QualifiedPath{RootID: "r0", Rel: "lower_ro.txt"}
+	testutil.FailErr(t, "SetXattr lower_ro.txt", c.SetXattr(qpLowerRO, "user.tag", []byte("v"), false))
+	stLower, err := c.Stat(qpLowerRO)
+	testutil.FailErr(t, "Stat lower_ro.txt", err)
+	if sErr := c.SyncViaNodeHandle(stLower.NodeID, stLower.Generation); !errors.Is(sErr, syscall.EACCES) {
+		t.Fatalf("expected EACCES on non-ownerCreatedRO 0444 node, got %v", sErr)
+	}
+}
+
+func ensureAllDirsTest(c *Core, rootID, rel string) error {
+	if _, err := c.Mkdir(QualifiedPath{RootID: rootID, Rel: "objects"}, 0o755); err != nil {
+		return err
+	}
+	_, err := c.Mkdir(QualifiedPath{RootID: rootID, Rel: rel}, 0o755)
+	return err
+}
+
