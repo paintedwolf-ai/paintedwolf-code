@@ -120,12 +120,14 @@ func (m *Manager) BindMountedView(binding MountedViewBinding) error {
 		return err
 	}
 	binding.MountPath = absWT
+	kernelMounted := isKernelMountedWorktree(absWT)
 	unregisterActiveView(view)
 	m.mu.Lock()
 	if oldWT := canonicalCleanPath(view.worktreeDir); oldWT != "" {
 		delete(m.viewsByWorktree, oldWT)
 	}
 	view.worktreeDir = absWT
+	view.kernelMounted = kernelMounted
 	if newWT := canonicalCleanPath(absWT); newWT != "" {
 		m.viewsByWorktree[newWT] = view
 	}
@@ -205,7 +207,8 @@ func registerMountedClaim(
 	view := &managedView{
 		viewID: viewID, workerID: workerID, rootID: rootID,
 		trunkDir: absTrunk, worktreeDir: absWT, materialized: false,
-		core: core, authorizedGitDirs: append([]string(nil), authorizedGitDirs...),
+		kernelMounted: isKernelMountedWorktree(absWT),
+		core:          core, authorizedGitDirs: append([]string(nil), authorizedGitDirs...),
 		accessOrigin: OriginFilesystem, repos: make(map[string]*initializedRepo),
 	}
 	if err := core.RegisterLowerProvider(rootID, &gitAwareLowerProvider{
@@ -224,6 +227,12 @@ func verifyActiveMountedView(mgr *Manager, view *managedView, repoLayoutWorktree
 	binding, ok := getMountedViewBinding(mgr, view.viewID, view.rootID)
 	if !ok {
 		return fmt.Errorf("%w: view %q root %q has no registered mounted view binding", ErrMountedWorktreeUnavailable, view.viewID, view.rootID)
+	}
+	if view.kernelMounted {
+		if binding.ViewID != view.viewID || binding.RootID != view.rootID || (view.workerID != "" && binding.WorkerID != "" && binding.WorkerID != view.workerID) || binding.Core != view.core || !isValidMountedAdapterID(binding.AdapterID) || !hasMountIdentityFact(binding) || !isBindingLive(binding) || filepath.Clean(binding.MountPath) != filepath.Clean(view.worktreeDir) {
+			return fmt.Errorf("%w: kernel-mounted view %q binding is inactive or mismatched", ErrMountedWorktreeUnavailable, view.viewID)
+		}
+		return nil
 	}
 	if _, err := validateMountedViewBinding(binding, view.viewID, view.workerID, view.rootID, view.trunkDir, view.worktreeDir, view.core); err != nil {
 		return err

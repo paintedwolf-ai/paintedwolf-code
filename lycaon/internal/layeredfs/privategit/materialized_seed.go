@@ -33,7 +33,11 @@ func ensureViewRepoInitialized(
 
 	repo, err := initializePrivateRepo(ctx, mgr, view, repoRel, targetWT)
 	if err != nil {
-		view.repos[repoRel] = &initializedRepo{metrics: InitMetrics{State: StateFailed}}
+		if os.IsNotExist(err) {
+			delete(view.repos, repoRel)
+		} else {
+			view.repos[repoRel] = &initializedRepo{metrics: InitMetrics{State: StateFailed}}
+		}
 		return err
 	}
 	view.repos[repoRel] = repo

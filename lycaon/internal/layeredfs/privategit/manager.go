@@ -27,6 +27,7 @@ type managedView struct {
 	trunkDir          string
 	worktreeDir       string
 	materialized      bool
+	kernelMounted     bool
 	core              *layeredfs.Core
 	authorizedGitDirs []string
 

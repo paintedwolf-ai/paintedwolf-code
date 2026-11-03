@@ -73,7 +73,7 @@ func isRemoteApproved(approved map[string]bool, remote, remoteURL string) bool {
 }
 
 func syncCoreOverlayToWorktree(view *managedView) error {
-	if view == nil || view.core == nil {
+	if view == nil || view.core == nil || (!view.materialized && view.kernelMounted) {
 		return nil
 	}
 	changes, err := view.core.EnumerateChanges(false)
@@ -137,7 +137,7 @@ type worktreeStatEntry struct {
 }
 
 func captureWorktreeMutationBaseline(view *managedView, targetWT string) map[string]worktreeStatEntry {
-	if view == nil || view.core == nil {
+	if view == nil || view.core == nil || (!view.materialized && view.kernelMounted) {
 		return nil
 	}
 	res := make(map[string]worktreeStatEntry)

@@ -115,8 +115,12 @@ func initializePrivateRepo(
 		return nil, err
 	}
 
+	kernelMounted := !view.materialized && view.kernelMounted
 	finalGitDir := filepath.Join(targetWorktreeDir, ".git")
-	if err := os.MkdirAll(targetWorktreeDir, 0o755); err != nil {
+	if kernelMounted {
+		finalGitDir = filepath.Join(mgr.cfg.BackingDir, "views", view.viewID, "private-git", sanitizeRepoKey(repoRel))
+	}
+	if err := os.MkdirAll(filepath.Dir(finalGitDir), 0o755); err != nil {
 		_ = mgr.store.ReleaseLease(leaseID)
 		cleanupStage()
 		return nil, err
@@ -139,17 +143,25 @@ func initializePrivateRepo(
 		}
 	}
 
-	if _, sErr := os.Stat(filepath.Join(finalGitDir, "index")); sErr == nil {
-		uOut, uCode, uErr := gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{
-			Profile: gitexec.ProfileHermetic,
-		})
-		if (uErr != nil && uCode != 1) || uCode >= 128 || uCode < 0 {
-			return abortFinal(fmt.Errorf("%w: update-index refresh failed (exit %d): %v: %s", layeredfs.ErrGitPending, uCode, uErr, strings.TrimSpace(string(uOut))))
+	if !kernelMounted {
+		if _, sErr := os.Stat(filepath.Join(finalGitDir, "index")); sErr == nil {
+			uOut, uCode, uErr := gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{
+				Profile: gitexec.ProfileHermetic,
+			})
+			if (uErr != nil && uCode != 1) || uCode >= 128 || uCode < 0 {
+				return abortFinal(fmt.Errorf("%w: update-index refresh failed (exit %d): %v: %s", layeredfs.ErrGitPending, uCode, uErr, strings.TrimSpace(string(uOut))))
+			}
 		}
 	}
 
 	var initHeadOID string
-	if hOut, hCode, hErr := gitexec.Run(ctx, targetWorktreeDir, []string{"rev-parse", "--verify", "HEAD"}, gitexec.Opts{
+	revDir := targetWorktreeDir
+	revArgs := []string{"rev-parse", "--verify", "HEAD"}
+	if kernelMounted {
+		revDir = filepath.Dir(finalGitDir)
+		revArgs = []string{"--git-dir=" + finalGitDir, "rev-parse", "--verify", "HEAD"}
+	}
+	if hOut, hCode, hErr := gitexec.Run(ctx, revDir, revArgs, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
 	}); hErr == nil && hCode == 0 {
 		initHeadOID = strings.TrimSpace(string(hOut))
@@ -167,6 +179,31 @@ func initializePrivateRepo(
 		initialRefs:    initRefs,
 		metrics:        importMetrics,
 	}, nil
+}
+
+func isKernelMountedWorktree(worktreeDir string) bool {
+	if strings.TrimSpace(worktreeDir) == "" {
+		return false
+	}
+	wtInfo, err := os.Lstat(worktreeDir)
+	if err != nil {
+		return false
+	}
+	parentInfo, pErr := os.Lstat(filepath.Dir(worktreeDir))
+	if pErr != nil {
+		return false
+	}
+	wtDev := fileInfoToLowerEntry(wtInfo).Dev
+	parentDev := fileInfoToLowerEntry(parentInfo).Dev
+	return wtDev != 0 && parentDev != 0 && wtDev != parentDev
+}
+
+func sanitizeRepoKey(repoRel string) string {
+	clean := cleanSlashRel(repoRel)
+	if clean == "." || clean == "" {
+		return "root"
+	}
+	return strings.ReplaceAll(clean, "/", "__")
 }
 
 func retainNewPrivateObjects(ctx context.Context, mgr *Manager, view *managedView, repoRel string) error {

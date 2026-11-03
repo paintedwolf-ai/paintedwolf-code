@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
@@ -201,6 +202,13 @@ func prepareManagedViewOperation(
 		Rel:    ".git",
 	}, true); err != nil {
 		return "", noop, true, err
+	}
+	if !view.materialized && view.kernelMounted {
+		if privGitDir, gErr := readyPrivateGitDir(mgr, view.viewID, "."); gErr == nil && privGitDir != "" {
+			_, _, _ = gitexec.Run(ctx, view.worktreeDir, []string{"--git-dir=" + privGitDir, "--work-tree=" + view.worktreeDir, "update-index", "-q", "--refresh"}, gitexec.Opts{
+				Profile: gitexec.ProfileHermetic,
+			})
+		}
 	}
 	if err := syncCoreOverlayToWorktree(view); err != nil {
 		return "", noop, true, err

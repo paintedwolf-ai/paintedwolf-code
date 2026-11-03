@@ -154,10 +154,21 @@ func executeViewGitCommand(
 		return "", err
 	}
 	beforeTree := captureWorktreeMutationBaseline(view, targetWT)
-	privObjDir := filepath.Join(targetWT, ".git", "objects")
+	privGitDir, _ := readyPrivateGitDir(e.mgr, e.viewID, repoRel)
+	if privGitDir == "" {
+		privGitDir = filepath.Join(targetWT, ".git")
+	}
+	execArgs := normalizedArgs
+	if privGitDir != filepath.Join(targetWT, ".git") {
+		_, _, _ = gitexec.Run(ctx, targetWT, []string{"--git-dir=" + privGitDir, "--work-tree=" + targetWT, "update-index", "-q", "--refresh"}, gitexec.Opts{
+			Profile: gitexec.ProfileHermetic,
+		})
+		execArgs = append([]string{"--git-dir=" + privGitDir, "--work-tree=" + targetWT}, normalizedArgs...)
+	}
+	privObjDir := filepath.Join(privGitDir, "objects")
 	beforeObjBytes := measureDirBytes(privObjDir)
 
-	out, code, runErr := gitexec.Run(ctx, targetWT, normalizedArgs, gitexec.Opts{
+	out, code, runErr := gitexec.Run(ctx, targetWT, execArgs, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
 		Identity: &gitexec.Identity{
 			Name:      "Painted Wolf Worker",

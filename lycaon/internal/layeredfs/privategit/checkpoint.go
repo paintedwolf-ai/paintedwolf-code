@@ -69,7 +69,7 @@ func captureCheckpointGitState(
 	subHeads := make(map[string]string)
 	var subErr error
 	for rel, sr := range view.repos {
-		if rel != "." && sr != nil {
+		if rel != "." && sr != nil && sr.privateGitDir != "" {
 			if _, hOID, _, hErr := resolveHeadState(sr.privateGitDir); hErr != nil {
 				subErr = hErr
 				break
@@ -244,12 +244,12 @@ func resolveRefInGitDir(gitDir, refName string) string {
 	return ""
 }
 
-func collectStashEntries(ctx context.Context, worktreeDir, gitDir string) ([]StashEntry, error) {
+func collectStashEntries(ctx context.Context, _ string, gitDir string) ([]StashEntry, error) {
 	oid := resolveRefInGitDir(gitDir, "refs/stash")
 	if oid == "" {
 		return nil, nil
 	}
-	out, code, err := gitexec.Run(ctx, worktreeDir, []string{"log", "-g", "--format=%H|%gd|%gs", "refs/stash"}, gitexec.Opts{
+	out, code, err := gitexec.Run(ctx, filepath.Dir(gitDir), []string{"--git-dir=" + gitDir, "log", "-g", "--format=%H|%gd|%gs", "refs/stash"}, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
 	})
 	if err != nil || code != 0 {
