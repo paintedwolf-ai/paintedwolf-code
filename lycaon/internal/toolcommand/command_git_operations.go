@@ -1,12 +1,15 @@
 package toolcommand
 
 import (
+	"context"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/argv"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
 func gitHistoryReplacement(args []string) (ReplacementCall, bool) {
@@ -100,14 +103,14 @@ func gitCheckoutReplacement(command string, args []string, projectDir string) (R
 		return gitCheckoutPathsReplacement(args)
 	}
 	mapped := map[string]any{}
-	if len(args) > 0 && ((command == "checkout" && args[0] == "-b") || (command == "switch" && args[0] == "-c")) {
+	if len(args) > 0 && ((command == "checkout" && args[0] == "-b") || (command == "switch" && (args[0] == "-c" || args[0] == "--create"))) {
 		mapped["create"] = true
 		args = args[1:]
 	}
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return ReplacementCall{}, false
 	}
-	if command == "checkout" && mapped["create"] != true && confine.ProjectPathExists(args[0], projectDir) {
+	if command == "checkout" && mapped["create"] != true && projectOrPrivateViewPathExists(args[0], projectDir) {
 		return ReplacementCall{}, false
 	}
 	mapped["branch"] = args[0]
@@ -240,3 +243,49 @@ func gitStashReplacement(args []string) (ReplacementCall, bool) {
 func gitLiteralOperand(path string) bool {
 	return path != "" && !strings.HasPrefix(path, ":") && !strings.ContainsAny(path, "*?[\\")
 }
+
+// ExecutePrivateGitCommand runs a supported Git command line against a worker's
+// private Git executor across FUSE, NFS, or eager-copy write legs.
+func ExecutePrivateGitCommand(ctx context.Context, exec *privategit.GitExecutor, commandLine string) (string, error) {
+	parsed, err := argv.SplitElement(strings.TrimSpace(commandLine))
+	if err != nil {
+		return "", err
+	}
+	if exec == nil || filepath.Base(parsed.Name) != "git" || len(parsed.Args) == 0 {
+		return "", fmt.Errorf("toolcommand: unsupported private git command %q", commandLine)
+	}
+	sub, rest := parsed.Args[0], parsed.Args[1:]
+	switch sub {
+	case "status":
+		return exec.Status(ctx, rest...)
+	case "diff":
+		return exec.Diff(ctx, rest...)
+	case "log":
+		return exec.Log(ctx, rest...)
+	case "stash":
+		return exec.Stash(ctx, rest...)
+	case "commit":
+		if len(rest) == 2 && (rest[0] == "-m" || rest[0] == "--message") {
+			return exec.Commit(ctx, rest[1])
+		}
+		if len(rest) == 3 && rest[0] == "-a" && (rest[1] == "-m" || rest[1] == "--message") {
+			return exec.Commit(ctx, rest[2], "-a")
+		}
+	case "revert":
+		if len(rest) == 1 && !strings.HasPrefix(rest[0], "-") {
+			return exec.Revert(ctx, rest[0])
+		}
+	case "checkout":
+		return exec.Checkout(ctx, rest...)
+	case "switch":
+		return exec.Switch(ctx, rest...)
+	case "worktree":
+		return exec.WorktreeList(ctx)
+	case "submodule":
+		return exec.SubmoduleStatus(ctx)
+	}
+	return "", fmt.Errorf("toolcommand: unsupported private git subcommand %q", sub)
+}
+
+
+

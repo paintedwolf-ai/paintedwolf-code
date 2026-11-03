@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -13,14 +14,18 @@ func registerGitStatusTool(reg *tools.DefaultRegistry, deps buildDeps) error {
 	}
 	return reg.Register("git_status", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		page := gitStatusPage(args)
-		cwd := tctx.ActiveRootPath()
+		cwd, finish, managed, prepErr := privategit.PrepareViewGitOperation(ctx, tools.HostWriteRoot(tctx), tctx.Identity.WorkerJobID)
+		if prepErr != nil {
+			return gitStatusOutput(nil, page, prepErr, tctx)
+		}
+		defer func() { _ = finish() }()
 		if page.Ignored {
 			return gitStatusIgnoredOutput(ctx, deps.git, cwd, page, tctx)
 		}
 		// Fresh status includes writes from the current turn.
 		var status *git.GitStatus
 		var err error
-		if deps.statusCache != nil {
+		if !managed && cwd == tctx.ActiveRootPath() && deps.statusCache != nil {
 			if cache := deps.statusCache.Load(); cache != nil {
 				cached, e := cache.GetOrLoad(ctx, cwd, true)
 				status, err = cached.Status, e

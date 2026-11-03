@@ -232,6 +232,7 @@ func initializeMaterializedSeed(
 	m.mu.Lock()
 	m.views[cfg.ViewID] = view
 	m.mu.Unlock()
+	registerActiveView(m, view)
 
 	if cfg.Core != nil {
 		_ = cfg.Core.RegisterLowerProvider("primary", &gitAwareLowerProvider{

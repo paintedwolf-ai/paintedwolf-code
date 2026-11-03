@@ -105,8 +105,7 @@ func (m *Manager) MountedClaim(
 		return err
 	}
 
-	m.mu.Lock()
-	m.views[viewID] = &managedView{
+	view := &managedView{
 		viewID:            viewID,
 		workerID:          workerID,
 		rootID:            rootID,
@@ -118,7 +117,10 @@ func (m *Manager) MountedClaim(
 		accessOrigin:      OriginFilesystem,
 		repos:             make(map[string]*initializedRepo),
 	}
+	m.mu.Lock()
+	m.views[viewID] = view
 	m.mu.Unlock()
+	registerActiveView(m, view)
 
 	return core.RegisterLowerProvider(rootID, &gitAwareLowerProvider{
 		mgr:      m,
@@ -201,6 +203,7 @@ func (m *Manager) PrivateGitDir(viewID, repoRel string) (string, error) {
 // ReleaseView releases active view leases from the retained store without invalidating
 // any retained checkpoint leases (#1671).
 func (m *Manager) ReleaseView(viewID string) error {
+	unregisterActiveView(viewID)
 	m.mu.Lock()
 	view, ok := m.views[viewID]
 	if ok {
