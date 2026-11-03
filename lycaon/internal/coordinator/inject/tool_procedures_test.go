@@ -164,15 +164,15 @@ func assertOfferedPageProcedures(t *testing.T, offered []string, block string) {
 func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
 	gatedAndLifecycle := []string{
-		"edit", "replace_lines", "restore_version", "jq_edit",
+		"command", "restore_version",
 		"task", "delegate_dispatch", "delegate_decompose",
 		"preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board",
 	}
-	for _, tool := range []string{"update_progress", "edit", "replace_lines", "restore_version", "jq_edit", "task", "delegate_dispatch", "delegate_decompose", "summarize", "wait"} {
+	for _, tool := range []string{"update_progress", "command", "edit", "replace_lines", "restore_version", "jq_edit", "task", "delegate_dispatch", "delegate_decompose", "summarize", "wait"} {
 		for _, profile := range []string{"coordinator", "implementer"} {
 			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-procedures", profile, []string{tool}, nil)
 			testutil.FailErr(t, "render progress procedure", err)
-			want := profile == "coordinator" && (tool == "update_progress" || tool == "command" || progress.IsProgressGatedTool(tool))
+			want := profile == "coordinator" && (tool == "update_progress" || tool == "command" || progress.IsProgressGatedTool(tool) && !toolcontract.IsCommandOperation(tool))
 			if strings.Contains(block, "checklist text in an assistant reply does not update it") != want {
 				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "checklist text in an assistant reply does not update it"), want, profile, tool)
 			}
@@ -202,9 +202,9 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 		}
 	}
 
-	withLifecycle, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-lifecycle", "coordinator", []string{"update_progress", "edit", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board"}, nil)
+	withLifecycle, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-lifecycle", "coordinator", []string{"update_progress", "command", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board"}, nil)
 	testutil.FailErr(t, "render lifecycle progress procedure", err)
-	if !strings.Contains(withLifecycle, "Establish the checklist once before the first `edit` or `task`") {
+	if !strings.Contains(withLifecycle, "Establish the checklist once before the first `command` or `task`") {
 		t.Fatalf("unexpected gated tool phrasing: %s", withLifecycle)
 	}
 	if !strings.Contains(withLifecycle, "Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, `pack_board`.") {
@@ -217,13 +217,13 @@ func TestRunnerProcedureStaticPreviewPointerFollowsOfferedAndRequestableCaptureP
 	for _, profile := range []string{"coordinator", "implementer"} {
 		offered, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "static-preview-offered", profile, []string{"command", "capture_page"}, nil)
 		testutil.FailErr(t, "render offered capture_page runner procedure", err)
-		if !strings.Contains(offered, "For static page preview, `capture_page` in `project_dir` mode needs no server.") {
+		if !strings.Contains(offered, "`capture_page`") || !strings.Contains(offered, "`project_dir`") || !strings.Contains(offered, "needs no server") {
 			t.Fatalf("%s offered capture_page missing project_dir pointer: %s", profile, offered)
 		}
 
 		requestable, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "static-preview-requestable", profile, []string{"command", "request_tools"}, nil)
 		testutil.FailErr(t, "render requestable capture_page runner procedure", err)
-		if !strings.Contains(requestable, "For static page preview, load page capture with `request_tools`") || !strings.Contains(requestable, "instead of starting a static server.") {
+		if !strings.Contains(requestable, "load page capture with `request_tools`") || !strings.Contains(requestable, "instead of starting a server") {
 			t.Fatalf("%s requestable capture_page missing request_tools static-preview pointer: %s", profile, requestable)
 		}
 		assertOfferedPageProcedures(t, []string{"command", "request_tools"}, requestable)
@@ -241,7 +241,7 @@ func TestRunnerProcedureStaticPreviewPointerFollowsOfferedAndRequestableCaptureP
 		t.Run(tc.name, func(t *testing.T) {
 			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "static-preview-omitted", tc.profile, tc.tools, nil)
 			testutil.FailErr(t, "render runner procedure without capture_page", err)
-			if strings.Contains(block, "For static page preview") {
+			if strings.Contains(block, "page capture with `request_tools`") {
 				t.Fatalf("unexpected static-preview pointer for %s/%v: %s", tc.profile, tc.tools, block)
 			}
 		})
