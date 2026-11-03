@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -8,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session/promotionstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -157,31 +158,6 @@ func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef
 	return store, manifest, promoter, true, nil
 }
 
-func checkpointManifestChangedPaths(manifest checkpoint.Manifest, roots []projectroot.RootRef) []string {
-	primary, hasPrimary := projectroot.PrimaryRoot(roots)
-	byID := make(map[string]projectroot.RootRef, len(roots))
-	for _, r := range roots {
-		byID[r.ID] = r
-	}
-	changed := make([]string, 0, len(manifest.Entries))
-	for _, e := range manifest.Entries {
-		rel := filepath.ToSlash(filepath.Clean(strings.TrimSpace(e.Path.Rel)))
-		if rel == "" || rel == "." {
-			continue
-		}
-		if hasPrimary == nil && len(roots) > 1 {
-			if r, ok := byID[e.Path.RootID]; ok {
-				rel = projectroot.Qualify(primary, r, filepath.Join(r.Path, filepath.FromSlash(rel)))
-			}
-		}
-		changed = append(changed, rel)
-	}
-	if len(roots) > 0 {
-		return FilterOverlayPromoteCandidatePathsForRoots(roots, changed)
-	}
-	return promotionstate.FilterOverlayPromoteCandidatePaths(changed)
-}
-
 // SyncTaskCheckpointToWorkspace rehydrates task.WorkspaceRoot from the published checkpoint manifest.
 func SyncTaskCheckpointToWorkspace(task *api.WorkerTask) error {
 	if task == nil {
@@ -202,8 +178,29 @@ func SyncTaskCheckpointToWorkspace(task *api.WorkerTask) error {
 	if err := os.MkdirAll(task.WorkspaceRoot, 0o755); err != nil {
 		return err
 	}
+	multiRoot := len(manifest.SelectedRoots) > 1
+	if !multiRoot {
+		for _, entry := range manifest.Entries {
+			id := strings.TrimSpace(entry.Path.RootID)
+			if id != "" && id != "primary" && id != "root-0" && (task == nil || id != strings.TrimSpace(task.WorkspaceRootID)) {
+				multiRoot = true
+				break
+			}
+		}
+	}
 	for _, entry := range manifest.Entries {
-		if err := applyManifestEntryToRoot(store, task.WorkspaceRoot, entry, true); err != nil {
+		targetDir := task.WorkspaceRoot
+		if multiRoot {
+			branchDir, bErr := projectroot.BranchDirForID(entry.Path.RootID)
+			if bErr != nil {
+				return bErr
+			}
+			targetDir = filepath.Join(task.WorkspaceRoot, branchDir)
+			if err := os.MkdirAll(targetDir, 0o755); err != nil {
+				return err
+			}
+		}
+		if err := applyManifestEntryToRoot(store, targetDir, entry, true); err != nil {
 			return err
 		}
 	}
@@ -232,6 +229,9 @@ func ApplyTaskCheckpointAttributes(task *api.WorkerTask, roots []projectroot.Roo
 }
 
 func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry checkpoint.ManifestEntry, writeRegularBytes bool) error {
+	if !filepath.IsLocal(entry.Path.Rel) || entry.Path.Rel == "." {
+		return fmt.Errorf("%w: invalid entry path %q", checkpoint.ErrInvalidManifest, entry.Path.Rel)
+	}
 	abs := filepath.Join(rootDir, filepath.FromSlash(entry.Path.Rel))
 	if entry.Deleted || entry.Kind == layeredfs.EntryAbsent {
 		return os.RemoveAll(abs)
@@ -247,7 +247,7 @@ func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry che
 		if mode == 0 {
 			mode = 0o755
 		}
-		if err := os.MkdirAll(abs, mode); err != nil {
+		if err := os.MkdirAll(abs, mode|0o700); err != nil {
 			return err
 		}
 		if err := os.Chmod(abs, mode); err != nil {
@@ -272,14 +272,15 @@ func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry che
 			if rErr != nil {
 				return rErr
 			}
-			if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			if _, err := fseffect.Replace(fseffect.ReplaceRequest{
+				Location: fseffect.Location{Root: rootDir, Rel: filepath.FromSlash(entry.Path.Rel)},
+				Source:   bytes.NewReader(raw),
+				Mode:     mode,
+				DirMode:  0o755,
+			}); err != nil {
 				return err
 			}
-			if err := os.WriteFile(abs, raw, mode); err != nil {
-				return err
-			}
-		}
-		if writeRegularBytes || entry.Final.Mode != 0 {
+		} else if entry.Final.Mode != 0 {
 			if err := os.Chmod(abs, mode); err != nil {
 				return err
 			}

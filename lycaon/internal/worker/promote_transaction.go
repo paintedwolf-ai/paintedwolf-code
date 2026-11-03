@@ -91,6 +91,9 @@ func (tx *promoteTransaction) apply(ctx context.Context, promote PromoteRoots, t
 			return &promoteTransactionUnstartedError{cause: err}
 		}
 	}
+	if err := retainPromoteOriginals(tx.path, promote, task, tx.plans); err != nil {
+		return &promoteTransactionUnstartedError{cause: err}
+	}
 	for _, plan := range tx.plans {
 		if err := context.Cause(ctx); err != nil {
 			return err
@@ -151,7 +154,7 @@ func verifyPromoteTarget(target fseffect.Target, wantExists bool, wantMode os.Fi
 }
 
 func (tx *promoteTransaction) rollback(promote PromoteRoots, task *api.WorkerTask) error {
-	return rollbackPromoteJournal(promote, task, tx.journal)
+	return rollbackPromoteJournalAt(tx.path, promote, task, tx.journal)
 }
 
 func (tx *promoteTransaction) close() error {
@@ -170,18 +173,25 @@ func recoverPromoteTransaction(dataDir, jobID string, promote PromoteRoots, task
 	if journal.Version != promoteTransactionVersion || journal.JobID != jobID {
 		return true, fmt.Errorf("promote transaction identity mismatch for %q", jobID)
 	}
-	if err := rollbackPromoteJournal(promote, task, journal); err != nil {
+	if err := rollbackPromoteJournalAt(path, promote, task, journal); err != nil {
 		return true, err
 	}
 	return true, nil
 }
 
 func rollbackPromoteJournal(promote PromoteRoots, task *api.WorkerTask, journal promoteTransactionJournal) error {
+	return rollbackPromoteJournalAt("", promote, task, journal)
+}
+
+func rollbackPromoteJournalAt(txPath string, promote PromoteRoots, task *api.WorkerTask, journal promoteTransactionJournal) error {
 	type restore struct {
 		plan promoteJournalMutation
 	}
 	restores := make([]restore, 0, len(journal.Mutations))
 	for _, mutation := range journal.Mutations {
+		if err := validateRetainedPromoteOriginal(txPath, mutation); err != nil {
+			return err
+		}
 		primaryAbs, _, err := promote.fileAbs(task, mutation.Path)
 		if err != nil {
 			return err
@@ -190,10 +200,12 @@ func rollbackPromoteJournal(promote PromoteRoots, task *api.WorkerTask, journal 
 		if err != nil {
 			return err
 		}
-		if promoteStateMatches(exists, mode, current, mutation.OriginalExists, os.FileMode(mutation.OriginalMode), contentSHA256(mutation.Original)) {
+		if promoteStateMatches(exists, mode, current, mutation.OriginalExists, os.FileMode(mutation.OriginalMode), contentSHA256(mutation.Original)) &&
+			promoteInodeMatchesRetained(txPath, primaryAbs, mutation) {
 			continue
 		}
-		if !promoteStateMatches(exists, mode, current, mutation.TargetExists, os.FileMode(mutation.TargetMode), mutation.TargetSHA256) {
+		if !promoteStateMatches(exists, mode, current, mutation.TargetExists, os.FileMode(mutation.TargetMode), mutation.TargetSHA256) &&
+			!promoteStateMatches(exists, mode, current, mutation.OriginalExists, os.FileMode(mutation.OriginalMode), contentSHA256(mutation.Original)) {
 			return fmt.Errorf("cannot recover promote transaction: %q diverged after interruption", mutation.Path)
 		}
 		restores = append(restores, restore{plan: mutation})
@@ -209,9 +221,12 @@ func rollbackPromoteJournal(promote PromoteRoots, task *api.WorkerTask, journal 
 			originalMode:   os.FileMode(mutation.OriginalMode),
 		}
 		verify := func(target fseffect.Target) error {
-			return verifyPromoteTarget(target, mutation.TargetExists, os.FileMode(mutation.TargetMode), mutation.TargetSHA256, mutation.Path)
+			if err := verifyPromoteTarget(target, mutation.TargetExists, os.FileMode(mutation.TargetMode), mutation.TargetSHA256, mutation.Path); err == nil {
+				return nil
+			}
+			return verifyPromoteTarget(target, mutation.OriginalExists, os.FileMode(mutation.OriginalMode), contentSHA256(mutation.Original), mutation.Path)
 		}
-		if err := applyOriginalPromoteMutation(promote, task, plan, verify); err != nil {
+		if err := restorePromoteOriginalMutation(txPath, promote, task, plan, verify); err != nil {
 			errs = append(errs, fmt.Errorf("restore %s: %w", mutation.Path, err))
 		}
 	}
@@ -271,6 +286,7 @@ func readPromoteTransaction(path string) (promoteTransactionJournal, bool, error
 }
 
 func removePromoteTransaction(path string) error {
+	_ = os.RemoveAll(promoteTransactionRetainedDir(path))
 	err := os.Remove(path)
 	if os.IsNotExist(err) {
 		return nil

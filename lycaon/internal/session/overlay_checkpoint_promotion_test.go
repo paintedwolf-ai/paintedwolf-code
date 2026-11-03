@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -164,5 +165,56 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 	testutil.FailErr(t, "retry ApplyTaskCheckpointAttributes", session.ApplyTaskCheckpointAttributes(task, nil))
 	if gotBytes, err := os.ReadFile(removedPath); err != nil || !strings.Contains(string(gotBytes), "recreated post-promote") {
 		t.Fatalf("post-promotion recreated file was clobbered or unreadable: %q (%v)", string(gotBytes), err)
+	}
+}
+
+func TestMultiRootCheckpointQualificationAndWorkspaceSync(t *testing.T) {
+	primary, secondary, overlay := t.TempDir(), t.TempDir(), t.TempDir()
+	testutil.FailErr(t, "seed secondary", os.WriteFile(filepath.Join(secondary, "mod.txt"), []byte("v1\n"), 0o644))
+	store, err := checkpoint.NewStore(filepath.Join(overlay, session.TaskCheckpointStoreSubdir))
+	testutil.FailErr(t, "NewStore", err)
+
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID:     "view-multiroot-cp",
+		BackingDir: t.TempDir(),
+		Roots: []layeredfs.RootSpec{
+			{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true},
+			{ID: "root-sec", Label: "docs", TrunkPath: secondary},
+		},
+	})
+	testutil.FailErr(t, "New Core", err)
+	defer func() { _ = core.ReleaseView() }()
+
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "root-sec", Rel: "mod.txt"}, []byte("v2\n"), 0o644)
+	testutil.FailErr(t, "WriteFile secondary", err)
+
+	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
+		WorkerID: "job-multi-cp", TaskID: "job-multi-cp", ProjectID: testdbseed.DefaultProjectID,
+		SourceGeneration: "gen-1", Core: core, Store: store,
+	})
+	testutil.FailErr(t, "NewPublisher", err)
+	_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "chk-multi-1", Trigger: checkpoint.TriggerWorkerCompletion})
+	testutil.FailErr(t, "Publish", err)
+
+	roots := []projectroot.RootRef{
+		{ID: "primary", Label: "primary", Path: primary, IsPrimary: true},
+		{ID: "root-sec", Label: "docs", Path: secondary},
+	}
+	if got := session.QualifyCheckpointPath(layeredfs.QualifiedPath{RootID: "root-sec", Rel: "mod.txt"}, roots); got != "@docs/mod.txt" {
+		t.Fatalf("QualifyCheckpointPath = %q, want @docs/mod.txt", got)
+	}
+
+	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
+	task := &api.WorkerTask{ID: "job-multi-cp", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, Scope: &scope}
+	changed := session.OverlayWorkspaceChangedPaths(t.Context(), task, roots)
+	if len(changed) != 1 || changed[0] != "@docs/mod.txt" {
+		t.Fatalf("OverlayWorkspaceChangedPaths = %v, want [@docs/mod.txt]", changed)
+	}
+	testutil.FailErr(t, "SyncTaskCheckpointToWorkspace", session.SyncTaskCheckpointToWorkspace(task))
+	secBranchDir, err := projectroot.BranchDirForID("root-sec")
+	testutil.FailErr(t, "BranchDirForID", err)
+	syncedPath := filepath.Join(overlay, secBranchDir, "mod.txt")
+	if got, err := os.ReadFile(syncedPath); err != nil || string(got) != "v2\n" {
+		t.Fatalf("synced secondary branch file = %q, err = %v", string(got), err)
 	}
 }

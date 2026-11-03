@@ -17,6 +17,9 @@ func (s *Store) LoadManifest(checkpointID string) (Manifest, error) {
 	if strings.TrimSpace(checkpointID) == "" {
 		return Manifest{}, ErrCheckpointNotFound
 	}
+	if !isSafeStoreID(checkpointID) {
+		return Manifest{}, fmt.Errorf("%w: invalid checkpoint id %q", ErrInvalidManifest, checkpointID)
+	}
 	manifestPath := filepath.Join(s.checkpointsDir, checkpointID, "manifest.json")
 	raw, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -124,6 +127,9 @@ func (s *Store) OpenParentLayer(checkpointID string) (*CheckpointParentLayer, er
 
 // LoadRetentionRecord loads the retention record for checkpointID.
 func (s *Store) LoadRetentionRecord(checkpointID string) (RetentionRecord, error) {
+	if !isSafeStoreID(checkpointID) {
+		return RetentionRecord{}, fmt.Errorf("%w: invalid checkpoint id %q", ErrInvalidManifest, checkpointID)
+	}
 	raw, err := os.ReadFile(filepath.Join(s.retentionDir, checkpointID+".json"))
 	if err != nil {
 		return RetentionRecord{}, err
@@ -137,6 +143,9 @@ func (s *Store) LoadRetentionRecord(checkpointID string) (RetentionRecord, error
 
 // LoadPromotionRecord loads a durable promotion journal record by transaction ID.
 func (s *Store) LoadPromotionRecord(txID string) (PromotionJournalRecord, bool, error) {
+	if !isSafeStoreID(txID) {
+		return PromotionJournalRecord{}, false, fmt.Errorf("%w: invalid transaction id %q", ErrInvalidManifest, txID)
+	}
 	raw, err := os.ReadFile(filepath.Join(s.promotionsDir, txID+".json"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -156,6 +165,9 @@ func (pr *Promoter) loadPromotionRecord(txID string) (PromotionJournalRecord, bo
 }
 
 func (pr *Promoter) savePromotionRecord(rec PromotionJournalRecord) error {
+	if !isSafeStoreID(rec.TransactionID) {
+		return fmt.Errorf("%w: invalid transaction id %q", ErrInvalidManifest, rec.TransactionID)
+	}
 	raw, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return err

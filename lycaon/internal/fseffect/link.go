@@ -14,6 +14,19 @@ type rootLinkTarget struct {
 	name string
 }
 
+// HardLinkRequest creates or atomically replaces a directory entry as a hard
+// link to an existing regular file at Source without following symlinks.
+type HardLinkRequest struct {
+	Source       Location
+	Location     Location
+	DirMode      os.FileMode
+	Replace      bool
+	BeforeCommit func(Target) error
+}
+
+// HardLink creates or atomically replaces an entry as a hard link to Source.
+func HardLink(req HardLinkRequest) error { return platformHardLink(req) }
+
 func (t rootLinkTarget) Open() (*os.File, error)     { return t.root.Open(t.name) }
 func (t rootLinkTarget) Lstat() (os.FileInfo, error) { return t.root.Lstat(t.name) }
 

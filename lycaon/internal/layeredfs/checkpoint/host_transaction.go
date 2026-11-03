@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
@@ -34,19 +36,36 @@ type hostTargetUndo struct {
 }
 
 type hostTargetImage struct {
-	Kind          layeredfs.EntryKind `json:"kind"`
-	Mode          os.FileMode         `json:"mode,omitempty"`
-	SHA256        string              `json:"sha256,omitempty"`
-	Size          int64               `json:"size,omitempty"`
-	LinkTarget    string              `json:"link_target,omitempty"`
-	HardLinkGroup string              `json:"hard_link_group,omitempty"`
-	Xattrs        map[string][]byte   `json:"xattrs,omitempty"`
+	Kind           layeredfs.EntryKind      `json:"kind"`
+	Mode           os.FileMode              `json:"mode,omitempty"`
+	SHA256         string                   `json:"sha256,omitempty"`
+	Size           int64                    `json:"size,omitempty"`
+	LinkTarget     string                   `json:"link_target,omitempty"`
+	Xattrs         map[string][]byte        `json:"xattrs,omitempty"`
+	HardLinkSource *layeredfs.QualifiedPath `json:"hard_link_source,omitempty"`
+	HardLinkGroup  string                   `json:"hard_link_group,omitempty"`
+	RetainedSlot   string                   `json:"retained_slot,omitempty"`
+	identity       string
+	links          uint64
 }
 
 type hostRefUndo struct {
 	Name   string `json:"name"`
 	Before string `json:"before,omitempty"`
 	After  string `json:"after"`
+}
+
+type hostPostimageRecord struct {
+	Index  int               `json:"index"`
+	Xattrs map[string][]byte `json:"xattrs,omitempty"`
+}
+
+func (host *HostPromotion) retainedDir() string {
+	return filepath.Join(host.store.promotionsDir, "host-retained")
+}
+
+func (host *HostPromotion) postimagesDir() string {
+	return filepath.Join(host.store.promotionsDir, "host-postimages")
 }
 
 // prepare persists undo before checkpoint effects join a host transaction.
@@ -62,6 +81,8 @@ func (host *HostPromotion) prepare(ctx context.Context, preview *PromotionPrevie
 	if found && !old.RolledBack {
 		return fmt.Errorf("checkpoint: unfinished host transaction requires recovery")
 	}
+	_ = os.RemoveAll(host.retainedDir())
+	_ = os.RemoveAll(host.postimagesDir())
 	m, err := host.store.LoadManifest(preview.CheckpointID)
 	if err != nil {
 		return err
@@ -81,7 +102,24 @@ func (host *HostPromotion) prepare(ctx context.Context, preview *PromotionPrevie
 	if err != nil {
 		return err
 	}
-	return host.saveHostTransaction(hostTransaction{Roots: roots, Version: 1, CheckpointID: m.CheckpointID, WorkerID: m.WorkerID, Targets: targets, Refs: refs})
+	tx := hostTransaction{
+		Roots:        roots,
+		Version:      1,
+		CheckpointID: m.CheckpointID,
+		WorkerID:     m.WorkerID,
+		Targets:      targets,
+		Refs:         refs,
+	}
+	if err := host.saveHostTransaction(tx); err != nil {
+		return err
+	}
+	idxMap := make(map[layeredfs.QualifiedPath]int, len(tx.Targets))
+	for i, target := range tx.Targets {
+		idxMap[target.Path] = i
+	}
+	host.activeTx = &tx
+	host.activeIndex = idxMap
+	return nil
 }
 
 // Rollback restores only recorded checkpoint effects, refusing divergence.
@@ -93,7 +131,7 @@ func (host *HostPromotion) Rollback(ctx context.Context) error {
 	if err != nil || !found || tx.RolledBack {
 		return err
 	}
-	if err := host.validateHostTargets(tx.Targets); err != nil {
+	if err := host.validateHostTargets(tx); err != nil {
 		return err
 	}
 	tx.RollingBack = true
@@ -111,7 +149,11 @@ func (host *HostPromotion) Rollback(ctx context.Context) error {
 		return err
 	}
 	tx.RolledBack = true
-	return host.saveHostTransaction(tx)
+	if err := host.saveHostTransaction(tx); err != nil {
+		return err
+	}
+	_ = os.RemoveAll(host.retainedDir())
+	return nil
 }
 
 func (host *HostPromotion) removeHostComponentRecord(tx hostTransaction) error {
@@ -151,10 +193,41 @@ func (host *HostPromotion) loadHostTransaction() (hostTransaction, bool, error) 
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return tx, true, ErrInvalidManifest
 	}
+	if err := host.foldHostPostimages(&tx); err != nil {
+		return tx, true, err
+	}
 	if err := host.validateHostTransaction(tx); err != nil {
 		return tx, true, err
 	}
 	return tx, true, nil
+}
+
+func (host *HostPromotion) foldHostPostimages(tx *hostTransaction) error {
+	entries, err := os.ReadDir(host.postimagesDir())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(host.postimagesDir(), entry.Name()))
+		if err != nil {
+			return err
+		}
+		var rec hostPostimageRecord
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			return err
+		}
+		if rec.Index < 0 || rec.Index >= len(tx.Targets) {
+			return ErrInvalidManifest
+		}
+		tx.Targets[rec.Index].After.Xattrs = cloneXattrs(rec.Xattrs)
+	}
+	return nil
 }
 
 func (host *HostPromotion) saveHostTransaction(tx hostTransaction) error {
@@ -162,15 +235,34 @@ func (host *HostPromotion) saveHostTransaction(tx hostTransaction) error {
 	if err != nil {
 		return err
 	}
-	return writeAtomicJSONOrText(host.store.promotionsDir, "host-transaction.json", raw, 0600)
+	if err := writeAtomicJSONOrText(host.store.promotionsDir, "host-transaction.json", raw, 0600); err != nil {
+		return err
+	}
+	_ = os.RemoveAll(host.postimagesDir())
+	return nil
 }
 
 // recordHostPostimage records attributes from an owned staging object before publication.
 // Filesystems may add attributes at creation; predicting an empty set loses those facts.
 func (host *HostPromotion) recordHostPostimage(path layeredfs.QualifiedPath, file *os.File) error {
-	tx, found, err := host.loadHostTransaction()
-	if err != nil || !found || tx.RolledBack || tx.RollingBack {
-		return err
+	if host.activeTx == nil || host.activeIndex == nil {
+		tx, found, err := host.loadHostTransaction()
+		if err != nil || !found || tx.RolledBack || tx.RollingBack {
+			return err
+		}
+		idxMap := make(map[layeredfs.QualifiedPath]int, len(tx.Targets))
+		for i, target := range tx.Targets {
+			idxMap[target.Path] = i
+		}
+		host.activeTx = &tx
+		host.activeIndex = idxMap
+	}
+	if host.activeTx.RolledBack || host.activeTx.RollingBack {
+		return nil
+	}
+	idx, ok := host.activeIndex[path]
+	if !ok {
+		return fmt.Errorf("checkpoint: unrecorded host target %s", pathKey(path))
 	}
 	attrs, err := readFileXattrs(file)
 	if err != nil {
@@ -180,16 +272,17 @@ func (host *HostPromotion) recordHostPostimage(path layeredfs.QualifiedPath, fil
 	if err != nil {
 		return err
 	}
-	for index := range tx.Targets {
-		target := &tx.Targets[index]
-		if target.Path != path {
-			continue
-		}
-		if target.After.Mode != info.Mode().Perm() {
-			return ErrStalePreviewTargetChanged
-		}
-		target.After.Xattrs = attrs
-		return host.saveHostTransaction(tx)
+	target := &host.activeTx.Targets[idx]
+	if target.After.Mode != info.Mode().Perm() {
+		return ErrStalePreviewTargetChanged
 	}
-	return fmt.Errorf("checkpoint: unrecorded host target %s", pathKey(path))
+	if maps.EqualFunc(target.After.Xattrs, attrs, bytes.Equal) {
+		return nil
+	}
+	target.After.Xattrs = cloneXattrs(attrs)
+	raw, err := json.Marshal(hostPostimageRecord{Index: idx, Xattrs: target.After.Xattrs})
+	if err != nil {
+		return err
+	}
+	return writeAtomicJSONOrText(host.store.promotionsDir, filepath.Join("host-postimages", fmt.Sprintf("target-%06d.json", idx)), raw, 0o600)
 }

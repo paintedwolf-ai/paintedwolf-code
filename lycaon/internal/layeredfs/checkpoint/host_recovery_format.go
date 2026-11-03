@@ -1,6 +1,7 @@
 package checkpoint
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"maps"
@@ -73,6 +74,7 @@ func (host *HostPromotion) validateHostTransaction(tx hostTransaction) error {
 		return ErrOwnershipMismatch
 	}
 	seen := map[layeredfs.QualifiedPath]bool{}
+	byPath := make(map[layeredfs.QualifiedPath]hostTargetUndo, len(tx.Targets))
 	for _, target := range tx.Targets {
 		if !filepath.IsLocal(target.Path.Rel) || target.Path.Rel == "." || seen[target.Path] {
 			return ErrInvalidManifest
@@ -82,6 +84,20 @@ func (host *HostPromotion) validateHostTransaction(tx hostTransaction) error {
 		}
 		seen[target.Path] = true
 		if !validHostImage(target.Before) || !validHostImage(target.After) {
+			return ErrInvalidManifest
+		}
+		if target.After.HardLinkSource != nil || target.After.HardLinkGroup != "" || target.After.RetainedSlot != "" {
+			return ErrInvalidManifest
+		}
+		byPath[target.Path] = target
+	}
+	for _, target := range tx.Targets {
+		source := target.Before.HardLinkSource
+		if source == nil {
+			continue
+		}
+		original, known := byPath[*source]
+		if !known || *source == target.Path || source.RootID != target.Path.RootID || original.Before.HardLinkSource != nil || !sameHostTarget(original.Before, target.Before) {
 			return ErrInvalidManifest
 		}
 	}
@@ -110,17 +126,64 @@ func validHostImage(image hostTargetImage) bool {
 	if image.Size < 0 || image.Mode != image.Mode.Perm() {
 		return false
 	}
+	if image.RetainedSlot != "" && !hostComponent(image.RetainedSlot) {
+		return false
+	}
+	if strings.ContainsAny(image.HardLinkGroup, "/\\\x00") {
+		return false
+	}
 	switch image.Kind {
 	case layeredfs.EntryRegular:
 		digest, err := hex.DecodeString(image.SHA256)
-		return err == nil && len(digest) == 32 && image.LinkTarget == "" && (image.HardLinkGroup == "" || hostComponent(image.HardLinkGroup))
+		return err == nil && len(digest) == 32 && image.LinkTarget == ""
 	case layeredfs.EntryDirectory:
-		return image.SHA256 == "" && image.LinkTarget == "" && image.HardLinkGroup == "" && image.Size == 0
+		return image.HardLinkSource == nil && image.HardLinkGroup == "" && image.RetainedSlot == "" && image.SHA256 == "" && image.LinkTarget == "" && image.Size == 0
 	case layeredfs.EntrySymlink:
-		return image.SHA256 == "" && image.HardLinkGroup == "" && image.Mode == 0 && image.Size == 0 && len(image.Xattrs) == 0
+		return image.HardLinkSource == nil && image.HardLinkGroup == "" && image.RetainedSlot == "" && image.SHA256 == "" && image.Mode == 0 && image.Size == 0 && len(image.Xattrs) == 0
 	case layeredfs.EntryAbsent:
-		return image.SHA256 == "" && image.LinkTarget == "" && image.HardLinkGroup == "" && image.Mode == 0 && image.Size == 0 && len(image.Xattrs) == 0
+		return image.HardLinkSource == nil && image.HardLinkGroup == "" && image.RetainedSlot == "" && image.SHA256 == "" && image.LinkTarget == "" && image.Mode == 0 && image.Size == 0 && len(image.Xattrs) == 0
 	default:
 		return false
 	}
+}
+
+func sameHostTarget(a, b hostTargetImage) bool {
+	if a.Kind == "" {
+		a.Kind = layeredfs.EntryAbsent
+	}
+	if b.Kind == "" {
+		b.Kind = layeredfs.EntryAbsent
+	}
+	return a.Kind == b.Kind && a.Mode == b.Mode && a.SHA256 == b.SHA256 && a.Size == b.Size && a.LinkTarget == b.LinkTarget && maps.EqualFunc(a.Xattrs, b.Xattrs, bytes.Equal)
+}
+
+func (host *HostPromotion) validateHostTargets(tx hostTransaction) error {
+	targets := tx.Targets
+	known := map[layeredfs.QualifiedPath]hostTargetImage{}
+	for _, target := range targets {
+		if !filepath.IsLocal(target.Path.Rel) || target.Path.Rel == "." {
+			return ErrInvalidManifest
+		}
+		if err := host.captureHostTree(target.Path, known); err != nil {
+			return err
+		}
+		if err := host.validateRetainedSlot(target.Path, target.Before); err != nil {
+			return err
+		}
+	}
+	for _, target := range targets {
+		current := known[target.Path]
+		if !sameHostTarget(current, target.Before) && !sameHostTarget(current, target.After) {
+			if tx.RollingBack && target.Before.HardLinkSource != nil && current.Kind == layeredfs.EntryAbsent {
+				delete(known, target.Path)
+				continue
+			}
+			return fmt.Errorf("checkpoint: cannot recover diverged target %s", pathKey(target.Path))
+		}
+		delete(known, target.Path)
+	}
+	if len(known) != 0 {
+		return fmt.Errorf("checkpoint: cannot recover directory with unrecorded children")
+	}
+	return nil
 }

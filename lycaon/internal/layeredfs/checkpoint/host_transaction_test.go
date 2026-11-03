@@ -161,3 +161,174 @@ func TestHostTransactionRecovery(t *testing.T) {
 		})
 	}
 }
+
+func TestHostTransactionAllHardLinksModifiedAliasDivergenceAndReadonlyDir(t *testing.T) {
+	t.Run("all in-root hard links modified preserves original inode", func(t *testing.T) {
+		primary := t.TempDir()
+		pathA := filepath.Join(primary, "a.txt")
+		pathB := filepath.Join(primary, "sub", "b.txt")
+		testutil.FailErr(t, "mkdir sub", os.MkdirAll(filepath.Dir(pathB), 0o755))
+		testutil.FailErr(t, "seed a.txt", os.WriteFile(pathA, []byte("shared-v1\n"), 0o640))
+		testutil.FailErr(t, "link b.txt", os.Link(pathA, pathB))
+
+		heldFD, err := os.Open(pathA)
+		testutil.FailErr(t, "open held fd", err)
+		defer func() { _ = heldFD.Close() }()
+		origStat, err := heldFD.Stat()
+		testutil.FailErr(t, "stat held fd", err)
+
+		core, err := layeredfs.New(layeredfs.Config{
+			ViewID: "all-links-view", BackingDir: t.TempDir(),
+			Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
+		})
+		testutil.FailErr(t, "new core", err)
+		defer func() { _ = core.ReleaseView() }()
+
+		qp := func(rel string) layeredfs.QualifiedPath { return layeredfs.QualifiedPath{RootID: "primary", Rel: rel} }
+		_, err = core.WriteFile(qp("a.txt"), []byte("worker-a\n"), 0o644)
+		testutil.FailErr(t, "edit a.txt", err)
+		_, err = core.WriteFile(qp("sub/b.txt"), []byte("worker-b\n"), 0o644)
+		testutil.FailErr(t, "edit sub/b.txt", err)
+
+		store, err := NewStore(t.TempDir())
+		testutil.FailErr(t, "new store", err)
+		pub, err := NewPublisher(PublisherConfig{Core: core, Store: store, WorkerID: "w1", TaskID: "t1", ProjectID: "p1"})
+		testutil.FailErr(t, "publisher", err)
+		_, err = pub.Publish(t.Context(), PublishRequest{CheckpointID: "cp-all-links", Trigger: TriggerWorkerCompletion})
+		testutil.FailErr(t, "publish", err)
+
+		cfg := PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}}
+		promoter, err := NewPromoter(cfg)
+		testutil.FailErr(t, "promoter", err)
+		preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-all-links"})
+		testutil.FailErr(t, "preview", err)
+		_, err = NewHostPromotion(promoter).Apply(t.Context(), ApplyRequest{Preview: preview})
+		testutil.FailErr(t, "apply", err)
+
+		reopened, err := NewPromoter(cfg)
+		testutil.FailErr(t, "reopen", err)
+		testutil.FailErr(t, "rollback", NewHostPromotion(reopened).Rollback(t.Context()))
+
+		infoA, err := os.Stat(pathA)
+		testutil.FailErr(t, "stat restored a.txt", err)
+		infoB, err := os.Stat(pathB)
+		testutil.FailErr(t, "stat restored b.txt", err)
+		if !os.SameFile(infoA, infoB) || !os.SameFile(infoA, origStat) {
+			t.Fatal("expected restored a.txt and sub/b.txt to share the exact pre-transaction inode")
+		}
+	})
+
+	t.Run("external mutation through hard-link alias refuses rollback", func(t *testing.T) {
+		primary := t.TempDir()
+		pathA := filepath.Join(primary, "a.txt")
+		pathB := filepath.Join(primary, "b.txt")
+		testutil.FailErr(t, "seed a.txt", os.WriteFile(pathA, []byte("shared-v1\n"), 0o640))
+		testutil.FailErr(t, "link b.txt", os.Link(pathA, pathB))
+
+		core, err := layeredfs.New(layeredfs.Config{
+			ViewID: "alias-div-view", BackingDir: t.TempDir(),
+			Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
+		})
+		testutil.FailErr(t, "new core", err)
+		defer func() { _ = core.ReleaseView() }()
+
+		_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "a.txt"}, []byte("worker-a\n"), 0o640)
+		testutil.FailErr(t, "edit a.txt", err)
+
+		store, err := NewStore(t.TempDir())
+		testutil.FailErr(t, "new store", err)
+		pub, err := NewPublisher(PublisherConfig{Core: core, Store: store, WorkerID: "w1", TaskID: "t1", ProjectID: "p1"})
+		testutil.FailErr(t, "publisher", err)
+		_, err = pub.Publish(t.Context(), PublishRequest{CheckpointID: "cp-alias-div", Trigger: TriggerWorkerCompletion})
+		testutil.FailErr(t, "publish", err)
+
+		cfg := PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}}
+		promoter, err := NewPromoter(cfg)
+		testutil.FailErr(t, "promoter", err)
+		preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-alias-div"})
+		testutil.FailErr(t, "preview", err)
+		_, err = NewHostPromotion(promoter).Apply(t.Context(), ApplyRequest{Preview: preview})
+		testutil.FailErr(t, "apply", err)
+
+		// Mutate the original inode in-place through b.txt while a.txt holds the promoted inode.
+		fB, err := os.OpenFile(pathB, os.O_WRONLY|os.O_TRUNC, 0o640)
+		testutil.FailErr(t, "open b.txt", err)
+		_, err = fB.WriteString("external-via-alias\n")
+		testutil.FailErr(t, "write b.txt", err)
+		testutil.FailErr(t, "close b.txt", fB.Close())
+
+		reopened, err := NewPromoter(cfg)
+		testutil.FailErr(t, "reopen", err)
+		if err := NewHostPromotion(reopened).Rollback(t.Context()); err == nil {
+			t.Fatal("expected rollback to refuse when retained inode was mutated via external hard-link alias")
+		}
+	})
+
+	t.Run("readonly directory recovery order and store ID validation", func(t *testing.T) {
+		primary := t.TempDir()
+		roDir := filepath.Join(primary, "rodir")
+		roChild := filepath.Join(roDir, "child.txt")
+		testutil.FailErr(t, "mkdir rodir", os.MkdirAll(roDir, 0o755))
+		testutil.FailErr(t, "seed child", os.WriteFile(roChild, []byte("before\n"), 0o640))
+		testutil.FailErr(t, "chmod rodir 0500", os.Chmod(roDir, 0o500))
+		t.Cleanup(func() { _ = os.Chmod(roDir, 0o700) })
+
+		core, err := layeredfs.New(layeredfs.Config{
+			ViewID: "ro-dir-view", BackingDir: t.TempDir(),
+			Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
+		})
+		testutil.FailErr(t, "new core", err)
+		defer func() { _ = core.ReleaseView() }()
+
+		qp := func(rel string) layeredfs.QualifiedPath { return layeredfs.QualifiedPath{RootID: "primary", Rel: rel} }
+		_, err = core.Chmod(qp("rodir"), 0o755)
+		testutil.FailErr(t, "chmod rodir in view", err)
+		_, err = core.WriteFile(qp("rodir/child.txt"), []byte("after\n"), 0o640)
+		testutil.FailErr(t, "write rodir/child.txt", err)
+		_, err = core.WriteFile(qp("rodir/added.txt"), []byte("added\n"), 0o640)
+		testutil.FailErr(t, "write rodir/added.txt", err)
+
+		store, err := NewStore(t.TempDir())
+		testutil.FailErr(t, "new store", err)
+		if _, err := store.LoadManifest("../escape"); !errors.Is(err, ErrInvalidManifest) {
+			t.Fatalf("expected ErrInvalidManifest for traversal checkpoint ID, got %v", err)
+		}
+		if _, err := store.VerifyBlob("../escape", -1); !errors.Is(err, ErrCorruptBlob) {
+			t.Fatalf("expected ErrCorruptBlob for non-hex blob SHA, got %v", err)
+		}
+		if _, _, err := store.LoadPromotionRecord("../escape"); !errors.Is(err, ErrInvalidManifest) {
+			t.Fatalf("expected ErrInvalidManifest for traversal tx ID, got %v", err)
+		}
+
+		pub, err := NewPublisher(PublisherConfig{Core: core, Store: store, WorkerID: "w1", TaskID: "t1", ProjectID: "p1"})
+		testutil.FailErr(t, "publisher", err)
+		_, err = pub.Publish(t.Context(), PublishRequest{CheckpointID: "cp-ro-dir", Trigger: TriggerWorkerCompletion})
+		testutil.FailErr(t, "publish", err)
+
+		cfg := PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}}
+		promoter, err := NewPromoter(cfg)
+		testutil.FailErr(t, "promoter", err)
+		preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-ro-dir"})
+		testutil.FailErr(t, "preview", err)
+		_, err = NewHostPromotion(promoter).Apply(t.Context(), ApplyRequest{Preview: preview})
+		testutil.FailErr(t, "apply", err)
+
+		reopened, err := NewPromoter(cfg)
+		testutil.FailErr(t, "reopen", err)
+		testutil.FailErr(t, "rollback readonly dir", NewHostPromotion(reopened).Rollback(t.Context()))
+
+		dirInfo, err := os.Stat(roDir)
+		testutil.FailErr(t, "stat restored rodir", err)
+		if dirInfo.Mode().Perm() != 0o500 {
+			t.Fatalf("restored rodir mode = %o, want 0500", dirInfo.Mode().Perm())
+		}
+		body, err := os.ReadFile(roChild)
+		testutil.FailErr(t, "read restored roChild", err)
+		if string(body) != "before\n" {
+			t.Fatalf("restored child = %q, want before", body)
+		}
+		if _, err := os.Lstat(filepath.Join(roDir, "added.txt")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expected added.txt removed from rodir, err = %v", err)
+		}
+	})
+}

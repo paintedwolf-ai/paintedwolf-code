@@ -5,9 +5,32 @@ package checkpoint
 import (
 	"bytes"
 	"errors"
-	"golang.org/x/sys/unix"
+	"fmt"
 	"os"
+	"syscall"
+
+	"github.com/lycaon/lycaon/internal/fspath"
+	"golang.org/x/sys/unix"
 )
+
+func targetFileIdentity(file *os.File, info os.FileInfo) (string, error) {
+	id, _, err := targetFileIdentityAndLinks(file, info)
+	return id, err
+}
+
+func targetFileIdentityAndLinks(file *os.File, info os.FileInfo) (string, uint64, error) {
+	if info != nil {
+		if st, ok := info.Sys().(*syscall.Stat_t); ok {
+			return fmt.Sprintf("%d:%d", uint64(st.Dev), uint64(st.Ino)), uint64(st.Nlink), nil
+		}
+		observed := fspath.ObserveFile(info)
+		if observed.Known {
+			return fmt.Sprintf("%d:%d", observed.Identity.Device, observed.Identity.Inode), 1, nil
+		}
+	}
+	id, err := fspath.EntryIdentity(file.Name())
+	return id, 1, err
+}
 
 // ApplyPathXattrs applies extended attributes to abs, ignoring ENOTSUP/EOPNOTSUPP.
 func ApplyPathXattrs(abs string, xattrs map[string][]byte) error {
@@ -20,7 +43,11 @@ func ApplyPathXattrs(abs string, xattrs map[string][]byte) error {
 }
 
 func applyFileXattrs(file *os.File, attrs map[string][]byte) error {
+	current, _ := readFileXattrs(file)
 	for key, value := range attrs {
+		if existing, ok := current[key]; ok && bytes.Equal(existing, value) {
+			continue
+		}
 		if err := unix.Fsetxattr(int(file.Fd()), key, value, 0); err != nil && !errors.Is(err, unix.ENOTSUP) && !errors.Is(err, unix.EOPNOTSUPP) {
 			return err
 		}
