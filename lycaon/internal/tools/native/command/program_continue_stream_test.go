@@ -11,7 +11,7 @@ import (
 )
 
 type continuationWriter struct {
-	bytes.Buffer
+	buffer  bytes.Buffer
 	entered chan struct{}
 	release chan struct{}
 }
@@ -22,7 +22,7 @@ func (w *continuationWriter) Write(p []byte) (int, error) {
 		<-w.release
 		w.entered = nil
 	}
-	return w.Buffer.Write(p)
+	return w.buffer.Write(p)
 }
 
 func TestProgramContinuationStreamReplaysThenFollows(t *testing.T) {
@@ -40,7 +40,7 @@ func TestProgramContinuationStreamReplaysThenFollows(t *testing.T) {
 	close(writer.release)
 	testutil.FailErr(t, "attach capture", <-attached)
 	testutil.FailErr(t, "append during attachment", <-appended)
-	if got := writer.String(); got != "before\nafter\n" {
+	if got := writer.buffer.String(); got != "before\nafter\n" {
 		t.Fatalf("captured %q", got)
 	}
 }
