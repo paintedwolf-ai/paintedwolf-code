@@ -23,6 +23,7 @@ type Core struct {
 }
 
 type backingWorkspace struct {
+	mu             sync.RWMutex
 	workDir        string
 	baseDir        string
 	journalDir     string
@@ -48,6 +49,7 @@ type statsCounters struct {
 }
 
 type idAllocator struct {
+	closing       bool
 	nextNodeID    uint64
 	nextGen       uint64
 	nextHandleID  uint64
@@ -201,6 +203,8 @@ func (b *backingWorkspace) close() {
 	if b == nil {
 		return
 	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	for _, f := range []*os.File{b.workDirFile, b.baseDirFile, b.journalDirFile} {
 		if f != nil {
 			_ = f.Close()

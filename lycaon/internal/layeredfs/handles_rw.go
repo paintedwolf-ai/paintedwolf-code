@@ -10,6 +10,14 @@ import (
 // ReadHandle reads bytes from an open handle at the specified offset.
 // Handles remain valid across rename and open-unlink until closed or the view is released.
 func (c *Core) ReadHandle(hid HandleID, p []byte, offset int64) (int, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return 0, err
+	}
+	defer c.barrier.leaveOp()
+	return readHandleAdmitted(c, hid, p, offset)
+}
+
+func readHandleAdmitted(c *Core, hid HandleID, p []byte, offset int64) (int, error) {
 	c.mu.Lock()
 	h, node, err := validateHandleLocked(c, hid, false)
 	if err != nil {
@@ -61,7 +69,10 @@ func (c *Core) WriteHandle(hid HandleID, data []byte, offset int64) (int, error)
 		return 0, err
 	}
 	defer c.barrier.leaveMutation()
+	return writeHandleAdmitted(c, hid, data, offset)
+}
 
+func writeHandleAdmitted(c *Core, hid HandleID, data []byte, offset int64) (int, error) {
 	c.mu.Lock()
 	h, node, err := validateHandleLocked(c, hid, true)
 	if err != nil {
@@ -101,16 +112,14 @@ func (c *Core) WriteHandle(hid HandleID, data []byte, offset int64) (int, error)
 	n, wErr := writeBackingAt(c, qpath, file, data, writeOffset)
 	if n > 0 {
 		c.mu.Lock()
-		if !c.state.released {
-			if writeOffset+int64(n) > node.size {
-				node.size = writeOffset + int64(n)
-			}
-			now := time.Now()
-			node.mtime = now
-			node.ctime = now
-			node.flags.contentChanged = true
-			recordJournalLocked(c, JournalOpWrite, h.qpath, nil, node, int64(n))
+		if writeOffset+int64(n) > node.size {
+			node.size = writeOffset + int64(n)
 		}
+		now := time.Now()
+		node.mtime = now
+		node.ctime = now
+		node.flags.contentChanged = true
+		recordJournalLocked(c, JournalOpWrite, h.qpath, nil, node, int64(n))
 		c.mu.Unlock()
 	}
 	return n, wErr
@@ -125,6 +134,14 @@ func writeBackingAt(c *Core, qpath QualifiedPath, file *os.File, data []byte, of
 
 // StatHandle returns current attributes for the object bound to hid, even if renamed or unlinked.
 func (c *Core) StatHandle(hid HandleID) (EntryAttr, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return EntryAttr{}, err
+	}
+	defer c.barrier.leaveOp()
+	return statHandleAdmitted(c, hid)
+}
+
+func statHandleAdmitted(c *Core, hid HandleID) (EntryAttr, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	h, node, err := validateHandleLocked(c, hid, false)
@@ -159,6 +176,14 @@ func (c *Core) StatHandle(hid HandleID) (EntryAttr, error) {
 
 // SyncHandle flushes dirty data for hid to stable storage.
 func (c *Core) SyncHandle(hid HandleID) error {
+	if err := c.barrier.enterOp(); err != nil {
+		return err
+	}
+	defer c.barrier.leaveOp()
+	return syncHandleAdmitted(c, hid)
+}
+
+func syncHandleAdmitted(c *Core, hid HandleID) error {
 	c.mu.Lock()
 	h, _, err := validateHandleLocked(c, hid, false)
 	if err != nil {
@@ -178,6 +203,14 @@ func (c *Core) SyncHandle(hid HandleID) error {
 
 // CloseHandle closes and retires an open handle.
 func (c *Core) CloseHandle(hid HandleID) error {
+	if err := c.barrier.enterOp(); err != nil {
+		return err
+	}
+	defer c.barrier.leaveOp()
+	return closeHandleAdmitted(c, hid)
+}
+
+func closeHandleAdmitted(c *Core, hid HandleID) error {
 	c.mu.Lock()
 	if c.state.released {
 		c.mu.Unlock()
@@ -227,84 +260,6 @@ func releaseHandleRef(c *Core, h *openHandle) error {
 	return closeErr
 }
 
-// WriteViaNodeHandle supports protocol-level writes (like NFSv3 WRITE on an owner-created 0444 file)
-// identified by (NodeID, Generation) without requiring a stateful open handle.
-func (c *Core) WriteViaNodeHandle(nodeID NodeID, gen Generation, data []byte, offset int64) (int, EntryAttr, error) {
-	if err := c.barrier.enterMutation(); err != nil {
-		return 0, EntryAttr{}, err
-	}
-	defer c.barrier.leaveMutation()
-
-	c.mu.RLock()
-	if c.state.released {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, ErrViewReleased
-	}
-	node, ok := c.state.nodesByID[nodeID]
-	if !ok || node == nil || node.gen != gen || node.flags.unlinked {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, ErrStaleHandle
-	}
-	c.mu.RUnlock()
-
-	node.flags.ioMu.Lock()
-	defer node.flags.ioMu.Unlock()
-
-	c.mu.RLock()
-	if c.state.released {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, ErrViewReleased
-	}
-	if node.gen != gen || node.flags.unlinked {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, ErrStaleHandle
-	}
-	if node.kind != EntryRegular {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, syscall.EISDIR
-	}
-	if node.mode&0o200 == 0 && !node.flags.ownerCreatedRO {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, syscall.EACCES
-	}
-	backingName, backingPath := node.flags.backingName, node.flags.backingPath
-	var anyPath QualifiedPath
-	for qp := range node.paths {
-		anyPath = qp
-		break
-	}
-	c.mu.RUnlock()
-
-	wf, err := openBackingFileRW(int(c.backing.workDirFile.Fd()), backingName, backingPath)
-	if err != nil {
-		return 0, EntryAttr{}, err
-	}
-	n, wErr := writeBackingAt(c, anyPath, wf, data, offset)
-	_ = wf.Close()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state.released {
-		return n, EntryAttr{}, ErrViewReleased
-	}
-	if n > 0 {
-		if offset+int64(n) > node.size {
-			node.size = offset + int64(n)
-		}
-		now := time.Now()
-		node.mtime = now
-		node.ctime = now
-		node.flags.contentChanged = true
-		for qp := range node.paths {
-			anyPath = qp
-			break
-		}
-		recordJournalLocked(c, JournalOpWrite, anyPath, nil, node, int64(n))
-	}
-	attr := nodeToAttrLocked(node)
-	return n, attr, wErr
-}
-
 func validateHandleLocked(c *Core, hid HandleID, requireWrite bool) (*openHandle, *privateNode, error) {
 	if c.state.released {
 		return nil, nil, ErrViewReleased
@@ -335,21 +290,4 @@ func hasOpenHandlesForNodeLocked(c *Core, nid NodeID) bool {
 		}
 	}
 	return false
-}
-
-// OpenBackingReader opens a read-only stream to a private node's backing content by NodeID and Generation.
-func (c *Core) OpenBackingReader(nodeID NodeID, gen Generation) (io.ReadCloser, error) {
-	c.mu.RLock()
-	if c.state.released {
-		c.mu.RUnlock()
-		return nil, ErrViewReleased
-	}
-	node, ok := c.state.nodesByID[nodeID]
-	if !ok || node == nil || node.gen != gen || node.kind != EntryRegular {
-		c.mu.RUnlock()
-		return nil, ErrStaleHandle
-	}
-	bName, bPath := node.flags.backingName, node.flags.backingPath
-	c.mu.RUnlock()
-	return openBackingFileRO(int(c.backing.workDirFile.Fd()), bName, bPath)
 }

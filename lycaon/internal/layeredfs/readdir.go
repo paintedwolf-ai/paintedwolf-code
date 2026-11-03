@@ -8,6 +8,10 @@ import (
 
 // ReadDir returns a merged, sorted directory listing for qpath across private, parent, and trunk layers.
 func (c *Core) ReadDir(qpath QualifiedPath) ([]DirEntry, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return nil, err
+	}
+	defer c.barrier.leaveOp()
 	res, err := resolvePath(c, qpath, true, false)
 	if err != nil {
 		return nil, err
@@ -151,4 +155,28 @@ func immediateChildName(rootID, prefix string, candidate QualifiedPath) (string,
 		return "", false
 	}
 	return rest, true
+}
+
+func isMaskedByPrivateDeletionOrReplacementLocked(c *Core, qpath QualifiedPath) bool {
+	if _, deleted := c.state.deletedPaths[qpath]; deleted {
+		return true
+	}
+	rel := qpath.Rel
+	for rel != "." {
+		if _, del := c.state.deletedPaths[QualifiedPath{RootID: qpath.RootID, Rel: rel}]; del {
+			return true
+		}
+		if ancID, ok := c.state.pathIndex[QualifiedPath{RootID: qpath.RootID, Rel: rel}]; ok {
+			anc := c.state.nodesByID[ancID]
+			if anc != nil && (anc.kind != EntryDirectory || anc.flags.namespaceAdded) {
+				return true
+			}
+		}
+		slash := strings.LastIndexByte(rel, '/')
+		if slash < 0 {
+			break
+		}
+		rel = rel[:slash]
+	}
+	return false
 }
