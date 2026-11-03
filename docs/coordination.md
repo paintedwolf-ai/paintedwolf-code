@@ -4,7 +4,7 @@ Coordination lets one session use parallel workers without sharing scratch state
 
 **See also:** [Architecture](architecture.md#coordination-planes) · [Session](session.md) · [Tools](tools.md#worker-scope-coordination) · [Grounding](grounding.md) · [Worker result contract](worker-result-contract.md)
 
-**Machine truth:** surface routing in `lycaon/config/packs/painted-wolf/platform/host/coordinator-flow.yaml` and `coordinator-surfaces.yaml`, compiled by `lycaon/internal/coordinator/surface/` · workers in `lycaon/internal/worker` and `lycaon/internal/spawn` · delegation in `lycaon/internal/delegation` · layered worker workspaces in `lycaon/internal/layeredfs`, `lycaon/internal/workspace`, and `lycaon/internal/sourceworkspace`
+**Machine truth:** surface routing in `lycaon/config/packs/painted-wolf/platform/host/coordinator-flow.yaml` and `coordinator-surfaces.yaml`, compiled by `lycaon/internal/coordinator/surface/` · workers in `lycaon/internal/worker` and `lycaon/internal/spawn` · delegation in `lycaon/internal/delegation` · worker workspaces in `lycaon/internal/sourceworkspace`
 
 ---
 
@@ -89,13 +89,13 @@ A worker job is one semantic unit with a stable child session and, for write wor
 `task.shared_context` carries the interface agreements a cold child needs, up to
 8192 UTF-8 bytes independently of the 4096-character brief. Coordinators pass the
 same relevant contract to collaborating workers. It travels in the pinned
-assignment and survives compaction. Read workers inspect the primary roots; write
-workers operate in an engine-managed private workspace—a live layered view on
-mounted adapters (`fuselinux`, `nfsdarwin`) where untouched paths follow the
-trunk and mutations stay private, or a fixed-seed materialized workspace when
-`eagercopy` fallback is used. A sibling path reference does not expose another
-worker's private working storage, and resuming a child retains its workspace view
-and published checkpoints.
+assignment and survives compaction. Read workers see primary; write workers see
+a private snapshot captured when execution starts (and under the Milestone 14
+target contract in [Worker workspace and promotion](#worker-workspace-and-promotion),
+an engine-managed live layered view on mounted adapters or a fixed-seed
+materialized workspace on `eagercopy`). A sibling path reference does
+not make that file available, and resuming a child retains its original snapshot
+(or its private workspace view and published checkpoints under Milestone 14).
 
 `task.after_workers` names up to 32 existing sibling jobs in the same session,
 project, and root. The host leaves a consumer pending without occupying a worker
@@ -145,11 +145,29 @@ Path reservations are informational. They make intended scope visible and reduce
 
 ### Worker workspace and promotion
 
-A write job receives an engine-managed private workspace (`lycaon/internal/layeredfs`) plus host-only metadata. The child sees its workspace roots, task mode, and focus hints; the parent receives summaries, findings, and checkpoint/overlay handles rather than raw backing paths.
+A write job receives a private live tree plus host-only metadata. The child sees the private workspace, task mode, and focus hints; the parent receives summaries, findings, and an overlay handle rather than absolute engine paths.
 
-Mounted write-worker preparation is `O(selected roots)`, independent of the number of files in the project. Linux serves one FUSE view per live worker (`fuselinux`); macOS serves one view per live worker through the built-in NFS client and an engine loopback NFSv3 server (`nfsdarwin`). When a mounted view is unavailable in the current installation or confinement context, `eagercopy` materializes the selected roots into private storage under bounded entry and byte limits (default 200,000 entries and 5 GiB), returning a structured `workspace_preparation_limit` with observed counts and retry options if a limit is reached. An explicit workspace selection on dispatch may narrow the workspace to specific attached root IDs or subroots within them (validated against existing grants); `task` path reservations remain informational focus hints and do not change workspace content.
+On current `main`, that private tree is materialized as a copied branch with no version-control metadata, so no repository tool is offered on a write leg. Change history inside one comes from the host source ledger. Reading repository history, or recovering a past revision, belongs to a read-scoped leg or the coordinator turn, both of which run on the primary tree.
 
-Six terms govern the worker workspace and integration lifecycle:
+Promotion is a host transition:
+
+1. Confirm the overlay belongs to the expected task and project generation.
+2. Collect every observed overlay change.
+3. Confirm required source verification is current.
+4. Preview or resolve conflicts against the integration target.
+5. Apply the change and advance the integrated source generation.
+6. Record the landing result and any new verification obligation.
+
+A rejected or conflicting promotion preserves the overlay for repair. It does not delete the only copy of the worker's result.
+
+#### Milestone 14 target contract: layered worker workspaces and checkpoint promotion
+
+> [!NOTE]
+> **Milestone 14 target contract ([#1656](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1656)).** The layered-workspace, private-Git, and checkpoint promotion contract below is tracked in [#1657](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1657)–[#1667](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1667) and [#1671](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1671) and replaces full-tree claim materialization and the no-VCS write-leg restriction as those issues land. This transition annotation will be removed once implementation is complete.
+
+In the Milestone 14 target architecture (planned `lycaon/internal/layeredfs`), write-worker preparation is independent of the number of files in the project (`O(selected roots)` on mounted adapters). Linux serves one FUSE view per live worker (`fuselinux`, [#1659](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1659)); macOS serves one view per live worker through the built-in NFS client and an engine loopback NFSv3 server (`nfsdarwin`, [#1660](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1660), [#1661](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1661)). When a mounted view is unavailable in the current installation or confinement context, `eagercopy` ([#1658](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1658)) materializes the selected roots into private storage under bounded entry and byte limits (initial configurable limits: 200,000 entries and 5 GiB), stopping cleanly and returning a structured limit outcome (proposed `workspace_preparation_limit` in [#1658](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1658)) with observed counts and retry options if a limit is reached. An explicit dispatch workspace selection ([#1658](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1658), [#1662](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1662)) may narrow the workspace to specific attached root IDs or subroots within them (validated against existing grants); `task` path reservations remain informational focus hints and do not change workspace content.
+
+Six terms govern the target worker workspace and integration lifecycle:
 
 - **View spec:** worker and project identities, selected root mappings, source generation, adapter, private storage, and retained parent checkpoint IDs.
 - **Working storage:** mutable private content and a journal of namespace changes. It is not a published checkpoint.
@@ -158,26 +176,26 @@ Six terms govern the worker workspace and integration lifecycle:
 - **Source observation:** what the host actually observed, with its version and provenance. An index timestamp does not prove which bytes a command read.
 - **Promotion:** the host transaction that previews and applies one checkpoint against an integration target.
 
-Mounted worker workspaces are live. Untouched paths resolve against the trunk and can reflect outside edits, while privately mutated paths resolve to private content in `Working storage` until the worker changes them again or starts another result. An open file descriptor can continue to refer to the object it opened after its pathname is replaced, and its observed version is tracked separately from later lookups of the same path. Shell commands, background processes, language servers, and live native file tools all operate through the same worker mount, so native edits and shell reads are immediately coherent without raw backing-directory bypasses.
+Mounted worker workspaces are live ([#1665](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1665)). Untouched paths resolve against the trunk and can reflect outside edits, while privately mutated paths resolve to private content in `Working storage` until the worker changes them again or starts another result. An open file descriptor can continue to refer to the object it opened after its pathname is replaced, and its observed version is tracked separately from later lookups of the same path. Shell commands, background processes, language servers, and live native file tools all operate through the same worker mount, so native edits and shell reads are immediately coherent without raw backing-directory bypasses.
 
-When previously observed trunk paths change, structured source events and observations record the change and add a `trunk.changed` note on the worker's next model request naming the affected paths and observation references. That notice informs the worker; it neither grants authority nor selects a merge base. Orientation, survey, search, divergence, and evidence consumers combine the project source index for untouched paths with the worker's private namespace/change index (or a selected immutable `Checkpoint`), carrying observation time, coverage, and freshness without walking unrelated lower directories.
+When previously observed trunk paths change, structured source events and observations record the change and deliver a trunk-change notice on the worker's next model request (proposed `trunk.changed` note in [#1665](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1665)) naming the affected paths and observation references. That notice informs the worker; it neither grants authority nor selects a merge base. Orientation, survey, search, divergence, and evidence consumers ([#1664](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1664)) combine the project source index for untouched paths with the worker's private namespace/change index (or a selected immutable `Checkpoint`), carrying observation time, coverage, and freshness without walking unrelated lower directories.
 
-Private Git is part of the write workspace on every adapter (`fuselinux`, `nfsdarwin`, and `eagercopy`), so repository tools and ordinary shell `git` operations (`status`, `diff`, `log`, `commit`, `revert`, `checkout`, `switch`, `stash`, worktree inspection, submodules, and egress-governed `fetch`/`push`) are available on write legs. Each repository receives private `HEAD`, refs, index, reflogs, rewritten `gitdir`/`commondir`/`worktree`/submodule links, and private object-write storage backed by an engine-retained content-addressed Git object store (never a direct alternate into the mutable trunk object directory). Mounted views intercept `.git` lookups and initialize private repository state lazily on first access, with first-use initialization cost reported separately from workspace claim; `eagercopy` discovers and initializes private repositories during its required seed traversal while skipping raw `.git` directories and gitlinks. Pre-existing staged and unstaged user changes remain the worker's base rather than becoming worker-authored changes when Git refreshes its index.
+Private Git is part of the write workspace on every adapter (`fuselinux`, `nfsdarwin`, and `eagercopy`, [#1671](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1671)), so repository tools and ordinary shell `git` operations (`status`, `diff`, `log`, `commit`, `revert`, `checkout`, `switch`, `stash`, worktree inspection, submodules, and egress-governed `fetch`/`push`) are available on write legs. Each repository receives private `HEAD`, refs, index, reflogs, rewritten `gitdir`/`commondir`/`worktree`/submodule links, and private object-write storage backed by an engine-retained content-addressed Git object store (never a direct alternate into the mutable trunk object directory). Mounted views intercept `.git` lookups and initialize private repository state lazily on first access, with first-use initialization cost reported separately from workspace claim; `eagercopy` discovers and initializes private repositories during its required seed traversal while skipping raw `.git` directories and gitlinks. Pre-existing staged and unstaged user changes remain the worker's base rather than becoming worker-authored changes when Git refreshes its index.
 
-Checkpoints are published at mutating foreground-command and native-mutation-batch boundaries, at worker completion, and on explicit capture requests. Publication stops admission of new mutations, acquires the adapter and process-supervision barrier, drains native mutations, quiesces worker writers, flushes dirty client buffers and writable mappings, writes referenced content, exact bases, private Git refs/objects, and the manifest in persistence order, and atomically publishes the `Checkpoint` ID and retention references before releasing the barrier. Continuing work writes new mutable versions that cannot overwrite published checkpoint content, even through already-open descriptors.
+Checkpoints ([#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663)) are published at mutating foreground-command and native-mutation-batch boundaries, at worker completion, and on explicit capture requests. Publication stops admission of new mutations, acquires the adapter and process-supervision barrier, drains native mutations, quiesces worker writers, flushes dirty client buffers and writable mappings, writes referenced content, exact bases, private Git refs/objects, and the manifest in persistence order, and atomically publishes the `Checkpoint` ID and retention references before releasing the barrier. Continuing work writes new mutable versions that cannot overwrite published checkpoint content, even through already-open descriptors.
 
-A checkpoint freezes the worker's private changes, not every untouched file in the project. Verification receipts bind to the private `Checkpoint` ID when one was used, the observed source state, and actual read/attribution coverage; verification never describes a checkpoint as a whole-project snapshot, and relevant trunk changes mark affected verification receipts stale.
+A checkpoint freezes the worker's private changes, not every untouched file in the project. Verification receipts ([#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663), [#1665](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1665)) bind to the private `Checkpoint` ID when one was used, the observed source state, and actual read/attribution coverage; verification never describes a checkpoint as a whole-project snapshot, and relevant trunk changes mark affected verification receipts stale.
 
-Promotion is a host transaction over an immutable `Checkpoint` (never a mutable working-directory scan or an inferred merge base):
+In the target contract, `Promotion` ([#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663)) is a host transaction over an immutable `Checkpoint` (never a mutable working-directory scan or an inferred merge base):
 
 1. Confirm the `Checkpoint` belongs to the expected worker job, `View spec`, and project generation.
 2. Preview every journaled change and its exact captured `Base` (or base absence and namespace state) from the checkpoint, along with any stale `Source observation` review hints across directories and roots.
 3. Confirm required source verification bound to the checkpoint and observed source state is current.
 4. Detect or resolve conflicts against the integration target using the checkpoint's exact bases; missing or ambiguous bases produce an explicit conflict with recoverable evidence rather than a guessed merge.
 5. Revalidate the integration target at apply, journal the apply transaction so retries resume or recognize the same transaction without duplicate application, and advance the integrated source generation.
-6. Record file promotion and namespaced Git ref import (`refs/paintedwolf/workers/<job>/<checkpoint>/<ref>`) as distinct, idempotent effects—importing commits never applies their working-tree file changes a second time—and record the landing result and any new verification obligation.
+6. Record file promotion and namespaced Git ref import (such as `refs/paintedwolf/workers/<job>/<checkpoint>/<ref>`, [#1671](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1671)) as distinct, idempotent effects—importing commits never applies their working-tree file changes a second time—and record the landing result and any new verification obligation.
 
-A rejected or conflicting promotion, or a released worker mount, preserves the published `Checkpoint` and its retained objects for repair; it never deletes the only copy of the worker's result. Stacked workers layer over retained immutable parent checkpoints rather than mutable parent working directories.
+A rejected or conflicting promotion, or a released worker mount, preserves the published `Checkpoint` and its retained objects for repair; it never deletes the only copy of the worker's result. Stacked workers ([#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666)) layer over retained immutable parent checkpoints rather than mutable parent working directories.
 
 ---
 
@@ -246,8 +264,8 @@ If the model cannot produce a valid closeout after bounded repair, the host may 
 
 - One visible human intent defines one batch and one final synthesis.
 - Workers share explicit findings and envelopes, not scratch transcript or write trees.
-- Write workers mutate private layered views (or bounded materialized fallbacks) with private Git; promotion consumes an immutable checkpoint and is the integration boundary.
-- Task paths guide focus only; explicit workspace selections narrow mapped roots under existing grants, and permissions, verification, and promotion use observed host state and exact bases.
+- Write workers mutate overlays; promotion is the integration boundary.
+- Task paths guide focus only; permissions, verification, and promotion use observed host state.
 - Human approvals remain with the effect checkpoint that raised them.
 - Progress, findings, board, and Blueprints keep separate state authorities.
 - Machine state selects coordinator surfaces; prose does not.
