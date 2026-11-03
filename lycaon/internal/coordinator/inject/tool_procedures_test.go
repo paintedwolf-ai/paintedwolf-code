@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -163,6 +164,17 @@ func assertOfferedPageProcedures(t *testing.T, offered []string, block string) {
 
 func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
+	catalog, err := renderer.UnitCatalog()
+	testutil.FailErr(t, "load progress unit catalog", err)
+	progressRef := ""
+	for _, unit := range catalog.Units() {
+		if unit.ID == "coordinator-progress-procedure" {
+			progressRef = unit.Ref
+		}
+	}
+	if progressRef == "" {
+		t.Fatal("progress procedure unit missing from catalog")
+	}
 	gatedAndLifecycle := []string{
 		"command", "restore_version",
 		"task", "delegate_dispatch", "delegate_decompose",
@@ -179,10 +191,15 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_RECONCILIATION_REQUIRED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, explanations, and commands that only write session scratch or saved output files need none")) {
 				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
 			}
+			if !want {
+				continue
+			}
+			progressBlock, err := renderer.RenderUnit(t.Context(), progressRef, prompts.VisibleToolsNativePartialVars([]string{tool}))
+			testutil.FailErr(t, "render isolated progress procedure", err)
 			for _, candidate := range gatedAndLifecycle {
-				wantCandidate := want && tool == candidate
-				if strings.Contains(block, "`"+candidate+"`") != wantCandidate {
-					t.Fatalf("progress procedure tool %q present=%v, want %v for %s/%s: %s", candidate, strings.Contains(block, "`"+candidate+"`"), wantCandidate, profile, tool, block)
+				wantCandidate := tool == candidate
+				if strings.Contains(progressBlock, "`"+candidate+"`") != wantCandidate {
+					t.Fatalf("progress procedure tool %q present=%v, want %v for %s/%s: %s", candidate, strings.Contains(progressBlock, "`"+candidate+"`"), wantCandidate, profile, tool, progressBlock)
 				}
 			}
 		}
