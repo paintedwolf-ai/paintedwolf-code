@@ -292,4 +292,3 @@ WHERE observed_files.layer != 'private' OR excluded.layer = 'private'`,
 	}
 	return tx.Commit()
 }
-

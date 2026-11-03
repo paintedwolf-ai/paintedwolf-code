@@ -91,4 +91,3 @@ func boundaryTime(history []api.Message) time.Time {
 	}
 	return time.Time{}
 }
-

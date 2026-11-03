@@ -115,4 +115,3 @@ func (c *ServiceConfigOps) SourceVerifyCommand(ctx context.Context, projectDir s
 	}
 	return strings.TrimSpace(c.svc.verifyConfig.VerifyTestCommand(projectDir))
 }
-
