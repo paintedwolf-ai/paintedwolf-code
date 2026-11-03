@@ -12,7 +12,7 @@ class HostedScheduleTests(unittest.TestCase):
         rows = hosted_plan.matrix("integration", timings=measured)["include"]
         self.assertEqual(measured, original)
         self.assertEqual({(row["lane"], row["shard"]) for row in rows[:4]},
-                         {("limits", ""), ("lint", ""), ("behavior", "1/2"), ("behavior", "2/2")})
+                         {("limits", ""), ("lint", ""), ("runner", ""), ("behavior", "1/2")})
         self.assertEqual({row["timing_basis"] for row in rows}, {"catalog-budget"})
         self.assertTrue(all(row["expected_seconds"] == row["minutes"] * 60 for row in rows))
         self.assertEqual(rows, hosted_plan.matrix("integration")["include"])
@@ -23,20 +23,21 @@ class HostedScheduleTests(unittest.TestCase):
         seconds = {row["timing_row"]: 600 for row in baseline}
         seconds.update({"behavior 1/2": 60, "behavior 2/2": 1500})
         rows = hosted_plan.matrix("integration", timings={"lanes": seconds})["include"]
-        self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
-        self.assertEqual([row["expected_seconds"] for row in rows[2:4]], [1500, 1500])
+        self.assertEqual([row["lane"] for row in rows[:3]], ["limits", "lint", "runner"])
+        self.assertEqual([row["lane"] for row in rows[3:5]], ["behavior", "behavior"])
+        self.assertEqual([row["expected_seconds"] for row in rows[3:5]], [1500, 1500])
         self.assertEqual({row["timing_basis"] for row in rows}, {"measured"})
         self.assertEqual(rows, hosted_plan.matrix("integration", timings={"lanes": seconds})["include"])
 
     def test_selected_profile_only_requires_its_own_rows(self):
-        rows = hosted_plan.matrix("fast", timings={"lanes": {"ready": 300}})["include"]
-        self.assertEqual([(row["lane"], row["expected_seconds"], row["timing_basis"]) for row in rows],
-                         [("ready", 300, "measured")])
+        rows = hosted_plan.matrix("fast", timings={"lanes": {"ready": 300, "ready-lint": 600}})["include"]
+        self.assertEqual(sorted((row["lane"], row["expected_seconds"], row["timing_basis"]) for row in rows),
+                         [("ready", 300, "measured"), ("ready-lint", 600, "measured")])
 
     def test_invalid_measurements_use_catalog_budgets(self):
         for value in [True, False, 0, -1, float("nan"), float("inf"), "300", None]:
             with self.subTest(value=value):
-                rows = hosted_plan.matrix("fast", timings={"lanes": {"ready": value}})["include"]
+                rows = hosted_plan.matrix("fast", timings={"lanes": {"ready": value, "ready-lint": 300}})["include"]
                 self.assertEqual(rows[0]["timing_basis"], "catalog-budget")
                 self.assertEqual(rows[0]["expected_seconds"], rows[0]["minutes"] * 60)
 
@@ -47,7 +48,8 @@ class HostedScheduleTests(unittest.TestCase):
         self.assertIn("Estimate basis: `catalog-budget`", summary)
         self.assertIn("`behavior 2/2`", summary)
         self.assertIn("Nightly timing sources: 30, 20", summary)
-        self.assertIn("| 3 | behavior | 1/2 | critical | 9000 |", summary)
+        self.assertIn("| 3 | runner |  | reject | 3600 |", summary)
+        self.assertIn("| 4 | behavior | 1/2 | critical | 9000 |", summary)
 
     def test_compile_promotion_preserves_work_and_predicted_completion(self):
         import itertools

@@ -80,6 +80,11 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Prepare disposable runner storage
+      if: inputs.lookup-only != 'true'
+      shell: bash
+      run: PYTHONPATH=scripts python3 -m ci_policy.runner_storage
+
     - name: Set verification compiler profiles
       if: inputs.lookup-only != 'true'
       shell: bash

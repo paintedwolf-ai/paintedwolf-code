@@ -155,10 +155,11 @@ class MeasuredTimingsTests(unittest.TestCase):
         rows = hosted_plan.matrix("integration", timings={"lanes": measured, "packages": {}})["include"]
         selection = lambda rows: sorted((row["lane"], row["shard"], row["minutes"]) for row in rows)
         self.assertEqual(selection(rows), selection(unmeasured))
-        self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
+        self.assertEqual({row["lane"] for row in rows[:3]}, {"limits", "lint", "runner"})
         rest = [row["lane"] for row in rows if lanes[row["lane"]].get("priority", "normal") in {"compile", "normal"}]
-        self.assertEqual(rest[:4], ["native", "webkit-gtk", "frontend", "runner"])
-        self.assertLess(rest.index("runner"), rest.index("contracts"))
+        self.assertEqual(rest[:3], ["native", "webkit-gtk", "frontend"])
+        self.assertLess([row["lane"] for row in rows].index("runner"),
+                        [row["lane"] for row in rows].index("contracts"))
 
     def test_plan_without_measurements_orders_by_budget(self):
         data = copy.deepcopy(planning.catalog())

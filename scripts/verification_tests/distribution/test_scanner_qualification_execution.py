@@ -70,10 +70,13 @@ pathlib.Path(os.environ['FIXTURE_RESULT']).write_text(json.dumps({
 
     def test_merge_phases_preserve_the_full_bundled_recipe(self):
         from ci_policy import hosted_plan, merge_preflight
-        packages = ["example/test/contract/hosted", "example/internal/scan"]
+        packages = ["./test/contract/hosted", "./internal/scan"]
         full = planning.expand(["test:full"])[0]
         with patch.object(merge_preflight.subprocess, "run") as listing:
-            listing.return_value.stdout = "\n".join(json.dumps({"ImportPath": name}) for name in packages)
+            listing.return_value.stdout = "\n".join(json.dumps({
+                "ImportPath": "example/" + name[2:],
+                "Dir": str(merge_preflight.ROOT / "lycaon" / name[2:]),
+            }) for name in packages)
             phases = merge_preflight.commands(hosted_plan.lanes()["behavior"], ["test:full"])
         observed = []
         for phase in phases:

@@ -16,6 +16,7 @@ def main():
     plan.add_argument("--suite", default="all", choices=sorted(hosted_plan.SUITES))
     plan.add_argument("--platform", action="store_true", help="only the profile's platform lanes")
     plan.add_argument("--timings", type=Path, help="measured timings that order the matrix")
+    plan.add_argument('--lane', default='', help='diagnostic lane; manual dispatch only')
     commands.add_parser("timings", help="main's latest measured lane and package durations")
     parallel = commands.add_parser("max-parallel", help="jobs a profile's matrix runs at once")
     parallel.add_argument("profile", choices=sorted(hosted_plan.PROFILES))
@@ -42,6 +43,12 @@ def main():
                 summary.write("### Change scope\n\n```json\n" + json.dumps(scope, indent=2) + "\n```\n")
         measured = json.loads(args.timings.read_text()) if args.timings else None
         matrix = hosted_plan.matrix(args.profile, args.suite, scope, args.platform, measured)
+        if args.lane:
+            if os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch':
+                parser.error('diagnostic lane selection requires manual dispatch')
+            matrix['include'] = [row for row in matrix['include'] if row['lane'] == args.lane]
+            if not matrix['include']:
+                parser.error('diagnostic lane is absent from the selected profile')
         if os.environ.get("GITHUB_STEP_SUMMARY"):
             from ci_policy.hosted_schedule import summarize
             with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:

@@ -125,7 +125,7 @@ boot_one() {
   session_id="$(jq -r '.session_id' <<<"${manifest}")"
   tool_id="$(jq -r '.tool_result_message_id' <<<"${manifest}")"
 
-  local tmp config_dir project_abs port addr token pid log base
+  local tmp config_dir project_abs addr token pid log base
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/upgrade-corpus-boot.XXXXXX")"
   # Materialized roots stay outside the config directory.
   config_dir="${tmp}/config"
@@ -148,8 +148,7 @@ boot_one() {
     return 1
   }
 
-  port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
-  addr="127.0.0.1:${port}"
+  addr="127.0.0.1:0"
   token="upgrade-corpus-boot-token"
   log="${tmp}/sidecar.log"
 
@@ -185,12 +184,13 @@ boot_one() {
     return "${code}"
   }
 
-  base="http://${addr}"
+  base=""
   local deadline body status got_schema
   deadline=$((SECONDS + 60))
   body=""
   while (( SECONDS < deadline )); do
-    if body="$(curl -sf --max-time 2 "${base}/health" 2>/dev/null)"; then
+    if base="$(upgrade_owned_base "${config_dir}" "${pid}")" &&
+       body="$(curl -sf --max-time 2 "${base}/health" 2>/dev/null)"; then
       status="$(jq -r '.status // empty' <<<"${body}")"
       if [[ "${status}" == "ok" || "${status}" == "degraded" || "${status}" == "recovery" ]]; then
         break

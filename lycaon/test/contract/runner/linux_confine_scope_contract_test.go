@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -171,9 +173,36 @@ func TestInstalledHelperSuiteIsNotASecurityJourney(t *testing.T) {
 func TestLinuxConfineRunsOnBothArchitectures(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	job := extractYAMLJob(contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml"), "upgrade-corpus")
-	if !strings.Contains(job, "run: ./task test:confine:linux\n") || !strings.Contains(job, "runs-on: ubuntu-latest") {
-		t.Error("the amd64 upgrade-corpus job must run ./task test:confine:linux")
+	var workflow struct {
+		Jobs map[string]struct {
+			Runner string                 `yaml:"runs-on"`
+			Steps  []struct{ Run string } `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	contractcheck.FailErr(t, "decode platform workflow", yaml.Unmarshal([]byte(contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml")), &workflow))
+	job := workflow.Jobs["upgrade-corpus"]
+	if job.Runner != "ubuntu-latest" {
+		t.Error("the amd64 upgrade-corpus job must use its declared Linux runner")
+	}
+	want := []string{"sandbox", "supervisor", "launch", "browser", "helpers"}
+	var legs []string
+	for _, step := range job.Steps {
+		args := strings.Fields(step.Run)
+		if len(args) < 2 || args[0] != "./task" || args[1] != "test:confine:linux" {
+			continue
+		}
+		if len(args) == 2 {
+			legs = append(legs, want...)
+		} else if len(args) > 3 && args[2] == "--" {
+			legs = append(legs, args[3:]...)
+		} else {
+			t.Fatalf("invalid confinement selection: %v", args)
+		}
+	}
+	slices.Sort(legs)
+	slices.Sort(want)
+	if !slices.Equal(legs, want) {
+		t.Errorf("amd64 confinement legs = %v, want each declared leg once: %v", legs, want)
 	}
 	var plan struct {
 		CI map[string]struct {

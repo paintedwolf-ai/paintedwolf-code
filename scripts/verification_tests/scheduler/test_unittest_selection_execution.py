@@ -19,12 +19,14 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class UnittestSelectionTests(unittest.TestCase):
-    def test_default_suite_and_resources_are_unchanged(self):
+    def test_default_suite_keeps_resources_when_full_gate_uses_coverage(self):
         stage = planning.request(["test:runner"], {})["stages"][0]
         self.assertEqual(stage["arguments"], ["test:runner"])
         self.assertEqual(resources.profile(stage, planning.catalog()), {"locks": ["runner"], "workers": 1})
-        full = next(s for s in planning.expand(["check"]) if s["name"] == "test:runner")
-        self.assertEqual(full, stage)
+        full = planning.expand(['check'])
+        self.assertNotIn('test:runner', [s['name'] for s in full])
+        measured = next(s for s in full if s['name'] == 'scripts:coverage:changes')
+        self.assertEqual(resources.profile(measured, planning.catalog()), resources.profile(stage, planning.catalog()))
 
     def test_repeated_patterns_are_part_of_the_planned_stage_identity(self):
         arguments = ["test:runner", "--", "-k", "terminal", "-k", "*crash*"]

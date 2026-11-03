@@ -7,6 +7,7 @@ import time
 
 from artifact_paths import artifact_root
 from ci_policy.evidence import failure_signature
+from ci_policy import retained_go_failures
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCERPT_LINES = 60
@@ -29,6 +30,7 @@ def failures(root):
         # A run stopped before any stage reported, such as a cancellation, has only the receipt's reason.
         found += stages or [{"stage": ", ".join(record.get("names", [])), "subject": "", "status": record.get("status"),
                              "tests": [], "output": None, "log": None, "reason": record.get("reason")}]
+        found += retained_go_failures.failures(root, record, stages)
     return found
 
 

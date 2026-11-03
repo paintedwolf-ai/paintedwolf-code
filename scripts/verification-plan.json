@@ -10,11 +10,8 @@
       "den:typecheck",
       "den:lint",
       "den:test:fast",
-      "den:coverage:changes",
       "test:short",
       "test:contract",
-      "coverage:changes",
-      "scripts:coverage:changes",
       "licenses:notices",
       "comments:check",
       "test:fail-messages:check",
@@ -43,11 +40,9 @@
       "licenses:notices"
     ],
     "check:tests": [
-      "test:runner",
       "test:full",
       "den:typecheck",
       "den:lint",
-      "den:test",
       "den:test:rust",
       "decide:test"
     ],
@@ -145,6 +140,7 @@
         "./internal/sourceledger",
         "./internal/session/store",
         "./internal/sourcecomparison",
+        "./internal/tools/native/command",
         "./internal/toolhost",
         "./internal/tools/native/jq"
       ],
@@ -998,27 +994,17 @@
   },
   "ci": {
     "ready": {
-      "compile_targets": {
-        "den:test:rust": [
-          "lycaon-den/src-tauri/"
-        ],
-        "decide:test": [
-          "lycaon/internal/decide/native/"
-        ]
-      },
+      "compile_targets": {},
       "targets": [
         "build",
-        "lint:full",
         "budgets",
         "den:typecheck",
         "den:lint",
-        "coverage:changes",
+        "test:short",
         "comments:check",
         "test:fail-messages:check",
         "docs:links",
-        "den:test:fast",
-        "den:coverage:changes",
-        "scripts:coverage:changes"
+        "den:test:fast"
       ],
       "minutes": 180,
       "profiles": [
@@ -1030,14 +1016,30 @@
         "test:contract",
         "--",
         "./test/contract/..."
+      ],
+      "admission_checks": [
+        [
+          "test:confine:linux",
+          "--",
+          "supervisor"
+        ]
       ]
+    },
+    "ready-lint": {
+      "targets": [
+        "lint:full"
+      ],
+      "minutes": 180,
+      "profiles": [
+        "fast"
+      ],
+      "suite": "all",
+      "setup": "analysis"
     },
     "limits": {
       "targets": [
         "budgets",
-        "coverage:changes",
-        "den:coverage:changes",
-        "scripts:coverage:changes"
+        "coverage:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1117,7 +1119,7 @@
     },
     "runner": {
       "targets": [
-        "test:runner"
+        "scripts:coverage:changes"
       ],
       "minutes": 60,
       "profiles": [
@@ -1126,7 +1128,9 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "priority": "reject",
+      "runtime_engines": false
     },
     "behavior": {
       "targets": [
@@ -1150,7 +1154,7 @@
       "targets": [
         "den:typecheck",
         "den:lint",
-        "den:test"
+        "den:coverage:changes"
       ],
       "minutes": 90,
       "profiles": [
@@ -1279,7 +1283,16 @@
         "nightly"
       ],
       "suite": "performance",
-      "setup": "verification"
+      "setup": "verification",
+      "arguments": [
+        "./internal/db",
+        "./internal/findings",
+        "./internal/git",
+        "./internal/sourcecatalog",
+        "./internal/sourceledger",
+        "./internal/session/store",
+        "./internal/sourcecomparison"
+      ]
     },
     "go-coverage": {
       "targets": [
@@ -1370,20 +1383,37 @@
       ],
       "suite": "all",
       "setup": "verification"
+    },
+    "command-scale": {
+      "targets": [
+        "test:stress"
+      ],
+      "arguments": [
+        "./internal/tools/native/command",
+        "./internal/toolhost"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "performance",
+      "setup": "verification"
     }
   },
   "capacity": {
     "runners": 20,
     "macos_runners": 5,
     "max_parallel": {
-      "fast": 1,
+      "fast": 2,
       "integration": 4,
       "check": 3,
       "nightly": 2,
       "release": 1
     },
     "footprints": {
-      "ci.yml": 1,
+      "ci.yml": 2,
       "qualification.yml": 3,
       "build-caches.yml": 1,
       "nightly.yml": 2,

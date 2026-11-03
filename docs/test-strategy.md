@@ -268,8 +268,8 @@ join the permanent corpus.
 Agents write code and prompt copy fast. These checks shape it through
 feedback an agent meets while it works: a warning as something approaches
 its limit, then a stop for a change that leaves a touched artifact past it.
-`check-fast` and `check` run them, and CI runs them in the ready tier and the merge group's `limits` lane with
-the same rules and the same words, so CI says nothing `check-fast` did not.
+Both gates enforce size budgets. `check` and exact-landing CI enforce changed
+coverage; focused ready checks run before queue admission.
 
 ### Size budgets
 
@@ -813,7 +813,7 @@ Run every task from the repository root through `./task`.
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
 | `./task coverage:changes` / `./task den:coverage:changes` / `./task scripts:coverage:changes` | Coverage of the Go, Den, and scripts Python statements a change adds or modifies |
-| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, changed coverage, notices, comment and failure-message checks, and documentation links |
+| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, notices, comment and failure-message checks, and documentation links |
 | `./task check` | Full local and qualification gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 
 Each gate runs once per change. A pushed change runs affected-scope integration in CI and daily full nightly verification, so it runs neither local gate first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
@@ -852,10 +852,14 @@ clients that require manual installation.
 
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
-`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-job, `ready`: it first runs the complete repository contract tree, then compiles
-the host and runs `lint:full`, size budgets, Go, Den, and scripts changed coverage, comment checks,
+`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier runs two jobs
+within its declared two-runner budget. `ready-lint` runs complete `lint:full`
+analysis while `ready` first runs the complete repository contract tree, then compiles
+the host and runs size budgets, affected short Go tests, comment checks,
 test failure-message checks, documentation links, Den typecheck, Den lint, and frontend seam canaries.
+The required aggregate waits for both jobs. Full lint has its own analysis setup;
+it does not repeat admission contracts. Catalog validation requires each fast
+assertion stage exactly once across the jobs.
 Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests.
 Admission uses `test:contract -- ./test/contract/...`
 without a test-name filter. Failure or interruption stops the lane before its
@@ -868,28 +872,22 @@ once against the checkout, sharing its compiler cache. It also checks the
 migration identities of every stable release tag; release CI adds the published
 preview releases it reads from GitHub.
 
-The admission execution budget is three hours, allowing the integration lint lane's existing
-ninety-minute allowance plus the contracts, affected native compilation and remaining checks. This is a
+Each admission job retains the existing three-hour execution allowance. This is a
 conservative ceiling, not a measured duration; broad-change hosted timings are
 required before tightening it or claiming an admission latency improvement.
 
-Admission also compiles affected native test targets without running them. The
-`ready` lane's `compile_targets` maps native source roots to existing managed
-verification targets. A broad or unknown scope compiles both the Den workspace
-and decision engine; ordinary Go, frontend, and prose changes add no native
-compilation. The Den workspace includes operational binaries and examples, so
-an observer compilation failure is visible before enqueueing. Compilation uses
-`--compile-only` on the normal test targets, preserving locked dependencies,
-features, resources, and all test targets. The single admission job provisions
-shell inputs only when Den compilation is selected. This adds real compilation
-cost to affected PRs; it does not claim a full native build is inexpensive.
+The real Linux supervisor/native-privilege leg runs early in admission for Go
+or CI changes, preserving required credential, effect and revocation assertions.
+Native Rust compilation and execution occur together in the landing native lane;
+ready admission does not repeat a compile-only copy. Standalone compile-only
+selection remains available for focused local diagnosis.
 
-The merge queue repeats changed coverage on the landing commit and runs the complete affected integration
-selection. Its `limits` and `lint` lanes start first, and the group stops at its
-first failure. The PR's pass does not replace verification of the landing commit.
-The `limits` lane retains a two-hour ceiling: broad Go changes
-run both changed-package and importer coverage passes before Den and scripts
-coverage. This accommodates broad changes without reducing the coverage selection.
+The merge queue measures changed coverage on its exact source and executes the
+complete affected integration selection. Frontend and scripts assertions execute
+once through their coverage stages; distinct short-covered and integration-tagged
+Go recipes retain their separate modes. The group stops at its first failure.
+The limits lane keeps its existing two-hour completion allowance, independent of
+the under-hour performance objective.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on twenty
@@ -1211,96 +1209,24 @@ failures and retries only demonstrated infrastructure faults. Product assertions
 and races remain blocking; there is no new automatic quarantine or assertion
 retry policy.
 
-##### Admission performance follow-up
+##### Admission and scale execution
 
-These proposed experiments build on the failure-frontier and Git fixture work.
-They do not change admission, required checks, or the existing capacity envelope.
-Retain run-specific measurements and source revisions in each experiment's PR.
+Ready admission runs focused Go tests and frontend seam canaries after repository
+contracts. Broad changed-statement coverage and native compilation execute at the
+exact landing source. Frontend and script coverage stages supply the complete
+assertion suites, avoiding a second uncovered execution in the same qualification.
+The failed/unverified/previously-passed frontier changes order, never the complete
+successful-path inventory. Unknown source scope still selects the complete recipe.
 
-The performance target is under 60 minutes for the complete CI path from a ready,
-stable candidate through its qualified main landing, including both fast and
-protected integration gates, setup, evidence publication and capacity waits.
-Measure ordinary affected changes and broad/full-scope candidates, with cold and
-warm inputs. Keep failed or superseded attempts and explicit external holds
-visible alongside successful-path latency. A per-job timeout is not this target.
-Execution deadlines are separate stuck-run protections and retain headroom for
-valid work. Never turn the one-hour performance target into an execution cutoff.
-An optimization reduces measured work or the critical path; timing out otherwise
-valid verification is a failure, not an improvement.
+Full-size program retention and query default-limit cases run in the command-scale
+qualification lane and nightly. Routine checks keep small mechanism cases, including
+bounded query input and durable receipt/session reuse. The full-size assertions and
+shipped limits remain intact. Nightly's other stress packages run separately so the
+same scale binaries do not execute twice in that profile.
 
-Tests should enforce the behavior and resource bound that matter to callers.
-Pair work ceilings and no-growth comparisons with positive outcome assertions;
-avoid exact incidental work counts that reject a valid optimization. Keep data
-contracts separate from display formatting and current-runtime fixtures separate
-from explicitly historical versions. Platform selections should derive from the
-canonical inventory while retaining dead-name and empty-scope checks. Failure
-evidence must retain the actual test and child/cleanup errors through enclosing
-coverage tasks, so each repair starts from the complete failure rather than a
-truncated summary.
-
-Review the test portfolio alongside execution cost. One instrumented run should
-supply assertions and coverage when its inputs and execution mode satisfy both
-contracts; compare test inventories and child coverage before consolidating runs.
-Short covered tests, full integration-tagged tests and real platform boundaries
-can provide different evidence even when names overlap. Keep cheap mechanism and
-resource-bound cases in ready checks, and explicitly select full-size scale cases
-for affected qualification, nightly and release work. Preserve real default-limit
-acceptance/refusal cases when smaller fixtures use an injectable limit. Retire a
-test only after identifying its distinct regression and proving that a retained
-replacement catches it; elapsed time or test count alone does not establish value.
-
-1. Separate preparation, compiler execution, queue admission wait, test execution,
-   and evidence publication in the latency report. A parent task's elapsed time
-   can include a nested request's wait; do not attribute all of it to its tests.
-   Record the critical path and total runner-minutes alongside cache outcomes,
-   test-binary counts and instrumented package sets.
-2. Measure cold and warm native compilation with the existing pinned toolchains,
-   locked dependencies, features and target inventory. Improve compiler artifact
-   reuse where the current keys or publication leave work cold. Derive native
-   invalidation from the complete declared input closure, including manifests,
-   lockfiles, build scripts, generated inputs, toolchains and features. Keep
-   unknown inputs conservative. Preserve every required compile target and keep test-result reuse subject to complete input
-   accounting; a compiler cache hit is not a test receipt.
-3. Compare bounded job layouts for language coverage and affected native
-   compilation against the single ready job. Include duplicated setup and cache
-   transfer in runner cost, and preserve the admission reservation. Every shard
-   must finish on the same source before the aggregate check can pass; failure,
-   missing evidence or interruption must continue to block admission. Coverage
-   shards must retain the test-binary inventory and instrumented statement union;
-   compare the critical path and total work, including duplicated preparation.
-4. Re-measure Git fixture construction and test execution after
-   fixture cloning and parallelization land. Use the resulting profile
-   to select the next expensive fixture or algorithm, preserving behavior and
-   machine-independent work/resource assertions. Do not duplicate that
-   work or introduce wall-clock test gates.
-5. Evaluate trusted, cheap commit-metadata validation before expensive work.
-   Check the actual pinned DCO trailer policy after provenance is added, and
-   retain complete original-commit certification. Preserve the trusted bot
-   workflow-run route and prove that CI and DCO cannot wait on each other.
-6. Design any reuse between fast and protected integration around complete
-   input evidence, including source and history inputs, toolchain, environment,
-   options, fixtures, native artifacts, and coverage base/instrumentation. This
-   requires a separate reviewed design. The exact landing still needs its own
-   required aggregate verdict over the complete inventory; unknown or changed
-   inputs rerun, and absent receipts never qualify. An earlier green head or
-   compiler cache hit cannot substitute for landing qualification.
-7. Generate platform test selections from the canonical verification plan and
-   declared test-group inventories. Preserve explicit architecture/resource
-   requirements and the no-empty, dead-name and complete-inventory contracts.
-   A renamed or added supervisor test should enter its declared platform scope
-   without a second hand-maintained shell regex drifting behind it.
-8. Compare collecting independent cheap preflight failures in one attempt with
-   stopping that preflight at its first failed package. Measure extra preflight
-   work against repeated setup and verification after serial repairs. Expensive
-   phases still require a clean preflight; preserve protected-queue fail-fast
-   behavior and do not turn diagnostic aggregation into assertion retries.
-
-Failure-frontier rotation improves time to a known failure while still running
-all required work on a successful candidate. Importer deduplication removes
-repeated test binaries while preserving the instrumented package union. Account
-for those existing changes before crediting a new experiment with either gain.
-Compare ordinary affected PRs and broad/full-scope changes separately. A higher
-execution deadline is a completion allowance, not evidence of faster admission.
+The performance objective is under an hour for the complete stable ready-to-main
+path. Execution deadlines retain their existing headroom; no one-hour cutoff is
+introduced. Compiler cache hits never substitute for executed test receipts.
 
 ##### Integration capacity experiment
 

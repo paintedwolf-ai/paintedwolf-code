@@ -15,7 +15,7 @@ from verification_execute import json_stream
 ROOT = Path(__file__).resolve().parents[2]
 HISTORY_LIMIT = 32 * 1024 * 1024
 MAX_HISTORY_RUNS = 5
-NATIVE_TARGETS = ('den:test:rust', 'decide:test')
+NATIVE_TARGETS = ('den:test:rust', 'decide:test', 'test:confine:linux')
 
 
 def rotate_cursor(items, failed, passed=()):
@@ -64,6 +64,8 @@ def receipt_state(raw, run, targets):
         if failure.get('status') != 'failed':
             continue
         stage = failure.get('stage')
+        if stage in NATIVE_TARGETS or stage == 'test:confine:linux-supervisor':
+            continue
         subject = failure.get('subject', '')
         if stage == 'test:contract' and subject.startswith('github.com/lycaon/lycaon/test/contract'):
             rel = './' + subject.removeprefix('github.com/lycaon/lycaon/')
@@ -130,12 +132,14 @@ def previous_plan(event, run_id, targets):
             matching = [artifact for artifact in artifacts
                         if artifact.get('name') == f"receipt-verification-fast-ready-{run['run_attempt']}"
                         and not artifact.get('expired') and artifact['size_in_bytes'] <= HISTORY_LIMIT]
+            if not matching:
+                continue  # Metadata/setup failures have no ready execution cursor.
             if len(matching) != 1:
                 return {}
             raw = subprocess.check_output(['gh', 'api', f"{repository()}/actions/artifacts/{matching[0]['id']}/zip"], timeout=30)
             state = receipt_state(raw, run, targets)
             if state is None:
-                return {}
+                continue
             if merged is None:
                 merged = state
             else:
@@ -204,7 +208,13 @@ def package_phases(selected):
     records = list(json_stream(result.stdout))
     if not records or any(row.get("Error") or row.get("DepsErrors") for row in records):
         raise ValueError("merge preflight requires a complete package selection")
-    packages = sorted({row["ImportPath"] for row in records})
+    root = (ROOT / 'lycaon').resolve()
+    try:
+        directories = {Path(row['Dir']).resolve().relative_to(root).as_posix() for row in records}
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('merge preflight requires local module package directories') from error
+    # Relative selections retain captured-stage receipts and package result reuse.
+    packages = sorted('./' if path == '.' else './' + path for path in directories)
     contracts = [name for name in packages if "/test/contract/" in name or name.endswith("/test/contract")]
     behavior = [name for name in packages if name not in contracts]
     if not contracts:
