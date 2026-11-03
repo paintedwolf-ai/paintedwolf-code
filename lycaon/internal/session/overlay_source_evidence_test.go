@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -27,7 +28,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -37,17 +40,21 @@ func overlaySourceFixture(t *testing.T) (primary, overlay string, scope api.Task
 	t.Helper()
 	primary = t.TempDir()
 	overlay = filepath.Join(primary, settingsoverlay.DirName(), "overlays", "job-source")
-	testutil.FailErr(t, "MkdirAll", os.MkdirAll(overlay, 0o755))
+	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(filepath.Join(overlay, "pkg"), 0o755))
+	testutil.FailErr(t, "MkdirAll primary pkg", os.MkdirAll(filepath.Join(primary, "pkg"), 0o755))
 	testutil.FailErr(t, "WriteFile primary game", os.WriteFile(filepath.Join(primary, "game.py"), []byte("print(0)\n"), 0o644))
+	testutil.FailErr(t, "WriteFile primary dep", os.WriteFile(filepath.Join(primary, "pkg", "dep.py"), []byte("dep = 1\n"), 0o644))
 	testutil.FailErr(t, "WriteFile primary dirty", os.WriteFile(filepath.Join(primary, "dirty_upper.py"), []byte("x = 1\n"), 0o644))
-	testutil.FailErr(t, "WriteFile overlay", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(1)\n"), 0o644))
+	testutil.FailErr(t, "WriteFile overlay game", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(100)\n"), 0o644))
+	testutil.FailErr(t, "WriteFile overlay dep", os.WriteFile(filepath.Join(overlay, "pkg", "dep.py"), []byte("dep = 1\n"), 0o644))
+	testutil.FailErr(t, "WriteFile overlay dirty", os.WriteFile(filepath.Join(overlay, "dirty_upper.py"), []byte("x = 1\n"), 0o644))
 	meta := enginepaths.MetaDirForBranchRoot(overlay)
 	testutil.FailErr(t, "MkdirAll meta", os.MkdirAll(meta, 0o700))
 	testutil.FailErr(t, "WriteJobMeta", workspace.WriteJobMeta(meta, workspace.JobMeta{
 		SnapshotComplete: true,
 		Roots:            []workspace.JobMetaRoot{{ID: "primary", Path: primary, IsPrimary: true}},
 	}))
-	scope = api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py", "dirty_upper.py"}}
+	scope = api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py", "dirty_upper.py", "pkg/dep.py"}}
 	snap := testbaseline.Capture(t, primary)
 	return primary, overlay, scope, snap
 }
@@ -73,6 +80,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	t.Cleanup(mgr.BeginEngineShutdown)
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -116,6 +124,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	t.Cleanup(mgr.BeginEngineShutdown)
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -172,6 +181,10 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
+	reg := tools.NewStubRegistry()
+	readTool := &survey.ReadTool{}
+	testutil.FailErr(t, "Register read tool", reg.Register(readTool.Name(), readTool.Run))
+
 	mgr := session.NewHost(
 		mem,
 		session.Models{
@@ -180,8 +193,9 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 			Limits:   settings.DefaultSessionLimits(),
 			Cost:     nil,
 		},
-		tools.NewStubRegistry(),
+		reg,
 	)
+	t.Cleanup(mgr.BeginEngineShutdown)
 	dataDir := t.TempDir()
 	mgr.Verification.SetDataDir(dataDir)
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
@@ -205,17 +219,9 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	child.ProjectID = testdbseed.DefaultProjectID
 
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
-		Prompt:                "fixture",
-		Brief:                 "fixture",
-		ParentSessionID:       parent.ID,
-		ProjectID:             testdbseed.DefaultProjectID,
-		WorkspacePath:         primary,
-		WorkspaceRoot:         overlay,
-		ChildSessionID:        child.ID,
-		AgentType:             "implementer",
-		Status:                api.WorkerStatusRunning,
-		Scope:                 &scope,
-		WorkspaceBaselinePath: baseline,
+		Prompt: "fixture", Brief: "fixture", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
+		WorkspacePath: primary, WorkspaceRoot: overlay, ChildSessionID: child.ID,
+		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &scope, WorkspaceBaselinePath: baseline,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
 	task, ok := q.Get(jobID)
@@ -223,8 +229,39 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		t.Fatalf("expected task %s in queue", jobID)
 	}
 
+	// Provision a second worker on an unrelated root to verify repochange root isolation.
+	otherPrimary, otherOverlay, otherScope, otherBaseline := overlaySourceFixture(t)
+	otherChild, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	testutil.FailErr(t, "CreateChild other", err)
+	otherChild.WorkspacePath = otherPrimary
+	otherChild.ProjectID = testdbseed.DefaultProjectID
+	otherJobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
+		Prompt: "other", Brief: "other", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
+		WorkspacePath: otherPrimary, WorkspaceRoot: otherOverlay, ChildSessionID: otherChild.ID,
+		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &otherScope, WorkspaceBaselinePath: otherBaseline,
+	})
+	testutil.FailErr(t, "EnqueueWithProjectID other", err)
+	otherTask, _ := q.Get(otherJobID)
+	otherCtx := workercontext.WithJob(ctx, otherJobID)
+	otherTctx, err := mgr.Workers.Workspaces.Enrich(otherCtx, otherChild, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: otherChild.ID, WorkerJobID: otherJobID},
+	})
+	testutil.FailErr(t, "Workspaces.Enrich other", err)
+	_, err = reg.Run(otherCtx, "read", map[string]any{"path": "pkg/dep.py"}, otherTctx)
+	testutil.FailErr(t, "ordinary ReadTool other", err)
+	otherVerifyMsg := currentVerifyPassedMessage(otherOverlay)
+	testutil.FailErr(t, "AppendMessages other", mem.AppendMessages(ctx, otherChild.ID, otherVerifyMsg))
+	mgr.Verification.RecordSourceRunTerminal(otherCtx, otherChild, parent.ID, verification.ProducerVerify, tools.SourceRunCapture{
+		CheckID: "check-verify-other", IsCheck: true, Command: "selected-check", Cwd: ".",
+		Verdict: api.SourceVerdictPassed, SourceRevision: rev, SourceRootDigest: rootDigest,
+	}, time.Now().UTC())
+	otherHistory, err := mem.GetMessages(ctx, otherChild.ID)
+	testutil.FailErr(t, "GetMessages other", err)
+
 	workerCtx := workercontext.WithJob(ctx, jobID)
-	tctx, err := mgr.Workers.Workspaces.Enrich(workerCtx, child, tools.ToolContext{})
+	tctx, err := mgr.Workers.Workspaces.Enrich(workerCtx, child, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: child.ID, WorkerJobID: jobID},
+	})
 	testutil.FailErr(t, "Workspaces.Enrich", err)
 
 	tracker := mgr.Workers.Workspaces.TrackerFor(jobID)
@@ -232,18 +269,17 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		t.Fatal("expected Enrich to provision a scoped observation.Tracker on mgr.Workers.Workspaces")
 	}
 
-	// Observe a lower file through the workspace service and a cross-root dependency.
-	if _, ok := mgr.Workers.Workspaces.ObserveReadPath(jobID, child.ID, primary, overlay, tctx.Source.Roots, "game.py"); !ok {
-		t.Fatal("expected ObserveReadPath(game.py) to succeed")
+	// Execute ordinary ReadTool calls (without workerharness.Service.Read and without calling ObserveReadPath).
+	_, err = reg.Run(workerCtx, "read", map[string]any{"path": "game.py"}, tctx)
+	testutil.FailErr(t, "ordinary ReadTool game.py", err)
+	_, err = reg.Run(workerCtx, "read", map[string]any{"path": "pkg/dep.py"}, tctx)
+	testutil.FailErr(t, "ordinary ReadTool pkg/dep.py", err)
+
+	depPath := layeredfs.QualifiedPath{RootID: "primary", Rel: "pkg/dep.py"}
+	depObs, ok := tracker.LatestObservationForPath(depPath)
+	if !ok || depObs.SHA256 != textfile.SHA256([]byte("dep = 1\n")) || depObs.Completeness != observation.CompletenessComplete || depObs.Layer != layeredfs.LayerTrunk {
+		t.Fatalf("expected ordinary ReadTool to record complete structured observation for pkg/dep.py, got %+v (ok=%v)", depObs, ok)
 	}
-	depPath := layeredfs.QualifiedPath{RootID: "secondary", Rel: "pkg/dep.py"}
-	tracker.RecordServerFSObservation(layeredfs.ObservationEvent{
-		Path:   depPath,
-		Layer:  layeredfs.LayerTrunk,
-		Kind:   layeredfs.ObserveRead,
-		Size:   10,
-		SHA256: "sha-dep-v1",
-	})
 
 	// Perform a worker write on dirty_upper.py so it is pinned in LayerPrivate.
 	testutil.FailErr(t, "BeforeWorkerWrite", mgr.Workers.Workspaces.BeforeWorkerWrite(workerCtx, tctx, "dirty_upper.py"))
@@ -266,12 +302,13 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	childHistory, err := mem.GetMessages(ctx, child.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
-	// 1. Unobserved lower source change keeps GateState and OverlaySourceProof valid and emits no notice.
-	mgr.Workers.Workspaces.RecordLowerTrunkChange(jobID, observation.TrunkChangeEvent{
-		Path:      layeredfs.QualifiedPath{RootID: "primary", Rel: "unrelated.py"},
-		Kind:      observation.TrunkWriteInPlace,
-		NewSHA256: "sha-unrelated-v2",
-		NewSize:   15,
+	// 1. Unobserved lower source change via real repochange.Notify keeps GateState and OverlaySourceProof valid.
+	testutil.FailErr(t, "WriteFile unrelated", os.WriteFile(filepath.Join(primary, "unrelated.py"), []byte("u = 2\n"), 0o644))
+	repochange.Notify(ctx, repochange.Event{
+		ProjectDir: primary,
+		Kind:       repochange.WorktreeChanged,
+		Paths:      []string{"unrelated.py"},
+		Source:     repochange.SourceWatcher,
 	})
 	if passed, _, _ := mgr.Verification.GateState(workerCtx, child, childHistory); !passed {
 		t.Fatal("expected unobserved lower change to keep Verification.GateState passed")
@@ -281,12 +318,13 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		t.Fatalf("expected unobserved lower change to preserve satisfied OverlaySourceProof, got %s", status)
 	}
 
-	// 2. Lower source change on a dirty upper override (dirty_upper.py) stays pinned and immune.
-	mgr.Workers.Workspaces.RecordLowerTrunkChange(jobID, observation.TrunkChangeEvent{
-		Path:      layeredfs.QualifiedPath{RootID: "primary", Rel: "dirty_upper.py"},
-		Kind:      observation.TrunkWriteInPlace,
-		NewSHA256: "sha-lower-clobber",
-		NewSize:   99,
+	// 2. Lower source change on a dirty upper override (dirty_upper.py) via repochange.Notify stays pinned and immune.
+	testutil.FailErr(t, "WriteFile dirty lower", os.WriteFile(filepath.Join(primary, "dirty_upper.py"), []byte("x = 999\n"), 0o644))
+	repochange.Notify(ctx, repochange.Event{
+		ProjectDir: primary,
+		Kind:       repochange.WorktreeChanged,
+		Paths:      []string{"dirty_upper.py"},
+		Source:     repochange.SourceWatcher,
 	})
 	if passed, _, _ := mgr.Verification.GateState(workerCtx, child, childHistory); !passed {
 		t.Fatal("expected dirty upper override to remain immune to lower trunk change")
@@ -295,16 +333,17 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		t.Fatalf("expected no trunk.changed notice for unobserved/dirty-upper paths, got err=%v notice=%+v", err, assembled.TrunkNotice)
 	}
 
-	// 3. Lower source change on an observed/verified path invalidates GateState & OverlaySourceProof and queues trunk.changed for next turn.
-	mgr.Workers.Workspaces.RecordLowerTrunkChange(jobID, observation.TrunkChangeEvent{
-		Path:      depPath,
-		Kind:      observation.TrunkAtomicReplace,
-		NewSHA256: "sha-dep-v2",
-		NewSize:   12,
+	// 3. Lower source change on observed pkg/dep.py via real repochange.Notify invalidates GateState & OverlaySourceProof and queues trunk.changed.
+	testutil.FailErr(t, "WriteFile dep v2", os.WriteFile(filepath.Join(primary, "pkg", "dep.py"), []byte("dep = 2\n"), 0o644))
+	repochange.Notify(ctx, repochange.Event{
+		ProjectDir: primary,
+		Kind:       repochange.WorktreeChanged,
+		Changes:    []repochange.WorktreeChange{{Path: "pkg/dep.py", Kind: repochange.WorktreeChangeStructural}},
+		Source:     repochange.SourceWatcher,
 	})
 	proofStale := session.OverlaySourceProof(workerworkspace.WithService(workerCtx, mgr.Workers.Workspaces), task, childHistory, "selected-check", curRev)
 	if status, _, _ := workercompletion.SourceEvidenceView(proofStale); status == workercompletion.EvidenceStatusSatisfied {
-		t.Fatalf("expected observed dependency change to invalidate OverlaySourceProof receipt, got %s", status)
+		t.Fatalf("expected observed dependency change via repochange.Notify to invalidate OverlaySourceProof receipt, got %s", status)
 	}
 	assessment, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, task)
 	if !ok || !assessment.VerificationInvalidated || !assessment.Freshness.Stale || assessment.Freshness.StaleReason != observation.StaleReasonObservedDependencyChanged {
@@ -315,6 +354,14 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	}
 	if passed, _, _ := mgr.Verification.GateState(workerCtx, child, childHistory); passed {
 		t.Fatal("expected Verification.GateState to be invalidated after observed lower path changed")
+	}
+
+	// Verify the second worker on otherPrimary was NOT invalidated or notified by events on primary.
+	if passed, _, _ := mgr.Verification.GateState(otherCtx, otherChild, otherHistory); !passed {
+		t.Fatal("expected worker on unrelated root to remain passed after repochange on primary")
+	}
+	if otherAssess, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, otherTask); !ok || otherAssess.VerificationInvalidated {
+		t.Fatalf("expected worker on unrelated root to remain fresh, got %+v (ok=%v)", otherAssess, ok)
 	}
 
 	// Next model turn preparation delivers trunk.changed once without interrupting in-flight calls.
@@ -332,36 +379,85 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		t.Fatalf("expected turn 2 not to duplicate consumed trunk.changed notice, got %+v", turn2.TrunkNotice)
 	}
 
-	// 4. Incomplete attribution refuses to certify freshness when scope generation advances.
-	partialFacts := observation.LiveMountVisibilityFacts("nfs-loopback", false, false, false, observation.CompletenessPartialKernelCached)
-	partialTracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-overlay-2", Facts: partialFacts})
-	testutil.FailErr(t, "NewTracker partial", err)
-	partialTracker.RecordServerFSObservation(layeredfs.ObservationEvent{
-		Path:   layeredfs.QualifiedPath{RootID: "primary", Rel: "game.py"},
-		Layer:  layeredfs.LayerTrunk,
-		Kind:   layeredfs.ObserveRead,
-		Size:   9,
-		SHA256: "sha-game-v1",
+	// 4. Watcher overflow via real repochange.Notify (WorktreeChangeResync) marks matching root uncertain without affecting unrelated root.
+	repochange.Notify(ctx, repochange.Event{
+		ProjectDir: otherPrimary,
+		Kind:       repochange.WorktreeChanged,
+		Changes:    []repochange.WorktreeChange{{Path: ".", Kind: repochange.WorktreeChangeResync}},
+		Source:     repochange.SourceWatcher,
 	})
-	partialBinding := partialTracker.BindVerificationReceipt("receipt-verify", "ckpt-2", []string{"primary"})
-	partialTracker.RecordTrunkChange(observation.TrunkChangeEvent{
-		Path:      layeredfs.QualifiedPath{RootID: "primary", Rel: "unlogged_kernel_cached.py"},
-		Kind:      observation.TrunkWriteInPlace,
-		NewSHA256: "sha-unlogged-v2",
-		NewSize:   20,
-	})
-	baseProof := workercompletion.BuildWorkerCompletionProof(childHistory, []string{"game.py"}, curRev)
-	evalProof, evalAssess := session.EvaluateOverlaySourceObservations(baseProof, partialTracker, partialBinding, "ckpt-2")
-	if !evalAssess.Freshness.Stale || evalAssess.Freshness.StaleReason != observation.StaleReasonIncompleteAttributionScopeAdvanced {
-		t.Fatalf("expected incomplete attribution with advanced scope generation to be stale, got %+v", evalAssess.Freshness)
-	}
-	if status, _, _ := workercompletion.SourceEvidenceView(evalProof); status == workercompletion.EvidenceStatusSatisfied {
-		t.Fatalf("expected incomplete attribution with advanced scope generation to invalidate proof receipt")
+	if otherAssess, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, otherTask); !ok || !otherAssess.VerificationInvalidated || otherAssess.Freshness.StaleReason != observation.StaleReasonWatcherOverflowUncertain {
+		t.Fatalf("expected watcher resync event on otherPrimary to mark otherTask stale with watcher_overflow_uncertain, got %+v (ok=%v)", otherAssess, ok)
 	}
 
 	// 5. ReleaseReservations cleans up the scoped workspace tracker.
 	testutil.FailErr(t, "ReleaseReservations", mgr.Workers.Workspaces.ReleaseReservations(ctx, parent.ID, jobID))
 	if mgr.Workers.Workspaces.TrackerFor(jobID) != nil {
 		t.Fatal("expected ReleaseReservations to clean up scoped tracker for jobID")
+	}
+}
+
+func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t *testing.T) {
+	svc := workerworkspace.New(nil, nil, nil)
+	t.Cleanup(svc.Close)
+
+	dir := t.TempDir()
+	diskFile := filepath.Join(dir, "mutated.py")
+	// Write mutated bytes on disk BEFORE calling ObserveReadWithFacts / RecordUpperWriteWithFacts
+	// to prove neither method re-reads the file with os.ReadFile.
+	testutil.FailErr(t, "WriteFile mutated", os.WriteFile(diskFile, []byte("disk-bytes-never-read-by-worker\n"), 0o644))
+
+	obs, ok := svc.ObserveReadWithFacts("job-facts", "sess-facts", dir, "", nil, tools.WorkerFileObservationFacts{
+		RootID:   "primary",
+		RelPath:  "mutated.py",
+		AbsPath:  diskFile,
+		SHA256:   "sha-exact-from-read-stream",
+		Size:     14,
+		Complete: true,
+	})
+	if !ok {
+		t.Fatal("expected ObserveReadWithFacts to succeed")
+	}
+	if obs.SHA256 != "sha-exact-from-read-stream" || obs.Size != 14 || obs.Completeness != observation.CompletenessComplete || obs.Uncertain {
+		t.Fatalf("expected observation to bind exact read-time facts without re-reading disk, got %+v", obs)
+	}
+
+	// RecordUpperWriteWithFacts binds exact write-time SHA256 and Size without re-reading disk,
+	// and a subsequent RecordUpperWrite without facts preserves that digest.
+	svc.RecordUpperWriteWithFacts("job-facts", "sess-facts", dir, "", nil, tools.WorkerFileObservationFacts{
+		RootID:   "primary",
+		RelPath:  "written.py",
+		AbsPath:  diskFile,
+		SHA256:   "sha-exact-from-write-commit",
+		Size:     21,
+		Layer:    "private",
+		Complete: true,
+	})
+	svc.RecordUpperWrite("job-facts", "sess-facts", dir, "", nil, "written.py")
+	tr := svc.TrackerFor("job-facts")
+	writeObs, ok := tr.LatestObservationForPath(layeredfs.QualifiedPath{RootID: "primary", Rel: "written.py"})
+	if !ok || writeObs.SHA256 != "sha-exact-from-write-commit" || writeObs.Size != 21 || writeObs.Layer != layeredfs.LayerPrivate {
+		t.Fatalf("expected upper write observation to preserve exact write-time facts, got %+v (ok=%v)", writeObs, ok)
+	}
+
+	// When digest facts are unavailable (ObserveReadPath / Complete: false), explicit unknown/partial
+	// evidence is preserved without reading the file from disk, and receipt freshness refuses to certify.
+	unknownObs, ok := svc.ObserveReadPath("job-facts", "sess-facts", dir, "", nil, "mutated.py")
+	if !ok {
+		t.Fatal("expected ObserveReadPath to succeed")
+	}
+	if unknownObs.SHA256 != "" || unknownObs.Completeness != observation.CompletenessPartial || !unknownObs.Uncertain {
+		t.Fatalf("expected unavailable digest facts to preserve explicit unknown/partial evidence, got %+v", unknownObs)
+	}
+	binding, ok := svc.BindVerificationReceipt("job-facts", "sess-facts", dir, "", "check-unknown", "ckpt-1", []string{"primary"})
+	if !ok {
+		t.Fatal("expected BindVerificationReceipt to succeed")
+	}
+	if binding.ReadAttributionCompleteness != observation.CompletenessPartial {
+		t.Fatalf("expected binding completeness to downgrade to partial when observation lacks digest facts, got %s", binding.ReadAttributionCompleteness)
+	}
+	freshness := tr.EvaluateReceiptFreshness(binding, "ckpt-1")
+	if !freshness.Stale {
+		t.Fatalf("expected receipt bound to uncertain unknown-digest observation to refuse freshness certification, got %+v", freshness)
 	}
 }

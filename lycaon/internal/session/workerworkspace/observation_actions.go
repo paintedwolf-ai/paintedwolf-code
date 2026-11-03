@@ -1,11 +1,9 @@
 package workerworkspace
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -13,85 +11,163 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // WorkspaceObservationOps provides read/write observation, verification binding,
 // trunk change delivery, and next-turn notice draining on a worker workspace Service.
 type WorkspaceObservationOps struct{ svc *Service }
 
-// ObserveReadPath records a file read observation on the worker workspace's scoped tracker.
+// ObserveWorkerRead implements tools.WorkerObservationCoordinator for structured read facts.
+func (o *WorkspaceObservationOps) ObserveWorkerRead(ctx context.Context, tctx tools.ToolContext, facts tools.WorkerFileObservationFacts) {
+	if o == nil || o.svc == nil {
+		return
+	}
+	jobID := firstNonEmpty(tctx.Identity.WorkerJobID, workercontext.Job(ctx))
+	sessionID := strings.TrimSpace(tctx.Identity.SessionID)
+	if jobID == "" && sessionID == "" && strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
+		return
+	}
+	_, _ = o.ObserveReadWithFacts(
+		jobID,
+		sessionID,
+		tctx.ActiveRootPath(),
+		tctx.Source.WorkerBranchRoot,
+		tctx.Source.Roots,
+		facts,
+	)
+}
+
+// ObserveWorkerWrite implements tools.WorkerObservationCoordinator for structured write facts.
+func (o *WorkspaceObservationOps) ObserveWorkerWrite(ctx context.Context, tctx tools.ToolContext, facts tools.WorkerFileObservationFacts) {
+	if o == nil || o.svc == nil {
+		return
+	}
+	jobID := firstNonEmpty(tctx.Identity.WorkerJobID, workercontext.Job(ctx))
+	sessionID := strings.TrimSpace(tctx.Identity.SessionID)
+	if jobID == "" && sessionID == "" && strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
+		return
+	}
+	o.RecordUpperWriteWithFacts(
+		jobID,
+		sessionID,
+		tctx.ActiveRootPath(),
+		tctx.Source.WorkerBranchRoot,
+		tctx.Source.Roots,
+		facts,
+	)
+}
+
+// ObserveReadWithFacts records a file read observation using structured facts from the read boundary
+// without performing a second file read. When digest facts are unavailable, it preserves explicit
+// unknown/partial evidence.
+func (o *WorkspaceObservationOps) ObserveReadWithFacts(
+	jobID, childSessionID, workspacePath, branchRoot string,
+	roots []projectroot.RootRef,
+	facts tools.WorkerFileObservationFacts,
+) (observation.SourceObservation, bool) {
+	rawPath := firstNonEmpty(facts.RelPath, facts.AbsPath)
+	if o == nil || o.svc == nil || rawPath == "" {
+		return observation.SourceObservation{}, false
+	}
+	tr := o.svc.EnsureTracker(jobID, childSessionID, workspacePath, branchRoot, roots)
+	if tr == nil {
+		return observation.SourceObservation{}, false
+	}
+	qpath, diskPath := resolveFactsPath(workspacePath, branchRoot, roots, facts)
+	layer := resolveObservationLayer(o.svc, tr, jobID, qpath, facts.Layer)
+	sha := strings.TrimSpace(facts.SHA256)
+	if !facts.Complete {
+		sha = ""
+	}
+	ev := layeredfs.ObservationEvent{
+		Path:      qpath,
+		Layer:     layer,
+		Kind:      layeredfs.ObserveRead,
+		SHA256:    sha,
+		Size:      facts.Size,
+		ModTimeNS: facts.ModTimeNS,
+		Ino:       facts.Ino,
+		Dev:       facts.Dev,
+	}
+	if ev.ModTimeNS == 0 && ev.Ino == 0 && diskPath != "" {
+		populateStatOnly(&ev, diskPath)
+	}
+	return tr.RecordServerFSObservation(ev), true
+}
+
+// ObserveReadPath records a path observation when structured read-time content digest facts
+// are not provided, preserving explicit unknown digest / partial attribution evidence.
 func (o *WorkspaceObservationOps) ObserveReadPath(
 	jobID, childSessionID, workspacePath, branchRoot string,
 	roots []projectroot.RootRef,
 	rawPath string,
 ) (observation.SourceObservation, bool) {
-	if o == nil || o.svc == nil || strings.TrimSpace(rawPath) == "" {
-		return observation.SourceObservation{}, false
+	return o.ObserveReadWithFacts(jobID, childSessionID, workspacePath, branchRoot, roots, tools.WorkerFileObservationFacts{
+		RelPath:  rawPath,
+		Complete: false,
+	})
+}
+
+// RecordUpperWriteWithFacts records a worker-initiated upper write using structured write facts,
+// pinning the path as LayerPrivate without re-reading the file from disk.
+func (o *WorkspaceObservationOps) RecordUpperWriteWithFacts(
+	jobID, childSessionID, workspacePath, branchRoot string,
+	roots []projectroot.RootRef,
+	facts tools.WorkerFileObservationFacts,
+) {
+	rawPath := firstNonEmpty(facts.RelPath, facts.AbsPath)
+	if o == nil || o.svc == nil || rawPath == "" {
+		return
 	}
 	tr := o.svc.EnsureTracker(jobID, childSessionID, workspacePath, branchRoot, roots)
 	if tr == nil {
-		return observation.SourceObservation{}, false
+		return
 	}
-	qpath, diskPath := resolveQualifiedAndDiskPath(workspacePath, branchRoot, roots, rawPath)
-	layer := layeredfs.LayerTrunk
-	if isTouchedForJob(o.svc, jobID, qpath.Rel) {
-		layer = layeredfs.LayerPrivate
+	qpath, diskPath := resolveFactsPath(workspacePath, branchRoot, roots, facts)
+	sha := strings.TrimSpace(facts.SHA256)
+	if !facts.Complete {
+		sha = ""
 	}
-	ev := layeredfs.ObservationEvent{
-		Path:  qpath,
-		Layer: layer,
-		Kind:  layeredfs.ObserveRead,
-	}
-	if diskPath != "" {
-		if info, err := os.Lstat(diskPath); err == nil {
-			ev.Size = info.Size()
-			ev.ModTimeNS = info.ModTime().UnixNano()
-			if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
-				ev.Ino = uint64(sys.Ino)
-				ev.Dev = uint64(sys.Dev)
-			}
-			if info.Mode().IsRegular() {
-				if data, rErr := os.ReadFile(diskPath); rErr == nil {
-					sum := sha256.Sum256(data)
-					ev.SHA256 = hex.EncodeToString(sum[:])
-					ev.Size = int64(len(data))
-				}
-			}
+	if sha == "" {
+		if latest, ok := tr.LatestObservationForPath(qpath); ok && latest.Layer == layeredfs.LayerPrivate && latest.SHA256 != "" {
+			tr.RecordWorkerMutation(qpath, observation.TrunkWriteInPlace)
+			return
 		}
 	}
-	return tr.RecordServerFSObservation(ev), true
+	modNS := facts.ModTimeNS
+	if modNS == 0 {
+		modNS = time.Now().UnixNano()
+	}
+	ev := layeredfs.ObservationEvent{
+		Path:      qpath,
+		Layer:     layeredfs.LayerPrivate,
+		Kind:      layeredfs.ObserveRead,
+		SHA256:    sha,
+		Size:      facts.Size,
+		ModTimeNS: modNS,
+		Ino:       facts.Ino,
+		Dev:       facts.Dev,
+	}
+	if ev.Ino == 0 && diskPath != "" {
+		populateStatOnly(&ev, diskPath)
+	}
+	tr.RecordServerFSObservation(ev)
+	tr.RecordWorkerMutation(qpath, observation.TrunkWriteInPlace)
 }
 
-// RecordUpperWrite records a worker-initiated upper write on the workspace's scoped tracker,
-// pinning the path as LayerPrivate so lower trunk changes cannot clobber or invalidate it.
+// RecordUpperWrite pins rawPath as LayerPrivate on the workspace's scoped tracker.
 func (o *WorkspaceObservationOps) RecordUpperWrite(
 	jobID, childSessionID, workspacePath, branchRoot string,
 	roots []projectroot.RootRef,
 	rawPath string,
 ) {
-	if o == nil || o.svc == nil || strings.TrimSpace(rawPath) == "" {
-		return
-	}
-	tr := o.svc.EnsureTracker(jobID, childSessionID, workspacePath, branchRoot, roots)
-	if tr == nil {
-		return
-	}
-	qpath, diskPath := resolveQualifiedAndDiskPath(workspacePath, branchRoot, roots, rawPath)
-	ev := layeredfs.ObservationEvent{
-		Path:      qpath,
-		Layer:     layeredfs.LayerPrivate,
-		Kind:      layeredfs.ObserveRead,
-		ModTimeNS: time.Now().UnixNano(),
-	}
-	if diskPath != "" {
-		if data, err := os.ReadFile(diskPath); err == nil {
-			sum := sha256.Sum256(data)
-			ev.SHA256 = hex.EncodeToString(sum[:])
-			ev.Size = int64(len(data))
-		}
-	}
-	tr.RecordServerFSObservation(ev)
-	tr.RecordWorkerMutation(qpath, observation.TrunkWriteInPlace)
+	o.RecordUpperWriteWithFacts(jobID, childSessionID, workspacePath, branchRoot, roots, tools.WorkerFileObservationFacts{
+		RelPath:  rawPath,
+		Layer:    "private",
+		Complete: false,
+	})
 }
 
 // BindVerificationReceipt snapshots and binds the current observed sources and scope generation
@@ -198,72 +274,23 @@ func (o *WorkspaceObservationOps) DrainTrunkChangedNotice(keys ...string) (*obse
 	return notice, observation.TrunkChangedEventType + ": " + string(raw)
 }
 
-func collectTargetTrackers(r *WorkspaceTrackerRegistry, key string) []*observation.Tracker {
-	if r == nil {
-		return nil
+func populateStatOnly(ev *layeredfs.ObservationEvent, diskPath string) {
+	info, err := os.Lstat(diskPath)
+	if err != nil {
+		return
 	}
-	r.obsMu.RLock()
-	defer r.obsMu.RUnlock()
-	var targets []*observation.Tracker
-	if strings.TrimSpace(key) != "" {
-		if st := lookupStateLocked(r, key); st != nil && st.Tracker != nil {
-			targets = append(targets, st.Tracker)
+	if ev.Size == 0 {
+		ev.Size = info.Size()
+	}
+	if ev.ModTimeNS == 0 {
+		ev.ModTimeNS = info.ModTime().UnixNano()
+	}
+	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
+		if ev.Ino == 0 {
+			ev.Ino = uint64(sys.Ino)
 		}
-		return targets
-	}
-	seen := make(map[*observation.Tracker]bool)
-	for _, st := range r.trackers {
-		if st != nil && st.Tracker != nil && !seen[st.Tracker] {
-			seen[st.Tracker] = true
-			targets = append(targets, st.Tracker)
-		}
-	}
-	return targets
-}
-
-func isTouchedForJob(m *Service, jobID, relPath string) bool {
-	if m == nil || m.Touches == nil {
-		return false
-	}
-	jobID = strings.TrimSpace(jobID)
-	relPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(relPath)))
-	if jobID == "" || relPath == "" || relPath == "." {
-		return false
-	}
-	for _, p := range m.Touches.Paths(jobID) {
-		if p == relPath {
-			return true
+		if ev.Dev == 0 {
+			ev.Dev = uint64(sys.Dev)
 		}
 	}
-	return false
-}
-
-func resolveQualifiedAndDiskPath(
-	workspacePath, branchRoot string,
-	roots []projectroot.RootRef,
-	rawPath string,
-) (layeredfs.QualifiedPath, string) {
-	rawPath = strings.TrimSpace(rawPath)
-	if colon := strings.IndexByte(rawPath, ':'); colon > 0 && !filepath.IsAbs(rawPath) {
-		rootID := strings.TrimSpace(rawPath[:colon])
-		rel := filepath.ToSlash(filepath.Clean(strings.TrimPrefix(strings.TrimSpace(rawPath[colon+1:]), "/")))
-		for _, r := range roots {
-			if r.ID == rootID {
-				return layeredfs.QualifiedPath{RootID: rootID, Rel: rel}, filepath.Join(r.Path, filepath.FromSlash(rel))
-			}
-		}
-	}
-	cleanRel := filepath.ToSlash(filepath.Clean(rawPath))
-	baseDir := firstNonEmpty(cleanOptionalPath(branchRoot), cleanOptionalPath(workspacePath))
-	if filepath.IsAbs(rawPath) && baseDir != "" {
-		if rel, err := filepath.Rel(baseDir, rawPath); err == nil && !strings.HasPrefix(rel, "..") {
-			cleanRel = filepath.ToSlash(filepath.Clean(rel))
-		}
-	}
-	cleanRel = strings.TrimPrefix(cleanRel, "/")
-	diskPath := ""
-	if baseDir != "" {
-		diskPath = filepath.Join(baseDir, filepath.FromSlash(cleanRel))
-	}
-	return layeredfs.QualifiedPath{RootID: "primary", Rel: cleanRel}, diskPath
 }

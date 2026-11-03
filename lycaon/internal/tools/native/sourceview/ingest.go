@@ -5,11 +5,31 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
+	"os"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
+
+// FileStatFacts captures the open file descriptor's metadata at the instant of read.
+type FileStatFacts struct {
+	Size, ModTimeNS int64
+	Ino, Dev        uint64
+}
+
+func extractFileStatFacts(info os.FileInfo) FileStatFacts {
+	if info == nil {
+		return FileStatFacts{}
+	}
+	facts := FileStatFacts{Size: info.Size(), ModTimeNS: info.ModTime().UnixNano()}
+	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
+		facts.Ino = uint64(sys.Ino)
+		facts.Dev = uint64(sys.Dev)
+	}
+	return facts
+}
 
 // Access selects the byte budget and rejection codes for one file load.
 type Access uint8
@@ -54,25 +74,36 @@ func MutationSizeReject(tool, path string, size int64) error {
 // projectpaths.Resolved.Compressed, a directory-scoped fact, never from
 // sniffing the file's bytes.
 func ReadContentCapped(tool string, access Access, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, error) {
+	body, _, err := ReadContentWithStatCapped(tool, access, loc, displayPath, compressed, maxBytes)
+	return body, err
+}
+
+// ReadContentWithStatCapped loads one bounded regular file along with the open descriptor's stat facts.
+func ReadContentWithStatCapped(tool string, access Access, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, FileStatFacts, error) {
 	f, err := fseffect.OpenRead(loc)
 	if err != nil {
-		return nil, err
+		return nil, FileStatFacts{}, err
 	}
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
-		return nil, err
+		return nil, FileStatFacts{}, err
 	}
 	if info.IsDir() {
-		return nil, DirectoryReject(displayPath)
+		return nil, FileStatFacts{}, DirectoryReject(displayPath)
 	}
+	stat := extractFileStatFacts(info)
 	if compressed {
-		return readCompressedContentCapped(tool, access, f, displayPath, maxBytes)
+		body, cErr := readCompressedContentCapped(tool, access, f, displayPath, maxBytes)
+		stat.Size = int64(len(body))
+		return body, stat, cErr
 	}
 	if info.Size() > maxBytes {
-		return nil, access.SizeReject(tool, displayPath, info.Size(), maxBytes)
+		return nil, stat, access.SizeReject(tool, displayPath, info.Size(), maxBytes)
 	}
-	return readPlainContentCapped(tool, access, f, displayPath, maxBytes)
+	body, rErr := readPlainContentCapped(tool, access, f, displayPath, maxBytes)
+	stat.Size = int64(len(body))
+	return body, stat, rErr
 }
 
 func readPlainContentCapped(tool string, access Access, r io.Reader, path string, maxBytes int64) ([]byte, error) {

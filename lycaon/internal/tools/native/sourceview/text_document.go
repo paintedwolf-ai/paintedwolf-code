@@ -17,20 +17,26 @@ import (
 // ReadTextDocument retains encoding and raw identity for matching writes.
 // Retained tool output keeps the session's spill bound for either access.
 func ReadTextDocument(tool string, access Access, resolved projectpaths.Resolved, maxSpillBytes int) (textfile.UntrustedDocument, error) {
+	doc, _, err := ReadTextDocumentWithStat(tool, access, resolved, maxSpillBytes)
+	return doc, err
+}
+
+// ReadTextDocumentWithStat loads a text document along with the open file descriptor's stat facts.
+func ReadTextDocumentWithStat(tool string, access Access, resolved projectpaths.Resolved, maxSpillBytes int) (textfile.UntrustedDocument, FileStatFacts, error) {
 	maxBytes := access.MaxBytes()
 	if resolved.ToolOutput {
 		maxBytes = int64(tooloutput.EffectiveMaxSpillFileBytes(maxSpillBytes))
 	}
-	raw, err := ReadContentCapped(tool, access, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)
+	raw, stat, err := ReadContentWithStatCapped(tool, access, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)
 	if err != nil {
-		return textfile.UntrustedDocument{}, err
+		return textfile.UntrustedDocument{}, FileStatFacts{}, err
 	}
 	doc, _, err := textfile.Open(raw, textfile.LimitsForRaw(maxBytes))
 	if err == nil {
-		return doc, nil
+		return doc, stat, nil
 	}
 	if textTooLarge(err) {
-		return textfile.UntrustedDocument{}, access.SizeReject(tool, resolved.DisplayPath, int64(len(raw)), maxBytes)
+		return textfile.UntrustedDocument{}, stat, access.SizeReject(tool, resolved.DisplayPath, int64(len(raw)), maxBytes)
 	}
 	data := map[string]any{"path": resolved.DisplayPath, "bytes": len(raw), "reason": err.Error()}
 	ext := strings.ToLower(filepath.Ext(resolved.DisplayPath))
@@ -39,7 +45,7 @@ func ReadTextDocument(tool string, access Access, resolved projectpaths.Resolved
 	case ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".bmp", ".tiff":
 		data["is_image"] = true
 	}
-	return textfile.UntrustedDocument{}, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: data}
+	return textfile.UntrustedDocument{}, stat, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: data}
 }
 
 // EncodeText encodes mutation content in the opened file's representation,

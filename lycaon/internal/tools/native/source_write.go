@@ -96,6 +96,7 @@ func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutation
 	})
 	if result.Committed {
 		delivery.Commit(ctx)
+		observeCommittedWorkerWrite(ctx, tctx, target.Abs, mutation.AfterSHA256, int64(len(after)))
 	}
 	return finishAgentMutation(ctx, tctx, mutation, journal, err)
 }
@@ -170,6 +171,7 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 	})
 	if result.Committed {
 		delivery.Commit(ctx)
+		observeCommittedWorkerWrite(ctx, tctx, req.Target.Abs, result.SHA256, result.Bytes)
 	}
 	return result, finishAgentMutation(ctx, tctx, mutation, journal, err)
 }

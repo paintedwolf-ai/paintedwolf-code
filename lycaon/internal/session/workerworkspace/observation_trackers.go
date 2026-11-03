@@ -67,7 +67,10 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 		r.trackers = make(map[string]*WorkspaceObservationState)
 	}
 
-	st := lookupStateLocked(r, jobID, childSessionID, branchRoot, workspacePath)
+	st := lookupStateLocked(r, jobID, childSessionID, branchRoot)
+	if st == nil && jobID == "" && childSessionID == "" && branchRoot == "" {
+		st = lookupStateLocked(r, workspacePath)
+	}
 	if st == nil {
 		viewID := firstNonEmpty(jobID, childSessionID, branchRoot, workspacePath, "workspace-view")
 		facts := observation.LiveMountVisibilityFacts("workspace-overlay", true, true, true, observation.CompletenessComplete)
@@ -106,7 +109,7 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 	if len(roots) > 0 {
 		st.Roots = append([]projectroot.RootRef(nil), roots...)
 	}
-	indexStateLocked(r, st, jobID, childSessionID, branchRoot, workspacePath)
+	indexStateLocked(r, st)
 	return st.Tracker
 }
 
@@ -252,13 +255,16 @@ func lookupStateLocked(r *WorkspaceTrackerRegistry, keys ...string) *WorkspaceOb
 }
 
 func indexStateLocked(r *WorkspaceTrackerRegistry, st *WorkspaceObservationState, keys ...string) {
-	all := append([]string{st.JobID, st.ChildSessionID, st.BranchRoot, st.WorkspacePath}, keys...)
+	all := append([]string{st.JobID, st.ChildSessionID, st.BranchRoot}, keys...)
 	for _, raw := range all {
 		k := strings.TrimSpace(raw)
 		if k == "" {
 			continue
 		}
 		r.trackers[k] = st
+	}
+	if wp := strings.TrimSpace(st.WorkspacePath); wp != "" && r.trackers[wp] == nil {
+		r.trackers[wp] = st
 	}
 }
 

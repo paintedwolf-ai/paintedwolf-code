@@ -22,7 +22,7 @@ func (v *VerificationTracker) BindVerificationReceipt(
 
 	completeness := t.facts.AttributionCompleteness
 	for _, obs := range observed {
-		if obs.Completeness != CompletenessComplete || obs.Provenance == ProvenanceIndexDerived || obs.Uncertain {
+		if obs.Layer == layeredfs.LayerTrunk && (obs.Completeness != CompletenessComplete || obs.Provenance == ProvenanceIndexDerived || obs.Uncertain) {
 			completeness = CompletenessPartialKernelCached
 			break
 		}
@@ -253,7 +253,7 @@ func isAttributionIncomplete(binding VerificationBinding) bool {
 		return true
 	}
 	for _, obs := range binding.ObservedSources {
-		if obs.Completeness != CompletenessComplete || obs.Provenance == ProvenanceIndexDerived || obs.Uncertain {
+		if obs.Layer == layeredfs.LayerTrunk && (obs.Completeness != CompletenessComplete || obs.Provenance == ProvenanceIndexDerived || obs.Uncertain) {
 			return true
 		}
 	}

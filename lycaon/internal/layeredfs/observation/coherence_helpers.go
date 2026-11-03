@@ -3,6 +3,7 @@ package observation
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,6 +12,23 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
+
+func hashBoundedFile(absPath string, fileSize, maxBytes int64) (string, int64, bool) {
+	if fileSize < 0 || fileSize > maxBytes {
+		return "", 0, false
+	}
+	f, err := os.Open(absPath)
+	if err != nil {
+		return "", 0, false
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(f, maxBytes+1))
+	if err != nil || n > maxBytes {
+		return "", 0, false
+	}
+	return hex.EncodeToString(h.Sum(nil)), n, true
+}
 
 func advanceGenerationLocked(t *Tracker, rootID string, requestedGen uint64) {
 	t.store.sourceGen++
@@ -49,10 +67,9 @@ func populateTrunkChangeFromDiskLocked(t *Tracker, ev *TrunkChangeEvent, qpath l
 		ev.NewDev = uint64(sys.Dev)
 	}
 	if ev.NewSHA256 == "" && info.Mode().IsRegular() {
-		if data, rErr := os.ReadFile(absPath); rErr == nil {
-			sum := sha256.Sum256(data)
-			ev.NewSHA256 = hex.EncodeToString(sum[:])
-			ev.NewSize = int64(len(data))
+		if digest, n, ok := hashBoundedFile(absPath, info.Size(), 4<<20); ok {
+			ev.NewSHA256 = digest
+			ev.NewSize = n
 		}
 	}
 }

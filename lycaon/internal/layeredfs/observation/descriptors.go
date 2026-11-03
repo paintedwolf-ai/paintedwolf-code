@@ -165,6 +165,9 @@ func enrichTrunkObservationLocked(t *Tracker, obs *SourceObservation, ev layered
 			obs.ModTimeNS = st.modTimeNS
 		}
 	}
+	if t.core == nil {
+		return
+	}
 	rootSpec, ok := t.rootsByID[obs.Path.RootID]
 	if !ok || rootSpec.TrunkPath == "" {
 		return
@@ -181,10 +184,9 @@ func enrichTrunkObservationLocked(t *Tracker, obs *SourceObservation, ev layered
 		obs.ModTimeNS = info.ModTime().UnixNano()
 	}
 	if obs.Kind == layeredfs.ObserveRead && obs.SHA256 == "" && info.Mode().IsRegular() {
-		if data, rErr := os.ReadFile(absPath); rErr == nil {
-			sum := sha256.Sum256(data)
-			obs.SHA256 = hex.EncodeToString(sum[:])
-			obs.Size = int64(len(data))
+		if digest, n, ok := hashBoundedFile(absPath, info.Size(), 4<<20); ok {
+			obs.SHA256 = digest
+			obs.Size = n
 		}
 	}
 }
@@ -217,6 +219,10 @@ func buildBaseObservationLocked(
 	}
 	if layer == layeredfs.LayerTrunk {
 		enrichTrunkObservationLocked(t, &obs, ev)
+	}
+	if obs.Kind == layeredfs.ObserveRead && obs.SHA256 == "" {
+		obs.Completeness = CompletenessPartialKernelCached
+		obs.Uncertain = true
 	}
 	if reasons := t.coherence.overflowByRoot[qpath.RootID]; len(reasons) > 0 && layer == layeredfs.LayerTrunk && prov != ProvenanceExactNativeRead {
 		obs.Uncertain = true

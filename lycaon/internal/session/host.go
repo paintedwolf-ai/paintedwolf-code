@@ -247,6 +247,9 @@ func (m *Host) BeginEngineShutdown() {
 	m.Runner.Settlement.BeginShutdown()
 	m.Coordinator.Runtime.StopSleepTimers()
 	m.Catalog.Stop()
+	if m.Workers != nil && m.Workers.Workspaces != nil {
+		m.Workers.Workspaces.Close()
+	}
 	if m.Runner.Curation != nil {
 		m.Runner.Curation.Stop()
 	}

@@ -35,6 +35,7 @@ type ObservationCompleteness = AttributionCompleteness
 const (
 	CompletenessComplete            AttributionCompleteness = "exact"
 	CompletenessPartialKernelCached AttributionCompleteness = "kernel_cached_partial"
+	CompletenessPartial             AttributionCompleteness = CompletenessPartialKernelCached
 )
 
 // VisibilityFacts declares adapter cache and revalidation capabilities as explicit typed facts.
