@@ -96,6 +96,15 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 	roots, sourceRoots []projectroot.RootRef,
 	activeRootID, jobID string,
 ) (*Binding, SandboxLayout, error) {
+	return createWorkerWorkspaceFromSources(ctx, m, roots, sourceRoots, activeRootID, jobID)
+}
+
+func createWorkerWorkspaceFromSources(
+	ctx context.Context,
+	m *Manager,
+	roots, sourceRoots []projectroot.RootRef,
+	activeRootID, jobID string,
+) (*Binding, SandboxLayout, error) {
 	if len(roots) == 0 {
 		return nil, SandboxLayout{}, fmt.Errorf("project roots required")
 	}
@@ -200,15 +209,16 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 	}
 	binding.Selection = choice
 	binding.Adapter = choice.Adapter
+	_, hints, _ := workspaceSelectionFromContext(ctx)
 
 	if choice.Facts.PreparationKind == adapter.PreparationMounted {
-		view, err := prepareMountedWorkspaceView(ctx, m, binding, sources, choice.Adapter)
+		view, cv, err := prepareMountedWorkspaceView(ctx, m, binding, sources, choice.Adapter)
 		if err != nil {
 			return classifyProvisionError(err)
 		}
 		binding.View = view
 		m.recordBranchViews(branchRoot, choice, view)
-		return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+		return markSnapshotCompleteWithClaim(branchRoot, choice, view, cv, hints)
 	}
 
 	if len(sources) == 1 {
@@ -219,7 +229,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 		}
 		binding.View = view
 		m.recordBranchViews(branchRoot, choice, view)
-		return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+		return markSnapshotCompleteWithClaim(branchRoot, choice, view, nil, hints)
 	}
 	var views []*adapter.PreparedView
 	for _, source := range sources {
@@ -238,7 +248,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 		}
 	}
 	m.recordBranchViews(branchRoot, choice, views...)
-	return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+	return markSnapshotCompleteWithClaim(branchRoot, choice, binding.View, nil, hints)
 }
 
 // jobIDForBranch is the branch directory name: the worker job id.

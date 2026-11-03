@@ -11,16 +11,55 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-const jobMetaFileName = "state.json"
+const (
+	jobMetaFileName = "state.json"
+	JobMetaFormatV1 = 1
+	JobMetaFormatV2 = 2
+)
+
+// JobMetaPreparation describes layered adapter and fallback facts for a worker view (#1662).
+type JobMetaPreparation struct {
+	AdapterID       adapter.AdapterID        `json:"adapter_id,omitempty"`
+	PreparationKind adapter.PreparationKind  `json:"preparation_kind,omitempty"`
+	VisibilityMode  adapter.SourceVisibility `json:"visibility_mode,omitempty"`
+	FallbackReason  adapter.ReasonCode       `json:"fallback_reason,omitempty"`
+	CopiedEntries   int64                    `json:"copied_entries,omitempty"`
+	CopiedBytes     int64                    `json:"copied_bytes,omitempty"`
+	PendingGitInit  bool                     `json:"pending_git_init,omitempty"`
+	AdapterFacts    *adapter.AdapterFacts    `json:"adapter_facts,omitempty"`
+}
+
+// JobMetaLineage describes layered view identity, journal, selection, and checkpoint refs (#1662).
+type JobMetaLineage struct {
+	ViewID                    string   `json:"view_id,omitempty"`
+	PreparedViewID            string   `json:"prepared_view_id,omitempty"`
+	SourceGeneration          int64    `json:"source_generation,omitempty"`
+	JournalPath               string   `json:"journal_path,omitempty"`
+	ParentCheckpointIDs       []string `json:"parent_checkpoint_ids,omitempty"`
+	LastPublishedCheckpointID string   `json:"last_published_checkpoint_id,omitempty"`
+	SelectedRootIDs           []string `json:"selected_root_ids,omitempty"`
+	FocusPathHints            []string `json:"focus_path_hints,omitempty"`
+}
 
 // JobMeta is durable state for one worker branch.
 type JobMeta struct {
 	FormatVersion    int           `json:"format_version"`
 	Roots            []JobMetaRoot `json:"roots"`
 	SnapshotComplete bool          `json:"snapshot_complete"`
+	JobMetaPreparation
+	JobMetaLineage
+}
+
+func hasLayeredV2Fields(m JobMeta) bool {
+	return m.AdapterID != "" || m.PreparationKind != "" || m.VisibilityMode != "" ||
+		m.FallbackReason != "" || m.CopiedEntries != 0 || m.CopiedBytes != 0 ||
+		m.PendingGitInit || m.ViewID != "" || m.PreparedViewID != "" ||
+		m.SourceGeneration != 0 || m.JournalPath != "" || len(m.ParentCheckpointIDs) > 0 ||
+		m.LastPublishedCheckpointID != "" || len(m.SelectedRootIDs) > 0 || len(m.FocusPathHints) > 0
 }
 
 // JobMetaRoot identifies one project root in the branch tree.
@@ -31,9 +70,7 @@ type JobMetaRoot struct {
 	IsPrimary bool   `json:"is_primary"`
 }
 
-func jobMetaPath(metaDir string) string {
-	return filepath.Join(metaDir, jobMetaFileName)
-}
+func jobMetaPath(metaDir string) string { return filepath.Join(metaDir, jobMetaFileName) }
 
 func cleanBranchRoot(branchRoot string) (string, error) {
 	branchRoot = strings.TrimSpace(branchRoot)
@@ -52,10 +89,21 @@ func WriteJobMeta(metaDir string, meta JobMeta) error {
 	if _, err := layoutFromJobMeta(meta); err != nil {
 		return err
 	}
+	if meta.FormatVersion == 0 {
+		meta.FormatVersion = JobMetaFormatV1
+		if hasLayeredV2Fields(meta) {
+			meta.FormatVersion = JobMetaFormatV2
+		}
+	}
+	if meta.FormatVersion != JobMetaFormatV1 && meta.FormatVersion != JobMetaFormatV2 {
+		return fmt.Errorf("unsupported worker metadata format %d", meta.FormatVersion)
+	}
+	if meta.FormatVersion == JobMetaFormatV1 && (meta.PreparationKind == adapter.PreparationMounted || meta.VisibilityMode == adapter.VisibilityLive) {
+		return fmt.Errorf("format v1 worker metadata cannot declare mounted or live view")
+	}
 	if err := os.MkdirAll(metaDir, 0o700); err != nil {
 		return err
 	}
-	meta.FormatVersion = 1
 	raw, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return err
@@ -69,7 +117,7 @@ func WriteJobMeta(metaDir string, meta JobMeta) error {
 	return err
 }
 
-// LoadJobMeta reads strict branch metadata.
+// LoadJobMeta reads strict branch metadata (Format-v1 or Format-v2).
 func LoadJobMeta(metaDir string) (JobMeta, error) {
 	raw, err := os.ReadFile(jobMetaPath(metaDir))
 	if err != nil {
@@ -87,13 +135,62 @@ func LoadJobMeta(metaDir string) (JobMeta, error) {
 		}
 		return JobMeta{}, err
 	}
-	if meta.FormatVersion != 1 {
+	if meta.FormatVersion != JobMetaFormatV1 && meta.FormatVersion != JobMetaFormatV2 {
 		return JobMeta{}, fmt.Errorf("unsupported worker metadata format %d", meta.FormatVersion)
 	}
 	if _, err := layoutFromJobMeta(meta); err != nil {
 		return JobMeta{}, err
 	}
+	if err := normalizeLoadedJobMeta(&meta); err != nil {
+		return JobMeta{}, err
+	}
 	return meta, nil
+}
+
+func normalizeLoadedJobMeta(meta *JobMeta) error {
+	if meta.FormatVersion == JobMetaFormatV1 {
+		if meta.PreparationKind == adapter.PreparationMounted || meta.VisibilityMode == adapter.VisibilityLive {
+			return fmt.Errorf("format v1 worker metadata cannot declare mounted or live view")
+		}
+		if meta.AdapterID == "" {
+			meta.AdapterID = adapter.AdapterEagerCopy
+		}
+		if meta.PreparationKind == "" {
+			meta.PreparationKind = adapter.PreparationMaterialized
+		}
+		if meta.VisibilityMode == "" {
+			meta.VisibilityMode = adapter.VisibilityFixed
+		}
+	} else if meta.VisibilityMode == "" {
+		if meta.PreparationKind == adapter.PreparationMounted {
+			meta.VisibilityMode = adapter.VisibilityLive
+		} else if meta.PreparationKind == adapter.PreparationMaterialized {
+			meta.VisibilityMode = adapter.VisibilityFixed
+		}
+	}
+	if len(meta.SelectedRootIDs) == 0 {
+		for _, r := range meta.Roots {
+			meta.SelectedRootIDs = append(meta.SelectedRootIDs, r.ID)
+		}
+	}
+	return nil
+}
+
+// UpgradeJobMetaToV2 upgrades a Format-v1 branch metadata file to Format-v2 while preserving
+// retained materialized eagercopy semantics (VisibilityFixed) without relabeling it as live (#1662).
+func UpgradeJobMetaToV2(metaDir string) (JobMeta, bool, error) {
+	meta, err := LoadJobMeta(metaDir)
+	if err != nil || meta.FormatVersion == JobMetaFormatV2 {
+		return meta, false, err
+	}
+	meta.FormatVersion = JobMetaFormatV2
+	meta.AdapterID = adapter.AdapterEagerCopy
+	meta.PreparationKind = adapter.PreparationMaterialized
+	meta.VisibilityMode = adapter.VisibilityFixed
+	if err := WriteJobMeta(metaDir, meta); err != nil {
+		return JobMeta{}, false, err
+	}
+	return meta, true, nil
 }
 
 func markSnapshotComplete(metaDir string) error {
@@ -106,15 +203,10 @@ func markSnapshotComplete(metaDir string) error {
 }
 
 func jobMetaFromLayout(layout SandboxLayout) JobMeta {
-	meta := JobMeta{
-		Roots: make([]JobMetaRoot, 0, len(layout.Roots)),
-	}
+	meta := JobMeta{Roots: make([]JobMetaRoot, 0, len(layout.Roots))}
 	for _, root := range layout.Roots {
 		meta.Roots = append(meta.Roots, JobMetaRoot{
-			ID:        root.ID,
-			Path:      filepath.Clean(root.Path),
-			Label:     root.Label,
-			IsPrimary: root.IsPrimary,
+			ID: root.ID, Path: filepath.Clean(root.Path), Label: root.Label, IsPrimary: root.IsPrimary,
 		})
 	}
 	return meta
@@ -124,10 +216,7 @@ func layoutFromJobMeta(meta JobMeta) (SandboxLayout, error) {
 	roots := make([]projectroot.RootRef, 0, len(meta.Roots))
 	for _, root := range meta.Roots {
 		roots = append(roots, projectroot.RootRef{
-			ID:        root.ID,
-			Path:      root.Path,
-			Label:     root.Label,
-			IsPrimary: root.IsPrimary,
+			ID: root.ID, Path: root.Path, Label: root.Label, IsPrimary: root.IsPrimary,
 		})
 	}
 	layout := SandboxLayout{Roots: roots}
@@ -181,19 +270,15 @@ func layoutFromJobMeta(meta JobMeta) (SandboxLayout, error) {
 // LoadBranchRoots returns the root topology recorded for branchRoot whether or
 // not its tree is on disk. Callers that need the tree use LoadBranchLayout.
 func LoadBranchRoots(branchRoot string) ([]projectroot.RootRef, error) {
-	branchRoot, err := cleanBranchRoot(branchRoot)
-	if err != nil {
+	if clean, err := cleanBranchRoot(branchRoot); err != nil {
 		return nil, err
-	}
-	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot))
-	if err != nil {
+	} else if meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(clean)); err != nil {
 		return nil, err
-	}
-	layout, err := layoutFromJobMeta(meta)
-	if err != nil {
+	} else if layout, err := layoutFromJobMeta(meta); err != nil {
 		return nil, err
+	} else {
+		return layout.Roots, nil
 	}
-	return layout.Roots, nil
 }
 
 // LoadBranchLayout returns the immutable root topology captured for branchRoot.
@@ -220,29 +305,5 @@ func LoadBranchLayout(branchRoot string) (SandboxLayout, error) {
 	if err != nil {
 		return SandboxLayout{}, err
 	}
-	if err := validateBranchDirectories(branchRoot, layout); err != nil {
-		return SandboxLayout{}, err
-	}
-	return layout, nil
-}
-
-func validateBranchDirectories(branchRoot string, layout SandboxLayout) error {
-	if len(layout.Roots) == 1 {
-		return nil
-	}
-	for _, root := range layout.Roots {
-		dir, err := projectroot.BranchDirForID(root.ID)
-		if err != nil {
-			return err
-		}
-		path := filepath.Join(branchRoot, dir)
-		info, err := os.Lstat(path)
-		if err != nil {
-			return fmt.Errorf("worker branch root %q is unavailable: %w", root.ID, err)
-		}
-		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("worker branch root %q is not a directory", root.ID)
-		}
-	}
-	return nil
+	return layout, validateBranchDirectories(branchRoot, layout)
 }

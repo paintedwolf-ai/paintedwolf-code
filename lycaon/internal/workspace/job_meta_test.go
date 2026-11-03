@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -141,11 +142,95 @@ func TestLoadBranchLayoutRejectsMultiRootSymlink(t *testing.T) {
 
 func TestJobMetaRejectsUnrecognizedFormat(t *testing.T) {
 	dir := t.TempDir()
-	for _, version := range []int{0, 2} {
+	for _, version := range []int{-1, 0, 3, 99} {
 		raw := fmt.Sprintf(`{"format_version":%d,"roots":[{"id":"app","path":"/project","is_primary":true}],"snapshot_complete":false}`, version)
-		testutil.FailErr(t, "write unsupported metadata", os.WriteFile(filepath.Join(dir, "state.json"), []byte(raw), 0o600))
+		path := filepath.Join(dir, "state.json")
+		testutil.FailErr(t, "write unsupported metadata", os.WriteFile(path, []byte(raw), 0o600))
 		if _, err := workspace.LoadJobMeta(dir); err == nil {
 			t.Fatalf("accepted metadata format %d", version)
 		}
+		if _, _, err := workspace.UpgradeJobMetaToV2(dir); err == nil {
+			t.Fatalf("UpgradeJobMetaToV2 accepted metadata format %d", version)
+		}
+		after, err := os.ReadFile(path)
+		testutil.FailErr(t, "read after failed upgrade", err)
+		if string(after) != raw {
+			t.Fatalf("failed upgrade mutated state.json: got %q want %q", after, raw)
+		}
+	}
+}
+
+func TestJobMetaFormatV1BackwardCompatibilityAndV2Persistence(t *testing.T) {
+	v1Dir := t.TempDir()
+	v1Raw := `{"format_version":1,"roots":[{"id":"app","path":"/project/app","label":"app","is_primary":true}],"snapshot_complete":true}`
+	testutil.FailErr(t, "write v1 metadata", os.WriteFile(filepath.Join(v1Dir, "state.json"), []byte(v1Raw), 0o600))
+
+	loadedV1, err := workspace.LoadJobMeta(v1Dir)
+	testutil.FailErr(t, "LoadJobMeta v1", err)
+	if loadedV1.FormatVersion != workspace.JobMetaFormatV1 ||
+		loadedV1.AdapterID != adapter.AdapterEagerCopy ||
+		loadedV1.PreparationKind != adapter.PreparationMaterialized ||
+		loadedV1.VisibilityMode != adapter.VisibilityFixed {
+		t.Fatalf("expected v1 metadata to load as retained materialized eagercopy with fixed visibility, got %+v", loadedV1)
+	}
+
+	// Format-v1 cannot be relabeled as mounted or live.
+	badV1 := v1Dir + "-bad"
+	testutil.FailErr(t, "mkdir badV1", os.MkdirAll(badV1, 0o700))
+	testutil.FailErr(t, "write bad v1", os.WriteFile(filepath.Join(badV1, "state.json"), []byte(
+		`{"format_version":1,"roots":[{"id":"app","path":"/project/app","is_primary":true}],"snapshot_complete":true,"preparation_kind":"mounted"}`,
+	), 0o600))
+	if _, err := workspace.LoadJobMeta(badV1); err == nil {
+		t.Fatal("expected Format-v1 metadata with mounted preparation_kind to be rejected")
+	}
+
+	upgraded, didUpgrade, err := workspace.UpgradeJobMetaToV2(v1Dir)
+	testutil.FailErr(t, "UpgradeJobMetaToV2", err)
+	if !didUpgrade || upgraded.FormatVersion != workspace.JobMetaFormatV2 ||
+		upgraded.AdapterID != adapter.AdapterEagerCopy ||
+		upgraded.PreparationKind != adapter.PreparationMaterialized ||
+		upgraded.VisibilityMode != adapter.VisibilityFixed {
+		t.Fatalf("expected upgraded v2 metadata to retain materialized fixed semantics, got didUpgrade=%v meta=%+v", didUpgrade, upgraded)
+	}
+
+	v2Dir := t.TempDir()
+	v2Meta := workspace.JobMeta{
+		FormatVersion:    workspace.JobMetaFormatV2,
+		Roots:            []workspace.JobMetaRoot{{ID: "app", Path: "/project/app", Label: "app", IsPrimary: true}},
+		SnapshotComplete: true,
+		JobMetaPreparation: workspace.JobMetaPreparation{
+			AdapterID:       adapter.AdapterNFSDarwin,
+			PreparationKind: adapter.PreparationMounted,
+			VisibilityMode:  adapter.VisibilityLive,
+			FallbackReason:  adapter.ReasonNone,
+			CopiedEntries:   0,
+			CopiedBytes:     0,
+			PendingGitInit:  true,
+		},
+		JobMetaLineage: workspace.JobMetaLineage{
+			ViewID:                    "view-v2",
+			SourceGeneration:          7,
+			JournalPath:               "/runtime/view-v2/journal",
+			ParentCheckpointIDs:       []string{"ckpt-1"},
+			LastPublishedCheckpointID: "ckpt-2",
+			SelectedRootIDs:           []string{"app"},
+			FocusPathHints:            []string{"cmd/main.go"},
+		},
+	}
+	testutil.FailErr(t, "WriteJobMeta v2", workspace.WriteJobMeta(v2Dir, v2Meta))
+	gotV2, err := workspace.LoadJobMeta(v2Dir)
+	testutil.FailErr(t, "LoadJobMeta v2", err)
+	if gotV2.FormatVersion != workspace.JobMetaFormatV2 ||
+		gotV2.AdapterID != adapter.AdapterNFSDarwin ||
+		gotV2.PreparationKind != adapter.PreparationMounted ||
+		gotV2.VisibilityMode != adapter.VisibilityLive ||
+		gotV2.ViewID != "view-v2" ||
+		gotV2.SourceGeneration != 7 ||
+		gotV2.JournalPath != "/runtime/view-v2/journal" ||
+		gotV2.LastPublishedCheckpointID != "ckpt-2" ||
+		!gotV2.PendingGitInit ||
+		len(gotV2.ParentCheckpointIDs) != 1 ||
+		len(gotV2.FocusPathHints) != 1 {
+		t.Fatalf("unexpected v2 round-trip metadata: %+v", gotV2)
 	}
 }
