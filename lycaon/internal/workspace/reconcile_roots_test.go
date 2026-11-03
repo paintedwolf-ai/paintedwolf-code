@@ -8,6 +8,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/filelock"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
@@ -141,3 +143,47 @@ func TestReconcileSandboxRootsDefersHeldBranchLocks(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t *testing.T) {
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	testutil.FailErr(t, "mkdir subroot", os.MkdirAll(filepath.Join(rootA, "services", "api"), 0o755))
+	testutil.FailErr(t, "mkdir sibling", os.MkdirAll(filepath.Join(rootA, "services", "billing"), 0o755))
+
+	attached := []projectroot.RootRef{
+		{ID: "primary", Label: "primary", Path: rootA, IsPrimary: true},
+		{ID: "docs", Label: "docs", Path: rootB},
+	}
+
+	// TaskPathHints alone do not narrow or expand selection when WorkspaceSelection is empty.
+	grantsAll, refsAll, err := workspace.ResolveDispatchWorkspaceSelection(
+		attached, adapter.WorkspaceSelection{}, []string{"primary/services/api/handler.go"},
+	)
+	testutil.FailErr(t, "ResolveDispatchWorkspaceSelection default", err)
+	if len(grantsAll) != 2 || len(refsAll) != 2 || refsAll[0].Path != filepath.Clean(rootA) {
+		t.Fatalf("expected default selection to include all attached roots unchanged, got %+v", refsAll)
+	}
+
+	// Explicit WorkspaceSelection narrows root and subroot while ignoring TaskPathHints to other roots.
+	grantsNarrow, refsNarrow, err := workspace.ResolveDispatchWorkspaceSelection(
+		attached,
+		adapter.WorkspaceSelection{
+			RootIDs:  []string{"primary"},
+			Subroots: map[string]string{"primary": "services/api"},
+		},
+		[]string{"docs/README.md", "primary/services/billing/invoice.go"},
+	)
+	testutil.FailErr(t, "ResolveDispatchWorkspaceSelection narrow", err)
+	wantSubPath := filepath.Join(filepath.Clean(rootA), "services", "api")
+	if len(grantsNarrow) != 1 || len(refsNarrow) != 1 || grantsNarrow[0].Subroot != "services/api" || refsNarrow[0].Path != wantSubPath {
+		t.Fatalf("unexpected narrowed roots: grants=%+v refs=%+v", grantsNarrow, refsNarrow)
+	}
+
+	// Unauthorized root selection must be rejected.
+	if _, _, err := workspace.ResolveDispatchWorkspaceSelection(
+		attached, adapter.WorkspaceSelection{RootIDs: []string{"ungranted"}}, nil,
+	); err == nil {
+		t.Fatal("expected unauthorized root selection to fail")
+	}
+}
+

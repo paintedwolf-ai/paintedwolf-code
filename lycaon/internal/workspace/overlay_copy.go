@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -18,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fileclone"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
@@ -63,6 +63,41 @@ func validateCompleteMirror(result mirrorResult) error {
 		return nil
 	}
 	return fmt.Errorf("source changed during snapshot: %d paths skipped", len(result.SkippedPaths))
+}
+
+// MaterializeBoundedWorkspace prepares an isolated materialized worker view using adapter.EagerCopyAdapter,
+// enforcing entry and byte limits (returning *adapter.PreparationLimitError with workspace_preparation_limit),
+// narrowing roots via WorkspaceSelection while keeping TaskPathHints separate, and isolating .git/gitlinks (#1658).
+func MaterializeBoundedWorkspace(
+	ctx context.Context,
+	viewID string,
+	runtimeDir string,
+	grants []adapter.RootGrant,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	maxEntries int64,
+	maxBytes int64,
+	fallbackReason adapter.ReasonCode,
+) (*adapter.PreparedView, error) {
+	adp := adapter.NewEagerCopyAdapter(fallbackReason)
+	return adp.Prepare(ctx, adapter.PrepareRequest{
+		ViewID:        viewID,
+		RuntimeDir:    runtimeDir,
+		Grants:        grants,
+		Selection:     selection,
+		TaskPathHints: taskPathHints,
+		MaxEntries:    maxEntries,
+		MaxBytes:      maxBytes,
+		ProgressFn: func(fp adapter.FallbackProgress) {
+			reportPreparation(ctx, PreparationProgress{
+				Strategy:   ProvisionMaterializedEagerCopy,
+				Stage:      "snapshotting_branch",
+				Files:      fp.ObservedEntries,
+				Bytes:      fp.ObservedBytes,
+				TotalBytes: fp.MaxBytes,
+			})
+		},
+	})
 }
 
 // CreateWorkerWorkspace creates a complete single-root branch.
@@ -177,7 +212,6 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 	walkErr := sandbox.SurveyWalk(ctx, srcRoot, sandbox.SurveyOptions{IncludeHidden: true},
 		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
 			dst := filepath.Join(dstRoot, filepath.FromSlash(entry.Rel))
-			// Leave nodes already present on the destination.
 			if existing, statErr := os.Lstat(dst); statErr == nil {
 				if existing.Mode().IsRegular() || existing.IsDir() || existing.Mode()&os.ModeSymlink != 0 {
 					return sandbox.SurveyContinue, nil
@@ -248,58 +282,6 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 			"phase", opts.phase, "source", srcRoot, "skipped", len(result.SkippedPaths))
 	}
 	return result, ctx.Err()
-}
-
-func logMirrorProgress(
-	ctx context.Context,
-	done <-chan struct{},
-	phase, source string,
-	files, bytes *atomic.Int64,
-) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-done:
-			return
-		case <-ticker.C:
-			slog.InfoContext(ctx, "preparing isolated worker workspace",
-				"phase", phase, "source", source, "files", files.Load(), "bytes", bytes.Load())
-		}
-	}
-}
-
-func finalizeDirectoryMetadata(queue []directoryMetadata) error {
-	for i := len(queue) - 1; i >= 0; i-- {
-		entry := queue[i]
-		if err := os.Chmod(entry.dst, entry.mode.Perm()); err != nil {
-			return err
-		}
-		if err := copyExtendedMetadata(entry.src, entry.dst); err != nil {
-			return err
-		}
-		if err := os.Chtimes(entry.dst, entry.modTime, entry.modTime); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func sourceChangeSkippable(err error) bool {
-	return errors.Is(err, fs.ErrNotExist)
-}
-
-func mirrorSymlink(src, dst string) error {
-	target, err := os.Readlink(src)
-	if err != nil {
-		return err
-	}
-	if err := os.Symlink(target, dst); err != nil && !errors.Is(err, fs.ErrExist) {
-		return err
-	}
-	return nil
 }
 
 func cloneOrCopyFile(ctx context.Context, src, dst string, mode fs.FileMode, modTime time.Time) (bool, error) {

@@ -2,11 +2,14 @@ package workspace_test
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -183,3 +186,49 @@ func TestWorkerSnapshotPrunesMetadataNotGitignore(t *testing.T) {
 		t.Fatal(".git must not be copied")
 	}
 }
+
+func TestMaterializeBoundedWorkspaceGitIsolationAndLimitEnforcement(t *testing.T) {
+	ctx := context.Background()
+	primary := t.TempDir()
+	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(primary, ".git", "objects", "ab"), 0o755))
+	testutil.FailErr(t, "write HEAD", os.WriteFile(filepath.Join(primary, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	testutil.FailErr(t, "mkdir sub", os.MkdirAll(filepath.Join(primary, "sub"), 0o755))
+	testutil.FailErr(t, "write gitlink", os.WriteFile(filepath.Join(primary, "sub", ".git"), []byte("gitdir: ../.git/modules/sub\n"), 0o644))
+	testutil.FailErr(t, "write code", os.WriteFile(filepath.Join(primary, "sub", "code.go"), []byte("package sub\n"), 0o644))
+
+	runtimeDir := t.TempDir()
+	grants := []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: primary, IsPrimary: true}}
+
+	view, err := workspace.MaterializeBoundedWorkspace(
+		ctx, "mat-view-ok", runtimeDir, grants, adapter.WorkspaceSelection{}, nil, 0, 0, adapter.ReasonMountDenied,
+	)
+	testutil.FailErr(t, "MaterializeBoundedWorkspace", err)
+	defer func() { _ = view.Core.ReleaseView() }()
+
+	if _, err := os.Lstat(filepath.Join(view.PrimaryWorkPath, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("raw .git directory must not exist in materialized workspace: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(view.PrimaryWorkPath, "sub", ".git")); !os.IsNotExist(err) {
+		t.Fatalf("raw gitlink file must not exist in materialized workspace: %v", err)
+	}
+	base, ok := view.Core.CapturedBase(layeredfs.QualifiedPath{RootID: "primary", Rel: "sub/code.go"})
+	if !ok || base.SHA256 == "" {
+		t.Fatalf("expected pre-captured seed base in Core, got ok=%v base=%+v", ok, base)
+	}
+
+	// Enforce actual entry limit and clean up incomplete seed without touching sibling view.
+	_, limErr := workspace.MaterializeBoundedWorkspace(
+		ctx, "mat-view-limit", runtimeDir, grants, adapter.WorkspaceSelection{}, nil, 2, 0, adapter.ReasonMountDenied,
+	)
+	var prepLim *adapter.PreparationLimitError
+	if !errors.As(limErr, &prepLim) || prepLim.ReasonCode != adapter.ReasonWorkspacePreparationLimit || !prepLim.CleanedIncompleteSeed {
+		t.Fatalf("expected PreparationLimitError with workspace_preparation_limit, got %v", limErr)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, "views", "mat-view-limit")); !os.IsNotExist(err) {
+		t.Fatalf("incomplete limited view was not cleaned up: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(view.PrimaryWorkPath, "sub", "code.go")); err != nil {
+		t.Fatalf("sibling materialized view was disrupted: %v", err)
+	}
+}
+
