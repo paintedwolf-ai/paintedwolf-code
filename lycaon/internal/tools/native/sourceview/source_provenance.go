@@ -12,19 +12,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Provenance reads retained source facts.
-type Provenance interface {
-	ResolveHead(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (sourceledger.BranchHead, error)
-	LatestFileEffect(ctx context.Context, projectID, fileID string) (sourceledger.Effect, bool, error)
-	SessionActivityFloor(ctx context.Context, projectID, sessionID string) (int64, bool, error)
-	QueryFileEffects(ctx context.Context, projectID, fileID string, afterOrdinal, beforeOrdinal int64, limit int) (sourceledger.FileEffectsResult, error)
-}
-
 const (
 	sourceStampSHAShortLen = 12
 	StampTimeLayout        = "2006-01-02 15:04 UTC"
-	// editForeignChangeRows bounds the provenance rows an edit reject carries.
-	editForeignChangeRows = 3
 )
 
 // LedgerLocation resolves a path to its branch, root, and relative path.
@@ -90,44 +80,6 @@ func ChangeOf(effect sourceledger.Effect, viewerSessionID string) *surveyreceipt
 	}
 	change.Turn = effect.AuthoredTurn()
 	return change
-}
-
-// ForeignChanges returns other actors' recorded changes, newest first; ok reports lookup completeness.
-func ForeignChanges(
-	ctx context.Context,
-	tctx tools.ToolContext,
-	absPath string,
-) (changes []*surveyreceipt.SourceChange, total int, ok bool) {
-	prov := tctx.Source.History.Files
-	if prov == nil || tctx.Identity.SessionID == "" {
-		return nil, 0, false
-	}
-	branch, rootID, rel, located := LedgerLocation(tctx, absPath)
-	if !located {
-		return nil, 0, false
-	}
-	head, err := prov.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
-	if err != nil {
-		return nil, 0, false
-	}
-	floor, found, err := prov.SessionActivityFloor(ctx, tctx.Identity.ProjectID, tctx.Identity.SessionID)
-	if err != nil || !found {
-		return nil, 0, false
-	}
-	page, err := prov.QueryFileEffects(ctx, tctx.Identity.ProjectID, head.FileID, floor, 0, 50)
-	if err != nil {
-		return nil, 0, false
-	}
-	for _, effect := range page.Effects {
-		if effect.BranchID != branch || effect.ActorClassFor(tctx.Identity.SessionID) == sourceledger.ActorYou {
-			continue
-		}
-		total++
-		if len(changes) < editForeignChangeRows {
-			changes = append(changes, ChangeOf(effect, tctx.Identity.SessionID))
-		}
-	}
-	return changes, total, len(changes) > 0
 }
 
 func ShortSHA(sha string) string {
