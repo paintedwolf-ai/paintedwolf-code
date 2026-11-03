@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
@@ -79,6 +80,55 @@ func (set *seedLockSet) forKey(key string) *sync.RWMutex {
 		set.locks[key] = lock
 	}
 	return lock
+}
+
+// CachedSeedEstimate returns a SourceIndexEstimate from a published bridge seed manifest when available (#1658).
+func CachedSeedEstimate(seedRoot, sourceRoot string) *adapter.SourceIndexEstimate {
+	if strings.TrimSpace(seedRoot) == "" || strings.TrimSpace(sourceRoot) == "" {
+		return nil
+	}
+	seedDir := enginepaths.ProjectSeedDir(seedRoot, sourceRoot)
+	_, tree, manifest := loadCurrentSeed(seedDir)
+	if tree == "" || len(manifest.Entries) == 0 {
+		return nil
+	}
+	return &adapter.SourceIndexEstimate{
+		EstimatedEntries: int64(len(manifest.Entries)),
+		EstimatedBytes:   regularBytes(manifest),
+	}
+}
+
+// PrepareMaterializedSeedView prepares a bounded materialized workspace view using adapter.EagerCopyAdapter,
+// populating missing root estimates from published bridge seed manifests and reporting preparation progress (#1658).
+func PrepareMaterializedSeedView(
+	ctx context.Context,
+	seedRoot string,
+	req adapter.PrepareRequest,
+	fallbackReason adapter.ReasonCode,
+) (*adapter.PreparedView, error) {
+	grants := make([]adapter.RootGrant, len(req.Grants))
+	copy(grants, req.Grants)
+	for i := range grants {
+		if grants[i].Estimate == nil && grants[i].Subroot == "" {
+			grants[i].Estimate = CachedSeedEstimate(seedRoot, grants[i].SourcePath)
+		}
+	}
+	req.Grants = grants
+	prevProgress := req.ProgressFn
+	req.ProgressFn = func(fp adapter.FallbackProgress) {
+		reportPreparation(ctx, PreparationProgress{
+			Strategy:   ProvisionMaterializedEagerCopy,
+			Stage:      "materializing_seed",
+			Files:      fp.ObservedEntries,
+			Bytes:      fp.ObservedBytes,
+			TotalBytes: fp.MaxBytes,
+		})
+		if prevProgress != nil {
+			prevProgress(fp)
+		}
+	}
+	adp := adapter.NewEagerCopyAdapter(fallbackReason)
+	return adp.Prepare(ctx, req)
 }
 
 func (m *Manager) provisionRoot(ctx context.Context, sourceRoot, branchRoot string) error {
@@ -569,68 +619,4 @@ func RemoveSeed(ctx context.Context, seedRoot, sourceRoot string) error {
 		return err
 	}
 	return nil
-}
-
-// ListSeedCaches inventories valid published bridge caches.
-func ListSeedCaches(ctx context.Context, seedRoot string) ([]SeedCacheStatus, error) {
-	if strings.TrimSpace(seedRoot) == "" {
-		return nil, nil
-	}
-	candidates, err := seedEvictionCandidates(seedRoot, "")
-	if err != nil {
-		return nil, err
-	}
-	statuses := make([]SeedCacheStatus, 0, len(candidates))
-	for _, candidate := range candidates {
-		_, tree, manifest := loadCurrentSeed(candidate.path)
-		if tree == "" || strings.TrimSpace(manifest.SourceRoot) == "" {
-			continue
-		}
-		allocated, err := treeAllocatedBytes(ctx, candidate.path)
-		if err != nil {
-			return nil, err
-		}
-		statuses = append(statuses, SeedCacheStatus{
-			ID:             candidate.key,
-			SourceRoot:     manifest.SourceRoot,
-			LogicalBytes:   regularBytes(manifest),
-			AllocatedBytes: allocated,
-			LastUsed:       candidate.lastUsed,
-		})
-	}
-	sort.Slice(statuses, func(i, j int) bool { return statuses[i].LastUsed.After(statuses[j].LastUsed) })
-	return statuses, nil
-}
-
-// RemoveSeedByID removes one rebuildable bridge cache under an exclusive lease.
-func RemoveSeedByID(ctx context.Context, seedRoot, id string) error {
-	if strings.TrimSpace(seedRoot) == "" {
-		return fmt.Errorf("worker cache storage is unavailable")
-	}
-	if !validSeedKey(id) {
-		return fmt.Errorf("invalid worker cache id")
-	}
-	release, err := lockSeedAcrossProcesses(ctx, seedRoot, id, true)
-	if err != nil {
-		return err
-	}
-	defer release()
-	return os.RemoveAll(filepath.Join(seedRoot, id))
-}
-
-func treeAllocatedBytes(ctx context.Context, root string) (int64, error) {
-	var total int64
-	err := sandbox.SurveyWalk(ctx, root, sandbox.SurveyOptions{IncludeHidden: true},
-		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
-			if entry.IsDir {
-				return sandbox.SurveyContinue, nil
-			}
-			info, err := entry.DirEntry.Info()
-			if err != nil {
-				return sandbox.SurveyContinue, err
-			}
-			total += max(allocatedFileBytes(info), 0)
-			return sandbox.SurveyContinue, nil
-		})
-	return total, err
 }
