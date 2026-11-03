@@ -3,10 +3,6 @@ package app
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -14,6 +10,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil"
+	"io"
+	"strings"
+	"testing"
 )
 
 type deliveredCommandBytes struct {
@@ -56,17 +55,25 @@ func TestCommandSedDeliveryAuthorizesOnlySeenEditorLines(t *testing.T) {
 	for _, m := range output.mappings {
 		tools.RememberCommandSourceDelivery(t.Context(), f.tctx, memory, m, output.Bytes()[m.OutputStartByte:m.OutputEndByte])
 	}
-	f.tctx.Source.EditorReadBases = tools.NewAgentReadBases(f.adapter.FreezeAgentReads(f.project.ID, f.session))
-	edit := &native.EditTool{Boundary: f.revisions.Boundary}
-	_, err = edit.Run(t.Context(), map[string]any{"path": "a.txt", "old_string": "line 10", "new_string": "changed 10\ninserted"}, f.tctx)
-	testutil.FailErr(t, "edit seen line", err)
-	_, err = edit.Run(t.Context(), map[string]any{"path": "a.txt", "old_string": "line 25", "new_string": "changed 25"}, f.tctx)
+	bases := f.adapter.FreezeAgentReads(f.project.ID, f.session)
+	if len(bases) != 1 {
+		t.Fatalf("delivered read bases=%+v", bases)
+	}
+	for _, basis := range bases {
+		doc := tools.EditorDocumentText{ReadWhole: basis.Whole, ReadSpans: basis.Spans}
+		if !doc.CoversLines(10, 20) || doc.CoversLines(9, 10) || doc.CoversLines(20, 21) || doc.CoversLines(25, 25) {
+			t.Fatalf("delivered line coverage=%+v", basis)
+		}
+	}
+	f.tctx.Source.EditorReadBases = tools.NewAgentReadBases(bases)
+	_, err = (&native.WriteTool{Boundary: f.revisions.Boundary}).Run(t.Context(), map[string]any{"path": "a.txt", "content": "replacement\n"}, f.tctx)
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "EDITOR_DOCUMENT_READ_REQUIRED" {
-		t.Fatalf("unseen line edit=%v", err)
+		t.Fatalf("partial delivery authorized whole-document replacement: %v", err)
 	}
-	if !strings.Contains(f.disk(t, "a.txt"), "changed 10\n") || !strings.Contains(f.disk(t, "a.txt"), "line 25\n") {
-		t.Fatalf("disk=%q", f.disk(t, "a.txt"))
+	if f.disk(t, "a.txt") != content.String() {
+		t.Fatal("rejected write changed disk")
 	}
+
 }
 
 func TestCommandDeliveryBareCarriageReturnDoesNotAuthorizeHiddenText(t *testing.T) {
@@ -84,7 +91,7 @@ func TestCommandDeliveryBareCarriageReturnDoesNotAuthorizeHiddenText(t *testing.
 	mapping := toolcontract.StreamSourceMapping{Source: pin, SourceEndByte: 4, OutputEndByte: 4}
 	tools.RememberCommandSourceDelivery(t.Context(), f.tctx, memory, mapping, []byte("safe"))
 	f.noReadBases(t)
-	_, err = (&native.EditTool{Boundary: f.revisions.Boundary}).Run(t.Context(), map[string]any{"path": "a.txt", "old_string": "hidden", "new_string": "changed"}, f.tctx)
+	_, err = (&native.WriteTool{Boundary: f.revisions.Boundary}).Run(t.Context(), map[string]any{"path": "a.txt", "content": "safe\rchanged\n"}, f.tctx)
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "EDITOR_DOCUMENT_READ_REQUIRED" {
 		t.Fatalf("hidden text edit=%v", err)
 	}

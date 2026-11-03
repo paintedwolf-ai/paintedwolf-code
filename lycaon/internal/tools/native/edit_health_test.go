@@ -3,15 +3,14 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/syntaxhealth"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/syntaxhealth"
-	"github.com/lycaon/lycaon/internal/testutil"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 const cleanGoFixture = "package p\n\nfunc A() int {\n\treturn 1\n}\n\nfunc B() int {\n\treturn 2\n}\n"
@@ -20,9 +19,9 @@ const cleanGoFixture = "package p\n\nfunc A() int {\n\treturn 1\n}\n\nfunc B() i
 func TestMutationHealthFlagsRegression(t *testing.T) {
 	tmpDir := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte(cleanGoFixture), 0o644))
-	tool := &ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}
+	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{
-		"path": "a.go", "start_line": 4, "end_line": 4, "new_content": "\treturn (1",
+		"path": "a.go", "content": strings.Replace(cleanGoFixture, "return 1", "return (1", 1),
 	}, nativefixture.Context(tmpDir))
 	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
@@ -43,9 +42,9 @@ func TestMutationHealthRejectsNonImprovingBrokenEdit(t *testing.T) {
 	tmpDir := t.TempDir()
 	broken := "package p\n\nfunc A( {\n\treturn 1\n}\n"
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte(broken), 0o644))
-	tool := &ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}
+	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{
-		"path": "a.go", "start_line": 4, "end_line": 4, "new_content": "\treturn 2",
+		"path": "a.go", "content": strings.Replace(broken, "return 1", "return 2", 1),
 	}, nativefixture.Context(tmpDir))
 	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_REPAIR_NOT_IMPROVED" {
@@ -57,9 +56,9 @@ func TestMutationHealthAllowsImprovingBrokenEdit(t *testing.T) {
 	tmpDir := t.TempDir()
 	broken := "package p\n\nfunc A( {\n\treturn 1\n}\n"
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte(broken), 0o644))
-	tool := &ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}
+	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{
-		"path": "a.go", "start_line": 3, "end_line": 3, "new_content": "func A() {",
+		"path": "a.go", "content": strings.Replace(broken, "func A( {", "func A() {", 1),
 	}, nativefixture.Context(tmpDir))
 	testutil.FailErr(t, "replace_lines", err)
 }
@@ -86,9 +85,9 @@ func TestMutationHealthPythonRejectIncludesIndentContext(t *testing.T) {
 	tmpDir := t.TempDir()
 	seed := "\"\"\"module\"\"\"\n\ndef run():\n    try:\n        work()\n    except Exception:\n        recover()\n"
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(tmpDir, "pipeline.py"), []byte(seed), 0o644))
-	tool := &ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}
+	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{
-		"path": "pipeline.py", "start_line": 6, "end_line": 7, "new_content": "    cleanup()",
+		"path": "pipeline.py", "content": strings.Replace(seed, "    except Exception:\n        recover()", "    cleanup()", 1),
 	}, nativefixture.Context(tmpDir))
 	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
@@ -112,9 +111,9 @@ func TestMutationHealthPythonRejectIncludesIndentContext(t *testing.T) {
 func TestMutationHealthSilentOnCleanEdit(t *testing.T) {
 	tmpDir := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte(cleanGoFixture), 0o644))
-	tool := &ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}
+	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out, err := tool.Run(context.Background(), map[string]any{
-		"path": "a.go", "start_line": 4, "end_line": 4, "new_content": "\treturn 42",
+		"path": "a.go", "content": strings.Replace(cleanGoFixture, "return 1", "return 42", 1),
 	}, nativefixture.Context(tmpDir))
 	testutil.FailErr(t, "replace_lines", err)
 	if strings.Contains(out, "⚠") {
@@ -126,9 +125,9 @@ func TestMutationHealthSilentOnCleanEdit(t *testing.T) {
 func TestMutationHealthSilentForNonCode(t *testing.T) {
 	tmpDir := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(tmpDir, "notes.txt"), []byte("one\ntwo\nthree\n"), 0o644))
-	tool := &ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}
+	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out, err := tool.Run(context.Background(), map[string]any{
-		"path": "notes.txt", "start_line": 2, "end_line": 2, "new_content": "TWO ((",
+		"path": "notes.txt", "content": "one\nTWO ((\nthree\n",
 	}, nativefixture.Context(tmpDir))
 	testutil.FailErr(t, "replace_lines", err)
 	if strings.Contains(out, "⚠") {

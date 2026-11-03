@@ -2,15 +2,14 @@ package native
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 func writeEditorConfig(t *testing.T, dir, body string) {
@@ -56,15 +55,15 @@ func TestWriteReportsDeclaredEditorConfigMismatchWithoutRewriting(t *testing.T) 
 	}
 }
 
-func TestEditReportsOnlyLinesItWrote(t *testing.T) {
+func TestWriteReportsOnlyLinesItChanged(t *testing.T) {
 	dir := t.TempDir()
 	writeEditorConfig(t, dir, "[*]\ntrim_trailing_whitespace = true\n")
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("old  \nkeep\n"), 0o644))
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
+	edit := &WriteTool{Boundary: nativefixture.Boundary(t)}
 
 	clean := nativefixture.Context(dir)
 	clean.Effects.Out = &tools.ToolInvocationOut{}
-	_, err := edit.Run(context.Background(), map[string]any{"path": "a.txt", "old_string": "keep", "new_string": "kept"}, clean)
+	_, err := edit.Run(context.Background(), map[string]any{"path": "a.txt", "content": "old  \nkept\n"}, clean)
 	testutil.FailErr(t, "clean edit", err)
 	if clean.Effects.Out.Facts.HasCode(toolrejection.EditorConfigMismatchCode) {
 		t.Fatalf("trailing whitespace the edit left alone was attributed to it: %+v", clean.Effects.Out.Facts)
@@ -72,7 +71,7 @@ func TestEditReportsOnlyLinesItWrote(t *testing.T) {
 
 	dirty := nativefixture.Context(dir)
 	dirty.Effects.Out = &tools.ToolInvocationOut{}
-	_, err = edit.Run(context.Background(), map[string]any{"path": "a.txt", "old_string": "kept", "new_string": "kept "}, dirty)
+	_, err = edit.Run(context.Background(), map[string]any{"path": "a.txt", "content": "old  \nkept \n"}, dirty)
 	testutil.FailErr(t, "dirty edit", err)
 	if got := mismatchDetails(t, dirty.Effects.Out)["editorconfig_lines"]; got != "a.txt:2 trim_trailing_whitespace" {
 		t.Fatalf("lines = %v", got)
@@ -101,8 +100,8 @@ func TestOpenDocumentEditLeavesLineEndingsToTheDocument(t *testing.T) {
 	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.go": openDoc("doc-a", "package draft\n", true)}}
 	tctx := editorCtx(dir, docs)
 	tctx.Effects.Out = &tools.ToolInvocationOut{}
-	_, err := (&EditTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
-		"path": "a.go", "old_string": "package draft", "new_string": "package agent ",
+	_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
+		"path": "a.go", "content": "package agent \n",
 	}, tctx)
 	testutil.FailErr(t, "edit", err)
 	got := mismatchDetails(t, tctx.Effects.Out)

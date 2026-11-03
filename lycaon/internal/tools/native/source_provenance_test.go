@@ -4,22 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/pkg/api"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
 // fakeSourceLedger supplies recording and history fixtures without a database.
@@ -260,82 +257,6 @@ func TestReadReceiptWithoutLedgerMakesNoClaim(t *testing.T) {
 	testutil.FailErr(t, "read", err)
 	if source := receiptSource(t, out); source != nil {
 		t.Fatalf("no-ledger read stamped %v, want absent", source)
-	}
-}
-
-func TestEditMissWithForeignChangeStatesProvenance(t *testing.T) {
-	dir := t.TempDir()
-	_, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
-	ledger := &fakeSourceLedger{
-		floor: 1, floorFound: true,
-		heads: map[string]sourceledger.BranchHead{
-			"r1/main.go": {FileID: "f1", VersionID: "v2", SHA256: sha, State: "content"},
-		},
-		effects: map[string][]sourceledger.Effect{
-			"f1": {
-				{Origin: api.SourceChangeOriginUser, Op: api.SourceChangeOpWrite, Ordinal: 8, TS: time.Date(2026, 8, 26, 14, 2, 0, 0, time.UTC)},
-				{Origin: api.SourceChangeOriginAgent, SessionID: "test-session", Op: api.SourceChangeOpWrite, Ordinal: 5},
-			},
-		},
-	}
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
-	_, err := edit.Run(context.Background(), map[string]any{
-		"path": "main.go", "old_string": "package moved", "new_string": "package main",
-	}, provenanceCtx(dir, ledger))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "EDIT_TARGET_CHANGED_BY_OTHERS" {
-		t.Fatalf("edit miss = %v, want EDIT_TARGET_CHANGED_BY_OTHERS", err)
-	}
-	rows, _ := reject.Data["changed_by"].([]map[string]any)
-	if len(rows) != 1 || rows[0]["actor"] != "user" {
-		t.Fatalf("changed_by = %v, want one user row (own effects excluded)", reject.Data["changed_by"])
-	}
-	if reject.Data["change_count"] != 1 {
-		t.Fatalf("change_count = %v, want 1", reject.Data["change_count"])
-	}
-}
-
-func TestEditMissWithOnlyOwnChangesKeepsPlainReject(t *testing.T) {
-	dir := t.TempDir()
-	_, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
-	ledger := &fakeSourceLedger{
-		floor: 1, floorFound: true,
-		heads: map[string]sourceledger.BranchHead{
-			"r1/main.go": {FileID: "f1", VersionID: "v2", SHA256: sha, State: "content"},
-		},
-		effects: map[string][]sourceledger.Effect{
-			"f1": {{Origin: api.SourceChangeOriginAgent, SessionID: "test-session", Op: api.SourceChangeOpWrite, Ordinal: 5}},
-		},
-	}
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
-	_, err := edit.Run(context.Background(), map[string]any{
-		"path": "main.go", "old_string": "package moved", "new_string": "package main",
-	}, provenanceCtx(dir, ledger))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
-		t.Fatalf("edit miss = %v, want plain EDIT_OLD_STRING_NOT_FOUND", err)
-	}
-}
-
-func TestEditMissWithoutRecordedFloorKeepsPlainReject(t *testing.T) {
-	dir := t.TempDir()
-	_, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
-	ledger := &fakeSourceLedger{
-		floorFound: false,
-		heads: map[string]sourceledger.BranchHead{
-			"r1/main.go": {FileID: "f1", VersionID: "v2", SHA256: sha, State: "content"},
-		},
-		effects: map[string][]sourceledger.Effect{
-			"f1": {{Origin: api.SourceChangeOriginUser, Op: api.SourceChangeOpWrite, Ordinal: 8}},
-		},
-	}
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
-	_, err := edit.Run(context.Background(), map[string]any{
-		"path": "main.go", "old_string": "package moved", "new_string": "package main",
-	}, provenanceCtx(dir, ledger))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
-		t.Fatalf("edit miss without floor = %v, want plain reject — an unknown baseline states nothing", err)
 	}
 }
 

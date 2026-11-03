@@ -4,17 +4,16 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"os"
-	"path/filepath"
-	"sync"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/pkg/api"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
 )
 
 type agentFeedCap struct {
@@ -54,7 +53,7 @@ func (h *agentFeedCap) take() []api.SourceChange {
 	return out
 }
 
-func TestAgentWriteAndEditEmitSourceChanged(t *testing.T) {
+func TestAgentCreateAndOverwriteEmitSourceChanged(t *testing.T) {
 	hub := &agentFeedCap{}
 	t.Cleanup(sourcefeed.Bind(hub))
 
@@ -76,9 +75,9 @@ func TestAgentWriteAndEditEmitSourceChanged(t *testing.T) {
 		t.Fatalf("write workspace kind = %q, want project", hub.lastKind())
 	}
 
-	et := &EditTool{Boundary: nativefixture.Boundary(t)}
+	et := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err = et.Run(context.Background(), map[string]any{
-		"path": "agent.go", "old_string": "package agent\n", "new_string": "package edited\n",
+		"path": "agent.go", "content": "package edited\n",
 	}, tctx)
 	testutil.FailErr(t, "edit", err)
 	got = hub.take()
@@ -124,7 +123,7 @@ func TestAgentMkdirEmitsSourceChanged(t *testing.T) {
 	}
 }
 
-func TestAgentUTF16EditEmitsRawEncodedSHA(t *testing.T) {
+func TestAgentUTF16WriteEmitsRawEncodedSHA(t *testing.T) {
 	hub := &agentFeedCap{}
 	t.Cleanup(sourcefeed.Bind(hub))
 
@@ -135,8 +134,8 @@ func TestAgentUTF16EditEmitsRawEncodedSHA(t *testing.T) {
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID = "proj-agent-utf16"
 
-	_, err := (&EditTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
-		"path": "wide.txt", "old_string": "before", "new_string": "after",
+	_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
+		"path": "wide.txt", "content": "after\n",
 	}, tctx)
 	testutil.FailErr(t, "edit UTF-16", err)
 	want := testutil.EncodeTextFixture(t, "after\n", textfile.UTF16BEBOM)

@@ -3,11 +3,6 @@ package session
 import (
 	"context"
 	"database/sql"
-	"os"
-	"path/filepath"
-	"sync"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
@@ -19,6 +14,10 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
 )
 
 type workerBranchLedgerCapture struct {
@@ -122,9 +121,9 @@ func TestWorkerBranchEditRecordsAgainstWorkerBranch(t *testing.T) {
 			tctx.Identity.ToolCallID = "call-edit"
 
 			boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true},
-				[]sandbox.ToolProfile{{ID: "implementer", Tools: map[string]bool{"edit": true}}})
-			_, err = (&native.EditTool{Boundary: boundary}).Run(ctx, map[string]any{
-				"path": tc.modelPath, "old_string": "package app\n", "new_string": "package routes\n",
+				[]sandbox.ToolProfile{{ID: "implementer", Tools: map[string]bool{"write": true}}})
+			_, err = (&native.WriteTool{Boundary: boundary}).Run(ctx, map[string]any{
+				"path": tc.modelPath, "content": "package routes\n",
 			}, tctx)
 			testutil.FailErr(t, "worker edit", err)
 

@@ -3,19 +3,17 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
-// Credential writes are never refused: every mutation tool presents them to
-// review, where the gate asks. A declined review leaves the file unchanged.
+// Declined credential reviews leave the file unchanged.
 func TestContentMutationToolsReviewCredentialPaths(t *testing.T) {
 	paths := []string{
 		".env",
@@ -36,41 +34,7 @@ func TestContentMutationToolsReviewCredentialPaths(t *testing.T) {
 			assertReviewDeclined(t, err, rel)
 			assertFileUnchanged(t, filepath.Join(dir, filepath.FromSlash(rel)))
 		})
-		t.Run("edit/"+rel, func(t *testing.T) {
-			dir := seedCredentialFile(t, rel)
-			tool := &EditTool{Boundary: nativefixture.Boundary(t)}
-			_, err := tool.Run(context.Background(), map[string]any{
-				"path": rel, "old_string": "SECRET", "new_string": "LEAKED",
-			}, decliningReview(t, dir, rel))
-			assertReviewDeclined(t, err, rel)
-			assertFileUnchanged(t, filepath.Join(dir, filepath.FromSlash(rel)))
-		})
-		t.Run("replace_lines/"+rel, func(t *testing.T) {
-			dir := seedCredentialFile(t, rel)
-			tool := &ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}
-			_, err := tool.Run(context.Background(), map[string]any{
-				"path": rel, "start_line": 1, "end_line": 1, "new_content": "",
-			}, decliningReview(t, dir, rel))
-			assertReviewDeclined(t, err, rel)
-			assertFileUnchanged(t, filepath.Join(dir, filepath.FromSlash(rel)))
-		})
 	}
-}
-
-// code_rewrite needs a language it supports, so it gets a credential path that
-// also carries a source extension.
-func TestCodeRewriteReviewsCredentialPath(t *testing.T) {
-	const rel = "deploy/id_rsa.go"
-	dir := t.TempDir()
-	abs := filepath.Join(dir, filepath.FromSlash(rel))
-	testutil.FailErr(t, "mkdir parent", os.MkdirAll(filepath.Dir(abs), 0o755))
-	testutil.FailErr(t, "seed file", os.WriteFile(abs, []byte("package deploy\n\nvar Key = \"SECRET\"\n"), 0o600))
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path": rel, "pattern": `"SECRET"`, "rewrite": `"LEAKED"`, "lang": "go",
-	}, decliningReview(t, dir, rel))
-	assertReviewDeclined(t, err, rel)
-	assertFileUnchanged(t, abs)
 }
 
 // The host family reaches the same review for the same paths.

@@ -2,23 +2,21 @@ package native
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/structrewrite"
 	"github.com/lycaon/lycaon/internal/syntaxhealth"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tsparse"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 func TestMutationTimeoutPreservesFileAndReportsHostCause(t *testing.T) {
@@ -101,61 +99,5 @@ func TestWriteSyntaxOverrideStillChecksContentAndRecordsReason(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "binary.go")); !os.IsNotExist(err) {
 		t.Fatalf("rejected binary content was written: %v", err)
-	}
-}
-
-func TestRewritePreviewRetainsParserFailureDetails(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	raw := codeRewriteDiffResult(ctx, "a.go", "go", 1, "package p\n", "package q\n")
-	var out codeRewriteDiffOut
-	testutil.FailErr(t, "decode rewrite preview", json.Unmarshal([]byte(raw), &out))
-	if out.SyntaxIssue == nil || out.SyntaxIssue.Code != "MUTATION_PARSE_INCOMPLETE" || out.SyntaxIssue.Details["parse_reason"] != "canceled" || out.SyntaxIssue.Details["parse_phase"] != "candidate" {
-		t.Fatalf("preview discarded parser failure details: %+v", out)
-	}
-}
-
-func TestMultiRewritePreviewRetainsSyntaxDiagnostics(t *testing.T) {
-	dir := t.TempDir()
-	for _, path := range []string{"a.go", "b.go"} {
-		testutil.FailErr(t, "seed rewrite source", os.WriteFile(filepath.Join(dir, path), []byte("package p\nfunc run() { f(1) }\n"), 0600))
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	raw, err := tool.Run(context.Background(), map[string]any{"paths": []string{"a.go", "b.go"}, "pattern": "f($A)", "rewrite": "broken(", "dry_run": true}, nativefixture.Context(dir))
-	testutil.FailErr(t, "preview invalid structural rewrite", err)
-	var out multiApplyOut
-	testutil.FailErr(t, "decode multi-file rewrite preview", json.Unmarshal([]byte(raw), &out))
-	if len(out.Changed) != 2 {
-		t.Fatalf("preview lost changed files: %+v", out)
-	}
-	for _, file := range out.Changed {
-		if file.SyntaxIssue == nil || file.SyntaxIssue.Code != "MUTATION_BROKE_PARSE" || file.SyntaxIssue.Details["parse_errors"] == nil {
-			t.Fatalf("preview lost syntax diagnostics: %+v", file)
-		}
-	}
-}
-
-func TestMultiRewriteParseFailurePreservesPlannedFiles(t *testing.T) {
-	configtest.Overlay(t, map[config.Rel]string{config.SourceParsing: "version: 1\nvalidation_timeout_ms: 30000\nanalysis_timeout_ms: 20\n"})
-	dir := t.TempDir()
-	sources := map[string]string{
-		"a.go": "package p\nfunc run() { f(1) }\n",
-		"b.go": "package p\nfunc run() {\n" + strings.Repeat("f(1)\n", 40000) + "}\n",
-	}
-	for path, source := range sources {
-		testutil.FailErr(t, "seed rewrite source", os.WriteFile(filepath.Join(dir, path), []byte(source), 0600))
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{"paths": []string{"a.go", "b.go"}, "pattern": "f($A)", "rewrite": "g($A)"}, nativefixture.Context(dir))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "SOURCE_PARSE_INCOMPLETE" {
-		t.Fatalf("unavailable rewrite source did not reject planning: %v", err)
-	}
-	for path, source := range sources {
-		got, err := os.ReadFile(filepath.Join(dir, path))
-		testutil.FailErr(t, "read preserved rewrite source", err)
-		if string(got) != source {
-			t.Fatalf("rewrite applied a partial plan to %s", path)
-		}
 	}
 }
