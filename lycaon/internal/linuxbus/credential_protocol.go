@@ -178,6 +178,8 @@ func credentialValueHasFD(value reflect.Value) bool {
 				return true
 			}
 		}
+	default:
+		// Scalars hold no descriptor.
 	}
 	return false
 }

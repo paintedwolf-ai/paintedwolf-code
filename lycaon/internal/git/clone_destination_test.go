@@ -50,6 +50,7 @@ func TestCloneRejectsEveryExistingDestination(t *testing.T) {
 	mgr, origin := initWorktreeRepo(t)
 	for _, kind := range []string{"empty_directory", "file", "symlink", "dangling_symlink"} {
 		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
 			dest := filepath.Join(t.TempDir(), "destination")
 			switch kind {
 			case "empty_directory":

@@ -3,6 +3,7 @@
 package linuxbus
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -48,7 +49,7 @@ func TestCredentialPoolBoundsAdmissionAndJoinsEveryAcceptedConnection(t *testing
 	if err := pool.Start(incoming, upstream); err == nil {
 		t.Fatal("connection beyond bound was admitted")
 	}
-	if _, err := client.Read(make([]byte, 1)); err != io.EOF {
+	if _, err := client.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
 		t.Fatalf("refused connection was not closed: %v", err)
 	}
 	testutil.FailErr(t, "join incomplete authentication connections", pool.Close())

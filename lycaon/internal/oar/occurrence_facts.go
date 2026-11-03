@@ -538,6 +538,7 @@ var occurrenceFactDecls = []factDecl{
 	{"env_var", oarcore.TypeString, FactTierHost, ""},
 	{"argument_schema_tool", oarcore.TypeString, FactTierHost, ""},
 	{"argument_schema_matches_tool", oarcore.TypeBool, FactTierHost, ""},
+	{"argument_schema_edits_source", oarcore.TypeBool, FactTierHost, ""},
 	{"replacement_args_json", oarcore.TypeString, FactTierHost, ""},
 	{"fetch_url_deferred", oarcore.TypeBool, FactTierHost, ""},
 }

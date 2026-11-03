@@ -34,13 +34,13 @@ copy:
     {% else %}{% if paintedwolf.terminal_capture %}A captured call runs one executable with literal arguments. Its result supplies `exit_code`; shell sequences are
     not part of this capture.
 
-    {% else %}{% if paintedwolf.use_env_param %}This tool accepts literal environment values in its `env` object; supply the executable in its `command` argument.
+    {% else %}{% if paintedwolf.use_env_param %}`terminal_open` and `verify` accept literal environment values in their `env` object; supply the executable in the `command` argument.
 
-    {% else %}{% if paintedwolf.use_pipeline_array %}This tool accepts a `pipeline` array for its stages; follow its declared argument schema.
+    {% else %}{% if paintedwolf.use_pipeline_array %}`verify` accepts a `pipeline` array for its stages; follow its declared argument schema.
 
-    {% else %}{% if paintedwolf.use_stdin_param %}This tool accepts literal input in `stdin`; shell substitutions are not evaluated in that field.
+    {% else %}{% if paintedwolf.use_stdin_param %}`verify` accepts literal input in `stdin`; shell substitutions are not evaluated in that field.
 
-    {% else %}{% if paintedwolf.use_background_param %}This tool''s `background` field requests an independently running job and returns its handle.
+    {% else %}{% if paintedwolf.use_background_param %}The `background` field of `verify` requests an independently running job and returns its handle.
 
     {% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
   instead: '{% if paintedwolf.can_command %}For a Bash program, the offered command tool accepts program text without capture.{% endif %}'

@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/pkg/api"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"math"
 	"slices"
 	"strings"
@@ -149,8 +148,8 @@ func (e *ThinkingOverrideError) Error() string {
 	return fmt.Sprintf("Thinking override for %s / %s cannot be applied: %s. Review thinking overrides in AI providers.", e.ProviderID, e.Model, e.Reason)
 }
 
-func (e *ThinkingOverrideError) NoticeCode() wire.NoticeCode {
-	return wire.NoticeCodeThinkingOverrideUnavailable
+func (e *ThinkingOverrideError) NoticeCode() api.NoticeCode {
+	return api.NoticeCodeThinkingOverrideUnavailable
 }
 
 const maxReasoningCaptureBytes = 512 * 1024

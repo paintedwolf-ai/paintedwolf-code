@@ -171,7 +171,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		publishProject(baseCtx, startEv)
 	}
 	if !proc.silent && !stopped {
-		r.sweeper.onJobStarted()
+		r.sweeper.onJobStarted() //nolint:contextcheck // The sweeper loop outlives this call and holds its own context.
 	}
 
 	r.Output.watchRefusals(baseCtx, proc)

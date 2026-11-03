@@ -60,15 +60,15 @@ func writeUnixDatagram(conn *net.UnixConn, data, control []byte, peer *net.UnixA
 		}
 		address.Family = unix.AF_UNIX
 		for i := 0; i < len(peer.Name); i++ {
-			address.Path[i] = int8(peer.Name[i])
+			address.Path[i] = int8(peer.Name[i]) //nolint:gosec // G115 — sockaddr path bytes keep their bit pattern.
 		}
-		message.Namelen = uint32(unsafe.Offsetof(address.Path)) + uint32(len(peer.Name)) + 1
+		message.Namelen = uint32(unsafe.Offsetof(address.Path)) + uint32(len(peer.Name)) + 1 //nolint:gosec // G115 — the name fits address.Path, checked above.
 		setUnixAddressLength(&address, message.Namelen)
-		message.Name = (*byte)(unsafe.Pointer(&address))
+		message.Name = (*byte)(unsafe.Pointer(&address)) //nolint:gosec // G103 — sendmsg takes the sockaddr by pointer.
 	}
 	var sendErr error
 	err = raw.Write(func(fd uintptr) bool {
-		n, _, code := unix.Syscall(unix.SYS_SENDMSG, fd, uintptr(unsafe.Pointer(&message)), 0)
+		n, _, code := unix.Syscall(unix.SYS_SENDMSG, fd, uintptr(unsafe.Pointer(&message)), 0) //nolint:gosec // G103 — sendmsg takes the message by pointer.
 		if code == unix.EAGAIN || code == unix.EINTR {
 			return false
 		}

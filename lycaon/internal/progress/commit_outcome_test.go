@@ -23,7 +23,7 @@ func (s unsettledProgressStore) Update(ctx context.Context, id string, change fu
 			return doc, err
 		})
 	}
-	current, err := s.Store.Snapshot(ctx, id)
+	current, err := s.Snapshot(ctx, id)
 	if err != nil {
 		return Snapshot{}, err
 	}

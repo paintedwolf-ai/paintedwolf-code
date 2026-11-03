@@ -31,6 +31,7 @@ func TestLandWorktreeRevalidatesUnderRepositoryLease(t *testing.T) {
 	t.Parallel()
 	for _, change := range []string{"base_branch", "source_branch", "base_dirty", "worktree_dirty"} {
 		t.Run(change, func(t *testing.T) {
+			t.Parallel()
 			mgr, req := landFixture(t)
 			before, err := ReadHeadSHA(req.BaseDir)
 			testutil.FailErr(t, "base head before", err)

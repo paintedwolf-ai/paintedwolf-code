@@ -29,7 +29,7 @@ func TestJSONDecodeMemoryFollowsCurrentPathAndScalar(t *testing.T) {
 		events := 0
 		for {
 			_, err := stream.Decode()
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {
@@ -52,7 +52,7 @@ func TestBoundedJSONValuesMatchCanonicalInput(t *testing.T) {
 		for {
 			got, e := bounded.Decode()
 			want, w := plain.Decode()
-			if e == io.EOF && w == io.EOF {
+			if errors.Is(e, io.EOF) && errors.Is(w, io.EOF) {
 				break
 			}
 			if e != nil || w != nil {
@@ -169,7 +169,7 @@ func TestJSONDecodersReleaseEveryRefusedAdmission(t *testing.T) {
 			}
 		}
 		reference := &eventFaultMemory{}
-		if err := run(reference); err != io.EOF || reference.held != 0 {
+		if err := run(reference); !errors.Is(err, io.EOF) || reference.held != 0 {
 			t.Fatalf("reference decode: %v memory %+v", err, reference)
 		}
 		for at := 1; at <= reference.calls; at++ {

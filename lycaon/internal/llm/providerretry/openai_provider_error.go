@@ -217,8 +217,8 @@ func fieldsFromErrorEnvelope(env openAICompatErrorBody) (ParsedProviderError, bo
 		Param:        strings.TrimSpace(fields.Param),
 		Type:         typ,
 		Status:       status,
-		MaxContext:   firstPositiveInt(fields.NCtx, fields.MaxModelLen, fields.ContextLength, fields.MaxContextLen, env.openAICompatErrorFields.NCtx),
-		PromptTokens: firstPositiveInt(fields.NPromptTokens, fields.PromptTokens, env.openAICompatErrorFields.NPromptTokens),
+		MaxContext:   firstPositiveInt(fields.NCtx, fields.MaxModelLen, fields.ContextLength, fields.MaxContextLen, env.NCtx),
+		PromptTokens: firstPositiveInt(fields.NPromptTokens, fields.PromptTokens, env.NPromptTokens),
 	}
 	return parsed, true
 }

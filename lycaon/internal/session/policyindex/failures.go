@@ -20,7 +20,7 @@ func policyFailures(err error) []*agentpolicy.ScopeError {
 	if err == nil {
 		return nil
 	}
-	if _, limited := err.(*scopeLimitError); limited {
+	if _, limited := err.(*scopeLimitError); limited { //nolint:errorlint // The walk below visits each joined member itself.
 		return nil
 	}
 	if group, ok := err.(interface{ Unwrap() []error }); ok {

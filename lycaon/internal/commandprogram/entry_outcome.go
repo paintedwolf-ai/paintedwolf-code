@@ -10,6 +10,8 @@ func failedEntry(invocation toolcontract.OperationInvocation, cause error) Progr
 		kind = StopAuthority
 	case toolcontract.ProducerInterrupted:
 		kind = StopInterrupted
+	default:
+		// Other terminals stay with the owner.
 	}
 	return ProgramOutcome{Status: result.Status, Stop: &HostStop{Kind: kind, ExecutionID: invocation.Identity.ExecutionID, Result: result}}
 }

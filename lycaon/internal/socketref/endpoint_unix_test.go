@@ -4,6 +4,7 @@ package socketref
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -67,7 +68,7 @@ func TestEndpointAdmissionBoundAndCancellationJoin(t *testing.T) {
 	}
 	extra := endpointClient(t, endpoint.Path())
 	var one [1]byte
-	if n, err := extra.Read(one[:]); n != 0 || err != io.EOF {
+	if n, err := extra.Read(one[:]); n != 0 || !errors.Is(err, io.EOF) {
 		t.Fatalf("excess connection was not refused: bytes=%d, error=%v", n, err)
 	}
 	if got := dials.Load(); got != endpointConnections {

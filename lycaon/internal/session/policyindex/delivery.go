@@ -39,7 +39,7 @@ func (m *Service) recordDeliveries(messages []api.Message, revisions [][]agentpo
 		}
 		identities[i].Files, identities[i].Content, identities[i].Priority = records[i].files, records[i].content, records[i].priority
 	}
-	body, _ := json.Marshal(identities)
+	body, _ := json.Marshal(identities) //nolint:errchkjson // Revisions, digests and priorities always encode.
 	identity := sha256.Sum256(body)
 	groupID := hex.EncodeToString(identity[:])
 	group := deliveredGroup{}

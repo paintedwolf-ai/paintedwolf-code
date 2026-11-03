@@ -25,7 +25,7 @@ func inet6V6Only(protocol Protocol) map[uint64]bool {
 	if err != nil {
 		return nil
 	}
-	defer syscall.Close(fd)
+	defer func() { _ = syscall.Close(fd) }()
 	if err := syscall.SetsockoptTimeval(fd, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &syscall.Timeval{Sec: 1}); err != nil {
 		return nil
 	}

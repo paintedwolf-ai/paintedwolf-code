@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -51,7 +52,7 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 			_, err = svc.publishReductionSynthesis(ctx, compaction.SessionInfo{ID: sess.ID}, rows, snapshot,
 				[]compaction.ContextMessage{{ID: "summary", Role: "assistant", Content: "A concise observation."}}, report)
 			if changed == "cancellation" {
-				if err != context.Canceled {
+				if !errors.Is(err, context.Canceled) {
 					t.Fatalf("cancelled publication returned %v", err)
 				}
 			} else {

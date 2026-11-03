@@ -1,6 +1,7 @@
 package jq
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -47,7 +48,7 @@ func TestJSONEventsPreserveQueryEvents(t *testing.T) {
 			var expected []string
 			for {
 				value, err := reference.Decode()
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					break
 				}
 				if err != nil {
@@ -63,7 +64,7 @@ func TestJSONEventsPreserveQueryEvents(t *testing.T) {
 			var got []string
 			for {
 				v, e := actual.Decode()
-				if e == io.EOF {
+				if errors.Is(e, io.EOF) {
 					break
 				}
 				if e != nil {
@@ -90,7 +91,7 @@ func TestJSONEventsRefuseMalformedInput(t *testing.T) {
 			_, err = s.Decode()
 		}
 		s.Close()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			t.Fatalf("malformed input accepted: %s", input)
 		}
 	}

@@ -75,9 +75,9 @@ func projectCommandResult(message api.Message, parts []api.MessageContentPart) [
 			}
 			delete(refusal, "details")
 			refusal["details_retained"] = json.RawMessage("true")
-			refusal["result_message_id"], _ = json.Marshal(message.ID)
+			refusal["result_message_id"], _ = json.Marshal(message.ID) //nolint:errchkjson // Strings always encode.
 		}
-		metadata["refusal"], _ = json.Marshal(refusal)
+		metadata["refusal"], _ = json.Marshal(refusal) //nolint:errchkjson // Members were decoded from JSON or are literal JSON.
 	}
 	delete(metadata, "stdout")
 	delete(metadata, "stderr")

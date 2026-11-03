@@ -28,6 +28,7 @@ requires:
   - paintedwolf.replacement_args_json
   - paintedwolf.argument_schema_tool
   - paintedwolf.argument_schema_matches_tool
+  - paintedwolf.argument_schema_edits_source
 when: paintedwolf.rejection_code == "TOOL_ARGS_INVALID"
 effect: block
 copy:
@@ -59,6 +60,10 @@ copy:
     }}
 
     Supply these missing arguments for the refused operation using its schema.
+
+    {% endif %}
+
+    {% if paintedwolf.argument_schema_edits_source %}Before reconstructing an unknown or mismatched old_string, read the current source; a schema repair does not resolve an earlier source mismatch.
 
     {% endif %}
 

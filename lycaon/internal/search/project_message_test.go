@@ -153,9 +153,10 @@ func TestProjectMessageDeduplicatesCloseoutLedgerSnapshotsAndEnrichesCitedRows(t
 	}
 	var uncitedTurn1, citedTurn1 IndexRow
 	for _, r := range rowsTurn1 {
-		if r.Handle == "grep#1" {
+		switch r.Handle {
+		case "grep#1":
 			uncitedTurn1 = r
-		} else if r.Handle == "read#1" {
+		case "read#1":
 			citedTurn1 = r
 		}
 	}

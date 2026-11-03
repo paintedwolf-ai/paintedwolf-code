@@ -51,16 +51,17 @@ func TestStreamPolicyFreshnessIsIndependentOfJournalPreparation(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					defer stage.Close()
+					t.Cleanup(stage.Close)
 					stages = append(stages, stage)
 				}
-				if mode == "batch" {
+				switch mode {
+				case "batch":
 					_, pending, publishErr := publishAgentStreams(ctx, tc, nil, stages)
 					err = publishErr
 					if pending != nil {
 						pending.Close()
 					}
-				} else if mode == "stream" {
+				case "stream":
 					_, err = stages[0].Commit(ctx, tc)
 				}
 				if !errors.Is(err, stale) {

@@ -93,7 +93,7 @@ func (r *Output) publishStream(ctx context.Context, proc *Process, stream string
 	running := proc.running
 	r.jobs.mu.Unlock()
 	if !silent && running {
-		r.sweeper.onOutputChunk()
+		r.sweeper.onOutputChunk() //nolint:contextcheck // The sweeper loop outlives this call and holds its own context.
 	}
 	if r.publish == nil {
 		return

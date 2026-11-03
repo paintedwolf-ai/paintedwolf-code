@@ -772,7 +772,7 @@ func declaredDirectIPMatch(raw string, addr netip.Addr, port uint16) (matched bo
 		if pErr != nil || parsedPort == 0 {
 			return false, true
 		}
-		portMatches := uint16(parsedPort) == port
+		portMatches := parsedPort == uint64(port)
 		if declaredAddr, aErr := netip.ParseAddr(strings.TrimSuffix(strings.TrimSpace(host), ".")); aErr == nil {
 			return portMatches && declaredAddr.Unmap() == addr, true
 		}

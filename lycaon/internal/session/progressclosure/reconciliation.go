@@ -13,7 +13,7 @@ import (
 func reconciliation(root string, baseline guard.ProgressClosureBaseline) *progress.Reconciliation {
 	jobs := slices.Clone(baseline.JobIDs)
 	slices.Sort(jobs)
-	raw, _ := json.Marshal(struct {
+	raw, _ := json.Marshal(struct { //nolint:errchkjson // Strings always encode.
 		Root, Revision string
 		Jobs           []string
 	}{root, baseline.Revision, jobs})
