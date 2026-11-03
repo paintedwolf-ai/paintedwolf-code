@@ -72,11 +72,11 @@ func checkNestedPinEpoch() error {
 		_ = unix.Close(fd)
 	}
 	if err != nil || !changed || fd >= 0 {
-		return fmt.Errorf("sibling publication was not discarded: fd=%d changed=%t err=%v", fd, changed, err)
+		return errors.Join(err, fmt.Errorf("sibling publication was not discarded: fd=%d changed=%t", fd, changed))
 	}
 	fd, changed, err = captureNestedViewPin(target, int(id), readMountInfo)
 	if err != nil || changed || fd < 0 {
-		return fmt.Errorf("fresh selected pin unavailable: fd=%d changed=%t err=%v", fd, changed, err)
+		return errors.Join(err, fmt.Errorf("fresh selected pin unavailable: fd=%d changed=%t", fd, changed))
 	}
 	defer unix.Close(fd)
 	actualID, actualInode, err := mountDescriptorIdentity(fd)
