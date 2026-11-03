@@ -9,7 +9,7 @@ hosts: [coordinator]
 ---
 Store the checklist with `update_progress(content=…)`; checklist text in an assistant reply does not update it.
 
-Before {% if progress_gated_tools %}{% for tool in progress_gated_tools %}{% if not forloop.First %}{% if forloop.Last %}{% if forloop.Counter > 2 %}, or {% else %} or {% endif %}{% else %}, {% endif %}{% endif %}`{{ tool }}`{% endfor %}{% else %}creating or editing files or dispatching a worker{% endif %}, call it with `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, explanations, and commands that only write session scratch or saved output files need none.
+Before creating or editing files or dispatching a worker, call it with `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, explanations, and commands that only write session scratch or saved output files need none.
 
 Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, never in-progress; `- [>]` note. Update only changed scope/status. `unchanged` reports a no-op; do not repeat it.
 

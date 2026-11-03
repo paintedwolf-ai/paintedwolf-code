@@ -80,6 +80,8 @@ Deleting bytes must produce an explainable unavailable state, not make a durable
 
 ## Portable command records
 
+The command language v1 summary output projects follow-up actions onto `command` arguments. Native `summarize --cursor` continues the same path and focus. This command interface is unpublished; released structured summary results and internal routing identities retain their existing shape and meaning.
+
 The compiled catalog freezes the language, operation definitions and limits for each invocation. The model call owns the aggregate receipt; child identities are host operations. Persistence and wire consumers follow the classifications below.
 
 Command limit identifiers are `agent-public` vocabulary. The shared text-search
