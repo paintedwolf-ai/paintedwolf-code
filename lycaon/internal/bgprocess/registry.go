@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -82,6 +83,7 @@ type Output struct {
 	complete        CompletionPublisher
 	refused         RefusalPublisher
 	projector       *captureprojection.Projector
+	screenMemory    func() (*toolcontract.ProgramMemory, error)
 }
 
 // ProcessLifecycle owns settlement, termination, and resource release.
@@ -104,7 +106,14 @@ func NewRegistry(cfg Config, hooks Hooks) *Registry {
 		cfg.MaxRecent = DefaultMaxRecent
 	}
 	jobs := &processTable{sessions: make(map[string]map[string]*Process), maxBackground: cfg.MaxBackground, maxAwaited: cfg.MaxAwaited, maxRecent: cfg.MaxRecent}
-	output := &Output{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, publish: hooks.Publish, complete: hooks.Complete, refused: hooks.Refused}
+	screenMemory := sync.OnceValues(func() (*toolcontract.ProgramMemory, error) {
+		limits, err := toolcontract.CatalogProgramMemoryLimits()
+		if err != nil {
+			return nil, err
+		}
+		return toolcontract.NewProgramMemory(limits)
+	})
+	output := &Output{screenMemory: screenMemory, jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, publish: hooks.Publish, complete: hooks.Complete, refused: hooks.Refused}
 	lifecycle := &ProcessLifecycle{jobs: jobs}
 	terminal := &Terminal{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, Output: output, Lifecycle: lifecycle}
 	return &Registry{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, Terminal: terminal, Output: output, Lifecycle: lifecycle}
