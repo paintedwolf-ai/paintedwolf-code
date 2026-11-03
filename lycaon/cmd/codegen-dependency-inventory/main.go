@@ -24,10 +24,22 @@ func main() {
 	repo := flag.String("repo", "..", "repository root")
 	check := flag.Bool("check", false, "fail when the policy no longer matches the manifests or .github/dependabot.yml is stale")
 	refresh := flag.Bool("refresh-upstream", false, "query package registries and rewrite the upstream snapshot")
+	nixBun := flag.Bool("nix-bun", false, "regenerate the Nix Bun expression with the pinned converter (requires Nix)")
 	flag.Parse()
 	if *check && *refresh {
 		fmt.Fprintln(os.Stderr, "codegen-dependency-inventory: --check and --refresh-upstream are exclusive")
 		os.Exit(2)
+	}
+	if *nixBun {
+		if *check || *refresh {
+			fmt.Fprintln(os.Stderr, "codegen-dependency-inventory: --nix-bun cannot combine with --check or --refresh-upstream")
+			os.Exit(2)
+		}
+		if err := generateNixBun(context.Background(), *repo, runBunCommand); err != nil {
+			fmt.Fprintln(os.Stderr, "codegen-dependency-inventory:", err)
+			os.Exit(1)
+		}
+		return
 	}
 	if err := run(*repo, *check, *refresh); err != nil {
 		fmt.Fprintln(os.Stderr, "codegen-dependency-inventory:", err)
