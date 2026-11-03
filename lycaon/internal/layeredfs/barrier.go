@@ -24,6 +24,9 @@ func (c *Core) ReleaseView() error {
 	c.state.seq.closing = true
 	c.mu.Unlock()
 
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
+		c.cfg.FaultHooks.ReleaseWaitHook("draining")
+	}
 	c.barrier.waitDrain()
 
 	var releaseErr error
@@ -196,9 +199,12 @@ func (b *barrierCoordinator) endReleaseAttempt(att *releaseAttempt, err error) {
 }
 
 func waitReleaseAttempt(c *Core, att *releaseAttempt) error {
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
+		c.cfg.FaultHooks.ReleaseWaitHook("joined")
+	}
 	<-att.done
 	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
-		c.cfg.FaultHooks.ReleaseWaitHook()
+		c.cfg.FaultHooks.ReleaseWaitHook("done")
 	}
 	return att.err
 }

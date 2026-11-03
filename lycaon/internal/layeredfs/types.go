@@ -161,7 +161,7 @@ type FaultHooks struct {
 	LowerXattrHook        func(qpath QualifiedPath) error
 	WorkingFileHashReader func(qpath QualifiedPath, r io.Reader) (io.Reader, error)
 	JournalSyncHook       func(phase string) error
-	ReleaseWaitHook       func()
+	ReleaseWaitHook       func(stage string)
 }
 
 type Config struct {

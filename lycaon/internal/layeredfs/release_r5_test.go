@@ -19,13 +19,22 @@ func TestReleaseViewWaitsForAcquiredCheckpointBarrierAndCompletesOnEndBarrier(t 
 	backingDir := t.TempDir()
 	testutil.FailErr(t, "write lower barrier.txt", os.WriteFile(filepath.Join(rootDir, "barrier.txt"), []byte("v1\n"), 0o644))
 
+	drainingEntered := make(chan struct{})
+	var drainingOnce sync.Once
+
 	c, err := New(Config{
 		ViewID:     "view-r5-barrier-release",
 		BackingDir: backingDir,
 		Roots:      []RootSpec{{ID: "r0", Label: "r0", TrunkPath: rootDir, IsPrimary: true}},
+		FaultHooks: &FaultHooks{
+			ReleaseWaitHook: func(stage string) {
+				if stage == "draining" {
+					drainingOnce.Do(func() { close(drainingEntered) })
+				}
+			},
+		},
 	})
 	testutil.FailErr(t, "new core", err)
-	t.Cleanup(func() { _ = c.ReleaseView() })
 
 	qp := QualifiedPath{RootID: "r0", Rel: "barrier.txt"}
 	_, err = c.WriteFile(qp, []byte("v2\n"), 0o644)
@@ -33,23 +42,32 @@ func TestReleaseViewWaitsForAcquiredCheckpointBarrierAndCompletesOnEndBarrier(t 
 
 	token, err := c.BeginCheckpointBarrier(context.Background())
 	testutil.FailErr(t, "BeginCheckpointBarrier", err)
+	var endBarrierOnce sync.Once
+	endBarrier := func() error {
+		var bErr error
+		endBarrierOnce.Do(func() {
+			bErr = c.EndCheckpointBarrier(token)
+		})
+		return bErr
+	}
+	t.Cleanup(func() {
+		_ = endBarrier()
+		_ = c.ReleaseView()
+	})
 
 	releaseDone := make(chan error, 1)
 	go func() {
 		releaseDone <- c.ReleaseView()
 	}()
 
-	// Wait until ReleaseView has closed admission while still waiting for the barrier to drain.
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		_, wErr := c.WriteFile(qp, []byte("v3\n"), 0o644)
-		if errors.Is(wErr, ErrViewReleased) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for ReleaseView to close admission; last err=%v", wErr)
-		}
-		time.Sleep(2 * time.Millisecond)
+	select {
+	case <-drainingEntered:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for ReleaseView to enter drain")
+	}
+
+	if _, wErr := c.WriteFile(qp, []byte("v3\n"), 0o644); !errors.Is(wErr, ErrViewReleased) {
+		t.Fatalf("expected ErrViewReleased while ReleaseView is draining, got %v", wErr)
 	}
 
 	select {
@@ -59,7 +77,7 @@ func TestReleaseViewWaitsForAcquiredCheckpointBarrierAndCompletesOnEndBarrier(t 
 	}
 
 	// EndCheckpointBarrier with the acquired token must succeed and unblock ReleaseView.
-	testutil.FailErr(t, "EndCheckpointBarrier during ReleaseView drain", c.EndCheckpointBarrier(token))
+	testutil.FailErr(t, "EndCheckpointBarrier during ReleaseView drain", endBarrier())
 
 	select {
 	case rErr := <-releaseDone:
@@ -85,10 +103,14 @@ func TestReleaseViewRetryOvertakingWaiterPreservesAttemptError(t *testing.T) {
 	syncEntered := make(chan struct{})
 	unblockSync := make(chan struct{})
 	var syncOnce sync.Once
+	var unblockSyncOnce sync.Once
 
+	waiterJoined := make(chan struct{})
 	waiterAwoke := make(chan struct{})
 	allowWaiterReturn := make(chan struct{})
+	var joinedOnce sync.Once
 	var waiterOnce sync.Once
+	var allowWaiterOnce sync.Once
 
 	c, err := New(Config{
 		ViewID:     "view-r5-overtake",
@@ -107,11 +129,16 @@ func TestReleaseViewRetryOvertakingWaiterPreservesAttemptError(t *testing.T) {
 				}
 				return nil
 			},
-			ReleaseWaitHook: func() {
-				waiterOnce.Do(func() {
-					close(waiterAwoke)
-					<-allowWaiterReturn
-				})
+			ReleaseWaitHook: func(stage string) {
+				switch stage {
+				case "joined":
+					joinedOnce.Do(func() { close(waiterJoined) })
+				case "done":
+					waiterOnce.Do(func() {
+						close(waiterAwoke)
+						<-allowWaiterReturn
+					})
+				}
 			},
 		},
 	})
@@ -119,6 +146,8 @@ func TestReleaseViewRetryOvertakingWaiterPreservesAttemptError(t *testing.T) {
 	t.Cleanup(func() {
 		failSync.Store(false)
 		pauseSync.Store(false)
+		unblockSyncOnce.Do(func() { close(unblockSync) })
+		allowWaiterOnce.Do(func() { close(allowWaiterReturn) })
 		_ = c.ReleaseView()
 	})
 
@@ -144,10 +173,15 @@ func TestReleaseViewRetryOvertakingWaiterPreservesAttemptError(t *testing.T) {
 	go func() {
 		attempt1WaiterErr <- c.ReleaseView()
 	}()
-	time.Sleep(15 * time.Millisecond)
+
+	select {
+	case <-waiterJoined:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for attempt 1 waiter to join active release attempt")
+	}
 
 	pauseSync.Store(false)
-	close(unblockSync)
+	unblockSyncOnce.Do(func() { close(unblockSync) })
 
 	if err := <-attempt1LeaderErr; !errors.Is(err, syscall.EIO) {
 		t.Fatalf("attempt 1 leader expected EIO, got %v", err)
@@ -162,7 +196,7 @@ func TestReleaseViewRetryOvertakingWaiterPreservesAttemptError(t *testing.T) {
 	failSync.Store(false)
 	testutil.FailErr(t, "retry B ReleaseView succeeds while waiter A is paused", c.ReleaseView())
 
-	close(allowWaiterReturn)
+	allowWaiterOnce.Do(func() { close(allowWaiterReturn) })
 	if err := <-attempt1WaiterErr; !errors.Is(err, syscall.EIO) {
 		t.Fatalf("attempt 1 joined waiter expected attempt 1 EIO despite retry B overtaking, got %v", err)
 	}
