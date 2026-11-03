@@ -5,27 +5,26 @@ package layeredfs
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/unix"
 )
 
 type osLowerProvider struct {
-	rootFile *os.File
-	rootPath string
-	hook     func(rel, comp string)
+	rootFile  *os.File
+	hook      func(rel, comp string)
+	xattrHook func(rel string) error
 }
 
-func newOSLowerProvider(rootPath string, hook func(rel, comp string)) (*osLowerProvider, error) {
+func newOSLowerProvider(rootPath string, hook func(rel, comp string), xattrHook func(rel string) error) (*osLowerProvider, error) {
 	f, err := openDirNoFollow(rootPath)
 	if err != nil {
 		return nil, err
 	}
 	return &osLowerProvider{
-		rootFile: f,
-		rootPath: f.Name(),
-		hook:     hook,
+		rootFile:  f,
+		hook:      hook,
+		xattrHook: xattrHook,
 	}, nil
 }
 
@@ -43,14 +42,14 @@ func (p *osLowerProvider) openParentAndName(rel string) (*os.File, string, error
 		if err != nil {
 			return nil, ".", err
 		}
-		return os.NewFile(uintptr(dupFD), p.rootPath), ".", nil
+		return os.NewFile(uintptr(dupFD), "."), ".", nil
 	}
 	parts := strings.Split(rel, "/")
 	dupFD, err := unix.Dup(int(p.rootFile.Fd()))
 	if err != nil {
 		return nil, "", err
 	}
-	cur := os.NewFile(uintptr(dupFD), p.rootPath)
+	cur := os.NewFile(uintptr(dupFD), ".")
 	for i := 0; i < len(parts)-1; i++ {
 		comp := parts[i]
 		if comp == "" || comp == "." || comp == ".." {
@@ -68,7 +67,7 @@ func (p *osLowerProvider) openParentAndName(rel string) (*os.File, string, error
 			}
 			return nil, "", openErr
 		}
-		cur = os.NewFile(uintptr(nextFD), filepath.Join(cur.Name(), comp))
+		cur = os.NewFile(uintptr(nextFD), comp)
 	}
 	last := parts[len(parts)-1]
 	if last == "" || last == "." || last == ".." {
@@ -141,7 +140,7 @@ func (p *osLowerProvider) OpenRead(rel string) (ReadSeekCloser, LowerEntry, erro
 		}
 		return nil, LowerEntry{}, err
 	}
-	f := os.NewFile(uintptr(fd), filepath.Join(parent.Name(), name))
+	f := os.NewFile(uintptr(fd), name)
 	var st unix.Stat_t
 	if err := unix.Fstat(fd, &st); err != nil {
 		_ = f.Close()
@@ -170,7 +169,7 @@ func (p *osLowerProvider) ReadDir(rel string) ([]LowerDirEntry, error) {
 		if dErr != nil {
 			return nil, dErr
 		}
-		dirFile = os.NewFile(uintptr(dupFD), parent.Name())
+		dirFile = os.NewFile(uintptr(dupFD), ".")
 	} else {
 		fd, oErr := unix.Openat(int(parent.Fd()), name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		if oErr != nil {
@@ -179,7 +178,7 @@ func (p *osLowerProvider) ReadDir(rel string) ([]LowerDirEntry, error) {
 			}
 			return nil, oErr
 		}
-		dirFile = os.NewFile(uintptr(fd), filepath.Join(parent.Name(), name))
+		dirFile = os.NewFile(uintptr(fd), name)
 	}
 	defer func() { _ = dirFile.Close() }()
 
@@ -213,9 +212,10 @@ func (p *osLowerProvider) ListXattr(rel string) (map[string][]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = parent.Close() }()
-	targetPath := parent.Name()
-	if name != "." {
-		targetPath = filepath.Join(parent.Name(), name)
+	if p.xattrHook != nil {
+		if hErr := p.xattrHook(cleanRelPath(rel)); hErr != nil {
+			return nil, hErr
+		}
 	}
-	return listXattrPath(targetPath)
+	return listXattrAt(int(parent.Fd()), name)
 }

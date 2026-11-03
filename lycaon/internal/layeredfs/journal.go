@@ -165,7 +165,10 @@ func buildChangeEntryLocked(c *Core, qp QualifiedPath, logicalOnly bool) (Change
 	if nid, ok := c.state.pathIndex[qp]; ok {
 		node := c.state.nodesByID[nid]
 		if node != nil && !node.flags.unlinked {
-			isLogical, contentChanged, metaChanged, sha := evaluateNodeLogicalChangeLocked(c, qp, node, base)
+			isLogical, contentChanged, metaChanged, sha, err := evaluateNodeLogicalChangeLocked(c, qp, node, base)
+			if err != nil {
+				return ChangeEntry{}, false, err
+			}
 			if logicalOnly && !isLogical {
 				return ChangeEntry{}, false, nil
 			}
@@ -226,17 +229,25 @@ func buildChangeEntryLocked(c *Core, qp QualifiedPath, logicalOnly bool) (Change
 	return ChangeEntry{}, false, nil
 }
 
-func evaluateNodeLogicalChangeLocked(c *Core, qp QualifiedPath, node *privateNode, base BaseCapture) (logical, contentChanged, metaChanged bool, sha string) {
+func evaluateNodeLogicalChangeLocked(
+	c *Core,
+	qp QualifiedPath,
+	node *privateNode,
+	base BaseCapture,
+) (logical, contentChanged, metaChanged bool, sha string, err error) {
 	if node.kind == EntryRegular && node.flags.backingName != "" {
-		sha = hashWorkingFileLocked(c, node.flags.backingName, node.flags.backingPath)
+		sha, err = hashWorkingFileLocked(c, qp, node.flags.backingName, node.flags.backingPath)
+		if err != nil {
+			return false, false, false, "", err
+		}
 	}
 	if !node.flags.physicalCopyUp || base.Kind == EntryAbsent || base.Kind != node.kind {
-		return true, true, node.flags.metadataChanged, sha
+		return true, true, node.flags.metadataChanged, sha, nil
 	}
 	if node.flags.namespaceAdded || len(node.paths) > 1 || (node.initial.originPath != nil && *node.initial.originPath != qp) {
 		contentChanged = node.flags.contentChanged && (sha != node.initial.sha256 || node.size != node.initial.size)
 		metaChanged = !metadataMatchesInitialLocked(node)
-		return true, contentChanged, metaChanged, sha
+		return true, contentChanged, metaChanged, sha, nil
 	}
 	switch node.kind {
 	case EntryRegular:
@@ -248,32 +259,61 @@ func evaluateNodeLogicalChangeLocked(c *Core, qp QualifiedPath, node *privateNod
 	}
 	metaChanged = !metadataMatchesInitialLocked(node)
 	logical = contentChanged || metaChanged
-	return logical, contentChanged, metaChanged, sha
+	return logical, contentChanged, metaChanged, sha, nil
 }
 
-func hashWorkingFileLocked(c *Core, bName, bPath string) string {
+func hashWorkingFileLocked(c *Core, qp QualifiedPath, bName, bPath string) (string, error) {
 	if c.backing.workDirFile == nil {
-		return ""
+		return "", ErrViewReleased
 	}
 	f, err := openBackingFileRO(int(c.backing.workDirFile.Fd()), bName, bPath)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	defer func() { _ = f.Close() }()
+	r := io.Reader(f)
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.WorkingFileHashReader != nil {
+		var hErr error
+		r, hErr = c.cfg.FaultHooks.WorkingFileHashReader(qp, f)
+		if hErr != nil {
+			return "", hErr
+		}
+	}
 	h := sha256.New()
-	_, _ = io.Copy(h, f)
-	return hex.EncodeToString(h.Sum(nil))
+	if _, err := io.Copy(h, r); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func countLogicalChangesLocked(c *Core) int {
 	count := 0
 	for _, qp := range collectTouchedPathsLocked(c) {
-		_, include, err := buildChangeEntryLocked(c, qp, true)
-		if err == nil && include {
+		if isPathLogicallyChangedFastLocked(c, qp) {
 			count++
 		}
 	}
 	return count
+}
+
+func isPathLogicallyChangedFastLocked(c *Core, qp QualifiedPath) bool {
+	base := c.state.basesByPath[qp]
+	if nid, ok := c.state.pathIndex[qp]; ok {
+		node := c.state.nodesByID[nid]
+		if node != nil && !node.flags.unlinked {
+			if !node.flags.physicalCopyUp || base.Kind == EntryAbsent || base.Kind != node.kind {
+				return true
+			}
+			if node.flags.namespaceAdded || len(node.paths) > 1 || (node.initial.originPath != nil && *node.initial.originPath != qp) {
+				return true
+			}
+			return node.flags.contentChanged || !metadataMatchesInitialLocked(node)
+		}
+	}
+	if _, isDel := c.state.deletedPaths[qp]; isDel {
+		return base.Kind != EntryAbsent
+	}
+	return false
 }
 
 // SnapshotJournal produces a versioned JournalSnapshot and persists it to the view's journal directory.

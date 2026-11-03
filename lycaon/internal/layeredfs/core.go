@@ -68,6 +68,7 @@ type viewState struct {
 }
 
 type nodeFlags struct {
+	ioMu            sync.Mutex
 	unlinked        bool
 	physicalCopyUp  bool
 	contentChanged  bool
@@ -109,16 +110,18 @@ type deletedState struct {
 }
 
 type openHandle struct {
-	id       HandleID
-	viewID   string
-	nodeID   NodeID
-	gen      Generation
-	qpath    QualifiedPath
-	flags    OpenFlags
-	isDir    bool
-	closed   bool
-	file     *os.File
-	roReader ReadSeekCloser
+	id           HandleID
+	viewID       string
+	nodeID       NodeID
+	gen          Generation
+	qpath        QualifiedPath
+	flags        OpenFlags
+	isDir        bool
+	closed       bool
+	refs         int
+	unlinkOrphan string
+	file         *os.File
+	roReader     ReadSeekCloser
 }
 
 type dirCookieState struct {
@@ -225,11 +228,20 @@ func initRootTable(cfg Config) (*rootTable, error) {
 		}
 		if r.TrunkPath != "" {
 			rootID := r.ID
-			prov, err := newOSLowerProvider(r.TrunkPath, func(rel, comp string) {
-				if cfg.LookupRaceHook != nil {
-					cfg.LookupRaceHook(QualifiedPath{RootID: rootID, Rel: rel}, comp)
-				}
-			})
+			prov, err := newOSLowerProvider(
+				r.TrunkPath,
+				func(rel, comp string) {
+					if cfg.LookupRaceHook != nil {
+						cfg.LookupRaceHook(QualifiedPath{RootID: rootID, Rel: rel}, comp)
+					}
+				},
+				func(rel string) error {
+					if cfg.FaultHooks != nil && cfg.FaultHooks.LowerXattrHook != nil {
+						return cfg.FaultHooks.LowerXattrHook(QualifiedPath{RootID: rootID, Rel: rel})
+					}
+					return nil
+				},
+			)
 			if err != nil {
 				rt.close()
 				return nil, fmt.Errorf("layeredfs: open root %s: %w", r.ID, err)

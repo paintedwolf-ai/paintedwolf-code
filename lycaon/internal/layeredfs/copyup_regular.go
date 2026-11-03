@@ -1,6 +1,7 @@
 package layeredfs
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -41,7 +42,13 @@ func tryCaptureTrunkOnce(
 		}, true, nil
 
 	case EntryDirectory:
-		xattrs, _ := provider.ListXattr(qpath.Rel)
+		xattrs, xErr := provider.ListXattr(qpath.Rel)
+		if xErr != nil {
+			if errors.Is(xErr, fs.ErrNotExist) || errors.Is(xErr, ErrSourceChangedDuringCapture) {
+				return BaseCapture{}, false, nil
+			}
+			return BaseCapture{}, false, xErr
+		}
 		if retryHook != nil {
 			retryHook(qpath, attempt)
 		}
@@ -69,7 +76,13 @@ func tryCaptureTrunkOnce(
 			}
 			return BaseCapture{}, false, lErr
 		}
-		xattrs, _ := provider.ListXattr(qpath.Rel)
+		xattrs, xErr := provider.ListXattr(qpath.Rel)
+		if xErr != nil {
+			if errors.Is(xErr, fs.ErrNotExist) || errors.Is(xErr, ErrSourceChangedDuringCapture) {
+				return BaseCapture{}, false, nil
+			}
+			return BaseCapture{}, false, xErr
+		}
 		if retryHook != nil {
 			retryHook(qpath, attempt)
 		}
@@ -134,21 +147,36 @@ func tryCaptureRegularOnce(
 	if wErr != nil {
 		return BaseCapture{}, false, wErr
 	}
+	baseDirFD := int(c.backing.baseDirFile.Fd())
 
-	xattrs, _ := provider.ListXattr(qpath.Rel)
+	xattrs, xErr := provider.ListXattr(qpath.Rel)
+	if xErr != nil {
+		_ = unlinkBackingFile(baseDirFD, baseName)
+		if errors.Is(xErr, fs.ErrNotExist) || errors.Is(xErr, ErrSourceChangedDuringCapture) {
+			return BaseCapture{}, false, nil
+		}
+		return BaseCapture{}, false, xErr
+	}
 	if retryHook != nil && before.Size == 0 {
 		retryHook(qpath, attempt)
 	}
 
 	c.counters.lowerLookups.Add(1)
-	baseDirFD := int(c.backing.baseDirFile.Fd())
 	after, aErr := provider.Lstat(qpath.Rel)
 	if aErr != nil || !sameLowerIdentity(before, after) || copiedSize != before.Size || copiedSize != after.Size {
 		_ = unlinkBackingFile(baseDirFD, baseName)
 		return BaseCapture{}, false, nil
 	}
 
-	if !verifySourceAndBaseDigest(provider, qpath.Rel, after, baseDirFD, baseName, basePath, copiedSize, sha) {
+	afterXattrs, axErr := provider.ListXattr(qpath.Rel)
+	if axErr != nil {
+		_ = unlinkBackingFile(baseDirFD, baseName)
+		if errors.Is(axErr, fs.ErrNotExist) || errors.Is(axErr, ErrSourceChangedDuringCapture) {
+			return BaseCapture{}, false, nil
+		}
+		return BaseCapture{}, false, axErr
+	}
+	if !sameXattrs(xattrs, afterXattrs) || !verifySourceAndBaseDigest(provider, qpath.Rel, after, baseDirFD, baseName, basePath, copiedSize, sha) {
 		_ = unlinkBackingFile(baseDirFD, baseName)
 		return BaseCapture{}, false, nil
 	}
@@ -166,6 +194,19 @@ func tryCaptureRegularOnce(
 		BackingFile: basePath,
 		CapturedAt:  time.Now(),
 	}, true, nil
+}
+
+func sameXattrs(a, b map[string][]byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		bv, ok := b[k]
+		if !ok || !bytes.Equal(v, bv) {
+			return false
+		}
+	}
+	return true
 }
 
 func verifySourceAndBaseDigest(
@@ -251,6 +292,7 @@ func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
 	if base.BackingFile != "" {
 		cloned, cloneErr := cloneFileIfSupported(base.BackingFile, workPath)
 		if cloneErr == nil && cloned {
+			_ = syncFD(workDirFD)
 			return workName, workPath, nil
 		}
 		baseFile, err := openBackingFileRO(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile), base.BackingFile)
@@ -264,8 +306,10 @@ func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
 			return "", "", err
 		}
 		_, copyErr := io.Copy(wf, baseFile)
+		syncErr := syncFD(int(wf.Fd()))
 		closeErr := wf.Close()
-		if err := errors.Join(copyErr, closeErr); err != nil {
+		dirSyncErr := syncFD(workDirFD)
+		if err := errors.Join(copyErr, syncErr, closeErr, dirSyncErr); err != nil {
 			_ = unlinkBackingFile(workDirFD, workName)
 			return "", "", err
 		}
@@ -276,7 +320,7 @@ func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	if err := wf.Close(); err != nil {
+	if err := errors.Join( wf.Close(), syncFD(workDirFD)); err != nil {
 		_ = unlinkBackingFile(workDirFD, workName)
 		return "", "", err
 	}
