@@ -2,6 +2,8 @@ package native_test
 
 import (
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestVerifyRunsSelectedBashProgramWithOwnReceipt(t *testing.T) {

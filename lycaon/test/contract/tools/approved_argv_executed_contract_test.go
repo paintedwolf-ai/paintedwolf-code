@@ -2,11 +2,12 @@ package contract
 
 import (
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"testing"
 )
 
 // Substitutions are admitted as the argv the external process receives.

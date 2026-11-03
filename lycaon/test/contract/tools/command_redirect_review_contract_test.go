@@ -1,15 +1,16 @@
 package contract
 
 import (
+	"path/filepath"
+	"slices"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"path/filepath"
-	"slices"
-	"testing"
 )
 
 // Native verification redirects receive the same prepared-change review as writes.

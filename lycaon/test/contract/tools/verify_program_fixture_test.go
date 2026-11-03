@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -12,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"testing"
 )
 
 func verificationProgramFixture(t *testing.T) (*programtest.Fixture, *recordingGate) {

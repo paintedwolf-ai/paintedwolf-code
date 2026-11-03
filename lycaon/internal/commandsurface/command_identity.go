@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/exec"
+	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -13,15 +14,11 @@ import (
 // forms also ignore equivalent literal quoting.
 func CommandIdentity(line string) string {
 	line = strings.TrimSpace(line)
-	if line == "" || int64(len(line)) > SyntaxUnitByteLimit(false) {
+	if line == "" || !utf8.ValidString(line) || int64(len(line)) > SyntaxUnitByteLimit(false) {
 		return ""
 	}
 	tree, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(line), "")
 	if err != nil || len(tree.Stmts) == 0 {
-		return ""
-	}
-	var formatted bytes.Buffer
-	if err := syntax.NewPrinter().Print(&formatted, tree); err != nil {
 		return ""
 	}
 	static := true
@@ -49,15 +46,30 @@ func CommandIdentity(line string) string {
 		}
 		return static
 	})
+	prefix := "program:"
 	if static {
-		if stages, err := exec.StagesFromCommandLine(strings.TrimSpace(formatted.String())); err == nil {
-			raw, err := json.Marshal(stages)
-			if err == nil {
-				return "argv:" + string(raw)
+		prefix = "argv:"
+		syntax.Walk(tree, func(node syntax.Node) bool {
+			if word, ok := node.(*syntax.Word); ok {
+				literal, literalErr := expand.Literal(nil, word)
+				if literalErr != nil {
+					err = literalErr
+					return false
+				}
+				encoded, _ := json.Marshal(literal)
+				word.Parts = []syntax.WordPart{&syntax.Lit{Value: string(encoded)}}
 			}
+			return true
+		})
+		if err != nil {
+			return ""
 		}
 	}
-	return "program:" + formatted.String()
+	var formatted bytes.Buffer
+	if err := syntax.NewPrinter().Print(&formatted, tree); err != nil {
+		return ""
+	}
+	return prefix + formatted.String()
 }
 
 // SameCommandLine compares valid program identities without evaluating them.

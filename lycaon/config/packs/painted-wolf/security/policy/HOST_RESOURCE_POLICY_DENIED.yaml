@@ -5,6 +5,7 @@ anchor: tool.rejected
 selector:
   tool:
     - command
+    - verify
     - terminal_open
 requires:
   profiles:

@@ -1,7 +1,6 @@
 package native
 
 import (
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -9,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestVerificationCanceledZeroExitIsNotPass(t *testing.T) {

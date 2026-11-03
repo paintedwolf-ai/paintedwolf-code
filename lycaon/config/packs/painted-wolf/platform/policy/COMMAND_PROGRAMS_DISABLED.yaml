@@ -5,6 +5,7 @@ anchor: tool.rejected
 selector:
   tool:
   - command
+  - verify
 requires:
   profiles:
   - tool
