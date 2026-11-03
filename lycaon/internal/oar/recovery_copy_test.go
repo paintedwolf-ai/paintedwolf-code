@@ -56,6 +56,30 @@ func TestRecoveryRecipesRequireUnrequestedSupportedCapabilities(t *testing.T) {
 	}
 }
 
+func TestSocketRecoveryKeepsEndpointGuidanceAfterDeclaration(t *testing.T) {
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load recovery catalog", err)
+	for _, tool := range []string{"command", "verify", "read", "unknown_tool"} {
+		for _, declared := range []bool{false, true} {
+			gc := NewGuardContext()
+			args := map[string]any{}
+			if declared {
+				args["capability_request"] = map[string]any{"socket_paths": []string{"/run/service.sock"}}
+			}
+			gc.ObserveToolCall(tool, args)
+			gc.ObservationData = map[string]any{"refused_socket_paths": []string{"/run/service.sock"}, "supports_socket_paths": true}
+			text := oarcore.RenderCopy(hints.HintCodes["SANDBOX_TRY_SOCKET_PATH"].Fix, activation(gc))
+			supported := tool == "command" || tool == "verify"
+			if strings.Contains(text, "DOCKER_HOST") != supported {
+				t.Fatalf("tool=%s declared=%t endpoint guidance=%q", tool, declared, text)
+			}
+			if strings.Contains(text, "Declare the exact service") != (supported && !declared) {
+				t.Fatalf("tool=%s declared=%t declaration guidance=%q", tool, declared, text)
+			}
+		}
+	}
+}
+
 func TestUnknownRecoveryHasNoInventedRemedy(t *testing.T) {
 	setupAuthorCheckRenderer(t)
 	hints, err := guidance.LoadHintConfigStock()
