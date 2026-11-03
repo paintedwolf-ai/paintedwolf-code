@@ -83,70 +83,93 @@ func (s *Server) opGetlk(nodeID uint64, body []byte) ([]byte, int32) {
 	return out, 0
 }
 
-func (s *Server) opSetlk(reqState *fuseRequestState, nodeID uint64, body []byte, wait bool) ([]byte, int32) {
-	if reqState.IsCanceled() {
-		return nil, -int32(syscall.EINTR)
-	}
+// opSetlk serves the requests that never wait: non-blocking acquires and every unlock.
+func (s *Server) opSetlk(st *fuseRequestState, nodeID uint64, body []byte) ([]byte, int32) {
 	req, ok := parseFuseLockIn(body)
 	if !ok {
 		return nil, -int32(syscall.EINVAL)
 	}
 	s.lockMu.Lock()
 	defer s.lockMu.Unlock()
-	if req.typ == syscall.F_UNLCK {
-		applyLockChangeLocked(s, nodeID, req)
-		s.lockCond.Broadcast()
-		return nil, 0
+	errno, conflict := s.attemptLockLocked(st, nodeID, req)
+	if conflict {
+		return nil, -int32(syscall.EAGAIN)
 	}
-	if req.typ != syscall.F_RDLCK && req.typ != syscall.F_WRLCK {
-		return nil, -int32(syscall.EINVAL)
+	return nil, errno
+}
+
+// attemptLockLocked applies req unless it conflicts. A canceled or closed request never acquires.
+func (s *Server) attemptLockLocked(st *fuseRequestState, nodeID uint64, req fileLockEntry) (int32, bool) {
+	if req.typ != syscall.F_UNLCK && req.typ != syscall.F_RDLCK && req.typ != syscall.F_WRLCK {
+		return -int32(syscall.EINVAL), false
 	}
-	waitRegistered := false
-	defer func() {
-		if waitRegistered {
-			s.lockWaiterCount--
-			if reqState != nil {
-				reqState.lockWaiting.Store(false)
-			}
+	if req.typ != syscall.F_UNLCK {
+		if s.closed.Load() || st.isCanceled() {
+			return -int32(syscall.EINTR), false
 		}
-	}()
-	for {
-		if s.closed.Load() || reqState.IsCanceled() {
-			return nil, -int32(syscall.EINTR)
-		}
-		conflict := false
 		for _, existing := range s.fileLocks[nodeID] {
 			if locksConflict(req, existing) {
-				conflict = true
-				break
+				return 0, true
 			}
 		}
-		if !conflict {
-			break
-		}
-		if !wait {
-			return nil, -int32(syscall.EAGAIN)
-		}
-		if !waitRegistered {
-			if s.lockWaiterCount >= s.maxLockWaiters {
-				return nil, -int32(syscall.EAGAIN)
-			}
-			s.lockWaiterCount++
-			waitRegistered = true
-			if reqState != nil {
-				reqState.waitStart = req.start
-				reqState.waitEnd = req.end
-				reqState.lockWaiting.Store(true)
-			}
-		}
-		s.lockCond.Wait()
-	}
-	if s.closed.Load() || reqState.IsCanceled() {
-		return nil, -int32(syscall.EINTR)
 	}
 	applyLockChangeLocked(s, nodeID, req)
 	s.lockCond.Broadcast()
-	return nil, 0
+	return 0, false
+}
+
+// startSetlkw runs on the reader. It answers immediately unless the request must wait, then
+// hands the wait to a goroutine bounded by maxLockWaiters. Running out of waiters is ENOLCK,
+// because a blocking lock call has no contract for EAGAIN.
+func (s *Server) startSetlkw(st *fuseRequestState, req []byte) {
+	nodeID := binary.LittleEndian.Uint64(req[16:24])
+	lock, ok := parseFuseLockIn(req[fuseHeaderInSize:])
+	if !ok {
+		s.finishRequest(st, -int32(syscall.EINVAL))
+		return
+	}
+	s.lockMu.Lock()
+	errno, conflict := s.attemptLockLocked(st, nodeID, lock)
+	if conflict {
+		if s.lockWaiterCount >= s.maxLockWaiters {
+			errno, conflict = -int32(syscall.ENOLCK), false
+		} else {
+			s.lockWaiterCount++
+		}
+	}
+	s.lockMu.Unlock()
+	if !conflict {
+		s.finishRequest(st, errno)
+		return
+	}
+	s.notifyLockWait(st.unique, lock, true)
+	s.wg.Add(1)
+	go s.waitForLock(st, nodeID, lock)
+}
+
+func (s *Server) waitForLock(st *fuseRequestState, nodeID uint64, lock fileLockEntry) {
+	defer s.wg.Done()
+	s.lockMu.Lock()
+	errno, conflict := s.attemptLockLocked(st, nodeID, lock)
+	for conflict {
+		s.lockCond.Wait()
+		errno, conflict = s.attemptLockLocked(st, nodeID, lock)
+	}
+	s.lockWaiterCount--
+	s.lockMu.Unlock()
+	s.notifyLockWait(st.unique, lock, false)
+	s.finishRequest(st, errno)
+}
+
+func (s *Server) notifyLockWait(unique uint64, lock fileLockEntry, waiting bool) {
+	if s.cfg.OnLockWait != nil {
+		s.cfg.OnLockWait(unique, lock.start, lock.end, waiting)
+	}
+}
+
+func (s *Server) finishRequest(st *fuseRequestState, errno int32) {
+	_ = s.writeReply(st.unique, errno, nil)
+	s.unregisterRequest(st.unique)
 }
 
 func applyLockChangeLocked(s *Server, nodeID uint64, req fileLockEntry) {

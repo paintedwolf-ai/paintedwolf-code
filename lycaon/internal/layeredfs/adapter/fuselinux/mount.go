@@ -14,9 +14,10 @@ import (
 )
 
 // FormatMountOptions returns the explicit unprivileged fusermount3 options for (viewID, rootID).
-// It never includes allow_other or allow_root.
+// It never includes allow_other or allow_root. default_permissions has the kernel enforce file
+// modes, so read-only files and access(2) behave for a worker as they do on a local filesystem.
 func FormatMountOptions(fsName string) string {
-	return fmt.Sprintf("rw,nosuid,nodev,fsname=%s,subtype=%s", fsName, DefaultSubtype)
+	return fmt.Sprintf("rw,nosuid,nodev,default_permissions,fsname=%s,subtype=%s", fsName, DefaultSubtype)
 }
 
 func formatFSName(viewID, rootID string) string {
@@ -43,12 +44,16 @@ func (a *Adapter) preflightProbeChecks(ctx context.Context, probeCfg adapter.Pro
 		res.Diagnostic = "required mount confinement context is unavailable"
 		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic}
 	}
-	if a.cfg.ConfinementCheckFn != nil {
-		if cErr := a.cfg.ConfinementCheckFn(ctx, probeCfg); cErr != nil {
-			res.ReasonCode, res.Diagnostic = adapter.ReasonConfinementUnavailable, cErr.Error()
-			return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
-		}
+	if a.cfg.ConfinementCheckFn == nil {
+		res.ReasonCode = adapter.ReasonConfinementUnavailable
+		res.Diagnostic = "no confinement check is configured, so direct backing denial cannot be established"
+		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic}
 	}
+	if cErr := a.cfg.ConfinementCheckFn(ctx, probeCfg); cErr != nil {
+		res.ReasonCode, res.Diagnostic = adapter.ReasonConfinementUnavailable, cErr.Error()
+		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
+	}
+	res.BackingDenialVerified = true
 	if err := checkFUSEDeviceAvailable(a.cfg.FuseDevicePath); err != nil {
 		res.ReasonCode = adapter.ReasonFUSEDeviceUnavailable
 		res.Diagnostic = fmt.Sprintf("FUSE device unavailable at %s: %v", a.cfg.FuseDevicePath, err)
@@ -139,7 +144,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 		if custom := strings.TrimSpace(req.TargetRootDirs[g.RootID]); custom != "" {
 			mountDir = filepath.Clean(custom)
 		}
-		rm, mErr := a.mountSingleRoot(ctx, req.ViewID, g, mountDir, core)
+		rm, mErr := a.mountSingleRoot(ctx, req.ViewID, g, mountDir, absBacking, core)
 		if mErr != nil {
 			rollback()
 			return nil, mErr
@@ -197,6 +202,7 @@ func (a *Adapter) mountSingleRoot(
 	viewID string,
 	grant adapter.RootGrant,
 	mountDir string,
+	backingDir string,
 	core *layeredfs.Core,
 ) (*rootMount, error) {
 	if err := checkFUSEDeviceAvailable(a.cfg.FuseDevicePath); err != nil {
@@ -237,7 +243,9 @@ func (a *Adapter) mountSingleRoot(
 		OwnerGID:              gid,
 		MaxConcurrentRequests: a.cfg.MaxConcurrentRequests,
 		MaxLockWaiters:        a.cfg.MaxLockWaiters,
+		BackingDir:            backingDir,
 		OnMutationHook:        a.cfg.OnMutationHook,
+		OnLockWait:            a.cfg.OnLockWait,
 	}, core)
 	if err != nil {
 		return nil, err
@@ -268,6 +276,19 @@ func (a *Adapter) mountSingleRoot(
 		}
 	}
 
+	if pErr := srv.optOutOfFUSEPoll(canonMount); pErr != nil {
+		_ = srv.Close()
+		_ = runFusermountUnmount(context.Background(), a.cfg.FusermountBin, canonMount, true)
+		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "prepare", ReasonCode: adapter.ReasonFUSEMountDenied, Diagnostic: pErr.Error(), Cause: pErr}
+	}
+
+	// The stat above completed only after FUSE_INIT, so the exchange is recorded by now.
+	protocol := srv.NegotiatedProtocol()
+	if protocol == nil {
+		_ = srv.Close()
+		_ = runFusermountUnmount(context.Background(), a.cfg.FusermountBin, canonMount, true)
+		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "prepare", ReasonCode: adapter.ReasonFUSEMountDenied, Diagnostic: "FUSE_INIT did not complete on " + canonMount}
+	}
 	facts := MountFacts{
 		ViewID: viewID, RootID: grant.RootID,
 		MountID:        fmt.Sprintf("fuselinux:%s:%s:%s", viewID, grant.RootID, mInfo.mountID),
@@ -280,6 +301,7 @@ func (a *Adapter) mountSingleRoot(
 		MountOptions:   mInfo.mountOptions,
 		SuperOptions:   mInfo.superOptions,
 		ProtocolMajor:  FUSEProtocolMajor, ProtocolMinor: FUSEProtocolMinor,
+		KernelMinor: protocol.KernelMinor, GrantedFlags: protocol.GrantedFlags,
 		MaxReadAhead: DefaultMaxReadAhead, MaxWrite: DefaultMaxWrite,
 		CachePolicy: DefaultCachePolicy,
 		ParentDev:   parentDev, MountedDev: mountedDev,

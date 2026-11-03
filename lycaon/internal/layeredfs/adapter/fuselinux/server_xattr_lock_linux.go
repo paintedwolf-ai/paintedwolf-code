@@ -5,10 +5,12 @@ package fuselinux
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"io/fs"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"golang.org/x/sys/unix"
 )
 
 func (s *Server) opSetxattr(nodeID uint64, body []byte) ([]byte, int32) {
@@ -20,6 +22,7 @@ func (s *Server) opSetxattr(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.ENOENT)
 	}
 	valSize := int(binary.LittleEndian.Uint32(body[0:4]))
+	flags := int(binary.LittleEndian.Uint32(body[4:8]))
 	rest := body[8:]
 	nulIdx := bytes.IndexByte(rest, 0)
 	if nulIdx <= 0 {
@@ -34,6 +37,17 @@ func (s *Server) opSetxattr(nodeID uint64, body []byte) ([]byte, int32) {
 		valBytes = valBytes[:valSize]
 	}
 	qp := s.qpath(rel)
+	if flags&(unix.XATTR_CREATE|unix.XATTR_REPLACE) != 0 {
+		_, getErr := s.core.GetXattr(qp, name, true)
+		switch {
+		case getErr == nil && flags&unix.XATTR_CREATE != 0:
+			return nil, -int32(syscall.EEXIST)
+		case errors.Is(getErr, syscall.ENODATA) && flags&unix.XATTR_REPLACE != 0:
+			return nil, -int32(syscall.ENODATA)
+		case getErr != nil && !errors.Is(getErr, syscall.ENODATA):
+			return nil, mapFUSEErrno(getErr)
+		}
+	}
 	if err := s.core.SetXattr(qp, name, valBytes, true); err != nil {
 		return nil, mapFUSEErrno(err)
 	}

@@ -4,6 +4,7 @@ package fuselinux
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"syscall"
 
@@ -15,7 +16,7 @@ const fuseWriteInHeaderSize = 40
 func (s *Server) storeOpenHandle(fh uint64, entry openHandleEntry) {
 	s.nodeMu.Lock()
 	s.openHandles[fh] = entry
-	if entry.rel != "" {
+	if entry.writable && entry.rel != "" {
 		s.dirtyRels[entry.rel] = struct{}{}
 	}
 	s.nodeMu.Unlock()
@@ -44,9 +45,12 @@ func (s *Server) lookupOpenHandleForNode(fh, nodeID uint64) (openHandleEntry, bo
 	return openHandleEntry{}, false
 }
 
-func (s *Server) opOpen(nodeID uint64, body []byte) ([]byte, int32) {
+func (s *Server) opOpen(st *fuseRequestState, nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
+	}
+	if nodeID == pollProbeNodeID {
+		return pollProbeOpenOut(), 0
 	}
 	rel, ok := s.resolveNodeRel(nodeID)
 	if !ok {
@@ -56,8 +60,8 @@ func (s *Server) opOpen(nodeID uint64, body []byte) ([]byte, int32) {
 	openFlags := translateOpenFlags(rawFlags)
 	mutating := openFlags != layeredfs.OpenReadOnly
 	if mutating {
-		if !s.enterMutation() {
-			return nil, -int32(syscall.EAGAIN)
+		if errno := s.enterMutation(st); errno != 0 {
+			return nil, errno
 		}
 		defer s.leaveMutation()
 		if s.cfg.OnMutationHook != nil {
@@ -72,10 +76,10 @@ func (s *Server) opOpen(nodeID uint64, body []byte) ([]byte, int32) {
 	fn := s.ensureNode(rel, attr)
 	fh := uint64(hid)
 	s.storeOpenHandle(fh, openHandleEntry{
-		hid:    hid,
-		fuseID: fn.fuseID,
-		rel:    cleanFuseRel(rel),
-		isDir:  false,
+		hid:      hid,
+		fuseID:   fn.fuseID,
+		rel:      cleanFuseRel(rel),
+		writable: openFlags&(layeredfs.OpenWriteOnly|layeredfs.OpenReadWrite) != 0,
 	})
 	out := make([]byte, 16)
 	binary.LittleEndian.PutUint64(out[0:8], fh)
@@ -109,10 +113,10 @@ func (s *Server) opCreate(nodeID uint64, body []byte) ([]byte, int32) {
 	fn := s.ensureNode(childRel, attr)
 	fh := uint64(hid)
 	s.storeOpenHandle(fh, openHandleEntry{
-		hid:    hid,
-		fuseID: fn.fuseID,
-		rel:    cleanFuseRel(childRel),
-		isDir:  false,
+		hid:      hid,
+		fuseID:   fn.fuseID,
+		rel:      cleanFuseRel(childRel),
+		writable: true,
 	})
 	entryBytes := encodeEntryOut(s, fn.fuseID, attr)
 	out := make([]byte, len(entryBytes)+16)
@@ -121,76 +125,49 @@ func (s *Server) opCreate(nodeID uint64, body []byte) ([]byte, int32) {
 	return out, 0
 }
 
-func (s *Server) opRead(nodeID uint64, body []byte) ([]byte, int32) {
+// opRead and opWrite act only on the object the descriptor holds. Falling back to its path
+// would hide the error and could reach a different file that took the same name.
+func (s *Server) opRead(body []byte) ([]byte, int32) {
 	if len(body) < 24 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	fh := binary.LittleEndian.Uint64(body[0:8])
+	h, ok := s.lookupHandle(binary.LittleEndian.Uint64(body[0:8]))
+	if !ok || h.isDir || h.hid == 0 {
+		return nil, -int32(syscall.EBADF)
+	}
 	offset := int64(binary.LittleEndian.Uint64(body[8:16]))
 	size := int(binary.LittleEndian.Uint32(body[16:20]))
 	if size <= 0 {
 		return nil, 0
 	}
 	buf := make([]byte, size)
-	if h, ok := s.lookupOpenHandleForNode(fh, nodeID); ok && h.hid != 0 {
-		n, err := s.core.ReadHandle(h.hid, buf, offset)
-		if err == nil || err == io.EOF {
-			return buf[:n], 0
-		}
-	}
-	rel, ok := s.resolveNodeRel(nodeID)
-	if !ok {
-		return nil, -int32(syscall.ENOENT)
-	}
-	hid, _, err := s.core.Open(s.qpath(rel), layeredfs.OpenReadOnly, 0)
-	if err != nil {
+	n, err := s.core.ReadHandle(h.hid, buf, offset)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, mapFUSEErrno(err)
-	}
-	n, rerr := s.core.ReadHandle(hid, buf, offset)
-	_ = s.core.CloseHandle(hid)
-	if rerr != nil && rerr != io.EOF {
-		return nil, mapFUSEErrno(rerr)
 	}
 	return buf[:n], 0
 }
 
-func (s *Server) opWrite(nodeID uint64, body []byte) ([]byte, int32) {
+func (s *Server) opWrite(body []byte) ([]byte, int32) {
 	if len(body) < fuseWriteInHeaderSize {
 		return nil, -int32(syscall.EINVAL)
 	}
-	fh := binary.LittleEndian.Uint64(body[0:8])
+	h, ok := s.lookupHandle(binary.LittleEndian.Uint64(body[0:8]))
+	if !ok || h.isDir || h.hid == 0 {
+		return nil, -int32(syscall.EBADF)
+	}
 	offset := int64(binary.LittleEndian.Uint64(body[8:16]))
 	size := int(binary.LittleEndian.Uint32(body[16:20]))
 	if len(body) < fuseWriteInHeaderSize+size {
 		size = len(body) - fuseWriteInHeaderSize
 	}
-	data := body[fuseWriteInHeaderSize : fuseWriteInHeaderSize+size]
-	if h, ok := s.lookupOpenHandleForNode(fh, nodeID); ok && h.hid != 0 {
-		if h.rel != "" {
-			s.recordDirtyRel(h.rel)
-		}
-		n, err := s.core.WriteHandle(h.hid, data, offset)
-		if err == nil {
-			out := make([]byte, 8)
-			binary.LittleEndian.PutUint32(out[0:4], uint32(n))
-			return out, 0
-		}
+	if h.rel != "" {
+		s.recordDirtyRel(h.rel)
 	}
-	rel, ok := s.resolveNodeRel(nodeID)
-	if !ok {
-		return nil, -int32(syscall.ENOENT)
-	}
-	qp := s.qpath(rel)
-	hid, attr, err := s.core.Open(qp, layeredfs.OpenReadWrite, 0)
+	n, err := s.core.WriteHandle(h.hid, body[fuseWriteInHeaderSize:fuseWriteInHeaderSize+size], offset)
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	n, werr := s.core.WriteHandle(hid, data, offset)
-	_ = s.core.CloseHandle(hid)
-	if werr != nil {
-		return nil, mapFUSEErrno(werr)
-	}
-	s.ensureNode(rel, attr)
 	out := make([]byte, 8)
 	binary.LittleEndian.PutUint32(out[0:4], uint32(n))
 	return out, 0
@@ -263,6 +240,8 @@ func (s *Server) opOpendir(nodeID uint64) ([]byte, int32) {
 	return out, 0
 }
 
+// opReaddir serves one directory stream from a snapshot taken when the stream starts or rewinds.
+// Offsets index that snapshot, so removing an entry mid-listing cannot make another one skip.
 func (s *Server) opReaddir(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 24 {
 		return nil, -int32(syscall.EINVAL)
@@ -270,45 +249,15 @@ func (s *Server) opReaddir(nodeID uint64, body []byte) ([]byte, int32) {
 	fh := binary.LittleEndian.Uint64(body[0:8])
 	offset := int(binary.LittleEndian.Uint64(body[8:16]))
 	maxSize := int(binary.LittleEndian.Uint32(body[16:20]))
-	rel, ok := s.resolveNodeRel(nodeID)
-	if !ok {
-		if h, hok := s.lookupHandle(fh); hok && h.rel != "" {
-			rel, ok = h.rel, true
+	s.nodeMu.RLock()
+	all, cached := s.dirSnapshots[fh]
+	s.nodeMu.RUnlock()
+	if offset == 0 || !cached {
+		var errno int32
+		all, errno = s.snapshotDirectory(nodeID, fh)
+		if errno != 0 {
+			return nil, errno
 		}
-	}
-	if !ok {
-		return nil, -int32(syscall.ENOENT)
-	}
-	entries, err := s.core.ReadDir(s.qpath(rel))
-	if err != nil {
-		return nil, mapFUSEErrno(err)
-	}
-	type rawDirent struct {
-		ino  uint64
-		typ  uint32
-		name string
-	}
-	all := make([]rawDirent, 0, len(entries)+2)
-	all = append(all,
-		rawDirent{ino: nodeID, typ: syscall.DT_DIR, name: "."},
-		rawDirent{ino: fuseRootID, typ: syscall.DT_DIR, name: ".."},
-	)
-	for _, e := range entries {
-		childRel := joinRel(rel, e.Name)
-		fn := s.ensureNode(childRel, layeredfs.EntryAttr{
-			NodeID:     e.NodeID,
-			Generation: e.Generation,
-			Layer:      e.Layer,
-			Kind:       e.Kind,
-			Mode:       e.Mode,
-			Size:       e.Size,
-			ModTime:    e.ModTime,
-		})
-		all = append(all, rawDirent{
-			ino:  fn.fuseID,
-			typ:  direntType(e.Mode),
-			name: e.Name,
-		})
 	}
 	if offset < 0 || offset >= len(all) {
 		return nil, 0
@@ -332,6 +281,43 @@ func (s *Server) opReaddir(nodeID uint64, body []byte) ([]byte, int32) {
 	return out, 0
 }
 
+func (s *Server) snapshotDirectory(nodeID, fh uint64) ([]rawDirent, int32) {
+	rel, ok := s.resolveNodeRel(nodeID)
+	if !ok {
+		if h, hok := s.lookupHandle(fh); hok && h.rel != "" {
+			rel, ok = h.rel, true
+		}
+	}
+	if !ok {
+		return nil, -int32(syscall.ENOENT)
+	}
+	entries, err := s.core.ReadDir(s.qpath(rel))
+	if err != nil {
+		return nil, mapFUSEErrno(err)
+	}
+	all := make([]rawDirent, 0, len(entries)+2)
+	all = append(all,
+		rawDirent{ino: nodeID, typ: syscall.DT_DIR, name: "."},
+		rawDirent{ino: fuseRootID, typ: syscall.DT_DIR, name: ".."},
+	)
+	for _, e := range entries {
+		fn := s.ensureNode(joinRel(rel, e.Name), layeredfs.EntryAttr{
+			NodeID:     e.NodeID,
+			Generation: e.Generation,
+			Layer:      e.Layer,
+			Kind:       e.Kind,
+			Mode:       e.Mode,
+			Size:       e.Size,
+			ModTime:    e.ModTime,
+		})
+		all = append(all, rawDirent{ino: fn.fuseID, typ: direntType(e.Mode), name: e.Name})
+	}
+	s.nodeMu.Lock()
+	s.dirSnapshots[fh] = all
+	s.nodeMu.Unlock()
+	return all, 0
+}
+
 func (s *Server) opReleasedir(body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
@@ -339,6 +325,7 @@ func (s *Server) opReleasedir(body []byte) ([]byte, int32) {
 	fh := binary.LittleEndian.Uint64(body[0:8])
 	s.nodeMu.Lock()
 	delete(s.openHandles, fh)
+	delete(s.dirSnapshots, fh)
 	s.nodeMu.Unlock()
 	return nil, 0
 }

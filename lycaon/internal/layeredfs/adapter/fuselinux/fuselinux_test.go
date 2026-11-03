@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
@@ -18,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"golang.org/x/sys/unix"
 )
+
+func confinementVerified(context.Context, adapter.ProbeConfig) error { return nil }
 
 func TestAdapterFactsAndFailureClassifications(t *testing.T) {
 	adp := fuselinux.New(fuselinux.Config{HostOS: "darwin"})
@@ -54,18 +55,26 @@ func TestAdapterFactsAndFailureClassifications(t *testing.T) {
 		t.Fatalf("expected ReasonConfinementUnavailable from ConfinementCheckFn, got res=%+v err=%v", res, err)
 	}
 
-	noDevAdp := fuselinux.New(fuselinux.Config{HostOS: "linux", FuseDevicePath: "/nonexistent/dev/fuse"})
+	// Without a check, backing denial is unknown: the probe must not report it as verified.
+	noCheckAdp := fuselinux.New(fuselinux.Config{HostOS: "linux"})
+	if res, err := noCheckAdp.Probe(t.Context(), adapter.ProbeConfig{}); err == nil || res.Supported ||
+		res.BackingDenialVerified || res.ReasonCode != adapter.ReasonConfinementUnavailable {
+		t.Fatalf("expected ReasonConfinementUnavailable with no confinement check, got res=%+v err=%v", res, err)
+	}
+
+	noDevAdp := fuselinux.New(fuselinux.Config{HostOS: "linux", ConfinementCheckFn: confinementVerified, FuseDevicePath: "/nonexistent/dev/fuse"})
 	if res, err := noDevAdp.Probe(t.Context(), adapter.ProbeConfig{}); err == nil || res.ReasonCode != adapter.ReasonFUSEDeviceUnavailable {
 		t.Fatalf("expected ReasonFUSEDeviceUnavailable for missing /dev/fuse, got res=%+v err=%v", res, err)
 	}
 
 	if runtime.GOOS == "linux" {
-		noHelperAdp := fuselinux.New(fuselinux.Config{HostOS: "linux", FusermountBin: "/nonexistent/bin/fusermount3"})
+		noHelperAdp := fuselinux.New(fuselinux.Config{HostOS: "linux", ConfinementCheckFn: confinementVerified, FusermountBin: "/nonexistent/bin/fusermount3"})
 		if res, err := noHelperAdp.Probe(t.Context(), adapter.ProbeConfig{}); err == nil || res.ReasonCode != adapter.ReasonFUSEHelperUnavailable {
 			t.Fatalf("expected ReasonFUSEHelperUnavailable for missing fusermount3, got res=%+v err=%v", res, err)
 		}
 		deniedAdp := fuselinux.New(fuselinux.Config{
-			HostOS: "linux",
+			HostOS:             "linux",
+			ConfinementCheckFn: confinementVerified,
 			MountHookForTest: func(_, _, _ string) error {
 				return errors.New("simulated EPERM mount denial")
 			},
@@ -81,7 +90,7 @@ func TestProbeAndPrepareFUSELinux(t *testing.T) {
 		t.Skip("real FUSE mount requires linux")
 	}
 
-	adp := fuselinux.New(fuselinux.Config{})
+	adp := fuselinux.New(fuselinux.Config{ConfinementCheckFn: confinementVerified})
 	tmp := t.TempDir()
 	probeRes, err := adp.Probe(t.Context(), adapter.ProbeConfig{
 		RuntimeDir: filepath.Join(tmp, "probe-runtime"),
@@ -242,16 +251,10 @@ func TestImmediateCoherenceAndBackgroundProcessStability(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(mnt, "watch.in"), []byte("lsp-coherent-v1\n"), 0o644); err != nil {
 		t.Fatalf("write watch.in: %v", err)
 	}
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		if raw, err := os.ReadFile(filepath.Join(mnt, "watch.out")); err == nil && string(raw) == "lsp-coherent-v1\n" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for background process to observe watch.in")
-		}
-		time.Sleep(15 * time.Millisecond)
-	}
+	awaitCondition(t, "background process copied watch.in", func() bool {
+		raw, err := os.ReadFile(filepath.Join(mnt, "watch.out"))
+		return err == nil && string(raw) == "lsp-coherent-v1\n"
+	})
 	_ = os.WriteFile(filepath.Join(mnt, "stop.flag"), []byte("1"), 0o644)
 	_ = bgCmd.Wait()
 }

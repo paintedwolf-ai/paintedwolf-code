@@ -77,7 +77,7 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 	defer func() { _ = syscall.Munmap(mappedSlice) }()
 
 	wantMapped := []byte("mutated-by-mmap!\n")
-	copy(mappedSlice, wantMapped)
+	copyToMapping(mappedSlice, wantMapped)
 
 	if err := adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
 		if err := fuselinux.SyncMappedRegion(mappedSlice); err != nil {

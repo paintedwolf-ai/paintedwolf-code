@@ -1,8 +1,6 @@
 package fuselinux
 
 import (
-	"context"
-	"errors"
 	"path"
 	"sort"
 	"strings"
@@ -25,7 +23,15 @@ type ServerConfig struct {
 	OwnerGID              uint32
 	MaxConcurrentRequests int
 	MaxLockWaiters        int
+	BackingDir            string
 	OnMutationHook        func(opcode uint32, rel string)
+	OnLockWait            func(unique, start, end uint64, waiting bool)
+}
+
+// NegotiatedProtocol records the kernel's FUSE_INIT offer and the capabilities granted to it.
+type NegotiatedProtocol struct {
+	KernelMajor, KernelMinor uint32
+	GrantedFlags             uint32
 }
 
 type fuseNode struct {
@@ -48,6 +54,8 @@ type openHandleEntry struct {
 	fuseID uint64
 	rel    string
 	isDir  bool
+	// writable handles are the only ones that can dirty kernel pages.
+	writable bool
 }
 
 type fileLockEntry struct {
@@ -60,6 +68,25 @@ type fileLockEntry struct {
 	isFlock bool
 }
 
+type rawDirent struct {
+	ino  uint64
+	typ  uint32
+	name string
+}
+
+// fuseRequestState is the cancellation identity of one request between read and reply.
+type fuseRequestState struct {
+	unique   uint64
+	canceled atomic.Bool
+}
+
+func (r *fuseRequestState) isCanceled() bool { return r.canceled.Load() }
+
+type queuedRequest struct {
+	state *fuseRequestState
+	req   []byte
+}
+
 // Server serves the Linux FUSE v7.31 wire protocol backed directly by *layeredfs.Core.
 type Server struct {
 	cfg      ServerConfig
@@ -67,9 +94,17 @@ type Server struct {
 	fd       int
 	stopPipe [2]int
 
-	writeMu sync.Mutex
-	closed  atomic.Bool
-	wg      sync.WaitGroup
+	notifyMu  sync.RWMutex
+	closed    atomic.Bool
+	stopCh    chan struct{}
+	stopOnce  sync.Once
+	closeOnce sync.Once
+	wg        sync.WaitGroup
+
+	negotiated      atomic.Pointer[NegotiatedProtocol]
+	pollProbeActive atomic.Bool
+	pollRequests    atomic.Int64
+	syncBacking     func(interface{ Sync() error }) error
 
 	nodeMu          sync.RWMutex
 	nextFuseID      uint64
@@ -77,6 +112,7 @@ type Server struct {
 	byRel           map[string]*fuseNode
 	byCorePrivateID map[layeredfs.NodeID]*fuseNode
 	openHandles     map[uint64]openHandleEntry
+	dirSnapshots    map[uint64][]rawDirent
 	dirtyRels       map[string]struct{}
 	nextDirFH       uint64
 
@@ -86,16 +122,17 @@ type Server struct {
 	lockWaiterCount int
 	maxLockWaiters  int
 
-	workerSem       chan struct{}
-	controlSem      chan struct{}
-	reqMu           sync.Mutex
-	inFlightReqs    map[uint64]*fuseRequestState
-	interruptedReqs map[uint64]struct{}
+	ordinaryQueue chan queuedRequest
+	workerCount   int
+	controlSem    chan struct{}
+	reqMu         sync.Mutex
+	inFlightReqs  map[uint64]*fuseRequestState
 
 	gateMu        sync.Mutex
 	gateCond      *sync.Cond
 	barrierActive bool
 	inFlightMut   int64
+	gatedMut      int64
 }
 
 func newServerInstance(cfg ServerConfig, core *layeredfs.Core, fd int, stopPipe [2]int) *Server {
@@ -126,10 +163,13 @@ func newServerInstance(cfg ServerConfig, core *layeredfs.Core, fd int, stopPipe 
 		nextDirFH:       1 << 50,
 		fileLocks:       make(map[uint64][]fileLockEntry),
 		maxLockWaiters:  maxWaiters,
-		workerSem:       make(chan struct{}, maxReq),
+		stopCh:          make(chan struct{}),
+		syncBacking:     func(f interface{ Sync() error }) error { return f.Sync() },
+		dirSnapshots:    make(map[uint64][]rawDirent),
+		ordinaryQueue:   make(chan queuedRequest, 2*maxReq),
+		workerCount:     maxReq,
 		controlSem:      make(chan struct{}, 32),
 		inFlightReqs:    make(map[uint64]*fuseRequestState),
-		interruptedReqs: make(map[uint64]struct{}),
 	}
 	s.lockCond = sync.NewCond(&s.lockMu)
 	s.gateCond = sync.NewCond(&s.gateMu)
@@ -148,7 +188,7 @@ func (s *Server) recordDirtyRel(rel string) {
 	s.nodeMu.Unlock()
 }
 
-// DirtyCandidatePaths returns the sorted union of relative paths opened or mutated via FUSE.
+// DirtyCandidatePaths returns the sorted union of relative paths mutated or held writable via FUSE.
 func (s *Server) DirtyCandidatePaths() []string {
 	if s == nil {
 		return nil
@@ -159,7 +199,7 @@ func (s *Server) DirtyCandidatePaths() []string {
 		seen[r] = struct{}{}
 	}
 	for _, h := range s.openHandles {
-		if h.rel != "" {
+		if h.writable && h.rel != "" {
 			seen[cleanFuseRel(h.rel)] = struct{}{}
 		}
 	}
@@ -171,6 +211,9 @@ func (s *Server) DirtyCandidatePaths() []string {
 	sort.Strings(out)
 	return out
 }
+
+// NegotiatedProtocol returns the completed FUSE_INIT exchange, or nil before it has happened.
+func (s *Server) NegotiatedProtocol() *NegotiatedProtocol { return s.negotiated.Load() }
 
 // IsAlive reports whether the FUSE server is still running and serving /dev/fuse.
 func (s *Server) IsAlive() bool {
@@ -192,133 +235,6 @@ func (s *Server) InFlightMutations() int64 {
 	s.gateMu.Lock()
 	defer s.gateMu.Unlock()
 	return s.inFlightMut
-}
-
-func (s *Server) enterMutation() bool {
-	s.gateMu.Lock()
-	defer s.gateMu.Unlock()
-	if s.closed.Load() || s.barrierActive {
-		return false
-	}
-	s.inFlightMut++
-	return true
-}
-
-func (s *Server) leaveMutation() {
-	s.gateMu.Lock()
-	s.inFlightMut--
-	if s.inFlightMut <= 0 {
-		s.inFlightMut = 0
-		s.gateCond.Broadcast()
-	}
-	s.gateMu.Unlock()
-}
-
-// BeginBarrierDrain blocks admission of new mutating FUSE requests, waits for in-flight
-// mutating FUSE requests to finish, and flushes Core journal state before Core.BeginCheckpointBarrier.
-func (s *Server) BeginBarrierDrain(ctx context.Context, viewID string) (func(), error) {
-	if !s.IsAlive() {
-		return nil, errors.New("fuselinux: FUSE server is not alive")
-	}
-	s.gateMu.Lock()
-	if s.barrierActive {
-		s.gateMu.Unlock()
-		return nil, layeredfs.ErrBarrierActive
-	}
-	s.barrierActive = true
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			s.gateMu.Lock()
-			s.gateCond.Broadcast()
-			s.gateMu.Unlock()
-		case <-done:
-		}
-	}()
-	for s.inFlightMut > 0 {
-		if s.closed.Load() {
-			s.barrierActive = false
-			s.gateCond.Broadcast()
-			s.gateMu.Unlock()
-			close(done)
-			return nil, errors.New("fuselinux: server closed during barrier drain")
-		}
-		if err := ctx.Err(); err != nil {
-			s.barrierActive = false
-			s.gateCond.Broadcast()
-			s.gateMu.Unlock()
-			close(done)
-			return nil, err
-		}
-		s.gateCond.Wait()
-	}
-	s.gateMu.Unlock()
-	close(done)
-
-	if err := s.FlushForCheckpoint(ctx, viewID); err != nil {
-		s.gateMu.Lock()
-		s.barrierActive = false
-		s.gateCond.Broadcast()
-		s.gateMu.Unlock()
-		return nil, err
-	}
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			s.gateMu.Lock()
-			s.barrierActive = false
-			s.gateCond.Broadcast()
-			s.gateMu.Unlock()
-		})
-	}, nil
-}
-
-// FlushForCheckpoint syncs all open handles tracked by the FUSE server and snapshots Core's journal.
-func (s *Server) FlushForCheckpoint(_ context.Context, _ string) error {
-	if !s.IsAlive() {
-		return errors.New("fuselinux: FUSE server is not alive")
-	}
-	s.nodeMu.RLock()
-	hids := make([]layeredfs.HandleID, 0, len(s.openHandles))
-	for _, h := range s.openHandles {
-		if !h.isDir && h.hid != 0 {
-			hids = append(hids, h.hid)
-		}
-	}
-	s.nodeMu.RUnlock()
-	for _, hid := range hids {
-		if err := s.core.SyncHandle(hid); err != nil && !errors.Is(err, layeredfs.ErrStaleHandle) {
-			return err
-		}
-	}
-	_, err := s.core.SnapshotJournal()
-	return err
-}
-
-// Close stops the FUSE server, wakes any blocked pollers/locks, and closes /dev/fuse.
-func (s *Server) Close() error {
-	if s == nil || !s.closed.CompareAndSwap(false, true) {
-		return nil
-	}
-	if s.stopPipe[1] >= 0 {
-		closeRawFD(s.stopPipe[1])
-	}
-	s.gateMu.Lock()
-	s.gateCond.Broadcast()
-	s.gateMu.Unlock()
-	s.lockMu.Lock()
-	s.lockCond.Broadcast()
-	s.lockMu.Unlock()
-
-	s.wg.Wait()
-	if s.stopPipe[0] >= 0 {
-		closeRawFD(s.stopPipe[0])
-	}
-	if s.fd >= 0 {
-		closeRawFD(s.fd)
-	}
-	return nil
 }
 
 // InvalidateRelPath sends kernel dentry/inode cache invalidation notifications for rel.

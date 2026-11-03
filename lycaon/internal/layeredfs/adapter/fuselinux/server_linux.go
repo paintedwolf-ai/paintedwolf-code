@@ -24,7 +24,9 @@ const (
 )
 
 func mountAndStartFUSEServer(ctx context.Context, adapterCfg Config, srvCfg ServerConfig, core *layeredfs.Core) (*Server, error) {
-	fuseFD, err := receiveFUSEDevFD(ctx, adapterCfg.FusermountBin, srvCfg.MountOptions, srvCfg.MountPath)
+	mountCtx, cancelMount := context.WithTimeout(ctx, adapterCfg.MountTimeout)
+	defer cancelMount()
+	fuseFD, err := receiveFUSEDevFD(mountCtx, adapterCfg.FusermountBin, srvCfg.MountOptions, srvCfg.MountPath)
 	if err != nil {
 		rc := adapter.ReasonFUSEMountDenied
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
@@ -50,9 +52,16 @@ func mountAndStartFUSEServer(ctx context.Context, adapterCfg Config, srvCfg Serv
 		}
 	}
 	srv := newServerInstance(srvCfg, core, fuseFD, pipeFDs)
-	srv.wg.Add(1)
-	go srv.serveLoop()
+	srv.start()
 	return srv, nil
+}
+
+func (s *Server) start() {
+	s.wg.Add(1 + s.workerCount)
+	go s.serveLoop()
+	for range s.workerCount {
+		go s.ordinaryWorker()
+	}
 }
 
 func receiveFUSEDevFD(ctx context.Context, fusermountBin, opts, mountPath string) (int, error) {
@@ -108,13 +117,7 @@ func receiveFUSEDevFD(ctx context.Context, fusermountBin, opts, mountPath string
 
 func (s *Server) serveLoop() {
 	defer func() {
-		s.closed.Store(true)
-		s.gateMu.Lock()
-		s.gateCond.Broadcast()
-		s.gateMu.Unlock()
-		s.lockMu.Lock()
-		s.lockCond.Broadcast()
-		s.lockMu.Unlock()
+		s.markClosed()
 		s.wg.Done()
 	}()
 
@@ -147,32 +150,50 @@ func (s *Server) serveLoop() {
 			}
 			return
 		}
+		if n == 0 {
+			return
+		}
 		if n < fuseHeaderInSize {
 			continue
 		}
 		req := make([]byte, n)
 		copy(req, buf[:n])
-		dispatchIncomingRequest(s, req)
+		s.dispatchRequest(req)
 	}
 }
 
-func (s *Server) writeReply(unique uint64, errno int32, payload []byte) error {
+func fuseOutFrame(unique uint64, errno int32, payload []byte) []byte {
 	total := fuseHeaderOutSize + len(payload)
 	out := make([]byte, total)
 	binary.LittleEndian.PutUint32(out[0:4], uint32(total))
 	binary.LittleEndian.PutUint32(out[4:8], uint32(errno))
 	binary.LittleEndian.PutUint64(out[8:16], unique)
-	if len(payload) > 0 {
-		copy(out[16:], payload)
-	}
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-	if s.closed.Load() || s.fd < 0 {
-		return syscall.EBADF
-	}
-	_, err := unix.Write(s.fd, out)
+	copy(out[16:], payload)
+	return out
+}
+
+// writeReply needs no lock: each write to /dev/fuse is atomic, and every caller is tracked by wg,
+// so the descriptor outlives it. Replies continue after close begins so that blocked callers get
+// their errors and any notification waiting on them can finish.
+func (s *Server) writeReply(unique uint64, errno int32, payload []byte) error {
+	_, err := unix.Write(s.fd, fuseOutFrame(unique, errno, payload))
 	return err
 }
+
+// writeNotification shares no lock with replies. The kernel can hold it on an inode lock or a page
+// that an in-flight request owns, and that request can only finish once its reply is written.
+func (s *Server) writeNotification(code int32, payload []byte) {
+	s.notifyMu.RLock()
+	defer s.notifyMu.RUnlock()
+	if !s.closed.Load() {
+		_, _ = unix.Write(s.fd, fuseOutFrame(0, code, payload))
+	}
+}
+
+const (
+	fuseNotifyInvalInode = 2
+	fuseNotifyInvalEntry = 3
+)
 
 func notifyInvalInode(s *Server, ino uint64) {
 	if !s.IsAlive() || ino == 0 {
@@ -182,7 +203,7 @@ func notifyInvalInode(s *Server, ino uint64) {
 	binary.LittleEndian.PutUint64(payload[0:8], ino)
 	binary.LittleEndian.PutUint64(payload[8:16], 0)
 	binary.LittleEndian.PutUint64(payload[16:24], ^uint64(0))
-	_ = s.writeReply(0, 2, payload[:])
+	s.writeNotification(fuseNotifyInvalInode, payload[:])
 }
 
 func notifyInvalEntry(s *Server, parent uint64, name string) {
@@ -193,7 +214,7 @@ func notifyInvalEntry(s *Server, parent uint64, name string) {
 	binary.LittleEndian.PutUint64(payload[0:8], parent)
 	binary.LittleEndian.PutUint32(payload[8:12], uint32(len(name)))
 	copy(payload[16:], name)
-	_ = s.writeReply(0, 3, payload)
+	s.writeNotification(fuseNotifyInvalEntry, payload)
 }
 
 func (s *Server) qpath(rel string) layeredfs.QualifiedPath {
@@ -234,6 +255,7 @@ func (s *Server) ensureNode(rel string, attr layeredfs.EntryAttr) *fuseNode {
 	defer s.nodeMu.Unlock()
 	if attr.Layer == layeredfs.LayerPrivate && attr.NodeID != 0 {
 		if fn, ok := s.byCorePrivateID[attr.NodeID]; ok {
+			s.displaceRelLocked(clean, fn)
 			fn.paths[clean] = struct{}{}
 			fn.unlinked = false
 			s.byRel[clean] = fn
@@ -275,6 +297,19 @@ func (s *Server) ensureNode(rel string, attr layeredfs.EntryAttr) *fuseNode {
 	return fn
 }
 
+// displaceRelLocked detaches rel from any other node it named. Otherwise a descriptor on the
+// replaced object would resolve to, and could mutate, the object now at that path.
+func (s *Server) displaceRelLocked(rel string, next *fuseNode) {
+	prev, ok := s.byRel[rel]
+	if !ok || prev == next {
+		return
+	}
+	delete(prev.paths, rel)
+	if len(prev.paths) == 0 {
+		prev.unlinked = true
+	}
+}
+
 func (s *Server) recordUnlink(rel string, attr layeredfs.EntryAttr, hadPriorAttr bool) {
 	clean := cleanFuseRel(rel)
 	s.nodeMu.Lock()
@@ -300,6 +335,10 @@ func (s *Server) recordRename(oldRel, newRel string) {
 	defer s.nodeMu.Unlock()
 	s.dirtyRels[oldClean] = struct{}{}
 	s.dirtyRels[newClean] = struct{}{}
+	if source := s.byRel[oldClean]; s.byRel[newClean] != source {
+		s.displaceRelLocked(newClean, source)
+		delete(s.byRel, newClean)
+	}
 	prefix := oldClean + "/"
 	var moves [][2]string
 	for rel := range s.byRel {

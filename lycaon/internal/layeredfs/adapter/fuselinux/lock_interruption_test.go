@@ -5,29 +5,56 @@ package fuselinux_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
 )
 
-func waitForBlockedLockRange(t *testing.T, srv *fuselinux.Server, start, end uint64) uint64 {
-	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if u, ok := srv.BlockedLockWaiterForRange(start, end); ok {
-			return u
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for blocked F_SETLKW waiter on [%d, %d] (waiters=%v)", start, end, srv.BlockedLockWaiters())
-	return 0
+type lockWaitEvent struct {
+	unique, start, end uint64
+	waiting            bool
 }
 
-func TestMountedBlockingLockInterruptionAndSelectiveCancellation(t *testing.T) {
-	adp := fuselinux.New(fuselinux.Config{})
+type lockWaitLog struct {
+	events chan lockWaitEvent
+}
+
+func newLockWaitLog() *lockWaitLog { return &lockWaitLog{events: make(chan lockWaitEvent, 256)} }
+
+func (l *lockWaitLog) record(unique, start, end uint64, waiting bool) {
+	l.events <- lockWaitEvent{unique: unique, start: start, end: end, waiting: waiting}
+}
+
+// next returns the next event for the byte range, leaving other ranges' events available to later calls.
+func (l *lockWaitLog) next(t *testing.T, start, end uint64, waiting bool) lockWaitEvent {
+	t.Helper()
+	var found lockWaitEvent
+	var held []lockWaitEvent
+	awaitCondition(t, "lock wait event", func() bool {
+		select {
+		case ev := <-l.events:
+			if ev.start == start && ev.end == end && ev.waiting == waiting {
+				found = ev
+				return true
+			}
+			held = append(held, ev)
+		default:
+		}
+		return false
+	})
+	for _, ev := range held {
+		l.events <- ev
+	}
+	return found
+}
+
+func prepareLockView(t *testing.T, cfg fuselinux.Config, viewID string) (*fuselinux.Adapter, string) {
+	t.Helper()
+	adp := fuselinux.New(cfg)
 	tmp := t.TempDir()
 	trunkDir, backingDir, runtimeDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime")
 	for _, d := range []string{trunkDir, backingDir, runtimeDir} {
@@ -38,8 +65,6 @@ func TestMountedBlockingLockInterruptionAndSelectiveCancellation(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(trunkDir, "locks.bin"), make([]byte, 1024), 0o644); err != nil {
 		t.Fatalf("seed locks.bin: %v", err)
 	}
-
-	const viewID = "view-lock-interrupt"
 	prep, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
 		ViewID: viewID, BackingDir: backingDir, RuntimeDir: runtimeDir,
 		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
@@ -48,125 +73,120 @@ func TestMountedBlockingLockInterruptionAndSelectiveCancellation(t *testing.T) {
 		t.Fatalf("Prepare: %v", err)
 	}
 	t.Cleanup(func() { _, _ = adp.Release(t.Context(), viewID) })
+	return adp, prep.PrimaryWorkPath
+}
 
-	srv := adp.ServerForView(viewID)
-	procA := startLockWorkerProc(t, "procA")
-	procB := startLockWorkerProc(t, "procB")
-	procC := startLockWorkerProc(t, "procC")
-	lockFile := filepath.Join(prep.PrimaryWorkPath, "locks.bin")
+func TestMountedSignalInterruptsOnlyItsBlockedLockAndRestarts(t *testing.T) {
+	log := newLockWaitLog()
+	adp, mnt := prepareLockView(t, fuselinux.Config{OnLockWait: log.record}, "view-lock-interrupt")
+	srv := adp.ServerForView("view-lock-interrupt")
+	lockFile := filepath.Join(mnt, "locks.bin")
 
+	procA, procB, procC := startLockWorkerProc(t, "procA"), startLockWorkerProc(t, "procB"), startLockWorkerProc(t, "procC")
 	procA.exec("OPEN fd1 "+lockFile, "OK ")
-	procB.exec("OPEN fd1 "+lockFile, "OK ")
+	pidB, tidB := procB.openWithThread(lockFile)
 	openC := procC.exec("OPEN fd1 "+lockFile, "OK ")
 	pidC := strings.TrimPrefix(openC, "OK ")
 
-	// 1. procA holds write lock on [0, 99].
 	procA.exec("SETLK fd1 WRLCK 0 100", "OK")
-
-	// 2. procB blocks on [0, 49] and procC blocks on [50, 99] via F_SETLKW.
 	procB.send("SETLKW fd1 WRLCK 0 50")
 	procC.send("SETLKW fd1 WRLCK 50 50")
+	first := log.next(t, 0, 49, true)
+	blockedC := log.next(t, 50, 99, true)
 
-	uniqueB := waitForBlockedLockRange(t, srv, 0, 49)
-	uniqueC := waitForBlockedLockRange(t, srv, 50, 99)
-	if uniqueB == uniqueC {
-		t.Fatalf("expected distinct unique request IDs for procB and procC, got %d", uniqueB)
+	// A caught signal reaches the waiter through the kernel's FUSE_INTERRUPT. The server ends that
+	// request alone, and the kernel restarts the system call as a request with a new identity.
+	if err := syscall.Tgkill(pidB, tidB, syscall.SIGUSR1); err != nil {
+		t.Fatalf("tgkill: %v", err)
+	}
+	if settled := log.next(t, 0, 49, false); settled.unique != first.unique {
+		t.Fatalf("settled request %d, want interrupted request %d", settled.unique, first.unique)
+	}
+	restarted := log.next(t, 0, 49, true)
+	if restarted.unique == first.unique || restarted.unique == blockedC.unique {
+		t.Fatalf("restart reused identity %d (first=%d other=%d)", restarted.unique, first.unique, blockedC.unique)
+	}
+	if got := srv.LockWaiterCountForTest(); got != 2 {
+		t.Fatalf("waiters after restart = %d, want 2", got)
 	}
 
-	// 3. Interrupt ONLY procB's request (uniqueB) via FUSE_INTERRUPT on the control lane.
-	// procB must return EINTR promptly while procC remains blocked on [50, 99].
-	srv.SendInterrupt(uniqueB)
-	procB.recv("EINTR")
-
-	waitersAfterInterrupt := srv.BlockedLockWaiters()
-	if len(waitersAfterInterrupt) != 1 || waitersAfterInterrupt[0] != uniqueC {
-		t.Fatalf("expected only procC (%d) to remain waiting after interrupting procB (%d), got %v", uniqueC, uniqueB, waitersAfterInterrupt)
+	// A fatal signal ends the restarted request for good, without touching the other waiter.
+	if err := procB.cmd.Process.Kill(); err != nil {
+		t.Fatalf("kill: %v", err)
+	}
+	if settled := log.next(t, 0, 49, false); settled.unique != restarted.unique {
+		t.Fatalf("settled request %d, want killed request %d", settled.unique, restarted.unique)
+	}
+	if got := srv.LockWaiterCountForTest(); got != 1 {
+		t.Fatalf("waiters after kill = %d, want 1", got)
 	}
 
-	// 4. Release procA's [0, 99] lock: procC must acquire [50, 99], while canceled procB's [0, 49] must stay unlocked!
+	// Releasing the conflict grants the surviving waiter; the canceled request acquired nothing.
 	procA.exec("SETLK fd1 UNLCK 0 100", "OK")
 	procC.recv("OK")
-
 	procA.exec("GETLK fd1 WRLCK 0 50", "UNLCK")
 	procA.exec("GETLK fd1 WRLCK 50 50", "HELD WRLCK 50 50 "+pidC)
-
 	procC.exec("SETLK fd1 UNLCK 50 50", "OK")
 	procA.exec("CLOSE fd1", "OK")
-	procB.exec("CLOSE fd1", "OK")
 	procC.exec("CLOSE fd1", "OK")
 }
 
-func TestMountedLockWaiterSaturationControlLaneUnlockAndRecovery(t *testing.T) {
-	adp := fuselinux.New(fuselinux.Config{
-		MaxConcurrentRequests: 2,
-		MaxLockWaiters:        2,
-	})
-	tmp := t.TempDir()
-	trunkDir, backingDir, runtimeDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime")
-	for _, d := range []string{trunkDir, backingDir, runtimeDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", d, err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(trunkDir, "locks.bin"), make([]byte, 1024), 0o644); err != nil {
-		t.Fatalf("seed locks.bin: %v", err)
-	}
-
+func TestMountedLockSaturationKeepsFileOperationsAndUnlockWorking(t *testing.T) {
 	const viewID = "view-lock-saturation"
-	prep, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
-		ViewID: viewID, BackingDir: backingDir, RuntimeDir: runtimeDir,
-		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
-	})
-	if err != nil {
-		t.Fatalf("Prepare: %v", err)
-	}
-	t.Cleanup(func() { _, _ = adp.Release(t.Context(), viewID) })
-
+	log := newLockWaitLog()
+	adp, mnt := prepareLockView(t, fuselinux.Config{MaxConcurrentRequests: 2, MaxLockWaiters: 2, OnLockWait: log.record}, viewID)
 	srv := adp.ServerForView(viewID)
-	procA := startLockWorkerProc(t, "procA")
-	procB := startLockWorkerProc(t, "procB")
-	procC := startLockWorkerProc(t, "procC")
-	procD := startLockWorkerProc(t, "procD")
-	lockFile := filepath.Join(prep.PrimaryWorkPath, "locks.bin")
+	lockFile := filepath.Join(mnt, "locks.bin")
 
+	procA, procB, procC, procD := startLockWorkerProc(t, "procA"), startLockWorkerProc(t, "procB"), startLockWorkerProc(t, "procC"), startLockWorkerProc(t, "procD")
 	openA := procA.exec("OPEN fd1 "+lockFile, "OK ")
 	pidA := strings.TrimPrefix(openA, "OK ")
 	procB.exec("OPEN fd1 "+lockFile, "OK ")
 	procC.exec("OPEN fd1 "+lockFile, "OK ")
 	procD.exec("OPEN fd1 "+lockFile, "OK ")
 
-	// 1. procA locks [0, 99].
 	procA.exec("SETLK fd1 WRLCK 0 100", "OK")
-
-	// 2. Saturate all 2 general worker & lock-waiter slots with procB ([0, 49]) and procC ([50, 99]).
 	procB.send("SETLKW fd1 WRLCK 0 50")
 	procC.send("SETLKW fd1 WRLCK 50 50")
-	_ = waitForBlockedLockRange(t, srv, 0, 49)
-	_ = waitForBlockedLockRange(t, srv, 50, 99)
+	log.next(t, 0, 49, true)
+	log.next(t, 50, 99, true)
 
-	// 3. With all 2 worker slots occupied, a 3rd blocking SETLKW from procD is rejected immediately
-	// with EAGAIN ("CONFLICT") rather than accumulating unbounded goroutines or hanging.
-	procD.exec("SETLKW fd1 WRLCK 0 100", "CONFLICT")
-	if got := srv.ActiveRequestCount(); got > 2 {
-		t.Fatalf("expected ActiveRequestCount <= 2 under saturation, got %d", got)
+	// Past the waiter limit a blocking request gets ENOLCK, the only errno its contract allows.
+	procD.exec("SETLKW fd1 WRLCK 0 100", "ENOLCK")
+	if got := srv.LockWaiterCountForTest(); got != 2 {
+		t.Fatalf("waiters = %d, want the limit of 2", got)
 	}
 
-	// 4. While general worker slots remain 100% saturated, the dedicated control lane still processes
-	// GETLK queries and SETLK(F_UNLCK) unlock operations to drain the blocked waiters and recover!
+	// Waiters occupy no worker, so more concurrent file operations than workers all succeed. A lock
+	// holder can do its work and reach its unlock however many others wait on it.
+	opErrs := make(chan error, 16)
+	for i := range cap(opErrs) {
+		go func() {
+			name := filepath.Join(mnt, "work-"+strconv.Itoa(i))
+			if err := os.WriteFile(name, []byte("held work\n"), 0o644); err != nil {
+				opErrs <- err
+				return
+			}
+			_, err := os.Stat(name)
+			opErrs <- err
+		}()
+	}
+	for range cap(opErrs) {
+		if err := <-opErrs; err != nil {
+			t.Fatalf("file operation while waiters are saturated: %v", err)
+		}
+	}
+
 	procD.exec("GETLK fd1 WRLCK 0 100", "HELD WRLCK 0 100 "+pidA)
 	procA.exec("SETLK fd1 UNLCK 0 100", "OK")
-
 	procB.recv("OK")
 	procC.recv("OK")
 
-	// 5. After draining the saturated lock waiters, normal lock and file operations succeed cleanly.
 	procB.exec("SETLK fd1 UNLCK 0 50", "OK")
 	procC.exec("SETLK fd1 UNLCK 50 50", "OK")
 	procD.exec("SETLKW fd1 WRLCK 0 100", "OK")
 	procD.exec("SETLK fd1 UNLCK 0 100", "OK")
-
-	procA.exec("CLOSE fd1", "OK")
-	procB.exec("CLOSE fd1", "OK")
-	procC.exec("CLOSE fd1", "OK")
-	procD.exec("CLOSE fd1", "OK")
+	for _, p := range []*lockWorkerProc{procA, procB, procC, procD} {
+		p.exec("CLOSE fd1", "OK")
+	}
 }

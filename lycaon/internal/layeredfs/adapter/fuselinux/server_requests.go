@@ -1,9 +1,9 @@
+//go:build linux
+
 package fuselinux
 
 import (
 	"encoding/binary"
-	"sort"
-	"sync/atomic"
 	"syscall"
 )
 
@@ -49,205 +49,142 @@ const (
 	fuseOpLseek       = 46
 )
 
-type fuseRequestState struct {
-	unique      uint64
-	opcode      uint32
-	nodeID      uint64
-	controlLane bool
-	waitStart   uint64
-	waitEnd     uint64
-	lockWaiting atomic.Bool
-	canceled    atomic.Bool
-}
+// requestLane says how the single /dev/fuse reader admits a request.
+type requestLane int
 
-func (r *fuseRequestState) IsCanceled() bool {
-	return r != nil && r.canceled.Load()
-}
+const (
+	// laneInline requests touch only server memory and never wait, so the reader serves
+	// them itself. Unlock and lock release therefore need no slot that a waiter could hold.
+	laneInline requestLane = iota
+	// laneLockWait requests may block on a conflicting lock. They hold a waiter slot only,
+	// so waiters can never starve the file operations a lock holder needs to reach its unlock.
+	laneLockWait
+	// laneControl requests release backing resources and take one of a few control slots.
+	laneControl
+	// laneOrdinary requests queue for the fixed worker pool. A full queue stops the reader,
+	// which is safe because ordinary requests never wait on another FUSE request.
+	laneOrdinary
+)
 
-// isControlLaneRequest classifies FUSE operations that release locks/handles,
-// deliver interrupts, or query lock status so they use the dedicated control lane
-// and cannot be starved when general request slots are saturated by blocked lock waiters.
-func isControlLaneRequest(opcode uint32, body []byte) bool {
+func classifyRequest(opcode uint32, body []byte) requestLane {
 	switch opcode {
-	case fuseOpInterrupt, fuseOpFlush, fuseOpRelease, fuseOpReleasedir,
-		fuseOpGetlk, fuseOpSetlk, fuseOpInit, fuseOpStatfs, fuseOpAccess, fuseOpDestroy:
-		return true
+	case fuseOpInit, fuseOpDestroy, fuseOpFlush, fuseOpReleasedir, fuseOpGetlk, fuseOpSetlk:
+		return laneInline
+	case fuseOpRelease:
+		return laneControl
 	case fuseOpSetlkw:
-		if len(body) >= 36 {
-			lkType := binary.LittleEndian.Uint32(body[32:36])
-			return lkType == syscall.F_UNLCK
+		if len(body) >= 36 && binary.LittleEndian.Uint32(body[32:36]) == syscall.F_UNLCK {
+			return laneInline
 		}
-		return false
+		return laneLockWait
 	default:
-		return false
+		return laneOrdinary
 	}
 }
 
-func registerRequest(s *Server, unique uint64, opcode uint32, nodeID uint64, controlLane bool) *fuseRequestState {
-	st := &fuseRequestState{
-		unique:      unique,
-		opcode:      opcode,
-		nodeID:      nodeID,
-		controlLane: controlLane,
-	}
-	if unique == 0 {
-		return st
-	}
+func (s *Server) registerRequest(unique uint64) *fuseRequestState {
+	st := &fuseRequestState{unique: unique}
 	s.reqMu.Lock()
-	if _, interrupted := s.interruptedReqs[unique]; interrupted {
-		delete(s.interruptedReqs, unique)
-		st.canceled.Store(true)
-	}
 	s.inFlightReqs[unique] = st
 	s.reqMu.Unlock()
 	return st
 }
 
-func unregisterRequest(s *Server, unique uint64) {
-	if unique == 0 {
-		return
-	}
+func (s *Server) unregisterRequest(unique uint64) {
 	s.reqMu.Lock()
 	delete(s.inFlightReqs, unique)
-	delete(s.interruptedReqs, unique)
 	s.reqMu.Unlock()
 }
 
-func handleInterrupt(s *Server, body []byte) {
-	if len(body) < 8 {
-		return
-	}
-	targetUnique := binary.LittleEndian.Uint64(body[0:8])
-	s.CancelRequest(targetUnique)
-}
-
-// SendInterrupt dispatches a FUSE_INTERRUPT wire request targeting targetUnique through the server's control lane.
-func (s *Server) SendInterrupt(targetUnique uint64) {
-	pkt := make([]byte, fuseHeaderInSize+8)
-	binary.LittleEndian.PutUint32(pkt[0:4], uint32(len(pkt)))
-	binary.LittleEndian.PutUint32(pkt[4:8], fuseOpInterrupt)
-	binary.LittleEndian.PutUint64(pkt[8:16], ^uint64(0)-targetUnique)
-	binary.LittleEndian.PutUint64(pkt[fuseHeaderInSize:], targetUnique)
-	dispatchIncomingRequest(s, pkt)
-}
-
-func dispatchIncomingRequest(s *Server, req []byte) {
+// dispatchRequest runs on the reader. It registers each request before any handler can run,
+// so an interrupt read later always finds a target that has not been answered.
+func (s *Server) dispatchRequest(req []byte) {
 	if len(req) < fuseHeaderInSize {
 		return
 	}
 	opcode := binary.LittleEndian.Uint32(req[4:8])
-	if opcode == fuseOpForget || opcode == fuseOpBatchForget {
-		return
-	}
-	if opcode == fuseOpInterrupt {
-		handleInterrupt(s, req[fuseHeaderInSize:])
-		return
-	}
 	unique := binary.LittleEndian.Uint64(req[8:16])
 	body := req[fuseHeaderInSize:]
-	controlLane := isControlLaneRequest(opcode, body)
-	if controlLane {
+	switch opcode {
+	case fuseOpForget, fuseOpBatchForget:
+		return
+	case fuseOpInterrupt:
+		s.handleInterrupt(unique, body)
+		return
+	}
+
+	st := s.registerRequest(unique)
+	switch classifyRequest(opcode, body) {
+	case laneInline:
+		s.serveRequest(st, req)
+	case laneLockWait:
+		s.startSetlkw(st, req)
+	case laneControl:
 		select {
 		case s.controlSem <- struct{}{}:
-		default:
-			if s.closed.Load() {
-				return
-			}
-			s.controlSem <- struct{}{}
+		case <-s.stopCh:
+			return
 		}
 		s.wg.Add(1)
-		go func(r []byte) {
+		go func() {
 			defer func() {
 				<-s.controlSem
 				s.wg.Done()
 			}()
-			s.handleRequest(r, true)
-		}(req)
-		return
-	}
-
-	select {
-	case s.workerSem <- struct{}{}:
-	default:
-		_ = s.writeReply(unique, -int32(syscall.EAGAIN), nil)
-		return
-	}
-	s.wg.Add(1)
-	go func(r []byte) {
-		defer func() {
-			<-s.workerSem
-			s.wg.Done()
+			s.serveRequest(st, req)
 		}()
-		s.handleRequest(r, false)
-	}(req)
+	default:
+		select {
+		case s.ordinaryQueue <- queuedRequest{state: st, req: req}:
+		case <-s.stopCh:
+		}
+	}
 }
 
-// CancelRequest marks the in-flight FUSE request identified by unique as canceled/interrupted
-// and wakes any blocked lock wait so only that specific request terminates with EINTR.
-func (s *Server) CancelRequest(unique uint64) bool {
-	if s == nil || unique == 0 {
-		return false
+func (s *Server) ordinaryWorker() {
+	defer s.wg.Done()
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		case q := <-s.ordinaryQueue:
+			if q.state.isCanceled() {
+				_ = s.writeReply(q.state.unique, -int32(syscall.EINTR), nil)
+				s.unregisterRequest(q.state.unique)
+				continue
+			}
+			s.serveRequest(q.state, q.req)
+		}
 	}
+}
+
+// handleInterrupt cancels only the identified request. An unknown target has already been
+// answered: the kernel discards EAGAIN for a finished request and requeues the interrupt
+// for one it still holds, so a reordered interrupt is retried rather than lost.
+func (s *Server) handleInterrupt(interruptUnique uint64, body []byte) {
+	if len(body) < 8 {
+		return
+	}
+	if !s.cancelRequest(binary.LittleEndian.Uint64(body[0:8])) {
+		_ = s.writeReply(interruptUnique, -int32(syscall.EAGAIN), nil)
+	}
+}
+
+func (s *Server) cancelRequest(unique uint64) bool {
 	s.reqMu.Lock()
 	st, ok := s.inFlightReqs[unique]
 	if ok {
 		st.canceled.Store(true)
-	} else {
-		if len(s.interruptedReqs) >= 256 {
-			for k := range s.interruptedReqs {
-				delete(s.interruptedReqs, k)
-				break
-			}
-		}
-		s.interruptedReqs[unique] = struct{}{}
 	}
 	s.reqMu.Unlock()
-
+	if !ok {
+		return false
+	}
 	s.lockMu.Lock()
 	s.lockCond.Broadcast()
 	s.lockMu.Unlock()
-	return ok
-}
-
-// BlockedLockWaiters returns the sorted FUSE request unique IDs currently blocked in F_SETLKW.
-func (s *Server) BlockedLockWaiters() []uint64 {
-	if s == nil {
-		return nil
-	}
-	s.reqMu.Lock()
-	var out []uint64
-	for u, st := range s.inFlightReqs {
-		if st.lockWaiting.Load() && !st.IsCanceled() {
-			out = append(out, u)
-		}
-	}
-	s.reqMu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
-	return out
-}
-
-// BlockedLockWaiterForRange returns the unique ID of a blocked F_SETLKW request waiting on [start, end].
-func (s *Server) BlockedLockWaiterForRange(start, end uint64) (uint64, bool) {
-	if s == nil {
-		return 0, false
-	}
-	s.reqMu.Lock()
-	defer s.reqMu.Unlock()
-	for u, st := range s.inFlightReqs {
-		if st.lockWaiting.Load() && !st.IsCanceled() && st.waitStart == start && st.waitEnd == end {
-			return u, true
-		}
-	}
-	return 0, false
-}
-
-// ActiveRequestCount returns the number of currently active in-flight FUSE requests.
-func (s *Server) ActiveRequestCount() int {
-	if s == nil {
-		return 0
-	}
-	s.reqMu.Lock()
-	n := len(s.inFlightReqs)
-	s.reqMu.Unlock()
-	return n
+	s.gateMu.Lock()
+	s.gateCond.Broadcast()
+	s.gateMu.Unlock()
+	return true
 }

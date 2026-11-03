@@ -29,8 +29,11 @@ const (
 	DefaultFuseDevicePath = "/dev/fuse"
 	// DefaultSubtype is the FUSE filesystem subtype reported in /proc/self/mountinfo.
 	DefaultSubtype = "lycaon_layeredfs"
-	// DefaultCachePolicy describes the zero-TTL + explicit notification revalidation policy.
-	DefaultCachePolicy = "entry_valid=0,attr_valid=0,fopen_keep_cache=0,notify_inval"
+	// DefaultCachePolicy states the kernel cache contract. Entries and attributes revalidate on
+	// every use; only the mount root's attributes are held, so entering the mount needs no server
+	// round trip while a forking process is suspended. Writes are write-through. Page cache is
+	// dropped at open: a descriptor already open keeps its pages until notify_inval or a size change.
+	DefaultCachePolicy = "entry_valid=0,attr_valid=0,root_attr_valid=3600,writeback_cache=0,fopen_keep_cache=0,notify_inval"
 	// DefaultMaxReadAhead is the negotiated FUSE max_readahead size (128 KiB).
 	DefaultMaxReadAhead = 131072
 	// DefaultMaxWrite is the negotiated FUSE max_write payload size (128 KiB).
@@ -54,6 +57,7 @@ type Config struct {
 	ClientSyncFn          func(path string) error
 	RemoveAllFn           func(path string) error
 	OnMutationHook        func(opcode uint32, rel string)
+	OnLockWait            func(unique, start, end uint64, waiting bool)
 }
 
 // MountFacts records the concrete mount options, kernel mountinfo identity, and negotiated protocol capabilities.
@@ -63,6 +67,7 @@ type MountFacts struct {
 	FilesystemType, DevMajorMinor         string
 	MountOptions, SuperOptions            string
 	ProtocolMajor, ProtocolMinor          uint32
+	KernelMinor, GrantedFlags             uint32
 	MaxReadAhead, MaxWrite                uint32
 	CachePolicy                           string
 	ParentDev, MountedDev                 uint64
@@ -97,6 +102,8 @@ type viewState struct {
 	coreReleased    atomic.Bool
 	runtimeCleaned  atomic.Bool
 }
+
+var _ adapter.Adapter = (*Adapter)(nil)
 
 // Adapter implements adapter.Adapter for Linux engine-served FUSE3 worker mounts (#1659).
 type Adapter struct {
@@ -155,6 +162,21 @@ func NoopQuiesceHook(_ context.Context, _ string) error { return nil }
 // NoWritableMappingsFlushHook is a FlushClientHook for callers that hold no writable client mmap regions.
 func NoWritableMappingsFlushHook(_ context.Context, _ string) error { return nil }
 
+// DetachMountEntry rewrites cmd so nothing on a mount is touched before its execve. The server
+// runs inside the engine, and between fork and exec Go's vfork child holds a scheduler slot that a
+// stop-the-world waits for. A chdir below the mount root, or executing a program from the mount,
+// needs a server reply at that point, which a stopped server cannot give: the whole engine hangs.
+// Every process the engine itself starts in a view must go through this. Entering the mount after
+// exec, from a helper outside it, leaves the parent free.
+func DetachMountEntry(cmd *exec.Cmd) {
+	dir := cmd.Dir
+	if dir == "" {
+		dir = "."
+	}
+	args := append([]string{"/bin/sh", "-c", `cd "$1" && shift && exec "$@"`, "sh", dir, cmd.Path}, cmd.Args[1:]...)
+	cmd.Path, cmd.Args, cmd.Dir = "/bin/sh", args, ""
+}
+
 // SyncMappedRegion flushes a writable client mmap slice to the kernel using MS_SYNC.
 func SyncMappedRegion(mapped []byte) error { return msyncMappedRegion(mapped) }
 
@@ -166,14 +188,6 @@ func (a *Adapter) Name() adapter.AdapterID { return adapter.AdapterFUSELinux }
 
 // Facts returns the static capability and coherence facts for fuselinux.
 func (a *Adapter) Facts() adapter.AdapterFacts { return a.facts }
-
-// SetConfigCallbacksForTest updates the fault-injection callbacks for client file sync and runtime directory cleanup.
-func (a *Adapter) SetConfigCallbacksForTest(clientSyncFn func(string) error, removeAllFn func(string) error) {
-	a.mu.Lock()
-	a.cfg.ClientSyncFn = clientSyncFn
-	a.cfg.RemoveAllFn = removeAllFn
-	a.mu.Unlock()
-}
 
 // MountFactsForView returns the recorded MountFacts for the primary root of viewID.
 func (a *Adapter) MountFactsForView(viewID string) (MountFacts, bool) {
@@ -265,6 +279,7 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 	}
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "cat probe.txt")
 	cmd.Dir = prep.PrimaryWorkPath
+	DetachMountEntry(cmd)
 	if out, cErr := cmd.CombinedOutput(); cErr != nil || strings.TrimSpace(string(out)) != "coherent-probe" {
 		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: err=%v out=%q", cErr, string(out))
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
@@ -275,7 +290,6 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		res.ReasonCode, res.Diagnostic = adapter.ReasonBackingConfinementFailed, "trunk file mutated during probe"
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic}
 	}
-	res.BackingDenialVerified = true
 
 	if _, rErr := a.Release(ctx, probeViewID); rErr != nil {
 		res.ReasonCode, res.Diagnostic = adapter.ReasonCleanupFailed, rErr.Error()
