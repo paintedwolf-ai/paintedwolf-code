@@ -31,7 +31,7 @@ type stubWorkerContext struct {
 	ctx inject.WorkerLegContext
 }
 
-func (s *stubWorkerContext) BuildWorkerPromptContext(_ string, _ *api.Session) (inject.WorkerLegContext, error) {
+func (s *stubWorkerContext) BuildWorkerPromptContext(_ context.Context, _ string, _ *api.Session) (inject.WorkerLegContext, error) {
 	return s.ctx, nil
 }
 

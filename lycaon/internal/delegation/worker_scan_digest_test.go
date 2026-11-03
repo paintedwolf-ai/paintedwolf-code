@@ -39,7 +39,7 @@ func scanDigestContext(t *testing.T, agent string, tools []string, runID string)
 		}),
 		AgentsFor: func(*api.Session) profiles.AgentProfileResolver { return agents },
 	}
-	got, err := c.BuildWorkerPromptContext(sess.ID, sess)
+	got, err := c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
 	testutil.FailErr(t, "build worker context", err)
 	return strings.Join(got.ScanDigest, "\n")
 }
