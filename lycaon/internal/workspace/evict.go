@@ -17,7 +17,43 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 )
+
+// EvictVerifiedCheckpointBranch evicts a worker branch tree and disposable working material only
+// when no reader holds the branch and a complete, verified checkpoint in coord can rebuild it.
+func EvictVerifiedCheckpointBranch(ctx context.Context, branchRoot string, coord *recovery.Coordinator, workerID, viewID, backingDir string) (*recovery.EvictionReport, error) {
+	if coord == nil {
+		return nil, fmt.Errorf("evict checkpoint branch: coordinator is required")
+	}
+	rep, err := coord.EvictDisposableWorkingMaterial(ctx, workerID, viewID, backingDir)
+	if err != nil {
+		return nil, err
+	}
+	return rep, EvictJobTree(ctx, branchRoot)
+}
+
+// RebuildWorkerWorkspaceFromCheckpoint recreates an evicted branch tree at branchRoot and
+// reconstructs its state from the worker's last validated published checkpoint.
+func (m *Manager) RebuildWorkerWorkspaceFromCheckpoint(ctx context.Context, branchRoot string, coord *recovery.Coordinator, req recovery.RecoverRequest) (*recovery.RecoveryResult, SandboxLayout, error) {
+	if coord == nil {
+		return nil, SandboxLayout{}, fmt.Errorf("rebuild checkpoint branch: coordinator is required")
+	}
+	var recRes *recovery.RecoveryResult
+	layout, err := m.RebuildWorkerWorkspace(ctx, branchRoot, func(rCtx context.Context, layout SandboxLayout, root string) (rErr error) {
+		if req.PrepareReq.TargetRootDirs == nil {
+			req.PrepareReq.TargetRootDirs = make(map[string]string, len(layout.Roots))
+		}
+		for _, r := range layout.Roots {
+			if r.IsPrimary && req.PrepareReq.TargetRootDirs[r.ID] == "" {
+				req.PrepareReq.TargetRootDirs[r.ID] = root
+			}
+		}
+		recRes, rErr = coord.RecoverWorkerView(rCtx, req)
+		return rErr
+	})
+	return recRes, layout, err
+}
 
 // EvictJobTree removes a branch tree while keeping its .meta sibling, so the
 // tree can be rebuilt from the job's baseline and overlay records. It refuses
@@ -58,11 +94,7 @@ func EvictJobTree(ctx context.Context, branchRoot string) error {
 // RebuildWorkerWorkspace recreates an evicted branch tree at its recorded path.
 // restore fills the fresh skeleton from the job's records; the layout is the
 // one captured at claim time. A tree that is already complete is left alone.
-func (m *Manager) RebuildWorkerWorkspace(
-	ctx context.Context,
-	branchRoot string,
-	restore func(ctx context.Context, layout SandboxLayout, branchRoot string) error,
-) (SandboxLayout, error) {
+func (m *Manager) RebuildWorkerWorkspace(ctx context.Context, branchRoot string, restore func(ctx context.Context, layout SandboxLayout, branchRoot string) error) (SandboxLayout, error) {
 	branchRoot, err := cleanBranchRoot(branchRoot)
 	if err != nil {
 		return SandboxLayout{}, err
@@ -97,11 +129,9 @@ func (m *Manager) RebuildWorkerWorkspace(
 	TouchBranchUse(binding.Root)
 	return layout, nil
 }
-
 type seedEvictionCandidate struct {
-	key      string
-	path     string
-	lastUsed time.Time
+	key, path string
+	lastUsed  time.Time
 }
 
 func (m *Manager) ensureSeedCapacity(ctx context.Context, required uint64, excludeKey string) error {

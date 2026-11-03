@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -22,11 +23,13 @@ type DelegationRunStopper interface {
 
 // RunStopService coordinates worker and delegation shutdown.
 type RunStopService struct {
-	Queue         WorkerQueue
-	Holds         WorkerRunStopSession
-	Cancellations WorkerCancellationProjection
-	Reports       ChangeReportDeps
-	Delegations   DelegationRunStopper
+	Queue          WorkerQueue
+	Holds          WorkerRunStopSession
+	Cancellations  WorkerCancellationProjection
+	Reports        ChangeReportDeps
+	Delegations    DelegationRunStopper
+	Recovery       *recovery.Coordinator
+	CancelViewHook func(ctx context.Context, coord *recovery.Coordinator, task api.WorkerTask) error
 }
 
 // CancelWorkersByRunID cancels and settles every worker in the run.
@@ -118,6 +121,20 @@ func (s *RunStopService) cancelTask(ctx context.Context, task api.WorkerTask, re
 	}
 	if err := s.Queue.StopExecution(ctx, jobID); err != nil {
 		return err
+	}
+	if s.CancelViewHook != nil {
+		if err := s.CancelViewHook(ctx, s.Recovery, task); err != nil {
+			return err
+		}
+	} else if s.Recovery != nil {
+		if j, lErr := s.Recovery.LoadWorkerJournal(jobID); lErr == nil && j.ViewID != "" {
+			if _, cErr := s.Recovery.CancelAndRelease(ctx, recovery.CancelReleaseRequest{
+				WorkerID: jobID,
+				ViewID:   j.ViewID,
+			}); cErr != nil {
+				return cErr
+			}
+		}
 	}
 	if current, ok := s.Queue.Get(jobID); ok {
 		task = *current

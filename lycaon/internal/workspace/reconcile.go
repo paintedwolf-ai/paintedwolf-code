@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,7 +12,60 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 )
+
+// ReconcileOwnedWorkerViews reconciles only the mounts, connections, and processes belonging
+// to the specified worker IDs using their recorded identities, without sweeping path prefixes.
+func ReconcileOwnedWorkerViews(
+	ctx context.Context,
+	coord *recovery.Coordinator,
+	workerIDs []string,
+	retainJobIDs map[string]struct{},
+) (settled int, err error) {
+	if coord == nil {
+		return 0, nil
+	}
+	var errs []error
+	for _, workerID := range workerIDs {
+		if err := ctx.Err(); err != nil {
+			return settled, err
+		}
+		workerID = strings.TrimSpace(workerID)
+		if workerID == "" {
+			continue
+		}
+		if _, keep := retainJobIDs[workerID]; keep {
+			continue
+		}
+		j, lErr := coord.LoadWorkerJournal(workerID)
+		if lErr != nil {
+			if os.IsNotExist(lErr) {
+				continue
+			}
+			errs = append(errs, lErr)
+			continue
+		}
+		if j.ViewID == "" {
+			continue
+		}
+		if _, hasIdent, iErr := coord.LoadMountIdentity(workerID, j.ViewID); iErr != nil {
+			errs = append(errs, iErr)
+			continue
+		} else if !hasIdent {
+			continue
+		}
+		if _, cErr := coord.CancelAndRelease(ctx, recovery.CancelReleaseRequest{
+			WorkerID: workerID,
+			ViewID:   j.ViewID,
+		}); cErr != nil {
+			errs = append(errs, cErr)
+			continue
+		}
+		settled++
+	}
+	return settled, errors.Join(errs...)
+}
 
 // ReconcileStaleSandboxes removes snapshotted candidates absent from current task state.
 func ReconcileStaleSandboxes(

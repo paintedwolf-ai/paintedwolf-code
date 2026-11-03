@@ -7,8 +7,40 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// CancelAndSettleWorkerView fences and stops worker execution, settles its owned view/mount
+// via coord.CancelAndRelease (retaining custody on UnresolvedSettlementError), and finalizes
+// the cancellation only after runtime settlement succeeds (#1666).
+func CancelAndSettleWorkerView(
+	ctx context.Context,
+	q *SQLQueue,
+	jobID string,
+	coord *recovery.Coordinator,
+	req recovery.CancelReleaseRequest,
+	result *api.WorkerResult,
+) (*recovery.CancelReleaseResult, error) {
+	if err := q.StopExecution(ctx, jobID); err != nil {
+		return nil, err
+	}
+	var relRes *recovery.CancelReleaseResult
+	if coord != nil {
+		if req.WorkerID == "" {
+			req.WorkerID = jobID
+		}
+		var err error
+		relRes, err = coord.CancelAndRelease(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := q.FinishCanceled(ctx, jobID, result); err != nil {
+		return relRes, err
+	}
+	return relRes, nil
+}
 
 // Cancel aborts or settles a canceled worker.
 func (q *SQLQueue) Cancel(ctx context.Context, jobID string, result *api.WorkerResult) error {

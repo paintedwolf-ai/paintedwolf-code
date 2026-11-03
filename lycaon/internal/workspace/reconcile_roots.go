@@ -11,8 +11,36 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
+
+// ReconcileSelectedSandboxRootsWithRecovery reconciles selected sandbox roots alongside
+// recorded worker view/mount identities in coord.
+func ReconcileSelectedSandboxRootsWithRecovery(
+	ctx context.Context,
+	branchRoot, seedRoot string,
+	coord *recovery.Coordinator,
+	workerIDs []string,
+	attached []projectroot.RootRef,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	loadRetainedJobs func(context.Context) (map[string]struct{}, error),
+) (int, error) {
+	removed, err := ReconcileSelectedSandboxRoots(ctx, branchRoot, seedRoot, attached, selection, taskPathHints, loadRetainedJobs)
+	if err != nil || coord == nil {
+		return removed, err
+	}
+	var retained map[string]struct{}
+	if loadRetainedJobs != nil {
+		retained, err = loadRetainedJobs(ctx)
+		if err != nil {
+			return removed, err
+		}
+	}
+	settled, sErr := ReconcileOwnedWorkerViews(ctx, coord, workerIDs, retained)
+	return removed + settled, sErr
+}
 
 // ResolveDispatchWorkspaceSelection validates an explicit adapter.WorkspaceSelection against attached
 // project roots, narrowing the materialized/visible roots and subroots while keeping informational

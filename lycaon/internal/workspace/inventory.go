@@ -13,9 +13,63 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/filelock"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
+
+// BuildLocalDataInventory aggregates workspace job trees, rebuildable seed caches, and
+// coordinator recovery records into the three local-data buckets (#1666):
+// BucketRetainedWorkerResults, BucketInterruptedWorkingData, and BucketDisposableRuntimeCache.
+func BuildLocalDataInventory(
+	ctx context.Context,
+	branchRoot, seedRoot string,
+	coord *recovery.Coordinator,
+) (recovery.LocalDataInventory, error) {
+	inv := recovery.LocalDataInventory{
+		FormatVersion: recovery.FormatVersion,
+		UpdatedAt:     time.Now().UTC(),
+	}
+	if coord != nil {
+		loaded, err := coord.LoadInventory()
+		if err != nil {
+			return recovery.LocalDataInventory{}, err
+		}
+		inv.Entries = append(inv.Entries, loaded.Entries...)
+	}
+	trees, err := ListJobTrees(ctx, branchRoot)
+	if err != nil {
+		return recovery.LocalDataInventory{}, err
+	}
+	for _, t := range trees {
+		bucket := recovery.BucketDisposableRuntimeCache
+		if !t.Present {
+			bucket = recovery.BucketRetainedWorkerResults
+		}
+		inv.Entries = append(inv.Entries, recovery.InventoryEntry{
+			ID:        "branch-" + t.ProjectKey + "-" + t.JobID,
+			Bucket:    bucket,
+			WorkerID:  t.JobID,
+			Path:      t.Root,
+			Bytes:     t.AllocatedBytes,
+			UpdatedAt: t.LastUsed,
+		})
+	}
+	seeds, err := ListSeedCaches(ctx, seedRoot)
+	if err != nil {
+		return recovery.LocalDataInventory{}, err
+	}
+	for _, s := range seeds {
+		inv.Entries = append(inv.Entries, recovery.InventoryEntry{
+			ID:        "seed-" + s.ID,
+			Bucket:    recovery.BucketDisposableRuntimeCache,
+			Path:      s.SourceRoot,
+			Bytes:     s.AllocatedBytes,
+			UpdatedAt: s.LastUsed,
+		})
+	}
+	return inv, nil
+}
 
 // JobTree is one worker branch under the engine's branch root, present on
 // disk or evicted down to its .meta record.
