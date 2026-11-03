@@ -292,6 +292,8 @@ func TestNonHTTPContractStaleSymlinkGrantRevalidateDenies(t *testing.T) {
 
 	grant, err := confine.ResolveSocketRequest(link)
 	contractcheck.FailErr(t, "ResolveSocketRequest", err)
+	grant, err = confine.CaptureSocketGrant(t.Context(), grant)
+	contractcheck.FailErr(t, "CaptureSocketGrant", err)
 	if err := confine.RevalidateSocketGrant(grant); err != nil {
 		t.Fatalf("fresh grant must revalidate: %v", err)
 	}

@@ -3,6 +3,7 @@ package contract
 import (
 	"bufio"
 	"encoding/json"
+	"go/build/constraint"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -128,7 +129,7 @@ func TestInternalIntegrationFilesRequireTheIntegrationTag(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !strings.HasPrefix(string(data), "//go:build integration\n") {
+		if !integrationOnly(string(data)) {
 			rel, err := filepath.Rel(root, path)
 			if err != nil {
 				return err
@@ -139,6 +140,13 @@ func TestInternalIntegrationFilesRequireTheIntegrationTag(t *testing.T) {
 	})
 	contractcheck.FailErr(t, "walk internal integration tests", err)
 	contractcheck.FailViolations(t, "internal integration tests must declare //go:build integration", missing)
+}
+
+// integrationOnly reports whether the leading build constraint excludes the file without the tag.
+func integrationOnly(source string) bool {
+	line, _, _ := strings.Cut(source, "\n")
+	expr, err := constraint.Parse(line)
+	return err == nil && !expr.Eval(func(tag string) bool { return tag != "integration" })
 }
 
 func TestCheckFastGateMembership(t *testing.T) {
