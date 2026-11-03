@@ -134,9 +134,9 @@ func TestWorkerBranchEditRecordsAgainstWorkerBranch(t *testing.T) {
 			tctx.Identity.ToolCallID = "call-edit"
 
 			boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true},
-				[]sandbox.ToolProfile{{ID: "implementer", Tools: map[string]bool{"edit": true}}})
-			_, err = (&native.EditTool{Boundary: boundary}).Run(ctx, map[string]any{
-				"path": tc.modelPath, "old_string": "package app\n", "new_string": "package routes\n",
+				[]sandbox.ToolProfile{{ID: "implementer", Tools: map[string]bool{"write": true}}})
+			_, err = (&native.WriteTool{Boundary: boundary}).Run(ctx, map[string]any{
+				"path": tc.modelPath, "content": "package routes\n",
 			}, tctx)
 			testutil.FailErr(t, "worker edit", err)
 
