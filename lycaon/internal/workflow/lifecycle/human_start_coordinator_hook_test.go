@@ -26,7 +26,7 @@ func TestHumanWorkflowStartInvokesPhaseAutoAdvancedHook(t *testing.T) {
 
 	_, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 		Request:         "test request",
 	})
 	testutil.FailErr(t, "mgr.StartHuman failed", err)
@@ -49,7 +49,7 @@ func TestRejectedCoordinatorWorkflowStartDoesNotInvokePhaseAutoAdvancedHook(t *t
 
 	_, err := mgr.Starts.Start(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 	})
 	if !errors.Is(err, runstate.ErrWorkflowStartRequiresHumanApproval) {
 		t.Fatalf("Start error = %v, want runstate.ErrWorkflowStartRequiresHumanApproval", err)

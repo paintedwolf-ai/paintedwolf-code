@@ -146,6 +146,10 @@ func NamespaceLedger(ev Ledger, legID string) Ledger {
 
 func cloneRecord(rec Record) Record {
 	out := rec
+	if rec.SourceDelivery != nil {
+		value := *rec.SourceDelivery
+		out.SourceDelivery = &value
+	}
 	if len(rec.pathsTouched) > 0 {
 		out.pathsTouched = append([]string(nil), rec.pathsTouched...)
 	}

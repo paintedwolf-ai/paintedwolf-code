@@ -83,6 +83,11 @@ func runLayoutProbe(
 			EntriesExamined: 1, InventoryEntries: 1, Groups: 1,
 		}, nil
 	}
+	if scope.LayoutDepth != nil && *scope.LayoutDepth == 0 {
+		groups := []layoutGroup{{path: displayBase, isDir: true, dirs: 1}}
+		records, folded := renderLayoutGroups(probe.Label, displayBase, groups, groupCap)
+		return records, 1, ProbeCoverage{Altitude: layoutAltitude(base), Resolution: "root_metadata", InventoryState: "not_needed", EntriesExamined: 1, InventoryEntries: 1, Groups: 1, GroupsFolded: folded}, nil
+	}
 	catalog := scope.SourceCatalog
 	if catalog == nil {
 		catalog = sourcecatalog.Process()
@@ -98,7 +103,7 @@ func runLayoutProbe(
 		return nil, 0, ProbeCoverage{}, joinErr
 	}
 	if joinErr == nil && layoutSnapshotCovers(snapshot, root.ID, base) {
-		return layoutRecordsFromSnapshot(ctx, probe.Label, snapshot, root.ID, base, displayBase, readFilter, groupCap)
+		return layoutRecordsFromSnapshot(ctx, probe.Label, snapshot, root.ID, base, displayBase, readFilter, groupCap, scope.LayoutDepth)
 	}
 	return shallowLayoutRecords(probe.Label, resolved.Abs, base, displayBase, snapshot.State, readFilter, groupCap)
 }
@@ -138,11 +143,19 @@ func layoutRecordsFromSnapshot(
 	rootID, base, displayBase string,
 	readFilter sandbox.ReadFilter,
 	groupCap int,
+	maxDepth *int64,
 ) ([]evidence.Record, int, ProbeCoverage, error) {
 	groups := map[string]*layoutGroup{}
 	examined := 0
 	err := snapshot.Walk(ctx, rootID, base, func(entry sourcecatalog.Entry) sourcecatalog.WalkStep {
 		if readFilter != nil && !readFilter(entry.Path, entry.IsDir) {
+			return sourcecatalog.WalkSkip
+		}
+		depth := strings.Count(entry.Path, "/") + 1
+		if base != "." {
+			depth -= strings.Count(base, "/") + 1
+		}
+		if maxDepth != nil && int64(depth) > *maxDepth {
 			return sourcecatalog.WalkSkip
 		}
 		examined++
@@ -160,6 +173,9 @@ func layoutRecordsFromSnapshot(
 			group.dirs++
 			if isDirect {
 				group.isDir = true
+			}
+			if maxDepth != nil && int64(depth) >= *maxDepth {
+				return sourcecatalog.WalkSkip
 			}
 			return sourcecatalog.WalkContinue
 		}
@@ -180,9 +196,13 @@ func layoutRecordsFromSnapshot(
 	}
 	ordered := displayLayoutGroups(orderedLayoutGroups(groups), base, displayBase)
 	records, folded := renderLayoutGroups(label, displayBase, ordered, groupCap)
+	resolution := "subtree_rollups"
+	if maxDepth != nil {
+		resolution = "depth_limited"
+	}
 	coverage := ProbeCoverage{
 		Altitude:         layoutAltitude(base),
-		Resolution:       "subtree_rollups",
+		Resolution:       resolution,
 		InventoryState:   string(snapshot.State),
 		EntriesExamined:  examined,
 		InventoryEntries: len(snapshot.Entries),

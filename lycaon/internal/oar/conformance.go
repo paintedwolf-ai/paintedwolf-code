@@ -374,6 +374,10 @@ func firstTool(r *Rule) string {
 	if tools := r.Selector["tool"]; len(tools) > 0 {
 		return tools[0]
 	}
+	// An operation's structured tool rehearses an operation-selected rule.
+	if operations := r.Selector["paintedwolf.operation"]; len(operations) > 0 {
+		return operations[0]
+	}
 	return ""
 }
 

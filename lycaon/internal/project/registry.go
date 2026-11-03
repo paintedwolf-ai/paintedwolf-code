@@ -433,7 +433,9 @@ func (r *MemoryRegistry) PatchRoot(ctx context.Context, id, rootID string, param
 		}
 		if p.Roots[idx].Label != label {
 			p.Roots[idx].Label = label
+			// A rename retires the old @label spelling, so it is a new generation.
 			changed = true
+			rootContextChanged = true
 		}
 	}
 	if params.IsPrimary != nil && *params.IsPrimary {

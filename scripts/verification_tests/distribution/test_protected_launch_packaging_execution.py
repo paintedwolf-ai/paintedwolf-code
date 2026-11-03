@@ -34,7 +34,14 @@ class Catalogs(unittest.TestCase):
         self.assertEqual(set(catalog["families"]), {"deb", "rpm", "pacman"})
         self.assertEqual(catalog["architectures"]["arm64"]["multiarch"], "aarch64-linux-gnu")
         for family, row in catalog["families"].items():
-            self.assertTrue(all(path.rsplit("/", 1)[1].startswith("WebKit") for path in row["system_executables"]), family)
+            programs = set(row["system_executables"])
+            self.assertTrue(any(path.rsplit("/", 1)[1] == "WebKitWebProcess" for path in programs), family)
+            self.assertIn("/usr/bin/bwrap", programs)
+            self.assertIn("/usr/bin/true", programs)
+            self.assertIn("/usr/libexec/glycin-loaders/2+/glycin-svg", programs)
+            self.assertIn("/usr/libexec/glycin-loaders/2+/glycin-image-rs", programs)
+            self.assertNotIn("/usr/bin", programs)
+            self.assertNotIn("/usr/libexec", programs)
         self.assertEqual({family: row["library_roots"] for family, row in catalog["families"].items()},
                          {"deb": ["/usr/lib/{multiarch}"], "rpm": ["/usr/lib64"], "pacman": ["/usr/lib"]})
         self.assertEqual(payload.load()["setuid_bootstrap"], {"name": "pw-launch", "path": "/usr/libexec/painted-wolf-code/pw-launch"})

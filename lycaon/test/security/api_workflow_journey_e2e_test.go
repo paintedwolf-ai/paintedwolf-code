@@ -149,7 +149,7 @@ func finishPlanWorkflow(
 	}
 
 	superseded := journeyPostJSON[wire.WorkflowRun](t, base,
-		"/v1/sessions/"+sessionID+"/workflow-runs", workflowStartJSON(t, base, sessionID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.0"}), http.StatusCreated)
+		"/v1/sessions/"+sessionID+"/workflow-runs", workflowStartJSON(t, base, sessionID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.1"}), http.StatusCreated)
 	if superseded.ID == run.ID {
 		t.Fatal("expected a new run id after human supersede")
 	}

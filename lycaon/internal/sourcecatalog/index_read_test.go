@@ -101,7 +101,7 @@ func TestIndexLiteralPreparationSurvivesSearchCancellation(t *testing.T) {
 	started, release := make(chan struct{}), make(chan struct{})
 	var once, releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
-	query := LiteralQuery{RootID: root.ID, IncludeKey: "test", Require: litprefilter.AnyOf("needle"), Open: func(entry Entry) (io.ReadCloser, error) {
+	query := LiteralQuery{IncludeKey: "test", Require: litprefilter.AnyOf("needle"), Open: func(entry Entry) (io.ReadCloser, error) {
 		once.Do(func() { close(started) })
 		<-release
 		return literalTestOpener(root.Path)(entry)
@@ -143,13 +143,13 @@ func TestIndexLiteralScopesBoundAndDrainQueuedWorkers(t *testing.T) {
 	release, err := c.Literals.broker.Acquire(t.Context(), backgroundwork.Request{Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceIO}})
 	testutil.FailErr(t, "hold content admission", err)
 	defer release()
-	for i := range literalIndexCacheCap + 3 {
+	for i := range literalPreparationScopeCap + 3 {
 		c.Literals.prepareIndexLiterals(t.Context(), reader, LiteralQuery{IncludeKey: fmt.Sprint(i), Open: literalTestOpener(root.Path)})
 	}
 	reader.store.mu.Lock()
 	count := len(reader.store.content)
 	reader.store.mu.Unlock()
-	if count != literalIndexCacheCap {
+	if count != literalPreparationScopeCap {
 		t.Fatalf("active scopes=%d", count)
 	}
 	testutil.FailErr(t, "drain queued content", c.Drain(t.Context()))

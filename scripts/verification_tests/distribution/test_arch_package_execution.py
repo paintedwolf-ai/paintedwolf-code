@@ -1,4 +1,4 @@
-"""Pacman recipes preserve the sealed common payload without package-time fixups."""
+"""Pacman recipes preserve sealed payload bytes and required installation modes."""
 
 import hashlib
 import json
@@ -82,6 +82,10 @@ class ArchPackageTests(unittest.TestCase):
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b"sealed\x00executable")
             binary.chmod(0o755)
+            bootstrap = tree / 'usr/libexec/painted-wolf-code/pw-launch'
+            bootstrap.parent.mkdir(parents=True)
+            bootstrap.write_bytes(b'sealed bootstrap')
+            bootstrap.chmod(0o4755)
             document = tree / "usr/share/doc/painted-wolf-code/Unicode λ with spaces"
             document.parent.mkdir(parents=True)
             document.write_text("retained notices")
@@ -105,7 +109,8 @@ class ArchPackageTests(unittest.TestCase):
             source.mkdir()
             with tarfile.open(payload) as archive:
                 self.assertTrue(all(member.uid == member.gid == 0 for member in archive))
-                archive.extractall(source)
+                archive.extractall(source, filter='data')
+            self.assertEqual((source / 'payload' / bootstrap.relative_to(tree)).stat().st_mode & 0o7777, 0o755)
             installed = root / "package"
             installed.mkdir()
             result = subprocess.run(["bash", "-c", 'source "$1"; srcdir="$2"; pkgdir="$3"; package',
@@ -114,6 +119,8 @@ class ArchPackageTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((installed / binary.relative_to(tree)).read_bytes(), binary.read_bytes())
             self.assertEqual((installed / binary.relative_to(tree)).stat().st_mode & 0o777, 0o755)
+            self.assertEqual((installed / bootstrap.relative_to(tree)).stat().st_mode & 0o7777, 0o4755)
+            self.assertEqual((installed / bootstrap.relative_to(tree)).read_bytes(), bootstrap.read_bytes())
             self.assertEqual((installed / document.relative_to(tree)).stat().st_mode & 0o777, 0o644)
             self.assertEqual((installed / service.relative_to(tree)).read_bytes(), service.read_bytes())
             self.assertEqual((installed / service.relative_to(tree)).stat().st_mode & 0o777, 0o755)
@@ -128,7 +135,7 @@ class ArchPackageTests(unittest.TestCase):
     def test_install_hook_is_a_hashed_makepkg_input(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for relative in ["packaging/linux/arch/PKGBUILD.in", "packaging/linux/dependencies.json",
+            for relative in ["packaging/linux/arch/PKGBUILD.in", "packaging/linux/dependencies.json", "packaging/linux/payload.json",
                              "lycaon/internal/platformfloor/linux_floor.txt", "RELEASE_BUILD"]:
                 destination = root / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)

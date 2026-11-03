@@ -3,7 +3,7 @@ id: READ_PATH_NOT_FOUND
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - read
   - edit
   - write
@@ -16,6 +16,7 @@ requires:
   - filesystem
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.path
   - paintedwolf.can_list_dir

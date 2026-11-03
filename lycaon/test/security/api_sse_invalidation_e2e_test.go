@@ -64,7 +64,7 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	hub.waitFor(t, wire.EventTopicWorkflow) // drain ambient exit envelope
 	run := journeyPostJSON[wire.WorkflowRun](t, base,
 		"/v1/sessions/"+sess.ID+"/workflow-runs",
-		`{"workflow_id":"plan","workflow_version":"1.0.0"}`, http.StatusCreated)
+		`{"workflow_id":"plan","workflow_version":"1.0.1"}`, http.StatusCreated)
 
 	wfEnv := hub.waitForWorkflowRunID(t, run.ID)
 	assertField(t, wfEnv, "workflow_id", "plan")

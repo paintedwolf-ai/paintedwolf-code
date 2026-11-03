@@ -21,20 +21,21 @@ mkdir -p "${CONFIG}"
 TOKEN="upgrade-archive-roundtrip-token"
 printf '%s' "${TOKEN}" >"${CONFIG}/api.token"
 chmod 600 "${CONFIG}/api.token"
-PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
-BASE="http://127.0.0.1:${PORT}"
+BASE=""
 
 start_engine() {
+  rm -f "${CONFIG}/daemon.json"
   (
     cd "${ROOT}/lycaon"
     LYCAON_CONFIG_DIR="${CONFIG}" LYCAON_LLM_MOCK=1 LYCAON_DEV=1 \
-      LYCAON_ADDR="127.0.0.1:${PORT}" LYCAON_API_TOKEN="${TOKEN}" \
+      LYCAON_ADDR="127.0.0.1:0" LYCAON_API_TOKEN="${TOKEN}" \
       LYCAON_LOG_LEVEL=warn exec "${ENGINE}" serve
   ) >"${SCRATCH}/sidecar.log" 2>&1 &
   UPGRADE_CHILD_PID=$!
   local deadline=$((SECONDS + 60)) body status
   while (( SECONDS < deadline )); do
-    if body="$(curl -sf --max-time 2 "${BASE}/health")"; then
+    if BASE="$(upgrade_owned_base "${CONFIG}" "${UPGRADE_CHILD_PID}")" &&
+       body="$(curl -sf --max-time 2 "${BASE}/health")"; then
       status="$(jq -r '.status // empty' <<<"${body}")"
       [[ "${status}" == "ok" || "${status}" == "degraded" ]] && return 0
       [[ "${status}" == "recovery" ]] && return 1
@@ -46,9 +47,12 @@ start_engine() {
 }
 
 start_engine
-curl -fsS --max-time 120 -X POST -H "Authorization: Bearer ${TOKEN}" \
+if ! curl --fail-with-body -sS --max-time 120 -X POST -H "Authorization: Bearer ${TOKEN}" \
   -H 'Content-Type: application/zip' --data-binary "@${FIXTURE}/backup.zip" \
-  "${BASE}/v1/backup/restore" >"${SCRATCH}/restore.json"
+  "${BASE}/v1/backup/restore" >"${SCRATCH}/restore.json"; then
+  cat "${SCRATCH}/restore.json" >&2
+  exit 1
+fi
 jq -e '.restart_required == true' "${SCRATCH}/restore.json" >/dev/null
 upgrade_stop_owned_child
 # Startup installs the staged archive before fixture paths can be relocated.

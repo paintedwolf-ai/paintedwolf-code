@@ -43,11 +43,11 @@ func assertCheckpointLifecycleRouting(t *testing.T, transport string, status api
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, hitl.CheckpointRequest{
 		SessionID: sid, Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "printf fixture"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "printf fixture"},
+			},
+		},
 	})
 	testutil.FailErr(t, "request checkpoint", err)
 	stored, err := store.Get(testdbseed.OwnerCaller(t, t.Context(), database), response.CheckpointID)
@@ -79,10 +79,10 @@ func TestCheckpointRejectsContradictoryOwnership(t *testing.T) {
 			req := hitl.CheckpointRequest{
 				SessionID: sid, Kind: api.CheckpointKindToolApproval,
 				ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-},
+					Invocation: hitl.ActionInvocation{
+						Tool: "command",
+					},
+				},
 			}
 			switch conflict {
 			case "request project":
@@ -123,10 +123,10 @@ func TestCheckpointDatabaseEnforcesSessionProject(t *testing.T) {
 	}
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, hitl.CheckpointRequest{
 		SessionID: sid, Kind: api.CheckpointKindToolApproval, ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+		},
 	})
 	testutil.FailErr(t, "create owned checkpoint", err)
 	for _, query := range []string{

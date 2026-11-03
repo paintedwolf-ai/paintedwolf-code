@@ -1,18 +1,18 @@
 ---
 description: >-
-  Creating, editing, or reverting project files: write, edit, replace_lines,
+  Creating, editing, or reverting project files: command, edit, replace_lines,
   restore_version, and bulk code rewrites, with the syntax-health rules that
   apply.
 slot: orientation
 order: 30
-attaches: [write, edit, replace_lines, restore_version, code_rewrite]
+attaches: [command, edit, replace_lines, restore_version, code_rewrite]
 hosts: [coordinator, worker]
 ---
-Land supported source with an explicit syntax-health result. New/clean files must finish clean; an already-broken file accepts only a strictly healthier incremental repair, while promotion requires the final merge plan to be clean. Parser timeout/failure rejects. Do not stack `replace_lines` on stale line numbers.
+Publish supported source with a syntax-health result. New/clean files finish clean; broken files require strictly healthier repairs. Promotion needs a clean final merge plan. Parser failure/timeout rejects.
 
-- **New file** → **`write`**. **Existing span** → **`edit`** (call `read` in a prior response; same-batch rejects; copy exact source into `old_string`; preserve whitespace and omit host framing from both edit strings). **`replace_lines`** only for a range returned by `read` in a prior response.
-- **Undo / revert a file** → **`restore_version`** (`path`, optional `version_id`). Reverts to prior ledger version or cleanly removes newly authored files. Prefer over hand-reverting when backing out changes.
-- Long files: outline → **`summarize`** / **`grep`** → scoped **`read(ranges=…)`**. Re-anchor from the receipt; pre-edit line numbers go stale.
-- **`replace_lines`** deletes `start_line`–`end_line` inclusive — re-emit boundary lines. For coupled seams, use one `operations` batch; every range uses the same original snapshot and lands atomically. `shift_indent` adds or removes one exact whitespace prefix across nonblank lines without re-emitting their bodies.
-{% if profile_has_code_rewrite %}- Same shape at many sites → one **`code_rewrite`** with `path` or `paths[]`; preview `dry_run`. A bare `$A | $B` matches every binary or — narrow one operand.
+- **New files:** quoted here-documents or `printf` redirects in `command`. **Existing spans:** `edit` with exact `old_string`, preserving whitespace and excluding host framing. Inspect source via `command` or `summarize` in a prior response; reads from the same response cannot anchor edits. `replace_lines` also requires prior inspected ranges.
+- **Undo:** `restore_version` (`path`, optional `version_id`) restores a retained ledger version or removes a newly authored file; prefer it to hand-reverting.
+- **Long files:** outline → `summarize` or bounded `command` (`grep -n`, `sed -n`) → scoped source. Re-anchor from current receipts after edits.
+- **`replace_lines`:** inclusive `start_line`–`end_line`; re-emit boundary lines. One `operations` batch shares the original snapshot and lands atomically. `shift_indent` adds/removes one exact prefix on nonblank lines without re-emitting bodies.
+{% if profile_has_code_rewrite %}- Repeated syntax → `code_rewrite` with `path` or `paths[]`; preview `dry_run`. Bare `$A | $B` matches every binary or: narrow an operand.
 {% endif %}{% include "partials/large-file-write-discipline.md" %}

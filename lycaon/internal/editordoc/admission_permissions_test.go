@@ -145,4 +145,3 @@ func TestNewRequiresLedger(t *testing.T) {
 	}()
 	New(NewStore(testdbfixture.Open(t, "store.db")), nil, nil, fixedRoots{})
 }
-

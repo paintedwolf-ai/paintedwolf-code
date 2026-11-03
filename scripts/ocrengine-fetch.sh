@@ -197,7 +197,8 @@ if [[ -n "${ARCHIVE}" ]]; then
   cp "${ARCHIVE}" "${TMP_DIR}/engine.tar.gz"
 else
   echo "ocrengine-fetch — downloading ${URL}" >&2
-  curl -fsSL -o "${TMP_DIR}/engine.tar.gz" "${URL}"
+  curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+    -o "${TMP_DIR}/engine.tar.gz" "${URL}"
 fi
 
 ACTUAL_SHA="$(sha256_of "${TMP_DIR}/engine.tar.gz")"
@@ -233,7 +234,8 @@ for ((index=0; index<${#DATA_LANGUAGES[@]}; index++)); do
   if [[ -n "${TRAINED_DATA_DIR}" ]]; then
     cp "${TRAINED_DATA_DIR}/${model}" "${payload}"
   else
-    curl -fsSL --max-filesize "${DATA_BYTES[index]}" -o "${payload}" \
+    curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+      --max-filesize "${DATA_BYTES[index]}" -o "${payload}" \
       "https://raw.githubusercontent.com/${MODEL_REPOSITORY}/${MODEL_COMMIT}/${model}"
   fi
   verify_payload "${payload}" "${DATA_SHAS[index]}" "${DATA_BYTES[index]}"

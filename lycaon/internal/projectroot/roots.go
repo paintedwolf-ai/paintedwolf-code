@@ -21,7 +21,10 @@ type RootRef struct {
 // VirtualScratchLabel names the host namespace for the invoking session's
 // scratch folder. Virtual roots are addressed like attached roots, so no
 // attached root may carry their labels.
-const VirtualScratchLabel = "scratch"
+const (
+	VirtualScratchLabel = "scratch"
+	VirtualOutputLabel  = "output"
+)
 
 var (
 	ErrNoProjectRoots   = errors.New("project has no folder roots")
@@ -33,7 +36,8 @@ var (
 // IsVirtualRootLabel reports whether label names a host namespace. Labels
 // compare case-insensitively, as attached root labels do.
 func IsVirtualRootLabel(label string) bool {
-	return strings.EqualFold(strings.TrimSpace(label), VirtualScratchLabel)
+	label = strings.TrimSpace(label)
+	return strings.EqualFold(label, VirtualScratchLabel) || strings.EqualFold(label, VirtualOutputLabel)
 }
 
 // BranchDirForID derives a stable host-only directory from a root ID.
@@ -84,7 +88,7 @@ func ActiveRoot(roots []RootRef, activeRootID string) (RootRef, error) {
 
 // IsUnionDiscoveryPath reports whether find/grep/list_dir should walk every root.
 func IsUnionDiscoveryPath(path string) bool {
-	p := strings.TrimSpace(path)
+	p := path
 	return p == "" || p == "." || p == "./"
 }
 
@@ -96,7 +100,7 @@ func ResolveAbs(roots []RootRef, activeRootID, path string) (abs string, root Ro
 	if strings.ContainsRune(path, 0) {
 		return "", RootRef{}, fmt.Errorf("path contains NUL byte")
 	}
-	raw := strings.TrimSpace(path)
+	raw := path
 	if raw == "" {
 		return "", RootRef{}, ErrNoProjectRoots
 	}

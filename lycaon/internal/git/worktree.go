@@ -2,12 +2,9 @@ package git
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gitargv"
@@ -37,20 +34,15 @@ func (e *MergeConflictError) Error() string {
 // Code returns the structured reject code for tool/API mapping.
 func (e *MergeConflictError) Code() string { return "GIT_MERGE_CONFLICT" }
 
-// AddWorktree creates a new branch checkout from baseRef.
+// AddWorktree creates a linked worktree checkout.
 func (m *Manager) AddWorktree(ctx context.Context, toplevel, path, branch, baseRef string) error {
 	dir, err := absProjectDir(toplevel)
 	if err != nil {
 		return err
 	}
-	if err := validateGitRef(branch, "branch"); err != nil {
+	args, err := worktreeAddArgs(path, branch, baseRef)
+	if err != nil {
 		return err
-	}
-	if err := validateGitRef(baseRef, "base ref"); err != nil {
-		return err
-	}
-	if !filepath.IsAbs(path) {
-		return fmt.Errorf("worktree path must be absolute")
 	}
 	release, err := gitlease.Repository(ctx, dir)
 	if err != nil {
@@ -62,7 +54,7 @@ func (m *Manager) AddWorktree(ctx context.Context, toplevel, path, branch, baseR
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("worktree path: %w", err)
 	}
-	out, code, err := gitexec.Run(ctx, dir, []string{"worktree", "add", "-b", branch, gitargv.EndOfOptions, path, baseRef}, hermeticOpts(0))
+	out, code, err := gitexec.Run(ctx, dir, args, hermeticOpts(0))
 	if err != nil {
 		return err
 	}
@@ -70,6 +62,36 @@ func (m *Manager) AddWorktree(ctx context.Context, toplevel, path, branch, baseR
 		return fmt.Errorf("git worktree add failed: %s", strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+func worktreeAddArgs(path, branch, baseRef string) ([]string, error) {
+	branch = strings.TrimSpace(branch)
+	baseRef = strings.TrimSpace(baseRef)
+	if branch != "" {
+		if err := validateGitRef(branch, "branch"); err != nil {
+			return nil, err
+		}
+		if baseRef == "" {
+			baseRef = "HEAD"
+		}
+	}
+	if baseRef != "" {
+		if err := validateGitRef(baseRef, "base ref"); err != nil {
+			return nil, err
+		}
+	}
+	if !filepath.IsAbs(path) {
+		return nil, fmt.Errorf("worktree path must be absolute")
+	}
+	args := []string{"worktree", "add"}
+	if branch != "" {
+		args = append(args, "-b", branch)
+	}
+	args = append(args, gitargv.EndOfOptions, path)
+	if baseRef != "" {
+		args = append(args, baseRef)
+	}
+	return args, nil
 }
 
 // RemoveWorktree removes a clean linked worktree.
@@ -114,6 +136,10 @@ func (m *Manager) ListWorktrees(ctx context.Context, toplevel string) ([]Worktre
 
 // ValidateWorktree confirms a registered branch checkout.
 func (m *Manager) ValidateWorktree(ctx context.Context, toplevel, path, branch string) error {
+	return validateWorktree(ctx, m, toplevel, path, branch)
+}
+
+func validateWorktree(ctx context.Context, m *Manager, toplevel, path, branch string) error {
 	path = filepath.Clean(strings.TrimSpace(path))
 	if path == "." || !filepath.IsAbs(path) {
 		return fmt.Errorf("worktree path must be absolute")
@@ -204,85 +230,6 @@ func (m *Manager) LocalBranchExists(ctx context.Context, toplevel, branch string
 	default:
 		return false, fmt.Errorf("git show-ref failed: %s", strings.TrimSpace(string(out)))
 	}
-}
-
-func (m *Manager) abortFailedMerge(ctx context.Context, dir string, mergeOut []byte) error {
-	conflictOut, _, _ := gitexec.Run(ctx, dir, []string{"diff", "--name-only", "--diff-filter=U"}, hermeticOpts(0))
-	paths := splitNonEmptyLines(string(conflictOut))
-	abortOut, abortCode, abortErr := gitexec.Run(ctx, dir, []string{"merge", "--abort"}, hermeticOpts(0))
-	if abortErr != nil {
-		return fmt.Errorf("git merge failed: %s; merge --abort failed: %w",
-			strings.TrimSpace(string(mergeOut)), abortErr)
-	}
-	if abortCode != 0 {
-		return fmt.Errorf("git merge failed: %s; merge --abort failed: %s",
-			strings.TrimSpace(string(mergeOut)), strings.TrimSpace(string(abortOut)))
-	}
-	return &MergeConflictError{Paths: paths}
-}
-
-// AheadBehindRefs counts commits unique to head and base.
-func (m *Manager) AheadBehindRefs(ctx context.Context, dir, base, head string) (ahead, behind int, err error) {
-	cwd, err := absProjectDir(dir)
-	if err != nil {
-		return 0, 0, err
-	}
-	if err := validateGitRef(base, "base"); err != nil {
-		return 0, 0, err
-	}
-	if err := validateGitRef(head, "head"); err != nil {
-		return 0, 0, err
-	}
-	out, code, err := gitexec.Run(ctx, cwd, []string{"rev-list", "--left-right", "--count", base + "..." + head}, hermeticOpts(0))
-	if err != nil {
-		return 0, 0, err
-	}
-	if code != 0 {
-		return 0, 0, fmt.Errorf("git rev-list failed: %s", strings.TrimSpace(string(out)))
-	}
-	fields := strings.Fields(strings.TrimSpace(string(out)))
-	if len(fields) != 2 {
-		return 0, 0, fmt.Errorf("unexpected rev-list output: %q", string(out))
-	}
-	behind, err = strconv.Atoi(fields[0])
-	if err != nil {
-		return 0, 0, fmt.Errorf("parse behind count %q: %w", fields[0], err)
-	}
-	ahead, err = strconv.Atoi(fields[1])
-	if err != nil {
-		return 0, 0, fmt.Errorf("parse ahead count %q: %w", fields[1], err)
-	}
-	return ahead, behind, nil
-}
-
-// RepoConfigFingerprint hashes configuration from the common git directory.
-func (m *Manager) RepoConfigFingerprint(ctx context.Context, toplevel string) (string, error) {
-	dir, err := absProjectDir(toplevel)
-	if err != nil {
-		return "", err
-	}
-	out, code, err := gitexec.Run(ctx, dir, []string{"rev-parse", "--git-common-dir"}, hermeticOpts(0))
-	if err != nil {
-		return "", err
-	}
-	if code != 0 {
-		return "", fmt.Errorf("git rev-parse --git-common-dir failed: %s", strings.TrimSpace(string(out)))
-	}
-	common := strings.TrimSpace(string(out))
-	if common == "" {
-		return "", fmt.Errorf("git rev-parse --git-common-dir returned empty")
-	}
-	if !filepath.IsAbs(common) {
-		common = filepath.Join(dir, common)
-	}
-	common = filepath.Clean(common)
-	cfgPath := filepath.Join(common, "config")
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return "", fmt.Errorf("read git common config: %w", err)
-	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:]), nil
 }
 
 func parseWorktreePorcelain(out string) []WorktreeEntry {

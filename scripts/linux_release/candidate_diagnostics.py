@@ -25,8 +25,8 @@ def retain(source, output, controller):
     selected=sorted(path for path in bundle.glob("*/release/bundle/*/*")
                     if path.parent.name in EXTENSIONS and path.name.startswith("painted-wolf-code")
                     and path.name.endswith(EXTENSIONS[path.parent.name]) and path.is_file())
-    if not selected or len(selected)>16:
-        raise ValueError("partial diagnostics require a bounded nonempty native package set")
+    if len(selected)>16:
+        raise ValueError("partial diagnostics require a bounded native package set")
     output.mkdir(parents=True,mode=0o700)
     try:
         rows=[]

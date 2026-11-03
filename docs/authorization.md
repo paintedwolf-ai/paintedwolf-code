@@ -214,6 +214,7 @@ Every rung on a write-root card continues the held write through this chat's run
 - Project authority binds stable project identity and expires.
 - Cross-project device authority exists only for subjects explicitly defined that way.
 - Exact-action authority uses an opaque host-only digest and changes when any material argument changes.
+- Native command authority keeps exact path bytes. The checkpoint, prepared-approval and chat-grant rows store it in a versioned lossless form beside its screened JSON display. Cards, events and lists read only the display. Resolution, recovery and boot replay restore the lossless form through one admitted reader, which refuses an unknown format or a display that no longer matches.
 - Set-valued destinations are compared as sets, not model-authored order.
 - Neutral presentation arguments may be excluded from identity only when the catalog declares that they cannot change the effect.
 

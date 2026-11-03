@@ -1,0 +1,748 @@
+{
+  "commands": [
+    {
+      "name": "set",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "set [-e|-u|+e|+u|-o OPTION|+o OPTION]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Updated the selected program options.",
+        "2": "Unsupported option or missing option name."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "set -e",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "set-operands-valid",
+        "set-rejection"
+      ]
+    },
+    {
+      "name": "eval",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "eval [ARG ...]",
+      "forms": [],
+      "operands": "Expanded arguments are joined with spaces, parsed and admitted as a command program in the current shell state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Completed the evaluated program.",
+        "1": "Ordinary evaluated program failure.",
+        "2": "Invalid or refused evaluated program."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "eval \"printf '%s\\n' alpha\"",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Reparses reached expanded arguments with the top-level parser and admission; no extra grants.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_eval.go",
+        "tests": [
+          "lycaon/internal/commandprogram/evaluate_test.go"
+        ],
+        "extension": "Reached dynamic parse and admission.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "eval-operands-valid",
+        "eval-rejection"
+      ]
+    },
+    {
+      "name": "read",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "read [-r] [-d DELIM] [-t SECONDS] [NAME ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "read-option-r",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 1,
+          "value_role": "delimiter",
+          "fixture_id": "read-option-d",
+          "consumption": "fixed",
+          "sample_values": [
+            ":"
+          ]
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 1,
+          "value_role": "seconds",
+          "fixture_id": "read-option-t",
+          "consumption": "fixed",
+          "sample_values": [
+            "0.2"
+          ]
+        }
+      ],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Read a complete delimited record and assigned its fields, or -t 0 found input ready without consuming bytes or assigning variables.",
+        "1": "Reached end of input before a delimiter, found no ready input with -t 0, or received an invalid timeout; retained any fields read.",
+        "2": "Invalid options or target variable name.",
+        "142": "The input deadline elapsed; retained any fields read."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'alpha\\n' | read VALUE",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes. A timed read reports its deadline through program waiting; long waits park and resume with the complete program result. With -t 0, tests input readiness without consuming bytes or assigning variables.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "read-operands-valid",
+        "read-rejection"
+      ]
+    },
+    {
+      "name": "break",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "break [N]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Completed the selected evaluator state change.",
+        "2": "Invalid arguments or use outside the required loop or function."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "for value in a; do break; done",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "break-operands-valid",
+        "break-rejection"
+      ]
+    },
+    {
+      "name": "continue",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "continue [N]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Completed the selected evaluator state change.",
+        "2": "Invalid arguments or use outside the required loop or function."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "for value in a; do continue; done",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "continue-operands-valid",
+        "continue-rejection"
+      ]
+    },
+    {
+      "name": "return",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "return [N]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Selected status zero.",
+        "1": "Selected status one.",
+        "2": "Selected status two, invalid arguments, or return outside a function or sourced unit."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "f() { return 0; }; f",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes. An explicit status from 0 through 255 is preserved; without an operand, the prior status is preserved.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "return-operands-valid",
+        "return-rejection"
+      ]
+    },
+    {
+      "name": "exit",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "exit [N]",
+      "forms": [],
+      "operands": "Arguments change only the current program evaluator state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Selected status zero.",
+        "1": "Selected status one.",
+        "2": "Selected status two or invalid arguments."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "exit 0",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Runs only when reached in the current program. Earlier completed effects remain after control flow changes. An explicit status from 0 through 255 is preserved; without an operand, the prior status is preserved.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_simple.go",
+        "tests": [
+          "lycaon/internal/commandprogram/control_status_test.go"
+        ],
+        "extension": "Evaluator state and reached control flow.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "exit-operands-valid",
+        "exit-rejection"
+      ]
+    },
+    {
+      "name": "ulimit",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "ulimit [-S|-H] [-a|-c|-f|-n|-s|-t|-u|-v ...] [LIMIT]",
+      "forms": [
+        {
+          "spellings": [
+            "-S"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-s-soft",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-H"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-h-hard",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-a-all",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-c-core",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-f-filesize",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-n-openfiles",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-s-stack",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-t-cputime",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-u-processes",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ulimit-option-v-virtualmemory",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "LIMIT is a decimal number in the resource's unit, unlimited, soft or hard. It sets the soft limit, with -H the hard limit and with -H -S both, for external children started later in the same program. A limit the platform does not provide is refused.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Reported or set the limits.",
+        "1": "Invalid number, a value above the hard limit, or a hard limit below the soft limit.",
+        "2": "Too many arguments."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "ulimit -n 256",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Reports the limits external children of this program receive; core and file sizes in 1024-byte blocks, stack and virtual memory in kbytes. A value may lower the soft limit or raise it up to the hard limit, applies to later external children of the same program, and never persists past the invocation. -H changes are refused.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_ulimit.go",
+        "tests": [
+          "lycaon/internal/commandprogram/evaluate_ulimit_test.go"
+        ],
+        "extension": "Frame built-in whose limits reach external launch.",
+        "evidence_kind": "Behavioral evaluator fixtures and confined launch tests"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "ulimit-operands-valid",
+        "ulimit-rejection",
+        "ulimit-option-s-soft",
+        "ulimit-option-h-hard",
+        "ulimit-option-a-all",
+        "ulimit-option-c-core",
+        "ulimit-option-f-filesize",
+        "ulimit-option-n-openfiles",
+        "ulimit-option-s-stack",
+        "ulimit-option-t-cputime",
+        "ulimit-option-u-processes",
+        "ulimit-option-v-virtualmemory"
+      ]
+    }
+  ]
+}

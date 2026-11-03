@@ -3,12 +3,13 @@ id: EDIT_ARGS_CONFLICT
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - edit
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.detail
     - paintedwolf.conflict

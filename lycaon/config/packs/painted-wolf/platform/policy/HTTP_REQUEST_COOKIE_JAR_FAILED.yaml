@@ -3,10 +3,11 @@ id: HTTP_REQUEST_COOKIE_JAR_FAILED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - http_request
 requires:
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.cookie_jar_name
   profiles:

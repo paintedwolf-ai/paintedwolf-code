@@ -135,6 +135,15 @@ func registerStubWorkspaceRoutes(mux *http.ServeMux, now time.Time, writeJSON st
 	mux.HandleFunc("GET /v1/sessions/{id}/invocations", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.InvocationReceiptList{Invocations: []api.InvocationReceipt{}})
 	})
+	mux.HandleFunc("GET /v1/sessions/{id}/program-receipts/{program_id}", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.CommandProgramReceiptPage{
+			Program: api.CommandProgramReceipt{
+				ID: r.PathValue("program_id"), ParentReceiptID: fixtureSessionID, LanguageVersion: 1,
+				State: "completed", ProgressState: "unchanged", StartedAt: time.Unix(0, 0).UTC(),
+			},
+			Executions: []api.CommandExecutionReceipt{}, Nodes: []api.CommandProgramNode{},
+		})
+	})
 	mux.HandleFunc("GET /v1/sessions/{id}/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.SessionBootstrap{
 			Session:           session,

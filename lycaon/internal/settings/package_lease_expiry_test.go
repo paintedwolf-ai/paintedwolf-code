@@ -39,20 +39,20 @@ func TestPackageCoordinateChatLeaseExpires(t *testing.T) {
 	testutil.FailErr(t, "apply expired package coordinate grant", err)
 
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-task-1",
-ProjectID: "proj-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "npm install lodash@4.17.21",
-},
-Execution: hitl.ActionExecution{
-PackageExecution: execution,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "chat-task-1",
+			ProjectID: "proj-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "npm install lodash@4.17.21",
+		},
+		Execution: hitl.ActionExecution{
+			PackageExecution: execution,
+		},
+	}
 	if approvalGate.GrantCovers(action) {
 		t.Fatal("an expired chat package lease must not cover the action")
 	}

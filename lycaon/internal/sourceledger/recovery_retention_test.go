@@ -35,18 +35,13 @@ func TestRecoveryReclamationBoundsEachWriterTransaction(t *testing.T) {
 		testutil.FailErr(t, "reclaim recovery page", err)
 		want := int64(blobMaintenanceBatchSize)
 		if pass == 3 {
-			want = 1
+			want = 2 // the final manifest row and its now-empty candidate
 		}
 		if n != want {
 			t.Fatalf("pass %d reclaimed %d, want %d", pass, n, want)
 		}
 	}
 	n, err := s.Retention.reclaimRecoveryBatch(ctx)
-	testutil.FailErr(t, "retire drained candidate", err)
-	if n != 1 {
-		t.Fatalf("candidate not retired: %d", n)
-	}
-	n, err = s.Retention.reclaimRecoveryBatch(ctx)
 	testutil.FailErr(t, "repeat maintenance", err)
 	if n != 0 {
 		t.Fatalf("empty queue did work: %d", n)
@@ -132,5 +127,69 @@ func TestRecoveryClaimLookupsUseExactIdentityIndexes(t *testing.T) {
 	testutil.FailErr(t, "finish query plan", rows.Err())
 	if lookups != 4 {
 		t.Fatalf("references lookups=%d, want 4", lookups)
+	}
+}
+
+func TestRecoveryReclamationBatchesEmptyCandidatesWithinTheSameBound(t *testing.T) {
+	s, ctx := openLedger(t)
+	const total = 2*blobMaintenanceBatchSize + 1
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	testutil.FailErr(t, "begin candidate fixture", err)
+	defer func() { _ = tx.Rollback() }()
+	for i := range total {
+		_, err := tx.ExecContext(ctx, `INSERT INTO source_recovery_reclaim_queue(project_id,recovery_id) VALUES('p1',?)`, fmt.Sprintf("empty-%04d", i))
+		testutil.FailErr(t, "queue empty recovery candidate", err)
+	}
+	testutil.FailErr(t, "commit candidate fixture", tx.Commit())
+	remaining := total
+	for _, want := range []int64{blobMaintenanceBatchSize, blobMaintenanceBatchSize, 1, 0} {
+		n, err := s.Retention.reclaimRecoveryBatch(ctx)
+		testutil.FailErr(t, "retire bounded candidates", err)
+		if n != want {
+			t.Fatalf("candidate work=%d want=%d", n, want)
+		}
+		remaining -= int(n)
+		var actual int
+		testutil.FailErr(t, "count retained candidates", s.sqlDB.QueryRowContext(ctx, `SELECT count(*) FROM source_recovery_reclaim_queue`).Scan(&actual))
+		if actual != remaining {
+			t.Fatalf("remaining candidates=%d want=%d", actual, remaining)
+		}
+	}
+}
+
+func TestRecoveryEmptyCandidateBatchDoesNotPassItsSelectedWindow(t *testing.T) {
+	s, ctx := openLedger(t)
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	testutil.FailErr(t, "begin claimed candidate fixture", err)
+	defer func() { _ = tx.Rollback() }()
+	for i := range blobMaintenanceBatchSize {
+		id := fmt.Sprintf("a-claimed-%04d", i)
+		_, err := tx.ExecContext(ctx, `INSERT INTO source_recovery_entries(project_id,recovery_id,ordinal,path,mode) VALUES('p1',?,0,'file',448)`, id)
+		testutil.FailErr(t, "seed retained manifest", err)
+		_, err = tx.ExecContext(ctx, `INSERT INTO source_mutations(id,project_id,kind,input_digest,plan_json,status,created_at,updated_at) VALUES(?,'p1','delete','digest','','prepared','','')`, id)
+		testutil.FailErr(t, "claim actual operation identity", err)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO source_recovery_reclaim_queue(project_id,recovery_id) VALUES('p1','z-empty')`)
+	testutil.FailErr(t, "seed candidate outside first window", err)
+	testutil.FailErr(t, "commit claimed fixture", tx.Commit())
+	_, err = s.sqlDB.ExecContext(ctx, `CREATE TRIGGER refuse_unselected_candidate BEFORE DELETE ON source_recovery_reclaim_queue WHEN OLD.recovery_id='z-empty' BEGIN SELECT RAISE(ABORT,'outside selected window'); END`)
+	testutil.FailErr(t, "guard later candidate", err)
+	n, err := s.Retention.reclaimRecoveryBatch(ctx)
+	testutil.FailErr(t, "retire only first candidate window", err)
+	if n != blobMaintenanceBatchSize {
+		t.Fatalf("selected candidate work=%d", n)
+	}
+	var manifests, queued int
+	testutil.FailErr(t, "count live manifests", s.sqlDB.QueryRowContext(ctx, `SELECT count(*) FROM source_recovery_entries`).Scan(&manifests))
+	testutil.FailErr(t, "count later candidate", s.sqlDB.QueryRowContext(ctx, `SELECT count(*) FROM source_recovery_reclaim_queue WHERE recovery_id='z-empty'`).Scan(&queued))
+	if manifests != blobMaintenanceBatchSize || queued != 1 {
+		t.Fatalf("live manifests=%d later candidate=%d", manifests, queued)
+	}
+	_, err = s.sqlDB.ExecContext(ctx, `DROP TRIGGER refuse_unselected_candidate`)
+	testutil.FailErr(t, "release later candidate guard", err)
+	n, err = s.Retention.reclaimRecoveryBatch(ctx)
+	testutil.FailErr(t, "retire next actual window", err)
+	if n != 1 {
+		t.Fatalf("later candidate work=%d", n)
 	}
 }

@@ -73,8 +73,8 @@ func (r *ProcessLifecycle) WatchIndex(sessionID, handle string, snapshot indexwa
 		snapshot.Release()
 		return
 	}
-	proc.indexWatch.Release()
-	proc.indexWatch = snapshot
+	proc.resources.indexWatch.Release()
+	proc.resources.indexWatch = snapshot
 }
 
 // TakeIndexWatch returns the process's index capture to an awaiting caller.
@@ -85,8 +85,8 @@ func (r *ProcessLifecycle) TakeIndexWatch(sessionID, handle string) indexwatch.S
 	}
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
-	snapshot := proc.indexWatch
-	proc.indexWatch = indexwatch.Snapshot{}
+	snapshot := proc.resources.indexWatch
+	proc.resources.indexWatch = indexwatch.Snapshot{}
 	return snapshot
 }
 
@@ -145,30 +145,6 @@ func (r *ProcessLifecycle) killProcess(proc *Process) {
 	}
 }
 
-// DisposeSession removes every handle and waits for process exit.
-func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string) error {
-	if r == nil {
-		return nil
-	}
-	sessionID = trim(sessionID)
-	r.jobs.mu.Lock()
-	procs := r.jobs.sessions[sessionID]
-	delete(r.jobs.sessions, sessionID)
-	for _, proc := range procs {
-		proc.discarded = true
-	}
-	r.jobs.mu.Unlock()
-	for _, proc := range procs {
-		r.killProcess(proc)
-	}
-	for _, proc := range procs {
-		if err := r.awaitSettled(ctx, proc); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // awaitSettled waits for process exit and output drain under the caller's deadline.
 func (r *ProcessLifecycle) awaitSettled(ctx context.Context, proc *Process) error {
 	select {
@@ -179,47 +155,15 @@ func (r *ProcessLifecycle) awaitSettled(ctx context.Context, proc *Process) erro
 	}
 }
 
-// Close rejects new work and waits for registered processes to exit.
-func (r *ProcessLifecycle) Close(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, processCloseTimeout)
-	defer cancel()
-	if r == nil {
-		return nil
-	}
-	r.jobs.mu.Lock()
-	if r.jobs.closed {
-		r.jobs.mu.Unlock()
-		return nil
-	}
-	r.jobs.closed = true
-	var procs []*Process
-	for sessionID, sessionProcs := range r.jobs.sessions {
-		for _, proc := range sessionProcs {
-			proc.discarded = true
-			procs = append(procs, proc)
-		}
-		delete(r.jobs.sessions, sessionID)
-	}
-	r.jobs.mu.Unlock()
-
-	for _, proc := range procs {
-		r.killProcess(proc)
-	}
-	for _, proc := range procs {
-		if err := r.awaitSettled(ctx, proc); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // OnExit releases process-scoped resources after exit, or immediately for an absent handle.
 func (r *ProcessLifecycle) OnExit(sessionID, handle string, fn func()) {
 	if r == nil || fn == nil {
 		return
 	}
-	proc, err := r.jobs.lookup(sessionID, handle)
-	if err != nil || proc == nil {
+	r.jobs.mu.Lock()
+	proc := r.jobs.ownedProcessesLocked(trim(sessionID))[trim(handle)]
+	r.jobs.mu.Unlock()
+	if proc == nil {
 		fn()
 		return
 	}
@@ -234,7 +178,13 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		return
 	}
 	r.jobs.mu.Lock()
-	if proc.silent || proc.discarded || !proc.hasExit || proc.terminalPublished {
+	if proc.discarded {
+		// The retained physical drain owns release and closes only after it
+		// finishes; terminal publication must not take that custody away.
+		r.jobs.mu.Unlock()
+		return
+	}
+	if proc.silent || !proc.hasExit || proc.terminalPublished {
 		r.jobs.mu.Unlock()
 		return
 	}
@@ -248,8 +198,9 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		TerminationReason: proc.reason, ExitCode: proc.exitCode, Failure: proc.failure,
 		Stages: append([]hostcmd.StageResult(nil), proc.Stages...),
 	}
-	completion.IndexWatch = proc.indexWatch
-	proc.indexWatch = indexwatch.Snapshot{}
+	owned := proc.resources.take()
+	completion.UnsavedDocumentPaths, completion.ReleaseNotices = owned.unsavedDocumentPaths, owned.releaseNotices
+	completion.IndexWatch = owned.indexWatch
 	exitCode := proc.exitCode
 	boundary := proc.boundary
 	facts := proc.facts
@@ -280,7 +231,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		complete(ctx, completion)
 		return
 	}
-	completion.IndexWatch.Release()
+	owned.release()
 }
 
 func trim(s string) string {

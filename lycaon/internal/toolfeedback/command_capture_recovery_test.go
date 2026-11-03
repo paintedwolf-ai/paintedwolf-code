@@ -21,7 +21,7 @@ func TestCommandRecoveryFollowsCaptureMode(t *testing.T) {
 	}{
 		{"capture sequence", "command", "tool --check; echo $?", true, commandsurface.ErrSequenceUnsupported, "omit `terminal_capture`"},
 		{"capture pipe", "command", "tool --check | tee output.txt", true, argv.ErrShellMetacharacters, "omit `terminal_capture`"},
-		{"ordinary pipe", "command", "tool --check | tee output.txt", false, argv.ErrShellMetacharacters, "Use the `pipeline` array"},
+		{"ordinary pipe", "command", "tool --check | tee output.txt", false, argv.ErrShellMetacharacters, "Use the `verify` tool's `pipeline` array"},
 		{"terminal pipe", "terminal_open", "tool --check | tee output.txt", false, argv.ErrShellMetacharacters, "run the composed form under `command`"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

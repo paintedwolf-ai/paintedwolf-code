@@ -3,7 +3,7 @@ id: EDIT_FILE_TOO_LARGE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - edit
     - replace_lines
     - code_rewrite
@@ -14,6 +14,7 @@ requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.max_file_bytes
     - paintedwolf.path

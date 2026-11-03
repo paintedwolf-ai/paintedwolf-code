@@ -69,7 +69,7 @@ func TestHostObligationHeldReleasedByTerminalStatus(t *testing.T) {
 func TestHostObligationHeldFalseWithoutDeclaredObligations(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	if _, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0"); err != nil {
+	if _, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1"); err != nil {
 		testutil.FailErr(t, "start run", err)
 	}
 	held, err := mgr.Obligations.HostObligationHeld(ctx, "sess-1")

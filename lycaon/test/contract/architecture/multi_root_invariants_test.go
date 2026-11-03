@@ -70,6 +70,7 @@ func TestMultiRootPathDiscoveryToolsRejectUnknownLabel(t *testing.T) {
 	ctx := context.Background()
 	probe := "@missing/secondary-sentinel.txt"
 	registered := toolfixture.BootRegisteredToolSet(t, reg)
+	program := toolfixture.NewProgramFixture(t)
 	for name := range registered {
 		cap := multiRootCapabilityOf(name)
 		if cap != toolcontract.MultiRootPathConsume && cap != toolcontract.MultiRootDiscovery {
@@ -85,6 +86,21 @@ func TestMultiRootPathDiscoveryToolsRejectUnknownLabel(t *testing.T) {
 			continue
 		}
 		t.Run(name, func(t *testing.T) {
+			if toolcontract.IsCommandOperation(name) {
+				source, ok := multiRootCommandProbe(name, probe)
+				if !ok {
+					t.Fatalf("missing native root probe for operation %s", name)
+				}
+				out, err := program.Invoke(t, source, fix.tctx("s1"))
+				code := toolRejectCode(err)
+				if out.Refusal != nil {
+					code = out.Refusal.Code
+				}
+				if code != "UNKNOWN_ROOT_LABEL" {
+					t.Fatalf("operation %s root refusal=%s outcome=%+v error=%v", name, code, out, err)
+				}
+				return
+			}
 			_, err := reg.Run(ctx, name, args, fix.tctx("s1"))
 			if err == nil {
 				t.Fatalf("%s(%v) accepted an unknown root label", name, args)
@@ -117,6 +133,7 @@ func TestMultiRootZeroRootsStructuredReject(t *testing.T) {
 			SessionID: "s1"},
 	}
 	registered := toolfixture.BootRegisteredToolSet(t, reg)
+	program := toolfixture.NewProgramFixture(t)
 	for name := range registered {
 		cap := multiRootCapabilityOf(name)
 		if cap != toolcontract.MultiRootPathConsume && cap != toolcontract.MultiRootDiscovery {
@@ -132,6 +149,21 @@ func TestMultiRootZeroRootsStructuredReject(t *testing.T) {
 			continue
 		}
 		t.Run(name, func(t *testing.T) {
+			if toolcontract.IsCommandOperation(name) {
+				source, ok := multiRootCommandProbe(name, ".")
+				if !ok {
+					t.Fatalf("missing native root probe for operation %s", name)
+				}
+				out, err := program.Invoke(t, source, tctx)
+				code := toolRejectCode(err)
+				if out.Refusal != nil {
+					code = out.Refusal.Code
+				}
+				if code != "PROJECT_HAS_NO_ROOTS" {
+					t.Fatalf("operation %s root refusal=%s outcome=%+v error=%v", name, code, out, err)
+				}
+				return
+			}
 			_, err := reg.Run(ctx, name, args, tctx)
 			if err == nil {
 				t.Fatalf("%s(%v) ran with no folder attached", name, args)
@@ -156,86 +188,61 @@ func TestMultiRootZeroRootsStructuredReject(t *testing.T) {
 }
 
 func TestMultiRootPathToolResolvesLabeledRoot(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
 	fix := newMultiRootFixture(t)
-	ctx := context.Background()
-	out, err := reg.Run(ctx, "read", map[string]any{"path": "@lycaon-den/secondary-sentinel.txt"}, fix.tctx("s1"))
-	contractcheck.FailErr(t, "read labeled root", err)
-	if !strings.Contains(out, "secondary") {
-		t.Fatalf("read output = %q", out)
+	out := assertRootProgramSuccess(t, rootProgram(t, "cat -- @lycaon-den/secondary-sentinel.txt", fix.tctx("s1")))
+	if out != "secondary" {
+		t.Fatalf("labeled source bytes=%q", out)
 	}
 }
 
 func TestMultiRootPathToolRejectsUnknownLabel(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
 	fix := newMultiRootFixture(t)
-	ctx := context.Background()
-	_, err := reg.Run(ctx, "read", map[string]any{"path": "@missing/secondary-sentinel.txt"}, fix.tctx("s1"))
-	if err == nil {
-		t.Fatal("expected unknown label reject")
-	}
-	code := toolRejectCode(err)
-	if code != "UNKNOWN_ROOT_LABEL" {
-		t.Fatalf("err = %v code = %q want UNKNOWN_ROOT_LABEL", err, code)
+	out := rootProgram(t, `cat -- "$(native_path -- @missing/secondary-sentinel.txt)"`, fix.tctx("s1"))
+	if out.Refusal == nil || out.Refusal.Code != "UNKNOWN_ROOT_LABEL" {
+		t.Fatalf("unknown root outcome=%+v", out)
 	}
 }
 
-func TestMultiRootPathToolRejectsTraversal(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
+func TestMultiRootExplicitAddressRejectsTraversal(t *testing.T) {
 	fix := newMultiRootFixture(t)
-	ctx := context.Background()
-	_, err := reg.Run(ctx, "read", map[string]any{"path": "../outside.txt"}, fix.tctx("s1"))
-	if err == nil {
-		t.Fatal("expected traversal reject")
+	contractcheck.FailErr(t, "seed real external traversal target", os.WriteFile(filepath.Join(filepath.Dir(fix.primaryDir), "outside.txt"), []byte("outside-secret"), 0o600))
+	// Explicit root addressing must stay inside that root. A native absolute
+	// temporary path instead uses the shared default filesystem authority.
+	out := rootProgram(t, `cat -- "$(native_path -- '@lycaon/../outside.txt')"`, fix.tctx("s1"))
+	if out.Refusal == nil || out.Refusal.Code != "SURVEY_PATH_ESCAPE" {
+		t.Fatalf("path escape outcome=%+v", out)
 	}
 }
 
 func TestMultiRootBareRelativeUsesActiveRootOnly(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
 	fix := newMultiRootFixture(t)
-	ctx := context.Background()
-	_, err := reg.Run(ctx, "read", map[string]any{"path": "secondary-sentinel.txt"}, fix.tctx("s1"))
-	if err == nil {
-		t.Fatal("expected missing file on active primary root")
+	out := rootProgram(t, "cat -- secondary-sentinel.txt", fix.tctx("s1"))
+	if out.Status == 0 || out.Stdout != "" {
+		t.Fatalf("relative read escaped active root: %+v", out)
 	}
 }
 
 func TestMultiRootDiscoveryUnionFindsBothRoots(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
 	fix := newMultiRootFixture(t)
-	ctx := context.Background()
-	out, err := reg.Run(ctx, "find", map[string]any{
-		"path":      ".",
-		"name_glob": "*-sentinel.txt",
-	}, fix.tctx("s1"))
-	contractcheck.FailErr(t, "find union", err)
-	if !strings.Contains(out, "primary-sentinel.txt") || !strings.Contains(out, "@lycaon-den") {
-		t.Fatalf("find union output = %q", out)
+	out := assertRootProgramSuccess(t, rootProgram(t, "find . @lycaon-den -name '*-sentinel.txt'", fix.tctx("s1")))
+	if !strings.Contains(out, "primary-sentinel.txt") || !strings.Contains(out, filepath.Join(fix.secondaryDir, "secondary-sentinel.txt")) {
+		t.Fatalf("explicit multi-root find=%q", out)
 	}
 }
 
 func TestMultiRootDiscoveryUnionListDir(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
 	fix := newMultiRootFixture(t)
-	ctx := context.Background()
-	out, err := reg.Run(ctx, "list_dir", map[string]any{"path": ".", "max_depth": 1}, fix.tctx("s1"))
-	contractcheck.FailErr(t, "list_dir union", err)
-	if !strings.Contains(out, "primary-sentinel.txt") || !strings.Contains(out, "@lycaon-den") {
-		t.Fatalf("list_dir union output = %q", out)
+	out := assertRootProgramSuccess(t, rootProgram(t, "ls -1 . @lycaon-den", fix.tctx("s1")))
+	if !strings.Contains(out, "primary-sentinel.txt") || !strings.Contains(out, "secondary-sentinel.txt") {
+		t.Fatalf("explicit multi-root listing=%q", out)
 	}
 }
 
 func TestMultiRootDiscoveryUnionGrep(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
 	fix := newMultiRootFixture(t)
-	ctx := context.Background()
-	out, err := reg.Run(ctx, "grep", map[string]any{
-		"pattern": "secondary",
-		"path":    ".",
-	}, fix.tctx("s1"))
-	contractcheck.FailErr(t, "grep union", err)
-	if !strings.Contains(out, "secondary-sentinel.txt") {
-		t.Fatalf("grep union output = %q", out)
+	out := assertRootProgramSuccess(t, rootProgram(t, "rg secondary . @lycaon-den", fix.tctx("s1")))
+	if !strings.Contains(out, filepath.Join(fix.secondaryDir, "secondary-sentinel.txt")) {
+		t.Fatalf("explicit multi-root search=%q", out)
 	}
 }
 
@@ -285,15 +292,10 @@ func TestMultiRootResolverQualifyRoundTrip(t *testing.T) {
 }
 
 func TestMultiRootPathsArrayToolStat(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
 	fix := newMultiRootFixture(t)
-	ctx := context.Background()
-	out, err := reg.Run(ctx, "stat", map[string]any{
-		"paths": []any{"@lycaon-den/secondary-sentinel.txt"},
-	}, fix.tctx("s1"))
-	contractcheck.FailErr(t, "stat labeled root", err)
+	out := assertRootProgramSuccess(t, rootProgram(t, "stat -- @lycaon-den/secondary-sentinel.txt", fix.tctx("s1")))
 	if !strings.Contains(out, "secondary-sentinel.txt") {
-		t.Fatalf("stat output = %q", out)
+		t.Fatalf("labeled stat=%q", out)
 	}
 }
 
@@ -321,5 +323,15 @@ func TestMultiRootAnalyzeRootsBudget(t *testing.T) {
 	contractcheck.FailErr(t, "AnalyzeRoots", err)
 	if mrb.RenderedBytes() > budget.TotalBytes+256 {
 		t.Fatalf("rendered %d exceeds budget %d", mrb.RenderedBytes(), budget.TotalBytes)
+	}
+}
+
+func TestMultiRootUnattachedAtWordRemainsLiteral(t *testing.T) {
+	fix := newMultiRootFixture(t)
+	contractcheck.FailErr(t, "create literal at-name", os.Mkdir(filepath.Join(fix.primaryDir, "@missing"), 0o700))
+	contractcheck.FailErr(t, "seed literal at-name", os.WriteFile(filepath.Join(fix.primaryDir, "@missing", "file"), []byte("literal-only"), 0o600))
+	out := assertRootProgramSuccess(t, rootProgram(t, "cat @missing/file", fix.tctx("s1")))
+	if out != "literal-only" {
+		t.Fatalf("unknown word became root authority: %q", out)
 	}
 }

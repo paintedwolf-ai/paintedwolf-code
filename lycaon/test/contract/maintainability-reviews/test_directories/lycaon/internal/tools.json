@@ -4,17 +4,19 @@
   "kind": "test_suite",
   "workstream": "tool-domains",
   "disposition": "retain",
-  "reason": "Retain the 50-source-file shared tool contract package and its 41-file suite. Provider projection is a pure view of ToolMeta used by request builders; execution validation retains the full catalog schema. Keeping projection beside its contract avoids a second schema owner. Catalog-wide tests preserve concrete type unions, local required fields, unchanged host rejection, and valid arguments when unsupported constraints are omitted.",
+  "reason": "Retain the 50-source-file shared tool contract package and its 41-file suite. Provider projection is a pure view of ToolMeta used by request builders; execution validation retains the full catalog schema. Keeping projection beside its contract avoids a second schema owner. Catalog-wide tests preserve concrete type unions, local required fields, unchanged host rejection, and valid arguments when unsupported constraints are omitted. Typed command resource and program rejection causes project once here for the evaluator and native domains; a native utility home would invert that dependency.",
   "reviewed_commit": "9c0469fb72d7fb8cbcae9ad9cff6adb6095d26d0",
   "ceiling": 41,
   "boundaries": {
     "lycaon/internal/tools/catalog_registry_test.go": "49c960f1e5ac9cec5d62967b6dc340524dbc66487064975248fe2e3792da89ca",
-    "lycaon/internal/tools/confine_request_parity_test.go": "c571018230a22c0985b430376cc7216a66c98065a6aa39a92a3ffe9f2a819415",
+    "lycaon/internal/tools/confine_request_parity_test.go": "ce799f896cc55fd277d69a411aa5c27bfafe6d8c06538f395854d12b83bfb50c",
     "lycaon/internal/tools/source_context_test.go": "bd7d89bb3ad46c1dc63f198f906e0a35b9f4f1dabae33b0a1c743cfc2281bef6",
     "lycaon/internal/tools/file_change_review_test.go": "5909d66ac6b182e59a85077f11e04c8543923791444085f791f58554f945796b",
     "lycaon/internal/tools/provider_projection_test.go": "effe5be99ceb73504157ce3d5f9611b476361eb8d8fedbb59102297021162c18",
     "lycaon/internal/tools/provider_projection_combinators_test.go": "7dbdbd3024acbdb481cfd5698cabf49c800701d2f890afc1403e7d9ea4e16b03",
-    "lycaon/internal/tools/provider_projection_catalog_test.go": "97f1f91d82ce811297cfd6f43718d325bb76161682aea2eb61390d9c5c18341b"
+    "lycaon/internal/tools/provider_projection_catalog_test.go": "97f1f91d82ce811297cfd6f43718d325bb76161682aea2eb61390d9c5c18341b",
+    "lycaon/internal/tools/command_resource_test.go": "163a8859e4b819a40e40243ae9039e43973535ef50319d070717705d6fdfbdaa",
+    "lycaon/internal/toolexecution/program_evaluator_refusal_test.go": "9836168dd1146162324e18ec6f98ce7a67411fbf4a81646147f1a3c90e275813"
   },
   "reviewed_shape": "e4b36d7a61f8f92d2c011371e6184cd8104815eae8ea028778720388cf47d44b"
 }

@@ -22,6 +22,9 @@ import (
 // outer helper. The plan is on 3, the marker on 4, and the control socket on 6.
 const signalReportFD = 5
 
+// InheritedStartFD follows the four fixed namespace-relay descriptors.
+const InheritedStartFD = 7
+
 // reportReady is the report byte that says the inner helper has its signal
 // handlers; any other byte names the signal that killed the target.
 const reportReady = 0xff
@@ -34,7 +37,7 @@ const reportReady = 0xff
 // action, and reports each refused socket call to refusals when it is set. The
 // returned signal, when set, killed the target and should end this process
 // the same way.
-func Relaunch(self string, args []string, plan []byte, network Network, marker, refusals *os.File) (code int, sig syscall.Signal, err error) {
+func Relaunch(self string, args []string, plan []byte, network Network, marker, refusals *os.File, inherited []*os.File) (code int, sig syscall.Signal, err error) {
 	// The parent-death signal is tied to the thread that forks.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -68,14 +71,25 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 	if refusals != nil {
 		lines = refusals
 	}
-	sup := newSupervisor(control, network, lines)
+	sup, err := newSupervisor(control, network, lines)
+	if err != nil {
+		_ = read.Close()
+		_ = write.Close()
+		_ = reportWrite.Close()
+		_ = control.Close()
+		_ = controlChild.Close()
+		return 0, 0, err
+	}
 	defer sup.close()
 	// A nil marker leaves its descriptor closed in the child.
-	cmd.ExtraFiles = []*os.File{read, marker, reportWrite, controlChild}
+	cmd.ExtraFiles = append([]*os.File{read, marker, reportWrite, controlChild}, inherited...)
 	cmd.SysProcAttr = namespaceAttr()
 	events := notifyForwarded()
 	defer signal.Stop(events)
 	err = cmd.Start()
+	for _, file := range inherited {
+		_ = file.Close()
+	}
 	_ = read.Close()
 	_ = reportWrite.Close()
 	_ = controlChild.Close()
@@ -183,7 +197,7 @@ func namespaceAttr() *syscall.SysProcAttr {
 // target leaves, and ends with the target's status. afterStart runs once the
 // target exists. The returned error is the raw exec failure, for the caller to
 // classify.
-func Supervise(path string, argv, env []string, afterStart func()) (code int, sig syscall.Signal, err error) {
+func Supervise(path string, argv, env []string, files []uintptr, afterStart func()) (code int, sig syscall.Signal, err error) {
 	// The target must not inherit the outer helper's report pipe or control socket.
 	syscall.CloseOnExec(signalReportFD)
 	syscall.CloseOnExec(controlFD)
@@ -196,7 +210,10 @@ func Supervise(path string, argv, env []string, afterStart func()) (code int, si
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return 0, 0, fmt.Errorf("dumpable: %w", err)
 	}
-	pid, err := syscall.ForkExec(path, argv, &syscall.ProcAttr{Env: env, Files: []uintptr{0, 1, 2}})
+	if files == nil {
+		files = []uintptr{0, 1, 2}
+	}
+	pid, err := syscall.ForkExec(path, argv, &syscall.ProcAttr{Env: env, Files: files})
 	if err != nil {
 		return 0, 0, err
 	}

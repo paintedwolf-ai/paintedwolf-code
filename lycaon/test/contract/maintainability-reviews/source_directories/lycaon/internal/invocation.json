@@ -1,0 +1,18 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/invocation",
+  "kind": "module",
+  "workstream": "portable-command-admission",
+  "disposition": "retain",
+  "reason": "Retain 26 production files in the invocation owner. Native start preparation, shared reviewed-input commit, progress and settlement have explicit domain phases; none creates another subsystem or authority owner. Input screening, SQL transition ordering and output claim recovery depend on one invocation lifetime. The atomicity, foreign-scope, retained-input and cold-recovery contracts support this membership; growth or structural changes require renewed review.",
+  "reviewed_commit": "f8b6e619a71e2f6e228be09f97e1a3f65a9ddabb",
+  "ceiling": 26,
+  "boundaries": {
+    "lycaon/internal/invocation/program_owner_input_test.go": "0e672ff81a6d6d80d60f4ad12681d990a882aa6949548ed745a39d13da968dc2",
+    "lycaon/internal/invocation/program_owner_commit_fault_test.go": "f895a9acda1814d7859db9b3e96b2974ca680b5e4ebf9653ac74c1a299467178",
+    "lycaon/internal/invocation/program_owner_recovery_test.go": "ab289f2c19f9290a9d9fe2a2379643fef642c91c2cb7bd3e94a9022a08e7268d",
+    "lycaon/internal/invocation/program_owner_scope_test.go": "36d716f3cab9a527da55d33a2aafc71f8b11a3489f45b7f2480f5b453cd3366d",
+    "lycaon/internal/invocation/program_input_capture_test.go": "ad917b63c46e2c828adadaf578887d5bc63673f23bb3fe75052414dfe7f328e5"
+  },
+  "reviewed_shape": "6834a605f125ebd150ec68ed66c42676d92f7abdd8beeff39dbf039a962c99f1"
+}

@@ -9,7 +9,15 @@
       "system_executables": [
         "/usr/lib/{multiarch}/webkit2gtk-4.1/WebKitWebProcess",
         "/usr/lib/{multiarch}/webkit2gtk-4.1/WebKitNetworkProcess",
-        "/usr/lib/{multiarch}/webkit2gtk-4.1/WebKitGPUProcess"
+        "/usr/lib/{multiarch}/webkit2gtk-4.1/WebKitGPUProcess",
+        "/usr/bin/bwrap",
+        "/usr/bin/true",
+        "/usr/libexec/glycin-loaders/2+/glycin-heif",
+        "/usr/libexec/glycin-loaders/2+/glycin-image-rs",
+        "/usr/libexec/glycin-loaders/2+/glycin-jpeg2000",
+        "/usr/libexec/glycin-loaders/2+/glycin-jxl",
+        "/usr/libexec/glycin-loaders/2+/glycin-raw",
+        "/usr/libexec/glycin-loaders/2+/glycin-svg"
       ],
       "library_roots": ["/usr/lib/{multiarch}"]
     },
@@ -17,7 +25,15 @@
       "system_executables": [
         "/usr/libexec/webkit2gtk-4.1/WebKitWebProcess",
         "/usr/libexec/webkit2gtk-4.1/WebKitNetworkProcess",
-        "/usr/libexec/webkit2gtk-4.1/WebKitGPUProcess"
+        "/usr/libexec/webkit2gtk-4.1/WebKitGPUProcess",
+        "/usr/bin/bwrap",
+        "/usr/bin/true",
+        "/usr/libexec/glycin-loaders/2+/glycin-heif",
+        "/usr/libexec/glycin-loaders/2+/glycin-image-rs",
+        "/usr/libexec/glycin-loaders/2+/glycin-jpeg2000",
+        "/usr/libexec/glycin-loaders/2+/glycin-jxl",
+        "/usr/libexec/glycin-loaders/2+/glycin-raw",
+        "/usr/libexec/glycin-loaders/2+/glycin-svg"
       ],
       "library_roots": ["/usr/lib64"]
     },
@@ -25,7 +41,15 @@
       "system_executables": [
         "/usr/lib/webkit2gtk-4.1/WebKitWebProcess",
         "/usr/lib/webkit2gtk-4.1/WebKitNetworkProcess",
-        "/usr/lib/webkit2gtk-4.1/WebKitGPUProcess"
+        "/usr/lib/webkit2gtk-4.1/WebKitGPUProcess",
+        "/usr/bin/bwrap",
+        "/usr/bin/true",
+        "/usr/libexec/glycin-loaders/2+/glycin-heif",
+        "/usr/libexec/glycin-loaders/2+/glycin-image-rs",
+        "/usr/libexec/glycin-loaders/2+/glycin-jpeg2000",
+        "/usr/libexec/glycin-loaders/2+/glycin-jxl",
+        "/usr/libexec/glycin-loaders/2+/glycin-raw",
+        "/usr/libexec/glycin-loaders/2+/glycin-svg"
       ],
       "library_roots": ["/usr/lib"]
     }

@@ -81,8 +81,9 @@ func (e *Capabilities) preflightLocalNetworkCapability(
 				Authorized: true,
 				Ports:      spawnPortNarrowing(result.ListenPorts, capReq.LocalListen.Ports),
 			}, &tools.LoopbackConnectResult{
-				Authorized: true,
-				Ports:      spawnPortNarrowing(result.ConnectPorts, capReq.LoopbackConnect.Ports),
+				Authorized:            true,
+				RequiresOwnedListener: result.ConnectRequiresOwnedListener,
+				Ports:                 spawnPortNarrowing(result.ConnectPorts, capReq.LoopbackConnect.Ports),
 			}, nil
 	}
 	listen, err = e.preflightLocalListenCapability(ctx, tool, args, tc)

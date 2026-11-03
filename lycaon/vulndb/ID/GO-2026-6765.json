@@ -1,0 +1,73 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cli/cli"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cli/cli/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.97.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-64653",
+  "GHSA-4fjg-2h4q-fwg3"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6765"
+ },
+ "details": "GitHub CLI allows path traversal through unescaped request URL components in github.com/cli/cli",
+ "id": "GO-2026-6765",
+ "modified": "2026-10-19T21:08:35Z",
+ "published": "2026-10-19T21:08:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cli/cli/security/advisories/GHSA-4fjg-2h4q-fwg3"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-64653"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/cli/cli/commit/0c2eea6338a2323cfff000160b9b5a56a38d2a06"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cli/cli/releases/tag/v2.97.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "GitHub CLI allows path traversal through unescaped request URL components in github.com/cli/cli"
+}

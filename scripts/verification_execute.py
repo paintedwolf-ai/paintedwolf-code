@@ -566,11 +566,12 @@ class Executor:
         result, result_path = job["result"], job["result_path"]
         consumers, stage_id, log = result["consumers"], result["stage_id"], Path(result["log"])
         code = job["future"].result()
-        result.update(exit_code=code, finished_at=time.time())
+        result.update(exit_code=code, finished_at=time.time(), queued_at=result['started_at'])
+        result['started_at'] = job['reservation'].entry.get('started_at', result['queued_at'])
         for request, index, _, _ in job["needs"]:
             self.running[request["ticket"]].discard(index)
         print(log.read_text(errors="replace"), end="", flush=True)
-        if code not in {130, 143}:
+        if code not in {130, 143} and 'started_at' in job['reservation'].entry:
             record_duration(self.queue, result["names"], result["finished_at"] - result["started_at"])
         if code == 130 and all(c in self.finished for c in consumers):
             self.stages.append(result)

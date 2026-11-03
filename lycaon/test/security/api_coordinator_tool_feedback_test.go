@@ -129,8 +129,8 @@ func TestCoordinatorPromptSuccessWorkflowGateBanner(t *testing.T) {
 	mock := &sequentialLLMClient{completions: []*modelcall.Completion{
 		{ToolCalls: []wire.ToolCall{{
 			ID:   "call_read",
-			Name: "read",
-			Args: map[string]any{"path": "notes.md"},
+			Name: "command",
+			Args: map[string]any{"command": "cat notes.md"},
 		}}},
 		{Content: "notes reviewed"},
 	}}

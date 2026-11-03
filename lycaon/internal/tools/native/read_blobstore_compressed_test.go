@@ -28,7 +28,7 @@ func TestReadToolDecompressesBlobstoreManagedSpill(t *testing.T) {
 	plain := strings.Repeat("compressed tool output line\n", 500)
 
 	store := blobstore.Store{Root: host}
-	blob, err := store.PutAt(tooloutput.ToolOutputSpillRelPath(plain), strings.NewReader(plain), bytebound.Materialization(10<<20))
+	blob, err := store.PutAt(t.Context(), tooloutput.ToolOutputSpillRelPath(plain), strings.NewReader(plain), bytebound.Materialization(10<<20))
 	testutil.FailErr(t, "spill via blobstore", err)
 
 	// The read below exercises decompression only if the stored bytes are compressed.
@@ -71,7 +71,7 @@ func TestReadToolOrdinaryFileUnaffectedByBlobstoreCompression(t *testing.T) {
 func TestReadRetainedDiffPagesIgnoreLaterWorkspaceChanges(t *testing.T) {
 	root, host := t.TempDir(), t.TempDir()
 	diff := strings.Repeat("+original line\n", 2500) + "+original final line\n"
-	spill := tooloutput.SpillWholeRaw(host, tooloutput.Screened(diff), 0)
+	spill := tooloutput.SpillWholeRaw(t.Context(), host, tooloutput.Screened(diff), 0)
 	if spill.SpillPath == "" {
 		t.Fatal("failed to retain diff")
 	}
@@ -91,7 +91,7 @@ func TestReadRetainedDiffPagesIgnoreLaterWorkspaceChanges(t *testing.T) {
 func TestReadLargeToolSpillUsesRetentionBound(t *testing.T) {
 	root, host := t.TempDir(), t.TempDir()
 	plain := strings.Repeat(strings.Repeat("x", 4095)+"\n", 2050) + "retained tail\n"
-	spill := tooloutput.SpillWholeRaw(host, tooloutput.Screened(plain), 0)
+	spill := tooloutput.SpillWholeRaw(t.Context(), host, tooloutput.Screened(plain), 0)
 	if spill.SpillPath == "" || len(plain) <= readcaps.MaxFileBytes {
 		t.Fatal("fixture must retain an observation above the project-file limit")
 	}

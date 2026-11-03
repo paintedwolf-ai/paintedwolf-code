@@ -381,7 +381,7 @@ func TestCapabilityPathAuthorityReadRefusesControlPlane(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{
 		"read_path": filepath.Join(cfg, "credential-vault.age"),
-	}}, "")
+	}}, "", "")
 	if reject == nil || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
 		t.Fatalf("control-plane read path reject = %+v", reject)
 	}
@@ -392,7 +392,7 @@ func TestCapabilityPathAuthorityWriteRefusesControlPlane(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{
 		"write_root": filepath.Join(cfg, "credential-vault.age"),
-	}}, "")
+	}}, "", "")
 	if reject == nil || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
 		t.Fatalf("control-plane write root reject = %+v", reject)
 	}
@@ -479,7 +479,7 @@ func TestCapabilityPathAuthorityLeavesOnlyInvokingScratch(t *testing.T) {
 	scratch := filepath.Join(cfg, "scratch", "own")
 	for _, field := range []string{"read_path", "write_root"} {
 		for _, path := range []string{filepath.Join(scratch, "file"), filepath.Join(cfg, "scratch", "other", "file"), filepath.Join(cfg, "store.db")} {
-			reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{field: path}}, scratch)
+			reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{field: path}}, scratch, "")
 			own := path == filepath.Join(scratch, "file")
 			if (reject == nil) != own {
 				t.Fatalf("%s %s reject=%+v", field, path, reject)

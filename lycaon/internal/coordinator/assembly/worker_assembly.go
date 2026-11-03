@@ -14,7 +14,7 @@ const siblingNoteInjectCap = 8
 
 // WorkerContextBuilder loads leg metadata for child session prompts.
 type WorkerContextBuilder interface {
-	BuildWorkerPromptContext(childSessionID string, sess *api.Session) (inject.WorkerLegContext, error)
+	BuildWorkerPromptContext(ctx context.Context, childSessionID string, sess *api.Session) (inject.WorkerLegContext, error)
 }
 
 // SiblingNoteDeliveryRecorder prepares retained context and commits it after a response.

@@ -1,7 +1,38 @@
 #!/usr/bin/env bash
-# Populate pinned compiler/generator inputs before the offline lane starts.
+# Populate pinned verification inputs before the offline lane starts.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+if [[ "${1:-}" == search-reference ]]; then
+  [[ $# -eq 2 ]] || { echo "error: expected a search-reference destination" >&2; exit 2; }
+  exec python3 "$ROOT/scripts/ci_policy/search_reference.py" "$2"
+fi
+if [[ "${1:-}" == repository-tools ]]; then
+  if [[ $# -eq 3 && "$2" == --signer ]]; then
+    exec nix --extra-experimental-features "nix-command flakes" build --inputs-from "$ROOT" --no-write-lock-file nixpkgs#minisign --out-link "$3"
+  fi
+  if [[ $# -eq 3 && "$2" == --python ]]; then
+    case "$(uname -s):$(uname -m)" in
+      Linux:x86_64) system=x86_64-linux ;;
+      Linux:aarch64) system=aarch64-linux ;;
+      Darwin:x86_64) system=x86_64-darwin ;;
+      Darwin:arm64) system=aarch64-darwin ;;
+      *) echo "error: verification Python requires a supported Linux or macOS architecture" >&2; exit 2 ;;
+    esac
+    exec nix --extra-experimental-features "nix-command flakes" build --inputs-from "$ROOT" --no-write-lock-file --impure \
+      --expr "let pkgs = (builtins.getFlake \"nixpkgs\").legacyPackages.${system}; in pkgs.python3.withPackages (p: [ p.pip ])" \
+      --out-link "$3"
+  fi
+  [[ $# -eq 1 ]] || { echo "error: expected repository-tools [--signer DIRECTORY | --python DIRECTORY]" >&2; exit 2; }
+  case "$(uname -s)" in
+    Linux)
+      sudo apt-get update -qq
+      sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg minisign pacman-package-manager rpm
+      ;;
+    Darwin) HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign ;;
+    *) echo "error: repository tools require macOS or apt-based Linux" >&2; exit 2 ;;
+  esac
+  exit 0
+fi
 case "${1:-verification}" in
   verification|analysis) ;;
   *) echo "error: unknown CI input profile: $1" >&2; exit 2 ;;

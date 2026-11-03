@@ -203,45 +203,9 @@ func (m *Matcher) harvestMatches(ctx context.Context, s string) []Match {
 }
 
 func (m *Matcher) needleMatches(s string, n needle, v HarvestedValue) []Match {
-	if n.text == "" || len(n.text) > len(s) {
-		return nil
-	}
 	var hits []Match
-	byteAt := 0
-	for occurrences := 0; v.NonDisclosable || occurrences < maxHarvestOccurrences; {
-		rel := strings.Index(s[byteAt:], n.text)
-		if rel < 0 {
-			break
-		}
-		at := byteAt + rel
-		byteAt = at + len(n.text)
-		if !v.NonDisclosable && wordBounded(s, at, byteAt) {
-			continue
-		}
-		occurrences++
-		start := utf8.RuneCountInString(s[:at])
-		// A line of a multi-line value is not the value its reference names.
-		reference := ""
-		if n.whole {
-			reference = v.Reference
-		}
-		hits = append(hits, Match{
-			RuleID:   v.RuleID,
-			Title:    v.Title,
-			Severity: "high",
-			Start:    start,
-			End:      start + utf8.RuneCountInString(n.text),
-			// Exact matches need a synthetic shape for approval copy.
-			GenericShape:   GenericShape(n.plain),
-			Fingerprint:    v.Fingerprint,
-			VarName:        v.Name,
-			Container:      v.Container,
-			Source:         v.Source,
-			Reference:      reference,
-			Retired:        v.Retired,
-			NonDisclosable: v.NonDisclosable,
-		})
-	}
+	state := needleCursor{}
+	_ = m.needleMatchesVisit(s, n, v, &state, len(s), func(hit Match, _, _ int) error { hits = append(hits, hit); return nil })
 	return hits
 }
 
@@ -292,43 +256,4 @@ func (m *Matcher) dropIgnored(ctx context.Context, hits []Match) []Match {
 		out = append(out, hit)
 	}
 	return out
-}
-
-// propagateNonDisclosable marks matches overlapping protected exact values and
-// copies the managed reference onto them for presentation. Retired bytes keep
-// no reference: theirs no longer resolves.
-func propagateNonDisclosable(hits []Match) {
-	for i := range hits {
-		for j := range hits {
-			if !overlaps(hits[i], hits[j]) {
-				continue
-			}
-			if hits[j].NonDisclosable {
-				hits[i].NonDisclosable = true
-			}
-			if hits[i].Reference == "" && !hits[i].Retired && hits[j].Reference != "" {
-				hits[i].Reference = hits[j].Reference
-			}
-		}
-	}
-}
-
-// mergeContainerEvidence preserves binding provenance on overlapping hits.
-func mergeContainerEvidence(hits []Match) []Match {
-	for i := range hits {
-		if hits[i].Source != SourceShapeRule || hits[i].VarName != "" {
-			continue
-		}
-		for j := range hits {
-			if hits[j].Source != SourceContainerHarvest {
-				continue
-			}
-			if overlaps(hits[i], hits[j]) {
-				hits[i].VarName = hits[j].VarName
-				hits[i].Container = hits[j].Container
-				break
-			}
-		}
-	}
-	return hits
 }

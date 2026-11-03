@@ -147,7 +147,7 @@ func TestDriveSendsTrustedPointerAndKeyboardInput(t *testing.T) {
 		t.Fatalf("right click = %+v", menus)
 	}
 	var clickResult struct {
-		Point  struct{ X, Y float64 } `json:"point"`
+		Point  struct{ X, Y float64 }   `json:"point"`
 		Target struct{ Tag, ID string } `json:"target"`
 	}
 	testutil.FailErr(t, "decode click result", json.Unmarshal(report.Results[0], &clickResult))

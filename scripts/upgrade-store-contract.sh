@@ -12,6 +12,15 @@ upgrade_store_health_matches() {
     ($health.status == "ok" or $health.status == "degraded")' >/dev/null
 }
 
+upgrade_owned_base() {
+  local manifest="$1/daemon.json" pid="$2"
+  [[ -f "${manifest}" && ! -L "${manifest}" ]] || return 1
+  jq -er --argjson pid "${pid}" '
+    select(.pid == $pid and .host == "127.0.0.1" and (.port | type) == "number" and
+      .port > 0 and .port <= 65535 and .port == (.port | floor)) |
+    "http://127.0.0.1:\(.port)"' "${manifest}" 2>/dev/null
+}
+
 upgrade_store_fingerprint() {
   python3 - "$1" <<'PYCODE'
 import hashlib

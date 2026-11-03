@@ -1,6 +1,6 @@
 id: repo-researcher
 name: Repo researcher
-description: Read-only codebase survey — grep/find/read, architecture traces, targeted file analysis; scope.mode read
+description: Read-only codebase survey — code search, architecture traces, targeted file analysis; scope.mode read
 tool_profile: explore_readonly
 exec_mode: none
 skills:

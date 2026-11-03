@@ -28,8 +28,8 @@ func TestStandardCacheDataRootsDarwin(t *testing.T) {
 			filepath.Join(home, "Library/Caches"),
 		})
 	})
-	testutil.FailErr(t, "prepare platform caches", preparePackageCacheDataRoots(Confinement{}, func(fseffect.Location, os.FileMode) error {
+	testutil.FailErr(t, "prepare platform caches", preparePackageCacheDataRoots(Confinement{}, func(fseffect.Location, os.FileMode) (int, error) {
 		t.Error("platform cache preparation attempted a filesystem effect")
-		return nil
+		return 0, nil
 	}))
 }

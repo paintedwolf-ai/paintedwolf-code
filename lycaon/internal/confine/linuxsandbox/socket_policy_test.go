@@ -17,8 +17,11 @@ func TestDecideSocketCalls(t *testing.T) {
 	direct := Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}}}
 	directUDP := Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}, {Protocol: "udp", Port: 53}}}
 	anyDirect := Network{Mode: NetworkDirectIP}
-	grant := Network{Mode: NetworkDeny, SocketPaths: []string{"/run/user/1/agent.sock"}}
+	grant := Network{Mode: NetworkDeny, SocketGrants: []SocketGrant{{Path: "/run/user/1/agent.sock", FD: SocketReferenceFD}}}
 	browser := Network{Mode: NetworkDeny, Browser: true, LoopbackConnect: true}
+	nix := KnownDelegatedEndpoints()[0].Path
+	nixGrant := Network{Mode: NetworkDeny, SocketGrants: []SocketGrant{{Path: nix, FD: SocketReferenceFD}}}
+	nixAlias := Network{Mode: NetworkDeny, SocketGrants: []SocketGrant{{Path: "/tmp/build/daemon.sock", FD: SocketReferenceFD, Delegated: DelegatedNixDaemon}}}
 
 	cases := []struct {
 		name    string
@@ -28,8 +31,14 @@ func TestDecideSocketCalls(t *testing.T) {
 		refusal string
 	}{
 		{"unix grant", grant, SocketRequest{Op: OpConnect, Unix: "/run/user/1/agent.sock", Stream: true}, Perform, ""},
+		{"unix seqpacket grant", grant, SocketRequest{Op: OpConnect, Unix: "/run/user/1/agent.sock", Seqpacket: true}, Perform, ""},
+		{"unix datagram grant refused", grant, SocketRequest{Op: OpConnect, Unix: "/run/user/1/agent.sock"}, Refuse, "network-outbound /run/user/1/agent.sock"},
 		{"unix grant spelled with dots", grant, SocketRequest{Op: OpConnect, Unix: "/run/user/1/../1/agent.sock", Stream: true}, Perform, ""},
 		{"unix other path", grant, SocketRequest{Op: OpConnect, Unix: "/run/dbus/system_bus_socket", Stream: true}, Refuse, "network-outbound /run/dbus/system_bus_socket"},
+		{"nix daemon refused despite its grant", nixGrant, SocketRequest{Op: OpConnect, Unix: nix, Stream: true}, Refuse, "host-service-delegation " + nix},
+		{"nix daemon spelled with dots", nixGrant, SocketRequest{Op: OpConnect, Unix: "/nix/var/nix/../nix/daemon-socket/socket", Stream: true}, Refuse, "host-service-delegation " + nix},
+		{"nix daemon without a grant", Network{Mode: NetworkDeny}, SocketRequest{Op: OpConnect, Unix: nix, Stream: true}, Refuse, "host-service-delegation " + nix},
+		{"nix daemon through a granted alias", nixAlias, SocketRequest{Op: OpConnect, Unix: "/tmp/build/daemon.sock", Seqpacket: true}, Refuse, "host-service-delegation /tmp/build/daemon.sock"},
 		{"unix without grants", deny, SocketRequest{Op: OpConnect, Unix: "/var/run/docker.sock", Stream: true}, Refuse, "network-outbound /var/run/docker.sock"},
 		{"unix bind path", grant, SocketRequest{Op: OpBind, Unix: "/tmp/x.sock", Stream: true}, Refuse, "network-bind /tmp/x.sock"},
 		{"unix abstract", deny, SocketRequest{Op: OpConnect, Abstract: true, Stream: true}, Perform, ""},

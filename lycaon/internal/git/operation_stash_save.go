@@ -53,7 +53,7 @@ func (p *operationPlan) saveStash(ctx context.Context, dir string, opts gitexec.
 	if err != nil {
 		return nil, err
 	}
-	headTree, err := optionalObject(ctx, dir, head+"^{tree}")
+	headTree, err := ResolveOptionalObject(ctx, dir, head+"^{tree}")
 	if err != nil {
 		return nil, err
 	}
