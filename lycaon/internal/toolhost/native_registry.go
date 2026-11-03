@@ -56,16 +56,12 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 
 	catalog := sourcecatalog.Process()
 	write := &native.WriteTool{Boundary: boundary}
-	edit := &native.EditTool{Boundary: boundary}
-	replaceLines := &native.ReplaceLinesTool{Boundary: boundary}
-	codeRewrite := &native.CodeRewriteTool{Boundary: boundary}
 	restoreVersion := &native.RestoreVersionTool{Boundary: boundary}
 	summarizeCaps, err := summarize.LoadCaps()
 	if err != nil {
 		return nil, nil, fmt.Errorf("summarize caps: %w", err)
 	}
 	summarizeTool := &surveytools.SummarizeTool{Boundary: boundary, Caps: summarizeCaps, Catalog: catalog, Rerank: deps.rerank}
-	jqEdit := &native.JqEditTool{Boundary: boundary}
 	chmod := &native.ChmodTool{Boundary: boundary}
 	deleteTool := &native.DeleteTool{Boundary: boundary}
 	copyTool := &native.CopyTool{Boundary: boundary}
@@ -84,7 +80,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 	if err := registerCommandOperations(reg, deps.nativeConfig); err != nil {
 		return nil, nil, err
 	}
-	if err := registerCoreNativeTools(register, edit, replaceLines, codeRewrite, restoreVersion, summarizeTool, jqEdit, chmod, chownTool, surveyRepo); err != nil {
+	if err := register("restore_version", restoreVersion.Run); err != nil {
 		return nil, nil, err
 	}
 
@@ -94,21 +90,6 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 		}
 	}
 
-	if deps.nativeConfig.HasTool("git_restore") && deps.git != nil {
-		restoreTool := &native.GitRestoreTool{Git: deps.git, Boundary: boundary}
-		if err := reg.Register("git_restore", restoreTool.Run); err != nil {
-			return nil, nil, err
-		}
-	}
-	if deps.nativeConfig.HasTool("git_commit") && deps.git != nil {
-		commitTool := &native.GitCommitTool{Git: deps.git, Boundary: boundary}
-		if err := reg.Register("git_commit", commitTool.Run); err != nil {
-			return nil, nil, err
-		}
-	}
-	if err := registerGitOperationTools(reg, deps, boundary); err != nil {
-		return nil, nil, err
-	}
 	skillsRead := &skilltools.SkillsReadTool{}
 	if err := register("skills_read", skillsRead.Run); err != nil {
 		return nil, nil, err
@@ -122,7 +103,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 	}
 	return reg, &nativeToolServices{
 		Survey:    &SurveyServices{summarizeTool: summarizeTool, fileAge: deps.fileAge, gitStatusCache: deps.statusCache},
-		Mutations: &MutationServices{writeTool: write, editTool: edit, replaceLinesTool: replaceLines, codeRewriteTool: codeRewrite, restoreVersionTool: restoreVersion, jqEditTool: jqEdit},
+		Mutations: &MutationServices{writeTool: write, restoreVersionTool: restoreVersion},
 		Commands: &CommandServices{commandTool: commandTool, verifyTool: verifyTool, commandOutputTool: commandOutputTool, commandStopTool: commandStopTool,
 			owners: programOwnerTools{boundary: boundary, summarize: summarizeTool, repo: surveyRepo, catalog: catalog, git: deps.git, registry: reg,
 				operations: mutation.Operations{Write: write, Delete: deleteTool, Move: moveTool, Copy: copyTool, Mkdir: mkdirTool, Chmod: chmod,

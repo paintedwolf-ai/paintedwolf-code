@@ -42,9 +42,6 @@ var orchestrationPinnedSurfaces = []string{
 
 // implementPromptToolsNotOnWire explains prompt-only tool references.
 var implementPromptToolsNotOnWire = map[string]string{
-	"summarize":                      "survey-first-pass partial (tool name in backticks); investigate/synthesis/overlay-promote read surfaces own the tool",
-	"edit":                           "product mutations via task() — not coordinator wire",
-	"replace_lines":                  "product mutations via task() — not coordinator wire",
 	"restore_version":                "product mutations via task() — not coordinator wire",
 	"command":                        "investigate/overlay_promote compile the family",
 	"command_output":                 "family compile; live jobs imply it elsewhere",
@@ -54,10 +51,6 @@ var implementPromptToolsNotOnWire = map[string]string{
 	"verify":                         "host-side test runner — surface override at invoke on investigate/overlay_promote",
 	"preview_overlay":                "landing is the overlay-promote surface's; other surfaces name it describing where a write leg ends up",
 	"reject_overlay":                 "landing is the overlay-promote surface's; other surfaces name it describing where a write leg ends up",
-	"chmod":                          "orchestrate surfaces delegate via task()",
-	"code_rewrite":                   "orchestrate surfaces delegate via task()",
-	"git_commit":                     "orchestrate surfaces delegate commits via task()",
-	"git_restore":                    "orchestrate surfaces delegate via task()",
 	"source_history":                 "orchestrate surfaces delegate via task()",
 	"delegate_dispatch":              "workflow delegation legs only (plan_execute) — ambient implement dispatch is task()",
 	"workflow_advance":               "workflow runtime visibility",
@@ -89,8 +82,6 @@ func loadImplementSurfaces(t *testing.T) map[string][]string {
 
 // routingPromptToolsAllowedOffWire documents shared prompt references.
 var routingPromptToolsAllowedOffWire = map[string]string{
-	"survey_repo":     "survey-first-pass partial; investigate/synthesis surfaces own bundle survey",
-	"summarize":       "survey-first-pass partial; investigate/synthesis/overlay-promote surfaces own the briefing tool",
 	"scan_pack":       "core scan policy; routing uses native scan_* drill-down",
 	"reject_overlay":  "overlay-promote / synthesis surfaces own reject; routing prompts describe the model but routing itself dispatches via promote_overlay or task()",
 	"preview_overlay": "overlay-promote / synthesis surfaces own preview; routing prompts describe the model but routing itself doesn't pre-flight overlays",
@@ -99,10 +90,9 @@ var routingPromptToolsAllowedOffWire = map[string]string{
 
 // orchestrateSharedPromptToolsAllowedOffWire documents shared prompt references.
 var orchestrateSharedPromptToolsAllowedOffWire = map[string]string{
-	"fetch_url":   "coordinator-core external-facts invariant; Lane S surfaces own fetch",
-	"survey_repo": "survey-first-pass partial; investigate/synthesis surfaces own bundle survey",
-	"scan_pack":   "core scan policy; orchestrate surfaces use native scan_* drill-down",
-	"web_search":  "coordinator-core external-facts invariant; Lane S surfaces own search",
+	"fetch_url":  "coordinator-core external-facts invariant; Lane S surfaces own fetch",
+	"scan_pack":  "core scan policy; orchestrate surfaces use native scan_* drill-down",
+	"web_search": "coordinator-core external-facts invariant; Lane S surfaces own search",
 }
 
 // orchestratePromptToolsAllowedOffWire documents surface-specific omissions.

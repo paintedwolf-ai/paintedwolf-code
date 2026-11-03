@@ -10,7 +10,6 @@ tools:
   view_video: sticky
   record_finding: sticky
   pack_board: sticky
-  summarize: sticky
   source_history: sticky
   wait: sticky
   held_result: true

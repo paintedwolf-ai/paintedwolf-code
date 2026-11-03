@@ -231,7 +231,7 @@ func TestRenderPromoteSpillFirstBanner(t *testing.T) {
 	payload := `{"job_id":"job-a","spill_path":"promote-spills/job-a.json","path_status":[{"path":"prompt.py","status":"conflict","hunk_count":23,"conflict_tier":"line_shift"}]}`
 	note, err := RenderPromoteSpillFirstBanner(ctx, payload)
 	testutil.FailErr(t, "RenderPromoteSpillFirstBanner failed", err)
-	for _, want := range []string{"spill_path", "read()", "BANNER_PROMOTE_SPILL_FIRST", "primary"} {
+	for _, want := range []string{"spill_path", "read whole primary product files", "BANNER_PROMOTE_SPILL_FIRST", "primary"} {
 		if want == "spill_path" {
 			if !strings.Contains(note, "promote-spills") && !strings.Contains(note, "spill_path") {
 				t.Fatalf("note = %q want spill path hint", note)

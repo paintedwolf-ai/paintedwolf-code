@@ -12,7 +12,7 @@ when: paintedwolf.fruitless_search_run >= 3
 effect: warn
 copy:
   cause: The same search question came up empty across reworded scopes
-  why: Varying path or path_glob explores where a name might be; it cannot help when the name itself is wrong.
+  why: Varying directories or file filters explores where a name might be; it cannot help when the name itself is wrong.
     The identical-args counter cannot see this, because every rewording lands in a different bucket. Three
     empties for one question is usually the answer arriving, not the search failing.
   fix: 'Read the empty result''s `note` first: it says whether nothing was searched (fix the scope and search

@@ -1,6 +1,6 @@
 # Survey at the scale of the tree
 
-Read repository state with native Git commands in `command`; use `git_commit` for staging and commit review.
+Read repository state with native Git commands in `command`; use `git add` and `git commit` for reviewed, path-scoped commits.
 
 The inventory is `git status --short`, `git diff --stat`, and a bounded `git log`, never every hunk. Narrow large trees by explicit paths. Paths, insertion and deletion counts, and recent messages establish the initial commit groups without reading every changed line.
 

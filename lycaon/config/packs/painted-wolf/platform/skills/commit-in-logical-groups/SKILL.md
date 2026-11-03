@@ -4,19 +4,18 @@ description: When the user asks to commit, split the working tree into coherent 
 optional_tools:
   - command
   - update_progress
-  - git_commit
 ---
 
 # Commit in logical groups
 
 **Entry check:** the user asked for the work to be committed. Committing is never an implicit part of finishing a change.
 
-Read repository state through native Git commands in `command`; load `git_commit` with `request_tools` before committing if needed. `git_commit` owns staging and review, so do not run `git add` or `git commit` through `command`.
+Use native Git commands through `command` for inspection, staging, and commits. Each operation retains host review and session attribution.
 
 ## Mechanics
 
 - [Survey at the scale of the tree](references/survey-at-tree-scale.md): open before the inventory on any tree larger than a few dozen files. Covers path-scoped status, diff statistics, and the single hunk-read batch.
-- [Batch and amend](references/batch-and-amend.md): open before issuing the commits. Covers one response of `git_commit` calls, retrying only a rejected call, and amending this session's own latest commit.
+- [Batch and amend](references/batch-and-amend.md): open before issuing the commits. Covers ordered Git command programs, retrying only a rejected call, and amending this session's own latest commit.
 
 ## Workflow
 
@@ -25,7 +24,7 @@ Read repository state through native Git commands in `command`; load `git_commit
 3. **Leave live work alone even when it is yours.** A file still being changed belongs in a later commit. Half a change under a confident message is worse than no commit.
 4. **Group by the change, not by the directory.** One commit is one reason: a feature with its tests and docs, a fix with its regression, a rename across every file it touched. Generated output travels with the source that produced it. State each group in one line; if you cannot, it is more than one commit. A group that needs a hunk to describe gets that hunk read, not the whole tree.
 5. **Order them so each stands alone.** Prefer a sequence where every commit leaves the project building — a refactor before the feature that needs it, not after.
-6. **Stage by explicit path, every time.** Never stage by wildcard, "all changes", or directory sweep; a large group is still an explicit list. Issue the declared groups together: several `git_commit` calls in one response, in group order, each with its own paths and message.
+6. **Stage by explicit path, every time.** Never stage by wildcard, "all changes", or directory sweep; a large group is still an explicit list. For each group, run `git add -- PATHS` followed by `git commit -m MESSAGE -- PATHS`. Preserve group order; proceed only after the preceding operation succeeds.
 7. **Write messages in the project's existing style.** State what changed and why; do not narrate the process or add trailers the project does not use.
 8. **Verify once and finish.** Commit receipts confirm hashes and committed paths; omitted `uncommitted_*` fields do not prove a clean tree. Run one final `git status --short` in `command`; if it fails, report cleanliness as unverified and do not infer the cause. Once the declared groups are committed, report that status and stop. List later arrivals as remaining work; do not reopen the survey without a new user request.
 
