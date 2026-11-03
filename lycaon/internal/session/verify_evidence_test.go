@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -340,28 +339,22 @@ func TestCommandCompletionRecordsPromotedVerifyEvidence(t *testing.T) {
 	}
 }
 
-func TestConfirmVerifyResult_stampsHostConfirmation(t *testing.T) {
-	declaredMgr, sess, _ := verifyGateHarness(t, "./task check")
-	const matched = `{"stages":[{"command":"./task check","exit_code":0}],"exit_code":0,"passed":true}`
-	if got := declaredMgr.Verification.ConfirmVerifyResult(sess, matched); !strings.Contains(got, `"declared_command_match":true`) {
-		t.Fatalf("declared command match should stamp declared_command_match=true, got %s", got)
-	}
-	const mismatched = `{"stages":[{"command":"echo ok","exit_code":0}],"exit_code":0,"passed":true}`
-	if got := declaredMgr.Verification.ConfirmVerifyResult(sess, mismatched); !strings.Contains(got, `"declared_command_match":false`) {
-		t.Fatalf("unrelated command must stamp declared_command_match=false, got %s", got)
-	}
-	if got := declaredMgr.Verification.ConfirmVerifyResult(sess, mismatched); !strings.Contains(got, `"declared_command":"./task check"`) {
-		t.Fatalf("declared project must stamp declared_command on result, got %s", got)
-	}
-
-	// Declared-but-empty command (the wired undeclared case) — a passing run is never confirmed.
-	undeclaredMgr, sess2, _ := verifyGateHarness(t, "")
-	undeclaredMgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: ""})
-	if got := undeclaredMgr.Verification.ConfirmVerifyResult(sess2, mismatched); !strings.Contains(got, `"declared_command_match":false`) {
-		t.Fatalf("undeclared project must stamp declared_command_match=false, got %s", got)
-	}
-	// Unparseable content is returned untouched.
-	if got := declaredMgr.Verification.ConfirmVerifyResult(sess, "not json"); got != "not json" {
-		t.Fatalf("non-JSON content should pass through, got %s", got)
+func TestVerifyGateStatePreservesSelectedBashSemantics(t *testing.T) {
+	for _, tc := range []struct {
+		name, selected, executed string
+		passed                   bool
+	}{
+		{"selected substitution", `value=$(printf checked); test "$value" = checked`, `value=$(printf checked); test "$value" = checked`, true},
+		{"literal is not expansion", `test "$value" = checked`, `test '$value' = checked`, false},
+		{"redirect destination", `tool > expected`, `tool > other`, false},
+		{"control operator", `check && report`, `check || report`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr, sess, history := verifyGateHarness(t, tc.selected)
+			recordVerify(t, mgr, sess, tc.executed, 0)
+			if passed, _, _ := mgr.Verification.GateState(t.Context(), sess, history); passed != tc.passed {
+				t.Fatalf("selected=%q executed=%q passed=%v", tc.selected, tc.executed, passed)
+			}
+		})
 	}
 }

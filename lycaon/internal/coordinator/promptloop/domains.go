@@ -80,7 +80,6 @@ type ToolsDeps struct {
 	HeldCallBudget              time.Duration
 	CommitEvidenceToolResult    func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (handle string, patchedContent string, err error)
 	RecordSourceRunEvidence     func(ctx context.Context, sessionID string, sess *api.Session, toolName string, run tools.SourceRunCapture)
-	ConfirmVerifyResult         func(sess *api.Session, content string) string
 }
 
 type CloseoutDeps struct {

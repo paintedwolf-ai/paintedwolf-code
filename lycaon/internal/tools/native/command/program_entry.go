@@ -217,7 +217,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	if err != nil {
 		return "", err
 	}
-	parsed, snapshot, err := parseProgram(ctx, memory, source)
+	parsed, snapshot, err := parseProgram(ctx, memory, tool, source)
 	if err != nil {
 		return "", err
 	}
@@ -501,10 +501,10 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 
 // parseProgram validates the entire unit; an excluded construct anywhere
 // refuses before the first statement could run.
-func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, source string) (*commandsurface.ParsedProgram, *commandsurface.ProgramSnapshotLease, error) {
+func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, tool, source string) (*commandsurface.ParsedProgram, *commandsurface.ProgramSnapshotLease, error) {
 	parsed, err := commandsurface.ParseAdmitted(ctx, memory, []byte(source), commandsurface.ParseOptions{})
 	if err != nil {
-		if reject := toolcommand.ProgramSyntaxObservation("command", err); reject != nil {
+		if reject := toolcommand.ProgramSyntaxObservation(tool, err); reject != nil {
 			return nil, nil, reject
 		}
 		return nil, nil, err
@@ -585,7 +585,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		var evaluationRefusal *commandprogram.EvaluationRefusal
 		if errors.As(evalErr, &evaluationRefusal) {
 			span := evaluationRefusal.Node.Span
-			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": evaluationRefusal.Expected, "expected_form": evaluationRefusal.Expected, "reason": evaluationRefusal.Expected}
+			data := map[string]any{"tool": run.tool, "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": evaluationRefusal.Expected, "expected_form": evaluationRefusal.Expected, "reason": evaluationRefusal.Expected}
 			var expansion *commandprogram.ExpansionError
 			if errors.As(evaluationRefusal.Cause, &expansion) && expansion.Limit != "" {
 				data["limit_id"], data["maximum"], data["observed"] = expansion.Limit, expansion.Maximum, expansion.ObservedValue()

@@ -17,13 +17,29 @@ func CommandIdentity(line string) string {
 		return ""
 	}
 	tree, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(line), "")
-	if err != nil {
+	if err != nil || len(tree.Stmts) == 0 {
+		return ""
+	}
+	var formatted bytes.Buffer
+	if err := syntax.NewPrinter().Print(&formatted, tree); err != nil {
 		return ""
 	}
 	static := true
 	syntax.Walk(tree, func(node syntax.Node) bool {
 		switch n := node.(type) {
-		case nil, *syntax.File, *syntax.Stmt, *syntax.CallExpr, *syntax.Word, *syntax.SglQuoted, *syntax.DblQuoted, *syntax.BinaryCmd:
+		case nil, *syntax.File, *syntax.CallExpr, *syntax.Word, *syntax.BinaryCmd:
+		case *syntax.Stmt:
+			if n.Negated || n.Background {
+				static = false
+			}
+		case *syntax.SglQuoted:
+			if n.Dollar {
+				static = false
+			}
+		case *syntax.DblQuoted:
+			if n.Dollar {
+				static = false
+			}
 		case *syntax.Lit:
 			if strings.ContainsAny(n.Value, "*?[{~") {
 				static = false
@@ -34,16 +50,12 @@ func CommandIdentity(line string) string {
 		return static
 	})
 	if static {
-		if stages, err := exec.StagesFromCommandLine(line); err == nil {
+		if stages, err := exec.StagesFromCommandLine(strings.TrimSpace(formatted.String())); err == nil {
 			raw, err := json.Marshal(stages)
 			if err == nil {
 				return "argv:" + string(raw)
 			}
 		}
-	}
-	var formatted bytes.Buffer
-	if err := syntax.NewPrinter().Print(&formatted, tree); err != nil {
-		return ""
 	}
 	return "program:" + formatted.String()
 }
