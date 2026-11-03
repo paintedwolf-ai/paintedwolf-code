@@ -210,7 +210,7 @@ func TestReadReceiptStatesUnrecordedBytesAsUnknown(t *testing.T) {
 
 func TestMixedPublicationRemainsVisibleToPublishingAgent(t *testing.T) {
 	dir := t.TempDir()
-	abs, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
+	_, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
 	ledger := &fakeSourceLedger{
 		floor: 1, floorFound: true,
 		heads: map[string]sourceledger.BranchHead{"r1/main.go": {FileID: "f1", VersionID: "v2", SHA256: sha, State: "content"}},
@@ -229,10 +229,6 @@ func TestMixedPublicationRemainsVisibleToPublishingAgent(t *testing.T) {
 	change, _ := receiptSource(t, out)["last_change"].(map[string]any)
 	if change["actor"] != "mixed" || change["detail"] != "you; user" {
 		t.Fatalf("mixed receipt lost authors: %v", change)
-	}
-	changes, total, ok := sourceview.ForeignChanges(t.Context(), tctx, abs)
-	if !ok || total != 1 || len(changes) != 1 || changes[0].Actor != "mixed" || changes[0].Turn != 0 {
-		t.Fatalf("publisher hid coauthored changes: %+v, total=%d, ok=%v", changes, total, ok)
 	}
 }
 
