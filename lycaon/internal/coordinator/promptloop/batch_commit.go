@@ -272,12 +272,7 @@ func (l *toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string,
 		return nil
 	}
 	if msg.ToolResult != nil && msg.ToolResult.CommandProgram != nil {
-		// Portable command observations come only from confirmed source deliveries.
-		if len(msg.EvidenceHandles) > 0 {
-			msg.Content = prependEvidenceHandles(msg.Content, msg.EvidenceHandles)
-			msg.ToolResult.Content = prependEvidenceHandles(msg.ToolResult.Content, msg.EvidenceHandles)
-		}
-		return nil
+		return l.tagProgramObservation(ctx, sessionID, toolName, msg)
 	}
 	if !eligible {
 		return nil

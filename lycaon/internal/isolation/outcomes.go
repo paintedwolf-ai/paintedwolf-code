@@ -76,7 +76,6 @@ var outcomes = [...]Outcome{
 	{CodeCapabilityRequestInvalid, DispositionRetry},
 	{CodeControlPlaneDenied, DispositionControlPlane},
 	{CodeTerminalPathRefused, DispositionControlPlane},
-	{CodeRefusalReportSilent, DispositionRetry},
 	{CodeDirectIPDenied, DispositionHumanDecision},
 	{CodeDirectIPAuthorizationChanged, DispositionRetry},
 	{CodeDirectIPRequestInvalid, DispositionRetry},
