@@ -12,17 +12,17 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-func (t *Tracker) advanceGenerationLocked(rootID string, requestedGen uint64) {
-	t.sourceGen++
-	if requestedGen > t.sourceGen {
-		t.sourceGen = requestedGen
+func advanceGenerationLocked(t *Tracker, rootID string, requestedGen uint64) {
+	t.store.sourceGen++
+	if requestedGen > t.store.sourceGen {
+		t.store.sourceGen = requestedGen
 	}
 	if rootID != "" {
-		t.rootGens[rootID] = t.sourceGen
+		t.store.rootGens[rootID] = t.store.sourceGen
 	}
 }
 
-func (t *Tracker) populateTrunkChangeFromDiskLocked(ev *TrunkChangeEvent, qpath layeredfs.QualifiedPath) {
+func populateTrunkChangeFromDiskLocked(t *Tracker, ev *TrunkChangeEvent, qpath layeredfs.QualifiedPath) {
 	if ev.OccurredAt.IsZero() {
 		ev.OccurredAt = t.clock()
 	}
@@ -57,15 +57,15 @@ func (t *Tracker) populateTrunkChangeFromDiskLocked(ev *TrunkChangeEvent, qpath 
 	}
 }
 
-func (t *Tracker) isPrivateOrRetainedPathLocked(qpath layeredfs.QualifiedPath) bool {
+func isPrivateOrRetainedPathLocked(t *Tracker, qpath layeredfs.QualifiedPath) bool {
 	if t.core != nil {
 		if _, hasCapturedBase := t.core.CapturedBase(qpath); hasCapturedBase {
 			return true
 		}
 	}
-	indices := t.obsByPath[qpath]
+	indices := t.store.obsByPath[qpath]
 	for i := len(indices) - 1; i >= 0; i-- {
-		if t.observations[indices[i]].Layer == layeredfs.LayerPrivate {
+		if t.store.observations[indices[i]].Layer == layeredfs.LayerPrivate {
 			return true
 		}
 	}
@@ -74,19 +74,19 @@ func (t *Tracker) isPrivateOrRetainedPathLocked(qpath layeredfs.QualifiedPath) b
 
 // markTrunkPathObservationsStaleLocked checks prior trunk observations for qpath against ev.
 // It never uses timestamp equality alone as proof that an observed version is unchanged.
-func (t *Tracker) markTrunkPathObservationsStaleLocked(qpath layeredfs.QualifiedPath, ev TrunkChangeEvent) {
-	indices := t.obsByPath[qpath]
+func markTrunkPathObservationsStaleLocked(t *Tracker, qpath layeredfs.QualifiedPath, ev TrunkChangeEvent) {
+	indices := t.store.obsByPath[qpath]
 	for _, idx := range indices {
-		obs := t.observations[idx]
+		obs := t.store.observations[idx]
 		if obs.Layer != layeredfs.LayerTrunk {
 			continue
 		}
 		if !observationAffectedByTrunkChange(obs, ev) {
 			continue
 		}
-		t.staleObsIDs[obs.ObservationID] = StaleReasonObservedDependencyChanged
-		t.pendingNotice[qpath] = struct{}{}
-		t.pendingObsRefs[obs.ObservationID] = struct{}{}
+		t.coherence.staleObsIDs[obs.ObservationID] = StaleReasonObservedDependencyChanged
+		t.coherence.pendingNotice[qpath] = struct{}{}
+		t.coherence.pendingObsRefs[obs.ObservationID] = struct{}{}
 	}
 }
 
@@ -107,7 +107,8 @@ func observationAffectedByTrunkChange(obs SourceObservation, ev TrunkChangeEvent
 	return true
 }
 
-func (t *Tracker) buildTrunkInvalidationsLocked(
+func buildTrunkInvalidationsLocked(
+	t *Tracker,
 	qpath layeredfs.QualifiedPath,
 	ev TrunkChangeEvent,
 	gen uint64,
@@ -116,8 +117,8 @@ func (t *Tracker) buildTrunkInvalidationsLocked(
 		return nil
 	}
 	parentDir, childName := splitParentAndName(qpath)
-	_, wasNegative := t.negativeLookups[qpath]
-	delete(t.negativeLookups, qpath)
+	_, wasNegative := t.store.negativeLookups[qpath]
+	delete(t.store.negativeLookups, qpath)
 
 	var events []InvalidationEvent
 	if (wasNegative || ev.Kind == TrunkCreate) && t.facts.SupportsNegativeLookupInvalidation {
@@ -196,11 +197,11 @@ func sortQualifiedPaths(paths []layeredfs.QualifiedPath) {
 	})
 }
 
-func (t *Tracker) rootGenLocked(rootID string) uint64 {
-	if gen, ok := t.rootGens[rootID]; ok && gen > 0 {
+func rootGenLocked(t *Tracker, rootID string) uint64 {
+	if gen, ok := t.store.rootGens[rootID]; ok && gen > 0 {
 		return gen
 	}
-	return t.sourceGen
+	return t.store.sourceGen
 }
 
 func normalizeQPath(qp layeredfs.QualifiedPath) layeredfs.QualifiedPath {
@@ -213,4 +214,3 @@ func normalizeQPath(qp layeredfs.QualifiedPath) layeredfs.QualifiedPath {
 	}
 	return layeredfs.QualifiedPath{RootID: qp.RootID, Rel: rel}
 }
-

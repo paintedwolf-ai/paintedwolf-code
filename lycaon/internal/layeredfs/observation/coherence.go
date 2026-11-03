@@ -9,14 +9,15 @@ import (
 // RecordTrunkChange processes a trunk mutation, updates source generation, marks affected
 // trunk observations stale, and dispatches targeted adapter cache invalidations.
 // Private paths and retained BaseCaptures remain immune to trunk edits.
-func (t *Tracker) RecordTrunkChange(ev TrunkChangeEvent) []InvalidationEvent {
+func (c *CoherenceTracker) RecordTrunkChange(ev TrunkChangeEvent) []InvalidationEvent {
+	t := c.tr
 	qpath := normalizeQPath(ev.Path)
 	t.mu.Lock()
-	t.advanceGenerationLocked(qpath.RootID, ev.SourceGeneration)
-	gen := t.rootGenLocked(qpath.RootID)
-	t.populateTrunkChangeFromDiskLocked(&ev, qpath)
+	advanceGenerationLocked(t, qpath.RootID, ev.SourceGeneration)
+	gen := rootGenLocked(t, qpath.RootID)
+	populateTrunkChangeFromDiskLocked(t, &ev, qpath)
 
-	t.trunkState[qpath] = recordedTrunkState{
+	t.coherence.trunkState[qpath] = recordedTrunkState{
 		kind:       ev.Kind,
 		sha256:     ev.NewSHA256,
 		size:       ev.NewSize,
@@ -28,17 +29,17 @@ func (t *Tracker) RecordTrunkChange(ev TrunkChangeEvent) []InvalidationEvent {
 		updatedAt:  t.clock(),
 	}
 
-	isPrivate := t.isPrivateOrRetainedPathLocked(qpath)
+	isPrivate := isPrivateOrRetainedPathLocked(t, qpath)
 	var dispatched []InvalidationEvent
 	if !isPrivate {
-		t.markTrunkPathObservationsStaleLocked(qpath, ev)
+		markTrunkPathObservationsStaleLocked(t, qpath, ev)
 		if ev.PreviousPath != nil {
 			prev := normalizeQPath(*ev.PreviousPath)
-			if !t.isPrivateOrRetainedPathLocked(prev) {
-				t.markTrunkPathObservationsStaleLocked(prev, ev)
+			if !isPrivateOrRetainedPathLocked(t, prev) {
+				markTrunkPathObservationsStaleLocked(t, prev, ev)
 			}
 		}
-		dispatched = t.buildTrunkInvalidationsLocked(qpath, ev, gen)
+		dispatched = buildTrunkInvalidationsLocked(t, qpath, ev, gen)
 	}
 	sinks := append([]InvalidationSink(nil), t.invalidationSinks...)
 	t.mu.Unlock()
@@ -53,12 +54,13 @@ func (t *Tracker) RecordTrunkChange(ev TrunkChangeEvent) []InvalidationEvent {
 
 // RecordWorkerMutation records a worker-initiated mutation through the mount and dispatches
 // immediate cache invalidations for negative lookups, same-size changes, and directory listings.
-func (t *Tracker) RecordWorkerMutation(qpath layeredfs.QualifiedPath, kind TrunkChangeKind) []InvalidationEvent {
+func (c *CoherenceTracker) RecordWorkerMutation(qpath layeredfs.QualifiedPath, kind TrunkChangeKind) []InvalidationEvent {
+	t := c.tr
 	qpath = normalizeQPath(qpath)
 	t.mu.Lock()
-	_, wasNegative := t.negativeLookups[qpath]
-	delete(t.negativeLookups, qpath)
-	gen := t.rootGenLocked(qpath.RootID)
+	_, wasNegative := t.store.negativeLookups[qpath]
+	delete(t.store.negativeLookups, qpath)
+	gen := rootGenLocked(t, qpath.RootID)
 	var events []InvalidationEvent
 	if t.facts.SupportsInvalidationUpcall {
 		parentDir, childName := splitParentAndName(qpath)
@@ -102,13 +104,14 @@ func (t *Tracker) RecordWorkerMutation(qpath layeredfs.QualifiedPath, kind Trunk
 
 // RecordWatcherOverflow marks affected trunk observations as uncertain due to a watcher gap
 // or queue overflow and triggers adapter cache invalidation/revalidation.
-func (t *Tracker) RecordWatcherOverflow(rootID string, reason string) []InvalidationEvent {
+func (c *CoherenceTracker) RecordWatcherOverflow(rootID string, reason string) []InvalidationEvent {
+	t := c.tr
 	if reason == "" {
 		reason = "watcher_queue_overflow"
 	}
 	t.mu.Lock()
-	t.advanceGenerationLocked(rootID, 0)
-	gen := t.sourceGen
+	advanceGenerationLocked(t, rootID, 0)
+	gen := t.store.sourceGen
 	targetRoots := map[string]struct{}{}
 	if rootID != "" {
 		targetRoots[rootID] = struct{}{}
@@ -116,31 +119,30 @@ func (t *Tracker) RecordWatcherOverflow(rootID string, reason string) []Invalida
 		for id := range t.rootsByID {
 			targetRoots[id] = struct{}{}
 		}
-		for _, obs := range t.observations {
+		for _, obs := range t.store.observations {
 			targetRoots[obs.Path.RootID] = struct{}{}
 		}
 	}
 	for rID := range targetRoots {
-		t.rootGens[rID] = gen
-		t.overflowByRoot[rID] = append(t.overflowByRoot[rID], reason)
+		t.store.rootGens[rID] = gen
+		t.coherence.overflowByRoot[rID] = append(t.coherence.overflowByRoot[rID], reason)
 	}
-	for i := range t.observations {
-		obs := &t.observations[i]
+	for i := range t.store.observations {
+		obs := &t.store.observations[i]
 		if obs.Layer != layeredfs.LayerTrunk {
 			continue
 		}
 		if _, match := targetRoots[obs.Path.RootID]; !match && rootID != "" {
 			continue
 		}
-		if t.isPrivateOrRetainedPathLocked(obs.Path) {
+		if isPrivateOrRetainedPathLocked(t, obs.Path) {
 			continue
 		}
 		obs.Uncertain = true
 		obs.Provenance = ProvenanceUncertainOverflow
-		obs.UncertaintyReason = reason
-		t.staleObsIDs[obs.ObservationID] = StaleReasonWatcherOverflowUncertain
-		t.pendingNotice[obs.Path] = struct{}{}
-		t.pendingObsRefs[obs.ObservationID] = struct{}{}
+		t.coherence.staleObsIDs[obs.ObservationID] = StaleReasonWatcherOverflowUncertain
+		t.coherence.pendingNotice[obs.Path] = struct{}{}
+		t.coherence.pendingObsRefs[obs.ObservationID] = struct{}{}
 	}
 	var events []InvalidationEvent
 	if t.facts.UntouchedVisibility == VisibilityLive && t.facts.SupportsInvalidationUpcall {
@@ -166,43 +168,62 @@ func (t *Tracker) RecordWatcherOverflow(rootID string, reason string) []Invalida
 }
 
 // PendingTrunkChangedNotice returns the structured trunk.changed notification without consuming it.
-func (t *Tracker) PendingTrunkChangedNotice() (*TrunkChangedNotice, bool) {
+func (c *CoherenceTracker) PendingTrunkChangedNotice() (*TrunkChangedNotice, bool) {
+	t := c.tr
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.buildNoticeLocked()
+	return buildNoticeLocked(t)
+}
+
+// LastTrunkChangedNotice returns the pending trunk.changed notice or the most recently consumed notice.
+func (c *CoherenceTracker) LastTrunkChangedNotice() (*TrunkChangedNotice, bool) {
+	t := c.tr
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if notice, ok := buildNoticeLocked(t); ok {
+		return notice, true
+	}
+	if t.coherence.lastConsumedNotice != nil {
+		cp := *t.coherence.lastConsumedNotice
+		return &cp, true
+	}
+	return nil, false
 }
 
 // ConsumeTrunkChangedNotice returns and clears the pending trunk.changed notification for the next model request.
-func (t *Tracker) ConsumeTrunkChangedNotice() (*TrunkChangedNotice, bool) {
+func (c *CoherenceTracker) ConsumeTrunkChangedNotice() (*TrunkChangedNotice, bool) {
+	t := c.tr
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	notice, ok := t.buildNoticeLocked()
+	notice, ok := buildNoticeLocked(t)
 	if !ok {
 		return nil, false
 	}
-	t.pendingNotice = make(map[layeredfs.QualifiedPath]struct{})
-	t.pendingObsRefs = make(map[string]struct{})
+	cp := *notice
+	t.coherence.lastConsumedNotice = &cp
+	t.coherence.pendingNotice = make(map[layeredfs.QualifiedPath]struct{})
+	t.coherence.pendingObsRefs = make(map[string]struct{})
 	return notice, true
 }
 
-func (t *Tracker) buildNoticeLocked() (*TrunkChangedNotice, bool) {
-	if len(t.pendingNotice) == 0 && len(t.overflowByRoot) == 0 {
+func buildNoticeLocked(t *Tracker) (*TrunkChangedNotice, bool) {
+	if len(t.coherence.pendingNotice) == 0 && len(t.coherence.overflowByRoot) == 0 {
 		return nil, false
 	}
-	paths := make([]layeredfs.QualifiedPath, 0, len(t.pendingNotice))
-	for p := range t.pendingNotice {
+	paths := make([]layeredfs.QualifiedPath, 0, len(t.coherence.pendingNotice))
+	for p := range t.coherence.pendingNotice {
 		paths = append(paths, p)
 	}
 	sortQualifiedPaths(paths)
 
-	refs := make([]string, 0, len(t.pendingObsRefs))
-	for ref := range t.pendingObsRefs {
+	refs := make([]string, 0, len(t.coherence.pendingObsRefs))
+	for ref := range t.coherence.pendingObsRefs {
 		refs = append(refs, ref)
 	}
 	sort.Strings(refs)
 
 	var reasons []string
-	for _, rList := range t.overflowByRoot {
+	for _, rList := range t.coherence.overflowByRoot {
 		reasons = append(reasons, rList...)
 	}
 	return &TrunkChangedNotice{
@@ -212,7 +233,7 @@ func (t *Tracker) buildNoticeLocked() (*TrunkChangedNotice, bool) {
 		ObservationRefs:      refs,
 		UncertainOverflow:    len(reasons) > 0,
 		OverflowReasons:      reasons,
-		SourceGeneration:     t.sourceGen,
+		SourceGeneration:     t.store.sourceGen,
 		GrantsAuthority:      false,
 		EstablishesMergeBase: false,
 	}, true

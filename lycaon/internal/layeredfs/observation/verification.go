@@ -8,16 +8,17 @@ import (
 
 // BindVerificationReceipt creates a VerificationBinding bound to checkpointID, current observed
 // sources, effective read attribution completeness, and enclosing scope source generations.
-func (t *Tracker) BindVerificationReceipt(
+func (v *VerificationTracker) BindVerificationReceipt(
 	receiptID string,
 	checkpointID string,
 	scopeRoots []string,
 ) VerificationBinding {
+	t := v.tr
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	observed := make([]SourceObservation, len(t.observations))
-	copy(observed, t.observations)
+	observed := make([]SourceObservation, len(t.store.observations))
+	copy(observed, t.store.observations)
 
 	completeness := t.facts.AttributionCompleteness
 	for _, obs := range observed {
@@ -37,7 +38,7 @@ func (t *Tracker) BindVerificationReceipt(
 
 	rootGens := make(map[string]uint64, len(roots))
 	for _, rID := range roots {
-		rootGens[rID] = t.rootGenLocked(rID)
+		rootGens[rID] = rootGenLocked(t, rID)
 	}
 
 	return VerificationBinding{
@@ -47,7 +48,7 @@ func (t *Tracker) BindVerificationReceipt(
 		ObservedSources:             observed,
 		ReadAttributionCompleteness: completeness,
 		EnclosingScopeRoots:         roots,
-		ScopeSourceGeneration:       t.sourceGen,
+		ScopeSourceGeneration:       t.store.sourceGen,
 		RootSourceGenerations:       rootGens,
 		BoundAt:                     t.clock(),
 	}
@@ -55,17 +56,18 @@ func (t *Tracker) BindVerificationReceipt(
 
 // EvaluateReceiptFreshness evaluates whether trunk changes, watcher overflows, or incomplete
 // read attribution invalidate a verification receipt.
-func (t *Tracker) EvaluateReceiptFreshness(
+func (v *VerificationTracker) EvaluateReceiptFreshness(
 	binding VerificationBinding,
 	currentCheckpointID string,
 ) ReceiptFreshnessResult {
+	t := v.tr
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
 	res := ReceiptFreshnessResult{
 		ReceiptID:           binding.ReceiptID,
 		CheckpointID:        binding.CheckpointID,
-		EvaluatedGeneration: t.sourceGen,
+		EvaluatedGeneration: t.store.sourceGen,
 	}
 
 	if binding.CheckpointID != "" && currentCheckpointID != "" && binding.CheckpointID != currentCheckpointID {
@@ -81,10 +83,10 @@ func (t *Tracker) EvaluateReceiptFreshness(
 
 	for _, obs := range binding.ObservedSources {
 		qpath := normalizeQPath(obs.Path)
-		if latestIdx, ok := t.obsByID[obs.ObservationID]; ok {
-			obs = t.observations[latestIdx]
+		if latestIdx, ok := t.store.obsByID[obs.ObservationID]; ok {
+			obs = t.store.observations[latestIdx]
 		}
-		if obs.Layer != layeredfs.LayerTrunk || t.isPrivateOrRetainedPathLocked(qpath) {
+		if obs.Layer != layeredfs.LayerTrunk || isPrivateOrRetainedPathLocked(t, qpath) {
 			continue
 		}
 		if obs.Uncertain || obs.Provenance == ProvenanceUncertainOverflow {
@@ -93,7 +95,7 @@ func (t *Tracker) EvaluateReceiptFreshness(
 			obsRefsMap[obs.ObservationID] = struct{}{}
 			continue
 		}
-		if reason, stale := t.staleObsIDs[obs.ObservationID]; stale {
+		if reason, stale := t.coherence.staleObsIDs[obs.ObservationID]; stale {
 			if reason == StaleReasonWatcherOverflowUncertain {
 				hasOverflow = true
 			} else {
@@ -103,15 +105,15 @@ func (t *Tracker) EvaluateReceiptFreshness(
 			obsRefsMap[obs.ObservationID] = struct{}{}
 			continue
 		}
-		if t.trunkChangedSinceObservationLocked(qpath, obs) {
+		if trunkChangedSinceObservationLocked(t, qpath, obs) {
 			hasObservedChange = true
 			invalidPathsMap[qpath] = struct{}{}
 			obsRefsMap[obs.ObservationID] = struct{}{}
 		}
 	}
 
-	for _, rID := range t.effectiveScopeRootsLocked(binding) {
-		if len(t.overflowByRoot[rID]) > 0 {
+	for _, rID := range effectiveScopeRootsLocked(t, binding) {
+		if len(t.coherence.overflowByRoot[rID]) > 0 {
 			hasOverflow = true
 		}
 	}
@@ -140,7 +142,7 @@ func (t *Tracker) EvaluateReceiptFreshness(
 		res.StaleReason = StaleReasonWatcherOverflowUncertain
 		return res
 	}
-	if t.isAttributionIncomplete(binding) && t.scopeGenerationAdvancedLocked(binding) {
+	if isAttributionIncomplete(binding) && scopeGenerationAdvancedLocked(t, binding) {
 		res.Stale = true
 		res.StaleReason = StaleReasonIncompleteAttributionScopeAdvanced
 		return res
@@ -150,20 +152,22 @@ func (t *Tracker) EvaluateReceiptFreshness(
 
 // BuildPromotionPreviewHints returns stale-observation review hints for promotion preview (#1663).
 // Hints never substitute for exact-base conflict checks or target revalidation.
-func (t *Tracker) BuildPromotionPreviewHints() []StaleObservationHint {
+func (v *VerificationTracker) BuildPromotionPreviewHints() []StaleObservationHint {
+	t := v.tr
 	t.mu.RLock()
-	obsCopy := make([]SourceObservation, len(t.observations))
-	copy(obsCopy, t.observations)
+	obsCopy := make([]SourceObservation, len(t.store.observations))
+	copy(obsCopy, t.store.observations)
 	t.mu.RUnlock()
 
-	return t.BuildPromotionPreviewHintsForBinding(VerificationBinding{
+	return v.BuildPromotionPreviewHintsForBinding(VerificationBinding{
 		ViewID:          t.viewID,
 		ObservedSources: obsCopy,
 	})
 }
 
 // BuildPromotionPreviewHintsForBinding builds stale-observation review hints for a specific binding.
-func (t *Tracker) BuildPromotionPreviewHintsForBinding(binding VerificationBinding) []StaleObservationHint {
+func (v *VerificationTracker) BuildPromotionPreviewHintsForBinding(binding VerificationBinding) []StaleObservationHint {
+	t := v.tr
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -173,28 +177,28 @@ func (t *Tracker) BuildPromotionPreviewHintsForBinding(binding VerificationBindi
 		if _, dup := seenObs[obs.ObservationID]; dup {
 			continue
 		}
-		if latestIdx, ok := t.obsByID[obs.ObservationID]; ok {
-			obs = t.observations[latestIdx]
+		if latestIdx, ok := t.store.obsByID[obs.ObservationID]; ok {
+			obs = t.store.observations[latestIdx]
 		}
 		qpath := normalizeQPath(obs.Path)
-		if obs.Layer != layeredfs.LayerTrunk || t.isPrivateOrRetainedPathLocked(qpath) {
+		if obs.Layer != layeredfs.LayerTrunk || isPrivateOrRetainedPathLocked(t, qpath) {
 			continue
 		}
-		reason := t.staleObsIDs[obs.ObservationID]
+		reason := t.coherence.staleObsIDs[obs.ObservationID]
 		if reason == "" && obs.Uncertain {
 			reason = StaleReasonWatcherOverflowUncertain
 		}
-		if reason == "" && t.trunkChangedSinceObservationLocked(qpath, obs) {
+		if reason == "" && trunkChangedSinceObservationLocked(t, qpath, obs) {
 			reason = StaleReasonObservedDependencyChanged
 		}
 		if reason == "" {
 			continue
 		}
 		seenObs[obs.ObservationID] = struct{}{}
-		curState := t.trunkState[qpath]
+		curState := t.coherence.trunkState[qpath]
 		curGen := curState.generation
 		if curGen == 0 {
-			curGen = t.rootGenLocked(qpath.RootID)
+			curGen = rootGenLocked(t, qpath.RootID)
 		}
 		hints = append(hints, StaleObservationHint{
 			Path:                      qpath,
@@ -221,8 +225,8 @@ func (t *Tracker) BuildPromotionPreviewHintsForBinding(binding VerificationBindi
 	return hints
 }
 
-func (t *Tracker) trunkChangedSinceObservationLocked(qpath layeredfs.QualifiedPath, obs SourceObservation) bool {
-	st, ok := t.trunkState[qpath]
+func trunkChangedSinceObservationLocked(t *Tracker, qpath layeredfs.QualifiedPath, obs SourceObservation) bool {
+	st, ok := t.coherence.trunkState[qpath]
 	if !ok {
 		return false
 	}
@@ -241,7 +245,7 @@ func (t *Tracker) trunkChangedSinceObservationLocked(qpath layeredfs.QualifiedPa
 	return st.generation > obs.SourceGeneration
 }
 
-func (t *Tracker) isAttributionIncomplete(binding VerificationBinding) bool {
+func isAttributionIncomplete(binding VerificationBinding) bool {
 	if binding.ReadAttributionCompleteness != CompletenessComplete {
 		return true
 	}
@@ -256,24 +260,24 @@ func (t *Tracker) isAttributionIncomplete(binding VerificationBinding) bool {
 	return false
 }
 
-func (t *Tracker) effectiveScopeRootsLocked(binding VerificationBinding) []string {
+func effectiveScopeRootsLocked(t *Tracker, binding VerificationBinding) []string {
 	if len(binding.EnclosingScopeRoots) > 0 {
 		return binding.EnclosingScopeRoots
 	}
-	roots := make([]string, 0, len(t.rootGens))
-	for rID := range t.rootGens {
+	roots := make([]string, 0, len(t.store.rootGens))
+	for rID := range t.store.rootGens {
 		roots = append(roots, rID)
 	}
 	sort.Strings(roots)
 	return roots
 }
 
-func (t *Tracker) scopeGenerationAdvancedLocked(binding VerificationBinding) bool {
+func scopeGenerationAdvancedLocked(t *Tracker, binding VerificationBinding) bool {
 	if len(binding.EnclosingScopeRoots) == 0 {
-		return t.sourceGen > binding.ScopeSourceGeneration
+		return t.store.sourceGen > binding.ScopeSourceGeneration
 	}
 	for _, rID := range binding.EnclosingScopeRoots {
-		curRootGen := t.rootGenLocked(rID)
+		curRootGen := rootGenLocked(t, rID)
 		boundGen := binding.ScopeSourceGeneration
 		if g, ok := binding.RootSourceGenerations[rID]; ok && g > 0 {
 			boundGen = g

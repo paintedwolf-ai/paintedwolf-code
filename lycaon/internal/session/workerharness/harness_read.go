@@ -7,9 +7,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+type workspaceReadObserver interface {
+	ObserveReadPath(jobID, childSessionID, workspacePath, branchRoot string, roots []projectroot.RootRef, rawPath string) (observation.SourceObservation, bool)
+}
 
 // Read performs one ordinary read inside a scripted worker child so
 // the observation lands in the child's transcript and evidence ledger exactly as
@@ -38,6 +44,9 @@ func (m *Service) Read(ctx context.Context, child *api.Session, job *api.WorkerT
 	content, err := m.tools.Run(ctx, "read", args, tctx)
 	if err != nil {
 		return "", "", err
+	}
+	if obs, ok := m.Workspaces.(workspaceReadObserver); ok {
+		obs.ObserveReadPath(job.ID, child.ID, job.WorkspacePath, tctx.Source.WorkerBranchRoot, tctx.Source.Roots, path)
 	}
 	projectDir, err := m.Workspace.ActivePath(ctx, child)
 	if err != nil {

@@ -28,6 +28,8 @@ type Calls interface {
 	ListActiveReservations(context.Context, string) ([]call.ActiveReservation, error)
 }
 type Service struct {
+	WorkspaceTrackerRegistry
+	WorkspaceObservationOps
 	store       Sessions
 	workspace   Workspace
 	tasks       Tasks
@@ -38,7 +40,10 @@ type Service struct {
 }
 
 func New(sessions Sessions, workspace Workspace, branchState func(string) (tools.BranchWorkspace, error)) *Service {
-	return &Service{store: sessions, workspace: workspace, branchState: branchState, Touches: NewTouchLedger()}
+	s := &Service{store: sessions, workspace: workspace, branchState: branchState, Touches: NewTouchLedger()}
+	s.WorkspaceTrackerRegistry.svc = s
+	s.WorkspaceObservationOps.svc = s
+	return s
 }
 func (m *Service) SetTasks(tasks Tasks)                     { m.tasks = tasks }
 func (m *Service) SetPublisher(publisher *events.Publisher) { m.events = publisher }

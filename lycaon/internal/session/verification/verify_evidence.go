@@ -7,15 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/project"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,20 +24,6 @@ type VerifyConfigResolver interface {
 
 // VerifySlot groups test evidence for a run.
 const VerifySlot = "tests"
-
-// SetEvidenceStore wires the run-keyed inspector evidence store for verify gating.
-func (m *Service) SetEvidenceStore(s inspector.EvidenceStore) {
-	if m != nil {
-		m.evidenceStore = s
-	}
-}
-
-// SetVerifyConfig supplies the project's selected test command.
-func (m *Service) SetVerifyConfig(r VerifyConfigResolver) {
-	if m != nil {
-		m.verifyConfig = r
-	}
-}
 
 // ConfirmVerifyResult compares a result with the declared command.
 func (m *Service) ConfirmVerifyResult(sess *api.Session, content string) string {
@@ -153,14 +136,9 @@ func (m *Service) RecordSourceRunTerminal(
 			slog.ErrorContext(ctx, "Record verification evidence", "session_id", sess.ID, "error", err)
 		}
 	}
-}
-
-// SourceVerifyCommand resolves the project check independently of the execution tool.
-func (m *Service) SourceVerifyCommand(ctx context.Context, projectDir string) string {
-	if m == nil || m.verifyConfig == nil {
-		return ""
+	if verifyVerdict(run.Verdict) == evidence.GateVerdictPassed {
+		autoBindPassingRun(m, ctx, sess, run.CheckID, run.SourceRevision)
 	}
-	return strings.TrimSpace(m.verifyConfig.VerifyTestCommand(projectDir))
 }
 
 func (m *Service) SourceEvidenceRoot(ctx context.Context, sess *api.Session) string {
@@ -191,31 +169,6 @@ func (m *Service) EvidenceRootFor(sess *api.Session) string {
 		return root
 	}
 	return ""
-}
-
-func BackgroundOutcome(completion bgprocess.Completion) string {
-	if completion.BoundaryRefusal != "" {
-		return api.SourceVerdictUnverifiable
-	}
-	if completion.TerminationReason == bgprocess.TerminationStopped || completion.TerminationReason == bgprocess.TerminationTimedOut {
-		return api.SourceVerdictFailed
-	}
-	if completion.ExitCode == 0 && completion.Failure == nil {
-		return api.SourceVerdictPassed
-	}
-	return api.SourceVerdictFailed
-}
-
-func verifyVerdict(outcome string) evidence.GateVerdict {
-	switch outcome {
-	case api.SourceVerdictUnverifiable:
-		return evidence.GateVerdictUnverifiable
-	case api.SourceVerdictPassed:
-		return evidence.GateVerdictPassed
-	case api.SourceVerdictFailed:
-		return evidence.GateVerdictFailed
-	}
-	return evidence.GateVerdictUnverifiable
 }
 
 // MaxAttemptsPerRun bounds repair attempts.
@@ -289,7 +242,7 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 		if currentRevision == "" || currentRootDigest == "" || revision != currentRevision || rootDigest != currentRootDigest {
 			continue
 		}
-		if m.checkStaleByObservation(ctx, sess, checkID) {
+		if checkStaleByObservation(m, ctx, sess, checkID) {
 			continue
 		}
 		cwd, _ := rec.Artifacts["cwd"].(string)
@@ -311,17 +264,3 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 	}
 }
 
-func (m *Service) Revision(ctx context.Context, root string) (string, string) {
-	if m.verificationSource != nil {
-		return m.verificationSource(ctx, root)
-	}
-	return sourceledger.VerificationState(ctx, m.sourceObservations, root)
-}
-
-// boundaryTime is the current user-intent boundary; older evidence does not count.
-func boundaryTime(history []api.Message) time.Time {
-	if message, ok := api.LastUserIntentMessage(history); ok {
-		return message.CreatedAt
-	}
-	return time.Time{}
-}

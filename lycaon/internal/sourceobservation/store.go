@@ -63,7 +63,6 @@ type File struct {
 	Uncertain        bool
 	SourceGeneration uint64
 	Ino              uint64
-	Dev              uint64
 }
 
 // Store is an explicitly rebuildable SQLite index separate from user history.
@@ -229,7 +228,7 @@ func scanFile(row *sql.Row) (File, bool, error) {
 	file.Uncertain = uncertain != 0
 	file.SourceGeneration = uint64(gen)
 	file.Ino = uint64(ino)
-	file.Dev = uint64(dev)
+	_ = dev
 	return file, true, nil
 }
 
@@ -287,62 +286,10 @@ uncertain=excluded.uncertain, source_generation=excluded.source_generation, ino=
 WHERE observed_files.layer != 'private' OR excluded.layer = 'private'`,
 			rootPath, norm.Path, norm.SHA256, norm.GitOID, norm.Size, norm.Mode, norm.ModifiedNS,
 			string(norm.Provenance), string(norm.Completeness), string(norm.Layer),
-			uncertainInt, int64(norm.SourceGeneration), int64(norm.Ino), int64(norm.Dev)); err != nil {
+			uncertainInt, int64(norm.SourceGeneration), int64(norm.Ino), int64(0)); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
 }
 
-// DeletePaths removes paths that left the tree.
-func (s *Store) DeletePaths(ctx context.Context, rootPath string, paths []string) error {
-	if len(paths) == 0 {
-		return nil
-	}
-	database, err := s.open(ctx)
-	if err != nil {
-		return err
-	}
-	tx, err := database.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	for _, path := range paths {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM observed_files WHERE root_path = ? AND path = ?`, rootPath, path); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
-}
-
-// DeleteRoot removes a detached root's rebuildable observations.
-func (s *Store) DeleteRoot(ctx context.Context, rootPath string) error {
-	database, err := s.open(ctx)
-	if err != nil {
-		return err
-	}
-	_, err = database.ExecContext(ctx, `DELETE FROM observed_files WHERE root_path = ?`, rootPath)
-	return err
-}
-
-// Clear removes every rebuildable observation and compacts the cache file.
-func (s *Store) Clear(ctx context.Context) error {
-	database, err := s.open(ctx)
-	if err != nil {
-		return err
-	}
-	if _, err := database.ExecContext(ctx, `DELETE FROM observed_files`); err != nil {
-		return err
-	}
-	_, err = database.ExecContext(ctx, `VACUUM`)
-	return err
-}
-
-// Close releases the cache database.
-func (s *Store) Close() error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	return s.db.Close()
-}

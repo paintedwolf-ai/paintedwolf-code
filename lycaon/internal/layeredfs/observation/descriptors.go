@@ -3,6 +3,7 @@ package observation
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -12,7 +13,8 @@ import (
 
 // OpenHeldDescriptor opens a read-only handle via Core and binds a HeldDescriptorObservation
 // to the exact object identity and content digest opened at this instant.
-func (t *Tracker) OpenHeldDescriptor(qpath layeredfs.QualifiedPath) (layeredfs.HandleID, HeldDescriptorObservation, error) {
+func (d *DescriptorTracker) OpenHeldDescriptor(qpath layeredfs.QualifiedPath) (layeredfs.HandleID, HeldDescriptorObservation, error) {
+	t := d.tr
 	qpath = normalizeQPath(qpath)
 	t.mu.RLock()
 	core := t.core
@@ -48,12 +50,12 @@ func (t *Tracker) OpenHeldDescriptor(qpath layeredfs.QualifiedPath) (layeredfs.H
 	}
 	t.mu.RUnlock()
 
-	held := t.RecordHeldDescriptorOpen(hid, qpath, attr, digest, ino, dev)
+	held := d.RecordHeldDescriptorOpen(hid, qpath, attr, digest, ino, dev)
 	return hid, held, nil
 }
 
 // RecordHeldDescriptorOpen records an open descriptor's bound identity and content digest.
-func (t *Tracker) RecordHeldDescriptorOpen(
+func (d *DescriptorTracker) RecordHeldDescriptorOpen(
 	hid layeredfs.HandleID,
 	qpath layeredfs.QualifiedPath,
 	attr layeredfs.EntryAttr,
@@ -61,11 +63,12 @@ func (t *Tracker) RecordHeldDescriptorOpen(
 	openedIno uint64,
 	openedDev uint64,
 ) HeldDescriptorObservation {
+	t := d.tr
 	qpath = normalizeQPath(qpath)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	gen := t.rootGenLocked(qpath.RootID)
+	gen := rootGenLocked(t, qpath.RootID)
 	ev := layeredfs.ObservationEvent{
 		ViewID:     t.viewID,
 		Path:       qpath,
@@ -79,11 +82,10 @@ func (t *Tracker) RecordHeldDescriptorOpen(
 		Ino:        openedIno,
 		Dev:        openedDev,
 	}
-	obs := t.buildBaseObservationLocked(qpath, ev, ProvenanceServerFSRequest, t.facts.AttributionCompleteness)
+	obs := buildBaseObservationLocked(t, qpath, ev, ProvenanceServerFSRequest, t.facts.AttributionCompleteness)
 	obs.SHA256 = openedDigest
 	obs.Ino = openedIno
-	obs.Dev = openedDev
-	obs = t.appendObservationLocked(obs)
+	obs = appendObservationLocked(t, obs)
 
 	held := HeldDescriptorObservation{
 		HandleID:         hid,
@@ -91,36 +93,35 @@ func (t *Tracker) RecordHeldDescriptorOpen(
 		Path:             qpath,
 		Layer:            attr.Layer,
 		NodeID:           attr.NodeID,
-		Generation:       attr.Generation,
 		OpenedDigest:     openedDigest,
 		OpenedSize:       attr.Size,
 		OpenedIno:        openedIno,
-		OpenedDev:        openedDev,
 		OpenedModTimeNS:  attr.ModTime.UnixNano(),
 		SourceGeneration: gen,
-		OpenedAt:         obs.ObservedAt,
 	}
-	t.heldByHandle[hid] = held
+	t.store.heldByHandle[hid] = held
 	if attr.NodeID != 0 {
-		t.heldByNode[nodeIdentityKey{nodeID: attr.NodeID, gen: attr.Generation}] = held
+		t.store.heldByNode[nodeIdentityKey{nodeID: attr.NodeID, gen: attr.Generation}] = held
 	}
 	return held
 }
 
 // HeldDescriptor returns the recorded HeldDescriptorObservation for hid.
-func (t *Tracker) HeldDescriptor(hid layeredfs.HandleID) (HeldDescriptorObservation, bool) {
+func (d *DescriptorTracker) HeldDescriptor(hid layeredfs.HandleID) (HeldDescriptorObservation, bool) {
+	t := d.tr
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	h, ok := t.heldByHandle[hid]
+	h, ok := t.store.heldByHandle[hid]
 	return h, ok
 }
 
 // ReadHeldDescriptor reads from an open descriptor via Core while preserving the descriptor's
 // distinct observed version even after pathname replacement on trunk.
-func (t *Tracker) ReadHeldDescriptor(hid layeredfs.HandleID, maxBytes int64) ([]byte, HeldDescriptorObservation, error) {
+func (d *DescriptorTracker) ReadHeldDescriptor(hid layeredfs.HandleID, maxBytes int64) ([]byte, HeldDescriptorObservation, error) {
+	t := d.tr
 	t.mu.RLock()
 	core := t.core
-	held, hasHeld := t.heldByHandle[hid]
+	held, hasHeld := t.store.heldByHandle[hid]
 	t.mu.RUnlock()
 	if core == nil {
 		return nil, HeldDescriptorObservation{}, ErrNilCore
@@ -144,20 +145,18 @@ func (t *Tracker) ReadHeldDescriptor(hid layeredfs.HandleID, maxBytes int64) ([]
 	return data, held, nil
 }
 
-func (t *Tracker) enrichTrunkObservationLocked(obs *SourceObservation) {
-	if held, ok := t.heldByNode[nodeIdentityKey{nodeID: obs.NodeID, gen: obs.Generation}]; ok && obs.NodeID != 0 {
+func enrichTrunkObservationLocked(t *Tracker, obs *SourceObservation, ev layeredfs.ObservationEvent) {
+	if held, ok := t.store.heldByNode[nodeIdentityKey{nodeID: ev.NodeID, gen: ev.Generation}]; ok && ev.NodeID != 0 {
 		obs.SHA256 = held.OpenedDigest
 		obs.Size = held.OpenedSize
 		obs.Ino = held.OpenedIno
-		obs.Dev = held.OpenedDev
 		obs.ModTimeNS = held.OpenedModTimeNS
 		obs.SourceGeneration = held.SourceGeneration
 		return
 	}
-	if st, ok := t.trunkState[obs.Path]; ok && !st.deleted {
+	if st, ok := t.coherence.trunkState[obs.Path]; ok && !st.deleted {
 		if obs.Ino == 0 {
 			obs.Ino = st.ino
-			obs.Dev = st.dev
 		}
 		if obs.SHA256 == "" && obs.Kind == layeredfs.ObserveRead {
 			obs.SHA256 = st.sha256
@@ -177,7 +176,6 @@ func (t *Tracker) enrichTrunkObservationLocked(obs *SourceObservation) {
 	}
 	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil && obs.Ino == 0 {
 		obs.Ino = uint64(sys.Ino)
-		obs.Dev = uint64(sys.Dev)
 	}
 	if obs.ModTimeNS == 0 {
 		obs.ModTimeNS = info.ModTime().UnixNano()
@@ -189,4 +187,48 @@ func (t *Tracker) enrichTrunkObservationLocked(obs *SourceObservation) {
 			obs.Size = int64(len(data))
 		}
 	}
+}
+
+func buildBaseObservationLocked(
+	t *Tracker,
+	qpath layeredfs.QualifiedPath,
+	ev layeredfs.ObservationEvent,
+	prov ObservationProvenance,
+	completeness AttributionCompleteness,
+) SourceObservation {
+	t.store.nextObsSeq++
+	obsID := fmt.Sprintf("obs-%s-%06d", t.viewID, t.store.nextObsSeq)
+	layer := ev.Layer
+	if layer == "" {
+		layer = layeredfs.LayerTrunk
+	}
+	obs := SourceObservation{
+		ObservationID:    obsID,
+		Path:             qpath,
+		Layer:            layer,
+		Kind:             ev.Kind,
+		Provenance:       prov,
+		Completeness:     completeness,
+		SHA256:           ev.SHA256,
+		Size:             ev.Size,
+		ModTimeNS:        ev.ModTimeNS,
+		Ino:              ev.Ino,
+		SourceGeneration: rootGenLocked(t, qpath.RootID),
+	}
+	if layer == layeredfs.LayerTrunk {
+		enrichTrunkObservationLocked(t, &obs, ev)
+	}
+	if reasons := t.coherence.overflowByRoot[qpath.RootID]; len(reasons) > 0 && layer == layeredfs.LayerTrunk && prov != ProvenanceExactNativeRead {
+		obs.Uncertain = true
+		obs.Provenance = ProvenanceUncertainOverflow
+	}
+	return obs
+}
+
+func appendObservationLocked(t *Tracker, obs SourceObservation) SourceObservation {
+	idx := len(t.store.observations)
+	t.store.observations = append(t.store.observations, obs)
+	t.store.obsByPath[obs.Path] = append(t.store.obsByPath[obs.Path], idx)
+	t.store.obsByID[obs.ObservationID] = idx
+	return obs
 }

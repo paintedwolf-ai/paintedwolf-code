@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io/fs"
 	"sync"
 	"time"
@@ -27,40 +26,57 @@ type nodeIdentityKey struct {
 }
 
 type recordedTrunkState struct {
-	kind       TrunkChangeKind
-	sha256     string
-	size       int64
-	modTimeNS  int64
-	ino        uint64
-	dev        uint64
-	generation uint64
-	deleted    bool
-	updatedAt  time.Time
+	kind                           TrunkChangeKind
+	sha256                         string
+	size, modTimeNS                int64
+	ino, dev, generation           uint64
+	deleted                        bool
+	updatedAt                      time.Time
 }
+
+type obsState struct {
+	nextObsSeq, sourceGen uint64
+	rootGens              map[string]uint64
+	observations          []SourceObservation
+	obsByPath             map[layeredfs.QualifiedPath][]int
+	obsByID               map[string]int
+	heldByHandle          map[layeredfs.HandleID]HeldDescriptorObservation
+	heldByNode            map[nodeIdentityKey]HeldDescriptorObservation
+	negativeLookups       map[layeredfs.QualifiedPath]uint64
+}
+
+type coherenceState struct {
+	trunkState                     map[layeredfs.QualifiedPath]recordedTrunkState
+	staleObsIDs                    map[string]string
+	pendingNotice                  map[layeredfs.QualifiedPath]struct{}
+	pendingObsRefs                 map[string]struct{}
+	lastConsumedNotice             *TrunkChangedNotice
+	overflowByRoot                 map[string][]string
+}
+
+// DescriptorTracker provides open-descriptor observation methods on a Tracker.
+type DescriptorTracker struct{ tr *Tracker }
+
+// CoherenceTracker provides trunk change and invalidation methods on a Tracker.
+type CoherenceTracker struct{ tr *Tracker }
+
+// VerificationTracker provides verification receipt binding and freshness evaluation on a Tracker.
+type VerificationTracker struct{ tr *Tracker }
 
 // Tracker coordinates trunk visibility, targeted adapter cache invalidation,
 // source observation provenance, watcher overflow uncertainty, and verification staleness.
 type Tracker struct {
+	DescriptorTracker
+	CoherenceTracker
+	VerificationTracker
 	mu                sync.RWMutex
 	viewID            string
 	facts             VisibilityFacts
 	core              *layeredfs.Core
 	rootsByID         map[string]layeredfs.RootSpec
 	clock             func() time.Time
-	nextObsSeq        uint64
-	sourceGen         uint64
-	rootGens          map[string]uint64
-	observations      []SourceObservation
-	obsByPath         map[layeredfs.QualifiedPath][]int
-	obsByID           map[string]int
-	heldByHandle      map[layeredfs.HandleID]HeldDescriptorObservation
-	heldByNode        map[nodeIdentityKey]HeldDescriptorObservation
-	negativeLookups   map[layeredfs.QualifiedPath]uint64
-	trunkState        map[layeredfs.QualifiedPath]recordedTrunkState
-	staleObsIDs       map[string]string
-	pendingNotice     map[layeredfs.QualifiedPath]struct{}
-	pendingObsRefs    map[string]struct{}
-	overflowByRoot    map[string][]string
+	store             obsState
+	coherence         coherenceState
 	invalidationSinks []InvalidationSink
 }
 
@@ -86,25 +102,33 @@ func NewTracker(cfg TrackerConfig) (*Tracker, error) {
 			rootGens[r.ID] = 1
 		}
 	}
-	return &Tracker{
-		viewID:          cfg.ViewID,
-		facts:           cfg.Facts,
-		core:            cfg.Core,
-		rootsByID:       rootsByID,
-		clock:           clock,
-		sourceGen:       1,
-		rootGens:        rootGens,
-		obsByPath:       make(map[layeredfs.QualifiedPath][]int),
-		obsByID:         make(map[string]int),
-		heldByHandle:    make(map[layeredfs.HandleID]HeldDescriptorObservation),
-		heldByNode:      make(map[nodeIdentityKey]HeldDescriptorObservation),
-		negativeLookups: make(map[layeredfs.QualifiedPath]uint64),
-		trunkState:      make(map[layeredfs.QualifiedPath]recordedTrunkState),
-		staleObsIDs:     make(map[string]string),
-		pendingNotice:   make(map[layeredfs.QualifiedPath]struct{}),
-		pendingObsRefs:  make(map[string]struct{}),
-		overflowByRoot:  make(map[string][]string),
-	}, nil
+	t := &Tracker{
+		viewID:    cfg.ViewID,
+		facts:     cfg.Facts,
+		core:      cfg.Core,
+		rootsByID: rootsByID,
+		clock:     clock,
+		store: obsState{
+			sourceGen:       1,
+			rootGens:        rootGens,
+			obsByPath:       make(map[layeredfs.QualifiedPath][]int),
+			obsByID:         make(map[string]int),
+			heldByHandle:    make(map[layeredfs.HandleID]HeldDescriptorObservation),
+			heldByNode:      make(map[nodeIdentityKey]HeldDescriptorObservation),
+			negativeLookups: make(map[layeredfs.QualifiedPath]uint64),
+		},
+		coherence: coherenceState{
+			trunkState:     make(map[layeredfs.QualifiedPath]recordedTrunkState),
+			staleObsIDs:    make(map[string]string),
+			pendingNotice:  make(map[layeredfs.QualifiedPath]struct{}),
+			pendingObsRefs: make(map[string]struct{}),
+			overflowByRoot: make(map[string][]string),
+		},
+	}
+	t.DescriptorTracker.tr = t
+	t.CoherenceTracker.tr = t
+	t.VerificationTracker.tr = t
+	return t, nil
 }
 
 // BindCore attaches a *layeredfs.Core instance and its root specifications to the Tracker.
@@ -115,8 +139,8 @@ func (t *Tracker) BindCore(core *layeredfs.Core, roots ...layeredfs.RootSpec) {
 	for _, r := range roots {
 		if r.ID != "" {
 			t.rootsByID[r.ID] = r
-			if t.rootGens[r.ID] == 0 {
-				t.rootGens[r.ID] = t.sourceGen
+			if t.store.rootGens[r.ID] == 0 {
+				t.store.rootGens[r.ID] = t.store.sourceGen
 			}
 		}
 	}
@@ -143,17 +167,17 @@ func (t *Tracker) RegisterInvalidationSink(sink InvalidationSink) {
 func (t *Tracker) CurrentSourceGeneration() uint64 {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.sourceGen
+	return t.store.sourceGen
 }
 
 // RootSourceGeneration returns the current source generation for a specific root ID.
 func (t *Tracker) RootSourceGeneration(rootID string) uint64 {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	if gen, ok := t.rootGens[rootID]; ok {
+	if gen, ok := t.store.rootGens[rootID]; ok {
 		return gen
 	}
-	return t.sourceGen
+	return t.store.sourceGen
 }
 
 // RecordObservation implements layeredfs.ObservationSink for server/core filesystem requests.
@@ -167,9 +191,9 @@ func (t *Tracker) RecordServerFSObservation(ev layeredfs.ObservationEvent) Sourc
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	delete(t.negativeLookups, qpath)
-	obs := t.buildBaseObservationLocked(qpath, ev, ProvenanceServerFSRequest, t.facts.AttributionCompleteness)
-	return t.appendObservationLocked(obs)
+	delete(t.store.negativeLookups, qpath)
+	obs := buildBaseObservationLocked(t, qpath, ev, ProvenanceServerFSRequest, t.facts.AttributionCompleteness)
+	return appendObservationLocked(t, obs)
 }
 
 // RecordExactNativeObservation records a complete, exact native content observation with SHA256 digest.
@@ -185,7 +209,7 @@ func (t *Tracker) RecordExactNativeObservation(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	delete(t.negativeLookups, qpath)
+	delete(t.store.negativeLookups, qpath)
 	ev := layeredfs.ObservationEvent{
 		ViewID:     t.viewID,
 		Path:       qpath,
@@ -197,34 +221,23 @@ func (t *Tracker) RecordExactNativeObservation(
 		ModTimeNS:  attr.ModTime.UnixNano(),
 		SHA256:     digest,
 	}
-	obs := t.buildBaseObservationLocked(qpath, ev, ProvenanceExactNativeRead, CompletenessComplete)
+	obs := buildBaseObservationLocked(t, qpath, ev, ProvenanceExactNativeRead, CompletenessComplete)
 	obs.SHA256 = digest
 	obs.Size = int64(len(data))
-	return t.appendObservationLocked(obs)
+	return appendObservationLocked(t, obs)
 }
 
 // RecordIndexDerivedObservation records an index-derived inventory observation.
-func (t *Tracker) RecordIndexDerivedObservation(
-	qpath layeredfs.QualifiedPath,
-	sha256Hex string,
-	size int64,
-	modTimeNS int64,
-) SourceObservation {
+func (t *Tracker) RecordIndexDerivedObservation(qpath layeredfs.QualifiedPath, sha256Hex string, size, modTimeNS int64) SourceObservation {
 	qpath = normalizeQPath(qpath)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
 	ev := layeredfs.ObservationEvent{
-		ViewID:    t.viewID,
-		Path:      qpath,
-		Layer:     layeredfs.LayerTrunk,
-		Kind:      layeredfs.ObserveStat,
-		Size:      size,
-		ModTimeNS: modTimeNS,
-		SHA256:    sha256Hex,
+		ViewID: t.viewID, Path: qpath, Layer: layeredfs.LayerTrunk,
+		Kind: layeredfs.ObserveStat, Size: size, ModTimeNS: modTimeNS, SHA256: sha256Hex,
 	}
-	obs := t.buildBaseObservationLocked(qpath, ev, ProvenanceIndexDerived, CompletenessPartialKernelCached)
-	return t.appendObservationLocked(obs)
+	obs := buildBaseObservationLocked(t, qpath, ev, ProvenanceIndexDerived, CompletenessPartialKernelCached)
+	return appendObservationLocked(t, obs)
 }
 
 // RecordNegativeLookup records that a lookup for qpath returned ENOENT.
@@ -232,7 +245,7 @@ func (t *Tracker) RecordNegativeLookup(qpath layeredfs.QualifiedPath) {
 	qpath = normalizeQPath(qpath)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.negativeLookups[qpath] = t.rootGenLocked(qpath.RootID)
+	t.store.negativeLookups[qpath] = rootGenLocked(t, qpath.RootID)
 }
 
 // ObserveLookupResult records either a negative lookup on fs.ErrNotExist or a positive lookup observation.
@@ -259,8 +272,8 @@ func (t *Tracker) ObserveLookupResult(qpath layeredfs.QualifiedPath, attr layere
 func (t *Tracker) Observations() []SourceObservation {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	out := make([]SourceObservation, len(t.observations))
-	copy(out, t.observations)
+	out := make([]SourceObservation, len(t.store.observations))
+	copy(out, t.store.observations)
 	return out
 }
 
@@ -269,10 +282,10 @@ func (t *Tracker) ObservationsForPath(qpath layeredfs.QualifiedPath) []SourceObs
 	qpath = normalizeQPath(qpath)
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	indices := t.obsByPath[qpath]
+	indices := t.store.obsByPath[qpath]
 	out := make([]SourceObservation, 0, len(indices))
 	for _, idx := range indices {
-		out = append(out, t.observations[idx])
+		out = append(out, t.store.observations[idx])
 	}
 	return out
 }
@@ -282,58 +295,9 @@ func (t *Tracker) LatestObservationForPath(qpath layeredfs.QualifiedPath) (Sourc
 	qpath = normalizeQPath(qpath)
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	indices := t.obsByPath[qpath]
+	indices := t.store.obsByPath[qpath]
 	if len(indices) == 0 {
 		return SourceObservation{}, false
 	}
-	return t.observations[indices[len(indices)-1]], true
-}
-
-func (t *Tracker) buildBaseObservationLocked(
-	qpath layeredfs.QualifiedPath,
-	ev layeredfs.ObservationEvent,
-	prov ObservationProvenance,
-	completeness AttributionCompleteness,
-) SourceObservation {
-	t.nextObsSeq++
-	obsID := fmt.Sprintf("obs-%s-%06d", t.viewID, t.nextObsSeq)
-	layer := ev.Layer
-	if layer == "" {
-		layer = layeredfs.LayerTrunk
-	}
-	obs := SourceObservation{
-		ObservationID:    obsID,
-		ViewID:           t.viewID,
-		Path:             qpath,
-		Layer:            layer,
-		Kind:             ev.Kind,
-		NodeID:           ev.NodeID,
-		Generation:       ev.Generation,
-		Provenance:       prov,
-		Completeness:     completeness,
-		SHA256:           ev.SHA256,
-		Size:             ev.Size,
-		ModTimeNS:        ev.ModTimeNS,
-		Ino:              ev.Ino,
-		Dev:              ev.Dev,
-		SourceGeneration: t.rootGenLocked(qpath.RootID),
-		ObservedAt:       t.clock(),
-	}
-	if layer == layeredfs.LayerTrunk {
-		t.enrichTrunkObservationLocked(&obs)
-	}
-	if reasons := t.overflowByRoot[qpath.RootID]; len(reasons) > 0 && layer == layeredfs.LayerTrunk && prov != ProvenanceExactNativeRead {
-		obs.Uncertain = true
-		obs.Provenance = ProvenanceUncertainOverflow
-		obs.UncertaintyReason = reasons[len(reasons)-1]
-	}
-	return obs
-}
-
-func (t *Tracker) appendObservationLocked(obs SourceObservation) SourceObservation {
-	idx := len(t.observations)
-	t.observations = append(t.observations, obs)
-	t.obsByPath[obs.Path] = append(t.obsByPath[obs.Path], idx)
-	t.obsByID[obs.ObservationID] = idx
-	return obs
+	return t.store.observations[indices[len(indices)-1]], true
 }

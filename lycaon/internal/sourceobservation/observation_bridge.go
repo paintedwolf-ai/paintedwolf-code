@@ -40,7 +40,6 @@ func FileFromSourceObservation(obs observation.SourceObservation, gitOID string,
 		Uncertain:        obs.Uncertain,
 		SourceGeneration: obs.SourceGeneration,
 		Ino:              obs.Ino,
-		Dev:              obs.Dev,
 	})
 }
 
@@ -49,7 +48,6 @@ func (f File) ToSourceObservation(viewID, rootID string) observation.SourceObser
 	norm := normalizeFileDefaults(f)
 	return observation.SourceObservation{
 		ObservationID:    fmt.Sprintf("store-%s-%s-%d", rootID, norm.Path, norm.SourceGeneration),
-		ViewID:           viewID,
 		Path:             layeredfs.QualifiedPath{RootID: rootID, Rel: norm.Path},
 		Layer:            norm.Layer,
 		Kind:             layeredfs.ObserveRead,
@@ -60,7 +58,6 @@ func (f File) ToSourceObservation(viewID, rootID string) observation.SourceObser
 		Size:             norm.Size,
 		ModTimeNS:        norm.ModifiedNS,
 		Ino:              norm.Ino,
-		Dev:              norm.Dev,
 		SourceGeneration: norm.SourceGeneration,
 	}
 }
@@ -155,11 +152,62 @@ func MatchesObservedIdentity(recorded, current File) bool {
 	if recorded.Ino != 0 && current.Ino != 0 && recorded.Ino != current.Ino {
 		return false
 	}
-	if recorded.Dev != 0 && current.Dev != 0 && recorded.Dev != current.Dev {
-		return false
-	}
 	if recorded.SHA256 == "" || current.SHA256 == "" {
 		return false
 	}
 	return recorded.SHA256 == current.SHA256
 }
+
+// DeletePaths removes paths that left the tree.
+func (s *Store) DeletePaths(ctx context.Context, rootPath string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	database, err := s.open(ctx)
+	if err != nil {
+		return err
+	}
+	tx, err := database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, path := range paths {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM observed_files WHERE root_path = ? AND path = ?`, rootPath, path); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// DeleteRoot removes a detached root's rebuildable observations.
+func (s *Store) DeleteRoot(ctx context.Context, rootPath string) error {
+	database, err := s.open(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = database.ExecContext(ctx, `DELETE FROM observed_files WHERE root_path = ?`, rootPath)
+	return err
+}
+
+// Clear removes every rebuildable observation and compacts the cache file.
+func (s *Store) Clear(ctx context.Context) error {
+	database, err := s.open(ctx)
+	if err != nil {
+		return err
+	}
+	if _, err := database.ExecContext(ctx, `DELETE FROM observed_files`); err != nil {
+		return err
+	}
+	_, err = database.ExecContext(ctx, `VACUUM`)
+	return err
+}
+
+// Close releases the cache database.
+func (s *Store) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+

@@ -145,24 +145,18 @@ const (
 
 // SourceObservation records a structured observation of a path in a worker view.
 type SourceObservation struct {
-	ObservationID     string                  `json:"observation_id"`
-	ViewID            string                  `json:"view_id"`
-	Path              layeredfs.QualifiedPath `json:"path"`
-	Layer             layeredfs.LayerSource   `json:"layer"`
-	Kind              layeredfs.ObservationKind `json:"kind"`
-	NodeID            layeredfs.NodeID        `json:"node_id"`
-	Generation        layeredfs.Generation    `json:"generation"`
-	Provenance        ObservationProvenance   `json:"provenance"`
-	Completeness      AttributionCompleteness `json:"completeness"`
-	Uncertain         bool                    `json:"uncertain"`
-	UncertaintyReason string                  `json:"uncertainty_reason,omitempty"`
-	SHA256            string                  `json:"sha256,omitempty"`
-	Size              int64                   `json:"size"`
-	ModTimeNS         int64                   `json:"mod_time_ns"`
-	Ino               uint64                  `json:"ino,omitempty"`
-	Dev               uint64                  `json:"dev,omitempty"`
-	SourceGeneration  uint64                  `json:"source_generation"`
-	ObservedAt        time.Time               `json:"observed_at"`
+	ObservationID    string                    `json:"observation_id"`
+	Path             layeredfs.QualifiedPath   `json:"path"`
+	Layer            layeredfs.LayerSource     `json:"layer"`
+	Kind             layeredfs.ObservationKind `json:"kind"`
+	Provenance       ObservationProvenance     `json:"provenance"`
+	Completeness     AttributionCompleteness   `json:"completeness"`
+	Uncertain        bool                      `json:"uncertain"`
+	SHA256           string                    `json:"sha256,omitempty"`
+	Size             int64                     `json:"size"`
+	ModTimeNS        int64                     `json:"mod_time_ns"`
+	Ino              uint64                    `json:"ino,omitempty"`
+	SourceGeneration uint64                    `json:"source_generation"`
 }
 
 // HeldDescriptorObservation binds an open file handle to the exact object version it opened.
@@ -172,14 +166,11 @@ type HeldDescriptorObservation struct {
 	Path             layeredfs.QualifiedPath `json:"path"`
 	Layer            layeredfs.LayerSource   `json:"layer"`
 	NodeID           layeredfs.NodeID        `json:"node_id"`
-	Generation       layeredfs.Generation    `json:"generation"`
 	OpenedDigest     string                  `json:"opened_digest,omitempty"`
 	OpenedSize       int64                   `json:"opened_size"`
 	OpenedIno        uint64                  `json:"opened_ino,omitempty"`
-	OpenedDev        uint64                  `json:"opened_dev,omitempty"`
 	OpenedModTimeNS  int64                   `json:"opened_mod_time_ns"`
 	SourceGeneration uint64                  `json:"source_generation"`
-	OpenedAt         time.Time               `json:"opened_at"`
 }
 
 // TrunkChangeKind classifies an external mutation on a live trunk root.

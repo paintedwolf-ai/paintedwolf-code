@@ -4,16 +4,24 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
+	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -21,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -29,11 +38,18 @@ func overlaySourceFixture(t *testing.T) (primary, overlay string, scope api.Task
 	primary = t.TempDir()
 	overlay = filepath.Join(primary, settingsoverlay.DirName(), "overlays", "job-source")
 	testutil.FailErr(t, "MkdirAll", os.MkdirAll(overlay, 0o755))
-	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(1)\n"), 0o644))
-	scope = api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}}
+	testutil.FailErr(t, "WriteFile primary game", os.WriteFile(filepath.Join(primary, "game.py"), []byte("print(0)\n"), 0o644))
+	testutil.FailErr(t, "WriteFile primary dirty", os.WriteFile(filepath.Join(primary, "dirty_upper.py"), []byte("x = 1\n"), 0o644))
+	testutil.FailErr(t, "WriteFile overlay", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(1)\n"), 0o644))
+	meta := enginepaths.MetaDirForBranchRoot(overlay)
+	testutil.FailErr(t, "MkdirAll meta", os.MkdirAll(meta, 0o700))
+	testutil.FailErr(t, "WriteJobMeta", workspace.WriteJobMeta(meta, workspace.JobMeta{
+		SnapshotComplete: true,
+		Roots:            []workspace.JobMetaRoot{{ID: "primary", Path: primary, IsPrimary: true}},
+	}))
+	scope = api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py", "dirty_upper.py"}}
 	snap := testbaseline.Capture(t, primary)
-	raw := snap
-	return primary, overlay, scope, raw
+	return primary, overlay, scope, snap
 }
 
 func currentVerifyPassedMessage(root string) api.Message {
@@ -44,7 +60,7 @@ func currentVerifyPassedMessage(root string) api.Message {
 			Content:  `{"outcome":"passed"}`,
 			ToolArgs: map[string]any{"command": "selected-check"},
 			Invocation: &api.InvocationReceipt{
-				ID: "receipt-verify", Tool: "verify", Status: api.InvocationStatusCompleted,
+				ID: "receipt-verify", Tool: "verify", ToolCallID: "check-verify-1", Status: api.InvocationStatusCompleted,
 				Evidence:       api.InvocationEvidence{Kind: "result", Ref: "message-1"},
 				SourceRevision: revision, SourceRootDigest: digest,
 				SourceVerdict: api.SourceVerdictPassed,
@@ -153,26 +169,73 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	}
 }
 
-func TestOverlaySourceProofInvalidatesStaleObservedDependenciesAndIncompleteAttribution(t *testing.T) {
+func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *testing.T) {
 	ctx := context.Background()
+	mem := store.NewMemory()
+	mgr := session.NewHost(
+		mem,
+		session.Models{
+			Client:   llm.NewMockProvider(&llm.MockConfig{}),
+			Provider: nil,
+			Limits:   settings.DefaultSessionLimits(),
+			Cost:     nil,
+		},
+		tools.NewStubRegistry(),
+	)
+	dataDir := t.TempDir()
+	mgr.Verification.SetDataDir(dataDir)
+	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
+
+	q := worker.NewInMemoryQueue(4)
+	mgr.SetWorkerQueue(q)
+
+	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create parent", err)
+
 	primary, overlay, scope, baseline := overlaySourceFixture(t)
 	rev, rootDigest := invocation.SourceRevisionForRoot(overlay)
 	curRev := workercompletion.SourceRevision{Revision: rev, RootDigest: rootDigest}
-	msgs := []api.Message{currentVerifyPassedMessage(overlay)}
+	mgr.Verification.SetRevisionSource(func(context.Context, string) (string, string) {
+		return rev, rootDigest
+	})
 
-	task := &api.WorkerTask{
-		ID:                    "job-obs-1665",
+	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	testutil.FailErr(t, "CreateChild", err)
+	child.WorkspacePath = primary
+	child.ProjectID = testdbseed.DefaultProjectID
+
+	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
+		Prompt:                "fixture",
+		Brief:                 "fixture",
+		ParentSessionID:       parent.ID,
+		ProjectID:             testdbseed.DefaultProjectID,
 		WorkspacePath:         primary,
 		WorkspaceRoot:         overlay,
-		ChildSessionID:        "child-obs-1665",
+		ChildSessionID:        child.ID,
+		AgentType:             "implementer",
+		Status:                api.WorkerStatusRunning,
 		Scope:                 &scope,
 		WorkspaceBaselinePath: baseline,
+	})
+	testutil.FailErr(t, "EnqueueWithProjectID", err)
+	task, ok := q.Get(jobID)
+	if !ok || task == nil {
+		t.Fatalf("expected task %s in queue", jobID)
 	}
 
-	facts := observation.LiveMountVisibilityFacts("fuse-linux", true, true, true, observation.CompletenessComplete)
-	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-overlay-1", Facts: facts})
-	testutil.FailErr(t, "NewTracker", err)
+	workerCtx := workercontext.WithJob(ctx, jobID)
+	tctx, err := mgr.Workers.Workspaces.Enrich(workerCtx, child, tools.ToolContext{})
+	testutil.FailErr(t, "Workspaces.Enrich", err)
 
+	tracker := mgr.Workers.Workspaces.TrackerFor(jobID)
+	if tracker == nil {
+		t.Fatal("expected Enrich to provision a scoped observation.Tracker on mgr.Workers.Workspaces")
+	}
+
+	// Observe a lower file through the workspace service and a cross-root dependency.
+	if _, ok := mgr.Workers.Workspaces.ObserveReadPath(jobID, child.ID, primary, overlay, tctx.Source.Roots, "game.py"); !ok {
+		t.Fatal("expected ObserveReadPath(game.py) to succeed")
+	}
 	depPath := layeredfs.QualifiedPath{RootID: "secondary", Rel: "pkg/dep.py"}
 	tracker.RecordServerFSObservation(layeredfs.ObservationEvent{
 		Path:   depPath,
@@ -181,47 +244,95 @@ func TestOverlaySourceProofInvalidatesStaleObservedDependenciesAndIncompleteAttr
 		Size:   10,
 		SHA256: "sha-dep-v1",
 	})
-	binding := tracker.BindVerificationReceipt("receipt-verify", "ckpt-1", []string{"primary", "secondary"})
-	session.RegisterOverlayObservationTracker(task.ID, tracker, binding, "ckpt-1")
-	t.Cleanup(func() {
-		session.UnregisterOverlayObservationTracker(task.ID)
-	})
 
-	// 1. Unrelated trunk change outside complete observed set keeps proof satisfied.
-	tracker.RecordTrunkChange(observation.TrunkChangeEvent{
+	// Perform a worker write on dirty_upper.py so it is pinned in LayerPrivate.
+	testutil.FailErr(t, "BeforeWorkerWrite", mgr.Workers.Workspaces.BeforeWorkerWrite(workerCtx, tctx, "dirty_upper.py"))
+	mgr.Workers.Workspaces.AfterWorkerWrite(workerCtx, tctx, "dirty_upper.py")
+
+	// Record passing verification evidence on the host's Verification service.
+	verifyMsg := currentVerifyPassedMessage(overlay)
+	testutil.FailErr(t, "AppendMessages", mem.AppendMessages(ctx, child.ID, verifyMsg))
+	mgr.Verification.RecordSourceRunTerminal(workerCtx, child, parent.ID, verification.ProducerVerify, tools.SourceRunCapture{
+		CheckID:          "check-verify-1",
+		IsCheck:          true,
+		Command:          "selected-check",
+		Cwd:              ".",
+		ExitCode:         0,
+		Verdict:          api.SourceVerdictPassed,
+		SourceRevision:   rev,
+		SourceRootDigest: rootDigest,
+	}, time.Now().UTC())
+
+	childHistory, err := mem.GetMessages(ctx, child.ID)
+	testutil.FailErr(t, "GetMessages", err)
+
+	// 1. Unobserved lower source change keeps GateState and OverlaySourceProof valid and emits no notice.
+	mgr.Workers.Workspaces.RecordLowerTrunkChange(jobID, observation.TrunkChangeEvent{
 		Path:      layeredfs.QualifiedPath{RootID: "primary", Rel: "unrelated.py"},
 		Kind:      observation.TrunkWriteInPlace,
 		NewSHA256: "sha-unrelated-v2",
 		NewSize:   15,
 	})
-	proofFresh := session.OverlaySourceProof(ctx, task, msgs, "selected-check", curRev)
+	if passed, _, _ := mgr.Verification.GateState(workerCtx, child, childHistory); !passed {
+		t.Fatal("expected unobserved lower change to keep Verification.GateState passed")
+	}
+	proofFresh := session.OverlaySourceProofWithWorkspaces(workerCtx, mgr.Workers.Workspaces, task, childHistory, "selected-check", curRev)
 	if status, _, _ := workercompletion.SourceEvidenceView(proofFresh); status != workercompletion.EvidenceStatusSatisfied {
-		t.Fatalf("expected unrelated trunk change to preserve satisfied proof, got %s", status)
+		t.Fatalf("expected unobserved lower change to preserve satisfied OverlaySourceProof, got %s", status)
 	}
 
-	// 2. Cross-root observed dependency change marks proof receipt stale.
-	tracker.RecordTrunkChange(observation.TrunkChangeEvent{
+	// 2. Lower source change on a dirty upper override (dirty_upper.py) stays pinned and immune.
+	mgr.Workers.Workspaces.RecordLowerTrunkChange(jobID, observation.TrunkChangeEvent{
+		Path:      layeredfs.QualifiedPath{RootID: "primary", Rel: "dirty_upper.py"},
+		Kind:      observation.TrunkWriteInPlace,
+		NewSHA256: "sha-lower-clobber",
+		NewSize:   99,
+	})
+	if passed, _, _ := mgr.Verification.GateState(workerCtx, child, childHistory); !passed {
+		t.Fatal("expected dirty upper override to remain immune to lower trunk change")
+	}
+	if assembled, err := mgr.Runner.Preparation.Build(workerCtx, child, child.ID, promptinput.Input{}, ""); err != nil || assembled.TrunkNotice != nil {
+		t.Fatalf("expected no trunk.changed notice for unobserved/dirty-upper paths, got err=%v notice=%+v", err, assembled.TrunkNotice)
+	}
+
+	// 3. Lower source change on an observed/verified path invalidates GateState & OverlaySourceProof and queues trunk.changed for next turn.
+	mgr.Workers.Workspaces.RecordLowerTrunkChange(jobID, observation.TrunkChangeEvent{
 		Path:      depPath,
 		Kind:      observation.TrunkAtomicReplace,
 		NewSHA256: "sha-dep-v2",
 		NewSize:   12,
 	})
-	proofStale := session.OverlaySourceProof(ctx, task, msgs, "selected-check", curRev)
+	proofStale := session.OverlaySourceProof(workerworkspace.WithService(workerCtx, mgr.Workers.Workspaces), task, childHistory, "selected-check", curRev)
 	if status, _, _ := workercompletion.SourceEvidenceView(proofStale); status == workercompletion.EvidenceStatusSatisfied {
-		t.Fatalf("expected cross-root dependency change to invalidate proof receipt, got %s", status)
+		t.Fatalf("expected observed dependency change to invalidate OverlaySourceProof receipt, got %s", status)
 	}
-	assessment, ok := session.OverlayObservationAssessmentForTask(task)
-	if !ok || !assessment.Freshness.Stale || assessment.Freshness.StaleReason != observation.StaleReasonObservedDependencyChanged {
+	assessment, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, task)
+	if !ok || !assessment.VerificationInvalidated || !assessment.Freshness.Stale || assessment.Freshness.StaleReason != observation.StaleReasonObservedDependencyChanged {
 		t.Fatalf("unexpected overlay assessment: %+v (ok=%v)", assessment, ok)
 	}
-	if assessment.TrunkChanged == nil || assessment.TrunkChanged.GrantsAuthority || assessment.TrunkChanged.EstablishesMergeBase {
-		t.Fatalf("unexpected trunk.changed notice: %+v", assessment.TrunkChanged)
+	if len(assessment.StaleSourcePaths) != 1 || assessment.StaleSourcePaths[0] != depPath {
+		t.Fatalf("expected StaleSourcePaths=[%v], got %+v", depPath, assessment.StaleSourcePaths)
 	}
-	if len(assessment.PreviewHints) == 0 || assessment.PreviewHints[0].SubstitutesExactBaseCheck {
-		t.Fatalf("unexpected promotion preview hints: %+v", assessment.PreviewHints)
+	if passed, _, _ := mgr.Verification.GateState(workerCtx, child, childHistory); passed {
+		t.Fatal("expected Verification.GateState to be invalidated after observed lower path changed")
 	}
 
-	// 3. Incomplete attribution refuses to certify freshness when scope generation advances.
+	// Next model turn preparation delivers trunk.changed once without interrupting in-flight calls.
+	turn1, err := mgr.Runner.Preparation.Build(workerCtx, child, child.ID, promptinput.Input{}, "")
+	testutil.FailErr(t, "Preparation.Build turn1", err)
+	if turn1.TrunkNotice == nil || turn1.TrunkNotice.GrantsAuthority || turn1.TrunkNotice.EstablishesMergeBase {
+		t.Fatalf("expected non-authoritative trunk.changed notice on turn 1, got %+v", turn1.TrunkNotice)
+	}
+	if len(turn1.Notices) != 1 || !strings.Contains(turn1.Notices[0], "trunk.changed") || !strings.Contains(turn1.Notices[0], "pkg/dep.py") {
+		t.Fatalf("unexpected turn 1 notices: %+v", turn1.Notices)
+	}
+	turn2, err := mgr.Runner.Preparation.Build(workerCtx, child, child.ID, promptinput.Input{}, "")
+	testutil.FailErr(t, "Preparation.Build turn2", err)
+	if turn2.TrunkNotice != nil || len(turn2.Notices) != 0 {
+		t.Fatalf("expected turn 2 not to duplicate consumed trunk.changed notice, got %+v", turn2.TrunkNotice)
+	}
+
+	// 4. Incomplete attribution refuses to certify freshness when scope generation advances.
 	partialFacts := observation.LiveMountVisibilityFacts("nfs-loopback", false, false, false, observation.CompletenessPartialKernelCached)
 	partialTracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-overlay-2", Facts: partialFacts})
 	testutil.FailErr(t, "NewTracker partial", err)
@@ -239,12 +350,18 @@ func TestOverlaySourceProofInvalidatesStaleObservedDependenciesAndIncompleteAttr
 		NewSHA256: "sha-unlogged-v2",
 		NewSize:   20,
 	})
-	baseProof := workercompletion.BuildWorkerCompletionProof(msgs, []string{"game.py"}, curRev)
+	baseProof := workercompletion.BuildWorkerCompletionProof(childHistory, []string{"game.py"}, curRev)
 	evalProof, evalAssess := session.EvaluateOverlaySourceObservations(baseProof, partialTracker, partialBinding, "ckpt-2")
 	if !evalAssess.Freshness.Stale || evalAssess.Freshness.StaleReason != observation.StaleReasonIncompleteAttributionScopeAdvanced {
 		t.Fatalf("expected incomplete attribution with advanced scope generation to be stale, got %+v", evalAssess.Freshness)
 	}
 	if status, _, _ := workercompletion.SourceEvidenceView(evalProof); status == workercompletion.EvidenceStatusSatisfied {
 		t.Fatalf("expected incomplete attribution with advanced scope generation to invalidate proof receipt")
+	}
+
+	// 5. ReleaseReservations cleans up the scoped workspace tracker.
+	testutil.FailErr(t, "ReleaseReservations", mgr.Workers.Workspaces.ReleaseReservations(ctx, parent.ID, jobID))
+	if mgr.Workers.Workspaces.TrackerFor(jobID) != nil {
+		t.Fatal("expected ReleaseReservations to clean up scoped tracker for jobID")
 	}
 }

@@ -7,15 +7,21 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/session/history"
 	"github.com/lycaon/lycaon/internal/session/loading"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/sourcebrief"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+type workspaceNoticeDrainer interface {
+	DrainTrunkChangedNotice(keys ...string) (*observation.TrunkChangedNotice, string)
+}
 
 type WorkerState interface {
 	ForSession(context.Context, *api.Session) surface.ImplementSessionState
@@ -40,10 +46,12 @@ func New(history *history.Service, loading *loading.Service, profiles *profiles.
 func (m *Service) SetFrame(frame inject.CoordinatorTurnFrameSource) { m.coordinatorFrame = frame }
 
 type Assembly struct {
-	History   []api.Message
-	ProfileID string
-	Machine   inject.Machine
-	ToolCtx   tools.ToolContext
+	History     []api.Message
+	ProfileID   string
+	Machine     inject.Machine
+	ToolCtx     tools.ToolContext
+	TrunkNotice *observation.TrunkChangedNotice
+	Notices     []string
 }
 
 // Build prepares one prompt run; openingMessageID is the user
@@ -83,11 +91,31 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, id string, in pr
 		return zero, err
 	}
 	m.Loading.Finish(ctx, sess, id, tctx, decision)
+	var trunkNotice *observation.TrunkChangedNotice
+	var notices []string
+	if drainer, ok := m.Workspace.(workspaceNoticeDrainer); ok && sess != nil {
+		jobID := strings.TrimSpace(tctx.Identity.WorkerJobID)
+		if jobID == "" {
+			jobID = workercontext.Job(ctx)
+		}
+		if notice, formatted := drainer.DrainTrunkChangedNotice(jobID, sess.ID, tctx.Source.WorkerBranchRoot, sess.WorkspacePath); notice != nil {
+			trunkNotice = notice
+			notices = append(notices, formatted)
+			history = append(history, api.Message{
+				Role:       api.MessageRoleSystem,
+				Origin:     api.MessageOriginHost,
+				Visibility: api.MessageVisibilityInternal,
+				Content:    formatted,
+			})
+		}
+	}
 	return Assembly{
-		History:   history,
-		ProfileID: profileID,
-		Machine:   machine,
-		ToolCtx:   tctx,
+		History:     history,
+		ProfileID:   profileID,
+		Machine:     machine,
+		ToolCtx:     tctx,
+		TrunkNotice: trunkNotice,
+		Notices:     notices,
 	}, nil
 }
 

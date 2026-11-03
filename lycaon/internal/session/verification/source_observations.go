@@ -26,8 +26,6 @@ type SourceCheckObservation struct {
 	Command                 string                              `json:"command"`
 	Cwd                     string                              `json:"cwd"`
 	Verdict                 string                              `json:"recorded_verdict"`
-	SourceRevision          string                              `json:"-"`
-	RootDigest              string                              `json:"-"`
 	Match                   SourceMatch                         `json:"source_match"`
 	PriorIntent             bool                                `json:"prior_user_intent"`
 	StaleReason             string                              `json:"stale_reason,omitempty"`
@@ -56,14 +54,13 @@ func (m *Service) SourceObservations(ctx context.Context, sess *api.Session, his
 	if err != nil {
 		return &SourceCheckObservations{RecordsUnavailable: true, RequiredByWorkflow: m.RequiresPhaseVerify(ctx, sess.ID)}
 	}
-	out := sourceCheckObservations(records, boundaryTime(history), "", "")
+	revision, root := m.Revision(ctx, m.SourceEvidenceRoot(ctx, sess))
+	out := sourceCheckObservations(records, boundaryTime(history), revision, root)
 	if len(out.Checks) == 0 {
 		return nil
 	}
-	revision, root := m.Revision(ctx, m.SourceEvidenceRoot(ctx, sess))
 	for i := range out.Checks {
-		out.Checks[i].Match = sourceMatch(out.Checks[i].SourceRevision, out.Checks[i].RootDigest, revision, root)
-		m.applyObservedFreshness(ctx, sess, &out.Checks[i])
+		applyObservedFreshness(m, ctx, sess, &out.Checks[i])
 	}
 	if notice, ok := m.PendingTrunkChangedNotice(ctx, sess); ok {
 		out.TrunkChanged = notice
@@ -102,7 +99,7 @@ func sourceCheckObservations(records []evidence.Record, boundary time.Time, revi
 		out.Checks = append(out.Checks, SourceCheckObservation{
 			CheckID: id, Command: runeclamp.ClampBytes(strings.TrimSpace(command), 240),
 			Cwd: runeclamp.ClampBytes(cwd, 160), Verdict: record.GateVerdict,
-			SourceRevision: source, RootDigest: identity, Match: sourceMatch(source, identity, revision, root),
+			Match:       sourceMatch(source, identity, revision, root),
 			PriorIntent: record.GateAt().Before(boundary),
 		})
 	}
