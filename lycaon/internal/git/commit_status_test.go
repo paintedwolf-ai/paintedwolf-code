@@ -8,6 +8,7 @@ import (
 )
 
 func TestCommitStatusPreservesPathsAndStructuredStates(t *testing.T) {
+	t.Parallel()
 	raw := strings.Join([]string{
 		"# branch.oid abc123", "# branch.head main",
 		"1 .M N... 100644 100644 100644 aaa aaa  leading and trailing ",
@@ -30,6 +31,7 @@ func TestCommitStatusPreservesPathsAndStructuredStates(t *testing.T) {
 }
 
 func TestCommitStatusRejectsIncompleteProtocol(t *testing.T) {
+	t.Parallel()
 	for _, raw := range []string{"? file\x00", "# branch.oid abc\x00x unknown\x00", "# branch.oid abc\x002 R. N... 100644 100644 100644 a a R100 dest\x00"} {
 		if _, err := parseCommitStatus([]byte(raw)); err == nil {
 			t.Fatalf("accepted incomplete status %q", raw)

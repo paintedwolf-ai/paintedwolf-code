@@ -11,21 +11,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceref"
 	"github.com/lycaon/lycaon/internal/tokenest"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -48,6 +43,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 			return api.Message{}, nil, nil, err
 		}
 	}
+	modelIteration := nextModelIteration(st)
 	messageID := uuid.NewString()
 	if st != nil && coordinatorDraftSlotEligible(sess, profileID) {
 		messageID = st.ensureCoordinatorDraftSlot()
@@ -128,17 +124,17 @@ func (l *modelTurn) runAssistantStreamTurn(
 		_ = persistPlaceholder()
 	})
 	if err != nil {
-		return api.Message{}, nil, nil, withdrawFailedDraft(err)
+		return api.Message{}, completion, nil, withdrawFailedDraft(err)
 	}
 	if err := persistPlaceholder(); err != nil {
 		return api.Message{}, nil, nil, err
 	}
 	clearStream()
 	promptAssistant, err := l.Projection.settleAssistantStreamTurn(
-		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, iterIndex, wireContent,
+		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, modelIteration, wireContent,
 	)
 	if err != nil {
-		return api.Message{}, nil, nil, withdrawFailedDraft(err)
+		return api.Message{}, completion, nil, withdrawFailedDraft(err)
 	}
 	if st != nil && st.observePrompt != nil {
 		st.observePrompt(st.coordinatorFrame)
@@ -155,7 +151,7 @@ func (l *turnProjection) settleAssistantStreamTurn(
 	completion *modelcall.Completion,
 	tokens []string,
 	outputID string,
-	iterIndex int,
+	iteration int,
 	wireContent func(string) string,
 ) (api.Message, error) {
 	assistantMsg.Content = completion.Content
@@ -181,7 +177,7 @@ func (l *turnProjection) settleAssistantStreamTurn(
 		}
 		committed, settleErr := l.Deps.SettleModelOutput(ctx, store.ModelOutput{
 			ID: outputID, TurnAttemptID: st.attemptID, SessionID: sessionID,
-			Iteration: iterIndex + 1, MessageID: assistantMsg.ID,
+			Iteration: iteration, MessageID: assistantMsg.ID,
 			ProviderID: completion.ProviderID, Model: completion.Model, Scripted: completion.Scripted,
 			Content: wireAssistant.Content, ToolCallsJSON: string(callsJSON),
 			ReasoningJSON: string(reasoningJSON), CreatedAt: assistantMsg.CreatedAt,
@@ -222,6 +218,34 @@ func (l *turnProjection) settleAssistantStreamTurn(
 	return promptAssistant, nil
 }
 
+func (l *turnProjection) seedModelIteration(ctx context.Context, attemptID string, st *promptLoopTurnState) error {
+	if st == nil || strings.TrimSpace(attemptID) == "" || l == nil || l.Deps.SettledModelOutputIteration == nil {
+		return nil
+	}
+	settledIteration, err := l.Deps.SettledModelOutputIteration(ctx, attemptID)
+	if err != nil {
+		return err
+	}
+	st.output.iteration = settledIteration
+	return nil
+}
+
+// nextModelIteration allocates the next 1-based model-output iteration for the attempt.
+func nextModelIteration(st *promptLoopTurnState) int {
+	if st == nil {
+		return 1
+	}
+	st.output.iteration++
+	return st.output.iteration
+}
+
+func currentModelIteration(st *promptLoopTurnState, iterIndex int) int {
+	if st != nil && st.output.iteration > 0 {
+		return st.output.iteration
+	}
+	return iterIndex + 1
+}
+
 func (l *modelTurn) completeStream(
 	ctx context.Context,
 	sess *api.Session,
@@ -234,6 +258,24 @@ func (l *modelTurn) completeStream(
 	st *promptLoopTurnState,
 	onProgress func(*modelcall.Completion),
 ) (_ *modelcall.Completion, _ []string, err error) {
+	return l.completeStreamWithOverflowRetry(
+		ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, onProgress, false,
+	)
+}
+
+func (l *modelTurn) completeStreamWithOverflowRetry(
+	ctx context.Context,
+	sess *api.Session,
+	sessionID string,
+	history []api.Message,
+	profileID string,
+	userPrompt string,
+	iterIndex, maxIter int,
+	hostTurn bool,
+	st *promptLoopTurnState,
+	onProgress func(*modelcall.Completion),
+	overflowRecovered bool,
+) (_ *modelcall.Completion, _ []string, err error) {
 	// Secret overlays live for one outbound decision.
 	if st.hasSecretStorageOverlays() {
 		defer st.clearSecretStorageOverlays()
@@ -242,8 +284,7 @@ func (l *modelTurn) completeStream(
 	isCoordinatorTurn := strings.TrimSpace(sess.ParentSessionID) == ""
 	finishPreparing := func() {}
 	if isCoordinatorTurn {
-		activity := l.Projection.beginActivity(ctx, sess, sessionID, api.ActivityKindPreparingContext, "", "")
-		finishPreparing = activity.finish
+		finishPreparing = l.Projection.beginActivity(ctx, sess, sessionID, api.ActivityKindPreparingContext, "", "").finish
 	}
 	defer finishPreparing()
 	llmCallID := uuid.NewString()
@@ -251,6 +292,15 @@ func (l *modelTurn) completeStream(
 	turn, err := l.buildTurnRequest(ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st)
 	slog.InfoContext(ctx, "model request preparation", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(preparationStarted).Milliseconds(), "failed", err != nil)
 	if err != nil {
+		if !overflowRecovered {
+			if tooSmall, ok := failure.AsProviderContextTooSmall(err); ok && tooSmall != nil {
+				finishPreparing()
+				history = l.recoverFromContextOverflow(ctx, sess, sessionID, history, st, "", tooSmall.ProviderID, tooSmall.Model, 0, tooSmall)
+				return l.completeStreamWithOverflowRetry(
+					ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, onProgress, true,
+				)
+			}
+		}
 		return nil, nil, err
 	}
 	if st != nil {
@@ -260,66 +310,25 @@ func (l *modelTurn) completeStream(
 	// One id joins usage and completion records.
 	req.Debug.CallID = llmCallID
 	callProvider, callModel := l.resolveUsageMeta(sess, &modelcall.Completion{}) //nolint:contextcheck // pure registry lookup
-	if ledger, ok := l.Deps.Cost.(cost.CallLedger); ok {
-		if beginErr := ledger.BeginCall(ctx, cost.UsageEvent{
-			ID: llmCallID, SessionID: sess.ID, ParentSessionID: strings.TrimSpace(sess.ParentSessionID),
-			ProjectID: sess.ProjectID, ProviderID: callProvider, Model: callModel,
-			Caller: promptLoopUsageCaller(sess), StartedAt: time.Now().UTC(),
-		}); beginErr != nil {
-			slog.WarnContext(ctx, "open llm call receipt", "call_id", llmCallID, "error", beginErr)
-		} else {
-			defer func() {
-				if unknownErr := ledger.MarkCallUnknown(context.WithoutCancel(ctx), llmCallID); unknownErr != nil {
-					slog.WarnContext(context.WithoutCancel(ctx), "mark interrupted llm call unknown", "call_id", llmCallID, "error", unknownErr)
-				}
-			}()
-		}
-	}
+	defer beginTurnCallLedger(ctx, l.Deps.Cost, sess, llmCallID, callProvider, callModel)()
 	proseFinish := st.proseTurn(sess, iterIndex, maxIter)
-	ctx = llm.WithDispatchObserver(ctx, func() {
-		finishPreparing()
-		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
-			return
-		}
-		loop := coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish)
-		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-			CallID:          llmCallID,
-			Provider:        callProvider,
-			Model:           callModel,
-			Status:          api.LLMCallStatusActive,
-			CoordinatorLoop: loop,
-		})
-	})
+	progressIterIndex := currentModelIteration(st, iterIndex) - 1
+	loopProgress := func() *api.CoordinatorLoopProgress {
+		return coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish)
+	}
+	ctx = attachStreamObservers(ctx, l, sess, sessionID, llmCallID, callProvider, callModel, isCoordinatorTurn, finishPreparing, loopProgress)
 	callFailed := func() {
 		if isCoordinatorTurn {
-			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish))
+			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, loopProgress())
 		}
 	}
+	suppressCallFailed := false
 	// Publish one terminal event even after cancellation.
 	defer func() {
-		if err != nil {
+		if err != nil && !suppressCallFailed {
 			callFailed()
 		}
 	}()
-
-	// Retry updates reuse the call id.
-	ctx = providerretry.WithRetryObserver(ctx, func(a providerretry.RetryAttempt) {
-		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
-			return
-		}
-		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-			CallID:          llmCallID,
-			Provider:        callProvider,
-			Model:           callModel,
-			Status:          api.LLMCallStatusActive,
-			Attempt:         a.Attempt,
-			MaxAttempts:     a.MaxAttempts,
-			RetryWaitMs:     a.Wait.Milliseconds(),
-			RetryReason:     api.LLMRetryReason(a.Reason),
-			SilenceMs:       a.Silence.Milliseconds(),
-			CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
-		})
-	})
 
 	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
 	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx))
@@ -328,16 +337,27 @@ func (l *modelTurn) completeStream(
 	callProvider, callModel = collected.providerID, collected.model
 	trainingcapture.Observe(ctx, collected.completion, collectErr != nil, callProvider, callModel)
 	if collectErr != nil {
-		var recovered *modelcall.Completion
-		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {
-			callFailed()
+		if !overflowRecovered {
+			if tooSmall, ok := failure.AsProviderContextTooSmall(collectErr); ok && tooSmall != nil {
+				suppressCallFailed = true
+				history = l.recoverFromContextOverflow(ctx, sess, sessionID, history, st, surfaceID, callProvider, callModel, transcriptEstimate, tooSmall)
+				return l.completeStreamWithOverflowRetry(
+					ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, onProgress, true,
+				)
+			}
 		}
-		return recovered, nil, err
+		recovered, rerr := handleStreamCollectError(ctx, l, req, collected, collectErr, func() (*modelcall.Completion, error) {
+			return l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish)
+		}, callFailed)
+		return recovered, nil, rerr
 	}
 	completion, tokens := collected.completion, collected.tokens
 	providerID, model := collected.providerID, collected.model
 	// What the provider delivered, before the tool-call contract rewrites it.
 	delivered := completion
+	if truncErr := truncatedCompletionFault(ctx, l, sess, llmCallID, req, providerID, model, completion); truncErr != nil {
+		return completion, nil, truncErr
+	}
 
 	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, completion, providerID, model)
 	if err != nil {
@@ -373,6 +393,16 @@ func (l *modelTurn) completeStream(
 	}
 	if proseFinish {
 		kept := retainOfferedToolCalls(nil, "", completion.ToolCalls, workerProseOfferedTools(sess))
+		if len(kept) == 0 && len(completion.ToolCalls) > 0 && strings.TrimSpace(completion.Content) == "" && allBookkeepingToolCalls(completion.ToolCalls) {
+			if retryComp, retryTokens, ok := l.retryProseFinishAfterBookkeeping(ctx, sess, client, req, onProgress, llmCallID, providerID, model); ok {
+				retryComp.SourceContext = sourceRequest.ForCompletion(retryComp)
+				if st != nil {
+					st.output.sourceContext = retryComp.SourceContext
+				}
+				completion = retryComp
+				tokens = retryTokens
+			}
+		}
 		// Calls the final turn will not run are the model's miss, not a silent provider.
 		if len(kept) == 0 && len(completion.ToolCalls) > 0 && strings.TrimSpace(completion.Content) == "" {
 			return nil, nil, &ProseTurnToolCallError{ProviderID: providerID, Model: model, Tools: proseTurnToolNames(completion.ToolCalls), CloseoutReason: st.closeoutCauseTextOrEmpty()}
@@ -381,15 +411,76 @@ func (l *modelTurn) completeStream(
 	}
 	// Empty completions fail before the terminal event.
 	if !modelcall.CompletionHasPayload(completion) {
-		return nil, nil, &failure.ProviderEmptyCompletionError{ProviderID: providerID, Model: model}
+		return completion, nil, emptyOrTruncatedCompletionError(ctx, l, req, providerID, model, completion)
 	}
 	if isCoordinatorTurn {
 		l.publishLLMCallOK(ctx, sess, sessionID, llmCallID, providerID, model, completion.Usage,
-			coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish))
+			coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish))
 	}
 	completion.ProviderID = providerID
 	completion.Model = model
 	return completion, tokens, nil
+}
+
+func beginTurnCallLedger(ctx context.Context, costDep any, sess *api.Session, llmCallID, callProvider, callModel string) func() {
+	ledger, ok := costDep.(cost.CallLedger)
+	if !ok {
+		return func() {}
+	}
+	if beginErr := ledger.BeginCall(ctx, cost.UsageEvent{
+		ID: llmCallID, SessionID: sess.ID, ParentSessionID: strings.TrimSpace(sess.ParentSessionID),
+		ProjectID: sess.ProjectID, ProviderID: callProvider, Model: callModel,
+		Caller: promptLoopUsageCaller(sess), StartedAt: time.Now().UTC(),
+	}); beginErr != nil {
+		slog.WarnContext(ctx, "open llm call receipt", "call_id", llmCallID, "error", beginErr)
+		return func() {}
+	}
+	return func() {
+		if unknownErr := ledger.MarkCallUnknown(context.WithoutCancel(ctx), llmCallID); unknownErr != nil {
+			slog.WarnContext(context.WithoutCancel(ctx), "mark interrupted llm call unknown", "call_id", llmCallID, "error", unknownErr)
+		}
+	}
+}
+
+func attachStreamObservers(
+	ctx context.Context,
+	l *modelTurn,
+	sess *api.Session,
+	sessionID, llmCallID, callProvider, callModel string,
+	isCoordinatorTurn bool,
+	finishPreparing func(),
+	loopProgress func() *api.CoordinatorLoopProgress,
+) context.Context {
+	ctx = llm.WithDispatchObserver(ctx, func() {
+		finishPreparing()
+		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
+			return
+		}
+		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+			CallID:          llmCallID,
+			Provider:        callProvider,
+			Model:           callModel,
+			Status:          api.LLMCallStatusActive,
+			CoordinatorLoop: loopProgress(),
+		})
+	})
+	return providerretry.WithRetryObserver(ctx, func(a providerretry.RetryAttempt) {
+		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
+			return
+		}
+		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+			CallID:          llmCallID,
+			Provider:        callProvider,
+			Model:           callModel,
+			Status:          api.LLMCallStatusActive,
+			Attempt:         a.Attempt,
+			MaxAttempts:     a.MaxAttempts,
+			RetryWaitMs:     a.Wait.Milliseconds(),
+			RetryReason:     api.LLMRetryReason(a.Reason),
+			SilenceMs:       a.Silence.Milliseconds(),
+			CoordinatorLoop: loopProgress(),
+		})
+	})
 }
 
 type promptStreamCollection struct {
@@ -461,199 +552,4 @@ func turnTimeoutCause(streamCtx context.Context, budget *llm.CallBudget) error {
 		return llm.ErrCallBudgetExceeded
 	}
 	return nil
-}
-
-// coordinatorTurnRequest is one assembled provider call.
-type coordinatorTurnRequest struct {
-	Req modelcall.CompletionRequest
-	// SurfaceID is empty outside coordinator profiles.
-	SurfaceID string
-	// TranscriptEstimate is the pre-call token estimate.
-	TranscriptEstimate int
-	ToolPlan           toolsurface.Plan
-}
-
-// buildTurnRequest assembles and detaches one provider request.
-func (l *modelTurn) buildTurnRequest(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID string,
-	history []api.Message,
-	profileID string,
-	userPrompt string,
-	iterIndex, maxIter int,
-	hostTurn bool,
-	st *promptLoopTurnState,
-) (coordinatorTurnRequest, error) {
-	if l.Context.Deps.BuildMessages == nil {
-		return coordinatorTurnRequest{}, fmt.Errorf("build messages not configured")
-	}
-	frameValue := inject.CoordinatorTurnFrame{}
-	var frame *inject.CoordinatorTurnFrame
-	if st != nil && st.coordinatorFrameReady {
-		frame = &st.coordinatorFrame
-		frameValue = st.coordinatorFrame
-	}
-	messages, err := l.Context.Deps.BuildMessages(ctx, sess, history, frame)
-	if err != nil {
-		return coordinatorTurnRequest{}, err
-	}
-	if frame != nil {
-		frameValue = *frame
-	}
-	if st != nil && st.proseTurn(sess, iterIndex, maxIter) {
-		st.proseFinish = true
-	}
-	turnTools, toolPlan, surfaceID, err := l.Context.coordinatorToolsForTurn(
-		ctx, sess, profileID, history, userPrompt, iterIndex, maxIter, frameValue, st,
-	)
-	if err != nil {
-		return coordinatorTurnRequest{}, err
-	}
-	if st != nil && st.spendSoftStopGranted {
-		turnTools = filterSpendSoftStopToolMetas(turnTools)
-	}
-	// A final turn with no completion tool keeps its tool definitions, which
-	// transports validate tool history against, and forbids calling them.
-	// Closeout repairs on earlier turns keep the surface callable: the repair
-	// kick offers resuming work, which retires the pinned report.
-	toolUse := modelcall.ToolUseAllowed
-	callable := turnTools
-	if st != nil && st.proseFinish && len(workerProseOfferedTools(sess)) == 0 {
-		toolUse = modelcall.ToolUseForbidden
-		callable = []tools.ToolMeta{}
-	}
-	messages, err = l.Tools.appendToolProcedures(ctx, sess, profileID, messages, callable)
-	if err != nil {
-		return coordinatorTurnRequest{}, err
-	}
-	if reject, blocked, _, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oar.ContentObservation{Segments: oarContentSegments(messages)}, "", nil); blocked {
-		return coordinatorTurnRequest{}, reject
-	} else if changed {
-		return coordinatorTurnRequest{}, fmt.Errorf("[OAR-PROF-10] model.input transform cannot preserve message roles and provenance")
-	}
-	if l.Inbox.Deps.TakePolicyFeedback != nil {
-		feedback, err := l.Inbox.Deps.TakePolicyFeedback(ctx, sessionID)
-		if err != nil {
-			return coordinatorTurnRequest{}, err
-		}
-		messages = append(messages, feedback...)
-		if st != nil {
-			st.history = append(st.history, feedback...)
-		}
-	}
-	// Detach the request from mutable history.
-	messages = append([]api.Message(nil), messages...)
-	req := modelcall.CompletionRequest{
-		Messages: messages,
-		Debug: modelcall.RequestDebug{
-			SessionID:        sessionID,
-			ProjectID:        sess.ProjectID,
-			ProjectDir:       l.Context.primaryProjectRoot(ctx, sess),
-			RootSessionID:    rootModelRequestSessionID(sess, sessionID),
-			AgentType:        sess.AgentType,
-			ParentSessionID:  sess.ParentSessionID,
-			ProfileID:        profileID,
-			HostTurn:         hostTurn,
-			Surface:          surfaceID,
-			Iteration:        iterIndex + 1,
-			MaxIterations:    maxIter,
-			WorkflowRevision: frameValue.WorkflowRevision,
-			CommandGuidance:  l.buildCommandGuidanceDebug(ctx, sess, profileID, surfaceID, frameValue, turnTools),
-		},
-	}
-	if err := validateTurnToolFunctionRoots(turnTools); err != nil {
-		return coordinatorTurnRequest{}, err
-	}
-	req.Tools = turnTools
-	req.ToolUse = toolUse
-	if l.Deps.FitRequest != nil {
-		req, err = l.Deps.FitRequest(ctx, sess, history, req)
-		if err != nil {
-			return coordinatorTurnRequest{}, err
-		}
-	}
-	st.stampOfferedToolNames(callable)
-	return coordinatorTurnRequest{
-		Req:                req,
-		SurfaceID:          surfaceID,
-		TranscriptEstimate: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(req.Messages)),
-		ToolPlan:           toolPlan,
-	}, nil
-}
-
-func validateTurnToolFunctionRoots(metas []tools.ToolMeta) error {
-	for _, meta := range metas {
-		if meta.ArgsSchema == nil {
-			continue
-		}
-		if err := tools.ValidateFunctionParametersRoot(meta.ArgsSchema); err != nil {
-			name := strings.TrimSpace(meta.Name)
-			if name == "" {
-				name = "unnamed"
-			}
-			return fmt.Errorf("tool %q: %w", name, err)
-		}
-	}
-	return nil
-}
-
-// primaryProjectRoot keeps project leases stable across worker checkouts.
-func (l *promptContext) primaryProjectRoot(ctx context.Context, sess *api.Session) string {
-	if l == nil || sess == nil {
-		return ""
-	}
-	return strings.TrimSpace(l.citationRoots(ctx, sess).ProjectDir)
-}
-
-func (l *modelTurn) buildCommandGuidanceDebug(
-	ctx context.Context,
-	sess *api.Session,
-	profileID, surfaceID string,
-	frame inject.CoordinatorTurnFrame,
-	turnTools []tools.ToolMeta,
-) *modelcall.CommandGuidanceDebug {
-	if sess == nil {
-		return nil
-	}
-	var offered, deferred []string
-	for _, meta := range turnTools {
-		name := strings.TrimSpace(meta.Name)
-		if name == "" {
-			continue
-		}
-		if meta.Deferred {
-			deferred = append(deferred, name)
-		} else {
-			offered = append(offered, name)
-		}
-	}
-	rootCount := 0
-	if l != nil && l.Context != nil && l.Context.Deps.ProjectRootCount != nil {
-		rootCount = l.Context.Deps.ProjectRootCount(ctx, sess)
-	}
-	projectDir := ""
-	if l != nil && l.Context != nil {
-		projectDir = l.Context.primaryProjectRoot(ctx, sess)
-	}
-	templates, facts := prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
-		ProfileID:             profileID,
-		SurfaceID:             surfaceID,
-		AgentType:             sess.AgentType,
-		IsCoordinator:         profileID == prompts.CoordinatorProfileID || strings.TrimSpace(surfaceID) != "",
-		OfferedTools:          offered,
-		DeferredTools:         deferred,
-		RootCount:             rootCount,
-		ProjectDir:            projectDir,
-		SessionScratchDir:     frame.Machine.Surface.SessionScratchDir,
-		Posture:               frame.Machine.Surface.Posture,
-		CommandExternalHidden: frame.Machine.Surface.CommandExternalHidden,
-	})
-	if len(templates) == 0 && len(facts) == 0 {
-		return nil
-	}
-	return &modelcall.CommandGuidanceDebug{
-		Templates: templates,
-		Facts:     facts,
-	}
 }

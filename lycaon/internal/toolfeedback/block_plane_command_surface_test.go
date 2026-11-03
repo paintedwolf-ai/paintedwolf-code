@@ -28,28 +28,28 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 			reject: &toolrejection.ToolReject{Code: "COMMAND_NOT_FOUND", Data: map[string]any{
 				"command": "missing-tool",
 			}},
-			want: []string{"missing-tool", "PATH"},
+			want: []string{"missing-tool", "could not be resolved"},
 		},
 		{
 			tool: "command",
 			reject: &toolrejection.ToolReject{Code: "COMMAND_PWD_NOT_CWD", Data: map[string]any{
 				"command": "go mod tidy", "cwd": "/project", "pwd": "/project/subdir",
 			}},
-			want: []string{"env.PWD", "/project/subdir", "cwd:"},
+			want: []string{"env.PWD", "/project/subdir", "resolved working directory"},
 		},
 		{
 			tool: "command",
 			reject: &toolrejection.ToolReject{Code: "COMMAND_IN_FLIGHT", Data: map[string]any{
 				"handles": []string{"command-1"}, "handles_text": "command-1",
 			}},
-			want: []string{"command-1", "allow_concurrent"},
+			want: []string{"command-1", "command_output"},
 		},
 		{
 			tool: "command",
 			reject: &toolrejection.ToolReject{Code: "COMMAND_DUPLICATE_RUNNING", Data: map[string]any{
 				"handles": []string{"command-1"}, "handles_text": "command-1",
 			}},
-			want: []string{"command-1", "observed exit"},
+			want: []string{"command-1", "does not establish exit"},
 		},
 		{
 			tool:   "command",
@@ -74,7 +74,8 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.reject.Code, func(t *testing.T) {
-			err := bp.RejectObservation(context.Background(), tc.tool, "implement", nil, tc.reject)
+			ctx := tools.WithRecoveryTools(t.Context(), []string{tc.tool, "command_output", "command_stop"})
+			err := bp.RejectObservation(ctx, tc.tool, "implement", map[string]any{}, tc.reject)
 			if err == nil {
 				t.Fatalf("%s produced no Decision — the agent would receive the bare code", tc.reject.Code)
 			}

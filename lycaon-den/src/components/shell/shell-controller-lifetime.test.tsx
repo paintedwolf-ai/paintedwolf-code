@@ -35,6 +35,13 @@ describe("shell controller ownership", () => {
     setShown(true);
     await waitFor(() => expect(seams.seen).toHaveBeenCalledWith("session"));
     expect(appStore.state.currentSession?.id).toBe("session");
+    seams.seen.mockClear();
+    appStore.actions.installTranscriptBaseline("session", [{ id: "m2", ord: 2, seq: 2, role: "user", origin: "user", authority: "user", trust_tier: "trusted", content: "hi", created_at: "t" }], 2, { hasMoreBefore: true });
+    await waitFor(() => expect(seams.seen).toHaveBeenCalledTimes(1));
+    seams.seen.mockClear();
+    appStore.actions.loadTranscriptPage({ edge: "older", beforeMessageId: "m2" }, { messages: [{ id: "m1", ord: 1, seq: 1, role: "user", origin: "user", authority: "user", trust_tier: "trusted", content: "older", created_at: "t" }], watermark: 2, turn_clocks: {}, turn_loads: {} });
+    await Promise.resolve();
+    expect(seams.seen).not.toHaveBeenCalled();
     controller.attentionIndex();
     view.unmount(); seams.seen.mockClear();
     setShown(false); setShown(true);

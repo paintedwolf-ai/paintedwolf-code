@@ -30,7 +30,7 @@ class HostedPlanTests(unittest.TestCase):
         # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
         self.assertLessEqual(release, check | platform)
         self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities",
-                                   "webkit-gtk", "confinement-arm64", "reference-userlands"})
+                                   "webkit-gtk", "confinement-arm64", "reference-userlands", "command-scale"})
         # Qualification runs the check gate, then release's platform lanes beside the platform gates.
         self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
@@ -61,6 +61,38 @@ class HostedPlanTests(unittest.TestCase):
         self.assertIn("test:short", stages)
         self.assertGreaterEqual(analysis["minutes"], ci.lanes()["lint"]["minutes"])
 
+    def test_script_coverage_keeps_repository_tools_without_host_runtime_engines(self):
+        for profile in ('check', 'integration', 'nightly'):
+            rows = ci.matrix(profile)['include']
+            runner = next(row for row in rows if row['lane'] == 'runner')
+            self.assertFalse(runner['runtime_engines'])
+            self.assertTrue(runner['repository_tools'])
+            behavior = next(row for row in rows if row['lane'] == 'behavior')
+            self.assertTrue(behavior['runtime_engines'])
+        for targets in (['test:full'], ['scripts:coverage:changes', 'test:full']):
+            data = copy.deepcopy(planning.catalog())
+            data['ci']['runner']['targets'] = targets
+            with self.subTest(targets=targets), patch.object(ci, 'catalog', return_value=data):
+                with self.assertRaisesRegex(ValueError, 'requires runtime engines'):
+                    ci.lanes()
+
+    def test_scale_cases_run_at_landing_and_release_and_partition_nightly_once(self):
+        lanes = ci.lanes()
+        expected = set(planning.catalog()['go']['test:stress']['packages'])
+        selected = [package for lane in lanes.values() if lane['targets'] == ['test:stress']
+                    and 'nightly' in lane['profiles'] for package in lane['arguments']]
+        self.assertEqual(set(selected), expected)
+        self.assertEqual(len(selected), len(expected))
+        for scope in (None, {'full': True}, {'full': False, 'paths': ['lycaon/internal/session/a.go']}):
+            self.assertIn('command-scale', {row['lane'] for row in ci.matrix('integration', scope=scope)['include']})
+        self.assertIn('command-scale', {row['lane'] for row in ci.matrix('release', platform=True)['include']})
+        self.assertNotIn('command-scale', {row['lane'] for row in ci.matrix('fast')['include']})
+        self.assertNotIn('command-scale', {row['lane'] for row in ci.matrix('integration',
+                         scope={'full': False, 'paths': ['lycaon-den/src/ui.ts']})['include']})
+        data = copy.deepcopy(planning.catalog())
+        data['ci']['stress']['arguments'].append(data['ci']['command-scale']['arguments'][0])
+        with patch.object(ci, 'catalog', return_value=data), self.assertRaisesRegex(ValueError, 'stress partition'):
+            ci.lanes()
 
     def test_parallel_analysis_cannot_replace_the_admission_contracts(self):
         for change in ('contracts', 'scope', 'setup', 'preflight'):
@@ -364,7 +396,7 @@ class HostedPlanTests(unittest.TestCase):
                 self.assertTrue(all(ci.supplemental(ci.lanes()[row["lane"]]) for row in rows))
         scope = dict(full=False, paths=["lycaon/internal/confine/boundary_linux.go"])
         self.assertEqual({row["lane"] for row in ci.matrix("integration", scope=scope, platform=True)["include"]},
-                         {"confinement-arm64"})
+                         {"confinement-arm64", "command-scale"})
         with self.assertRaises(ValueError):
             ci.matrix("check", platform=True)
 
@@ -389,7 +421,8 @@ class HostedPlanTests(unittest.TestCase):
         lanes = ci.lanes()
         rows = ci.matrix("integration")["include"]
         self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
-        self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
+        self.assertEqual(rows[2]["lane"], "runner")
+        self.assertEqual([row["lane"] for row in rows[3:5]], ["behavior", "behavior"])
         for profile in ci.PROFILES:
             rows = ci.matrix(profile)['include']
             ordinary = [row for row in rows if row['priority'] != 'compile']

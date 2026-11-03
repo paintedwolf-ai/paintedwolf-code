@@ -7,9 +7,6 @@ optional_tools:
   - verify
   - terminal_open
   - terminal_send
-  - edit
-  - replace_lines
-  - jq_edit
 ---
 
 # Use secrets without reading them

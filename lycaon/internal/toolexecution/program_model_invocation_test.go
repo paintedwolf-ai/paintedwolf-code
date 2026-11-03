@@ -101,7 +101,7 @@ func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *test
 	ctx, observation, release, err := prepareProgramPolicyObservation(t.Context(), frame, memory, tc, nil)
 	testutil.FailErr(t, "admit actual policy observation", err)
 	if observation.submitted["command"] != "cat input" || memory.InUse().State <= baseline {
-		t.Fatal("policy observation lost actual envelope or decoded-state admission")
+		t.Fatal("policy observation lost actual envelope or snapshot admission")
 	}
 	cause := &toolrejection.ToolReject{Code: "READ_PATH_DENIED", Data: map[string]any{"path": "input"}}
 	executor := NewExecutor(nil, nil, "fixture")
@@ -113,7 +113,7 @@ func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *test
 	}
 	release()
 	if memory.InUse().State != baseline {
-		t.Fatal("decoded observation lease leaked")
+		t.Fatal("policy observation lease leaked")
 	}
 	tc.Identity.ToolCallID = "another-model-call"
 	if _, _, err := programModelArguments(t.Context(), frame, memory, tc); err == nil || memory.InUse().State != baseline {
@@ -158,5 +158,24 @@ func TestProgramFrameRetainsSupplementalFactsOnCapturedLedger(t *testing.T) {
 	}
 	if err := frame.retainProgramFacts(t.Context(), 1); err == nil {
 		t.Fatal("closed frame retained new facts")
+	}
+}
+
+func TestVerifyProgramFrameRetainsSelectedCheckInvocation(t *testing.T) {
+	parent, tc := frameFixture(t)
+	memory := stageMemory(t, 64<<20)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "verify", Arguments: map[string]any{}}, memory)
+	testutil.FailErr(t, "capture selected-check invocation", err)
+	defer frame.Close()
+	model, err := frame.ModelInvocation(t.Context())
+	testutil.FailErr(t, "observe selected-check invocation", err)
+	if model.ToolName != "verify" || model.CanonicalArguments != "{}" {
+		t.Fatalf("model invocation=%+v", model)
+	}
+	_, observation, release, err := prepareProgramPolicyObservation(t.Context(), frame, memory, tc, nil)
+	testutil.FailErr(t, "observe verify policy", err)
+	defer release()
+	if len(observation.submitted) != 0 {
+		t.Fatalf("policy received generated arguments: %+v", observation.submitted)
 	}
 }

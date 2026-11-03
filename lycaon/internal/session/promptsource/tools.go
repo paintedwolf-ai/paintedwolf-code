@@ -95,7 +95,6 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 		return m.Sessions.CommitEvidenceToolResult(ctx, sessionID, projectDir, toolName, args, content)
 	}
 	deps.RecordSourceRunEvidence = m.Verification.RecordSourceRunEvidence
-	deps.ConfirmVerifyResult = m.Verification.ConfirmVerifyResult
 	deps.InFlightWorkerRosterNote = func(ctx context.Context, sess *api.Session) string {
 		if m == nil || m.Workers == nil || sess == nil {
 			return ""

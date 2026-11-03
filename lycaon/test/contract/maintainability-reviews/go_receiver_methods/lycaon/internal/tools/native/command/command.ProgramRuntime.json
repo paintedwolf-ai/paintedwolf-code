@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/tools/native/command/command.ProgramRuntime",
+  "kind": "runtime_service",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain one program lifetime shared by command and verify: admission, immutable parent identity, source binding, output custody and parked settlement remain coordinated here. Existing effect, review and persistence collaborators retain their authority. The shared failure tracker preserves the existing loop guard. Selected-check and parked-verification contracts support this composed boundary; no second runtime controller is introduced.",
+  "reviewed_commit": "1da0705c31dcb167e8a38f16761ff8a4b8e1f033",
+  "ceiling": 30,
+  "boundaries": {
+    "lycaon/internal/tools/native/verify_test.go": "30d258e73e5f1fa299b24fe66452ed1a6c2bde65971e3e9da629986d39eb4cad",
+    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338"
+  },
+  "reviewed_shape": "682a6fc95738046c18667837cd3dc2673cb3c92570ce6c2043e8095c2df206bb"
+}

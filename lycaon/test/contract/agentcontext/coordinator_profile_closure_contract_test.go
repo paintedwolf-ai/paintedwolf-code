@@ -21,22 +21,8 @@ var coordinatorPromptCorpusGlobs = []string{
 // coordinatorPromptlessAllowlist lists coordinator profile tools documented
 // outside tripartite coordinator prose.
 var coordinatorPromptlessAllowlist = map[string]string{
-	"survey_repo":         "survey-first-pass partial; catalog bundle composite survey",
-	"edit":                "documented in coordinator-surface-build.md; wrapup partial lists as forbidden",
-	"replace_lines":       "worker long-file mutations via task(); coordinator plan surfaces only",
 	"restore_version":     "worker mutations via task(); coordinator plan surfaces only",
 	"source_history":      "universal repo inspection",
-	"git_commit":          "implement_investigate surface; orchestrate modes delegate via task()",
-	"git_checkout":        "branch checkout convention supplied by its tool schema",
-	"git_merge":           "merge convention supplied by its tool schema",
-	"git_stash":           "stash mutation convention supplied by its tool schema",
-	"git_restore":         "implement_investigate surface; orchestrate modes delegate via task()",
-	"chmod":               "implement_investigate surface; orchestrate modes delegate via task()",
-	"chown":               "implement_investigate surface; orchestrate modes delegate via task()",
-	"code_rewrite":        "implement_investigate surface; orchestrate modes delegate via task()",
-	"jq_edit":             "structured document write on implement_investigate; calling convention in tool schema",
-	"process_list":        "implement_investigate surface; orchestrate modes delegate via task()",
-	"process_signal":      "implement_investigate surface; orchestrate modes delegate via task()",
 	"delegate_dispatch":   "delegation primitive; calling convention covered by topology docs",
 	"task":                "delegation primitive; surfaced via leg-finished kick",
 	"workflow_persist":    "low-level upsert; coordinator uses compose/compose_from_template instead",

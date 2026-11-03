@@ -3,16 +3,16 @@ package native
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
-func TestWriteEditGitInternalsDenied(t *testing.T) {
+func TestWriteGitInternalsDenied(t *testing.T) {
 	cases := []struct {
 		path  string
 		class string
@@ -38,16 +38,15 @@ func TestWriteEditGitInternalsDenied(t *testing.T) {
 				t.Fatalf("class = %v, want %s", reject.Data["class"], tc.class)
 			}
 		})
-		t.Run("edit/"+tc.path, func(t *testing.T) {
+		t.Run("overwrite/"+tc.path, func(t *testing.T) {
 			dir := t.TempDir()
 			abs := filepath.Join(dir, filepath.FromSlash(tc.path))
 			testutil.FailErr(t, "mkdir parent", os.MkdirAll(filepath.Dir(abs), 0o755))
 			testutil.FailErr(t, "seed file", os.WriteFile(abs, []byte("old\n"), 0o644))
-			tool := &EditTool{Boundary: nativefixture.Boundary(t)}
+			tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 			_, err := tool.Run(context.Background(), map[string]any{
-				"path":       tc.path,
-				"old_string": "old",
-				"new_string": "new",
+				"path":    tc.path,
+				"content": "new\n",
 			}, nativefixture.Context(dir))
 			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {

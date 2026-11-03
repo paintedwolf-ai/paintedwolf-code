@@ -10,6 +10,7 @@ import (
 )
 
 func TestResolveRevisionReadsCommitsBranchesAndRanges(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	commit := func(name, message string) string {
 		t.Helper()
@@ -65,6 +66,7 @@ func TestResolveRevisionReadsCommitsBranchesAndRanges(t *testing.T) {
 }
 
 func TestResolveRevisionDetachedHeadAndUnrelatedHistory(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	testutil.FailErr(t, "write first", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644))
 	run("add", "-A")

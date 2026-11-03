@@ -1,8 +1,8 @@
 import copy
 import json
 import pathlib
-from test_episode_support import EvidenceCase
-from workflow_evidence import workflow_checks
+from test_episode_evidence import EvidenceCase
+from verification_evidence import workflow_checks
 
 OPERATIONS = [op for op in json.loads(pathlib.Path(__file__).with_name('benchmark.json').read_text())['operations'] if op.get('workflow')]
 
@@ -96,7 +96,7 @@ class WorkflowEvidenceTests(WorkflowFixtureCase):
                             self.assertFalse(self.checks()['workflow-receipt-'+required['id']])
 
     def test_declared_negative_controls_fail_their_named_checks(self):
-        from workflow_controls import plan
+        from smoke_grading import plan
         controls=json.loads(pathlib.Path(__file__).with_name('fixture-controls.json').read_text())
         for operation in OPERATIONS:
             control=controls[operation['id']]['workflow']

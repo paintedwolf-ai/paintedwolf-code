@@ -28,7 +28,6 @@ func TestNativePathArgsRejectTraversal(t *testing.T) {
 	allTools := []tool{
 		&surveytools.ReadTool{Boundary: boundary},
 		&WriteTool{Boundary: boundary},
-		&EditTool{Boundary: boundary},
 		&surveytools.FindTool{Boundary: boundary},
 		&surveytools.GrepTool{Boundary: boundary},
 		&surveytools.StatTool{Boundary: boundary},
@@ -65,9 +64,6 @@ func TestNativePathArgsRejectTraversal(t *testing.T) {
 					switch tl.Name() {
 					case "write":
 						args["content"] = "x"
-					case "edit":
-						args["old_string"] = "x"
-						args["new_string"] = "y"
 					case "grep":
 						args["pattern"] = "x"
 					case "stat", "wc", "delete":

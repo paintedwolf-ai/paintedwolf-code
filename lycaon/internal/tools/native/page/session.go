@@ -225,7 +225,7 @@ func mapPageLifecycleReject(err error, id string) error {
 }
 
 // attachPageVisual makes a page result's raster or recording the tool's visual. A timeline
-// is perceived as its contact sheet.
+// or filmstrip is perceived as its contact sheet.
 func attachPageVisual(tctx tools.ToolContext, out browser.CaptureResult) {
 	if tctx.Effects.Out == nil {
 		return
@@ -235,7 +235,7 @@ func attachPageVisual(tctx tools.ToolContext, out browser.CaptureResult) {
 		Bytes:     append([]byte(nil), out.Bytes...),
 		Source:    api.VisualArtifactSourceCapture,
 		Caption:   out.Caption,
-		Perceive:  out.Mime != browser.FilmstripMime,
+		Perceive:  true,
 		Projected: true,
 		Width:     out.Width,
 		Height:    out.Height,

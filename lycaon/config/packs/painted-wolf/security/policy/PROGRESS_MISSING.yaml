@@ -22,6 +22,7 @@ copy:
     Call **`update_progress`** with JSON arguments including at least one open **`- [ ]`** step, for example
     `{"content":"## Progress\n- [ ] Deliver the requested changes\n- [ ] Verify the result"}`.
     Replace the row text with the requested deliverables; use **`- [>]`** for optional report-only rows.
+    When a checklist already exists, include its current snapshot revision as `expected_revision`; first creation may omit it.
     After it succeeds, retry the rejected **`{{ tool }}`** call with its original arguments.
     A different edit or dispatch tool has the same prerequisite.
   instead: Call **`update_progress`**, then retry the same rejected call

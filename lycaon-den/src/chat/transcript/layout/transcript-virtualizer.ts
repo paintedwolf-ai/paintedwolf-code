@@ -665,8 +665,16 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       opts.observeElementOffset ?? observeTranscriptScrollOffset,
     onChange: opts.onChange,
   }) as MeasuredTranscriptVirtualizer;
+  let pendingLanding:
+    | {
+        targetOffsetPx: number;
+      }
+    | undefined;
   virtualizer.runway = runway;
   virtualizer.prepareLanding = (targetOffsetPx: number) => {
+    pendingLanding = {
+      targetOffsetPx,
+    };
     runwayBudget.prepareLanding(
       targetOffsetPx,
       opts.originPx?.() ?? 0,
@@ -903,7 +911,34 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
     measuredBasis = basis;
     const changedRevisions = untrack(collectRevisionChanges);
     setOptions(next);
-    carryRowChanges(anchor, countBefore, originBefore);
+    const anchorSurvived =
+      anchor !== null && indexOfKey(virtualizer, anchor.key, anchor.index) >= 0;
+    if (!pendingLanding) {
+      carryRowChanges(anchor, countBefore, originBefore);
+    } else if (!anchorSurvived && virtualizer.options.count > 0) {
+      const landing = pendingLanding;
+      pendingLanding = undefined;
+      if (virtualizer.scrollOffset !== null) {
+        const extent = virtualizer.residentExtent();
+        const viewportHeight =
+          virtualizer.scrollRect?.height ?? TRANSCRIPT_VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX;
+        const maxOffset = Math.max(extent.startPx, extent.endPx - viewportHeight);
+        const currentOffset = landing.targetOffsetPx;
+        const targetOffset = Math.min(
+          maxOffset,
+          Math.max(extent.startPx, currentOffset),
+        );
+        const drift = targetOffset - virtualizer.scrollOffset;
+        if (drift !== 0) {
+          virtualizer.scrollOffset = Math.max(0, virtualizer.scrollOffset + drift);
+          if (!rowDriftQueued) {
+            rowDriftQueued = true;
+            queueMicrotask(carryRowDrift);
+          }
+          pendingRowDrift += drift;
+        }
+      }
+    }
     if (geometryChanged) reestimateUnmountedRows();
     else if (changedRevisions && changedRevisions.size > 0) reestimateUnmountedRows(changedRevisions);
   };

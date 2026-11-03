@@ -157,7 +157,7 @@ func (t *WriteTool) writeText(ctx context.Context, tctx tools.ToolContext, resol
 			reportTextIntent(tctx, resolved, st, before != nil, finalContent)
 		}
 	}
-	if err := rejectIfSyntaxUnhealthy(ctx, "write", path, before, finalContent, mutationSeam{}); err != nil {
+	if err := rejectIfSyntaxUnhealthy(ctx, "write", path, before, finalContent); err != nil {
 		return WriteResult{}, err
 	}
 	landed, err := land(finalContent)

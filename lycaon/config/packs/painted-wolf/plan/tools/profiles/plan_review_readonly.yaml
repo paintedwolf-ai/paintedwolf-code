@@ -11,7 +11,6 @@ tools:
   pack_board: sticky
   request_decision: sticky
   request_budget: sticky
-  summarize: sticky
   source_history: sticky
   skills_read: sticky
   wait: sticky

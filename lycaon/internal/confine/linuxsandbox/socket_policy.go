@@ -129,6 +129,9 @@ func (n Network) decideUnix(r SocketRequest) Decision {
 	}
 	for _, grant := range n.SocketGrants {
 		if grant.Path == path {
+			if grant.CredentialRead && (!r.Stream || r.Seqpacket) {
+				return refuse("network-outbound", path)
+			}
 			return Decision{Action: Perform, SocketFD: grant.FD}
 		}
 	}

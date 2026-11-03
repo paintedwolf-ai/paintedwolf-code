@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { createRoot } from "solid-js";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
-import { createWorkspaceProjectRemoval } from "./project-lifecycle.ts";
+import { createProjectLifecycle, createWorkspaceProjectRemoval, formatForcedLifecycleMessage } from "./project-lifecycle.ts";
+import { LycaonApiError } from "../../api/http.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
 import { selectAppNotices } from "../../notices/notice-select.ts";
 import { APP_SCOPE } from "../../notices/notice-scope.ts";
@@ -10,12 +11,14 @@ import { createShellStore } from "../../store/shell-store.ts";
 const seams = vi.hoisted(() => ({
   prepare: vi.fn(async () => undefined), retire: vi.fn(), thumbnail: vi.fn(), invalidate: vi.fn(async () => undefined),
   report: vi.fn(), notify: vi.fn((_notice: import("../../notices/notice-model.ts").NoticeInput) => {}), assess: vi.fn(), remove: vi.fn(), lookup: vi.fn(),
+  detachRoot: vi.fn(), listBg: vi.fn(), confirm: vi.fn(),
 }));
 vi.mock("../../files/documents/project-files-buffers.ts", () => ({ prepareFilesRootDetach: seams.prepare, dropFilesBuffersForRoot: vi.fn() }));
 vi.mock("../../home/thumbnail-store.ts", () => ({ forgetProjectThumbnail: seams.thumbnail }));
 vi.mock("../../contributions/contribution-store.ts", () => ({ invalidateContributionFrame: seams.invalidate }));
+vi.mock("../../platform/interaction/confirm-dialog.ts", () => ({ confirmDestructive: (...args: unknown[]) => seams.confirm(...args) }));
 vi.mock("../../platform/connection/app-connection.ts", () => ({ getEntityRetire: () => ({ project: seams.retire }),
-  getLycaonClient: () => ({ assessProjectRemoval: seams.assess, createProjectRemoval: seams.remove, getProjectRemoval: seams.lookup }),
+  getLycaonClient: () => ({ assessProjectRemoval: seams.assess, createProjectRemoval: seams.remove, getProjectRemoval: seams.lookup, detachProjectRoot: seams.detachRoot, listProjectBackgroundProcesses: seams.listBg }),
   noticeReporterFor: () => ({ reportError: seams.report, publish: seams.notify }) }));
 
 describe("workspace project retirement", () => {
@@ -75,4 +78,79 @@ it("updates one existing app notice with host progress and withdraws it at settl
   expect(selectAppNotices(notices.index())).toHaveLength(0);
   expect(seams.retire).toHaveBeenCalledWith("project");
   expect(seams.report).not.toHaveBeenCalled();
+});
+
+describe("workspace root detach running commands", () => {
+  it("lists exact affected background commands (including archived chats) and refreshes if the set changes before force admission", async () => {
+    vi.clearAllMocks();
+    const bg1 = {
+      process_id: "bg_1",
+      handle: "bg_1",
+      session_id: "s-idle",
+      session_title: "Idle server chat",
+      session_archived: false,
+      command: "python3 -m http.server 8000",
+      root_id: "root-2",
+      ports: ["127.0.0.1:8000"],
+      running: true,
+    };
+    const bg2 = {
+      process_id: "bg_2",
+      handle: "bg_2",
+      session_id: "s-archived",
+      session_title: "Archived watcher",
+      session_archived: true,
+      command: "npm run watch",
+      root_id: "root-2",
+      ports: [],
+      running: true,
+    };
+    expect(
+      formatForcedLifecycleMessage({ background_processes: [bg1, bg2] }),
+    ).toContain("• python3 -m http.server 8000 (127.0.0.1:8000) — Idle server chat");
+    expect(
+      formatForcedLifecycleMessage({ background_processes: [bg1, bg2] }),
+    ).toContain("• npm run watch — Archived watcher (archived)");
+
+    seams.detachRoot
+      .mockRejectedValueOnce(
+        new LycaonApiError("Folder is in use", 409, "root_busy", {
+          details: { background_processes: [bg1] },
+        }),
+      )
+      .mockResolvedValueOnce({ id: "project", roots: [] });
+    seams.listBg
+      .mockResolvedValueOnce({ processes: [bg1, bg2] })
+      .mockResolvedValueOnce({ processes: [bg1, bg2] });
+    seams.confirm.mockResolvedValue(true);
+
+    const lifecycle = createRoot((dispose) => {
+      onTestFinished(dispose);
+      return createProjectLifecycle({
+        projects: { byId: () => undefined, upsert: vi.fn(), applyPatch: vi.fn() },
+        activeProjectId: () => "project",
+        activeProject: () => null,
+        report: seams.report,
+      });
+    });
+    await lifecycle.detachProjectRoot("project", "root-2");
+    expect(seams.confirm).toHaveBeenCalledTimes(2);
+    expect(seams.confirm.mock.calls[0]?.[0]?.message).toContain(
+      "1 background command bound to this folder will stop:",
+    );
+    expect(seams.confirm.mock.calls[1]?.[0]?.message).toContain(
+      "2 background commands bound to this folder will stop:",
+    );
+    expect(seams.detachRoot).toHaveBeenLastCalledWith("project", "root-2", { force: true });
+
+    // Cancel stops nothing
+    seams.detachRoot.mockReset().mockRejectedValueOnce(
+      new LycaonApiError("Folder is in use", 409, "root_busy", {
+        details: { background_processes: [bg1] },
+      }),
+    );
+    seams.confirm.mockReset().mockResolvedValueOnce(false);
+    await lifecycle.detachProjectRoot("project", "root-2");
+    expect(seams.detachRoot).toHaveBeenCalledTimes(1);
+  });
 });

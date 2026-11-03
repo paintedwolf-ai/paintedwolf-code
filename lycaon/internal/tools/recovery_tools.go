@@ -5,9 +5,17 @@ import (
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 type recoveryToolsKey struct{}
+
+type recoveryContractKey struct{ tool string }
+
+// WithRecoveryContract freezes the definition used by this invocation.
+func WithRecoveryContract(ctx context.Context, tool string, contract toolcontract.Contract) context.Context {
+	return context.WithValue(ctx, recoveryContractKey{tool}, toolcontract.ToolCapabilitySnapshot{Tool: tool, Capabilities: contract.Capabilities})
+}
 
 // WithRecoveryTools freezes the tool names actually offered on this request.
 // An absent list provides no evidence that a proposed recovery tool is available.
@@ -23,6 +31,9 @@ func ToolOffered(ctx context.Context, name string) bool {
 
 // RegisterRecoveryFacts publishes the frozen offered-tool snapshot lazily.
 func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
+	if snapshot, ok := ctx.Value(recoveryContractKey{gc.Invocation.Tool}).(toolcontract.ToolCapabilitySnapshot); ok {
+		gc.Invocation.CapabilityContract = &snapshot
+	}
 	names, _ := ctx.Value(recoveryToolsKey{}).([]string)
 	gc.RegisterProvider("paintedwolf.offered_tools", func(target *oar.GuardContext) error {
 		if target.ObservationData == nil {

@@ -28,6 +28,12 @@ func Command(
 		if err != nil {
 			return nil, func() {}, err
 		}
+		var releaseCredential func()
+		c, releaseCredential, err = prepareCredentialSocket(c)
+		if err != nil {
+			return nil, func() {}, err
+		}
+		defer releaseCredential()
 		if err := preparePackageCacheDataRoots(c, fseffect.MkdirAll); err != nil {
 			return nil, func() {}, err
 		}

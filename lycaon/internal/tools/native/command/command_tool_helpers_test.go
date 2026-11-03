@@ -21,7 +21,7 @@ func commandToolContext(root, sessionID, workerJobID string) tools.ToolContext {
 }
 
 // newCommandTool builds the retained confined runner used by one-shot
-// captures and verify's background launches.
+// captures and external process launches.
 func newCommandTool(t *testing.T) (*command.CommandTool, *bgprocess.Registry) {
 	t.Helper()
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{

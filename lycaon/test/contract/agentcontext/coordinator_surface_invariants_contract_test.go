@@ -138,7 +138,7 @@ func TestCoordinatorSurfaceInvariants_surfaceCardTracksItsRoster(t *testing.T) {
 			verb  string
 			tools []string
 		}{
-			{"edit", []string{"write", "edit", "replace_lines", "delete", "code_rewrite"}},
+			{"edit", []string{"command", "restore_version"}},
 			{"run commands", []string{"command", "verify"}},
 			{"dispatch", []string{"task", "delegate_dispatch"}},
 		} {

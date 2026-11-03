@@ -63,9 +63,6 @@ func (m *Service) BeforeTool(
 		}
 		return "", skip, err
 	}
-	if closureArmed {
-		m.ProgressClosure.ClearSatisfied(root, currentProgress, closureBaseline)
-	}
 	return "", false, nil
 }
 
@@ -104,14 +101,32 @@ func (m *Service) BeforeFinish(
 		return reject, true
 	}
 	implState := m.state.ForSession(ctx, sess)
-	batchTurn := m.Batch.TurnGuard(sess.ID)
-	if reject, block := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		guard.ObserveCoordinatorHostNoToolTurn(
-			sess, history, lastAssistant, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
+	openProgressChecked := false
+	if invokeAllowed && workersIdle && len(implState.PendingOverlayIDs) == 0 && guard.SurfaceFinishesWithUserProse(surfaceID) && implState.ProgressOpenCount > 0 {
+		openProgressChecked = true
+		reject, block, waived := m.openProgressWithWaiver(
+			ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed,
 		)
-		return nil
-	}); block {
-		return reject, true
+		if block {
+			return reject, true
+		}
+		if waived {
+			implState.ProgressOpenCount = 0
+		}
+	}
+	if invokeAllowed {
+		var batchTurn guard.BatchTurnGuard
+		if m.Batch != nil {
+			batchTurn = m.Batch.TurnGuard(sess.ID)
+		}
+		if reject, block := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
+			guard.ObserveCoordinatorHostNoToolTurn(
+				sess, history, lastAssistant, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
+			)
+			return nil
+		}); block {
+			return reject, true
+		}
 	}
 	if reject, block := m.MissingVerdict(ctx, sess, workersIdle, invokeAllowed); block {
 		return reject, true
@@ -124,6 +139,9 @@ func (m *Service) BeforeFinish(
 	}
 	if reject, block := m.OpenGates(ctx, sess, workersIdle, invokeAllowed); block {
 		return reject, true
+	}
+	if openProgressChecked {
+		return nil, false
 	}
 	return m.OpenProgress(
 		ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed,

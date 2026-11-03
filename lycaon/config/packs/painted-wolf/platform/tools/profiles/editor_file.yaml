@@ -9,12 +9,7 @@ tools:
   command_output: sticky
   command_stop: sticky
   recall: sticky
-  edit: sticky
-  replace_lines: sticky
-  code_rewrite: sticky
   restore_version: sticky
-  summarize: sticky
-  jq_edit: true
   scan_query: sticky
   scan_list: sticky
   record_finding: sticky

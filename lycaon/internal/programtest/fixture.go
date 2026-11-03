@@ -186,11 +186,19 @@ func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string
 // CallArgs runs one command call with the model's complete arguments.
 func (f *Fixture) CallArgs(t testing.TB, ctx context.Context, args map[string]any) (string, error) {
 	t.Helper()
+	return f.Invoke(t, ctx, "command", args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+		return f.Runtime.Run(ctx, "command", args, tc)
+	})
+}
+
+// Invoke opens the initiating tool's receipt and runs its handler.
+func (f *Fixture) Invoke(t testing.TB, ctx context.Context, tool string, args map[string]any, handler tools.ToolHandler) (string, error) {
+	t.Helper()
 	f.calls++
 	callID := fmt.Sprintf("model-call-%d", f.calls)
-	contract, _ := toolcontract.Lookup("command")
+	contract, _ := toolcontract.Lookup(tool)
 	//nolint:contextcheck // The test context keeps the initiating receipt available after execution cancellation.
-	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
+	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: callID, ToolName: tool, Args: args, Contract: contract})
 	testutil.FailErr(t, "begin model receipt", err)
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
@@ -202,7 +210,7 @@ func (f *Fixture) CallArgs(t testing.TB, ctx context.Context, args map[string]an
 	if f.Configure != nil {
 		f.Configure(&tc)
 	}
-	return f.Runtime.Run(ctx, args, tc)
+	return handler(ctx, args, tc)
 }
 
 // Programs lists program receipt states in start order.

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/workerprogress"
@@ -27,30 +28,45 @@ const (
 	loopExitAssertRunnable
 	loopExitLLMTimeout
 	loopExitSecretWithheld
+	loopExitOutputTruncated
 	loopExitBlockedLoop
 )
 
-// modelOutputState keeps a response's durable identity, source provenance, and
-// policy refusal together until that response is settled, and counts the
-// consecutive responses whose native call the provider dropped as invalid JSON.
-type modelOutputState struct {
-	id                    string
-	sourceContext         *api.SourceContext
-	rejection             *guidance.Refusal
-	droppedToolCallStreak int
+type promptLoopTurnState struct {
+	turnID    string
+	attemptID string
+	history   []api.Message
+	// draftSlotID identifies the draft updated by the current model turn.
+	draftSlotID       string
+	draftSlotAppended bool
+	// proseFinish is a forced or last-iteration closeout.
+	proseFinish      bool
+	coordinatorFrame inject.CoordinatorTurnFrame
+	machine          inject.Machine
+
+	turnStreamState
+	turnBatchState
+	turnCloseoutState
+	turnProvenanceState
 }
 
-type promptLoopTurnState struct {
-	output                  modelOutputState
-	observePrompt           func(inject.CoordinatorTurnFrame)
-	turnID                  string
-	attemptID               string
-	history                 []api.Message
-	lastAssistantID         string
-	lastAssistantContent    string
-	turnTools               []string
-	tasksDispatchedCount    int
-	turnEndedGuidanceReject bool
+type turnStreamState struct {
+	output               modelOutputState
+	observePrompt        func(inject.CoordinatorTurnFrame)
+	lastAssistantID      string
+	lastAssistantContent string
+	// deferredUserNudges flush when the draft slot closes.
+	deferredUserNudges []api.Message
+	turnsRanThisRun    int
+	// offeredToolNames distinguishes unstamped requests from an empty tool set.
+	offeredToolNames      []string
+	offeredToolSchemas    map[string]map[string]any
+	coordinatorFrameReady bool
+}
+
+type turnBatchState struct {
+	turnTools            []string
+	tasksDispatchedCount int
 	// Read-only streaks count consecutive batches that observed without acting.
 	readOnlyBatches        int
 	readOnlyStreakTools    []string
@@ -58,6 +74,11 @@ type promptLoopTurnState struct {
 	statusCursorNextOffset *int
 	statusCursorPaths      []string
 	statusCursorGroupDepth int
+	turnToolPlan           toolsurface.Plan
+}
+
+type turnCloseoutState struct {
+	turnEndedGuidanceReject bool
 	// Blocked streaks track repeated and total rejection codes, and the last
 	// refused call so a closeout can name it.
 	consecutiveBlockedBatches int
@@ -68,11 +89,11 @@ type promptLoopTurnState struct {
 	// closeoutCauseText is the clause the final-turn nudge opened with.
 	closeoutCauseText    string
 	proseFinishDelivered bool
-	spendSoftStopGranted bool
 	closeoutRetry        closeoutRetryState
-	// deferredUserNudges flush when the draft slot closes.
-	deferredUserNudges []api.Message
-	turnsRanThisRun    int
+}
+
+type turnProvenanceState struct {
+	spendSoftStopGranted bool
 	// workerProgress tracks durable rounds and the active batch.
 	workerProgress *workerprogress.Tracker
 	workerJobID    string
@@ -80,22 +101,10 @@ type promptLoopTurnState struct {
 	workerBudget workerBudgetWatch
 	// repairCeiling is the round ceiling a grounding retry may reach.
 	repairCeiling int
-	// draftSlotID identifies the draft updated by the current model turn.
-	draftSlotID       string
-	draftSlotAppended bool
-	// proseFinish is a forced or last-iteration closeout.
-	proseFinish bool
-	// offeredToolNames distinguishes unstamped requests from an empty tool set.
-	offeredToolNames   []string
-	offeredToolSchemas map[string]map[string]any
 	// secretStorageOverlays retain raw fields until their approval decision.
 	secretStorageOverlays map[string]secretStorageOverlay
 	// secretWithheldRetries bounds repeated credential approval requests.
 	secretWithheldRetries int
-	coordinatorFrame      inject.CoordinatorTurnFrame
-	coordinatorFrameReady bool
-	machine               inject.Machine
-	turnToolPlan          toolsurface.Plan
 }
 
 func (st *promptLoopTurnState) progress() *workerprogress.Tracker {
@@ -167,31 +176,6 @@ func (st *promptLoopTurnState) blockedLoopExhausted() bool {
 
 func (st *promptLoopTurnState) proseTurn(sess *api.Session, iterIndex, maxIter int) bool {
 	return guard.ProseTurn(sess, iterIndex, maxIter, st != nil && st.proseFinish)
-}
-
-// batchMadeProgress reports whether the batch advanced or ended its own cycle.
-func batchMadeProgress(history []api.Message, assistantMessageID string) bool {
-	assistantMessageID = strings.TrimSpace(assistantMessageID)
-	if assistantMessageID == "" {
-		return true
-	}
-	sawToolRow := false
-	for _, msg := range history {
-		if msg.Role != api.MessageRoleTool || msg.ToolResult == nil {
-			continue
-		}
-		if strings.TrimSpace(msg.ToolResult.AssistantMessageID) != assistantMessageID {
-			continue
-		}
-		sawToolRow = true
-		switch msg.ToolResult.Outcome {
-		case api.ToolResultOutcomeRejected, api.ToolResultOutcomeError:
-			continue
-		default:
-			return true
-		}
-	}
-	return !sawToolRow
 }
 
 // batchRejectCode returns the first structured rejection in the batch and the
@@ -276,29 +260,32 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, guidance.CloseoutRead{Report: report, Unread: unread})
 		}
 	} else {
-		l.Closeout.resumeWork(ctx, sessionID, st)
+		if batchResumesCloseoutWork(completion.ToolCalls) {
+			l.Closeout.resumeWork(ctx, sessionID, st)
+		}
 		if st != nil && st.turnID != "" && st.attemptID != "" && l.Projection.Deps.CheckpointTurn != nil {
 			checkpoint := fmt.Sprintf(`{"model_output_id":%q,"assistant_message_id":%q}`, st.output.id, assistantMsg.ID)
 			if err := l.Projection.Deps.CheckpointTurn(ctx, st.turnID, st.attemptID, store.TurnPhaseTools, checkpoint); err != nil {
 				return out, err
 			}
 		}
-		var anyTaskEnqueued bool
-		var taskEnqueuedThisTurn int
-		var lastTaskMessageID string
-		var breakToolLoop bool
-		var batchTurnTools []string
-		var err error
-		st.history, batchTurnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, breakToolLoop, err = l.Batch.executeToolCallsInTurn(
+		batchResult, err := l.Batch.executeToolCallsInTurn(
 			ctx, sess, sessionID, completion.ToolCalls, in.ToolCtx, st.history, userPrompt, st.lastAssistantID, surfaceID, st,
 		)
+		st.history = batchResult.history
 		if err != nil {
 			return out, err
 		}
-		if batchMadeProgress(st.history, assistantMsg.ID) {
+		batchTurnTools := batchResult.turnTools
+		anyTaskEnqueued := batchResult.anyTaskEnqueued
+		taskEnqueuedThisTurn := batchResult.taskEnqueuedThisTurn
+		lastTaskMessageID := batchResult.lastTaskMessageID
+		breakToolLoop := batchResult.breakToolLoop
+		batchProgress := batchResult.progress
+		if batchProgress.Advanced {
 			st.clearBlockedStreak()
 			st.noteBatchLifecycle(judgeBatch(l.Context.Deps.Tools, st.history, assistantMsg.ID))
-		} else {
+		} else if batchProgress.Blocked {
 			code, tool := batchRejectCode(st.history, assistantMsg.ID)
 			if !schemaRejectExemptFromBlockedLoop(code) && st.noteBlockedBatch(code, tool) {
 				out.breakLoop = true
@@ -472,7 +459,8 @@ func (l *PromptLoop) finalizePromptLoopRun(
 	// A refused credential ends without another provider request.
 	if !blockedLiveCommandParked && !st.proseFinishDelivered && strings.TrimSpace(st.lastAssistantID) != "" &&
 		loopExit != loopExitCompleted && loopExit != loopExitToolBoundary &&
-		loopExit != loopExitGracefulCancel && loopExit != loopExitSecretWithheld {
+		loopExit != loopExitGracefulCancel && loopExit != loopExitSecretWithheld &&
+		loopExit != loopExitOutputTruncated {
 		reason := TurnCloseoutIterationCap
 		switch loopExit {
 		case loopExitAssertRunnable:
@@ -481,7 +469,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 			reason = TurnCloseoutLLMTimeout
 		case loopExitBlockedLoop:
 			reason = TurnCloseoutBlockedLoop
-		case loopExitNone, loopExitCompleted, loopExitToolBoundary, loopExitGracefulCancel, loopExitSecretWithheld:
+		case loopExitNone, loopExitCompleted, loopExitToolBoundary, loopExitGracefulCancel, loopExitSecretWithheld, loopExitOutputTruncated:
 		}
 		closedHistory, aid, content, cerr := l.Closeout.runEarlyTurnCloseout(ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter, reason, "", closeoutNudgeSent, in, st)
 		if cerr != nil {
@@ -516,14 +504,20 @@ func (l *PromptLoop) finalizePromptLoopRun(
 	if err := l.Inbox.takePolicyFeedback(ctx, sessionID, st); err != nil {
 		return nil, err
 	}
+	outcome := promptresult.OutcomeCompleted
+	if st.output.truncatedOutcome != nil {
+		outcome = promptresult.OutcomeOutputTruncated
+	}
 	if st.lastAssistantID == "" {
-		if !st.turnEndedGuidanceReject && loopExit != loopExitSecretWithheld {
+		if !st.turnEndedGuidanceReject && loopExit != loopExitSecretWithheld && loopExit != loopExitOutputTruncated {
 			return nil, fmt.Errorf("prompt produced no assistant message")
 		}
 		return &PromptRunResult{
 			TurnTools:            st.turnTools,
 			OfferedTools:         st.offeredToolNames,
 			TasksDispatchedCount: st.tasksDispatchedCount,
+			Outcome:              outcome,
+			OutputTruncated:      st.output.truncatedOutcome,
 		}, nil
 	}
 	return &PromptRunResult{
@@ -533,5 +527,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		TurnTools:            st.turnTools,
 		OfferedTools:         st.offeredToolNames,
 		TasksDispatchedCount: st.tasksDispatchedCount,
+		Outcome:              outcome,
+		OutputTruncated:      st.output.truncatedOutcome,
 	}, nil
 }

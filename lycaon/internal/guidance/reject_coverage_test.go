@@ -150,15 +150,14 @@ func TestRenderUnifiedRejectBlock(t *testing.T) {
 		"reason": "missing path",
 	})
 	testutil.FailErr(t, "RenderUnifiedRejectBlock", err)
-	for _, want := range []string{"Rejected:", "Fix:", "Code: TOOL_ARGS_INVALID"} {
+	for _, want := range []string{"Rejected:", "missing path", "Code: TOOL_ARGS_INVALID"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}
 	}
 }
 
-// TestRejectBlockCarriesTheAuthoredCause pins the card as the only place the
-// agent can read the cause a blocking unit is required to carry.
+// Authored causes reach the refusal frame.
 func TestRejectBlockCarriesTheAuthoredCause(t *testing.T) {
 	setupGuidanceRenderer(t)
 	cfg := loadValidatedHints(t)
@@ -208,9 +207,12 @@ func TestCapabilityRequestFieldsReachRejectCopy(t *testing.T) {
 	if !ok {
 		t.Fatal("SANDBOX_CAPABILITY_REQUEST_INVALID missing from stock policy")
 	}
-	contract := toolcontract.Contract{Capabilities: toolcontract.CapabilityLoopbackConnect}
+	contract, known := toolcontract.Lookup("http_request")
+	if !known {
+		t.Fatal("missing HTTP tool contract")
+	}
 	block, err := guidance.RenderUnifiedRejectBlock(context.Background(), "SANDBOX_CAPABILITY_REQUEST_INVALID", entry, map[string]any{
-		"tool": "http_request", "capability_request_fields": contract.CapabilityRequestFields(),
+		"tool": "http_request", "capability_request_fields": []string{"host_execution"},
 		"supports_loopback_connect": true,
 	})
 	testutil.FailErr(t, "RenderUnifiedRejectBlock", err)
@@ -219,7 +221,7 @@ func TestCapabilityRequestFieldsReachRejectCopy(t *testing.T) {
 			t.Fatalf("missing catalog field %q in:\n%s", field, block)
 		}
 	}
-	for _, unsupported := range []string{"local_listen", "direct_ip", "socket_paths", "host_resources"} {
+	for _, unsupported := range []string{"local_listen", "socket_paths", "host_resources", "host_execution"} {
 		if strings.Contains(block, unsupported) {
 			t.Fatalf("unsupported HTTP capability %q offered in:\n%s", unsupported, block)
 		}
@@ -233,7 +235,7 @@ func TestInapplicableArgumentRecoveryUsesHostFacts(t *testing.T) {
 	for _, fields := range [][]string{nil, {"workflow_work_id"}, {"first", "second"}} {
 		block, err := guidance.RenderUnifiedRejectBlock(t.Context(), "TOOL_ARGS_INVALID", entry, map[string]any{
 			"tool": "task", "field": "workflow_work_id", "reason": "not_a_planned_fanout_phase",
-			"inapplicable_fields": fields,
+			"inapplicable_fields": fields, "argument_schema_tool": "task",
 		})
 		testutil.FailErr(t, "render argument recovery", err)
 		if !strings.Contains(block, "at `workflow_work_id`") || strings.Contains(block, "Omit `") != (len(fields) > 0) {

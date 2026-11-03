@@ -14,6 +14,8 @@ export type SidebarChatRow = {
   /** Order among the project's pinned chats; null when unpinned. */
   pinRank: number | null;
   messageCount: number;
+  /** Live background commands currently running in this chat. */
+  backgroundRunning?: number;
 };
 
 /** The sidebar's two groups, each in presentation order. */
@@ -66,6 +68,7 @@ export function sidebarChatRow(s: SessionSummary): SidebarChatRow {
     activityAtMs: timeMs(s.activity_at),
     pinRank: s.pin_rank ?? null,
     messageCount: s.message_count,
+    backgroundRunning: s.background_running ?? 0,
   };
 }
 

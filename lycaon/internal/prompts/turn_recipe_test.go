@@ -18,7 +18,7 @@ func TestTurnRecipeSelectsAvailableSurveyRoutes(t *testing.T) {
 			"visual_show_available": available,
 		})
 		testutil.FailErr(t, "render turn recipe capability selection", err)
-		for _, guidance := range []string{"start with `summarize(path=…)`", "find . -maxdepth 2 -type d"} {
+		for _, guidance := range []string{"start with `summarize --path PATH`", "find . -maxdepth 2 -type d"} {
 			if strings.Contains(out, guidance) != available {
 				t.Fatalf("available=%t: selection rule %q in %s", available, guidance, out)
 			}

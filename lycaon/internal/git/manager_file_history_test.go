@@ -33,6 +33,7 @@ func fileHistoryRepo(t *testing.T) (dir string, run func(args ...string) string)
 }
 
 func TestFileHistoryUsesCurrentPathWithBlobIdentity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir, run := fileHistoryRepo(t)
 	write := func(rel, content string) {
@@ -89,6 +90,7 @@ func TestFileHistoryUsesCurrentPathWithBlobIdentity(t *testing.T) {
 }
 
 func TestFileHistoryReportsARemovalWithoutABlob(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir, run := fileHistoryRepo(t)
 	testutil.FailErr(t, "write doomed",
@@ -113,6 +115,7 @@ func TestFileHistoryReportsARemovalWithoutABlob(t *testing.T) {
 
 // Timeout classification stays distinct from other failures.
 func TestFileHistoryFailureSeparatesBudgetFromEveryOtherOutcome(t *testing.T) {
+	t.Parallel()
 	expired, cancelExpired := context.WithDeadline(
 		context.Background(), time.Now().Add(-time.Second))
 	defer cancelExpired()
@@ -155,6 +158,7 @@ func TestFileHistoryFailureSeparatesBudgetFromEveryOtherOutcome(t *testing.T) {
 }
 
 func TestIsAncestorAnswersLineageAndReportsUnknownObjects(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir, run := fileHistoryRepo(t)
 	testutil.FailErr(t, "write a",
@@ -183,6 +187,7 @@ func TestIsAncestorAnswersLineageAndReportsUnknownObjects(t *testing.T) {
 }
 
 func TestBlobContentHonorsLimitsAboveDefaultCommandOutput(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	content := strings.Repeat("line\n", 240000)
 	testutil.FailErr(t, "write large text blob", os.WriteFile(filepath.Join(dir, "large.txt"), []byte(content), 0o644))
@@ -201,6 +206,7 @@ func TestBlobContentHonorsLimitsAboveDefaultCommandOutput(t *testing.T) {
 }
 
 func TestBlobContentRoundTripsAndRefusesOverLongObjects(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir, run := fileHistoryRepo(t)
 	testutil.FailErr(t, "write blob",

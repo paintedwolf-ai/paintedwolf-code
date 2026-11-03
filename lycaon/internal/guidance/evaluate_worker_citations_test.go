@@ -2,6 +2,7 @@ package guidance_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -327,3 +328,38 @@ func TestEvaluateWorkerCitationsReportsURLOffendersAlongsidePathOffenders(t *tes
 	}
 }
 
+func TestGroundingHintData_prefersRecentHandlesAndOffenderTool(t *testing.T) {
+	var records []evidence.Record
+	for i := 1; i <= 10; i++ {
+		records = append(records, evidence.Record{Handle: fmt.Sprintf("command#%d", i), Kind: "command", SourceTool: "command"})
+	}
+	for i := 1; i <= 3; i++ {
+		records = append(records, evidence.Record{Handle: fmt.Sprintf("edit#%d", i), Kind: "edit", SourceTool: "edit"})
+	}
+	for i := 1; i <= 8; i++ {
+		records = append(records, evidence.Record{Handle: fmt.Sprintf("page#%d", i), Kind: "page", SourceTool: "capture_page"})
+	}
+	for i := 1; i <= 5; i++ {
+		records = append(records, evidence.Record{Handle: fmt.Sprintf("read#%d", i), Kind: "read", SourceTool: "read"})
+		records = append(records, evidence.Record{Handle: fmt.Sprintf("write#%d", i), Kind: "write", SourceTool: "write"})
+	}
+	records = append(records, evidence.Record{Handle: "verify#12", Kind: "verify", SourceTool: "verify"})
+
+	ev := evidence.AssembleLedger(records)
+	data := guidance.GroundingHintData(nil, ev)
+	sample, _ := data["observed_handles_sample"].(string)
+	for _, want := range []string{"verify#12", "command#10", "page#8", "read#5", "write#5", "edit#3"} {
+		if !strings.Contains(sample, want) {
+			t.Fatalf("observed_handles_sample = %q, missing recent handle %s", sample, want)
+		}
+	}
+	if strings.Contains(sample, "command#1,") {
+		t.Fatalf("observed_handles_sample = %q, still led with oldest command#1", sample)
+	}
+
+	targeted := guidance.GroundingHintData([]string{"capture_page#8"}, ev)
+	targetedSample, _ := targeted["observed_handles_sample"].(string)
+	if !strings.HasPrefix(targetedSample, "page#8") {
+		t.Fatalf("targeted observed_handles_sample = %q, want page#8 first for capture_page#8 offender", targetedSample)
+	}
+}

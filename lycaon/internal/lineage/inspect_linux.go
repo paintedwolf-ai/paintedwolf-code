@@ -14,7 +14,7 @@ import (
 )
 
 // hostProc is the procfs mount the kernel tables are read from.
-var hostProc = procFS{root: "/proc"}
+var hostProc = procFS{root: "/proc", ipv6Only: inet6V6Only}
 
 // pipePeerHandle returns the pipe's inode. Both ends share it, so holders are
 // narrowed to write ends by their open flags.

@@ -179,7 +179,7 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, filesystem *mutation.
 	}
 	mode := effectMode(spec, parsed, bound)
 	review := bound.Review(reviewID)
-	review.PathTargets = gitPathTargets(bound, parsed, mode)
+	review.PathTargets = gitPathTargets(bound, parsed, mode, paths.Cwd().Abs)
 	return Prepared{
 		Command:    spec.Name,
 		Operation:  o.ops[spec.Name],

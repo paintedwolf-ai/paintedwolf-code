@@ -45,7 +45,7 @@ func TestUnixGuardTerminateEndsJobsOutsideTheLeadersGroup(t *testing.T) {
 	requireOwnGroup(t, cmd.Process.Pid, job)
 
 	guard.terminate(cmd)
-	waitErr := cmd.Wait()
+	waitErr := guard.wait(cmd)
 	guard.release()
 	var exitErr *exec.ExitError
 	if !errors.As(waitErr, &exitErr) || exitErr.Sys().(syscall.WaitStatus).Signal() != syscall.SIGTERM {
@@ -54,6 +54,32 @@ func TestUnixGuardTerminateEndsJobsOutsideTheLeadersGroup(t *testing.T) {
 	if err := waitForProcessGone(t.Context(), job); err != nil {
 		_ = syscall.Kill(job, syscall.SIGKILL)
 		testutil.FailErr(t, "job outside the leader's group outlived terminate", err)
+	}
+}
+
+func TestUnixGuardTerminateEndsJobsOutsideTheLeadersGroupAfterLeaderExits(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "job.pid")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	guard, err := newRunGuard(ProcessPriorityNormal)
+	testutil.FailErr(t, "newRunGuard", err)
+	defer guard.release()
+
+	script := fmt.Sprintf("set -m; sleep 30 & echo $! > %s; exit 0", strconv.Quote(pidFile))
+	cmd := exec.CommandContext(ctx, "sh", "-c", script)
+	guard.configure(cmd)
+	testutil.FailErr(t, "start leader", cmd.Start())
+	testutil.FailErr(t, "guard onStarted", guard.onStarted(cmd))
+	job := waitForPIDFile(t, pidFile)
+	requireOwnGroup(t, cmd.Process.Pid, job)
+
+	testutil.FailErr(t, "guard wait", guard.wait(cmd))
+	guard.terminate(cmd)
+	guard.release()
+
+	if err := waitForProcessGone(t.Context(), job); err != nil {
+		_ = syscall.Kill(job, syscall.SIGKILL)
+		testutil.FailErr(t, "job outside the leader's group outlived post-reap terminate", err)
 	}
 }
 
@@ -72,7 +98,7 @@ func TestUnixGuardTerminateKillsATreeIgnoringTerm(t *testing.T) {
 	job := waitForPIDFile(t, pidFile)
 
 	guard.terminate(cmd)
-	waitErr := cmd.Wait()
+	waitErr := guard.wait(cmd)
 	guard.release()
 	var exitErr *exec.ExitError
 	if !errors.As(waitErr, &exitErr) || exitErr.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {

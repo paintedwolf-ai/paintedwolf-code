@@ -271,19 +271,12 @@ func (l *toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string,
 	if msg == nil {
 		return nil
 	}
-	if sess != nil && toolName == "verify" && l.Tools.Deps.ConfirmVerifyResult != nil &&
-		msg.ToolResult != nil && msg.ToolResult.Outcome == api.ToolResultOutcomeCompleted {
-		content := strings.TrimSpace(msg.ToolResult.Content)
-		if content == "" {
-			content = strings.TrimSpace(msg.Content)
-		}
-		if stamped := l.Tools.Deps.ConfirmVerifyResult(sess, content); stamped != "" {
-			msg.ToolResult.Content = stamped
-		}
-	}
 	if msg.ToolResult != nil && msg.ToolResult.CommandProgram != nil {
-		// Portable source observations come only from confirmed delivered native
-		// mappings. A legacy command fingerprint must not scrape its stdout.
+		// Portable command observations come only from confirmed source deliveries.
+		if len(msg.EvidenceHandles) > 0 {
+			msg.Content = prependEvidenceHandles(msg.Content, msg.EvidenceHandles)
+			msg.ToolResult.Content = prependEvidenceHandles(msg.ToolResult.Content, msg.EvidenceHandles)
+		}
 		return nil
 	}
 	if !eligible {

@@ -388,66 +388,6 @@ func checkNestedHiddenAndSymlink(source, desktop *os.File, pins *fixtureLifecycl
 	return nestedRolesAlive(pins)
 }
 
-// An owned tmpfs observation pin prevents mount-ID recycling during this one
-// replacement. It is closed before source unmount and is not leak/latency evidence.
-func pinNestedViewRoot(source, desktop *os.File, pins *fixtureLifecyclePins, target string, expected int) (fd int, err error) {
-	fd = -1
-	if err := nestedRolesAlive(pins); err != nil {
-		return fd, err
-	}
-	birth, err := lifecycleBirth(pins.roles[0].PID)
-	if err != nil || birth.Start != pins.roles[0].Start || birth.Parent != pins.roles[0].Parent {
-		return -1, errors.New("desktop birth differs before view pin")
-	}
-	if err := unix.Setns(int(desktop.Fd()), unix.CLONE_NEWNS); err != nil {
-		return -1, err
-	}
-	defer func() {
-		err = errors.Join(err, unix.Setns(int(source.Fd()), unix.CLONE_NEWNS))
-		after, birthErr := lifecycleBirth(pins.roles[0].PID)
-		if birthErr != nil || after != birth {
-			err = errors.Join(err, errors.New("desktop birth changed during view pin"))
-		}
-		err = errors.Join(err, nestedRolesAlive(pins))
-		if err != nil && fd >= 0 {
-			_ = unix.Close(fd)
-			fd = -1
-		}
-	}()
-	info, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return -1, err
-	}
-	defer unix.Close(info)
-	rows, changed, err := readIntakeMountTopology(info, readMountInfo)
-	if err != nil || changed {
-		return -1, errors.Join(err, errors.New("view pin topology unstable"))
-	}
-	selected := false
-	for _, row := range rows {
-		if row.id == expected && row.mountPoint == target {
-			selected = true
-		}
-	}
-	if !selected {
-		return -1, errors.New("view pin topology lacks exact selected mount")
-	}
-	fd, err = openMountPoint(target)
-	if err != nil {
-		return -1, err
-	}
-	id, inode, err := mountDescriptorIdentity(fd)
-	if err != nil {
-		return fd, err
-	}
-	changed, err = mountInfoEpochChanged(info)
-	if err != nil || changed || id != uint64(expected) {
-		return fd, errors.Join(err, errors.New("view pin changed exact mount identity"))
-	}
-	fmt.Printf("PW_NESTED_PIN01 {\"mount_id\":%d,\"inode\":%d,\"desktop_pid\":%d,\"desktop_start\":%d}\n", id, inode, birth.PID, birth.Start)
-	return fd, nil
-}
-
 // The held descriptor selects only our own covered tmpfs, not a visible alias.
 // A late nested mount here must remain excluded while later positive phases
 // establish that the actual intake has reconciled this source epoch.
