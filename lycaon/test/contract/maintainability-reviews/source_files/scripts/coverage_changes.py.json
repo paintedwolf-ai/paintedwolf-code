@@ -4,11 +4,12 @@
   "kind": "module",
   "workstream": "verification-tools",
   "disposition": "retain",
-  "reason": "Retain the 309-line changed-coverage orchestrator within 309 lines. Go, Den, and Python measurement adapters share one change scope and finding report; pinned package preparation is shared through the toolchain module. Focused tests preserve selected-file coverage, fail-closed measurement, subprocess instrumentation, and exact dependency preparation.",
-  "ceiling": 309,
+  "reason": "Retain the 332-line coverage orchestrator within 350 lines. The Go, Den and Python adapters share one change scope, statement judgment and finding report. Complete frontend and script assertions now run through these adapters even when no changed source needs instrumentation. Keep that assertion/measurement failure path cohesive. Focused contracts cover full-suite selection without fast or changed-only filters, selected-file measurement, child-process instrumentation and exact dependency preparation.",
+  "ceiling": 350,
   "boundaries": {
     "scripts/verification_tests/evidence/test_coverage_execution.py": "0c74dce692d02c5c9b82d6f7adcd701760a15a267df5ba867ea729a86892d962",
-    "scripts/verification_tests/ci/test_python_coverage_execution.py": "f8063af98dd0f5bc75b829f594f5c1ab20931f887e31e6d5aad2279227c806fb"
+    "scripts/verification_tests/ci/test_python_coverage_execution.py": "adc951d00c9018bc8598a22a4e67b81fe1e93cd95da349a31104811efe4e308b",
+    "scripts/verification_tests/ci/test_change_report_execution.py": "fec85d8b5fb72469cf6c7d4b1ff9b740f131f890b3e9507e9fea16c82c705125"
   },
-  "reviewed_commit": "8fb92f31286891a180769e95d687a30c500c10be"
+  "reviewed_commit": "8fefd57d6a0cb449cf7ea8f2f6b8f01538063deb"
 }

@@ -15,24 +15,40 @@ from unittest.mock import patch
 
 from ci_policy import merge_preflight as preflight
 from ci_policy import hosted_plan
+import verification_plan
 
 
 class MergePreflightTests(unittest.TestCase):
-    def test_fast_coverage_measurements_ignore_unrelated_paths(self):
+    def setUp(self):
+        scope = patch('ci_policy.impact.go_scope', return_value=None)
+        scope.start()
+        self.addCleanup(scope.stop)
+
+    def test_landing_frontend_and_script_assertions_run_without_changed_statements(self):
         import coverage_changes as coverage
         for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['scripts/example.sh'],
                       ['lycaon-den/src/model.test.ts', 'lycaon-den/src/style.css']):
-            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call') as call, \
+            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call', return_value=0) as call, \
                     patch.object(coverage.python_coverage, 'measure') as measure:
                 scope = SimpleNamespace(paths=paths)
-                self.assertEqual(coverage.run_den(scope), ([], False, 'no changed frontend source'))
-                self.assertEqual(coverage.run_python(scope), ([], False, 'no changed scripts Python'))
-                call.assert_not_called()
+                self.assertEqual(coverage.run_den(scope), ([], False, 'complete frontend tests; no changed source to measure'))
+                self.assertEqual(coverage.run_python(scope), ([], False, 'complete script tests; no changed source to measure'))
+                self.assertEqual(call.call_count, 2)
                 measure.assert_not_called()
+                self.assertNotIn('--changed', call.call_args_list[0].args[0])
+                self.assertIn('runner_tests.py', call.call_args_list[1].args[0][1])
 
     def history_state(self, failed=()):
         return {"failed_targets": list(failed), "passed_targets": [], "native_failed": [],
                 "native_passed": [], "contract_failures": []}
+
+    def test_landing_assertion_failures_block_even_without_changed_statements(self):
+        import coverage_changes as coverage
+        with patch.object(coverage.subprocess, 'call', return_value=1):
+            for run in (coverage.run_den, coverage.run_python):
+                findings, failed, _ = run(SimpleNamespace(paths=[]))
+                self.assertTrue(failed)
+                self.assertEqual(findings[0].level, 'error')
 
     def history_archive(self, record=None, failures=None):
         record = record if record is not None else {
@@ -82,9 +98,30 @@ class MergePreflightTests(unittest.TestCase):
                         {'workflow_runs': [run]}, {'artifacts': artifacts}]), \
                     patch.object(preflight.subprocess, 'check_output', return_value=raw):
                 self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
+
         with patch.object(preflight, 'repository', return_value='repos/o/r'), \
                 patch.object(preflight, 'api', side_effect=OSError):
             self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
+
+    def test_metadata_only_failure_preserves_the_previous_execution_cursor(self):
+        event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a'}}}
+        previous = dict(id=20, workflow_id=10, event='pull_request', pull_requests=[{'number': 7}],
+                        run_attempt=2, status='completed', conclusion='failure')
+        artifact = dict(id=40, name='receipt-verification-fast-ready-2', expired=False, size_in_bytes=200)
+        empty = io.BytesIO()
+        with zipfile.ZipFile(empty, 'w') as archive:
+            archive.writestr('ci/failures.json', '[]')
+        for artifacts, payloads in (([], [self.history_archive()]),
+                                    ([{**artifact, 'id': 41}], [empty.getvalue(), self.history_archive()])):
+            with self.subTest(artifacts=artifacts), patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                    patch.object(preflight, 'api', side_effect=[{'workflow_id': 10},
+                        {'workflow_runs': [{**previous, 'id': 21}, previous]},
+                        {'artifacts': artifacts}, {'artifacts': [artifact]}]), \
+                    patch.object(preflight.subprocess, 'check_output', side_effect=payloads):
+                state = preflight.previous_plan(event, '30', ['build', 'budgets'])
+            self.assertEqual(state['failed_targets'], ['budgets'])
+            phases = preflight.ready_commands(['build', 'budgets'], [], state)
+            self.assertEqual(phases, [['./task', 'budgets'], ['./task', 'build']])
 
     def test_branch_query_finds_history_behind_unrelated_workflow_traffic(self):
         run = dict(id=20, workflow_id=10, event='pull_request', pull_requests=[{'number': 7}],
@@ -154,8 +191,8 @@ class MergePreflightTests(unittest.TestCase):
         from ci_policy import hosted_execution as execution
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
         targets = hosted_plan.lanes()['ready']['targets']
-        idx = targets.index('coverage:changes')
-        history = json.dumps({'failed_targets': ['coverage:changes'], 'passed_targets': targets[:idx],
+        idx = targets.index('test:short')
+        history = json.dumps({'failed_targets': ['test:short'], 'passed_targets': targets[:idx],
                               'native_passed': ['decide:test']}, separators=(',', ':'))
         compile_native, after_cmd, before_cmd = ['./task', 'decide:test', '--', '--compile-only'], ['./task', *targets[idx + 1:]], ['./task', *targets[:idx]]
         for after_verdict in (0, 1):
@@ -166,7 +203,7 @@ class MergePreflightTests(unittest.TestCase):
                     patch.dict(os.environ, GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=history), \
                     patch.object(execution.subprocess, 'call', side_effect=lambda cmd, **_: after_verdict if cmd == after_cmd else 0) as call:
                 self.assertEqual(execution.run_lane('ready'), after_verdict)
-                expected = [['./task', *hosted_plan.lanes()['ready']['preflight']], ['./task', 'coverage:changes'], after_cmd]
+                expected = [['./task', *hosted_plan.lanes()['ready']['preflight']], ['./task', 'test:short'], after_cmd]
                 if after_verdict == 0:
                     expected += [compile_native, before_cmd]
                 self.assertEqual([entry.args[0] for entry in call.call_args_list], expected)
@@ -258,11 +295,13 @@ class MergePreflightTests(unittest.TestCase):
     def test_packages_are_partitioned_once_with_contracts_first(self):
         packages = ["module/internal/a", "module/test/contract/hosted", "module/test/contract", "module/test/smoke"]
         with patch.object(preflight.subprocess, "run") as run:
-            run.return_value.stdout = "\n".join(json.dumps({"ImportPath": name}) for name in packages)
+            run.return_value.stdout = "\n".join(json.dumps({"ImportPath": name,
+                "Dir": str(preflight.ROOT / 'lycaon' / name.removeprefix('module/'))}) for name in packages)
             phases = preflight.package_phases(None)
-            self.assertEqual(phases[0], ["module/test/contract", "module/test/contract/hosted"])
-            self.assertEqual(sorted(sum(phases, [])), sorted(packages))
+            self.assertEqual(phases[0], ["./test/contract", "./test/contract/hosted"])
+            self.assertEqual(sorted(sum(phases, [])), sorted(name.replace('module/', './') for name in packages))
             self.assertEqual(len(sum(phases, [])), len(packages))
+            self.assertTrue(verification_plan.go_selection(sum(phases, []), 'test:full')['shareable'])
             self.assertEqual(run.call_args.args[0][-1], "./...")
             self.assertEqual(run.call_args.kwargs["env"]["GOPROXY"], "off")
             self.assertEqual(run.call_args.kwargs["env"]["GOTOOLCHAIN"], "local")
@@ -271,7 +310,8 @@ class MergePreflightTests(unittest.TestCase):
 
     def test_uncertain_or_incomplete_selection_cannot_skip_contracts(self):
         for payload in ("", '{"ImportPath":"module/internal/a"}',
-                        '{"ImportPath":"module/test/contract/a","DepsErrors":[{}]}'):
+                        '{"ImportPath":"module/test/contract/a","DepsErrors":[{}]}',
+                        json.dumps({'ImportPath': 'foreign/test/contract/a', 'Dir': '/outside/module'})):
             with self.subTest(payload=payload), patch.object(preflight.subprocess, "run") as run:
                 run.return_value.stdout = payload
                 with self.assertRaises(ValueError):
