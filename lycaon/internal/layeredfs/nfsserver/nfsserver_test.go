@@ -137,7 +137,7 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 		t.Fatalf("READLINK target=%q", gotTarget)
 	}
 
-	// MKNOD and LINK return NFSStatusNotSupp.
+	// MKNOD returns NFSStatusNotSupp; LINK creates hard link sharing NodeID and handle.
 	var mknodArgs bytes.Buffer
 	putBytes(&mknodArgs, rootFH)
 	putStr(&mknodArgs, "fifo")
@@ -147,12 +147,34 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 		t.Fatalf("MKNOD status=%v", nst)
 	}
 	var linkArgs bytes.Buffer
-	putBytes(&linkArgs, readmeFH)
+	putBytes(&linkArgs, childFH)
 	putBytes(&linkArgs, rootFH)
 	putStr(&linkArgs, "hardlink")
 	_, lkr := cli.call(100003, 3, uint32(nfs.NFSProcedureLink), linkArgs.Bytes())
-	if nst := nfs.NFSStatus(getU32(t, lkr)); nst != nfs.NFSStatusNotSupp {
+	if nst := nfs.NFSStatus(getU32(t, lkr)); nst != nfs.NFSStatusOk {
 		t.Fatalf("LINK status=%v", nst)
+	}
+	linkPostAttr := getPostOpAttr(t, lkr)
+	if linkPostAttr.Nlink != 2 {
+		t.Fatalf("expected Nlink=2 after LINK, got %d", linkPostAttr.Nlink)
+	}
+	nst, linkFH, linkLookupAttr := cli.lookup(rootFH, "hardlink")
+	if nst != nfs.NFSStatusOk || !bytes.Equal(linkFH, childFH) || linkLookupAttr.Fileid != linkPostAttr.Fileid || linkLookupAttr.Nlink != 2 {
+		t.Fatalf("hardlink lookup mismatch: st=%v sameFH=%v fileid=%d/%d nlink=%d",
+			nst, bytes.Equal(linkFH, childFH), linkLookupAttr.Fileid, linkPostAttr.Fileid, linkLookupAttr.Nlink)
+	}
+	if nst, _, _, _ := cli.write(linkFH, 0, []byte("shared-hardlink-data"), nfsserver.FileSync); nst != nfs.NFSStatusOk {
+		t.Fatalf("write via hardlink: %v", nst)
+	}
+	var remLink bytes.Buffer
+	putBytes(&remLink, rootFH)
+	putStr(&remLink, "hardlink")
+	_, rlr2 := cli.call(100003, 3, uint32(nfs.NFSProcedureRemove), remLink.Bytes())
+	if nst := nfs.NFSStatus(getU32(t, rlr2)); nst != nfs.NFSStatusOk {
+		t.Fatalf("REMOVE hardlink: %v", nst)
+	}
+	if nst, gotShared, _ := cli.read(childFH, 0, 64); nst != nfs.NFSStatusOk || string(gotShared) != "shared-hardlink-data" {
+		t.Fatalf("read original after hardlink remove: st=%v data=%q", nst, gotShared)
 	}
 
 	// ENOSPC on WRITE.
@@ -165,37 +187,26 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 	// EPERM vs EACCES: SETATTR with foreign UID -> EPERM; WRITE to read-only existing file -> EACCES.
 	var setUIDArgs bytes.Buffer
 	putBytes(&setUIDArgs, readmeFH)
-	putU32(&setUIDArgs, 0) // mode
-	putU32(&setUIDArgs, 1) // HasUID
-	putU32(&setUIDArgs, env.UID+999)
-	for range 4 {
-		putU32(&setUIDArgs, 0)
+	for _, v := range []uint32{0, 1, env.UID + 999, 0, 0, 0, 0, 0} {
+		putU32(&setUIDArgs, v)
 	}
-	putU32(&setUIDArgs, 0) // guard
 	_, sur := cli.call(100003, 3, uint32(nfs.NFSProcedureSetAttr), setUIDArgs.Bytes())
 	if nst := nfs.NFSStatus(getU32(t, sur)); nst != nfs.NFSStatusPerm {
 		t.Fatalf("expected EPERM(NFSStatusPerm), got %v", nst)
 	}
-
 	_, _ = env.Core.Chmod(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "README.md"}, 0o444)
 	if nst, _, _, _ := cli.write(readmeFH, 0, []byte("denied"), nfsserver.FileSync); nst != nfs.NFSStatusAccess {
 		t.Fatalf("expected EACCES(NFSStatusAccess), got %v", nst)
 	}
-
-	// ELOOP status mapping.
 	if nfsserver.MapErrorToNFSStatus(syscall.ELOOP) != nfsserver.NFSStatusLoop {
 		t.Fatal("expected ELOOP to map to NFSStatusLoop")
 	}
-
-	// EROFS on read-only view export.
 	roCap := env.createViewAndExport(t, "view-ro", false)
 	roCli := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
 	_, roRoot := roCli.mount(roCap.ExportPath)
 	if nst, _ := roCli.create(roRoot, "nope.txt", 0o644, 0, [8]byte{}); nst != nfs.NFSStatusROFS {
 		t.Fatalf("expected EROFS, got %v", nst)
 	}
-
-	// Malformed requests on every procedure return NFSStatusInval without crashing.
 	for proc := nfs.NFSProcedureGetAttr; proc <= nfs.NFSProcedureCommit; proc++ {
 		_, mr := cli.call(100003, 3, uint32(proc), []byte{0, 0})
 		if nst := nfs.NFSStatus(getU32(t, mr)); nst != nfs.NFSStatusInval {
@@ -207,16 +218,12 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 	var remArgs bytes.Buffer
 	putBytes(&remArgs, subFH)
 	putStr(&remArgs, "inside.txt")
-	_, rmr := cli.call(100003, 3, uint32(nfs.NFSProcedureRemove), remArgs.Bytes())
-	if nst := nfs.NFSStatus(getU32(t, rmr)); nst != nfs.NFSStatusOk {
-		t.Fatalf("REMOVE: %v", nst)
+	if _, rmr := cli.call(100003, 3, uint32(nfs.NFSProcedureRemove), remArgs.Bytes()); nfs.NFSStatus(getU32(t, rmr)) != nfs.NFSStatusOk {
+		t.Fatal("REMOVE inside.txt failed")
 	}
-	_, rr2 := cli.call(100003, 3, uint32(nfs.NFSProcedureRmDir), rmdirArgs.Bytes())
-	if nst := nfs.NFSStatus(getU32(t, rr2)); nst != nfs.NFSStatusOk {
-		t.Fatalf("RMDIR empty sub: %v", nst)
+	if _, rr2 := cli.call(100003, 3, uint32(nfs.NFSProcedureRmDir), rmdirArgs.Bytes()); nfs.NFSStatus(getU32(t, rr2)) != nfs.NFSStatusOk {
+		t.Fatal("RMDIR empty sub failed")
 	}
-
-	// UMNT and UMNTALL.
 	var umntArgs bytes.Buffer
 	putStr(&umntArgs, roCap.ExportPath)
 	if code, _ := roCli.call(100005, 3, uint32(nfs.MountProcUmnt), umntArgs.Bytes()); code != nfs.ResponseCodeSuccess {
@@ -250,13 +257,16 @@ func TestGitLooseObject0444AndPOSIXMetadataPreservation(t *testing.T) {
 	putStr(&renArgs, "tmp_obj_abc123")
 	putBytes(&renArgs, rootFH)
 	putStr(&renArgs, "final_obj_abc123")
-	_, rr := cli.call(100003, 3, uint32(nfs.NFSProcedureRename), renArgs.Bytes())
-	if nst := nfs.NFSStatus(getU32(t, rr)); nst != nfs.NFSStatusOk {
-		t.Fatalf("RENAME 0444 loose object: %v", nst)
+	if _, rr := cli.call(100003, 3, uint32(nfs.NFSProcedureRename), renArgs.Bytes()); nfs.NFSStatus(getU32(t, rr)) != nfs.NFSStatusOk {
+		t.Fatal("RENAME 0444 loose object failed")
 	}
-	nst, attr := cli.getAttr(tmpFH)
-	if nst != nfs.NFSStatusOk || attr.FileMode != 0o444 || attr.Filesize != uint64(len(payload)) {
+	if nst, attr := cli.getAttr(tmpFH); nst != nfs.NFSStatusOk || attr.FileMode != 0o444 || attr.Filesize != uint64(len(payload)) {
 		t.Fatalf("loose object attr mismatch: st=%v mode=%o size=%d", nst, attr.FileMode, attr.Filesize)
+	}
+	for _, jop := range env.Core.JournalOperations() {
+		if jop.Kind == layeredfs.JournalOpSetAttr {
+			t.Fatalf("unexpected spurious JournalOpSetAttr during 0444 loose object write: %+v", jop)
+		}
 	}
 
 	// cp -p / tar -xpf / rsync -a / install -m 0644: set explicit mode + client atime/mtime + truncate size.
@@ -268,21 +278,16 @@ func TestGitLooseObject0444AndPOSIXMetadataPreservation(t *testing.T) {
 	wantTime := time.Date(2025, 6, 15, 12, 30, 0, 123000000, time.UTC)
 	var sa bytes.Buffer
 	putBytes(&sa, metaFH)
-	putU32(&sa, 1) // HasMode
-	putU32(&sa, 0o644)
-	putU32(&sa, 1) // HasUID
-	putU32(&sa, env.UID)
-	putU32(&sa, 1) // HasGID
-	putU32(&sa, env.GID)
-	putU32(&sa, 1) // HasSize
+	for _, v := range []uint32{1, 0o644, 1, env.UID, 1, env.GID, 1} {
+		putU32(&sa, v)
+	}
 	putU64(&sa, 4)
-	putU32(&sa, 2) // SET_TO_CLIENT_TIME atime
-	putU32(&sa, uint32(wantTime.Unix()))
-	putU32(&sa, uint32(wantTime.Nanosecond()))
-	putU32(&sa, 2) // SET_TO_CLIENT_TIME mtime
-	putU32(&sa, uint32(wantTime.Unix()))
-	putU32(&sa, uint32(wantTime.Nanosecond()))
-	putU32(&sa, 0) // no guard
+	for _, v := range []uint32{
+		2, uint32(wantTime.Unix()), uint32(wantTime.Nanosecond()),
+		2, uint32(wantTime.Unix()), uint32(wantTime.Nanosecond()), 0,
+	} {
+		putU32(&sa, v)
+	}
 	_, sar := cli.call(100003, 3, uint32(nfs.NFSProcedureSetAttr), sa.Bytes())
 	if nst := nfs.NFSStatus(getU32(t, sar)); nst != nfs.NFSStatusOk {
 		t.Fatalf("SETATTR metadata preservation: %v", nst)

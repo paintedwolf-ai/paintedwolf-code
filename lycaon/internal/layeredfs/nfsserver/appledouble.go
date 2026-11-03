@@ -3,7 +3,6 @@ package nfsserver
 import (
 	"bytes"
 	"encoding/binary"
-	"os"
 	"path"
 	"sort"
 	"strings"
@@ -147,6 +146,40 @@ func parseAppleDoubleAttrSection(attrBytes []byte) (map[string][]byte, bool) {
 	return out, true
 }
 
+func synthAppleDoubleAttr(core *layeredfs.Core, qpath layeredfs.QualifiedPath) (layeredfs.EntryAttr, []byte, bool) {
+	targetRel, ok := isAppleDoublePath(qpath.Rel)
+	if !ok {
+		return layeredfs.EntryAttr{}, nil, false
+	}
+	targetMeta, err := core.Lstat(layeredfs.QualifiedPath{RootID: qpath.RootID, Rel: targetRel})
+	if err != nil || len(targetMeta.Xattrs) == 0 {
+		return layeredfs.EntryAttr{}, nil, false
+	}
+	payload := EncodeAppleDoubleXattrs([32]byte{}, targetMeta.Xattrs)
+	adNodeID := layeredfs.NodeID(uint64(targetMeta.NodeID) ^ 0xAD00000000000001)
+	if adNodeID == 0 {
+		adNodeID = 1
+	}
+	return layeredfs.EntryAttr{
+		NodeID: adNodeID, Generation: 1, Layer: targetMeta.Layer,
+		Kind: layeredfs.EntryRegular, Mode: 0o644, Size: int64(len(payload)),
+		ModTime: targetMeta.ModTime, ATime: targetMeta.ATime, CTime: targetMeta.CTime, Nlink: 1,
+	}, payload, true
+}
+
+func syncAppleDoubleForPath(core *layeredfs.Core, qpath layeredfs.QualifiedPath) {
+	if _, ok := isAppleDoublePath(qpath.Rel); ok {
+		syncAppleDoubleXattrsIfPresent(core, qpath)
+		return
+	}
+	dir, base := path.Dir(qpath.Rel), path.Base(qpath.Rel)
+	sidecarRel := "._" + base
+	if dir != "." && dir != "" {
+		sidecarRel = dir + "/._" + base
+	}
+	syncAppleDoubleXattrsIfPresent(core, layeredfs.QualifiedPath{RootID: qpath.RootID, Rel: sidecarRel})
+}
+
 func syncAppleDoubleXattrsIfPresent(core *layeredfs.Core, qpath layeredfs.QualifiedPath) {
 	targetRel, ok := isAppleDoublePath(qpath.Rel)
 	if !ok {
@@ -204,17 +237,24 @@ func flushChunksToCore(
 	if curMeta.Mode&0o200 == 0 && !rec.ownerCreatedRO {
 		return layeredfs.EntryAttr{}, syscall.EACCES
 	}
-	origPerm := curMeta.Mode & os.ModePerm
-	restoreRO := curMeta.Mode&0o200 == 0 && rec.ownerCreatedRO
-	if restoreRO {
-		if _, err := core.Chmod(rec.qpath, origPerm|0o200); err != nil {
-			return layeredfs.EntryAttr{}, err
-		}
-		defer func() {
-			if restoreRO {
-				_, _ = core.Chmod(rec.qpath, origPerm)
+	if curMeta.Mode&0o200 == 0 && rec.ownerCreatedRO {
+		for _, ch := range chunks {
+			if _, _, err := core.WriteViaNodeHandle(curMeta.NodeID, curMeta.Generation, ch.data, int64(ch.offset)); err != nil {
+				return layeredfs.EntryAttr{}, err
 			}
-		}()
+		}
+		if fault != nil && fault.OnSync != nil {
+			if err := fault.OnSync(rec.viewID, rec.qpath); err != nil {
+				return layeredfs.EntryAttr{}, err
+			}
+		}
+		syncAppleDoubleForPath(core, rec.qpath)
+		if snapshotJournal {
+			if _, err := core.SnapshotJournal(); err != nil {
+				return layeredfs.EntryAttr{}, err
+			}
+		}
+		return core.Lstat(rec.qpath)
 	}
 
 	fd, _, err := core.Open(rec.qpath, layeredfs.OpenReadWrite, 0)
@@ -238,11 +278,7 @@ func flushChunksToCore(
 		return layeredfs.EntryAttr{}, err
 	}
 	_ = core.CloseHandle(fd)
-	if restoreRO {
-		_, _ = core.Chmod(rec.qpath, origPerm)
-		restoreRO = false
-	}
-	syncAppleDoubleXattrsIfPresent(core, rec.qpath)
+	syncAppleDoubleForPath(core, rec.qpath)
 	if snapshotJournal {
 		if _, err := core.SnapshotJournal(); err != nil {
 			return layeredfs.EntryAttr{}, err

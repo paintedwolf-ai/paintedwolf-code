@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/nfsserver"
 	nfs "github.com/willscott/go-nfs"
 )
@@ -153,6 +154,58 @@ func TestBoundedRPCFramingAndHugeOpaquePrefixRejection(t *testing.T) {
 	}
 	if st := nfs.NFSStatus(getU32(t, r)); st != nfs.NFSStatusInval {
 		t.Fatalf("expected NFSStatusInval for huge opaque prefix, got %v", st)
+	}
+}
+
+func TestAppleDoubleLowerXattrRoundTripAndOrdinaryDotUnderscorePreservation(t *testing.T) {
+	env := newTestEnv(t, nil)
+	capCfg := env.createViewAndExport(t, "view-ad-lower", true)
+	cli := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
+	_, rootFH := cli.mount(capCfg.ExportPath)
+
+	readmeQP := layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "README.md"}
+	quarantine := []byte("0081;66000000;Safari;")
+	if err := env.Core.SetXattr(readmeQP, "com.apple.quarantine", quarantine, true); err != nil {
+		t.Fatalf("SetXattr README.md: %v", err)
+	}
+
+	// 1. LOOKUP and READ synthesized ._README.md for lower file with xattrs, then round-trip to copy.md.
+	nst, adReadmeFH, adAttr := cli.lookup(rootFH, "._README.md")
+	if nst != nfs.NFSStatusOk || adAttr.Filesize == 0 {
+		t.Fatalf("LOOKUP ._README.md: st=%v size=%d", nst, adAttr.Filesize)
+	}
+	nst, adData, eof := cli.read(adReadmeFH, 0, 4096)
+	if nst != nfs.NFSStatusOk || !eof || len(adData) == 0 {
+		t.Fatalf("READ ._README.md: st=%v eof=%v len=%d", nst, eof, len(adData))
+	}
+	_, copyFH := cli.create(rootFH, "README-copy.md", 0o644, 0, [8]byte{})
+	_, _, _, _ = cli.write(copyFH, 0, []byte("# Copy\n"), nfsserver.FileSync)
+	_, adCopyFH := cli.create(rootFH, "._README-copy.md", 0o644, 0, [8]byte{})
+	_, _, _, _ = cli.write(adCopyFH, 0, adData, nfsserver.FileSync)
+
+	copyQP := layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "README-copy.md"}
+	gotQ, err := env.Core.GetXattr(copyQP, "com.apple.quarantine", true)
+	if err != nil || !bytes.Equal(gotQ, quarantine) {
+		t.Fatalf("quarantine round-trip mismatch: got=%q err=%v", gotQ, err)
+	}
+
+	// 2. Ordinary ._* file with non-AppleDouble partial content and rename is preserved intact.
+	_, plainFH := cli.create(rootFH, "._ordinary.bin", 0o644, 0, [8]byte{})
+	rawBytes := []byte("ordinary-non-appledouble-payload")
+	_, _, _, _ = cli.write(plainFH, 0, rawBytes[:12], nfsserver.Unstable)
+	_, _, _, _ = cli.write(plainFH, 12, rawBytes[12:], nfsserver.FileSync)
+	var ren bytes.Buffer
+	putBytes(&ren, rootFH)
+	putStr(&ren, "._ordinary.bin")
+	putBytes(&ren, rootFH)
+	putStr(&ren, "._ordinary-renamed.bin")
+	_, rr := cli.call(100003, 3, uint32(nfs.NFSProcedureRename), ren.Bytes())
+	if st := nfs.NFSStatus(getU32(t, rr)); st != nfs.NFSStatusOk {
+		t.Fatalf("RENAME ._ordinary.bin: %v", st)
+	}
+	gotRaw, err := env.Core.ReadFile(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "._ordinary-renamed.bin"})
+	if err != nil || !bytes.Equal(gotRaw, rawBytes) {
+		t.Fatalf("ordinary ._* content lost: got=%q err=%v", gotRaw, err)
 	}
 }
 

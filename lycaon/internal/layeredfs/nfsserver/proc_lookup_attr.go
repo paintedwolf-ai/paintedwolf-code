@@ -2,7 +2,6 @@ package nfsserver
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"syscall"
 	"time"
@@ -125,21 +124,8 @@ func applySattr3(s *Server, rec *handleRecord, exp *exportEntry, preMeta layered
 	return nil
 }
 
-func truncateRecord(s *Server, viewCore *layeredfs.Core, rec *handleRecord, preMeta layeredfs.EntryAttr, size uint64) error {
+func truncateRecord(s *Server, viewCore *layeredfs.Core, rec *handleRecord, _ layeredfs.EntryAttr, size uint64) error {
 	s.stability.DiscardKey(rec.key)
-	restoreRO := false
-	origPerm := preMeta.Mode & os.ModePerm
-	if origPerm&0o200 == 0 && rec.ownerCreatedRO {
-		if _, err := viewCore.Chmod(rec.qpath, origPerm|0o200); err != nil {
-			return err
-		}
-		restoreRO = true
-	}
-	defer func() {
-		if restoreRO {
-			_, _ = viewCore.Chmod(rec.qpath, origPerm)
-		}
-	}()
 	_, err := viewCore.Truncate(rec.qpath, int64(size))
 	return err
 }
@@ -178,10 +164,15 @@ func onLookup(s *Server, cs *connState, call rpcCallHeader) []byte {
 	}
 	childMeta, err := exp.core.Lstat(childQPath)
 	if err != nil {
-		return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
+		if adMeta, _, ok := synthAppleDoubleAttr(exp.core, childQPath); ok {
+			childMeta = adMeta
+		} else {
+			return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
+		}
 	}
 	childFH := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, cleanRel(childQPath.Rel) == ".", false)
 	if childRec, _ := s.handles.LookupByPath(dirRec.viewID, childQPath); childRec != nil {
+		childMeta.NodeID = childRec.key.nodeID
 		childMeta = s.stability.EffectiveMeta(childRec.key, childMeta)
 	}
 

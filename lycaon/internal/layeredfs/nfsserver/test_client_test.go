@@ -17,22 +17,17 @@ import (
 )
 
 type testEnv struct {
-	Core     *layeredfs.Core
-	Server   *nfsserver.Server
-	BaseDir  string
-	ProjDir  string
-	WorkDir  string
-	StateDir string
-	UID      uint32
-	GID      uint32
+	Core                            *layeredfs.Core
+	Server                          *nfsserver.Server
+	BaseDir, ProjDir, WorkDir       string
+	StateDir                        string
+	UID, GID                        uint32
 }
 
 func newTestEnv(t *testing.T, fault *nfsserver.FaultInjector) *testEnv {
 	t.Helper()
 	tmp := t.TempDir()
-	projDir := filepath.Join(tmp, "project")
-	workDir := filepath.Join(tmp, "worktree")
-	stateDir := filepath.Join(tmp, "state")
+	projDir, workDir, stateDir := filepath.Join(tmp, "project"), filepath.Join(tmp, "worktree"), filepath.Join(tmp, "state")
 	for _, d := range []string{projDir, workDir, stateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", d, err)
@@ -42,8 +37,7 @@ func newTestEnv(t *testing.T, fault *nfsserver.FaultInjector) *testEnv {
 		t.Fatalf("seed README: %v", err)
 	}
 	core, err := layeredfs.New(layeredfs.Config{
-		ViewID:     "default",
-		BackingDir: filepath.Join(stateDir, "default"),
+		ViewID: "default", BackingDir: filepath.Join(stateDir, "default"),
 		Roots: []layeredfs.RootSpec{
 			{ID: nfsserver.ProjectRoot, Label: "project", TrunkPath: projDir, IsPrimary: true},
 			{ID: nfsserver.WorktreeRoot, Label: "worktree", TrunkPath: workDir},
@@ -53,9 +47,7 @@ func newTestEnv(t *testing.T, fault *nfsserver.FaultInjector) *testEnv {
 		t.Fatalf("layeredfs.New: %v", err)
 	}
 	t.Cleanup(func() { _ = core.ReleaseView() })
-
-	uid := uint32(os.Geteuid())
-	gid := uint32(os.Getegid())
+	uid, gid := uint32(os.Geteuid()), uint32(os.Getegid())
 	srv, err := nfsserver.New(core, nfsserver.Config{
 		ListenAddr: "127.0.0.1:0", ExpectedUID: uid, ExpectedGID: gid,
 		HasExpectedUID: true, HasExpectedGID: true, FaultInjector: fault,
@@ -64,7 +56,6 @@ func newTestEnv(t *testing.T, fault *nfsserver.FaultInjector) *testEnv {
 		t.Fatalf("nfsserver.New: %v", err)
 	}
 	t.Cleanup(func() { _ = srv.Close() })
-
 	return &testEnv{
 		Core: core, Server: srv, BaseDir: tmp, ProjDir: projDir,
 		WorkDir: workDir, StateDir: stateDir, UID: uid, GID: gid,
@@ -74,8 +65,7 @@ func newTestEnv(t *testing.T, fault *nfsserver.FaultInjector) *testEnv {
 func (e *testEnv) createViewAndExport(t *testing.T, viewID nfsserver.ViewID, writable bool) nfsserver.ExportCapability {
 	t.Helper()
 	viewCore, err := layeredfs.New(layeredfs.Config{
-		ViewID:     viewID,
-		BackingDir: filepath.Join(e.StateDir, viewID),
+		ViewID: viewID, BackingDir: filepath.Join(e.StateDir, viewID),
 		Roots: []layeredfs.RootSpec{
 			{ID: nfsserver.ProjectRoot, Label: "project", TrunkPath: e.ProjDir, IsPrimary: true},
 			{ID: nfsserver.WorktreeRoot, Label: "worktree", TrunkPath: e.WorkDir},
@@ -95,12 +85,11 @@ func (e *testEnv) createViewAndExport(t *testing.T, viewID nfsserver.ViewID, wri
 }
 
 type rpcClient struct {
-	t      *testing.T
-	conn   net.Conn
-	uid    uint32
-	gid    uint32
-	flavor nfs.AuthFlavor
-	xidSeq atomic.Uint32
+	t        *testing.T
+	conn     net.Conn
+	uid, gid uint32
+	flavor   nfs.AuthFlavor
+	xidSeq   atomic.Uint32
 }
 
 func dialRPC(t *testing.T, addr net.Addr, uid, gid uint32) *rpcClient {
@@ -117,27 +106,20 @@ func (c *rpcClient) call(prog, vers, proc uint32, args []byte) (nfs.ResponseCode
 	c.t.Helper()
 	xid := c.xidSeq.Add(1)
 	var msg bytes.Buffer
-	putU32(&msg, xid)
-	putU32(&msg, 0) // CALL
-	putU32(&msg, 2) // RPC v2
-	putU32(&msg, prog)
-	putU32(&msg, vers)
-	putU32(&msg, proc)
-
-	putU32(&msg, uint32(c.flavor))
+	for _, v := range []uint32{xid, 0, 2, prog, vers, proc, uint32(c.flavor)} {
+		putU32(&msg, v)
+	}
 	if c.flavor == nfs.AuthFlavorUnix {
 		var cred bytes.Buffer
 		putU32(&cred, 1)
 		putStr(&cred, "localhost")
-		putU32(&cred, c.uid)
-		putU32(&cred, c.gid)
-		putU32(&cred, 1)
-		putU32(&cred, c.gid)
+		for _, v := range []uint32{c.uid, c.gid, 1, c.gid} {
+			putU32(&cred, v)
+		}
 		putBytes(&msg, cred.Bytes())
 	} else {
 		putBytes(&msg, nil)
 	}
-	// Verifier: AUTH_NULL
 	putU32(&msg, 0)
 	putU32(&msg, 0)
 	_, _ = msg.Write(args)
@@ -148,32 +130,26 @@ func (c *rpcClient) call(prog, vers, proc uint32, args []byte) (nfs.ResponseCode
 	if _, err := c.conn.Write(frame.Bytes()); err != nil {
 		c.t.Fatalf("write RPC frame: %v", err)
 	}
-
 	var hdr [4]byte
 	if _, err := io.ReadFull(c.conn, hdr[:]); err != nil {
 		c.t.Fatalf("read RPC reply header: %v", err)
 	}
-	respLen := binary.BigEndian.Uint32(hdr[:]) & 0x7fffffff
-	respBuf := make([]byte, respLen)
+	respBuf := make([]byte, binary.BigEndian.Uint32(hdr[:])&0x7fffffff)
 	if _, err := io.ReadFull(c.conn, respBuf); err != nil {
 		c.t.Fatalf("read RPC reply body: %v", err)
 	}
 	r := bytes.NewReader(respBuf)
-	gotXID := getU32(c.t, r)
-	if gotXID != xid {
+	if gotXID := getU32(c.t, r); gotXID != xid {
 		c.t.Fatalf("XID mismatch: got %d, want %d", gotXID, xid)
 	}
 	if replyType := getU32(c.t, r); replyType != 1 {
 		c.t.Fatalf("expected REPLY(1), got %d", replyType)
 	}
-	replyStat := getU32(c.t, r)
-	if replyStat != 0 {
+	if getU32(c.t, r) != 0 {
 		return nfs.ResponseCodeAuthError, r
 	}
-	_ = getU32(c.t, r) // verf flavor
-	_ = getBytes(c.t, r)
-	acceptStat := nfs.ResponseCode(getU32(c.t, r))
-	return acceptStat, r
+	_, _ = getU32(c.t, r), getBytes(c.t, r)
+	return nfs.ResponseCode(getU32(c.t, r)), r
 }
 
 func (c *rpcClient) mount(exportPath string) (nfs.MountStatus, []byte) {
@@ -184,12 +160,11 @@ func (c *rpcClient) mount(exportPath string) (nfs.MountStatus, []byte) {
 	if code != nfs.ResponseCodeSuccess {
 		c.t.Fatalf("MOUNT accept code: %v", code)
 	}
-	st := nfs.MountStatus(getU32(c.t, r))
-	if st != nfs.MountStatusOk {
+	if st := nfs.MountStatus(getU32(c.t, r)); st != nfs.MountStatusOk {
 		return st, nil
+	} else {
+		return st, getBytes(c.t, r)
 	}
-	fh := getBytes(c.t, r)
-	return st, fh
 }
 
 func (c *rpcClient) lookup(dirFH []byte, name string) (nfs.NFSStatus, []byte, nfs.FileAttribute) {
@@ -198,13 +173,12 @@ func (c *rpcClient) lookup(dirFH []byte, name string) (nfs.NFSStatus, []byte, nf
 	putBytes(&args, dirFH)
 	putStr(&args, name)
 	_, r := c.call(100003, 3, uint32(nfs.NFSProcedureLookup), args.Bytes())
-	st := nfs.NFSStatus(getU32(c.t, r))
-	if st != nfs.NFSStatusOk {
+	if st := nfs.NFSStatus(getU32(c.t, r)); st != nfs.NFSStatusOk {
 		return st, nil, nfs.FileAttribute{}
+	} else {
+		fh := getBytes(c.t, r)
+		return st, fh, getPostOpAttr(c.t, r)
 	}
-	fh := getBytes(c.t, r)
-	attr := getPostOpAttr(c.t, r)
-	return st, fh, attr
 }
 
 func (c *rpcClient) getAttr(fh []byte) (nfs.NFSStatus, nfs.FileAttribute) {
@@ -212,11 +186,11 @@ func (c *rpcClient) getAttr(fh []byte) (nfs.NFSStatus, nfs.FileAttribute) {
 	var args bytes.Buffer
 	putBytes(&args, fh)
 	_, r := c.call(100003, 3, uint32(nfs.NFSProcedureGetAttr), args.Bytes())
-	st := nfs.NFSStatus(getU32(c.t, r))
-	if st != nfs.NFSStatusOk {
+	if st := nfs.NFSStatus(getU32(c.t, r)); st != nfs.NFSStatusOk {
 		return st, nfs.FileAttribute{}
+	} else {
+		return st, getFattr3(c.t, r)
 	}
-	return st, getFattr3(c.t, r)
 }
 
 func (c *rpcClient) create(dirFH []byte, name string, mode uint32, how uint32, verf [8]byte) (nfs.NFSStatus, []byte) {
@@ -231,16 +205,13 @@ func (c *rpcClient) create(dirFH []byte, name string, mode uint32, how uint32, v
 		encodeSattrMode(&args, true, mode)
 	}
 	_, r := c.call(100003, 3, uint32(nfs.NFSProcedureCreate), args.Bytes())
-	st := nfs.NFSStatus(getU32(c.t, r))
-	if st != nfs.NFSStatusOk {
+	if st := nfs.NFSStatus(getU32(c.t, r)); st != nfs.NFSStatusOk {
+		return st, nil
+	} else if getU32(c.t, r) == 1 {
+		return st, getBytes(c.t, r)
+	} else {
 		return st, nil
 	}
-	hasFH := getU32(c.t, r)
-	var fh []byte
-	if hasFH == 1 {
-		fh = getBytes(c.t, r)
-	}
-	return st, fh
 }
 
 func (c *rpcClient) write(fh []byte, offset uint64, data []byte, stab nfsserver.WriteStability) (nfs.NFSStatus, uint32, nfsserver.WriteStability, [8]byte) {
@@ -258,8 +229,7 @@ func (c *rpcClient) write(fh []byte, offset uint64, data []byte, stab nfsserver.
 		return st, 0, 0, verf
 	}
 	skipWcc(c.t, r)
-	n := getU32(c.t, r)
-	committed := nfsserver.WriteStability(getU32(c.t, r))
+	n, committed := getU32(c.t, r), nfsserver.WriteStability(getU32(c.t, r))
 	_, _ = io.ReadFull(r, verf[:])
 	return st, n, committed, verf
 }
@@ -273,11 +243,10 @@ func (c *rpcClient) commit(fh []byte, offset uint64, count uint32) (nfs.NFSStatu
 	_, r := c.call(100003, 3, uint32(nfs.NFSProcedureCommit), args.Bytes())
 	st := nfs.NFSStatus(getU32(c.t, r))
 	var verf [8]byte
-	if st != nfs.NFSStatusOk {
-		return st, verf
+	if st == nfs.NFSStatusOk {
+		skipWcc(c.t, r)
+		_, _ = io.ReadFull(r, verf[:])
 	}
-	skipWcc(c.t, r)
-	_, _ = io.ReadFull(r, verf[:])
 	return st, verf
 }
 
@@ -288,15 +257,13 @@ func (c *rpcClient) read(fh []byte, offset uint64, count uint32) (nfs.NFSStatus,
 	putU64(&args, offset)
 	putU32(&args, count)
 	_, r := c.call(100003, 3, uint32(nfs.NFSProcedureRead), args.Bytes())
-	st := nfs.NFSStatus(getU32(c.t, r))
-	if st != nfs.NFSStatusOk {
+	if st := nfs.NFSStatus(getU32(c.t, r)); st != nfs.NFSStatusOk {
 		return st, nil, false
+	} else {
+		_, _ = getPostOpAttr(c.t, r), getU32(c.t, r)
+		eof := getU32(c.t, r) == 1
+		return st, getBytes(c.t, r), eof
 	}
-	_ = getPostOpAttr(c.t, r)
-	_ = getU32(c.t, r) // count
-	eof := getU32(c.t, r) == 1
-	data := getBytes(c.t, r)
-	return st, data, eof
 }
 
 func putU32(w *bytes.Buffer, v uint32) {
@@ -314,10 +281,8 @@ func putU64(w *bytes.Buffer, v uint64) {
 func putBytes(w *bytes.Buffer, data []byte) {
 	putU32(w, uint32(len(data)))
 	_, _ = w.Write(data)
-	if pad := (4 - (len(data) & 3)) & 3; pad > 0 {
-		var z [4]byte
-		_, _ = w.Write(z[:pad])
-	}
+	var z [4]byte
+	_, _ = w.Write(z[:(4-(len(data)&3))&3])
 }
 
 func putStr(w *bytes.Buffer, s string) { putBytes(w, []byte(s)) }

@@ -103,8 +103,8 @@ func TestDirectoryMutationCookieVerifierInvalidationAndO1HandleLookup(t *testing
 	// First page of READDIR (small count = 256 bytes so eof == false).
 	var rd1 bytes.Buffer
 	putBytes(&rd1, rootFH)
-	putU64(&rd1, 0) // cookie 0
-	putU64(&rd1, 0) // zero cookieverf
+	putU64(&rd1, 0)
+	putU64(&rd1, 0)
 	putU32(&rd1, 256)
 	_, r := cli.call(100003, 3, uint32(nfs.NFSProcedureReadDir), rd1.Bytes())
 	if st := nfs.NFSStatus(getU32(t, r)); st != nfs.NFSStatusOk {
@@ -118,15 +118,12 @@ func TestDirectoryMutationCookieVerifierInvalidationAndO1HandleLookup(t *testing
 	}
 	var lastCookie uint64
 	for getU32(t, r) == 1 {
-		_ = getU64(t, r)      // fileid
-		_ = getBytes(t, r)    // name
+		_, _ = getU64(t, r), getBytes(t, r)
 		lastCookie = getU64(t, r)
 	}
 	if lastCookie == 0 {
 		t.Fatal("expected at least one READDIR entry")
 	}
-
-	// Continuation with matching cookieverf BEFORE mutation succeeds.
 	var rd2 bytes.Buffer
 	putBytes(&rd2, rootFH)
 	putU64(&rd2, lastCookie)
@@ -136,14 +133,12 @@ func TestDirectoryMutationCookieVerifierInvalidationAndO1HandleLookup(t *testing
 	if st := nfs.NFSStatus(getU32(t, r2)); st != nfs.NFSStatusOk {
 		t.Fatalf("READDIR continuation before mutation failed: %v", st)
 	}
-
 	// Mutate directory -> old cookieverf MUST be rejected with NFSStatusBadCookie on both READDIR and READDIRPLUS!
 	_, _ = cli.create(rootFH, "mutated-new.txt", 0o644, 0, [8]byte{})
 	_, r3 := cli.call(100003, 3, uint32(nfs.NFSProcedureReadDir), rd2.Bytes())
 	if st := nfs.NFSStatus(getU32(t, r3)); st != nfs.NFSStatusBadCookie {
 		t.Fatalf("expected NFSStatusBadCookie on READDIR after dir mutation, got %v", st)
 	}
-
 	var rdp bytes.Buffer
 	putBytes(&rdp, rootFH)
 	putU64(&rdp, lastCookie)
@@ -154,8 +149,6 @@ func TestDirectoryMutationCookieVerifierInvalidationAndO1HandleLookup(t *testing
 	if st := nfs.NFSStatus(getU32(t, r4)); st != nfs.NFSStatusBadCookie {
 		t.Fatalf("expected NFSStatusBadCookie on READDIRPLUS after dir mutation, got %v", st)
 	}
-
-	// Fresh READDIRPLUS with cookie=0 and zero verifier succeeds.
 	var rdpFresh bytes.Buffer
 	putBytes(&rdpFresh, rootFH)
 	putU64(&rdpFresh, 0)
@@ -166,11 +159,8 @@ func TestDirectoryMutationCookieVerifierInvalidationAndO1HandleLookup(t *testing
 	if st := nfs.NFSStatus(getU32(t, r5)); st != nfs.NFSStatusOk {
 		t.Fatalf("fresh READDIRPLUS failed: %v", st)
 	}
-
-	// Verify O(1) handle resolution across all created handles.
 	for i, fh := range handles {
-		qpath, err := env.Server.ResolveHandleForView(fh, "view-dir")
-		if err != nil || qpath.Rel != fmt.Sprintf("file-%03d.txt", i) {
+		if qpath, err := env.Server.ResolveHandleForView(fh, "view-dir"); err != nil || qpath.Rel != fmt.Sprintf("file-%03d.txt", i) {
 			t.Fatalf("ResolveHandleForView(%d): qpath=%+v err=%v", i, qpath, err)
 		}
 	}
@@ -195,10 +185,8 @@ func TestWriteStabilityFaultInjectionVerifierRotationAndCheckpointBarrier(t *tes
 	capCfg := env.createViewAndExport(t, "view-dur", true)
 	cli := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
 	_, rootFH := cli.mount(capCfg.ExportPath)
-
 	_, fh := cli.create(rootFH, "durable.txt", 0o644, 0, [8]byte{})
 
-	// 1. UNSTABLE write returns initial writeVerifier and is immediately visible to READ.
 	st, n, committed, verf1 := cli.write(fh, 0, []byte("chunk-one"), nfsserver.Unstable)
 	if st != nfs.NFSStatusOk || n != 9 || committed != nfsserver.Unstable {
 		t.Fatalf("UNSTABLE write: st=%v n=%d committed=%v", st, n, committed)
@@ -206,29 +194,21 @@ func TestWriteStabilityFaultInjectionVerifierRotationAndCheckpointBarrier(t *tes
 	if st, data, _ := cli.read(fh, 0, 64); st != nfs.NFSStatusOk || string(data) != "chunk-one" {
 		t.Fatalf("READ of uncommitted UNSTABLE write: st=%v data=%q", st, data)
 	}
-
-	// 2. Simulate server restart between UNSTABLE write and COMMIT: rotates writeVerifier & drops uncommitted buffer.
 	verf2 := env.Server.ResetUnstableState()
 	if verf2 == verf1 {
 		t.Fatalf("expected ResetUnstableState to rotate writeVerifier, got same %x", verf2)
 	}
-	st, commitVerf := cli.commit(fh, 0, 9)
-	if st != nfs.NFSStatusOk || commitVerf != verf2 {
+	if st, commitVerf := cli.commit(fh, 0, 9); st != nfs.NFSStatusOk || commitVerf != verf2 {
 		t.Fatalf("COMMIT after restart: st=%v commitVerf=%x want=%x", st, commitVerf, verf2)
 	}
-	// Client detects commitVerf != verf1 and retransmits UNSTABLE write + COMMIT.
-	_, _, _, verfAfterRetry := cli.write(fh, 0, []byte("chunk-one"), nfsserver.Unstable)
-	if verfAfterRetry != verf2 {
+	if _, _, _, verfAfterRetry := cli.write(fh, 0, []byte("chunk-one"), nfsserver.Unstable); verfAfterRetry != verf2 {
 		t.Fatalf("expected retry WRITE verifier %x, got %x", verf2, verfAfterRetry)
 	}
-
-	// 3. Inject COMMIT and Sync faults: COMMIT fails, staged data remains pending until retry succeeds.
 	failCommit = true
 	if st, _ := cli.commit(fh, 0, 9); st != nfs.NFSStatusIO {
 		t.Fatalf("expected NFSStatusIO on injected COMMIT fault, got %v", st)
 	}
-	failCommit = false
-	failSync = true
+	failCommit, failSync = false, true
 	if st, _ := cli.commit(fh, 0, 9); st != nfs.NFSStatusIO {
 		t.Fatalf("expected NFSStatusIO on injected Sync fault, got %v", st)
 	}
@@ -236,17 +216,13 @@ func TestWriteStabilityFaultInjectionVerifierRotationAndCheckpointBarrier(t *tes
 	if st, finalVerf := cli.commit(fh, 0, 9); st != nfs.NFSStatusOk || finalVerf != verf2 {
 		t.Fatalf("COMMIT retry failed: st=%v verf=%x", st, finalVerf)
 	}
-
-	// 4. Stage another UNSTABLE write and run FlushForCheckpoint barrier before checkpointing.
 	_, _, _, _ = cli.write(fh, 9, []byte("-two"), nfsserver.Unstable)
 	if err := env.Server.FlushForCheckpoint(context.Background(), "view-dur"); err != nil {
 		t.Fatalf("FlushForCheckpoint: %v", err)
 	}
-	_, data, _ := cli.read(fh, 0, 64)
-	if string(data) != "chunk-one-two" {
+	if _, data, _ := cli.read(fh, 0, 64); string(data) != "chunk-one-two" {
 		t.Fatalf("after FlushForCheckpoint got %q, want %q", data, "chunk-one-two")
 	}
-	// Also test DATA_SYNC write.
 	if st, _, comm, _ := cli.write(fh, 13, []byte("-three"), nfsserver.DataSync); st != nfs.NFSStatusOk || comm != nfsserver.DataSync {
 		t.Fatalf("DATA_SYNC write failed: st=%v comm=%v", st, comm)
 	}
@@ -305,19 +281,14 @@ func TestAppleDoubleCreatePartialWriteReadRenameAndXattrRoundTrip(t *testing.T) 
 			t.Fatalf("RENAME %s -> %s: %v", pair[0], pair[1], nst)
 		}
 	}
-
 	changes, err := env.Core.EnumerateChanges(true)
 	if err != nil {
 		t.Fatalf("EnumerateChanges: %v", err)
 	}
 	seenMoved, seenAD := false, false
 	for _, ch := range changes {
-		if ch.Path.Rel == "moved.txt" {
-			seenMoved = true
-		}
-		if ch.Path.Rel == "._moved.txt" {
-			seenAD = true
-		}
+		seenMoved = seenMoved || ch.Path.Rel == "moved.txt"
+		seenAD = seenAD || ch.Path.Rel == "._moved.txt"
 	}
 	if !seenMoved || !seenAD {
 		t.Fatalf("expected moved.txt and ._moved.txt in EnumerateChanges, got %+v", changes)

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"os"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	nfs "github.com/willscott/go-nfs"
@@ -25,7 +24,11 @@ func statRecord(s *Server, rec *handleRecord) (layeredfs.EntryAttr, error) {
 	}
 	meta, err := viewCore.Lstat(rec.qpath)
 	if err != nil {
-		return layeredfs.EntryAttr{}, err
+		if adMeta, _, ok := synthAppleDoubleAttr(viewCore, rec.qpath); ok {
+			meta = adMeta
+		} else {
+			return layeredfs.EntryAttr{}, err
+		}
 	}
 	if rec.generation > 1 && uint64(meta.Generation) != rec.generation {
 		return layeredfs.EntryAttr{}, ErrStaleHandle
@@ -99,6 +102,13 @@ func readBaseFile(viewCore *layeredfs.Core, rec *handleRecord, offset uint64, co
 	}
 	fd, meta, err := viewCore.Open(rec.qpath, layeredfs.OpenReadOnly, 0)
 	if err != nil {
+		if adMeta, payload, ok := synthAppleDoubleAttr(viewCore, rec.qpath); ok {
+			if offset >= uint64(len(payload)) {
+				return nil, adMeta.Size, nil
+			}
+			end := min(int(offset)+max(count, 0), len(payload))
+			return payload[offset:end], adMeta.Size, nil
+		}
 		return nil, 0, err
 	}
 	buf := make([]byte, max(count, 0))
@@ -204,9 +214,6 @@ func checkWritablePath(viewCore *layeredfs.Core, qpath layeredfs.QualifiedPath) 
 		}
 		_ = viewCore.CloseHandle(fd)
 		return nil
-	}
-	if _, err := viewCore.Chmod(qpath, meta.Mode&os.ModePerm); err != nil && err != syscall.EACCES {
-		return err
 	}
 	return nil
 }

@@ -14,18 +14,14 @@ import (
 
 // sattr3 represents RFC 1813 section 2.5.4 settable file attributes with explicit presence flags.
 type sattr3 struct {
-	HasMode  bool
-	Mode     os.FileMode
-	HasUID   bool
-	UID      uint32
-	HasGID   bool
-	GID      uint32
-	HasSize  bool
-	Size     uint64
-	HasAtime bool
-	Atime    time.Time
-	HasMtime bool
-	Mtime    time.Time
+	HasMode            bool
+	Mode               os.FileMode
+	HasUID, HasGID     bool
+	UID, GID           uint32
+	HasSize            bool
+	Size               uint64
+	HasAtime, HasMtime bool
+	Atime, Mtime       time.Time
 }
 
 const (
@@ -39,10 +35,8 @@ func readUint32(r *bytes.Reader) (uint32, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 	var buf [4]byte
-	if _, err := io.ReadFull(r, buf[:]); err != nil {
-		return 0, err
-	}
-	return binary.BigEndian.Uint32(buf[:]), nil
+	_, err := io.ReadFull(r, buf[:])
+	return binary.BigEndian.Uint32(buf[:]), err
 }
 
 func readUint64(r *bytes.Reader) (uint64, error) {
@@ -50,10 +44,8 @@ func readUint64(r *bytes.Reader) (uint64, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 	var buf [8]byte
-	if _, err := io.ReadFull(r, buf[:]); err != nil {
-		return 0, err
-	}
-	return binary.BigEndian.Uint64(buf[:]), nil
+	_, err := io.ReadFull(r, buf[:])
+	return binary.BigEndian.Uint64(buf[:]), err
 }
 
 func readBool(r *bytes.Reader) (bool, error) {
@@ -231,9 +223,7 @@ func writeOpaque(w *bytes.Buffer, data []byte) {
 	}
 }
 
-func writeString(w *bytes.Buffer, s string) {
-	writeOpaque(w, []byte(s))
-}
+func writeString(w *bytes.Buffer, s string) { writeOpaque(w, []byte(s)) }
 
 func writePostOpFH3(w *bytes.Buffer, fh []byte) {
 	if len(fh) == 0 {
@@ -274,18 +264,10 @@ func nodeMetaToFileAttr(meta *layeredfs.EntryAttr, uid, gid uint32) *nfs.FileAtt
 		ctime = mtime
 	}
 	return &nfs.FileAttribute{
-		Type:     ft,
-		FileMode: uint32(meta.Mode & (os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky)),
-		Nlink:    nlink,
-		UID:      uid,
-		GID:      gid,
-		Filesize: size,
-		Used:     (size + 4095) &^ 4095,
-		FSID:     1,
-		Fileid:   uint64(meta.NodeID),
-		Atime:    nfs.ToNFSTime(atime),
-		Mtime:    nfs.ToNFSTime(mtime),
-		Ctime:    nfs.ToNFSTime(ctime),
+		Type: ft, FileMode: uint32(meta.Mode & (os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky)),
+		Nlink: nlink, UID: uid, GID: gid, Filesize: size, Used: (size + 4095) &^ 4095,
+		FSID: 1, Fileid: uint64(meta.NodeID),
+		Atime: nfs.ToNFSTime(atime), Mtime: nfs.ToNFSTime(mtime), Ctime: nfs.ToNFSTime(ctime),
 	}
 }
 

@@ -2,7 +2,6 @@ package nfsserver
 
 import (
 	"bytes"
-	"os"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -51,13 +50,12 @@ func executeRemove(s *Server, viewCore *layeredfs.Core, dirRec *handleRecord, ch
 		meta, err := viewCore.Lstat(childQPath)
 		if err == nil && meta.Mode.IsRegular() {
 			_, _, _ = s.stability.Commit(viewCore, s.handles, nil, childRec, meta, 0, 0)
-			if meta.Mode&0o200 == 0 && childRec.ownerCreatedRO {
-				_, _ = viewCore.Chmod(childQPath, (meta.Mode&os.ModePerm)|0o200)
-			}
-			if fd, _, openErr := viewCore.Open(childQPath, layeredfs.OpenReadWrite, 0); openErr == nil {
-				openFD, childMeta = fd, meta
-			} else if fd, _, openErr := viewCore.Open(childQPath, layeredfs.OpenReadOnly, 0); openErr == nil {
-				openFD, childMeta = fd, meta
+			if meta.Nlink <= 1 && len(childRec.paths) <= 1 {
+				if fd, _, openErr := viewCore.Open(childQPath, layeredfs.OpenReadWrite, 0); openErr == nil {
+					openFD, childMeta = fd, meta
+				} else if fd, _, openErr := viewCore.Open(childQPath, layeredfs.OpenReadOnly, 0); openErr == nil {
+					openFD, childMeta = fd, meta
+				}
 			}
 		}
 	}
@@ -72,6 +70,11 @@ func executeRemove(s *Server, viewCore *layeredfs.Core, dirRec *handleRecord, ch
 		s.handles.MarkUnlinked(dirRec.viewID, childQPath, openFD, childMeta)
 	} else {
 		s.handles.InvalidatePath(viewCore, dirRec.viewID, childQPath)
+		if hasHandle {
+			if updated, ok := lookupRecordByKey(s.handles, childRec.key); ok {
+				s.stability.UpdateRecPath(updated.key, updated.qpath)
+			}
+		}
 	}
 	return nil
 }
@@ -112,15 +115,11 @@ func onRmdir(s *Server, cs *connState, call rpcCallHeader) []byte {
 }
 
 func onRename(s *Server, cs *connState, call rpcCallHeader) []byte {
-	fromDirFH, fromName, err := readDirOpArg(call.Body)
-	if err != nil {
+	fromDirFH, fromName, err1 := readDirOpArg(call.Body)
+	toDirFH, toName, err2 := readDirOpArg(call.Body)
+	if err1 != nil || err2 != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureRename, nfs.NFSStatusInval)
 	}
-	toDirFH, toName, err := readDirOpArg(call.Body)
-	if err != nil {
-		return encodeNFSError(call.XID, nfs.NFSProcedureRename, nfs.NFSStatusInval)
-	}
-
 	fromDirRec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, fromDirFH)
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureRename, MapErrorToNFSStatus(err))
@@ -132,19 +131,17 @@ func onRename(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if fromDirRec.viewID != toDirRec.viewID {
 		return encodeNFSError(call.XID, nfs.NFSProcedureRename, nfs.NFSStatusAccess)
 	}
-
-	preFrom, err := statRecord(s, fromDirRec)
-	if err != nil {
-		return encodeNFSError(call.XID, nfs.NFSProcedureRename, MapErrorToNFSStatus(err))
-	}
-	preTo, err := statRecord(s, toDirRec)
-	if err != nil {
-		return encodeNFSError(call.XID, nfs.NFSProcedureRename, MapErrorToNFSStatus(err))
+	preFrom, err1 := statRecord(s, fromDirRec)
+	preTo, err2 := statRecord(s, toDirRec)
+	if err1 != nil || err2 != nil {
+		if err1 != nil {
+			return encodeNFSError(call.XID, nfs.NFSProcedureRename, MapErrorToNFSStatus(err1))
+		}
+		return encodeNFSError(call.XID, nfs.NFSProcedureRename, MapErrorToNFSStatus(err2))
 	}
 	if exp.cap.ReadOnly {
 		return encodeRenameError(call.XID, nfs.NFSStatusROFS, &preFrom, &preFrom, &preTo, &preTo, exp)
 	}
-
 	fromQPath, err := joinChildPath(fromDirRec.qpath, fromName)
 	if err != nil {
 		return encodeRenameError(call.XID, MapErrorToNFSStatus(err), &preFrom, &preFrom, &preTo, &preTo, exp)
@@ -153,30 +150,26 @@ func onRename(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeRenameError(call.XID, MapErrorToNFSStatus(err), &preFrom, &preFrom, &preTo, &preTo, exp)
 	}
-
 	if srcRec, ok := s.handles.LookupByPath(fromDirRec.viewID, fromQPath); ok {
 		if srcMeta, statErr := statRecord(s, srcRec); statErr == nil {
 			_, _, _ = s.stability.Commit(exp.core, s.handles, nil, srcRec, srcMeta, 0, 0)
 		}
 	}
-
 	err = exp.core.Rename(fromQPath, toQPath)
 	postFrom, _ := statRecord(s, fromDirRec)
 	postTo, _ := statRecord(s, toDirRec)
 	if err != nil {
 		return encodeRenameError(call.XID, MapErrorToNFSStatus(err), &preFrom, &postFrom, &preTo, &postTo, exp)
 	}
-
 	s.handles.UpdateOnRename(exp.core, fromDirRec.viewID, fromQPath, toQPath)
 	if movedRec, ok := s.handles.LookupByPath(fromDirRec.viewID, toQPath); ok {
 		s.stability.UpdateRecPath(movedRec.key, toQPath)
 	}
-	syncAppleDoubleXattrsIfPresent(exp.core, toQPath)
+	syncAppleDoubleForPath(exp.core, toQPath)
 	s.dirs.InvalidateDir(fromDirRec.key)
 	if toDirRec.key != fromDirRec.key {
 		s.dirs.InvalidateDir(toDirRec.key)
 	}
-
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
 	writeWccData(&body, &preFrom, &postFrom, exp.cap.AllowedUID, exp.cap.AllowedGID)
@@ -199,7 +192,7 @@ func onLink(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureLink, nfs.NFSStatusInval)
 	}
-	dirFH, _, err := readDirOpArg(call.Body)
+	dirFH, name, err := readDirOpArg(call.Body)
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureLink, nfs.NFSStatusInval)
 	}
@@ -214,14 +207,64 @@ func onLink(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if targetRec.viewID != dirRec.viewID {
 		return encodeNFSError(call.XID, nfs.NFSProcedureLink, nfs.NFSStatusAccess)
 	}
-	targetMeta, _ := statRecord(s, targetRec)
-	dirMeta, _ := statRecord(s, dirRec)
-
+	preTarget, err := statRecord(s, targetRec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureLink, MapErrorToNFSStatus(err))
+	}
+	preDir, err := statRecord(s, dirRec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureLink, MapErrorToNFSStatus(err))
+	}
+	if exp.cap.ReadOnly {
+		return encodeLinkError(call.XID, nfs.NFSStatusROFS, &preTarget, &preDir, &preDir, exp)
+	}
+	if targetRec.qpath.RootID != dirRec.qpath.RootID {
+		return encodeLinkError(call.XID, nfs.NFSStatusXDev, &preTarget, &preDir, &preDir, exp)
+	}
+	if !preDir.Mode.IsDir() {
+		return encodeLinkError(call.XID, nfs.NFSStatusNotDir, &preTarget, &preDir, &preDir, exp)
+	}
+	linkQPath, err := joinChildPath(dirRec.qpath, name)
+	if err != nil {
+		return encodeLinkError(call.XID, MapErrorToNFSStatus(err), &preTarget, &preDir, &preDir, exp)
+	}
+	_, _, _ = s.stability.Commit(exp.core, s.handles, nil, targetRec, preTarget, 0, 0)
+	postTarget, err := exp.core.Link(targetRec.qpath, linkQPath)
+	postDir, _ := statRecord(s, dirRec)
+	if err != nil {
+		return encodeLinkError(call.XID, MapErrorToNFSStatus(err), &preTarget, &preDir, &postDir, exp)
+	}
+	postTarget.NodeID = targetRec.key.nodeID
+	ensureMeta := postTarget
+	ensureMeta.Generation = layeredfs.Generation(targetRec.generation)
+	_ = s.handles.Ensure(dirRec.viewID, linkQPath, ensureMeta, false, targetRec.ownerCreatedRO)
+	s.dirs.InvalidateDir(dirRec.key)
 	var body bytes.Buffer
-	writeUint32(&body, uint32(nfs.NFSStatusNotSupp))
-	writePostOpAttr(&body, &targetMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
-	writeWccData(&body, &dirMeta, &dirMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	writePostOpAttr(&body, &postTarget, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeWccData(&body, &preDir, &postDir, exp.cap.AllowedUID, exp.cap.AllowedGID)
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func encodeLinkError(
+	xid uint32, st nfs.NFSStatus, target, preDir, postDir *layeredfs.EntryAttr, exp *exportEntry,
+) []byte {
+	var body bytes.Buffer
+	writeUint32(&body, uint32(st))
+	writePostOpAttr(&body, target, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeWccData(&body, preDir, postDir, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	return encodeAcceptedReply(xid, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func rebindRecordPathLocked(t *handleTable, rec *handleRecord, oldPK pathKey, newQP layeredfs.QualifiedPath) {
+	delete(t.byPath, oldPK)
+	delete(rec.paths, oldPK)
+	if rec.paths == nil {
+		rec.paths = make(map[pathKey]layeredfs.QualifiedPath)
+	}
+	newPK := makePathKey(rec.viewID, newQP)
+	rec.paths[newPK], rec.qpath = newQP, newQP
+	t.byPath[newPK] = rec
 }
 
 func (t *handleTable) UpdateOnRename(core *layeredfs.Core, viewID ViewID, from, to layeredfs.QualifiedPath) {
@@ -231,16 +274,7 @@ func (t *handleTable) UpdateOnRename(core *layeredfs.Core, viewID ViewID, from, 
 	srcRec := t.byPath[fromPK]
 	var toClose layeredfs.HandleID
 	if dstRec, ok := t.byPath[toPK]; ok && dstRec != srcRec {
-		delete(t.byPath, toPK)
-		delete(t.byKey, dstRec.key)
-		if dstRec.lruElem != nil {
-			t.lru.Remove(dstRec.lruElem)
-			dstRec.lruElem = nil
-		}
-		if dstRec.unlinked != nil {
-			toClose = dstRec.unlinked.fd
-			dstRec.unlinked.fd = 0
-		}
+		toClose = dropRecordPathLocked(t, dstRec, toPK, to)
 	}
 	prefix := from.Rel + "/"
 	for pk, rec := range t.byPath {
@@ -248,59 +282,13 @@ func (t *handleTable) UpdateOnRename(core *layeredfs.Core, viewID ViewID, from, 
 			continue
 		}
 		if pk.relPath == from.Rel {
-			delete(t.byPath, pk)
-			rec.qpath = to
-			t.byPath[toPK] = rec
+			rebindRecordPathLocked(t, rec, pk, to)
 		} else if from.Rel != "." && strings.HasPrefix(pk.relPath, prefix) {
-			delete(t.byPath, pk)
-			suffix := strings.TrimPrefix(pk.relPath, prefix)
-			newRel := suffix
+			newRel := strings.TrimPrefix(pk.relPath, prefix)
 			if to.Rel != "." {
-				newRel = to.Rel + "/" + suffix
+				newRel = to.Rel + "/" + newRel
 			}
-			rec.qpath = layeredfs.QualifiedPath{RootID: to.RootID, Rel: newRel}
-			t.byPath[makePathKey(viewID, rec.qpath)] = rec
-		}
-	}
-	t.mu.Unlock()
-	if core != nil && toClose != 0 {
-		_ = core.CloseHandle(toClose)
-	}
-}
-
-func (t *handleTable) MarkUnlinked(viewID ViewID, qpath layeredfs.QualifiedPath, openFD layeredfs.HandleID, meta layeredfs.EntryAttr) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	pk := makePathKey(viewID, qpath)
-	if rec, ok := t.byPath[pk]; ok {
-		delete(t.byPath, pk)
-		rec.unlinked = &unlinkedFile{fd: openFD, meta: meta}
-	}
-}
-
-func (t *handleTable) UpdateUnlinkedMeta(hk handleKey, meta layeredfs.EntryAttr) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if rec, ok := t.byKey[hk]; ok && rec.unlinked != nil {
-		rec.unlinked.meta = meta
-	}
-}
-
-func (t *handleTable) InvalidatePath(core *layeredfs.Core, viewID ViewID, qpath layeredfs.QualifiedPath) {
-	t.mu.Lock()
-	pk := makePathKey(viewID, qpath)
-	rec, ok := t.byPath[pk]
-	var toClose layeredfs.HandleID
-	if ok {
-		delete(t.byPath, pk)
-		delete(t.byKey, rec.key)
-		if rec.lruElem != nil {
-			t.lru.Remove(rec.lruElem)
-			rec.lruElem = nil
-		}
-		if rec.unlinked != nil {
-			toClose = rec.unlinked.fd
-			rec.unlinked.fd = 0
+			rebindRecordPathLocked(t, rec, pk, layeredfs.QualifiedPath{RootID: to.RootID, Rel: newRel})
 		}
 	}
 	t.mu.Unlock()

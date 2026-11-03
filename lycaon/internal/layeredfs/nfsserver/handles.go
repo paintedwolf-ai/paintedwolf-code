@@ -21,46 +21,41 @@ type handleKey struct {
 	viewHash uint64
 	nodeID   layeredfs.NodeID
 }
-
 type pathKey struct {
 	viewID  ViewID
 	root    RootID
 	relPath string
 }
-
 type wireHeader struct {
-	root       RootID
-	viewHash   uint64
-	nodeID     layeredfs.NodeID
-	generation uint64
+	root                 RootID
+	viewHash, generation uint64
+	nodeID               layeredfs.NodeID
 }
-
 type unlinkedFile struct {
 	fd   layeredfs.HandleID
 	meta layeredfs.EntryAttr
 }
-
 type handleRecord struct {
-	wire           [HandleSize]byte
-	key            handleKey
-	viewID         ViewID
-	qpath          layeredfs.QualifiedPath
-	generation     uint64
-	isRoot         bool
-	ownerCreatedRO bool
-	createVerf     *[8]byte
-	unlinked       *unlinkedFile
-	lruElem        *list.Element
+	wire                   [HandleSize]byte
+	key                    handleKey
+	viewID                 ViewID
+	qpath                  layeredfs.QualifiedPath
+	paths                  map[pathKey]layeredfs.QualifiedPath
+	generation             uint64
+	isRoot, ownerCreatedRO bool
+	createVerf             *[8]byte
+	unlinked               *unlinkedFile
+	lruElem                *list.Element
 }
 
 type handleTable struct {
-	mu          sync.RWMutex
-	secret      [32]byte
-	maxHandles  int
-	activeViews map[uint64]ViewID
-	byKey       map[handleKey]*handleRecord
-	byPath      map[pathKey]*handleRecord
-	lru         *list.List
+	mu           sync.RWMutex
+	secret       [32]byte
+	maxHandles   int
+	activeViews  map[uint64]ViewID
+	byKey        map[handleKey]*handleRecord
+	byPath       map[pathKey]*handleRecord
+	lru          *list.List
 }
 
 func newHandleTable(secret [32]byte, maxHandles int) *handleTable {
@@ -68,8 +63,7 @@ func newHandleTable(secret [32]byte, maxHandles int) *handleTable {
 		maxHandles = DefaultMaxHandles
 	}
 	return &handleTable{
-		secret:      secret,
-		maxHandles:  maxHandles,
+		secret: secret, maxHandles: maxHandles,
 		activeViews: make(map[uint64]ViewID),
 		byKey:       make(map[handleKey]*handleRecord),
 		byPath:      make(map[pathKey]*handleRecord),
@@ -79,38 +73,30 @@ func newHandleTable(secret [32]byte, maxHandles int) *handleTable {
 
 func computeViewHash(viewID ViewID) uint64 {
 	sum := sha256.Sum256([]byte(viewID))
-	v := binary.BigEndian.Uint64(sum[:8])
-	if v == 0 {
-		return 1
+	if v := binary.BigEndian.Uint64(sum[:8]); v != 0 {
+		return v
 	}
-	return v
+	return 1
 }
 
 func encodeWireHandle(secret [32]byte, vHash uint64, root RootID, nodeID layeredfs.NodeID, gen uint64) [HandleSize]byte {
 	var out [HandleSize]byte
 	binary.BigEndian.PutUint32(out[0:4], handleMagic)
-	out[4] = handleVersion
+	out[4], out[5] = handleVersion, rootSlotProj
 	if root == WorktreeRoot {
 		out[5] = rootSlotWork
-	} else {
-		out[5] = rootSlotProj
 	}
 	binary.BigEndian.PutUint64(out[8:16], vHash)
 	binary.BigEndian.PutUint64(out[16:24], uint64(nodeID))
 	binary.BigEndian.PutUint64(out[24:32], gen)
-
 	mac := hmac.New(sha256.New, secret[:])
 	_, _ = mac.Write(out[0:32])
-	digest := mac.Sum(nil)
-	copy(out[32:56], digest[:24])
+	copy(out[32:56], mac.Sum(nil)[:24])
 	return out
 }
 
 func decodeWireHandle(secret [32]byte, raw []byte) (wireHeader, error) {
-	if len(raw) != HandleSize {
-		return wireHeader{}, ErrForgedHandle
-	}
-	if binary.BigEndian.Uint32(raw[0:4]) != handleMagic || raw[4] != handleVersion {
+	if len(raw) != HandleSize || binary.BigEndian.Uint32(raw[0:4]) != handleMagic || raw[4] != handleVersion {
 		return wireHeader{}, ErrForgedHandle
 	}
 	var root RootID
@@ -149,10 +135,11 @@ func (t *handleTable) ReleaseView(core *layeredfs.Core, viewID ViewID) {
 			continue
 		}
 		if rec.unlinked != nil && rec.unlinked.fd != 0 {
-			toClose = append(toClose, rec.unlinked.fd)
-			rec.unlinked.fd = 0
-		}
-		if rec.unlinked == nil {
+			toClose, rec.unlinked.fd = append(toClose, rec.unlinked.fd), 0
+		} else if rec.unlinked == nil {
+			for pk := range rec.paths {
+				delete(t.byPath, pk)
+			}
 			delete(t.byPath, makePathKey(rec.viewID, rec.qpath))
 		}
 		if rec.lruElem != nil {
@@ -162,9 +149,8 @@ func (t *handleTable) ReleaseView(core *layeredfs.Core, viewID ViewID) {
 		delete(t.byKey, k)
 	}
 	t.mu.Unlock()
-
-	if core != nil {
-		for _, fd := range toClose {
+	for _, fd := range toClose {
+		if core != nil {
 			_ = core.CloseHandle(fd)
 		}
 	}
@@ -193,9 +179,10 @@ func (t *handleTable) Ensure(
 	pk := makePathKey(viewID, qpath)
 	gen := uint64(meta.Generation)
 	if existing, ok := t.byKey[hk]; ok {
-		if existing.unlinked == nil && existing.qpath != qpath {
-			delete(t.byPath, makePathKey(existing.viewID, existing.qpath))
+		if existing.paths == nil {
+			existing.paths = make(map[pathKey]layeredfs.QualifiedPath)
 		}
+		existing.paths[pk] = qpath
 		existing.qpath, existing.unlinked = qpath, nil
 		if existing.generation != gen {
 			existing.generation = gen
@@ -222,6 +209,7 @@ func (t *handleTable) Ensure(
 	wire := encodeWireHandle(t.secret, vHash, qpath.RootID, meta.NodeID, gen)
 	rec := &handleRecord{
 		wire: wire, key: hk, viewID: viewID, qpath: qpath,
+		paths:      map[pathKey]layeredfs.QualifiedPath{pk: qpath},
 		generation: gen, isRoot: isRoot, ownerCreatedRO: ownerCreatedRO,
 	}
 	rec.lruElem = t.lru.PushFront(rec)
@@ -237,7 +225,6 @@ func (t *handleTable) evictIfNeededLocked() {
 		}
 		rec := back.Value.(*handleRecord)
 		if rec.isRoot || (rec.unlinked != nil && rec.unlinked.fd != 0) {
-			// Keep root and open-unlinked handles pinned; stop if all remaining entries are pinned.
 			if t.lru.Len() <= 4 {
 				break
 			}
@@ -248,6 +235,9 @@ func (t *handleTable) evictIfNeededLocked() {
 		rec.lruElem = nil
 		delete(t.byKey, rec.key)
 		if rec.unlinked == nil {
+			for pk := range rec.paths {
+				delete(t.byPath, pk)
+			}
 			delete(t.byPath, makePathKey(rec.viewID, rec.qpath))
 		}
 	}
@@ -260,15 +250,13 @@ func (t *handleTable) Resolve(raw []byte, expectedViewHash uint64) (*handleRecor
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
 	if expectedViewHash != 0 && hdr.viewHash != expectedViewHash {
 		return nil, ErrCrossViewHandle
 	}
 	if _, active := t.activeViews[hdr.viewHash]; !active {
 		return nil, ErrStaleHandle
 	}
-	hk := handleKey{viewHash: hdr.viewHash, nodeID: hdr.nodeID}
-	rec, ok := t.byKey[hk]
+	rec, ok := t.byKey[handleKey{viewHash: hdr.viewHash, nodeID: hdr.nodeID}]
 	if !ok || rec.generation != hdr.generation {
 		return nil, ErrStaleHandle
 	}
@@ -282,29 +270,27 @@ func (t *handleTable) Resolve(raw []byte, expectedViewHash uint64) (*handleRecor
 func (t *handleTable) LookupByPath(viewID ViewID, qpath layeredfs.QualifiedPath) (*handleRecord, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	rec, ok := t.byPath[makePathKey(viewID, qpath)]
-	if !ok {
-		return nil, false
+	if rec, ok := t.byPath[makePathKey(viewID, qpath)]; ok {
+		clone := *rec
+		return &clone, true
 	}
-	clone := *rec
-	return &clone, true
+	return nil, false
 }
 
 func (t *handleTable) SetOwnerCreatedRO(hk handleKey, ro bool) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	if rec, ok := t.byKey[hk]; ok {
 		rec.ownerCreatedRO = ro
 	}
+	t.mu.Unlock()
 }
 
 func (t *handleTable) SetCreateVerifier(hk handleKey, verf [8]byte) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	if rec, ok := t.byKey[hk]; ok {
-		v := verf
-		rec.createVerf = &v
+		rec.createVerf = &verf
 	}
+	t.mu.Unlock()
 }
 
 func (t *handleTable) Count() int {

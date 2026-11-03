@@ -122,11 +122,7 @@ func (c *dirCache) ReleaseView(viewID ViewID) {
 // ReadSnapshot validates the client's cookie and cookieverf, returning the remaining
 // directory entries and the active 8-byte cookie verifier.
 func (c *dirCache) ReadSnapshot(
-	core *layeredfs.Core,
-	dirRec *handleRecord,
-	dirMeta layeredfs.EntryAttr,
-	cookie uint64,
-	clientVerf [8]byte,
+	core *layeredfs.Core, dirRec *handleRecord, dirMeta layeredfs.EntryAttr, cookie uint64, clientVerf [8]byte,
 ) ([]dirSnapshotEntry, [8]byte, error) {
 	c.mu.Lock()
 	expectedVerf := c.computeVerifierLocked(dirRec.key, uint64(dirMeta.Generation))
@@ -180,20 +176,14 @@ func (c *dirCache) ReadSnapshot(
 		evicted.lruElem = nil
 		delete(c.byKey, evicted.key)
 	}
-	snap := &dirSnapshot{
-		key:     ck,
-		verf:    currentVerf,
-		entries: built,
-	}
+	snap := &dirSnapshot{key: ck, verf: currentVerf, entries: built}
 	snap.lruElem = c.lru.PushFront(snap)
 	c.byKey[ck] = snap
 	return built[cookie:], currentVerf, nil
 }
 
 func buildDirEntries(
-	core *layeredfs.Core,
-	dirRec *handleRecord,
-	dirMeta layeredfs.EntryAttr,
+	core *layeredfs.Core, dirRec *handleRecord, dirMeta layeredfs.EntryAttr,
 ) ([]dirSnapshotEntry, error) {
 	rawEntries, err := core.ReadDir(dirRec.qpath)
 	if err != nil {
@@ -201,14 +191,12 @@ func buildDirEntries(
 	}
 	parentQPath := dirRec.qpath
 	if cleanRel(dirRec.qpath.Rel) != "." {
-		parentRel := path.Dir(dirRec.qpath.Rel)
-		parentQPath = layeredfs.QualifiedPath{RootID: dirRec.qpath.RootID, Rel: cleanRel(parentRel)}
+		parentQPath = layeredfs.QualifiedPath{RootID: dirRec.qpath.RootID, Rel: cleanRel(path.Dir(dirRec.qpath.Rel))}
 	}
 	parentMeta, err := core.Lstat(parentQPath)
 	if err != nil {
 		parentMeta = dirMeta
 	}
-
 	out := make([]dirSnapshotEntry, 0, len(rawEntries)+2)
 	out = append(out,
 		dirSnapshotEntry{Name: ".", Cookie: 1, QPath: dirRec.qpath, Meta: dirMeta},
@@ -228,12 +216,75 @@ func buildDirEntries(
 				ModTime: ent.ModTime, ATime: ent.ModTime, CTime: ent.ModTime,
 			}
 		}
-		out = append(out, dirSnapshotEntry{
-			Name:   ent.Name,
-			Cookie: uint64(i + 3),
-			QPath:  childQPath,
-			Meta:   childMeta,
-		})
+		out = append(out, dirSnapshotEntry{Name: ent.Name, Cookie: uint64(i + 3), QPath: childQPath, Meta: childMeta})
 	}
 	return out, nil
+}
+
+func lookupRecordByKey(t *handleTable, hk handleKey) (*handleRecord, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	rec, ok := t.byKey[hk]
+	if !ok {
+		return nil, false
+	}
+	clone := *rec
+	return &clone, true
+}
+
+func (t *handleTable) MarkUnlinked(viewID ViewID, qpath layeredfs.QualifiedPath, openFD layeredfs.HandleID, meta layeredfs.EntryAttr) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	pk := makePathKey(viewID, qpath)
+	if rec, ok := t.byPath[pk]; ok {
+		delete(t.byPath, pk)
+		delete(rec.paths, pk)
+		rec.unlinked = &unlinkedFile{fd: openFD, meta: meta}
+	}
+}
+
+func (t *handleTable) UpdateUnlinkedMeta(hk handleKey, meta layeredfs.EntryAttr) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if rec, ok := t.byKey[hk]; ok && rec.unlinked != nil {
+		rec.unlinked.meta = meta
+	}
+}
+
+func dropRecordPathLocked(t *handleTable, rec *handleRecord, pk pathKey, qpath layeredfs.QualifiedPath) layeredfs.HandleID {
+	delete(t.byPath, pk)
+	delete(rec.paths, pk)
+	if len(rec.paths) > 0 {
+		if rec.qpath == qpath {
+			for _, remQP := range rec.paths {
+				rec.qpath = remQP
+				break
+			}
+		}
+		return 0
+	}
+	delete(t.byKey, rec.key)
+	if rec.lruElem != nil {
+		t.lru.Remove(rec.lruElem)
+		rec.lruElem = nil
+	}
+	if rec.unlinked != nil {
+		fd := rec.unlinked.fd
+		rec.unlinked.fd = 0
+		return fd
+	}
+	return 0
+}
+
+func (t *handleTable) InvalidatePath(core *layeredfs.Core, viewID ViewID, qpath layeredfs.QualifiedPath) {
+	t.mu.Lock()
+	pk := makePathKey(viewID, qpath)
+	var toClose layeredfs.HandleID
+	if rec, ok := t.byPath[pk]; ok {
+		toClose = dropRecordPathLocked(t, rec, pk, qpath)
+	}
+	t.mu.Unlock()
+	if core != nil && toClose != 0 {
+		_ = core.CloseHandle(toClose)
+	}
 }

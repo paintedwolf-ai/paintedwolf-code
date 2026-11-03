@@ -110,18 +110,14 @@ func executeCreate(
 	} else if !attrs.HasSize || attrs.Size == 0 {
 		openFlags |= layeredfs.OpenTruncate
 	}
-	createPerm := perm
-	if ownerRO {
-		createPerm = perm | 0o200
-	}
-	fd, _, err := viewCore.Open(childQPath, openFlags, createPerm)
+	fd, _, err := viewCore.Open(childQPath, openFlags, perm)
 	if err != nil {
 		return zeroFH, layeredfs.EntryAttr{}, err
 	}
 	_ = viewCore.CloseHandle(fd)
 
 	if how != createExclusive {
-		if attrs.HasMode {
+		if statErr == nil && attrs.HasMode {
 			_, _ = viewCore.Chmod(childQPath, perm)
 		}
 		if attrs.HasAtime || attrs.HasMtime {
@@ -136,6 +132,7 @@ func executeCreate(
 			_, _ = viewCore.Chtimes(childQPath, at, mt, true)
 		}
 	}
+	syncAppleDoubleForPath(viewCore, childQPath)
 	meta, err := viewCore.Lstat(childQPath)
 	if err != nil {
 		return zeroFH, layeredfs.EntryAttr{}, err

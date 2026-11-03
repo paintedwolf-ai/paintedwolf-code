@@ -34,52 +34,39 @@ func (cs *connState) bindView(vHash uint64) bool {
 
 func (cs *connState) clearView(vHash uint64) {
 	cs.mu.Lock()
-	defer cs.mu.Unlock()
 	if cs.boundViewHash == vHash {
 		cs.boundViewHash = 0
 	}
+	cs.mu.Unlock()
 }
 
 type rpcCallHeader struct {
-	XID     uint32
-	MsgType uint32
-	RPCVers uint32
-	Prog    uint32
-	Vers    uint32
-	Proc    uint32
-	Cred    authCred
-	Body    *bytes.Reader
+	XID, MsgType, RPCVers, Prog, Vers, Proc uint32
+	Cred                                    authCred
+	Body                                    *bytes.Reader
 }
 
 func serveConn(s *Server, conn net.Conn) {
 	var writeMu sync.Mutex
 	cs := &connState{}
 	defer releaseConnState(s, cs)
-
 	for {
 		payload, err := readRPCMessage(conn, s.cfg.MaxRequestBytes)
 		if err != nil || s.state.closed.Load() {
 			return
 		}
-
 		done := make(chan []byte, 1)
-		task := func() {
-			done <- handleRPCPayload(s, cs, payload)
-		}
 		select {
-		case s.queue <- task:
+		case s.queue <- func() { done <- handleRPCPayload(s, cs, payload) }:
 		default:
-			reply := handleOverloadedPayload(payload)
-			if len(reply) > 0 {
+			if reply := handleOverloadedPayload(payload); len(reply) > 0 {
 				writeMu.Lock()
 				_ = writeRPCFrame(conn, reply)
 				writeMu.Unlock()
 			}
 			continue
 		}
-
-		reply := <-done
-		if len(reply) > 0 {
+		if reply := <-done; len(reply) > 0 {
 			writeMu.Lock()
 			err = writeRPCFrame(conn, reply)
 			writeMu.Unlock()

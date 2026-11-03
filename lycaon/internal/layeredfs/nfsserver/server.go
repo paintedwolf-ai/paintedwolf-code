@@ -55,12 +55,10 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 	if err := validateLoopbackListenAddr(cfg.ListenAddr); err != nil {
 		return nil, err
 	}
-
 	var secret [32]byte
 	if _, err := rand.Read(secret[:]); err != nil {
 		return nil, fmt.Errorf("layeredfs/nfsserver: generate handle secret: %w", err)
 	}
-
 	ln, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {
 		return nil, err
@@ -69,25 +67,21 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 		_ = ln.Close()
 		return nil, ErrNonLoopbackAddress
 	}
-
 	s := &Server{
-		core:      core,
-		cfg:       cfg,
-		listener:  ln,
+		core: core, cfg: cfg, listener: ln,
 		handles:   newHandleTable(secret, cfg.MaxHandles),
 		dirs:      newDirCache(secret, cfg.MaxDirListings),
 		stability: newStabilityEngine(),
 		workSem:   make(chan struct{}, cfg.MaxConcurrentRPCs),
 		queue:     make(chan func(), cfg.MaxQueuedRPCs),
 		state: serverState{
-			cores:        map[ViewID]*layeredfs.Core{core.ViewID(): core},
+			cores:       map[ViewID]*layeredfs.Core{core.ViewID(): core},
 			readOnly:    make(map[ViewID]bool),
 			exportsByID: make(map[string]*exportEntry),
 			exportsByVH: make(map[uint64][]*exportEntry),
 			conns:       make(map[net.Conn]struct{}),
 		},
 	}
-
 	s.state.wg.Add(2)
 	go runDispatchLoop(s)
 	go runAcceptLoop(s)
@@ -109,9 +103,7 @@ func validateLoopbackListenAddr(addr string) error {
 }
 
 // Addr returns the bound loopback TCP address of the server.
-func (s *Server) Addr() net.Addr {
-	return s.listener.Addr()
-}
+func (s *Server) Addr() net.Addr { return s.listener.Addr() }
 
 // BindViewCore associates a dedicated *layeredfs.Core and read-only policy with viewID on s.
 func BindViewCore(s *Server, viewID ViewID, core *layeredfs.Core, readOnly bool) {
@@ -186,8 +178,7 @@ func (s *Server) RegisterExportWithUID(
 
 // ReleaseExport revokes all capability exports for viewID and invalidates all handles and cached listings.
 func (s *Server) ReleaseExport(viewID ViewID) {
-	vHash := computeViewHash(viewID)
-	viewCore := coreForView(s, viewID)
+	vHash, viewCore := computeViewHash(viewID), coreForView(s, viewID)
 	s.state.mu.Lock()
 	entries := s.state.exportsByVH[vHash]
 	delete(s.state.exportsByVH, vHash)
@@ -195,7 +186,6 @@ func (s *Server) ReleaseExport(viewID ViewID) {
 		delete(s.state.exportsByID, e.cap.ExportPath)
 	}
 	s.state.mu.Unlock()
-
 	s.stability.ReleaseView(viewID)
 	s.dirs.ReleaseView(viewID)
 	s.handles.ReleaseView(viewCore, viewID)
@@ -214,19 +204,13 @@ func (s *Server) FlushForCheckpoint(ctx context.Context, viewID ViewID) error {
 
 // ResetUnstableState discards uncommitted UNSTABLE write buffers and rotates the 8-byte
 // write verifier to simulate a server restart between UNSTABLE writes and COMMIT.
-func (s *Server) ResetUnstableState() [8]byte {
-	return s.stability.ResetUnstableState()
-}
+func (s *Server) ResetUnstableState() [8]byte { return s.stability.ResetUnstableState() }
 
 // WriteVerifier returns the server's current 8-byte NFSv3 write verifier.
-func (s *Server) WriteVerifier() [8]byte {
-	return s.stability.WriteVerifier()
-}
+func (s *Server) WriteVerifier() [8]byte { return s.stability.WriteVerifier() }
 
 // HandleCount returns the current number of cached handles in the bounded handle table.
-func (s *Server) HandleCount() int {
-	return s.handles.Count()
-}
+func (s *Server) HandleCount() int { return s.handles.Count() }
 
 // ResolveHandleForView resolves a raw wire handle in O(1) and verifies it belongs to expectedView.
 func (s *Server) ResolveHandleForView(raw []byte, expectedView ViewID) (layeredfs.QualifiedPath, error) {
@@ -258,7 +242,6 @@ func (s *Server) Close() error {
 		_ = c.Close()
 	}
 	s.state.mu.Unlock()
-
 	close(s.queue)
 	s.state.wg.Wait()
 	for _, v := range views {
@@ -273,8 +256,7 @@ func runDispatchLoop(s *Server) {
 		s.workSem <- struct{}{}
 		s.state.wg.Add(1)
 		go func(task func()) {
-			defer s.state.wg.Done()
-			defer func() { <-s.workSem }()
+			defer func() { <-s.workSem; s.state.wg.Done() }()
 			task()
 		}(fn)
 	}
@@ -302,15 +284,14 @@ func runAcceptLoop(s *Server) {
 		}
 		s.state.conns[conn] = struct{}{}
 		s.state.mu.Unlock()
-
 		s.state.wg.Add(1)
 		go func(c net.Conn) {
-			defer s.state.wg.Done()
 			defer func() {
 				s.state.mu.Lock()
 				delete(s.state.conns, c)
 				s.state.mu.Unlock()
 				_ = c.Close()
+				s.state.wg.Done()
 			}()
 			serveConn(s, c)
 		}(conn)
