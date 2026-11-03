@@ -18,7 +18,8 @@ type ModelLimit struct {
 	ExhaustedAttemptID string `json:"exhausted_attempt_id,omitempty"`
 }
 
-func (s *SQL) ConfigureModelLimit(ctx context.Context, sessionID string, limit int) error {
+func (t *sqlTurns) ConfigureModelLimit(ctx context.Context, sessionID string, limit int) error {
+	s := t.core
 	if limit < 1 {
 		return fmt.Errorf("response allowance must be positive")
 	}
@@ -52,7 +53,8 @@ func (s *SQL) ConfigureModelLimit(ctx context.Context, sessionID string, limit i
 }
 
 // AdmitModelResponse counts settled outputs within the serialized session lane.
-func (s *SQL) AdmitModelResponse(ctx context.Context, sessionID, attemptID string) error {
+func (t *sqlTurns) AdmitModelResponse(ctx context.Context, sessionID, attemptID string) error {
+	s := t.core
 	if _, err := s.queries.GetSessionModelLimit(ctx, sessionID); errors.Is(err, sql.ErrNoRows) {
 		return nil
 	} else if err != nil {
@@ -95,7 +97,8 @@ func (s *SQL) AdmitModelResponse(ctx context.Context, sessionID, attemptID strin
 	return ErrModelResponseLimit
 }
 
-func (s *Memory) ConfigureModelLimit(_ context.Context, sessionID string, limit int) error {
+func (t *memoryTurns) ConfigureModelLimit(_ context.Context, sessionID string, limit int) error {
+	s := t.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if limit < 1 || s.sessions[sessionID] == nil {
@@ -119,7 +122,8 @@ func (s *Memory) ConfigureModelLimit(_ context.Context, sessionID string, limit 
 	return nil
 }
 
-func (s *Memory) AdmitModelResponse(_ context.Context, sessionID, attemptID string) error {
+func (t *memoryTurns) AdmitModelResponse(_ context.Context, sessionID, attemptID string) error {
+	s := t.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	limit, ok := s.modelLimits[sessionID]

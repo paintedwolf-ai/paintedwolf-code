@@ -13,6 +13,7 @@ import (
 
 // Fixed commit dates distinguish per-path touch order.
 func TestGitManagerLastTouchByPath(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)

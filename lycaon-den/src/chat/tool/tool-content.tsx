@@ -13,6 +13,7 @@ type ToolContent = {
   args: Accessor<ChatContentAccess | undefined>;
   outputOffset: Accessor<number | undefined>;
   argsOffset: Accessor<number | undefined>;
+  revealedCallId?: Accessor<string | undefined>;
 };
 const ToolContentContext = createContext<ToolContent>();
 export const ToolContentProvider = ToolContentContext.Provider;

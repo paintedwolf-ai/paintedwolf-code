@@ -17,13 +17,13 @@ const peoplePkg = "github.com/lycaon/lycaon/internal/people"
 
 // Only admitted authorship may fall back to the host owner.
 var actingFallbacks = map[string]string{
-	"internal/session/store/sql_sessions.go:CreateWithStatus":    "a root chat the host opens belongs to the host owner",
-	"internal/session/store/memory.go:CreateWithStatus":          "memory twin of the SQL session store",
-	"internal/session/transcript/user_input.go:PromptAuthor":     "a prompt without an admission receipt is authored by its request's caller",
-	"internal/session/submissions/admission.go:admitPrompt":      "a user prompt admission names its request's caller",
-	"internal/editordoc/authorship.go:personActor":               "editor transitions are authored by their client's person",
-	"internal/sourceledger/recording.go:operationPerson":         "user-origin source operations without an explicit person",
-	"internal/projectsource/source_mutation_store.go:insertWith": "user file mutations journal their person",
+	"internal/session/store:sqlSessions.CreateWithStatus":     "a root chat the host opens belongs to the host owner",
+	"internal/session/store:memorySessions.CreateWithStatus":  "memory twin of the SQL session store",
+	"internal/session/transcript:Service.PromptAuthor":        "a prompt without an admission receipt is authored by its request's caller",
+	"internal/session/submissions:Service.admitPrompt":        "a user prompt admission names its request's caller",
+	"internal/editordoc:authorshipTracker.personActor":        "editor transitions are authored by their client's person",
+	"internal/sourceledger:Store.operationPerson":             "user-origin source operations without an explicit person",
+	"internal/projectsource:SourceMutationJournal.insertWith": "user file mutations journal their person",
 }
 
 func TestOwnerFallbackIsLimitedToAdmittedAuthorship(t *testing.T) {
@@ -50,7 +50,10 @@ func TestOwnerFallbackIsLimitedToAdmittedAuthorship(t *testing.T) {
 			if !callsSelector(fn.Body, alias, "Acting") {
 				continue
 			}
-			key := rel + ":" + fn.Name.Name
+			key := filepath.ToSlash(filepath.Dir(rel)) + ":" + fn.Name.Name
+			if receiver := receiverName(fn); receiver != "" {
+				key = filepath.ToSlash(filepath.Dir(rel)) + ":" + receiver + "." + fn.Name.Name
+			}
 			if _, ok := actingFallbacks[key]; ok {
 				delete(unused, key)
 				continue

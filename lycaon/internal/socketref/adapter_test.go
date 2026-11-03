@@ -2,18 +2,13 @@ package socketref
 
 import "testing"
 
-func TestBindingDefaultUsesActualAdapterRealization(t *testing.T) {
-	if got, want := (Binding{}).Mode(), Platform().Command; got != want {
-		t.Fatalf("default binding=%s, adapter=%s", got, want)
+func TestBindingPreservesSavedInterpretation(t *testing.T) {
+	if got := (Binding{}).Mode(); got != implicitBindingMode() {
+		t.Fatalf("implicit saved binding changed: %s", got)
 	}
-	for _, command := range []Enforcement{NoRealization, KernelPathname, RetainedObject} {
-		adapter := Adapter{Command: command}
-		if got := adapter.BindingMode(Binding{}); got != command {
-			t.Fatalf("adapter %s defaulted to %s", command, got)
-		}
-		explicit := Binding{Enforcement: RetainedObject, ID: "saved-intent"}
-		if got := adapter.BindingMode(explicit); got != RetainedObject {
-			t.Fatalf("adapter rewrote explicit intent to %s", got)
+	for _, enforcement := range []Enforcement{NoRealization, KernelPathname, RetainedObject} {
+		if got := (Binding{Enforcement: enforcement}).Mode(); got != enforcement {
+			t.Fatalf("saved %s binding changed to %s", enforcement, got)
 		}
 	}
 	if err := (Binding{Enforcement: NoRealization}).ValidateShape(); err != nil {

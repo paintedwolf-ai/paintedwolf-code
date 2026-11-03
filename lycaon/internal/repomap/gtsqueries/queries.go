@@ -474,8 +474,12 @@ var tagsQueries = map[string]string{
 (tag (start_tag (tag_name) @name)) @definition.tag
 `,
 	"css": `
-(class_name) @name @definition.class
-(id_name) @name @definition.class
+((rule_set (selectors) @name) @definition.id
+  (#match? @name "^#[A-Za-z0-9_-]+$"))
+((rule_set (selectors) @name) @definition.class
+  (#match? @name "^\\.[A-Za-z0-9_-]+$"))
+((rule_set (selectors) @name) @definition.rule
+  (#not-match? @name "^[.#][A-Za-z0-9_-]+$"))
 (keyframes_statement
   (keyframes_name) @name) @definition.function
 `,

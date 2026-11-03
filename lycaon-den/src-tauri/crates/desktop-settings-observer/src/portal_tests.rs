@@ -1,4 +1,4 @@
-use super::*;
+use super::{portal_decode::*, *};
 #[test]
 fn typed_denial_cannot_become_missing() {
     assert_eq!(

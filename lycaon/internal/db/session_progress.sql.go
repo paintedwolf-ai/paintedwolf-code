@@ -10,8 +10,8 @@ import (
 )
 
 const bindSessionProgressRun = `-- name: BindSessionProgressRun :exec
-INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at)
-VALUES (?, ?, '', ?)
+INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
+VALUES (?, ?, '', ?, '[]', 1)
 ON CONFLICT(session_id) DO UPDATE SET workflow_run_id = excluded.workflow_run_id
 `
 
@@ -27,12 +27,14 @@ func (q *Queries) BindSessionProgressRun(ctx context.Context, arg BindSessionPro
 }
 
 const ensureSessionProgressRun = `-- name: EnsureSessionProgressRun :exec
-INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at)
-VALUES (?, ?, ?, ?)
+INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
+VALUES (?, ?, ?, ?, '[]', 1)
 ON CONFLICT(session_id) DO UPDATE SET
     workflow_run_id = excluded.workflow_run_id,
     content = excluded.content,
-    updated_at = excluded.updated_at
+    updated_at = excluded.updated_at,
+    item_ids_json = '[]',
+    document_version = session_progress.document_version + 1
 `
 
 type EnsureSessionProgressRunParams struct {
@@ -76,10 +78,39 @@ func (q *Queries) GetSessionProgressRunID(ctx context.Context, sessionID string)
 	return workflow_run_id, err
 }
 
+const getSessionProgressSnapshot = `-- name: GetSessionProgressSnapshot :one
+SELECT content, workflow_run_id, updated_at, item_ids_json, document_version FROM session_progress WHERE session_id = ?
+`
+
+type GetSessionProgressSnapshotRow struct {
+	Content         string `json:"content"`
+	WorkflowRunID   string `json:"workflow_run_id"`
+	UpdatedAt       string `json:"updated_at"`
+	ItemIdsJson     string `json:"item_ids_json"`
+	DocumentVersion int64  `json:"document_version"`
+}
+
+func (q *Queries) GetSessionProgressSnapshot(ctx context.Context, sessionID string) (GetSessionProgressSnapshotRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionProgressSnapshot, sessionID)
+	var i GetSessionProgressSnapshotRow
+	err := row.Scan(
+		&i.Content,
+		&i.WorkflowRunID,
+		&i.UpdatedAt,
+		&i.ItemIdsJson,
+		&i.DocumentVersion,
+	)
+	return i, err
+}
+
 const upsertSessionProgressContent = `-- name: UpsertSessionProgressContent :exec
-INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at)
-VALUES (?, ?, ?, ?)
-ON CONFLICT(session_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at
+INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
+VALUES (?, ?, ?, ?, ?, 1)
+ON CONFLICT(session_id) DO UPDATE SET
+    content = excluded.content,
+    updated_at = excluded.updated_at,
+    item_ids_json = excluded.item_ids_json,
+    document_version = session_progress.document_version + 1
 `
 
 type UpsertSessionProgressContentParams struct {
@@ -87,6 +118,7 @@ type UpsertSessionProgressContentParams struct {
 	WorkflowRunID string `json:"workflow_run_id"`
 	Content       string `json:"content"`
 	UpdatedAt     string `json:"updated_at"`
+	ItemIdsJson   string `json:"item_ids_json"`
 }
 
 func (q *Queries) UpsertSessionProgressContent(ctx context.Context, arg UpsertSessionProgressContentParams) error {
@@ -95,6 +127,7 @@ func (q *Queries) UpsertSessionProgressContent(ctx context.Context, arg UpsertSe
 		arg.WorkflowRunID,
 		arg.Content,
 		arg.UpdatedAt,
+		arg.ItemIdsJson,
 	)
 	return err
 }

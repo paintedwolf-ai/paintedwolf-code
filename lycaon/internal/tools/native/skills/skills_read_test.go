@@ -389,3 +389,36 @@ func TestSkillsReadTemplateInvalid(t *testing.T) {
 		t.Fatalf("name = %#v", tr.Data["name"])
 	}
 }
+
+func TestSkillsReadTreatsSelfReferentialSkillMarkdownAsMainBody(t *testing.T) {
+	body := "# Prepare a release\n\nCheck version files.\n"
+	tool := &skilltools.SkillsReadTool{
+		Skills: func(context.Context, tools.ToolContext) []skills.Skill {
+			return []skills.Skill{{
+				Name: "prepare-a-release",
+				Body: body,
+				Dir:  "/pack/skills/prepare-a-release",
+			}}
+		},
+	}
+	for _, resource := range []string{
+		"SKILL.md",
+		"./SKILL.md",
+		"prepare-a-release/SKILL.md",
+		"skills/prepare-a-release/SKILL.md",
+	} {
+		out := &tools.ToolInvocationOut{}
+		got, err := tool.Run(
+			context.Background(),
+			map[string]any{
+				"need":     "prepare-a-release — repository release source of truth, version files, changelog policy",
+				"resource": resource,
+			},
+			tools.ToolContext{Effects: tools.InvocationEffects{Out: out}},
+		)
+		testutil.FailErr(t, "self-referential SKILL.md read ("+resource+")", err)
+		if !strings.HasPrefix(got, "Skill: prepare-a-release\n\n"+body) || out.Skill == nil || out.Skill.Name != "prepare-a-release" {
+			t.Fatalf("resource %q did not resolve to main skill body: got=%q projection=%#v", resource, got, out.Skill)
+		}
+	}
+}

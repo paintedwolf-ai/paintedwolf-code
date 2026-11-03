@@ -16,6 +16,7 @@ import {
   getLycaonClient,
   onAttentionEvent,
   onAttentionResync,
+  onProjectBackgroundEvent,
   onProjectEvent,
   onSessionEvent,
 } from "./platform/connection/app-connection.ts";
@@ -57,6 +58,7 @@ const attentionStore = createAttentionStore(() => getLycaonClient(), {
 onAttentionResync(() => void attentionStore.load());
 const projectSessionsStore = createProjectSessionsStore(() => getLycaonClient(), {
   onSessionEvent,
+  onProjectBackgroundEvent,
 });
 // A reopened stream refreshes events missed while disconnected.
 onAttentionResync(() => void projectSessionsStore.refresh());

@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/tools/native/command/command.ProgramRuntime",
+  "kind": "runtime_service",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain 30 command runtime methods composing one program lifetime. The shared ledger and frozen catalog supply capture bounds, while existing collaborators retain review, dispatch, native operation and persistence authority. Composed wide-command and projection-bound contracts support this fixed interface.",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
+  "ceiling": 30,
+  "boundaries": {
+    "lycaon/internal/toolhost/command_review_scale_test.go": "76cc3d3ca9a003ea84416039669bb1c96c0f8d4c178818c2db0181c40a684f92",
+    "lycaon/internal/captureprojection/value_scale_test.go": "2823644af528cbb95abda234c271557bd327d7e7abbbe41da8fed30e520d78fa"
+  },
+  "reviewed_shape": "d71ee76b96c581558b27bf715448bee7f6fce9fa3fab17a11db55ef2f2e0f89b"
+}

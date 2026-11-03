@@ -85,13 +85,19 @@ func recordWithheld(
 }
 
 func (r *Output) publishStream(ctx context.Context, proc *Process, stream string, cursor int64) {
-	if r == nil || r.publish == nil || proc == nil {
+	if r == nil || proc == nil {
 		return
 	}
 	r.jobs.mu.Lock()
 	silent := proc.silent
 	running := proc.running
 	r.jobs.mu.Unlock()
+	if !silent && running {
+		r.sweeper.onOutputChunk()
+	}
+	if r.publish == nil {
+		return
+	}
 	if silent {
 		// Screen before eviction to retain masked ranges that cross writes.
 		if proc.buffer.Overflowing() {
@@ -258,7 +264,7 @@ func joinOutputChunks(chunks []OutputChunk) string {
 
 func toAPIChunks(chunks []OutputChunk) []api.BackgroundProcessChunk {
 	if len(chunks) == 0 {
-		return nil
+		return []api.BackgroundProcessChunk{}
 	}
 	out := make([]api.BackgroundProcessChunk, len(chunks))
 	for i, c := range chunks {

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-go-context-running
+command: painted-wolf/platform:go-context-running
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Leader P"
+  windows:
+    - "Leader P"
+  linux:
+    - "Leader P"

@@ -16,6 +16,7 @@ import (
 )
 
 func TestOperationBranchSynchronization(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	gittest.Run(t, dir, "checkout", "-b", "benchmark-page")
 	operationWrite(t, dir, "benchmark.txt", "benchmark\n")
@@ -53,6 +54,7 @@ func TestOperationBranchSynchronization(t *testing.T) {
 }
 
 func TestOperationReviewRefusalAndStaleChanges(t *testing.T) {
+	t.Parallel()
 	for _, mutate := range []bool{false, true} {
 		t.Run(map[bool]string{false: "refusal", true: "stale"}[mutate], func(t *testing.T) {
 			dir := operationFixture(t)
@@ -84,6 +86,7 @@ func TestOperationReviewRefusalAndStaleChanges(t *testing.T) {
 }
 
 func TestOperationScopedStashPreservesOtherIndexEntries(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	operationWrite(t, dir, "shared.txt", "saved\n")
 	operationWrite(t, dir, "unrelated.txt", "someone else's staged work\n")
@@ -131,6 +134,7 @@ func TestOperationScopedStashPreservesOtherIndexEntries(t *testing.T) {
 }
 
 func TestOperationStashConflictPreservesUnrelatedStaging(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	operationWrite(t, dir, "shared.txt", "stashed version\n")
 	gittest.Run(t, dir, "stash", "push", "--", "shared.txt")
@@ -153,6 +157,7 @@ func TestOperationStashConflictPreservesUnrelatedStaging(t *testing.T) {
 }
 
 func TestOperationStashStagedDeletionWithLiteralPath(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	path := "-literal\tline\nfile.txt"
 	operationWrite(t, dir, path, "delete this\n")
@@ -178,6 +183,7 @@ func TestOperationStashStagedDeletionWithLiteralPath(t *testing.T) {
 }
 
 func TestOperationMergeConflictsContinueAndAbort(t *testing.T) {
+	t.Parallel()
 	for _, action := range []string{"continue", "abort"} {
 		t.Run(action, func(t *testing.T) {
 			dir := operationFixture(t)
@@ -208,6 +214,7 @@ func TestOperationMergeConflictsContinueAndAbort(t *testing.T) {
 }
 
 func TestOperationMergeWithoutCommitStaysActiveUntilContinue(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	gittest.Run(t, dir, "checkout", "-b", "feature")
 	operationWrite(t, dir, "feature.txt", "feature\n")
@@ -230,6 +237,7 @@ func TestOperationMergeWithoutCommitStaysActiveUntilContinue(t *testing.T) {
 }
 
 func TestGitLogRevisionRangesAndPaging(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	gittest.Run(t, dir, "checkout", "-b", "feature")
 	for _, message := range []string{"First", "Second"} {
@@ -265,6 +273,7 @@ func TestGitLogRevisionRangesAndPaging(t *testing.T) {
 }
 
 func TestOperationReviewsIndexOnlyChanges(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	operationWrite(t, dir, "shared.txt", "staged\n")
 	gittest.Run(t, dir, "add", "--", "shared.txt")
@@ -285,6 +294,7 @@ func TestOperationReviewsIndexOnlyChanges(t *testing.T) {
 }
 
 func TestOperationDropDuplicateStashRequiresExactSelector(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	operationWrite(t, dir, "shared.txt", "saved\n")
 	saved := operateOK(t, dir, OperationRequest{Kind: "stash", Action: "save", Paths: []string{"shared.txt"}})
@@ -308,6 +318,7 @@ func TestOperationDropDuplicateStashRequiresExactSelector(t *testing.T) {
 }
 
 func TestOperationRefusesLFSChangesBeforeBranchMoves(t *testing.T) {
+	// Serial: uses t.Setenv for LYCAON_GIT_LFS_FORCE_ABSENT.
 	t.Setenv("LYCAON_GIT_LFS_FORCE_ABSENT", "1")
 	dir := operationFixture(t)
 	gittest.Run(t, dir, "checkout", "-b", "feature")
@@ -326,6 +337,7 @@ func TestOperationRefusesLFSChangesBeforeBranchMoves(t *testing.T) {
 }
 
 func TestOperationStashSavesIndexOnlyChanges(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	operationWrite(t, dir, "shared.txt", "staged\n")
 	gittest.Run(t, dir, "add", "--", "shared.txt")
@@ -346,6 +358,7 @@ func TestOperationStashSavesIndexOnlyChanges(t *testing.T) {
 }
 
 func TestOperationMergeAbortReviewsExistingAutostash(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	gittest.Run(t, dir, "checkout", "-b", "feature")
 	operationWrite(t, dir, "shared.txt", "feature\n")
@@ -381,6 +394,7 @@ func TestOperationMergeAbortReviewsExistingAutostash(t *testing.T) {
 }
 
 func TestOperationRefusesSymlinkAncestorBeforeReadingFiles(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	operationWrite(t, dir, "nested/file.txt", "tracked\n")
 	gittest.Run(t, dir, "add", "--", "nested/file.txt")
@@ -403,6 +417,7 @@ func TestOperationRefusesSymlinkAncestorBeforeReadingFiles(t *testing.T) {
 }
 
 func TestOperationRefusesReplacementHistory(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	original := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", "HEAD"))
 	operationWrite(t, dir, "shared.txt", "replacement\n")

@@ -49,7 +49,7 @@ type GitFileCommit struct {
 }
 
 // FileHistory returns independent copies of current-path commits, newest first.
-func (m *Manager) FileHistory(ctx context.Context, projectDir string, opts GitFileHistoryOpts) (commits []GitFileCommit, err error) {
+func (m *gitCommitManager) FileHistory(ctx context.Context, projectDir string, opts GitFileHistoryOpts) (commits []GitFileCommit, err error) {
 	started := time.Now()
 	disposition := "bypass"
 	defer func() {
@@ -71,7 +71,7 @@ func (m *Manager) FileHistory(ctx context.Context, projectDir string, opts GitFi
 		return nil, nil
 	}
 	if opts.Revision == "" {
-		opts.Revision, err = m.HeadSHA(ctx, dir)
+		opts.Revision, err = headSHA(ctx, dir)
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +169,7 @@ func fileHistoryFailure(parent, walk context.Context, err error, code int) error
 }
 
 // IsAncestor reports whether descendant reaches ancestor.
-func (m *Manager) IsAncestor(
+func (m *gitCommitManager) IsAncestor(
 	ctx context.Context,
 	projectDir, ancestor, descendant string,
 ) (bool, error) {
@@ -199,7 +199,7 @@ func (m *Manager) IsAncestor(
 }
 
 // BlobContent reads one bounded blob from the repository store.
-func (m *Manager) BlobContent(
+func (m *gitCommitManager) BlobContent(
 	ctx context.Context,
 	projectDir, blobOID string,
 	maxBytes int,

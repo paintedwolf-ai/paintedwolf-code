@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
@@ -14,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -73,6 +75,8 @@ type NativeEffect struct {
 //
 //nolint:funlen // Linear reached-effect admission, review, and receipt settlement pipeline.
 func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
+	ctx, socketScope := socketref.WithScope(ctx)
+	defer socketScope.Close()
 	end, err := frame.beginUse()
 	if err != nil {
 		return result, err
@@ -113,6 +117,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
+	}
+	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, nativePolicyMutation(bound)); err != nil {
+		return result, err
 	}
 	values := effect.Arguments
 	if effect.Argv != nil {
@@ -156,7 +163,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := checkLiveProgramProgress(ctx, progressFacts, bound); err != nil {
 		return result, err
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(facts.Contract, arguments.values); reject != nil {
+	if reject := capabilityrequest.ValidateCapabilityContract(facts.Identity, facts.Contract, arguments.values); reject != nil {
 		return result, reject
 	}
 	if err := validateNativeArguments(facts, effect.Argv, arguments.values, tc); err != nil {
@@ -399,7 +406,15 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 	if err := frame.validateScope(invocation.Scope, tc); err != nil {
 		return err
 	}
+	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, nativePolicyMutation(bound)); err != nil {
+		return err
+	}
 	return checkLiveProgramProgress(ctx, progressFacts, bound)
+}
+
+func nativePolicyMutation(bound toolcontract.BoundOperation) bool {
+	classes := bound.Effects().Classes()
+	return slices.Contains(classes, toolcontract.CommandMutation) || slices.Contains(classes, toolcontract.CommandExternalExec)
 }
 
 // validateNativeArguments checks structured native tool values against their

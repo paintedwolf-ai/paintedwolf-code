@@ -831,7 +831,7 @@ func (p *Parser) doHeredocs() {
 			r.Hdoc = p.getWord()
 		}
 		if stop := p.hdocStops[len(p.hdocStops)-1]; stop != nil {
-			p.posErr(r.Pos(), "unclosed here-document %#q", stop)
+			p.diagnosticErr(r.Pos(), ErrorDiagnostic{Kind: UnclosedHeredoc, Expected: p.budgetFormat("%s", stop), Found: p.tok.String(), At: p.pos}, "unclosed here-document %#q", stop)
 		}
 		p.hdocStops = p.hdocStops[:len(p.hdocStops)-1]
 	}
@@ -888,7 +888,7 @@ func (t token) Format(f fmt.State, verb rune) {
 func (p *Parser) followErr(pos Pos, left, right any) {
 	p.enterFrame()
 	defer p.leaveFrame()
-	p.posErr(pos, "%#q must be followed by %#q", left, right)
+	p.diagnosticErr(pos, ErrorDiagnostic{Kind: ExpectedFollowing, Expected: p.budgetFormat("%#q", right), Found: p.tok.String(), At: p.pos}, "%#q must be followed by %#q", left, right)
 }
 
 func (p *Parser) followErrExp(pos Pos, left any) {
@@ -970,7 +970,7 @@ func (p *Parser) stmtEnd(n Node, start, end string) Pos {
 		if p.recoverError() {
 			return recoveredPos
 		}
-		p.posErr(n.Pos(), "%#q statement must end with %#q", start, end)
+		p.diagnosticErr(n.Pos(), ErrorDiagnostic{Kind: ExpectedCloser, Expected: end, Found: p.tok.String(), At: p.pos}, "%#q statement must end with %#q", start, end)
 	}
 	return pos
 }
@@ -978,13 +978,13 @@ func (p *Parser) stmtEnd(n Node, start, end string) Pos {
 func (p *Parser) quoteErr(lpos Pos, quote token) {
 	p.enterFrame()
 	defer p.leaveFrame()
-	p.posErr(lpos, "reached %#q without closing quote %#q", p.tok, quote)
+	p.diagnosticErr(lpos, ErrorDiagnostic{Kind: UnclosedQuote, Expected: quote.String(), Found: p.tok.String(), At: p.pos}, "reached %#q without closing quote %#q", p.tok, quote)
 }
 
 func (p *Parser) matchingErr(lpos Pos, left, right token) {
 	p.enterFrame()
 	defer p.leaveFrame()
-	p.posErr(lpos, "reached %#q without matching %#q with %#q", p.tok, left, right)
+	p.diagnosticErr(lpos, ErrorDiagnostic{Kind: ExpectedCloser, Expected: right.String(), Found: p.tok.String(), At: p.pos}, "reached %#q without matching %#q with %#q", p.tok, left, right)
 }
 
 func (p *Parser) matched(lpos Pos, left, right token) Pos {
@@ -1059,9 +1059,10 @@ func IsKeyword(word string) bool {
 // ParseError represents an error found when parsing a source file, from which
 // the parser cannot recover.
 type ParseError struct {
-	Filename string
-	Pos      Pos
-	Text     string
+	Filename   string
+	Pos        Pos
+	Text       string
+	Diagnostic ErrorDiagnostic
 
 	Incomplete bool
 }
@@ -1117,20 +1118,7 @@ func (e LangError) Error() string {
 }
 
 func (p *Parser) posErr(pos Pos, format string, args ...any) {
-	p.enterFrame()
-	defer p.leaveFrame()
-	// for i, arg := range args {
-	// 	if arg, ok := arg.(fmt.Stringer); ok && arg != _EOF {
-	// 		args[i] = quotedToken(arg)
-	// 	}
-	// }
-	p.reserveHeap(1024) // Error boxing and fixed diagnostic record.
-	p.errPass(ParseError{
-		Filename:   p.f.Name,
-		Pos:        pos,
-		Text:       p.budgetFormat(format, args...),
-		Incomplete: p.tok == _EOF && p.Incomplete(),
-	})
+	p.diagnosticErr(pos, ErrorDiagnostic{Kind: InvalidSyntax, Found: p.tok.String(), At: p.pos}, format, args...)
 }
 
 func (p *Parser) curErr(format string, args ...any) {

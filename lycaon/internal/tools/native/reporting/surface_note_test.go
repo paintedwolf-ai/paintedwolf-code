@@ -443,6 +443,121 @@ func TestSurfaceNoteSurveyOnlyEvidenceIsStrict(t *testing.T) {
 	}
 }
 
+func surfaceNoteGroundedAndSurveyLedger(t *testing.T, path string) evidence.Ledger {
+	t.Helper()
+	msgs := []api.Message{
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
+			{Name: "read", ID: "c1", Args: map[string]any{"path": path, "offset": 1, "limit": 1}},
+			{Name: "list_dir", ID: "c2", Args: map[string]any{}},
+		}},
+		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+			Outcome: api.ToolResultOutcomeCompleted,
+			Content: fmt.Sprintf(`{"path":%q,"content":"1|package main","offset":1,"end_line":1,"limit":1}`, path),
+		}},
+		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+			Outcome: api.ToolResultOutcomeCompleted,
+			Content: fmt.Sprintf(`{"view":"tree","entries":[%q]}`, path),
+		}},
+	}
+	return ledgertest.BuildFromMessages("", msgs)
+}
+
+func TestSurfaceNoteAllowsSurveyHandleWithGroundedEvidence(t *testing.T) {
+	ev := surfaceNoteGroundedAndSurveyLedger(t, "src/a.go")
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register", native.RegisterSurfaceNoteTool(reg, reporttools.SurfaceNoteDeps{
+		Ledger: stubSurfaceLedger{ev: ev},
+		Messages: func(context.Context, string) ([]api.Message, error) {
+			return nil, nil
+		},
+	}))
+	out := &tools.ToolInvocationOut{}
+	_, err := reg.Run(context.Background(), "surface_note", map[string]any{
+		"summary":        "Verified handler file and workspace listing.",
+		"cited_evidence": []any{"read#1", "list#1"},
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: out},
+	})
+	testutil.FailErr(t, "surface_note with supplementary survey handle", err)
+	if out.AgentNote == nil || out.AgentNote.Grounding == nil || !out.AgentNote.Grounding.Traced {
+		t.Fatalf("grounding = %+v want traced", out.AgentNote)
+	}
+	if got := out.AgentNote.Grounding.CitedEvidence; len(got) != 1 || got[0].Handle != "read#1" {
+		t.Fatalf("cited_evidence = %+v want [read#1] only", got)
+	}
+}
+
+func TestSurfaceNoteSurveyHandleOnlyIsRejected(t *testing.T) {
+	ev := surfaceNoteGroundedAndSurveyLedger(t, "src/a.go")
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register", native.RegisterSurfaceNoteTool(reg, reporttools.SurfaceNoteDeps{
+		Ledger: stubSurfaceLedger{ev: ev},
+		Messages: func(context.Context, string) ([]api.Message, error) {
+			return nil, nil
+		},
+	}))
+	out := &tools.ToolInvocationOut{}
+	_, err := reg.Run(context.Background(), "surface_note", map[string]any{
+		"summary":        "Listed workspace only.",
+		"cited_evidence": []any{"list#1"},
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: out},
+	})
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
+		t.Fatalf("err = %v want SURFACE_NOTE_HANDLE_UNGROUND", err)
+	}
+	if sample, _ := reject.Data["offenders_sample"].(string); !strings.Contains(sample, "list#1") {
+		t.Fatalf("offenders_sample = %q want list#1", sample)
+	}
+	if out.AgentNote != nil {
+		t.Fatalf("capture leaked: %+v", out.AgentNote)
+	}
+	cfg, cfgErr := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "LoadHintConfigStock", cfgErr)
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(engine))
+	rendered, fmtErr := guidance.NewStaticRejectFormatter(cfg).Format(reject.Code, reject.Data)
+	testutil.FailErr(t, "format "+reject.Code, fmtErr)
+	if !strings.Contains(rendered, "survey handles") || !strings.Contains(rendered, "primary grounded") {
+		t.Fatalf("rendered reject missing survey handle guidance:\n%s", rendered)
+	}
+}
+
+func TestSurfaceNoteRejectExcludesSurveyFromObservedHandlesSample(t *testing.T) {
+	ev := surfaceNoteGroundedAndSurveyLedger(t, "src/a.go")
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register", native.RegisterSurfaceNoteTool(reg, reporttools.SurfaceNoteDeps{
+		Ledger: stubSurfaceLedger{ev: ev},
+		Messages: func(context.Context, string) ([]api.Message, error) {
+			return nil, nil
+		},
+	}))
+	_, err := reg.Run(context.Background(), "surface_note", map[string]any{
+		"summary":        "Fabricated handle.",
+		"cited_evidence": []any{"read#999"},
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	})
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
+		t.Fatalf("err = %v want SURFACE_NOTE_HANDLE_UNGROUND", err)
+	}
+	handlesSample, _ := reject.Data["observed_handles_sample"].(string)
+	if !strings.Contains(handlesSample, "read#1") || strings.Contains(handlesSample, "list#1") {
+		t.Fatalf("observed_handles_sample = %q want read#1 without list#1", handlesSample)
+	}
+	if count, _ := reject.Data["observed_handles_count"].(int); count != 1 {
+		t.Fatalf("observed_handles_count = %#v want 1", reject.Data["observed_handles_count"])
+	}
+}
+
 func TestSurfaceNoteRejectedInWorkerSession(t *testing.T) {
 	ev := surfaceNoteLedger(t, "src/a.go")
 	reg := tools.NewDefaultRegistry()

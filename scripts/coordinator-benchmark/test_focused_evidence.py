@@ -3,7 +3,7 @@ import pathlib
 import tempfile
 import unittest
 import uuid
-from test_episode_support import EvidenceCase
+from test_episode_evidence import EvidenceCase
 from focused_evidence import preparation_checks, prepared_case, sandbox_checks, returned_worker_checks
 
 

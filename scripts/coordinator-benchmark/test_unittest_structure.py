@@ -2,8 +2,7 @@ import shutil
 import unittest
 from unittest.mock import patch
 
-from candidate_tests import changed_test_paths
-from unittest_structure import preserved_definitions
+from candidate_tests import changed_test_paths, preserved_definitions
 import outcomes
 import test_outcomes
 

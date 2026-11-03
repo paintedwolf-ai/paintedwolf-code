@@ -17,13 +17,14 @@ import (
 // operation are preserved unchanged because their selection never depended on
 // a replaced schema.
 var structuredOnlyOperationRules = map[string]string{
-	"CHOWN_GROUP_UNKNOWN":         "native chown accepts numeric UID[:GID] only; the owner cannot emit an account lookup failure there",
-	"CHOWN_USER_UNKNOWN":          "native chown accepts numeric UID[:GID] only; the owner cannot emit an account lookup failure there",
-	"CHOWN_RECURSIVE_DENIED":      "native chown has no recursive option; the structured request remains the only producer",
-	"HTTP_REQUEST_WEB_PAGE":       "post-invoke advisory from the structured result observation; native children publish no such observation",
-	"SOURCE_ANALYSIS_UNAVAILABLE": "post-invoke advisory from the structured result observation; native children publish no such observation",
-	"EDITORCONFIG_MISMATCH":       "post-invoke advisory from the structured result observation; native children publish no such observation",
-	"SYNTAX_CHECK_OVERRIDDEN":     "post-invoke advisory from the structured result observation; native children publish no such observation",
+	"CHOWN_GROUP_UNKNOWN":                 "native chown accepts numeric UID[:GID] only; the owner cannot emit an account lookup failure there",
+	"CHOWN_USER_UNKNOWN":                  "native chown accepts numeric UID[:GID] only; the owner cannot emit an account lookup failure there",
+	"CHOWN_RECURSIVE_DENIED":              "native chown has no recursive option; the structured request remains the only producer",
+	"HTTP_REQUEST_LOOPBACK_OTHER_SESSION": "post-invoke advisory from structured HTTP result facts; native children publish no such post-invoke observation",
+	"HTTP_REQUEST_WEB_PAGE":               "post-invoke advisory from the structured result observation; native children publish no such observation",
+	"SOURCE_ANALYSIS_UNAVAILABLE":         "post-invoke advisory from the structured result observation; native children publish no such observation",
+	"EDITORCONFIG_MISMATCH":               "post-invoke advisory from the structured result observation; native children publish no such observation",
+	"SYNTAX_CHECK_OVERRIDDEN":             "post-invoke advisory from the structured result observation; native children publish no such observation",
 }
 
 func nativeOperationIdentities(t *testing.T) map[string]bool {
