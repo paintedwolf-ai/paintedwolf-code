@@ -27,8 +27,6 @@ type fakeSourceLedger struct {
 	effects      map[string][]sourceledger.Effect
 	attribution  map[string]sourceledger.AttributionResult
 	authored     map[string][]string
-	floor        int64
-	floorFound   bool
 	versions     map[string]sourceledger.RestorableVersion
 	fileVersions map[string][]sourceledger.Version
 	comparisons  map[string]sourceledger.Comparison
@@ -104,7 +102,7 @@ func (f *fakeSourceLedger) LatestFileEffect(_ context.Context, _, fileID string)
 }
 
 func (f *fakeSourceLedger) SessionActivityFloor(context.Context, string, string) (int64, bool, error) {
-	return f.floor, f.floorFound, nil
+	return 0, false, nil
 }
 
 func (f *fakeSourceLedger) GitTransitionsByIDs(context.Context, []string) (map[string]sourceledger.GitTransition, error) {
@@ -212,7 +210,6 @@ func TestMixedPublicationRemainsVisibleToPublishingAgent(t *testing.T) {
 	dir := t.TempDir()
 	_, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
 	ledger := &fakeSourceLedger{
-		floor: 1, floorFound: true,
 		heads: map[string]sourceledger.BranchHead{"r1/main.go": {FileID: "f1", VersionID: "v2", SHA256: sha, State: "content"}},
 		effects: map[string][]sourceledger.Effect{"f1": {{
 			Origin: api.SourceChangeOriginAgent, SessionID: "test-session", Turn: 9, Ordinal: 2,

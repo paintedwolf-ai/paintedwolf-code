@@ -82,7 +82,7 @@ func TestMutationHealthRejectsBrokenNewFile(t *testing.T) {
 	}
 }
 
-func TestMutationHealthPythonRejectIncludesIndentContext(t *testing.T) {
+func TestMutationHealthPythonRejectIncludesSourceDiagnostic(t *testing.T) {
 	tmpDir := t.TempDir()
 	seed := "\"\"\"module\"\"\"\n\ndef run():\n    try:\n        work()\n    except Exception:\n        recover()\n"
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(tmpDir, "pipeline.py"), []byte(seed), 0o644))
@@ -94,9 +94,9 @@ func TestMutationHealthPythonRejectIncludesIndentContext(t *testing.T) {
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
 	}
-	contextRows, ok := reject.Data["python_indent_context"].([]syntaxhealth.LineContext)
-	if !ok || len(contextRows) == 0 {
-		t.Fatalf("Python indentation context missing: %+v", reject.Data)
+	diagnostic, ok := reject.Data["syntax_diagnostic"].(syntaxhealth.Diagnostic)
+	if !ok || diagnostic.Row <= 1 || reject.Data["parse_language"] != "python" {
+		t.Fatalf("Python source diagnostic missing: %+v", reject.Data)
 	}
 	if parseError, _ := reject.Data["parse_error"].(string); parseError == "" || strings.Contains(parseError, "line 1") {
 		t.Fatalf("parse_error = %q, want localized seam fault", parseError)

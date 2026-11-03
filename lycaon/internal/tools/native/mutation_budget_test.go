@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -57,27 +56,15 @@ func requireUnchanged(t *testing.T, path, want string) {
 	}
 }
 
-func TestNativeEditsRejectABaseOverTheBudget(t *testing.T) {
+func TestWriteRejectsABaseOverTheBudget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "big.txt")
 	over := readcaps.MaxMutationBytes + 1
-	for _, tc := range []struct {
-		name string
-		file string
-		body string
-		run  func(boundary *sandbox.Boundary, dir string) error
-	}{
-		{"write replaces", "big.txt", padTo("target\n", "", over), func(b *sandbox.Boundary, dir string) error {
-			_, err := (&WriteTool{Boundary: b}).Run(context.Background(), map[string]any{"path": "big.txt", "content": "small\n"}, nativefixture.Context(dir))
-			return err
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := filepath.Join(dir, tc.file)
-			testutil.FailErr(t, "write fixture", os.WriteFile(path, []byte(tc.body), 0o644))
-			requireSizeReject(t, tc.run(nativefixture.Boundary(t), dir), over)
-			requireUnchanged(t, path, tc.body)
-		})
-	}
+	body := padTo("target\n", "", over)
+	testutil.FailErr(t, "write fixture", os.WriteFile(path, []byte(body), 0o644))
+	_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "big.txt", "content": "small\n"}, nativefixture.Context(dir))
+	requireSizeReject(t, err, over)
+	requireUnchanged(t, path, body)
 }
 
 // A base under the budget cannot be grown past it; the file keeps its state.

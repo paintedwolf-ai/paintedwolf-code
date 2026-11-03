@@ -19,7 +19,7 @@ import (
 
 var implicitTextEncodings = testutil.SelfIdentifyingTextEncodings()
 
-func TestNativeTextToolsPreserveSelfIdentifyingEncodings(t *testing.T) {
+func TestNativeReadAndAppendPreserveSelfIdentifyingEncodings(t *testing.T) {
 	t.Parallel()
 	for _, encoding := range implicitTextEncodings {
 		t.Run(encoding, func(t *testing.T) {
@@ -47,18 +47,7 @@ func TestNativeTextToolsPreserveSelfIdentifyingEncodings(t *testing.T) {
 			}, ctx); err != nil {
 				t.Fatalf("append %s: %v", encoding, err)
 			}
-			if _, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
-				"path": "notes.txt", "content": "ALPHA\nbeta\ntail\n",
-			}, ctx); err != nil {
-				t.Fatalf("edit %s: %v", encoding, err)
-			}
-			if _, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
-				"path": "notes.txt", "content": "ALPHA\nBETA\ntail\n",
-			}, ctx); err != nil {
-				t.Fatalf("replace lines %s: %v", encoding, err)
-			}
-
-			wantText := "ALPHA\nBETA\ntail\n"
+			wantText := "alpha\nbeta\ntail\n"
 			want := testutil.EncodeTextFixture(t, wantText, encoding)
 			got, err := os.ReadFile(path)
 			if err != nil {
@@ -170,38 +159,26 @@ func TestWriteRefusesUnsupportedExistingTextWithoutChangingIt(t *testing.T) {
 	}
 }
 
-func TestNativeMutationsPreserveControlText(t *testing.T) {
+func TestNativeWritePreservesControlText(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name string
-		want string
-		run  func(*testing.T, string, tools.ToolContext) error
-	}{
-		{"write", "control\x1btext\n", func(t *testing.T, _ string, ctx tools.ToolContext) error {
-			_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
-				"path": "notes.txt", "content": "control\x1btext\n",
-			}, ctx)
-			return err
-		}},
-	}
-	for _, tc := range cases {
-		for _, encoding := range implicitTextEncodings {
-			t.Run(tc.name+"/"+encoding, func(t *testing.T) {
-				t.Parallel()
-				dir := t.TempDir()
-				path := filepath.Join(dir, "notes.txt")
-				before := testutil.EncodeTextFixture(t, "alpha\nbeta\n", encoding)
-				testutil.FailErr(t, "write fixture", os.WriteFile(path, before, 0o644))
-				testutil.FailErr(t, "mutate control text", tc.run(t, path, nativefixture.Context(dir)))
-				after, err := os.ReadFile(path)
-				testutil.FailErr(t, "read mutated file", err)
-				doc, _, err := textfile.Open(after, textfile.LimitsForRaw(int64(len(after))))
-				testutil.FailErr(t, "decode mutated file", err)
-				if doc.Encoding() != encoding || doc.Text() != tc.want {
-					t.Fatalf("mutation encoding=%q text=%q", doc.Encoding(), doc.Text())
-				}
-			})
-		}
+	const want = "control\x1btext\n"
+	for _, encoding := range implicitTextEncodings {
+		t.Run(encoding, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			path := filepath.Join(dir, "notes.txt")
+			before := testutil.EncodeTextFixture(t, "alpha\nbeta\n", encoding)
+			testutil.FailErr(t, "write fixture", os.WriteFile(path, before, 0o644))
+			_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "notes.txt", "content": want}, nativefixture.Context(dir))
+			testutil.FailErr(t, "write control text", err)
+			after, err := os.ReadFile(path)
+			testutil.FailErr(t, "read mutated file", err)
+			doc, _, err := textfile.Open(after, textfile.LimitsForRaw(int64(len(after))))
+			testutil.FailErr(t, "decode mutated file", err)
+			if doc.Encoding() != encoding || doc.Text() != want {
+				t.Fatalf("encoding=%q text=%q", doc.Encoding(), doc.Text())
+			}
+		})
 	}
 }
 

@@ -51,7 +51,7 @@ func TestOriginalParseFailureRetainsPhase(t *testing.T) {
 	change := syntaxhealth.Change{Transition: syntaxhealth.TransitionParseIncomplete, Before: &syntaxhealth.Report{Status: syntaxhealth.StatusIncomplete, Failure: failure}, After: syntaxhealth.Report{
 		Status: syntaxhealth.StatusBroken, Diagnostics: []syntaxhealth.Diagnostic{{Row: 5, Col: 12, Kind: "missing", NodeType: ")"}},
 	}}
-	data := syntaxRejectData("edit", "a.go", change, nil, mutationSeam{})
+	data := syntaxRejectData("edit", "a.go", change)
 	if data["parse_phase"] != "original" || data["parse_source_bytes"] != 100 {
 		t.Fatalf("wrong failing snapshot: %+v", data)
 	}
