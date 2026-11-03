@@ -64,10 +64,10 @@ func (s *Server) opGetlk(nodeID uint64, body []byte) ([]byte, int32) {
 	if !ok {
 		return nil, -int32(syscall.EINVAL)
 	}
-	s.lockMu.Lock()
-	defer s.lockMu.Unlock()
+	s.locks.mu.Lock()
+	defer s.locks.mu.Unlock()
 	if req.typ != syscall.F_UNLCK {
-		for _, existing := range s.fileLocks[nodeID] {
+		for _, existing := range s.locks.files[nodeID] {
 			if locksConflict(req, existing) {
 				out := make([]byte, 24)
 				binary.LittleEndian.PutUint64(out[0:8], existing.start)
@@ -89,32 +89,32 @@ func (s *Server) opSetlk(st *fuseRequestState, nodeID uint64, body []byte) ([]by
 	if !ok {
 		return nil, -int32(syscall.EINVAL)
 	}
-	s.lockMu.Lock()
-	defer s.lockMu.Unlock()
-	errno, conflict := s.attemptLockLocked(st, nodeID, req)
+	s.locks.mu.Lock()
+	defer s.locks.mu.Unlock()
+	errno, conflict := s.locks.attemptLocked(st, nodeID, req)
 	if conflict {
 		return nil, -int32(syscall.EAGAIN)
 	}
 	return nil, errno
 }
 
-// attemptLockLocked applies req unless it conflicts. A canceled or closed request never acquires.
-func (s *Server) attemptLockLocked(st *fuseRequestState, nodeID uint64, req fileLockEntry) (int32, bool) {
+// attemptLocked applies req unless it conflicts. A canceled or closed request never acquires.
+func (l *lockTable) attemptLocked(st *fuseRequestState, nodeID uint64, req fileLockEntry) (int32, bool) {
 	if req.typ != syscall.F_UNLCK && req.typ != syscall.F_RDLCK && req.typ != syscall.F_WRLCK {
 		return -int32(syscall.EINVAL), false
 	}
 	if req.typ != syscall.F_UNLCK {
-		if s.closed.Load() || st.isCanceled() {
+		if l.closed.Load() || st.isCanceled() {
 			return -int32(syscall.EINTR), false
 		}
-		for _, existing := range s.fileLocks[nodeID] {
+		for _, existing := range l.files[nodeID] {
 			if locksConflict(req, existing) {
 				return 0, true
 			}
 		}
 	}
-	applyLockChangeLocked(s, nodeID, req)
-	s.lockCond.Broadcast()
+	l.applyChangeLocked(nodeID, req)
+	l.cond.Broadcast()
 	return 0, false
 }
 
@@ -128,16 +128,16 @@ func (s *Server) startSetlkw(st *fuseRequestState, req []byte) {
 		s.finishRequest(st, -int32(syscall.EINVAL))
 		return
 	}
-	s.lockMu.Lock()
-	errno, conflict := s.attemptLockLocked(st, nodeID, lock)
+	s.locks.mu.Lock()
+	errno, conflict := s.locks.attemptLocked(st, nodeID, lock)
 	if conflict {
-		if s.lockWaiterCount >= s.maxLockWaiters {
+		if s.locks.waiters >= s.locks.maxWaiters {
 			errno, conflict = -int32(syscall.ENOLCK), false
 		} else {
-			s.lockWaiterCount++
+			s.locks.waiters++
 		}
 	}
-	s.lockMu.Unlock()
+	s.locks.mu.Unlock()
 	if !conflict {
 		s.finishRequest(st, errno)
 		return
@@ -149,14 +149,14 @@ func (s *Server) startSetlkw(st *fuseRequestState, req []byte) {
 
 func (s *Server) waitForLock(st *fuseRequestState, nodeID uint64, lock fileLockEntry) {
 	defer s.wg.Done()
-	s.lockMu.Lock()
-	errno, conflict := s.attemptLockLocked(st, nodeID, lock)
+	s.locks.mu.Lock()
+	errno, conflict := s.locks.attemptLocked(st, nodeID, lock)
 	for conflict {
-		s.lockCond.Wait()
-		errno, conflict = s.attemptLockLocked(st, nodeID, lock)
+		s.locks.cond.Wait()
+		errno, conflict = s.locks.attemptLocked(st, nodeID, lock)
 	}
-	s.lockWaiterCount--
-	s.lockMu.Unlock()
+	s.locks.waiters--
+	s.locks.mu.Unlock()
 	s.notifyLockWait(st.unique, lock, false)
 	s.finishRequest(st, errno)
 }
@@ -169,11 +169,11 @@ func (s *Server) notifyLockWait(unique uint64, lock fileLockEntry, waiting bool)
 
 func (s *Server) finishRequest(st *fuseRequestState, errno int32) {
 	_ = s.writeReply(st.unique, errno, nil)
-	s.unregisterRequest(st.unique)
+	s.requests.unregister(st.unique)
 }
 
-func applyLockChangeLocked(s *Server, nodeID uint64, req fileLockEntry) {
-	existing := s.fileLocks[nodeID]
+func (l *lockTable) applyChangeLocked(nodeID uint64, req fileLockEntry) {
+	existing := l.files[nodeID]
 	if req.isFlock {
 		kept := make([]fileLockEntry, 0, len(existing)+1)
 		for _, lk := range existing {
@@ -186,9 +186,9 @@ func applyLockChangeLocked(s *Server, nodeID uint64, req fileLockEntry) {
 			kept = append(kept, req)
 		}
 		if len(kept) == 0 {
-			delete(s.fileLocks, nodeID)
+			delete(l.files, nodeID)
 		} else {
-			s.fileLocks[nodeID] = kept
+			l.files[nodeID] = kept
 		}
 		return
 	}
@@ -221,9 +221,9 @@ func applyLockChangeLocked(s *Server, nodeID uint64, req fileLockEntry) {
 	coalesced := coalescePOSIXRanges(owned)
 	combined := append(others, coalesced...)
 	if len(combined) == 0 {
-		delete(s.fileLocks, nodeID)
+		delete(l.files, nodeID)
 	} else {
-		s.fileLocks[nodeID] = combined
+		l.files[nodeID] = combined
 	}
 }
 
@@ -258,30 +258,30 @@ func coalescePOSIXRanges(intervals []fileLockEntry) []fileLockEntry {
 	return merged
 }
 
-func releasePOSIXLocksForOwner(s *Server, nodeID, handleNodeID, lockOwner uint64) {
+func (l *lockTable) releasePOSIXForOwner(nodeID, handleNodeID, lockOwner uint64) {
 	if lockOwner == 0 {
 		return
 	}
-	s.lockMu.Lock()
-	defer s.lockMu.Unlock()
-	changed := filterNodeLocksLocked(s, nodeID, func(lk fileLockEntry) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	changed := l.filterNodeLocked(nodeID, func(lk fileLockEntry) bool {
 		return !lk.isFlock && lk.owner == lockOwner
 	})
 	if handleNodeID != 0 && handleNodeID != nodeID {
-		if filterNodeLocksLocked(s, handleNodeID, func(lk fileLockEntry) bool {
+		if l.filterNodeLocked(handleNodeID, func(lk fileLockEntry) bool {
 			return !lk.isFlock && lk.owner == lockOwner
 		}) {
 			changed = true
 		}
 	}
 	if changed {
-		s.lockCond.Broadcast()
+		l.cond.Broadcast()
 	}
 }
 
-func releaseLocksForHandle(s *Server, fh, nodeID uint64, releaseFlags uint32, lockOwner uint64) {
-	s.lockMu.Lock()
-	defer s.lockMu.Unlock()
+func (l *lockTable) releaseForHandle(fh, nodeID uint64, releaseFlags uint32, lockOwner uint64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	shouldDrop := func(lk fileLockEntry) bool {
 		if lk.fh == fh {
 			return true
@@ -296,21 +296,21 @@ func releaseLocksForHandle(s *Server, fh, nodeID uint64, releaseFlags uint32, lo
 	}
 	changed := false
 	if nodeID != 0 {
-		changed = filterNodeLocksLocked(s, nodeID, shouldDrop)
+		changed = l.filterNodeLocked(nodeID, shouldDrop)
 	} else {
-		for nid := range s.fileLocks {
-			if filterNodeLocksLocked(s, nid, shouldDrop) {
+		for nid := range l.files {
+			if l.filterNodeLocked(nid, shouldDrop) {
 				changed = true
 			}
 		}
 	}
 	if changed {
-		s.lockCond.Broadcast()
+		l.cond.Broadcast()
 	}
 }
 
-func filterNodeLocksLocked(s *Server, nodeID uint64, drop func(fileLockEntry) bool) bool {
-	locks := s.fileLocks[nodeID]
+func (l *lockTable) filterNodeLocked(nodeID uint64, drop func(fileLockEntry) bool) bool {
+	locks := l.files[nodeID]
 	if len(locks) == 0 {
 		return false
 	}
@@ -324,9 +324,9 @@ func filterNodeLocksLocked(s *Server, nodeID uint64, drop func(fileLockEntry) bo
 		kept = append(kept, lk)
 	}
 	if len(kept) == 0 {
-		delete(s.fileLocks, nodeID)
+		delete(l.files, nodeID)
 	} else {
-		s.fileLocks[nodeID] = kept
+		l.files[nodeID] = kept
 	}
 	return removed
 }

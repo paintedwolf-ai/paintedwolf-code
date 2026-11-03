@@ -2,7 +2,6 @@ package fuselinux
 
 import (
 	"path"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -82,6 +81,52 @@ type fuseRequestState struct {
 
 func (r *fuseRequestState) isCanceled() bool { return r.canceled.Load() }
 
+// lockTable is the view's POSIX and flock state. Every operation on it touches only this memory.
+type lockTable struct {
+	mu         sync.Mutex
+	cond       *sync.Cond
+	closed     *atomic.Bool
+	files      map[uint64][]fileLockEntry
+	waiters    int
+	maxWaiters int
+}
+
+func newLockTable(maxWaiters int) *lockTable {
+	l := &lockTable{files: make(map[uint64][]fileLockEntry), maxWaiters: maxWaiters}
+	l.cond = sync.NewCond(&l.mu)
+	return l
+}
+
+// requestTable holds every request between read and reply, for cancellation by identity.
+type requestTable struct {
+	mu       sync.Mutex
+	inFlight map[uint64]*fuseRequestState
+}
+
+func (t *requestTable) register(unique uint64) *fuseRequestState {
+	st := &fuseRequestState{unique: unique}
+	t.mu.Lock()
+	t.inFlight[unique] = st
+	t.mu.Unlock()
+	return st
+}
+
+func (t *requestTable) unregister(unique uint64) {
+	t.mu.Lock()
+	delete(t.inFlight, unique)
+	t.mu.Unlock()
+}
+
+func (t *requestTable) markCanceled(unique uint64) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	st, ok := t.inFlight[unique]
+	if ok {
+		st.canceled.Store(true)
+	}
+	return ok
+}
+
 type queuedRequest struct {
 	state *fuseRequestState
 	req   []byte
@@ -106,33 +151,15 @@ type Server struct {
 	pollRequests    atomic.Int64
 	syncBacking     func(interface{ Sync() error }) error
 
-	nodeMu          sync.RWMutex
-	nextFuseID      uint64
-	byFuseID        map[uint64]*fuseNode
-	byRel           map[string]*fuseNode
-	byCorePrivateID map[layeredfs.NodeID]*fuseNode
-	openHandles     map[uint64]openHandleEntry
-	dirSnapshots    map[uint64][]rawDirent
-	dirtyRels       map[string]struct{}
-	nextDirFH       uint64
+	nodes *nodeTable
 
-	lockMu          sync.Mutex
-	lockCond        *sync.Cond
-	fileLocks       map[uint64][]fileLockEntry
-	lockWaiterCount int
-	maxLockWaiters  int
+	locks *lockTable
 
 	ordinaryQueue chan queuedRequest
 	workerCount   int
 	controlSem    chan struct{}
-	reqMu         sync.Mutex
-	inFlightReqs  map[uint64]*fuseRequestState
-
-	gateMu        sync.Mutex
-	gateCond      *sync.Cond
-	barrierActive bool
-	inFlightMut   int64
-	gatedMut      int64
+	requests      *requestTable
+	gate          *mutationGate
 }
 
 func newServerInstance(cfg ServerConfig, core *layeredfs.Core, fd int, stopPipe [2]int) *Server {
@@ -144,72 +171,23 @@ func newServerInstance(cfg ServerConfig, core *layeredfs.Core, fd int, stopPipe 
 	if maxWaiters <= 0 {
 		maxWaiters = maxReq
 	}
-	rootNode := &fuseNode{
-		fuseID:     fuseRootID,
-		generation: 1,
-		paths:      map[string]struct{}{".": {}},
-	}
 	s := &Server{
-		cfg:             cfg,
-		core:            core,
-		fd:              fd,
-		stopPipe:        stopPipe,
-		nextFuseID:      2,
-		byFuseID:        map[uint64]*fuseNode{fuseRootID: rootNode},
-		byRel:           map[string]*fuseNode{".": rootNode},
-		byCorePrivateID: make(map[layeredfs.NodeID]*fuseNode),
-		openHandles:     make(map[uint64]openHandleEntry),
-		dirtyRels:       make(map[string]struct{}),
-		nextDirFH:       1 << 50,
-		fileLocks:       make(map[uint64][]fileLockEntry),
-		maxLockWaiters:  maxWaiters,
-		stopCh:          make(chan struct{}),
-		syncBacking:     func(f interface{ Sync() error }) error { return f.Sync() },
-		dirSnapshots:    make(map[uint64][]rawDirent),
-		ordinaryQueue:   make(chan queuedRequest, 2*maxReq),
-		workerCount:     maxReq,
-		controlSem:      make(chan struct{}, 32),
-		inFlightReqs:    make(map[uint64]*fuseRequestState),
+		cfg:           cfg,
+		core:          core,
+		fd:            fd,
+		stopPipe:      stopPipe,
+		nodes:         newNodeTable(),
+		locks:         newLockTable(maxWaiters),
+		stopCh:        make(chan struct{}),
+		syncBacking:   func(f interface{ Sync() error }) error { return f.Sync() },
+		ordinaryQueue: make(chan queuedRequest, 2*maxReq),
+		workerCount:   maxReq,
+		controlSem:    make(chan struct{}, 32),
+		requests:      &requestTable{inFlight: make(map[uint64]*fuseRequestState)},
 	}
-	s.lockCond = sync.NewCond(&s.lockMu)
-	s.gateCond = sync.NewCond(&s.gateMu)
+	s.locks.closed = &s.closed
+	s.gate = newMutationGate(&s.closed)
 	return s
-}
-
-func (s *Server) recordDirtyRel(rel string) {
-	clean := cleanFuseRel(rel)
-	s.nodeMu.Lock()
-	s.dirtyRels[clean] = struct{}{}
-	if clean != "." {
-		if parent := path.Dir(clean); parent != "" {
-			s.dirtyRels[cleanFuseRel(parent)] = struct{}{}
-		}
-	}
-	s.nodeMu.Unlock()
-}
-
-// DirtyCandidatePaths returns the sorted union of relative paths mutated or held writable via FUSE.
-func (s *Server) DirtyCandidatePaths() []string {
-	if s == nil {
-		return nil
-	}
-	s.nodeMu.RLock()
-	seen := make(map[string]struct{}, len(s.dirtyRels)+len(s.openHandles))
-	for r := range s.dirtyRels {
-		seen[r] = struct{}{}
-	}
-	for _, h := range s.openHandles {
-		if h.writable && h.rel != "" {
-			seen[cleanFuseRel(h.rel)] = struct{}{}
-		}
-	}
-	s.nodeMu.RUnlock()
-	out := make([]string, 0, len(seen))
-	for r := range seen {
-		out = append(out, r)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // NegotiatedProtocol returns the completed FUSE_INIT exchange, or nil before it has happened.
@@ -222,32 +200,20 @@ func (s *Server) IsAlive() bool {
 
 // IsBarrierActive reports whether the FUSE server is currently gating mutations for a checkpoint barrier.
 func (s *Server) IsBarrierActive() bool {
-	if s == nil {
-		return false
-	}
-	s.gateMu.Lock()
-	defer s.gateMu.Unlock()
-	return s.barrierActive
-}
-
-// InFlightMutations returns the number of currently executing FUSE mutating operations.
-func (s *Server) InFlightMutations() int64 {
-	s.gateMu.Lock()
-	defer s.gateMu.Unlock()
-	return s.inFlightMut
+	return s != nil && s.gate.isActive()
 }
 
 // InvalidateRelPath sends kernel dentry/inode cache invalidation notifications for rel.
 func (s *Server) InvalidateRelPath(rel string) {
 	clean := cleanFuseRel(rel)
-	s.nodeMu.RLock()
-	fn := s.byRel[clean]
+	s.nodes.mu.RLock()
+	fn := s.nodes.byRel[clean]
 	parentRel := path.Dir(clean)
 	if parentRel == "" {
 		parentRel = "."
 	}
-	parentFn := s.byRel[parentRel]
-	s.nodeMu.RUnlock()
+	parentFn := s.nodes.byRel[parentRel]
+	s.nodes.mu.RUnlock()
 	if fn != nil {
 		notifyInvalInode(s, fn.fuseID)
 	}

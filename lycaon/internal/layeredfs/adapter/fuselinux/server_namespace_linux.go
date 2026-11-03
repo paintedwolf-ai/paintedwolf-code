@@ -13,7 +13,7 @@ import (
 )
 
 func (s *Server) opSymlink(nodeID uint64, body []byte) ([]byte, int32) {
-	parentRel, ok := s.resolveNodeRel(nodeID)
+	parentRel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -26,7 +26,7 @@ func (s *Server) opSymlink(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.ensureNode(childRel, attr)
+	fn := s.nodes.ensureNode(childRel, attr)
 	return encodeEntryOut(s, fn.fuseID, attr), 0
 }
 
@@ -34,7 +34,7 @@ func (s *Server) opMknod(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 16 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	parentRel, ok := s.resolveNodeRel(nodeID)
+	parentRel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -54,7 +54,7 @@ func (s *Server) opMknod(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, mapFUSEErrno(err)
 	}
 	_ = s.core.CloseHandle(hid)
-	fn := s.ensureNode(childRel, attr)
+	fn := s.nodes.ensureNode(childRel, attr)
 	return encodeEntryOut(s, fn.fuseID, attr), 0
 }
 
@@ -62,7 +62,7 @@ func (s *Server) opMkdir(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	parentRel, ok := s.resolveNodeRel(nodeID)
+	parentRel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -76,13 +76,13 @@ func (s *Server) opMkdir(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	s.recordDirtyRel(childRel)
-	fn := s.ensureNode(childRel, attr)
+	s.nodes.recordDirtyRel(childRel)
+	fn := s.nodes.ensureNode(childRel, attr)
 	return encodeEntryOut(s, fn.fuseID, attr), 0
 }
 
 func (s *Server) opUnlink(nodeID uint64, body []byte) ([]byte, int32) {
-	parentRel, ok := s.resolveNodeRel(nodeID)
+	parentRel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -96,12 +96,12 @@ func (s *Server) opUnlink(nodeID uint64, body []byte) ([]byte, int32) {
 	if err := s.core.Unlink(qp, false); err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	s.recordUnlink(childRel, prevAttr, prevErr == nil)
+	s.nodes.recordUnlink(childRel, prevAttr, prevErr == nil)
 	return nil, 0
 }
 
 func (s *Server) opRmdir(nodeID uint64, body []byte) ([]byte, int32) {
-	parentRel, ok := s.resolveNodeRel(nodeID)
+	parentRel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -113,7 +113,7 @@ func (s *Server) opRmdir(nodeID uint64, body []byte) ([]byte, int32) {
 	if err := s.core.Unlink(s.qpath(childRel), true); err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	s.recordUnlink(childRel, layeredfs.EntryAttr{}, false)
+	s.nodes.recordUnlink(childRel, layeredfs.EntryAttr{}, false)
 	return nil, 0
 }
 
@@ -133,8 +133,8 @@ func (s *Server) opRename(nodeID uint64, body []byte, isRename2 bool) ([]byte, i
 			return nil, -int32(syscall.EINVAL)
 		}
 	}
-	oldParent, ok1 := s.resolveNodeRel(nodeID)
-	newParent, ok2 := s.resolveNodeRel(newDirID)
+	oldParent, ok1 := s.nodes.resolveNodeRel(nodeID)
+	newParent, ok2 := s.nodes.resolveNodeRel(newDirID)
 	if !ok1 || !ok2 {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -152,7 +152,7 @@ func (s *Server) opRename(nodeID uint64, body []byte, isRename2 bool) ([]byte, i
 	if err := s.core.Rename(s.qpath(oldRel), s.qpath(newRel)); err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	s.recordRename(oldRel, newRel)
+	s.nodes.recordRename(oldRel, newRel)
 	return nil, 0
 }
 
@@ -161,8 +161,8 @@ func (s *Server) opLink(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.EINVAL)
 	}
 	oldNodeID := binary.LittleEndian.Uint64(body[0:8])
-	oldRel, ok1 := s.resolveNodeRel(oldNodeID)
-	parentRel, ok2 := s.resolveNodeRel(nodeID)
+	oldRel, ok1 := s.nodes.resolveNodeRel(oldNodeID)
+	parentRel, ok2 := s.nodes.resolveNodeRel(nodeID)
 	if !ok1 || !ok2 {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -175,10 +175,10 @@ func (s *Server) opLink(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	s.recordDirtyRel(oldRel)
-	s.recordDirtyRel(newRel)
-	s.ensureNode(oldRel, attr)
-	fn := s.ensureNode(newRel, attr)
+	s.nodes.recordDirtyRel(oldRel)
+	s.nodes.recordDirtyRel(newRel)
+	s.nodes.ensureNode(oldRel, attr)
+	fn := s.nodes.ensureNode(newRel, attr)
 	return encodeEntryOut(s, fn.fuseID, attr), 0
 }
 

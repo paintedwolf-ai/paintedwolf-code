@@ -222,9 +222,9 @@ func TestInterruptForAnsweredRequestAsksKernelToRetryAndKeepsNoState(t *testing.
 	answered := w.send(fuseOpStatfs, fuseRootID, nil)
 	w.wantErrno("statfs", w.reply(answered), 0)
 	w.await("answered request forgotten", func() bool {
-		w.srv.reqMu.Lock()
-		defer w.srv.reqMu.Unlock()
-		return len(w.srv.inFlightReqs) == 0
+		w.srv.requests.mu.Lock()
+		defer w.srv.requests.mu.Unlock()
+		return len(w.srv.requests.inFlight) == 0
 	})
 
 	for range 1024 {
@@ -232,9 +232,9 @@ func TestInterruptForAnsweredRequestAsksKernelToRetryAndKeepsNoState(t *testing.
 		w.sendWith(interrupt, fuseOpInterrupt, 0, u64(answered))
 		w.wantErrno("interrupt of answered request", w.reply(interrupt), syscall.EAGAIN)
 	}
-	w.srv.reqMu.Lock()
-	defer w.srv.reqMu.Unlock()
-	if n := len(w.srv.inFlightReqs); n != 0 {
+	w.srv.requests.mu.Lock()
+	defer w.srv.requests.mu.Unlock()
+	if n := len(w.srv.requests.inFlight); n != 0 {
 		t.Fatalf("interrupts left %d request records", n)
 	}
 }

@@ -30,7 +30,7 @@ const (
 )
 
 func (s *Server) serveRequest(st *fuseRequestState, req []byte) {
-	defer s.unregisterRequest(st.unique)
+	defer s.requests.unregister(st.unique)
 	opcode := binary.LittleEndian.Uint32(req[4:8])
 	nodeID := binary.LittleEndian.Uint64(req[16:24])
 	body := req[fuseHeaderInSize:]
@@ -89,14 +89,14 @@ func (s *Server) serveRequest(st *fuseRequestState, req []byte) {
 }
 
 func (s *Server) dispatchMutatingOp(st *fuseRequestState, opcode uint32, nodeID uint64, body []byte) ([]byte, int32) {
-	if errno := s.enterMutation(st); errno != 0 {
+	if errno := s.gate.enter(st); errno != 0 {
 		return nil, errno
 	}
-	defer s.leaveMutation()
+	defer s.gate.leave()
 
-	rel, _ := s.resolveNodeRel(nodeID)
+	rel, _ := s.nodes.resolveNodeRel(nodeID)
 	if rel != "" {
-		s.recordDirtyRel(rel)
+		s.nodes.recordDirtyRel(rel)
 	}
 	if s.cfg.OnMutationHook != nil {
 		s.cfg.OnMutationHook(opcode, rel)
@@ -160,7 +160,7 @@ func (s *Server) opInit(body []byte) ([]byte, int32) {
 }
 
 func (s *Server) opLookup(nodeID uint64, body []byte) ([]byte, int32) {
-	parentRel, ok := s.resolveNodeRel(nodeID)
+	parentRel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -168,7 +168,7 @@ func (s *Server) opLookup(nodeID uint64, body []byte) ([]byte, int32) {
 	if name == "" {
 		return nil, -int32(syscall.ENOENT)
 	}
-	if s.isPollProbe(nodeID, name) {
+	if s.pollProbeActive.Load() && nodeID == fuseRootID && name == pollProbeName {
 		return encodeEntryOut(s, pollProbeNodeID, pollProbeAttr()), 0
 	}
 	childRel := joinRel(parentRel, name)
@@ -176,7 +176,7 @@ func (s *Server) opLookup(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.ensureNode(childRel, attr)
+	fn := s.nodes.ensureNode(childRel, attr)
 	return encodeEntryOut(s, fn.fuseID, attr), 0
 }
 
@@ -184,19 +184,19 @@ func (s *Server) opGetattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if nodeID == pollProbeNodeID {
 		return encodeAttrOut(s, nodeID, pollProbeAttr()), 0
 	}
-	if rel, ok := s.resolveNodeRel(nodeID); ok {
+	if rel, ok := s.nodes.resolveNodeRel(nodeID); ok {
 		attr, err := s.core.Lstat(s.qpath(rel))
 		if err != nil {
 			return nil, mapFUSEErrno(err)
 		}
-		fn := s.ensureNode(rel, attr)
+		fn := s.nodes.ensureNode(rel, attr)
 		return encodeAttrOut(s, fn.fuseID, attr), 0
 	}
 	var fh uint64
 	if len(body) >= 16 {
 		fh = binary.LittleEndian.Uint64(body[8:16])
 	}
-	if h, ok := s.lookupOpenHandleForNode(fh, nodeID); ok && h.hid != 0 {
+	if h, ok := s.nodes.lookupOpenHandleForNode(fh, nodeID); ok && h.hid != 0 {
 		attr, err := s.core.StatHandle(h.hid)
 		if err != nil {
 			return nil, mapFUSEErrno(err)
@@ -211,7 +211,7 @@ func (s *Server) opSetattr(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.EINVAL)
 	}
 	valid := binary.LittleEndian.Uint32(body[0:4])
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		// Core mutates attributes by path only, and a replaced or unlinked object has no path.
 		// Its old name may now belong to another file, so the request must not reach it.
@@ -257,12 +257,12 @@ func (s *Server) opSetattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.ensureNode(rel, attr)
+	fn := s.nodes.ensureNode(rel, attr)
 	return encodeAttrOut(s, fn.fuseID, attr), 0
 }
 
 func (s *Server) opReadlink(nodeID uint64) ([]byte, int32) {
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -280,7 +280,7 @@ func (s *Server) opFsync(body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	h, ok := s.lookupHandle(binary.LittleEndian.Uint64(body[0:8]))
+	h, ok := s.nodes.lookupHandle(binary.LittleEndian.Uint64(body[0:8]))
 	if !ok || h.isDir || h.hid == 0 {
 		return nil, -int32(syscall.EBADF)
 	}

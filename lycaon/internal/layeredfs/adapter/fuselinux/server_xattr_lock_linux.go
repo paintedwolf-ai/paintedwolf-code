@@ -17,7 +17,7 @@ func (s *Server) opSetxattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -52,7 +52,7 @@ func (s *Server) opSetxattr(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, mapFUSEErrno(err)
 	}
 	if attr, lerr := s.core.Lstat(qp); lerr == nil {
-		s.ensureNode(rel, attr)
+		s.nodes.ensureNode(rel, attr)
 	}
 	return nil, 0
 }
@@ -61,7 +61,7 @@ func (s *Server) opGetxattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -95,7 +95,7 @@ func (s *Server) opListxattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -121,7 +121,7 @@ func (s *Server) opListxattr(nodeID uint64, body []byte) ([]byte, int32) {
 }
 
 func (s *Server) opRemovexattr(nodeID uint64, body []byte) ([]byte, int32) {
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -140,7 +140,7 @@ func (s *Server) opRemovexattr(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, mapFUSEErrno(err)
 	}
 	if attr, lerr := s.core.Lstat(qp); lerr == nil {
-		s.ensureNode(rel, attr)
+		s.nodes.ensureNode(rel, attr)
 	}
 	return nil, 0
 }

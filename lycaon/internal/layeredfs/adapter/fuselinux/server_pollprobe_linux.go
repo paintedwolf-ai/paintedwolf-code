@@ -41,10 +41,6 @@ func (s *Server) optOutOfFUSEPoll(mountPath string) error {
 	return nil
 }
 
-func (s *Server) isPollProbe(nodeID uint64, name string) bool {
-	return s.pollProbeActive.Load() && nodeID == fuseRootID && name == pollProbeName
-}
-
 func pollProbeAttr() layeredfs.EntryAttr {
 	return layeredfs.EntryAttr{Kind: layeredfs.EntryRegular, Mode: 0o400, Nlink: 1}
 }

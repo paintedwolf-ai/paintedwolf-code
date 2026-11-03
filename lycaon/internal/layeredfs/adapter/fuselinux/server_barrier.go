@@ -4,40 +4,112 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-// enterMutation admits a mutating request, holding it while a checkpoint barrier is active.
-// The barrier ends on every path, and a held request stays cancellable by its own interrupt.
-// Failing it instead would surface EAGAIN from blocking calls and lose kernel writeback.
-func (s *Server) enterMutation(st *fuseRequestState) int32 {
-	s.gateMu.Lock()
-	defer s.gateMu.Unlock()
-	s.gatedMut++
-	defer func() { s.gatedMut-- }()
-	for s.barrierActive && !s.closed.Load() && !st.isCanceled() {
-		s.gateCond.Wait()
+// mutationGate holds mutating requests while a checkpoint barrier is active and counts those
+// in flight so the barrier can wait for them.
+type mutationGate struct {
+	mu       sync.Mutex
+	cond     *sync.Cond
+	closed   *atomic.Bool
+	active   bool
+	inFlight int64
+	held     int64
+}
+
+func newMutationGate(closed *atomic.Bool) *mutationGate {
+	g := &mutationGate{closed: closed}
+	g.cond = sync.NewCond(&g.mu)
+	return g
+}
+
+// enter admits a mutating request, holding it while a barrier is active. The barrier ends on
+// every path, and a held request stays cancellable by its own interrupt. Failing it instead
+// would surface EAGAIN from blocking calls and lose kernel writeback.
+func (g *mutationGate) enter(st *fuseRequestState) int32 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.held++
+	defer func() { g.held-- }()
+	for g.active && !g.closed.Load() && !st.isCanceled() {
+		g.cond.Wait()
 	}
-	if s.closed.Load() {
+	if g.closed.Load() {
 		return -int32(syscall.EIO)
 	}
 	if st.isCanceled() {
 		return -int32(syscall.EINTR)
 	}
-	s.inFlightMut++
+	g.inFlight++
 	return 0
 }
 
-func (s *Server) leaveMutation() {
-	s.gateMu.Lock()
-	s.inFlightMut--
-	if s.inFlightMut <= 0 {
-		s.inFlightMut = 0
-		s.gateCond.Broadcast()
+func (g *mutationGate) leave() {
+	g.mu.Lock()
+	g.inFlight--
+	if g.inFlight <= 0 {
+		g.inFlight = 0
+		g.cond.Broadcast()
 	}
-	s.gateMu.Unlock()
+	g.mu.Unlock()
+}
+
+func (g *mutationGate) wake() {
+	g.mu.Lock()
+	g.cond.Broadcast()
+	g.mu.Unlock()
+}
+
+func (g *mutationGate) isActive() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.active
+}
+
+func (g *mutationGate) open() {
+	g.mu.Lock()
+	g.active = false
+	g.cond.Broadcast()
+	g.mu.Unlock()
+}
+
+// closeAndDrain stops admission and waits for in-flight mutations. It leaves the gate open on failure.
+func (g *mutationGate) closeAndDrain(ctx context.Context) error {
+	g.mu.Lock()
+	if g.active {
+		g.mu.Unlock()
+		return layeredfs.ErrBarrierActive
+	}
+	g.active = true
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			g.wake()
+		case <-done:
+		}
+	}()
+	defer g.mu.Unlock()
+	for g.inFlight > 0 {
+		var err error
+		if g.closed.Load() {
+			err = errors.New("fuselinux: server closed during barrier drain")
+		} else {
+			err = ctx.Err()
+		}
+		if err != nil {
+			g.active = false
+			g.cond.Broadcast()
+			return err
+		}
+		g.cond.Wait()
+	}
+	return nil
 }
 
 // BeginBarrierDrain blocks admission of new mutating FUSE requests, waits for in-flight
@@ -46,58 +118,15 @@ func (s *Server) BeginBarrierDrain(ctx context.Context, viewID string) (func(), 
 	if !s.IsAlive() {
 		return nil, errors.New("fuselinux: FUSE server is not alive")
 	}
-	s.gateMu.Lock()
-	if s.barrierActive {
-		s.gateMu.Unlock()
-		return nil, layeredfs.ErrBarrierActive
+	if err := s.gate.closeAndDrain(ctx); err != nil {
+		return nil, err
 	}
-	s.barrierActive = true
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			s.gateMu.Lock()
-			s.gateCond.Broadcast()
-			s.gateMu.Unlock()
-		case <-done:
-		}
-	}()
-	for s.inFlightMut > 0 {
-		if s.closed.Load() {
-			s.barrierActive = false
-			s.gateCond.Broadcast()
-			s.gateMu.Unlock()
-			close(done)
-			return nil, errors.New("fuselinux: server closed during barrier drain")
-		}
-		if err := ctx.Err(); err != nil {
-			s.barrierActive = false
-			s.gateCond.Broadcast()
-			s.gateMu.Unlock()
-			close(done)
-			return nil, err
-		}
-		s.gateCond.Wait()
-	}
-	s.gateMu.Unlock()
-	close(done)
-
 	if err := s.FlushForCheckpoint(ctx, viewID); err != nil {
-		s.gateMu.Lock()
-		s.barrierActive = false
-		s.gateCond.Broadcast()
-		s.gateMu.Unlock()
+		s.gate.open()
 		return nil, err
 	}
 	var once sync.Once
-	return func() {
-		once.Do(func() {
-			s.gateMu.Lock()
-			s.barrierActive = false
-			s.gateCond.Broadcast()
-			s.gateMu.Unlock()
-		})
-	}, nil
+	return func() { once.Do(s.gate.open) }, nil
 }
 
 // FlushForCheckpoint syncs all open handles tracked by the FUSE server and snapshots Core's journal.
@@ -105,14 +134,14 @@ func (s *Server) FlushForCheckpoint(_ context.Context, _ string) error {
 	if !s.IsAlive() {
 		return errors.New("fuselinux: FUSE server is not alive")
 	}
-	s.nodeMu.RLock()
-	hids := make([]layeredfs.HandleID, 0, len(s.openHandles))
-	for _, h := range s.openHandles {
+	s.nodes.mu.RLock()
+	hids := make([]layeredfs.HandleID, 0, len(s.nodes.openHandles))
+	for _, h := range s.nodes.openHandles {
 		if !h.isDir && h.hid != 0 {
 			hids = append(hids, h.hid)
 		}
 	}
-	s.nodeMu.RUnlock()
+	s.nodes.mu.RUnlock()
 	for _, hid := range hids {
 		if err := s.core.SyncHandle(hid); err != nil && !errors.Is(err, layeredfs.ErrStaleHandle) {
 			return err
@@ -126,12 +155,10 @@ func (s *Server) FlushForCheckpoint(_ context.Context, _ string) error {
 func (s *Server) markClosed() {
 	s.closed.Store(true)
 	s.stopOnce.Do(func() { close(s.stopCh) })
-	s.gateMu.Lock()
-	s.gateCond.Broadcast()
-	s.gateMu.Unlock()
-	s.lockMu.Lock()
-	s.lockCond.Broadcast()
-	s.lockMu.Unlock()
+	s.gate.wake()
+	s.locks.mu.Lock()
+	s.locks.cond.Broadcast()
+	s.locks.mu.Unlock()
 }
 
 // Close stops the FUSE server and closes /dev/fuse, including after the connection ended by itself.

@@ -71,16 +71,16 @@ func (a *Adapter) KillServerForView(viewID string) error {
 
 // LockWaiterCountForTest reports how many requests currently hold a lock waiter slot.
 func (s *Server) LockWaiterCountForTest() int {
-	s.lockMu.Lock()
-	defer s.lockMu.Unlock()
-	return s.lockWaiterCount
+	s.locks.mu.Lock()
+	defer s.locks.mu.Unlock()
+	return s.locks.waiters
 }
 
 // GatedMutationsForTest reports how many mutating requests are held by the barrier gate.
 func (s *Server) GatedMutationsForTest() int64 {
-	s.gateMu.Lock()
-	defer s.gateMu.Unlock()
-	return s.gatedMut
+	s.gate.mu.Lock()
+	defer s.gate.mu.Unlock()
+	return s.gate.held
 }
 
 // PollRequestsForTest reports how many FUSE_POLL requests have reached the server.

@@ -181,7 +181,7 @@ func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) []stri
 		}
 	}
 	if m.server != nil {
-		for _, r := range m.server.DirtyCandidatePaths() {
+		for _, r := range m.server.nodes.dirtyCandidatePaths() {
 			addRel(r)
 		}
 	}

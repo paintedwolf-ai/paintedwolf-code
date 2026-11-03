@@ -13,38 +13,6 @@ import (
 
 const fuseWriteInHeaderSize = 40
 
-func (s *Server) storeOpenHandle(fh uint64, entry openHandleEntry) {
-	s.nodeMu.Lock()
-	s.openHandles[fh] = entry
-	if entry.writable && entry.rel != "" {
-		s.dirtyRels[entry.rel] = struct{}{}
-	}
-	s.nodeMu.Unlock()
-}
-
-func (s *Server) lookupHandle(fh uint64) (openHandleEntry, bool) {
-	s.nodeMu.RLock()
-	h, ok := s.openHandles[fh]
-	s.nodeMu.RUnlock()
-	return h, ok
-}
-
-func (s *Server) lookupOpenHandleForNode(fh, nodeID uint64) (openHandleEntry, bool) {
-	s.nodeMu.RLock()
-	defer s.nodeMu.RUnlock()
-	if fh != 0 {
-		if h, ok := s.openHandles[fh]; ok {
-			return h, true
-		}
-	}
-	for _, h := range s.openHandles {
-		if h.fuseID == nodeID && !h.isDir && h.hid != 0 {
-			return h, true
-		}
-	}
-	return openHandleEntry{}, false
-}
-
 func (s *Server) opOpen(st *fuseRequestState, nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
@@ -52,7 +20,7 @@ func (s *Server) opOpen(st *fuseRequestState, nodeID uint64, body []byte) ([]byt
 	if nodeID == pollProbeNodeID {
 		return pollProbeOpenOut(), 0
 	}
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -60,10 +28,10 @@ func (s *Server) opOpen(st *fuseRequestState, nodeID uint64, body []byte) ([]byt
 	openFlags := translateOpenFlags(rawFlags)
 	mutating := openFlags != layeredfs.OpenReadOnly
 	if mutating {
-		if errno := s.enterMutation(st); errno != 0 {
+		if errno := s.gate.enter(st); errno != 0 {
 			return nil, errno
 		}
-		defer s.leaveMutation()
+		defer s.gate.leave()
 		if s.cfg.OnMutationHook != nil {
 			s.cfg.OnMutationHook(fuseOpOpen, rel)
 		}
@@ -73,9 +41,9 @@ func (s *Server) opOpen(st *fuseRequestState, nodeID uint64, body []byte) ([]byt
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.ensureNode(rel, attr)
+	fn := s.nodes.ensureNode(rel, attr)
 	fh := uint64(hid)
-	s.storeOpenHandle(fh, openHandleEntry{
+	s.nodes.storeOpenHandle(fh, openHandleEntry{
 		hid:      hid,
 		fuseID:   fn.fuseID,
 		rel:      cleanFuseRel(rel),
@@ -90,7 +58,7 @@ func (s *Server) opCreate(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 16 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	parentRel, ok := s.resolveNodeRel(nodeID)
+	parentRel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -110,9 +78,9 @@ func (s *Server) opCreate(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.ensureNode(childRel, attr)
+	fn := s.nodes.ensureNode(childRel, attr)
 	fh := uint64(hid)
-	s.storeOpenHandle(fh, openHandleEntry{
+	s.nodes.storeOpenHandle(fh, openHandleEntry{
 		hid:      hid,
 		fuseID:   fn.fuseID,
 		rel:      cleanFuseRel(childRel),
@@ -131,7 +99,7 @@ func (s *Server) opRead(body []byte) ([]byte, int32) {
 	if len(body) < 24 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	h, ok := s.lookupHandle(binary.LittleEndian.Uint64(body[0:8]))
+	h, ok := s.nodes.lookupHandle(binary.LittleEndian.Uint64(body[0:8]))
 	if !ok || h.isDir || h.hid == 0 {
 		return nil, -int32(syscall.EBADF)
 	}
@@ -152,7 +120,7 @@ func (s *Server) opWrite(body []byte) ([]byte, int32) {
 	if len(body) < fuseWriteInHeaderSize {
 		return nil, -int32(syscall.EINVAL)
 	}
-	h, ok := s.lookupHandle(binary.LittleEndian.Uint64(body[0:8]))
+	h, ok := s.nodes.lookupHandle(binary.LittleEndian.Uint64(body[0:8]))
 	if !ok || h.isDir || h.hid == 0 {
 		return nil, -int32(syscall.EBADF)
 	}
@@ -162,7 +130,7 @@ func (s *Server) opWrite(body []byte) ([]byte, int32) {
 		size = len(body) - fuseWriteInHeaderSize
 	}
 	if h.rel != "" {
-		s.recordDirtyRel(h.rel)
+		s.nodes.recordDirtyRel(h.rel)
 	}
 	n, err := s.core.WriteHandle(h.hid, body[fuseWriteInHeaderSize:fuseWriteInHeaderSize+size], offset)
 	if err != nil {
@@ -180,8 +148,8 @@ func (s *Server) opFlush(nodeID uint64, body []byte) ([]byte, int32) {
 	fh := binary.LittleEndian.Uint64(body[0:8])
 	if len(body) >= 24 {
 		lockOwner := binary.LittleEndian.Uint64(body[16:24])
-		h, _ := s.lookupHandle(fh)
-		releasePOSIXLocksForOwner(s, nodeID, h.fuseID, lockOwner)
+		h, _ := s.nodes.lookupHandle(fh)
+		s.locks.releasePOSIXForOwner(nodeID, h.fuseID, lockOwner)
 	}
 	return nil, 0
 }
@@ -199,15 +167,15 @@ func (s *Server) opRelease(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) >= 24 {
 		lockOwner = binary.LittleEndian.Uint64(body[16:24])
 	}
-	s.nodeMu.Lock()
-	h, ok := s.openHandles[fh]
-	delete(s.openHandles, fh)
-	s.nodeMu.Unlock()
+	s.nodes.mu.Lock()
+	h, ok := s.nodes.openHandles[fh]
+	delete(s.nodes.openHandles, fh)
+	s.nodes.mu.Unlock()
 	targetNode := h.fuseID
 	if targetNode == 0 {
 		targetNode = nodeID
 	}
-	releaseLocksForHandle(s, fh, targetNode, releaseFlags, lockOwner)
+	s.locks.releaseForHandle(fh, targetNode, releaseFlags, lockOwner)
 	if ok && !h.isDir && h.hid != 0 {
 		_ = s.core.CloseHandle(h.hid)
 	}
@@ -215,7 +183,7 @@ func (s *Server) opRelease(nodeID uint64, body []byte) ([]byte, int32) {
 }
 
 func (s *Server) opOpendir(nodeID uint64) ([]byte, int32) {
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -226,15 +194,15 @@ func (s *Server) opOpendir(nodeID uint64) ([]byte, int32) {
 	if !attr.Mode.IsDir() {
 		return nil, -int32(syscall.ENOTDIR)
 	}
-	s.nodeMu.Lock()
-	fh := s.nextDirFH
-	s.nextDirFH++
-	s.openHandles[fh] = openHandleEntry{
+	s.nodes.mu.Lock()
+	fh := s.nodes.nextDirFH
+	s.nodes.nextDirFH++
+	s.nodes.openHandles[fh] = openHandleEntry{
 		fuseID: nodeID,
 		rel:    cleanFuseRel(rel),
 		isDir:  true,
 	}
-	s.nodeMu.Unlock()
+	s.nodes.mu.Unlock()
 	out := make([]byte, 16)
 	binary.LittleEndian.PutUint64(out[0:8], fh)
 	return out, 0
@@ -249,9 +217,9 @@ func (s *Server) opReaddir(nodeID uint64, body []byte) ([]byte, int32) {
 	fh := binary.LittleEndian.Uint64(body[0:8])
 	offset := int(binary.LittleEndian.Uint64(body[8:16]))
 	maxSize := int(binary.LittleEndian.Uint32(body[16:20]))
-	s.nodeMu.RLock()
-	all, cached := s.dirSnapshots[fh]
-	s.nodeMu.RUnlock()
+	s.nodes.mu.RLock()
+	all, cached := s.nodes.dirSnapshots[fh]
+	s.nodes.mu.RUnlock()
 	if offset == 0 || !cached {
 		var errno int32
 		all, errno = s.snapshotDirectory(nodeID, fh)
@@ -282,9 +250,9 @@ func (s *Server) opReaddir(nodeID uint64, body []byte) ([]byte, int32) {
 }
 
 func (s *Server) snapshotDirectory(nodeID, fh uint64) ([]rawDirent, int32) {
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
-		if h, hok := s.lookupHandle(fh); hok && h.rel != "" {
+		if h, hok := s.nodes.lookupHandle(fh); hok && h.rel != "" {
 			rel, ok = h.rel, true
 		}
 	}
@@ -301,7 +269,7 @@ func (s *Server) snapshotDirectory(nodeID, fh uint64) ([]rawDirent, int32) {
 		rawDirent{ino: fuseRootID, typ: syscall.DT_DIR, name: ".."},
 	)
 	for _, e := range entries {
-		fn := s.ensureNode(joinRel(rel, e.Name), layeredfs.EntryAttr{
+		fn := s.nodes.ensureNode(joinRel(rel, e.Name), layeredfs.EntryAttr{
 			NodeID:     e.NodeID,
 			Generation: e.Generation,
 			Layer:      e.Layer,
@@ -312,9 +280,9 @@ func (s *Server) snapshotDirectory(nodeID, fh uint64) ([]rawDirent, int32) {
 		})
 		all = append(all, rawDirent{ino: fn.fuseID, typ: direntType(e.Mode), name: e.Name})
 	}
-	s.nodeMu.Lock()
-	s.dirSnapshots[fh] = all
-	s.nodeMu.Unlock()
+	s.nodes.mu.Lock()
+	s.nodes.dirSnapshots[fh] = all
+	s.nodes.mu.Unlock()
 	return all, 0
 }
 
@@ -323,9 +291,9 @@ func (s *Server) opReleasedir(body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.EINVAL)
 	}
 	fh := binary.LittleEndian.Uint64(body[0:8])
-	s.nodeMu.Lock()
-	delete(s.openHandles, fh)
-	delete(s.dirSnapshots, fh)
-	s.nodeMu.Unlock()
+	s.nodes.mu.Lock()
+	delete(s.nodes.openHandles, fh)
+	delete(s.nodes.dirSnapshots, fh)
+	s.nodes.mu.Unlock()
 	return nil, 0
 }

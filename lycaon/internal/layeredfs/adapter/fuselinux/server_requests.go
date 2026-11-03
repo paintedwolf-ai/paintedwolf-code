@@ -82,20 +82,6 @@ func classifyRequest(opcode uint32, body []byte) requestLane {
 	}
 }
 
-func (s *Server) registerRequest(unique uint64) *fuseRequestState {
-	st := &fuseRequestState{unique: unique}
-	s.reqMu.Lock()
-	s.inFlightReqs[unique] = st
-	s.reqMu.Unlock()
-	return st
-}
-
-func (s *Server) unregisterRequest(unique uint64) {
-	s.reqMu.Lock()
-	delete(s.inFlightReqs, unique)
-	s.reqMu.Unlock()
-}
-
 // dispatchRequest runs on the reader. It registers each request before any handler can run,
 // so an interrupt read later always finds a target that has not been answered.
 func (s *Server) dispatchRequest(req []byte) {
@@ -113,7 +99,7 @@ func (s *Server) dispatchRequest(req []byte) {
 		return
 	}
 
-	st := s.registerRequest(unique)
+	st := s.requests.register(unique)
 	switch classifyRequest(opcode, body) {
 	case laneInline:
 		s.serveRequest(st, req)
@@ -150,7 +136,7 @@ func (s *Server) ordinaryWorker() {
 		case q := <-s.ordinaryQueue:
 			if q.state.isCanceled() {
 				_ = s.writeReply(q.state.unique, -int32(syscall.EINTR), nil)
-				s.unregisterRequest(q.state.unique)
+				s.requests.unregister(q.state.unique)
 				continue
 			}
 			s.serveRequest(q.state, q.req)
@@ -171,20 +157,12 @@ func (s *Server) handleInterrupt(interruptUnique uint64, body []byte) {
 }
 
 func (s *Server) cancelRequest(unique uint64) bool {
-	s.reqMu.Lock()
-	st, ok := s.inFlightReqs[unique]
-	if ok {
-		st.canceled.Store(true)
-	}
-	s.reqMu.Unlock()
-	if !ok {
+	if !s.requests.markCanceled(unique) {
 		return false
 	}
-	s.lockMu.Lock()
-	s.lockCond.Broadcast()
-	s.lockMu.Unlock()
-	s.gateMu.Lock()
-	s.gateCond.Broadcast()
-	s.gateMu.Unlock()
+	s.locks.mu.Lock()
+	s.locks.cond.Broadcast()
+	s.locks.mu.Unlock()
+	s.gate.wake()
 	return true
 }
