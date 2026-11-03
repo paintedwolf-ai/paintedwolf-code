@@ -36,7 +36,7 @@ func (a NextAction) MarshalJSON() ([]byte, error) {
 		args.Limit = last - args.Offset + 1
 	}
 	kind := "inspect"
-	if a.Cursor != "" {
+	if a.Cursor != "" || a.Continue {
 		kind = "continue"
 	}
 	return json.Marshal(actionWire{Tool: a.Tool, Args: args, Kind: kind, Reason: a.Why})
@@ -48,7 +48,7 @@ func (a *NextAction) UnmarshalJSON(raw []byte) error {
 		return err
 	}
 	*a = NextAction{Tool: wire.Tool, Path: wire.Args.Path, Paths: wire.Args.Paths, Task: wire.Args.Task,
-		Pattern: wire.Args.Pattern, Cursor: wire.Args.Cursor, Why: wire.Reason, Command: wire.Args.Command}
+		Pattern: wire.Args.Pattern, Cursor: wire.Args.Cursor, Why: wire.Reason, Command: wire.Args.Command, Continue: wire.Kind == "continue"}
 
 	if wire.Args.Offset > 0 && wire.Args.Limit > 0 {
 		a.Lines = fmt.Sprintf("%d-%d", wire.Args.Offset, wire.Args.Offset+wire.Args.Limit-1)
@@ -56,12 +56,10 @@ func (a *NextAction) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-// PortableInspection returns an explicit command action for a caller whose live
-// offered entry accepts the portable language. Ordinary structured summarize
-// consumers retain their currently reachable actions until that entry activates.
-func (a NextAction) PortableInspection() (NextAction, error) {
+// CommandFollowup projects a routed action onto the callable command interface.
+func (a NextAction) CommandFollowup() (NextAction, error) {
 	switch a.Tool {
-	case "read", "grep", "find", "list_dir":
+	case "read", "grep", "find", "list_dir", "summarize":
 		path, err := quoteActionOperand(a.Path)
 		if err != nil {
 			return NextAction{}, err
@@ -88,7 +86,23 @@ func (a NextAction) PortableInspection() (NextAction, error) {
 			command = "find -- " + path
 		case "list_dir":
 			command = "ls -a -- " + path
+		case "summarize":
+			if len(a.Paths) != 0 || a.Path == "" {
+				return NextAction{}, fmt.Errorf("native summary follow-up requires one path")
+			}
+			command = "summarize --path " + path
+			for _, option := range []struct{ name, value string }{{"--focus", a.Task}, {"--cursor", a.Cursor}} {
+				if option.value == "" {
+					continue
+				}
+				quoted, err := quoteActionOperand(option.value)
+				if err != nil {
+					return NextAction{}, err
+				}
+				command += " " + option.name + " " + quoted
+			}
 		}
+		a.Continue = a.Cursor != "" || a.Continue
 		a.Tool = "command"
 		a.Command = command
 		a.Path = ""
