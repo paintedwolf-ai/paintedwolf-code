@@ -130,7 +130,7 @@ func TestSpawnRosterCoordinatorSurfaceVariable(t *testing.T) {
 	}{
 		{
 			name:        "investigate grants inline edits and command",
-			tools:       []string{"read", "write", "edit", "command", "task", "update_progress"},
+			tools:       []string{"command", "task", "update_progress"},
 			wantRender:  []string{"edits inline; runs commands on this surface"},
 			denyRender:  []string{"(no command)", "routes product writes via workers"},
 			wantEdit:    true,
@@ -156,7 +156,7 @@ func TestSpawnRosterCoordinatorSurfaceVariable(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			surfaceTools := map[string][]string{"coordinator": tc.tools}
+			surfaceTools := map[string]prompts.SpawnToolSurface{"coordinator": {Tools: tc.tools, CommandMutates: tc.wantEdit}}
 			data, err := prompts.LoadSpawnRosterSurface([]string{"coordinator"}, 3, surfaceTools, nil, nil)
 			if err != nil {
 				t.Fatalf("LoadSpawnRosterSurface: %v", err)

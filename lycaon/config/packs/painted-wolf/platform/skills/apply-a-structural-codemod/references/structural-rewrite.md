@@ -1,6 +1,6 @@
 # Structural rewrite reference
 
-Maintained sources of truth: command help for text-search syntax and the live `code_rewrite` schema for structural patterns, replacements, and supported grammars, and the project's own verification policy for completion. Tool confinement, write scope, mutation receipts, and structured rejection `Code:` values remain authoritative.
+Maintained sources of truth: command help for text-search syntax and `code-rewrite --help` for structural patterns, replacements, and supported grammars, and the project's own verification policy for completion. Tool confinement, write scope, mutation receipts, and structured rejection `Code:` values remain authoritative.
 
 ## Pattern shape
 
@@ -20,7 +20,7 @@ Use the singular capture when arity is part of the claim and the sequence captur
 
 1. Bound candidate paths with text search.
 2. Inspect representative source and choose one complete syntax pattern.
-3. Preview that pattern, replacement, paths, recursion setting, and language with `code_rewrite(dry_run: true)`.
+3. Preview that pattern, replacement, paths, recursion setting, and language with `code-rewrite --dry-run` in `command`.
 4. Inspect structural matches, affected paths, and proposed changes.
 5. Apply exactly the reviewed call.
 6. Inspect the resulting diff and verify behavior.
