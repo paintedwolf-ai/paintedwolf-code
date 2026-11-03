@@ -34,7 +34,7 @@ func TestProgramObservationRequiresReceiptAndKnownOwner(t *testing.T) {
 func TestProgramObservationBoundsCapturedOutput(t *testing.T) {
 	rec := BuildProgramObservation("command", &api.CommandProgramReceipt{ID: "program", ParentReceiptID: "invocation"}, strings.Repeat("x", EvidenceCaptureBodyCapBytes+1))
 	if !rec.Truncated || len(rec.Body) != 1 || len(rec.Body[0]) != EvidenceCaptureBodyCapBytes {
-		t.Fatalf("unbounded command observation: %+v", rec)
+		t.Fatalf("capture truncated=%v body_count=%d", rec.Truncated, len(rec.Body))
 	}
 }
 
