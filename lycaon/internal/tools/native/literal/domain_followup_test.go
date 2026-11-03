@@ -2,8 +2,12 @@ package literal
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
@@ -12,8 +16,14 @@ import (
 func TestSummaryBuiltinProjectsFollowupsAndContinuesCoverage(t *testing.T) {
 	h := domainHarness(t)
 	owner := h.owners.Domain.Summarize
-	owner.Caps.Gather.MetadataNodes = 1
-	owner.Caps.Pack.SubtreeFanoutMax = 1
+	for i := range 93 {
+		testutil.FailErr(t, "write summary source", os.WriteFile(filepath.Join(h.root, fmt.Sprintf("item-%03d.go", i)), []byte("package sample\nfunc Useful() {}\n"), 0600))
+	}
+	owner.Catalog = sourcecatalog.New()
+	owner.Caps.Gather.MetadataNodes = 32
+	owner.Caps.Gather.MaxFilesRead = 3
+	owner.Caps.Gather.MaxBytes = 1024
+	owner.Caps.Pack.SubtreeFanoutMax = 8
 	var observed summarize.Result
 	owner.Observe = func(result summarize.Result) { observed = result }
 	first := h.exec("", "summarize", "--path", ".", "--focus", "project structure")

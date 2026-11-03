@@ -17,7 +17,7 @@ import (
 )
 
 var implementInvestigateSurfaceTools = []string{
-	"command", "summarize", "skills_read",
+	"command", "skills_read",
 	"update_progress", "ask_user", "surface_note", "request_tools",
 	"recall",
 }
@@ -42,7 +42,7 @@ func TestCoordinatorToolSurfaceSecretsRemainRequestableWithOutboundExecution(t *
 		}
 	}
 
-	for _, name := range []string{"process_list", "process_signal", "secret_generate", "secret_list", "secret_revoke"} {
+	for _, name := range []string{"secret_generate", "secret_list", "secret_revoke"} {
 		if !contractcheck.ContainsString(deferred, name) {
 			t.Fatalf("implement_investigate missing deferred outbound capability %q", name)
 		}
@@ -73,17 +73,8 @@ func TestCoordinatorToolSurface_managedSecretLifecycleFollowsMutationCapability(
 }
 
 var implementInvestigateDeferredTools = []string{
-	"survey_repo",
-	"edit",
-	"replace_lines",
 	"restore_version",
-	"code_rewrite",
-	"jq_edit",
 	"source_history",
-	"chmod",
-	"chown",
-	"process_list",
-	"process_signal",
 	"verify",
 	"wait",
 	"terminal_open",
@@ -91,11 +82,6 @@ var implementInvestigateDeferredTools = []string{
 	"terminal_read",
 	"terminal_snapshot",
 	"terminal_close",
-	"git_commit",
-	"git_restore",
-	"git_checkout",
-	"git_merge",
-	"git_stash",
 	"render_view",
 	"view_image",
 	"view_video",
