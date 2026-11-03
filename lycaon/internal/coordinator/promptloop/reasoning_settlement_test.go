@@ -55,12 +55,16 @@ func TestSettlementPreservesReasoningAndPresentationBoundaries(t *testing.T) {
 			state := &promptLoopTurnState{attemptID: execution.Attempt.ID}
 			_, err = loop.Projection.settleAssistantStreamTurn(ctx, sess.ID, state, message, completion, nil, uuid.NewString(), nextModelIteration(state), func(text string) string { return text })
 			testutil.FailErr(t, "settle output", err)
-			var content, reasoningJSON string
-			testutil.FailErr(t, "read canonical output", db.QueryRowContext(ctx, "SELECT content, reasoning_json FROM model_outputs WHERE id=?", state.output.id).Scan(&content, &reasoningJSON))
+			pending, err := store.NewSQL(db).ListPendingModelOutputProjections(ctx)
+			testutil.FailErr(t, "reload canonical output", err)
+			if len(pending) != 1 || pending[0].Output.ID != state.output.id {
+				t.Fatalf("canonical output identity changed: %+v", pending)
+			}
+			output := pending[0].Output
 			var reasoning api.ModelReasoning
-			testutil.FailErr(t, "decode canonical reasoning", json.Unmarshal([]byte(reasoningJSON), &reasoning))
-			if content != tc.content || reasoning.Text != private || len(reasoning.Details) != 1 || reasoning.ProviderID != "fixture" {
-				t.Fatalf("canonical channels changed: content=%q reasoning=%+v", content, reasoning)
+			testutil.FailErr(t, "decode canonical reasoning", json.Unmarshal([]byte(output.ReasoningJSON), &reasoning))
+			if output.Content != tc.content || reasoning.Text != private || len(reasoning.Details) != 1 || reasoning.ProviderID != "fixture" {
+				t.Fatalf("canonical channels changed: content=%q reasoning=%+v", output.Content, reasoning)
 			}
 			reloaded, err := store.NewSQL(db).GetMessage(ctx, sess.ID, message.ID)
 			testutil.FailErr(t, "reload transcript", err)
