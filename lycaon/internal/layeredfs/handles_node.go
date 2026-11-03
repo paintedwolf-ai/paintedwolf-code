@@ -1,6 +1,7 @@
 package layeredfs
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -8,7 +9,10 @@ import (
 	"time"
 )
 
-func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, flags OpenFlags, createMode os.FileMode) (*privateNode, error) {
+func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, flags OpenFlags, createMode os.FileMode, expectedGen uint64) (*privateNode, error) {
+	if c.state.nsGen != expectedGen {
+		return nil, errNamespaceRetry
+	}
 	if existingID, ok := c.state.pathIndex[qpath]; ok {
 		if existing := c.state.nodesByID[existingID]; existing != nil && !existing.flags.unlinked {
 			return existing, nil
@@ -26,6 +30,10 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		if c.state.released {
 			_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
 			return nil, ErrViewReleased
+		}
+		if c.state.nsGen != expectedGen {
+			_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
+			return nil, errNamespaceRetry
 		}
 		if existingID, ok := c.state.pathIndex[qpath]; ok {
 			if existing := c.state.nodesByID[existingID]; existing != nil && !existing.flags.unlinked {
@@ -68,6 +76,9 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 
 	if flags&OpenCreate == 0 {
 		return nil, os.ErrNotExist
+	}
+	if !isParentDirValidLocked(c, qpath) {
+		return nil, errNamespaceRetry
 	}
 
 	workName, workPath := c.state.allocStorageFile(c.backing.workDir, "work")
@@ -212,4 +223,88 @@ func (c *Core) OpenBackingReader(nodeID NodeID, gen Generation) (io.ReadCloser, 
 	bName, bPath := node.flags.backingName, node.flags.backingPath
 	c.mu.RUnlock()
 	return openBackingFileRO(int(c.backing.workDirFile.Fd()), bName, bPath)
+}
+
+func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *privateNode {
+	if nid, ok := c.state.pathIndex[qpath]; ok {
+		if n := c.state.nodesByID[nid]; n != nil && !n.flags.unlinked {
+			return n
+		}
+	}
+	nid, gen := c.state.allocNodeID()
+	node := &privateNode{
+		id:     nid,
+		gen:    gen,
+		kind:   EntryDirectory,
+		mode:   attr.Mode,
+		atime:  attr.ATime,
+		mtime:  attr.ModTime,
+		ctime:  attr.CTime,
+		xattrs: cloneXattrs(attr.Xattrs),
+		paths:  map[QualifiedPath]struct{}{qpath: {}},
+	}
+	c.state.nodesByID[nid] = node
+	c.state.pathIndex[qpath] = nid
+	return node
+}
+
+func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*privateNode, error) {
+	res, err := lookupExactComponent(c, qpath)
+	if err != nil {
+		return nil, err
+	}
+	base, err := ensureBaseCaptured(c, qpath)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state.released {
+		return nil, ErrViewReleased
+	}
+	if c.state.nsGen != expectedGen {
+		return nil, errNamespaceRetry
+	}
+	if nid, ok := c.state.pathIndex[qpath]; ok {
+		if n := c.state.nodesByID[nid]; n != nil && !n.flags.unlinked {
+			return n, nil
+		}
+	}
+	switch res.attr.Kind {
+	case EntryRegular:
+		return ensureWritableNodeLocked(c, qpath, base, OpenWriteOnly, res.attr.Mode, expectedGen)
+	case EntryDirectory:
+		return ensurePrivateDirNodeLocked(c, qpath, res.attr), nil
+	case EntrySymlink:
+		nid, gen := c.state.allocNodeID()
+		originCopy := qpath
+		node := &privateNode{
+			id:     nid,
+			gen:    gen,
+			kind:   EntrySymlink,
+			mode:   res.attr.Mode,
+			size:   int64(len(res.attr.LinkTarget)),
+			atime:  res.attr.ATime,
+			mtime:  res.attr.ModTime,
+			ctime:  res.attr.CTime,
+			xattrs: cloneXattrs(res.attr.Xattrs),
+			paths:  map[QualifiedPath]struct{}{qpath: {}},
+			flags: nodeFlags{
+				physicalCopyUp: true,
+				linkTarget:     res.attr.LinkTarget,
+			},
+			initial: nodeInitialState{
+				mode:       res.attr.Mode,
+				mtime:      res.attr.ModTime,
+				xattrs:     cloneXattrs(res.attr.Xattrs),
+				originPath: &originCopy,
+			},
+		}
+		c.state.nodesByID[nid] = node
+		c.state.pathIndex[qpath] = nid
+		c.counters.physicalCopyUps.Add(1)
+		return node, nil
+	default:
+		return nil, fmt.Errorf("unsupported entry kind %s", res.attr.Kind)
+	}
 }

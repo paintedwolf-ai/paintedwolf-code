@@ -61,6 +61,7 @@ type idAllocator struct {
 
 type viewState struct {
 	released     bool
+	nsGen        uint64
 	seq          idAllocator
 	nodesByID    map[NodeID]*privateNode
 	pathIndex    map[QualifiedPath]NodeID

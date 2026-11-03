@@ -1,6 +1,7 @@
 package layeredfs
 
 import (
+	"errors"
 	"os"
 	"sort"
 	"strings"
@@ -23,156 +24,180 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 	if oldPath.RootID != newPath.RootID {
 		return syscall.EXDEV
 	}
-	oldParent, oldName, err := resolveParentDir(c, oldPath, true)
-	if err != nil {
-		return err
-	}
-	srcPath := QualifiedPath{RootID: oldParent.RootID, Rel: joinRel(oldParent.Rel, oldName)}
-	srcPath, err = checkGitAccess(c, srcPath, true)
-	if err != nil {
-		return err
-	}
-
-	newParent, newName, err := resolveParentDir(c, newPath, true)
-	if err != nil {
-		return err
-	}
-	dstPath := QualifiedPath{RootID: newParent.RootID, Rel: joinRel(newParent.Rel, newName)}
-	dstPath, err = checkGitAccess(c, dstPath, true)
-	if err != nil {
-		return err
-	}
-
-	if srcPath == dstPath {
-		_, err := lookupExactComponent(c, srcPath)
-		return err
-	}
-	if strings.HasPrefix(dstPath.Rel, srcPath.Rel+"/") {
-		return syscall.EINVAL
-	}
-
-	srcRes, err := lookupExactComponent(c, srcPath)
-	if err != nil {
-		return err
-	}
-	dstRes, dstErr := lookupExactComponent(c, dstPath)
-	if dstErr != nil && !os.IsNotExist(dstErr) {
-		return dstErr
-	}
-	dstExists := dstErr == nil
-	if dstExists {
-		if srcRes.privNode != nil && dstRes.privNode != nil && srcRes.privNode.id == dstRes.privNode.id {
-			return nil
+	for {
+		startGen, err := currentNamespaceGen(c)
+		if err != nil {
+			return err
 		}
-		if srcRes.attr.Kind == EntryDirectory && dstRes.attr.Kind != EntryDirectory {
-			return syscall.ENOTDIR
+		oldParent, oldName, err := resolveParentDir(c, oldPath, true)
+		if err != nil {
+			return err
 		}
-		if srcRes.attr.Kind != EntryDirectory && dstRes.attr.Kind == EntryDirectory {
-			return syscall.EISDIR
+		srcPath := QualifiedPath{RootID: oldParent.RootID, Rel: joinRel(oldParent.Rel, oldName)}
+		srcPath, err = checkGitAccess(c, srcPath, true)
+		if err != nil {
+			return err
 		}
-		if dstRes.attr.Kind == EntryDirectory {
-			children, cErr := readDirUnlocked(c, dstPath)
-			if cErr != nil {
-				return cErr
+
+		newParent, newName, err := resolveParentDir(c, newPath, true)
+		if err != nil {
+			return err
+		}
+		dstPath := QualifiedPath{RootID: newParent.RootID, Rel: joinRel(newParent.Rel, newName)}
+		dstPath, err = checkGitAccess(c, dstPath, true)
+		if err != nil {
+			return err
+		}
+
+		if srcPath == dstPath {
+			_, err := lookupExactComponent(c, srcPath)
+			return err
+		}
+		if strings.HasPrefix(dstPath.Rel, srcPath.Rel+"/") {
+			return syscall.EINVAL
+		}
+
+		srcRes, err := lookupExactComponent(c, srcPath)
+		if err != nil {
+			return err
+		}
+		dstRes, dstErr := lookupExactComponent(c, dstPath)
+		if dstErr != nil && !os.IsNotExist(dstErr) {
+			return dstErr
+		}
+		dstExists := dstErr == nil
+		if dstExists {
+			if srcRes.privNode != nil && dstRes.privNode != nil && srcRes.privNode.id == dstRes.privNode.id {
+				return nil
 			}
-			if len(children) > 0 {
-				return syscall.ENOTEMPTY
+			if srcRes.attr.Kind == EntryDirectory && dstRes.attr.Kind != EntryDirectory {
+				return syscall.ENOTDIR
 			}
-		}
-	}
-
-	if _, err := ensureBaseCaptured(c, srcPath); err != nil {
-		return err
-	}
-	dstBase, err := ensureBaseCaptured(c, dstPath)
-	if err != nil {
-		return err
-	}
-
-	if srcRes.attr.Kind == EntryDirectory {
-		return renameDirectorySubtree(c, srcPath, dstPath, dstExists)
-	}
-
-	srcNode, err := ensureCopiedUpNode(c, srcPath)
-	if err != nil {
-		return err
-	}
-
-	c.mu.Lock()
-	if c.state.released {
-		c.mu.Unlock()
-		return ErrViewReleased
-	}
-
-	var replacedNodeID NodeID
-	var replacedNode *privateNode
-	var orphanBacking string
-	if existingID, ok := c.state.pathIndex[dstPath]; ok {
-		if existingID == srcNode.id {
-			c.mu.Unlock()
-			return nil
-		}
-		replacedNodeID = existingID
-		if existingNode := c.state.nodesByID[existingID]; existingNode != nil {
-			replacedNode = existingNode
-			delete(existingNode.paths, dstPath)
-			existingNode.ctime = time.Now()
-			if len(existingNode.paths) == 0 {
-				existingNode.flags.unlinked = true
-				if existingNode.flags.backingName != "" && !hasOpenHandlesForNodeLocked(c, existingNode.id) {
-					orphanBacking = existingNode.flags.backingName
+			if srcRes.attr.Kind != EntryDirectory && dstRes.attr.Kind == EntryDirectory {
+				return syscall.EISDIR
+			}
+			if dstRes.attr.Kind == EntryDirectory {
+				children, cErr := readDirUnlocked(c, dstPath)
+				if cErr != nil {
+					return cErr
+				}
+				if len(children) > 0 {
+					return syscall.ENOTEMPTY
 				}
 			}
 		}
-	}
 
-	delete(c.state.pathIndex, srcPath)
-	delete(srcNode.paths, srcPath)
-	c.state.deletedPaths[srcPath] = deletedState{
-		ReplacedKind: srcRes.attr.Kind,
-		Timestamp:    time.Now(),
-	}
+		if _, err := ensureBaseCaptured(c, srcPath); err != nil {
+			return err
+		}
+		dstBase, err := ensureBaseCaptured(c, dstPath)
+		if err != nil {
+			return err
+		}
 
-	_, wasDeletedDir := c.state.deletedPaths[dstPath]
-	delete(c.state.deletedPaths, dstPath)
-	srcNode.paths[dstPath] = struct{}{}
-	srcNode.ctime = time.Now()
-	srcNode.flags.namespaceAdded = true
-	c.state.pathIndex[dstPath] = srcNode.id
-	updateOpenHandlesPathLocked(c, srcNode.id, srcPath, dstPath)
+		if srcRes.attr.Kind == EntryDirectory {
+			err := renameDirectorySubtree(c, srcPath, dstPath, dstExists, startGen)
+			if errors.Is(err, errNamespaceRetry) {
+				continue
+			}
+			return err
+		}
 
-	bumpParentDirGenLocked(c, srcPath)
-	bumpParentDirGenLocked(c, dstPath)
+		srcNode, err := ensureCopiedUpNode(c, srcPath, startGen)
+		if errors.Is(err, errNamespaceRetry) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 
-	opKind := JournalOpRename
-	if dstExists || replacedNodeID != 0 {
-		opKind = JournalOpRenameOver
+		runNamespacePreCommitHook(c, "rename", srcPath)
+
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			return ErrViewReleased
+		}
+		if c.state.nsGen != startGen || c.state.pathIndex[srcPath] != srcNode.id || srcNode.flags.unlinked ||
+			!isParentDirValidLocked(c, srcPath) || !isParentDirValidLocked(c, dstPath) {
+			c.mu.Unlock()
+			continue
+		}
+
+		var replacedNodeID NodeID
+		var replacedNode *privateNode
+		var orphanBacking string
+		if existingID, ok := c.state.pathIndex[dstPath]; ok {
+			if existingID == srcNode.id {
+				c.mu.Unlock()
+				return nil
+			}
+			replacedNodeID = existingID
+			if existingNode := c.state.nodesByID[existingID]; existingNode != nil {
+				if existingNode.kind == EntryDirectory {
+					c.mu.Unlock()
+					return syscall.EISDIR
+				}
+				replacedNode = existingNode
+				delete(existingNode.paths, dstPath)
+				existingNode.ctime = time.Now()
+				if len(existingNode.paths) == 0 {
+					existingNode.flags.unlinked = true
+					if existingNode.flags.backingName != "" && !hasOpenHandlesForNodeLocked(c, existingNode.id) {
+						orphanBacking = existingNode.flags.backingName
+					}
+				}
+			}
+		}
+
+		delete(c.state.pathIndex, srcPath)
+		delete(srcNode.paths, srcPath)
+		c.state.deletedPaths[srcPath] = deletedState{
+			ReplacedKind: srcRes.attr.Kind,
+			Timestamp:    time.Now(),
+		}
+
+		_, wasDeletedDir := c.state.deletedPaths[dstPath]
+		delete(c.state.deletedPaths, dstPath)
+		srcNode.paths[dstPath] = struct{}{}
+		srcNode.ctime = time.Now()
+		srcNode.flags.namespaceAdded = true
+		c.state.pathIndex[dstPath] = srcNode.id
+		updateOpenHandlesPathLocked(c, srcNode.id, srcPath, dstPath)
+
+		bumpParentDirGenLocked(c, srcPath)
+		bumpParentDirGenLocked(c, dstPath)
+
+		opKind := JournalOpRename
+		if dstExists || replacedNodeID != 0 {
+			opKind = JournalOpRenameOver
+		}
+		if wasDeletedDir || dstBase.Kind == EntryDirectory {
+			opKind = JournalOpReplaceDir
+		}
+		recordJournalLocked(c, opKind, dstPath, &srcPath, srcNode, 0)
+		var workDirFD = -1
+		if orphanBacking != "" && c.backing.workDirFile != nil {
+			workDirFD = int(c.backing.workDirFile.Fd())
+		}
+		c.mu.Unlock()
+		if orphanBacking != "" && workDirFD >= 0 && replacedNode != nil {
+			replacedNode.flags.ioMu.Lock()
+			_ = unlinkBackingFile(workDirFD, orphanBacking)
+			replacedNode.flags.ioMu.Unlock()
+		}
+		return nil
 	}
-	if wasDeletedDir || dstBase.Kind == EntryDirectory {
-		opKind = JournalOpReplaceDir
-	}
-	recordJournalLocked(c, opKind, dstPath, &srcPath, srcNode, 0)
-	var workDirFD = -1
-	if orphanBacking != "" && c.backing.workDirFile != nil {
-		workDirFD = int(c.backing.workDirFile.Fd())
-	}
-	c.mu.Unlock()
-	if orphanBacking != "" && workDirFD >= 0 && replacedNode != nil {
-		replacedNode.flags.ioMu.Lock()
-		_ = unlinkBackingFile(workDirFD, orphanBacking)
-		replacedNode.flags.ioMu.Unlock()
-	}
-	return nil
 }
 
-func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists bool) error {
+func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists bool, startGen uint64) error {
 	subtreePaths, err := collectDirectorySubtreePaths(c, srcPath)
 	if err != nil {
 		return err
 	}
 	srcPrefix := srcPath.Rel + "/"
 	for _, p := range subtreePaths {
-		if _, err := ensureCopiedUpNode(c, p); err != nil {
+		if _, err := ensureCopiedUpNode(c, p, startGen); err != nil {
 			return err
 		}
 		if strings.HasPrefix(p.Rel, srcPrefix) {
@@ -184,10 +209,22 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 		}
 	}
 
+	runNamespacePreCommitHook(c, "rename", srcPath)
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.state.released {
 		return ErrViewReleased
+	}
+	if c.state.nsGen != startGen || !isParentDirValidLocked(c, srcPath) || !isParentDirValidLocked(c, dstPath) {
+		return errNamespaceRetry
+	}
+	if hasPrivateChildrenLocked(c, dstPath) {
+		return syscall.ENOTEMPTY
+	}
+	srcID, ok := c.state.pathIndex[srcPath]
+	if !ok || c.state.nodesByID[srcID] == nil || c.state.nodesByID[srcID].flags.unlinked || c.state.nodesByID[srcID].kind != EntryDirectory {
+		return errNamespaceRetry
 	}
 
 	var affected []QualifiedPath
@@ -217,6 +254,15 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 			newRel = joinRel(dstPath.Rel, suffix)
 		}
 		newQP := QualifiedPath{RootID: dstPath.RootID, Rel: newRel}
+		if existingID, exists := c.state.pathIndex[newQP]; exists && existingID != nid {
+			if existingNode := c.state.nodesByID[existingID]; existingNode != nil {
+				delete(existingNode.paths, newQP)
+				existingNode.ctime = now
+				if len(existingNode.paths) == 0 {
+					existingNode.flags.unlinked = true
+				}
+			}
+		}
 		delete(c.state.deletedPaths, newQP)
 		delete(node.paths, oldQP)
 		node.paths[newQP] = struct{}{}

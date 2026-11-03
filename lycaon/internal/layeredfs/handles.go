@@ -1,10 +1,36 @@
 package layeredfs
 
 import (
+	"errors"
 	"os"
 	"syscall"
 	"time"
 )
+
+// ReadFile reads the entire contents of qpath from whichever layer owns it.
+func (c *Core) ReadFile(qpath QualifiedPath) ([]byte, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return nil, err
+	}
+	defer c.barrier.leaveOp()
+	hid, attr, err := openAdmitted(c, qpath, OpenReadOnly, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = closeHandleAdmitted(c, hid) }()
+	if attr.Kind != EntryRegular {
+		return nil, syscall.EISDIR
+	}
+	buf := make([]byte, attr.Size)
+	if attr.Size == 0 {
+		return buf, nil
+	}
+	n, rErr := readHandleAdmitted(c, hid, buf, 0)
+	if rErr != nil && n == 0 {
+		return nil, rErr
+	}
+	return buf[:n], nil
+}
 
 // Open resolves qpath and opens a view-scoped handle.
 func (c *Core) Open(qpath QualifiedPath, flags OpenFlags, mode os.FileMode) (HandleID, EntryAttr, error) {
@@ -24,23 +50,41 @@ func (c *Core) Open(qpath QualifiedPath, flags OpenFlags, mode os.FileMode) (Han
 
 func openAdmitted(c *Core, qpath QualifiedPath, flags OpenFlags, mode os.FileMode) (HandleID, EntryAttr, error) {
 	writeIntent := flags.hasWriteIntent()
-	parentPath, name, err := resolveParentDir(c, qpath, writeIntent)
-	if err != nil {
-		if !writeIntent && cleanRelPath(qpath.Rel) == "." {
-			return openRootDirHandle(c, qpath)
-		}
-		return 0, EntryAttr{}, err
-	}
-	targetPath := QualifiedPath{RootID: parentPath.RootID, Rel: joinRel(parentPath.Rel, name)}
-	targetPath, err = checkGitAccess(c, targetPath, writeIntent)
-	if err != nil {
-		return 0, EntryAttr{}, err
-	}
-
 	if !writeIntent {
+		parentPath, name, err := resolveParentDir(c, qpath, false)
+		if err != nil {
+			if cleanRelPath(qpath.Rel) == "." {
+				return openRootDirHandle(c, qpath)
+			}
+			return 0, EntryAttr{}, err
+		}
+		targetPath := QualifiedPath{RootID: parentPath.RootID, Rel: joinRel(parentPath.Rel, name)}
+		targetPath, err = checkGitAccess(c, targetPath, false)
+		if err != nil {
+			return 0, EntryAttr{}, err
+		}
 		return openReadOnlyTarget(c, targetPath, flags)
 	}
-	return openMutableTarget(c, targetPath, flags, mode)
+	for {
+		startGen, err := currentNamespaceGen(c)
+		if err != nil {
+			return 0, EntryAttr{}, err
+		}
+		parentPath, name, err := resolveParentDir(c, qpath, true)
+		if err != nil {
+			return 0, EntryAttr{}, err
+		}
+		targetPath := QualifiedPath{RootID: parentPath.RootID, Rel: joinRel(parentPath.Rel, name)}
+		targetPath, err = checkGitAccess(c, targetPath, true)
+		if err != nil {
+			return 0, EntryAttr{}, err
+		}
+		hid, attr, err := openMutableTarget(c, targetPath, flags, mode, startGen)
+		if errors.Is(err, errNamespaceRetry) {
+			continue
+		}
+		return hid, attr, err
+	}
 }
 
 func openRootDirHandle(c *Core, qpath QualifiedPath) (HandleID, EntryAttr, error) {
@@ -158,7 +202,7 @@ func openReadOnlyStream(c *Core, res resolvedLayerEntry) (ReadSeekCloser, error)
 	return r, err
 }
 
-func openMutableTarget(c *Core, targetPath QualifiedPath, flags OpenFlags, mode os.FileMode) (HandleID, EntryAttr, error) {
+func openMutableTarget(c *Core, targetPath QualifiedPath, flags OpenFlags, mode os.FileMode, startGen uint64) (HandleID, EntryAttr, error) {
 	followFinal := flags&OpenNoFollow == 0
 	existingRes, lookErr := resolvePath(c, targetPath, followFinal, true)
 	if lookErr == nil && existingRes.attr.Kind == EntrySymlink {
@@ -187,31 +231,33 @@ func openMutableTarget(c *Core, targetPath QualifiedPath, flags OpenFlags, mode 
 		return 0, EntryAttr{}, err
 	}
 
-	var node *privateNode
-	for {
-		c.mu.Lock()
-		if c.state.released {
-			c.mu.Unlock()
-			return 0, EntryAttr{}, ErrViewReleased
-		}
-		var nErr error
-		node, nErr = ensureWritableNodeLocked(c, effPath, base, flags, mode)
+	runNamespacePreCommitHook(c, "open", effPath)
+
+	c.mu.Lock()
+	if c.state.released {
 		c.mu.Unlock()
-		if nErr != nil {
-			return 0, EntryAttr{}, nErr
-		}
-		node.flags.ioMu.Lock()
-		c.mu.Lock()
-		if c.state.released {
-			c.mu.Unlock()
-			node.flags.ioMu.Unlock()
-			return 0, EntryAttr{}, ErrViewReleased
-		}
-		if !node.flags.unlinked && c.state.pathIndex[effPath] == node.id {
-			break
-		}
+		return 0, EntryAttr{}, ErrViewReleased
+	}
+	if c.state.nsGen != startGen || !isParentDirValidLocked(c, effPath) {
+		c.mu.Unlock()
+		return 0, EntryAttr{}, errNamespaceRetry
+	}
+	node, nErr := ensureWritableNodeLocked(c, effPath, base, flags, mode, startGen)
+	c.mu.Unlock()
+	if nErr != nil {
+		return 0, EntryAttr{}, nErr
+	}
+	node.flags.ioMu.Lock()
+	c.mu.Lock()
+	if c.state.released {
 		c.mu.Unlock()
 		node.flags.ioMu.Unlock()
+		return 0, EntryAttr{}, ErrViewReleased
+	}
+	if node.flags.unlinked || c.state.pathIndex[effPath] != node.id {
+		c.mu.Unlock()
+		node.flags.ioMu.Unlock()
+		return 0, EntryAttr{}, errNamespaceRetry
 	}
 	defer node.flags.ioMu.Unlock()
 	defer c.mu.Unlock()
