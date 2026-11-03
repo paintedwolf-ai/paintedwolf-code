@@ -605,7 +605,6 @@ func mergeOfferedToolGuidance(offered []string, into map[string]any) {
 	for _, name := range []string{"render_view", "capture_page", "measure_page", "page_open", "page_snapshot", "page_act", "page_close", "view_image", "view_video", "update_progress", "delegate_dispatch", "delegate_decompose", "write", "edit", "replace_lines", "restore_version", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board", "process_list", "process_signal", "command_output", "command_stop"} {
 		into["profile_has_"+name] = set[name]
 	}
-	into["progress_gated_tools"] = orderedEnabledTools([]string{"write", "edit", "replace_lines", "restore_version", "task", "delegate_dispatch", "delegate_decompose"}, set)
 	into["profile_has_page_controls"] = set["page_open"] || set["page_snapshot"] || set["page_act"] || set["page_close"]
 	into["profile_has_scan_drilldown"] = profileHasScanDrilldownTools(set)
 	into["profile_has_managed_secrets"] = set["secret_generate"] && set["secret_list"] && set["secret_revoke"]

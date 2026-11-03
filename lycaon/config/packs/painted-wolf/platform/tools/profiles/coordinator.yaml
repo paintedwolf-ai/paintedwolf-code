@@ -1,5 +1,5 @@
 id: coordinator
-description: Coordinator tool surface — orchestration without product repo writes
+description: Coordinator tools — orchestration, scoped inline work, and worker integration
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   recall: sticky
