@@ -366,7 +366,9 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: invocation.MaximumProgramInputBytes, OutputBytes: invocation.MaximumProgramInputBytes, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
-		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, screening)
+		outputScreening := screening
+		outputScreening.Policy = secretmatch.StreamPolicy{ManagedEchoes: true}
+		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, outputScreening)
 		if err != nil {
 			return err
 		}

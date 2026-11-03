@@ -70,7 +70,7 @@ func (r *Output) Promote(ctx context.Context, sessionID, handle string) error {
 	}
 	if r.publish != nil {
 		proc.publishMu.Lock()
-		projection := r.projectWindow(ctx, proc)
+		projection := r.projectWindow(ctx, proc, 0)
 		tail := projection.Text
 		if !projection.Screened && !projection.Empty {
 			tail = captureUnavailableText

@@ -38,7 +38,7 @@ func TestSnapshotKeepsScreenedOutputBeyondTheTail(t *testing.T) {
 	}
 }
 
-func TestSnapshotOutputUnscreenedWithoutProjector(t *testing.T) {
+func TestSnapshotOutputSuppressedWithoutProjector(t *testing.T) {
 	h := newProjectionHarness(t, DefaultRingBufferBytes)
 	h.reg.Output.SetCaptureProjector(nil)
 	h.write("stdout", "plain output")
@@ -50,7 +50,7 @@ func TestSnapshotOutputUnscreenedWithoutProjector(t *testing.T) {
 	if snap.OutputScreened {
 		t.Fatal("an unwired projector cannot vouch for the output")
 	}
-	if snap.Output != snap.Tail || !strings.Contains(snap.Output, "plain output") {
+	if snap.Output != snap.Tail || snap.Output != captureUnavailableText {
 		t.Fatalf("output/tail = %q / %q", snap.Output, snap.Tail)
 	}
 }
