@@ -15,11 +15,10 @@ import (
 )
 
 type exportEntry struct {
-	cap        ExportCapability
-	core       *layeredfs.Core
-	viewHash   uint64
-	mounted    bool
-	activeConn *connState
+	cap      ExportCapability
+	core     *layeredfs.Core
+	viewHash uint64
+	mounted  bool
 }
 
 type serverState struct {
@@ -69,17 +68,13 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 	}
 	s := &Server{
 		core: core, cfg: cfg, listener: ln,
-		handles:   newHandleTable(secret, cfg.MaxHandles),
-		dirs:      newDirCache(secret, cfg.MaxDirListings),
-		stability: newStabilityEngine(),
-		workSem:   make(chan struct{}, cfg.MaxConcurrentRPCs),
-		queue:     make(chan func(), cfg.MaxQueuedRPCs),
+		handles: newHandleTable(secret, cfg.MaxHandles), dirs: newDirCache(secret, cfg.MaxDirListings),
+		stability: newStabilityEngine(), workSem: make(chan struct{}, cfg.MaxConcurrentRPCs),
+		queue: make(chan func(), cfg.MaxQueuedRPCs),
 		state: serverState{
-			cores:       map[ViewID]*layeredfs.Core{core.ViewID(): core},
-			readOnly:    make(map[ViewID]bool),
-			exportsByID: make(map[string]*exportEntry),
-			exportsByVH: make(map[uint64][]*exportEntry),
-			conns:       make(map[net.Conn]struct{}),
+			cores: map[ViewID]*layeredfs.Core{core.ViewID(): core}, readOnly: make(map[ViewID]bool),
+			exportsByID: make(map[string]*exportEntry), exportsByVH: make(map[uint64][]*exportEntry),
+			conns: make(map[net.Conn]struct{}),
 		},
 	}
 	s.state.wg.Add(2)
@@ -154,11 +149,9 @@ func (s *Server) RegisterExportWithUID(
 	if err != nil {
 		return ExportCapability{}, err
 	}
-
 	s.state.mu.RLock()
 	ro := s.state.readOnly[viewID]
 	s.state.mu.RUnlock()
-
 	exportPath := fmt.Sprintf("/views/%s/%s/%s", viewID, root, token)
 	capCfg := ExportCapability{
 		ViewID: viewID, Root: root, Token: token,
@@ -166,7 +159,6 @@ func (s *Server) RegisterExportWithUID(
 	}
 	s.handles.RegisterView(viewID)
 	s.handles.Ensure(viewID, rootQPath, meta, true, false)
-
 	vHash := computeViewHash(viewID)
 	entry := &exportEntry{cap: capCfg, core: viewCore, viewHash: vHash}
 	s.state.mu.Lock()
@@ -211,6 +203,13 @@ func (s *Server) WriteVerifier() [8]byte { return s.stability.WriteVerifier() }
 
 // HandleCount returns the current number of cached handles in the bounded handle table.
 func (s *Server) HandleCount() int { return s.handles.Count() }
+
+// ActiveConnections returns the current number of admitted client TCP connections.
+func (s *Server) ActiveConnections() int {
+	s.state.mu.RLock()
+	defer s.state.mu.RUnlock()
+	return len(s.state.conns)
+}
 
 // ResolveHandleForView resolves a raw wire handle in O(1) and verifies it belongs to expectedView.
 func (s *Server) ResolveHandleForView(raw []byte, expectedView ViewID) (layeredfs.QualifiedPath, error) {
@@ -277,10 +276,10 @@ func runAcceptLoop(s *Server) {
 			continue
 		}
 		s.state.mu.Lock()
-		if s.state.closed.Load() {
+		if s.state.closed.Load() || len(s.state.conns) >= s.cfg.MaxConnections {
 			s.state.mu.Unlock()
 			_ = conn.Close()
-			return
+			continue
 		}
 		s.state.conns[conn] = struct{}{}
 		s.state.mu.Unlock()

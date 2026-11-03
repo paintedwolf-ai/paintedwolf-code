@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	nfs "github.com/willscott/go-nfs"
 )
@@ -14,6 +15,7 @@ import (
 type connState struct {
 	mu            sync.Mutex
 	boundViewHash uint64
+	mountDenied   bool
 }
 
 func (cs *connState) getBoundView() uint64 {
@@ -25,16 +27,28 @@ func (cs *connState) getBoundView() uint64 {
 func (cs *connState) bindView(vHash uint64) bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	if cs.boundViewHash != 0 && cs.boundViewHash != vHash {
+	if cs.mountDenied || (cs.boundViewHash != 0 && cs.boundViewHash != vHash) {
 		return false
 	}
 	cs.boundViewHash = vHash
 	return true
 }
 
+func (cs *connState) denyMount() {
+	cs.mu.Lock()
+	cs.mountDenied = true
+	cs.mu.Unlock()
+}
+
+func (cs *connState) isMountDenied() bool {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return cs.mountDenied
+}
+
 func (cs *connState) clearView(vHash uint64) {
 	cs.mu.Lock()
-	if cs.boundViewHash == vHash {
+	if vHash == 0 || cs.boundViewHash == vHash {
 		cs.boundViewHash = 0
 	}
 	cs.mu.Unlock()
@@ -49,9 +63,8 @@ type rpcCallHeader struct {
 func serveConn(s *Server, conn net.Conn) {
 	var writeMu sync.Mutex
 	cs := &connState{}
-	defer releaseConnState(s, cs)
 	for {
-		payload, err := readRPCMessage(conn, s.cfg.MaxRequestBytes)
+		payload, err := readRPCMessage(conn, s.cfg.MaxRequestBytes, s.cfg.IdleTimeout, s.cfg.ReadHeaderTimeout)
 		if err != nil || s.state.closed.Load() {
 			return
 		}
@@ -77,12 +90,23 @@ func serveConn(s *Server, conn net.Conn) {
 	}
 }
 
-// readRPCMessage reads a record-marked RPC message while enforcing maxBytes before allocating.
-func readRPCMessage(r io.Reader, maxBytes int) ([]byte, error) {
+// readRPCMessage reads a record-marked RPC message while enforcing maxBytes and per-record deadlines.
+func readRPCMessage(conn net.Conn, maxBytes int, idleTimeout, recordTimeout time.Duration) ([]byte, error) {
 	var total []byte
+	firstFrag := true
 	for {
 		var hdrBuf [4]byte
-		if _, err := io.ReadFull(r, hdrBuf[:]); err != nil {
+		if firstFrag {
+			_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))
+			if _, err := io.ReadFull(conn, hdrBuf[:1]); err != nil {
+				return nil, err
+			}
+			_ = conn.SetReadDeadline(time.Now().Add(recordTimeout))
+			if _, err := io.ReadFull(conn, hdrBuf[1:4]); err != nil {
+				return nil, err
+			}
+			firstFrag = false
+		} else if _, err := io.ReadFull(conn, hdrBuf[:]); err != nil {
 			return nil, err
 		}
 		hdr := binary.BigEndian.Uint32(hdrBuf[:])
@@ -93,15 +117,17 @@ func readRPCMessage(r io.Reader, maxBytes int) ([]byte, error) {
 		}
 		if fragLen > 0 {
 			frag := make([]byte, fragLen)
-			if _, err := io.ReadFull(r, frag); err != nil {
+			if _, err := io.ReadFull(conn, frag); err != nil {
 				return nil, err
 			}
 			if len(total) == 0 && isLast {
+				_ = conn.SetReadDeadline(time.Time{})
 				return frag, nil
 			}
 			total = append(total, frag...)
 		}
 		if isLast {
+			_ = conn.SetReadDeadline(time.Time{})
 			return total, nil
 		}
 	}
@@ -162,11 +188,10 @@ func readRPCAuth(r *bytes.Reader) (authCred, error) {
 	if cred.MachineName, err = readStringBounded(br, 255); err != nil {
 		return authCred{}, err
 	}
-	if cred.UID, err = readUint32(br); err != nil {
-		return authCred{}, err
-	}
-	if cred.GID, err = readUint32(br); err != nil {
-		return authCred{}, err
+	for _, dst := range []*uint32{&cred.UID, &cred.GID} {
+		if *dst, err = readUint32(br); err != nil {
+			return authCred{}, err
+		}
 	}
 	numGroups, err := readUint32(br)
 	if err != nil || numGroups > 64 {
@@ -210,7 +235,6 @@ func handleRPCPayload(s *Server, cs *connState, payload []byte) []byte {
 	if call.RPCVers != rpcVersion2 {
 		return encodeRPCMismatchReply(call.XID, rpcVersion2, rpcVersion2)
 	}
-
 	switch call.Prog {
 	case mountProgramID:
 		if call.Vers != mountVersion3 {
@@ -230,15 +254,10 @@ func handleRPCPayload(s *Server, cs *connState, payload []byte) []byte {
 func encodeAcceptedReply(xid uint32, acceptStat nfs.ResponseCode, body []byte) []byte {
 	var out bytes.Buffer
 	out.Grow(24 + len(body))
-	writeUint32(&out, xid)
-	writeUint32(&out, 1) // REPLY
-	writeUint32(&out, 0) // MSG_ACCEPTED
-	writeUint32(&out, 0) // AUTH_NULL verifier flavor
-	writeUint32(&out, 0) // AUTH_NULL verifier length
-	writeUint32(&out, uint32(acceptStat))
-	if len(body) > 0 {
-		_, _ = out.Write(body)
+	for _, v := range []uint32{xid, 1, 0, 0, 0, uint32(acceptStat)} {
+		writeUint32(&out, v)
 	}
+	_, _ = out.Write(body)
 	return out.Bytes()
 }
 
@@ -251,29 +270,14 @@ func encodeProgMismatchReply(xid, low, high uint32) []byte {
 
 func encodeRPCMismatchReply(xid, low, high uint32) []byte {
 	var out bytes.Buffer
-	writeUint32(&out, xid)
-	writeUint32(&out, 1) // REPLY
-	writeUint32(&out, 1) // MSG_DENIED
-	writeUint32(&out, 0) // RPC_MISMATCH
-	writeUint32(&out, low)
-	writeUint32(&out, high)
+	for _, v := range []uint32{xid, 1, 1, 0, low, high} {
+		writeUint32(&out, v)
+	}
 	return out.Bytes()
 }
 
-func releaseConnState(s *Server, cs *connState) {
-	s.state.mu.Lock()
-	defer s.state.mu.Unlock()
-	for _, entries := range s.state.exportsByVH {
-		for _, e := range entries {
-			if e.activeConn == cs {
-				e.activeConn = nil
-			}
-		}
-	}
-}
-
 func resolveAndAuthHandle(s *Server, cs *connState, cred authCred, raw []byte) (*handleRecord, *exportEntry, error) {
-	if cred.Flavor != nfs.AuthFlavorUnix {
+	if cred.Flavor != nfs.AuthFlavorUnix || cs.isMountDenied() {
 		return nil, nil, ErrUnauthorizedRPC
 	}
 	rec, err := s.handles.Resolve(raw, cs.getBoundView())
@@ -283,16 +287,12 @@ func resolveAndAuthHandle(s *Server, cs *connState, cred authCred, raw []byte) (
 	s.state.mu.Lock()
 	defer s.state.mu.Unlock()
 	for _, e := range s.state.exportsByVH[rec.key.viewHash] {
-		if !e.mounted || e.cap.AllowedUID != cred.UID {
-			continue
-		}
-		if e.activeConn != nil && e.activeConn != cs {
+		if !e.mounted || e.cap.AllowedUID != cred.UID || e.cap.AllowedGID != cred.GID {
 			continue
 		}
 		if !cs.bindView(rec.key.viewHash) {
 			return nil, nil, ErrCrossViewHandle
 		}
-		e.activeConn = cs
 		return rec, e, nil
 	}
 	return nil, nil, ErrUnauthorizedRPC

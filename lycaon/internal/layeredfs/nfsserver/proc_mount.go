@@ -35,21 +35,18 @@ func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	}
 	dirPath = "/" + strings.Trim(dirPath, "/")
 	if call.Cred.Flavor != nfs.AuthFlavorUnix {
+		cs.denyMount()
 		return encodeMountStatus(call.XID, nfs.MountStatusErrAcces)
 	}
 
 	s.state.mu.Lock()
 	entry, ok := s.state.exportsByID[dirPath]
-	if !ok || entry.cap.AllowedUID != call.Cred.UID {
-		s.state.mu.Unlock()
-		return encodeMountStatus(call.XID, nfs.MountStatusErrAcces)
-	}
-	if !cs.bindView(entry.viewHash) {
+	if !ok || entry.cap.AllowedUID != call.Cred.UID || entry.cap.AllowedGID != call.Cred.GID || !cs.bindView(entry.viewHash) {
+		cs.denyMount()
 		s.state.mu.Unlock()
 		return encodeMountStatus(call.XID, nfs.MountStatusErrAcces)
 	}
 	entry.mounted = true
-	entry.activeConn = cs
 	capCfg := entry.cap
 	viewCore := entry.core
 	s.state.mu.Unlock()
@@ -76,11 +73,11 @@ func onUmnt(s *Server, cs *connState, call rpcCallHeader) []byte {
 	}
 	dirPath = "/" + strings.Trim(dirPath, "/")
 	s.state.mu.Lock()
-	if entry, ok := s.state.exportsByID[dirPath]; ok && call.Cred.Flavor == nfs.AuthFlavorUnix && entry.cap.AllowedUID == call.Cred.UID {
+	if entry, ok := s.state.exportsByID[dirPath]; ok &&
+		call.Cred.Flavor == nfs.AuthFlavorUnix &&
+		entry.cap.AllowedUID == call.Cred.UID &&
+		entry.cap.AllowedGID == call.Cred.GID {
 		entry.mounted = false
-		if entry.activeConn == cs {
-			entry.activeConn = nil
-		}
 		cs.clearView(entry.viewHash)
 	}
 	s.state.mu.Unlock()
@@ -88,14 +85,16 @@ func onUmnt(s *Server, cs *connState, call rpcCallHeader) []byte {
 }
 
 func onUmntAll(s *Server, cs *connState, call rpcCallHeader) []byte {
-	vHash := cs.getBoundView()
-	if vHash != 0 && call.Cred.Flavor == nfs.AuthFlavorUnix {
+	if call.Cred.Flavor == nfs.AuthFlavorUnix {
+		vHash := cs.getBoundView()
 		s.state.mu.Lock()
-		for _, entry := range s.state.exportsByVH[vHash] {
-			if entry.cap.AllowedUID == call.Cred.UID {
-				entry.mounted = false
-				if entry.activeConn == cs {
-					entry.activeConn = nil
+		for vh, entries := range s.state.exportsByVH {
+			if vHash != 0 && vh != vHash {
+				continue
+			}
+			for _, entry := range entries {
+				if entry.cap.AllowedUID == call.Cred.UID && entry.cap.AllowedGID == call.Cred.GID {
+					entry.mounted = false
 				}
 			}
 		}

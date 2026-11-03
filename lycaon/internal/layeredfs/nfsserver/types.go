@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	nfs "github.com/willscott/go-nfs"
@@ -15,8 +16,11 @@ const (
 	DefaultMaxRequestBytes   = 1 << 20 // 1 MiB maximum RPC record payload.
 	DefaultMaxConcurrentRPCs = 32
 	DefaultMaxQueuedRPCs     = 128
+	DefaultMaxConnections    = 64
 	DefaultMaxHandles        = 8192
 	DefaultMaxDirListings    = 512
+	DefaultReadHeaderTimeout = 5 * time.Second
+	DefaultIdleTimeout       = 30 * time.Second
 
 	// HandleSize is the fixed wire length of an authenticated Lycaon NFSv3 file handle.
 	HandleSize = 56
@@ -84,12 +88,13 @@ type Config struct {
 	MaxRequestBytes   int
 	MaxConcurrentRPCs int
 	MaxQueuedRPCs     int
+	MaxConnections    int
 	MaxHandles        int
 	MaxDirListings    int
+	ReadHeaderTimeout time.Duration
+	IdleTimeout       time.Duration
 	ExpectedUID       uint32
 	ExpectedGID       uint32
-	HasExpectedUID    bool
-	HasExpectedGID    bool
 	FaultInjector     *FaultInjector
 }
 
@@ -106,16 +111,25 @@ func (c Config) withDefaults() Config {
 	if c.MaxQueuedRPCs <= 0 {
 		c.MaxQueuedRPCs = DefaultMaxQueuedRPCs
 	}
+	if c.MaxConnections <= 0 {
+		c.MaxConnections = DefaultMaxConnections
+	}
 	if c.MaxHandles <= 0 {
 		c.MaxHandles = DefaultMaxHandles
 	}
 	if c.MaxDirListings <= 0 {
 		c.MaxDirListings = DefaultMaxDirListings
 	}
-	if !c.HasExpectedUID && c.ExpectedUID == 0 {
-		c.ExpectedUID = uint32(os.Geteuid())
+	if c.ReadHeaderTimeout <= 0 && c.IdleTimeout <= 0 {
+		c.ReadHeaderTimeout = DefaultReadHeaderTimeout
+		c.IdleTimeout = DefaultIdleTimeout
+	} else if c.ReadHeaderTimeout <= 0 {
+		c.ReadHeaderTimeout = c.IdleTimeout
+	} else if c.IdleTimeout <= 0 {
+		c.IdleTimeout = c.ReadHeaderTimeout
 	}
-	if !c.HasExpectedGID && c.ExpectedGID == 0 {
+	if c.ExpectedUID == 0 && c.ExpectedGID == 0 {
+		c.ExpectedUID = uint32(os.Geteuid())
 		c.ExpectedGID = uint32(os.Getegid())
 	}
 	return c

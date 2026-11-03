@@ -49,8 +49,7 @@ func newTestEnv(t *testing.T, fault *nfsserver.FaultInjector) *testEnv {
 	t.Cleanup(func() { _ = core.ReleaseView() })
 	uid, gid := uint32(os.Geteuid()), uint32(os.Getegid())
 	srv, err := nfsserver.New(core, nfsserver.Config{
-		ListenAddr: "127.0.0.1:0", ExpectedUID: uid, ExpectedGID: gid,
-		HasExpectedUID: true, HasExpectedGID: true, FaultInjector: fault,
+		ListenAddr: "127.0.0.1:0", ExpectedUID: uid, ExpectedGID: gid, FaultInjector: fault,
 	})
 	if err != nil {
 		t.Fatalf("nfsserver.New: %v", err)
