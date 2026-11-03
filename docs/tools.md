@@ -8,6 +8,26 @@ Tools are structured capabilities published with argument schema, execution poli
 
 ---
 
+## Command operations and structured tools
+
+`command` is the single model entry point for filesystem work, source inspection,
+search, structural edits, repository surveys, summarization, Git operations, and
+process inspection or signals. Its native forms use the existing operation
+implementations, admission, source observations, mutation receipts, and recovery.
+An operation identity in a receipt is not a callable tool name.
+
+Structured tools manage capabilities with a distinct host lifecycle: worker and
+workflow coordination, overlays, source history and restoration, user decisions,
+managed secrets, browser and terminal sessions, retained command results, and
+verification of the selected project check. They remain discoverable on the
+surfaces that permit them. `verify` retains its selected-command enforcement and
+terminal verdict; ordinary scoped checks use `command(verification=true)`.
+
+Tool catalogs, exact-name discovery, standing surfaces, and training exports use
+the same callable roster. Native operation schemas describe execution contracts;
+they do not introduce additional tool choices. Retired public tool names name
+`command` as their successor and retain their recorded historical meanings.
+
 ## Portable command language version 1
 
 The versioned catalog defines the program language and native utility contracts.

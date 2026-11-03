@@ -1591,7 +1591,7 @@
       "aliases": [],
       "family": "inspect",
       "owner": "summarization",
-      "argv": "summarize --path PATH [--focus TEXT]",
+      "argv": "summarize --path PATH [--focus TEXT] [--cursor TOKEN]",
       "forms": [
         {
           "spellings": [
@@ -1615,6 +1615,18 @@
           "consumption": "fixed",
           "sample_values": [
             "alpha"
+          ]
+        },
+        {
+          "spellings": [
+            "--cursor"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "summarize-option-cursor",
+          "consumption": "fixed",
+          "sample_values": [
+            "continuation-token"
           ]
         }
       ],
@@ -1666,7 +1678,7 @@
           }
         }
       },
-      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "notes": "Prints a structured summary of pinned source. Follow-up actions name command and carry literal native programs; --cursor continues the same path and focus. Digest text orients; source windows carry evidence.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/summarize.go",
         "tests": [

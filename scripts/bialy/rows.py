@@ -14,7 +14,7 @@ RETENTION_SCHEMA = "pw-retention-row/1"
 RETENTION_TRUTH = ("needed", "later")
 
 
-def load(path, schema=SCHEMA):
+def load(path, schema=SCHEMA, *, corpus=None):
     """Every row of a JSON-lines file, refusing any row of another shape."""
     rows = []
     with open(path, encoding="utf-8") as fh:
@@ -24,6 +24,11 @@ def load(path, schema=SCHEMA):
             row = json.loads(line)
             if row.get("schema") != schema:
                 raise ValueError("%s:%d: schema %r, want %r" % (path, n, row.get("schema"), schema))
+            if schema == SCHEMA and corpus is not None:
+                try:
+                    corpus.validate_row(row)
+                except ValueError as exc:
+                    raise ValueError("%s:%d: %s" % (path, n, exc)) from exc
             rows.append(row)
     return rows
 
@@ -99,7 +104,7 @@ def tool_targets(row, rule="consensus"):
     else:
         pairs = tool_pairs(row)
         targets = {t: (1 if pairs[t][0] >= 3 else (0 if pairs[t][1] <= 1 else None)) if t in pairs else None for t in offered}
-    targets.update({t: 1 for t in labels["requested_names"]})
+    targets.update({t: 1 for t in labels["requested_names"] if t in offered})
     return targets
 
 

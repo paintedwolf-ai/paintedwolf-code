@@ -27,7 +27,6 @@ func testBoundary(t *testing.T) *sandbox.Boundary {
 func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 	boundary := testBoundary(t)
 	writeTool := &native.WriteTool{Boundary: boundary}
-	editTool := &native.EditTool{Boundary: boundary}
 
 	tmpDir := t.TempDir()
 	blueprintsDir := filepath.Join(tmpDir, filepath.FromSlash(settingsoverlay.Rel("blueprints")))
@@ -66,9 +65,6 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 		}},
 		{"create missing", "write", "src/new.py", func() (string, error) {
 			return writeTool.Run(t.Context(), map[string]any{"path": "src/new.py", "content": "print('nope')\n"}, tctx)
-		}},
-		{"edit existing", "edit", "src/main.py", func() (string, error) {
-			return editTool.Run(t.Context(), map[string]any{"path": "src/main.py", "old_string": "unchanged", "new_string": "changed"}, tctx)
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

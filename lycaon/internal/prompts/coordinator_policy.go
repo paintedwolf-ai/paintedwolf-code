@@ -81,6 +81,8 @@ func CoordinatorPolicyTemplateVars(offered, requestable []string) map[string]any
 	out["recall_may_widen"] = true
 	out["more_tools_loadable"] = len(requestable) > 0
 	out["profile_can_request"] = requestableToolSet(offered, requestable)
+	available := append(append([]string(nil), offered...), requestable...)
+	out["profile_mutation_capable"] = ToolNamesMutationCapable(available)
 	MergeHTTPActionVars(offered, out)
 	return out
 }

@@ -69,6 +69,7 @@ func TestEffectiveAdvancePolicyShippedManifestParity(t *testing.T) {
 		"plan@1.0.1":            {},
 		"plan@1.0.0":            {},
 		"recon-pack@1.0.0":      {},
+		"security-survey@2.0.1": {},
 		"security-survey@2.0.0": {},
 		"security-survey@1.0.0": {},
 		"options@1.0.0":         {},

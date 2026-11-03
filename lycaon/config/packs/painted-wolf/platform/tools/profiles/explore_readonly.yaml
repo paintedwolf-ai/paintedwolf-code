@@ -10,8 +10,6 @@ tools:
   request_budget: sticky
   surface_note: sticky
   complete_leg: sticky
-  summarize: sticky
-  survey_repo: sticky
   source_history: true
   scan_list: true
   scan_summary: true

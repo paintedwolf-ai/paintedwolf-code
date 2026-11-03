@@ -37,6 +37,9 @@ func TestCodeRewriteRecursiveSurveyPreservesCaptureAndPublication(t *testing.T) 
 			effects := toolcontract.EffectCompleted
 			if dryRun {
 				effects = toolcontract.NoEffect
+				if !strings.Contains(result.stdout, "-func f() int { return 1 + 2 }") || !strings.Contains(result.stdout, "+func f() int { return 3 }") {
+					t.Fatalf("missing preview: %q", result.stdout)
+				}
 			}
 			if result.result.EffectCertainty != effects {
 				t.Fatalf("effects %+v", result.result)

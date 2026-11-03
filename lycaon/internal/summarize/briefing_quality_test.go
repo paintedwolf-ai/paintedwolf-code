@@ -44,7 +44,7 @@ func TestBriefingRetainsRelevantSectionAcrossDefinitionDensity(t *testing.T) {
 }
 
 func TestNextActionArgumentsAreExecutableReadRange(t *testing.T) {
-	actionInput, err := (NextAction{Tool: "read", Path: "source.go", Lines: "40-63", Why: "Inspect source detail"}).PortableInspection()
+	actionInput, err := (NextAction{Tool: "read", Path: "source.go", Lines: "40-63", Why: "Inspect source detail"}).CommandFollowup()
 	testutil.FailErr(t, "select explicit active portable entry", err)
 	raw, err := json.Marshal(actionInput)
 	testutil.FailErr(t, "encode read action", err)
@@ -150,7 +150,7 @@ func TestSourceFocusUsesCodeIdentifiersForBroadQuestion(t *testing.T) {
 func TestInspectionActionsAreLiteralPortableCommands(t *testing.T) {
 	path := "src/quote'$(touch marker);\\native\nfile.go"
 	for _, tool := range []string{"read", "grep", "find", "list_dir"} {
-		action, err := (NextAction{Tool: tool, Path: path, Pattern: "a'$(false)"}).PortableInspection()
+		action, err := (NextAction{Tool: tool, Path: path, Pattern: "a'$(false)"}).CommandFollowup()
 		testutil.FailErr(t, "select explicit portable action", err)
 		raw, err := json.Marshal(action)
 		testutil.FailErr(t, "encode actual inspection action", err)
@@ -183,7 +183,7 @@ func TestInspectionActionsAreLiteralPortableCommands(t *testing.T) {
 		}
 	}
 	for _, path := range []string{"bad\x00path", "bad\xffpath"} {
-		if _, err := (NextAction{Tool: "read", Path: path}).PortableInspection(); err == nil {
+		if _, err := (NextAction{Tool: "read", Path: path}).CommandFollowup(); err == nil {
 			t.Fatal("unrepresentable command source silently changed")
 		}
 	}
