@@ -3,13 +3,14 @@ id: LIST_DIR_PATH_NOT_FOUND
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - list_dir
 requires:
   profiles:
     - filesystem
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.path
 when: paintedwolf.rejection_code == "LIST_DIR_PATH_NOT_FOUND"

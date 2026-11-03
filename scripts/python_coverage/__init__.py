@@ -122,8 +122,9 @@ def measure(root, files, suites, work):
         if not any(path.startswith(start + "/") for path in files):
             continue
         print(f"Changed coverage (Python): {name}: unittest discover -s {start} -p '{suite['pattern']}'", flush=True)
-        if subprocess.call([str(python), "-m", "unittest", "discover", "-s", start, "-p", suite["pattern"]],
-                           cwd=root, env=env) != 0:
+        command = ([str(python), str(root / "scripts/ci_policy/runner_tests.py")] if name == "test:runner"
+                   else [str(python), "-m", "unittest", "discover", "-s", start, "-p", suite["pattern"]])
+        if subprocess.call(command, cwd=root, env=env) != 0:
             return None
     if not any(data.glob("started.*")):
         missing = RuntimeError("coverage.py did not start in any measured suite process")

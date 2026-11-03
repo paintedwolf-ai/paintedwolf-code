@@ -81,7 +81,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	proc.Stages = hostcmd.StagePlaceholders(req.Stages)
 
 	r.jobs.mu.Lock()
-	if r.jobs.closed {
+	if r.jobs.closed || r.jobs.drains[sessionID] != nil {
 		r.jobs.mu.Unlock()
 		cancel()
 		return "", ErrRegistryClosed

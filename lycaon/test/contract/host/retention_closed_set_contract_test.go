@@ -33,6 +33,10 @@ const (
 
 // retentionAnswers records released and process-lifetime stores.
 var retentionAnswers = map[string]retentionAnswer{
+	// Session disposal closes admission, drains jobs and drops the index.
+	"lycaon/internal/tools/native/command/program_supervision.go#sessions": retentionReleased,
+	// Each held job releases once; idle programs leave the supervisor index.
+	"lycaon/internal/tools/native/command/program_supervision.go#jobs":         retentionReleased,
 	"lycaon/internal/session/loopback_provenance.go#sessionContainers":         retentionReleased,
 	"lycaon/internal/session/stream/hub.go#subs":                               retentionReleased,
 	"lycaon/internal/session/stream/hub.go#sessionMsg":                         retentionReleased,
@@ -55,10 +59,12 @@ var retentionAnswers = map[string]retentionAnswer{
 	"lycaon/internal/session/store/memory.go#secretExposureRecords":            retentionJustified,
 	"lycaon/internal/secretharvest/secretharvest.go#bySession":                 retentionJustified,
 	// Chat approvals: durable projections of chat_grants, released when the chat is disposed.
-	"lycaon/internal/session/approvalstate/sandbox_ask_guard.go#bySession": retentionReleased,
-	"lycaon/internal/settings/session_grants.go#bySession":                 retentionReleased,
-	"lycaon/internal/settings/ask_quiet.go#byChat":                         retentionReleased,
-	"lycaon/internal/grantedpath/grantedpath.go#byRoot":                    retentionReleased,
+	"lycaon/internal/session/approvalstate/sandbox_ask_guard.go#bySession":        retentionReleased,
+	"lycaon/internal/session/projectcontrol/service.go#lastSessionPosture":        retentionJustified,
+	"lycaon/internal/session/projectcontrol/service.go#lastSessionExternalHidden": retentionJustified,
+	"lycaon/internal/settings/session_grants.go#bySession":                        retentionReleased,
+	"lycaon/internal/settings/ask_quiet.go#byChat":                                retentionReleased,
+	"lycaon/internal/grantedpath/grantedpath.go#byRoot":                           retentionReleased,
 }
 
 // retentionIdentityKeys identify runtime identity domains.

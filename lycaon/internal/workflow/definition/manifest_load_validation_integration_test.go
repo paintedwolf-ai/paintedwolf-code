@@ -25,7 +25,7 @@ func TestBundledPlanManifestLoadValidation(t *testing.T) {
 	if diags := vocabulary.ValidateBundled(reg, manifests, ruleConfigs); len(diags) > 0 {
 		t.Fatalf("vocabulary.ValidateBundled failed: %v", diags)
 	}
-	plan, err := manifests.Get("plan", "1.0.0")
+	plan, err := manifests.Get("plan", "1.0.1")
 	testutil.FailErr(t, "manifests.Get failed", err)
 	if plan.Request == nil || plan.Request.Question != "What would you like to plan?" || plan.Request.Default != "" {
 		t.Fatalf("plan request = %+v", plan.Request)

@@ -22,6 +22,13 @@ func CanonicalPath(path string) string {
 	cur := cleaned
 	links := 0
 	for {
+		if resolved, ok := canonicalizeExisting(cur); ok {
+			out := resolved
+			for i := len(missing) - 1; i >= 0; i-- {
+				out = filepath.Join(out, missing[i])
+			}
+			return compareForm(out)
+		}
 		// Resolve dangling links before appending the missing tail.
 		if target, err := os.Readlink(cur); err == nil {
 			links++
@@ -33,13 +40,6 @@ func CanonicalPath(path string) string {
 			}
 			cur = filepath.Clean(target)
 			continue
-		}
-		if resolved, ok := canonicalizeExisting(cur); ok {
-			out := resolved
-			for i := len(missing) - 1; i >= 0; i-- {
-				out = filepath.Join(out, missing[i])
-			}
-			return compareForm(out)
 		}
 		dir := filepath.Dir(cur)
 		base := filepath.Base(cur)

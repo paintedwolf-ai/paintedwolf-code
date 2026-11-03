@@ -38,7 +38,7 @@ func (g *summarySources) openRead(ctx context.Context, abs string) (*os.File, er
 	if err != nil {
 		return nil, err
 	}
-	return g.access.reads.Open(resolved)
+	return g.access.reads.Open(ctx, resolved)
 }
 
 func (g *summarySources) readFileCached(ctx context.Context, abs string) ([]byte, error) {

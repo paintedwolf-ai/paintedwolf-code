@@ -96,7 +96,7 @@ func TestWorkerChildPromptUsesToolPolicy(t *testing.T) {
 		}
 		return false
 	}
-	if !has("write") || !has("edit") || !has("replace_lines") {
-		t.Fatalf("implementer child must list write/edit/replace_lines on wire, got %v", names)
+	if !has("command") || !has("edit") || !has("replace_lines") {
+		t.Fatalf("implementer child must list command/edit/replace_lines on wire, got %v", names)
 	}
 }

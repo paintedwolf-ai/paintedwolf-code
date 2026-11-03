@@ -44,6 +44,10 @@ func (r *hintCodeRow) UnmarshalYAML(node *yaml.Node) error {
 	if len(r.Tools) == 0 {
 		r.Tools = append([]string(nil), r.Selector["tool"]...)
 	}
+	// An operation selector applies where that operation's structured tool is offered.
+	if len(r.Tools) == 0 {
+		r.Tools = append([]string(nil), r.Selector["paintedwolf.operation"]...)
+	}
 	return nil
 }
 

@@ -169,25 +169,28 @@ func TestSourceFUSEServerProcess(t *testing.T) {
 			os.Exit(2)
 		}
 	}
-	if err := serveSourceFUSE(3, uint32(os.Getuid()), uint32(os.Getgid()), module); err != nil {
+	if err := serveSourceFUSE(os.NewFile(3, "fixture-fuse"), uint32(os.Getuid()), uint32(os.Getgid()), module); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	os.Exit(0)
 }
 
-func serveSourceFUSE(fd int, uid, gid uint32, module []byte) error {
+func serveSourceFUSE(device io.ReadWriter, uid, gid uint32, module []byte) error {
 	buffer := make([]byte, 1<<20)
 	for {
-		n, err := unix.Read(fd, buffer)
+		n, err := device.Read(buffer)
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}
-		if errors.Is(err, unix.ENODEV) || errors.Is(err, unix.EBADF) || n == 0 {
+		if errors.Is(err, unix.ENODEV) || errors.Is(err, unix.EBADF) || errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
 			return err
+		}
+		if n == 0 {
+			return nil
 		}
 		if n < 40 || binary.LittleEndian.Uint32(buffer) != uint32(n) {
 			return errors.New("invalid FUSE request size")
@@ -206,8 +209,18 @@ func serveSourceFUSE(fd int, uid, gid uint32, module []byte) error {
 		binary.LittleEndian.PutUint32(reply[4:], uint32(-int32(failure)))
 		binary.LittleEndian.PutUint64(reply[8:], unique)
 		copy(reply[16:], payload)
-		if written, err := unix.Write(fd, reply); err != nil || written != len(reply) {
+		written, err := device.Write(reply)
+		if errors.Is(err, unix.ENOENT) {
+			continue // The kernel interrupted this request.
+		}
+		if errors.Is(err, unix.ENODEV) {
+			return nil // The fixture was unmounted.
+		}
+		if err != nil {
 			return fmt.Errorf("write FUSE reply: %w", err)
+		}
+		if written != len(reply) {
+			return io.ErrShortWrite
 		}
 	}
 }

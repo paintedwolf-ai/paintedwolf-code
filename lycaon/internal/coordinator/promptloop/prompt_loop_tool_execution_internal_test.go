@@ -154,7 +154,7 @@ func TestPromptLoop_ToolMessageContainsSpecProgress(t *testing.T) {
 			DoomLoop: guard,
 		},
 		Tools: ToolsDeps{
-			EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
+			EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, _ *api.ToolCompletion, _ int) (string, guidance.ToolResultFacts) {
 				enriched := enricher.Enrich(t.Context(), guidance.EnrichInput{
 					SessionID: sess.ID,
 					Session:   sess,
@@ -226,7 +226,7 @@ func TestPromptLoop_PhaseGateUnmetJSONSkipsDoomLoopRecord(t *testing.T) {
 			// The banner carries the gate refusal.,
 		},
 		Tools: ToolsDeps{
-			EnrichToolOutput: func(_ context.Context, _ *api.Session, _ string, _ map[string]any, output string, raised guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
+			EnrichToolOutput: func(_ context.Context, _ *api.Session, _ string, _ map[string]any, output string, raised guidance.ToolResultFacts, _ *api.ToolCompletion, _ int) (string, guidance.ToolResultFacts) {
 				return output + "\n\n>>> Tool feedback\nGate blocked\nCode: WORKFLOW_GATE_BLOCKED",
 					raised.WithCode("WORKFLOW_GATE_BLOCKED").WithOutcome(api.ToolResultOutcomeRejected)
 			},

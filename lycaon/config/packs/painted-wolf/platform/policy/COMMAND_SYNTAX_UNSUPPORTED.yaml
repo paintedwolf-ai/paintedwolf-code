@@ -1,0 +1,38 @@
+oar: '1.0'
+id: COMMAND_SYNTAX_UNSUPPORTED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.source_line
+  - paintedwolf.source_column
+  - paintedwolf.expected_form
+when: paintedwolf.rejection_code == "COMMAND_SYNTAX_UNSUPPORTED"
+effect: block
+copy:
+  what: 'This shell form is not supported at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}.'
+  cause: 'This shell form is not supported here.'
+  why: 'Earlier commands that finished still count.'
+  fix: 'Use the supported form shown below, or write the operation as ordinary commands.'
+  instead: 'Expected: {{ paintedwolf.expected_form }}.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command syntax unit was not admitted
+x-paintedwolf-scenarios:
+- id: captured_unit
+  vars:
+    tool: command
+    source_line: 3
+    source_column: 7
+    expected_form: supported syntax
+  expect_contains:
+  - 'Code: COMMAND_SYNTAX_UNSUPPORTED'
+  - '3:7'
+  - Earlier commands that finished still count.

@@ -27,7 +27,7 @@ func TestSQLSpillReferencesFollowDurableTranscriptAndCompactionViews(t *testing.
 
 	writeSpill := func(body string) (string, string) {
 		t.Helper()
-		out := tooloutput.SpillWholeToolOutput(hostDir, tooloutput.Screened(body), 0)
+		out := tooloutput.SpillWholeToolOutput(t.Context(), hostDir, tooloutput.Screened(body), 0)
 		if out.SpillPath == "" {
 			t.Fatal("spill path was not written")
 		}
@@ -99,7 +99,7 @@ func TestSQLSpillReconciliationAdvancesInBoundedBatches(t *testing.T) {
 	settled := time.Now().Add(-2 * time.Minute)
 	for i := range spillReconcileBatchSize + 1 {
 		body := strings.Repeat("orphan "+string(rune('a'+i%26)), i+2)
-		out := tooloutput.SpillWholeToolOutput(hostDir, tooloutput.Screened(body), 0)
+		out := tooloutput.SpillWholeToolOutput(t.Context(), hostDir, tooloutput.Screened(body), 0)
 		if out.SpillPath == "" {
 			t.Fatal("spill path was not written")
 		}

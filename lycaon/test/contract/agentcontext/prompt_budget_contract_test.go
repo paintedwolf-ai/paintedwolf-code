@@ -216,7 +216,7 @@ func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) 
 		if id == "coordinator-roots-changed" {
 			before := []projectroot.RootRef{{ID: "source", Label: "source", Path: "/workspace/source", IsPrimary: true}}
 			after := []projectroot.RootRef{{ID: "source", Label: "source", Path: "/workspace/source"}, {ID: "assets", Label: "assets", Path: "/workspace/assets", IsPrimary: true}}
-			kickVars = prompts.RootsChangedKickData(before, after, "source")
+			kickVars = prompts.RootsChangedKickData(projectroot.DiffRoots(before, after), after, "source")
 		}
 		rendered, err := engine.Render(context.Background(), "kicks/"+id+".md", kickVars)
 		contractcheck.FailErr(t, "render kick "+id, err)

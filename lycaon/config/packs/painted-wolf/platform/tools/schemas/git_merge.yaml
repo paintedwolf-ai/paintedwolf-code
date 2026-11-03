@@ -1,5 +1,5 @@
 tags: [git, mutation]
-description: "Merge a revision into the current branch. Rehearses and reviews file effects. Conflicts are explicit and retain the merge state: edit resolutions, then continue with explicit paths; abort only when asked to discard merge work. Check status and after state, not diagnostics, for success. Replaces command: git merge."
+description: "Merge a revision into the current branch. Rehearses and reviews file effects. Conflicts are explicit and retain the merge state: edit resolutions, then continue with explicit paths; abort only when asked to discard merge work. Check status and after state, not diagnostics, for success."
 schema:
   type: object
   properties:

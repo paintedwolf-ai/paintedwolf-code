@@ -1,21 +1,25 @@
 package native
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
-
 	"context"
+	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
 type workerCoordSpy struct {
 	before int
+	path   string
 	after  int
 }
 
-func (s *workerCoordSpy) BeforeWorkerWrite(context.Context, tools.ToolContext, string) error {
+func (s *workerCoordSpy) BeforeWorkerWrite(_ context.Context, _ tools.ToolContext, path string) error {
 	s.before++
+	s.path = path
 	return nil
 }
 
@@ -75,5 +79,28 @@ func TestWorkerMutationHooksRunForWorkerJob(t *testing.T) {
 	afterWorkerMutation(context.Background(), tctx, "src/foo.go")
 	if spy.before != 1 || spy.after != 1 {
 		t.Fatalf("worker hooks before=%d after=%d want 1/1", spy.before, spy.after)
+	}
+}
+
+func TestWorkerMutationHookMapsNativeAbsolutePaths(t *testing.T) {
+	branch := t.TempDir()
+	spy := &workerCoordSpy{}
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1"},
+		Source: tools.InvocationSource{
+			Roots:        []projectroot.RootRef{{ID: "primary", Path: branch, IsPrimary: true}},
+			ActiveRootID: "primary", WorkerBranchRoot: branch,
+			BranchWorkspace: testutil.CompleteBranchWorkspace{}, WorkerCoord: spy,
+		},
+	}
+	testutil.FailErr(t, "reserve native worker path", beforeWorkerMutation(t.Context(), tc, filepath.Join(branch, "main.go")))
+	if spy.before != 1 || spy.path != "main.go" {
+		t.Fatalf("reservation = %d %q", spy.before, spy.path)
+	}
+	if err := beforeWorkerMutation(t.Context(), tc, filepath.Join(filepath.Dir(branch), "outside.go")); err == nil {
+		t.Fatal("outside branch path admitted to reservation")
+	}
+	if spy.before != 1 {
+		t.Fatal("outside branch path reached reservation")
 	}
 }

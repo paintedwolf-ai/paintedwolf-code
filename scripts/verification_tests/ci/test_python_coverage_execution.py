@@ -15,6 +15,7 @@ import change_report
 import coverage_changes
 from toolchain import python_tools
 import coverage_policy
+from ci_policy import runner_tests
 
 ROOT = Path(__file__).resolve().parents[3]
 BASE = """\
@@ -204,6 +205,7 @@ class ProvisionTests(unittest.TestCase):
             self.assertEqual(coverage_changes.main(["python", "--provision"]), 0)
         installed = [call.args[0] for call in provision.call_args_list]
         self.assertEqual(installed, [coverage_changes.python_coverage.REQUIREMENTS,
+                                     coverage_changes.ROOT / "scripts/workflow_lint/requirements.txt",
                                      ROOT / "scripts/coordinator-benchmark/requirements.txt",
                                      ROOT / "scripts/bialy/custom_model/requirements-test.txt"])
         with patch("sys.stderr"), self.assertRaises(SystemExit):
@@ -214,7 +216,9 @@ class DeclaredSuiteTests(unittest.TestCase):
     def test_runner_suite_is_the_test_runner_discovery(self):
         suite = coverage_policy.python_suites()["test:runner"]
         body = re.search(r"^  test:runner:\n(?:    .*\n)+", (ROOT / "Taskfile.yml").read_text(), re.M).group(0)
-        self.assertIn(f"python3 -m unittest discover -s {suite['start']} -p '{suite['pattern']}'", body)
+        self.assertIn("python3 {{.SCRIPTS_DIR}}/ci_policy/runner_tests.py {{.CLI_ARGS}}", body)
+        self.assertEqual(runner_tests.discovery_arguments([]),
+                         ["unittest", "discover", "-s", str(ROOT / suite["start"]), "-p", suite["pattern"]])
 
     def test_suites_need_a_start_and_pattern(self):
         with tempfile.TemporaryDirectory() as directory:

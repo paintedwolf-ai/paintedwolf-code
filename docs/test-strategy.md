@@ -18,6 +18,8 @@ How Painted Wolf Code proves v1 behavior.
 | Browser and desktop | `lycaon-den/e2e/` | Complete user journeys through the web harness and Tauri shell |
 | Performance | `cmd/lycaon-perf`, Go benchmarks | Release-channel boot and mixed workloads, latency distributions, resource stability, restart/replay recovery, and focused hot paths |
 | Release | release workflow targets | Full Go behavior, race detection, scanner corpora, and Go and Den coverage floors |
+| Reference userlands | `lycaon/test/referenceuserland/` | Pinned GNU, BSD and busybox container images and the runner command conformance compares with ([Reference userlands](#reference-userlands)) |
+| Command conformance | `lycaon/test/commandconformance/`, `lycaon/test/wiring/conformance/` | Shell programs run through the `command` entry and compared with the reference userlands' results ([Command conformance](#command-conformance)) |
 | Verification runner | `scripts/verification_tests/` (`scheduler`, `ci`, `distribution`, `evidence`) | The `./task` queue: planning, batching, admission, cancellation, caching, reuse, health, and worker limits, through bounded subprocess fixtures |
 | Coordinator benchmark | `scripts/coordinator-benchmark/` | Opt-in paid runs of candidate models through the real application, graded on environment outcomes — [Coordinator benchmark](coordinator-benchmark.md) |
 
@@ -133,13 +135,141 @@ and `guidancescan` fixtures. Keep a scanner with the contract it proves and use
 shared support for cross-domain mechanics. Source assertions follow subpackages
 and import manifests, so a split file never leaves them inspecting an empty entry.
 
+## Reference userlands
+
+Command conformance compares the command language with real userlands rather
+than with expectations written by hand. `lycaon/test/referenceuserland` defines
+three Linux container images and the one runner every consumer uses:
+
+| Userland | Contents | Shell |
+|----------|----------|-------|
+| `gnu` | Debian 13 slim with GNU coreutils, sed, grep, findutils, gawk, tar, gzip, diffutils, patch and procps, util-linux's `column`, `hexdump` and `rev`, and the shared tools | bash |
+| `bsd` | The same Debian base and archive snapshot with the GNU packages that FreeBSD replaces removed, and chimerautils (FreeBSD 15.1's utilities ported to Linux) installed in their place, including FreeBSD awk, sed, grep, find, xargs, diff, patch, gzip and `/bin/sh`; `tar` is libarchive's bsdtar | bash |
+| `busybox` | The upstream busybox image (musl build) and nothing else | busybox sh |
+
+The shared tools (bash, jq, yq, git, ripgrep, file, curl, xxd, zip, unzip,
+bzip2, xz, perl's `shasum` and lsof) are the same builds in `gnu` and `bsd`, so
+a difference between those two comes from the BSD utilities. A command FreeBSD
+lacks, such as `tac`, is not found in `bsd`, as on FreeBSD.
+
+**Pinned and reproduced.** `userlands.json` pins each base image by digest,
+each package to an exact version from one Debian archive snapshot (with the
+versions the archive rebuilt for one architecture), and each source archive by
+SHA-256; the Containerfiles take nothing else and build without a context. Each
+userland also records, per architecture, the digest of its image's file tree:
+every path, type, permission, owner and content, apart from the files a
+container runtime provides. `./task userlands:build` builds the missing images
+and tags one only when its tree matches the recorded digest, so a tagged image
+is the reproduced one. After changing a pin, `./task userlands:record` rebuilds
+without any cache and records the new digest; record each architecture on a
+native host, because emulated builds are not dependable.
+
+The images are built from their pins and cached for CI; they are not distributed.
+
+**One fixed environment.** A batch of programs runs in one new container with
+no network. Before each program the driver resets the workspace, home and
+temporary directories, seeds the workspace with fixed times and owner, and runs
+the program as an unprivileged user with a fixed environment, the same in every
+userland; when the shell exits, whatever it left running is killed. The package
+documentation lists the environment. A result carries the status, both output
+streams as exact bytes, and the final state of each tracked path.
+
+**BSD coverage.** chimerautils ports FreeBSD's own sources, so options, error
+text and statuses are FreeBSD's. What it cannot carry over:
+
+- Regular expressions, `printf` and `strftime` formatting, and locale data come
+  from glibc, not FreeBSD's libc. For example, glibc accepts `\+`, `\?` and `\|`
+  in basic regular expressions.
+- FreeBSD's process tools (`ps`, `pgrep`, `pkill`), `bc` and `dc` are not
+  ported, so `bsd` has none of them.
+- FreeBSD features without a Linux counterpart are removed, such as `chmod -h`,
+  file flags and NFSv4 ACLs.
+- macOS ships its own, older FreeBSD-derived tools with Apple changes. A
+  spelling only macOS implements, such as `base64 -D` or `-b`, is covered by
+  golden tests rather than by this userland.
+
+`./task test:userlands` verifies the images and runs the runner's contract in
+all three: the fixed environment, the identity of each userland's tools, exact
+result bytes, isolation between programs, and repeatable results. The ordinary
+suites never need Docker; they compare with stored snapshots.
+
+### Command conformance
+
+The conformance corpus (`lycaon/test/commandconformance`) is a list of shell
+programs, each with the workspace it starts from, the paths whose final state
+counts, and the userlands it compares with. A case names only the userlands
+that implement every spelling it uses: `stat -c` compares with `gnu` and
+`busybox`, `stat -f` with `bsd`, and bash syntax or tools busybox lacks with
+`gnu` and `bsd`. A spelling no reference implements, such as macOS's
+`base64 -b`, is covered by its lane's golden tests instead, and the corpus
+names that test.
+
+The command entry passes a case when its status, both output streams and every
+tracked file (content and permissions) equal one of the case's userlands. Only
+these deliberate differences are normalized:
+
+- The command language always has `pipefail` and, in bash, `globstar`; each
+  reference program starts with a prelude that enables them.
+- The command entry runs in a real project directory, whose absolute path
+  stands for the reference workspace, `/workspace`.
+- The command entry writes a shell error as `bash: …`, without the line number
+  a shell running `-c` adds.
+
+One deliberate difference is checked exactly rather than normalized: under the
+language's pipefail, a producer ended by SIGPIPE because its reader finished
+does not fail the pipeline, so `seq 1 100000000 | head -3` exits 0 where bash
+exits 141, while `PIPESTATUS` still reports 141. The contract case
+`pipefail-reader-ends-producer` holds those expectations.
+
+Host decisions, approvals, labels and receipts are structured results outside
+the output streams. A differential case must finish with no refusal and no
+fallback to an installed program, so none of them is compared. Programs whose
+result the command language defines itself, such as native built-ins, `external`,
+`native_path` and redirects that publish over their own input, are contract
+cases in `lycaon/test/wiring/conformance` with their expected results.
+
+Snapshots record behaviour only, never a tool's `--help`, `--version`, `info`
+or manual output; the corpus refuses a program that asks for them.
+
+`./task conformance:capture` runs the corpus in the verified images and stores
+every result in `testdata/snapshots.json`, with the digest of each case's input
+and the images it came from (`-- <case>...` captures only those cases;
+`-git-seed` records the Git seed repository again in `gnu`). The suite refuses a
+snapshot whose case or images changed, so editing a case means capturing it.
+`test:wiring` compares the command entry with the stored snapshots and needs no
+Docker. `./task test:conformance:live` runs the corpus in the images again,
+fails when any stored snapshot does not reproduce byte for byte, and compares
+every program through the command entry with the live results.
+
+Generated programs use recorded seeds `7`, `41` and `20261028`, with 16 programs
+per seed. Each program combines at most four bounded grammar fragments; loops
+iterate at most four times. The generator covers quoting, parameter and arithmetic
+expansion, braces, here-documents and here-strings, loops, conditionals, functions,
+pipelines, redirects, text transforms and file metadata. Programs share the corpus
+workspace, observation and normalization. Their userland set includes only shells
+that implement the generated grammar.
+
+`./task test:conformance:live -- --generated-only --seed 7 --programs 16` reruns
+one seed; repeat `--seed` to select more (at most 64), and `--programs` selects
+1–64 programs per seed. Without selection, the Linux reference-userlands lane
+runs the recorded set beside the corpus. A mismatch is reduced by deleting
+fragments and simplifying values while retaining its structured difference type,
+status pair, refusal code or file path. The report includes both observations,
+the original and reduced programs, and the seed. Candidate references are batched
+per reduction step; each userland starts once for that batch. Top-level rejections
+without a typed identity retain the original program rather than changing causes.
+A fixed point is minimal under
+those reductions; a 128-trial bound reports explicitly when minimization remains
+incomplete. Production fixes go to their command component, and their regressions
+join the permanent corpus.
+
 ## Size budgets and changed coverage
 
 Agents write code and prompt copy fast. These checks shape it through
 feedback an agent meets while it works: a warning as something approaches
 its limit, then a stop for a change that leaves a touched artifact past it.
-`check-fast` and `check` run them, and CI runs them in the ready tier and the merge group's `limits` lane with
-the same rules and the same words, so CI says nothing `check-fast` did not.
+Both gates enforce size budgets. `check` and exact-landing CI enforce changed
+coverage; focused ready checks run before queue admission.
 
 ### Size budgets
 
@@ -683,7 +813,7 @@ Run every task from the repository root through `./task`.
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
 | `./task coverage:changes` / `./task den:coverage:changes` / `./task scripts:coverage:changes` | Coverage of the Go, Den, and scripts Python statements a change adds or modifies |
-| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, changed coverage, notices, comment and failure-message checks, and documentation links |
+| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, notices, comment and failure-message checks, and documentation links |
 | `./task check` | Full local and qualification gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 
 Each gate runs once per change. A pushed change runs affected-scope integration in CI and daily full nightly verification, so it runs neither local gate first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
@@ -722,10 +852,14 @@ clients that require manual installation.
 
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
-`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-job, `ready`: it first runs the complete repository contract tree, then compiles
-the host and runs `lint:full`, size budgets, Go, Den, and scripts changed coverage, comment checks,
+`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier runs two jobs
+within its declared two-runner budget. `ready-lint` runs complete `lint:full`
+analysis while `ready` first runs the complete repository contract tree, then compiles
+the host and runs size budgets, affected short Go tests, comment checks,
 test failure-message checks, documentation links, Den typecheck, Den lint, and frontend seam canaries.
+The required aggregate waits for both jobs. Full lint has its own analysis setup;
+it does not repeat admission contracts. Catalog validation requires each fast
+assertion stage exactly once across the jobs.
 Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests.
 Admission uses `test:contract -- ./test/contract/...`
 without a test-name filter. Failure or interruption stops the lane before its
@@ -738,25 +872,23 @@ once against the checkout, sharing its compiler cache. It also checks the
 migration identities of every stable release tag; release CI adds the published
 preview releases it reads from GitHub.
 
-The execution budget is two hours, allowing the integration lint lane's existing
-ninety-minute allowance plus the contracts and remaining checks. This is a
+Each admission job retains the existing three-hour execution allowance. This is a
 conservative ceiling, not a measured duration; broad-change hosted timings are
 required before tightening it or claiming an admission latency improvement.
 
-Admission also compiles affected native test targets without running them. The
-`ready` lane's `compile_targets` maps native source roots to existing managed
-verification targets. A broad or unknown scope compiles both the Den workspace
-and decision engine; ordinary Go, frontend, and prose changes add no native
-compilation. The Den workspace includes operational binaries and examples, so
-an observer compilation failure is visible before enqueueing. Compilation uses
-`--compile-only` on the normal test targets, preserving locked dependencies,
-features, resources, and all test targets. The single admission job provisions
-shell inputs only when Den compilation is selected. This adds real compilation
-cost to affected PRs; it does not claim a full native build is inexpensive.
+The Linux supervisor/native-privilege variant runs early in admission for Go or CI changes.
+Its existing managed target selects the complete supervisor leg on the ephemeral
+runner, preserving all credential, effect and revocation assertions.
+Native Rust compilation and execution occur together in the landing native lane;
+ready admission does not repeat a compile-only copy. Standalone compile-only
+selection remains available for focused local diagnosis.
 
-The merge queue repeats changed coverage on the landing commit and runs the complete affected integration
-selection. Its `limits` and `lint` lanes start first, and the group stops at its
-first failure. The PR's pass does not replace verification of the landing commit.
+The merge queue measures changed coverage on its exact source and executes the
+complete affected integration selection. Frontend and scripts assertions execute
+once through their coverage stages; distinct short-covered and integration-tagged
+Go recipes retain their separate modes. The group stops at its first failure.
+The limits lane keeps its existing two-hour completion allowance, independent of
+the under-hour performance objective.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on twenty
@@ -867,6 +999,15 @@ pinned browser under confinement) runs on both. Platform qualification's
 `ubuntu-24.04-arm` nightly, in qualification, and in the merge queue when the
 sandbox, its helper, or the command supervisor's Linux files change. Setup
 provisions the pinned browser before the lane goes offline.
+
+The `reference-userlands` lane runs `test:userlands` and
+`test:conformance:live` in the merge queue for broad changes, which include
+every change to the userland definitions and their runner, and for changes to
+the command language: its catalog, parser and evaluator (`commandsurface`,
+`commandprogram`), native utilities (`tools/native`) and the conformance corpus.
+It also runs nightly and in qualification. Setup restores the verified images
+that main's build-caches run publishes, builds any that are missing, and
+verifies each by its recorded digest before the lane goes offline.
 
 The `nix` lane runs `nix:check` nightly. It informs and gates no merge or
 release. A lane's `arguments` reach its single target. Setup installs the pinned

@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/sourcebrief"
+	"github.com/lycaon/lycaon/internal/session/toolcontext"
 	"github.com/lycaon/lycaon/internal/session/toolpresentation"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -62,6 +63,7 @@ type Assembly struct {
 	WorkerContext assembly.WorkerContextBuilder
 	Workspace     *sessionscope.Service
 	Workspaces    *workerworkspace.Service
+	ToolContext   *toolcontext.Service
 }
 
 func (m *Assembly) Build() assembly.AssemblyDeps {
@@ -131,7 +133,11 @@ func (m *Assembly) PromptSurface(ctx context.Context, sess *api.Session) prompts
 		return prompts.AgentPromptSurface{}
 	}
 	profileID, _ := m.Profiles.PromptToolProfile(ctx, sess)
-	return m.Profiles.CompileMachine(ctx, sess, profileID).Surface
+	surface := m.Profiles.CompileMachine(ctx, sess, profileID).Surface
+	if m.ToolContext != nil {
+		surface.SessionScratchDir = m.ToolContext.ScratchDir(ctx, sess)
+	}
+	return surface
 }
 func (m *Assembly) PromptTools(ctx context.Context, sess *api.Session, profileID string) ([]tools.ToolMeta, error) {
 	if m == nil || sess == nil {

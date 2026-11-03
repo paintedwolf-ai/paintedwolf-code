@@ -12,6 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -19,18 +21,25 @@ import (
 
 func ContractToolExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
+	return ContractToolRuntime(t).Executor
+}
+
+// ContractToolRuntime composes the actual execution owners and catalog boundary.
+func ContractToolRuntime(t *testing.T) *toolhost.Runtime {
+	t.Helper()
 	root := contractcheck.RepoRoot(t)
 	configRoot := filepath.Join(root, "lycaon")
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
 	contractcheck.FailErr(t, "toolhost.NewRuntime failed", err)
 	applyStockToolSchemas(t, rt)
+	wireContractProgramServices(t, rt, testdbfixture.Open(t, "exec-boot.db"), store.NewMemory())
 	hints, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	rt.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
 	WireContractBlockPlane(t, rt, guidance.NewStaticRejectFormatter(hints))
 	registerCatalogToolsOnto(t, rt.Registry)
-	return rt.Executor
+	return rt
 }
 
 func applyStockToolSchemas(t *testing.T, rt *toolhost.Runtime) {

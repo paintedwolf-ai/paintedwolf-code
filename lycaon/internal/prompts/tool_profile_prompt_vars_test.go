@@ -79,24 +79,17 @@ func TestHTTPRequestPartialTeachesFirstClassActionWorkflow(t *testing.T) {
 	t.Parallel()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	got, err := engine.Render(context.Background(), "units/http-request-tools.md", map[string]any{
-		"profile_has_http_request": true,
-		"profile_has_fetch_url":    true,
-		"profile_has_wait":         true,
+		"profile_has_fetch_url": true,
 	})
 	testutil.FailErr(t, "render HTTP request partial", err)
 	for _, want := range []string{
-		"HTTP actions", "Use `http_request` for APIs",
-		"Use `fetch_url` for readable web research", "where `http_request` returns raw HTML",
-		"Use `wait` with `http_ready`/`port_ready`",
+		"Use `fetch_url` for readable web research",
+		"pages and documentation arrive as markdown with paging",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("HTTP request partial missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(strings.ToLower(got), "curl") {
-		t.Fatalf("HTTP request teaching must not advertise a shell client:\n%s", got)
-	}
-
 	if strings.Contains(got, "request_tools") {
 		t.Fatalf("sticky HTTP tools must not be taught as deferred:\n%s", got)
 	}
@@ -179,17 +172,30 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 		t.Fatalf("write tools missing edit: %v", writeTools)
 	}
 	surveyTools, _ := vars["tool_check_survey_tools"].([]string)
-	for _, want := range []string{"summarize", "survey_repo", "read", "grep", "find", "list_dir", "jq"} {
+	for _, want := range []string{"summarize", "survey_repo", "command"} {
 		if !slices.Contains(surveyTools, want) {
 			t.Fatalf("survey tools missing %q: %v", want, surveyTools)
 		}
 	}
-	concurrent, _ := vars["profile_concurrent_tools"].([]string)
-	if !slices.Contains(concurrent, "grep") {
-		t.Fatalf("grep should be concurrent: %v", concurrent)
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq"} {
+		if slices.Contains(surveyTools, retired) {
+			t.Fatalf("survey tools still require retired routine schema %q: %v", retired, surveyTools)
+		}
 	}
+	concurrent, _ := vars["profile_concurrent_tools"].([]string)
 	if !slices.Contains(concurrent, "summarize") {
 		t.Fatalf("summarize should be concurrent: %v", concurrent)
+	}
+	canRequest, _ := vars["profile_can_request"].(map[string]bool)
+	for _, loadable := range []string{"jq_edit"} {
+		if !canRequest[loadable] {
+			t.Fatalf("implement profile_can_request missing %q: %v", loadable, canRequest)
+		}
+	}
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq", "write"} {
+		if canRequest[retired] {
+			t.Errorf("retired routine schema %s is requestable", retired)
+		}
 	}
 	serial, _ := vars["profile_serial_tools"].([]string)
 	if !slices.Contains(serial, "edit") || !slices.Contains(serial, "command") {
@@ -207,6 +213,9 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	}
 	if vars["profile_has_terminal_capture"] != true {
 		t.Fatal("implement command surface must advertise sealed terminal capture")
+	}
+	if hostExec, _ := vars["runner_host_execution_tools"].([]string); !reflect.DeepEqual(hostExec, []string{"command", "verify"}) {
+		t.Fatalf("implement runner_host_execution_tools = %v, want [command verify]", hostExec)
 	}
 }
 
@@ -227,8 +236,8 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	if vars["profile_mutation_capable"] != false {
 		t.Fatalf("explore_readonly must not be mutation-capable")
 	}
-	if vars["profile_has_command"] != false {
-		t.Fatalf("explore_readonly must not have command")
+	if vars["profile_has_command"] != true {
+		t.Fatalf("explore_readonly must offer read-only command")
 	}
 	if vars["profile_has_http_request"] != false || vars["profile_has_fetch_url"] != false || vars["profile_has_wait"] != true {
 		t.Fatalf("explore_readonly HTTP capability flags are wrong: %#v", vars)
@@ -239,13 +248,27 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	if vars["profile_has_terminal_capture"] != false {
 		t.Fatalf("explore_readonly must not advertise sealed terminal capture")
 	}
+	if hostExec, _ := vars["runner_host_execution_tools"].([]string); len(hostExec) != 0 {
+		t.Fatalf("explore_readonly runner_host_execution_tools = %v, want empty", hostExec)
+	}
 	surveyTools, _ := vars["tool_check_survey_tools"].([]string)
 	if slices.Contains(surveyTools, "write") || slices.Contains(surveyTools, "edit") {
 		t.Fatalf("survey tools must be read-only: %v", surveyTools)
 	}
-	for _, want := range []string{"summarize", "survey_repo", "read", "grep", "find", "list_dir"} {
+	for _, want := range []string{"summarize", "survey_repo", "command"} {
 		if !slices.Contains(surveyTools, want) {
 			t.Fatalf("explore_readonly survey tools missing %q: %v", want, surveyTools)
+		}
+	}
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq"} {
+		if slices.Contains(surveyTools, retired) {
+			t.Fatalf("explore_readonly survey tools still load retired routine schema %q up front: %v", retired, surveyTools)
+		}
+	}
+	canRequest, _ := vars["profile_can_request"].(map[string]bool)
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq", "git_status", "git_diff"} {
+		if canRequest[retired] {
+			t.Errorf("retired routine schema %s is requestable", retired)
 		}
 	}
 	verifyTools, _ := vars["tool_check_verify_tools"].([]string)
@@ -400,6 +423,9 @@ func TestVisibleToolsNativePartialVarsFromSurfaceTools(t *testing.T) {
 
 func TestPreferNativeAndHostRunnerDerivedFromSurface(t *testing.T) {
 	vars := prompts.VisibleToolsNativePartialVars([]string{"write", "command", "terminal_open"})
+	if vars["command_output_files"] != true {
+		t.Fatalf("command_output_files = %v, want true", vars["command_output_files"])
+	}
 	prefer, _ := vars["prefer_native_file_tools"].([]string)
 	host, _ := vars["host_runner_tools"].([]string)
 	if !slices.Contains(prefer, "write") {

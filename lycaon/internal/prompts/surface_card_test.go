@@ -35,7 +35,7 @@ func TestSurfaceCardParkAndWrapup(t *testing.T) {
 
 	wrap := renderSurfaceCard(t, "wrapup", "One user report from receipts in this chat.", "wrapup",
 		[]string{"recall", "read", "grep", "summarize", "render_view", "update_progress", "request_tools"}, nil)
-	for _, want := range []string{"wrapup", "No mutation"} {
+	for _, want := range []string{"preparing the report", "No mutation"} {
 		if !strings.Contains(wrap, want) {
 			t.Fatalf("wrapup card missing %q: %q", want, wrap)
 		}
@@ -44,7 +44,7 @@ func TestSurfaceCardParkAndWrapup(t *testing.T) {
 	inv := renderSurfaceCard(t, "investigate", "Empty assistant text while tools run.", "investigate",
 		[]string{"recall", "read", "write", "edit", "replace_lines", "task"},
 		[]string{"command", "verify", "delete"})
-	for _, want := range []string{"investigate", "Empty assistant text", "edit", "dispatch"} {
+	for _, want := range []string{"exploring the project", "Empty assistant text", "edit", "dispatch"} {
 		if !strings.Contains(inv, want) {
 			t.Fatalf("investigate card missing %q: %q", want, inv)
 		}
@@ -82,7 +82,7 @@ func TestSurfaceCardTracksRoster(t *testing.T) {
 // Unnamed surfaces use their execution-mode family; unknown families render no card.
 func TestSurfaceCardFallsBackToFamily(t *testing.T) {
 	family := renderSurfaceCard(t, "", "", "orchestrate", []string{"recall", "task"}, nil)
-	if !strings.Contains(family, "Surface: orchestrate.") {
+	if !strings.Contains(family, "You are planning work.") {
 		t.Fatalf("card must fall back to the execution-mode family: %q", family)
 	}
 	if !strings.Contains(family, "No product writes this turn.") {

@@ -54,3 +54,29 @@ func TestRejectSelectorUsesExactMembership(t *testing.T) {
 		})
 	}
 }
+
+// An operation selector covers its structured tool and its bound native child
+// beneath command, never another operation or an unbound command call.
+func TestRejectOperationSelectorFollowsBoundOperation(t *testing.T) {
+	entry := HintEntry{}
+	entry.Selector = map[string]any{"paintedwolf.operation": []any{"chmod"}}
+	for _, tc := range []struct {
+		name string
+		data map[string]any
+		want bool
+	}{
+		{"structured", map[string]any{"tool": "chmod"}, true},
+		{"native child", map[string]any{"tool": "command", "native_operation": "chmod"}, true},
+		{"other native operation", map[string]any{"tool": "command", "native_operation": "write"}, false},
+		{"unbound command", map[string]any{"tool": "command"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := entryCoversTool("FIXTURE", entry, tc.data); (err == nil) != tc.want {
+				t.Fatalf("data %v: error=%v, want match=%v", tc.data, err, tc.want)
+			}
+		})
+	}
+	if got := scenarioTool(entry, ScenarioEntry{}); got != "chmod" {
+		t.Fatalf("operation-selected scenario rehearses %q", got)
+	}
+}

@@ -1,6 +1,6 @@
 # Structural rewrite reference
 
-Maintained sources of truth: the live `grep` and `code_rewrite` schemas for arguments and supported grammars, and the project's own verification policy for completion. Tool confinement, write scope, mutation receipts, and structured rejection `Code:` values remain authoritative.
+Maintained sources of truth: the command language help for `rg --help` and the live `code_rewrite` schema for arguments and supported grammars, and the project's own verification policy for completion. Tool confinement, write scope, mutation receipts, and structured rejection `Code:` values remain authoritative.
 
 ## Pattern shape
 
@@ -14,7 +14,7 @@ old_api($$$ARGS)
 new_api($$$ARGS)
 ```
 
-Use the singular capture when arity is part of the claim and the sequence capture when arguments should pass through unchanged. Include required receivers, declaration bodies, return forms, delimiters, and surrounding syntax rather than supplying a keyword or node prefix. Use text `grep` when the target is a name, literal, comment, or formatting token rather than syntax shape.
+Use the singular capture when arity is part of the claim and the sequence capture when arguments should pass through unchanged. Include required receivers, declaration bodies, return forms, delimiters, and surrounding syntax rather than supplying a keyword or node prefix. Use `command` with `rg PATTERN PATH` when the target is a name, literal, comment, or formatting token rather than syntax shape.
 
 ## Safe rewrite loop
 

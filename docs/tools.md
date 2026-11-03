@@ -4,16 +4,15 @@ Tools are structured capabilities published with argument schema, execution poli
 
 **See also:** [Architecture](architecture.md#subsystem-owners) · [Adding a tool](adding-tools.md) · [Coordination](coordination.md) · [Grounding](grounding.md) · [Security](security.md) · [Authorization](authorization.md)
 
-**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, `tool-command-equivalence.yaml`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
+**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
 
 ---
 
 ## Portable command language version 1
 
-The [milestone 10](https://github.com/paintedwolf-ai/paintedwolf-code/milestone/10)
-contract is frozen independently from runtime activation. The currently shipped
-command path described below remains in use until its replacements land. The
-versioned catalog does not enable a shell fallback or qualify native execution.
+The versioned catalog defines the program language and native utility contracts.
+Programs dispatch through host-owned operations; the catalog grants no execution
+authority and provides no shell fallback.
 
 Machine sources live in
 [`command-language-v1/`](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/).
@@ -23,31 +22,72 @@ status/publication rules, representation, retained output and compact schema cop
 Each utility family defines argv grammar, option spelling/arity/value role,
 effect modes, platform capabilities, status, encoding, examples and existing
 implementation/test references. The stock disposition inventory covers the live
-manifest, retaining domain operations and naming the future replacement work.
-No routine schema is retired by publishing these contracts.
+manifest and its domain operations.
 
 `./task codegen:tool-command-equivalence` compiles the same catalog into
 `toolcontract.LanguageV1`; its existing `:check` target detects drift.
 `CommandHelp` derives option help from these facts rather than maintaining a
-second executor/prompt option map. P04 consumes the typed facts in its parser;
-P03 binds executable operations through existing subsystem contracts. Pure catalog
+second executor/prompt option map. The parser consumes typed facts, and dispatch
+binds executable operations through existing subsystem contracts. Pure catalog
 facts carry no grant or execution authority.
 
 The catalog freezes both GNU and BSD `sed -i` without backups, GNU `stat -c`
 and BSD `stat -f` formats, and Base64 `-d`/`-D` decoding. Empty xargs launches
 nothing; `wc -l` counts LF bytes. Ripgrep's conflicting short options retain
 ripgrep roles rather than copying grep aliases. PCRE-compatible grammar is an
-explicit bounded contract; P13 selects and qualifies an engine rather than
-calling RE2 full PCRE. File signatures name format-identification evidence,
+explicit bounded contract enforced by the native regex engine. File signatures name format-identification evidence,
 not archive/database trust.
 
-Native document streams encode accepted text with the captured encoding, BOM
-and newline policy. A checksum and byte count cover that same representation;
-disk provenance remains separate. Exact delivered literal source windows may
+Native byte streams preserve the saved file representation, including its
+encoding, BOM and newline policy. Checksums and byte counts cover those saved
+bytes; decoded transforms retain explicit source mappings. Exact delivered literal source windows may
 qualify conversational edit evidence, while internal execution reads do not.
-This deliberately replaces the old mixed editor-line/disk-byte wc projection
-for command output. Diff reuses the existing engine; complete stream bounds
-are independent from its old structured preview/context caps.
+Diff reuses the existing engine; complete stream bounds are independent from
+structured preview and context caps.
+
+`patch` and `git apply` share one hunk applier over parsed unified and Git
+diffs: offset search, GNU fuzz for `patch` (`-F`, default 2), exact context
+for `git apply`, reversal and Git binary patches (`git apply` only). Both
+capture every touched file before the first write and publish each file through
+the pinned write door; `patch` publishes files whose hunks applied and reports
+failed hunks on stderr and in receipt evidence without writing `.rej` or `.orig`
+files, while `git apply` changes nothing unless every section applies.
+`git apply --index` and `--cached` change the index through one reviewed Git
+operation with `git add`'s session-staging rules, and `--3way` merges from the
+preimage blob with Git's merge-file, reporting conflicted paths and index stages.
+
+`git rm` and `git mv` compose recoverable filesystem deletion or movement with
+the same Git stage operation. `git rm --cached` changes only the index. Both
+commands support dry runs, preserve unrelated staging, and include affected
+paths in session staging. Ordinary Git safety checks precede removal; force
+does not change host authority. `git rm` removes the directories a removal
+leaves empty, each through the same recoverable delete, and keeps the
+repository root and the command directory. If index staging fails after a
+filesystem change, the result retains the completed effect and its source
+recovery. A following `git commit` builds its tree in a private index seeded
+from `HEAD`, so staged deletions, both sides of a rename and the selected
+paths are committed while unrelated staged work stays staged.
+
+`git grep` searches a revision's tree, the index or the tracked working tree
+with the same native regex engines as `grep` (basic by default, `-E`, `-F`,
+`-P`) and prints Git's `REV:PATH:LINE` layout with paths relative to the
+command directory. `git describe`, `git reflog`, `git shortlog`, `git ls-tree`,
+`git cat-file`, `git show-ref` and `git for-each-ref` run through the Git
+owner's read door with their catalogued options; `git shortlog` without a
+revision summarizes `HEAD`. Batch object reads, reflog maintenance and
+signature format atoms are refused.
+
+`git bisect` runs natively on the Git owner. Sessions live in the repository's
+`BISECT_*` files and `refs/bisect` refs exactly as Git keeps them, so a user's
+own `git bisect` and `git status` see the same session, and every step checks
+out through the Git owner's checkout operation. `git bisect start` refuses a
+tree with tracked changes with `GIT_BISECT_DIRTY_TREE`; a separate worktree
+keeps that tree untouched. `git bisect run` dispatches its check as an ordinary
+child of the program: status 0 marks the commit old, 125 skips it, 1 to 127
+marks it new, and any other status stops the run. An interrupted run leaves
+the session recorded at the commit under test and names the `git bisect reset`
+to run. `git bisect visualize` and `view` are limited to `--oneline`, and
+`replay` is refused because `git bisect log` is the session record.
 
 Overwrite, append and in-place edits capture revisions before producers,
 stage complete output, review exact bytes, then publish each eligible target.
@@ -57,11 +97,417 @@ incomplete input, denied authority, stale revisions and cancellation discard
 uncommitted staging. Earlier committed effects remain; programs are not
 multi-operation transactions. Host terminal stops cannot be masked by `exit 0`.
 
+Reached native operations freeze the normalized opaque-reference arguments
+before capability and policy review. Their separate `operation_arguments_v1`
+representation tags every scalar and container, sorts object keys by original
+bytes, and explicitly Base64-encodes non-UTF-8 strings and keys. Literal arrays
+cannot impersonate tags; numeric tokens retain their exact precision. The
+existing semantic grant normalization still removes declared authority-neutral
+arguments. Native review has a distinct identity domain; structured tool calls
+retain their existing digest and grant contracts. Owners receive the original
+frozen values, never a decoded inspection projection or resolved-secret record.
+
+The program frame separately retains the actual submitted `command` model
+arguments and real model call ID. Native operation arguments and child execution
+IDs cannot stand in for that outer observation. The immutable submitted JSON is
+borrowed until the frame closes. Closing denies new admission immediately;
+addressed roots and argument reservations remain held until active owner calls
+and prepared envelopes release their uses, then the shared facts are cleared.
+
 The golden program and option/limit fixture definitions are normative inputs
 for later acceptance suites. Catalog generation, reference probes and unit tests
 are distinct from executing native owners, live model qualification and installed
 platform evidence. macOS/Linux execution and installed qualification remain
 required; Windows-shaped paths and compile results never qualify native Windows.
+
+### Complete syntax units
+
+[`commandsurface.ParseProgram`](../lycaon/internal/commandsurface/program_parse.go)
+parses a submitted UTF-8 unit before exposing its typed plan. Original byte
+coordinates and a source digest survive quote removal; words retain literals,
+quotes, parameters and deferred substitutions. The private parsed tree returns
+detached snapshots. Parsing grants no operation capability and invokes no shell,
+filesystem operation, expansion or upstream interpreter.
+
+[`commandprogram.LoadSourceUnit`](../lycaon/internal/commandprogram/source_unit.go)
+captures an explicitly reached script through the source port. It requires the
+owner's exact UTF-8 representation, revision, complete range and byte digest, and
+validates the entire captured unit before any of its statements can be dispatched.
+A malformed script supplies no proof that earlier parent effects did not occur.
+Typed syntax diagnostics carry byte ranges, line/column, expected forms and
+resource measurements through the existing rejection/OAR pipeline. They never
+guess missing source contents or create executable replacement calls.
+
+Program plans retain functions, loops and substitutions through evaluation.
+Verify, terminal and process-launch surfaces use process-stage plans with their
+own accepted arguments. Dispatch binds each reached program operation to its
+owner rather than flattening the program into a process pipeline.
+
+The syntax adapter charges parser scratch to the enclosing program before each
+allocation and meters the selected upstream parser's allocations and recursive
+frames. Brace classification and static quote removal share that allocation pool; admission never invokes general
+field expansion or its account/environment/glob callbacks. The 8,192-node and
+64-edge limits count the completed selected syntax tree before host-plan
+allocation; temporary parser wrappers remain scratch. This clarifies the
+catalog's former generic “before allocation” wording without changing either
+threshold. Host lowering reserves a conservative typed-node, slice-growth,
+cloned-text and frame envelope against the same pool before allocating its plan.
+
+Source capture receives an explicit byte ceiling and representation before
+materialization. Execution constructs `NewProgramParser` before capture and
+admits an initial working chunk; parser growth uses that same incremental
+account up to `evaluation_memory_bytes`. Capture and its byte-copy overlap
+reserve bounded `program_state_bytes` capacity before materialization. Successful
+lowering transfers the captured bytes into the retained plan/snapshot envelope;
+closing parser scratch does not release that state.
+
+Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
+while the original parsed program is released. `ParseProgram`, `Snapshot` and
+`Source` are bounded inspection helpers and do not grant execution authority;
+execution callers must retain the applicable leases while values remain reachable.
+`ValidatedProgramIdentity` supplies a zero-copy source/catalog identity only while
+that validated execution lease remains live. Admission can bind a whole-envelope
+progress update to this unit without treating an inspection copy or a caller's
+boolean as validation proof; the identity check itself applies no progress.
+Local parser tests do not qualify the later command dispatch, native utilities,
+publication or installed-platform wiring.
+
+### Complete byte streams
+
+`commandprogram.BytePipe` uses unbuffered `io.Pipe` backpressure and an explicit
+ingress byte budget. EOF, producer failure, deliberate consumer closure,
+cancellation and budget refusal have separate typed settlement facts. A preview,
+receipt, digest or truncation notice is never a pipeline source. Here-document
+and native-null inputs use the same exact byte endpoints; typed null sinks count
+ingress without opening a platform device or resolving secret references.
+
+Pipes and file redirects receive the exact producer bytes. Secret screening runs
+when output is delivered to the model or retained for the transcript and receipts;
+it does not rewrite bytes consumed by another stage or published to a file.
+
+`ScreenedPipe` connects the existing capture projection to that byte plane.
+Screening reserves actual payload/candidate capacities incrementally against the
+caller's aggregate working-memory ledger before allocation. It reuses the
+catalog window schedule, exact-value policy and interval rewrite; independent
+chunk screening is not equivalent. Managed-value and classification changes
+stop complete publication. Raw received hashes and emitted screened hashes stay
+separate, and emitted bytes preserve NUL, CRLF and invalid UTF-8 outside declared
+redactions. No general transform receives a secret-resolution API.
+
+`tooloutput.RetainScreenedStream` spools only already-screened bytes through the
+existing blob store's staging, compression, commit, retention and recovery claims.
+The plaintext and compressed staging overlap is admitted against spill quota;
+codec scratch is admitted after input EOF, when upstream screening can release
+its scratch. Preview and metadata have a separate retained-state lease. A
+readable failure prefix remains incomplete. Canceling input closes its source;
+copy/compression cancellation refuses a not-yet-committed body. Each live body
+reference has its own retention claim, separate from its initiating operation.
+Closing a spill releases its display preview and refuses future opens; body/disk
+accounting remains until active readers and recovery claims permit physical
+collection. `TransferBody` first durably attaches the exact reference, then moves
+the same claim and body leases into the existing invocation/output lifecycle.
+A failed attachment leaves the wrapper responsible. Preview closure cannot
+release a transferred body's quota. Bounded spill reads use one decoder worker,
+an8MiB history ceiling and admitted32MiB scratch; complete bodies may exceed
+that history size. Generic blob readers retain their existing profile. Callers
+keep applicable leases while their references remain reachable. These are
+logical capacity reservations, not process RSS.
+
+`StreamSourceMapping` carries only candidate ranges beside exact bytes. Its
+capture pin and digest stay unchanged when an exact presentation slice narrows
+the separate mapped range. `ProjectStreamMappings` admits and retains that
+metadata for explicitly exact slices; unspecified/arbitrary transforms drop it.
+Unseen retained bytes and printed source-like text establish no model read base.
+A source operation and the existing delivery boundary must still attribute the
+actual page before it qualifies as conversational evidence. These stream ports
+do not activate the later command-entry integration by themselves.
+
+Program operations pin execution revisions from published disk. Native utilities,
+input redirections, Git, and external programs all read the saved file. After a
+reached operation is admitted, accepted changes authored only by that chat can
+publish through separate write admission, current review and the editor save
+path. Each preparation write has its own receipt. Read-only profiles read saved
+bytes without publishing drafts. Human and other chats' drafts stay unsaved.
+Redirects contribute their mutation effects before admission; input opening and
+destination capture happen after accepted-draft preparation settles. Earlier
+admitted operations may already have published when a later operation is refused.
+
+The initial response includes one note per affected path observed by native
+reads, stating that commands read the saved file. Notices first discovered by
+a background child reach its completion report; paths already reported in the
+initial response are not repeated. Native writes refuse dirty destinations with
+`COMMAND_REVISION_CONFLICT`. External programs retain ordinary sandbox write
+roots. Their outside saves merge with accepted and pending typing through the
+editor's existing filesystem-replica transition against the saved checkpoint.
+The editor's typing stays in the document even when a program changes disk.
+
+Each destination's revision or absence is captured before preparing its change.
+A `WriteExecutionPinned` write rechecks the destination in the document owner or
+write door and rechecks sources after review. Movement refuses with
+`COMMAND_REVISION_CONFLICT`, without refreshing or rerunning the operation. If an
+editor accepts a command's write but cannot save it, that exact write stops with
+`COMMAND_PUBLICATION_PENDING`. Its accepted revision and held recovery version
+remain in the receipt; later children do not run. There is no dependent-launch
+barrier or draft substitution.
+
+Each operation captures its own inputs, so later statements see earlier saved
+writes rather than a whole-program snapshot. Internal captures, pipes and
+external printed paths grant no editor read basis. Exact source mappings credit
+only complete source lines actually delivered to the model, at the matching
+saved revision. Omitted, changed or partial-line bytes grant none. A later
+structured `edit` or `replace_lines` may change those seen lines; other lines
+still require a read. Read scopes stay frozen with both their revision and line
+coverage for each model response. The current inline delivery withholds credit
+when top-level output writers overlap or pass through nested tees rather than
+assigning ambiguous source positions. Optional editor credit reserves bounded
+snapshot and encoding capacity before opening the document; if that capacity is
+unavailable, output remains delivered and a later edit needs a fresh read.
+
+### Literal content and metadata commands
+
+`internal/tools/native/literal` is the command frontend for cat, head, tail, nl,
+wc, ls, stat, du, df, diff, cmp, file, xxd, hexdump, od, strings, the checksum
+family, base64 and the outline, summarize and repo-map built-ins. Argv binds
+through the catalog binder; each command runs under its catalog operation
+identity (`read`, `wc`, `list_dir`, `stat`, `diff`, `summarize`, `survey_repo`)
+over the same typed operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
+each file as exact published stream bytes before any output, retaining its
+encoding, BOM and newline policy. The pin names that exact representation. An input above the read budget,
+or output above the stream ceiling, refuses; nothing is truncated or summarized
+in its place.
+
+Formatting follows GNU coreutils and diffutils, with BSD `stat -f` and
+`base64 -D`/`-b` beside their GNU forms. The catalog fixes a few
+representations itself: wc separates values with one space, `file` answers from
+the versioned signature corpus, and `ls -l` prints owner and group names
+(decimal ids under `-n` or when the account database has no name) and UTC
+long-ISO times after GNU's block total, and bare `stat` prints the catalog's
+GNU multi-line default. Ordinary operand failures (missing,
+directory, permission) go to stderr with the utility's status and later operands
+still run; authority, budget and platform refusals stop with their typed code.
+Only diff's and cmp's complete status 1 is a publishable comparison. du walks
+through the same bounded held-root directory reads as `ls -R` and refuses a walk
+over `traversal_visits` rather than print a short total; df reads statfs through
+each bound path, defaulting to the attached folders and session scratch.
+Literal windows, strings runs and reversible numbering record exact source
+mappings when the output endpoint implements
+`commandprogram.SourceMappingRecorder`; notation, encodings and stdin record
+none. The command never delivers a conversational read; only exact mapped
+output that the delivery owner later delivers can qualify an edit base.
+
+`tree` runs in the search frontend over the same walk as find and rg, so the
+read boundary and visit budget apply and `--gitignore` uses the project ignore
+owner. `iconv` and `envsubst` run with the text utilities: iconv converts
+through `golang.org/x/text/encoding` and stages `-o` like a redirect; envsubst
+reads the statement's exported environment, where a managed secret stays its
+reference token.
+
+diff `-N` compares an absent file, and under `-r` an absent directory, as
+empty; `-x` and `-X` skip directory entries by base-name glob; and
+`--strip-trailing-cr` drops CR before each newline. Archives keep every
+extraction guard across gzip, bzip2, xz and zstd: tar `--exclude`, `-X` and
+`--exclude-vcs` patterns match any run of whole name components and prune
+excluded directories before their entries are examined, zip and unzip `-x`
+match the whole stored name, and every xz block's dictionary is checked
+against a 64 MiB ceiling before decoding.
+
+One date package (`internal/tools/native/datetext`) reads the `date -d`
+grammar, renders `+FORMAT`, parses `-j -f` strptime formats and applies `-v`
+adjustments. `date`, `touch -d`/`-t` and `find -newerXY` share it and read
+times in `TZ` from the program frame, UTC when unset. realpath resolves links
+before `..`, canonicalizes under `-e`, the default or `-m`, and projects
+`--relative-to`/`--relative-base`; an operand that does not resolve is an
+ordinary status-one failure and later operands still run.
+
+Name-only `ls` listings admit directory member names without fetching child metadata. Metadata is read only for selected formatting, sorting, classification or recursion. Hidden-name selection applies before the remaining `traversal_visits` bound, so an oversized listing refuses before allocating its full membership or inspecting its children. Completion logs report listing entries, directories and child metadata reads.
+
+### Search commands
+
+`grep`, `egrep`, `fgrep`, `rg` and `find` bind through the catalog and select
+records with `internal/textsearch`, the line-search operation the structured
+`grep` tool also scans with. grep's default BRE and `-E` ERE use POSIX
+leftmost-longest matching, with GNU back references, `\<`, `\>`, `\b`, `\w` and
+`\s` over fixed ASCII classes. `-P` is P01's bounded `pcre-common-v1` grammar
+on the bounded backtracking engine; it is never RE2. A construct outside a
+dialect refuses with `GREP_REGEX_UNSUPPORTED`, never a reinterpretation. rg's
+default dialect is RE2. Each record search is metered against the catalog
+regex ceilings, and an overrun refuses with `GREP_MATCH_BUDGET`.
+
+Traversal walks the invocation's held roots in unsigned byte order. Every
+listed name counts against `traversal_visits`, and every file read is pinned
+through execution revisions before it is searched. grep recursion visits
+hidden entries and applies no ignore file. rg skips hidden entries and applies
+the project ignore rules unless `-u` or `--hidden` say otherwise. find visits
+every entry and follows links only when `-H` or `-L` requests it. All of them skip entries the read
+boundary protects. A file holding NUL bytes prints GNU's
+`grep: PATH: binary file matches` once on stderr. A complete search without
+matches is status 1 and stays publication-eligible. An unreadable input, refusal or limit is status 2 or a
+typed stop, never a no-match. `find -exec` dispatches each child through the
+evaluator frame as an ordinary program child. `find -delete` removes entries
+only through the recoverable removal owner.
+
+Directory membership comes from the shared source catalog after current read
+admission. Cold directories prepare bounded observations; repeated commands
+reuse complete membership after watcher or directory-stamp validation. Hidden,
+ignored, and VCS entries remain eligible. An incomplete namespace, a followed
+link, or an external root uses live listing. Each listed name still charges the
+command's traversal budget. Native find evaluates name and path predicates
+before requesting live metadata; reached metadata predicates, actions, and
+printed matches validate the current entry through its held root. Discovery
+completion logs distinguish entry metadata reads, directory preparations,
+membership reuse, and live listings.
+
+File-backed grep and rg searches use at most eight workers, bounded by the
+process CPU allowance. One reducer publishes files in operand and traversal
+order, including diagnostics, source mappings and revision pins. Pending work
+is limited to twice the worker count; output travels in 64 KiB chunks with a
+two-event queue per file, charged to the program's aggregate memory admission.
+The bounded buffer pool includes the reducer's current payload and recycles
+storage after each write, including mapped records and cancellation cleanup.
+The first output record is released promptly. Quiet matches, closed downstream
+pipes and cancellation stop pending workers and release their held roots and
+memory. Stdin and process substitutions retain sequential stream consumption.
+Worker count shrinks when available working capacity cannot fund the transport
+window. Reader scratch, record growth, retained context, regex sessions and
+transformed output share the program account. Simultaneous work can reach that
+aggregate ceiling before a per-file ceiling; it returns a typed resource stop
+and releases all workers rather than waiting on its own leases or retrying reads.
+
+Pure literal searches use exact byte matching for ASCII case-insensitive
+records without creating a regex session for each line. The compiled matcher
+proves literal eligibility once; records outside that proof retain the same
+bounded regex engine, including Unicode case folding and malformed-byte offsets.
+
+### Stream queries and format-aware edits
+
+`internal/tools/native/query` runs jq, yq and the jq-edit built-in, each with
+the real tool's results.
+
+jq compiles one gojq program per execution through `nativejq.CompileProgram`,
+the same compilation the structured jq and jq_edit tools use. The vendored
+gojq ([third_party/README.md](../third_party/README.md#jq-engine)) behaves as
+jq 1.8: objects keep input key order, unmodified number literals print as
+written (`2.0`, `1E+3`), arithmetic is double arithmetic, and runtime errors use
+jq's wording and `jq: error (at FILE:LINE)` positions. Statuses are jq's: 5 for
+a runtime error in the last input or input that is not JSON, 3 for a compile
+error, 2 for an unreadable operand, and `-e`'s 1 and 4. Complete input values
+stream through the program in operand order, and the same iterator backs
+`input` and `inputs`, so a file is captured and pinned only when the query
+reaches it; `--slurpfile` and `--rawfile` files are pinned the same way. `$ENV`
+and `env` present the program's exported environment. No module loader or
+other file access exists. `query_depth`, `query_outputs`, `query_value_bytes`,
+`query_elapsed_ms` and `stream_bytes` refuse rather than truncate. The jq
+evaluation clock accumulates time across inputs inside the compiled program,
+including its input/output callbacks. Preparing a reached input between program
+runs is outside that clock. gojq exposes no instruction counter; cancellation is
+cooperative at its existing VM boundaries, not a CPU-time or hard wall-time guarantee.
+
+yq is mikefarah yq v4 on its own library: yq expression syntax, `eval` per
+document and `eval-all` over every document, `-p`/`-o` formats, and YAML output
+that keeps comments, key order and styles. `-i` evaluates into the first file
+and publishes the result at the captured revisions through the pinned write
+door. The library's environment, `load` and system operators are disabled, and
+evaluations run one at a time because the library keeps process-wide state.
+YAML alias expansion and the expression evaluator have no work counter; input
+size and `stream_bytes` bound them.
+
+Spellings are not dialect-exclusive. jq also accepts gojq's and jq's newer
+forms (`--args`, `--jsonargs`, `$ARGS`, `-f`, `--raw-output0`, `--stream`,
+`--yaml-input`, `--yaml-output`), runs `.` without a filter, and reports
+command-line errors with jq's message and status 2. A python yq spelling
+(`-y`, `-c`, `-s`, `-S`, `--arg` and the rest of jq's options) selects python
+yq: the jq program over each file's YAML documents, JSON output unless `-y`,
+and `-i` rewriting each file through the write door. Every other yq command
+is mikefarah yq; spellings the two share mean the same in both.
+
+A jq redirect re-serializes the document. jq-edit is the format-aware edit for
+JSON, YAML and TOML: it runs `nativejq.Edit` over the pinned accepted text and
+publishes the result through the pinned write door at its captured destination
+revision. A rewrite that would drop comments, tags or literals refuses with
+`JQ_EDIT_LOSSY`.
+
+### Platform adapter evidence
+
+`fseffect.Replace` reports whether replacement, directory durability and byte
+verification actually occurred, even when a later step fails. Staged byte counts
+alone do not prove publication. Source mutation settlement preserves the same
+journal and reports committed publication separately from a later completion
+error. Ownership changes return an explicit capability and applied result;
+unsupported platforms never claim that metadata changed.
+
+Native TCP observations carry exact endpoints, an opaque socket resource identity
+and the holder's process incarnation. Fresh inherited-descriptor checks establish
+lineage membership. Session pairing additionally requires complete observation
+of every relevant holder: inaccessible process/socket tables produce
+`ErrObservationIncomplete`, not a partial positive. Wildcard listeners retain
+ordinary connection admission. These are observations for mediated admission,
+not grants; mediated admission must recheck current identities at each required
+boundary.
+
+Portable external launch uses one prepared lifecycle through the existing
+`exec.LaunchPlan` boundary for commands, pipelines, PTYs and retained native
+process producers. Final sanitized environment, PATH selection, real cwd and
+literal argv are captured before helper construction. The helper receives the
+selected native executable path and held cwd, and never resolves a prepared
+command through PATH a second time. A current invocation path owner may supply
+its checked metadata handles; a held handle never grants source-read or execution
+authority. Host-managed native producers retain their existing OS authority. Agent command
+launches without an explicit scoped path port require their current initiating
+execution-authority callback: it revalidates the actual live action, actor/root
+identity, confinement and worker branch without consuming once-use permits twice.
+This admits execution metadata only and never grants source-read authority.
+Explicit strict confinement remains strict when the platform cannot apply it.
+
+Selection captures metadata identity without reading executable contents or
+preparsing shebangs. Execution-only files and directories retain their native
+permission semantics. Before start and at the actual helper handoff, the initiating
+owner rechecks current authority and captured entry/cwd identity. Existing process
+or process-tree supervision registers before release. Guard registration only
+establishes ownership; group, pipeline and PTY launch sites then require the
+captured handoff explicitly. Missing or concurrently released capture refuses. The helper then uses
+ordinary native pathname execution with the original literal argv, held cwd and
+frozen environment; scripts keep kernel shebang behavior, `$0` and native argument
+rules. The absolute metadata selection is separate from the native filename sent
+to the kernel: relative slash operands and relative/empty PATH entries preserve
+that spelling under captured cwd. Discovery without cwd facts retains its explicit
+absolute-only lookup policy. Darwin uses O_EXEC for entry and O_SEARCH for cwd;
+Linux uses O_PATH. Native capability availability remains platform qualification. Approved set-user-ID and file-capability behavior is preserved without a
+tracer, descriptor pathname or extra no-new-privileges restriction. Existing
+confinement still applies its own required restrictions.
+
+These are captured selection and current handoff checks. Native pathname lookup
+is not atomic with the final identity check, and mutable executable/interpreter
+contents are not immutable historical bytes. A stopped postexec image, credential,
+cwd or kernel-expanded argv snapshot is not a universal launch requirement.
+Available native process observations remain separate truthful facts, and absent
+observations never become successful enforcement claims. Exec transport EOF is
+not completed output, effects or recovery proof. Changed identity, current
+authority refusal, cancellation and actual native exec failures stop this launch;
+none selects another execution mechanism or automatically retries it.
+
+Synchronous and retained asynchronous groups share `ProcessGroup`: native Wait,
+tree cleanup and guard release settle once, and Stop ignores a settled invocation.
+Both managed browser postures use this lifecycle and the existing executor reaper;
+Chromium keeps its own sandbox when no host boundary is selected. Browser URL
+readiness stays separate from process admission, and both postures use the reduced
+environment. SDK transports retain their own native pipe and Wait lifecycle inside
+the prepared start callback; a failed handoff closes their terminal reader after
+native settlement.
+
+Complete macOS/Linux managed native fixtures, caller lifecycle regressions and
+installed-platform qualification remain required. Component fixtures and native
+helper success do not establish a connected command runtime or installed release.
+
+Windows qualification requires actual filesystem replacement while handles are
+open, reparse-point and exact-name identity checks, journal/error settlement,
+metadata capability results, typed null operands, executable alias resolution
+and launcher-stub refusal, literal argv/environment/cwd handoff, owned Job Object
+cancellation that preserves unrelated processes, and observed confinement and
+network enforcement. Packaging must deliver and verify the required executable,
+helper and security prerequisites on the installed target. Cross-compilation,
+Unix fixtures and unsupported results do not qualify those capabilities. The
+same native macOS/Linux runtime and installed-platform qualification obligations
+remain; individual adapter tests do not qualify the complete command evaluator.
 
 ## Altitude
 
@@ -72,9 +518,9 @@ The preferred tool is the highest-level capability that completely expresses the
 | Domain tool | Files, git, scans, search, workflow, delegation, browser, and other host operations |
 | Native analysis tool | A bounded first-party read or transformation with structured arguments, rejects, and evidence |
 | Confined MCP | An external protocol tool whose complete effect remains inside host confinement and policy |
-| Generic `command` | Last resort when no structured capability expresses the operation |
+| `command` | Programs that compose native utilities and confined external processes |
 
-Higher-level tools expose intent and consequences as fields, so the host can enforce scope, choose approval, preserve evidence, and offer specific recovery without parsing shell text. The generic command path still takes structured argv, not a shell string, and is not a shortcut around a native operation, project boundary, or approval gate.
+Domain tools expose intent and consequences as fields. `command` expresses programs whose reached statements bind to the same native owners, project boundaries and approval gates. Both forms preserve operation evidence and structured recovery.
 
 ### Root-scope guards
 
@@ -84,11 +530,37 @@ Temporary, cache, and tool data paths derive from the same OS conventions as sub
 
 Multi-root calls use explicit root addressing when a relative path is ambiguous. Host-data-relative spill paths are a separate jailed namespace that never exposes the absolute config directory.
 
-`@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share. One grammar resolves it for native tools, `cwd`, stream redirects, and unquoted `command` and `verify` arguments, which reach the program as absolute paths; a quoted `@scratch/...` stays literal. Processes also receive the folder as `SCRATCH_DIR`. A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
+`@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share, and `@label/<path>` an attached folder. One grammar resolves them for native tools, `cwd` and redirects. In a `command` program an unquoted leading `@label` or `@scratch` expands to the folder's absolute path in every argument and assignment value, external programs included; a quoted one stays literal, and a label no folder carries stays literal for the program to read. Expansion grants nothing; the operation or launch that uses the path checks it. `native_path` converts a computed path explicitly. `TMPDIR`, `TMP`, `TEMP` and `SCRATCH_DIR` name the same folder for native utilities and processes, and `mktemp` creates there; literal `/tmp` keeps its OS meaning. `pwd` and `$PWD` are absolute, and the command guidance lists each folder's label and absolute path with the scratch path ([paths in command programs](projects.md#paths-in-command-programs)). A path or label of a folder that was removed, moved or renamed refuses with `ROOT_NOT_ATTACHED` and lists the current folders ([root changes](projects.md#root-changes-during-a-session)). A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
 
-Recovery reads and structured queries of retained tool output use the session's spill byte bound (64 MiB by default), including decompression. Ordinary project files keep the 8 MiB read bound (`read`, `summarize`, and `diff`; `grep` searches the leading 8 MiB) and the 20 MiB `jq` input bound. Native edits (`edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `write`, and `restore_version`) have a lower 4 MiB bound, the size that version history and pre-turn checkpoints retain in full: a file or open document above it, or new content that would exceed it, rejects with `EDIT_FILE_TOO_LARGE` before any review or write, so every state a native edit replaces stays restorable. Removal and replacement follow the same promise without the bound: `delete`, `move` onto an existing file, and a `copy`, redirect, or extracted entry overwriting a file above it set the old entry aside in lifecycle recovery first ([Files live](files-live.md)). `command` has no such bound. The host's resolved path classification selects the bound; a similarly named project directory cannot widen it. Line and output limits still bound the returned page. A single long JSON string can be recovered in bounded substrings with `jq`.
+`@output/<program>.stdout` and `.stderr` address the invoking chat's retained
+command output copies. Unquoted addresses expand to absolute paths; quoted
+addresses remain literal. The host prepares this folder under its own state,
+outside writable scratch and standard temporary roots. These files are views,
+not authoritative output: retained screened blobs and their size and SHA-256
+identify the bytes. A host `read` repairs a missing or changed view and serves
+the retained bytes. Commands read the current file; changed bytes cannot reuse
+the original source mappings. Sandboxed commands receive read access through the
+standard read-root rules; native writes refuse this read namespace. The command
+result and receipt carry an `output_path` for each retained stream. Head and tail
+windows keep the start and summary visible, and their notice gives the exact next
+line to read with `sed -n`. Source mappings from later reads still refer to the
+original delivered file spans. Copies follow the session cleanup lifetime.
+
+
+Recovery reads and structured queries of retained tool output use the session's spill byte bound (64 MiB by default), including decompression. Ordinary project files keep the 8 MiB read bound (`read`, `summarize`, and `diff`; `grep` searches the leading 8 MiB) and the 64 MiB `jq` input bound. Native edits (`edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `write`, and `restore_version`) have a lower 4 MiB bound, the size that version history and pre-turn checkpoints retain in full: a file or open document above it, or new content that would exceed it, rejects with `EDIT_FILE_TOO_LARGE` before any review or write, so every state a native edit replaces stays restorable. Removal and replacement follow the same promise without the bound: `delete`, `move` onto an existing file, and a `copy`, redirect, or extracted entry overwriting a file above it set the old entry aside in lifecycle recovery first ([Files live](files-live.md)). Portable `command` reads ordinary disk streams without a per-file gather limit; operations that need a whole input use a 32 MiB bound. Buffered stages keep a 64 MiB bound, records have a 4 MiB bound, and streaming throughput has a 1 GiB runaway guard. `grep -T` on nonseekable stdin needs a second pass and uses a quota-admitted anonymous spool bounded to 64 MiB; ordinary file searches stream. Program memory admission is aggregate, so representation conversion and concurrent work can refuse below an individual input ceiling. Editor documents and credential-read fallback retain their own bounded capture rules. The host's resolved path classification selects the bound; a similarly named project directory cannot widen it. Line and output limits still bound the returned page. A single long JSON string can be recovered in bounded substrings with `jq`.
+
+A stopped `command` result keeps `refusal.code`, rendered `refusal.feedback`, and optional `refusal.details` from the actual screened rejection. Limit identifiers, maximum and observed values, and source coordinates stay typed. The program's separate completed and uncertain effect counts come from its settled receipt; a refusal does not undo earlier work. If feedback cannot be delivered, `refusal.delivery_failure` names capacity, cancellation or unavailable rendering; feedback and details remain empty, and the settled partial result remains available.
 
 Scope is rechecked where the effect occurs. A model-visible schema, prompt instruction, or earlier path classification never authorizes a later write.
+
+Each reached command retains its prepared inputs before approval. After admission,
+the invocation recorder commits the screened reviewed inputs and owner-start marker
+in one transaction before dispatch. Screening and blob staging happen outside the
+writer transaction; attachment, trace charges, and the start marker commit together
+for inline and blob inputs. Progress envelopes use the same boundary. A failed
+acknowledgement never permits dispatch, and retained bodies remain charged until a
+durable lookup reconciles their attachment. Recovery preserves unknown outcomes
+without replaying the program.
 
 ---
 
@@ -191,6 +663,60 @@ A tool profile is a declared capability surface for an agent role: allowed tools
 
 Open-world `tools: all` means all effective registered tools admitted to that workflow surface, including enabled extensions and MCP definitions. Restricted profiles remain closed and do not gain a tool merely because it registered at runtime.
 
+### Native command admission
+
+Typed command operations are selected explicitly from immutable native definitions.
+Retained structured schema registration and discovery do not expose a native
+binding. The effective profile declares the set-valued `command_effects` axes
+(`read_only`, `mutation`, `external_exec`, `network_egress`); an absent declaration
+admits none. Coordinator surface and session posture declarations further
+intersect that set. Project posture overlays can tighten their shipped set.
+These declarations do not activate the replacement command entry or remove
+current structured tools and shell restrictions.
+
+Each program frame pins the real initiating model call, actor, session, addressed
+roots and source branches. A child has its own host execution identity, fresh
+one-call capability state and owner contract; its identity does not replace the
+model call used for checkpoint correlation. Binding and effect-class admission
+supply no filesystem, network, revision, content-review or person authority.
+Those existing boundaries still admit each reached effect, including resumption.
+
+Reached admission freezes the actual reviewed opaque-reference argument object,
+separately from the ephemeral resolved-secret copy, under the shared retained
+state admission. The required recorder marker runs before entering the complete
+native owner. `OwnerInvoked` is independent of mutation certainty: an executed
+read with `NoEffect` still rules out a claim of zero program execution. A later
+host stop cannot rewrite a completed owner result or make its output publishable.
+Socket and direct-IP once permits bind session, the real model call and optional
+native execution id; a structured-only permit cannot authorize a native child.
+
+Progress requirements belong to immutable operation metadata. Retained operations
+use the existing progress-gated catalog; native definitions declare `required` or
+`not_required`. The shared progress predicate preserves worker and review-loop
+exemptions. The introducing command entry must validate the complete syntax unit
+and optional owner-prepared progress before applying that progress, then check
+known prerequisites and recheck reached effects against current progress. A
+progress update remains separate from program success and is never inferred
+from utility output.
+
+`PrepareProgramEnvelope` requires the actual parsed program's live validated
+identity before admitting the optional payload through the existing
+`update_progress` schema and author validation. `ApplyProgramProgress` uses the
+existing policy, secret screens, review and progress store, checking the held
+program identity and current root again before application. Its host envelope
+execution id has no invented shell node or source span. The progress recorder
+marker and `AuthorUpdateResult` remain separate from program-child settlement;
+a committed checklist is preserved after a later denied operation. These typed
+ports do not activate the replacement command entry.
+
+A listen request alone grants no connection. Automatic paired loopback access
+requires narrowed per-action conditional admission, current policy, and a fresh
+exact native listener/resource observation before dialing and before payload
+writes. Incomplete platform ownership observations use ordinary approval.
+Separately approved connect grants retain their existing authority. Resource
+identity changes stop later writes without rewriting earlier delivered effects;
+these checks do not claim kernel-atomic ownership across observation and write.
+
 ### Turn tool plans
 
 Each model call compiles one typed tool plan from the active surface, profile, attached roots, live resources, session activations, web-research state, and current MCP definitions. Every consumer for that call reads the same plan: the provider receives its immediate schemas, invocation reachability sees its complete addressable set, and `request_tools` sees its deferred set. A named surface without a successful compile is closed, not an unrestricted turn.
@@ -265,14 +791,14 @@ Results count searched text files, binary skips, unreadable files, byte-capped f
 
 ## The open document is the file
 
-A file the person has open in the editor is its editor document, for the agent as for the person. Tool reads of that path serve the document's draft, unsaved edits included; tool writes land in the document and save it. There is one text per open file, and it is the one the person is looking at.
+A file the person has open in the editor is its editor document, for the agent as for the person. Conversational structured reads of that path serve the document's draft, unsaved edits included; structured writes land in the document and save it. The `command` tool follows the saved-file rules above. There is one text per open file, and it is the one the person is looking at.
 
 | Tool | With an open document |
 |------|-----------------------|
-| `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
-| `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
+| Structured `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
+| Structured `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
 | `write`, `edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `restore_version` | Compute against the draft, land in the document, and save through the person's own journaled save door, recorded as the agent's write. One save publishes every contribution the draft holds, the person's unsaved typing included, and the ledger records each contributor, so such a publication reads as mixed authorship rather than the agent's alone. `EDITOR_DOCUMENT_CHANGING` rejects a document that kept moving under the write. A document diverged from disk, or a publication that fails after acceptance, holds the edit unsaved in the document: the receipt says the file was not written and why, that the disk still holds its earlier bytes for commands and tests, and names the retained state |
-| `command`, `verify`, processes | See disk. An agent write saves, so the files it touched are current for them |
+| `command`, `verify`, processes | Read saved bytes. An accepted edit whose publication failed remains unsaved and does not change those inputs |
 
 A worker on its private branch never sees documents: its tree is a copy. The design and the Den side are in [files-live.md § The open document is the file](files-live.md#the-open-document-is-the-file).
 
@@ -299,7 +825,7 @@ Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-
 
 ## Host process tools
 
-`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
+`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_list` with `listening_port` (and optionally `protocol`) answers which process holds a port: each matching process carries its listeners, and `unattributed_listeners` lists held sockets whose process could not be read. Native `lsof -i :PORT`, `-iTCP:PORT -sTCP:LISTEN` and `-iUDP:PORT` read the same kernel listener tables through the same owner. They always list the session's own listeners with their job identity; for a named port they list other holders only after the same inspection approval, and otherwise say those holders were not inspected. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
 
 For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 
@@ -418,6 +944,12 @@ A confined result also lists `sandbox_refusals`: each operation the kernel refus
 
 A run can fail for a reason its exit status does not carry. The foreground result, `command_output` for a job, and the job's completion then state `exec_failure` with a `kind` (`redirect_commit` when redirected output did not land, `stage_launch` when a later stage never started, `run` otherwise) and the error as `detail`. Such a run is never `ok`, and a verification check that ends this way fails. A timeout is reported by `termination_reason`, not here.
 
+Non-interactive external programs receive pipes rather than a terminal. Their
+default environment sets `TERM=dumb`, `PAGER=cat`, and `GIT_PAGER=cat`, and drops
+ambient `COLORTERM`. This avoids pagers and automatic terminal color; explicit
+program options still control their output. Interactive terminal sessions keep
+their terminal setup.
+
 ### Command job lifecycle
 
 A bounded foreground command may settle with captured output. A long-running command becomes a durable job reference with process-local control: spawn under the compiled confinement profile; record the handle and `owner_ref`; expose bounded output reads and an explicit stop action; settle on exit, stop, session teardown, or interruption. The host stops only processes it launched; process discovery by command-line or binary name is never authority.
@@ -431,6 +963,8 @@ A bounded foreground command may settle with captured output. A long-running com
 For a known command, `wait(until_complete=true, conditions=[{"kind":"process_done","handles":["<handle>"]}])` requires exact handles owned by the calling session and wakes on the first selected completion, loss of process ownership, or kernel refusal no earlier result showed. A `next_worker_done` condition may likewise name task ids in `handles`; other workers finishing do not wake it. A refusal settles the condition with `outcome: refused` while the job keeps running. Every process wake carries the host's report of the job: how it ended, or what was refused, with the recovery guidance that applies. Omit `timeout_ms` to wait without a deadline, or pass it as an explicit backstop. The host reconciles process state without periodic model turns, including exits before subscription and unavailable handles after restart. `resume=true`, restart recovery, and host re-arms keep both the conditions and the deadline mode unless explicitly replaced. `scan_done` concerns scans the session requested; automatic scans of the same tree neither hold it open nor wake it. A denied HTTP readiness destination ends the wait with `HTTP_REQUEST_HOST_DENIED`; it is not disguised as a later timeout.
 
 A wait lease is durable: it persists the addressed session, optional worker job, active profile, optional deadline, conditions, and exact loopback ports, and restart reconstructs subscriptions and probes. The first condition or deadline settles it. Worker waits return through the durable worker queue, coordinator waits keep coordinator workflow gating, and direct agent modes re-enter the same session. Delivery uses the lease id as an idempotent receipt; live delivery retries with bounded backoff, and restart recovery can replay a settled wake without duplicating an admitted one.
+
+A `command` call whose program is only waiting parks on the same lease. The evaluator reports a typed wait state when every live statement and job is blocked: the waiting statement, the earliest timer wake, and exact job handles. A call whose next wake falls more than ten seconds after it started, or whose program still waits only on jobs at that point, settles as `parked` with the waiting statement as its reason. Its turn ends and releases the worker slot, while the program keeps running under supervision; the lease subscribes to `program_done`, which only the host arms, and the program's end resumes the turn with exactly the result an unparked call returns. Shorter waits stay inline. The call's `timeout_ms`, or the catalog's `program_lifetime_ms` when the call names none, remains the program's outer bound: a single wait that cannot end within it refuses with `COMMAND_LIMIT_EXCEEDED` before the program parks. Anything else that ends the wait interrupts the program at its waiting statement while its `&` jobs keep running: user input or a stop opens the next turn with the interrupted result, and a replacement wait does the same. A restart cannot resume a program, so recovery resolves its lease with the program's receipts, interrupted, and the turn resumes with them; nothing is replayed.
 
 Coordinator wakes retain their event identity, target, batch, and workflow revision while queued. One consumer drains a session's queue; each successful model request acknowledges the facts captured for it, and failed requests do not consume wakes. A matching event settles the lease and delivers its result even when optional workflow gates would suppress an ambient turn; a fresh permitted workflow interruption ends the lease before model execution starts; unrelated process events leave the selected handle's wait armed.
 
@@ -493,7 +1027,9 @@ Redirects under `redirects: safe` follow RFC 9110 method rewriting (303 becomes 
 
 Failures separate what a retry can fix from what it cannot. A bounded body, a refused redirect chain, and an unusable declaration are permanent (`internal/outboundhttp` typed faults) and come back with `retryable: false`; a dial, a reset, or a deadline stays retryable and names `timeout_ms` when the deadline was the cause. A transfer that stops mid-download is a transfer failure, not a failure of its sink.
 
-Requesting `command` does not automatically load `http_request`; the coordinator can request that native tool when needed. An exact `curl` shape may be parsed before execution; agent-visible recovery is `USE_HTTP_REQUEST_NATIVE` with validated native entries in `replacement_calls`, never parser examples. The parsed grammar covers one request or a `;` / `&&` sequence with `echo` separators and carries the runner envelope: `cwd` joins onto body, response, and socket paths; `loopback_connect` is carried; a loopback URL declares its own port unless `--unix-socket` makes the socket the destination; `timeout_ms` is carried only when exactly one produced call owns the deadline and the native schema can hold it. Cookie files become a jar named after the file, basic credentials become `auth`, form parts become `form`, and url-encoded data is encoded into the body. Insecure TLS, a `||` gate, an unsupported capability request, and any `--data-urlencode` or `-F` operand that reads a file into an encoded body have no native shape and stay on the command boundary.
+Requesting `command` does not automatically load `http_request`; `curl` in a program runs through the native HTTP owner, and the coordinator can request `http_request` by exact name when it needs the structured result.
+
+`curl` keeps its own spellings on that owner. `--cacert` and `--capath` add a bundle, read through read authority, to the trust of that one request; `-E`/`--cert`, `--key` and `--pass` attach a PEM client identity, and an encrypted PKCS#8 key opens with a passphrase that may be a managed secret reference and is never echoed. Verification has no off switch: `-k` refuses with `COMMAND_TLS_VERIFICATION_REQUIRED` even beside `--cacert`, and `--cert-type` accepts only `PEM`. `-T` uploads a file's exact bytes, or stdin with `-T -`, and the receipt carries the sent body digest beside the received and emitted ones. `--resolve` and `--connect-to` change only where a hop connects: the override address passes the same address policy and loopback authority as a URL naming it, while the URL host stays in place for SNI, `Host`, cookies and the outbound-secret recipient. `-v` writes curl's `*`, `>` and `<` lines from the owner's observations of each hop, with `Authorization` and `Proxy-Authorization` shown by scheme alone and the rest screened at model delivery like any stderr. `--fail-with-body`, `-r` and the `-w` timing, peer, protocol, redirect and size variables report what the exchange observed. `-x`/`--proxy`, `--noproxy` and `--retry` stay unsupported because egress is mediated and HTTP is never replayed.
 
 ## Web research sources
 
@@ -505,8 +1041,52 @@ Search results are untrusted inbound content. Provider text is normalized at one
 
 ### Shared operation invocation contracts
 
-The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P08 binds production admission.
+The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. The evaluator settles each producer independently and publishes staged destinations only from complete eligible results.
 
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 
-Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) precede future persistence and wire producers.
+Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) govern persistence and wire producers.
+
+### Command schema and guidance
+
+`command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Domain source tools remain loadable where the profile offers them; routine operations run only through command. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
+
+The schema describes ordinary bash programs, including pipes, `while` and `until` loops, brace expansion, variables with assigning defaults such as `${PORT:=8080}`, functions, command substitutions, here-documents, here-strings, redirects and background jobs. Brace expansion is bounded by `expanded_fields` at admission, and a here-string counts against `here_document_bytes`. `timeout` and `nohup` dispatch their command exactly as a reached command, with its own receipt and confinement. `timeout` expiry signals the external process through program supervision (KILL after `-k`) or interrupts a native operation, and returns 124; the call's `timeout_ms` stays the outer bound. `time` and `time -p` report on stderr with processor time from reaped external children; a report that counted native operations as zero sets `cpu_time_unmeasured` in the result. `ulimit` reports the limits external children receive and sets soft and hard limits for later children of the same call only, from the per-resource capabilities the platform's resource-limit owner declares; a limit the platform does not provide is refused. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
+
+When every live evaluator activity is blocked, `sleep`, shell `wait` (`wait`, `wait %N`, `wait PID`), `timeout` and `read -t` report their timer deadlines and exact job handles to the shared wait lease, so a long wait parks the call as described under wait leases. Polling loops run each probe between full sleep intervals; no readiness event wakes a sleep early. A timed read keeps its partial input and returns 142 on expiry, and `read -t 0` reports whether input is ready without consuming it.
+
+| Surface | Source |
+|---|---|
+| Tool arguments and capability requests | `platform/tools/schemas/command.yaml` |
+| Syntax, utility forms, help and limits | `platform/tools/command-language-v1/*.json` and their generated catalog |
+| Per-call guidance | `platform/shared/partials/command-surface.md` |
+| Available command effects | `platform/host/coordinator-surfaces.yaml` and `platform/tools/profiles/*.yaml` |
+
+OAR policies select the actual operation and typed rejection facts. A host refusal preserves the results already produced and identifies the stopped execution. Source pins describe computation inputs; only confirmed delivery of mapped source bytes establishes observation evidence.
+
+---
+
+## Portable command cutover inventory
+
+[`tool-audit.csv`](../tool-audit.csv) enumerates the 119 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 79 retained domain tools, 15 structured tools also available as command forms, and 24 command-only operation contracts. Host process controls, Git mutations and conversational document edits retain useful structured surfaces beside command forms.
+
+The current command entry parses and admits ordinary bash programs, dispatches cataloged utilities natively, and launches other programs through confinement. It returns child output and status, effects, a program receipt, and typed host refusals. Utility errors retain the utility's stderr and exit status. OAR renders host decisions from typed facts; it does not classify a command by reading its output. The stopped statement's shell-voice stderr accompanies the structured refusal, and earlier child results remain available. The [feedback contract](agent-tool-feedback.md) and [command language](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/) define those surfaces.
+
+| Area | Current path and cutover decision |
+|---|---|
+| Native utilities | `internal/toolhost/command_programs.go` composes literal, mutation, query, search, text, host-environment, Git, and HTTP operations. The catalog accepts common GNU and BSD spellings. Unsupported syntax is a typed admission refusal; utility option and input errors use native status and stderr. |
+| External programs | The command program's process launcher applies the configured confinement and capability decisions at launch. A utility gap that falls through to an installed binary records `native_gap` for repair in the corresponding utility branch. |
+| Results and receipts | Invocation records identify program and child executions, source pins, delivered ranges, effects, completeness, and host-stop facts. An incomplete result cannot become successful evidence merely because one child exited zero. |
+| Approvals | Host decisions use structured operation and effect facts. Balanced cards and recommended options follow [authorization](authorization.md) and [security usability](security.md#security-usability); this cutover does not change their frequency. |
+| Guidance and workflow | The command schema, per-call prompt, OAR policies, and workflow consumers use the current tool surface. The final live request capture must confirm rendered wording and model selection on the rebuilt composition. |
+| Routine tools | `command` is on the routine floor. Routine file, search, query, Git inspection and HTTP operations have no callable registration or profile offer. Their contracts remain available for command admission, receipts, approvals and historical decoding. Domain tools and conversational edits keep their structured surfaces. |
+
+### Source-index behavior
+
+A ready index accelerates the parts of a query it can prove current. The native `grep` and `rg` paths consult exact-revision Bloom filters per walked file; uncovered, changed, out-of-scope, still-indexing, symlink, and otherwise undecidable files are read live. The source-index coverage change in #1466 makes native survey and listing combine indexed covered entries with live directory reconciliation, including additions and deletions. `find` currently walks and stats live entries because its expression and traversal semantics require current filesystem facts beyond the safe index projection. Native search tests and #1466 exercise mixed indexed and live scopes through direct tools and the `command` entry. An index miss is never evidence that a live area is empty.
+
+### Qualification and default cutover
+
+The stock profiles and coordinator surfaces use the command environment for routine work. Its disable control refuses new program dispatch and settles its live work; it never sends a program to a shell as a fallback. Named operation contracts retain their authority, approval and history meanings after their standalone schemas leave the offered roster.
+
+Focused tests establish the changed registry, catalog and runtime contracts on their recorded source. GitHub CI checks each PR; a local composition supports direct human command testing and application validation with the shipped prompts. Historical run-3 results remain diagnostic evidence. A local development build does not establish installed macOS/Linux qualification, and Windows-host qualification remains pending. No release is part of this cutover.

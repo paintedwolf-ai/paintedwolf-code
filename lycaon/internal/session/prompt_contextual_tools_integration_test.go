@@ -4,6 +4,7 @@ package session_test
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -33,7 +35,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	}
 	specSession, err := specFix.Store.Get(t.Context(), specFix.Sess.ID)
 	testutil.FailErr(t, "read spec workflow posture", err)
-	if specSession.Posture != api.SessionPostureSpec || !hasTool(rec.LastRequest().Tools, "read") {
+	if specSession.Posture != api.SessionPostureSpec || !hasTool(rec.LastRequest().Tools, "command") {
 		t.Fatalf("spec workflow lost its reading posture: posture=%s tools=%v", specSession.Posture, toolNames(rec.LastRequest().Tools))
 	}
 	for _, tool := range rec.LastRequest().Tools {
@@ -106,34 +108,25 @@ func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T)
 	if commandSchema == nil {
 		t.Fatal("Investigate request must expose command")
 	}
-	props, ok := commandSchema["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("Investigate command schema=%v want properties", commandSchema)
-	}
-	capability := promptSchemaMap(t, props["capability_request"])
-	capabilityProps := promptSchemaMap(t, capability["properties"])
-	socketPaths := promptSchemaMap(t, capabilityProps["socket_paths"])
-	if socketPaths["type"] != "array" || promptSchemaMap(t, socketPaths["items"])["type"] != "string" {
-		t.Fatalf("socket_paths schema=%v", socketPaths)
-	}
-	if _, ok := capabilityProps["direct_ip"]; !ok {
-		t.Fatalf("capability_request properties=%v want direct_ip", capabilityProps)
-	}
-	envValues := promptSchemaMap(t, promptSchemaMap(t, props["env"])["additionalProperties"])
-	if envValues["type"] != "string" {
-		t.Fatalf("command env value schema=%v", envValues)
+	for _, test := range []struct {
+		name  string
+		args  map[string]any
+		valid bool
+	}{
+		{"program with capabilities", map[string]any{"command": `MODE=fixture; printf '%s\n' "$MODE"`, "capability_request": map[string]any{"socket_paths": []string{filepath.Join(t.TempDir(), "service.sock")}, "direct_ip": true}}, true},
+		{"program string required", map[string]any{"command": 12}, false},
+		{"socket path array required", map[string]any{"command": "true", "capability_request": map[string]any{"socket_paths": "service.sock"}}, false},
+		{"environment belongs in program", map[string]any{"command": "true", "env": map[string]any{"MODE": "fixture"}}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := tools.ValidateToolArgs(commandSchema, test.args)
+			if (err == nil) != test.valid {
+				t.Fatalf("actual offered arguments valid=%v want=%v error=%v", err == nil, test.valid, err)
+			}
+		})
 	}
 
 	if _, ok := firstSystemMessage(req.Messages); !ok {
 		t.Fatal("Investigate request must include a system prompt")
 	}
-}
-
-func promptSchemaMap(t *testing.T, raw any) map[string]any {
-	t.Helper()
-	value, ok := raw.(map[string]any)
-	if !ok {
-		t.Fatalf("schema value=%T want map[string]any", raw)
-	}
-	return value
 }

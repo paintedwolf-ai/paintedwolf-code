@@ -4,12 +4,12 @@ import os
 import subprocess
 
 
-def api(path, method='GET', body=None):
+def api(path, method='GET', body=None, timeout=None):
     command = ['gh', 'api', '--method', method, path]
     if body is not None:
         command += ['--input', '-']
     result = subprocess.run(command, input=json.dumps(body) if body is not None else None,
-                            capture_output=True, text=True, check=True)
+                            capture_output=True, text=True, check=True, timeout=timeout)
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
