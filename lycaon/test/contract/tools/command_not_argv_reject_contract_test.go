@@ -96,7 +96,7 @@ func TestCommandNotArgvRejectsInlineEnvironment(t *testing.T) {
 	t.Parallel()
 	exec := commandRejectExecutor(t)
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{
-		"command": "TOKEN=value",
+		"command":          "TOKEN=value",
 		"terminal_capture": map[string]any{},
 	}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},

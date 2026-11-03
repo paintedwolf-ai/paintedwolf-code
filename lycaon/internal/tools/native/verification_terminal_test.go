@@ -1,7 +1,7 @@
 package native
 
 import (
-"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"

@@ -160,3 +160,22 @@ func TestProgramFrameRetainsSupplementalFactsOnCapturedLedger(t *testing.T) {
 		t.Fatal("closed frame retained new facts")
 	}
 }
+
+func TestVerifyProgramFrameRetainsSelectedCheckInvocation(t *testing.T) {
+	parent, tc := frameFixture(t)
+	memory := stageMemory(t, 64<<20)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "verify", Arguments: map[string]any{}}, memory)
+	testutil.FailErr(t, "capture selected-check invocation", err)
+	defer frame.Close()
+	model, err := frame.ModelInvocation(t.Context())
+	testutil.FailErr(t, "observe selected-check invocation", err)
+	if model.ToolName != "verify" || model.CanonicalArguments != "{}" {
+		t.Fatalf("model invocation=%+v", model)
+	}
+	_, observation, release, err := prepareProgramPolicyObservation(t.Context(), frame, memory, tc, nil)
+	testutil.FailErr(t, "observe verify policy", err)
+	defer release()
+	if len(observation.submitted) != 0 {
+		t.Fatalf("policy received generated arguments: %+v", observation.submitted)
+	}
+}

@@ -13,15 +13,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/programtest"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -68,7 +64,7 @@ func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {
 			return &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: paths}, Tools: tc, Admission: admit}, nil
 		}}, nil
 	}
-	root, readRoot := program.Dir, t.TempDir()
+	readRoot := t.TempDir()
 	source := filepath.Join(readRoot, "input")
 	testutil.FailErr(t, "seed owned input", os.WriteFile(source, []byte("ordinary fixture bytes through EOF"), 0o644))
 	testutil.FailErr(t, "seed owned input attribute", unix.Setxattr(source, "user.stream-fixture", []byte("original"), 0))
@@ -80,48 +76,33 @@ func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {
 	testutil.FailErr(t, "close owned atime fixture", unix.Close(fd))
 	var before unix.Stat_t
 	testutil.FailErr(t, "inspect source before", unix.Stat(source, &before))
-	c, on := confine.DefaultConfinement(confine.Request{Roots: []string{root}, ReadRoots: []string{readRoot}})
+	c, on := confine.DefaultConfinement(confine.Request{Roots: []string{program.Dir}, ReadRoots: []string{readRoot}})
 	if !on || confine.BoundaryOf(c).Filesystem.Verdict(confine.AccessWrite, source).Allowed {
 		t.Fatal("fixture input must be outside effective write authority")
 	}
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate byte input process", err)
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"read": true, "verify": true}}})
-	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	t.Cleanup(func() {
-		testutil.FailErr(t, "close owned fixture registry", registry.Lifecycle.Close(context.Background()))
-	})
-	tool := &native.VerifyTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: registry}
+	tool := &native.VerifyTool{Programs: program.Runtime}
 	program.Configure = func(tc *tools.ToolContext) {
 		tc.Files.ReadRoots = []string{readRoot}
 		tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(source)}}
 	}
-	for _, kind := range []string{"stdin_from", "stage input"} {
+	for _, kind := range []string{"verify", "command"} {
 		t.Run(kind, func(t *testing.T) {
-			tctx := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "implement", SessionID: "stream-fixture-" + kind}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}}, Files: tools.InvocationFiles{ReadRoots: []string{readRoot}, ApprovedFileAccess: []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(source)}}}}
 			line := strconv.Quote(self) + " -test.run=TestNativeCommandByteInputProcess -- byte-input-probe"
 			var raw string
-			if kind == "stdin_from" {
-				raw, err = tool.Run(t.Context(), map[string]any{"command": line, "stdin_from": source, "wait_ms": float64(10000)}, tctx)
-				testutil.FailErr(t, "verify native byte input", err)
-				var result struct {
-					Outcome  string `json:"outcome"`
-					ExitCode int    `json:"exit_code"`
-					Tail     string `json:"tail"`
-				}
-				testutil.FailErr(t, "decode verification result", json.Unmarshal([]byte(raw), &result))
-				if result.Outcome != "passed" || result.ExitCode != 0 || !strings.Contains(result.Tail, "byte-input:ordinary fixture bytes through EOF") {
-					t.Fatalf("verification input did not finish with complete bytes: %s", raw)
-				}
+			if kind == "verify" {
+				raw, err = program.Invoke(t, t.Context(), "verify", map[string]any{"command": line + " < " + strconv.Quote(source)}, tool.Run)
 			} else {
 				raw, err = program.Call(t, t.Context(), line+" < "+strconv.Quote(source))
-				testutil.FailErr(t, "execute program byte input", err)
-				var result command.ProgramOutcome
-				testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(raw), &result))
-				if result.State != "completed" || result.Status != 0 || !strings.Contains(result.Stdout, "byte-input:ordinary fixture bytes through EOF") {
-					t.Fatalf("program input did not finish with complete bytes: %s", raw)
-				}
 			}
+			testutil.FailErr(t, "execute byte input", err)
+			var result command.ProgramOutcome
+			testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(raw), &result))
+			if result.State != "completed" || result.Status != 0 || !strings.Contains(result.Stdout, "byte-input:ordinary fixture bytes through EOF") {
+				t.Fatalf("program input did not finish with complete bytes: %s", raw)
+			}
+
 			var after unix.Stat_t
 			testutil.FailErr(t, "inspect source after", unix.Stat(source, &after))
 			if before.Mode != after.Mode || before.Uid != after.Uid || before.Gid != after.Gid || before.Atim != after.Atim || before.Mtim != after.Mtim || before.Ctim != after.Ctim {

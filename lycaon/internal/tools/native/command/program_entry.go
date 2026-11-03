@@ -109,7 +109,7 @@ type SessionOwners interface {
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
-	tool string
+	tool            string
 	control         programControlDefinition
 	publicationOnce sync.Once
 	publicationErr  error
@@ -143,8 +143,8 @@ type programRun struct {
 
 // ProgramOutcome is the command tool's result for a settled program.
 type ProgramOutcome struct {
-	ResultVersion int `json:"result_version,omitempty"`
-	Outcome string `json:"outcome,omitempty"`
+	ResultVersion    int                              `json:"result_version,omitempty"`
+	Outcome          string                           `json:"outcome,omitempty"`
 	ProgramID        string                           `json:"program_id"`
 	State            string                           `json:"state"`
 	Status           int                              `json:"status"`
@@ -351,7 +351,11 @@ func (r *ProgramRuntime) bindProgramFrame(ctx context.Context, run *programRun, 
 		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID, BranchID: branch.String(), Directory: cwd},
 		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: catalogDigest,
 	}
-	frame, err := toolexecution.FreezeProgramFrame(ctx, root, tc, toolexecution.ProgramModelInvocation{ToolName: run.tool, Arguments: args}, run.memory)
+	submitted := tc.Effects.RequestedArgs
+	if submitted == nil {
+		submitted = args
+	}
+	frame, err := toolexecution.FreezeProgramFrame(ctx, root, tc, toolexecution.ProgramModelInvocation{ToolName: run.tool, Arguments: submitted}, run.memory)
 	if err != nil {
 		return nil, err
 	}

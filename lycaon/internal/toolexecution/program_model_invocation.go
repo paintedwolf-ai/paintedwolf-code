@@ -259,5 +259,5 @@ func (f ProgramFrame) retainProgramFacts(ctx context.Context, n int64) error {
 }
 
 func programModelTool(name string) bool {
-    return name == "command" || name == "verify"
+	return name == "command" || name == "verify"
 }

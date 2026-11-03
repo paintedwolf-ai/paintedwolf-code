@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -97,7 +98,8 @@ func (canaryEchoSession) Close() error { return nil }
 func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	service, _, _ := newTestSecrets(t)
 	meta := hostSecret(t, service, "canary", "Canary", canaryValue)
-	root := t.TempDir()
+	program := programtest.New(t, programtest.Options{})
+	root := program.Dir
 	script := filepath.Join(root, "echo.sh")
 	testutil.FailErr(t, "write echo script", os.WriteFile(script, []byte(echoScript), 0o755))
 	seen := func(name string) func() string {
@@ -139,7 +141,11 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 	runner := hostcmd.NewRunner()
 	command := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
-	verify := &native.VerifyTool{Runner: runner, Boundary: boundary, Background: background}
+	verify := &native.VerifyTool{Programs: program.Runtime}
+	program.Runtime.Executor = executor
+	program.Runtime.Registry = registry
+	program.Runtime.Projector = captureprojection.New(matcher, nil)
+	executor.SetProgramEntry("verify", nil)
 	testutil.FailErr(t, "register command", registry.Register("command", command.Run))
 	testutil.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	testutil.FailErr(t, "register terminal tools", native.RegisterTerminalSessionTools(registry, background))
@@ -168,7 +174,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 			{scheme: "argument", args: map[string]any{"command": "sh echo.sh " + meta.Reference, "terminal_capture": map[string]any{}}, received: seen("seen.txt")},
 		},
 		"verify": {
-			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-verify.txt"}}, received: seen("seen-verify.txt")},
+			{scheme: "environment", args: map[string]any{"command": "TOKEN=" + meta.Reference + " SEEN=seen-verify.txt sh echo.sh"}, received: seen("seen-verify.txt")},
 		},
 		"terminal_open": {
 			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-terminal-open.txt"}}, received: seen("seen-terminal-open.txt")},
@@ -222,7 +228,15 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 				}
 				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 				defer cancel()
-				out, err := executor.Invoke(ctx, tool, call.args, tctx)
+				var out string
+				var err error
+				if tool == "verify" {
+					out, err = program.Invoke(t, ctx, tool, call.args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+						return executor.Invoke(ctx, tool, args, tc)
+					})
+				} else {
+					out, err = executor.Invoke(ctx, tool, call.args, tctx)
+				}
 				if err != nil && toolrejection.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
 					t.Fatalf("%s (%s): %v", tool, call.scheme, err)
 				}

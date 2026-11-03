@@ -1,9 +1,9 @@
 package native
 
 import (
-"github.com/lycaon/lycaon/internal/tools/native/command"
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"

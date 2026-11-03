@@ -11,8 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
-"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -263,7 +263,9 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 			outcome.Outcome = run.tc.Effects.Out.SourceRun.Verdict
 		}
 	}
-	if run.tool == "verify" { outcome.ResultVersion = 2 }
+	if run.tool == "verify" {
+		outcome.ResultVersion = 2
+	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
 		return "", fmt.Errorf("command program encode: %w", err)
