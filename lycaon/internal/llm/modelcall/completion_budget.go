@@ -84,7 +84,7 @@ func CapOutputTokens(limit, explicit, catalog int) int {
 // Session recovery lowers reasoning on the next attempt without changing answer limits.
 var sessionReasoningRecovery = scopedstore.New[struct{}](scopedstore.DefaultEntries)
 
-// MarkSessionReasoningRecovery lowers reasoning after a hidden-reasoning-heavy reply.
+// MarkSessionReasoningRecovery lowers reasoning after excessive hidden reasoning.
 func MarkSessionReasoningRecovery(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -93,7 +93,7 @@ func MarkSessionReasoningRecovery(sessionID string) {
 	sessionReasoningRecovery.Store(sessionID, struct{}{})
 }
 
-// SessionReasoningRecovery reports whether a prior turn triggered closed-loop downgrade.
+// SessionReasoningRecovery reports whether a prior reply reduced reasoning.
 func SessionReasoningRecovery(sessionID string) bool {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
