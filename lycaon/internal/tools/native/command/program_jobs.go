@@ -24,12 +24,10 @@ import (
 // jobs, wait, kill, command_output and command_stop share one set of handles.
 // A native job has a session numeric identifier; its stop cancels its context.
 type SessionJobs struct {
-	Registry      *bgprocess.Registry
-	Supervisor    *ProgramSupervisor
-	SessionID     string
-	RootSessionID string
-	ProjectID     string
-	ToolCallID    string
+	Registry   *bgprocess.Registry
+	Supervisor *ProgramSupervisor
+	SessionID  string
+	ProjectID  string
 
 	mu        sync.Mutex
 	closed    atomic.Bool
@@ -50,7 +48,17 @@ type SessionJobs struct {
 
 type jobWaiter struct{ unblock func() }
 
-// sessionJobsKey binds admission to this retained session owner.
+// ProgramJobOrigin binds a job to the call that started its program.
+type ProgramJobOrigin struct {
+	Tool, ToolCallID, RootSessionID string
+}
+
+type programJobsBinding struct {
+	owner  *SessionJobs
+	origin ProgramJobOrigin
+}
+
+// sessionJobsKey binds program provenance to its retained session owner.
 type sessionJobsKey struct{}
 
 type jobOutcome struct {
@@ -108,7 +116,7 @@ func noteJobNative(ctx context.Context, args []string) {
 
 // BeginProgram prunes finished jobs from prior programs before a new program
 // runs so %1 names the first active or newly started job.
-func (j *SessionJobs) BeginProgram(ctx context.Context) (context.Context, error) {
+func (j *SessionJobs) BeginProgram(ctx context.Context, origin ProgramJobOrigin) (context.Context, error) {
 	if j == nil || j.Registry == nil {
 		return ctx, nil
 	}
@@ -145,13 +153,17 @@ func (j *SessionJobs) BeginProgram(ctx context.Context) (context.Context, error)
 	}
 	j.order = kept
 	j.programOrder = nil
-	return context.WithValue(ctx, sessionJobsKey{}, j), nil
+	return context.WithValue(ctx, sessionJobsKey{}, programJobsBinding{owner: j, origin: origin}), nil
 }
 
 // start runs the job body detached from the launching statement's context.
 func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
 	if j == nil || j.Registry == nil || run == nil {
 		return "", fmt.Errorf("program jobs require a session registry and body")
+	}
+	binding, ok := ctx.Value(sessionJobsKey{}).(programJobsBinding)
+	if !ok || binding.owner != j || binding.origin.Tool == "" || binding.origin.ToolCallID == "" || binding.origin.RootSessionID == "" {
+		return "", fmt.Errorf("program job requires its initiating call")
 	}
 	// Serialize registration against closing this retained session owner.
 	j.mu.Lock()
@@ -169,8 +181,8 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	done := make(chan struct{})
 	tracker := &jobProcessTracker{ready: make(chan struct{})}
 	handle, err = j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
-		SessionID: j.SessionID, RootSessionID: j.RootSessionID, ProjectID: j.ProjectID,
-		CommandLine: commandLine, OriginTool: "command", ToolCallID: j.ToolCallID,
+		SessionID: j.SessionID, RootSessionID: binding.origin.RootSessionID, ProjectID: j.ProjectID,
+		CommandLine: commandLine, OriginTool: binding.origin.Tool, ToolCallID: binding.origin.ToolCallID,
 		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			defer close(done)
 			defer release()

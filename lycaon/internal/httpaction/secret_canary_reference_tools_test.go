@@ -99,7 +99,11 @@ func (canaryEchoSession) Close() error { return nil }
 func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	service, _, _ := newTestSecrets(t)
 	meta := hostSecret(t, service, "canary", "Canary", canaryValue)
-	program := programtest.New(t, programtest.Options{})
+	completions := make(chan bgprocess.Completion, 1)
+	programBackground := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{Complete: func(_ context.Context, result bgprocess.Completion) { completions <- result }})
+	t.Cleanup(func() { _ = programBackground.Lifecycle.Close(context.Background()) })
+	program := programtest.New(t, programtest.Options{Background: programBackground})
+	program.Configure = func(tc *tools.ToolContext) { tc.Identity.RootSessionID = "root-1" }
 	root := program.Dir
 	script := filepath.Join(root, "echo.sh")
 	testutil.FailErr(t, "write echo script", os.WriteFile(script, []byte(echoScript), 0o755))
@@ -157,6 +161,9 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 		return append([]secretmatch.HarvestedValue(nil), evidence...)
 	})
 	program.Runtime.Projector = captureprojection.New(matcher, func(ctx context.Context, projectID, chatID string) error {
+		if chatID != "root-1" {
+			t.Errorf("capture root=%q, want root-1", chatID)
+		}
 		values, err := service.ScreeningValues(ctx, projectID, chatID)
 		if err != nil {
 			return err
@@ -170,6 +177,8 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 		return nil
 	})
 	program.Runtime.Projector.SetManagedSecretGeneration(service.ScreeningGeneration)
+	program.Background.Output.SetCaptureProjector(program.Runtime.Projector)
+	testutil.FailErr(t, "register command output", registry.Register("command_output", (&command.CommandOutputTool{Registry: program.Background}).Run))
 	verifyExecutor.SetProgramEntry("verify", nil)
 	testutil.FailErr(t, "register program verify", program.Runtime.Registry.Register("verify", verify.Run))
 	testutil.FailErr(t, "register command", registry.Register("command", command.Run))
@@ -203,6 +212,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 			{scheme: "environment", args: map[string]any{"command": "TOKEN=" + meta.Reference + " SEEN=seen-verify.txt sh echo.sh"}, received: seen("seen-verify.txt")},
 			{scheme: "argument", args: map[string]any{"command": "SEEN=seen-verify-argument.txt sh echo.sh " + meta.Reference}, received: seen("seen-verify-argument.txt")},
 			{scheme: "pipeline", args: map[string]any{"command": `sh -c 'printf %s "$1"' canary ` + meta.Reference + ` | sh -c 'v=$(cat); printf %s "$v" > seen-pipeline.txt; printf %s "$v"'`}, received: seen("seen-pipeline.txt")},
+			{scheme: "poll", args: map[string]any{"command": "SEEN=seen-verify-poll.txt sh echo.sh " + meta.Reference + " &"}, received: seen("seen-verify-poll.txt")},
 		},
 		"terminal_open": {
 			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-terminal-open.txt"}}, received: seen("seen-terminal-open.txt")},
@@ -256,14 +266,35 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 				}
 				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 				defer cancel()
+				var originCallID string
 				var out string
 				var err error
 				if tool == "verify" {
 					out, err = program.Invoke(t, ctx, tool, call.args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+						originCallID = tc.Identity.ToolCallID
 						return verifyExecutor.Invoke(ctx, tool, args, tc)
 					})
 				} else {
 					out, err = executor.Invoke(ctx, tool, call.args, tctx)
+				}
+				if tool == "verify" && call.scheme == "poll" && err == nil {
+					jobs := program.Background.Output.List(ctx, program.Session)
+					if len(jobs) != 1 {
+						t.Fatalf("background jobs=%+v", jobs)
+					}
+					_, _, waitErr := program.Background.Lifecycle.Wait(ctx, program.Session, jobs[0].ProcessID)
+					testutil.FailErr(t, "wait for verification job", waitErr)
+					select {
+					case completion := <-completions:
+						if completion.OriginTool != "verify" || completion.ToolCallID != originCallID {
+							t.Fatalf("completion origin=%+v", completion)
+						}
+					case <-ctx.Done():
+						t.Fatal("verification completion not published")
+					}
+					out, err = program.Invoke(t, ctx, "command_output", map[string]any{"handle": jobs[0].ProcessID, "cursor": float64(0)}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+						return executor.Invoke(ctx, "command_output", args, tc)
+					})
 				}
 				if err != nil && toolrejection.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
 					t.Fatalf("%s (%s): %v", tool, call.scheme, err)

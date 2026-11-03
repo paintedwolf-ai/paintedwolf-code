@@ -269,7 +269,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	}
 	outputs, scope, screening := run.capture.Outputs, run.capture.Scope, run.capture.Screening
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
-	ctx, err = jobs.BeginProgram(ctx)
+	ctx, err = jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: run.tool, ToolCallID: tc.Identity.ToolCallID, RootSessionID: tc.ChatSessionID()})
 	if err != nil {
 		return "", err
 	}
