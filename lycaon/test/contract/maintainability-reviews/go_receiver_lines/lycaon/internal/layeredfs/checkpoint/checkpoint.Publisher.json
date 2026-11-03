@@ -1,0 +1,14 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/layeredfs/checkpoint/checkpoint.Publisher",
+  "kind": "runtime_service",
+  "workstream": "immutable-worker-checkpoints",
+  "disposition": "retain",
+  "reason": "Retain the 306-line publication lifecycle: one barrier orders client and mapped-region flush, content capture, durable publication and retention. Checkpoint publication, fault and recovery contracts support this bounded owner.",
+  "reviewed_commit": "bd060249916b4513aba81ab615d13e81549da7fb",
+  "ceiling": 306,
+  "boundaries": {
+    "lycaon/internal/layeredfs/checkpoint/checkpoint_test.go": "0a6dfdc9275bf942bf3059251d25a8d5ad24810d60f26a49959e9b06e8ebfe84"
+  },
+  "reviewed_shape": "1637b6984de77145769e2ddf29dccb07647e88a9dca777999a6ee8d8bde28300"
+}

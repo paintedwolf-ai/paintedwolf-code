@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -46,7 +47,10 @@ func (s *MergeService) clearReconcilePaths(sessionID string) {
 	s.Reconcile.ClearMergeReconcilePaths(sessionID)
 }
 
-func prepareMergeMutations(task *api.WorkerTask, assessment PromoteAssessment) ([]promoteMutation, error) {
+func prepareMergeMutations(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, assessment PromoteAssessment) ([]promoteMutation, error) {
+	if err := session.RevalidateTaskCheckpointPreview(ctx, task, roots); err != nil {
+		return nil, err
+	}
 	byPath := map[string]PromoteMergeResult{}
 	for _, mr := range assessment.MergeResults {
 		byPath[mr.Path] = mr

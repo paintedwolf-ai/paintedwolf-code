@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/layeredfs/checkpoint/checkpoint.Store",
+  "kind": "runtime_service",
+  "workstream": "immutable-worker-checkpoints",
+  "disposition": "retain",
+  "reason": "Retain the 18-method immutable store as the content-addressed blob, manifest and journal persistence boundary. Manifest validation and recovery share storage paths; publication and promotion remain separate owners.",
+  "reviewed_commit": "bd060249916b4513aba81ab615d13e81549da7fb",
+  "ceiling": 18,
+  "boundaries": {
+    "lycaon/internal/layeredfs/checkpoint/checkpoint_test.go": "0a6dfdc9275bf942bf3059251d25a8d5ad24810d60f26a49959e9b06e8ebfe84",
+    "lycaon/internal/layeredfs/checkpoint/promotion_test.go": "15b3f49a90d062f63ff21f95208d2eb408caf442a2defc0a98f9baaa140bcaf2"
+  },
+  "reviewed_shape": "ffe063b7c1495179f2ba831ccac82f3902d707c66046e7032d3d78a095f9b841"
+}

@@ -138,7 +138,7 @@ func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, 
 	if strings.TrimSpace(task.ParentSessionID) != sessionID {
 		return api.WorkerMergeResult{}, s.reject(OverlayPromoteSessionMismatchCode, map[string]any{"job_id": jobID})
 	}
-	if strings.TrimSpace(task.WorkspaceRoot) == "" {
+	if strings.TrimSpace(task.WorkspaceRoot) == "" && session.CheckpointStoreDirForTask(task) == "" {
 		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID, "reason": "no isolated branch"})
 	}
 	if task.MergeStatus != api.WorkerMergeStatusPending {
@@ -175,6 +175,9 @@ func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, 
 		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNoPathsCode, map[string]any{"job_id": jobID, "remaining_overlay_paths": changed})
 	}
 	out.Paths = mergePaths
+	if session.CheckpointStoreDirForTask(task) != "" {
+		session.MarkTaskCheckpointPreviewBindIntent(jobID)
+	}
 	assessment, err := s.assessMerge(ctx, sessionID, task, mergePaths)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
@@ -263,6 +266,9 @@ func (s *MergeService) reclaimOrphanedApply(ctx context.Context, task *api.Worke
 	}
 	roots := s.taskRootRefs(ctx, task)
 	promote := PromoteRootsForTask(task, roots)
+	if err := session.RollbackTaskCheckpointJournal(ctx, task, roots); err != nil {
+		return true, fmt.Errorf("recover checkpoint promotion: %w", err)
+	}
 	found, err := recoverPromoteTransaction(s.hostDataDirFor(task), jobID, promote, task)
 	if err != nil {
 		return true, fmt.Errorf("recover interrupted promote: %w", err)
@@ -316,10 +322,15 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 	}
 }
 
-func (s *MergeService) failPromoteTransaction(tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
+func (s *MergeService) failPromoteTransaction(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
 	var unstarted *promoteTransactionUnstartedError
 	if errors.As(cause, &unstarted) {
 		return errors.Join(cause, tx.close(), revertPending())
+	}
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
+	defer cancel()
+	if err := session.RollbackTaskCheckpointJournal(cleanupCtx, task, promote.Roots); err != nil {
+		return errors.Join(cause, err)
 	}
 	rollbackErr := tx.rollback(promote, task)
 	if rollbackErr != nil {
@@ -503,6 +514,9 @@ func (s *MergeService) assessMerge(ctx context.Context, sessionID string, task *
 	if task == nil {
 		return PromoteAssessment{}, nil
 	}
+	if assessment, ok, err := assessCheckpointTask(ctx, s, sessionID, task, mergePaths); ok || err != nil {
+		return assessment, err
+	}
 	return AssessPromotePaths3Way(ctx, s, sessionID, task, mergePaths)
 }
 
@@ -585,9 +599,19 @@ func normalizeMergePaths(ctx context.Context, paths []string, task api.WorkerTas
 // holdBranch leases the overlay's branch tree for a merge read, rebuilding a
 // reclaimed tree. A tree that cannot be rebuilt rejects as not pending.
 func (s *MergeService) holdBranch(ctx context.Context, jobID string) (*BranchLease, error) {
+	task, exists := s.Queue.Get(jobID)
+	checkpointed := exists && task != nil && session.CheckpointStoreDirForTask(task) != ""
+	if checkpointed {
+		if err := session.SyncTaskCheckpointToWorkspace(task); err != nil {
+			return nil, fmt.Errorf("rehydrate checkpoint branch: %w", err)
+		}
+	}
 	_, lease, err := s.Queue.EnsureWorkerBranch(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, ErrWorkerBranchUnavailable) {
+			if checkpointed {
+				return LeaseExistingBranch(ctx, task)
+			}
 			return nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{
 				"job_id": jobID, "reason": "overlay workspace unavailable",
 			})
