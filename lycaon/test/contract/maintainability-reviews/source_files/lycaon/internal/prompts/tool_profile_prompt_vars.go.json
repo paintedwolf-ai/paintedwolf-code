@@ -4,12 +4,12 @@
   "kind": "projection",
   "workstream": "command-operation-surface",
   "disposition": "retain",
-  "reason": "Retain the 544-line projection of offered schemas, compiled availability and command effects into template facts. Command operation guidance derives from the callable command entry and its allowed effects; loading, permission and execution remain with their existing owners. One projection keeps debug snapshots and rendered guidance consistent. Focused capability and command-guidance contracts cover read-only, mutating, deferred and unavailable surfaces. Growth beyond 545 lines requires renewed review.",
-  "reviewed_commit": "9f223ceb2db9726aea288fcd3e81160eed9fd33f",
-  "ceiling": 545,
+  "reason": "Retain the 579-line projection of offered schemas, compiled availability, command effects and requestability into template facts. Progress guidance uses offered command identity and excludes it under read-only effects. Keeping these facts with runner and surface projections gives normal prompts and debug rendering one authority source. Capability, surface-card and command-guidance contracts cover mutating, read-only, deferred and unavailable surfaces. Retain at 579 lines; growth requires renewed cohesion review.",
+  "reviewed_commit": "afefe66e693a5edc97fd23b8be3fe94f4eae83c7",
+  "ceiling": 579,
   "boundaries": {
     "lycaon/test/contract/agentcontext/command_guidance_facts_test.go": "4b4cbd12c20d7bfa5821f2471ced0cfbedf3a8f9f5e46d8497ad716d5bc21e43",
     "lycaon/internal/prompts/surface_card_test.go": "df543f08f40716e342a26b975c045763c6f189c0e35e4876f586bacfef3177d0",
-    "lycaon/internal/prompts/tool_profile_prompt_vars_test.go": "893682101aea177d2e98326017e68e47698e3abb199de7c672ca7008eed5e1af"
+    "lycaon/internal/prompts/tool_profile_prompt_vars_test.go": "4c7112d8e65cfd5e752dc8f58d83345fe42f61a3ebfc2c9f30fc3d5a488f7bc3"
   }
 }
