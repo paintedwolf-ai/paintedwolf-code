@@ -6,31 +6,22 @@ from capture import verify_capture_files
 import math
 import pathlib
 import subprocess
-from worker_evidence import worker_checks
+from orchestration_evidence import worker_checks, planned_dispatch_checks, decision_checks, question_checks
 import episode_evidence
+from episode_evidence import verify_execution, closeout_checks, progress_checks, method_checks, cited_finding_checks, verify_allowance, allowance_checks
 from focused_evidence import prepared_case, preparation_checks, returned_worker_checks, sandbox_checks
 from candidate_tests import changed_test_paths
-from verification_evidence import verification_checks
+from verification_evidence import verification_checks, capability_checks, workflow_checks
 from artifacts import retain_project, retain_outside, InvalidCandidate
-from grading_identity import grading_hash, report_id, verify_grader, retain_grader
-from grading_state import report_lease
+from grading_identity import grading_hash, report_id, verify_grader, retain_grader, report_lease, measure
 from grade import grade, IMAGE, GradingUnavailable
-from measurement_cache import measure
 from progress import save
 from built_runtime import verify_application
 from snapshot import ROOT, identity, file_hash
 from local_runtime import runtime_identity
-from execution_evidence import verify_execution
-from coordinator_evidence import closeout_checks, progress_checks
-from orchestration_evidence import planned_dispatch_checks
-from decision_evidence import decision_checks, question_checks
-from capability_evidence import capability_checks
-from closeout_evidence import method_checks, cited_finding_checks
 from fixture_contracts import outside_checks
-import structure
+import sampling as structure
 import cost_evidence
-from workflow_evidence import workflow_checks
-from allowance_evidence import verify_allowance, allowance_checks
 from sampling import estimate, reliability, METHOD
 
 MANIFEST = json.loads((pathlib.Path(__file__).parent / 'benchmark.json').read_text())

@@ -142,7 +142,7 @@ func TestEstimateMessagesTokensWithVision_chargesOnlyTheWindow(t *testing.T) {
 	total := window.MaxToolImages + 1
 	msgs := make([]compaction.ContextMessage, total)
 	for i := range msgs {
-		msgs[i] = compaction.ContextMessage{ToolImageTokens: 100}
+		msgs[i].ToolImageTokens = 100
 	}
 	want := (total - window.Dropped(total)) * 100
 	if got := compaction.EstimateMessagesTokensWithVision(msgs, true); got != want {

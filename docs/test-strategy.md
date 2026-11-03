@@ -876,9 +876,8 @@ Each admission job retains the existing three-hour execution allowance. This is 
 conservative ceiling, not a measured duration; broad-change hosted timings are
 required before tightening it or claiming an admission latency improvement.
 
-The Linux supervisor/native-privilege variant runs early in admission for Go or CI changes.
-Its existing managed target selects the complete supervisor leg on the ephemeral
-runner, preserving all credential, effect and revocation assertions.
+The real Linux supervisor/native-privilege leg runs early in admission for Go
+or CI changes, preserving required credential, effect and revocation assertions.
 Native Rust compilation and execution occur together in the landing native lane;
 ready admission does not repeat a compile-only copy. Standalone compile-only
 selection remains available for focused local diagnosis.
@@ -1209,6 +1208,25 @@ cache hits alone do not establish a test pass. Existing recovery retains first
 failures and retries only demonstrated infrastructure faults. Product assertions
 and races remain blocking; there is no new automatic quarantine or assertion
 retry policy.
+
+##### Admission and scale execution
+
+Ready admission runs focused Go tests and frontend seam canaries after repository
+contracts. Broad changed-statement coverage and native compilation execute at the
+exact landing source. Frontend and script coverage stages supply the complete
+assertion suites, avoiding a second uncovered execution in the same qualification.
+The failed/unverified/previously-passed frontier changes order, never the complete
+successful-path inventory. Unknown source scope still selects the complete recipe.
+
+Full-size program retention and query default-limit cases run in the command-scale
+qualification lane and nightly. Routine checks keep small mechanism cases, including
+bounded query input and durable receipt/session reuse. The full-size assertions and
+shipped limits remain intact. Nightly's other stress packages run separately so the
+same scale binaries do not execute twice in that profile.
+
+The performance objective is under an hour for the complete stable ready-to-main
+path. Execution deadlines retain their existing headroom; no one-hour cutoff is
+introduced. Compiler cache hits never substitute for executed test receipts.
 
 ##### Integration capacity experiment
 

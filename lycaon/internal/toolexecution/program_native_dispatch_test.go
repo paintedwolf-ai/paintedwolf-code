@@ -35,10 +35,12 @@ func (f nativeStartFunc) BeforeNativeOwner(ctx context.Context, b toolcontract.B
 }
 
 func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t *testing.T) {
-	nativeReadAdmissionFixture(t, "input")
+	for _, tool := range []string{"command", "verify"} {
+		t.Run(tool, func(t *testing.T) { nativeReadAdmissionFixture(t, "input", tool) })
+	}
 }
 
-func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
+func nativeReadAdmissionFixture(t *testing.T, inputPath, modelTool string) {
 	t.Helper()
 	parent, tc := frameFixture(t)
 	root := tc.ActiveRootPath()
@@ -51,7 +53,7 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 	// independently of the raw native path handed to the existing read door.
 	var observationRules []*oar.Rule
 	for _, anchor := range []string{oar.AnchorToolPreInvoke, oar.AnchorToolHandler} {
-		observationRules = append(observationRules, &oar.Rule{ID: anchor, Kind: oar.KindPolicy, Anchor: anchor, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool != "command" || paintedwolf.native_operation != "read" || tool_arg_string("command") != "fixture" || tool_arg_string("path") != ""`})
+		observationRules = append(observationRules, &oar.Rule{ID: anchor, Kind: oar.KindPolicy, Anchor: anchor, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool != "` + modelTool + `" || paintedwolf.native_operation != "read" || tool_arg_string("command") != "fixture" || tool_arg_string("path") != ""`})
 	}
 	pipeline := oar.NewGuardPipeline(oar.NewRuleSet(observationRules), nil, nil)
 	pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
@@ -60,7 +62,7 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 	definition := nativeDefinition(t, "read")
 	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
 	testutil.FailErr(t, "freeze actual profile", err)
-	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "fixture"}}, stageMemory(t, 64<<20))
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: modelTool, Arguments: map[string]any{"command": "fixture"}}, stageMemory(t, 64<<20))
 	testutil.FailErr(t, "freeze frame", err)
 	t.Cleanup(frame.Close)
 	child := parent

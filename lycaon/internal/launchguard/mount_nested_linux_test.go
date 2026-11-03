@@ -205,7 +205,7 @@ func checkNestedTopologyChanges(directory, root string, underlay int, pins *fixt
 		return closeHiddenErr
 	}
 	if group {
-		held, err = pinNestedViewRoot(sourceNS, desktopNS, pins, target, first)
+		held, err = pinNestedViewRoot(sourceNS, desktopNS, pins, target, first, deadline)
 		if err != nil {
 			return err
 		}
@@ -226,7 +226,7 @@ func checkNestedTopologyChanges(directory, root string, underlay int, pins *fixt
 		}
 	}
 	if group {
-		held, err = pinNestedViewRoot(sourceNS, desktopNS, pins, target, added)
+		held, err = pinNestedViewRoot(sourceNS, desktopNS, pins, target, added, deadline)
 		if err != nil {
 			return err
 		}

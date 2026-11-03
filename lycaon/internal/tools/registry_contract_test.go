@@ -163,23 +163,23 @@ func TestRegistryReplacesDynamicDefinitionsAtomically(t *testing.T) {
 
 func TestCatalogRegistryPublishesDeclaredMetadata(t *testing.T) {
 	catalog := &toolschema.Config{Tools: map[string]toolschema.Entry{
-		"read": {Description: "Read", Schema: map[string]any{"type": "object"}},
+		"recall": {Description: "Read", Schema: map[string]any{"type": "object"}},
 	}}
 	reg, err := NewCatalogRegistry(catalog)
 	testutil.FailErr(t, "create registry", err)
-	catalog.Tools["read"] = toolschema.Entry{Description: "Changed", Schema: map[string]any{"type": "string"}}
+	catalog.Tools["recall"] = toolschema.Entry{Description: "Changed", Schema: map[string]any{"type": "string"}}
 	handler := func(context.Context, map[string]any, ToolContext) (string, error) { return "ok", nil }
-	testutil.FailErr(t, "register read", reg.Register("read", handler))
-	read, _ := reg.Definition("read")
+	testutil.FailErr(t, "register recall", reg.Register("recall", handler))
+	read, _ := reg.Definition("recall")
 	if read.Meta.Description != "Read" {
 		t.Fatalf("description = %q", read.Meta.Description)
 	}
 	read.Meta.ArgsSchema["type"] = "string"
-	read, _ = reg.Definition("read")
+	read, _ = reg.Definition("recall")
 	if read.Meta.ArgsSchema["type"] != "object" {
 		t.Fatalf("schema changed through snapshot: %+v", read.Meta.ArgsSchema)
 	}
-	if err := reg.RegisterDerived(ToolMeta{Name: "read", Description: "inline"}, handler); err == nil {
+	if err := reg.RegisterDerived(ToolMeta{Name: "recall", Description: "inline"}, handler); err == nil {
 		t.Fatal("catalog metadata was overridden")
 	}
 

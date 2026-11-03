@@ -37,7 +37,7 @@ func RejectFromGuardErr(ctx context.Context, err error) *guidance.Refusal {
 	}
 	var nudge *guidance.ErrGroundingNudge
 	if errors.As(err, &nudge) && nudge != nil {
-		body, renderErr := guidance.RenderPolicyCopy(ctx, nudge.Code, string(oar.EffectBlock), nudge.Copy)
+		body, renderErr := guidance.RenderPolicyCopy(ctx, nudge.Code, string(oar.EffectBlock), nudge.Copy, nudge.Data)
 		if renderErr != nil {
 			body = nudge.Code
 		}
@@ -204,6 +204,7 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 	RegisterWorktreeFacts(ctx, gc, raised.IndexWatch)
 	ObserveEditorConfigMismatch(gc, raised)
 	ObserveHTTPRequestWebPage(gc, raised)
+	ObserveHTTPRequestLoopbackOtherSession(gc, raised)
 	ObserveSourceParsingFeedback(gc, raised)
 	m.ObserveDeferredUnactivated(gc, sess.ID)
 	loopguard.ObserveDoomLoopWarn(gc, doomCompletionCountAfter, loopguard.DoomLoopMaxAttempts, tool, args)

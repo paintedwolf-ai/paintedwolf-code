@@ -11,7 +11,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Memory) PrepareRewind(ctx context.Context, op RewindOperation) error {
+func (r *memoryRewind) PrepareRewind(ctx context.Context, op RewindOperation) error {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -32,7 +33,8 @@ func (s *Memory) PrepareRewind(ctx context.Context, op RewindOperation) error {
 	return nil
 }
 
-func (s *Memory) GetRewindOperation(ctx context.Context, id string) (*RewindOperation, error) {
+func (r *memoryRewind) GetRewindOperation(ctx context.Context, id string) (*RewindOperation, error) {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -46,7 +48,8 @@ func (s *Memory) GetRewindOperation(ctx context.Context, id string) (*RewindOper
 	return &copy, nil
 }
 
-func (s *Memory) SetRewindPhase(ctx context.Context, id, status, detail string) error {
+func (r *memoryRewind) SetRewindPhase(ctx context.Context, id, status, detail string) error {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -67,7 +70,11 @@ func (s *Memory) SetRewindPhase(ctx context.Context, id, status, detail string) 
 	return nil
 }
 
-func (s *Memory) CommitRewind(ctx context.Context, id, sessionID, anchorMessageID string, response api.RewindSessionResponse) (int, error) {
+func (r *memoryRewind) CommitRewind(ctx context.Context, id, sessionID, anchorMessageID string, response api.RewindSessionResponse) (int, error) {
+	return commitRewindMemory(ctx, r.core, id, sessionID, anchorMessageID, response)
+}
+
+func commitRewindMemory(ctx context.Context, s *memoryCore, id, sessionID, anchorMessageID string, response api.RewindSessionResponse) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -120,20 +127,20 @@ func (s *Memory) CommitRewind(ctx context.Context, id, sessionID, anchorMessageI
 	return 0, ErrMessageNotFound
 }
 
-func (s *Memory) RewindOperationsForRecovery(ctx context.Context) ([]RewindOperation, error) {
-	return s.rewindOperationsForRecoveryMatching(ctx, "")
+func (r *memoryRewind) RewindOperationsForRecovery(ctx context.Context) ([]RewindOperation, error) {
+	return rewindOperationsForRecoveryMatching(ctx, r.core, "")
 }
 
 // RewindOperationsForRecoverySession scopes RewindOperationsForRecovery to
 // one session, for on-demand repair after a panic caught mid-rewind.
-func (s *Memory) RewindOperationsForRecoverySession(ctx context.Context, sessionID string) ([]RewindOperation, error) {
+func (r *memoryRewind) RewindOperationsForRecoverySession(ctx context.Context, sessionID string) ([]RewindOperation, error) {
 	if strings.TrimSpace(sessionID) == "" {
 		return nil, fmt.Errorf("session id required")
 	}
-	return s.rewindOperationsForRecoveryMatching(ctx, sessionID)
+	return rewindOperationsForRecoveryMatching(ctx, r.core, sessionID)
 }
 
-func (s *Memory) rewindOperationsForRecoveryMatching(ctx context.Context, sessionID string) ([]RewindOperation, error) {
+func rewindOperationsForRecoveryMatching(ctx context.Context, s *memoryCore, sessionID string) ([]RewindOperation, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -154,7 +161,8 @@ func (s *Memory) rewindOperationsForRecoveryMatching(ctx context.Context, sessio
 
 // CommittedRewindOperationsForSweep lists committed rewinds awaiting the
 // boot-only disk GC pass (see Manager.sweepCommittedRewinds).
-func (s *Memory) CommittedRewindOperationsForSweep(ctx context.Context) ([]RewindOperationSweepItem, error) {
+func (r *memoryRewind) CommittedRewindOperationsForSweep(ctx context.Context) ([]RewindOperationSweepItem, error) {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -183,7 +191,8 @@ func (s *Memory) CommittedRewindOperationsForSweep(ctx context.Context) ([]Rewin
 // DeleteRewindOperation removes one committed rewind row once its retention
 // window (olderThan) has passed. A no-op (not an error) if the row already
 // moved past 'committed', or hasn't aged out yet.
-func (s *Memory) DeleteRewindOperation(ctx context.Context, id string, olderThan time.Time) error {
+func (r *memoryRewind) DeleteRewindOperation(ctx context.Context, id string, olderThan time.Time) error {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return err
 	}

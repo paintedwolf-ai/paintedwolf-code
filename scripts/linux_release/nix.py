@@ -10,11 +10,11 @@ from pathlib import Path
 import platform
 import subprocess
 import sys
-import time
 import tempfile
+import time
 
 from ..artifact_paths import artifact_root
-from . import nix_archive, factory_source, nix_runner, nix_scanner_tools, nix_progress
+from . import nix_closure_notices as nix_scanner_tools, nix_runner, release_source as factory_source
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
@@ -22,8 +22,28 @@ NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 CREDENTIALS = ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY", "FEED_SIGNING_KEYS_JSON",
                "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
 COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "document-core",
-              "desktop-settings-observer", "desktop-shell-check", "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools", "closure-notices",
-              "scanner-host-tools", "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm", "nix-workflow-fixture")
+              "desktop-settings-observer", "desktop-shell-check", "resources", "browser", "gitengine", "ocr",
+              "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools",
+              "closure-notices", "scanner-host-tools", "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm",
+              "nix-workflow-fixture")
+
+
+def destination(root: Path, path: Path | None) -> Path | None:
+    if path is None:
+        return None
+    if path.is_symlink() or path.exists():
+        raise ValueError("closure archive must use a fresh destination")
+    selected = path.resolve()
+    if selected.is_relative_to(root.resolve()) or selected.is_relative_to(Path("/nix/store")):
+        raise ValueError("closure archive must stay outside source and Nix store trees")
+    if not selected.parent.is_dir():
+        raise ValueError("closure archive parent directory must already exist")
+    return selected
+
+
+def copy_closure(nix: list[str], outputs: list[str], path: Path, environment: dict):
+    path.mkdir(mode=0o700)
+    return subprocess.run(nix + ["copy", "--to", path.as_uri(), *outputs], env=environment, text=True)
 
 
 def credential_free_environment() -> dict:
@@ -74,7 +94,7 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
         raise ValueError("flake.lock is required; evaluation/build must not create or update it")
     if archive_dir is not None and operation != "build":
         raise ValueError("closure archives require a build operation")
-    archive = nix_archive.destination(root, archive_dir)
+    archive = destination(root, archive_dir)
     if archive is not None and role is not None and archive.is_relative_to(factory_root):
         raise ValueError("Factory archive must stay outside the factory source tree")
     source = None if role is None else ("git+file://" + str(factory_root) + "?rev=" +
@@ -103,7 +123,7 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
     if component == "scanner-host-tools" and operation == "check":
         report["passed"] = True
         return retain_report(root, report, 0)
-    result = nix_progress.run(invocation, cwd=root, env=environment)
+    result = nix_runner.run(invocation, cwd=root, env=environment)
     report["passed"] = result.returncode == 0
     if result.returncode == 0 and operation == "check" and role is None:
         result, report["nonflake"] = nonflake_identity(root, environment)
@@ -121,7 +141,7 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
         else:
             result = closure
         if report["passed"] and archive is not None:
-            result = nix_archive.copy_closure(NIX, outputs, archive, environment)
+            result = copy_closure(NIX, outputs, archive, environment)
             report["archive"] = {"path": str(archive), "publication": "nonrelease"}
             report["passed"] = result.returncode == 0
     return retain_report(root, report, result.returncode)

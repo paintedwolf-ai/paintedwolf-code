@@ -7,6 +7,7 @@ import (
 	"time"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
+	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -16,8 +17,21 @@ const dispatchHeartbeatEvery = scanbase.DispatchClaimTTL / 4
 const dispatchCleanupTimeout = 5 * time.Second
 
 type dispatchFailure struct {
-	ScannerID string
-	Error     string
+	ScannerID   string
+	Error       string
+	ConfigFault bool
+}
+
+func newDispatchFailure(scannerID string, err error) dispatchFailure {
+	if err == nil {
+		return dispatchFailure{ScannerID: scannerID}
+	}
+	_, configFault := scancatalog.AsConfigFault(err)
+	return dispatchFailure{
+		ScannerID:   scannerID,
+		Error:       err.Error(),
+		ConfigFault: configFault,
+	}
 }
 
 type rootDispatcher struct {

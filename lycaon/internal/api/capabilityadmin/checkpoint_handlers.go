@@ -2,20 +2,21 @@ package capabilityadmin
 
 import (
 	"errors"
-	"github.com/go-chi/chi/v5"
-	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/socketref"
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/projectview"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/secretview"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	"github.com/lycaon/lycaon/internal/socketref"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -155,7 +156,10 @@ func (s *CheckpointActions) writeCheckpointResolveError(w http.ResponseWriter, r
 		return
 	}
 	var socketError *confine.SocketResolveError
+	var capacity *toolcontract.ProgramMemoryLimitError
 	switch {
+	case errors.As(err, &capacity):
+		s.responses.FailDetails(w, wire.ApiErrorCodeApprovalCapacityExceeded, map[string]any{"account": capacity.Account, "maximum": capacity.Maximum, "observed": capacity.Observed}, "Approval authority exceeds the decision capacity.")
 	case errors.Is(err, socketref.ErrUnbound) || errors.As(err, &socketError):
 		s.responses.FailDetails(w, confine.SocketResolveChanged, map[string]any{"field": "option_id", "recovery": "request_fresh_approval"}, "The local service needs a fresh approval after the service or engine restarts.")
 	case errors.Is(err, hitl.ErrPresenceRequired):

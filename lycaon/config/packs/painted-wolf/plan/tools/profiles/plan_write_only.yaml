@@ -11,10 +11,7 @@ tools:
   pack_board: sticky
   request_decision: sticky
   request_budget: sticky
-  edit: sticky
-  replace_lines: sticky
   restore_version: sticky
-  summarize: sticky
   render_view: sticky
   wait: sticky
   skills_read: sticky

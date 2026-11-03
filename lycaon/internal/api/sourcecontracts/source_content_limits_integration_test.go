@@ -11,10 +11,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 

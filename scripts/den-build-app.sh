@@ -26,6 +26,11 @@ for arg in "$@"; do
   esac
 done
 
+if [[ ! -d "${DEN_DIR}/node_modules" ]]; then
+  echo "error: frontend dependencies missing — run ./task setup-dev -- --frontend" >&2
+  exit 1
+fi
+
 for tool in bun go cargo rustc; do
   if ! command -v "${tool}" >/dev/null 2>&1; then
     echo "error: ${tool} required" >&2

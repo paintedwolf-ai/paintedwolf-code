@@ -10,23 +10,31 @@ import (
 )
 
 func (g *RuleApprovalGate) executionCapabilityCovers(action hitl.ProposedAction) bool {
-	capability := hitl.ExecutionCapabilityForAction(action)
-	if capability == "" || g.grants == nil {
+	capabilities := hitl.ExecutionCapabilitiesForAction(action)
+	if len(capabilities) == 0 || g.grants == nil {
 		return false
 	}
-	for _, grant := range g.grants.live(action.Scope.ChatSession()) {
-		if grant.Predicate.Category != hitl.ApprovalGrantCategoryExecutionCapability || grant.Predicate.Pattern != capability {
-			continue
+	live := g.grants.live(action.Scope.ChatSession())
+	for _, capability := range capabilities {
+		covered := false
+		for _, grant := range live {
+			if grant.Predicate.Category != hitl.ApprovalGrantCategoryExecutionCapability || grant.Predicate.Pattern != capability {
+				continue
+			}
+			if grant.Scope != hitl.ApprovalGrantScopeChat || grant.ProjectID != action.Scope.ProjectID || grant.ChatSessionID != action.Scope.ChatSession() {
+				continue
+			}
+			if grant.ExpiresAt != nil && !grant.ExpiresAt.After(time.Now()) {
+				continue
+			}
+			covered = true
+			break
 		}
-		if grant.Scope != hitl.ApprovalGrantScopeChat || grant.ProjectID != action.Scope.ProjectID || grant.ChatSessionID != action.Scope.ChatSession() {
-			continue
+		if !covered {
+			return false
 		}
-		if grant.ExpiresAt != nil && !grant.ExpiresAt.After(time.Now()) {
-			continue
-		}
-		return true
 	}
-	return false
+	return true
 }
 
 func executionCapabilityDecision(result *hitl.ApprovalResult) bool {

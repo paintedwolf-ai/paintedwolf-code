@@ -263,27 +263,18 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 
 // RecoverApprovalOperations rolls back authority installed without a committed checkpoint.
 func (m *ApprovalAuthority) RecoverApprovalOperations(ctx context.Context) error {
-	pending, releasePending, err := restoredApprovalOperations(ctx, m.store, m.nativeAdmission)
-	if err != nil {
-		return err
-	}
-	defer releasePending()
-	if len(pending) == 0 {
-		return nil
-	}
-	recovery, ok := m.authorityInstaller.(approvalAuthorityRecovery)
-	if !ok {
-		return fmt.Errorf("approval authority recovery is not configured")
-	}
-	for _, op := range pending {
+	release := m.LockApprovalAuthority()
+	defer release()
+	return m.store.eachPreparedApprovalOperation(ctx, m.nativeAdmission, func(op preparedApprovalOperation) error {
+		recovery, ok := m.authorityInstaller.(approvalAuthorityRecovery)
+		if !ok {
+			return fmt.Errorf("approval authority recovery is not configured")
+		}
 		if err := recovery.RollbackApprovalOption(ctx, op.CheckpointID, op.Option); err != nil {
 			return err
 		}
-		if err := m.store.rollbackApprovalOperation(ctx, op.CheckpointID); err != nil {
-			return err
-		}
-	}
-	return nil
+		return m.store.rollbackApprovalOperation(ctx, op.CheckpointID)
+	})
 }
 
 type ApprovalAuthority struct {
@@ -306,8 +297,8 @@ type approvalAuthorityStore interface {
 	prepareApprovalOperation(context.Context, string, string, approvedAuthority) error
 	commitApprovalOperation(context.Context, StoredCheckpoint, *DecisionResult, time.Time, Resolution, func(*sql.Tx) error) (bool, error)
 	rollbackApprovalOperation(context.Context, string) error
-	preparedApprovalOperations(context.Context) ([]preparedApprovalOperation, error)
-	chatGrants(context.Context, time.Time) ([]ChatGrant, error)
+	eachPreparedApprovalOperation(context.Context, toolcontract.ReviewStateAdmission, func(preparedApprovalOperation) error) error
+	eachChatGrant(context.Context, toolcontract.ReviewStateAdmission, time.Time, func(ChatGrant) error) error
 	forgetChatGrant(context.Context, string) (bool, error)
 	nativeAuthority() nativeAuthorityReader
 }

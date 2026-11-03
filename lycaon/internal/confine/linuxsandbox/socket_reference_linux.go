@@ -107,6 +107,11 @@ func (s *supervisor) connectUnix(socket, referenceID int) unix.Errno {
 	if s.network.beforeSocketConnect != nil {
 		s.network.beforeSocketConnect()
 	}
+	for _, grant := range s.network.SocketGrants {
+		if grant.FD == referenceID && grant.CredentialRead {
+			return s.connectCredentialRead(socket, reference)
+		}
+	}
 	address := &unix.SockaddrUnix{Name: "/proc/self/fd/" + strconv.Itoa(int(reference.Fd()))}
 	return errnoOf(unix.Connect(socket, address), 0)
 }

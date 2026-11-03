@@ -28,7 +28,7 @@ func planFixture(t *testing.T, kind hitl.ApprovalSubjectKind, options []hitl.App
 	case hitl.ApprovalSubjectDestinationSet:
 		gateName = api.GateFirstHost
 		stage = hitl.ApprovalStagePreDial
-	case hitl.ApprovalSubjectProcessControl, hitl.ApprovalSubjectHostExecution, hitl.ApprovalSubjectLocalListen,
+	case hitl.ApprovalSubjectProcessControl, hitl.ApprovalSubjectCredentialStore, hitl.ApprovalSubjectHostExecution, hitl.ApprovalSubjectLocalListen,
 		hitl.ApprovalSubjectLoopbackConnect, hitl.ApprovalSubjectReadPathSet:
 	}
 	target := hitl.ApprovalTarget{Kind: "t", Label: "x"}
@@ -37,16 +37,16 @@ func planFixture(t *testing.T, kind hitl.ApprovalSubjectKind, options []hitl.App
 	}
 	plan, err := hitl.NewApprovalPlan(
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Presentation: hitl.ActionPresentation{
-Command: "pwd",
-},
-Scope: hitl.ActionScope{
-SessionID: "s1",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: "pwd",
+			},
+			Scope: hitl.ActionScope{
+				SessionID: "s1",
+			},
+		},
 		stage,
 		hitl.ApprovalSubject{Kind: kind, Title: "Fixture", Targets: []hitl.ApprovalTarget{target}},
 		hitl.ApprovalPresentation{
@@ -130,16 +130,16 @@ func TestUnrewritableSecretFacesTheSendNotDisabledRedaction(t *testing.T) {
 	gateName := api.GateSecretOutbound
 	plan, err := hitl.NewApprovalPlan(
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Presentation: hitl.ActionPresentation{
-Command: "curl",
-},
-Scope: hitl.ActionScope{
-SessionID: "s1",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: "curl",
+			},
+			Scope: hitl.ActionScope{
+				SessionID: "s1",
+			},
+		},
 		hitl.ApprovalStagePreSend,
 		hitl.ApprovalSubject{
 			Kind: hitl.ApprovalSubjectSecret, Title: "Fixture",
@@ -191,16 +191,16 @@ func TestCapabilityWideningActionSetFacesTask(t *testing.T) {
 	}
 	plan, err := hitl.NewApprovalPlan(
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Presentation: hitl.ActionPresentation{
-Command: "node server.js",
-},
-Scope: hitl.ActionScope{
-SessionID: "s1",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: "node server.js",
+			},
+			Scope: hitl.ActionScope{
+				SessionID: "s1",
+			},
+		},
 		hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{
 			Kind: hitl.ApprovalSubjectActionSet, Title: "Allow local network use",
@@ -226,13 +226,13 @@ SessionID: "s1",
 func TestSecretPlanRequiresGenericShape(t *testing.T) {
 	_, err := hitl.NewApprovalPlan(
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "model_request",
-},
-Scope: hitl.ActionScope{
-SessionID: "s1",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "model_request",
+			},
+			Scope: hitl.ActionScope{
+				SessionID: "s1",
+			},
+		},
 		hitl.ApprovalStagePreSend,
 		hitl.ApprovalSubject{
 			Kind: hitl.ApprovalSubjectSecret, Title: "Fixture",
@@ -257,13 +257,13 @@ func TestPlanRungsAreUniqueAndOrdered(t *testing.T) {
 	dup2.ID = "other-once"
 	_, err := hitl.NewApprovalPlan(
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Presentation: hitl.ActionPresentation{
-Command: "pwd",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: "pwd",
+			},
+		},
 		hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{Kind: hitl.ApprovalSubjectAction, Title: "T", Targets: []hitl.ApprovalTarget{{Kind: "t", Label: "x"}}},
 		hitl.ApprovalPresentation{
@@ -281,13 +281,13 @@ Command: "pwd",
 func TestGateProvenanceIsAlwaysRequired(t *testing.T) {
 	_, err := hitl.NewApprovalPlan(
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Presentation: hitl.ActionPresentation{
-Command: "pwd",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: "pwd",
+			},
+		},
 		hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{Kind: hitl.ApprovalSubjectAction, Title: "T", Targets: []hitl.ApprovalTarget{{Kind: "t", Label: "x"}}},
 		hitl.ApprovalPresentation{Action: "A", Impact: "I"},
@@ -320,16 +320,16 @@ func TestDirectIPPlanAllowedAfterFailure(t *testing.T) {
 	})
 	_, err := hitl.NewApprovalPlan(
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Presentation: hitl.ActionPresentation{
-Command: "ssh host true",
-},
-Scope: hitl.ActionScope{
-SessionID: "s1",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: "ssh host true",
+			},
+			Scope: hitl.ActionScope{
+				SessionID: "s1",
+			},
+		},
 		hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{Kind: hitl.ApprovalSubjectDirectIP, Title: "Allow direct network access",
 			Targets: []hitl.ApprovalTarget{{Kind: "direct_ip", Label: "this exact command, unobserved"}}},

@@ -124,4 +124,3 @@ func (r *Records) Discard(ctx context.Context, projectID, artifactID string) (Ar
 	r.outbox.Notify()
 	return rec, true, nil
 }
-

@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/components/checkpoint/ToolApprovalBody.tsx",
+  "kind": "module",
+  "workstream": "approval-decision-feedback",
+  "disposition": "retain",
+  "reason": "This view derives the host-provided subject, consequences and grant ladder, then composes one card. Decision submission and menu interaction have separate owners. Keep the typed presentation derivations visible together; ladder, secret-recipient, action and failure contracts bound its current scope.",
+  "reviewed_commit": "9048ab1b26588517749373aaf600c07d757725c4",
+  "ceiling": 444,
+  "boundaries": {
+    "lycaon-den/src/components/checkpoint/ApprovalCard.behaviors.test.tsx": "3da8c45f8c70e97462fa474b51a5e777a9d3dff6573e7bf4d95080cfdd9aaafb",
+    "lycaon-den/src/components/checkpoint/approval-ladder-slots.test.tsx": "458c2cce95af6708a10c147451ec5167aed4c7d5493f8f07c124c44b5c805188",
+    "lycaon-den/src/components/checkpoint/secret-ladder.test.tsx": "840cc07a568c02f5646bdc91f0cb8ed8224588484c364f49f6023dc1e3d2c86f",
+    "lycaon-den/src/components/checkpoint/CheckpointCards.failure.test.tsx": "c20dc018211ac3288dea25e7abffe45353bee0992f4da49c77953b56f393de97"
+  }
+}

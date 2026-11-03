@@ -605,7 +605,7 @@ func citedURLHandleOffenders(urls []string, ev evidence.Ledger) []string {
 // GroundingHintData maps offenders and observed evidence to bounded hint template vars.
 func GroundingHintData(offenders []string, ev evidence.Ledger) map[string]any {
 	data := OffenderHintData(offenders)
-	handleReport := FormatOffenderReport(evidence.HandlesSorted(ev))
+	handleReport := FormatOffenderReport(groundingHintHandles(offenders, ev))
 	data["observed_handles_count"] = handleReport.Count
 	data["observed_handles_sample"] = handleReport.Sample
 	data["observed_handles_omitted"] = handleReport.Omitted

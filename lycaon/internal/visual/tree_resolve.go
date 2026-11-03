@@ -221,4 +221,3 @@ func artifactRetentionClass(class string) string {
 	}
 	return "artifact"
 }
-

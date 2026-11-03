@@ -26,7 +26,6 @@ func TestCoordinatorSynthesisWrapupPromptAssembly(t *testing.T) {
 		"Read-only report",
 		"read-only",
 		"command mutations",
-		"`edit`",
 		"`task`",
 		"Do not narrate fixes",
 		"SYNTH_HANDLE_NOT_IN_LEGS",

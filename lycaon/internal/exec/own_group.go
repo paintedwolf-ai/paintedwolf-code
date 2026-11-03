@@ -69,7 +69,7 @@ func (g *ProcessGroup) release(err error) error {
 
 func (g *ProcessGroup) abort(err error) error {
 	g.guard.kill(g.command)
-	_ = g.command.Wait()
+	_ = g.guard.wait(g.command)
 	return g.release(fmt.Errorf("process group: %w", err))
 }
 
@@ -99,7 +99,7 @@ func runHelperProbeGroup(cmd *exec.Cmd) error {
 // Wait settles native exit and tree cleanup once, including concurrent callers.
 func (g *ProcessGroup) Wait() error {
 	g.waitOnce.Do(func() {
-		g.waitErr = g.command.Wait()
+		g.waitErr = g.guard.wait(g.command)
 		g.mu.Lock()
 		g.settled = true
 		g.guard.kill(g.command)

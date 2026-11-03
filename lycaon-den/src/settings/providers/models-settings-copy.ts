@@ -174,6 +174,8 @@ export const MODELS_SETTINGS_COPY = {
   /** Credentials are in place and nothing has been reached yet. */
   statusNotChecked: "Not checked",
   statusUnavailable: "Unavailable",
+  contextWindowUnknown:
+    "Context window is unknown — using a conservative local fallback until the server reports one.",
   coordinatorSlotLabel: "Coordinator",
   coordinatorSlotHint:
     "Must be tool-calling capable or Painted Wolf Code cannot run. We recommend GLM 5.3 Flash, Gemini 3.5 Flash, Claude Sonnet, or a similar class model — this is the hard part, so use your strongest model.",

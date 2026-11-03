@@ -8,13 +8,12 @@ import subprocess
 import sys
 import threading
 from artifacts import InvalidCandidate, retain_project, retain_outside
-from application_environment import application_environment, isolated_command
+from application_environment import application_environment, isolated_command, release_external_resource
 from capture_storage import cleanup_private_config, deduplicate_runtime
 from episode_runtime import execute, lease_available, run_retained_step, RetainedProcessingExhausted
 from local_runtime import verify_runtime
 from progress import save, timestamp
 from recovery import local_probe, infrastructure_recovery, recovery_delay
-from runtime_resources import release_external_resource
 
 
 def disposition(exit_record, report, setup_failure=None):

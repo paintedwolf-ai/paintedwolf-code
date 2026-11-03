@@ -12,18 +12,19 @@ import (
 
 func selectedCommitFixture(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	gittest.Init(t, dir)
-	for path, content := range map[string]string{"kept.txt": "kept\n", "old.txt": "moved\n", "cached.txt": "cached\n", "peer.txt": "peer\n"} {
-		testutil.FailErr(t, "write fixture", os.WriteFile(filepath.Join(dir, path), []byte(content), 0o644))
-	}
-	gittest.CommitAll(t, dir, "base")
-	testutil.FailErr(t, "peer edit", os.WriteFile(filepath.Join(dir, "peer.txt"), []byte("staged peer\n"), 0o644))
-	gittest.Run(t, dir, "add", "--", "peer.txt")
-	return dir
+	return CloneFixtureRepo(t, "selected-commit", func(dir string) {
+		gittest.Init(t, dir)
+		for path, content := range map[string]string{"kept.txt": "kept\n", "old.txt": "moved\n", "cached.txt": "cached\n", "peer.txt": "peer\n"} {
+			testutil.FailErr(t, "write fixture", os.WriteFile(filepath.Join(dir, path), []byte(content), 0o644))
+		}
+		gittest.CommitAll(t, dir, "base")
+		testutil.FailErr(t, "peer edit", os.WriteFile(filepath.Join(dir, "peer.txt"), []byte("staged peer\n"), 0o644))
+		gittest.Run(t, dir, "add", "--", "peer.txt")
+	})
 }
 
 func TestSelectedCommitKeepsStagedDeletionsAndRenames(t *testing.T) {
+	t.Parallel()
 	dir := selectedCommitFixture(t)
 	gittest.Run(t, dir, "rm", "-q", "--cached", "--", "cached.txt")
 	gittest.Run(t, dir, "mv", "--", "old.txt", "new.txt")
@@ -49,6 +50,7 @@ func TestSelectedCommitKeepsStagedDeletionsAndRenames(t *testing.T) {
 }
 
 func TestSelectedCommitTakesWorkingContentAndAmends(t *testing.T) {
+	t.Parallel()
 	dir := selectedCommitFixture(t)
 	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(dir, "kept.txt"), []byte("edited\n"), 0o644))
 	testutil.FailErr(t, "delete", os.Remove(filepath.Join(dir, "old.txt")))
@@ -74,6 +76,7 @@ func TestSelectedCommitTakesWorkingContentAndAmends(t *testing.T) {
 }
 
 func TestSelectedCommitBeforeTheFirstCommit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gittest.Init(t, dir)
 	for _, path := range []string{"first.txt", "other.txt"} {
@@ -91,6 +94,7 @@ func TestSelectedCommitBeforeTheFirstCommit(t *testing.T) {
 }
 
 func TestSelectedCommitKeepsExplicitIdentity(t *testing.T) {
+	t.Parallel()
 	dir := selectedCommitFixture(t)
 	testutil.FailErr(t, "edit selected file", os.WriteFile(filepath.Join(dir, "kept.txt"), []byte("selected\n"), 0o644))
 	_, err := NewManager().Commit(t.Context(), dir, GitCommitOpts{

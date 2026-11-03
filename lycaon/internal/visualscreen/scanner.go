@@ -121,6 +121,8 @@ type segment struct {
 	start, end       int
 	rawStart, rawEnd int
 	span             int
+	ocr              bool
+	candidates       []string
 }
 
 // ScannedVisual is the text the screen can read from a visual and the facts
@@ -182,7 +184,13 @@ func (s *Scanner) Scan(ctx context.Context, mime string, raw []byte) (*ScannedVi
 		spans, gap, detail := s.recognize(ctx, rasterMagic(raw), raw)
 		out.Spans, out.Gap, out.GapDetail = spans, gap, detail
 		for i, span := range spans {
-			b.add(segment{kind: segmentOCR, rawStart: -1, span: i}, span.Text)
+			b.add(segment{
+				kind:       segmentOCR,
+				rawStart:   -1,
+				span:       i,
+				ocr:        true,
+				candidates: span.Candidates,
+			}, span.Text)
 		}
 	}
 	out.ExtractedText = b.text.String()
@@ -216,6 +224,14 @@ type textBuilder struct {
 func (b *textBuilder) add(seg segment, line string) {
 	trimmedLeft := strings.TrimLeft(line, " \t\r\n")
 	trimmed := strings.TrimRight(trimmedLeft, " \t\r\n")
+	if trimmed == "" && (seg.ocr || seg.kind == segmentOCR) {
+		for _, candidate := range seg.candidates {
+			if text := strings.TrimSpace(candidate); text != "" {
+				trimmed = text
+				break
+			}
+		}
+	}
 	if trimmed == "" {
 		return
 	}

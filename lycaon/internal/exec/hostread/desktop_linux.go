@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 const outputLimit = 64 << 10
@@ -46,8 +48,14 @@ func read(ctx context.Context, program string) ([]byte, int, error) {
 	command := exec.CommandContext(ctx, program, "list-recursively", "org.gnome.system.proxy")
 	command.Env = append(os.Environ(), "LC_ALL=C")
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	identityReady := make(chan struct{})
+	var identity osprocess.Incarnation
 	command.Cancel = func() error {
-		err := syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		<-identityReady
+		if identity.PID == 0 {
+			return os.ErrProcessDone
+		}
+		err := osprocess.SignalGroup(identity, syscall.SIGKILL)
 		if errors.Is(err, syscall.ESRCH) {
 			return os.ErrProcessDone
 		}
@@ -57,7 +65,14 @@ func read(ctx context.Context, program string) ([]byte, int, error) {
 	output := &boundedOutput{}
 	command.Stdout = output
 	command.Stderr = io.Discard
-	err := command.Run()
+	err := command.Start()
+	if err == nil {
+		identity, _ = osprocess.IncarnationOf(command.Process.Pid)
+	}
+	close(identityReady)
+	if err == nil {
+		err = command.Wait()
+	}
 	if ctx.Err() != nil {
 		return nil, -1, ctx.Err()
 	}
@@ -75,7 +90,7 @@ func read(ctx context.Context, program string) ([]byte, int, error) {
 }
 
 type boundedOutput struct {
-	buffer bytes.Buffer
+	buffer   bytes.Buffer
 	exceeded bool
 }
 

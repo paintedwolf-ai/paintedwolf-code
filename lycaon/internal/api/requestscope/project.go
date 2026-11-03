@@ -74,8 +74,9 @@ func ProjectIDQuery(registry project.Registry, responses *httpio.Responder, w ht
 	return p.ID, overlay.Primary.Path, true
 }
 
-// ProjectByRootPath resolves an existing folder to its most recent project.
-func ProjectByRootPath(registry project.Registry, ctx context.Context, resolved string) *project.Project {
+// ProjectsByRootPath returns all projects containing resolved as a root,
+// ordered with single-root matches before multi-root matches.
+func ProjectsByRootPath(registry project.Registry, ctx context.Context, resolved string) []project.Project {
 	if registry == nil {
 		return nil
 	}
@@ -83,7 +84,7 @@ func ProjectByRootPath(registry project.Registry, ctx context.Context, resolved 
 	if err != nil {
 		return nil
 	}
-	return project.FindByRootPath(list, resolved)
+	return project.FindAllByRootPath(list, resolved)
 }
 
 // GatedProjectDir returns projectDir when its trust surface applies.

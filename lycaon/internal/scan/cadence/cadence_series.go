@@ -52,6 +52,9 @@ func (p seriesPlanner) syncLocked(ctx context.Context, canonical string) ([]scan
 				return nil, err
 			}
 		}
+		if _, err := refreshAvailabilityLocked(ctx, p.c, row); err != nil {
+			return nil, err
+		}
 		out = append(out, *row)
 	}
 	return out, nil
@@ -100,6 +103,7 @@ func (p seriesPlanner) requestFullLocked(ctx context.Context, row *scanbase.Seri
 		return nil
 	}
 	now := nowUTC(p.c)
+	row.ClearUnavailable()
 	row.DesiredPassID = passID
 	row.DesiredPaths = nil
 	row.DesiredTrigger = strongerTrigger(row.DesiredTrigger, trigger)
@@ -141,7 +145,7 @@ func (p seriesPlanner) requestPathsLocked(ctx context.Context, row *scanbase.Ser
 
 // Claimed rows retain pending work until the claim is released.
 func (p seriesPlanner) arm(row *scanbase.SeriesRow, now time.Time, delay time.Duration) {
-	if row.DispatchToken != "" {
+	if row.DispatchToken != "" || row.Unavailable() {
 		return
 	}
 	if row.DirtySinceAt.IsZero() {
@@ -151,6 +155,9 @@ func (p seriesPlanner) arm(row *scanbase.SeriesRow, now time.Time, delay time.Du
 	due := now.Add(delay)
 	if !row.MaxDueAt.IsZero() && due.After(row.MaxDueAt) {
 		due = row.MaxDueAt
+	}
+	if row.ConsecutiveFailures > 0 && !row.DueAt.IsZero() && due.Before(row.DueAt) {
+		due = row.DueAt
 	}
 	row.DueAt = due
 }

@@ -113,6 +113,8 @@ func (b claimBook) finishBaselineDispatches(ctx context.Context, rows []scanbase
 			continue
 		}
 		releaseClaim(row)
+		row.ConsecutiveFailures = 0
+		row.ClearUnavailable()
 		row.LastCoveredSnapshotID = snapshot.ID
 		row.LastCoveredExecutionFingerprint = executions[row.ScannerID].Fingerprint
 		row.LastFileCount = snapshot.FileCount
@@ -166,6 +168,8 @@ func (b claimBook) finishNoopDispatches(ctx context.Context, claimed []scanbase.
 			continue
 		}
 		releaseClaim(row)
+		row.ConsecutiveFailures = 0
+		row.ClearUnavailable()
 		planner.rearmHeldDesireLocked(row)
 		row.UpdatedAt = now
 		if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {

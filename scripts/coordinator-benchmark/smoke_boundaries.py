@@ -9,9 +9,9 @@ import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import smoke_workers
-import write_boundary_probe
+import runtime_checks as write_boundary_probe
 from artifacts import retain_outside
-from runtime_resources import release_external_resource
+from application_environment import release_external_resource
 from progress import save
 from snapshot import ROOT
 from fixture_contracts import CONTRACTS, receipt_checks

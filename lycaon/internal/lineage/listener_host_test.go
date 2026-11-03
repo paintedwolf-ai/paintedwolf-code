@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"slices"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/lineage"
@@ -64,5 +65,60 @@ func TestListenersHolderIsTheSocketObservationHolder(t *testing.T) {
 	testutil.FailErr(t, "listeners", err)
 	if len(got) != 1 || !slices.Equal(got[0].Holders, []lineage.ProcessIdentity{observed.Holder}) {
 		t.Fatalf("listener table holders %+v, want the observed holder %+v", got, observed.Holder)
+	}
+}
+
+func TestListenersReportsIPv6OnlyFlagAndKeepsFamiliesSeparate(t *testing.T) {
+	listenV6 := func(t *testing.T, v6Only int) net.Listener {
+		t.Helper()
+		lc := net.ListenConfig{
+			Control: func(_, _ string, c syscall.RawConn) error {
+				var sockErr error
+				if err := c.Control(func(fd uintptr) {
+					sockErr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_V6ONLY, v6Only)
+				}); err != nil {
+					return err
+				}
+				return sockErr
+			},
+		}
+		ln, err := lc.Listen(t.Context(), "tcp6", "[::]:0")
+		if err != nil {
+			t.Skipf("tcp6 listen unavailable: %v", err)
+		}
+		t.Cleanup(func() { _ = ln.Close() })
+		return ln
+	}
+
+	dual := listenV6(t, 0)
+	dualPort := uint16(dual.Addr().(*net.TCPAddr).Port)
+	gotDual, err := lineage.Listeners(lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}, Port: dualPort})
+	testutil.FailErr(t, "dual-stack listeners", err)
+	wantDualAddr := netip.AddrPortFrom(netip.IPv6Unspecified(), dualPort)
+	if !slices.ContainsFunc(gotDual, func(l lineage.Listener) bool {
+		return l.Addr == wantDualAddr && !l.IPv6Only
+	}) {
+		t.Fatalf("dual-stack listener on %d = %+v, want [::]:%d with IPv6Only=false", dualPort, gotDual, dualPort)
+	}
+
+	v6OnlyLn := listenV6(t, 1)
+	v6Port := uint16(v6OnlyLn.Addr().(*net.TCPAddr).Port)
+	v4Ln, err := net.Listen("tcp4", netip.AddrPortFrom(netip.IPv4Unspecified(), v6Port).String())
+	testutil.FailErr(t, "listen tcp4 on same port as v6only", err)
+	defer v4Ln.Close()
+
+	gotBoth, err := lineage.Listeners(lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}, Port: v6Port})
+	testutil.FailErr(t, "both-family listeners", err)
+	wantV6Addr := netip.AddrPortFrom(netip.IPv6Unspecified(), v6Port)
+	wantV4Addr := netip.AddrPortFrom(netip.IPv4Unspecified(), v6Port)
+	if !slices.ContainsFunc(gotBoth, func(l lineage.Listener) bool {
+		return l.Addr == wantV6Addr && l.IPv6Only
+	}) {
+		t.Fatalf("listeners on %d = %+v, want [::]:%d with IPv6Only=true", v6Port, gotBoth, v6Port)
+	}
+	if !slices.ContainsFunc(gotBoth, func(l lineage.Listener) bool {
+		return l.Addr == wantV4Addr && !l.IPv6Only
+	}) {
+		t.Fatalf("listeners on %d = %+v, want 0.0.0.0:%d kept separate with IPv6Only=false", v6Port, gotBoth, v6Port)
 	}
 }

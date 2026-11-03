@@ -351,6 +351,19 @@ describe("refreshTailWindow", () => {
     expect(Object.keys(trimmed.pages).length).toBe(TRANSCRIPT_PAGE_BUDGET);
     expect(materializeTranscriptWindow(trimmed).some((m) => m.ord === 15)).toBe(false);
   });
+
+  it("evicts an unprotected page instead of the reader's keepOrds page when exceeding the hard cap", () => {
+    let tw = emptyTranscriptWindow();
+    const keepOrds = { firstOrd: 10, lastOrd: 20 };
+    const rolls = 22;
+    const total = TRANSCRIPT_TAIL_BUDGET + rolls * DEFAULT_TRANSCRIPT_PAGE_LIMIT;
+    for (let i = 1; i <= total; i++) {
+      tw = appendToTail(tw, msg(`m${i}`, i), { keepOrds });
+    }
+    expect(Object.keys(tw.pages).length).toBeLessThanOrEqual(20);
+    expect(materializeTranscriptWindow(tw).some((m) => m.ord === 15)).toBe(true);
+    expect(tw.hasTailGap).toBe(true);
+  });
 });
 
 

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -33,8 +34,9 @@ type SourceRunRecorder interface {
 // ParkedProgramResult is a command call's result when its program parked: the
 // turn ends, and the program's complete result resumes it.
 type ParkedProgramResult struct {
-	ProgramID string `json:"program_id"`
-	State     string `json:"state"`
+	ResultVersion int    `json:"result_version,omitempty"`
+	ProgramID     string `json:"program_id"`
+	State         string `json:"state"`
 	// Reason is the statement the program waits at.
 	Reason  string `json:"reason"`
 	LeaseID string `json:"lease_id"`
@@ -43,20 +45,22 @@ type ParkedProgramResult struct {
 
 // programEvaluation is one bound program handed from its call to evaluation.
 type programEvaluation struct {
-	run          *programRun
-	call         *programCall
-	park         *programPark
-	plan         commandsurface.ProgramSnapshot
-	ports        commandprogram.EvaluationPorts
-	dispatcher   *ProgramDispatcher
-	stdout       *programStream
-	stderr       *programStream
-	outputs      *invocation.ProgramOutputRetention
-	scope        captureprojection.Scope
-	documents    *programDocuments
-	paths        *projectpaths.ProgramPaths
-	verification func() commandSourceIdentity
-	release      func()
+	ctx            context.Context
+	run            *programRun
+	call           *programCall
+	park           *programPark
+	plan           commandsurface.ProgramSnapshot
+	ports          commandprogram.EvaluationPorts
+	dispatcher     *ProgramDispatcher
+	stdout         *programStream
+	stderr         *programStream
+	outputs        *invocation.ProgramOutputRetention
+	scope          captureprojection.Scope
+	documents      *programDocuments
+	paths          *projectpaths.ProgramPaths
+	verification   func() commandSourceIdentity
+	failureAttempt *commandFailureAttempt
+	release        func()
 	// callTC is the call's own tool context; evaluation writes its effects to
 	// run.tc's private outcome until the result belongs to the call.
 	callTC tools.ToolContext
@@ -107,6 +111,11 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
 		out.CommandProgram, out.SourceRun = e.run.tc.Effects.Out.CommandProgram, e.run.tc.Effects.Out.SourceRun
+		out.Facts = out.Facts.Merge(e.run.tc.Effects.Out.Facts)
+		if e.run.tc.Effects.Out.ExternalAccess != nil {
+			out.ExternalAccess = e.run.tc.Effects.Out.ExternalAccess
+		}
+		out.SourceDeliveryHandles = append([]string(nil), e.run.tc.Effects.Out.SourceDeliveryHandles...)
 	}
 	return ending.result, ending.err
 }
@@ -147,12 +156,14 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		parked.Settle(settleCtx, ending.result, ending.err)
 	}()
 	if out := e.callTC.Effects.Out; out != nil {
-		if projection, err := r.Recorder.ProjectProgram(callCtx, run.tc.Identity.SessionID, programID, 1); err == nil {
-			receipt := projection.Program
+		if receipt, err := r.Recorder.ActivitySummary(callCtx, run.tc.Identity.SessionID, programID); err == nil {
 			out.CommandProgram = &receipt
 		}
 	}
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
+	if run.tool == "verify" {
+		result.ResultVersion = 2
+	}
 	if !state.Until.IsZero() {
 		result.WakeAt = state.Until.UTC().Format(time.RFC3339)
 	}
@@ -196,7 +207,7 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 	if err != nil || sess == nil {
 		return
 	}
-	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, "command", *capture)
+	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for
@@ -215,6 +226,9 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects,
 		UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps,
 	}
+	if projection.ParentTool == "verify" {
+		outcome.ResultVersion = 2
+	}
 	if status := projection.Program.StatusCode; status != nil {
 		outcome.Status = *status
 	}
@@ -228,7 +242,7 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 // finish evaluates the program under supervision, settles it and returns its
 // bounded result, whether the call still holds it or it parked.
 func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
-	run, ctx := e.run, e.call.ctx
+	run, ctx := e.run, e.ctx
 	defer e.call.end()
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, run.root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
@@ -272,7 +286,14 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	if settledNow {
+		recordProgramAttempt(r.FailureTracker, e.failureAttempt, ctx, outcome)
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
+		if run.tc.Execution.VerificationCheck && run.tc.Effects.Out.SourceRun != nil {
+			outcome.Outcome = run.tc.Effects.Out.SourceRun.Verdict
+		}
+	}
+	if run.tool == "verify" {
+		outcome.ResultVersion = 2
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
@@ -329,4 +350,7 @@ func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resol
 		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
 	}
 	tc.Effects.Out.SourceRun = run
+	if tc.Execution.VerificationCheck && verdict == api.SourceVerdictUnverifiable {
+		tc.Effects.Out.Facts = guidance.ToolResultFacts{}.WithCode(toolrejection.VerifyUnverifiableCode).Merge(tc.Effects.Out.Facts)
+	}
 }

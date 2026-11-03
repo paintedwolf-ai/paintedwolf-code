@@ -34,6 +34,7 @@ type Failure struct {
 	Message                                string
 	Details                                map[string]any
 	Documents, Sessions, Workers, Overlays int
+	BackgroundProcesses                    []wire.ProjectBackgroundProcess
 }
 
 func (f *Failure) Error() string { return f.Message }
@@ -178,6 +179,9 @@ func (o *Owner) deletionFailure(ctx context.Context, result wire.ProjectRemovalR
 		if errors.As(cause, &failure) {
 			result.FailureCode, result.Reason = string(failure.Code), failure.Message
 			result.Documents, result.Sessions, result.Workers, result.Overlays = failure.Documents, failure.Sessions, failure.Workers, failure.Overlays
+			if len(failure.BackgroundProcesses) > 0 {
+				result.BackgroundProcesses = append([]wire.ProjectBackgroundProcess(nil), failure.BackgroundProcesses...)
+			}
 		}
 	}
 	return result
