@@ -483,6 +483,7 @@
       "summary": "code_rewrite on {{ paintedwolf.path }} rejected pattern {{ paintedwolf.pattern }} — a bare {{ paintedwolf.operator }} between two metavariables matches every such operator in the file, not one meaning of it."
     },
     "COMMAND_ARGV_CONFLICT": {
+      "branch_instruction": "Retry with one explicit command form, not both",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "`{{ tool }}()` received conflicting explicit command forms."
@@ -504,9 +505,10 @@
       "summary": "This exact command execution is already live ({{ paintedwolf.handles_text }})."
     },
     "COMMAND_EFFECT_NOT_ALLOWED": {
+      "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
       "category": "recoverable",
       "emit": "guard:command_effect_admission",
-      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside the active permission profile."
+      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if permission_profile %}profile **{{ permission_profile }}**{% else %}the active permission profile{% endif %}."
     },
     "COMMAND_EXEC_DENIED": {
       "category": "recoverable",
@@ -566,9 +568,10 @@
       "summary": "{% if paintedwolf.parser_message %}Shell source encoding error{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}: {{ paintedwolf.parser_message }}.{% else %}A command operand was refused.{% endif %}"
     },
     "COMMAND_OPERATION_NOT_ALLOWED": {
+      "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
       "category": "recoverable",
       "emit": "guard:command_operation_admission",
-      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside the active permission profile."
+      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if permission_profile %}profile **{{ permission_profile }}**{% else %}the active permission profile{% endif %}."
     },
     "COMMAND_OPTION_UNSUPPORTED": {
       "category": "recoverable",

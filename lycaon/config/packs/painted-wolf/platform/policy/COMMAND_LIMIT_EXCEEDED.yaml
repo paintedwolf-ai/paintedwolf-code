@@ -42,3 +42,15 @@ x-paintedwolf-scenarios:
   - ast_nodes
   - '8192'
   - '8193'
+- id: top_level_source
+  vars:
+    tool: command
+    limit_id: source_bytes
+    resource_unit: bytes
+    maximum: 65536
+    observed: 65537
+    diagnostic_top_level: true
+  expect_contains:
+  - 'Code: COMMAND_LIMIT_EXCEEDED'
+  - source_bytes
+  - Reduce the size or complexity of the submitted shell source
