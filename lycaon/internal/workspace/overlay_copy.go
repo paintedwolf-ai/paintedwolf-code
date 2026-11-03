@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
@@ -24,38 +25,29 @@ var workspaceMirrorConcurrency = min(max(runtime.GOMAXPROCS(0), 4), 16)
 var cloneWorkspaceFile = fileclone.Clone
 
 type overlayCopyJob struct {
-	src     string
-	dst     string
-	rel     string
-	mode    fs.FileMode
-	modTime time.Time
+	src, dst, rel string
+	mode          fs.FileMode
+	modTime       time.Time
 }
 
 type directoryMetadata struct {
-	src     string
-	dst     string
-	mode    fs.FileMode
-	modTime time.Time
+	src, dst string
+	mode     fs.FileMode
+	modTime  time.Time
 }
 
 type mirrorOptions struct {
-	phase          string
-	tolerateChange bool
-	fileSource     func(rel, sourcePath string) string
-	preparation    PreparationProgress
-	maxEntries     int64
-	maxBytes       int64
+	phase                string
+	tolerateChange       bool
+	fileSource           func(rel, sourcePath string) string
+	preparation          PreparationProgress
+	maxEntries, maxBytes int64
 }
 
 type mirrorResult struct {
-	Files        int64
-	Directories  int64
-	Symlinks     int64
-	Bytes        int64
-	ClonedFiles  int64
-	ClonedBytes  int64
-	CopiedBytes  int64
-	SkippedPaths []string
+	Files, Directories, Symlinks, Bytes     int64
+	ClonedFiles, ClonedBytes, CopiedBytes   int64
+	SkippedPaths                            []string
 }
 
 func validateCompleteMirror(result mirrorResult) error {
@@ -69,32 +61,18 @@ func validateCompleteMirror(result mirrorResult) error {
 // enforcing entry and byte limits (returning *adapter.PreparationLimitError with workspace_preparation_limit),
 // narrowing roots via WorkspaceSelection while keeping TaskPathHints separate, and isolating .git/gitlinks (#1658).
 func MaterializeBoundedWorkspace(
-	ctx context.Context,
-	viewID string,
-	runtimeDir string,
-	grants []adapter.RootGrant,
-	selection adapter.WorkspaceSelection,
-	taskPathHints []string,
-	maxEntries int64,
-	maxBytes int64,
-	fallbackReason adapter.ReasonCode,
+	ctx context.Context, viewID, runtimeDir string, grants []adapter.RootGrant,
+	selection adapter.WorkspaceSelection, taskPathHints []string,
+	maxEntries, maxBytes int64, fallbackReason adapter.ReasonCode,
 ) (*adapter.PreparedView, error) {
 	adp := adapter.NewEagerCopyAdapter(fallbackReason)
 	return adp.Prepare(ctx, adapter.PrepareRequest{
-		ViewID:        viewID,
-		RuntimeDir:    runtimeDir,
-		Grants:        grants,
-		Selection:     selection,
-		TaskPathHints: taskPathHints,
-		MaxEntries:    maxEntries,
-		MaxBytes:      maxBytes,
+		ViewID: viewID, RuntimeDir: runtimeDir, Grants: grants, Selection: selection,
+		TaskPathHints: taskPathHints, MaxEntries: maxEntries, MaxBytes: maxBytes,
 		ProgressFn: func(fp adapter.FallbackProgress) {
 			reportPreparation(ctx, PreparationProgress{
-				Strategy:   ProvisionMaterializedEagerCopy,
-				Stage:      "snapshotting_branch",
-				Files:      fp.ObservedEntries,
-				Bytes:      fp.ObservedBytes,
-				TotalBytes: fp.MaxBytes,
+				Strategy: ProvisionMaterializedEagerCopy, Stage: "snapshotting_branch",
+				Files: fp.ObservedEntries, Bytes: fp.ObservedBytes, TotalBytes: fp.MaxBytes,
 			})
 		},
 	})
@@ -106,22 +84,18 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 	if err != nil {
 		return nil, err
 	}
-	roots := []projectroot.RootRef{
-		{ID: "primary", Path: primary, IsPrimary: true},
-	}
+	roots := []projectroot.RootRef{{ID: "primary", Path: primary, IsPrimary: true}}
 	binding, _, err := m.CreateWorkerWorkspaceFromSources(ctx, roots, roots, "primary", jobID)
 	return binding, err
 }
 
 // DestroyWorkerWorkspace removes a branch, releases its prepared adapter view, and deletes its metadata.
 func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
-	if binding == nil {
+	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return nil
 	}
 	root := strings.TrimSpace(binding.Root)
-	if root == "" {
-		return nil
-	}
+	releaseBranchClaimState(root)
 	m.releaseBranchViews(root)
 	if binding.Adapter != nil && binding.View != nil {
 		_, _ = binding.Adapter.Release(context.Background(), binding.View.ViewID)
@@ -129,6 +103,64 @@ func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	_ = os.RemoveAll(enginepaths.MetaDirForBranchRoot(root))
 	removeBranchLocks(root)
 	return os.RemoveAll(root)
+}
+
+func markSnapshotCompleteWithClaim(branchRoot string, choice WorkspaceStrategySelection, view *adapter.PreparedView, cv *claim.ClaimedView, hints []string) error {
+	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
+	meta, err := LoadJobMeta(metaDir)
+	if err != nil {
+		return err
+	}
+	cpFacts := choice.Facts
+	meta.FormatVersion, meta.SnapshotComplete = JobMetaFormatV2, true
+	meta.AdapterID, meta.PreparationKind = choice.AdapterID, choice.Facts.PreparationKind
+	meta.VisibilityMode, meta.FallbackReason = choice.Facts.UntouchedSourceVisibility, choice.Facts.FallbackReason
+	meta.PendingGitInit = choice.Facts.PreparationKind == adapter.PreparationMounted
+	meta.SourceGeneration, meta.FocusPathHints, meta.AdapterFacts = 1, append([]string(nil), hints...), &cpFacts
+	if view != nil {
+		meta.ViewID, meta.PreparedViewID = view.ViewID, view.ViewID
+		meta.CopiedEntries, meta.CopiedBytes = view.ObservedEntries, view.ObservedBytes
+		if view.BackingDir != "" {
+			meta.JournalPath = filepath.Join(view.BackingDir, "journal")
+		}
+	}
+	if cv != nil {
+		meta.JournalPath = cv.Metadata.JournalPath
+	} else {
+		recordBranchClaimState(branchRoot, nil, snapshotFromJobMeta(branchRoot, meta))
+	}
+	return WriteJobMeta(metaDir, meta)
+}
+
+func snapshotFromJobMeta(branchRoot string, meta JobMeta) claim.WorkspaceStateSnapshot {
+	roots := make([]claim.RootMappingRecord, 0, len(meta.Roots))
+	for _, r := range meta.Roots {
+		roots = append(roots, claim.RootMappingRecord{
+			RootID: r.ID, Label: r.Label, SourcePath: r.Path, WorkspacePath: branchRoot, IsPrimary: r.IsPrimary,
+		})
+	}
+	gitState := claim.GitInitInitialized
+	if meta.PendingGitInit {
+		gitState = claim.GitInitLazyPending
+	}
+	notice := claim.FallbackNotice{Severity: claim.SeverityInfo}
+	if meta.FallbackReason != "" {
+		notice = claim.FallbackNotice{
+			Severity: claim.SeverityWarning, ReasonCode: meta.FallbackReason,
+			CopiedEntries: meta.CopiedEntries, CopiedBytes: meta.CopiedBytes,
+		}
+	}
+	return claim.WorkspaceStateSnapshot{
+		Identity:       claim.ClaimIdentity{WorkerID: jobIDForBranch(branchRoot), ViewID: meta.ViewID, SourceGeneration: uint64(max(meta.SourceGeneration, 0))},
+		Readiness:      claim.StateReady,
+		Adapter:        claim.AdapterMetadataFacts{AdapterID: meta.AdapterID, PreparationKind: meta.PreparationKind, SourceVisibility: meta.VisibilityMode, FallbackReason: meta.FallbackReason, CopiedEntries: meta.CopiedEntries, CopiedBytes: meta.CopiedBytes, PendingGitInit: meta.PendingGitInit},
+		SelectedRoots:  roots,
+		FocusPathHints: append([]string(nil), meta.FocusPathHints...),
+		Notice:         notice,
+		GitInit:        gitState,
+		Command:        claim.CommandIdle,
+		Checkpoint:     claim.CheckpointStatus{State: claim.CheckpointNone},
+	}
 }
 
 func jobRoot(m *Manager, primaryDir, jobID string) string {
@@ -144,32 +176,16 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 	defer cancel()
 	jobs := make(chan overlayCopyJob, workers*2)
 	var (
-		wg        sync.WaitGroup
-		errOnce   sync.Once
-		firstErr  error
-		entries   atomic.Int64
-		walkBytes atomic.Int64
-		files     atomic.Int64
-		bytes     atomic.Int64
-		clones    atomic.Int64
-		cloneB    atomic.Int64
-		copyB     atomic.Int64
-		dirs      atomic.Int64
-		links     atomic.Int64
-		skipMu    sync.Mutex
-		skipped   []string
+		wg                                               sync.WaitGroup
+		errOnce                                          sync.Once
+		firstErr                                         error
+		entries, walkBytes, files, bytes, clones         atomic.Int64
+		cloneB, copyB, dirs, links                       atomic.Int64
+		skipMu                                           sync.Mutex
+		skipped                                          []string
 	)
-	fail := func(err error) {
-		errOnce.Do(func() {
-			firstErr = err
-			cancel()
-		})
-	}
-	recordSkip := func(rel string) {
-		skipMu.Lock()
-		skipped = append(skipped, rel)
-		skipMu.Unlock()
-	}
+	fail := func(err error) { errOnce.Do(func() { firstErr = err; cancel() }) }
+	recordSkip := func(rel string) { skipMu.Lock(); skipped = append(skipped, rel); skipMu.Unlock() }
 	for range workers {
 		wg.Add(1)
 		go func() {

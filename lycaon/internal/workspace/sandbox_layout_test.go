@@ -5,9 +5,12 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -109,5 +112,63 @@ func TestCreateWorkerWorkspaceFromSourcesSingleRootFlat(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(binding.Root, "root")); !os.IsNotExist(err) {
 		t.Fatal("single-root sandbox must be flat")
+	}
+}
+
+func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Meta(t *testing.T) {
+	base := t.TempDir()
+	primary := filepath.Join(base, "primary")
+	secondary := filepath.Join(base, "secondary")
+	for _, dir := range []string{primary, secondary} {
+		testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Join(dir, "pkg"), 0o755))
+		testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "pkg", "code.go"), []byte("package pkg\n"), 0o644))
+	}
+	roots := []projectroot.RootRef{
+		{ID: "p", Label: "primary", Path: primary, IsPrimary: true},
+		{ID: "s", Label: "secondary", Path: secondary, IsPrimary: false},
+	}
+
+	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
+		TargetOS:  runtime.GOOS,
+		MountProbeFn: func(_ context.Context, _, _ string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
+		},
+	})
+	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds")).WithSelector(sel)
+
+	binding, _, err := mgr.CreateWorkerWorkspaceSelected(
+		t.Context(),
+		roots,
+		roots,
+		adapter.WorkspaceSelection{RootIDs: []string{"p", "s"}},
+		[]string{"pkg/code.go"},
+		"p",
+		"job-mounted-v2",
+	)
+	testutil.FailErr(t, "CreateWorkerWorkspaceSelected mounted", err)
+	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+
+	if binding.View == nil || binding.View.Core == nil {
+		t.Fatalf("expected mounted view with Core, got %+v", binding.View)
+	}
+	if stats := binding.View.Core.Stats(); stats.LowerDirReads != 0 {
+		t.Fatalf("expected 0 lower ReadDir walks during mounted workspace claim, got %d", stats.LowerDirReads)
+	}
+
+	meta, err := workspace.LoadJobMeta(enginepaths.MetaDirForBranchRoot(binding.Root))
+	testutil.FailErr(t, "LoadJobMeta mounted v2", err)
+	if meta.FormatVersion != workspace.JobMetaFormatV2 ||
+		meta.PreparationKind != adapter.PreparationMounted ||
+		meta.VisibilityMode != adapter.VisibilityLive ||
+		!meta.PendingGitInit ||
+		meta.JournalPath == "" {
+		t.Fatalf("expected Format-v2 mounted live JobMeta with journal and PendingGitInit, got %+v", meta)
+	}
+
+	snap, receipt, ok := workspace.BranchWorkspaceState(binding.Root)
+	if !ok || snap.Readiness != claim.StateReady || snap.GitInit != claim.GitInitLazyPending || snap.Adapter.SourceVisibility != adapter.VisibilityLive || receipt.AdapterID != adapter.AdapterNFSDarwin {
+		t.Fatalf("unexpected BranchWorkspaceState: ok=%v snap=%+v receipt=%+v", ok, snap, receipt)
 	}
 }
