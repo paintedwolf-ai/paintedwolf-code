@@ -4,14 +4,12 @@
   "kind": "data_record",
   "workstream": "shared-verification-runtime",
   "disposition": "retain",
-  "reason": "The record owns one program lifetime and its admitted dependencies. The initiating tool identity travels with existing execution state rather than creating a second verification runner. Parent identity and parked-settlement contracts constrain that shared lifetime. Retain the measured 26 ceiling; growth requires renewed review.",
-  "reviewed_commit": "e2519cef51d263fbb797b9f1137df6dc3fc996c0",
+  "reason": "Retain one ephemeral program lifetime record. Immutable initiating tool identity accompanies the existing execution frame and source binding; it does not create a separate verification runtime or authority owner. Selected-check receipts and parked-settlement contracts cover those links.",
+  "reviewed_commit": "1da0705c31dcb167e8a38f16761ff8a4b8e1f033",
   "ceiling": 26,
   "boundaries": {
     "lycaon/internal/tools/native/verify_test.go": "30d258e73e5f1fa299b24fe66452ed1a6c2bde65971e3e9da629986d39eb4cad",
-    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338",
-    "lycaon/internal/toolexecution/program_model_invocation_test.go": "4a2d9417a4e5c4c3f41aa36699a8a11b370929cf2d90955784ddcc39f398d3f7",
-    "lycaon/internal/session/verify_evidence_test.go": "4e71a3d113c6a868e58a32f207aaa929ce52fe67b6bfb4cfc7c59623a3c3ac90"
+    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338"
   },
-  "reviewed_shape": "6f1768c3732984608a23a01061e1fa7f74917dd8e54639f328d7e2fe857902b2"
+  "reviewed_shape": "1fa7b554c6572434f6f03d4edaf98200797ce8d249bf95deb0a9c5463cd06b1a"
 }
