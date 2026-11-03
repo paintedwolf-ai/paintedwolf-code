@@ -90,7 +90,7 @@ func generateNixBun(ctx context.Context, repo string, run bunCommand) error {
 		return err
 	}
 	if string(current) != string(source) || string(currentFlake) != string(flake) {
-		return fmt.Errorf("Bun or Nix pins changed during generation; rerun generation")
+		return fmt.Errorf("dependency pins changed during generation; rerun generation")
 	}
 	sourceHash, expressionHash := sha256.Sum256(source), sha256.Sum256(expression)
 	identity := nixBunIdentity{Source: hex.EncodeToString(sourceHash[:]), Expression: hex.EncodeToString(expressionHash[:]), Generator: revision}
