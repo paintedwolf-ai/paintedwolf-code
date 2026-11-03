@@ -20,7 +20,7 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// The current manifest writer bounds its re-derivable memos and maintains
 	// target indexes during insertion, preserving the source-sized sorter proof.
 	reviewed := [][2]string{
-		{"source-manifest-layout", "8ecdf662e38522ecefe931cf89178ac90e4f9e972cde88ef4c1d820e7fce0225"},
+		{"source-manifest-layout", "ae4d80d6bcf5cb51657e0b8d31648093917e22116b9e4e64b6c707643f1b42d1"},
 		{"vault-unlock-away", "13094df267f14b2a7cda143ef5ac6466bc242fb65f5f5452c6e3554e285d2676"},
 		{"native-child-once-authority", "417303ae6c704fdd6909312f57a37c41428182ced025d74d2c0cd4123fc89f95"},
 		{"portable-program-receipts", "bde8b3115696ead32e21b55f520fff50c94e04da79604a0a71a6e7889370ef40"},
