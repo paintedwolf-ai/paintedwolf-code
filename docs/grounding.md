@@ -34,6 +34,15 @@ Observation identity and file currency are separate. Exact handles keep resolvin
 
 File supersession never invalidates a command, Git receipt, artifact, or other event observation merely because its output mentions a changed file. A merge receipt still proves the recorded merge outcome after a file is edited. Native Git operations produce their own catalog-declared receipts, including commit identities, graph observations, and affected paths. Verification and overlay operations also publish citable outcome receipts through this pipeline. Those citations establish the recorded outcome; source-verification and promotion gates still evaluate their own structured facts. Historical evidence retains its original trust; supersession cannot erase prior exposure to untrusted content.
 
+Portable program results receive `command#` observation handles alongside any
+confirmed source-delivery handles. These observations retain the screened output
+seen by the model, including incomplete and failed execution outcomes. Their
+opaque command shape does not index printed paths, create source read authority,
+prove visual observations, or supply workflow verification verdicts. Source and
+verification evidence continue through their respective typed owners. The records
+use the existing versioned evidence payload and command-handle meaning; retained
+observations are unchanged.
+
 ### Transcript diet vs evidence ledger
 
 The transcript is presentation history; the evidence ledger is the resolution substrate. They are linked but have different retention and compaction behavior.
