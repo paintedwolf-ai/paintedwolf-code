@@ -120,6 +120,7 @@ func (r *ProgramRuntime) retainProgramStream(ctx context.Context, run *programRu
 		done <- retained{spill, err}
 	}()
 	metadata, screenErr := r.Projector.ScreenStream(ctx, scope, "capture.native", raw, output, captureprojection.StreamOptions{
+		Policy:        secretmatch.StreamPolicy{ManagedEchoes: true},
 		WorkingMemory: run.memory,
 		Bounds:        secretmatch.StreamBounds{InputBytes: maximum, OutputBytes: maximum, MemoryBytes: 32 << 20, DetectorWork: 1 << 30},
 	})

@@ -16,7 +16,7 @@ const referenceContextBytes = len(referenceTokenPrefix) + 36 + 2
 // every emitted chunk and final settlement. observe must charge retained metadata.
 // admission charges actual allocations against an aggregate ledger. Pure local
 // reference callers may pass nil; production capture requires aggregate admission.
-func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer, label string, bounds StreamBounds, admission StreamMemoryAdmission, check func() error, observe func(context.Context, StreamSpan) error) (result StreamResult, err error) {
+func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer, label string, policy StreamPolicy, bounds StreamBounds, admission StreamMemoryAdmission, check func() error, observe func(context.Context, StreamSpan) error) (result StreamResult, err error) {
 	if ctx == nil || m == nil || src == nil || dst == nil || bounds.InputBytes <= 0 || bounds.OutputBytes <= 0 || bounds.MemoryBytes <= 0 || bounds.DetectorWork <= 0 {
 		return result, errors.New("invalid stream screening contract")
 	}
@@ -64,7 +64,7 @@ func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer,
 	if len(prefix) > window {
 		return result, &StreamLimitError{"screen_label_bytes", int64(window), int64(len(prefix))}
 	}
-	state := streamScreen{matcher: m, memory: memory, needles: needles, hits: streamHits{memory: memory}, bounds: bounds, check: check, observe: observe}
+	state := streamScreen{matcher: m, memory: memory, needles: needles, hits: streamHits{memory: memory}, bounds: bounds, policy: policy, check: check, observe: observe}
 	state.result.ClassificationRevision = revision
 	if err := state.grow(len(prefix) + streamReadBytes); err != nil {
 		return result, err
@@ -86,7 +86,7 @@ func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer,
 		}
 		// A complete detector window plus the largest exact spelling and token
 		// context makes every candidate beginning in the next committed prefix whole.
-		required := state.catalog + int64(window+longest+referenceContextBytes+utf8.UTFMax)
+		required := state.catalog + int64(window+longest+referenceContextBytes+utf8.UTFMax+8)
 		if !eof && state.base+int64(len(state.buffer)) < required {
 			readMax := min(int64(len(chunk)), bounds.InputBytes-state.result.InputBytes+1)
 			n, readErr := src.Read(chunk[:int(readMax)])
@@ -132,6 +132,8 @@ type streamScreen struct {
 	needles                          []streamNeedle
 	hits                             streamHits
 	bounds                           StreamBounds
+	policy                           StreamPolicy
+	echoWork                         int64
 	check                            func() error
 	observe                          func(context.Context, StreamSpan) error
 	buffer                           []byte
@@ -182,6 +184,9 @@ func (s *streamScreen) advance(ctx context.Context, dst io.Writer, window, overl
 		harvestUntil = s.base + int64(len(raw))
 	}
 	if err := s.matcher.streamHarvest(ctx, mask.text, s.base, harvestUntil, eof, s.needles, &s.hits); err != nil {
+		return err
+	}
+	if err := s.streamEncodedEchoes(ctx, mask.text, harvestUntil); err != nil {
 		return err
 	}
 	s.catalog = next
