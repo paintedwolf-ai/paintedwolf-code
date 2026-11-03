@@ -7,7 +7,8 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 )
 
-func (s *Memory) SessionUntrustedContent(sessionID string) bool {
+func (ev *memoryEvidence) SessionUntrustedContent(sessionID string) bool {
+	s := ev.core
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return false
@@ -17,11 +18,11 @@ func (s *Memory) SessionUntrustedContent(sessionID string) bool {
 	return s.untrustedRecords[sessionID] > 0
 }
 
-func (s *Memory) SessionUntrustedContentResult(ctx context.Context, sessionID string) (bool, error) {
+func (ev *memoryEvidence) SessionUntrustedContentResult(ctx context.Context, sessionID string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	return s.SessionUntrustedContent(sessionID), nil
+	return ev.SessionUntrustedContent(sessionID), nil
 }
 
 // untrustedCount tracks the cached count and initialization state.
@@ -31,12 +32,16 @@ type untrustedCount struct {
 }
 
 // SessionUntrustedContent reads the cache with a background context.
-func (s *SQL) SessionUntrustedContent(sessionID string) bool {
-	value, _ := s.SessionUntrustedContentResult(context.Background(), sessionID)
+func (ev *sqlEvidence) SessionUntrustedContent(sessionID string) bool {
+	value, _ := sessionUntrustedContentResultSQL(context.Background(), ev.core, sessionID)
 	return value
 }
 
-func (s *SQL) SessionUntrustedContentResult(ctx context.Context, sessionID string) (bool, error) {
+func (ev *sqlEvidence) SessionUntrustedContentResult(ctx context.Context, sessionID string) (bool, error) {
+	return sessionUntrustedContentResultSQL(ctx, ev.core, sessionID)
+}
+
+func sessionUntrustedContentResultSQL(ctx context.Context, s *sqlCore, sessionID string) (bool, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return false, nil
@@ -46,7 +51,7 @@ func (s *SQL) SessionUntrustedContentResult(ctx context.Context, sessionID strin
 	if cached, ok := s.untrustedRecords.Load(sessionID); ok && cached.warm {
 		return cached.n > 0, nil
 	}
-	n, err := s.countUntrustedRecords(ctx, sessionID)
+	n, err := countUntrustedRecords(ctx, s, sessionID)
 	if err != nil {
 		return false, err
 	}
@@ -54,7 +59,7 @@ func (s *SQL) SessionUntrustedContentResult(ctx context.Context, sessionID strin
 	return n > 0, nil
 }
 
-func (s *SQL) countUntrustedRecords(ctx context.Context, sessionID string) (int, error) {
+func countUntrustedRecords(ctx context.Context, s *sqlCore, sessionID string) (int, error) {
 	n, err := s.queries.HasUntrustedEvidence(ctx, sessionID)
 	if err != nil || n == 0 {
 		return 0, err
@@ -62,7 +67,7 @@ func (s *SQL) countUntrustedRecords(ctx context.Context, sessionID string) (int,
 	return 1, nil
 }
 
-func (s *Memory) bumpUntrustedLocked(sessionID string, rec evidence.Record) {
+func bumpUntrustedLocked(s *memoryCore, sessionID string, rec evidence.Record) {
 	if !evidence.RecordMarksUntrustedContent(rec) {
 		return
 	}
@@ -72,7 +77,7 @@ func (s *Memory) bumpUntrustedLocked(sessionID string, rec evidence.Record) {
 	s.untrustedRecords[sessionID]++
 }
 
-func (s *SQL) bumpUntrusted(sessionID string, rec evidence.Record) {
+func bumpUntrusted(s *sqlCore, sessionID string, rec evidence.Record) {
 	if !evidence.RecordMarksUntrustedContent(rec) {
 		return
 	}
@@ -87,19 +92,19 @@ func (s *SQL) bumpUntrusted(sessionID string, rec evidence.Record) {
 	s.untrustedRecords.Delete(sessionID)
 }
 
-func (s *SQL) invalidateUntrusted(sessionID string) {
+func invalidateUntrusted(s *sqlCore, sessionID string) {
 	s.untrustedMu.Lock()
 	defer s.untrustedMu.Unlock()
 	s.untrustedRecords.Delete(sessionID)
 }
 
 // SeedUntrustedContent records inherited untrusted content.
-func (s *Memory) SeedUntrustedContent(ctx context.Context, sessionID string) error {
-	return s.UpsertEvidenceRecord(ctx, sessionID, inheritUntrustedRecord())
+func (ev *memoryEvidence) SeedUntrustedContent(ctx context.Context, sessionID string) error {
+	return upsertEvidenceRecordMemory(ctx, ev.core, sessionID, inheritUntrustedRecord())
 }
 
-func (s *SQL) SeedUntrustedContent(ctx context.Context, sessionID string) error {
-	return s.UpsertEvidenceRecord(ctx, sessionID, inheritUntrustedRecord())
+func (ev *sqlEvidence) SeedUntrustedContent(ctx context.Context, sessionID string) error {
+	return upsertEvidenceRecordSQL(ctx, ev.core, sessionID, inheritUntrustedRecord())
 }
 
 func inheritUntrustedRecord() evidence.Record {
@@ -111,45 +116,45 @@ func inheritUntrustedRecord() evidence.Record {
 	}
 }
 
-func (s *Memory) SessionVisitedHosts(sessionID string) map[string]struct{} {
+func (ev *memoryEvidence) SessionVisitedHosts(sessionID string) map[string]struct{} {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
 	}
-	ev, err := s.LoadLedger(context.Background(), sessionID)
+	ledger, err := loadLedgerMemory(context.Background(), ev.core, sessionID)
 	if err != nil {
 		return nil
 	}
-	return evidence.VisitedHostsFromLedger(ev)
+	return evidence.VisitedHostsFromLedger(ledger)
 }
 
-func (s *SQL) SessionVisitedHosts(sessionID string) map[string]struct{} {
+func (ev *sqlEvidence) SessionVisitedHosts(sessionID string) map[string]struct{} {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
 	}
-	ev, err := s.LoadLedger(context.Background(), sessionID)
+	ledger, err := loadLedger(context.Background(), ev.core, ev.core.queries, sessionID)
 	if err != nil {
 		return nil
 	}
-	return evidence.VisitedHostsFromLedger(ev)
+	return evidence.VisitedHostsFromLedger(ledger)
 }
 
 // RecordHostVisit adds a mediated dial to the chat's visited-host set. The record
 // carries no content tool, so it does not mark the session untrusted.
-func (s *Memory) RecordHostVisit(ctx context.Context, sessionID, host string) error {
+func (ev *memoryEvidence) RecordHostVisit(ctx context.Context, sessionID, host string) error {
 	rec, ok := evidence.DialedHostRecord(host)
 	if !ok || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
-	return s.UpsertEvidenceRecord(ctx, sessionID, rec)
+	return upsertEvidenceRecordMemory(ctx, ev.core, sessionID, rec)
 }
 
 // RecordHostVisit adds a mediated dial to the chat's visited-host set.
-func (s *SQL) RecordHostVisit(ctx context.Context, sessionID, host string) error {
+func (ev *sqlEvidence) RecordHostVisit(ctx context.Context, sessionID, host string) error {
 	rec, ok := evidence.DialedHostRecord(host)
 	if !ok || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
-	return s.UpsertEvidenceRecord(ctx, sessionID, rec)
+	return upsertEvidenceRecordSQL(ctx, ev.core, sessionID, rec)
 }

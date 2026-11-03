@@ -40,6 +40,7 @@ type Listener struct {
 	Protocol Protocol
 	Addr     netip.AddrPort
 	UID      uint32
+	IPv6Only bool
 	Holders  []ProcessIdentity
 }
 
@@ -53,6 +54,7 @@ type kernelListener struct {
 	Protocol Protocol
 	Local    netip.AddrPort
 	UID      uint32
+	IPv6Only bool
 	Handle   uint64
 }
 
@@ -66,6 +68,7 @@ func resolveListeners(rows []kernelListener, pids []int, observe func(pid int) (
 		wanted[row.Handle] = true
 	}
 	holders := map[uint64][]ProcessIdentity{}
+	ipv6Only := map[uint64]bool{}
 	for _, pid := range pids {
 		if pid <= 0 {
 			continue
@@ -76,15 +79,26 @@ func resolveListeners(rows []kernelListener, pids []int, observe func(pid int) (
 		}
 		held := map[uint64]bool{}
 		for _, socket := range sockets {
-			if wanted[socket.handle] && !held[socket.handle] {
-				held[socket.handle] = true
-				holders[socket.handle] = append(holders[socket.handle], socket.Holder)
+			if wanted[socket.handle] {
+				if socket.IPv6Only {
+					ipv6Only[socket.handle] = true
+				}
+				if !held[socket.handle] {
+					held[socket.handle] = true
+					holders[socket.handle] = append(holders[socket.handle], socket.Holder)
+				}
 			}
 		}
 	}
 	out := make([]Listener, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, Listener{Protocol: row.Protocol, Addr: row.Local, UID: row.UID, Holders: holders[row.Handle]})
+		out = append(out, Listener{
+			Protocol: row.Protocol,
+			Addr:     row.Local,
+			UID:      row.UID,
+			IPv6Only: row.IPv6Only || ipv6Only[row.Handle],
+			Holders:  holders[row.Handle],
+		})
 	}
 	return out
 }

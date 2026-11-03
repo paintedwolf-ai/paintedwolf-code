@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -80,6 +81,11 @@ func confinedExit(t *testing.T, self string, c confine.Confinement, name string,
 // confinedRun is confinedExit plus the child's combined stdout+stderr.
 func confinedRun(t *testing.T, self string, c confine.Confinement, name string, args ...string) (int, string) {
 	t.Helper()
+	c, args, release, err := bindSocketFixture(t, c, args)
+	if err != nil {
+		return 126, err.Error()
+	}
+	defer release()
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
@@ -91,6 +97,11 @@ func confinedRun(t *testing.T, self string, c confine.Confinement, name string, 
 // whose answer is stdout; system shims such as xcrun may warn on stderr.
 func confinedStdout(t *testing.T, self string, c confine.Confinement, name string, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
+	c, args, release, err := bindSocketFixture(t, c, args)
+	if err != nil {
+		return 126, "", err.Error()
+	}
+	defer release()
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
@@ -98,6 +109,38 @@ func confinedStdout(t *testing.T, self string, c confine.Confinement, name strin
 	cmd.Stderr = &errBuf
 	out, _ := cmd.Output()
 	return cmd.ProcessState.ExitCode(), string(out), errBuf.String()
+}
+
+func bindSocketFixture(t *testing.T, c confine.Confinement, args []string) (confine.Confinement, []string, func(), error) {
+	t.Helper()
+	if len(c.SocketGrants) == 0 {
+		return c, args, func() {}, nil
+	}
+	ctx, scope := socketref.WithScope(t.Context())
+	c.SocketGrants = slices.Clone(c.SocketGrants)
+	for i, grant := range c.SocketGrants {
+		if grant.Binding.ID == "" {
+			grant.Binding.Enforcement = socketref.Platform().Command
+			captured, err := confine.CaptureSocketGrant(ctx, grant)
+			if err != nil {
+				scope.Close()
+				return c, nil, func() {}, err
+			}
+			c.SocketGrants[i] = captured
+		}
+	}
+	lease, err := confine.BindAction(&c, confine.EgressCommand{ToolCallID: t.Name()})
+	if err != nil {
+		scope.Close()
+		return c, nil, func() {}, err
+	}
+	cleanup := func() { lease.Close(t.Context()); scope.Close() }
+	resolved, _, err := confine.ResolveSocketArguments(&c, args, nil)
+	if err != nil {
+		cleanup()
+		return c, nil, func() {}, err
+	}
+	return c, resolved, cleanup, nil
 }
 
 func TestBuildProfileConfinesWritesAndDeniesNetwork(t *testing.T) {

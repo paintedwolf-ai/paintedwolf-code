@@ -24,6 +24,17 @@ func NameFromFolderPath(path string) string {
 	return trimProjectName(filepath.Base(path))
 }
 
+// DisplayName returns the explicit project name or primary folder basename.
+func DisplayName(p *Project) string {
+	if p == nil {
+		return ""
+	}
+	if name := strings.TrimSpace(p.Name); name != "" {
+		return name
+	}
+	return NameFromFolderPath(PrimaryRootPath(p))
+}
+
 // DefaultNameForCreate selects the initial project name.
 func DefaultNameForCreate(params CreateParams) string {
 	if trimmed := strings.TrimSpace(params.Name); trimmed != "" {

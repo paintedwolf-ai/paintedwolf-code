@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/textguard"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // AgentsMDBodyTruncatedMarker is appended when an AGENTS.md body exceeds the inject cap.
@@ -20,26 +19,6 @@ const DefaultAgentsMDInjectMaxBodyBytes = 65536
 
 // AgentsMDReadMaxBytes allows heading extraction beyond the smaller injection budget.
 const AgentsMDReadMaxBytes = 4 << 20 // 4 MiB
-
-var agentsMDPathTools = map[string]struct{}{
-	"read":          {},
-	"write":         {},
-	"edit":          {},
-	"replace_lines": {},
-	"code_rewrite":  {},
-	"grep":          {},
-	"find":          {},
-	"list_dir":      {},
-	"stat":          {},
-	"wc":            {},
-	"jq":            {},
-	"jq_edit":       {},
-	"chmod":         {},
-	"delete":        {},
-	"mkdir":         {},
-	"copy":          {},
-	"move":          {},
-}
 
 // AgentsMDSessionState fixes one root and synchronizes access to its cached index.
 type AgentsMDSessionState struct {
@@ -206,64 +185,6 @@ func BuildChainInject(
 		return AgentsMDInject{}, nil
 	}
 	return AgentsMDInject{Content: block, Paths: paths}, nil
-}
-
-// ExtractPathScopedToolPaths returns repository paths from recent source-tool calls.
-func ExtractPathScopedToolPaths(history []api.Message) []string {
-	var paths []string
-	seen := map[string]struct{}{}
-	for i := len(history) - 1; i >= 0; i-- {
-		msg := history[i]
-		if msg.Role != api.MessageRoleAssistant {
-			continue
-		}
-		for _, tc := range msg.ToolCalls {
-			if _, ok := agentsMDPathTools[strings.TrimSpace(tc.Name)]; !ok {
-				continue
-			}
-			for _, path := range toolCallScopePaths(tc) {
-				path = strings.TrimSpace(path)
-				if path == "" {
-					continue
-				}
-				if _, dup := seen[path]; dup {
-					continue
-				}
-				seen[path] = struct{}{}
-				paths = append(paths, path)
-			}
-		}
-	}
-	return paths
-}
-
-func toolCallScopePaths(call api.ToolCall) []string {
-	var paths []string
-	appendPath := func(value any) {
-		switch typed := value.(type) {
-		case string:
-			paths = append(paths, typed)
-		case []any:
-			for _, item := range typed {
-				if path, ok := item.(string); ok {
-					paths = append(paths, path)
-				}
-			}
-		case []string:
-			paths = append(paths, typed...)
-		}
-	}
-	appendPath(call.Args["path"])
-	appendPath(call.Args["paths"])
-	for _, key := range []string{"copies", "moves"} {
-		pairs, _ := call.Args[key].([]any)
-		for _, item := range pairs {
-			pair, _ := item.(map[string]any)
-			appendPath(pair["from"])
-			appendPath(pair["to"])
-		}
-	}
-	return paths
 }
 
 // FirstConcreteScopePath picks the first non-glob scope or leg path suitable for chain resolution.

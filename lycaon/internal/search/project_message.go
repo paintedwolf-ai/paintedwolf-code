@@ -31,12 +31,30 @@ func groundingRows(projectID, sessionID, messageID, ts, role string, gr *api.Cit
 		return nil
 	}
 	verified := gr.Traced
+	recByHandle := make(map[string]api.CitationGroundingEvidenceRecord, len(gr.EvidenceRecords))
+	for _, rec := range gr.EvidenceRecords {
+		if h := strings.TrimSpace(rec.Handle); h != "" {
+			recByHandle[h] = rec
+		}
+	}
+	citedHandles := make(map[string]struct{}, len(gr.CitedEvidence))
+	for _, cited := range gr.CitedEvidence {
+		if h := strings.TrimSpace(cited.Handle); h != "" {
+			citedHandles[h] = struct{}{}
+		}
+	}
 	var rows []IndexRow
 	for i, rec := range gr.EvidenceRecords {
+		if h := strings.TrimSpace(rec.Handle); h != "" {
+			if _, alsoCited := citedHandles[h]; alsoCited {
+				continue
+			}
+		}
 		rows = append(rows, evidenceRecordRow(projectID, sessionID, messageID, ts, role, verified, gr.HintCode, rec, rowSuffix(prefix+"evidence_record", i, rec.Handle)))
 	}
 	for i, cited := range gr.CitedEvidence {
-		rows = append(rows, citedEvidenceRow(projectID, sessionID, messageID, ts, role, gr.HintCode, cited, rowSuffix(prefix+"cited", i, cited.Handle)))
+		rec := recByHandle[strings.TrimSpace(cited.Handle)]
+		rows = append(rows, citedEvidenceRow(projectID, sessionID, messageID, ts, role, gr.HintCode, cited, rec, rowSuffix(prefix+"cited", i, cited.Handle)))
 	}
 	for i, finding := range gr.Findings {
 		rows = append(rows, findingRow(projectID, sessionID, messageID, ts, role, gr.HintCode, finding, rowSuffix(prefix+"finding", i, finding.Handle)))
@@ -83,19 +101,25 @@ func evidenceRecordRow(projectID, sessionID, messageID, ts, role string, verifie
 	}
 	url := firstURL(rec.URLs)
 	v := verified
+	rowScopeID := messageID
+	if strings.TrimSpace(rec.Handle) != "" && strings.TrimSpace(sessionID) != "" {
+		// Ledger snapshots repeat across turn closeouts; key by session to upsert in place.
+		rowScopeID = strings.TrimSpace(sessionID)
+	}
 	return IndexRow{
-		ID:        RowID(SourceMessage, messageID, suffix),
+		ID:        RowID(SourceMessage, rowScopeID, suffix),
 		ProjectID: projectID,
 		Source:    SourceMessage,
 		HitKind:   HitKindEvidence,
 		SessionID: sessionID,
 		MessageID: messageID,
 		SourceRef: messageID,
-		Handle:    rec.Handle,
+		Handle:    strings.TrimSpace(rec.Handle),
+		Tool:      strings.TrimSpace(rec.Tool),
 		Kind:      kind,
 		Shape:     rec.Shape,
 		Role:      role,
-		Path:      rec.Path,
+		Path:      cleanToolPath(rec.Path),
 		Line:      rec.Line,
 		URL:       url,
 		Snippet:   rec.Excerpt,
@@ -108,8 +132,16 @@ func evidenceRecordRow(projectID, sessionID, messageID, ts, role string, verifie
 	}
 }
 
-func citedEvidenceRow(projectID, sessionID, messageID, ts, role, hintCode string, cited api.CitationGroundingCitedEvidence, suffix string) IndexRow {
+func citedEvidenceRow(projectID, sessionID, messageID, ts, role, hintCode string, cited api.CitationGroundingCitedEvidence, rec api.CitationGroundingEvidenceRecord, suffix string) IndexRow {
 	v := verdictVerified(cited.Verdict)
+	kind := strings.TrimSpace(rec.Kind)
+	if kind == "" {
+		kind = HitKindEvidence
+	}
+	line := cited.Line
+	if line <= 0 {
+		line = rec.Line
+	}
 	return IndexRow{
 		ID:        RowID(SourceMessage, messageID, suffix),
 		ProjectID: projectID,
@@ -118,15 +150,21 @@ func citedEvidenceRow(projectID, sessionID, messageID, ts, role, hintCode string
 		SessionID: sessionID,
 		MessageID: messageID,
 		SourceRef: messageID,
-		Handle:    cited.Handle,
-		Kind:      HitKindEvidence,
+		Handle:    strings.TrimSpace(cited.Handle),
+		Tool:      strings.TrimSpace(rec.Tool),
+		Kind:      kind,
+		Shape:     rec.Shape,
 		Role:      role,
-		Path:      cited.Path,
-		Line:      cited.Line,
-		Snippet:   cited.Excerpt,
+		Path:      cleanToolPath(firstNonEmpty(cited.Path, rec.Path)),
+		Line:      line,
+		URL:       firstURL(rec.URLs),
+		Snippet:   firstNonEmpty(cited.Excerpt, rec.Excerpt),
 		Verified:  &v,
 		HintCode:  hintCode,
+		Trust:     rec.Fidelity,
+		Truncated: rec.Truncated,
 		TS:        ts,
+		Untrusted: ingestion.IsRetrievalTool(rec.Tool),
 	}
 }
 
@@ -140,10 +178,10 @@ func findingRow(projectID, sessionID, messageID, ts, role, hintCode string, find
 		SessionID: sessionID,
 		MessageID: messageID,
 		SourceRef: messageID,
-		Handle:    finding.Handle,
+		Handle:    strings.TrimSpace(finding.Handle),
 		Kind:      HitKindClaim,
 		Role:      role,
-		Path:      finding.Path,
+		Path:      cleanToolPath(finding.Path),
 		Line:      finding.Line,
 		Snippet:   firstNonEmpty(finding.Excerpt, finding.Note),
 		Verified:  &v,

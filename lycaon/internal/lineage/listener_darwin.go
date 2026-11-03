@@ -22,6 +22,7 @@ struct pw_listen_row {
  uint32_t uid;
  uint16_t port;
  unsigned char ipv4;
+ unsigned char ipv6_only;
 };
 
 // pw_listen_rows reads the host-wide PCB table, which needs no access to the
@@ -75,6 +76,7 @@ static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count) {
   row->uid = inp->xi_socket.so_uid;
   row->port = ntohs(inp->inp_lport);
   row->ipv4 = (inp->inp_vflag & INP_IPV6) == 0;
+  row->ipv6_only = !row->ipv4 && (inp->inp_flags & IN6P_IPV6_V6ONLY) != 0;
   if (row->ipv4) {
    memcpy(row->local, &inp->inp_dependladdr.inp46_local.ia46_addr4, 4);
   } else {
@@ -138,7 +140,13 @@ func pcbListeners(protocol Protocol) ([]kernelListener, error) {
 		} else {
 			addr = netip.AddrFrom16([16]byte(raw))
 		}
-		out = append(out, kernelListener{Protocol: protocol, Local: netip.AddrPortFrom(addr, uint16(row.port)), UID: uint32(row.uid), Handle: uint64(row.handle)})
+		out = append(out, kernelListener{
+			Protocol: protocol,
+			Local:    netip.AddrPortFrom(addr, uint16(row.port)),
+			UID:      uint32(row.uid),
+			IPv6Only: row.ipv6_only != 0,
+			Handle:   uint64(row.handle),
+		})
 	}
 	return out, nil
 }

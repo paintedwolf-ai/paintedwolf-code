@@ -36,6 +36,7 @@ func TestNativeToolHistoryKeepsNotesAndReasoningSeparate(t *testing.T) {
 			}
 			wantReasoning, wantContent := "", ""
 			switch style {
+			case providerprofile.ReasoningWireNone:
 			case providerprofile.ReasoningWireContent:
 				wantContent = trace
 			case providerprofile.ReasoningWireDetails:

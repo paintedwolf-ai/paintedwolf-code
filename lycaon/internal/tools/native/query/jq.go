@@ -89,13 +89,17 @@ func runJqProgram(inv *invocation, dialect jqDialect) error {
 	}
 	stream := &inputs{inv: inv, operands: args.files, raw: inv.flag("-R"), yaml: dialect.yamlInput || inv.flag("--yaml-input"), limit: safecmd.JQCaps().InputBytes, captured: dialect.captured}
 	defer stream.close()
-	if inv.flag("--stream") {
-		events, err := nativejq.CompileProgram("tostream", nativejq.ProgramOptions{})
+	stream.eventMode = inv.flag("--stream")
+	if !stream.yaml {
+		stream.limit = inv.owners.limit("stream_throughput_bytes")
+	}
+	if stream.eventMode && (stream.raw || stream.yaml) {
+		stream.eventProgram, err = nativejq.CompileProgram("tostream", nativejq.ProgramOptions{})
 		if err != nil {
 			return err
 		}
-		stream.events = events
 	}
+
 	variables, err := inv.variables(stream, args.positional)
 	if err != nil || stream.stop != nil {
 		return errors.Join(err, stream.stop)
@@ -139,18 +143,17 @@ func (r *jqRun) evaluateAll() error {
 		_, err := r.evaluate(text, true)
 		return err
 	case r.inv.flag("-s"):
-		all := []any{}
-		for v, ok := r.stream.Next(); ok; v, ok = r.stream.Next() {
-			all = append(all, v)
+		all, release, err := r.slurpInputs()
+		if err != nil {
+			return err
 		}
-		if r.stream.stop != nil {
-			return r.stream.stop
-		}
+		defer release()
 		if r.stream.broken {
 			return nil
 		}
-		_, err := r.evaluate(all, true)
+		_, err = r.evaluate(all, true)
 		return err
+
 	}
 	// jq stops reading once an operand could not be opened, after
 	// evaluating the value that read returned.

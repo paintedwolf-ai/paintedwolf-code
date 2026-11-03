@@ -20,6 +20,7 @@ func scopeRepos(roots []projectroot.RootRef) []git.RepoRef {
 }
 
 func TestRepoSetCacheSeparatesRootIdentities(t *testing.T) {
+	t.Parallel()
 	base := []projectroot.RootRef{{ID: "root", Path: "/project", Label: "Project", IsPrimary: true}}
 	for _, changed := range []projectroot.RootRef{
 		{ID: "root", Path: "/worktree", Label: "Project", IsPrimary: true},
@@ -58,6 +59,7 @@ func TestRepoSetCacheSeparatesRootIdentities(t *testing.T) {
 }
 
 func TestRepoSetCacheDoesNotCoalesceDifferentCheckouts(t *testing.T) {
+	t.Parallel()
 	started := make(chan string, 2)
 	release := make(chan struct{})
 	cache := git.NewRepoSetCache(time.Hour, git.WithRepoSetDiscover(func(_ context.Context, roots []projectroot.RootRef) []git.RepoRef {

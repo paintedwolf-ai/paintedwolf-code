@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -86,7 +88,9 @@ func (s *CancelService) AbortWorkersForRoot(ctx context.Context, projectID, root
 	if !ok {
 		return nil
 	}
-	tasks, err := s.Queue.List(ctx, projectID,
+	fenceCtx, cancel := cancellationFenceContext(ctx)
+	defer cancel()
+	tasks, err := s.Queue.List(fenceCtx, projectID,
 		api.WorkerStatusPending, api.WorkerStatusRunning, api.WorkerStatusWaiting, api.WorkerStatusHeld)
 	if err != nil {
 		return err
@@ -110,8 +114,10 @@ func (s *CancelService) AbortAllWorkers(ctx context.Context, sessionID, projectI
 	if sessionID == "" {
 		return nil
 	}
+	fenceCtx, cancel := cancellationFenceContext(ctx)
+	defer cancel()
 	tasks, err := s.Queue.ListBySession(
-		ctx,
+		fenceCtx,
 		projectID,
 		sessionID,
 		api.WorkerStatusPending,
@@ -142,9 +148,11 @@ func (s *CancelService) abortTasks(ctx context.Context, tasks []api.WorkerTask, 
 // requestWorkerCancellations fences the whole batch before waiting for any one
 // worker to exit.
 func requestWorkerCancellations(ctx context.Context, queue WorkerQueue, tasks []api.WorkerTask) error {
+	fenceCtx, cancel := cancellationFenceContext(ctx)
+	defer cancel()
 	var errs []error
 	for _, task := range tasks {
-		if _, err := queue.RequestCancellation(ctx, task.ID); err != nil {
+		if _, err := queue.RequestCancellation(fenceCtx, task.ID); err != nil {
 			errs = append(errs, fmt.Errorf("fence worker %s cancellation: %w", task.ID, err))
 		}
 	}
@@ -187,8 +195,21 @@ func (s *CancelService) cancelRunningGraceful(ctx context.Context, task *api.Wor
 func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTask, sessionID, reason string) (api.WorkerCancelResult, error) {
 	jobID := strings.TrimSpace(task.ID)
 	if err := s.Queue.StopExecution(ctx, jobID); err != nil {
+		if isWorkerReleaseTimeout(ctx, err) {
+			slog.WarnContext(ctx, "fenced worker did not exit within release timeout; poller will settle cancellation",
+				"component", "worker", "job_id", jobID, "session_id", sessionID)
+			if current, ok := s.Queue.Get(jobID); ok {
+				task = current
+			}
+			return api.WorkerCancelResult{
+				JobID:     task.ID,
+				Status:    task.Status,
+				AgentType: task.AgentType,
+			}, nil
+		}
 		return api.WorkerCancelResult{}, err
 	}
+	settleCtx := context.WithoutCancel(ctx)
 	if current, ok := s.Queue.Get(jobID); ok {
 		task = current
 	}
@@ -196,13 +217,13 @@ func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTas
 	if task.Status.IsTerminal() && task.Status != api.WorkerStatusCanceled {
 		return api.WorkerCancelResult{}, s.reject(WorkerCancelTerminalCode, map[string]any{"job_id": jobID, "status": string(task.Status)})
 	}
-	result := hostCancellationResult(ctx, *task, reason, s.reports())
+	result := hostCancellationResult(settleCtx, *task, reason, s.reports())
 	report := *result.ChangeReport
-	if err := s.Queue.FinishCanceled(ctx, jobID, &result); err != nil {
+	if err := s.Queue.FinishCanceled(settleCtx, jobID, &result); err != nil {
 		return api.WorkerCancelResult{}, err
 	}
 	if s.Cancellations != nil && sessionID != "" {
-		if err := s.Cancellations.Append(ctx, sessionID, workeroutcomes.CancellationInput{
+		if err := s.Cancellations.Append(settleCtx, sessionID, workeroutcomes.CancellationInput{
 			JobID:          jobID,
 			AgentType:      task.AgentType,
 			ChildSessionID: task.ChildSessionID,
@@ -212,7 +233,7 @@ func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTas
 		}); err != nil {
 			return api.WorkerCancelResult{}, err
 		}
-		s.Events.Terminal(ctx, sessionID, jobID)
+		s.Events.Terminal(settleCtx, sessionID, jobID)
 	}
 	got, ok := s.Queue.Get(jobID)
 	if !ok {
@@ -225,6 +246,32 @@ func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTas
 		Report:    report,
 		Result:    result,
 	}, nil
+}
+
+type cancellationFenceError struct {
+	err error
+}
+
+func (e *cancellationFenceError) Error() string {
+	return "request worker cancellation: " + e.err.Error()
+}
+func (e *cancellationFenceError) Unwrap() error { return e.err }
+
+// Fencing survives caller cancellation but retains the release deadline.
+func cancellationFenceContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	deadline := time.Now().Add(defaultRunStopReleaseTimeout)
+	if callerDeadline, ok := ctx.Deadline(); ok && callerDeadline.Before(deadline) {
+		deadline = callerDeadline
+	}
+	return context.WithDeadline(context.WithoutCancel(ctx), deadline)
+}
+
+func isWorkerReleaseTimeout(ctx context.Context, err error) bool {
+	var fenceError *cancellationFenceError
+	if errors.As(err, &fenceError) {
+		return false
+	}
+	return errors.Is(err, errWorkerReleaseTimeout) || (errors.Is(err, context.DeadlineExceeded) && ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded))
 }
 
 func (s *CancelService) reports() ChangeReportDeps {

@@ -9,39 +9,27 @@ requires:
   - paintedwolf.rejection_code
   - paintedwolf.capability
   - paintedwolf.capability_request_fields
-  - paintedwolf.supports_local_listen
-  - paintedwolf.supports_loopback_connect
   - paintedwolf.rejection_reason
   - paintedwolf.rejection_field
+  - paintedwolf.capability_contract_known
 when: paintedwolf.rejection_code == "SANDBOX_CAPABILITY_REQUEST_INVALID"
 effect: block
 copy:
-  what: The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason
-    }}{% endif %}{% if paintedwolf.rejection_field %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if
-    paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}.
-  cause: The request was empty, malformed, or contained an unsupported capability field.
-  why: Capability authority is accepted only through the declared structured request shape.
-  fix: '{% if paintedwolf.capability_request_fields %}Omit capability_request for ordinary project-tree reads and writes,
-    or send a non-empty capability_request using only these fields: {{ paintedwolf.capability_request_fields }}. {%
-    if paintedwolf.supports_local_listen %}A server needs the local_listen object for listener authority. {% endif
-    %}{% if paintedwolf.supports_loopback_connect %}A client of a service on this machine needs the loopback_connect
-    object for client authority. {% endif %}{% if paintedwolf.supports_local_listen %}{% if paintedwolf.supports_loopback_connect
-    %}A harness that binds and then calls itself requests both objects; listen and connect ids do not belong in host_resources.
-    {% endif %}{% endif %} {% else %}This tool accepts no execution capability request. Remove capability_request;
-    if the intended operation needs additional authority, choose an available tool whose published schema declares
-    it.{% endif %}'
-  instead: Branch on Code; correct the structured capability request
+  what: The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}{% if paintedwolf.rejection_field
+    %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}.
+  cause: The request did not match the receiving tool's declared capability schema.
+  why: ''
+  fix: '{% if paintedwolf.capability_contract_known %}{% if paintedwolf.capability_request_fields %}Use a non-empty capability_request object with fields from {{
+    paintedwolf.capability_request_fields }}, following this tool''s schema.{% else %}Remove capability_request; this tool does not accept it.{% endif %}{% endif
+    %}'
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox_capability
 x-paintedwolf-message: structured capability request invalid
 x-paintedwolf-scenarios:
 - id: server_and_client
   vars:
-    capability_request_fields:
-    - local_listen
-    - loopback_connect
-    supports_local_listen: true
-    supports_loopback_connect: true
+    tool: command
   expect_contains:
   - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
   - capability request
@@ -63,18 +51,13 @@ x-paintedwolf-scenarios:
   - loopback_connect
 - id: client_only
   vars:
-    capability_request_fields:
-    - loopback_connect
-    supports_loopback_connect: true
-    supports_local_listen: false
+    tool: page_open
   expect_contains:
+  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
   - loopback_connect
-  - client authority
 - id: no_capabilities
   vars:
-    capability_request_fields: []
-    supports_loopback_connect: false
-    supports_local_listen: false
+    tool: read
   expect_contains:
-  - accepts no execution capability request
+  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
   - Remove capability_request

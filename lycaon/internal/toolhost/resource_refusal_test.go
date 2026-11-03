@@ -78,9 +78,9 @@ func TestCommandResourceRefusalPreservesFactsAndEarlierEffects(t *testing.T) {
 		t.Fatalf("delivered refusal %+v", result)
 	}
 	t.Logf("Delivered resource refusal:\n%s", result.Refusal.Feedback)
-	const stderr = "cut: request: This command reached its record_bytes limit (4194305 bytes; maximum 4194304) [COMMAND_LIMIT_EXCEEDED]\n"
-	if result.Stdout != "" || result.Stderr != stderr || result.CompletedEffects != 1 || result.UncertainEffects != 0 {
-		t.Fatalf("partial outcome %+v, want stderr %q", result, stderr)
+	assertCommandRefusalDiagnostic(t, result.Stderr, "cut", "request", refusal.Code)
+	if result.Stdout != "" || result.CompletedEffects != 1 || result.UncertainEffects != 0 {
+		t.Fatalf("partial outcome %+v", result)
 	}
 	if kept, err := os.ReadFile(filepath.Join(env.Dir, "kept")); err != nil || string(kept) != "before" {
 		t.Fatalf("earlier effect %q %v", kept, err)

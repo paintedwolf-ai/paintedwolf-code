@@ -17,15 +17,14 @@ import (
 type timeoutClaim struct {
 	label    string // human-readable
 	pkgRel   string // path relative to lycaon module root
-	file     string // file basename (helps disambiguate when name is reused across packages)
 	receiver string // type name for methods; "" for top-level
 	funcName string
 }
 
 var timeoutClaims = []timeoutClaim{
-	{"gitRemoteHash", "internal/project", "roots.go", "", "gitRemoteHash"},
-	{"(*SQLQueue).Get", "internal/worker", "sql_queue_query.go", "SQLQueue", "Get"},
-	{"fetchDiscoveredModels", "internal/llm", "registry_discovery.go", "", "fetchDiscoveredModels"},
+	{"gitRemoteHash", "internal/project", "", "gitRemoteHash"},
+	{"(*sqlQueueCore).Get", "internal/worker", "sqlQueueCore", "Get"},
+	{"fetchDiscoveredModels", "internal/llm", "", "fetchDiscoveredModels"},
 }
 
 func TestBoundedTimeoutClaimsConstructDeadline(t *testing.T) {
@@ -34,13 +33,22 @@ func TestBoundedTimeoutClaimsConstructDeadline(t *testing.T) {
 	for _, claim := range timeoutClaims {
 		t.Run(claim.label, func(t *testing.T) {
 			t.Parallel()
-			path := filepath.Join(root, "lycaon", claim.pkgRel, claim.file)
-			fset := token.NewFileSet()
-			f, err := parser.ParseFile(fset, path, nil, 0)
-			contractcheck.FailErr(t, "parse "+path, err)
-			fn := findFuncOrMethod(f, claim.receiver, claim.funcName)
+			dir := filepath.Join(root, "lycaon", claim.pkgRel)
+			fset, files := contractcheck.ParseNonTestGoTree(t, dir)
+			var fn *ast.FuncDecl
+			for _, file := range files {
+				if filepath.Dir(fset.Position(file.Pos()).Filename) != dir {
+					continue
+				}
+				if candidate := findFuncOrMethod(file, claim.receiver, claim.funcName); candidate != nil {
+					if fn != nil {
+						t.Fatalf("ambiguous timeout claim %s in %s", claim.label, dir)
+					}
+					fn = candidate
+				}
+			}
 			if fn == nil {
-				t.Fatalf("could not find %s in %s", claim.label, path)
+				t.Fatalf("could not find %s in %s", claim.label, dir)
 			}
 			if !bodyConstructsDeadline(fn.Body) {
 				t.Fatalf(

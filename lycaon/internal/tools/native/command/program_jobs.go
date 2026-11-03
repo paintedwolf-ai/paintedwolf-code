@@ -199,7 +199,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 		close(ready)
 		return "", err
 	}
-	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle) })
+	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle, bgprocess.TerminationStoppedByAgent) })
 	if j.numbers == nil {
 		j.numbers = map[string]int{}
 	}
@@ -452,7 +452,7 @@ func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error 
 	}
 	j.signals[handle] = status
 	j.mu.Unlock()
-	if _, err := j.Registry.Lifecycle.Stop(j.SessionID, handle); err != nil {
+	if _, err := j.Registry.Lifecycle.Stop(j.SessionID, handle, bgprocess.TerminationStoppedByAgent); err != nil {
 		return jobLookupError(err, handle)
 	}
 	return nil

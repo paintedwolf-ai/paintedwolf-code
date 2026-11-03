@@ -134,6 +134,12 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 		boundary = *opts.Launch.Confinement
 	}
 	boundary.Process = opts.Child
+	args, final.Env, err = confine.ResolveSocketArguments(opts.Launch.Confinement, args, final.Env)
+	if err != nil {
+		cancel()
+		_ = inputs.Close()
+		return nil, nil, err
+	}
 	cmd, baseCleanup, err := confine.Command(ctx, self, name, args, boundary)
 	if err != nil {
 		cancel()

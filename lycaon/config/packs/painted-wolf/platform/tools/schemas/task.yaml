@@ -2,7 +2,7 @@ description: >-
   Start background workers for parallel execution across concurrent legs
   and return control immediately. Dispatch ready legs together in the same turn
   or launch companion legs while work runs. For single-thread, localized changes,
-  execute inline directly. Write workers use private snapshots; sibling files do not appear live. Use after_workers when a worker needs completed producer files. Match the worker profile and scope to the assignment.
+  execute inline directly. Write workers execute inside a private snapshot overlay with no version-control metadata (.git is excluded) and no remote or publish capability; sibling files do not appear live. Version-control inspection (git_status, git_diff), committing (git_commit), and any publication steps belong to the coordinator on the host workspace after promotion. Use after_workers when a worker needs completed producer files. Match the worker profile and scope to the assignment.
 schema:
   type: object
   additionalProperties: false
@@ -27,9 +27,11 @@ schema:
     brief:
       description: >-
         Structured worker charter, capped at 4096 runes across its text fields.
-        Parent-session attachments are forwarded by the host as header-only
-        handles; cite their names in context_refs instead of pasting bodies or
-        inventing host-data paths.
+        Do not assign git commit, git push, branch/tag operations, release
+        publication, or external publishing inside a worker brief or acceptance
+        criteria. Parent-session attachments are forwarded by the host as
+        header-only handles; cite their names in context_refs instead of pasting
+        bodies or inventing host-data paths.
       type: object
       additionalProperties: false
       properties:
@@ -99,7 +101,7 @@ schema:
       additionalProperties: false
       properties:
         mode:
-          description: "read for survey; write for overlay landing (required when the profile can mutate)."
+          description: "read for survey; write for private snapshot overlay landing with no .git metadata or remote/publish capability (required when the profile can mutate)."
           type: string
           enum: [read, write]
         paths:

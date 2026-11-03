@@ -25,6 +25,7 @@ components:
         - progress
         - queue
         - project
+        - project_background
         - process
         - preview
         - attention

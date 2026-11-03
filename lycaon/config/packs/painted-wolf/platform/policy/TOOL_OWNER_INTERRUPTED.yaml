@@ -11,11 +11,11 @@ requires:
 when: paintedwolf.rejection_code == "TOOL_OWNER_INTERRUPTED"
 effect: block
 copy:
-  what: The subsystem owner stopped the action before it settled.
-  cause: '{% if paintedwolf.rejection_reason %}{{ paintedwolf.rejection_reason }}{% else %}The active program or session supervision ended before the action settled.{% endif %}'
-  why: An interrupted action cannot admit new child work or claim completion.
-  fix: Inspect any earlier completed effects and active job state before submitting a new action.
-  instead: Branch on Code TOOL_OWNER_INTERRUPTED; inspect completed effects before starting new work
+  what: The operation was interrupted.
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: An interruption does not establish completion.
+  fix: ''
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool_owner
 x-paintedwolf-message: Subsystem owner interrupted the action before settlement
@@ -27,4 +27,5 @@ x-paintedwolf-scenarios:
     tool: command
   expect_contains:
   - 'Code: TOOL_OWNER_INTERRUPTED'
-  - completed effects
+  - program admission closed
+  - does not establish completion

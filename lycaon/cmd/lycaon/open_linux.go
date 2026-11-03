@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 // linuxDesktopLauncher is the installed desktop entry point, the same program the
@@ -54,8 +56,9 @@ func startDesktop(launch desktopLaunch) (appStart, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("could not start Painted Wolf Code: %w", err)
 	}
-	started := &desktopStart{cmd: cmd, grace: launch.grace, exited: make(chan error, 1), done: make(chan struct{}),
-		observed: make(chan struct{}), reapAllowed: make(chan struct{}), signalGroup: syscall.Kill}
+	leader, _ := osprocess.IncarnationOf(cmd.Process.Pid)
+	started := &desktopStart{cmd: cmd, leader: leader, grace: launch.grace, exited: make(chan error, 1), done: make(chan struct{}),
+		observed: make(chan struct{}), reapAllowed: make(chan struct{}), signalGroup: osprocess.SignalGroup}
 	go started.wait()
 	return started, nil
 }
@@ -107,6 +110,7 @@ func trustedLauncher(path, anchor string, owner uint32) error {
 // desktopStart owns one launched process group until the app is reachable.
 type desktopStart struct {
 	cmd                   *exec.Cmd
+	leader                osprocess.Incarnation
 	grace                 time.Duration
 	exited                chan error
 	done                  chan struct{}
@@ -114,7 +118,7 @@ type desktopStart struct {
 	mu                    sync.Mutex
 	stopping, reaped      bool
 	observed, reapAllowed chan struct{}
-	signalGroup           func(int, syscall.Signal) error
+	signalGroup           func(osprocess.Incarnation, syscall.Signal) error
 }
 
 func (d *desktopStart) wait() {
@@ -165,8 +169,7 @@ func (d *desktopStart) Stop() {
 			return
 		}
 		d.stopping = true
-		group := -d.cmd.Process.Pid
-		_ = d.signalGroup(group, syscall.SIGTERM)
+		_ = d.signalGroup(d.leader, syscall.SIGTERM)
 		d.mu.Unlock()
 		select {
 		case <-d.observed:
@@ -175,7 +178,7 @@ func (d *desktopStart) Stop() {
 		// The leader has not been reaped, even if TERM made it exit. Finish
 		// owned descendants before permitting Wait to release its group ID.
 		d.mu.Lock()
-		_ = d.signalGroup(group, syscall.SIGKILL)
+		_ = d.signalGroup(d.leader, syscall.SIGKILL)
 		close(d.reapAllowed)
 		d.mu.Unlock()
 		<-d.done

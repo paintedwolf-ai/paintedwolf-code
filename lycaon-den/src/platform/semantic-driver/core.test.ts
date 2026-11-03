@@ -59,6 +59,62 @@ describe("semantic-driver core", () => {
     expect(state).toHaveProperty("interactive");
     const snap = api.snapshot();
     expect(snap).toHaveProperty("tree");
+    expect(snap).toHaveProperty("viewport");
+  });
+
+  it("snapshot and state report compact bounding rects and viewport overflow", () => {
+    const card = document.createElement("section");
+    card.setAttribute("data-testid", "board-card");
+    placeAt(card, { left: 24, top: 40, width: 1280, height: 320 });
+    const btn = document.createElement("button");
+    btn.id = "add-card";
+    btn.textContent = "Add card";
+    placeAt(btn, { left: 40, top: 64, width: 1200, height: 40 });
+    card.appendChild(btn);
+    document.body.appendChild(card);
+
+    const api = installLycaonDriver();
+    const state = api.state();
+    expect(state).toMatchObject({
+      interactive: [
+        {
+          tag: "section",
+          testid: "board-card",
+          rect: { x: 24, y: 40, width: 1280, height: 320 },
+        },
+        {
+          id: "add-card",
+          tag: "button",
+          rect: { x: 40, y: 64, width: 1200, height: 40 },
+        },
+      ],
+    });
+    const snap = api.snapshot();
+    expect(snap).toMatchObject({
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        scroll_width: Math.max(window.innerWidth, 1304),
+        overflow_x: true,
+      },
+      tree: {
+        role: "body",
+        children: [
+          {
+            role: "section",
+            testid: "board-card",
+            rect: { x: 24, y: 40, width: 1280, height: 320 },
+            children: [
+              {
+                role: "button",
+                name: "Add card",
+                rect: { x: 40, y: 64, width: 1200, height: 40 },
+              },
+            ],
+          },
+        ],
+      },
+    });
   });
 
   it("identifies unlabeled controls without exposing their values", () => {
