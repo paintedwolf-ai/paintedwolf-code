@@ -32,7 +32,9 @@ func verificationProgramFixture(t *testing.T) (*programtest.Fixture, *recordingG
 			return command.ProgramOwners{}, err
 		}
 		owners.Admission = admission
-		return command.ProgramOwners{Redirections: func(frame *projectpaths.ProgramPaths, review tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+		return command.ProgramOwners{Publication: func(review tools.CommandOutputAdmission) commandprogram.OutputPublication {
+			return &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: paths}, Tools: tc, Admission: review}
+		}, Redirections: func(frame *projectpaths.ProgramPaths, review tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
 			p := &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: frame}, Tools: tc, Admission: review}
 			return p, p
 		}}, nil

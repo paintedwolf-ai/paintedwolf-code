@@ -86,12 +86,11 @@ func TestUndeclaredProjectRejectsNothing(t *testing.T) {
 	}
 }
 
-func TestDeclaredGateRefusesChangedArgumentsAndPipelines(t *testing.T) {
+func TestDeclaredGateRefusesChangedArguments(t *testing.T) {
 	t.Parallel()
 	for _, args := range []map[string]any{
 		{"command": `tool 'two words'`},
 		{"command": `tool two words`},
-		{"pipeline": []any{`tool 'two  words'`}},
 	} {
 		err := rejectDeclaredCommandOverride(`tool 'two  words'`, args)
 		if err == nil {

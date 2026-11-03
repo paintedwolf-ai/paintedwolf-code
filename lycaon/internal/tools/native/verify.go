@@ -48,8 +48,8 @@ func rejectDeclaredCommandOverride(declared string, args map[string]any) error {
 	if declared == "" {
 		return nil
 	}
-	requested := commandsurface.PrimaryCommandLine(args, nil)
-	if requested == "" || (commandsurface.SameCommandLine(requested, declared) && args["pipeline"] == nil) {
+	requested, _ := args["command"].(string)
+	if strings.TrimSpace(requested) == "" || commandsurface.SameCommandLine(requested, declared) {
 		return nil
 	}
 	return &toolrejection.ToolReject{Code: "VERIFY_DECLARED_COMMAND_OVERRIDE", Data: map[string]any{

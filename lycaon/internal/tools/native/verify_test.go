@@ -1,6 +1,7 @@
 package native_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -128,5 +129,18 @@ func TestVerifyBindsEvidenceToSourceBeforeExecution(t *testing.T) {
 	testutil.FailErr(t, "source-bound check", err)
 	if out.SourceRun == nil || out.SourceRun.SourceRevision != revision || out.SourceRun.SourceRootDigest != root {
 		t.Fatalf("source identity=%+v want %s %s", out.SourceRun, revision, root)
+	}
+}
+
+func TestVerifySchemaRefusesSeparatePipelineBeforeExecution(t *testing.T) {
+	f := programtest.New(t, programtest.Options{})
+	tool := &native.VerifyTool{Programs: f.Runtime, DeclaredCommand: func(string) string { return "true" }}
+	testutil.FailErr(t, "register verify", f.Runtime.Registry.Register("verify", tool.Run))
+	f.Runtime.Executor.SetProgramEntry("verify", nil)
+	_, err := f.Invoke(t, t.Context(), "verify", map[string]any{"pipeline": []any{"true"}}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+		return f.Runtime.Executor.Invoke(ctx, "verify", args, tc)
+	})
+	if rejection := toolrejection.AsToolReject(err); rejection == nil || rejection.Code != "TOOL_ARGS_INVALID" || len(f.Programs(t)) != 0 {
+		t.Fatalf("schema bypassed: programs=%v error=%v", f.Programs(t), err)
 	}
 }

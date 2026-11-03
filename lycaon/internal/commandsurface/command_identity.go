@@ -14,10 +14,11 @@ import (
 // forms also ignore equivalent literal quoting.
 func CommandIdentity(line string) string {
 	line = strings.TrimSpace(line)
-	if line == "" || !utf8.ValidString(line) || int64(len(line)) > SyntaxUnitByteLimit(false) {
+	catalog, catalogErr := programLanguage()
+	if catalogErr != nil || line == "" || !utf8.ValidString(line) || int64(len(line)) > languageLimit(catalog, "program_bytes") {
 		return ""
 	}
-	tree, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(line), "")
+	tree, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{MaxBytes: languageLimit(catalog, "evaluation_memory_bytes")})).Parse(strings.NewReader(line), "")
 	if err != nil || len(tree.Stmts) == 0 {
 		return ""
 	}
