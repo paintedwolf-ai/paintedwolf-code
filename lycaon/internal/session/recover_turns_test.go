@@ -233,7 +233,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 func TestListenPlanOffersStandardRungs(t *testing.T) {
 	t.Parallel()
 	broker := &ListenCheckpointBroker{}
-	card, err := broker.buildListenCard(tools.LocalListenAsk{
+	card, err := broker.buildListenCard(t.Context(), tools.LocalListenAsk{
 		Command: "docker compose up", ToolName: "command", ProjectDir: "/tmp/proj",
 		Ports: []uint16{3000},
 	}, "child", "root", []uint16{3000})
@@ -246,7 +246,7 @@ func TestListenPlanOffersStandardRungs(t *testing.T) {
 func TestLoopbackPlanOffersStandardRungs(t *testing.T) {
 	t.Parallel()
 	broker := &LoopbackCheckpointBroker{}
-	card, err := broker.buildCard(tools.LoopbackConnectAsk{
+	card, err := broker.buildCard(t.Context(), tools.LoopbackConnectAsk{
 		Command: "curl localhost:8123", ToolName: "command", ProjectDir: "/tmp/proj",
 		Ports: []uint16{8123},
 	}, "root", "root", []uint16{8123})
@@ -313,7 +313,7 @@ func assertStandardPortRungs(t *testing.T, plan *hitl.ApprovalPlan, kind hitl.Ap
 func TestLocalNetworkPlanContinuesBothAxes(t *testing.T) {
 	t.Parallel()
 	broker := &LocalNetworkCheckpointBroker{}
-	card, err := broker.buildCard(tools.LocalNetworkAsk{
+	card, err := broker.buildCard(t.Context(), tools.LocalNetworkAsk{
 		Command: "node server.js", ToolName: "command", ProjectDir: "/tmp/proj",
 		ListenPorts: []uint16{3000}, ConnectPorts: []uint16{3000},
 	}, "root", "root")
@@ -335,7 +335,7 @@ func TestLocalNetworkPlanContinuesBothAxes(t *testing.T) {
 
 func TestListenPlanKeepsChatAuthorityOnChildSession(t *testing.T) {
 	broker := &ListenCheckpointBroker{}
-	card, err := broker.buildListenCard(tools.LocalListenAsk{ProjectDir: "/tmp/proj", Ports: []uint16{3000}}, "child", "root", []uint16{3000})
+	card, err := broker.buildListenCard(t.Context(), tools.LocalListenAsk{ProjectDir: "/tmp/proj", Ports: []uint16{3000}}, "child", "root", []uint16{3000})
 	testutil.FailErr(t, "build listen card", err)
 	if card.Action.Scope.RootSessionID != "root" || card.Action.ChatSession() != "root" || card.Action.Scope.SessionID != "child" {
 		t.Fatalf("action sessions = root %q chat %q child %q", card.Action.Scope.RootSessionID, card.Action.ChatSession(), card.Action.Scope.SessionID)

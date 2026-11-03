@@ -406,11 +406,11 @@ func sandboxServicePermission() *hitl.SecretPermission {
 
 func TestLocalCapabilityCardsComposeSecretPermission(t *testing.T) {
 	permission := sandboxServicePermission()
-	loopback, err := (&LoopbackCheckpointBroker{}).buildCard(tools.LoopbackConnectAsk{
+	loopback, err := (&LoopbackCheckpointBroker{}).buildCard(t.Context(), tools.LoopbackConnectAsk{
 		ProjectID: "project", ToolName: "http_request", SecretPermission: permission,
 	}, "chat", "chat", []uint16{8080})
 	testutil.FailErr(t, "build combined HTTP permission", err)
-	combined, err := (&LocalNetworkCheckpointBroker{}).buildCard(tools.LocalNetworkAsk{
+	combined, err := (&LocalNetworkCheckpointBroker{}).buildCard(t.Context(), tools.LocalNetworkAsk{
 		ProjectID: "project", ToolName: "command", ListenPorts: []uint16{8080}, ConnectPorts: []uint16{8080}, SecretPermission: permission,
 	}, "chat", "chat")
 	testutil.FailErr(t, "build combined process permission", err)

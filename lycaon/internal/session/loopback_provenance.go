@@ -89,16 +89,6 @@ func (c ContainerPortPublication) coversListener(l socketListener) bool {
 	return c.IPv6
 }
 
-func (c ContainerPortPublication) coversAddr(addr netip.Addr) bool {
-	if !addr.IsValid() {
-		return c.IPv4 || c.IPv6
-	}
-	if addr.Unmap().Is4() {
-		return c.IPv4
-	}
-	return c.IPv6
-}
-
 // ProvenanceEvidence describes how session ownership was decided.
 type ProvenanceEvidence struct {
 	Method             ProvenanceMethod

@@ -637,7 +637,7 @@ func TestSandboxPortBrokersDescribeHoldersOnApprovalCards(t *testing.T) {
 	res := fixture.resolver(ctx)
 
 	loopbackBroker := &LoopbackCheckpointBroker{Provenance: res}
-	connectCard, err := loopbackBroker.buildCard(tools.LoopbackConnectAsk{
+	connectCard, err := loopbackBroker.buildCard(t.Context(), tools.LoopbackConnectAsk{
 		ProjectID:  "proj-current",
 		ProjectDir: "/workspace/current",
 		SessionID:  "session-current",
@@ -661,7 +661,7 @@ func TestSandboxPortBrokersDescribeHoldersOnApprovalCards(t *testing.T) {
 	}
 
 	listenBroker := &ListenCheckpointBroker{Provenance: res}
-	listenCard, err := listenBroker.buildListenCard(tools.LocalListenAsk{
+	listenCard, err := listenBroker.buildListenCard(t.Context(), tools.LocalListenAsk{
 		ProjectID:  "proj-current",
 		ProjectDir: "/workspace/current",
 		SessionID:  "session-current",

@@ -134,15 +134,6 @@ func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T)
 	}
 }
 
-func promptSchemaMap(t *testing.T, raw any) map[string]any {
-	t.Helper()
-	value, ok := raw.(map[string]any)
-	if !ok {
-		t.Fatalf("schema value=%T want map[string]any", raw)
-	}
-	return value
-}
-
 func TestPromptLoopParitySpecPosture(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},

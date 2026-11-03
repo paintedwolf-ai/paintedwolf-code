@@ -91,7 +91,7 @@ func (b *LocalNetworkCheckpointBroker) raise(ctx context.Context, in tools.Local
 		InvokingSessionID: invokingSessionID, Key: in.SecretPermission.Key(localNetworkAxisKey), ToolCallID: in.ToolCallID,
 		ProjectID: in.ProjectID, Tool: "local_network",
 		AskFamily: authzledger.AskFamilyLocalListen, CheckpointLabel: "local-network",
-		BuildCard: func() (sandboxAskCard, error) { return b.buildCard(in, invokingSessionID, rootSessionID) },
+		BuildCard: func() (sandboxAskCard, error) { return b.buildCard(ctx, in, invokingSessionID, rootSessionID) },
 	})
 	if err != nil || !resolved.Answered {
 		return tools.LocalNetworkResult{}, err
@@ -103,7 +103,7 @@ func (b *LocalNetworkCheckpointBroker) raise(ctx context.Context, in tools.Local
 	}, nil
 }
 
-func (b *LocalNetworkCheckpointBroker) buildCard(in tools.LocalNetworkAsk, invokingSessionID, rootSessionID string) (sandboxAskCard, error) {
+func (b *LocalNetworkCheckpointBroker) buildCard(ctx context.Context, in tools.LocalNetworkAsk, invokingSessionID, rootSessionID string) (sandboxAskCard, error) {
 	summary := sandboxAskCommandSummary(in.Command)
 	listenPorts := append([]uint16(nil), in.ListenPorts...)
 	connectPorts := append([]uint16(nil), in.ConnectPorts...)
@@ -161,8 +161,8 @@ func (b *LocalNetworkCheckpointBroker) buildCard(in tools.LocalNetworkAsk, invok
 			"connect_ports": listenPortInts(connectPorts),
 		}},
 	}
-	listenLead := applyPortHolderDetails(context.Background(), b.Provenance, invokingSessionID, in.ProjectDir, listenPorts, targets[0].Details)
-	connectLead := applyPortHolderDetails(context.Background(), b.Provenance, invokingSessionID, in.ProjectDir, connectPorts, targets[1].Details)
+	listenLead := applyPortHolderDetails(ctx, b.Provenance, invokingSessionID, in.ProjectDir, listenPorts, targets[0].Details)
+	connectLead := applyPortHolderDetails(ctx, b.Provenance, invokingSessionID, in.ProjectDir, connectPorts, targets[1].Details)
 	lead := listenLead
 	if connectLead != "" && connectLead != listenLead {
 		if lead != "" {

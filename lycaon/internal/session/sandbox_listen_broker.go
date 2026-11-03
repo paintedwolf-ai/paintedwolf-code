@@ -133,7 +133,7 @@ func (b *ListenCheckpointBroker) raiseListenCard(
 		ProjectID: in.ProjectID, Tool: "local_listen",
 		AskFamily: authzledger.AskFamilyLocalListen, CheckpointLabel: "local-listen",
 		BuildCard: func() (sandboxAskCard, error) {
-			return b.buildListenCard(in, invokingSessionID, rootSessionID, ports)
+			return b.buildListenCard(ctx, in, invokingSessionID, rootSessionID, ports)
 		},
 	})
 	if err != nil || !resolved.Answered {
@@ -147,6 +147,7 @@ func (b *ListenCheckpointBroker) raiseListenCard(
 }
 
 func (b *ListenCheckpointBroker) buildListenCard(
+	ctx context.Context,
 	in tools.LocalListenAsk,
 	invokingSessionID, rootSessionID string,
 	ports []uint16,
@@ -192,7 +193,7 @@ func (b *ListenCheckpointBroker) buildListenCard(
 	target := hitl.ApprovalTarget{Kind: "local_listen", Label: label, Details: map[string]any{
 		"listen_ports": listenPortInts(ports),
 	}}
-	lead := applyPortHolderDetails(context.Background(), b.Provenance, invokingSessionID, in.ProjectDir, ports, target.Details)
+	lead := applyPortHolderDetails(ctx, b.Provenance, invokingSessionID, in.ProjectDir, ports, target.Details)
 	primary, cited, reasons := hitl.PresentDecision(decision)
 	plan, err := hitl.NewApprovalPlan(grantAction, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectLocalListen, Title: title, Targets: []hitl.ApprovalTarget{target},
