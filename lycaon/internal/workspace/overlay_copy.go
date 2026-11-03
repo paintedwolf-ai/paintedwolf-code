@@ -2,9 +2,7 @@ package workspace
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -15,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fileclone"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
@@ -45,6 +43,8 @@ type mirrorOptions struct {
 	tolerateChange bool
 	fileSource     func(rel, sourcePath string) string
 	preparation    PreparationProgress
+	maxEntries     int64
+	maxBytes       int64
 }
 
 type mirrorResult struct {
@@ -65,6 +65,41 @@ func validateCompleteMirror(result mirrorResult) error {
 	return fmt.Errorf("source changed during snapshot: %d paths skipped", len(result.SkippedPaths))
 }
 
+// MaterializeBoundedWorkspace prepares an isolated materialized worker view using adapter.EagerCopyAdapter,
+// enforcing entry and byte limits (returning *adapter.PreparationLimitError with workspace_preparation_limit),
+// narrowing roots via WorkspaceSelection while keeping TaskPathHints separate, and isolating .git/gitlinks (#1658).
+func MaterializeBoundedWorkspace(
+	ctx context.Context,
+	viewID string,
+	runtimeDir string,
+	grants []adapter.RootGrant,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	maxEntries int64,
+	maxBytes int64,
+	fallbackReason adapter.ReasonCode,
+) (*adapter.PreparedView, error) {
+	adp := adapter.NewEagerCopyAdapter(fallbackReason)
+	return adp.Prepare(ctx, adapter.PrepareRequest{
+		ViewID:        viewID,
+		RuntimeDir:    runtimeDir,
+		Grants:        grants,
+		Selection:     selection,
+		TaskPathHints: taskPathHints,
+		MaxEntries:    maxEntries,
+		MaxBytes:      maxBytes,
+		ProgressFn: func(fp adapter.FallbackProgress) {
+			reportPreparation(ctx, PreparationProgress{
+				Strategy:   ProvisionMaterializedEagerCopy,
+				Stage:      "snapshotting_branch",
+				Files:      fp.ObservedEntries,
+				Bytes:      fp.ObservedBytes,
+				TotalBytes: fp.MaxBytes,
+			})
+		},
+	})
+}
+
 // CreateWorkerWorkspace creates a complete single-root branch.
 func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID string) (*Binding, error) {
 	primary, err := absDir(primaryDir)
@@ -78,7 +113,7 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 	return binding, err
 }
 
-// DestroyWorkerWorkspace removes a branch and its metadata.
+// DestroyWorkerWorkspace removes a branch, releases its prepared adapter view, and deletes its metadata.
 func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	if binding == nil {
 		return nil
@@ -87,12 +122,16 @@ func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	if root == "" {
 		return nil
 	}
+	m.releaseBranchViews(root)
+	if binding.Adapter != nil && binding.View != nil {
+		_, _ = binding.Adapter.Release(context.Background(), binding.View.ViewID)
+	}
 	_ = os.RemoveAll(enginepaths.MetaDirForBranchRoot(root))
 	removeBranchLocks(root)
 	return os.RemoveAll(root)
 }
 
-func (m *Manager) jobRoot(primaryDir, jobID string) string {
+func jobRoot(m *Manager, primaryDir, jobID string) string {
 	return enginepaths.JobBranchDir(m.branchRoot, primaryDir, jobID)
 }
 
@@ -100,27 +139,25 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 	if err := os.MkdirAll(dstRoot, 0o750); err != nil {
 		return mirrorResult{}, err
 	}
-	workers := workspaceMirrorConcurrency
-	if workers < 1 {
-		workers = 1
-	}
-
+	workers := max(workspaceMirrorConcurrency, 1)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	jobs := make(chan overlayCopyJob, workers*2)
 	var (
-		wg       sync.WaitGroup
-		errOnce  sync.Once
-		firstErr error
-		files    atomic.Int64
-		bytes    atomic.Int64
-		clones   atomic.Int64
-		cloneB   atomic.Int64
-		copyB    atomic.Int64
-		dirs     atomic.Int64
-		links    atomic.Int64
-		skipMu   sync.Mutex
-		skipped  []string
+		wg        sync.WaitGroup
+		errOnce   sync.Once
+		firstErr  error
+		entries   atomic.Int64
+		walkBytes atomic.Int64
+		files     atomic.Int64
+		bytes     atomic.Int64
+		clones    atomic.Int64
+		cloneB    atomic.Int64
+		copyB     atomic.Int64
+		dirs      atomic.Int64
+		links     atomic.Int64
+		skipMu    sync.Mutex
+		skipped   []string
 	)
 	fail := func(err error) {
 		errOnce.Do(func() {
@@ -155,7 +192,11 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 				files.Add(1)
 				info, statErr := os.Stat(job.dst)
 				if statErr == nil {
-					bytes.Add(info.Size())
+					curBytes := bytes.Add(info.Size())
+					if limitErr := checkPreparationLimits(entries.Load(), curBytes, opts.maxEntries, opts.maxBytes, true); limitErr != nil {
+						fail(limitErr)
+						return
+					}
 					if cloned {
 						clones.Add(1)
 						cloneB.Add(info.Size())
@@ -164,7 +205,7 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 					}
 					progress := opts.preparation
 					progress.Files = files.Load()
-					progress.Bytes = bytes.Load()
+					progress.Bytes = curBytes
 					reportPreparation(ctx, progress)
 				}
 			}
@@ -177,7 +218,6 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 	walkErr := sandbox.SurveyWalk(ctx, srcRoot, sandbox.SurveyOptions{IncludeHidden: true},
 		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
 			dst := filepath.Join(dstRoot, filepath.FromSlash(entry.Rel))
-			// Leave nodes already present on the destination.
 			if existing, statErr := os.Lstat(dst); statErr == nil {
 				if existing.Mode().IsRegular() || existing.IsDir() || existing.Mode()&os.ModeSymlink != 0 {
 					return sandbox.SurveyContinue, nil
@@ -192,6 +232,15 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 					return sandbox.SurveyContinue, nil
 				}
 				return sandbox.SurveyContinue, err
+			}
+			curEntries := entries.Add(1)
+			curBytes := walkBytes.Load()
+			if info.Mode().IsRegular() && info.Size() > 0 {
+				curBytes = walkBytes.Add(info.Size())
+			}
+			if limitErr := checkPreparationLimits(curEntries, curBytes, opts.maxEntries, opts.maxBytes, true); limitErr != nil {
+				fail(limitErr)
+				return sandbox.SurveyStop, limitErr
 			}
 			switch {
 			case entry.IsDir:
@@ -230,10 +279,12 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 	wg.Wait()
 	close(progressDone)
 	if firstErr != nil {
-		return mirrorResult{}, firstErr
+		_ = os.RemoveAll(dstRoot)
+		return mirrorResult{}, markIncompleteSeedCleaned(firstErr)
 	}
 	if walkErr != nil {
-		return mirrorResult{}, walkErr
+		_ = os.RemoveAll(dstRoot)
+		return mirrorResult{}, markIncompleteSeedCleaned(walkErr)
 	}
 	if err := finalizeDirectoryMetadata(directoryQueue); err != nil {
 		return mirrorResult{}, err
@@ -248,104 +299,4 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 			"phase", opts.phase, "source", srcRoot, "skipped", len(result.SkippedPaths))
 	}
 	return result, ctx.Err()
-}
-
-func logMirrorProgress(
-	ctx context.Context,
-	done <-chan struct{},
-	phase, source string,
-	files, bytes *atomic.Int64,
-) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-done:
-			return
-		case <-ticker.C:
-			slog.InfoContext(ctx, "preparing isolated worker workspace",
-				"phase", phase, "source", source, "files", files.Load(), "bytes", bytes.Load())
-		}
-	}
-}
-
-func finalizeDirectoryMetadata(queue []directoryMetadata) error {
-	for i := len(queue) - 1; i >= 0; i-- {
-		entry := queue[i]
-		if err := os.Chmod(entry.dst, entry.mode.Perm()); err != nil {
-			return err
-		}
-		if err := copyExtendedMetadata(entry.src, entry.dst); err != nil {
-			return err
-		}
-		if err := os.Chtimes(entry.dst, entry.modTime, entry.modTime); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func sourceChangeSkippable(err error) bool {
-	return errors.Is(err, fs.ErrNotExist)
-}
-
-func mirrorSymlink(src, dst string) error {
-	target, err := os.Readlink(src)
-	if err != nil {
-		return err
-	}
-	if err := os.Symlink(target, dst); err != nil && !errors.Is(err, fs.ErrExist) {
-		return err
-	}
-	return nil
-}
-
-func cloneOrCopyFile(ctx context.Context, src, dst string, mode fs.FileMode, modTime time.Time) (bool, error) {
-	cloned, err := cloneWorkspaceFile(src, dst)
-	if err != nil {
-		return false, err
-	}
-	if !cloned {
-		if err := copyRegularFile(ctx, src, dst, mode); err != nil {
-			return false, err
-		}
-	}
-	if err := copyExtendedMetadata(src, dst); err != nil {
-		_ = os.Remove(dst)
-		return false, err
-	}
-	if err := os.Chmod(dst, mode.Perm()); err != nil {
-		_ = os.Remove(dst)
-		return false, err
-	}
-	if err := os.Chtimes(dst, modTime, modTime); err != nil {
-		_ = os.Remove(dst)
-		return false, err
-	}
-	return cloned, nil
-}
-
-func copyRegularFile(ctx context.Context, src, dst string, mode fs.FileMode) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode.Perm())
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(out, contextio.Reader{Context: ctx, Source: in})
-	closeErr := out.Close()
-	if copyErr != nil {
-		_ = os.Remove(dst)
-		return copyErr
-	}
-	if closeErr != nil {
-		_ = os.Remove(dst)
-		return closeErr
-	}
-	return nil
 }
