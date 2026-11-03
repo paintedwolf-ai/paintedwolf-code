@@ -70,6 +70,7 @@ func TestSandboxRecoveryRoutesDeclaredCapabilityFacts(t *testing.T) {
 }
 
 func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
 	mgr := newPostToolGuidanceManager(t)
 	for offered := 0; offered < 4; offered++ {
 		t.Run(fmt.Sprint(offered), func(t *testing.T) {
