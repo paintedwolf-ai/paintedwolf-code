@@ -36,9 +36,9 @@ def main():
     release.add_argument("step", help="the step whose leftover requests are withdrawn")
     args = parser.parse_args()
     if args.command == "matrix":
-        from ci_policy.nix_bun import require_current
+        from ci_policy.admission_metadata import require_nix_bun
         try:
-            require_current(Path(__file__).resolve().parents[1])
+            require_nix_bun(Path(__file__).resolve().parents[1])
         except (ValueError, OSError, KeyError, TypeError) as error:
             print(f"::error file=packaging/nix/bun-lock.json::{error}")
             return 1
