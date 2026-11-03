@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -20,17 +22,14 @@ type queryBytesWithFailure struct {
 func TestQueryInputBoundaryWithSmallLimit(t *testing.T) {
 	for _, text := range []string{" true", " true "} {
 		h := newHarness(t, nil)
-		in := &inputs{inv: &invocation{ctx: t.Context(), owners: h.owners, out: &output{}}, limit: 5, label: "input"}
-		positions, err := newInputPositions(in.inv, in.limit, in.label)
-		testutil.FailErr(t, "prepare bounded query positions", err)
-		in.positions = positions
-		in.stream = nativejq.NewValueStream(queryInputReader{input: strings.NewReader(text), owner: in})
+		in := &inputs{inv: &invocation{ctx: t.Context(), owners: h.owners, out: &output{}, input: strings.NewReader(text)}, limit: 5, label: "input"}
+		in.openStream(commandprogram.Field{Value: "-"})
 		value, ok := in.Next()
 		if len(text) == 5 {
 			if !ok || value != true || in.stop != nil {
 				t.Fatalf("at-limit query value=%v accepted=%t refusal=%v", value, ok, in.stop)
 			}
-		} else if reject := toolrejection.AsToolReject(in.stop); ok || reject == nil || reject.Code != "JQ_INPUT_TOO_LARGE" {
+		} else if reject := toolrejection.AsToolReject(in.stop); ok || reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || reject.Data["limit_id"] != "stream_throughput_bytes" || reject.Data["maximum"] != int64(5) || reject.Data["observed"] != int64(len(text)) {
 			t.Fatalf("over-limit query value=%v accepted=%t refusal=%v", value, ok, in.stop)
 		}
 		in.close()
