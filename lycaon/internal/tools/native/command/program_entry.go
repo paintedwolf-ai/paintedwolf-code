@@ -642,8 +642,10 @@ var compiledExternalDefinition = sync.OnceValues(func() (toolcontract.OperationD
 	if !ok {
 		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
 	}
+	// The command field is a review projection; launch uses only typed values.
+	contract.SecretReferenceArgs = []string{"command", "argument_values", "environment_values"}
 	return toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
-		Identity: "command", Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
+		Identity: "command", Version: 2, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
 		Commands: []toolcontract.CommandSpecification{commands["external"]}, Resources: catalog.Language.Limits,
 		ProgressGate: toolcontract.ProgressExistingAdmission, RejectionContract: "command",
 		Streams: toolcontract.StreamContract{Input: "exact process stdin bytes", Output: "exact process stdout bytes", Error: "process stderr; typed host refusals", Statuses: map[int]string{0: "process exit status"}},
@@ -669,16 +671,6 @@ func launchEnvelope(args map[string]any) map[string]any {
 		}
 	}
 	return envelope
-}
-
-// launchArguments are the arguments the existing command review, detection
-// and policy evaluate for one launch.
-func (r *programRun) launchArguments(line, cwd string) map[string]any {
-	arguments := map[string]any{"command": line, "cwd": cwd}
-	for field, value := range r.envelope {
-		arguments[field] = value
-	}
-	return arguments
 }
 
 // nativeArguments attaches any call-level capability declarations that the
