@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/worker/worker.mergeEngine",
+  "kind": "algorithm",
+  "workstream": "immutable-worker-checkpoints",
+  "disposition": "retain",
+  "reason": "Retain the 557-line, 28-method promotion algorithm under the existing MergeService dependencies. Branch leases, source snapshots, claim rollback and durable completion form one ordered operation. Checkpoint selection stays immutable; superseded review refuses before mutation and recovery requires a fresh preview.",
+  "reviewed_commit": "bd060249916b4513aba81ab615d13e81549da7fb",
+  "ceiling": 28,
+  "boundaries": {
+    "lycaon/internal/worker/merge_apply_claim_test.go": "651b2650409ea4b7663ec1e416e2864bab401ab7fc2f9f58d091c4805a224bd7",
+    "lycaon/internal/worker/promote_transaction_test.go": "0afc31a18954a0acca4f100cf5d4264529e66c864936f126e5c6ac18f70c96f5",
+    "lycaon/internal/worker/sql_store_obligation_test.go": "f16f62406c9ba1a0216bb456778f5551a92dad1235a5be414e7c69bfba75fc9b"
+  },
+  "reviewed_shape": "be4ae71365278b86627b088502b7fed3d433bf5cc5368098be3b7b1a9b3d5784"
+}

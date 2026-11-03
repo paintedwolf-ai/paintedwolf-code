@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/worker/merge_promote_write.go",
+  "kind": "module",
+  "workstream": "immutable-worker-checkpoints",
+  "disposition": "retain",
+  "reason": "Retain the 305-line promotion completion module. Prepared mutations, rollback, durable document/source/scan completion and teardown must preserve their ordered lifetime. Checkpoint journaling uses the selected manifest without switching assessment to newer work after apply.",
+  "reviewed_commit": "bd060249916b4513aba81ab615d13e81549da7fb",
+  "ceiling": 305,
+  "boundaries": {
+    "lycaon/internal/worker/merge_apply_claim_test.go": "651b2650409ea4b7663ec1e416e2864bab401ab7fc2f9f58d091c4805a224bd7",
+    "lycaon/internal/worker/promote_transaction_test.go": "0afc31a18954a0acca4f100cf5d4264529e66c864936f126e5c6ac18f70c96f5",
+    "lycaon/internal/worker/sql_store_obligation_test.go": "f16f62406c9ba1a0216bb456778f5551a92dad1235a5be414e7c69bfba75fc9b"
+  }
+}
