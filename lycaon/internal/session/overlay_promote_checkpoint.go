@@ -47,6 +47,15 @@ func MaybeBindTaskCheckpointPreview(jobID string, cpPreview *checkpoint.Promotio
 	previewBindMu.Unlock()
 }
 
+func boundTaskCheckpointID(jobID string) string {
+	previewBindMu.Lock()
+	defer previewBindMu.Unlock()
+	if preview := boundPreviewsByJob[jobID]; preview != nil {
+		return preview.CheckpointID
+	}
+	return ""
+}
+
 // RevalidateTaskCheckpointPreview checks whether any bound PromotionPreview target observations drifted.
 func RevalidateTaskCheckpointPreview(task *api.WorkerTask) error {
 	if task == nil {

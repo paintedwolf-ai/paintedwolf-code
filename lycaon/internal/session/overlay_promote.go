@@ -61,7 +61,7 @@ func isCheckpointStoreDir(dir string) bool {
 	return err == nil && blobSt.IsDir()
 }
 
-// OpenTaskCheckpointStore opens the task's durable checkpoint store and loads its latest published manifest.
+// OpenTaskCheckpointStore loads the reviewed checkpoint, or latest when no preview is bound.
 func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoint.Manifest, bool, error) {
 	dir := CheckpointStoreDirForTask(task)
 	if dir == "" {
@@ -71,9 +71,15 @@ func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoin
 	if err != nil {
 		return nil, checkpoint.Manifest{}, true, err
 	}
-	manifest, err := store.LoadLatestManifest()
+	checkpointID := boundTaskCheckpointID(task.ID)
+	var manifest checkpoint.Manifest
+	if checkpointID == "" {
+		manifest, err = store.LoadLatestManifest()
+	} else {
+		manifest, err = store.LoadManifest(checkpointID)
+	}
 	if err != nil {
-		if errors.Is(err, checkpoint.ErrCheckpointNotFound) {
+		if errors.Is(err, checkpoint.ErrCheckpointNotFound) && checkpointID == "" {
 			return store, checkpoint.Manifest{}, false, nil
 		}
 		return nil, checkpoint.Manifest{}, true, err
