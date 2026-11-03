@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/tools/native/command/command.SessionJobs",
+  "kind": "runtime_service",
+  "workstream": "shared-verification-runtime",
+  "disposition": "retain",
+  "reason": "One retained session owner tracks handles, process identity, waits and disposal. Each program now binds immutable tool, call and root-session provenance beside that owner. The origin does not mutate shared job state. Retained-origin, disposal and actual polling contracts support this lifecycle boundary. Retain the measured 338 ceiling; growth requires renewed review.",
+  "reviewed_commit": "303bd754eab8175f819ec3ecbf882f0612847259",
+  "ceiling": 338,
+  "boundaries": {
+    "lycaon/internal/tools/native/command/program_retention_test.go": "821759e8697b9626ac8b36a396ecae3ca2c28e61a7580c97db277076ac938c7c",
+    "lycaon/internal/httpaction/secret_canary_reference_tools_test.go": "b2155d7d468a6ac18733c3295178863a60464d4da8d9392eed6dc822808c482e"
+  },
+  "reviewed_shape": "0350551eff186775762f72eb425f2d152b08ad2cb3b55ad0c7b7532bc99329fc"
+}
