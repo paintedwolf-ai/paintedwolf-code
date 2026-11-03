@@ -216,14 +216,13 @@ func (r *Output) ReadOutput(ctx context.Context, sessionID, handle string) (api.
 	raw := snapshot.Output
 	out := api.BackgroundProcessOutput{
 		ProcessID:         raw.Handle,
-		Chunks:            toAPIChunks(raw.Chunks),
 		Running:           raw.Running,
 		Truncated:         raw.Truncated,
 		ExitCode:          raw.ExitCode,
 		TerminationReason: api.BackgroundProcessTerminationReason(snapshot.TerminationReason),
 	}
 	proc.publishMu.Lock()
-	projection := r.projectWindow(ctx, proc)
+	projection := r.projectWindow(ctx, proc, 0)
 	proc.publishMu.Unlock()
 	if projection.Empty {
 		out.Chunks = []api.BackgroundProcessChunk{}

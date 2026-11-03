@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -100,6 +101,7 @@ type Output struct {
 	complete        CompletionPublisher
 	refused         RefusalPublisher
 	projector       *captureprojection.Projector
+	screenMemory    func() (*toolcontract.ProgramMemory, error)
 }
 
 // ProcessLifecycle owns settlement, termination, and resource release.
@@ -125,6 +127,13 @@ func NewRegistry(cfg Config, hooks Hooks) *Registry {
 	if cfg.MaxRecent <= 0 {
 		cfg.MaxRecent = DefaultMaxRecent
 	}
+	screenMemory := sync.OnceValues(func() (*toolcontract.ProgramMemory, error) {
+		limits, err := toolcontract.CatalogProgramMemoryLimits()
+		if err != nil {
+			return nil, err
+		}
+		return toolcontract.NewProgramMemory(limits)
+	})
 	jobs := &processTable{
 		sessions:         make(map[string]map[string]*Process),
 		projectProcs:     make(map[string]map[string]*Process),
@@ -141,6 +150,7 @@ func NewRegistry(cfg Config, hooks Hooks) *Registry {
 	}
 	sweeper := newListenerSweeper(jobs, cfg, hooks.PublishProject)
 	output := &Output{
+		screenMemory:    screenMemory,
 		jobs:            jobs,
 		sweeper:         sweeper,
 		ringBufferBytes: cfg.RingBufferBytes,
