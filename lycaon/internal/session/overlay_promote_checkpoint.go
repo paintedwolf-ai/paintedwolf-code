@@ -67,9 +67,18 @@ func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask) 
 	if bound == nil {
 		return nil
 	}
-	_, _, promoter, ok, err := NewTaskCheckpointPromoter(task, nil, nil)
+	store, _, promoter, ok, err := NewTaskCheckpointPromoter(task, nil, nil)
 	if err != nil || !ok {
 		return err
+	}
+	// A worker has one durable promotion completion. Refresh review before applying
+	// a superseded checkpoint rather than marking newer, unreviewed work merged.
+	latest, err := store.LatestCheckpointID()
+	if err != nil {
+		return err
+	}
+	if latest != bound.CheckpointID {
+		return checkpoint.ErrStalePreviewCheckpointChanged
 	}
 	curPreview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{CheckpointID: bound.CheckpointID})
 	if err != nil {

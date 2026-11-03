@@ -92,7 +92,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 	for _, publishLater := range []bool{false, true} {
 		name := "reviewed checkpoint"
 		if publishLater {
-			name = "new checkpoint remains pending"
+			name = "new checkpoint requires refreshed preview"
 		}
 		t.Run(name, func(t *testing.T) {
 
@@ -210,12 +210,31 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 				})
 				testutil.FailErr(t, "publish checkpoint after reviewed preview", err)
 			}
+			if publishLater {
+				_, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
+				if !errors.Is(err, checkpoint.ErrStalePreviewCheckpointChanged) {
+					t.Fatalf("superseded checkpoint promotion = %v", err)
+				}
+				body, err := os.ReadFile(filepath.Join(primary, "app.go"))
+				testutil.FailErr(t, "read unchanged primary", err)
+				if string(body) != trunkStale {
+					t.Fatalf("superseded preview changed primary: %q", body)
+				}
+				if _, exists, err := cpStore.LoadPromotionRecord("tx-chk-promote-1"); err != nil || exists {
+					t.Fatalf("superseded preview created journal: exists=%t err=%v", exists, err)
+				}
+				if task, ok := q.Get(jobID); !ok || task.MergeStatus != api.WorkerMergeStatusPending {
+					t.Fatalf("superseded preview lost pending state: %+v", task)
+				}
+				if _, err := svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", nil); err != nil {
+					t.Fatalf("refresh superseded checkpoint preview: %v", err)
+				}
+				manifest, err = cpStore.LoadLatestManifest()
+				testutil.FailErr(t, "load refreshed manifest", err)
+			}
 			promoteOut, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
 			testutil.FailErr(t, "PromoteOverlay", err)
 			wantStatus := api.WorkerMergeStatusMerged
-			if publishLater {
-				wantStatus = api.WorkerMergeStatusPending
-			}
 			if promoteOut.Status != wantStatus {
 				t.Fatalf("PromoteOverlay status = %q, want %q", promoteOut.Status, wantStatus)
 			}
@@ -223,6 +242,9 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			mergedBytes, err := os.ReadFile(filepath.Join(primary, "app.go"))
 			testutil.FailErr(t, "ReadFile merged app.go", err)
 			wantMerged := "package app\n\nfunc A() int { return 99 }\n\nfunc B() int { return 22 }\n"
+			if publishLater {
+				wantMerged = strings.Replace(wantMerged, "return 22", "return 33", 1)
+			}
 			if string(mergedBytes) != wantMerged {
 				t.Fatalf("merged app.go =\n%s\nwant:\n%s", string(mergedBytes), wantMerged)
 			}
@@ -244,7 +266,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			if strings.TrimSpace(string(gitRefBytes)) != featureOID {
 				t.Fatalf("imported git ref file = %q, want %s", string(gitRefBytes), featureOID)
 			}
-			cpRefBytes, err := os.ReadFile(filepath.Join(primary, ".git", "refs", "lycaon", "checkpoints", "chk-promote-1", "heads", "feature"))
+			cpRefBytes, err := os.ReadFile(filepath.Join(primary, ".git", "refs", "lycaon", "checkpoints", manifest.CheckpointID, "heads", "feature"))
 			testutil.FailErr(t, "ReadFile imported checkpoint ref", err)
 			if strings.TrimSpace(string(cpRefBytes)) != featureOID {
 				t.Fatalf("imported checkpoint ref file = %q, want %s", string(cpRefBytes), featureOID)
@@ -258,14 +280,8 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			if rec.FilePromotionStatus != checkpoint.EffectCompleted || rec.RefImportStatus != checkpoint.EffectCompleted {
 				t.Fatalf("effects file=%q ref=%q", rec.FilePromotionStatus, rec.RefImportStatus)
 			}
-			if rec.ImportedRefs["refs/lycaon/workers/"+jobID+"/heads/feature"] != featureOID || rec.ImportedRefs["refs/lycaon/checkpoints/chk-promote-1/heads/feature"] != featureOID {
+			if rec.ImportedRefs["refs/lycaon/workers/"+jobID+"/heads/feature"] != featureOID || rec.ImportedRefs["refs/lycaon/checkpoints/"+manifest.CheckpointID+"/heads/feature"] != featureOID {
 				t.Fatalf("ImportedRefs = %v", rec.ImportedRefs)
-			}
-
-			if publishLater {
-				if _, exists, err := cpStore.LoadPromotionRecord("tx-chk-promote-later"); err != nil || exists {
-					t.Fatalf("unreviewed later checkpoint received a promotion record: exists=%t err=%v", exists, err)
-				}
 			}
 
 		})

@@ -245,18 +245,6 @@ func (s mergeEngine) finishPromoteState(ctx context.Context, in promoteFinishInp
 		if err := commitCheckpointPromotionJournal(ctx, s.MergeService, in.task); err != nil {
 			return err
 		}
-		session.ClearTaskCheckpointPreview(in.jobID)
-		_, latest, _, ok, err := session.NewTaskCheckpointPromoter(in.task, s.taskRootRefs(ctx, in.task), nil)
-		if err != nil {
-			return err
-		}
-		if ok && latest.CheckpointID != fullAssessment.checkpointID {
-			latestAssessment, err := s.assessMerge(ctx, in.sessionID, in.task, s.jobPromotePaths(ctx, in.task))
-			if err != nil {
-				return err
-			}
-			remaining = remainingPromoteWork(latestAssessment, nil)
-		}
 	}
 	in.out.Applied = append([]string(nil), in.resolved...)
 	fillMergeResult(in.out, remaining, promoteOutputOpts{Detail: in.detail})
