@@ -248,3 +248,46 @@ func onReadlink(s *Server, cs *connState, call rpcCallHeader) []byte {
 	writeString(&body, target)
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
 }
+
+func snapshotFlushLocked(e *stabilityEngine, hk handleKey) ([]unstableChunk, uint64, [8]byte) {
+	var chunks []unstableChunk
+	var flushedSeq uint64
+	if st, ok := e.pending[hk]; ok && len(st.chunks) > 0 {
+		chunks = append([]unstableChunk(nil), st.chunks...)
+		for _, ch := range chunks {
+			if ch.seq > flushedSeq {
+				flushedSeq = ch.seq
+			}
+		}
+		st.flushingSeq = flushedSeq
+	}
+	return chunks, flushedSeq, e.verf
+}
+
+func finishFlushLocked(e *stabilityEngine, hk handleKey, flushedSeq uint64, flushErr error) [8]byte {
+	st, ok := e.pending[hk]
+	if !ok {
+		return e.verf
+	}
+	st.flushingSeq = 0
+	if flushErr != nil {
+		st.chunks = coalesceAdjacentChunks(st.chunks, 0)
+		return e.verf
+	}
+	kept := st.chunks[:0]
+	var maxEnd uint64
+	for _, ch := range st.chunks {
+		if ch.seq > flushedSeq {
+			kept = append(kept, ch)
+			if end := ch.offset + uint64(len(ch.data)); end > maxEnd {
+				maxEnd = end
+			}
+		}
+	}
+	st.chunks = coalesceAdjacentChunks(kept, 0)
+	st.maxEnd = maxEnd
+	if len(st.chunks) == 0 {
+		delete(e.pending, hk)
+	}
+	return e.verf
+}

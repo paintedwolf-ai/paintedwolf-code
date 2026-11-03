@@ -178,11 +178,14 @@ func onWrite(s *Server, cs *connState, call rpcCallHeader) []byte {
 	}
 
 	var (
-		postMeta layeredfs.EntryAttr
-		verf     [8]byte
+		postMeta  layeredfs.EntryAttr
+		verf      [8]byte
+		committed = stability
 	)
 	if stability == Unstable {
-		postMeta, verf, err = s.stability.StageUnstable(rec, preMeta, offset, data)
+		postMeta, committed, verf, err = s.stability.StageUnstable(
+			exp.core, s.handles, s.cfg.FaultInjector, rec, preMeta, offset, data,
+		)
 	} else {
 		postMeta, verf, err = s.stability.WriteStable(
 			exp.core, s.handles, s.cfg.FaultInjector, rec, offset, data, stability,
@@ -197,7 +200,7 @@ func onWrite(s *Server, cs *connState, call rpcCallHeader) []byte {
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
 	writeWccData(&body, &preMeta, &postMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
 	writeUint32(&body, uint32(len(data)))
-	writeUint32(&body, uint32(stability))
+	writeUint32(&body, uint32(committed))
 	_, _ = body.Write(verf[:])
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
 }
@@ -256,4 +259,28 @@ func onCommit(s *Server, cs *connState, call rpcCallHeader) []byte {
 	writeWccData(&body, &preMeta, &postMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
 	_, _ = body.Write(verf[:])
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func acquireNodeFlush(e *stabilityEngine, hk handleKey) {
+	e.mu.Lock()
+	for {
+		ch, busy := e.flushing[hk]
+		if !busy {
+			e.flushing[hk] = make(chan struct{})
+			e.mu.Unlock()
+			return
+		}
+		e.mu.Unlock()
+		<-ch
+		e.mu.Lock()
+	}
+}
+
+func releaseNodeFlush(e *stabilityEngine, hk handleKey) {
+	e.mu.Lock()
+	if ch, ok := e.flushing[hk]; ok {
+		delete(e.flushing, hk)
+		close(ch)
+	}
+	e.mu.Unlock()
 }

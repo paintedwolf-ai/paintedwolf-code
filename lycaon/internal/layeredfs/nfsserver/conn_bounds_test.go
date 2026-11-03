@@ -3,10 +3,14 @@ package nfsserver_test
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"net"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/nfsserver"
 	nfs "github.com/willscott/go-nfs"
 )
@@ -78,26 +82,19 @@ func TestSeparateMountAndDataConnectionsAndReconnect(t *testing.T) {
 func TestServerBoundsConcurrentConnectionsAndIncompleteRecords(t *testing.T) {
 	env := newTestEnv(t, nil)
 	srv, err := nfsserver.New(env.Core, nfsserver.Config{
-		ListenAddr:        "127.0.0.1:0",
-		MaxConnections:    2,
-		ReadHeaderTimeout: 100 * time.Millisecond,
-		IdleTimeout:       100 * time.Millisecond,
-		ExpectedUID:       env.UID,
-		ExpectedGID:       env.GID,
+		ListenAddr: "127.0.0.1:0", MaxConnections: 2,
+		ReadHeaderTimeout: 100 * time.Millisecond, IdleTimeout: 100 * time.Millisecond,
+		ExpectedUID: env.UID, ExpectedGID: env.GID,
 	})
 	if err != nil {
 		t.Fatalf("nfsserver.New bounded: %v", err)
 	}
 	t.Cleanup(func() { _ = srv.Close() })
-
 	capCfg, err := srv.RegisterExport(env.Core.ViewID(), nfsserver.ProjectRoot, "")
 	if err != nil {
 		t.Fatalf("RegisterExport: %v", err)
 	}
 
-	// 1. Open 2 connections that send incomplete RPC records and stall:
-	//    c1 sends only 2 bytes of the 4-byte fragment header;
-	//    c2 sends a 4-byte fragment header claiming 64 bytes, followed by only 8 bytes.
 	c1, err := net.DialTimeout("tcp", srv.Addr().String(), 2*time.Second)
 	if err != nil {
 		t.Fatalf("dial c1: %v", err)
@@ -114,15 +111,13 @@ func TestServerBoundsConcurrentConnectionsAndIncompleteRecords(t *testing.T) {
 	binary.BigEndian.PutUint32(partialFrag[0:4], 64|0x80000000)
 	_, _ = c2.Write(partialFrag[:])
 
-	deadline := time.Now().Add(500 * time.Millisecond)
-	for srv.ActiveConnections() < 2 && time.Now().Before(deadline) {
+	for deadline := time.Now().Add(500 * time.Millisecond); srv.ActiveConnections() < 2 && time.Now().Before(deadline); {
 		time.Sleep(5 * time.Millisecond)
 	}
 	if got := srv.ActiveConnections(); got > 2 {
 		t.Fatalf("ActiveConnections exceeded MaxConnections(2): got %d", got)
 	}
 
-	// 2. While c1 and c2 occupy the 2 connection slots, a 3rd connection c3 is rejected/closed immediately.
 	c3, err := net.DialTimeout("tcp", srv.Addr().String(), 2*time.Second)
 	if err != nil {
 		t.Fatalf("dial c3: %v", err)
@@ -137,7 +132,6 @@ func TestServerBoundsConcurrentConnectionsAndIncompleteRecords(t *testing.T) {
 		t.Fatalf("ActiveConnections exceeded MaxConnections(2) after c3: got %d", got)
 	}
 
-	// 3. Incomplete records on c1 and c2 are settled/closed once ReadHeaderTimeout elapses.
 	_ = c1.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 	if _, err := c1.Read(buf[:]); err == nil {
 		t.Fatal("expected incomplete header connection c1 to be settled and closed")
@@ -146,16 +140,13 @@ func TestServerBoundsConcurrentConnectionsAndIncompleteRecords(t *testing.T) {
 	if _, err := c2.Read(buf[:]); err == nil {
 		t.Fatal("expected incomplete body connection c2 to be settled and closed")
 	}
-
-	waitEmpty := time.Now().Add(500 * time.Millisecond)
-	for srv.ActiveConnections() != 0 && time.Now().Before(waitEmpty) {
+	for waitEmpty := time.Now().Add(500 * time.Millisecond); srv.ActiveConnections() != 0 && time.Now().Before(waitEmpty); {
 		time.Sleep(5 * time.Millisecond)
 	}
 	if got := srv.ActiveConnections(); got != 0 {
 		t.Fatalf("expected 0 active connections after timeout settlement, got %d", got)
 	}
 
-	// 4. Subsequent normal client connection succeeds once stalled connections are reclaimed.
 	cli := dialRPC(t, srv.Addr(), env.UID, env.GID)
 	mst, rootFH := cli.mount(capCfg.ExportPath)
 	if mst != nfs.MountStatusOk {
@@ -163,5 +154,144 @@ func TestServerBoundsConcurrentConnectionsAndIncompleteRecords(t *testing.T) {
 	}
 	if nst, _ := cli.getAttr(rootFH); nst != nfs.NFSStatusOk {
 		t.Fatalf("GETATTR after connection recovery failed: %v", nst)
+	}
+}
+
+func TestConcurrentUnstableWriteDuringCommitSurvivesAndFlushes(t *testing.T) {
+	syncEntered, releaseSync := make(chan struct{}, 4), make(chan struct{})
+	var pauseSync, failSync atomic.Bool
+	env := newTestEnv(t, &nfsserver.FaultInjector{
+		OnSync: func(_ nfsserver.ViewID, _ layeredfs.QualifiedPath) error {
+			if pauseSync.CompareAndSwap(true, false) {
+				syncEntered <- struct{}{}
+				<-releaseSync
+			}
+			if failSync.Load() {
+				return syscall.EIO
+			}
+			return nil
+		},
+	})
+	capCfg := env.createViewAndExport(t, "view-conc", true)
+	c1, c2 := dialRPC(t, env.Server.Addr(), env.UID, env.GID), dialRPC(t, env.Server.Addr(), env.UID, env.GID)
+	_, rootFH := c1.mount(capCfg.ExportPath)
+	_, fh := c1.create(rootFH, "conc.txt", 0o644, 0, [8]byte{})
+
+	if st, _, _, _ := c1.write(fh, 0, []byte("first-part"), nfsserver.Unstable); st != nfs.NFSStatusOk {
+		t.Fatalf("c1 write 1: %v", st)
+	}
+	pauseSync.Store(true)
+	commitDone := make(chan nfs.NFSStatus, 1)
+	go func() { st, _ := c1.commit(fh, 0, 10); commitDone <- st }()
+	<-syncEntered
+	if st, _, _, _ := c2.write(fh, 10, []byte("-second-part"), nfsserver.Unstable); st != nfs.NFSStatusOk {
+		t.Fatalf("c2 concurrent write 2 during paused COMMIT: %v", st)
+	}
+	releaseSync <- struct{}{}
+	if st := <-commitDone; st != nfs.NFSStatusOk {
+		t.Fatalf("c1 COMMIT 1: %v", st)
+	}
+	if vb, vc, _ := nfsserver.PendingUnstableStats(env.Server, "view-conc"); vb != 12 || vc != 1 {
+		t.Fatalf("expected second write retained in pending state (12B, 1 chunk), got bytes=%d chunks=%d", vb, vc)
+	}
+	failSync.Store(true)
+	if st, _ := c2.commit(fh, 0, 22); st != nfs.NFSStatusIO {
+		t.Fatalf("expected NFSStatusIO on failed COMMIT, got %v", st)
+	}
+	if vb, vc, _ := nfsserver.PendingUnstableStats(env.Server, "view-conc"); vb != 12 || vc != 1 {
+		t.Fatalf("failed COMMIT discarded pending write: bytes=%d chunks=%d", vb, vc)
+	}
+	failSync.Store(false)
+	if st, _ := c2.commit(fh, 0, 22); st != nfs.NFSStatusOk {
+		t.Fatalf("c2 COMMIT retry: %v", st)
+	}
+	if got, err := env.Core.ReadFile(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "conc.txt"}); err != nil || string(got) != "first-part-second-part" {
+		t.Fatalf("after second COMMIT got %q err=%v", got, err)
+	}
+
+	_, _ = env.Core.Truncate(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "conc.txt"}, 0)
+	_, _, _, _ = c1.write(fh, 0, []byte("UUUUUUUUUUUUUUUU"), nfsserver.Unstable)
+	pauseSync.Store(true)
+	stableDone := make(chan nfs.NFSStatus, 1)
+	go func() { st, _, _, _ := c1.write(fh, 4, []byte("SSSSSSSS"), nfsserver.FileSync); stableDone <- st }()
+	<-syncEntered
+	if st, _, _, _ := c2.write(fh, 0, []byte("XXXX"), nfsserver.Unstable); st != nfs.NFSStatusOk {
+		t.Fatalf("c2 overlapping UNSTABLE write during WriteStable: %v", st)
+	}
+	releaseSync <- struct{}{}
+	if st := <-stableDone; st != nfs.NFSStatusOk {
+		t.Fatalf("c1 WriteStable: %v", st)
+	}
+	if st, _ := c2.commit(fh, 0, 16); st != nfs.NFSStatusOk {
+		t.Fatalf("c2 final COMMIT: %v", st)
+	}
+	if got, err := env.Core.ReadFile(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "conc.txt"}); err != nil || string(got) != "XXXXSSSSSSSSUUUU" {
+		t.Fatalf("overlap result got %q, want %q (err=%v)", got, "XXXXSSSSSSSSUUUU", err)
+	}
+}
+
+func TestUnstableWriteCompactionAndBoundedPendingBytes(t *testing.T) {
+	var failSync atomic.Bool
+	env := newTestEnv(t, nil)
+	srv, err := nfsserver.New(env.Core, nfsserver.Config{
+		ListenAddr: "127.0.0.1:0", MaxUnstableBytesPerView: 1024, MaxUnstableChunksPerView: 4, MaxTotalUnstableBytes: 1536,
+		ExpectedUID: env.UID, ExpectedGID: env.GID,
+		FaultInjector: &nfsserver.FaultInjector{
+			OnSync: func(_ nfsserver.ViewID, _ layeredfs.QualifiedPath) error {
+				if failSync.Load() {
+					return syscall.EIO
+				}
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("nfsserver.New: %v", err)
+	}
+	t.Cleanup(func() { _ = srv.Close() })
+	env.Server = srv
+	cap1 := env.createViewAndExport(t, "view-cap1", true)
+	cli := dialRPC(t, srv.Addr(), env.UID, env.GID)
+	_, root1 := cli.mount(cap1.ExportPath)
+	_, ovFH := cli.create(root1, "overwrite.bin", 0o644, 0, [8]byte{})
+
+	for i := range 40 {
+		payload := bytes.Repeat([]byte{byte('A' + (i % 26))}, 256)
+		if st, _, _, _ := cli.write(ovFH, 0, payload, nfsserver.Unstable); st != nfs.NFSStatusOk {
+			t.Fatalf("overwrite %d: %v", i, st)
+		}
+		if vb, vc, tb := nfsserver.PendingUnstableStats(srv, "view-cap1"); vb != 256 || vc != 1 || tb != 256 {
+			t.Fatalf("iter %d: expected compacted 256B/1chunk, got vb=%d vc=%d tb=%d", i, vb, vc, tb)
+		}
+	}
+	if st, _ := cli.commit(ovFH, 0, 256); st != nfs.NFSStatusOk {
+		t.Fatalf("COMMIT overwrite.bin: %v", st)
+	}
+
+	var fhs [][]byte
+	for i := range 10 {
+		_, fh := cli.create(root1, fmt.Sprintf("f-%d.bin", i), 0o644, 0, [8]byte{})
+		fhs = append(fhs, fh)
+		data := bytes.Repeat([]byte{byte('0' + i)}, 300)
+		if st, _, _, _ := cli.write(fh, 0, data, nfsserver.Unstable); st != nfs.NFSStatusOk {
+			t.Fatalf("write f-%d.bin: %v", i, st)
+		}
+		if vb, vc, tb := nfsserver.PendingUnstableStats(srv, "view-cap1"); vb > 1024 || vc > 4 || tb > 1536 {
+			t.Fatalf("bounds exceeded at file %d: vb=%d vc=%d tb=%d", i, vb, vc, tb)
+		}
+	}
+	failSync.Store(true)
+	_, extraFH := cli.create(root1, "reject.bin", 0o644, 0, [8]byte{})
+	if st, _, _, _ := cli.write(extraFH, 0, bytes.Repeat([]byte("X"), 900), nfsserver.Unstable); st != nfs.NFSStatusIO {
+		t.Fatalf("expected NFSStatusIO when backpressure flush fails, got %v", st)
+	}
+	failSync.Store(false)
+	for i, fh := range fhs {
+		if st, _ := cli.commit(fh, 0, 300); st != nfs.NFSStatusOk {
+			t.Fatalf("COMMIT f-%d.bin: %v", i, st)
+		}
+		if st, got, _ := cli.read(fh, 0, 400); st != nfs.NFSStatusOk || !bytes.Equal(got, bytes.Repeat([]byte{byte('0'+i)}, 300)) {
+			t.Fatalf("READ f-%d.bin mismatch: st=%v len=%d", i, st, len(got))
+		}
 	}
 }

@@ -11,31 +11,50 @@ import (
 )
 
 type unstableChunk struct {
+	seq    uint64
 	offset uint64
 	data   []byte
 }
 
 type unstableFileState struct {
-	rec    handleRecord
-	chunks []unstableChunk
-	maxEnd uint64
-	mtime  time.Time
+	rec         handleRecord
+	chunks      []unstableChunk
+	flushingSeq uint64
+	maxEnd      uint64
+	mtime       time.Time
+}
+
+type stabilityLimits struct {
+	maxBytesPerView  int
+	maxChunksPerView int
+	maxTotalBytes    int
 }
 
 type stabilityEngine struct {
-	mu      sync.Mutex
-	verf    [8]byte
-	seq     uint64
-	pending map[handleKey]*unstableFileState
+	mu       sync.Mutex
+	verf     [8]byte
+	seq      uint64
+	chunkSeq uint64
+	limits   stabilityLimits
+	pending  map[handleKey]*unstableFileState
+	flushing map[handleKey]chan struct{}
 }
 
-func newStabilityEngine() *stabilityEngine {
-	e := &stabilityEngine{pending: make(map[handleKey]*unstableFileState)}
-	e.rotateVerifierLocked()
+func newStabilityEngine(cfg Config) *stabilityEngine {
+	e := &stabilityEngine{
+		limits: stabilityLimits{
+			maxBytesPerView:  cfg.MaxUnstableBytesPerView,
+			maxChunksPerView: cfg.MaxUnstableChunksPerView,
+			maxTotalBytes:    cfg.MaxTotalUnstableBytes,
+		},
+		pending:  make(map[handleKey]*unstableFileState),
+		flushing: make(map[handleKey]chan struct{}),
+	}
+	rotateVerifierLocked(e)
 	return e
 }
 
-func (e *stabilityEngine) rotateVerifierLocked() [8]byte {
+func rotateVerifierLocked(e *stabilityEngine) [8]byte {
 	e.seq++
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -55,13 +74,11 @@ func (e *stabilityEngine) WriteVerifier() [8]byte {
 	return e.verf
 }
 
-// ResetUnstableState discards uncommitted UNSTABLE buffers and rotates the write
-// verifier to simulate a server restart between UNSTABLE writes and COMMIT.
 func (e *stabilityEngine) ResetUnstableState() [8]byte {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.pending = make(map[handleKey]*unstableFileState)
-	return e.rotateVerifierLocked()
+	return rotateVerifierLocked(e)
 }
 
 func (e *stabilityEngine) ReleaseView(viewID ViewID) {
@@ -89,9 +106,7 @@ func (e *stabilityEngine) UpdateRecPath(hk handleKey, qpath layeredfs.QualifiedP
 	e.mu.Unlock()
 }
 
-func (e *stabilityEngine) EffectiveMeta(hk handleKey, base layeredfs.EntryAttr) layeredfs.EntryAttr {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+func effectiveMetaLocked(e *stabilityEngine, hk handleKey, base layeredfs.EntryAttr) layeredfs.EntryAttr {
 	st, ok := e.pending[hk]
 	if !ok || len(st.chunks) == 0 {
 		return base
@@ -103,6 +118,12 @@ func (e *stabilityEngine) EffectiveMeta(hk handleKey, base layeredfs.EntryAttr) 
 		base.ModTime, base.CTime = st.mtime, st.mtime
 	}
 	return base
+}
+
+func (e *stabilityEngine) EffectiveMeta(hk handleKey, base layeredfs.EntryAttr) layeredfs.EntryAttr {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return effectiveMetaLocked(e, hk, base)
 }
 
 func (e *stabilityEngine) OverlayRead(hk handleKey, offset uint64, count uint32, baseData []byte, baseSize int64) ([]byte, bool) {
@@ -131,22 +152,40 @@ func (e *stabilityEngine) OverlayRead(hk handleKey, offset uint64, count uint32,
 	return out, offset+avail >= effectiveSize
 }
 
-func (e *stabilityEngine) StageUnstable(
-	rec *handleRecord, baseMeta layeredfs.EntryAttr, offset uint64, data []byte,
-) (layeredfs.EntryAttr, [8]byte, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	st, ok := e.pending[rec.key]
+func tryStageLocked(
+	e *stabilityEngine, rec *handleRecord, baseMeta layeredfs.EntryAttr, offset uint64, data []byte,
+) (layeredfs.EntryAttr, [8]byte, bool) {
 	now := time.Now()
-	if !ok {
+	if len(data) == 0 {
+		baseMeta.ModTime, baseMeta.CTime = now, now
+		return baseMeta, e.verf, true
+	}
+	st := e.pending[rec.key]
+	var curChunks []unstableChunk
+	var flushingSeq uint64
+	if st != nil {
+		curChunks, flushingSeq = st.chunks, st.flushingSeq
+	}
+	newSeq := e.chunkSeq + 1
+	added := unstableChunk{seq: newSeq, offset: offset, data: append([]byte(nil), data...)}
+	nextChunks := compactAndInsertChunk(curChunks, added, flushingSeq)
+	oldBytes, oldCount := chunksByteCount(curChunks), len(curChunks)
+	newBytes, newCount := chunksByteCount(nextChunks), len(nextChunks)
+	viewBytes, viewChunks, totalBytes := pendingStatsLocked(e, rec.key.viewHash)
+	if viewBytes-oldBytes+newBytes > e.limits.maxBytesPerView ||
+		viewChunks-oldCount+newCount > e.limits.maxChunksPerView ||
+		totalBytes-oldBytes+newBytes > e.limits.maxTotalBytes {
+		return layeredfs.EntryAttr{}, e.verf, false
+	}
+	e.chunkSeq = newSeq
+	if st == nil {
 		st = &unstableFileState{rec: *rec, maxEnd: uint64(max(baseMeta.Size, 0))}
 		e.pending[rec.key] = st
 	} else {
 		st.rec = *rec
 	}
-	buf := append([]byte(nil), data...)
-	st.chunks = append(st.chunks, unstableChunk{offset: offset, data: buf})
-	if end := offset + uint64(len(buf)); end > st.maxEnd {
+	st.chunks = nextChunks
+	if end := offset + uint64(len(data)); end > st.maxEnd {
 		st.maxEnd = end
 	}
 	st.mtime = now
@@ -154,30 +193,50 @@ func (e *stabilityEngine) StageUnstable(
 		baseMeta.Size = int64(st.maxEnd)
 	}
 	baseMeta.ModTime, baseMeta.CTime = now, now
-	return baseMeta, e.verf, nil
+	return baseMeta, e.verf, true
+}
+
+func (e *stabilityEngine) StageUnstable(
+	core *layeredfs.Core, handles *handleTable, fault *FaultInjector,
+	rec *handleRecord, baseMeta layeredfs.EntryAttr, offset uint64, data []byte,
+) (layeredfs.EntryAttr, WriteStability, [8]byte, error) {
+	e.mu.Lock()
+	if meta, verf, ok := tryStageLocked(e, rec, baseMeta, offset, data); ok {
+		e.mu.Unlock()
+		return meta, Unstable, verf, nil
+	}
+	e.mu.Unlock()
+	if err := e.FlushView(context.Background(), core, handles, fault, rec.viewID); err != nil {
+		return layeredfs.EntryAttr{}, Unstable, e.WriteVerifier(), err
+	}
+	e.mu.Lock()
+	if meta, verf, ok := tryStageLocked(e, rec, baseMeta, offset, data); ok {
+		e.mu.Unlock()
+		return meta, Unstable, verf, nil
+	}
+	e.mu.Unlock()
+	meta, verf, err := e.WriteStable(core, handles, fault, rec, offset, data, FileSync)
+	return meta, FileSync, verf, err
 }
 
 func (e *stabilityEngine) WriteStable(
 	core *layeredfs.Core, handles *handleTable, fault *FaultInjector,
 	rec *handleRecord, offset uint64, data []byte, stability WriteStability,
 ) (layeredfs.EntryAttr, [8]byte, error) {
+	acquireNodeFlush(e, rec.key)
+	defer releaseNodeFlush(e, rec.key)
 	e.mu.Lock()
-	var chunks []unstableChunk
-	if st, ok := e.pending[rec.key]; ok {
-		chunks = append(chunks, st.chunks...)
-	}
-	verf := e.verf
+	chunks, flushedSeq, _ := snapshotFlushLocked(e, rec.key)
 	e.mu.Unlock()
 	chunks = append(chunks, unstableChunk{offset: offset, data: data})
 	meta, err := flushChunksToCore(core, handles, fault, rec, chunks, stability == FileSync)
-	if err != nil {
-		return layeredfs.EntryAttr{}, verf, err
-	}
 	e.mu.Lock()
-	delete(e.pending, rec.key)
-	verf = e.verf
+	verf := finishFlushLocked(e, rec.key, flushedSeq, err)
+	if err == nil {
+		meta = effectiveMetaLocked(e, rec.key, meta)
+	}
 	e.mu.Unlock()
-	return meta, verf, nil
+	return meta, verf, err
 }
 
 func (e *stabilityEngine) Commit(
@@ -189,12 +248,10 @@ func (e *stabilityEngine) Commit(
 			return baseMeta, e.WriteVerifier(), err
 		}
 	}
+	acquireNodeFlush(e, rec.key)
+	defer releaseNodeFlush(e, rec.key)
 	e.mu.Lock()
-	var chunks []unstableChunk
-	if st, ok := e.pending[rec.key]; ok && len(st.chunks) > 0 {
-		chunks = append([]unstableChunk(nil), st.chunks...)
-	}
-	verf := e.verf
+	chunks, flushedSeq, verf := snapshotFlushLocked(e, rec.key)
 	e.mu.Unlock()
 	if len(chunks) == 0 {
 		if fault != nil && fault.OnSync != nil {
@@ -205,14 +262,15 @@ func (e *stabilityEngine) Commit(
 		return baseMeta, verf, nil
 	}
 	meta, err := flushChunksToCore(core, handles, fault, rec, chunks, true)
-	if err != nil {
-		return baseMeta, verf, err
-	}
 	e.mu.Lock()
-	delete(e.pending, rec.key)
-	verf = e.verf
+	verf = finishFlushLocked(e, rec.key, flushedSeq, err)
+	if err == nil {
+		meta = effectiveMetaLocked(e, rec.key, meta)
+	} else {
+		meta = baseMeta
+	}
 	e.mu.Unlock()
-	return meta, verf, nil
+	return meta, verf, err
 }
 
 func (e *stabilityEngine) FlushView(
@@ -220,23 +278,20 @@ func (e *stabilityEngine) FlushView(
 ) error {
 	vHash := computeViewHash(viewID)
 	e.mu.Lock()
-	var states []*unstableFileState
+	var keys []handleKey
 	for hk, st := range e.pending {
 		if hk.viewHash == vHash && len(st.chunks) > 0 {
-			states = append(states, &unstableFileState{rec: st.rec, chunks: append([]unstableChunk(nil), st.chunks...)})
+			keys = append(keys, hk)
 		}
 	}
 	e.mu.Unlock()
-	for _, st := range states {
+	for _, hk := range keys {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if _, err := flushChunksToCore(core, handles, fault, &st.rec, st.chunks, true); err != nil {
+		if err := flushPendingKey(e, core, handles, fault, hk); err != nil {
 			return err
 		}
-		e.mu.Lock()
-		delete(e.pending, st.rec.key)
-		e.mu.Unlock()
 	}
 	return nil
 }

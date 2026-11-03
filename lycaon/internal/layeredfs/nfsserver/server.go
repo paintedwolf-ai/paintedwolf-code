@@ -68,9 +68,9 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 	}
 	s := &Server{
 		core: core, cfg: cfg, listener: ln,
-		handles: newHandleTable(secret, cfg.MaxHandles), dirs: newDirCache(secret, cfg.MaxDirListings),
-		stability: newStabilityEngine(), workSem: make(chan struct{}, cfg.MaxConcurrentRPCs),
-		queue: make(chan func(), cfg.MaxQueuedRPCs),
+		handles: newHandleTable(secret, cfg.MaxHandles), dirs: newDirCache(secret, DefaultMaxDirListings),
+		stability: newStabilityEngine(cfg), workSem: make(chan struct{}, DefaultMaxConcurrentRPCs),
+		queue: make(chan func(), DefaultMaxQueuedRPCs),
 		state: serverState{
 			cores: map[ViewID]*layeredfs.Core{core.ViewID(): core}, readOnly: make(map[ViewID]bool),
 			exportsByID: make(map[string]*exportEntry), exportsByVH: make(map[uint64][]*exportEntry),

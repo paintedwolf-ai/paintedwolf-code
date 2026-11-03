@@ -229,3 +229,72 @@ func joinChildPath(parent layeredfs.QualifiedPath, name string) (layeredfs.Quali
 	}
 	return layeredfs.QualifiedPath{RootID: parent.RootID, Rel: rel}, nil
 }
+
+// PendingUnstableStats returns the buffered unstable bytes and chunk count for viewID,
+// along with total buffered unstable bytes across all views on s.
+func PendingUnstableStats(s *Server, viewID ViewID) (viewBytes, viewChunks, totalBytes int) {
+	s.stability.mu.Lock()
+	defer s.stability.mu.Unlock()
+	return pendingStatsLocked(s.stability, computeViewHash(viewID))
+}
+
+func compactAndInsertChunk(chunks []unstableChunk, added unstableChunk, flushingSeq uint64) []unstableChunk {
+	if len(added.data) == 0 {
+		return chunks
+	}
+	newStart, newEnd := added.offset, added.offset+uint64(len(added.data))
+	next := make([]unstableChunk, 0, len(chunks)+2)
+	inserted := false
+	for _, ch := range chunks {
+		chStart, chEnd := ch.offset, ch.offset+uint64(len(ch.data))
+		if chEnd <= newStart {
+			next = append(next, ch)
+			continue
+		}
+		if chStart >= newEnd {
+			if !inserted {
+				next, inserted = append(next, added), true
+			}
+			next = append(next, ch)
+			continue
+		}
+		if chStart < newStart {
+			prefix := append([]byte(nil), ch.data[:newStart-chStart]...)
+			next = append(next, unstableChunk{seq: ch.seq, offset: chStart, data: prefix})
+		}
+		if !inserted {
+			next, inserted = append(next, added), true
+		}
+		if chEnd > newEnd {
+			suffix := append([]byte(nil), ch.data[newEnd-chStart:]...)
+			next = append(next, unstableChunk{seq: ch.seq, offset: newEnd, data: suffix})
+		}
+	}
+	if !inserted {
+		next = append(next, added)
+	}
+	return coalesceAdjacentChunks(next, flushingSeq)
+}
+
+func coalesceAdjacentChunks(chunks []unstableChunk, flushingSeq uint64) []unstableChunk {
+	if len(chunks) <= 1 {
+		return chunks
+	}
+	out := make([]unstableChunk, 0, len(chunks))
+	out = append(out, chunks[0])
+	for i := 1; i < len(chunks); i++ {
+		prev, cur := &out[len(out)-1], chunks[i]
+		if prev.offset+uint64(len(prev.data)) == cur.offset && prev.seq > flushingSeq && cur.seq > flushingSeq {
+			merged := make([]byte, len(prev.data)+len(cur.data))
+			copy(merged, prev.data)
+			copy(merged[len(prev.data):], cur.data)
+			prev.data = merged
+			if cur.seq > prev.seq {
+				prev.seq = cur.seq
+			}
+			continue
+		}
+		out = append(out, cur)
+	}
+	return out
+}

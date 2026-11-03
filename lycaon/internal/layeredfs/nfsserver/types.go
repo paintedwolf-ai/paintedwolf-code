@@ -12,15 +12,18 @@ import (
 
 // Default server bounds and protocol constants.
 const (
-	DefaultListenAddr        = "127.0.0.1:0"
-	DefaultMaxRequestBytes   = 1 << 20 // 1 MiB maximum RPC record payload.
-	DefaultMaxConcurrentRPCs = 32
-	DefaultMaxQueuedRPCs     = 128
-	DefaultMaxConnections    = 64
-	DefaultMaxHandles        = 8192
-	DefaultMaxDirListings    = 512
-	DefaultReadHeaderTimeout = 5 * time.Second
-	DefaultIdleTimeout       = 30 * time.Second
+	DefaultListenAddr               = "127.0.0.1:0"
+	DefaultMaxRequestBytes          = 1 << 20 // 1 MiB maximum RPC record payload.
+	DefaultMaxConcurrentRPCs        = 32
+	DefaultMaxQueuedRPCs            = 128
+	DefaultMaxConnections           = 64
+	DefaultMaxHandles               = 8192
+	DefaultMaxDirListings           = 512
+	DefaultMaxUnstableBytesPerView  = 8 << 20  // 8 MiB maximum buffered unstable bytes per view.
+	DefaultMaxUnstableChunksPerView = 256      // 256 maximum disjoint unstable chunks per view.
+	DefaultMaxTotalUnstableBytes    = 32 << 20 // 32 MiB maximum total buffered unstable bytes.
+	DefaultReadHeaderTimeout        = 5 * time.Second
+	DefaultIdleTimeout              = 30 * time.Second
 
 	// HandleSize is the fixed wire length of an authenticated Lycaon NFSv3 file handle.
 	HandleSize = 56
@@ -84,18 +87,18 @@ type FaultInjector struct {
 
 // Config configures the loopback NFSv3 and MOUNTv3 server.
 type Config struct {
-	ListenAddr        string
-	MaxRequestBytes   int
-	MaxConcurrentRPCs int
-	MaxQueuedRPCs     int
-	MaxConnections    int
-	MaxHandles        int
-	MaxDirListings    int
-	ReadHeaderTimeout time.Duration
-	IdleTimeout       time.Duration
-	ExpectedUID       uint32
-	ExpectedGID       uint32
-	FaultInjector     *FaultInjector
+	ListenAddr               string
+	MaxRequestBytes          int
+	MaxConnections           int
+	MaxHandles               int
+	MaxUnstableBytesPerView  int
+	MaxUnstableChunksPerView int
+	MaxTotalUnstableBytes    int
+	ReadHeaderTimeout        time.Duration
+	IdleTimeout              time.Duration
+	ExpectedUID              uint32
+	ExpectedGID              uint32
+	FaultInjector            *FaultInjector
 }
 
 func (c Config) withDefaults() Config {
@@ -105,20 +108,20 @@ func (c Config) withDefaults() Config {
 	if c.MaxRequestBytes <= 0 {
 		c.MaxRequestBytes = DefaultMaxRequestBytes
 	}
-	if c.MaxConcurrentRPCs <= 0 {
-		c.MaxConcurrentRPCs = DefaultMaxConcurrentRPCs
-	}
-	if c.MaxQueuedRPCs <= 0 {
-		c.MaxQueuedRPCs = DefaultMaxQueuedRPCs
-	}
 	if c.MaxConnections <= 0 {
 		c.MaxConnections = DefaultMaxConnections
 	}
 	if c.MaxHandles <= 0 {
 		c.MaxHandles = DefaultMaxHandles
 	}
-	if c.MaxDirListings <= 0 {
-		c.MaxDirListings = DefaultMaxDirListings
+	if c.MaxUnstableBytesPerView <= 0 {
+		c.MaxUnstableBytesPerView = DefaultMaxUnstableBytesPerView
+	}
+	if c.MaxUnstableChunksPerView <= 0 {
+		c.MaxUnstableChunksPerView = DefaultMaxUnstableChunksPerView
+	}
+	if c.MaxTotalUnstableBytes <= 0 {
+		c.MaxTotalUnstableBytes = max(DefaultMaxTotalUnstableBytes, c.MaxUnstableBytesPerView)
 	}
 	if c.ReadHeaderTimeout <= 0 && c.IdleTimeout <= 0 {
 		c.ReadHeaderTimeout = DefaultReadHeaderTimeout

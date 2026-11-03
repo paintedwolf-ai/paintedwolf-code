@@ -3,6 +3,7 @@ package nfsserver
 import (
 	"bytes"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	nfs "github.com/willscott/go-nfs"
 )
 
@@ -246,4 +247,47 @@ func onPathConf(s *Server, cs *connState, call rpcCallHeader) []byte {
 	writeBool(&body, false)
 	writeBool(&body, true)
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func chunksByteCount(chunks []unstableChunk) int {
+	total := 0
+	for _, ch := range chunks {
+		total += len(ch.data)
+	}
+	return total
+}
+
+func pendingStatsLocked(e *stabilityEngine, vHash uint64) (viewBytes, viewChunks, totalBytes int) {
+	for hk, st := range e.pending {
+		b := chunksByteCount(st.chunks)
+		totalBytes += b
+		if hk.viewHash == vHash {
+			viewBytes += b
+			viewChunks += len(st.chunks)
+		}
+	}
+	return viewBytes, viewChunks, totalBytes
+}
+
+func flushPendingKey(
+	e *stabilityEngine, core *layeredfs.Core, handles *handleTable, fault *FaultInjector, hk handleKey,
+) error {
+	acquireNodeFlush(e, hk)
+	defer releaseNodeFlush(e, hk)
+	e.mu.Lock()
+	st, ok := e.pending[hk]
+	var rec handleRecord
+	if ok {
+		rec = st.rec
+	}
+	chunks, flushedSeq, _ := snapshotFlushLocked(e, hk)
+	e.mu.Unlock()
+	var err error
+	if len(chunks) > 0 {
+		_, err = flushChunksToCore(core, handles, fault, &rec, chunks, true)
+	}
+	e.mu.Lock()
+	_ = finishFlushLocked(e, hk, flushedSeq, err)
+	e.mu.Unlock()
+	return err
 }
