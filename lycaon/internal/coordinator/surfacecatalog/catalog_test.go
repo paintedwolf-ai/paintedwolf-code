@@ -130,3 +130,20 @@ func contains(names []string, want string) bool {
 	}
 	return false
 }
+
+func TestCommandSurfacesCanInspectAndStopContinuations(t *testing.T) {
+	catalog, err := Load()
+	testutil.FailErr(t, "load command surfaces", err)
+	for _, id := range catalog.SurfaceIDs() {
+		row, err := catalog.Surface(id)
+		testutil.FailErr(t, "read command surface", err)
+		if !contains(row.FloorTools(), "command") && !contains(row.LoadableTools(), "command") {
+			continue
+		}
+		for _, name := range []string{"command_output", "command_stop"} {
+			if !contains(row.FloorTools(), name) && !contains(row.LoadableTools(), name) {
+				t.Errorf("%s cannot access %s for a running program", id, name)
+			}
+		}
+	}
+}

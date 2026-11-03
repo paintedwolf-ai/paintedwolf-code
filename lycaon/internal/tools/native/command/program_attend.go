@@ -73,10 +73,16 @@ type programEnding struct {
 	err    error
 }
 
-// attend holds the call until its program ends, or parks the call when the
-// program waits past the inline budget.
+// attend returns completion, parks an explicit wait, or exposes a running
+// program after the foreground budget.
 func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (string, error) {
 	ending := &programEnding{done: make(chan struct{})}
+	lifetime := &programLifetime{release: e.release}
+	e.release = lifetime.settled
+	defer lifetime.callerDone()
+	expired := make(chan struct{})
+	stop := r.clock().AfterFunc(DefaultProgramInlineWait, func() { close(expired) })
+	defer stop()
 	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {
 		ending.result, ending.err = r.finish(e)
@@ -86,6 +92,16 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		select {
 		case <-ending.done:
 			waiting = false
+		case <-expired:
+			select {
+			case <-ending.done:
+				waiting = false
+			default:
+				if callCtx.Err() == nil {
+					return r.continueProgram(callCtx, e, ending)
+				}
+				expired = nil
+			}
 		case blocked := <-e.park.parks:
 			if parked, ok := r.parkProgram(callCtx, e, ending, blocked); ok {
 				return parked, nil

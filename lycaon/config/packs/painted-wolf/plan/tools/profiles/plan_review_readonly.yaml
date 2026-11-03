@@ -3,6 +3,8 @@ description: Read-only plan review — command in read-only mode on plan paths
 command_effects: [read_only]
 tools:
   command: sticky
+  command_output: sticky
+  command_stop: sticky
   complete_leg: sticky
   recall: sticky
   record_finding: sticky

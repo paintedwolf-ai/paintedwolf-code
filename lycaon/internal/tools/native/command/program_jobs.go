@@ -38,10 +38,8 @@ type SessionJobs struct {
 	// order is the job table in start order. A job takes one more than the
 	// highest number in the table and leaves it once waited, so numbers are
 	// reused as a shell reuses them.
-	order   []string
-	numbers map[string]int
-	// programOrder tracks handles started by the active program.
-	programOrder []string
+	order        []string
+	numbers      map[string]int
 	publicIDs    map[string]int
 	nextNativeID int
 }
@@ -60,6 +58,10 @@ type programJobsBinding struct {
 
 // sessionJobsKey binds program provenance to its retained session owner.
 type sessionJobsKey struct{}
+
+// programJobs holds one program's bare-wait set under SessionJobs.mu.
+type programJobs struct{ handles []string }
+type programJobsKey struct{}
 
 type jobOutcome struct {
 	result toolcontract.ProducerResult
@@ -152,7 +154,7 @@ func (j *SessionJobs) BeginProgram(ctx context.Context, origin ProgramJobOrigin)
 		}
 	}
 	j.order = kept
-	j.programOrder = nil
+	ctx = context.WithValue(ctx, programJobsKey{}, &programJobs{})
 	return context.WithValue(ctx, sessionJobsKey{}, programJobsBinding{owner: j, origin: origin}), nil
 }
 
@@ -221,7 +223,9 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	}
 	j.numbers[handle] = number
 	j.order = append(j.order, handle)
-	j.programOrder = append(j.programOrder, handle)
+	if own, ok := ctx.Value(programJobsKey{}).(*programJobs); ok {
+		own.handles = append(own.handles, handle)
+	}
 	j.mu.Unlock()
 	tracker.onRecord = func(process jobProcess) {
 		j.recordProcess(handle, process)
@@ -351,7 +355,10 @@ func (j *SessionJobs) Resolve(reference string) (string, error) {
 // current program if any, otherwise all active session jobs.
 func (j *SessionJobs) Unwaited(ctx context.Context) ([]string, error) {
 	j.mu.Lock()
-	programHandles := slices.Clone(j.programOrder)
+	var programHandles []string
+	if own, ok := ctx.Value(programJobsKey{}).(*programJobs); ok {
+		programHandles = slices.Clone(own.handles)
+	}
 	j.mu.Unlock()
 	if len(programHandles) > 0 {
 		return programHandles, nil

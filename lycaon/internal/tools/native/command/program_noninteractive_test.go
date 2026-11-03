@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -133,6 +134,7 @@ func TestProgramPythonReceivesEOFWithoutControllingTerminal(t *testing.T) {
 func TestProgramNpmInitSettlesOnEOF(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	f := newProgramFixture(t)
+	f.Runtime.Clock = programtest.NewManualClock()
 	binary := requiredExternal(t, "npm")
 	out, err := f.call(t, t.Context(), externalProgram(binary, "init"))
 	testutil.FailErr(t, "run npm init", err)
