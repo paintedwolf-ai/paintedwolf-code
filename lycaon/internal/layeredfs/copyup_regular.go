@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"path/filepath"
 	"time"
 )
 
@@ -277,63 +276,4 @@ func sameLowerIdentity(a, b LowerEntry) bool {
 		a.ModTime.Equal(b.ModTime) &&
 		a.CtimeSec == b.CtimeSec &&
 		a.CtimeNsec == b.CtimeNsec
-}
-
-func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
-	c.mu.Lock()
-	if c.state.released {
-		c.mu.Unlock()
-		return "", "", ErrViewReleased
-	}
-	workName, workPath := c.state.allocStorageFile(c.backing.workDir, "work")
-	workDirFD := int(c.backing.workDirFile.Fd())
-	c.mu.Unlock()
-
-	if base.BackingFile != "" {
-		cloned, cloneErr := cloneFileIfSupported(base.BackingFile, workPath)
-		if cloneErr == nil && cloned {
-			_ = syncFD(workDirFD)
-			return workName, workPath, nil
-		}
-		baseFile, err := openBackingFileRO(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile), base.BackingFile)
-		if err != nil {
-			return "", "", err
-		}
-		defer func() { _ = baseFile.Close() }()
-
-		wf, err := createExclusiveBackingFile(workDirFD, workName, workPath, 0o600)
-		if err != nil {
-			return "", "", err
-		}
-		_, copyErr := io.Copy(wf, baseFile)
-		syncErr := syncFD(int(wf.Fd()))
-		closeErr := wf.Close()
-		dirSyncErr := syncFD(workDirFD)
-		if err := errors.Join(copyErr, syncErr, closeErr, dirSyncErr); err != nil {
-			_ = unlinkBackingFile(workDirFD, workName)
-			return "", "", err
-		}
-		return workName, workPath, nil
-	}
-
-	wf, err := createExclusiveBackingFile(workDirFD, workName, workPath, 0o600)
-	if err != nil {
-		return "", "", err
-	}
-	if err := errors.Join( wf.Close(), syncFD(workDirFD)); err != nil {
-		_ = unlinkBackingFile(workDirFD, workName)
-		return "", "", err
-	}
-	return workName, workPath, nil
-}
-
-func cloneXattrs(in map[string][]byte) map[string][]byte {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string][]byte, len(in))
-	for k, v := range in {
-		out[k] = append([]byte(nil), v...)
-	}
-	return out
 }

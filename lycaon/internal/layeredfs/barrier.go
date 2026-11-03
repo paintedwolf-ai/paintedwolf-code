@@ -8,6 +8,10 @@ import (
 
 // RegisterLowerProvider registers a custom or virtual LowerProvider for a RootID.
 func (c *Core) RegisterLowerProvider(rootID string, provider LowerProvider) error {
+	if err := c.barrier.enterMutation(); err != nil {
+		return err
+	}
+	defer c.barrier.leaveMutation()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.state.released {
@@ -46,14 +50,26 @@ func (c *Core) ResetStepStats() {
 	c.counters.lowerLookups.Store(0)
 }
 
-// ReleaseView invalidates all handles, waits for in-flight operations to drain, and closes descriptors.
+// ReleaseView closes admission to new operations, waits for all in-flight mutations, reads,
+// and flushes to drain and settle their accounting, flushes and closes open handles and
+// directory descriptors, and preserves settled recovery state.
 func (c *Core) ReleaseView() error {
-	c.mu.Lock()
-	if c.state.released {
-		c.mu.Unlock()
+	alreadyReleased, waitOnly := c.barrier.beginRelease()
+	if alreadyReleased {
 		return nil
 	}
-	c.state.released = true
+	if waitOnly {
+		c.barrier.waitReleaseDone()
+		return nil
+	}
+
+	c.mu.Lock()
+	c.state.seq.closing = true
+	c.mu.Unlock()
+
+	c.barrier.waitDrain()
+
+	c.mu.Lock()
 	handles := make([]*openHandle, 0, len(c.state.handles))
 	for id, h := range c.state.handles {
 		h.closed = true
@@ -61,20 +77,31 @@ func (c *Core) ReleaseView() error {
 		delete(c.state.handles, id)
 	}
 	c.state.dirCookies = make(map[uint64]dirCookieState)
+	hasRecoveryState := len(c.state.journal) > 0 || len(c.state.pathIndex) > 0 || len(c.state.deletedPaths) > 0
 	c.mu.Unlock()
 
 	for _, h := range handles {
+		if h.file != nil {
+			_ = syncFD(int(h.file.Fd()))
+		}
 		_ = releaseHandleRef(c, h)
 	}
-	c.barrier.waitDrain()
+	for _, df := range []*os.File{c.backing.workDirFile, c.backing.baseDirFile, c.backing.journalDirFile} {
+		if df != nil {
+			_ = syncFD(int(df.Fd()))
+		}
+	}
+	if hasRecoveryState {
+		_, _ = snapshotJournal(c)
+	}
 
 	c.mu.Lock()
-	c.state.nodesByID = make(map[NodeID]*privateNode)
-	c.state.pathIndex = make(map[QualifiedPath]NodeID)
+	c.state.released = true
 	c.mu.Unlock()
 
 	c.roots.close()
 	c.backing.close()
+	c.barrier.finishRelease()
 	return nil
 }
 
@@ -85,12 +112,15 @@ type BarrierToken struct {
 }
 
 type barrierCoordinator struct {
-	viewID   string
-	mu       sync.Mutex
-	cond     *sync.Cond
-	active   bool
-	inFlight int64
-	seq      uint64
+	viewID      string
+	mu          sync.Mutex
+	cond        *sync.Cond
+	active      bool
+	closing     bool
+	released    bool
+	inFlight    int64
+	opsInFlight int64
+	seq         uint64
 }
 
 func newBarrierCoordinator(viewID string) *barrierCoordinator {
@@ -102,6 +132,9 @@ func newBarrierCoordinator(viewID string) *barrierCoordinator {
 func (b *barrierCoordinator) enterMutation() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.closing || b.released {
+		return ErrViewReleased
+	}
 	if b.active {
 		return ErrBarrierActive
 	}
@@ -119,9 +152,58 @@ func (b *barrierCoordinator) leaveMutation() {
 	b.mu.Unlock()
 }
 
+func (b *barrierCoordinator) enterOp() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closing || b.released {
+		return ErrViewReleased
+	}
+	b.opsInFlight++
+	return nil
+}
+
+func (b *barrierCoordinator) leaveOp() {
+	b.mu.Lock()
+	b.opsInFlight--
+	if b.opsInFlight <= 0 {
+		b.opsInFlight = 0
+		b.cond.Broadcast()
+	}
+	b.mu.Unlock()
+}
+
+func (b *barrierCoordinator) beginRelease() (bool, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.released {
+		return true, false
+	}
+	if b.closing {
+		return false, true
+	}
+	b.closing = true
+	b.cond.Broadcast()
+	return false, false
+}
+
 func (b *barrierCoordinator) waitDrain() {
 	b.mu.Lock()
-	for b.inFlight > 0 {
+	for b.inFlight > 0 || b.opsInFlight > 0 || b.active {
+		b.cond.Wait()
+	}
+	b.mu.Unlock()
+}
+
+func (b *barrierCoordinator) finishRelease() {
+	b.mu.Lock()
+	b.released = true
+	b.cond.Broadcast()
+	b.mu.Unlock()
+}
+
+func (b *barrierCoordinator) waitReleaseDone() {
+	b.mu.Lock()
+	for !b.released {
 		b.cond.Wait()
 	}
 	b.mu.Unlock()
@@ -130,15 +212,12 @@ func (b *barrierCoordinator) waitDrain() {
 // BeginCheckpointBarrier blocks new mutation admission, waits for active mutations to drain,
 // and flushes all open writable handles and backing directories (#1658, #1663).
 func (c *Core) BeginCheckpointBarrier(ctx context.Context) (BarrierToken, error) {
-	c.mu.RLock()
-	if c.state.released {
-		c.mu.RUnlock()
-		return BarrierToken{}, ErrViewReleased
-	}
-	c.mu.RUnlock()
-
 	b := c.barrier
 	b.mu.Lock()
+	if b.closing || b.released {
+		b.mu.Unlock()
+		return BarrierToken{}, ErrViewReleased
+	}
 	if b.active {
 		b.mu.Unlock()
 		return BarrierToken{}, ErrBarrierActive
@@ -159,8 +238,16 @@ func (c *Core) BeginCheckpointBarrier(ctx context.Context) (BarrierToken, error)
 	}()
 
 	for b.inFlight > 0 {
+		if b.closing || b.released {
+			b.active = false
+			b.cond.Broadcast()
+			b.mu.Unlock()
+			close(done)
+			return BarrierToken{}, ErrViewReleased
+		}
 		if err := ctx.Err(); err != nil {
 			b.active = false
+			b.cond.Broadcast()
 			b.mu.Unlock()
 			close(done)
 			return BarrierToken{}, err
