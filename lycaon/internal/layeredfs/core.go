@@ -24,6 +24,8 @@ type Core struct {
 
 type backingWorkspace struct {
 	mu             sync.RWMutex
+	snapshotMu     sync.Mutex
+	tmpSeq         atomic.Uint64
 	workDir        string
 	baseDir        string
 	journalDir     string

@@ -161,3 +161,47 @@ func sortedNames[V any](m map[string]V) []string {
 	sort.Strings(names)
 	return names
 }
+
+// RegisterLowerProvider registers a custom or virtual LowerProvider for a RootID.
+func (c *Core) RegisterLowerProvider(rootID string, provider LowerProvider) error {
+	if err := c.barrier.enterMutation(); err != nil {
+		return err
+	}
+	defer c.barrier.leaveMutation()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state.released {
+		return ErrViewReleased
+	}
+	if _, ok := c.roots.byID[rootID]; !ok {
+		return ErrInvalidRoot
+	}
+	c.roots.providers[rootID] = provider
+	return nil
+}
+
+// ViewID returns the unique view identifier.
+func (c *Core) ViewID() string {
+	return c.cfg.ViewID
+}
+
+// Stats returns a snapshot of the deterministic operation and byte counters.
+func (c *Core) Stats() Stats {
+	c.mu.RLock()
+	logical := countLogicalChangesLocked(c)
+	c.mu.RUnlock()
+	return Stats{
+		LowerDirReads:     c.counters.lowerDirReads.Load(),
+		LowerLookups:      c.counters.lowerLookups.Load(),
+		PhysicalCopyUps:   c.counters.physicalCopyUps.Load(),
+		LogicalChanges:    int64(logical),
+		CapturedBaseBytes: c.counters.capturedBaseBytes.Load(),
+		JournalEntries:    c.counters.journalEntries.Load(),
+	}
+}
+
+// ResetStepStats clears per-scenario lower read/lookup counters while preserving view state.
+func (c *Core) ResetStepStats() {
+	c.counters.lowerDirReads.Store(0)
+	c.counters.lowerLookups.Store(0)
+}
