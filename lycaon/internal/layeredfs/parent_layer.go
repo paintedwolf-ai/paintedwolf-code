@@ -289,4 +289,3 @@ func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*priv
 		return nil, fmt.Errorf("unsupported entry kind %s", res.attr.Kind)
 	}
 }
-
