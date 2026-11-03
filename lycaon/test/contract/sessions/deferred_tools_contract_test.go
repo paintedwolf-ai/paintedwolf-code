@@ -188,15 +188,15 @@ func TestWorkerProfilesKeepCoreEagerAndOptionalCapabilitiesReachable(t *testing.
 		effects                 []toolcontract.CommandEffectClass
 	}{
 		"implement": {
-			eager:    []string{"edit", "replace_lines", "code_rewrite", "summarize", "survey_repo", "command", "command_output", "command_stop", "verify", "complete_leg", "request_tools", "skills_read", "terminal_open", "terminal_close"},
-			deferred: []string{"jq_edit", "page_open", "page_act", "page_close", "capture_page", "scan_pack", "secret_generate", "secret_list", "secret_revoke", "handoff_reserve"},
-			denied:   []string{"delegate_start", "state_set", "write", "read", "grep", "find", "list_dir", "jq", "http_request"},
+			eager:    []string{"command", "command_output", "command_stop", "verify", "complete_leg", "request_tools", "skills_read", "terminal_open", "terminal_close"},
+			deferred: []string{"page_open", "page_act", "page_close", "capture_page", "scan_pack", "secret_generate", "secret_list", "secret_revoke", "handoff_reserve"},
+			denied:   []string{"edit", "replace_lines", "code_rewrite", "summarize", "survey_repo", "jq_edit", "delegate_start", "state_set", "write", "read", "grep", "find", "list_dir", "jq", "http_request"},
 			effects:  []toolcontract.CommandEffectClass{toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress},
 		},
 		"explore_readonly": {
-			eager:    []string{"command", "summarize", "survey_repo", "record_finding", "complete_leg", "request_tools", "skills_read"},
+			eager:    []string{"command", "record_finding", "complete_leg", "request_tools", "skills_read"},
 			deferred: []string{"page_open", "page_act", "page_close", "capture_page", "scan_query", "source_history"},
-			denied:   []string{"write", "git_commit", "secret_generate", "read", "grep", "find", "list_dir", "jq", "git_status", "git_diff", "git_log", "git_show"},
+			denied:   []string{"edit", "replace_lines", "code_rewrite", "summarize", "survey_repo", "jq_edit", "write", "git_commit", "secret_generate", "read", "grep", "find", "list_dir", "jq", "git_status", "git_diff", "git_log", "git_show"},
 			effects:  []toolcontract.CommandEffectClass{toolcontract.CommandReadOnly},
 		},
 	}
