@@ -17,11 +17,17 @@ func (s *streamScreen) streamEncodedEchoes(ctx context.Context, text string, unt
 	}
 	largest := 0
 	for _, n := range s.needles {
-		if IsManagedRule(n.value.RuleID) {
+		if IsManagedRule(n.value.RuleID) && n.needle.whole && n.needle.text == n.value.Secret {
 			largest = max(largest, len(n.value.Secret))
 		}
 	}
+	if largest == 0 {
+		return nil
+	}
 	s.echoWork = int64(len(text))
+	if s.echoWork > s.bounds.DetectorWork {
+		return &StreamLimitError{"screen_work_units", s.bounds.DetectorWork, s.echoWork}
+	}
 	charge := int64(len(text))*2 + int64(largest)*96 + 1024
 	if err := s.memory.take(charge); err != nil {
 		return err
