@@ -1,6 +1,7 @@
 package layeredfs
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"strings"
@@ -43,31 +44,6 @@ func (c *Core) WriteFile(qpath QualifiedPath, data []byte, mode fs.FileMode) (En
 	return attr, closeErr
 }
 
-// ReadFile reads the entire contents of qpath from whichever layer owns it.
-func (c *Core) ReadFile(qpath QualifiedPath) ([]byte, error) {
-	if err := c.barrier.enterOp(); err != nil {
-		return nil, err
-	}
-	defer c.barrier.leaveOp()
-	hid, attr, err := openAdmitted(c, qpath, OpenReadOnly, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = closeHandleAdmitted(c, hid) }()
-	if attr.Kind != EntryRegular {
-		return nil, syscall.EISDIR
-	}
-	buf := make([]byte, attr.Size)
-	if attr.Size == 0 {
-		return buf, nil
-	}
-	n, rErr := readHandleAdmitted(c, hid, buf, 0)
-	if rErr != nil && n == 0 {
-		return nil, rErr
-	}
-	return buf[:n], nil
-}
-
 // Truncate changes the size of the file at qpath.
 func (c *Core) Truncate(qpath QualifiedPath, size int64) (EntryAttr, error) {
 	if size < 0 {
@@ -85,32 +61,40 @@ func truncatePathAdmitted(c *Core, qpath QualifiedPath, size int64) (EntryAttr, 
 		return EntryAttr{}, syscall.EINVAL
 	}
 
-	res, err := resolvePath(c, qpath, true, true)
-	if err != nil {
-		return EntryAttr{}, err
-	}
-	if res.attr.Kind == EntryDirectory {
-		return EntryAttr{}, syscall.EISDIR
-	}
-	if res.attr.Kind != EntryRegular {
-		return EntryAttr{}, syscall.EINVAL
-	}
-
-	base, err := ensureBaseCaptured(c, res.qpath)
-	if err != nil {
-		return EntryAttr{}, err
-	}
-
+	var res resolvedLayerEntry
 	var node *privateNode
 	for {
+		startGen, err := currentNamespaceGen(c)
+		if err != nil {
+			return EntryAttr{}, err
+		}
+		res, err = resolvePath(c, qpath, true, true)
+		if err != nil {
+			return EntryAttr{}, err
+		}
+		if res.attr.Kind == EntryDirectory {
+			return EntryAttr{}, syscall.EISDIR
+		}
+		if res.attr.Kind != EntryRegular {
+			return EntryAttr{}, syscall.EINVAL
+		}
+
+		base, err := ensureBaseCaptured(c, res.qpath)
+		if err != nil {
+			return EntryAttr{}, err
+		}
+
 		c.mu.Lock()
 		if c.state.released {
 			c.mu.Unlock()
 			return EntryAttr{}, ErrViewReleased
 		}
 		var nErr error
-		node, nErr = ensureWritableNodeLocked(c, res.qpath, base, OpenWriteOnly, res.attr.Mode)
+		node, nErr = ensureWritableNodeLocked(c, res.qpath, base, OpenWriteOnly, res.attr.Mode, startGen)
 		c.mu.Unlock()
+		if errors.Is(nErr, errNamespaceRetry) {
+			continue
+		}
 		if nErr != nil {
 			return EntryAttr{}, nErr
 		}
@@ -158,64 +142,79 @@ func mkdirPath(c *Core, qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error
 	}
 	defer c.barrier.leaveMutation()
 
-	parentPath, name, err := resolveParentDir(c, qpath, true)
-	if err != nil {
-		return EntryAttr{}, err
-	}
-	targetPath := QualifiedPath{RootID: parentPath.RootID, Rel: joinRel(parentPath.Rel, name)}
-	targetPath, err = checkGitAccess(c, targetPath, true)
-	if err != nil {
-		return EntryAttr{}, err
-	}
+	for {
+		startGen, err := currentNamespaceGen(c)
+		if err != nil {
+			return EntryAttr{}, err
+		}
+		parentPath, name, err := resolveParentDir(c, qpath, true)
+		if err != nil {
+			return EntryAttr{}, err
+		}
+		targetPath := QualifiedPath{RootID: parentPath.RootID, Rel: joinRel(parentPath.Rel, name)}
+		targetPath, err = checkGitAccess(c, targetPath, true)
+		if err != nil {
+			return EntryAttr{}, err
+		}
 
-	if _, lookErr := lookupExactComponent(c, targetPath); lookErr == nil {
-		return EntryAttr{}, os.ErrExist
-	} else if !os.IsNotExist(lookErr) {
-		return EntryAttr{}, lookErr
-	}
+		if _, lookErr := lookupExactComponent(c, targetPath); lookErr == nil {
+			return EntryAttr{}, os.ErrExist
+		} else if !os.IsNotExist(lookErr) {
+			return EntryAttr{}, lookErr
+		}
 
-	base, err := ensureBaseCaptured(c, targetPath)
-	if err != nil {
-		return EntryAttr{}, err
-	}
+		base, err := ensureBaseCaptured(c, targetPath)
+		if err != nil {
+			return EntryAttr{}, err
+		}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state.released {
-		return EntryAttr{}, ErrViewReleased
-	}
-	if _, lookID := c.state.pathIndex[targetPath]; lookID {
-		return EntryAttr{}, os.ErrExist
-	}
+		runNamespacePreCommitHook(c, "mkdir", targetPath)
 
-	now := time.Now()
-	nid, gen := c.state.allocNodeID()
-	cleanMode := fs.ModeDir | (mode.Perm() & 0o777)
-	if cleanMode.Perm() == 0 {
-		cleanMode = fs.ModeDir | 0o755
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			return EntryAttr{}, ErrViewReleased
+		}
+		if c.state.nsGen != startGen || !isParentDirValidLocked(c, targetPath) {
+			c.mu.Unlock()
+			continue
+		}
+		if _, lookID := c.state.pathIndex[targetPath]; lookID {
+			c.mu.Unlock()
+			return EntryAttr{}, os.ErrExist
+		}
+
+		now := time.Now()
+		nid, gen := c.state.allocNodeID()
+		cleanMode := fs.ModeDir | (mode.Perm() & 0o777)
+		if cleanMode.Perm() == 0 {
+			cleanMode = fs.ModeDir | 0o755
+		}
+		node := &privateNode{
+			id:    nid,
+			gen:   gen,
+			kind:  EntryDirectory,
+			mode:  cleanMode,
+			atime: now,
+			mtime: now,
+			ctime: now,
+			paths: map[QualifiedPath]struct{}{targetPath: {}},
+			flags: nodeFlags{namespaceAdded: true},
+		}
+		_, wasReplaced := c.state.deletedPaths[targetPath]
+		delete(c.state.deletedPaths, targetPath)
+		c.state.nodesByID[nid] = node
+		c.state.pathIndex[targetPath] = nid
+		bumpParentDirGenLocked(c, targetPath)
+		opKind := JournalOpMkdir
+		if wasReplaced || (base.Kind != EntryAbsent && base.Kind != EntryDirectory) {
+			opKind = JournalOpReplaceDir
+		}
+		recordJournalLocked(c, opKind, targetPath, nil, node, 0)
+		attr := nodeToAttrLocked(node)
+		c.mu.Unlock()
+		return attr, nil
 	}
-	node := &privateNode{
-		id:    nid,
-		gen:   gen,
-		kind:  EntryDirectory,
-		mode:  cleanMode,
-		atime: now,
-		mtime: now,
-		ctime: now,
-		paths: map[QualifiedPath]struct{}{targetPath: {}},
-		flags: nodeFlags{namespaceAdded: true},
-	}
-	_, wasReplaced := c.state.deletedPaths[targetPath]
-	delete(c.state.deletedPaths, targetPath)
-	c.state.nodesByID[nid] = node
-	c.state.pathIndex[targetPath] = nid
-	bumpParentDirGenLocked(c, targetPath)
-	opKind := JournalOpMkdir
-	if wasReplaced || (base.Kind != EntryAbsent && base.Kind != EntryDirectory) {
-		opKind = JournalOpReplaceDir
-	}
-	recordJournalLocked(c, opKind, targetPath, nil, node, 0)
-	return nodeToAttrLocked(node), nil
 }
 
 // Symlink creates a symbolic link at linkPath pointing to target.
@@ -232,59 +231,77 @@ func symlinkPath(c *Core, target string, linkPath QualifiedPath) (EntryAttr, err
 	}
 	defer c.barrier.leaveMutation()
 
-	parentPath, name, err := resolveParentDir(c, linkPath, true)
-	if err != nil {
-		return EntryAttr{}, err
-	}
-	targetPath := QualifiedPath{RootID: parentPath.RootID, Rel: joinRel(parentPath.Rel, name)}
-	targetPath, err = checkGitAccess(c, targetPath, true)
-	if err != nil {
-		return EntryAttr{}, err
-	}
+	for {
+		startGen, err := currentNamespaceGen(c)
+		if err != nil {
+			return EntryAttr{}, err
+		}
+		parentPath, name, err := resolveParentDir(c, linkPath, true)
+		if err != nil {
+			return EntryAttr{}, err
+		}
+		targetPath := QualifiedPath{RootID: parentPath.RootID, Rel: joinRel(parentPath.Rel, name)}
+		targetPath, err = checkGitAccess(c, targetPath, true)
+		if err != nil {
+			return EntryAttr{}, err
+		}
 
-	if _, lookErr := lookupExactComponent(c, targetPath); lookErr == nil {
-		return EntryAttr{}, os.ErrExist
-	} else if !os.IsNotExist(lookErr) {
-		return EntryAttr{}, lookErr
-	}
+		if _, lookErr := lookupExactComponent(c, targetPath); lookErr == nil {
+			return EntryAttr{}, os.ErrExist
+		} else if !os.IsNotExist(lookErr) {
+			return EntryAttr{}, lookErr
+		}
 
-	base, err := ensureBaseCaptured(c, targetPath)
-	if err != nil {
-		return EntryAttr{}, err
-	}
+		base, err := ensureBaseCaptured(c, targetPath)
+		if err != nil {
+			return EntryAttr{}, err
+		}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state.released {
-		return EntryAttr{}, ErrViewReleased
+		runNamespacePreCommitHook(c, "symlink", targetPath)
+
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			return EntryAttr{}, ErrViewReleased
+		}
+		if c.state.nsGen != startGen || !isParentDirValidLocked(c, targetPath) {
+			c.mu.Unlock()
+			continue
+		}
+		if _, lookID := c.state.pathIndex[targetPath]; lookID {
+			c.mu.Unlock()
+			return EntryAttr{}, os.ErrExist
+		}
+		now := time.Now()
+		nid, gen := c.state.allocNodeID()
+		node := &privateNode{
+			id:    nid,
+			gen:   gen,
+			kind:  EntrySymlink,
+			mode:  fs.ModeSymlink | 0o777,
+			size:  int64(len(target)),
+			atime: now,
+			mtime: now,
+			ctime: now,
+			paths: map[QualifiedPath]struct{}{targetPath: {}},
+			flags: nodeFlags{
+				contentChanged: true,
+				namespaceAdded: true,
+				linkTarget:     target,
+			},
+		}
+		_, wasReplaced := c.state.deletedPaths[targetPath]
+		delete(c.state.deletedPaths, targetPath)
+		c.state.nodesByID[nid] = node
+		c.state.pathIndex[targetPath] = nid
+		bumpParentDirGenLocked(c, targetPath)
+		opKind := JournalOpSymlink
+		if wasReplaced || base.Kind == EntryDirectory {
+			opKind = JournalOpReplaceDir
+		}
+		recordJournalLocked(c, opKind, targetPath, nil, node, int64(len(target)))
+		attr := nodeToAttrLocked(node)
+		c.mu.Unlock()
+		return attr, nil
 	}
-	now := time.Now()
-	nid, gen := c.state.allocNodeID()
-	node := &privateNode{
-		id:    nid,
-		gen:   gen,
-		kind:  EntrySymlink,
-		mode:  fs.ModeSymlink | 0o777,
-		size:  int64(len(target)),
-		atime: now,
-		mtime: now,
-		ctime: now,
-		paths: map[QualifiedPath]struct{}{targetPath: {}},
-		flags: nodeFlags{
-			contentChanged: true,
-			namespaceAdded: true,
-			linkTarget:     target,
-		},
-	}
-	_, wasReplaced := c.state.deletedPaths[targetPath]
-	delete(c.state.deletedPaths, targetPath)
-	c.state.nodesByID[nid] = node
-	c.state.pathIndex[targetPath] = nid
-	bumpParentDirGenLocked(c, targetPath)
-	opKind := JournalOpSymlink
-	if wasReplaced || base.Kind == EntryDirectory {
-		opKind = JournalOpReplaceDir
-	}
-	recordJournalLocked(c, opKind, targetPath, nil, node, int64(len(target)))
-	return nodeToAttrLocked(node), nil
 }

@@ -1,6 +1,7 @@
 package layeredfs
 
 import (
+	"errors"
 	"io"
 	"os"
 	"syscall"
@@ -198,7 +199,7 @@ func syncHandleAdmitted(c *Core, hid HandleID) error {
 	if f == nil {
 		return nil
 	}
-	return syncFD(int(f.Fd()))
+	return errors.Join(runJournalSyncHook(c, "handle_sync"), syncFD(int(f.Fd())))
 }
 
 // CloseHandle closes and retires an open handle.
@@ -254,8 +255,9 @@ func releaseHandleRef(c *Core, h *openHandle) error {
 	}
 	if unlinkOrphan != "" && workDirFD >= 0 && node != nil {
 		node.flags.ioMu.Lock()
-		_ = unlinkBackingFile(workDirFD, unlinkOrphan)
+		uErr := unlinkBackingFile(workDirFD, unlinkOrphan)
 		node.flags.ioMu.Unlock()
+		closeErr = errors.Join(closeErr, uErr)
 	}
 	return closeErr
 }

@@ -120,6 +120,9 @@ func (c *Core) SnapshotJournal() (JournalSnapshot, error) {
 }
 
 func snapshotJournal(c *Core) (JournalSnapshot, error) {
+	c.backing.snapshotMu.Lock()
+	defer c.backing.snapshotMu.Unlock()
+
 	changes, err := c.EnumerateChanges(false)
 	if err != nil {
 		return JournalSnapshot{}, err
@@ -141,7 +144,7 @@ func snapshotJournal(c *Core) (JournalSnapshot, error) {
 		Bases:         bases,
 	}
 	err = c.backing.withJournalDirFD(func(dirFD int, dirPath string) error {
-		return persistJournalSnapshot(dirFD, dirPath, snap)
+		return persistJournalSnapshot(c, dirFD, dirPath, snap)
 	})
 	if err != nil {
 		return JournalSnapshot{}, err
@@ -149,32 +152,33 @@ func snapshotJournal(c *Core) (JournalSnapshot, error) {
 	return snap, nil
 }
 
-func persistJournalSnapshot(dirFD int, dirPath string, snap JournalSnapshot) error {
+func persistJournalSnapshot(c *Core, dirFD int, dirPath string, snap JournalSnapshot) error {
 	raw, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmpName := "journal.json.tmp"
+	tmpName := fmt.Sprintf("journal.json.tmp.%d", c.backing.tmpSeq.Add(1))
 	tmpPath := filepath.Join(dirPath, tmpName)
 	_ = unlinkBackingFile(dirFD, tmpName)
 	f, err := createExclusiveBackingFile(dirFD, tmpName, tmpPath, 0o600)
 	if err != nil {
 		return err
 	}
-	_, wErr := io.Copy(f, bytes.NewReader(raw))
-	sErr := syncFD(int(f.Fd()))
-	cErr := f.Close()
-	if wErr != nil || sErr != nil || cErr != nil {
-		_ = unlinkBackingFile(dirFD, tmpName)
-		if wErr != nil {
-			return wErr
-		}
-		if sErr != nil {
-			return sErr
-		}
-		return cErr
+	wErr := runJournalSyncHook(c, "journal_tmp_write")
+	if wErr == nil {
+		_, wErr = io.Copy(f, bytes.NewReader(raw))
 	}
-	return renameBackingFile(dirFD, tmpName, "journal.json")
+	sErr := errors.Join(runJournalSyncHook(c, "journal_tmp_sync"), syncFD(int(f.Fd())))
+	cErr := f.Close()
+	if err := errors.Join(wErr, sErr, cErr); err != nil {
+		_ = unlinkBackingFile(dirFD, tmpName)
+		return err
+	}
+	if err := renameBackingFile(dirFD, tmpName, "journal.json"); err != nil {
+		_ = unlinkBackingFile(dirFD, tmpName)
+		return err
+	}
+	return errors.Join(runJournalSyncHook(c, "journal_dir_sync"), syncFD(dirFD))
 }
 
 // ParseJournalSnapshot decodes and validates a persisted versioned journal payload.

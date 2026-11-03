@@ -2,106 +2,90 @@ package layeredfs
 
 import (
 	"context"
-	"os"
+	"errors"
 	"sync"
 )
 
-// RegisterLowerProvider registers a custom or virtual LowerProvider for a RootID.
-func (c *Core) RegisterLowerProvider(rootID string, provider LowerProvider) error {
-	if err := c.barrier.enterMutation(); err != nil {
-		return err
-	}
-	defer c.barrier.leaveMutation()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state.released {
-		return ErrViewReleased
-	}
-	if _, ok := c.roots.byID[rootID]; !ok {
-		return ErrInvalidRoot
-	}
-	c.roots.providers[rootID] = provider
-	return nil
-}
-
-// ViewID returns the unique view identifier.
-func (c *Core) ViewID() string {
-	return c.cfg.ViewID
-}
-
-// Stats returns a snapshot of the deterministic operation and byte counters.
-func (c *Core) Stats() Stats {
-	c.mu.RLock()
-	logical := countLogicalChangesLocked(c)
-	c.mu.RUnlock()
-	return Stats{
-		LowerDirReads:     c.counters.lowerDirReads.Load(),
-		LowerLookups:      c.counters.lowerLookups.Load(),
-		PhysicalCopyUps:   c.counters.physicalCopyUps.Load(),
-		LogicalChanges:    int64(logical),
-		CapturedBaseBytes: c.counters.capturedBaseBytes.Load(),
-		JournalEntries:    c.counters.journalEntries.Load(),
-	}
-}
-
-// ResetStepStats clears per-scenario lower read/lookup counters while preserving view state.
-func (c *Core) ResetStepStats() {
-	c.counters.lowerDirReads.Store(0)
-	c.counters.lowerLookups.Store(0)
-}
-
 // ReleaseView closes admission to new operations, waits for all in-flight mutations, reads,
 // and flushes to drain and settle their accounting, flushes and closes open handles and
-// directory descriptors, and preserves settled recovery state.
+// directory descriptors, persists the recovery journal snapshot, and releases view resources.
+// If any durability or snapshot step fails, ReleaseView preserves settled recovery state and
+// returns the error so the caller can retry or inspect recovery state.
 func (c *Core) ReleaseView() error {
-	alreadyReleased, waitOnly := c.barrier.beginRelease()
+	alreadyReleased, joinedAttempt, att := c.barrier.beginRelease()
 	if alreadyReleased {
 		return nil
 	}
-	if waitOnly {
-		c.barrier.waitReleaseDone()
-		return nil
+	if joinedAttempt {
+		return waitReleaseAttempt(c, att)
 	}
 
 	c.mu.Lock()
 	c.state.seq.closing = true
 	c.mu.Unlock()
 
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
+		c.cfg.FaultHooks.ReleaseWaitHook("draining")
+	}
 	c.barrier.waitDrain()
 
+	var releaseErr error
+
 	c.mu.Lock()
-	handles := make([]*openHandle, 0, len(c.state.handles))
-	for id, h := range c.state.handles {
-		h.closed = true
-		handles = append(handles, h)
-		delete(c.state.handles, id)
+	type handleEntry struct {
+		id HandleID
+		h  *openHandle
 	}
-	c.state.dirCookies = make(map[uint64]dirCookieState)
-	hasRecoveryState := len(c.state.journal) > 0 || len(c.state.pathIndex) > 0 || len(c.state.deletedPaths) > 0
+	entries := make([]handleEntry, 0, len(c.state.handles))
+	for id, h := range c.state.handles {
+		entries = append(entries, handleEntry{id: id, h: h})
+	}
+	hasRecoveryState := len(c.state.journal) > 0 || len(c.state.pathIndex) > 0 || len(c.state.deletedPaths) > 0 || len(c.state.basesByPath) > 0
 	c.mu.Unlock()
 
-	for _, h := range handles {
-		if h.file != nil {
-			_ = syncFD(int(h.file.Fd()))
+	for _, e := range entries {
+		var sErr error
+		if e.h.file != nil {
+			sErr = errors.Join(runJournalSyncHook(c, "handle_sync"), syncFD(int(e.h.file.Fd())))
 		}
-		_ = releaseHandleRef(c, h)
-	}
-	for _, df := range []*os.File{c.backing.workDirFile, c.backing.baseDirFile, c.backing.journalDirFile} {
-		if df != nil {
-			_ = syncFD(int(df.Fd()))
+		if sErr != nil {
+			releaseErr = errors.Join(releaseErr, sErr)
+			continue
 		}
+		c.mu.Lock()
+		e.h.closed = true
+		delete(c.state.handles, e.id)
+		c.mu.Unlock()
+		releaseErr = errors.Join(releaseErr, releaseHandleRef(c, e.h))
 	}
+
+	if c.backing.workDirFile != nil {
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "work_dir_sync"), syncFD(int(c.backing.workDirFile.Fd())))
+	}
+	if c.backing.baseDirFile != nil {
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "base_dir_sync"), syncFD(int(c.backing.baseDirFile.Fd())))
+	}
+
 	if hasRecoveryState {
-		_, _ = snapshotJournal(c)
+		_, snapErr := snapshotJournal(c)
+		releaseErr = errors.Join(releaseErr, snapErr)
+	} else if c.backing.journalDirFile != nil {
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "journal_dir_sync"), syncFD(int(c.backing.journalDirFile.Fd())))
+	}
+
+	if releaseErr != nil {
+		c.barrier.endReleaseAttempt(att, releaseErr)
+		return releaseErr
 	}
 
 	c.mu.Lock()
+	c.state.dirCookies = make(map[uint64]dirCookieState)
 	c.state.released = true
 	c.mu.Unlock()
 
 	c.roots.close()
 	c.backing.close()
-	c.barrier.finishRelease()
+	c.barrier.endReleaseAttempt(att, nil)
 	return nil
 }
 
@@ -111,6 +95,11 @@ type BarrierToken struct {
 	Seq    uint64
 }
 
+type releaseAttempt struct {
+	done chan struct{}
+	err  error
+}
+
 type barrierCoordinator struct {
 	viewID      string
 	mu          sync.Mutex
@@ -118,6 +107,7 @@ type barrierCoordinator struct {
 	active      bool
 	closing     bool
 	released    bool
+	curAttempt  *releaseAttempt
 	inFlight    int64
 	opsInFlight int64
 	seq         uint64
@@ -172,18 +162,20 @@ func (b *barrierCoordinator) leaveOp() {
 	b.mu.Unlock()
 }
 
-func (b *barrierCoordinator) beginRelease() (bool, bool) {
+func (b *barrierCoordinator) beginRelease() (bool, bool, *releaseAttempt) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.released {
-		return true, false
+		return true, false, nil
 	}
-	if b.closing {
-		return false, true
+	if b.curAttempt != nil {
+		return false, true, b.curAttempt
 	}
+	att := &releaseAttempt{done: make(chan struct{})}
 	b.closing = true
+	b.curAttempt = att
 	b.cond.Broadcast()
-	return false, false
+	return false, false, att
 }
 
 func (b *barrierCoordinator) waitDrain() {
@@ -194,19 +186,27 @@ func (b *barrierCoordinator) waitDrain() {
 	b.mu.Unlock()
 }
 
-func (b *barrierCoordinator) finishRelease() {
+func (b *barrierCoordinator) endReleaseAttempt(att *releaseAttempt, err error) {
 	b.mu.Lock()
-	b.released = true
+	att.err = err
+	close(att.done)
+	b.curAttempt = nil
+	if err == nil {
+		b.released = true
+	}
 	b.cond.Broadcast()
 	b.mu.Unlock()
 }
 
-func (b *barrierCoordinator) waitReleaseDone() {
-	b.mu.Lock()
-	for !b.released {
-		b.cond.Wait()
+func waitReleaseAttempt(c *Core, att *releaseAttempt) error {
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
+		c.cfg.FaultHooks.ReleaseWaitHook("joined")
 	}
-	b.mu.Unlock()
+	<-att.done
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
+		c.cfg.FaultHooks.ReleaseWaitHook("done")
+	}
+	return att.err
 }
 
 // BeginCheckpointBarrier blocks new mutation admission, waits for active mutations to drain,
@@ -295,22 +295,22 @@ func flushBackingState(c *Core) error {
 	journalFile := c.backing.journalDirFile
 	c.mu.Unlock()
 
-	var firstErr error
+	var flushErr error
 	for _, h := range held {
-		if err := syncFD(int(h.file.Fd())); err != nil && firstErr == nil {
-			firstErr = err
-		}
-		_ = releaseHandleRef(c, h)
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "handle_sync"), syncFD(int(h.file.Fd())))
+		flushErr = errors.Join(flushErr, releaseHandleRef(c, h))
 	}
-	if firstErr != nil {
-		return firstErr
+	if flushErr != nil {
+		return flushErr
 	}
-	for _, df := range []*os.File{workFile, baseFile, journalFile} {
-		if df != nil {
-			if err := syncFD(int(df.Fd())); err != nil {
-				return err
-			}
-		}
+	if workFile != nil {
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "work_dir_sync"), syncFD(int(workFile.Fd())))
 	}
-	return nil
+	if baseFile != nil {
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "base_dir_sync"), syncFD(int(baseFile.Fd())))
+	}
+	if journalFile != nil {
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "journal_dir_sync"), syncFD(int(journalFile.Fd())))
+	}
+	return flushErr
 }

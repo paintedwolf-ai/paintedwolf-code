@@ -161,3 +161,132 @@ func sortedNames[V any](m map[string]V) []string {
 	sort.Strings(names)
 	return names
 }
+
+// RegisterLowerProvider registers a custom or virtual LowerProvider for a RootID.
+func (c *Core) RegisterLowerProvider(rootID string, provider LowerProvider) error {
+	if err := c.barrier.enterMutation(); err != nil {
+		return err
+	}
+	defer c.barrier.leaveMutation()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state.released {
+		return ErrViewReleased
+	}
+	if _, ok := c.roots.byID[rootID]; !ok {
+		return ErrInvalidRoot
+	}
+	c.roots.providers[rootID] = provider
+	return nil
+}
+
+// ViewID returns the unique view identifier.
+func (c *Core) ViewID() string {
+	return c.cfg.ViewID
+}
+
+// Stats returns a snapshot of the deterministic operation and byte counters.
+func (c *Core) Stats() Stats {
+	c.mu.RLock()
+	logical := countLogicalChangesLocked(c)
+	c.mu.RUnlock()
+	return Stats{
+		LowerDirReads:     c.counters.lowerDirReads.Load(),
+		LowerLookups:      c.counters.lowerLookups.Load(),
+		PhysicalCopyUps:   c.counters.physicalCopyUps.Load(),
+		LogicalChanges:    int64(logical),
+		CapturedBaseBytes: c.counters.capturedBaseBytes.Load(),
+		JournalEntries:    c.counters.journalEntries.Load(),
+	}
+}
+
+// ResetStepStats clears per-scenario lower read/lookup counters while preserving view state.
+func (c *Core) ResetStepStats() {
+	c.counters.lowerDirReads.Store(0)
+	c.counters.lowerLookups.Store(0)
+}
+
+func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *privateNode {
+	if nid, ok := c.state.pathIndex[qpath]; ok {
+		if n := c.state.nodesByID[nid]; n != nil && !n.flags.unlinked {
+			return n
+		}
+	}
+	nid, gen := c.state.allocNodeID()
+	node := &privateNode{
+		id:     nid,
+		gen:    gen,
+		kind:   EntryDirectory,
+		mode:   attr.Mode,
+		atime:  attr.ATime,
+		mtime:  attr.ModTime,
+		ctime:  attr.CTime,
+		xattrs: cloneXattrs(attr.Xattrs),
+		paths:  map[QualifiedPath]struct{}{qpath: {}},
+	}
+	c.state.nodesByID[nid] = node
+	c.state.pathIndex[qpath] = nid
+	return node
+}
+
+func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*privateNode, error) {
+	res, err := lookupExactComponent(c, qpath)
+	if err != nil {
+		return nil, err
+	}
+	base, err := ensureBaseCaptured(c, qpath)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state.released {
+		return nil, ErrViewReleased
+	}
+	if c.state.nsGen != expectedGen {
+		return nil, errNamespaceRetry
+	}
+	if nid, ok := c.state.pathIndex[qpath]; ok {
+		if n := c.state.nodesByID[nid]; n != nil && !n.flags.unlinked {
+			return n, nil
+		}
+	}
+	switch res.attr.Kind {
+	case EntryRegular:
+		return ensureWritableNodeLocked(c, qpath, base, OpenWriteOnly, res.attr.Mode, expectedGen)
+	case EntryDirectory:
+		return ensurePrivateDirNodeLocked(c, qpath, res.attr), nil
+	case EntrySymlink:
+		nid, gen := c.state.allocNodeID()
+		originCopy := qpath
+		node := &privateNode{
+			id:     nid,
+			gen:    gen,
+			kind:   EntrySymlink,
+			mode:   res.attr.Mode,
+			size:   int64(len(res.attr.LinkTarget)),
+			atime:  res.attr.ATime,
+			mtime:  res.attr.ModTime,
+			ctime:  res.attr.CTime,
+			xattrs: cloneXattrs(res.attr.Xattrs),
+			paths:  map[QualifiedPath]struct{}{qpath: {}},
+			flags: nodeFlags{
+				physicalCopyUp: true,
+				linkTarget:     res.attr.LinkTarget,
+			},
+			initial: nodeInitialState{
+				mode:       res.attr.Mode,
+				mtime:      res.attr.ModTime,
+				xattrs:     cloneXattrs(res.attr.Xattrs),
+				originPath: &originCopy,
+			},
+		}
+		c.state.nodesByID[nid] = node
+		c.state.pathIndex[qpath] = nid
+		c.counters.physicalCopyUps.Add(1)
+		return node, nil
+	default:
+		return nil, fmt.Errorf("unsupported entry kind %s", res.attr.Kind)
+	}
+}
+

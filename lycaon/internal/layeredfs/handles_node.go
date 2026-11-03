@@ -9,7 +9,10 @@ import (
 	"time"
 )
 
-func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, flags OpenFlags, createMode os.FileMode) (*privateNode, error) {
+func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, flags OpenFlags, createMode os.FileMode, expectedGen uint64) (*privateNode, error) {
+	if c.state.nsGen != expectedGen {
+		return nil, errNamespaceRetry
+	}
 	if existingID, ok := c.state.pathIndex[qpath]; ok {
 		if existing := c.state.nodesByID[existingID]; existing != nil && !existing.flags.unlinked {
 			return existing, nil
@@ -27,6 +30,10 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		if c.state.released {
 			_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
 			return nil, ErrViewReleased
+		}
+		if c.state.nsGen != expectedGen {
+			_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
+			return nil, errNamespaceRetry
 		}
 		if existingID, ok := c.state.pathIndex[qpath]; ok {
 			if existing := c.state.nodesByID[existingID]; existing != nil && !existing.flags.unlinked {
@@ -69,6 +76,9 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 
 	if flags&OpenCreate == 0 {
 		return nil, os.ErrNotExist
+	}
+	if !isParentDirValidLocked(c, qpath) {
+		return nil, errNamespaceRetry
 	}
 
 	workName, workPath := c.state.allocStorageFile(c.backing.workDir, "work")
@@ -122,6 +132,10 @@ func joinRel(parentRel, name string) string {
 // WriteViaNodeHandle supports protocol-level writes (like NFSv3 WRITE on an owner-created 0444 file)
 // identified by (NodeID, Generation) without requiring a stateful open handle.
 func (c *Core) WriteViaNodeHandle(nodeID NodeID, gen Generation, data []byte, offset int64) (int, EntryAttr, error) {
+	return writeViaNodeHandle(c, nodeID, gen, data, offset)
+}
+
+func writeViaNodeHandle(c *Core, nodeID NodeID, gen Generation, data []byte, offset int64) (int, EntryAttr, error) {
 	if err := c.barrier.enterMutation(); err != nil {
 		return 0, EntryAttr{}, err
 	}
@@ -196,6 +210,10 @@ func (c *Core) WriteViaNodeHandle(nodeID NodeID, gen Generation, data []byte, of
 
 // SyncViaNodeHandle flushes dirty data for a private node identified by (NodeID, Generation) to stable storage.
 func (c *Core) SyncViaNodeHandle(nodeID NodeID, gen Generation) error {
+	return syncViaNodeHandle(c, nodeID, gen)
+}
+
+func syncViaNodeHandle(c *Core, nodeID NodeID, gen Generation) error {
 	if err := c.barrier.enterOp(); err != nil {
 		return err
 	}
