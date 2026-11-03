@@ -4,11 +4,11 @@
   "kind": "runtime_service",
   "workstream": "shared-verification-runtime",
   "disposition": "retain",
-  "reason": "Job registration, handle resolution, waiting and signals share the process registry and supervisor lifetime. Per-program provenance is bound at admission while session job state remains under one owner. Retained-origin and disposal contracts constrain that boundary; the callable polling canary checks published origin and capture scope. Retain the measured 445 ceiling; growth requires renewed review.",
-  "reviewed_commit": "303bd754eab8175f819ec3ecbf882f0612847259",
-  "ceiling": 445,
+  "reason": "Retain one session owner for handles, process identity, waits and disposal. Each program carries an immutable origin and a context-scoped bare-wait set; concurrent admissions cannot reset a sibling program. The global program-order field is removed. Concurrent wait isolation, retained-origin and disposal contracts support this boundary. Retain the measured ceiling; growth requires renewed review.",
+  "reviewed_commit": "4738f54a38b1fc727d9c144fdccb77e043e0d002",
+  "ceiling": 451,
   "boundaries": {
-    "lycaon/internal/tools/native/command/program_retention_test.go": "821759e8697b9626ac8b36a396ecae3ca2c28e61a7580c97db277076ac938c7c",
-    "lycaon/internal/httpaction/secret_canary_reference_tools_test.go": "97a44337e0598ac9b0ed6614a33f85293039678c78a0a7f76c3444dd8c4b535b"
+    "lycaon/internal/tools/native/command/program_concurrent_jobs_test.go": "f4bfe01e0197cd01da3770495b891f9c723868d2b54666fcf84ce426b9a2ab98",
+    "lycaon/internal/tools/native/command/program_retention_test.go": "821759e8697b9626ac8b36a396ecae3ca2c28e61a7580c97db277076ac938c7c"
   }
 }
