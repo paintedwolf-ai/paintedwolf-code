@@ -49,7 +49,7 @@ func captureLLMComplete(providerID string, profile providerprofile.Profile, req 
 		TTFTMs:     elapsed,
 	}, usage, observability.LLMRequestDebug{
 		CallID:            req.Debug.CallID,
-		ReasoningRecovery: req.StrictBudget,
+		ReasoningRecovery: req.ReasoningRecovery,
 		RequestControls:   req.ControlCapture.Snapshot(),
 		EmptyCompletion:   captureEmptyCompletion(err),
 		SessionID:         req.Debug.SessionID,
@@ -150,7 +150,7 @@ func logStreamCapture(providerID string, req modelcall.CompletionRequest, start 
 		TTFTMs:     ttftMs,
 	}, usage, observability.LLMRequestDebug{
 		CallID:            req.Debug.CallID,
-		ReasoningRecovery: req.StrictBudget,
+		ReasoningRecovery: req.ReasoningRecovery,
 		RequestControls:   req.ControlCapture.Snapshot(),
 		EmptyCompletion:   captureEmptyCompletion(responseErr),
 		SessionID:         req.Debug.SessionID,
