@@ -15,6 +15,14 @@ dependencies or this directory change on main, and refreshes upstream versions w
 `./task check` runs `codegen:dependency-inventory:check`, which fails only when this policy
 no longer matches the manifests or `.github/dependabot.yml` is stale. Run
 `./task codegen:dependency-inventory` after editing the policy so `dependabot.yml` follows.
+The Nix frontend also pins the generated Bun expression. After a Bun lockfile or
+`bun2nix` revision change, run `./task codegen:dependency-inventory -- --nix-bun`.
+This mode requires Nix and builds the converter at the revision in `flake.lock`;
+it does not require a working application closure or development shell. Commit
+`packaging/nix/bun.nix` and `packaging/nix/bun-lock.json` with the lockfile change.
+Hosted planning checks their source, expression and converter identities before
+starting verification lanes. Normal inventory generation remains offline.
+
 Manifest sections sharing a `kind` and `dependabot_group` coalesce into one ecosystem block.
 The default group includes minor and patch version updates (`extra` entries may override
 `update_types`). Majors and security updates remain separate PRs; existing package holds still
