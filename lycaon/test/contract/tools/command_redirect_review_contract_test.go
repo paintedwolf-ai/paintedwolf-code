@@ -16,11 +16,11 @@ import (
 // Native verification redirects receive the same prepared-change review as writes.
 func TestVerificationRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 	f, recorder := verificationProgramFixture(t)
-	_, err := f.Invoke(t, t.Context(), "verify", map[string]any{"command": "printf checked > result.txt"}, (&native.VerifyTool{Programs: f.Runtime}).Run)
+	raw, err := f.Invoke(t, t.Context(), "verify", map[string]any{"command": "printf checked > result.txt"}, (&native.VerifyTool{Programs: f.Runtime}).Run)
 	contractcheck.FailErr(t, "verification redirect", err)
 	action, ok := changeReviewFor(recorder, "write", filepath.Join(f.Dir, "result.txt"))
 	if !ok {
-		t.Fatal("redirect omitted its prepared-change review")
+		t.Fatalf("redirect omitted its prepared-change review: result=%s actions=%+v", raw, recorder.actions)
 	}
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	contractcheck.FailErr(t, "approval store", err)

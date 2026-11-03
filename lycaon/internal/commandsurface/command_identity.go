@@ -56,6 +56,7 @@ func CommandIdentity(line string) string {
 					err = literalErr
 					return false
 				}
+				// JSON encodes literal values for identity, never execution.
 				encoded, _ := json.Marshal(literal)
 				word.Parts = []syntax.WordPart{&syntax.Lit{Value: string(encoded)}}
 			}
