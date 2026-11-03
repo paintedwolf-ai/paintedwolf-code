@@ -2,13 +2,9 @@ package checkpoint
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -42,16 +38,16 @@ const (
 
 // PlannedChange describes one validated mutation in a PromotionPreview.
 type PlannedChange struct {
-	Path              layeredfs.QualifiedPath   `json:"path"`
-	Action            PlannedActionKind         `json:"action"`
-	Mode              fs.FileMode               `json:"mode,omitempty"`
-	MergedBytes       []byte                    `json:"merged_bytes,omitempty"`
-	MergedSHA256      string                    `json:"merged_sha256,omitempty"`
-	LinkTarget        string                    `json:"link_target,omitempty"`
-	HardLinkGroup     string                    `json:"hard_link_group,omitempty"`
-	HardLinkSource    *layeredfs.QualifiedPath  `json:"hard_link_source,omitempty"`
-	Xattrs            map[string][]byte         `json:"xattrs,omitempty"`
-	DirectoryReplaced bool                      `json:"directory_replaced,omitempty"`
+	Path              layeredfs.QualifiedPath  `json:"path"`
+	Action            PlannedActionKind        `json:"action"`
+	Mode              fs.FileMode              `json:"mode,omitempty"`
+	MergedBytes       []byte                   `json:"merged_bytes,omitempty"`
+	MergedSHA256      string                   `json:"merged_sha256,omitempty"`
+	LinkTarget        string                   `json:"link_target,omitempty"`
+	HardLinkGroup     string                   `json:"hard_link_group,omitempty"`
+	HardLinkSource    *layeredfs.QualifiedPath `json:"hard_link_source,omitempty"`
+	Xattrs            map[string][]byte        `json:"xattrs,omitempty"`
+	DirectoryReplaced bool                     `json:"directory_replaced,omitempty"`
 }
 
 // PromotionPreview binds planned changes, conflicts, and verification obligations
@@ -195,53 +191,6 @@ func validatePreviewOwnership(m Manifest, req PreviewRequest) error {
 	return nil
 }
 
-func (pr *Promoter) observeTarget(qpath layeredfs.QualifiedPath) (TargetObservation, error) {
-	rootDir, ok := pr.cfg.TargetRoots[qpath.RootID]
-	if !ok {
-		return TargetObservation{}, layeredfs.ErrInvalidRoot
-	}
-	abs := filepath.Join(rootDir, filepath.FromSlash(qpath.Rel))
-	info, err := os.Lstat(abs)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
-			return TargetObservation{Path: qpath, Kind: layeredfs.EntryAbsent}, nil
-		}
-		return TargetObservation{}, err
-	}
-	obs := TargetObservation{
-		Path:    qpath,
-		Mode:    info.Mode(),
-		Size:    info.Size(),
-		ModTime: info.ModTime(),
-	}
-	switch {
-	case info.Mode().IsRegular():
-		obs.Kind = layeredfs.EntryRegular
-		raw, err := os.ReadFile(abs)
-		if err != nil {
-			return TargetObservation{}, err
-		}
-		obs.SHA256 = sha256Hex(raw)
-	case info.IsDir():
-		obs.Kind = layeredfs.EntryDirectory
-		entries, err := os.ReadDir(abs)
-		if err != nil {
-			return TargetObservation{}, err
-		}
-		obs.DirEmpty = len(entries) == 0
-	case info.Mode()&fs.ModeSymlink != 0:
-		obs.Kind = layeredfs.EntrySymlink
-		target, err := os.Readlink(abs)
-		if err != nil {
-			return TargetObservation{}, err
-		}
-		obs.LinkTarget = target
-	default:
-		obs.Kind = layeredfs.EntryAbsent
-	}
-	return obs, nil
-}
-
 func applyConflictResolution(entry ManifestEntry, cur TargetObservation, res ConflictResolution) (PlannedChange, error) {
 	switch res.Choice {
 	case ResolutionKeepTarget:
@@ -261,7 +210,7 @@ func applyConflictResolution(entry ManifestEntry, cur TargetObservation, res Con
 		return PlannedChange{
 			Path:         entry.Path,
 			Action:       ActionWriteRegular,
-			Mode:          pickMode(entry.Final.Mode, cur.Mode),
+			Mode:         pickMode(entry.Final.Mode, cur.Mode),
 			MergedBytes:  append([]byte(nil), res.ManualBytes...),
 			MergedSHA256: sha256Hex(res.ManualBytes),
 			Xattrs:       cloneXattrs(entry.Final.Xattrs),

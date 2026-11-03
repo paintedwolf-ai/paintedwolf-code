@@ -3,8 +3,6 @@ package checkpoint
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -202,92 +200,6 @@ func sameTargetObservation(a, b TargetObservation) bool {
 		return a.DirEmpty == b.DirEmpty
 	}
 	return false
-}
-
-func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
-	rootDir, ok := pr.cfg.TargetRoots[ch.Path.RootID]
-	if !ok {
-		return layeredfs.ErrInvalidRoot
-	}
-	targetAbs := filepath.Join(rootDir, filepath.FromSlash(ch.Path.Rel))
-
-	switch ch.Action {
-	case ActionNoop:
-		return nil
-	case ActionDelete:
-		return os.RemoveAll(targetAbs)
-	case ActionMkdir:
-		return applyTargetDir(targetAbs, ch.Mode, ch.Xattrs, false)
-	case ActionReplaceWithDirectory:
-		return applyTargetDir(targetAbs, ch.Mode, ch.Xattrs, true)
-	case ActionReplaceDirWithRegular:
-		if err := os.RemoveAll(targetAbs); err != nil {
-			return err
-		}
-		return pr.writeTargetRegular(targetAbs, ch)
-	case ActionWriteRegular:
-		return pr.writeTargetRegular(targetAbs, ch)
-	case ActionSymlink:
-		if err := os.MkdirAll(filepath.Dir(targetAbs), 0o755); err != nil {
-			return err
-		}
-		if err := os.RemoveAll(targetAbs); err != nil {
-			return err
-		}
-		return os.Symlink(ch.LinkTarget, targetAbs)
-	case ActionHardLink:
-		if ch.HardLinkSource == nil {
-			return fmt.Errorf("checkpoint: missing hard-link source for %v", ch.Path)
-		}
-		srcAbs := filepath.Join(pr.cfg.TargetRoots[ch.HardLinkSource.RootID], filepath.FromSlash(ch.HardLinkSource.Rel))
-		if err := os.MkdirAll(filepath.Dir(targetAbs), 0o755); err != nil {
-			return err
-		}
-		if err := os.RemoveAll(targetAbs); err != nil {
-			return err
-		}
-		return os.Link(srcAbs, targetAbs)
-	default:
-		return fmt.Errorf("checkpoint: unsupported action %q", ch.Action)
-	}
-}
-
-func applyTargetDir(targetAbs string, rawMode os.FileMode, xattrs map[string][]byte, replace bool) error {
-	if replace {
-		if err := os.RemoveAll(targetAbs); err != nil {
-			return err
-		}
-	}
-	mode := pickMode(rawMode, 0o755).Perm()
-	if err := os.MkdirAll(targetAbs, mode); err != nil {
-		return err
-	}
-	if err := os.Chmod(targetAbs, mode); err != nil {
-		return err
-	}
-	return ApplyPathXattrs(targetAbs, xattrs)
-}
-
-func (pr *Promoter) writeTargetRegular(targetAbs string, ch PlannedChange) error {
-	data := ch.MergedBytes
-	if data == nil && ch.MergedSHA256 != "" {
-		b, err := pr.cfg.Store.ReadBlob(ch.MergedSHA256)
-		if err != nil {
-			return err
-		}
-		data = b
-	}
-	parentDir, mode := filepath.Dir(targetAbs), pickMode(ch.Mode, 0o644).Perm()
-	if err := os.MkdirAll(parentDir, 0o755); err != nil {
-		return err
-	}
-	if err := writeAtomicJSONOrText(parentDir, filepath.Base(targetAbs), data, mode); err != nil {
-		return err
-	}
-	if err := os.Chmod(targetAbs, mode); err != nil {
-		return err
-	}
-	return ApplyPathXattrs(targetAbs, ch.Xattrs)
 }
 
 func hasPath(list []layeredfs.QualifiedPath, target layeredfs.QualifiedPath) bool {

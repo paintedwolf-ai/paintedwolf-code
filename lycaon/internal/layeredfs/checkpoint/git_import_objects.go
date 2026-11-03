@@ -16,22 +16,11 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gitexec"
-	"golang.org/x/sys/unix"
 )
 
 const (
 	maxVisitedGitObjects, maxMetadataObjectBytes, maxLooseBlobBytes = 65536, 16 << 20, 512 << 20
 )
-
-// ApplyPathXattrs applies extended attributes to abs, ignoring ENOTSUP/EOPNOTSUPP.
-func ApplyPathXattrs(abs string, xattrs map[string][]byte) error {
-	for k, v := range xattrs {
-		if err := unix.Setxattr(abs, k, v, 0); err != nil && !errors.Is(err, unix.ENOTSUP) && !errors.Is(err, unix.EOPNOTSUPP) {
-			return err
-		}
-	}
-	return nil
-}
 
 // WriteLooseGitObject writes a standard zlib-compressed loose Git object into objectsDir and returns its SHA-1 hex OID.
 func WriteLooseGitObject(objectsDir, objType string, payload []byte) (string, error) {
@@ -281,7 +270,10 @@ func verifyTreeBody(ctx context.Context, repoRoot, commonGitDir, objectsDir stri
 }
 
 func hexObjSHA1(b []byte) string { s := sha1.Sum(b); return hex.EncodeToString(s[:]) }
-func isHexOID(s string) bool     { _, err := hex.DecodeString(s); return err == nil && (len(s) == 40 || len(s) == 64) }
+func isHexOID(s string) bool {
+	_, err := hex.DecodeString(s)
+	return err == nil && (len(s) == 40 || len(s) == 64)
+}
 func isAllZeroOID(s string) bool { return strings.Trim(s, "0") == "" }
 
 func selectPrimaryRootDir(targetRoots map[string]string) string {

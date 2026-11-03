@@ -1,9 +1,6 @@
 package checkpoint
 
 import (
-	"os"
-	"path/filepath"
-
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
@@ -50,8 +47,7 @@ func (pr *Promoter) evaluateAmbiguousCandidates(
 		workerBytes = b
 	}
 	if cur.Kind == layeredfs.EntryRegular {
-		rootDir := pr.cfg.TargetRoots[entry.Path.RootID]
-		b, err := os.ReadFile(filepath.Join(rootDir, filepath.FromSlash(entry.Path.Rel)))
+		b, err := pr.readObservedTarget(cur)
 		if err != nil {
 			return nil, err
 		}
@@ -260,8 +256,7 @@ func (pr *Promoter) evaluateRegular(
 		}, nil, false, nil
 	}
 
-	rootDir := pr.cfg.TargetRoots[entry.Path.RootID]
-	targetBytes, err := os.ReadFile(filepath.Join(rootDir, filepath.FromSlash(entry.Path.Rel)))
+	targetBytes, err := pr.readObservedTarget(cur)
 	if err != nil {
 		return PlannedChange{}, nil, false, err
 	}
