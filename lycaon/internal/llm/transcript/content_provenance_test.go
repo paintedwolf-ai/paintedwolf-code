@@ -147,7 +147,7 @@ func TestProjectModelMessagesMarksNonModelDataMixedIntoAssistantTurn(t *testing.
 	}
 }
 
-func TestProjectModelMessagesDataMarksInternalStepNoteModelText(t *testing.T) {
+func TestProjectModelMessagesPreservesNativeToolStepText(t *testing.T) {
 	out := Project([]api.Message{{
 		Role:      api.MessageRoleAssistant,
 		Content:   "Inspecting the parser.\nChecking edge cases.",
@@ -157,7 +157,7 @@ func TestProjectModelMessagesDataMarksInternalStepNoteModelText(t *testing.T) {
 		t.Fatalf("projected messages = %+v", out)
 	}
 	got := out[1].Content
-	want := internalStepNoteNotice + "\n\n⟦D:model:internal_step_note⟧\n⟦D⟧Inspecting the parser.\n⟦D⟧Checking edge cases."
+	want := "Inspecting the parser.\nChecking edge cases."
 	if got != want {
 		t.Fatalf("internal step note projection = %q, want %q", got, want)
 	}

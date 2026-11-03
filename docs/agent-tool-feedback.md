@@ -61,16 +61,17 @@ with current capability and recovery admission.
 
 ## Internal tool-step notes
 
-Assistant text accompanying native tool calls is an internal working note, hidden
-from the user. Model-facing transcript projection labels that visibility while
-preserving the note, tool calls, arguments, results, and model reasoning. The
-frame is catalog-authored and carries no instruction authority. It appears only
-on nonempty tool-step text; public agent notes and final no-tool replies retain
-their presentation.
+Assistant text accompanying native tool calls is private working context. The
+host hides that prose in the user transcript and replays it in the native
+assistant role alongside its structured tool calls. Tool results follow their
+calls; provider reasoning retains its separate representation. Public agent
+notes and final no-tool replies keep their user-facing presentation.
 
-Framing happens after canonical history and reasoning rehydration. Repeated
-projection is idempotent. Stored messages and the user-facing transcript remain
-unchanged; execution and completion still come from tool results.
+The catalog-authored host instruction explains these channels once per model
+request. Transcript projection does not insert instructions into assistant
+speech or classify text by its wording. It preserves the working note, tool
+calls, arguments, results, and reasoning through context fitting and replay.
+Stored history is unchanged; execution and completion come from tool results.
 
 ## Source text in model requests
 

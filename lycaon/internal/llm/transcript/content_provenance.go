@@ -44,7 +44,6 @@ func loadContentAuthority() {
 		}
 		var doc struct {
 			Notice              string `yaml:"notice"`
-			InternalStepNote    string `yaml:"internal_step_note"`
 			CheckpointGuidance  string `yaml:"checkpoint_guidance"`
 			CheckpointApproval  string `yaml:"checkpoint_approval"`
 			CheckpointRejection string `yaml:"checkpoint_rejection"`
@@ -55,10 +54,6 @@ func loadContentAuthority() {
 		}
 		if contentAuthorityNotice = strings.TrimSpace(doc.Notice); contentAuthorityNotice == "" {
 			contentAuthorityErr = fmt.Errorf("content-authority.yaml declares no notice")
-			return
-		}
-		if internalStepNoteNotice = strings.TrimSpace(doc.InternalStepNote); internalStepNoteNotice == "" {
-			contentAuthorityErr = fmt.Errorf("content-authority.yaml declares no internal_step_note")
 			return
 		}
 		if checkpointRejectionNotice = strings.TrimSpace(doc.CheckpointRejection); checkpointRejectionNotice == "" {
@@ -81,7 +76,6 @@ func loadContentAuthority() {
 var (
 	contentAuthorityOnce      sync.Once
 	contentAuthorityNotice    string
-	internalStepNoteNotice    string
 	checkpointGuidanceNotice  string
 	checkpointApprovalNotice  string
 	checkpointRejectionNotice string
@@ -90,7 +84,6 @@ var (
 
 const (
 	contentAuthorityNoticeSource = "content_authority_notice"
-	internalStepNoteSource       = "internal_step_note"
 	checkpointDenialSource       = "checkpoint_denial"
 	checkpointGuidanceSource     = "checkpoint_guidance"
 	checkpointDecisionSource     = "checkpoint_decision"
@@ -129,7 +122,6 @@ func Project(messages []api.Message) []api.Message {
 		if len(parts) > 0 {
 			msg.Content = ProjectContentParts(msg.Role, parts)
 		}
-		msg = frameInternalStepNote(msg)
 		msg.ModelProjected = true
 		out = append(out, msg)
 	}
@@ -266,8 +258,7 @@ func ProjectContentParts(role api.MessageRole, parts []api.MessageContentPart) s
 // Assistant roles structurally identify model output without a transport label.
 func contentPartUsesNativeRole(role api.MessageRole, part api.MessageContentPart) bool {
 	return role == api.MessageRoleAssistant &&
-		part.Origin == api.MessageOriginModel && part.Authority == api.ContentAuthorityNone &&
-		strings.TrimSpace(part.Source) != internalStepNoteSource
+		part.Origin == api.MessageOriginModel && part.Authority == api.ContentAuthorityNone
 }
 
 func contentPartIsInstruction(authority api.ContentAuthority) bool {
