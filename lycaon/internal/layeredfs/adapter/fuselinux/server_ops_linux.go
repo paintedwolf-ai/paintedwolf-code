@@ -93,13 +93,13 @@ func (s *Server) handleRequest(req []byte) {
 	case fuseOpStatfs:
 		payload, errno = s.opStatfs()
 	case fuseOpRelease:
-		payload, errno = s.opRelease(body)
+		payload, errno = s.opRelease(nodeID, body)
 	case fuseOpFsync:
 		payload, errno = s.opFsync(body)
 	case fuseOpFsyncdir:
 		payload, errno = nil, 0
 	case fuseOpFlush:
-		payload, errno = s.opFlush(body)
+		payload, errno = s.opFlush(nodeID, body)
 	case fuseOpOpendir:
 		payload, errno = s.opOpendir(nodeID)
 	case fuseOpReaddir:

@@ -196,23 +196,41 @@ func (s *Server) opWrite(nodeID uint64, body []byte) ([]byte, int32) {
 	return out, 0
 }
 
-func (s *Server) opFlush(body []byte) ([]byte, int32) {
-	if len(body) < 8 {
-		return nil, -int32(syscall.EINVAL)
-	}
-	return nil, 0
-}
-
-func (s *Server) opRelease(body []byte) ([]byte, int32) {
+func (s *Server) opFlush(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
 	fh := binary.LittleEndian.Uint64(body[0:8])
+	if len(body) >= 24 {
+		lockOwner := binary.LittleEndian.Uint64(body[16:24])
+		h, _ := s.lookupHandle(fh)
+		s.releasePOSIXLocksForOwner(nodeID, h.fuseID, lockOwner)
+	}
+	return nil, 0
+}
+
+func (s *Server) opRelease(nodeID uint64, body []byte) ([]byte, int32) {
+	if len(body) < 8 {
+		return nil, -int32(syscall.EINVAL)
+	}
+	fh := binary.LittleEndian.Uint64(body[0:8])
+	var releaseFlags uint32
+	var lockOwner uint64
+	if len(body) >= 16 {
+		releaseFlags = binary.LittleEndian.Uint32(body[12:16])
+	}
+	if len(body) >= 24 {
+		lockOwner = binary.LittleEndian.Uint64(body[16:24])
+	}
 	s.nodeMu.Lock()
 	h, ok := s.openHandles[fh]
 	delete(s.openHandles, fh)
 	s.nodeMu.Unlock()
-	s.releaseLocksForHandle(fh, h.fuseID)
+	targetNode := h.fuseID
+	if targetNode == 0 {
+		targetNode = nodeID
+	}
+	s.releaseLocksForHandle(fh, targetNode, releaseFlags, lockOwner)
 	if ok && !h.isDir && h.hid != 0 {
 		_ = s.core.CloseHandle(h.hid)
 	}
