@@ -139,10 +139,7 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 	privGitRel := filepath.ToSlash(filepath.Join(g.RootID, gitRel))
 	privGitDir := filepath.Join(a.runtimeViewDir, "privategit", filepath.FromSlash(privGitRel))
 	authDirs := make([]string, 0, len(a.req.Grants)+len(a.narrowed))
-	for _, rg := range a.req.Grants {
-		authDirs = append(authDirs, rg.SourcePath)
-	}
-	for _, rg := range a.narrowed {
+	for _, rg := range append(append([]RootGrant(nil), a.req.Grants...), a.narrowed...) {
 		authDirs = append(authDirs, rg.SourcePath)
 	}
 	spec := SeedGitRepoSpec{
@@ -168,8 +165,7 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 	res, err := initFn(a.ctx, spec)
 	if err != nil {
 		if errors.Is(err, privategit.ErrSeedLimitExceeded) {
-			entries := max(res.AddedEntries, a.maxEntries-a.out.observedEntries+1)
-			return a.chargeUsage(g.RootID, entries, max(res.AddedBytes, 0))
+			return a.chargeUsage(g.RootID, max(res.AddedEntries, a.maxEntries-a.out.observedEntries+1), max(res.AddedBytes, 0))
 		}
 		return err
 	}
@@ -181,9 +177,7 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 		return err
 	}
 	a.out.seededRepos[g.RootID+":"+repoRel] = res
-	a.out.gitInterceptMap[layeredfs.QualifiedPath{RootID: g.RootID, Rel: gitRel}] = layeredfs.QualifiedPath{
-		RootID: "__privategit__", Rel: privGitRel,
-	}
+	a.out.gitInterceptMap[layeredfs.QualifiedPath{RootID: g.RootID, Rel: gitRel}] = layeredfs.QualifiedPath{RootID: "__privategit__", Rel: privGitRel}
 	return nil
 }
 
@@ -194,7 +188,10 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 	}
 	qp := layeredfs.QualifiedPath{RootID: g.RootID, Rel: rel}
 	mode := info.Mode()
-	xattrs, _ := readPathXattrs(srcPath)
+	xattrs, err := readPathXattrs(srcPath)
+	if err != nil {
+		return err
+	}
 
 	switch {
 	case mode.IsDir():
@@ -204,6 +201,7 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 		if err := os.MkdirAll(dstPath, mode.Perm()|0o700); err != nil {
 			return err
 		}
+		writePathXattrs(dstPath, xattrs)
 		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryDirectory,
 			Mode: mode, ModTime: info.ModTime(), Xattrs: xattrs, CapturedAt: time.Now(),
@@ -221,6 +219,7 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 		if err := os.Symlink(target, dstPath); err != nil && !errors.Is(err, fs.ErrExist) {
 			return err
 		}
+		writePathXattrs(dstPath, xattrs)
 		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntrySymlink,
 			Mode: mode, Size: int64(len(target)), ModTime: info.ModTime(), LinkTarget: target, Xattrs: xattrs, CapturedAt: time.Now(),
@@ -253,6 +252,7 @@ func (a *seedAccumulator) seedRegularFile(rootID string, qp layeredfs.QualifiedP
 				return err
 			}
 		}
+		writePathXattrs(dstPath, xattrs)
 		a.out.filePaths[qp] = dstPath
 		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryRegular,
@@ -281,6 +281,8 @@ func (a *seedAccumulator) seedRegularFile(rootID string, qp layeredfs.QualifiedP
 	if err := a.chargeUsage(rootID, 0, n); err != nil {
 		return err
 	}
+	_ = os.Chmod(dstPath, info.Mode().Perm())
+	writePathXattrs(dstPath, xattrs)
 	_ = os.Chtimes(dstPath, info.ModTime(), info.ModTime())
 	a.out.filePaths[qp] = dstPath
 	a.out.bases = append(a.out.bases, layeredfs.BaseCapture{

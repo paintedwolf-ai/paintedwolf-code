@@ -1,7 +1,6 @@
 package adapter
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -10,19 +9,29 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-// syncMaterializedTreeToCore scans the materialized seed directories and records any direct
-// filesystem modifications, additions, deletions, replacements, or metadata changes into Core's journal.
-func syncMaterializedTreeToCore(view *PreparedView, bases map[layeredfs.QualifiedPath]layeredfs.BaseCapture) error {
+// syncMaterializedTreeToCore scans the materialized seed directories and reconciles any direct
+// filesystem modifications, additions, deletions, replacements, or metadata changes against the
+// currently synchronized Core state while preserving original immutable seed base records.
+func syncMaterializedTreeToCore(
+	view *PreparedView,
+	bases map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
+	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
+) error {
 	if view == nil || view.Core == nil {
 		return nil
 	}
+	if synced == nil {
+		synced = make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture, len(bases))
+		for qp, b := range bases {
+			synced[qp] = cloneBaseCaptureRecord(b)
+		}
+	}
 	for _, r := range view.Roots {
-		if err := syncSingleMaterializedRoot(view.Core, r.RootID, r.WorkspacePath, bases); err != nil {
+		if err := syncSingleMaterializedRoot(view.Core, r.RootID, r.WorkspacePath, bases, synced); err != nil {
 			return err
 		}
 	}
@@ -33,15 +42,17 @@ func syncSingleMaterializedRoot(
 	core *layeredfs.Core,
 	rootID, seedDir string,
 	bases map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
+	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
 ) error {
-	// Phase 1: Unlink any seeded entry that was removed on disk or replaced with a different
-	// entry kind (or retargeted symlink), in reverse depth order (children before parents).
-	if err := deleteRemovedOrReplacedEntries(core, rootID, seedDir, bases); err != nil {
+	// Phase 1: Unlink any previously synchronized entry (from seed or prior captures) that was
+	// removed on disk or replaced with a different entry kind (or retargeted symlink), in reverse
+	// depth order so children are unlinked before parent directories.
+	if err := deleteRemovedOrReplacedEntries(core, rootID, seedDir, synced); err != nil {
 		return err
 	}
 
 	// Phase 2: Walk current on-disk tree top-down to apply additions, replacements, content
-	// modifications, and metadata changes.
+	// modifications, reverts, and metadata changes relative to the synchronized Core state.
 	return filepath.WalkDir(seedDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -65,11 +76,11 @@ func syncSingleMaterializedRoot(
 		base, hasBase := bases[qp]
 		switch {
 		case info.IsDir():
-			return syncDirEntry(core, qp, p, info, base, hasBase)
+			return syncDirEntry(core, qp, p, info, synced)
 		case info.Mode()&os.ModeSymlink != 0:
-			return syncSymlinkEntry(core, qp, p, base, hasBase)
+			return syncSymlinkEntry(core, qp, p, info, synced)
 		case info.Mode().IsRegular():
-			return syncRegularEntry(core, qp, p, info, base, hasBase)
+			return syncRegularEntry(core, qp, p, info, base, hasBase, synced)
 		default:
 			return nil
 		}
@@ -79,15 +90,17 @@ func syncSingleMaterializedRoot(
 func deleteRemovedOrReplacedEntries(
 	core *layeredfs.Core,
 	rootID, seedDir string,
-	bases map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
+	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
 ) error {
 	type removalCandidate struct {
 		qp    layeredfs.QualifiedPath
 		kind  layeredfs.EntryKind
 		depth int
 	}
-	var candidates []removalCandidate
-	for qp, base := range bases {
+	marked := make(map[layeredfs.QualifiedPath]layeredfs.EntryKind)
+	removedDirs := make([]string, 0)
+
+	for qp, cur := range synced {
 		if qp.RootID != rootID {
 			continue
 		}
@@ -100,24 +113,49 @@ func deleteRemovedOrReplacedEntries(
 			} else {
 				return err
 			}
-		} else if !entryKindMatchesMode(base.Kind, info.Mode()) {
+		} else if !entryKindMatchesMode(cur.Kind, info.Mode()) {
 			needRemove = true
-		} else if base.Kind == layeredfs.EntrySymlink {
+		} else if cur.Kind == layeredfs.EntrySymlink {
 			target, linkErr := os.Readlink(full)
 			if linkErr != nil {
 				return linkErr
 			}
-			if target != base.LinkTarget {
+			if target != cur.LinkTarget {
 				needRemove = true
 			}
 		}
 		if needRemove {
-			candidates = append(candidates, removalCandidate{
-				qp:    qp,
-				kind:  base.Kind,
-				depth: strings.Count(qp.Rel, "/"),
-			})
+			marked[qp] = cur.Kind
+			if cur.Kind == layeredfs.EntryDirectory {
+				removedDirs = append(removedDirs, qp.Rel+"/")
+			}
 		}
+	}
+
+	if len(removedDirs) > 0 {
+		for qp, cur := range synced {
+			if qp.RootID != rootID {
+				continue
+			}
+			if _, already := marked[qp]; already {
+				continue
+			}
+			for _, prefix := range removedDirs {
+				if strings.HasPrefix(qp.Rel, prefix) {
+					marked[qp] = cur.Kind
+					break
+				}
+			}
+		}
+	}
+
+	candidates := make([]removalCandidate, 0, len(marked))
+	for qp, kind := range marked {
+		candidates = append(candidates, removalCandidate{
+			qp:    qp,
+			kind:  kind,
+			depth: strings.Count(qp.Rel, "/"),
+		})
 	}
 	sort.Slice(candidates, func(i, j int) bool {
 		if candidates[i].depth != candidates[j].depth {
@@ -130,25 +168,9 @@ func deleteRemovedOrReplacedEntries(
 		if err := core.Unlink(c.qp, rmdir); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
+		delete(synced, c.qp)
 	}
 	return nil
-}
-
-func isMissingOnDisk(err error) bool {
-	return os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR)
-}
-
-func entryKindMatchesMode(kind layeredfs.EntryKind, mode fs.FileMode) bool {
-	switch kind {
-	case layeredfs.EntryDirectory:
-		return mode.IsDir()
-	case layeredfs.EntrySymlink:
-		return mode&os.ModeSymlink != 0
-	case layeredfs.EntryRegular:
-		return mode.IsRegular()
-	default:
-		return false
-	}
 }
 
 func syncDirEntry(
@@ -156,34 +178,47 @@ func syncDirEntry(
 	qp layeredfs.QualifiedPath,
 	fullPath string,
 	info fs.FileInfo,
-	base layeredfs.BaseCapture,
-	hasBase bool,
+	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
 ) error {
-	if !hasBase || base.Kind != layeredfs.EntryDirectory {
+	cur, hasSynced := synced[qp]
+	if !hasSynced || cur.Kind != layeredfs.EntryDirectory {
 		if _, err := core.Mkdir(qp, info.Mode().Perm()); err != nil && !errors.Is(err, os.ErrExist) {
 			return err
 		}
-		return syncEntryMetadataIfChanged(core, qp, fullPath, info, layeredfs.BaseCapture{}, false)
+		synced[qp] = layeredfs.BaseCapture{
+			Path: qp,
+			Kind: layeredfs.EntryDirectory,
+			Mode: fs.ModeDir | info.Mode().Perm(),
+		}
 	}
-	return syncEntryMetadataIfChanged(core, qp, fullPath, info, base, true)
+	return syncEntryMetadataIfChanged(core, qp, fullPath, info, synced)
 }
 
 func syncSymlinkEntry(
 	core *layeredfs.Core,
 	qp layeredfs.QualifiedPath,
 	fullPath string,
-	base layeredfs.BaseCapture,
-	hasBase bool,
+	info fs.FileInfo,
+	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
 ) error {
 	target, err := os.Readlink(fullPath)
 	if err != nil {
 		return err
 	}
-	if hasBase && base.Kind == layeredfs.EntrySymlink && base.LinkTarget == target {
-		return nil
+	cur, hasSynced := synced[qp]
+	if !hasSynced || cur.Kind != layeredfs.EntrySymlink || cur.LinkTarget != target {
+		if _, err := core.Symlink(target, qp); err != nil {
+			return err
+		}
+		synced[qp] = layeredfs.BaseCapture{
+			Path:       qp,
+			Kind:       layeredfs.EntrySymlink,
+			Mode:       fs.ModeSymlink | 0o777,
+			Size:       int64(len(target)),
+			LinkTarget: target,
+		}
 	}
-	_, err = core.Symlink(target, qp)
-	return err
+	return syncEntryMetadataIfChanged(core, qp, fullPath, info, synced)
 }
 
 func syncRegularEntry(
@@ -193,21 +228,59 @@ func syncRegularEntry(
 	info fs.FileInfo,
 	base layeredfs.BaseCapture,
 	hasBase bool,
+	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
 ) error {
 	raw, err := os.ReadFile(fullPath)
 	if err != nil {
 		return err
 	}
-	if hasBase && base.Kind == layeredfs.EntryRegular {
-		sum := sha256.Sum256(raw)
-		if hex.EncodeToString(sum[:]) == base.SHA256 {
-			return syncEntryMetadataIfChanged(core, qp, fullPath, info, base, true)
+	sum := sha256.Sum256(raw)
+	diskSHA := hex.EncodeToString(sum[:])
+
+	cur, hasSynced := synced[qp]
+	wasDifferentFromBase := !hasSynced ||
+		cur.Kind != layeredfs.EntryRegular ||
+		cur.SHA256 != base.SHA256 ||
+		cur.Mode.Perm() != base.Mode.Perm() ||
+		!xattrsEqual(cur.Xattrs, base.Xattrs)
+
+	if !hasSynced || cur.Kind != layeredfs.EntryRegular || diskSHA != cur.SHA256 {
+		if _, err := core.WriteFile(qp, raw, info.Mode().Perm()); err != nil {
+			return err
 		}
+		if !hasSynced || cur.Kind != layeredfs.EntryRegular {
+			cur = layeredfs.BaseCapture{
+				Path:   qp,
+				Kind:   layeredfs.EntryRegular,
+				Mode:   info.Mode().Perm(),
+				Size:   int64(len(raw)),
+				SHA256: diskSHA,
+			}
+		} else {
+			cur.Size = int64(len(raw))
+			cur.SHA256 = diskSHA
+		}
+		synced[qp] = cur
 	}
-	if _, err := core.WriteFile(qp, raw, info.Mode().Perm()); err != nil {
+
+	if err := syncEntryMetadataIfChanged(core, qp, fullPath, info, synced); err != nil {
 		return err
 	}
-	return syncEntryMetadataIfChanged(core, qp, fullPath, info, base, hasBase && base.Kind == layeredfs.EntryRegular)
+
+	after := synced[qp]
+	matchesSeedBase := hasBase &&
+		base.Kind == layeredfs.EntryRegular &&
+		after.SHA256 == base.SHA256 &&
+		after.Mode.Perm() == base.Mode.Perm() &&
+		xattrsEqual(after.Xattrs, base.Xattrs)
+	if matchesSeedBase && wasDifferentFromBase {
+		if _, err := core.Chtimes(qp, base.ModTime, base.ModTime, true); err != nil {
+			return err
+		}
+		after.ModTime = base.ModTime
+		synced[qp] = after
+	}
+	return nil
 }
 
 func syncEntryMetadataIfChanged(
@@ -215,57 +288,26 @@ func syncEntryMetadataIfChanged(
 	qp layeredfs.QualifiedPath,
 	fullPath string,
 	info fs.FileInfo,
-	base layeredfs.BaseCapture,
-	compareBase bool,
+	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
 ) error {
-	if compareBase && info.Mode().Perm() != base.Mode.Perm() {
-		if _, err := core.Chmod(qp, info.Mode().Perm()); err != nil {
-			return err
-		}
-	}
-	diskXattrs, _ := readPathXattrs(fullPath)
-	if compareBase && xattrsEqual(diskXattrs, base.Xattrs) {
-		return nil
-	}
-	if !compareBase && len(diskXattrs) == 0 {
-		return nil
-	}
-	existingNames, err := core.ListXattr(qp, false)
+	diskXattrs, err := readPathXattrs(fullPath)
 	if err != nil {
 		return err
 	}
-	existingSet := make(map[string]struct{}, len(existingNames))
-	for _, name := range existingNames {
-		existingSet[name] = struct{}{}
-		if _, keep := diskXattrs[name]; !keep {
-			if err := core.RemoveXattr(qp, name, false); err != nil {
-				return err
-			}
-		}
-	}
-	for name, val := range diskXattrs {
-		if _, had := existingSet[name]; had {
-			oldVal, gErr := core.GetXattr(qp, name, false)
-			if gErr == nil && bytes.Equal(oldVal, val) {
-				continue
-			}
-		}
-		if err := core.SetXattr(qp, name, val, false); err != nil {
+	cur := synced[qp]
+	if info.Mode()&os.ModeSymlink == 0 && (info.Mode().Perm() != cur.Mode.Perm() || info.Mode().Perm() == 0) {
+		if _, err := core.Chmod(qp, info.Mode().Perm()); err != nil {
 			return err
 		}
+		cur.Mode = (cur.Mode & fs.ModeType) | info.Mode().Perm()
+		synced[qp] = cur
+	}
+	if !xattrsEqual(diskXattrs, cur.Xattrs) {
+		if err := applyXattrDiff(core, qp, diskXattrs); err != nil {
+			return err
+		}
+		cur.Xattrs = cloneXattrMap(diskXattrs)
+		synced[qp] = cur
 	}
 	return nil
-}
-
-func xattrsEqual(a, b map[string][]byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, va := range a {
-		vb, ok := b[k]
-		if !ok || !bytes.Equal(va, vb) {
-			return false
-		}
-	}
-	return true
 }

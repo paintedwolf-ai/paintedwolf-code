@@ -17,6 +17,8 @@ var sharedEagerViews sync.Map // map[string]*eagerViewState
 type eagerViewState struct {
 	view            *PreparedView
 	seedRecords     map[layeredfs.QualifiedPath]layeredfs.BaseCapture
+	syncedRecords   map[layeredfs.QualifiedPath]layeredfs.BaseCapture
+	syncMu          sync.Mutex
 	denySourcePaths []string
 	gitStore        *privategit.RetainedObjectStore
 	gitLeases       []string
@@ -180,7 +182,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		return nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
 
-	if err := registerSeededLowerProviders(core, outcome.preparedRoots, outcome.bases, outcome.filePaths); err != nil {
+	if err := registerSeededLowerProviders(core, backingDir, outcome.preparedRoots, outcome.bases, outcome.filePaths); err != nil {
 		releaseGitLeases(gitStore, outcome.gitLeases)
 		_ = core.ReleaseView()
 		_ = os.RemoveAll(runtimeViewDir)
@@ -188,6 +190,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 	}
 
 	seedMap := make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture, len(outcome.bases))
+	syncedMap := make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture, len(outcome.bases))
 	for _, b := range outcome.bases {
 		if rErr := core.RegisterSeedBase(b); rErr != nil {
 			releaseGitLeases(gitStore, outcome.gitLeases)
@@ -196,6 +199,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 			return nil, rErr
 		}
 		seedMap[b.Path] = b
+		syncedMap[b.Path] = cloneBaseCaptureRecord(b)
 	}
 
 	view := &PreparedView{
@@ -217,6 +221,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 	st := &eagerViewState{
 		view:            view,
 		seedRecords:     seedMap,
+		syncedRecords:   syncedMap,
 		denySourcePaths: outcome.denyPaths,
 		gitStore:        gitStore,
 		gitLeases:       outcome.gitLeases,
@@ -279,7 +284,9 @@ func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string)
 				return err
 			}
 		}
-		return syncMaterializedTreeToCore(st.view, st.seedRecords)
+		st.syncMu.Lock()
+		defer st.syncMu.Unlock()
+		return syncMaterializedTreeToCore(st.view, st.seedRecords, st.syncedRecords)
 	}
 	return executeCheckpointBarrier(ctx, AdapterEagerCopy, st.view.Core, quiesceAndSync, st.flushHook)
 }

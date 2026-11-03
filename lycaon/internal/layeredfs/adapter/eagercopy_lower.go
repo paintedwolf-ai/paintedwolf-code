@@ -1,7 +1,9 @@
 package adapter
 
 import (
-	"bytes"
+	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -9,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/layeredfs"
-	"golang.org/x/sys/unix"
 )
 
 func resolvePrepareLimits(maxEntries, maxBytes int64) (int64, int64) {
@@ -135,12 +137,31 @@ func newSeededLowerProvider(rootID, seedDir string, allBases []layeredfs.BaseCap
 
 func registerSeededLowerProviders(
 	core *layeredfs.Core,
+	backingDir string,
 	roots []PreparedRoot,
 	bases []layeredfs.BaseCapture,
-	_ map[layeredfs.QualifiedPath]string,
+	filePaths map[layeredfs.QualifiedPath]string,
 ) error {
 	if core == nil {
 		return nil
+	}
+	basesDir := filepath.Join(backingDir, "bases")
+	if resolved, err := filepath.EvalSymlinks(basesDir); err == nil {
+		basesDir = resolved
+	}
+	for i := range bases {
+		if bases[i].Kind != layeredfs.EntryRegular {
+			continue
+		}
+		srcPath := filePaths[bases[i].Path]
+		if srcPath == "" {
+			continue
+		}
+		dstBase := filepath.Join(basesDir, fmt.Sprintf("seed-base-%08d", i+1))
+		if err := copyOrCloneSeedBase(srcPath, dstBase); err != nil {
+			return err
+		}
+		bases[i].BackingFile = dstBase
 	}
 	for _, r := range roots {
 		if err := core.RegisterLowerProvider(r.RootID, newSeededLowerProvider(r.RootID, r.WorkspacePath, bases)); err != nil {
@@ -148,6 +169,24 @@ func registerSeededLowerProviders(
 		}
 	}
 	return nil
+}
+
+func copyOrCloneSeedBase(srcPath, dstPath string) error {
+	if cloned, err := fileclone.Clone(srcPath, dstPath); err == nil && cloned {
+		return nil
+	}
+	in, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenFile(dstPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(out, in)
+	closeErr := out.Close()
+	return errors.Join(copyErr, closeErr)
 }
 
 func (p *seededLowerProvider) Lstat(rel string) (layeredfs.LowerEntry, error) {
@@ -226,7 +265,12 @@ func (p *seededLowerProvider) OpenRead(rel string) (layeredfs.ReadSeekCloser, la
 	if entry.Kind != layeredfs.EntryRegular {
 		return nil, layeredfs.LowerEntry{}, os.ErrInvalid
 	}
-	f, err := os.Open(filepath.Join(p.seedDir, filepath.FromSlash(rel)))
+	clean := strings.TrimPrefix(path.Clean(strings.ReplaceAll(rel, "\\", "/")), "/")
+	openPath := filepath.Join(p.seedDir, filepath.FromSlash(rel))
+	if b, ok := p.bases[clean]; ok && b.BackingFile != "" {
+		openPath = b.BackingFile
+	}
+	f, err := os.Open(openPath)
 	if err != nil {
 		return nil, layeredfs.LowerEntry{}, err
 	}
@@ -250,40 +294,4 @@ func (p *seededLowerProvider) ListXattr(rel string) (map[string][]byte, error) {
 		cp[k] = append([]byte(nil), v...)
 	}
 	return cp, nil
-}
-
-func readPathXattrs(p string) (map[string][]byte, error) {
-	sz, err := unix.Llistxattr(p, nil)
-	if err != nil || sz <= 0 {
-		return nil, nil
-	}
-	buf := make([]byte, sz)
-	n, err := unix.Llistxattr(p, buf)
-	if err != nil || n <= 0 {
-		return nil, nil
-	}
-	out := make(map[string][]byte)
-	for _, rawName := range bytes.Split(buf[:n], []byte{0}) {
-		if len(rawName) == 0 {
-			continue
-		}
-		name := string(rawName)
-		vsz, gErr := unix.Lgetxattr(p, name, nil)
-		if gErr != nil || vsz < 0 {
-			continue
-		}
-		if vsz == 0 {
-			out[name] = []byte{}
-			continue
-		}
-		vbuf := make([]byte, vsz)
-		vn, gErr := unix.Lgetxattr(p, name, vbuf)
-		if gErr == nil && vn >= 0 {
-			out[name] = vbuf[:vn]
-		}
-	}
-	if len(out) == 0 {
-		return nil, nil
-	}
-	return out, nil
 }
