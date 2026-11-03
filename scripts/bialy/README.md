@@ -166,6 +166,15 @@ texts for a new training run come from that roster; an installed release keeps
 its evaluated vocabulary until a newly trained and evaluated release replaces
 it.
 
+The export contract is `pw-decide-corpus/2`: tool options come from the current
+callable schemas, including worker tools. Unversioned exports used the installed
+release's preload options and cannot be consumed as this contract. Re-export
+with the current host; retain old corpora with the artifacts they qualified.
+Training, calibration, replay, skill discovery and parity checks reject offered
+candidates or scored labels absent from the selected corpus before model work.
+Unknown names in requests remain observations, not invented candidate labels.
+`pw-decide-row/1` and retention rows keep their existing meanings and versions.
+
 ## Corpus
 
 The host exports the corpus the decision scores; nothing here parses packs:
