@@ -38,7 +38,7 @@ func registerCommandTools(
 			return hostUtilities.Builtins(tc, nested, bound)
 		}}
 	*commandTool = &command.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft, Programs: programs}
-	*verifyTool = &native.VerifyTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
+	*verifyTool = &native.VerifyTool{Programs: programs}
 	*commandOutputTool = &command.CommandOutputTool{}
 	*commandStopTool = &command.CommandStopTool{}
 	if err := reg.Register("command", (*commandTool).Run); err != nil {

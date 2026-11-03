@@ -41,7 +41,7 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission *t
 	if err != nil {
 		return nil, nil, err
 	}
-	if model.ToolName != "command" || model.ToolCallID != tc.Identity.ToolCallID {
+	if !programModelTool(model.ToolName) || model.ToolCallID != tc.Identity.ToolCallID {
 		return nil, nil, fmt.Errorf("program observation model call changed")
 	}
 	if int64(len(model.CanonicalArguments)) > (math.MaxInt64-4096)/32 {

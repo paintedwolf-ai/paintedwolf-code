@@ -61,7 +61,7 @@ func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 		if t.Programs == nil {
 			return "", fmt.Errorf("command program runtime is not configured")
 		}
-		return t.Programs.Run(ctx, args, tctx)
+		return t.Programs.Run(ctx, "command", args, tctx)
 	}
 	res, outcome, err := t.confined().Run(ctx, args, tctx)
 	if err != nil {

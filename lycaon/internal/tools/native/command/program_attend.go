@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
+"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -91,6 +92,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
 		out.CommandProgram, out.SourceRun = e.run.tc.Effects.Out.CommandProgram, e.run.tc.Effects.Out.SourceRun
+		out.Facts = e.run.tc.Effects.Out.Facts.Merge(out.Facts)
 	}
 	return ending.result, ending.err
 }
@@ -180,7 +182,7 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 	if err != nil || sess == nil {
 		return
 	}
-	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, "command", *capture)
+	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for
@@ -257,7 +259,11 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	if settledNow {
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
+		if run.tc.Execution.VerificationCheck && run.tc.Effects.Out.SourceRun != nil {
+			outcome.Outcome = run.tc.Effects.Out.SourceRun.Verdict
+		}
 	}
+	if run.tool == "verify" { outcome.ResultVersion = 2 }
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
 		return "", fmt.Errorf("command program encode: %w", err)
@@ -313,4 +319,7 @@ func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resol
 		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
 	}
 	tc.Effects.Out.SourceRun = run
+	if tc.Execution.VerificationCheck && verdict == api.SourceVerdictUnverifiable {
+		tc.Effects.Out.Facts = guidance.ToolResultFacts{}.WithCode(toolrejection.VerifyUnverifiableCode).Merge(tc.Effects.Out.Facts)
+	}
 }

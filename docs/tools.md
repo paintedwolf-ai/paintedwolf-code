@@ -1110,3 +1110,19 @@ A ready index accelerates the parts of a query it can prove current. The native 
 The stock profiles and coordinator surfaces use the command environment for routine work. Its disable control refuses new program dispatch and settles its live work; it never sends a program to a shell as a fallback. Named operation contracts retain their authority, approval and history meanings after their standalone schemas leave the offered roster.
 
 Focused tests establish the changed registry, catalog and runtime contracts on their recorded source. GitHub CI checks each PR; a local composition supports direct human command testing and application validation with the shipped prompts. Historical run-3 results remain diagnostic evidence. A local development build does not establish installed macOS/Linux qualification, and Windows-host qualification remains pending. No release is part of this cutover.
+
+### Selected verification programs
+
+`verify` retains the selected-project-check contract and runs the same Bash
+program language as `command`. An omitted command resolves the selected check;
+a different command is refused while a selection exists. Targeted checks use
+`command` with `verification: true`. Native operations and external launches
+keep their own effect admission, while the initiating receipt remains `verify`.
+
+Verification program results use `result_version: 2`, the command program
+status/output fields, and an `outcome` only after settlement. The outcome remains
+`passed`, `failed`, or `unverifiable`, bound to the source captured before the
+check starts. Running jobs provide no premature verdict. Historical argv-runner
+results remain unchanged in stored receipts; their stage/tail fields are not
+reinterpreted. Shell source carries environment assignments, redirections,
+pipes and background jobs instead of separate argv-runner options.
