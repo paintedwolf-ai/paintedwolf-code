@@ -462,3 +462,15 @@ func TestMergeProfileRequestableVars(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandProgressGuidanceFollowsOfferedEffects(t *testing.T) {
+	offered := []string{"command", "restore_version", "task", "edit", "jq_edit"}
+	vars := prompts.VisibleToolsNativePartialVars(offered)
+	if got := vars["progress_gated_tools"]; !reflect.DeepEqual(got, []string{"command", "restore_version", "task"}) {
+		t.Fatalf("offered progress guidance = %v", got)
+	}
+	prompts.ApplyReadOnlyCommandEffects(offered, nil, vars)
+	if got := vars["progress_gated_tools"]; !reflect.DeepEqual(got, []string{"restore_version", "task"}) {
+		t.Fatalf("read-only command progress guidance = %v", got)
+	}
+}
