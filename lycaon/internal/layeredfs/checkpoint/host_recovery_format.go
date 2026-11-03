@@ -113,13 +113,13 @@ func validHostImage(image hostTargetImage) bool {
 	switch image.Kind {
 	case layeredfs.EntryRegular:
 		digest, err := hex.DecodeString(image.SHA256)
-		return err == nil && len(digest) == 32 && image.LinkTarget == ""
+		return err == nil && len(digest) == 32 && image.LinkTarget == "" && (image.HardLinkGroup == "" || hostComponent(image.HardLinkGroup))
 	case layeredfs.EntryDirectory:
-		return image.SHA256 == "" && image.LinkTarget == "" && image.Size == 0
+		return image.SHA256 == "" && image.LinkTarget == "" && image.HardLinkGroup == "" && image.Size == 0
 	case layeredfs.EntrySymlink:
-		return image.SHA256 == "" && image.Mode == 0 && image.Size == 0 && len(image.Xattrs) == 0
+		return image.SHA256 == "" && image.HardLinkGroup == "" && image.Mode == 0 && image.Size == 0 && len(image.Xattrs) == 0
 	case layeredfs.EntryAbsent:
-		return image.SHA256 == "" && image.LinkTarget == "" && image.Mode == 0 && image.Size == 0 && len(image.Xattrs) == 0
+		return image.SHA256 == "" && image.LinkTarget == "" && image.HardLinkGroup == "" && image.Mode == 0 && image.Size == 0 && len(image.Xattrs) == 0
 	default:
 		return false
 	}

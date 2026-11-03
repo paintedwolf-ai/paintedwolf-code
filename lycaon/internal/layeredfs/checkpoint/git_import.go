@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -49,11 +48,10 @@ func ResolveGitDirs(repoRoot string, authorizedDirs ...string) (gitDir, commonGi
 		if rErr != nil || !strings.HasPrefix(line, "gitdir:") || strings.ContainsAny(line, "\r\n\x00") {
 			return "", "", fmt.Errorf("checkpoint: invalid .git file at %s", dotGit)
 		}
-		target := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
-		if !filepath.IsAbs(target) {
-			target = filepath.Join(repoRoot, target)
+		if gitDir = strings.TrimSpace(strings.TrimPrefix(line, "gitdir:")); !filepath.IsAbs(gitDir) {
+			gitDir = filepath.Join(repoRoot, gitDir)
 		}
-		gitDir = filepath.Clean(target)
+		gitDir = filepath.Clean(gitDir)
 	} else {
 		return "", "", fmt.Errorf("checkpoint: unsupported .git entry at %s", dotGit)
 	}
@@ -181,7 +179,10 @@ func ImportAndValidateCheckpointGitRefs(
 		return nil, err
 	}
 	targetObjectsDir := filepath.Join(commonGitDir, "objects")
-	if err := errors.Join(ensureMinimalGitDirLayout(gitDir, commonGitDir), copyCandidateGitObjects(storeDir, cleanCheckpoint, targetObjectsDir)); err != nil {
+	if err := ensureMinimalGitDirLayout(gitDir, commonGitDir); err != nil {
+		return nil, err
+	}
+	if err := copyCandidateGitObjects(storeDir, cleanCheckpoint, targetObjectsDir); err != nil {
 		return nil, err
 	}
 	refNames := make([]string, 0, len(git.Refs))
@@ -189,7 +190,6 @@ func ImportAndValidateCheckpointGitRefs(
 		refNames = append(refNames, name)
 	}
 	sort.Strings(refNames)
-
 	verifiedOIDs := make(map[string]bool, len(refNames)*4)
 	var writes []plannedRefWrite
 	for _, refName := range refNames {
@@ -287,17 +287,4 @@ func resolveExistingGitRef(commonGitDir, gitDir, dstRef string) string {
 		}
 	}
 	return ""
-}
-
-func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-	data, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
-	if err != nil || int64(len(data)) > maxBytes {
-		return nil, fmt.Errorf("checkpoint: read %s failed or exceeded limit: %w", path, err)
-	}
-	return data, nil
 }

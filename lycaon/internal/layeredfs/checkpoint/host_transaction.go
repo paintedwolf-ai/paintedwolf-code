@@ -34,12 +34,13 @@ type hostTargetUndo struct {
 }
 
 type hostTargetImage struct {
-	Kind       layeredfs.EntryKind `json:"kind"`
-	Mode       os.FileMode         `json:"mode,omitempty"`
-	SHA256     string              `json:"sha256,omitempty"`
-	Size       int64               `json:"size,omitempty"`
-	LinkTarget string              `json:"link_target,omitempty"`
-	Xattrs     map[string][]byte   `json:"xattrs,omitempty"`
+	Kind          layeredfs.EntryKind `json:"kind"`
+	Mode          os.FileMode         `json:"mode,omitempty"`
+	SHA256        string              `json:"sha256,omitempty"`
+	Size          int64               `json:"size,omitempty"`
+	LinkTarget    string              `json:"link_target,omitempty"`
+	HardLinkGroup string              `json:"hard_link_group,omitempty"`
+	Xattrs        map[string][]byte   `json:"xattrs,omitempty"`
 }
 
 type hostRefUndo struct {

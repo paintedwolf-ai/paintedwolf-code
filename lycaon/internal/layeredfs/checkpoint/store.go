@@ -101,11 +101,10 @@ func (s *Store) WriteBlob(r io.Reader, expectedSHA string, expectedSize int64) (
 	}
 	finalPath := s.BlobPath(actualSHA)
 	if _, err := os.Stat(finalPath); err == nil {
-		_ = os.Remove(tmpPath)
-		if _, vErr := s.VerifyBlob(actualSHA, n); vErr != nil {
-			return "", vErr
+		if _, vErr := s.VerifyBlob(actualSHA, n); vErr == nil {
+			_ = os.Remove(tmpPath)
+			return actualSHA, nil
 		}
-		return actualSHA, nil
 	}
 	if err := os.Rename(tmpPath, finalPath); err != nil {
 		_ = os.Remove(tmpPath)
@@ -228,12 +227,11 @@ func writeAtomicJSONOrText(dir, name string, raw []byte, mode fs.FileMode) error
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
-	tmpPath := filepath.Join(dir, "."+name+".tmp")
-	_ = os.Remove(tmpPath)
-	f, err := os.OpenFile(tmpPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := os.CreateTemp(dir, "."+name+".tmp-*")
 	if err != nil {
 		return err
 	}
+	tmpPath := f.Name()
 	_, wErr := f.Write(raw)
 	mErr := f.Chmod(mode)
 	sErr := syncFile(f)

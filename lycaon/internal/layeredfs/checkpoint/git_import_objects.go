@@ -3,7 +3,6 @@ package checkpoint
 import (
 	"bytes"
 	"compress/zlib"
-	"context"
 	"crypto/sha1" // #nosec G505 -- SHA-1 is the object identifier in the admitted Git repository format.
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,14 +11,17 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
 const (
 	maxVisitedGitObjects, maxMetadataObjectBytes, maxLooseBlobBytes = 65536, 16 << 20, 512 << 20
+)
+
+var (
+	wrapObjectCopyReaderFn = func(_ string, r io.Reader) io.Reader { return r }
+	syncObjectFileFn       = syncFile
+	closeObjectFileFn      = func(f *os.File) error { return f.Close() }
 )
 
 // WriteLooseGitObject writes a standard zlib-compressed loose Git object into objectsDir and returns its SHA-1 hex OID.
@@ -29,15 +31,20 @@ func WriteLooseGitObject(objectsDir, objType string, payload []byte) (string, er
 	var compressed bytes.Buffer
 	zw := zlib.NewWriter(&compressed)
 	_, wErr := zw.Write(raw)
-	if err := errors.Join(wErr, zw.Close(), os.MkdirAll(filepath.Join(objectsDir, oid[:2]), 0o750)); err != nil {
+	if err := errors.Join(wErr, zw.Close()); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Join(objectsDir, oid[:2]), 0o750); err != nil {
 		return "", err
 	}
 	return oid, writeAtomicJSONOrText(filepath.Join(objectsDir, oid[:2]), oid[2:], compressed.Bytes(), 0o444)
 }
 
 func ensureMinimalGitDirLayout(gitDir, commonGitDir string) error {
-	if err := errors.Join(os.MkdirAll(filepath.Join(commonGitDir, "objects"), 0o750), os.MkdirAll(filepath.Join(commonGitDir, "refs"), 0o750)); err != nil {
-		return err
+	for _, d := range []string{filepath.Join(commonGitDir, "objects"), filepath.Join(commonGitDir, "refs")} {
+		if err := os.MkdirAll(d, 0o750); err != nil {
+			return err
+		}
 	}
 	if _, err := os.Lstat(filepath.Join(commonGitDir, "config")); errors.Is(err, os.ErrNotExist) {
 		if wErr := writeAtomicJSONOrText(commonGitDir, "config", []byte("[core]\n\trepositoryformatversion = 0\n"), 0o644); wErr != nil {
@@ -68,7 +75,7 @@ func copyCandidateGitObjects(storeDir, checkpointID, targetObjectsDir string) er
 			continue
 		}
 		walkErr := filepath.WalkDir(srcObjects, func(path string, d os.DirEntry, wErr error) error {
-			if wErr != nil || d.IsDir() {
+			if wErr != nil || d.IsDir() || strings.HasPrefix(d.Name(), ".") {
 				return wErr
 			}
 			if d.Type()&os.ModeSymlink != 0 {
@@ -79,7 +86,7 @@ func copyCandidateGitObjects(storeDir, checkpointID, targetObjectsDir string) er
 				return rErr
 			}
 			dst := filepath.Join(targetObjectsDir, rel)
-			if _, statErr := os.Stat(dst); statErr == nil {
+			if isValidDestinationGitAsset(path, dst) {
 				return nil
 			}
 			return copyFileStreamingAtomic(path, dst, 0o444)
@@ -105,168 +112,102 @@ func copyFileStreamingAtomic(srcPath, dstPath string, mode os.FileMode) error {
 		return err
 	}
 	tmpPath := tmpFile.Name()
-	_, copyErr := io.Copy(tmpFile, in)
-	if err := errors.Join(copyErr, tmpFile.Chmod(mode), syncFile(tmpFile), tmpFile.Close(), os.Rename(tmpPath, dstPath)); err != nil {
-		_ = os.Remove(tmpPath)
+	published := false
+	defer func() {
+		_ = tmpFile.Close()
+		if !published {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := io.Copy(tmpFile, wrapObjectCopyReaderFn(srcPath, in)); err != nil {
 		return err
 	}
+	if err := tmpFile.Chmod(mode); err != nil {
+		return err
+	}
+	if err := errors.Join(syncObjectFileFn(tmpFile), closeObjectFileFn(tmpFile)); err != nil {
+		return err
+	}
+	if err := publishStagedGitAsset(srcPath, tmpPath, dstPath); err != nil {
+		return err
+	}
+	published = true
 	return syncDir(filepath.Dir(dstPath))
 }
 
-func verifyReachableGitObject(ctx context.Context, repoRoot, commonGitDir, objectsDir, oid string, seen map[string]bool) error {
-	oid = strings.ToLower(strings.TrimSpace(oid))
-	if !isHexOID(oid) || isAllZeroOID(oid) {
-		return fmt.Errorf("checkpoint: invalid git object id %q", oid)
-	}
-	if seen[oid] {
-		return nil
-	}
-	if len(seen) >= maxVisitedGitObjects {
-		return fmt.Errorf("checkpoint: git object traversal exceeded %d objects", maxVisitedGitObjects)
-	}
-	var (
-		objType string
-		body    []byte
-		err     error
-	)
-	if f, openErr := os.Open(filepath.Join(objectsDir, oid[:2], oid[2:])); openErr == nil {
-		objType, body, err = readAndVerifyLooseGitObject(f, oid)
-		_ = f.Close()
-	} else if errors.Is(openErr, os.ErrNotExist) {
-		objType, body, err = readAndVerifyPackedGitObject(ctx, repoRoot, commonGitDir, oid)
-	} else {
-		err = openErr
-	}
-	if err != nil {
-		return err
-	}
-	seen[oid] = true
-	switch objType {
-	case "blob":
-		return nil
-	case "commit", "tag":
-		return verifyCommitOrTagBody(ctx, repoRoot, commonGitDir, objectsDir, body, objType == "commit", seen)
-	case "tree":
-		return verifyTreeBody(ctx, repoRoot, commonGitDir, objectsDir, body, len(oid)/2, seen)
-	default:
-		return fmt.Errorf("checkpoint: unsupported git object type %q", objType)
-	}
-}
-
-func readAndVerifyLooseGitObject(f *os.File, oid string) (string, []byte, error) {
-	zr, err := zlib.NewReader(f)
-	if err != nil {
-		return "", nil, err
-	}
-	defer func() { _ = zr.Close() }()
-	h := sha1.New() // #nosec G401 -- Verify standard Git object identifiers, not security signatures.
-	if len(oid) == 64 {
-		h = sha256.New()
-	}
-	tr := io.TeeReader(zr, h)
-	var hdrBuf [64]byte
-	hdrLen, foundNul := 0, false
-	for hdrLen < len(hdrBuf) {
-		var b [1]byte
-		if _, rErr := io.ReadFull(tr, b[:]); rErr != nil {
-			return "", nil, fmt.Errorf("malformed loose object header for %s: %w", oid, rErr)
-		}
-		if b[0] == 0 {
-			foundNul = true
-			break
-		}
-		hdrBuf[hdrLen] = b[0]
-		hdrLen++
-	}
-	hdrType, hdrSize, ok := strings.Cut(string(hdrBuf[:hdrLen]), " ")
-	size, sErr := strconv.ParseInt(hdrSize, 10, 64)
-	if !foundNul || !ok || sErr != nil || size < 0 {
-		return "", nil, fmt.Errorf("malformed loose object header for %s", oid)
-	}
-	var body []byte
-	if hdrType == "blob" {
-		if n, cErr := io.Copy(io.Discard, io.LimitReader(tr, size+1)); size > maxLooseBlobBytes || cErr != nil || n != size {
-			return "", nil, fmt.Errorf("size or limit mismatch for loose blob %s", oid)
-		}
-	} else {
-		var rErr error
-		if body, rErr = io.ReadAll(io.LimitReader(tr, size+1)); size > maxMetadataObjectBytes || rErr != nil || int64(len(body)) != size {
-			return "", nil, fmt.Errorf("size or limit mismatch for loose object %s", oid)
-		}
-	}
-	if hex.EncodeToString(h.Sum(nil)) != oid {
-		return "", nil, fmt.Errorf("digest mismatch for loose object %s", oid)
-	}
-	return hdrType, body, nil
-}
-
-func readAndVerifyPackedGitObject(ctx context.Context, repoRoot, commonGitDir, oid string) (string, []byte, error) {
-	typeOut, code, err := gitexec.Run(ctx, repoRoot, []string{"--git-dir=" + commonGitDir, "cat-file", "-t", oid}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	if err != nil || code != 0 {
-		return "", nil, fmt.Errorf("missing git object %s: %w (%s)", oid, err, strings.TrimSpace(string(typeOut)))
-	}
-	objType := strings.TrimSpace(string(typeOut))
-	if objType == "blob" {
-		diag, bCode, bErr := gitexec.RunTo(ctx, repoRoot, []string{"--git-dir=" + commonGitDir, "cat-file", "blob", oid}, gitexec.Opts{Profile: gitexec.ProfileHermetic}, io.Discard)
-		if bErr != nil || bCode != 0 {
-			return "", nil, fmt.Errorf("corrupt packed blob %s: %w (%s)", oid, bErr, strings.TrimSpace(string(diag)))
-		}
-		return "blob", nil, nil
-	}
-	body, cCode, cErr := gitexec.Run(ctx, repoRoot, []string{"--git-dir=" + commonGitDir, "cat-file", objType, oid}, gitexec.Opts{Profile: gitexec.ProfileHermetic, MaxOutput: maxMetadataObjectBytes})
-	if cErr != nil || cCode != 0 {
-		return "", nil, fmt.Errorf("corrupt packed %s %s: %w", objType, oid, cErr)
-	}
-	return objType, body, nil
-}
-
-func verifyCommitOrTagBody(ctx context.Context, repoRoot, commonGitDir, objectsDir string, body []byte, isCommit bool, seen map[string]bool) error {
-	foundPrimary := false
-	for _, line := range strings.Split(string(body), "\n") {
-		if line == "" {
-			break
-		}
-		f := strings.Fields(line)
-		if len(f) == 0 || !((isCommit && (f[0] == "tree" || f[0] == "parent")) || (!isCommit && f[0] == "object")) {
-			continue
-		}
-		if len(f) != 2 || !isHexOID(strings.ToLower(f[1])) || isAllZeroOID(strings.ToLower(f[1])) {
-			return fmt.Errorf("checkpoint: invalid %s target oid %q", f[0], line)
-		}
-		foundPrimary = foundPrimary || f[0] == "tree" || f[0] == "object"
-		if err := verifyReachableGitObject(ctx, repoRoot, commonGitDir, objectsDir, strings.ToLower(f[1]), seen); err != nil {
+func publishStagedGitAsset(srcPath, tmpPath, dstPath string) error {
+	if oid, ok := looseObjectOIDForPath(dstPath); ok {
+		f, err := os.Open(tmpPath)
+		if err != nil {
 			return err
 		}
+		_, _, vErr := readAndVerifyLooseGitObject(f, oid)
+		_ = f.Close()
+		if vErr != nil {
+			return vErr
+		}
 	}
-	if !foundPrimary {
-		return fmt.Errorf("checkpoint: missing required target object header")
+	if linkErr := os.Link(tmpPath, dstPath); linkErr == nil {
+		_ = os.Remove(tmpPath)
+		return nil
+	} else if errors.Is(linkErr, os.ErrExist) && isValidDestinationGitAsset(srcPath, dstPath) {
+		_ = os.Remove(tmpPath)
+		return nil
 	}
-	return nil
+	return os.Rename(tmpPath, dstPath)
 }
 
-func verifyTreeBody(ctx context.Context, repoRoot, commonGitDir, objectsDir string, body []byte, hashBytes int, seen map[string]bool) error {
-	for len(body) > 0 {
-		n := bytes.IndexByte(body, 0)
-		if n <= 0 || n+1+hashBytes > len(body) {
-			return fmt.Errorf("checkpoint: malformed tree entry")
-		}
-		hdr := string(body[:n])
-		mode, name, ok := strings.Cut(hdr, " ")
-		if !ok || mode == "" || name == "" || name == "." || name == ".." || strings.Contains(name, "/") {
-			return fmt.Errorf("checkpoint: invalid tree entry header %q", hdr)
-		}
-		entryOID := hex.EncodeToString(body[n+1 : n+1+hashBytes])
-		body = body[n+1+hashBytes:]
-		if !isHexOID(entryOID) || isAllZeroOID(entryOID) {
-			return fmt.Errorf("checkpoint: invalid tree entry oid %q", entryOID)
-		}
-		if mode != "160000" {
-			if err := verifyReachableGitObject(ctx, repoRoot, commonGitDir, objectsDir, entryOID, seen); err != nil {
-				return err
-			}
-		}
+func isValidDestinationGitAsset(srcPath, dstPath string) bool {
+	dstSt, err := os.Lstat(dstPath)
+	if err != nil || !dstSt.Mode().IsRegular() || dstSt.Size() <= 0 {
+		return false
 	}
-	return nil
+	if oid, ok := looseObjectOIDForPath(dstPath); ok {
+		f, openErr := os.Open(dstPath)
+		if openErr != nil {
+			return false
+		}
+		_, _, vErr := readAndVerifyLooseGitObject(f, oid)
+		_ = f.Close()
+		return vErr == nil
+	}
+	srcSt, err := os.Lstat(srcPath)
+	if err != nil || !srcSt.Mode().IsRegular() || srcSt.Size() != dstSt.Size() {
+		return false
+	}
+	srcSHA, sErr := fileDigestSHA256(srcPath)
+	dstSHA, dErr := fileDigestSHA256(dstPath)
+	return sErr == nil && dErr == nil && srcSHA != "" && srcSHA == dstSHA
+}
+
+func looseObjectOIDForPath(p string) (string, bool) {
+	prefix, suffix := filepath.Base(filepath.Dir(p)), filepath.Base(p)
+	oid := strings.ToLower(prefix + suffix)
+	return oid, len(prefix) == 2 && isHexOID(oid) && !isAllZeroOID(oid)
+}
+
+func fileDigestSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	_, cErr := io.Copy(h, f)
+	return hex.EncodeToString(h.Sum(nil)), cErr
+}
+
+func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
+	if err != nil || int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("checkpoint: read %s failed or exceeded limit: %w", path, err)
+	}
+	return data, nil
 }
 
 func hexObjSHA1(b []byte) string {

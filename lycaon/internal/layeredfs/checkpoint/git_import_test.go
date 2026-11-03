@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -242,5 +243,102 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 	}
 	if !errors.Is(loserErr, ErrCheckpointRefConflict) {
 		t.Fatalf("expected loser error to wrap ErrCheckpointRefConflict, got %v", loserErr)
+	}
+}
+
+type failingAfterBytesReader struct {
+	r         io.Reader
+	remaining int
+}
+
+func (f *failingAfterBytesReader) Read(p []byte) (int, error) {
+	if f.remaining <= 0 {
+		return 0, errors.New("injected mid-copy read error")
+	}
+	n, _ := f.r.Read(p[:min(len(p), f.remaining)])
+	f.remaining -= n
+	return n, errors.New("injected mid-copy read error")
+}
+
+func TestCheckpointGitImportCopyFailureAndCorruptDestinationRecovery(t *testing.T) {
+	dstRepo, storeDir := t.TempDir(), t.TempDir()
+	runGitTestCmd(t, dstRepo, "init", "-q")
+	_, err := NewStore(storeDir)
+	testutil.FailErr(t, "NewStore", err)
+
+	objsDir := filepath.Join(storeDir, "objects")
+	oid, err := WriteLooseGitObject(objsDir, "blob", []byte("atomic-object-payload\n"))
+	testutil.FailErr(t, "write blob", err)
+	dstObjPath := filepath.Join(dstRepo, ".git", "objects", oid[:2], oid[2:])
+
+	assertNoDestOrTemp := func(label string) {
+		t.Helper()
+		if _, stErr := os.Lstat(dstObjPath); !errors.Is(stErr, os.ErrNotExist) {
+			t.Fatalf("%s: partial destination object must not be published, stat err=%v", label, stErr)
+		}
+		if entries, _ := os.ReadDir(filepath.Dir(dstObjPath)); len(entries) != 0 {
+			t.Fatalf("%s: expected temporary files cleaned up, got %d entries", label, len(entries))
+		}
+	}
+	origWrap, origSync, origClose := wrapObjectCopyReaderFn, syncObjectFileFn, closeObjectFileFn
+	t.Cleanup(func() { wrapObjectCopyReaderFn, syncObjectFileFn, closeObjectFileFn = origWrap, origSync, origClose })
+
+	// 1. Mid-copy reader failure must not publish tmpFile or leave temp artifacts.
+	wrapObjectCopyReaderFn = func(srcPath string, r io.Reader) io.Reader {
+		if strings.HasPrefix(srcPath, storeDir) {
+			return &failingAfterBytesReader{r: r, remaining: 4}
+		}
+		return r
+	}
+	if _, err := ImportAndValidateCheckpointGitRefs(t.Context(), storeDir, "chk-f1", "w-1", PrivateGitSnapshot{Refs: map[string]string{"refs/heads/f": oid}}, map[string]string{"primary": dstRepo}); err == nil {
+		t.Fatal("expected mid-copy failure")
+	}
+	assertNoDestOrTemp("mid-copy")
+	wrapObjectCopyReaderFn = origWrap
+
+	// 2. syncFile failure must not publish tmpFile.
+	syncObjectFileFn = func(f *os.File) error {
+		if strings.HasPrefix(f.Name(), dstRepo) {
+			return errors.New("injected sync failure")
+		}
+		return origSync(f)
+	}
+	if _, err := ImportAndValidateCheckpointGitRefs(t.Context(), storeDir, "chk-f2", "w-1", PrivateGitSnapshot{Refs: map[string]string{"refs/heads/f": oid}}, map[string]string{"primary": dstRepo}); err == nil {
+		t.Fatal("expected sync failure")
+	}
+	assertNoDestOrTemp("sync")
+	syncObjectFileFn = origSync
+
+	// 3. Close failure must not publish tmpFile.
+	closeObjectFileFn = func(f *os.File) error {
+		name := f.Name()
+		_ = f.Close()
+		if strings.HasPrefix(name, dstRepo) {
+			return errors.New("injected close failure")
+		}
+		return nil
+	}
+	if _, err := ImportAndValidateCheckpointGitRefs(t.Context(), storeDir, "chk-f3", "w-1", PrivateGitSnapshot{Refs: map[string]string{"refs/heads/f": oid}}, map[string]string{"primary": dstRepo}); err == nil {
+		t.Fatal("expected close failure")
+	}
+	assertNoDestOrTemp("close")
+	closeObjectFileFn = origClose
+
+	// 4. Pre-existing corrupt/truncated destination object is detected and replaced on retry without poisoning.
+	testutil.FailErr(t, "mkdir dst prefix", os.MkdirAll(filepath.Dir(dstObjPath), 0o750))
+	testutil.FailErr(t, "seed corrupt dst", os.WriteFile(dstObjPath, []byte("corrupt-partial"), 0o444))
+	imported, err := ImportAndValidateCheckpointGitRefs(t.Context(), storeDir, "chk-ok", "w-1", PrivateGitSnapshot{Refs: map[string]string{"refs/heads/f": oid}}, map[string]string{"primary": dstRepo})
+	testutil.FailErr(t, "retry import after failures and corrupt dst", err)
+	if imported["refs/lycaon/workers/w-1/heads/f"] != oid {
+		t.Fatalf("unexpected imported refs: %v", imported)
+	}
+	// 5. Failed copy against an already-valid destination must preserve the valid destination object intact.
+	wrapObjectCopyReaderFn = func(_ string, r io.Reader) io.Reader { return &failingAfterBytesReader{r: r, remaining: 4} }
+	if err := copyFileStreamingAtomic(filepath.Join(objsDir, oid[:2], oid[2:]), dstObjPath, 0o444); err == nil {
+		t.Fatal("expected direct copyFileStreamingAtomic failure")
+	}
+	wrapObjectCopyReaderFn = origWrap
+	if !isValidDestinationGitAsset(filepath.Join(objsDir, oid[:2], oid[2:]), dstObjPath) {
+		t.Fatal("existing valid destination object was clobbered by failed copy")
 	}
 }

@@ -2,15 +2,14 @@ package checkpoint
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
@@ -40,6 +39,13 @@ func (host *HostPromotion) captureHostTarget(path layeredfs.QualifiedPath) (host
 		return image, err
 	}
 	if obs.Kind == layeredfs.EntryRegular {
+		info, err := file.Stat()
+		if err != nil {
+			return image, err
+		}
+		if fobs := fspath.ObserveFile(info); fobs.Known && fobs.Links > 1 {
+			image.HardLinkGroup = fmt.Sprintf("%d:%d", fobs.Identity.Device, fobs.Identity.Inode)
+		}
 		body, err := io.ReadAll(file)
 		if err != nil {
 			return image, err
@@ -227,86 +233,6 @@ func (host *HostPromotion) validateHostTargets(targets []hostTargetUndo) error {
 	}
 	if len(known) != 0 {
 		return fmt.Errorf("checkpoint: cannot recover directory with unrecorded children")
-	}
-	return nil
-}
-
-func (host *HostPromotion) restoreHostTargets(targets []hostTargetUndo) error {
-	ordered := slices.Clone(targets)
-	slices.SortFunc(ordered, func(a, b hostTargetUndo) int { return len(b.Path.Rel) - len(a.Path.Rel) })
-	// Remove only recorded entries, never an unobserved child added concurrently.
-	for _, target := range ordered {
-		current, err := host.captureHostTarget(target.Path)
-		if err != nil {
-			return err
-		}
-		if sameHostTarget(current, target.Before) {
-			continue
-		}
-		if !sameHostTarget(current, target.After) {
-			return fmt.Errorf("checkpoint: target changed during recovery: %s", pathKey(target.Path))
-		}
-		if current.Kind != layeredfs.EntryAbsent && (target.Before.Kind == layeredfs.EntryAbsent || target.Before.Kind == "" || current.Kind != target.Before.Kind) {
-			root, err := host.targets.openTargetRoot(target.Path.RootID)
-			if err != nil {
-				return err
-			}
-			err = root.Remove(target.Path.Rel)
-			_ = root.Close()
-			if err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
-		}
-	}
-	slices.Reverse(ordered)
-	for _, target := range ordered {
-		before := target.Before
-		if before.Kind == layeredfs.EntryAbsent || before.Kind == "" {
-			continue
-		}
-		change := PlannedChange{Path: target.Path, Mode: before.Mode, Xattrs: before.Xattrs}
-		switch before.Kind {
-		case layeredfs.EntryRegular:
-			change.Action = ActionWriteRegular
-			change.MergedSHA256 = before.SHA256
-		case layeredfs.EntryDirectory:
-			change.Action = ActionMkdir
-		case layeredfs.EntrySymlink:
-			change.Action = ActionSymlink
-			change.LinkTarget = before.LinkTarget
-		default:
-			return ErrInvalidManifest
-		}
-		current, err := host.captureHostTarget(target.Path)
-		if err != nil {
-			return err
-		}
-		if sameHostTarget(current, before) {
-			continue
-		}
-		if err := host.targets.applyPlannedChange(change); err != nil {
-			return err
-		}
-		if before.Kind == layeredfs.EntryRegular || before.Kind == layeredfs.EntryDirectory {
-			root, err := host.targets.openTargetRoot(target.Path.RootID)
-			if err != nil {
-				return err
-			}
-			file, err := root.Open(target.Path.Rel)
-			if err != nil {
-				_ = root.Close()
-				return err
-			}
-			err = restoreFileXattrs(file, before.Xattrs)
-			if err == nil {
-				err = syncFile(file)
-			}
-			_ = file.Close()
-			_ = root.Close()
-			if err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
