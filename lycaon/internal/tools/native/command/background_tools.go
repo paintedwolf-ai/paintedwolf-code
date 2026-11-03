@@ -39,7 +39,7 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	if v, ok := args["cursor"].(float64); ok {
 		cursor = int64(v)
 	}
-	snapshot, err := t.Registry.Output.ReadRawOutput(tctx.Identity.SessionID, handle, cursor)
+	snapshot, err := t.Registry.Output.ReadCommandOutput(ctx, tctx.Identity.SessionID, handle, cursor)
 	if err != nil {
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
 			return "", missingCommandHandleReject(t.Registry, tctx.Identity.SessionID, handle)
@@ -351,7 +351,7 @@ func awaitBackgroundEarlyExit(
 ) (stages []hostcmd.StageResult, exitCode int, tail string, exited bool) {
 	deadline := time.Now().Add(backgroundLaunchGrace)
 	for {
-		snapshot, err := registry.Output.ReadRawOutput(sessionID, handle, 0)
+		snapshot, err := registry.Output.ReadCommandOutput(ctx, sessionID, handle, 0)
 		if err != nil {
 			return nil, 0, "", false
 		}

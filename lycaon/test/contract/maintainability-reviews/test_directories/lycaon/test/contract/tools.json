@@ -1,0 +1,16 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/test/contract/tools",
+  "kind": "test_suite",
+  "workstream": "shared-verification-runtime",
+  "disposition": "retain",
+  "reason": "Tool contracts share fixtures for real operation admission and prepared-change review. Verification now exercises the shared program runtime with native publication ownership. Keep these cross-owner contracts together rather than splitting a test-only package by callable name. Retain the measured 38 ceiling; growth requires renewed review.",
+  "reviewed_commit": "e2519cef51d263fbb797b9f1137df6dc3fc996c0",
+  "ceiling": 38,
+  "boundaries": {
+    "lycaon/test/contract/tools/verify_program_fixture_test.go": "58d7608d1ced3c2d65ae39a57da0bc1dd42af748644c4b99082823f3e57c2e42",
+    "lycaon/test/contract/tools/command_redirect_review_contract_test.go": "2a0a7f846415d754cdfcaef955d9c96eadea0e4050ec54a35ee91872929841ae",
+    "lycaon/test/contract/tools/approved_argv_executed_contract_test.go": "80f52beb51246d57315c513add21c5590ab3e6f7cd6fdba6b6032315a135186b"
+  },
+  "reviewed_shape": "6f1f549248ad13d07c8cd6d611164fc94586fc6799d01808c38d2b0716c0c6ca"
+}

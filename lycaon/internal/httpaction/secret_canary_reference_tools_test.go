@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -97,7 +99,12 @@ func (canaryEchoSession) Close() error { return nil }
 func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	service, _, _ := newTestSecrets(t)
 	meta := hostSecret(t, service, "canary", "Canary", canaryValue)
-	root := t.TempDir()
+	completions := make(chan bgprocess.Completion, 1)
+	programBackground := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{Complete: func(_ context.Context, result bgprocess.Completion) { completions <- result }})
+	t.Cleanup(func() { _ = programBackground.Lifecycle.Close(context.Background()) })
+	program := programtest.New(t, programtest.Options{Background: programBackground})
+	program.Configure = func(tc *tools.ToolContext) { tc.Identity.RootSessionID = "root-1" }
+	root := program.Dir
 	script := filepath.Join(root, "echo.sh")
 	testutil.FailErr(t, "write echo script", os.WriteFile(script, []byte(echoScript), 0o755))
 	seen := func(name string) func() string {
@@ -138,9 +145,43 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 	runner := hostcmd.NewRunner()
-	command := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
-	verify := &native.VerifyTool{Runner: runner, Boundary: boundary, Background: background}
-	testutil.FailErr(t, "register command", registry.Register("command", command.Run))
+	capturedCommand := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
+	verify := &native.VerifyTool{Programs: program.Runtime}
+	verifyExecutor := program.Runtime.Executor
+	verifyExecutor.Approvals.SetCheckpointManager(t.Context(), review, authority)
+	verifyExecutor.Secrets.SetSecretResolver(service)
+	verifyExecutor.Secrets.SetSecretMatcher(matcher)
+	verifyExecutor.Capabilities.SetLoopbackConnectGate(review)
+	verifyExecutor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
+	var evidenceMu sync.Mutex
+	var evidence []secretmatch.HarvestedValue
+	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
+		evidenceMu.Lock()
+		defer evidenceMu.Unlock()
+		return append([]secretmatch.HarvestedValue(nil), evidence...)
+	})
+	program.Runtime.Projector = captureprojection.New(matcher, func(ctx context.Context, projectID, chatID string) error {
+		if chatID != "root-1" {
+			t.Errorf("capture root=%q, want root-1", chatID)
+		}
+		values, err := service.ScreeningValues(ctx, projectID, chatID)
+		if err != nil {
+			return err
+		}
+		evidenceMu.Lock()
+		defer evidenceMu.Unlock()
+		evidence = nil
+		for _, value := range values {
+			evidence = append(evidence, secretmatch.HarvestedValue{Name: value.Name, Container: value.Origin, Secret: value.Secret, RuleID: value.RuleID, Title: value.Title, Source: value.Source, Reference: value.Reference, Retired: value.Retired, NonDisclosable: value.NonDisclosable})
+		}
+		return nil
+	})
+	program.Runtime.Projector.SetManagedSecretGeneration(service.ScreeningGeneration)
+	program.Background.Output.SetCaptureProjector(program.Runtime.Projector)
+	testutil.FailErr(t, "register command output", registry.Register("command_output", (&command.CommandOutputTool{Registry: program.Background}).Run))
+	verifyExecutor.SetProgramEntry("verify", nil)
+	testutil.FailErr(t, "register program verify", program.Runtime.Registry.Register("verify", verify.Run))
+	testutil.FailErr(t, "register command", registry.Register("command", capturedCommand.Run))
 	testutil.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	testutil.FailErr(t, "register terminal tools", native.RegisterTerminalSessionTools(registry, background))
 
@@ -168,7 +209,10 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 			{scheme: "argument", args: map[string]any{"command": "sh echo.sh " + meta.Reference, "terminal_capture": map[string]any{}}, received: seen("seen.txt")},
 		},
 		"verify": {
-			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-verify.txt"}}, received: seen("seen-verify.txt")},
+			{scheme: "environment", args: map[string]any{"command": "TOKEN=" + meta.Reference + " SEEN=seen-verify.txt sh echo.sh"}, received: seen("seen-verify.txt")},
+			{scheme: "argument", args: map[string]any{"command": "SEEN=seen-verify-argument.txt sh echo.sh " + meta.Reference}, received: seen("seen-verify-argument.txt")},
+			{scheme: "pipeline", args: map[string]any{"command": `sh -c 'printf %s "$1"' canary ` + meta.Reference + ` | sh -c 'v=$(cat); printf %s "$v" > seen-pipeline.txt; printf %s "$v"'`}, received: seen("seen-pipeline.txt")},
+			{scheme: "poll", args: map[string]any{"command": "SEEN=seen-verify-poll.txt sh echo.sh " + meta.Reference + " &"}, received: seen("seen-verify-poll.txt")},
 		},
 		"terminal_open": {
 			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-terminal-open.txt"}}, received: seen("seen-terminal-open.txt")},
@@ -222,11 +266,40 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 				}
 				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 				defer cancel()
-				out, err := executor.Invoke(ctx, tool, call.args, tctx)
+				var originCallID string
+				var out string
+				var err error
+				if tool == "verify" {
+					out, err = program.Invoke(t, ctx, tool, call.args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+						originCallID = tc.Identity.ToolCallID
+						return verifyExecutor.Invoke(ctx, tool, args, tc)
+					})
+				} else {
+					out, err = executor.Invoke(ctx, tool, call.args, tctx)
+				}
+				if tool == "verify" && call.scheme == "poll" && err == nil {
+					jobs := program.Background.Output.List(ctx, program.Session)
+					if len(jobs) != 1 {
+						t.Fatalf("background jobs=%+v", jobs)
+					}
+					_, _, waitErr := program.Background.Lifecycle.Wait(ctx, program.Session, jobs[0].ProcessID)
+					testutil.FailErr(t, "wait for verification job", waitErr)
+					select {
+					case completion := <-completions:
+						if completion.OriginTool != "verify" || completion.ToolCallID != originCallID {
+							t.Fatalf("completion origin=%+v", completion)
+						}
+					case <-ctx.Done():
+						t.Fatal("verification completion not published")
+					}
+					out, err = program.Invoke(t, ctx, "command_output", map[string]any{"handle": jobs[0].ProcessID, "cursor": float64(0)}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+						return executor.Invoke(ctx, "command_output", args, tc)
+					})
+				}
 				if err != nil && toolrejection.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
 					t.Fatalf("%s (%s): %v", tool, call.scheme, err)
 				}
-				if got := waitReceived(t, call.received); got != canaryValue {
+				if got := waitReceived(ctx, call.received); got != canaryValue {
 					t.Fatalf("%s (%s): the consumer did not receive the resolved canary: %q (result %s, err %v)", tool, call.scheme, got, out, err)
 				}
 				assertNoCanary(t, tool, call.scheme, out)
@@ -265,10 +338,9 @@ func openCanaryShell(t *testing.T, executor *toolexecution.Executor, root string
 }
 
 // waitReceived lets a pty-driven consumer finish writing what it saw.
-func waitReceived(t *testing.T, received func() string) string {
-	t.Helper()
+func waitReceived(ctx context.Context, received func() string) string {
 	var got string
-	for t.Context().Err() == nil {
+	for ctx.Err() == nil {
 		if got = received(); got == canaryValue {
 			return got
 		}

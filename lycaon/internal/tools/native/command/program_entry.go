@@ -110,6 +110,7 @@ type SessionOwners interface {
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
+	tool            string
 	control         programControlDefinition
 	publicationOnce sync.Once
 	publicationErr  error
@@ -143,6 +144,8 @@ type programRun struct {
 
 // ProgramOutcome is the command tool's result for a settled program.
 type ProgramOutcome struct {
+	ResultVersion    int                              `json:"result_version,omitempty"`
+	Outcome          string                           `json:"outcome,omitempty"`
 	ProgramID        string                           `json:"program_id"`
 	State            string                           `json:"state"`
 	Status           int                              `json:"status"`
@@ -178,14 +181,14 @@ type ProgramRefusal struct {
 // Run parses and validates the whole submitted program before any effect,
 // freezes frame and surface, records the program, evaluates it under
 // supervision, settles it and returns the bounded owner projection.
-func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext) (string, error) {
 	ctx = sandbox.WithSessionID(ctx, tc.Identity.SessionID)
 	source, _ := args["command"].(string)
 	if source == "" {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_ARGV_REQUIRED", map[string]any{"field": "command"})
 	}
 	if r != nil && r.disabled.Load() {
-		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": "command"})
+		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": tool})
 	}
 	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
@@ -215,7 +218,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
-	parsed, snapshot, err := parseProgram(ctx, memory, source)
+	parsed, snapshot, err := parseProgram(ctx, memory, tool, source)
 	if err != nil {
 		return "", err
 	}
@@ -228,7 +231,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}()
 
-	run := &programRun{catalog: catalog, commands: commands, envelope: launchEnvelope(args), tc: tc, memory: memory, source: source, parentReceipt: tc.Invocation.ID}
+	run := &programRun{tool: tool, catalog: catalog, commands: commands, envelope: launchEnvelope(args), tc: tc, memory: memory, source: source, parentReceipt: tc.Invocation.ID}
 	paths, err := r.bindProgramFrame(ctx, run, args, snapshot.Plan.CatalogDigest)
 	if err != nil {
 		return "", err
@@ -264,7 +267,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	outputs, scope, screening := run.capture.Outputs, run.capture.Scope, run.capture.Screening
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
-	ctx, err = jobs.BeginProgram(ctx)
+	ctx, err = jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: run.tool, ToolCallID: tc.Identity.ToolCallID, RootSessionID: tc.ChatSessionID()})
 	if err != nil {
 		return "", err
 	}
@@ -347,7 +350,11 @@ func (r *ProgramRuntime) bindProgramFrame(ctx context.Context, run *programRun, 
 		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID, BranchID: branch.String(), Directory: cwd},
 		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: catalogDigest,
 	}
-	frame, err := toolexecution.FreezeProgramFrame(ctx, root, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: args}, run.memory)
+	submitted := tc.Effects.RequestedArgs
+	if submitted == nil {
+		submitted = args
+	}
+	frame, err := toolexecution.FreezeProgramFrame(ctx, root, tc, toolexecution.ProgramModelInvocation{ToolName: run.tool, Arguments: submitted}, run.memory)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +373,9 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: invocation.MaximumProgramInputBytes, OutputBytes: invocation.MaximumProgramInputBytes, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
-		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, screening)
+		outputScreening := screening
+		outputScreening.Policy = secretmatch.StreamPolicy{ManagedEchoes: true}
+		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, outputScreening)
 		if err != nil {
 			return err
 		}
@@ -502,10 +511,10 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 
 // parseProgram validates the entire unit; an excluded construct anywhere
 // refuses before the first statement could run.
-func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, source string) (*commandsurface.ParsedProgram, *commandsurface.ProgramSnapshotLease, error) {
+func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, tool, source string) (*commandsurface.ParsedProgram, *commandsurface.ProgramSnapshotLease, error) {
 	parsed, err := commandsurface.ParseAdmitted(ctx, memory, []byte(source), commandsurface.ParseOptions{})
 	if err != nil {
-		if reject := toolcommand.ProgramSyntaxObservation("command", err); reject != nil {
+		if reject := toolcommand.ProgramSyntaxObservation(tool, err); reject != nil {
 			return nil, nil, reject
 		}
 		return nil, nil, err
@@ -642,8 +651,10 @@ var compiledExternalDefinition = sync.OnceValues(func() (toolcontract.OperationD
 	if !ok {
 		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
 	}
+	// The command field is a review projection; launch uses only typed values.
+	contract.SecretReferenceArgs = []string{"command", "argument_values", "environment_values"}
 	return toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
-		Identity: "command", Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
+		Identity: "command", Version: 2, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
 		Commands: []toolcontract.CommandSpecification{commands["external"]}, Resources: catalog.Language.Limits,
 		ProgressGate: toolcontract.ProgressExistingAdmission, RejectionContract: "command",
 		Streams: toolcontract.StreamContract{Input: "exact process stdin bytes", Output: "exact process stdout bytes", Error: "process stderr; typed host refusals", Statuses: map[int]string{0: "process exit status"}},
@@ -669,16 +680,6 @@ func launchEnvelope(args map[string]any) map[string]any {
 		}
 	}
 	return envelope
-}
-
-// launchArguments are the arguments the existing command review, detection
-// and policy evaluate for one launch.
-func (r *programRun) launchArguments(line, cwd string) map[string]any {
-	arguments := map[string]any{"command": line, "cwd": cwd}
-	for field, value := range r.envelope {
-		arguments[field] = value
-	}
-	return arguments
 }
 
 // nativeArguments attaches any call-level capability declarations that the

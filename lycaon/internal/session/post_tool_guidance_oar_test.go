@@ -214,8 +214,8 @@ func TestVerifyUnverifiableBannerFiresOnConfineStop(t *testing.T) {
 	if !strings.Contains(out, "Code: VERIFY_UNVERIFIABLE") {
 		t.Fatalf("verify confine stop carried no banner:\n%s", out)
 	}
-	if strings.Contains(out, "Code: SANDBOX_BOUNDARY_REFUSED") || facts.HasCode(isolation.CodeBoundaryRefused) {
-		t.Fatalf("verify uses VERIFY_UNVERIFIABLE, not the command last-resort:\n%s", out)
+	if !strings.Contains(out, "Code: SANDBOX_BOUNDARY_REFUSED") || !facts.HasCode(isolation.CodeBoundaryRefused) {
+		t.Fatalf("verify lost the observed boundary refusal:\n%s", out)
 	}
 	if !facts.HasCode("VERIFY_UNVERIFIABLE") {
 		t.Fatalf("OAR must state VERIFY_UNVERIFIABLE on facts: %#v", facts)
