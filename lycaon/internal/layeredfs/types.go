@@ -4,7 +4,9 @@ package layeredfs
 
 import (
 	"errors"
+	"io"
 	"io/fs"
+	"os"
 	"syscall"
 	"time"
 )
@@ -152,6 +154,14 @@ type ObservationSink interface {
 	RecordObservation(ev ObservationEvent)
 }
 
+// FaultHooks provides deterministic test hooks for concurrency barriers and fault injection.
+type FaultHooks struct {
+	BeforeAppendLock      func(qpath QualifiedPath, data []byte)
+	WriteAtFunc           func(qpath QualifiedPath, file *os.File, data []byte, offset int64) (int, error)
+	LowerXattrHook        func(qpath QualifiedPath) error
+	WorkingFileHashReader func(qpath QualifiedPath, r io.Reader) (io.Reader, error)
+}
+
 type Config struct {
 	ViewID              string
 	BackingDir          string
@@ -164,6 +174,7 @@ type Config struct {
 	MaxCaptureRetries   int
 	CaptureRetryHook    func(qpath QualifiedPath, attempt int)
 	LookupRaceHook      func(qpath QualifiedPath, component string)
+	FaultHooks          *FaultHooks
 }
 
 // EntryAttr carries unified attributes returned by Stat/Lstat/GetAttr.

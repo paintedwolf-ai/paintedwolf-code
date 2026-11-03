@@ -90,15 +90,34 @@ func truncatePath(c *Core, qpath QualifiedPath, size int64) (EntryAttr, error) {
 		return EntryAttr{}, err
 	}
 
-	c.mu.Lock()
+	var node *privateNode
+	for {
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			return EntryAttr{}, ErrViewReleased
+		}
+		var nErr error
+		node, nErr = ensureWritableNodeLocked(c, res.qpath, base, OpenWriteOnly, res.attr.Mode)
+		c.mu.Unlock()
+		if nErr != nil {
+			return EntryAttr{}, nErr
+		}
+		node.flags.ioMu.Lock()
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			node.flags.ioMu.Unlock()
+			return EntryAttr{}, ErrViewReleased
+		}
+		if !node.flags.unlinked && c.state.pathIndex[res.qpath] == node.id {
+			break
+		}
+		c.mu.Unlock()
+		node.flags.ioMu.Unlock()
+	}
+	defer node.flags.ioMu.Unlock()
 	defer c.mu.Unlock()
-	if c.state.released {
-		return EntryAttr{}, ErrViewReleased
-	}
-	node, err := ensureWritableNodeLocked(c, res.qpath, base, OpenWriteOnly, res.attr.Mode)
-	if err != nil {
-		return EntryAttr{}, err
-	}
 	wf, err := openBackingFileRW(int(c.backing.workDirFile.Fd()), node.flags.backingName, node.flags.backingPath)
 	if err != nil {
 		return EntryAttr{}, err

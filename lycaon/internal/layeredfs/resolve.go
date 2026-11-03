@@ -286,7 +286,10 @@ func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, err
 	if le.Kind == EntryAbsent {
 		return resolvedLayerEntry{}, fs.ErrNotExist
 	}
-	xattrs, _ := provider.ListXattr(qpath.Rel)
+	xattrs, xErr := provider.ListXattr(qpath.Rel)
+	if xErr != nil {
+		return resolvedLayerEntry{}, xErr
+	}
 	return resolvedLayerEntry{
 		qpath:      qpath,
 		layer:      LayerTrunk,

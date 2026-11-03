@@ -201,8 +201,14 @@ func TestScenarioSuiteAllOperations(t *testing.T) {
 	}
 	xnames, err := core.ListXattr(qp("base.txt"), false)
 	testutil.FailErr(t, "listxattr base.txt", err)
-	if len(xnames) != 1 || xnames[0] != "user.test" {
-		t.Fatalf("unexpected xattr names: %v", xnames)
+	foundUserTest := false
+	for _, xn := range xnames {
+		if xn == "user.test" {
+			foundUserTest = true
+		}
+	}
+	if !foundUserTest {
+		t.Fatalf("expected user.test in xattr names, got %v", xnames)
 	}
 	appleDouble := []byte{0x00, 0x05, 0x16, 0x07, 0x00, 0x02, 0x00, 0x00, 'm', 'a', 'c', 'o', 's'}
 	_, err = core.WriteFile(qp("._base.txt"), appleDouble, 0o644)

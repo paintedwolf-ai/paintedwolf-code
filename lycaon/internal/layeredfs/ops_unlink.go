@@ -128,8 +128,8 @@ func unlinkPath(c *Core, qpath QualifiedPath, removeDir bool) error {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.state.released {
+		c.mu.Unlock()
 		return ErrViewReleased
 	}
 	var removedNode *privateNode
@@ -154,8 +154,15 @@ func unlinkPath(c *Core, qpath QualifiedPath, removeDir bool) error {
 	}
 	bumpParentDirGenLocked(c, targetPath)
 	recordJournalLocked(c, JournalOpUnlink, targetPath, nil, removedNode, 0)
+	var workDirFD = -1
 	if orphanBacking != "" && c.backing.workDirFile != nil {
-		_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), orphanBacking)
+		workDirFD = int(c.backing.workDirFile.Fd())
+	}
+	c.mu.Unlock()
+	if orphanBacking != "" && workDirFD >= 0 && removedNode != nil {
+		removedNode.flags.ioMu.Lock()
+		_ = unlinkBackingFile(workDirFD, orphanBacking)
+		removedNode.flags.ioMu.Unlock()
 	}
 	return nil
 }
