@@ -33,8 +33,13 @@ func setAttrPath(c *Core, qpath QualifiedPath, req SetAttrRequest) (EntryAttr, e
 	if req.UID != nil || req.GID != nil {
 		return EntryAttr{}, syscall.EPERM
 	}
+	if err := c.barrier.enterMutation(); err != nil {
+		return EntryAttr{}, err
+	}
+	defer c.barrier.leaveMutation()
+
 	if req.Size != nil {
-		attr, err := c.Truncate(qpath, *req.Size)
+		attr, err := truncatePathAdmitted(c, qpath, *req.Size)
 		if err != nil {
 			return EntryAttr{}, err
 		}
@@ -42,10 +47,6 @@ func setAttrPath(c *Core, qpath QualifiedPath, req SetAttrRequest) (EntryAttr, e
 			return attr, nil
 		}
 	}
-	if err := c.barrier.enterMutation(); err != nil {
-		return EntryAttr{}, err
-	}
-	defer c.barrier.leaveMutation()
 
 	followFinal := !req.NoFollow
 	res, err := resolvePath(c, qpath, followFinal, true)
@@ -100,6 +101,10 @@ func (c *Core) GetXattr(qpath QualifiedPath, name string, noFollow bool) ([]byte
 	if strings.TrimSpace(name) == "" {
 		return nil, syscall.EINVAL
 	}
+	if err := c.barrier.enterOp(); err != nil {
+		return nil, err
+	}
+	defer c.barrier.leaveOp()
 	res, err := resolvePath(c, qpath, !noFollow, false)
 	if err != nil {
 		return nil, err
@@ -113,6 +118,10 @@ func (c *Core) GetXattr(qpath QualifiedPath, name string, noFollow bool) ([]byte
 
 // ListXattr lists all extended attribute names on qpath in sorted order.
 func (c *Core) ListXattr(qpath QualifiedPath, noFollow bool) ([]string, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return nil, err
+	}
+	defer c.barrier.leaveOp()
 	res, err := resolvePath(c, qpath, !noFollow, false)
 	if err != nil {
 		return nil, err
