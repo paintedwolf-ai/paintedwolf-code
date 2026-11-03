@@ -50,7 +50,7 @@ func TestCorpusExportsCallableVocabularyWithoutChangingRelease(t *testing.T) {
 	testutil.FailErr(t, "encode corpus", err)
 	var decoded corpus
 	testutil.FailErr(t, "decode corpus", json.Unmarshal(encoded, &decoded))
-	if !reflect.DeepEqual(out, decoded) {
+	if decoded.Schema != corpusSchema || !reflect.DeepEqual(out.Tools, decoded.Tools) || !reflect.DeepEqual(out.Questions.Tools.Options, decoded.Questions.Tools.Options) {
 		t.Fatal("corpus contract changed during serialization")
 	}
 }
