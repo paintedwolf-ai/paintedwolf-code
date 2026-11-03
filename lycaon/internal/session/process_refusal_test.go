@@ -96,14 +96,20 @@ func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
 		text, err := engine.RenderKick(t.Context(), "coordinator-process-refused", map[string]any{"command_refusal": env.CommandRefusalDigest})
 		testutil.FailErr(t, "render process refusal wake", err)
 		for _, control := range []string{"command_output", "command_stop"} {
-			if strings.Contains(text, "`"+control) != tools.ToolOffered(ctx, control) {
+			if strings.Contains(text, control) != tools.ToolOffered(ctx, control) {
 				t.Errorf("wake recommends unavailable control %s: %s", control, text)
 			}
 		}
-		for _, required := range []string{"Do not reissue while the job is running", "A stop request alone does not", "Preserve completed effects"} {
+		for _, required := range []string{"Do not start replacement work while this job is running"} {
 			if !strings.Contains(text, required) {
 				t.Errorf("wake lost %q: %s", required, text)
 			}
+		}
+		if tools.ToolOffered(ctx, "command_stop") && !strings.Contains(text, "observe its exit") {
+			t.Errorf("stop guidance omitted observed exit: %s", text)
+		}
+		if strings.Contains(text, "capability_request.host_execution") || strings.Contains(text, "capability_request.write_root") {
+			t.Errorf("wake invented a retry recipe without invocation arguments: %s", text)
 		}
 		if strings.Contains(text, "and rerun it") {
 			t.Errorf("wake bypassed observed exit: %s", text)

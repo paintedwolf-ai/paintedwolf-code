@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/scan/obligation"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -51,7 +52,10 @@ func (s mergeEngine) clearReconcilePaths(sessionID string) {
 	s.Reconcile.ClearMergeReconcilePaths(sessionID)
 }
 
-func prepareMergeMutations(task *api.WorkerTask, assessment PromoteAssessment) ([]promoteMutation, error) {
+func prepareMergeMutations(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, assessment PromoteAssessment) ([]promoteMutation, error) {
+	if err := session.RevalidateTaskCheckpointPreview(ctx, task, roots); err != nil {
+		return nil, err
+	}
 	byPath := map[string]PromoteMergeResult{}
 	for _, mr := range assessment.MergeResults {
 		byPath[mr.Path] = mr
@@ -180,6 +184,9 @@ func (s mergeEngine) reclaimOrphanedApply(ctx context.Context, task *api.WorkerT
 	}
 	roots := s.taskRootRefs(ctx, task)
 	promote := PromoteRootsForTask(task, roots)
+	if err := session.RollbackTaskCheckpointJournal(ctx, task, roots); err != nil {
+		return true, fmt.Errorf("recover checkpoint promotion: %w", err)
+	}
 	found, err := recoverPromoteTransaction(s.hostDataDirFor(task), jobID, promote, task)
 	if err != nil {
 		return true, fmt.Errorf("recover interrupted promote: %w", err)
@@ -198,10 +205,15 @@ func (s mergeEngine) reclaimOrphanedApply(ctx context.Context, task *api.WorkerT
 	return true, nil
 }
 
-func (s mergeEngine) failPromoteTransaction(tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
+func (s mergeEngine) failPromoteTransaction(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
 	var unstarted *promoteTransactionUnstartedError
 	if errors.As(cause, &unstarted) {
 		return errors.Join(cause, tx.close(), revertPending())
+	}
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
+	defer cancel()
+	if err := session.RollbackTaskCheckpointJournal(cleanupCtx, task, promote.Roots); err != nil {
+		return errors.Join(cause, err)
 	}
 	rollbackErr := tx.rollback(promote, task)
 	if rollbackErr != nil {

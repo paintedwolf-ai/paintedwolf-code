@@ -49,6 +49,7 @@ type PromoteAssessment struct {
 	MergeResults  []PromoteMergeResult
 	OverlapJobIDs []string           `json:"overlap_job_ids,omitempty"`
 	PathOrders    []PromotePathOrder `json:"-"`
+	checkpointID  string
 	primary       map[string]promotePrimarySnapshot
 }
 

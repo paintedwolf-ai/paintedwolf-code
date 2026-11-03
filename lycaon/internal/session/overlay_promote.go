@@ -2,16 +2,90 @@ package session
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// TaskCheckpointStoreSubdir is the conventional checkpoint store subdirectory for a worker task.
+const TaskCheckpointStoreSubdir = ".lycaon-checkpoint-store"
+
+// CheckpointStoreDirForTask resolves the durable checkpoint store directory for task if one exists.
+func CheckpointStoreDirForTask(task *api.WorkerTask) string {
+	if task == nil {
+		return ""
+	}
+	for _, raw := range []string{task.WorkspaceBaselinePath, task.WorkspaceOverlayPath} {
+		p := strings.TrimSpace(raw)
+		if p == "" {
+			continue
+		}
+		for _, cand := range []string{p, filepath.Join(p, TaskCheckpointStoreSubdir), filepath.Dir(p), filepath.Join(filepath.Dir(p), TaskCheckpointStoreSubdir)} {
+			if isCheckpointStoreDir(cand) {
+				return cand
+			}
+		}
+	}
+	if root := strings.TrimSpace(task.WorkspaceRoot); root != "" {
+		for _, cand := range []string{filepath.Join(root, TaskCheckpointStoreSubdir), root + TaskCheckpointStoreSubdir} {
+			if isCheckpointStoreDir(cand) {
+				return cand
+			}
+		}
+	}
+	return ""
+}
+
+func isCheckpointStoreDir(dir string) bool {
+	if dir == "" || dir == "." || dir == "/" {
+		return false
+	}
+	st, err := os.Lstat(dir)
+	if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
+	cpSt, err := os.Stat(filepath.Join(dir, "checkpoints"))
+	if err != nil || !cpSt.IsDir() {
+		return false
+	}
+	blobSt, err := os.Stat(filepath.Join(dir, "blobs"))
+	return err == nil && blobSt.IsDir()
+}
+
+// OpenTaskCheckpointStore loads the reviewed checkpoint, or latest when no preview is bound.
+func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoint.Manifest, bool, error) {
+	dir := CheckpointStoreDirForTask(task)
+	if dir == "" {
+		return nil, checkpoint.Manifest{}, false, nil
+	}
+	store, err := checkpoint.NewStore(dir)
+	if err != nil {
+		return nil, checkpoint.Manifest{}, true, err
+	}
+	checkpointID := boundTaskCheckpointID(task.ID)
+	var manifest checkpoint.Manifest
+	if checkpointID == "" {
+		manifest, err = store.LoadLatestManifest()
+	} else {
+		manifest, err = store.LoadManifest(checkpointID)
+	}
+	if err != nil {
+		if errors.Is(err, checkpoint.ErrCheckpointNotFound) && checkpointID == "" {
+			return store, checkpoint.Manifest{}, false, nil
+		}
+		return nil, checkpoint.Manifest{}, true, err
+	}
+	return store, manifest, true, nil
+}
 
 // OverlayWorkspaceChangedPaths returns overlay changes since the leg started.
 func OverlayWorkspaceChangedPaths(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) []string {
@@ -24,9 +98,20 @@ func OverlayWorkspaceChangedPaths(ctx context.Context, task *api.WorkerTask, roo
 	return paths
 }
 
-// InspectOverlayChanges returns overlay changes and any baseline read error.
+// InspectOverlayChanges returns overlay changes and any baseline or checkpoint read error.
 func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) ([]string, error) {
-	if task == nil || task.WorkspaceRoot == "" || !OverlayWorkspaceAvailable(task) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if task == nil || !OverlayWorkspaceAvailable(task) {
+		return nil, nil
+	}
+	if _, manifest, hasCheckpoint, err := OpenTaskCheckpointStore(task); err != nil {
+		return nil, err
+	} else if hasCheckpoint {
+		return checkpointManifestChangedPaths(manifest, roots), nil
+	}
+	if task.WorkspaceRoot == "" {
 		return nil, nil
 	}
 	baseline, err := workspacebaseline.Open(ctx, task.WorkspaceBaselinePath, workspacebaseline.ContentStore(task.WorkspaceBaselinePath))
@@ -44,17 +129,23 @@ func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []pr
 	return promotionstate.FilterOverlayPromoteCandidatePaths(changed), nil
 }
 
-// OverlayWorkspaceAvailable reports whether the task's overlay root is a real directory.
+// OverlayWorkspaceAvailable reports whether the task's overlay root is a real directory or has a published checkpoint store.
 func OverlayWorkspaceAvailable(task *api.WorkerTask) bool {
 	if task == nil {
 		return false
 	}
 	root := strings.TrimSpace(task.WorkspaceRoot)
-	if root == "" {
-		return false
+	if root != "" {
+		st, err := os.Lstat(root)
+		if err != nil {
+			return CheckpointStoreDirForTask(task) != ""
+		}
+		if st.Mode()&os.ModeSymlink != 0 || !st.IsDir() {
+			return false
+		}
+		return true
 	}
-	st, err := os.Lstat(root)
-	return err == nil && st.IsDir() && st.Mode()&os.ModeSymlink == 0
+	return CheckpointStoreDirForTask(task) != ""
 }
 
 // OverlayAwaitingPromote keeps changed or unreadable write overlays open.
@@ -71,10 +162,13 @@ func OverlayAwaitingPromote(ctx context.Context, task *api.WorkerTask) bool {
 	return err != nil || len(paths) > 0
 }
 
-// OverlayWorkspaceDivergencePaths compares the overlay with the live project.
+// OverlayWorkspaceDivergencePaths compares the overlay or published checkpoint with the live project.
 func OverlayWorkspaceDivergencePaths(task *api.WorkerTask, roots []projectroot.RootRef) []string {
 	if task == nil || !task.EffectiveScope().IsWrite() {
 		return nil
+	}
+	if _, manifest, hasCheckpoint, err := OpenTaskCheckpointStore(task); err == nil && hasCheckpoint {
+		return checkpointManifestChangedPaths(manifest, roots)
 	}
 	overlay := strings.TrimSpace(task.WorkspaceRoot)
 	if overlay == "" || !OverlayWorkspaceAvailable(task) {
@@ -98,7 +192,6 @@ func OverlayWorkspaceDivergencePaths(task *api.WorkerTask, roots []projectroot.R
 	}
 	var changed []string
 	if len(projSnap) == 0 {
-		// Empty live tree: every overlay file is new work to preserve.
 		overlaySnap, err := SnapshotWorkspace(overlay)
 		if err != nil {
 			return nil

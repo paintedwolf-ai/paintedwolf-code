@@ -133,7 +133,7 @@ func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, 
 	if strings.TrimSpace(task.ParentSessionID) != sessionID {
 		return api.WorkerMergeResult{}, s.reject(OverlayPromoteSessionMismatchCode, map[string]any{"job_id": jobID})
 	}
-	if strings.TrimSpace(task.WorkspaceRoot) == "" {
+	if strings.TrimSpace(task.WorkspaceRoot) == "" && session.CheckpointStoreDirForTask(task) == "" {
 		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID, "reason": "no isolated branch"})
 	}
 	if task.MergeStatus != api.WorkerMergeStatusPending {
@@ -159,6 +159,9 @@ func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, 
 		return api.WorkerMergeResult{}, err
 	}
 	out.Paths = mergePaths
+	if session.CheckpointStoreDirForTask(task) != "" {
+		session.MarkTaskCheckpointPreviewBindIntent(jobID)
+	}
 	assessment, err := eng.assessMerge(ctx, sessionID, task, mergePaths)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
@@ -249,6 +252,9 @@ func (s mergeEngine) attachSourceEvidence(ctx context.Context, task *api.WorkerT
 func (s mergeEngine) assessMerge(ctx context.Context, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, error) {
 	if task == nil {
 		return PromoteAssessment{}, nil
+	}
+	if assessment, ok, err := assessCheckpointTask(ctx, s.MergeService, sessionID, task, mergePaths); ok || err != nil {
+		return assessment, err
 	}
 	return AssessPromotePaths3Way(ctx, s.MergeService, sessionID, task, mergePaths)
 }

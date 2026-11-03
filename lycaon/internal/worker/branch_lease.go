@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -256,9 +257,19 @@ func (s mergeEngine) teardownBranch(task *api.WorkerTask) error {
 // holdBranch leases the overlay's branch tree for a merge read, rebuilding a
 // reclaimed tree. A tree that cannot be rebuilt rejects as not pending.
 func (s mergeEngine) holdBranch(ctx context.Context, jobID string) (*BranchLease, error) {
+	task, exists := s.Queue.Get(jobID)
+	checkpointed := exists && task != nil && session.CheckpointStoreDirForTask(task) != ""
+	if checkpointed {
+		if err := session.SyncTaskCheckpointToWorkspace(task); err != nil {
+			return nil, fmt.Errorf("rehydrate checkpoint branch: %w", err)
+		}
+	}
 	_, lease, err := s.Queue.EnsureWorkerBranch(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, ErrWorkerBranchUnavailable) {
+			if checkpointed {
+				return LeaseExistingBranch(ctx, task)
+			}
 			return nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{
 				"job_id": jobID, "reason": "overlay workspace unavailable",
 			})
