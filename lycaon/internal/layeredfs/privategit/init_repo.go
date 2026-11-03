@@ -19,7 +19,6 @@ type initializedRepo struct {
 	leaseID        string
 	initialHeadOID string
 	initialRefs    map[string]string
-	trunkInodes    map[string]uint64
 	metrics        InitMetrics
 }
 
@@ -35,6 +34,14 @@ func initializePrivateRepo(
 	layout, err := resolveSourceRepoLayout(view.trunkDir, repoRel, view.authorizedGitDirs, forbidden)
 	if err != nil {
 		return nil, err
+	}
+	if !view.materialized {
+		if strings.TrimSpace(view.worktreeDir) == "" {
+			return nil, fmt.Errorf("%w: %w: view %q has no bound mounted worktree", layeredfs.ErrGitPending, ErrMountedWorktreeUnavailable, view.viewID)
+		}
+		if _, vErr := validateMountedWorktreeDir(layout.worktreeDir, targetWorktreeDir); vErr != nil {
+			return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, vErr)
+		}
 	}
 
 	stageBase := filepath.Join(mgr.cfg.BackingDir, "views", view.viewID, "git-staging")
@@ -135,15 +142,6 @@ func initializePrivateRepo(
 		}
 	}
 
-	var trunkInodes map[string]uint64
-	if !view.materialized {
-		inodes, pErr := projectMountedWorktreeFromTrunk(layout.worktreeDir, targetWorktreeDir)
-		if pErr != nil {
-			return abortFinal(fmt.Errorf("%w: %v", layeredfs.ErrGitPending, pErr))
-		}
-		trunkInodes = inodes
-	}
-
 	if _, sErr := os.Stat(filepath.Join(finalGitDir, "index")); sErr == nil {
 		uOut, uCode, uErr := gitexec.Run(ctx, targetWorktreeDir, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{
 			Profile: gitexec.ProfileHermetic,
@@ -170,7 +168,6 @@ func initializePrivateRepo(
 		leaseID:        leaseID,
 		initialHeadOID: initHeadOID,
 		initialRefs:    initRefs,
-		trunkInodes:    trunkInodes,
 		metrics:        importMetrics,
 	}, nil
 }

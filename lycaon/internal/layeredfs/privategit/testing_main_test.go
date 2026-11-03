@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -93,6 +94,44 @@ func newTestManager(t *testing.T, baseDir string) *Manager {
 	return mgr
 }
 
+func populateDisposableTestMount(t *testing.T, trunkDir, mountDir string) {
+	t.Helper()
+	testutil.FailErr(t, "mkdir mountDir", os.MkdirAll(mountDir, 0o755))
+	err := filepath.WalkDir(trunkDir, func(path string, d fs.DirEntry, wErr error) error {
+		if wErr != nil {
+			return wErr
+		}
+		rel, rErr := filepath.Rel(trunkDir, path)
+		if rErr != nil || rel == "." {
+			return rErr
+		}
+		if d.Name() == ".git" {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		dst := filepath.Join(mountDir, rel)
+		info, iErr := d.Info()
+		if iErr != nil {
+			return iErr
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			link, lErr := os.Readlink(path)
+			if lErr != nil {
+				return lErr
+			}
+			_ = os.RemoveAll(dst)
+			return os.Symlink(link, dst)
+		}
+		if d.IsDir() {
+			return os.MkdirAll(dst, info.Mode().Perm()|0o700)
+		}
+		return copyWorkingTreeFile(path, dst, info.Mode())
+	})
+	testutil.FailErr(t, "populateDisposableTestMount", err)
+}
+
 func newMountedViewWithManager(
 	t *testing.T,
 	mgr *Manager,
@@ -101,7 +140,9 @@ func newMountedViewWithManager(
 ) *layeredfs.Core {
 	t.Helper()
 	backing := filepath.Join(mgr.cfg.BackingDir, "core-backing-"+viewID)
+	mountDir := filepath.Join(mgr.cfg.BackingDir, "test-mount-"+viewID)
 	testutil.FailErr(t, "mkdir core backing", os.MkdirAll(backing, 0o700))
+	populateDisposableTestMount(t, trunkDir, mountDir)
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID:         viewID,
 		BackingDir:     backing,
@@ -111,7 +152,7 @@ func newMountedViewWithManager(
 		},
 	})
 	testutil.FailErr(t, "layeredfs.New", err)
-	testutil.FailErr(t, "MountedClaim", mgr.MountedClaim(viewID, "worker-"+viewID, "primary", trunkDir, core, authorized...))
+	testutil.FailErr(t, "MountedClaimWithWorktree", mgr.MountedClaimWithWorktree(viewID, "worker-"+viewID, "primary", trunkDir, mountDir, core, authorized...))
 	t.Cleanup(func() {
 		_ = mgr.ReleaseView(viewID)
 		_ = core.ReleaseView()
@@ -139,8 +180,12 @@ func snapshotDirectoryTreeDigests(t *testing.T, root string) map[string]string {
 			out[slash] = "symlink:" + link
 			return nil
 		}
+		info, iErr := d.Info()
+		if iErr != nil {
+			return iErr
+		}
 		if d.IsDir() {
-			out[slash] = "dir"
+			out[slash] = fmt.Sprintf("dir:%04o", info.Mode().Perm())
 			return nil
 		}
 		raw, readErr := os.ReadFile(path)
@@ -148,7 +193,7 @@ func snapshotDirectoryTreeDigests(t *testing.T, root string) map[string]string {
 			return readErr
 		}
 		sum := sha256.Sum256(raw)
-		out[slash] = hex.EncodeToString(sum[:])
+		out[slash] = fmt.Sprintf("mode=%04o:sha=%s", info.Mode().Perm(), hex.EncodeToString(sum[:]))
 		return nil
 	})
 	testutil.FailErr(t, "snapshotDirectoryTreeDigests", err)

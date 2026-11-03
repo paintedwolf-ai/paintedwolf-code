@@ -73,13 +73,7 @@ func isRemoteApproved(approved map[string]bool, remote, remoteURL string) bool {
 }
 
 func syncCoreOverlayToWorktree(view *managedView) error {
-	if view == nil {
-		return nil
-	}
-	if err := syncTrunkInodesToWorktree(view); err != nil {
-		return err
-	}
-	if view.core == nil {
+	if view == nil || view.core == nil {
 		return nil
 	}
 	changes, err := view.core.EnumerateChanges(false)

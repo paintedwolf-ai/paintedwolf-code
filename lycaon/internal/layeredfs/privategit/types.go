@@ -40,6 +40,10 @@ var (
 	// ErrCorruptObjectStore is returned when imported Git objects fail integrity or
 	// connectivity verification.
 	ErrCorruptObjectStore = errors.New("privategit: object integrity or connectivity check failed")
+
+	// ErrMountedWorktreeUnavailable is returned when a mounted view has no bound
+	// host-owned FUSE/NFS mounted workspace path or when the mounted path is not active.
+	ErrMountedWorktreeUnavailable = errors.New("privategit: mounted workspace worktree path is unavailable or not mounted")
 )
 
 // LeaseKind classifies an active object retention lease in the engine-retained store.

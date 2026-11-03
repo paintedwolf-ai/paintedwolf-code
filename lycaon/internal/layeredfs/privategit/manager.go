@@ -85,13 +85,21 @@ func (m *Manager) Store() *RetainedObjectStore {
 }
 
 // MountedClaim binds a mounted layeredfs.Core view without scanning for or initializing
-// any repositories during workspace claim (#1671).
+// any repositories during workspace claim (#1671). A mounted worktree directory must be
+// bound via MountedClaimWithWorktree or BindMountedWorktree before running Git operations.
 func (m *Manager) MountedClaim(
 	viewID, workerID, rootID, trunkDir string,
 	core *layeredfs.Core,
 	authorizedGitDirs ...string,
 ) error {
-	return m.MountedClaimWithWorktree(viewID, workerID, rootID, trunkDir, "", core, authorizedGitDirs...)
+	if viewID == "" || trunkDir == "" || core == nil {
+		return fmt.Errorf("privategit: viewID, trunkDir, and core are required")
+	}
+	absTrunk, err := filepath.Abs(trunkDir)
+	if err != nil {
+		return err
+	}
+	return registerMountedClaim(m, viewID, workerID, rootID, absTrunk, "", core, authorizedGitDirs...)
 }
 
 func registerManagedView(m *Manager, view *managedView) {

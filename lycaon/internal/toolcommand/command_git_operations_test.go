@@ -103,7 +103,12 @@ func verifyPrivateGitCommandExecution(t *testing.T, adapter string) {
 		})
 		testutil.FailErr(t, "layeredfs.New", cErr)
 		t.Cleanup(func() { _ = core.ReleaseView() })
-		testutil.FailErr(t, "MountedClaim", mgr.MountedClaim(viewID, "worker-cmd", "primary", trunkDir, core))
+		mountDir := filepath.Join(t.TempDir(), "mounted-"+adapter)
+		testutil.FailErr(t, "mkdir mountDir", os.MkdirAll(mountDir, 0o755))
+		appBytes, rErr := os.ReadFile(filepath.Join(trunkDir, "app.txt"))
+		testutil.FailErr(t, "read trunk app.txt", rErr)
+		testutil.FailErr(t, "seed mountDir app.txt", os.WriteFile(filepath.Join(mountDir, "app.txt"), appBytes, 0o644))
+		testutil.FailErr(t, "MountedClaimWithWorktree", mgr.MountedClaimWithWorktree(viewID, "worker-cmd", "primary", trunkDir, mountDir, core))
 		var finish func() error
 		wtDir, finish, _, err = privategit.PrepareManagerViewOperation(t.Context(), mgr, trunkDir, "worker-cmd")
 		testutil.FailErr(t, "PrepareManagerViewOperation", err)
