@@ -124,6 +124,7 @@ func TestRetirementCatalogRefusesMalformedContentContracts(t *testing.T) {
 		"declaration string version":   retirementCatalog(`"content_contracts":{"paintedwolf.note":{"version":"1","summary":"Note."}},`, ""),
 		"tool shaped declaration":      retirementCatalog(`"content_contracts":{"surface_note":{"version":1,"summary":"Note."}},`, ""),
 		"mcp shaped declaration":       retirementCatalog(`"content_contracts":{"mcp_*":{"version":1,"summary":"Note."}},`, ""),
+		"unknown vocabulary":           []byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"palettes":{}}}`),
 		"null successor":               retirementCatalog(noteContracts, `"old":null`),
 		"scalar successor":             retirementCatalog(noteContracts, `"old":"read"`),
 		"mixed successor list":         retirementCatalog(noteContracts, `"old":["read",`+noteSuccessor+`]`),
