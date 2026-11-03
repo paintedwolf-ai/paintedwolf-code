@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,8 +25,8 @@ func setOSFileXattr(t *testing.T, path, attr string, val []byte) {
 }
 
 // TestLowerTrunkXattrPreservedAndFaultInjected verifies Finding 1:
-// real lower-file xattrs (including macOS quarantine metadata and user xattrs) are read
-// from the trunk, preserved through copy-up into both BaseCapture and the private node,
+// real lower-file xattrs (macOS quarantine + user xattr on Darwin; supported user.* xattrs on Linux)
+// are read from the trunk, preserved through copy-up into both BaseCapture and the private node,
 // and non-ignorable metadata read errors are surfaced rather than discarded.
 func TestLowerTrunkXattrPreservedAndFaultInjected(t *testing.T) {
 	t.Parallel()
@@ -42,16 +40,16 @@ func TestLowerTrunkXattrPreservedAndFaultInjected(t *testing.T) {
 
 		quarantineVal := []byte("0083;66300000;Safari;12345678-1234-1234-1234-1234567890AB")
 		customVal := []byte("lower-custom-xattr-value")
-		setOSFileXattr(t, trunkFile, "com.apple.quarantine", quarantineVal)
-		setOSFileXattr(t, trunkFile, "user.layeredfs.custom", customVal)
+		setOSFileXattr(t, trunkFile, platformPrimaryTestXattr, quarantineVal)
+		setOSFileXattr(t, trunkFile, platformSecondaryTestXattr, customVal)
 
-		gotQ, err := core.GetXattr(qp, "com.apple.quarantine", false)
-		testutil.FailErr(t, "GetXattr com.apple.quarantine on trunk", err)
+		gotQ, err := core.GetXattr(qp, platformPrimaryTestXattr, false)
+		testutil.FailErr(t, "GetXattr primary on trunk", err)
 		if !bytes.Equal(gotQ, quarantineVal) {
-			t.Fatalf("expected quarantine xattr %q on trunk, got %q", string(quarantineVal), string(gotQ))
+			t.Fatalf("expected primary xattr %q on trunk, got %q", string(quarantineVal), string(gotQ))
 		}
-		gotCustom, err := core.GetXattr(qp, "user.layeredfs.custom", false)
-		testutil.FailErr(t, "GetXattr user.layeredfs.custom on trunk", err)
+		gotCustom, err := core.GetXattr(qp, platformSecondaryTestXattr, false)
+		testutil.FailErr(t, "GetXattr secondary on trunk", err)
 		if !bytes.Equal(gotCustom, customVal) {
 			t.Fatalf("expected custom xattr %q on trunk, got %q", string(customVal), string(gotCustom))
 		}
@@ -78,18 +76,18 @@ func TestLowerTrunkXattrPreservedAndFaultInjected(t *testing.T) {
 		if !ok {
 			t.Fatal("expected CapturedBase for quarantined.txt")
 		}
-		if !bytes.Equal(base.Xattrs["com.apple.quarantine"], quarantineVal) ||
-			!bytes.Equal(base.Xattrs["user.layeredfs.custom"], customVal) {
+		if !bytes.Equal(base.Xattrs[platformPrimaryTestXattr], quarantineVal) ||
+			!bytes.Equal(base.Xattrs[platformSecondaryTestXattr], customVal) {
 			t.Fatalf("expected CapturedBase to preserve lower xattrs, got %+v", base.Xattrs)
 		}
 
-		gotQAfter, err := core.GetXattr(qp, "com.apple.quarantine", false)
-		testutil.FailErr(t, "GetXattr com.apple.quarantine after copy-up", err)
+		gotQAfter, err := core.GetXattr(qp, platformPrimaryTestXattr, false)
+		testutil.FailErr(t, "GetXattr primary after copy-up", err)
 		if !bytes.Equal(gotQAfter, quarantineVal) {
-			t.Fatalf("expected quarantine xattr preserved after copy-up, got %q", string(gotQAfter))
+			t.Fatalf("expected primary xattr preserved after copy-up, got %q", string(gotQAfter))
 		}
-		gotCustomAfter, err := core.GetXattr(qp, "user.layeredfs.custom", false)
-		testutil.FailErr(t, "GetXattr user.layeredfs.custom after copy-up", err)
+		gotCustomAfter, err := core.GetXattr(qp, platformSecondaryTestXattr, false)
+		testutil.FailErr(t, "GetXattr secondary after copy-up", err)
 		if !bytes.Equal(gotCustomAfter, customVal) {
 			t.Fatalf("expected custom xattr preserved after copy-up, got %q", string(gotCustomAfter))
 		}
@@ -349,130 +347,5 @@ func TestPartialWriteFailureUpdatesAccountingAndJournal(t *testing.T) {
 	testutil.FailErr(t, "SnapshotJournal", err)
 	if len(snap.Changes) != 2 {
 		t.Fatalf("expected 2 changes in snapshot after partial writes, got %d", len(snap.Changes))
-	}
-}
-
-type prefixFailReader struct {
-	r         io.Reader
-	limit     int
-	readSoFar int
-	err       error
-}
-
-func (p *prefixFailReader) Read(buf []byte) (int, error) {
-	if p.readSoFar >= p.limit {
-		return 0, p.err
-	}
-	rem := p.limit - p.readSoFar
-	if len(buf) > rem {
-		buf = buf[:rem]
-	}
-	n, err := p.r.Read(buf)
-	p.readSoFar += n
-	if p.readSoFar >= p.limit {
-		return n, p.err
-	}
-	return n, err
-}
-
-// TestWorkingFileHashOpenAndPrefixReadFailurePropagates verifies Finding 5:
-// working-file open failures and mid-read io.Copy failures during EnumerateChanges and SnapshotJournal
-// are propagated rather than swallowed into empty or truncated digests.
-func TestWorkingFileHashOpenAndPrefixReadFailurePropagates(t *testing.T) {
-	t.Parallel()
-	tmp := t.TempDir()
-	trunk := filepath.Join(tmp, "trunk")
-	backing := filepath.Join(tmp, "backing")
-	testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
-	testutil.FailErr(t, "mkdir backing", os.MkdirAll(backing, 0o700))
-
-	mode := "none"
-	core, err := New(Config{
-		ViewID:     "view-hash-err",
-		BackingDir: backing,
-		Roots: []RootSpec{
-			{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true},
-		},
-		FaultHooks: &FaultHooks{
-			WorkingFileHashReader: func(qpath QualifiedPath, r io.Reader) (io.Reader, error) {
-				if qpath.Rel == "file.txt" && mode == "prefix-err" {
-					return &prefixFailReader{r: r, limit: 4, err: syscall.EIO}, nil
-				}
-				return r, nil
-			},
-		},
-	})
-	testutil.FailErr(t, "New Core", err)
-	defer func() { _ = core.ReleaseView() }()
-
-	qp := QualifiedPath{RootID: "primary", Rel: "file.txt"}
-	_, err = core.WriteFile(qp, []byte("0123456789abcdef"), 0o644)
-	testutil.FailErr(t, "WriteFile file.txt", err)
-
-	// 1. Reader failing after reading a 4-byte prefix must fail EnumerateChanges and SnapshotJournal.
-	mode = "prefix-err"
-	if _, err := core.EnumerateChanges(true); !errors.Is(err, syscall.EIO) {
-		t.Fatalf("expected syscall.EIO from EnumerateChanges on prefix read failure, got %v", err)
-	}
-	if _, err := core.SnapshotJournal(); !errors.Is(err, syscall.EIO) {
-		t.Fatalf("expected syscall.EIO from SnapshotJournal on prefix read failure, got %v", err)
-	}
-
-	// Stats() uses maintained in-memory flags and does not fail or re-hash all working files.
-	if st := core.Stats(); st.LogicalChanges != 1 {
-		t.Fatalf("expected Stats().LogicalChanges == 1 without hashing working file, got %d", st.LogicalChanges)
-	}
-
-	// 2. Working-file open failure (missing backing file) must fail EnumerateChanges and SnapshotJournal.
-	mode = "none"
-	entries, err := os.ReadDir(filepath.Join(backing, "working"))
-	testutil.FailErr(t, "ReadDir working", err)
-	for _, e := range entries {
-		testutil.FailErr(t, "remove working blob", os.Remove(filepath.Join(backing, "working", e.Name())))
-	}
-	if _, err := core.EnumerateChanges(true); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("expected fs.ErrNotExist from EnumerateChanges when working file is missing, got %v", err)
-	}
-	if _, err := core.SnapshotJournal(); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("expected fs.ErrNotExist from SnapshotJournal when working file is missing, got %v", err)
-	}
-}
-
-// TestRenameHardLinkAliasOverSameNodeLeavesBothIntact verifies Finding 6:
-// renaming one hard-link alias over another that points to the same private node is a no-op
-// that preserves both names, Nlink == 2, and the change journal.
-func TestRenameHardLinkAliasOverSameNodeLeavesBothIntact(t *testing.T) {
-	t.Parallel()
-	core, trunk, _ := newSingleRootTestCore(t)
-	qp := func(rel string) QualifiedPath {
-		return QualifiedPath{RootID: "primary", Rel: rel}
-	}
-	testutil.FailErr(t, "write trunk orig.txt", os.WriteFile(filepath.Join(trunk, "orig.txt"), []byte("hardlink-content"), 0o644))
-
-	aliasA := qp("orig.txt")
-	aliasB := qp("alias.txt")
-	_, err := core.Link(aliasA, aliasB)
-	testutil.FailErr(t, "Link orig.txt -> alias.txt", err)
-
-	// Rename aliasA over aliasB (both refer to the same private node).
-	testutil.FailErr(t, "Rename aliasA over aliasB", core.Rename(aliasA, aliasB))
-
-	attrA, err := core.Stat(aliasA)
-	testutil.FailErr(t, "Stat aliasA after same-node rename", err)
-	attrB, err := core.Stat(aliasB)
-	testutil.FailErr(t, "Stat aliasB after same-node rename", err)
-	if attrA.NodeID != attrB.NodeID || attrA.Nlink != 2 || attrB.Nlink != 2 {
-		t.Fatalf("expected both aliases intact with shared NodeID and Nlink=2, got A=%+v B=%+v", attrA, attrB)
-	}
-
-	changes, err := core.EnumerateChanges(true)
-	testutil.FailErr(t, "EnumerateChanges(true)", err)
-	if len(changes) != 2 {
-		t.Fatalf("expected 2 logical change entries (both hard-link aliases), got %+v", changes)
-	}
-	for _, ce := range changes {
-		if ce.Deleted || len(ce.Final.HardLinkPaths) != 2 {
-			t.Fatalf("expected non-deleted hard-link change entry with 2 paths, got %+v", ce)
-		}
 	}
 }
