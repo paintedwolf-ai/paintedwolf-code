@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
@@ -66,18 +68,25 @@ func (set *seedLockSet) forKey(key string) *sync.RWMutex {
 	return lock
 }
 
-func provisionRoot(ctx context.Context, m *Manager, sourceRoot, branchRoot string) error {
+func provisionRoot(
+	ctx context.Context,
+	m *Manager,
+	source projectroot.RootRef,
+	branchRoot, runtimeDir, viewID string,
+	fallbackReason adapter.ReasonCode,
+) (*adapter.PreparedView, error) {
+	sourceRoot := source.Path
 	maxEntries, maxBytes := effectiveLimits(ctx, m)
 	if est := CachedSeedEstimate(m.seedRoot, sourceRoot); est != nil {
 		if err := checkPreparationLimits(est.EstimatedEntries, est.EstimatedBytes, maxEntries, maxBytes, true); err != nil {
 			_ = os.RemoveAll(branchRoot)
-			return err
+			return nil, err
 		}
 	}
 	reportPreparation(ctx, PreparationProgress{Stage: "probing"})
 	strategy, err := chooseProvisionStrategy(ctx, m, sourceRoot, branchRoot)
 	if err != nil {
-		return classifyProvisionError(err)
+		return nil, classifyProvisionError(err)
 	}
 	base := PreparationProgress{Strategy: strategy}
 	if strings.TrimSpace(m.seedRoot) != "" {
@@ -88,22 +97,20 @@ func provisionRoot(ctx context.Context, m *Manager, sourceRoot, branchRoot strin
 	if strategy != ProvisionBridgeCoW {
 		base.Stage = "snapshotting_branch"
 		reportPreparation(ctx, base)
-		result, mirrorErr := mirrorTree(ctx, sourceRoot, branchRoot, mirrorOptions{
-			phase: "worker_branch_" + string(strategy), tolerateChange: true, preparation: base, maxEntries: maxEntries, maxBytes: maxBytes,
-		})
+		view, result, mirrorErr := materializeRootWithAdapter(ctx, m, source, sourceRoot, "", branchRoot, runtimeDir, viewID, base, maxEntries, maxBytes, fallbackReason)
 		if mirrorErr != nil {
 			_ = os.RemoveAll(branchRoot)
-			return classifyProvisionError(fmt.Errorf("snapshot worker branch: %w", markIncompleteSeedCleaned(mirrorErr)))
+			return nil, classifyProvisionError(fmt.Errorf("snapshot worker branch: %w", markIncompleteSeedCleaned(mirrorErr)))
 		}
 		if err := validateCompleteMirror(result); err != nil {
 			_ = os.RemoveAll(branchRoot)
-			return err
+			return nil, err
 		}
 		logProvisionResult(ctx, sourceRoot, strategy, false, result)
 		if err := RemoveSeed(ctx, m.seedRoot, sourceRoot); err != nil {
 			slog.WarnContext(ctx, "remove worker cache no longer useful", "source", sourceRoot, "err", err)
 		}
-		return nil
+		return view, nil
 	}
 
 	base.Stage = "surveying_source"
@@ -111,7 +118,7 @@ func provisionRoot(ctx context.Context, m *Manager, sourceRoot, branchRoot strin
 	refreshed, err := refreshSeedLocked(ctx, m, sourceRoot, base)
 	if err != nil {
 		_ = os.RemoveAll(branchRoot)
-		return classifyProvisionError(fmt.Errorf("refresh worker seed: %w", markIncompleteSeedCleaned(err)))
+		return nil, classifyProvisionError(fmt.Errorf("refresh worker seed: %w", markIncompleteSeedCleaned(err)))
 	}
 
 	key := enginepaths.ProjectKey(sourceRoot)
@@ -120,29 +127,27 @@ func provisionRoot(ctx context.Context, m *Manager, sourceRoot, branchRoot strin
 	defer inProcess.RUnlock()
 	release, err := lockSeedAcrossProcesses(ctx, m.seedRoot, key, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer release()
 	seedDir := enginepaths.ProjectSeedDir(m.seedRoot, sourceRoot)
 	_, seedTree, manifest := loadCurrentSeed(seedDir)
 	if seedTree == "" {
-		return fmt.Errorf("current worker seed is unavailable")
+		return nil, fmt.Errorf("current worker seed is unavailable")
 	}
 	base.Stage = "snapshotting_branch"
 	if manifest.Entries != nil {
 		base.TotalBytes = regularBytes(manifest)
 	}
 	reportPreparation(ctx, base)
-	result, err := mirrorTree(ctx, seedTree, branchRoot, mirrorOptions{
-		phase: "worker_branch_bridge_cow", preparation: base, maxEntries: maxEntries, maxBytes: maxBytes,
-	})
+	view, result, err := materializeRootWithAdapter(ctx, m, source, sourceRoot, seedTree, branchRoot, runtimeDir, viewID, base, maxEntries, maxBytes, fallbackReason)
 	if err != nil {
 		_ = os.RemoveAll(branchRoot)
-		return classifyProvisionError(fmt.Errorf("snapshot worker branch: %w", markIncompleteSeedCleaned(err)))
+		return nil, classifyProvisionError(fmt.Errorf("snapshot worker branch: %w", markIncompleteSeedCleaned(err)))
 	}
 	touchSeedLastUsed(seedDir)
 	logProvisionResult(ctx, sourceRoot, strategy, refreshed, result)
-	return nil
+	return view, nil
 }
 
 func logProvisionResult(ctx context.Context, sourceRoot string, strategy ProvisionStrategy, refreshed bool, result mirrorResult) {

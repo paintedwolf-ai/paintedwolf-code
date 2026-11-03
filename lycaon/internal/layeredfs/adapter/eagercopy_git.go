@@ -63,6 +63,13 @@ func storeDirExists(s *privategit.RetainedObjectStore) bool {
 	return err == nil && st.IsDir()
 }
 
+func outcomeStore(out *seedOutcome) *privategit.RetainedObjectStore {
+	if out == nil {
+		return nil
+	}
+	return out.gitStore
+}
+
 func outcomeLeases(out *seedOutcome) []string {
 	if out == nil {
 		return nil

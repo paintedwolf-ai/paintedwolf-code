@@ -130,8 +130,16 @@ func reportPreparation(ctx context.Context, progress PreparationProgress) {
 // Binding is one isolated worker sandbox — a copy of the project tree living
 // outside the repo. There is no git interaction and no linked worktree.
 type Binding struct {
-	ID   string
-	Root string
+	ID        string
+	Root      string
+	Selection WorkspaceStrategySelection
+	View      *adapter.PreparedView
+	Adapter   adapter.Adapter
+}
+
+type branchViewState struct {
+	selection WorkspaceStrategySelection
+	views     []*adapter.PreparedView
 }
 
 // Manager creates and destroys per-job worker sandboxes, retaining a central
@@ -143,6 +151,8 @@ type Manager struct {
 	maxEntries int64
 	maxBytes   int64
 	selector   *adapter.Selector
+	viewsMu    sync.Mutex
+	views      map[string]branchViewState
 }
 
 // NewManager returns a workspace manager rooted at out-of-repo branch and seed bases.
@@ -153,6 +163,53 @@ func NewManager(branchRoot, seedRoot string) *Manager {
 		locks:      newSeedLockSet(),
 		maxEntries: adapter.DefaultMaxEntries,
 		maxBytes:   adapter.DefaultMaxBytes,
+		views:      make(map[string]branchViewState),
+	}
+}
+
+// WithSelector configures an explicit workspace adapter Selector on the Manager (#1658).
+func (m *Manager) WithSelector(selector *adapter.Selector) *Manager {
+	m.selector = selector
+	return m
+}
+
+func (m *Manager) recordBranchViews(branchRoot string, sel WorkspaceStrategySelection, views ...*adapter.PreparedView) {
+	m.viewsMu.Lock()
+	defer m.viewsMu.Unlock()
+	if m.views == nil {
+		m.views = make(map[string]branchViewState)
+	}
+	m.views[filepath.Clean(branchRoot)] = branchViewState{
+		selection: sel,
+		views:     append([]*adapter.PreparedView(nil), views...),
+	}
+}
+
+func (m *Manager) lookupBranchViews(branchRoot string) (WorkspaceStrategySelection, *adapter.PreparedView, bool) {
+	m.viewsMu.Lock()
+	defer m.viewsMu.Unlock()
+	st, ok := m.views[filepath.Clean(branchRoot)]
+	if !ok || len(st.views) == 0 {
+		return WorkspaceStrategySelection{}, nil, false
+	}
+	return st.selection, st.views[0], true
+}
+
+func (m *Manager) releaseBranchViews(branchRoot string) {
+	m.viewsMu.Lock()
+	key := filepath.Clean(branchRoot)
+	st, ok := m.views[key]
+	if ok {
+		delete(m.views, key)
+	}
+	m.viewsMu.Unlock()
+	if !ok || st.selection.Adapter == nil {
+		return
+	}
+	for _, v := range st.views {
+		if v != nil {
+			_, _ = st.selection.Adapter.Release(context.Background(), v.ViewID)
+		}
 	}
 }
 

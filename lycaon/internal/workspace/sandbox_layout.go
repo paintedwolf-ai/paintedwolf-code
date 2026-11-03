@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
@@ -160,66 +158,23 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 	}
 	defer release()
 	if completeBranchMatchesLayout(branchRoot, layout) {
-		return &Binding{ID: jobID, Root: branchRoot}, layout, nil
+		b := &Binding{ID: jobID, Root: branchRoot}
+		if sel, view, ok := m.lookupBranchViews(branchRoot); ok {
+			b.Selection = sel
+			b.View = view
+			b.Adapter = sel.Adapter
+		}
+		return b, layout, nil
 	}
 	binding, err := m.createBranchSkeleton(ctx, branchRoot, layout, jobID)
 	if err != nil {
 		return nil, SandboxLayout{}, err
 	}
-	if err := snapshotSourceRoots(ctx, m, binding.Root, sources.Roots); err != nil {
+	if err := snapshotSourceRoots(ctx, m, binding, sources.Roots); err != nil {
 		_ = m.DestroyWorkerWorkspace(binding)
 		return nil, SandboxLayout{}, err
 	}
 	return binding, layout, nil
-}
-
-const provisionLockSuffix = ".provision.lock"
-
-func tryWorkspaceProvisionLock(branchRoot string) (func(), error) {
-	file, err := filelock.Open(branchRoot + provisionLockSuffix)
-	if err != nil {
-		return nil, err
-	}
-	held, err := filelock.TryExclusive(file)
-	if err != nil || !held {
-		_ = file.Close()
-		if err != nil {
-			return nil, err
-		}
-		return nil, ErrBranchInUse
-	}
-	return func() {
-		_ = filelock.Unlock(file)
-		_ = file.Close()
-	}, nil
-}
-
-func acquireWorkspaceProvisionLock(ctx context.Context, branchRoot string) (func(), error) {
-	file, err := filelock.Open(branchRoot + provisionLockSuffix)
-	if err != nil {
-		return nil, err
-	}
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		held, lockErr := filelock.TryExclusive(file)
-		if lockErr != nil {
-			_ = file.Close()
-			return nil, lockErr
-		}
-		if held {
-			return func() {
-				_ = filelock.Unlock(file)
-				_ = file.Close()
-			}, nil
-		}
-		select {
-		case <-ctx.Done():
-			_ = file.Close()
-			return nil, ctx.Err()
-		case <-ticker.C:
-		}
-	}
 }
 
 func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
@@ -237,22 +192,52 @@ func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
 	return true
 }
 
-func snapshotSourceRoots(ctx context.Context, m *Manager, branchRoot string, sources []projectroot.RootRef) error {
-	if len(sources) == 1 {
-		if err := provisionRoot(ctx, m, sources[0].Path, branchRoot); err != nil {
-			return err
+func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef) error {
+	branchRoot := binding.Root
+	choice, err := SelectWorkspaceAdapter(ctx, adapter.ProbeConfig{RuntimeDir: filepath.Join(m.branchRoot, ".adapter")}, m.selector)
+	if err != nil {
+		return classifyProvisionError(err)
+	}
+	binding.Selection = choice
+	binding.Adapter = choice.Adapter
+
+	if choice.Facts.PreparationKind == adapter.PreparationMounted {
+		view, err := prepareMountedWorkspaceView(ctx, m, binding, sources, choice.Adapter)
+		if err != nil {
+			return classifyProvisionError(err)
 		}
+		binding.View = view
+		m.recordBranchViews(branchRoot, choice, view)
 		return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
 	}
+
+	if len(sources) == 1 {
+		rtDir := filepath.Join(m.branchRoot, ".adapter", enginepaths.ProjectKey(sources[0].Path))
+		view, err := provisionRoot(ctx, m, sources[0], branchRoot, rtDir, binding.ID, choice.Facts.FallbackReason)
+		if err != nil {
+			return err
+		}
+		binding.View = view
+		m.recordBranchViews(branchRoot, choice, view)
+		return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+	}
+	var views []*adapter.PreparedView
 	for _, source := range sources {
 		dir, err := projectroot.BranchDirForID(source.ID)
 		if err != nil {
 			return err
 		}
-		if err := provisionRoot(ctx, m, source.Path, filepath.Join(branchRoot, dir)); err != nil {
+		rtDir := filepath.Join(m.branchRoot, ".adapter", enginepaths.ProjectKey(source.Path))
+		view, err := provisionRoot(ctx, m, source, filepath.Join(branchRoot, dir), rtDir, binding.ID+"-"+source.ID, choice.Facts.FallbackReason)
+		if err != nil {
 			return err
 		}
+		views = append(views, view)
+		if source.IsPrimary || binding.View == nil {
+			binding.View = view
+		}
 	}
+	m.recordBranchViews(branchRoot, choice, views...)
 	return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
 }
 

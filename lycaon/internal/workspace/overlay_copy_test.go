@@ -241,3 +241,75 @@ func TestMaterializeBoundedWorkspaceGitIsolationAndLimitEnforcement(t *testing.T
 	}
 }
 
+func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t *testing.T) {
+	ctx := context.Background()
+	primary := t.TempDir()
+	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(primary, ".git", "objects", "ab"), 0o755))
+	testutil.FailErr(t, "write HEAD", os.WriteFile(filepath.Join(primary, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	testutil.FailErr(t, "write loose obj", os.WriteFile(filepath.Join(primary, ".git", "objects", "ab", "0123456789abcdef0123456789abcdef012345"), []byte("git-blob"), 0o644))
+	testutil.FailErr(t, "write main.go", os.WriteFile(filepath.Join(primary, "main.go"), []byte("package main\n"), 0o644))
+
+	// 1. Default Manager.CreateWorkerWorkspace routes through SelectWorkspaceAdapter + PrepareMaterializedSeedView.
+	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
+	binding, err := mgr.CreateWorkerWorkspace(ctx, primary, "prod-entry")
+	testutil.FailErr(t, "CreateWorkerWorkspace", err)
+
+	if binding.View == nil || binding.Adapter == nil || binding.View.Core == nil {
+		t.Fatalf("expected CreateWorkerWorkspace to attach PreparedView and Adapter, got %+v", binding)
+	}
+	if binding.Selection.Strategy != workspace.ProvisionMaterializedEagerCopy ||
+		binding.Selection.Facts.FallbackReason != adapter.ReasonMountHelperUnavailable {
+		t.Fatalf("expected default selector fallback with ReasonMountHelperUnavailable, got %+v", binding.Selection)
+	}
+	if _, ok := binding.View.SeededGitRepos["primary:."]; !ok {
+		t.Fatalf("expected private Git initialized in PreparedView.SeededGitRepos, got %+v", binding.View.SeededGitRepos)
+	}
+	if _, err := os.Lstat(filepath.Join(binding.Root, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("expected .git excluded from workspace root, got %v", err)
+	}
+	base, ok := binding.View.Core.CapturedBase(layeredfs.QualifiedPath{RootID: "primary", Rel: "main.go"})
+	if !ok || base.SHA256 == "" {
+		t.Fatalf("expected pre-captured seed base in binding.View.Core, got ok=%v base=%+v", ok, base)
+	}
+
+	// Mutate main.go on disk in binding.Root and verify CheckpointBarrier syncs into binding.View.Core.
+	testutil.FailErr(t, "edit main.go", os.WriteFile(filepath.Join(binding.Root, "main.go"), []byte("package main\n// edited\n"), 0o644))
+	_, releaseBarrier, err := binding.Adapter.CheckpointBarrier(ctx, binding.View.ViewID)
+	testutil.FailErr(t, "CheckpointBarrier", err)
+	testutil.FailErr(t, "releaseBarrier", releaseBarrier())
+	changes, err := binding.View.Core.EnumerateChanges(true)
+	testutil.FailErr(t, "EnumerateChanges", err)
+	if len(changes) != 1 || changes[0].Path.Rel != "main.go" {
+		t.Fatalf("expected main.go synced into Core journal, got %+v", changes)
+	}
+	testutil.FailErr(t, "DestroyWorkerWorkspace", mgr.DestroyWorkerWorkspace(binding))
+
+	// 2. Manager.WithSelector(mountedSel) routes CreateWorkerWorkspace through MountedAdapter.Prepare & Release.
+	var mountedPrepared, mountedReleased bool
+	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
+		TargetOS:  "",
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
+		},
+		MountViewFn: func(ctx context.Context, viewID string, roots []adapter.PreparedRoot) error {
+			mountedPrepared = true
+			return nil
+		},
+		UnmountViewFn: func(ctx context.Context, viewID, runtimeDir string) error {
+			mountedReleased = true
+			return nil
+		},
+	})
+	mountedSel := adapter.NewSelector("", mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	mBinding, err := mgr.WithSelector(mountedSel).CreateWorkerWorkspace(ctx, primary, "prod-mounted")
+	testutil.FailErr(t, "CreateWorkerWorkspace mounted", err)
+	if !mountedPrepared || mBinding.View == nil || mBinding.Selection.Facts.PreparationKind != adapter.PreparationMounted {
+		t.Fatalf("expected mounted adapter Prepare via CreateWorkerWorkspace, got prepared=%v binding=%+v", mountedPrepared, mBinding)
+	}
+	testutil.FailErr(t, "DestroyWorkerWorkspace mounted", mgr.DestroyWorkerWorkspace(mBinding))
+	if !mountedReleased {
+		t.Fatalf("expected DestroyWorkerWorkspace to release mounted view")
+	}
+}
+

@@ -2,7 +2,10 @@ package workspace
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,21 +48,41 @@ func PrepareMaterializedSeedView(
 		}
 	}
 	req.Grants = grants
-	prevProgress := req.ProgressFn
-	req.ProgressFn = func(fp adapter.FallbackProgress) {
-		reportPreparation(ctx, PreparationProgress{
-			Strategy:   ProvisionMaterializedEagerCopy,
-			Stage:      "materializing_seed",
-			Files:      fp.ObservedEntries,
-			Bytes:      fp.ObservedBytes,
-			TotalBytes: fp.MaxBytes,
-		})
-		if prevProgress != nil {
-			prevProgress(fp)
+	if req.ProgressFn == nil {
+		var estTotal int64
+		for _, g := range grants {
+			if g.Estimate != nil && g.Estimate.EstimatedBytes > 0 {
+				estTotal += g.Estimate.EstimatedBytes
+			}
+		}
+		if estTotal == 0 {
+			estTotal = req.MaxBytes
+		}
+		req.ProgressFn = func(fp adapter.FallbackProgress) {
+			reportPreparation(ctx, PreparationProgress{
+				Strategy:   ProvisionMaterializedEagerCopy,
+				Stage:      "materializing_seed",
+				Files:      fp.ObservedEntries,
+				Bytes:      fp.ObservedBytes,
+				TotalBytes: estTotal,
+			})
 		}
 	}
 	adp := adapter.NewEagerCopyAdapter(fallbackReason)
 	return adp.Prepare(ctx, req)
+}
+
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // Adapter-backed ProvisionStrategy constants (#1658).

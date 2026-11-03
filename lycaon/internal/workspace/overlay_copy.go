@@ -113,7 +113,7 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 	return binding, err
 }
 
-// DestroyWorkerWorkspace removes a branch and its metadata.
+// DestroyWorkerWorkspace removes a branch, releases its prepared adapter view, and deletes its metadata.
 func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	if binding == nil {
 		return nil
@@ -121,6 +121,10 @@ func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	root := strings.TrimSpace(binding.Root)
 	if root == "" {
 		return nil
+	}
+	m.releaseBranchViews(root)
+	if binding.Adapter != nil && binding.View != nil {
+		_, _ = binding.Adapter.Release(context.Background(), binding.View.ViewID)
 	}
 	_ = os.RemoveAll(enginepaths.MetaDirForBranchRoot(root))
 	removeBranchLocks(root)

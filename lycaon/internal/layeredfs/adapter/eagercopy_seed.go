@@ -26,6 +26,7 @@ type seedOutcome struct {
 	filePaths       map[layeredfs.QualifiedPath]string
 	seededRepos     map[string]SeedGitInitResult
 	gitInterceptMap map[layeredfs.QualifiedPath]layeredfs.QualifiedPath
+	gitStore        *privategit.RetainedObjectStore
 	gitLeases       []string
 	observedEntries int64
 	observedBytes   int64
@@ -39,7 +40,7 @@ type seedAccumulator struct {
 	narrowed       []RootGrant
 	maxEntries     int64
 	maxBytes       int64
-	gitStore       *privategit.RetainedObjectStore
+	gitStores      *gitStoreRegistry
 	gitReposBuilt  int
 	out            *seedOutcome
 }
@@ -51,7 +52,7 @@ func seedSelectedRoots(
 	narrowed []RootGrant,
 	selectedIDs []string,
 	maxEntries, maxBytes int64,
-	gitStore *privategit.RetainedObjectStore,
+	gitStores *gitStoreRegistry,
 ) (*seedOutcome, error) {
 	out := &seedOutcome{
 		filePaths:       make(map[layeredfs.QualifiedPath]string),
@@ -60,12 +61,15 @@ func seedSelectedRoots(
 	}
 	acc := &seedAccumulator{
 		ctx: ctx, req: req, runtimeViewDir: runtimeViewDir, selectedIDs: selectedIDs,
-		narrowed: narrowed, maxEntries: maxEntries, maxBytes: maxBytes, gitStore: gitStore, out: out,
+		narrowed: narrowed, maxEntries: maxEntries, maxBytes: maxBytes, gitStores: gitStores, out: out,
 	}
 
 	for _, g := range narrowed {
 		seedDir := filepath.Join(runtimeViewDir, "seeds", g.RootID)
-		if err := os.MkdirAll(seedDir, 0o700); err != nil {
+		if custom := strings.TrimSpace(req.TargetRootDirs[g.RootID]); custom != "" {
+			seedDir = filepath.Clean(custom)
+		}
+		if err := os.MkdirAll(seedDir, 0o750); err != nil {
 			return out, err
 		}
 		if err := acc.walkAndSeedRoot(g, seedDir); err != nil {
@@ -104,6 +108,9 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir string) error {
 			return err
 		}
 		rel := filepath.ToSlash(relOS)
+		if d.Name() == ".lycaon" && d.IsDir() {
+			return filepath.SkipDir
+		}
 		if d.Name() == ".git" {
 			if err := a.handleDiscoveredGit(g, rel, srcPath, d); err != nil {
 				return err
@@ -118,6 +125,13 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir string) error {
 }
 
 func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath string, d fs.DirEntry) error {
+	if a.out.gitStore == nil && a.gitStores != nil {
+		store, err := a.gitStores.storeForPrepare(a.req.RuntimeDir, a.narrowed)
+		if err != nil {
+			return err
+		}
+		a.out.gitStore = store
+	}
 	repoRel := filepath.ToSlash(filepath.Dir(gitRel))
 	if repoRel == "" {
 		repoRel = "."
@@ -135,7 +149,7 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 		ViewID: a.req.ViewID, RootID: g.RootID, RepoRelPath: repoRel, GitEntryRel: gitRel,
 		SourceGitPath: srcGitPath, PrivateGitDir: privGitDir, IsGitlink: !d.IsDir(),
 		AuthorizedGitDirs: authDirs, MaxEntries: max(a.maxEntries-a.out.observedEntries, 1),
-		MaxBytes: max(a.maxBytes-a.out.observedBytes, 1), RetainedStore: a.gitStore,
+		MaxBytes: max(a.maxBytes-a.out.observedBytes, 1), RetainedStore: a.out.gitStore,
 	}
 	if d.Type()&fs.ModeSymlink != 0 {
 		return &AdapterError{AdapterID: AdapterEagerCopy, Op: "seed_git", ReasonCode: ReasonUnauthorizedRoot, Diagnostic: ".git symlink is forbidden", Cause: privategit.ErrUnauthorizedGitTarget}
@@ -204,7 +218,7 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 		if err := a.chargeUsage(g.RootID, 1, int64(len(target))); err != nil {
 			return err
 		}
-		if err := os.Symlink(target, dstPath); err != nil {
+		if err := os.Symlink(target, dstPath); err != nil && !errors.Is(err, fs.ErrExist) {
 			return err
 		}
 		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
@@ -224,6 +238,28 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 func (a *seedAccumulator) seedRegularFile(rootID string, qp layeredfs.QualifiedPath, srcPath, dstPath string, info fs.FileInfo, xattrs map[string][]byte) error {
 	if err := a.chargeUsage(rootID, 1, 0); err != nil {
 		return err
+	}
+	if a.req.FileSeeder != nil {
+		sz := max(info.Size(), 0)
+		if err := a.chargeUsage(rootID, 0, sz); err != nil {
+			return err
+		}
+		_, n, shaHex, err := a.req.FileSeeder(a.ctx, rootID, qp.Rel, srcPath, dstPath, info)
+		if err != nil {
+			return err
+		}
+		if n > sz {
+			if err := a.chargeUsage(rootID, 0, n-sz); err != nil {
+				return err
+			}
+		}
+		a.out.filePaths[qp] = dstPath
+		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
+			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryRegular,
+			Mode: info.Mode(), Size: n, ModTime: info.ModTime(), SHA256: shaHex,
+			Xattrs: xattrs, CapturedAt: time.Now(),
+		})
+		return nil
 	}
 	remainingBytes := a.maxBytes - a.out.observedBytes
 	in, err := os.Open(srcPath)

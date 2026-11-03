@@ -4,12 +4,15 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
+
+var sharedEagerViews sync.Map // map[string]*eagerViewState
 
 type eagerViewState struct {
 	view            *PreparedView
@@ -81,6 +84,13 @@ func (a *EagerCopyAdapter) Probe(ctx context.Context, probeCfg ProbeConfig) (Pro
 		res.Diagnostic = err.Error()
 		return res, &AdapterError{AdapterID: AdapterEagerCopy, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
 	}
+	if strings.TrimSpace(probeCfg.RuntimeDir) != "" {
+		if err := os.MkdirAll(probeCfg.RuntimeDir, 0o700); err != nil {
+			res.ReasonCode = ReasonMountDenied
+			res.Diagnostic = err.Error()
+			return res, &AdapterError{AdapterID: AdapterEagerCopy, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
+		}
+	}
 	probeRoot, err := os.MkdirTemp(probeCfg.RuntimeDir, "lycaon-eager-probe-*")
 	if err != nil {
 		res.ReasonCode = ReasonMountDenied
@@ -131,24 +141,24 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		return nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
 
-	gitStore, err := a.gitStores.storeForPrepare(req.RuntimeDir, narrowed)
+	outcome, err := seedSelectedRoots(ctx, req, runtimeViewDir, narrowed, selectedIDs, maxEntries, maxBytes, a.gitStores)
 	if err != nil {
-		_ = os.RemoveAll(runtimeViewDir)
-		return nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
-	}
-
-	outcome, err := seedSelectedRoots(ctx, req, runtimeViewDir, narrowed, selectedIDs, maxEntries, maxBytes, gitStore)
-	if err != nil {
-		releaseGitLeases(gitStore, outcomeLeases(outcome))
+		releaseGitLeases(outcomeStore(outcome), outcomeLeases(outcome))
 		_ = os.RemoveAll(runtimeViewDir)
 		if req.BackingDir != "" {
 			_ = os.RemoveAll(req.BackingDir)
+		}
+		for _, dir := range req.TargetRootDirs {
+			if strings.TrimSpace(dir) != "" {
+				_ = os.RemoveAll(dir)
+			}
 		}
 		if limErr, ok := err.(*PreparationLimitError); ok {
 			limErr.CleanedIncompleteSeed = true
 		}
 		return nil, err
 	}
+	gitStore := outcome.gitStore
 
 	gitInterceptor := req.GitInterceptor
 	if gitInterceptor == nil && len(outcome.gitInterceptMap) > 0 {
@@ -204,8 +214,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		Core:            core,
 	}
 
-	a.mu.Lock()
-	a.views[req.ViewID] = &eagerViewState{
+	st := &eagerViewState{
 		view:            view,
 		seedRecords:     seedMap,
 		denySourcePaths: outcome.denyPaths,
@@ -214,15 +223,29 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		quiesceHook:     req.QuiesceHook,
 		flushHook:       req.FlushClientHook,
 	}
+	a.mu.Lock()
+	a.views[req.ViewID] = st
 	a.mu.Unlock()
+	sharedEagerViews.Store(req.ViewID, st)
 	return view, nil
+}
+
+func (a *EagerCopyAdapter) lookupViewState(viewID string) (*eagerViewState, bool) {
+	a.mu.RLock()
+	st, ok := a.views[viewID]
+	a.mu.RUnlock()
+	if ok {
+		return st, true
+	}
+	if v, ok := sharedEagerViews.Load(viewID); ok {
+		return v.(*eagerViewState), true
+	}
+	return nil, false
 }
 
 // CommandAccess returns the seeded private paths and confinement facts without re-copying.
 func (a *EagerCopyAdapter) CommandAccess(viewID string) (CommandAccessSpec, error) {
-	a.mu.RLock()
-	st, ok := a.views[viewID]
-	a.mu.RUnlock()
+	st, ok := a.lookupViewState(viewID)
 	if !ok {
 		return CommandAccessSpec{}, &AdapterError{AdapterID: AdapterEagerCopy, Op: "command_access", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
@@ -246,9 +269,7 @@ func (a *EagerCopyAdapter) CommandAccess(viewID string) (CommandAccessSpec, erro
 
 // CheckpointBarrier quiesces writers, reconciles direct materialized edits, and acquires the Core barrier.
 func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string) (BarrierReceipt, func() error, error) {
-	a.mu.RLock()
-	st, ok := a.views[viewID]
-	a.mu.RUnlock()
+	st, ok := a.lookupViewState(viewID)
 	if !ok {
 		return BarrierReceipt{}, nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "checkpoint_barrier", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
@@ -271,6 +292,13 @@ func (a *EagerCopyAdapter) Release(ctx context.Context, viewID string) (ReleaseR
 		delete(a.views, viewID)
 	}
 	a.mu.Unlock()
+	if !ok {
+		if v, loaded := sharedEagerViews.LoadAndDelete(viewID); loaded {
+			st, ok = v.(*eagerViewState), true
+		}
+	} else {
+		sharedEagerViews.Delete(viewID)
+	}
 	if !ok {
 		return ReleaseReceipt{ViewID: viewID, AdapterID: AdapterEagerCopy, Settled: false, ReasonCode: ReasonViewNotFound},
 			&AdapterError{AdapterID: AdapterEagerCopy, Op: "release", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}

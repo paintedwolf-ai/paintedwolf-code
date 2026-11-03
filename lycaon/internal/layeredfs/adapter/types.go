@@ -6,6 +6,7 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -46,6 +47,7 @@ const (
 	ReasonUnsupportedPlatform        ReasonCode = "unsupported_platform"
 	ReasonMountDenied                ReasonCode = "mount_denied"
 	ReasonHelperMissing              ReasonCode = "helper_missing"
+	ReasonMountHelperUnavailable     ReasonCode = "mount_helper_unavailable"
 	ReasonBackingConfinementFailed   ReasonCode = "backing_confinement_failed"
 	ReasonTransientStartupFailure    ReasonCode = "transient_startup_failure"
 	ReasonProbeReadWriteFailed       ReasonCode = "probe_read_write_failed"
@@ -181,11 +183,15 @@ type SeedGitInitResult struct {
 // SeedGitInitializer builds private Git metadata/object retention during materialized seeding.
 type SeedGitInitializer func(ctx context.Context, spec SeedGitRepoSpec) (SeedGitInitResult, error)
 
+// FileSeederFunc optionally seeds a regular file (e.g. via CoW clone or bridge cache) and returns its bytes and SHA-256.
+type FileSeederFunc func(ctx context.Context, rootID, rel, srcPath, dstPath string, info fs.FileInfo) (cloned bool, bytesWritten int64, sha256Hex string, err error)
+
 // PrepareRequest configures preparation of a single worker workspace view.
 type PrepareRequest struct {
 	ViewID          string
 	RuntimeDir      string
 	BackingDir      string
+	TargetRootDirs  map[string]string
 	Grants          []RootGrant
 	Selection       WorkspaceSelection
 	TaskPathHints   []string
@@ -196,6 +202,7 @@ type PrepareRequest struct {
 	MaxBytes        int64
 	ProgressFn      func(FallbackProgress)
 	SeedGitInit     SeedGitInitializer
+	FileSeeder      FileSeederFunc
 	QuiesceHook     func(ctx context.Context, viewID string) error
 	FlushClientHook func(ctx context.Context, viewID string) error
 }
