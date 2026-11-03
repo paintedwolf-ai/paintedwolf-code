@@ -37,7 +37,7 @@ func ClearTaskCheckpointPreview(jobID string) {
 	previewBindMu.Unlock()
 }
 
-// MaybeBindTaskCheckpointPreview binds cpPreview to jobID if preview-bind intent was marked.
+// MaybeBindTaskCheckpointPreview retains the selected checkpoint until a new preview begins.
 func MaybeBindTaskCheckpointPreview(jobID string, cpPreview *checkpoint.PromotionPreview) {
 	previewBindMu.Lock()
 	if previewBindIntentJobs[jobID] || boundPreviewsByJob[jobID] == nil {

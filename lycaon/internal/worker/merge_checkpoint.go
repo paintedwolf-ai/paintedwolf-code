@@ -14,7 +14,7 @@ import (
 	"sync"
 )
 
-// CheckpointRefImporterFunc imports checkpointed private Git refs (#1671) as a distinct recorded effect.
+// CheckpointRefImporterFunc imports checkpointed private Git refs as a distinct recorded effect.
 type CheckpointRefImporterFunc func(ctx context.Context, txID, workerID string, git checkpoint.PrivateGitSnapshot) (map[string]string, error)
 
 var (
@@ -22,7 +22,7 @@ var (
 	refImportersByJob = map[string]CheckpointRefImporterFunc{}
 )
 
-// RegisterCheckpointRefImporter registers an optional per-job #1671 namespaced Git ref importer callback.
+// RegisterCheckpointRefImporter registers an optional per-job namespaced Git ref importer callback.
 func RegisterCheckpointRefImporter(jobID string, fn CheckpointRefImporterFunc) {
 	refImporterMu.Lock()
 	defer refImporterMu.Unlock()
