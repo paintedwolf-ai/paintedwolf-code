@@ -1,15 +1,14 @@
 package toolcontract
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"strings"
 )
 
 // ProgramDiagnosticStage names where language admission or evaluation refused.
-// Only the syntax stage precedes every program effect; later stages refuse a
-// reached command whose earlier effects the receipt ledger reports separately.
+// A syntax refusal precedes evaluation of its source unit. The ledger reports
+// effects of enclosing units separately.
 type ProgramDiagnosticStage string
 
 const (
@@ -21,10 +20,7 @@ const (
 
 const optionUnsupportedCode = "COMMAND_OPTION_UNSUPPORTED"
 
-// ProgramDiagnostic is the typed form of a parser, argv binder, expansion or
-// evaluator refusal (commandsurface.SyntaxDiagnostic, commandprogram.ArgvError,
-// ExpansionError and EvaluationRefusal map into it). Code keeps its public
-// meaning; Expected is the catalog's declared form, never prose to parse.
+// ProgramDiagnostic carries source coordinates and declared command forms.
 type ProgramDiagnostic struct {
 	Stage             ProgramDiagnosticStage
 	Code              string
@@ -35,6 +31,7 @@ type ProgramDiagnostic struct {
 	Span              SourceSpan
 	Limit, Unit       string
 	Maximum, Observed int64
+	Parser            *ParserDiagnostic
 }
 
 func (d ProgramDiagnostic) validate() error {
@@ -105,6 +102,9 @@ func (d ProgramDiagnostic) Feedback() (map[string]any, error) {
 	if d.Limit != "" {
 		facts["limit"], facts["limit_unit"], facts["limit_maximum"], facts["limit_observed"] = d.Limit, d.Unit, d.Maximum, d.Observed
 	}
+	if d.Parser != nil {
+		d.Parser.addFacts(facts)
+	}
 	return facts, nil
 }
 
@@ -116,94 +116,4 @@ func CommandSpellings(command CommandSpecification) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// ProgramRepairRequest supplies the exact submitted unit and current facts a
-// replacement must satisfy. Validate parses and binds the complete proposed
-// unit against the active catalog; Offered reports that the current surface
-// lets the model submit command. A repair never executes or grants authority.
-type ProgramRepairRequest struct {
-	Source   []byte
-	Offered  bool
-	Validate func([]byte) error
-}
-
-// ProgramRepair is one exact, validated byte replacement for explicit
-// submission. Program is the complete corrected syntax unit.
-type ProgramRepair struct {
-	SourceUnitID string
-	Span         SourceSpan
-	Text         string
-	Program      []byte
-}
-
-// Feedback publishes the exact replacement coordinates, never the program.
-func (r ProgramRepair) Feedback() map[string]any {
-	return map[string]any{
-		"replacement_source_unit_id": r.SourceUnitID, "replacement_start_byte": r.Span.StartByte,
-		"replacement_end_byte": r.Span.EndByte, "replacement_text": r.Text, "replacement_submission": "explicit",
-	}
-}
-
-// Repair returns the single mechanically proven correction or nil. The only
-// proven form is an unquoted long option that abbreviates exactly one of its
-// command's catalog spellings; ambiguity, quoting, expansion, an unavailable
-// surface or a failed validation leaves the precise diagnosis without one.
-func (d ProgramDiagnostic) Repair(req ProgramRepairRequest) (*ProgramRepair, error) {
-	if err := d.validate(); err != nil {
-		return nil, err
-	}
-	if d.Stage != OptionDiagnosticStage || d.Code != optionUnsupportedCode || !req.Offered || req.Validate == nil {
-		return nil, nil
-	}
-	command, _, err := diagnosticCommand(d.Command)
-	if err != nil {
-		return nil, err
-	}
-	if d.Span.EndByte > len(req.Source) || !bytes.Equal(req.Source[d.Span.StartByte:d.Span.EndByte], []byte(d.Word)) || !literalOptionWord(d.Word) {
-		return nil, nil
-	}
-	name, value, assigned := strings.Cut(d.Word, "=")
-	var match *OptionForm
-	spelling := ""
-	for i := range command.Forms {
-		for _, candidate := range command.Forms[i].Spellings {
-			if !strings.HasPrefix(candidate, "--") || !strings.HasPrefix(candidate, name) || candidate == name {
-				continue
-			}
-			if match != nil {
-				return nil, nil
-			}
-			match, spelling = &command.Forms[i], candidate
-		}
-	}
-	if match == nil || (assigned && match.Arity == 0) {
-		return nil, nil
-	}
-	text := spelling
-	if assigned {
-		text += "=" + value
-	}
-	program := make([]byte, 0, len(req.Source)-len(d.Word)+len(text))
-	program = append(append(append(program, req.Source[:d.Span.StartByte]...), text...), req.Source[d.Span.EndByte:]...)
-	if req.Validate(program) != nil {
-		//nolint:nilerr // Failed candidate validation means no proven repair; retain the original diagnostic.
-		return nil, nil
-	}
-	return &ProgramRepair{SourceUnitID: d.SourceUnitID, Span: d.Span, Text: text, Program: program}, nil
-}
-
-// literalOptionWord admits only bytes the shell reads as themselves, so the
-// span is the whole word and no quote, escape or expansion is reinterpreted.
-func literalOptionWord(word string) bool {
-	if len(word) < 3 || !strings.HasPrefix(word, "--") {
-		return false
-	}
-	for i := 0; i < len(word); i++ {
-		c := word[i]
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("-_=.,:/+", c) >= 0) {
-			return false
-		}
-	}
-	return true
 }

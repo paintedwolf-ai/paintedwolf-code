@@ -36,7 +36,7 @@ COCRResult recognize_text_apple_vision(const unsigned char* data, size_t len) {
         res.count = 0;
 
         for (VNRecognizedTextObservation* obs in observations) {
-            NSArray<VNRecognizedText*>* candidates = [obs topCandidates:1];
+            NSArray<VNRecognizedText*>* candidates = [obs topCandidates:5];
             if (candidates == nil || [candidates count] == 0) {
                 continue;
             }
@@ -49,6 +49,17 @@ COCRResult recognize_text_apple_vision(const unsigned char* data, size_t len) {
             COCRSpan* span = &res.spans[res.count++];
             span->text = strdup([str UTF8String]);
             span->confidence = [top confidence];
+            NSUInteger totalCandidates = [candidates count];
+            if (totalCandidates > 1) {
+                span->candidates = (char**)calloc(totalCandidates - 1, sizeof(char*));
+                for (NSUInteger idx = 1; idx < totalCandidates; idx++) {
+                    NSString* alt = [[candidates objectAtIndex:idx] string];
+                    if (alt == nil || [alt length] == 0 || [alt isEqualToString:str]) {
+                        continue;
+                    }
+                    span->candidates[span->candidate_count++] = strdup([alt UTF8String]);
+                }
+            }
             CGRect bbox = [obs boundingBox];
             span->x = (float)bbox.origin.x;
             span->y = (float)(1.0 - (bbox.origin.y + bbox.size.height));
@@ -67,6 +78,14 @@ void free_ocr_result(COCRResult result) {
         for (size_t i = 0; i < result.count; i++) {
             if (result.spans[i].text != NULL) {
                 free(result.spans[i].text);
+            }
+            if (result.spans[i].candidates != NULL) {
+                for (size_t j = 0; j < result.spans[i].candidate_count; j++) {
+                    if (result.spans[i].candidates[j] != NULL) {
+                        free(result.spans[i].candidates[j]);
+                    }
+                }
+                free(result.spans[i].candidates);
             }
         }
         free(result.spans);

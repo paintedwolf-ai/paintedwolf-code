@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/components/checkpoint/ApprovalShell.tsx",
+  "kind": "module",
+  "workstream": "approval-decision-feedback",
+  "disposition": "retain",
+  "reason": "Card layout, context, subject presentation and card-scoped actions share the same visual and focus contract. Stateful grant-menu interaction has its own component, and asynchronous decisions have their own owner. Retain the remaining presentation primitives together at the measured ceiling; layout, collapse, subject and recovery contracts bound this module.",
+  "reviewed_commit": "9048ab1b26588517749373aaf600c07d757725c4",
+  "ceiling": 597,
+  "boundaries": {
+    "lycaon-den/src/components/checkpoint/approval-shell-invariants.test.tsx": "5bca4d88a022626d1e650ea0c0fa3f786b1045d2188a3ddaf01c65d70248d28e",
+    "lycaon-den/src/components/checkpoint/approval-collapse.test.tsx": "de21913811a92cc7c9e5bcba5731b0949789c409e568ed3f694c7c6ea9d93860",
+    "lycaon-den/src/components/checkpoint/subject-targets.test.tsx": "1d3f1d6a2058a6bf1641f8e6c4a6ac6abde7c872c7e1d7283ffba3758d6b7931",
+    "lycaon-den/src/components/checkpoint/CheckpointCards.failure.test.tsx": "c20dc018211ac3288dea25e7abffe45353bee0992f4da49c77953b56f393de97"
+  }
+}

@@ -2,7 +2,6 @@ package promptloop
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -10,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
@@ -44,14 +43,11 @@ type PromptLoopDeps struct {
 }
 
 type PromptRunInput struct {
-	SessionID  string
-	TurnID     string
-	AttemptID  string
-	Session    *api.Session
-	History    []api.Message
-	ProfileID  string
-	UserPrompt string
-	HostTurn   bool
+	SessionID, TurnID, AttemptID string
+	Session                      *api.Session
+	History                      []api.Message
+	ProfileID, UserPrompt        string
+	HostTurn                     bool
 	// HostSignalID names the host kick a host turn delivers.
 	HostSignalID string
 	// ProseFinish is a forced closeout for the whole run.
@@ -70,6 +66,9 @@ type PromptRunResult struct {
 	// OfferedTools are the tools the final model request could call.
 	OfferedTools         []string
 	TasksDispatchedCount int
+	Outcome              promptresult.Outcome
+	OutputTruncated      *promptresult.OutputTruncatedOutcome
+	CloseoutBlocked      *promptresult.CloseoutBlocked
 }
 
 type promptLoopSetup struct {
@@ -96,7 +95,7 @@ func (l *PromptLoop) Run(ctx context.Context, in PromptRunInput) (*PromptRunResu
 		result, err = l.runPreparedPromptLoop(ctx, in, setup)
 	}
 	if err != nil {
-		return nil, err
+		return l.Closeout.settleCloseoutBlocked(ctx, in, setup, err)
 	}
 	if err := l.Closeout.capturePromptRunCloseout(ctx, setup.state, result); err != nil {
 		return nil, err
@@ -192,22 +191,15 @@ loop:
 
 		assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(turnCtx, id, sess, st.history, st, profileID, userPrompt, step, maxIter, in.HostTurn)
 		if err != nil {
-			if errors.Is(err, ErrLLMTurnTimeout) && strings.TrimSpace(st.lastAssistantID) != "" {
-				loopExit = loopExitLLMTimeout
-				break
+			retry, exit, serr := l.Nudges.handleStreamTurnError(turnCtx, sess, id, err, completion, st)
+			if serr != nil {
+				return nil, serr
 			}
-			if errors.Is(err, llm.ErrModelRequestSecretWithheld) {
-				retry, werr := l.Nudges.handleSecretWithheldTurn(turnCtx, sess, id, err, st)
-				if werr != nil {
-					return nil, werr
-				}
-				if retry {
-					continue
-				}
-				loopExit = loopExitSecretWithheld
-				break
+			if retry {
+				continue
 			}
-			return nil, err
+			loopExit = exit
+			break
 		}
 		if sess.IsWorkerChild() && l.Context.Deps.CommitWorkerContext != nil {
 			if err := l.Context.Deps.CommitWorkerContext(turnCtx, id, assistantMsg.ID); err != nil {
@@ -329,6 +321,9 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 			history: in.History, machine: in.Machine, turnID: in.TurnID, attemptID: in.AttemptID,
 		},
 	}
+	if err := l.Projection.seedModelIteration(ctx, in.AttemptID, setup.state); err != nil {
+		return nil, err
+	}
 	if guard.IsCoordinatorProfile(setup.profileID) && l.Closeout.Deps.CloseoutStallState != nil {
 		retained := l.Closeout.Deps.CloseoutStallState(ctx, setup.sessionID)
 		setup.state.closeoutRetry = closeoutRetryState{
@@ -428,8 +423,7 @@ func (l *turnNudges) workerContextUsage(ctx context.Context, sess *api.Session, 
 		return nil
 	}
 	usage := &api.WorkerContextUsage{PromptTokens: promptTokens}
-	if l.Model.Deps.CompactionConfig != nil {
-		cc := l.Model.Deps.CompactionConfig(ctx, sess)
+	if cc, ok := l.Model.effectiveCompactionConfig(ctx, sess); ok {
 		usage.Window = cc.ModelContextWindow
 		usage.CompactionThreshold = cc.CompactionTriggerTokens()
 	}

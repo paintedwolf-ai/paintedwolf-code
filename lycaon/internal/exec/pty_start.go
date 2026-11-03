@@ -54,16 +54,17 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		_ = main.Close()
 		guard.kill(cmd)
 		// Reap the child after guard setup fails.
-		_ = cmd.Wait()
+		_ = guard.wait(cmd)
 		cleanup()
 		guard.release()
 		return nil, fmt.Errorf("pty guard onStarted: %w", err)
 	}
 
 	return &ptySession{
-		main:    main,
-		cmd:     cmd,
-		guard:   guard,
-		cleanup: cleanup,
+		main:        main,
+		cmd:         cmd,
+		guard:       guard,
+		cleanup:     cleanup,
+		confinement: opts.Launch.Confinement,
 	}, nil
 }

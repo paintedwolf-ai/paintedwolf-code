@@ -13,16 +13,16 @@ import (
 
 func operationFixture(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	gittest.Init(t, dir)
-	gittest.Run(t, dir, "config", "user.name", "Test")
-	gittest.Run(t, dir, "config", "user.email", "test@example.com")
-	operationWrite(t, dir, "shared.txt", "base\n")
-	operationWrite(t, dir, "unrelated.txt", "original\n")
-	gittest.Run(t, dir, "add", "--", "shared.txt", "unrelated.txt")
-	gittest.Run(t, dir, "commit", "-m", "Initial")
-	gittest.Run(t, dir, "branch", "-M", "main")
-	return dir
+	return CloneFixtureRepo(t, "operation-fixture", func(dir string) {
+		gittest.Init(t, dir)
+		gittest.Run(t, dir, "config", "user.name", "Test")
+		gittest.Run(t, dir, "config", "user.email", "test@example.com")
+		operationWrite(t, dir, "shared.txt", "base\n")
+		operationWrite(t, dir, "unrelated.txt", "original\n")
+		gittest.Run(t, dir, "add", "--", "shared.txt", "unrelated.txt")
+		gittest.Run(t, dir, "commit", "-m", "Initial")
+		gittest.Run(t, dir, "branch", "-M", "main")
+	})
 }
 func operationWrite(t *testing.T, dir, path, body string) {
 	t.Helper()

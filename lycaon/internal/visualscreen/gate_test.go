@@ -275,3 +275,47 @@ func TestGateRejectsOversizedRasterBeforeOCR(t *testing.T) {
 		t.Fatalf("OCR ran %d times before the bound check", ocr.calls)
 	}
 }
+
+type cancelingOCR struct {
+	cancel context.CancelFunc
+	text   string
+}
+
+func (ocr cancelingOCR) RecognizeText(context.Context, string, []byte) ([]TextSpan, error) {
+	if ocr.cancel != nil {
+		ocr.cancel()
+	}
+	return []TextSpan{{Text: ocr.text, BoundingBox: [4]float64{0, 0, 1, 1}}}, nil
+}
+
+func TestVisualCancellationNeverBecomesCleanOrApprovedPerception(t *testing.T) {
+	matcher := bundledMatcher(t)
+	for _, stage := range []string{"before_scan", "after_ocr", "approval"} {
+		t.Run(stage, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			ocr := cancelingOCR{text: "ordinary heading"}
+			switch stage {
+			case "before_scan":
+				cancel()
+			case "after_ocr":
+				ocr.cancel = cancel
+			case "approval":
+				ocr.text = testSecret
+			}
+			asks := 0
+			ask := func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
+				asks++
+				cancel()
+				return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
+			}
+			outcome, err := NewGate(NewScanner(ocr), matcher, ask).Screen(ctx, VisualScreenInput{Mime: "image/png", RawBytes: whitePNG(t, 4, 4)})
+			if !errors.Is(err, context.Canceled) || outcome != nil {
+				t.Fatalf("cancellation published perception: stage=%s outcome=%+v err=%v", stage, outcome, err)
+			}
+			if stage != "approval" && asks != 0 {
+				t.Fatal("canceled recognition requested an approval")
+			}
+		})
+	}
+}

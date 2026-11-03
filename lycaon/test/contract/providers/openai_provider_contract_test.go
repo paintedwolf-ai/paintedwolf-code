@@ -21,6 +21,7 @@ func TestBundledOpenAIStyleProviders(t *testing.T) {
 	}{
 		{id: "openai", baseURL: "https://api.openai.com/v1", apiKeyEnv: "OPENAI_API_KEY", label: "OpenAI", kind: "openai"},
 		{id: "openrouter", baseURL: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY", label: "OpenRouter", kind: "openrouter"},
+		{id: "scaleway", baseURL: "https://api.scaleway.ai/v1", apiKeyEnv: "SCW_SECRET_KEY", label: "Scaleway", kind: "scaleway"},
 	} {
 		t.Run(tc.id, func(t *testing.T) {
 			p := bundledProvider(t, tc.id)

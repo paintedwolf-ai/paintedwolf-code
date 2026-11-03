@@ -4,7 +4,7 @@ This is a forced final turn{% if reason_text %} — {{ reason_text }}{% endif %}
 {% if llm_timeout %}
 The timed-out turn was discarded: no text or tool calls were kept, and it did not change files. If it was composing a large write, report that and recommend smaller write chunks.
 {% endif %}
-Stop calling tools. Write a Markdown report; end it with any report fields in one `json` fence:
+Stop calling tools; do not call `update_progress`, as open checklist items may remain unchecked on this turn. Write a Markdown report; end it with any report fields in one `json` fence:
 
 ```json
 {"cited_evidence": [{"evidence": "read#1"}]}

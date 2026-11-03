@@ -1,6 +1,0 @@
-{
-  "category": "source_files",
-  "artifact": "lycaon-den/src/components/chatview/Composer.tsx",
-  "cap": 1300,
-  "reason": "Unified chat composer managing editor, attachments, shortcuts, and suggestions; decomposition tracked in #399."
-}

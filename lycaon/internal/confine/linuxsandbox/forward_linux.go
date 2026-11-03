@@ -13,6 +13,8 @@ import (
 	"os"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/linuxbus"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -116,15 +118,16 @@ func sendHandoff(h handoff, fd int) error {
 // inner helper hands it from the host's network namespace and decides the
 // sandbox's socket calls.
 type supervisor struct {
-	control    *os.File
-	network    Network
-	socketRefs *socketReferences
-	factory    *socketFactory
-	relays     *datagramRelays
-	host       *hostSockets
-	wg         sync.WaitGroup
-	mu         sync.Mutex
-	closers    []io.Closer
+	control     *os.File
+	network     Network
+	socketRefs  *socketReferences
+	credentials *linuxbus.CredentialReadPool
+	factory     *socketFactory
+	relays      *datagramRelays
+	host        *hostSockets
+	wg          sync.WaitGroup
+	mu          sync.Mutex
+	closers     []io.Closer
 	// setupDone is set once the seccomp listener arrives, the last thing the
 	// inner helper hands over before the target can run. Later handoffs are
 	// refused: only a process that took over the inner helper could send one.
@@ -144,9 +147,18 @@ func newSupervisor(control *os.File, network Network, refusals io.Writer) (*supe
 		return nil, err
 	}
 	factory := newSocketFactory(control)
+	var credentials *linuxbus.CredentialReadPool
+	if network.CredentialReadPolicy != nil {
+		credentials, err = linuxbus.NewCredentialReadPool(*network.CredentialReadPolicy)
+		if err != nil {
+			refs.close()
+			return nil, err
+		}
+	}
 	return &supervisor{
-		socketRefs: refs,
-		control:    control, network: network, factory: factory,
+		credentials: credentials,
+		socketRefs:  refs,
+		control:     control, network: network, factory: factory,
 		relays: newDatagramRelays(network, factory), host: newHostSockets(),
 		refusals: &refusalLines{w: refusals}, targets: newTargetHandles(),
 	}, nil
@@ -289,6 +301,9 @@ func (s *supervisor) track(c io.Closer) {
 
 // close ends every listener; connections in flight end with the process.
 func (s *supervisor) close() {
+	if s.credentials != nil {
+		_ = s.credentials.Close()
+	}
 	s.socketRefs.close()
 	s.mu.Lock()
 	closers := s.closers

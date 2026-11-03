@@ -11,7 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/protectedpath"
 )
 
-func (s *Memory) SessionSecretExposure(ctx context.Context, sessionID string) (bool, error) {
+func (ev *memoryEvidence) SessionSecretExposure(ctx context.Context, sessionID string) (bool, error) {
+	s := ev.core
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -29,7 +30,8 @@ type secretExposureCount struct {
 	warm bool
 }
 
-func (s *SQL) SessionSecretExposure(ctx context.Context, sessionID string) (bool, error) {
+func (ev *sqlEvidence) SessionSecretExposure(ctx context.Context, sessionID string) (bool, error) {
+	s := ev.core
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return false, nil
@@ -39,7 +41,7 @@ func (s *SQL) SessionSecretExposure(ctx context.Context, sessionID string) (bool
 	if cached, ok := s.secretExposureRecords.Load(sessionID); ok && cached.warm {
 		return cached.n > 0, nil
 	}
-	n, err := s.countSecretExposureRecords(ctx, sessionID)
+	n, err := countSecretExposureRecords(ctx, s, sessionID)
 	if err != nil {
 		return false, err
 	}
@@ -47,8 +49,8 @@ func (s *SQL) SessionSecretExposure(ctx context.Context, sessionID string) (bool
 	return n > 0, nil
 }
 
-func (s *SQL) countSecretExposureRecords(ctx context.Context, sessionID string) (int, error) {
-	ev, err := s.LoadLedger(ctx, sessionID)
+func countSecretExposureRecords(ctx context.Context, s *sqlCore, sessionID string) (int, error) {
+	ev, err := loadLedger(ctx, s, s.queries, sessionID)
 	if err != nil {
 		return 0, err
 	}
@@ -61,7 +63,7 @@ func (s *SQL) countSecretExposureRecords(ctx context.Context, sessionID string) 
 	return n, nil
 }
 
-func (s *Memory) bumpSecretExposureLocked(sessionID string, rec evidence.Record) {
+func bumpSecretExposureLocked(s *memoryCore, sessionID string, rec evidence.Record) {
 	if !evidence.RecordMarksSecretExposure(rec) {
 		return
 	}
@@ -71,7 +73,7 @@ func (s *Memory) bumpSecretExposureLocked(sessionID string, rec evidence.Record)
 	s.secretExposureRecords[sessionID]++
 }
 
-func (s *SQL) bumpSecretExposure(sessionID string, rec evidence.Record) {
+func bumpSecretExposure(s *sqlCore, sessionID string, rec evidence.Record) {
 	if !evidence.RecordMarksSecretExposure(rec) {
 		return
 	}
@@ -85,19 +87,19 @@ func (s *SQL) bumpSecretExposure(sessionID string, rec evidence.Record) {
 	s.secretExposureRecords.Delete(sessionID)
 }
 
-func (s *SQL) invalidateSecretExposure(sessionID string) {
+func invalidateSecretExposure(s *sqlCore, sessionID string) {
 	s.secretExposureMu.Lock()
 	defer s.secretExposureMu.Unlock()
 	s.secretExposureRecords.Delete(sessionID)
 }
 
 // SeedSecretExposure records inherited secret exposure.
-func (s *Memory) SeedSecretExposure(ctx context.Context, sessionID string) error {
-	return s.UpsertEvidenceRecord(ctx, sessionID, inheritSecretExposureRecord())
+func (ev *memoryEvidence) SeedSecretExposure(ctx context.Context, sessionID string) error {
+	return upsertEvidenceRecordMemory(ctx, ev.core, sessionID, inheritSecretExposureRecord())
 }
 
-func (s *SQL) SeedSecretExposure(ctx context.Context, sessionID string) error {
-	return s.UpsertEvidenceRecord(ctx, sessionID, inheritSecretExposureRecord())
+func (ev *sqlEvidence) SeedSecretExposure(ctx context.Context, sessionID string) error {
+	return upsertEvidenceRecordSQL(ctx, ev.core, sessionID, inheritSecretExposureRecord())
 }
 
 func inheritSecretExposureRecord() evidence.Record {
@@ -109,12 +111,12 @@ func inheritSecretExposureRecord() evidence.Record {
 }
 
 // MarkSecretExposureOnRead records a successful credential-path read.
-func (s *SQL) MarkSecretExposureOnRead(ctx context.Context, sessionID, relPath string) error {
+func (ev *sqlEvidence) MarkSecretExposureOnRead(ctx context.Context, sessionID, relPath string) error {
 	rec, ok := secretExposureReadRecord(relPath)
 	if !ok {
 		return nil
 	}
-	return s.UpsertEvidenceRecord(ctx, sessionID, rec)
+	return upsertEvidenceRecordSQL(ctx, ev.core, sessionID, rec)
 }
 
 func secretExposureReadRecord(relPath string) (evidence.Record, bool) {

@@ -5,16 +5,27 @@ import { chromeProps } from "../../../styling/ui-chrome.ts";
 import { For, Show, createEffect, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 import { ResidentPortal } from "../../primitives/ResidentPortal.tsx";
-import type { Accessor, JSX } from "solid-js";
+import type { JSX } from "solid-js";
 import { createModalFocusTrap, shellChromeInertTargets } from "../../../platform/interaction/modal-focus-trap.ts";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { ProviderMeta } from "../../../api/types.ts";
-import { groupProvidersByKind, providerDiscoveryFailure, providerDisplayName, providerEndpointHost, providerIsReady, providerKindIsCustom, providerKindTemplateGroups, providerShowsApiKeyControls, providerStatusLabel, providerToolCallSupport } from "../../../settings/providers/models-editor-model.ts";
-import { ambientAuthCopy, kindIsAmbientOnly, kindOffersCredentialChoice, providerCredentialSource, templateForProvider } from "../../../settings/providers/provider-credential-modes.ts";
+import {
+  groupProvidersByKind,
+  providerDisplayName,
+  providerEndpointHost,
+  providerIsReady,
+  providerKindIsCustom,
+  providerKindTemplateGroups,
+  providerStatusLabel,
+} from "../../../settings/providers/models-editor-model.ts";
+import {
+  ambientAuthCopy,
+  kindIsAmbientOnly,
+  kindOffersCredentialChoice,
+} from "../../../settings/providers/provider-credential-modes.ts";
 import { MODELS_SETTINGS_COPY } from "../../../settings/providers/models-settings-copy.ts";
 import { providerEndpointError } from "../../../settings/providers/cloudflare-endpoint.ts";
 import type { SettingsStore } from "../../../store/settings-store.ts";
-import { InlineRenameInput } from "../../inline-rename/InlineRenameInput.tsx";
 import { DenButton } from "../../primitives/DenButton.tsx";
 import { DenField } from "../../primitives/DenField.tsx";
 import { DenInput } from "../../primitives/DenInput.tsx";
@@ -29,7 +40,16 @@ import { ListSurfaceInbox } from "../../list/ListSurfaceInbox.tsx";
 import { SettingsListPanel } from "../SettingsListPanel.tsx";
 import { SettingsListRow } from "../SettingsListRow.tsx";
 import { CloudflareAccountField } from "./CloudflareAccountField.tsx";
-import { PROVIDER_LABEL_MAX, type NewProviderForm, emptyForm, endpointStyle, endpointLabel, parseConfiguredModels, formShowsApiKeyField, toolCallStateCopy, secretScreenTrustEndpointNote, providerFeedStatusHints, flattenGroupedProviders } from "./provider-form-model.ts";
+import { ProviderDetailCard } from "./ProviderDetailCard.tsx";
+import {
+  type NewProviderForm,
+  emptyForm,
+  endpointStyle,
+  endpointLabel,
+  parseConfiguredModels,
+  formShowsApiKeyField,
+  flattenGroupedProviders,
+} from "./provider-form-model.ts";
 
 type Props = {
   client: LycaonClient;
@@ -460,548 +480,170 @@ export function ProvidersPanel(props: Props) {
     </Show>
   );
 
-  // The live accessor updates fields without remounting the card.
-  const renderProviderBody = (provider: Accessor<ProviderMeta>): JSX.Element => (
+  const detailOpen = () => selectedProvider() != null;
+  const isEmpty = () => groups().length === 0;
+
+  return (
     <>
-      <Show when={providerFeedStatusHints(provider()).length > 0}>
-        <p
-          class="den-settings-hint"
-          data-testid={`provider-feed-status-${provider().id}`}
-        >
-          {providerFeedStatusHints(provider()).join(" · ")}
-        </p>
-      </Show>
-
-      <Show when={provider().usage_quota}>
-        {(quota) => (
-          <p
-            class="den-settings-hint"
-            data-testid={`provider-usage-quota-${provider().id}`}
-          >
-            {MODELS_SETTINGS_COPY.usageQuota(
-              quota().used,
-              quota().limit,
-              quota().unit,
-            )}
-            <Show when={(quota().overage_nano_usd ?? 0) > 0}>
-              {" "}
-              ({MODELS_SETTINGS_COPY.usageQuotaOverage((quota().overage_nano_usd ?? 0) / 1e9)})
-            </Show>
-          </p>
-        )}
-      </Show>
-
-      {/* Reuses the provider-card failure block: same role, same card. */}
-      <Show when={providerDiscoveryFailure(provider())} keyed>
-        {(failure) => (
-          <div
-            class="den-settings-provider-refresh-failure"
-            role="status"
-            data-testid={`provider-discovery-failure-${provider().id}`}
-          >
-            <p class="den-settings-warn">{failure.title}</p>
-            <p class="den-settings-hint">{failure.detail}</p>
-            <p class="den-settings-hint">{failure.nextStep}</p>
-          </div>
-        )}
-      </Show>
-
-      {/* Unknown is a hint, not a warning: nothing has said no. */}
-      <Show when={providerToolCallSupport(provider()) !== "supported"}>
-        <p
-          class="den-settings-hint"
-          classList={{
-            "den-settings-warn":
-              providerToolCallSupport(provider()) === "unsupported",
-          }}
-          data-testid={`provider-tool-calls-${provider().id}`}
-          data-tool-calls={providerToolCallSupport(provider())}
-        >
-          {toolCallStateCopy(provider())}
-        </p>
-      </Show>
-
-      <Show when={endpointStyle(provider().endpoint_style) !== "derived"}>
-        <Show when={provider().kind === "cloudflare-workers-ai"}>
-          <CloudflareAccountField
-            baseUrl={card(provider().id).baseUrl}
-            testId={`provider-account-id-${provider().id}`}
-            onInput={(baseUrl) => patchCard(provider().id, { baseUrl })}
-          />
-        </Show>
-        <DenField label={endpointLabel(endpointStyle(provider().endpoint_style))}>
-          <DenInput
-            type="text"
-            autocomplete="off"
-            data-testid={`provider-endpoint-${provider().id}`}
-            aria-invalid={!!providerEndpointError(provider().kind, card(provider().id).baseUrl)}
-            aria-describedby={
-              providerEndpointError(provider().kind, card(provider().id).baseUrl)
-                ? `provider-endpoint-error-${provider().id}`
-                : undefined
-            }
-            placeholder={
-              endpointStyle(provider().endpoint_style) === "region"
-                ? "us-east-1"
-                : (provider().base_url ?? "https://…")
-            }
-            value={card(provider().id).baseUrl}
-            onInput={(e) =>
-              patchCard(provider().id, { baseUrl: e.currentTarget.value })
-            }
-          />
-        </DenField>
-        <Show when={providerEndpointError(provider().kind, card(provider().id).baseUrl)}>
-          {(error) => (
-            <p class="den-settings-warn" id={`provider-endpoint-error-${provider().id}`} role="status">
-              {error()}
+      <SettingsListPanel
+        testId="providers-list-panel"
+        setting="ai-providers"
+        chrome={
+          detailOpen() ? (
+            <SettingsListBackChrome
+              testId="providers-back"
+              label={MODELS_SETTINGS_COPY.providersBack}
+              onBack={closeDetail}
+            />
+          ) : (
+            <SettingsListChrome
+              testId="providers-list-chrome"
+              count={
+                <span data-testid="providers-count">
+                  {providerCount()} AI provider
+                  {providerCount() === 1 ? "" : "s"}
+                </span>
+              }
+              action={
+                <DenButton
+                  variant="primary"
+                  compact
+                  data-testid="providers-add"
+                  {...settingControl()}
+                  onClick={openAddForm}
+                >
+                  {settingLabel("ai-providers")}
+                </DenButton>
+              }
+            />
+          )
+        }
+      >
+        <ListSurfaceInbox
+          class="den-settings-providers"
+          detailOpen={detailOpen()}
+          isEmpty={isEmpty()}
+          listTestId="providers-list"
+          detailTestId="providers-detail"
+          empty={
+            <p
+              class="den-settings-hint den-settings-list-inbox__empty"
+              data-testid="providers-empty"
+            >
+              {MODELS_SETTINGS_COPY.providersEmpty}
             </p>
-          )}
-        </Show>
-        <div class="den-settings-provider-actions">
-          <DenButton
-            variant="secondary"
-            data-testid={`provider-save-endpoint-${provider().id}`}
-            disabled={
-              card(provider().id).savingEndpoint ||
-              !!providerEndpointError(provider().kind, card(provider().id).baseUrl) ||
-              !card(provider().id).baseUrl.trim()
-            }
-            onClick={() => void saveEndpoint(provider())}
-          >
-            {MODELS_SETTINGS_COPY.saveEndpoint}
-          </DenButton>
-        </div>
-      </Show>
-      <Show when={endpointStyle(provider().endpoint_style) === "derived"}>
-        <p class="den-settings-hint">
-          {MODELS_SETTINGS_COPY.providerDerivedEndpointHint}
-        </p>
-      </Show>
-      <Show when={provider().kind === "azure"}>
-        <DenField label={MODELS_SETTINGS_COPY.providerDeploymentsLabel}>
-          <DenInput
-            type="text"
-            autocomplete="off"
-            data-testid={`provider-models-${provider().id}`}
-            placeholder={MODELS_SETTINGS_COPY.providerDeploymentsPlaceholder}
-            value={card(provider().id).models}
-            onInput={(e) =>
-              patchCard(provider().id, { models: e.currentTarget.value })
-            }
-          />
-        </DenField>
-        <p class="den-settings-hint">
-          {MODELS_SETTINGS_COPY.providerDeploymentsHint}
-        </p>
-        <div class="den-settings-provider-actions">
-          <DenButton
-            variant="secondary"
-            data-testid={`provider-save-models-${provider().id}`}
-            disabled={card(provider().id).savingModels}
-            onClick={() => void saveModels(provider())}
-          >
-            {MODELS_SETTINGS_COPY.saveDeployments}
-          </DenButton>
-        </div>
-      </Show>
-
-      <Show
-        when={kindOffersCredentialChoice(
-          templateForProvider(provider(), kinds()),
-        )}
-      >
-        <DenField label={MODELS_SETTINGS_COPY.providerCredentialLabel}>
-          <div
-            class="den-settings-credential-modes"
-            role="radiogroup"
-            aria-label={MODELS_SETTINGS_COPY.providerCredentialLabel}
-            data-testid={`provider-credential-mode-${provider().id}`}
-          >
-            <DenRadio
-              name={`provider-credential-mode-${provider().id}`}
-              data-testid={`provider-credential-mode-api-key-${provider().id}`}
-              checked={provider().requires_api_key}
-              onChange={() => void setCredentialMode(provider(), true)}
-            >
-              {MODELS_SETTINGS_COPY.providerApiKeyLabel}
-            </DenRadio>
-            <DenRadio
-              name={`provider-credential-mode-${provider().id}`}
-              data-testid={`provider-credential-mode-ambient-${provider().id}`}
-              checked={!provider().requires_api_key}
-              onChange={() => void setCredentialMode(provider(), false)}
-            >
-              {ambientAuthCopy(provider().ambient_auth)?.label ?? ""}
-            </DenRadio>
-          </div>
-        </DenField>
-      </Show>
-      <Show
-        when={
-          !provider().requires_api_key &&
-          ambientAuthCopy(provider().ambient_auth)
-        }
-      >
-        {(copy) => (
-          <p
-            class="den-settings-hint"
-            data-testid={`provider-ambient-hint-${provider().id}`}
-            data-ambient-resolved={
-              providerCredentialSource(provider()) === "ambient"
-            }
-          >
-            {copy().detail}{" "}
-            {providerCredentialSource(provider()) === "ambient"
-              ? MODELS_SETTINGS_COPY.ambientCredentialsActive
-              : MODELS_SETTINGS_COPY.ambientCredentialsMissing}
-          </p>
-        )}
-      </Show>
-
-      <Show when={providerShowsApiKeyControls(provider())}>
-        <DenField
-          label={
-            <span class="den-settings-provider-key-label">
-              <span>{MODELS_SETTINGS_COPY.providerApiKeyLabel}</span>
-              <span
-                class="den-settings-provider-status"
-                classList={{
-                  "den-settings-warn":
-                    providerCredentialSource(provider()) === "none" &&
-                    provider().requires_api_key,
-                }}
-                data-configured={
-                  providerCredentialSource(provider()) !== "none"
-                }
-                data-source={providerCredentialSource(provider())}
-                data-testid={`provider-key-status-${provider().id}`}
-              >
-                {providerCredentialSource(provider()) === "stored"
-                  ? MODELS_SETTINGS_COPY.apiKeyStoredStatus
-                  : MODELS_SETTINGS_COPY.apiKeyMissingStatus}
-              </span>
-            </span>
           }
-        >
-          <DenInput
-            type="password"
-            autocomplete="off"
-            class="den-settings-api-key-input"
-            data-testid={`provider-api-key-${provider().id}`}
-            data-credential={
-              provider().credential_present ? "stored" : "missing"
-            }
-            data-required={
-              provider().requires_api_key ? "true" : "false"
-            }
-            placeholder={
-              provider().credential_present
-                ? MODELS_SETTINGS_COPY.providerApiKeyPlaceholderStored
-                : MODELS_SETTINGS_COPY.providerApiKeyPlaceholder
-            }
-            value={card(provider().id).apiKey}
-            onInput={(e) =>
-              patchCard(provider().id, {
-                apiKey: e.currentTarget.value,
-              })
-            }
-          />
-        </DenField>
-        <div class="den-settings-provider-actions">
-          <DenButton
-            variant="secondary"
-            data-testid={`provider-save-key-${provider().id}`}
-            onClick={() => void saveCredential(provider())}
-          >
-            {MODELS_SETTINGS_COPY.saveApiKey}
-          </DenButton>
-          <Show when={provider().credential_present}>
-            <DenButton
-              variant="secondary"
-              data-testid={`provider-clear-key-${provider().id}`}
-              onClick={() => void clearCredential(provider())}
-            >
-              {MODELS_SETTINGS_COPY.clearApiKey}
-            </DenButton>
-          </Show>
-        </div>
-      </Show>
-
-      <DenCheckbox
-        data-testid={`provider-secret-trust-${provider().id}`}
-        checked={provider().secret_screen_trusted ?? false}
-        disabled={card(provider().id).savingSecretTrust}
-        onChange={(e) =>
-          void setSecretScreenTrust(provider(), e.currentTarget.checked)
-        }
-      >
-        {MODELS_SETTINGS_COPY.secretScreenTrustLabel}
-      </DenCheckbox>
-      <p
-        class="den-settings-hint"
-        data-testid={`provider-secret-trust-hint-${provider().id}`}
-      >
-        {MODELS_SETTINGS_COPY.secretScreenTrustHint}
-        <Show when={secretScreenTrustEndpointNote(provider())}>
-          {(note) => <> {note()}</>}
-        </Show>
-      </p>
-
-      <Show when={provider().models.length > 0}>
-        <p class="den-settings-hint">
-          {provider().models.length} model
-          {provider().models.length === 1 ? "" : "s"}
-          {" · "}
-          <DenButton
-            variant="link"
-            data-testid={`provider-toggle-models-${provider().id}`}
-            onClick={() => void toggleModelList(provider())}
-          >
-            {card(provider().id).expanded ? "Hide list" : "Show list"}
-          </DenButton>
-        </p>
-        <Show when={card(provider().id).expanded}>
-          <ul class="den-settings-provider-models" data-testid={`provider-model-list-${provider().id}`}>
-            <For each={provider().models}>{model => <li><code>{model.id}</code><p class="den-settings-hint">{model.eligibility.coordinator.reason}</p></li>}</For>
-          </ul>
-        </Show>
-      </Show>
-
-      <Show when={provider().configured}>
-        <p class="den-settings-hint" data-testid={`provider-test-scope-${provider().id}`}>
-          {MODELS_SETTINGS_COPY.testConnectionScopeHint}
-          <Show when={provider().kind === "cloudflare-workers-ai"}>
-            {" "}{MODELS_SETTINGS_COPY.cloudflareModelAccessHint}
-          </Show>
-        </p>
-        <div class="den-settings-provider-actions">
-          <DenButton
-            variant="secondary"
-            data-testid={`provider-test-${provider().id}`}
-            disabled={card(provider().id).testing}
-            onClick={() => void testProvider(provider())}
-          >
-            {card(provider().id).testing
-              ? MODELS_SETTINGS_COPY.testingConnection
-              : MODELS_SETTINGS_COPY.testConnection}
-          </DenButton>
-          <DenButton
-            variant="secondary"
-            data-testid={`provider-refresh-${provider().id}`}
-            disabled={card(provider().id).refreshing}
-            onClick={() => void refreshModels(provider())}
-          >
-            {card(provider().id).refreshing
-              ? MODELS_SETTINGS_COPY.refreshingModels
-              : MODELS_SETTINGS_COPY.refreshModels}
-          </DenButton>
-        </div>
-        <Show when={card(provider().id).testMessage}>
-          <p
-            class="den-settings-hint"
-            data-testid={`provider-test-result-${provider().id}`}
-          >
-            {card(provider().id).testMessage}
-          </p>
-        </Show>
-        {/* Keep refresh errors below the retained model list. */}
-        <Show when={card(provider().id).refreshFailure} keyed>
-          {(failure) => (
-            <div
-              class="den-settings-provider-refresh-failure"
-              role="status"
-              data-testid={`provider-refresh-failure-${provider().id}`}
-            >
-              <p class="den-settings-warn">{failure.title}</p>
-              <p class="den-settings-hint">{failure.message}</p>
-              <Show when={failure.suggestedAction}>
-                <p class="den-settings-hint">{failure.suggestedAction}</p>
-              </Show>
-              <DenButton
-                variant="secondary"
-                data-testid={`provider-refresh-retry-${provider().id}`}
-                disabled={card(provider().id).refreshing}
-                onClick={() => void refreshModels(provider())}
+          list={
+            <For each={groups()}>
+              {(group) => (
+                <SettingsListGroup
+                  testId={`provider-group-${group.kind}`}
+                  label={group.label}
+                  meta={
+                    group.providers.length > 1
+                      ? MODELS_SETTINGS_COPY.instanceCount(
+                          group.providers.length,
+                        )
+                      : undefined
+                  }
+                >
+                  <For each={group.providers}>
+                    {(provider) => (
+                      <SettingsListRow
+                        testId={`providers-row-${provider.id}`}
+                        primary={providerDisplayName(provider)}
+                        secondary={providerEndpointHost(provider.base_url)}
+                        status={
+                          <span
+                            class="den-settings-provider-status"
+                            data-configured={providerIsReady(provider)}
+                          >
+                            {providerStatusLabel(provider)}
+                          </span>
+                        }
+                        onSelect={() => selectProvider(provider.id)}
+                      />
+                    )}
+                  </For>
+                </SettingsListGroup>
+              )}
+            </For>
+          }
+          detail={
+            <div class="den-settings-providers-detail">
+              {/* Provider identity preserves the detail form across refreshes. */}
+              <ShowLatest
+                when={props.providers.find((p) => p.id === selectedId())}
+                by={(provider) => provider.id}
               >
-                {MODELS_SETTINGS_COPY.retryRefreshModels}
-              </DenButton>
+                {(provider) => (
+                  <ProviderDetailCard
+                    provider={provider}
+                    kinds={kinds}
+                    renaming={renaming}
+                    setRenaming={setRenaming}
+                    card={card}
+                    patchCard={patchCard}
+                    onRenameLabel={(item, next) => void renameLabel(item, next)}
+                    onRemoveProvider={(item) => void removeProvider(item)}
+                    onSaveEndpoint={(item) => void saveEndpoint(item)}
+                    onSaveModels={(item) => void saveModels(item)}
+                    onSetCredentialMode={(item, reqKey) => void setCredentialMode(item, reqKey)}
+                    onSaveCredential={(item) => void saveCredential(item)}
+                    onClearCredential={(item) => void clearCredential(item)}
+                    onSetSecretScreenTrust={(item, trusted) => void setSecretScreenTrust(item, trusted)}
+                    onToggleModelList={(item) => void toggleModelList(item)}
+                    onTestProvider={(item) => void testProvider(item)}
+                    onRefreshModels={(item) => void refreshModels(item)}
+                    renderDiscoveryFailure={(providerId, failure) => (
+                      <div
+                        class="den-settings-provider-refresh-failure"
+                        role="status"
+                        data-testid={`provider-discovery-failure-${providerId}`}
+                      >
+                        <p class="den-settings-warn">{failure.title}</p>
+                        <p class="den-settings-hint">{failure.detail}</p>
+                        <p class="den-settings-hint">{failure.nextStep}</p>
+                      </div>
+                    )}
+                    renderEndpointError={(providerId, error) => (
+                      <p
+                        class="den-settings-warn"
+                        id={`provider-endpoint-error-${providerId}`}
+                        role="status"
+                      >
+                        {error}
+                      </p>
+                    )}
+                    renderRefreshFailure={(item, failure) => (
+                      <div
+                        class="den-settings-provider-refresh-failure"
+                        role="status"
+                        data-testid={`provider-refresh-failure-${item.id}`}
+                      >
+                        <p class="den-settings-warn">{failure.title}</p>
+                        <p class="den-settings-hint">{failure.message}</p>
+                        <Show when={failure.suggestedAction}>
+                          <p class="den-settings-hint">{failure.suggestedAction}</p>
+                        </Show>
+                        <DenButton
+                          variant="secondary"
+                          data-testid={`provider-refresh-retry-${item.id}`}
+                          disabled={card(item.id).refreshing}
+                          onClick={() => void refreshModels(item)}
+                        >
+                          {MODELS_SETTINGS_COPY.retryRefreshModels}
+                        </DenButton>
+                      </div>
+                    )}
+                  />
+                )}
+              </ShowLatest>
             </div>
-          )}
-        </Show>
-      </Show>
+          }
+        />
+      </SettingsListPanel>
+      {renderAddDialog()}
     </>
   );
-
-  const renderSettingsInbox = (): JSX.Element => {
-    const detailOpen = () => selectedProvider() != null;
-    const isEmpty = () => groups().length === 0;
-
-    return (
-      <>
-        <SettingsListPanel
-          testId="providers-list-panel"
-          setting="ai-providers"
-          chrome={
-            detailOpen() ? (
-              <SettingsListBackChrome
-                testId="providers-back"
-                label={MODELS_SETTINGS_COPY.providersBack}
-                onBack={closeDetail}
-              />
-            ) : (
-              <SettingsListChrome
-                testId="providers-list-chrome"
-                count={
-                  <span data-testid="providers-count">
-                    {providerCount()} AI provider
-                    {providerCount() === 1 ? "" : "s"}
-                  </span>
-                }
-                action={
-                  <DenButton
-                    variant="primary"
-                    compact
-                    data-testid="providers-add"
-                    {...settingControl()}
-                    onClick={openAddForm}
-                  >
-                    {settingLabel("ai-providers")}
-                  </DenButton>
-                }
-              />
-            )
-          }
-        >
-          <ListSurfaceInbox
-            class="den-settings-providers"
-            detailOpen={detailOpen()}
-            isEmpty={isEmpty()}
-            listTestId="providers-list"
-            detailTestId="providers-detail"
-            empty={
-              <p
-                class="den-settings-hint den-settings-list-inbox__empty"
-                data-testid="providers-empty"
-              >
-                {MODELS_SETTINGS_COPY.providersEmpty}
-              </p>
-            }
-            list={
-              <For each={groups()}>
-                {(group) => (
-                  <SettingsListGroup
-                    testId={`provider-group-${group.kind}`}
-                    label={group.label}
-                    meta={
-                      group.providers.length > 1
-                        ? MODELS_SETTINGS_COPY.instanceCount(
-                            group.providers.length,
-                          )
-                        : undefined
-                    }
-                  >
-                    <For each={group.providers}>
-                      {(provider) => (
-                        <SettingsListRow
-                          testId={`providers-row-${provider.id}`}
-                          primary={providerDisplayName(provider)}
-                          secondary={providerEndpointHost(provider.base_url)}
-                          status={
-                            <span
-                              class="den-settings-provider-status"
-                              data-configured={providerIsReady(provider)}
-                            >
-                              {providerStatusLabel(provider)}
-                            </span>
-                          }
-                          onSelect={() => selectProvider(provider.id)}
-                        />
-                      )}
-                    </For>
-                  </SettingsListGroup>
-                )}
-              </For>
-            }
-            detail={
-              <div class="den-settings-providers-detail">
-                {/* Provider identity preserves the detail form across refreshes. */}
-                <ShowLatest
-                  when={props.providers.find((p) => p.id === selectedId())}
-                  by={(provider) => provider.id}
-                >
-                  {(provider) => (
-                    <article
-                      class="den-settings-provider-card"
-                      data-testid={`provider-card-${provider().id}`}
-                    >
-                      <header class="den-settings-provider-head">
-                        <div class="den-settings-provider-title">
-                          <Show
-                            when={!renaming()}
-                            fallback={
-                              <InlineRenameInput
-                                class="den-settings-provider-rename-input"
-                                testId="provider-rename-input"
-                                initialValue={providerDisplayName(provider())}
-                                maxLength={PROVIDER_LABEL_MAX}
-                                ariaLabel={MODELS_SETTINGS_COPY.renameDisplayName}
-                                onCommit={(next) => {
-                                  setRenaming(false);
-                                  void renameLabel(provider(), next);
-                                }}
-                                onCancel={() => setRenaming(false)}
-                              />
-                            }
-                          >
-                            <button
-                              type="button"
-                              class="den-settings-provider-rename-trigger"
-                              data-testid="provider-rename-trigger"
-                              aria-label={MODELS_SETTINGS_COPY.renameDisplayName}
-                              data-tip={MODELS_SETTINGS_COPY.renameDisplayName}
-                              onClick={() => setRenaming(true)}
-                            >
-                              {providerDisplayName(provider())}
-                            </button>
-                          </Show>
-                          <code
-                            class="den-settings-provider-id"
-                            data-testid={`provider-id-${provider().id}`}
-                          >
-                            {provider().id}
-                          </code>
-                        </div>
-                        <span
-                          class="den-settings-provider-status"
-                          data-configured={providerIsReady(provider())}
-                        >
-                          {providerStatusLabel(provider())}
-                        </span>
-                        <DenButton
-                          variant="link"
-                          class="den-settings-provider-remove"
-                          data-testid={`provider-remove-${provider().id}`}
-                          onClick={() => void removeProvider(provider())}
-                        >
-                          {MODELS_SETTINGS_COPY.removeProvider}
-                        </DenButton>
-                      </header>
-                      <p class="den-settings-provider-label-hint">
-                        {MODELS_SETTINGS_COPY.providerLabelRenameHint}
-                      </p>
-                      {renderProviderBody(provider)}
-                    </article>
-                  )}
-                </ShowLatest>
-              </div>
-            }
-          />
-        </SettingsListPanel>
-        {renderAddDialog()}
-      </>
-    );
-  };
-
-  return renderSettingsInbox();
 }

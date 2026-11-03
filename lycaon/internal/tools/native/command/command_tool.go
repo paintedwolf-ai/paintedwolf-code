@@ -61,6 +61,9 @@ func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 		if t.Programs == nil {
 			return "", fmt.Errorf("command program runtime is not configured")
 		}
+		if t.Programs.FailureTracker == nil {
+			t.Programs.FailureTracker = t.FailureTracker
+		}
 		return t.Programs.Run(ctx, args, tctx)
 	}
 	res, outcome, err := t.confined().Run(ctx, args, tctx)
@@ -140,7 +143,7 @@ func CommandResultFromOutcome(
 		Stages:            outcome.Snapshot.Stages,
 		ExitCode:          outcome.Snapshot.ExitCode,
 		Tail:              outcome.Snapshot.Tail,
-		OK:                outcome.Snapshot.ExitCode == 0 && outcome.Snapshot.Failure == nil && outcome.Snapshot.TerminationReason != bgprocess.TerminationStopped && (outcome.Snapshot.TerminationReason != bgprocess.TerminationTimedOut || outcome.Terminal != nil),
+		OK:                outcome.Snapshot.ExitCode == 0 && outcome.Snapshot.Failure == nil && !outcome.Snapshot.TerminationReason.IsStopped() && (outcome.Snapshot.TerminationReason != bgprocess.TerminationTimedOut || outcome.Terminal != nil),
 		ExecFailure:       outcome.Snapshot.Failure,
 		TerminationReason: string(outcome.Snapshot.TerminationReason),
 		Network:           outcome.Network,
@@ -232,10 +235,10 @@ func VerdictFor(res *hostcmd.Result) (string, string) {
 	if res.BoundaryRefusal != "" {
 		return api.SourceVerdictUnverifiable, "boundary_refused"
 	}
-	switch res.TerminationReason {
-	case string(bgprocess.TerminationTimedOut):
+	switch {
+	case res.TerminationReason == string(bgprocess.TerminationTimedOut):
 		return api.SourceVerdictUnverifiable, "host_deadline"
-	case string(bgprocess.TerminationStopped):
+	case bgprocess.TerminationReason(res.TerminationReason).IsStopped():
 		return api.SourceVerdictUnverifiable, "host_stopped"
 	}
 	if res.OK {

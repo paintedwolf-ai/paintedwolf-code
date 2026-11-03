@@ -41,6 +41,13 @@ li:last-child > .chat-list-row {
   display: inline-flex;
   color: var(--den-text-muted);
 }
+.chat-list-row__background-running {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--den-status-running);
+}
 .chat-list-row__count,
 .chat-list-row__activity {
   font-size: var(--text-den-hint);

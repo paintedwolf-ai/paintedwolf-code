@@ -437,3 +437,39 @@ func TestSelfCancellationReleasesChildBoundDuringExecution(t *testing.T) {
 		t.Fatalf("self cancellation lost observations: %+v", got)
 	}
 }
+
+func TestCancellationFencesRetainDeadlinesAndSeparateReleaseTimeouts(t *testing.T) {
+	type contextKey struct{}
+	callerDeadline := time.Now().Add(time.Second)
+	parent, cancelParent := context.WithCancel(context.WithValue(t.Context(), contextKey{}, "fact"))
+	cancelParent()
+	fence, cancelFence := cancellationFenceContext(parent)
+	defer cancelFence()
+	if fence.Err() != nil || fence.Value(contextKey{}) != "fact" {
+		t.Fatal("fencing lost request facts or retained caller cancellation")
+	}
+	boundedParent, cancelBoundedParent := context.WithDeadline(t.Context(), callerDeadline)
+	defer cancelBoundedParent()
+	bounded, cancelBounded := cancellationFenceContext(boundedParent)
+	defer cancelBounded()
+	if deadline, ok := bounded.Deadline(); !ok || deadline != callerDeadline {
+		t.Fatal("fencing widened its caller's release deadline")
+	}
+	standalone, cancelStandalone := cancellationFenceContext(context.Background())
+	defer cancelStandalone()
+	if _, ok := standalone.Deadline(); !ok {
+		t.Fatal("detached fencing has no deadline")
+	}
+	expired, cancelExpired := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancelExpired()
+	failure := &cancellationFenceError{err: context.DeadlineExceeded}
+	if isWorkerReleaseTimeout(expired, failure) {
+		t.Fatal("failed cancellation fence was accepted as pending runtime release")
+	}
+	if !errors.Is(failure, context.DeadlineExceeded) {
+		t.Fatal("fence failure lost its cause")
+	}
+	if !isWorkerReleaseTimeout(expired, errWorkerReleaseTimeout) {
+		t.Fatal("physical release timeout lost deferred settlement")
+	}
+}

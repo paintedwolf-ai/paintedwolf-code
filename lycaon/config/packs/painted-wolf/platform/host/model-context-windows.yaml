@@ -2,6 +2,7 @@
 # time. First matching rule wins (case-insensitive substring).
 # Prefer specific ids before family catch-alls. No live HTTP on this path.
 fallback_true_window: 262144
+local_fallback_true_window: 32768
 
 windows:
   - match: [gpt-oss-120b, gpt-oss-20b]

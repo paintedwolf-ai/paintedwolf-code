@@ -36,7 +36,7 @@ func (s *SQLStore) SetProgress(ctx context.Context, workerJobID string, snap wor
 }
 
 // SetChildSessionID binds the spawned child session to a worker job.
-func (q *SQLQueue) SetChildSessionID(ctx context.Context, jobID, childSessionID string) error {
+func (q *sqlQueuePromotion) SetChildSessionID(ctx context.Context, jobID, childSessionID string) error {
 	if err := q.store.SetChildSessionID(ctx, jobID, childSessionID); err != nil {
 		return err
 	}
@@ -45,8 +45,8 @@ func (q *SQLQueue) SetChildSessionID(ctx context.Context, jobID, childSessionID 
 }
 
 // PublishWorkerProgress checkpoints round boundaries.
-func (q *SQLQueue) PublishWorkerProgress(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool) error {
-	if q == nil || q.store == nil {
+func (q *sqlQueuePromotion) PublishWorkerProgress(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool) error {
+	if q == nil || q.sqlQueueCore == nil || q.store == nil {
 		return nil
 	}
 	workerJobID = strings.TrimSpace(workerJobID)
@@ -68,7 +68,7 @@ func (q *SQLQueue) PublishWorkerProgress(ctx context.Context, workerJobID string
 }
 
 // refreshBoard rebuilds the session board after a job transition.
-func (q *SQLQueue) refreshBoard(ctx context.Context, task api.WorkerTask, projectID string) {
+func (q *sqlQueueCore) refreshBoard(ctx context.Context, task api.WorkerTask, projectID string) {
 	if q.events == nil {
 		return
 	}
@@ -79,7 +79,7 @@ func (q *SQLQueue) refreshBoard(ctx context.Context, task api.WorkerTask, projec
 	q.events.PublishBoard(ctx, key, strings.TrimSpace(task.ParentSessionID))
 }
 
-func (q *SQLQueue) refreshBoardByID(ctx context.Context, jobID string) {
+func (q *sqlQueueCore) refreshBoardByID(ctx context.Context, jobID string) {
 	if task, ok := q.Get(jobID); ok { //nolint:contextcheck // Get has internal sqlQueueGetTimeout
 		q.refreshBoard(ctx, *task, task.ProjectID)
 	}

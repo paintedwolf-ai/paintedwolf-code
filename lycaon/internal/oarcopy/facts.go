@@ -4,9 +4,14 @@ package oarcopy
 import (
 	"fmt"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 const HostFactNamespace = "paintedwolf"
+
+// CapabilitySnapshotKey carries typed host facts only during local formatting.
+const CapabilitySnapshotKey = "_host_capability_snapshot"
 
 var profileNames = map[string]bool{
 	"tool":                    true,
@@ -54,8 +59,20 @@ var reasonFlags = map[string]string{
 func FactsFromData(data map[string]any) map[string]any {
 	out := map[string]any{}
 	for key, value := range data {
-		out[publishKey(key)] = value
+		if key != CapabilitySnapshotKey {
+			out[publishKey(key)] = value
+		}
 	}
+	publishParserFacts(out)
+	tool, _ := data["tool"].(string)
+	args, _ := data["tool_args"].(map[string]any)
+	snapshot, observed := data[CapabilitySnapshotKey].(toolcontract.ToolCapabilitySnapshot)
+	var contract *toolcontract.ToolCapabilitySnapshot
+	if observed {
+		contract = &snapshot
+	}
+	PublishInvocationRecovery(out, tool, args, contract)
+	PublishDiagnosticKnowledge(out, data)
 	reason, _ := out["paintedwolf.rejection_reason"].(string)
 	if reason == "" {
 		if raw, ok := data["reason"]; ok {

@@ -38,6 +38,10 @@ func (m *Status) PublishBusy(ctx context.Context, sess *api.Session, preview str
 }
 
 func (m *Status) PublishIdle(ctx context.Context, sessionID string, disposition api.SessionIdleDisposition) {
+	m.PublishIdleWithMessage(ctx, sessionID, disposition, "")
+}
+
+func (m *Status) PublishIdleWithMessage(ctx context.Context, sessionID string, disposition api.SessionIdleDisposition, messageOverride string) {
 	if m == nil || m.events == nil || m.store == nil {
 		return
 	}
@@ -45,7 +49,10 @@ func (m *Status) PublishIdle(ctx context.Context, sessionID string, disposition 
 	if err != nil {
 		return
 	}
-	lastMessage := LastAssistantMessageContent(ctx, m.store, sessionID)
+	lastMessage := strings.TrimSpace(messageOverride)
+	if lastMessage == "" {
+		lastMessage = LastAssistantMessageContent(ctx, m.store, sessionID)
+	}
 	m.events.PublishSessionIdle(ctx, updated.ProjectID, sessionID, lastMessage, disposition)
 }
 

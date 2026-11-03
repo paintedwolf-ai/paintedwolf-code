@@ -156,7 +156,7 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 	var err error
 	refuse := func(loc commandsurface.SyntaxLocation, expected string) {
 		if err == nil {
-			err = &EvaluationRefusal{Code: "COMMAND_SYNTAX_UNSUPPORTED", Node: loc, Expected: expected}
+			err = &EvaluationRefusal{SourceUnitID: ports.Invocation.SourceUnitID, Code: "COMMAND_SYNTAX_UNSUPPORTED", Node: loc, Expected: expected}
 		}
 	}
 	var statements func([]commandsurface.Statement)
