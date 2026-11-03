@@ -53,7 +53,7 @@ def lanes():
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
             raise ValueError(f"CI lane {name} arguments belong to exactly one target")
         if 'runtime_engines' in lane and (lane['runtime_engines'] is not False
-                or lane['targets'] != ['den:test:rust', 'decide:test']):
+                or lane['targets'] not in (['den:test:rust', 'decide:test'], ['scripts:coverage:changes'])):
             raise ValueError(f"CI lane {name} requires runtime engines for host checks")
         if supplemental(lane) and "platform" not in lane:
             if (lane["targets"] != ["test:stress"] or not lane.get("arguments")

@@ -38,4 +38,3 @@ func (l DirectIPLease) IdentityKey() string {
 func DirectIPChatConfinementDigest(roots []string, egress string) string {
 	return RootsDigest(roots) + ":" + strings.TrimSpace(egress)
 }
-

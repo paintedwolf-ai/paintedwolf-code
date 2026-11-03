@@ -61,4 +61,3 @@ func TestCredentialProtectionRequiresEmbeddedProfile(t *testing.T) {
 		t.Fatal("executed host without its packaged provisioning profile")
 	}
 }
-

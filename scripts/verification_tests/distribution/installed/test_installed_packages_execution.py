@@ -27,7 +27,7 @@ class InstalledPackagesTests(unittest.TestCase):
 
     def test_selected_fixture_rejects_changed_bytes_symlinks_and_unknown_fields(self):
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "selected.deb"
+            path = Path(temporary).resolve() / "selected.deb"
             path.write_bytes(b"package")
             binding = self.binding(path)
             self.assertEqual(current_package(binding), path)
@@ -48,14 +48,14 @@ class InstalledPackagesTests(unittest.TestCase):
 
     def test_failed_removal_restores_and_rebinds_before_reporting(self):
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "selected.deb"
+            path = Path(temporary).resolve() / "selected.deb"
             path.write_bytes(b"package")
             binding = self.binding(path)
             replies = [(0, b"painted-wolf-code: /usr/bin/painted-wolf-code\n", b""),
                        (0, b"painted-wolf-code\n", b""), (1, b"", b"remove failed"), (0, b"", b"")]
             with patch.object(packages, "native_lock", return_value=nullcontext()), patch.object(packages, "require_owned_guest"), patch.object(packages, "command", side_effect=replies) as run, \
                     patch.object(packages, "inspect", return_value={}), patch.object(packages, "bind", return_value={"payload": {"status": "passed"}}) as rebind:
-                result = packages.execute(binding, "installation", "package-ownership-and-removal", Path(temporary)/"evidence")
+                result = packages.execute(binding, "installation", "package-ownership-and-removal", Path(temporary).resolve()/"evidence")
             self.assertEqual(result["status"], "failed")
             self.assertEqual(run.call_args.args[0][:4], ["sudo", "-n", "dpkg", "--install"])
             rebind.assert_called_once()
@@ -64,7 +64,7 @@ class InstalledPackagesTests(unittest.TestCase):
 
     def test_missing_driver_never_claims_an_interaction(self):
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary)/"selected.deb"
+            path = Path(temporary).resolve()/"selected.deb"
             path.write_bytes(b"package")
-            result = packages.execute(self.binding(path), "updates", "interrupted-upgrade", Path(temporary)/"evidence")
+            result = packages.execute(self.binding(path), "updates", "interrupted-upgrade", Path(temporary).resolve()/"evidence")
             self.assertEqual(result["status"], "unverified")

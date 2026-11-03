@@ -19,17 +19,17 @@ func TestGrantCoversRequiresAnActualLease(t *testing.T) {
 	approvalGate := NewRuleApprovalGate(store, NoSources())
 
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "network",
-Args: map[string]any{"host": "example.org", "transport": "http-connect"},
-},
-Scope: hitl.ActionScope{
-ProjectID: "proj-1",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "network",
+			Args: map[string]any{"host": "example.org", "transport": "http-connect"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID: "proj-1",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
+		},
+	}
 	if approvalGate.GrantCovers(action) {
 		t.Fatal("no host grant must not count as coverage")
 	}
@@ -67,19 +67,19 @@ func TestDeviceWriteRootLeaseCoversOtherProject(t *testing.T) {
 	approvalGate := NewRuleApprovalGate(store, NoSources())
 
 	first := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write_root",
-Args: map[string]any{"proposed_write_root": "/Users/me/go"},
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-a",
-ProjectID: "proj-a",
-ProjectDir: "/tmp/a",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/a"}},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "write_root",
+			Args: map[string]any{"proposed_write_root": "/Users/me/go"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "chat-a",
+			ProjectID:  "proj-a",
+			ProjectDir: "/tmp/a",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/a"}},
+		},
+	}
 	offers := approvalGate.GrantOffers(first, &hitl.ApprovalResult{Decision: askDecision(api.GateOutsideRootsWrite)})
 	var device *hitl.ApprovalGrantOffer
 	for _, offer := range offers {
@@ -100,19 +100,19 @@ Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roo
 	testutil.FailErr(t, "apply device write-root grant", err)
 
 	other := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write_root",
-Args: map[string]any{"proposed_write_root": "/Users/me/go"},
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-b",
-ProjectID: "proj-b",
-ProjectDir: "/tmp/b",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/b"}},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "write_root",
+			Args: map[string]any{"proposed_write_root": "/Users/me/go"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "chat-b",
+			ProjectID:  "proj-b",
+			ProjectDir: "/tmp/b",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/b"}},
+		},
+	}
 	if !approvalGate.GrantCovers(other) {
 		t.Fatal("device write-root lease must cover the same path on another project")
 	}
@@ -121,19 +121,19 @@ Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roo
 	}
 
 	toolAsk := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "chown",
-Args: map[string]any{"path": "/Users/me/go/bin/tea"},
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-b",
-ProjectID: "proj-b",
-ProjectDir: "/tmp/b",
-},
-Execution: hitl.ActionExecution{
-Contained: other.Execution.Contained,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "chown",
+			Args: map[string]any{"path": "/Users/me/go/bin/tea"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "chat-b",
+			ProjectID:  "proj-b",
+			ProjectDir: "/tmp/b",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: other.Execution.Contained,
+		},
+	}
 	if approvalGate.GrantCovers(toolAsk) {
 		t.Fatal("a write-root lease must not satisfy a tool ask")
 	}
@@ -165,20 +165,20 @@ func TestPackageCoordinateLeaseCoversFlagAndEnvVariants(t *testing.T) {
 	testutil.FailErr(t, "apply package coordinate grant", err)
 
 	action1 := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-task-1",
-ProjectID: "proj-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "npm install lodash@4.17.21",
-},
-Execution: hitl.ActionExecution{
-PackageExecution: pkgExecBase,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "chat-task-1",
+			ProjectID: "proj-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "npm install lodash@4.17.21",
+		},
+		Execution: hitl.ActionExecution{
+			PackageExecution: pkgExecBase,
+		},
+	}
 	if !approvalGate.GrantCovers(action1) {
 		t.Fatal("package coordinate grant must cover base command")
 	}
@@ -191,41 +191,40 @@ PackageExecution: pkgExecBase,
 		},
 	}
 	action2 := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-task-1",
-ProjectID: "proj-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "npm install lodash@4.17.21 --save-dev --verbose",
-},
-Execution: hitl.ActionExecution{
-PackageExecution: pkgExecFlagVariant,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "chat-task-1",
+			ProjectID: "proj-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "npm install lodash@4.17.21 --save-dev --verbose",
+		},
+		Execution: hitl.ActionExecution{
+			PackageExecution: pkgExecFlagVariant,
+		},
+	}
 	if !approvalGate.GrantCovers(action2) {
 		t.Fatal("package coordinate grant must cover command with flag variants")
 	}
 
 	action3 := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: "chat-task-1",
-ProjectID: "proj-1",
-},
-Presentation: hitl.ActionPresentation{
-Command: "NODE_ENV=production npm install lodash@4.17.21",
-},
-Execution: hitl.ActionExecution{
-PackageExecution: pkgExecBase,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "chat-task-1",
+			ProjectID: "proj-1",
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "NODE_ENV=production npm install lodash@4.17.21",
+		},
+		Execution: hitl.ActionExecution{
+			PackageExecution: pkgExecBase,
+		},
+	}
 	if !approvalGate.GrantCovers(action3) {
 		t.Fatal("package coordinate grant must cover command with env variants")
 	}
 }
-

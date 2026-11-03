@@ -286,5 +286,3 @@ func (l *LifecycleService) ObserveDisk(ctx context.Context, p *project.Project, 
 	}
 	return s.withParticipants(d), nil
 }
-
-

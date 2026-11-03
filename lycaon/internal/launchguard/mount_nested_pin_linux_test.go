@@ -44,7 +44,7 @@ func pinNestedViewRoot(source, desktop *os.File, pins *fixtureLifecyclePins, tar
 			return -1, err
 		}
 		var changed bool
-		fd, changed, err = captureNestedViewPin(target, expected)
+		fd, changed, err = captureNestedViewPin(target, expected, readMountInfo)
 		if err != nil || !changed {
 			return fd, err
 		}
@@ -54,7 +54,7 @@ func pinNestedViewRoot(source, desktop *os.File, pins *fixtureLifecyclePins, tar
 }
 
 // One capture owns its poll descriptor and discards every pin from a changed epoch.
-func captureNestedViewPin(target string, expected int) (fd int, changed bool, err error) {
+func captureNestedViewPin(target string, expected int, read func(int, []byte) ([]byte, error)) (fd int, changed bool, err error) {
 	fd = -1
 	defer func() {
 		if (changed || err != nil) && fd >= 0 {
@@ -67,7 +67,7 @@ func captureNestedViewPin(target string, expected int) (fd int, changed bool, er
 		return -1, false, err
 	}
 	defer unix.Close(info)
-	rows, changed, err := readIntakeMountTopology(info, readMountInfo)
+	rows, changed, err := readIntakeMountTopology(info, read)
 	if err != nil || changed {
 		return -1, changed, err
 	}

@@ -293,4 +293,3 @@ func metaFromRecord(rec ArtifactRecord) api.VisualArtifact {
 	}
 	return meta
 }
-
