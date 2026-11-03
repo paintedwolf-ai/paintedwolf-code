@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
@@ -18,9 +19,11 @@ const jobMetaFileName = "state.json"
 
 // JobMeta is durable state for one worker branch.
 type JobMeta struct {
-	FormatVersion    int           `json:"format_version"`
-	Roots            []JobMetaRoot `json:"roots"`
-	SnapshotComplete bool          `json:"snapshot_complete"`
+	FormatVersion    int                   `json:"format_version"`
+	Roots            []JobMetaRoot         `json:"roots"`
+	SnapshotComplete bool                  `json:"snapshot_complete"`
+	PreparedViewID   string                `json:"prepared_view_id,omitempty"`
+	AdapterFacts     *adapter.AdapterFacts `json:"adapter_facts,omitempty"`
 }
 
 // JobMetaRoot identifies one project root in the branch tree.
@@ -97,11 +100,25 @@ func LoadJobMeta(metaDir string) (JobMeta, error) {
 }
 
 func markSnapshotComplete(metaDir string) error {
+	return markSnapshotCompleteWithView(metaDir, nil, adapter.AdapterFacts{})
+}
+
+func markSnapshotCompleteWithView(metaDir string, view *adapter.PreparedView, facts adapter.AdapterFacts) error {
 	meta, err := LoadJobMeta(metaDir)
 	if err != nil {
 		return err
 	}
 	meta.SnapshotComplete = true
+	if view != nil {
+		meta.PreparedViewID = strings.TrimSpace(view.ViewID)
+		if view.Facts.AdapterID != "" {
+			facts = view.Facts
+		}
+	}
+	if facts.AdapterID != "" {
+		cp := facts
+		meta.AdapterFacts = &cp
+	}
 	return WriteJobMeta(metaDir, meta)
 }
 

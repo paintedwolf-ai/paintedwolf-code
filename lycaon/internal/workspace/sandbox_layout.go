@@ -3,13 +3,12 @@ package workspace
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/filelock"
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
@@ -39,6 +38,56 @@ func validateLayout(layout SandboxLayout) error {
 		}
 	}
 	return nil
+}
+
+// CreateWorkerWorkspaceSelected narrows attached roots and subroots using an explicit WorkspaceSelection
+// (keeping informational taskPathHints separate) before provisioning the worker workspace (#1658).
+func (m *Manager) CreateWorkerWorkspaceSelected(
+	ctx context.Context,
+	roots, sourceRoots []projectroot.RootRef,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	activeRootID, jobID string,
+) (*Binding, SandboxLayout, error) {
+	ctx = WithWorkspaceSelection(ctx, selection, taskPathHints...)
+	return m.CreateWorkerWorkspaceFromSources(ctx, roots, sourceRoots, activeRootID, jobID)
+}
+
+func applyWorkspaceSelectionToLayout(
+	layout, sources SandboxLayout,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	activeRootID string,
+) (SandboxLayout, SandboxLayout, string, error) {
+	narrowedGrants, narrowedSources, err := ResolveDispatchWorkspaceSelection(sources.Roots, selection, taskPathHints)
+	if err != nil {
+		return SandboxLayout{}, SandboxLayout{}, "", err
+	}
+	layoutByID := make(map[string]projectroot.RootRef, len(layout.Roots))
+	for _, r := range layout.Roots {
+		layoutByID[r.ID] = r
+	}
+	narrowedLayout := make([]projectroot.RootRef, 0, len(narrowedGrants))
+	activeFound := false
+	primaryID := ""
+	for i, g := range narrowedGrants {
+		lr := layoutByID[g.RootID]
+		lr.IsPrimary = g.IsPrimary
+		if g.Subroot != "" {
+			lr.Path = filepath.Join(lr.Path, filepath.FromSlash(g.Subroot))
+		}
+		narrowedLayout = append(narrowedLayout, lr)
+		if lr.ID == activeRootID {
+			activeFound = true
+		}
+		if narrowedSources[i].IsPrimary {
+			primaryID = narrowedSources[i].ID
+		}
+	}
+	if !activeFound && primaryID != "" {
+		activeRootID = primaryID
+	}
+	return SandboxLayout{Roots: narrowedLayout}, SandboxLayout{Roots: narrowedSources}, activeRootID, nil
 }
 
 // CreateWorkerWorkspaceFromSources snapshots sources under canonical root identities.
@@ -76,6 +125,13 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 			return nil, SandboxLayout{}, fmt.Errorf("workspace source root %d identity mismatch", i)
 		}
 	}
+	if sel, hints, ok := workspaceSelectionFromContext(ctx); ok {
+		var selErr error
+		layout, sources, activeRootID, selErr = applyWorkspaceSelectionToLayout(layout, sources, sel, hints, activeRootID)
+		if selErr != nil {
+			return nil, SandboxLayout{}, selErr
+		}
+	}
 	if err := validateLayout(layout); err != nil {
 		return nil, SandboxLayout{}, err
 	}
@@ -88,13 +144,13 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 		if err != nil {
 			return nil, SandboxLayout{}, err
 		}
-		branchRoot = m.jobRoot(primary.Path, jobID)
+		branchRoot = jobRoot(m, primary.Path, jobID)
 	} else {
 		active, err := projectroot.ActiveRoot(layout.Roots, activeRootID)
 		if err != nil {
 			return nil, SandboxLayout{}, err
 		}
-		branchRoot = m.jobRoot(active.Path, jobID)
+		branchRoot = jobRoot(m, active.Path, jobID)
 	}
 	release, err := acquireWorkspaceProvisionLock(ctx, branchRoot)
 	if err != nil {
@@ -102,66 +158,23 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 	}
 	defer release()
 	if completeBranchMatchesLayout(branchRoot, layout) {
-		return &Binding{ID: jobID, Root: branchRoot}, layout, nil
+		b := &Binding{ID: jobID, Root: branchRoot}
+		if sel, view, ok := m.lookupBranchViews(branchRoot); ok {
+			b.Selection = sel
+			b.View = view
+			b.Adapter = sel.Adapter
+		}
+		return b, layout, nil
 	}
 	binding, err := m.createBranchSkeleton(ctx, branchRoot, layout, jobID)
 	if err != nil {
 		return nil, SandboxLayout{}, err
 	}
-	if err := m.snapshotSourceRoots(ctx, binding.Root, sources.Roots); err != nil {
+	if err := snapshotSourceRoots(ctx, m, binding, sources.Roots); err != nil {
 		_ = m.DestroyWorkerWorkspace(binding)
 		return nil, SandboxLayout{}, err
 	}
 	return binding, layout, nil
-}
-
-const provisionLockSuffix = ".provision.lock"
-
-func tryWorkspaceProvisionLock(branchRoot string) (func(), error) {
-	file, err := filelock.Open(branchRoot + provisionLockSuffix)
-	if err != nil {
-		return nil, err
-	}
-	held, err := filelock.TryExclusive(file)
-	if err != nil || !held {
-		_ = file.Close()
-		if err != nil {
-			return nil, err
-		}
-		return nil, ErrBranchInUse
-	}
-	return func() {
-		_ = filelock.Unlock(file)
-		_ = file.Close()
-	}, nil
-}
-
-func acquireWorkspaceProvisionLock(ctx context.Context, branchRoot string) (func(), error) {
-	file, err := filelock.Open(branchRoot + provisionLockSuffix)
-	if err != nil {
-		return nil, err
-	}
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		held, lockErr := filelock.TryExclusive(file)
-		if lockErr != nil {
-			_ = file.Close()
-			return nil, lockErr
-		}
-		if held {
-			return func() {
-				_ = filelock.Unlock(file)
-				_ = file.Close()
-			}, nil
-		}
-		select {
-		case <-ctx.Done():
-			_ = file.Close()
-			return nil, ctx.Err()
-		case <-ticker.C:
-		}
-	}
 }
 
 func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
@@ -179,54 +192,78 @@ func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
 	return true
 }
 
-func (m *Manager) snapshotSourceRoots(ctx context.Context, branchRoot string, sources []projectroot.RootRef) error {
+func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef) error {
+	branchRoot := binding.Root
+	choice, err := SelectWorkspaceAdapter(ctx, adapter.ProbeConfig{RuntimeDir: filepath.Join(m.branchRoot, ".adapter")}, m.selector)
+	if err != nil {
+		return classifyProvisionError(err)
+	}
+	binding.Selection = choice
+	binding.Adapter = choice.Adapter
+
+	if choice.Facts.PreparationKind == adapter.PreparationMounted {
+		view, err := prepareMountedWorkspaceView(ctx, m, binding, sources, choice.Adapter)
+		if err != nil {
+			return classifyProvisionError(err)
+		}
+		binding.View = view
+		m.recordBranchViews(branchRoot, choice, view)
+		return markSnapshotCompleteWithView(enginepaths.MetaDirForBranchRoot(branchRoot), view, choice.Facts)
+	}
+
 	if len(sources) == 1 {
-		if err := m.provisionRoot(ctx, sources[0].Path, branchRoot); err != nil {
+		rtDir := filepath.Join(m.branchRoot, ".adapter", enginepaths.ProjectKey(sources[0].Path))
+		view, err := provisionRoot(ctx, m, sources[0], branchRoot, rtDir, binding.ID, choice.Facts.FallbackReason)
+		if err != nil {
 			return err
 		}
-	} else {
-		for _, source := range sources {
-			dir, err := projectroot.BranchDirForID(source.ID)
-			if err != nil {
-				return err
-			}
-			if err := m.provisionRoot(ctx, source.Path, filepath.Join(branchRoot, dir)); err != nil {
-				return err
-			}
+		binding.View = view
+		m.recordBranchViews(branchRoot, choice, view)
+		return markSnapshotCompleteWithView(enginepaths.MetaDirForBranchRoot(branchRoot), view, choice.Facts)
+	}
+	var views []*adapter.PreparedView
+	for _, source := range sources {
+		dir, err := projectroot.BranchDirForID(source.ID)
+		if err != nil {
+			return err
+		}
+		rtDir := filepath.Join(m.branchRoot, ".adapter", enginepaths.ProjectKey(source.Path))
+		view, err := provisionRoot(ctx, m, source, filepath.Join(branchRoot, dir), rtDir, binding.ID+"-"+source.ID, choice.Facts.FallbackReason)
+		if err != nil {
+			return err
+		}
+		views = append(views, view)
+		if source.IsPrimary || binding.View == nil {
+			binding.View = view
 		}
 	}
-	return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+	m.recordBranchViews(branchRoot, choice, views...)
+	return markSnapshotCompleteWithView(enginepaths.MetaDirForBranchRoot(branchRoot), binding.View, choice.Facts)
 }
 
 // jobIDForBranch is the branch directory name: the worker job id.
-func jobIDForBranch(branchRoot string) string {
-	return filepath.Base(filepath.Clean(branchRoot))
-}
+func jobIDForBranch(branchRoot string) string { return filepath.Base(filepath.Clean(branchRoot)) }
 
 // BranchRootRefs returns branch paths with canonical root identities.
 func BranchRootRefs(branchRoot string) ([]projectroot.RootRef, error) {
-	branchRoot, err := cleanBranchRoot(branchRoot)
-	if err != nil {
+	if clean, err := cleanBranchRoot(branchRoot); err != nil {
 		return nil, err
-	}
-	layout, err := LoadBranchLayout(branchRoot)
-	if err != nil {
+	} else if layout, err := LoadBranchLayout(clean); err != nil {
 		return nil, err
+	} else {
+		return branchRootPaths(clean, layout.Roots)
 	}
-	return branchRootPaths(branchRoot, layout.Roots)
 }
 
 // BranchRootAddresses maps recorded topology without requiring a materialized tree.
 func BranchRootAddresses(branchRoot string) ([]projectroot.RootRef, error) {
-	branchRoot, err := cleanBranchRoot(branchRoot)
-	if err != nil {
+	if clean, err := cleanBranchRoot(branchRoot); err != nil {
 		return nil, err
-	}
-	roots, err := LoadBranchRoots(branchRoot)
-	if err != nil {
+	} else if roots, err := LoadBranchRoots(clean); err != nil {
 		return nil, err
+	} else {
+		return branchRootPaths(clean, roots)
 	}
-	return branchRootPaths(branchRoot, roots)
 }
 
 func branchRootPaths(branchRoot string, source []projectroot.RootRef) ([]projectroot.RootRef, error) {

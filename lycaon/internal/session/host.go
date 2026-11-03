@@ -228,6 +228,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.Coordinator.Guidance = guidancedelivery.New(store, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
 	m.Processes = processcontrol.New(store, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
 	m.Workers = workerexecution.New(store, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, turnHistory, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store, m.Workspace, newBranchWorkspace)})
+	m.Verification.SetWorkspaceTrackers(m.Workers.Workspaces)
 	turnPreparation := preparation.New(turnHistory, m.Coordinator.Loading, m.Profiles, m.SourceBriefs, m.ToolContext, m.Workers.Workspaces, m.Workers.State)
 	turnPostTurn := postturn.New(store, m.Coordinator.Guidance)
 	m.Coordinator.Batch = batchcontrol.New(store, workerState, m.Verification, m.Coordinator.Guidance)
@@ -242,7 +243,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 		return texts
 	})
 	m.Runner = turnexecution.New(store, svc, turnexecution.Components{Execution: turnExecution, Workspace: m.Workspace, Spend: turnSpend, Transcript: turnTranscript, Turns: turnTurns, Chats: m.Chats, SubmissionState: turnSubmissionState, Settlement: turnSettlement, Clocks: turnClocks, Closeouts: turnCloseouts, Guidance: m.Coordinator.Guidance, Curation: turnCuration, Status: turnStatus, Instructions: turnInstructions, Preparation: turnPreparation, Authorization: turnAuthorization, History: turnHistory, PostTurn: turnPostTurn})
-	m.Workers.Harness = workerharness.New(store, m.Profiles, m.ToolContext, m.Workers.Workspaces, m.Workspace, registry, m.Verification, OverlaySourceProof)
+	m.Workers.Harness = workerharness.New(store, m.Profiles, m.ToolContext, m.Workers.Workspaces, m.Workspace, registry, m.Verification, OverlaySourceProofForWorkspaces(m.Workers.Workspaces))
 	m.Admission.Bind(m.Runner, turnSettlement, m.Submissions)
 	m.Coordinator.Closeout = closeoutassembly.New(store, m.Workspace, workerState, m.Verification.Evidence)
 	m.Coordinator.Closeout.SetSourceVerification(m.Verification)
@@ -279,6 +280,9 @@ func (m *Host) BeginEngineShutdown() {
 	m.Runner.Settlement.BeginShutdown()
 	m.Coordinator.Runtime.StopSleepTimers()
 	m.Catalog.Stop()
+	if m.Workers != nil && m.Workers.Workspaces != nil {
+		m.Workers.Workspaces.Close()
+	}
 	if m.Runner.Curation != nil {
 		m.Runner.Curation.Stop()
 	}

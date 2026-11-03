@@ -10,7 +10,64 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
+
+// ResolveDispatchWorkspaceSelection validates an explicit adapter.WorkspaceSelection against attached
+// project roots, narrowing the materialized/visible roots and subroots while keeping informational
+// taskPathHints separate (#1658).
+func ResolveDispatchWorkspaceSelection(
+	attached []projectroot.RootRef,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+) ([]adapter.RootGrant, []projectroot.RootRef, error) {
+	_ = taskPathHints // Informational hints never change workspace authority or materialization.
+	grants := make([]adapter.RootGrant, 0, len(attached))
+	for _, r := range attached {
+		grants = append(grants, adapter.RootGrant{
+			RootID:     r.ID,
+			Label:      r.Label,
+			SourcePath: r.Path,
+			IsPrimary:  r.IsPrimary,
+		})
+	}
+	narrowedGrants, err := adapter.ValidateWorkspaceSelection(grants, selection)
+	if err != nil {
+		return nil, nil, err
+	}
+	narrowedRefs := make([]projectroot.RootRef, 0, len(narrowedGrants))
+	for _, g := range narrowedGrants {
+		narrowedRefs = append(narrowedRefs, projectroot.RootRef{
+			ID:        g.RootID,
+			Label:     g.Label,
+			Path:      g.SourcePath,
+			IsPrimary: g.IsPrimary,
+		})
+	}
+	return narrowedGrants, narrowedRefs, nil
+}
+
+// ReconcileSelectedSandboxRoots validates an explicit WorkspaceSelection against attached project roots
+// and reconciles branches and seeds against the narrowed root set while keeping taskPathHints separate (#1658).
+func ReconcileSelectedSandboxRoots(
+	ctx context.Context,
+	branchRoot, seedRoot string,
+	attached []projectroot.RootRef,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	loadRetainedJobs func(context.Context) (map[string]struct{}, error),
+) (int, error) {
+	_, narrowedRefs, err := ResolveDispatchWorkspaceSelection(attached, selection, taskPathHints)
+	if err != nil {
+		return 0, err
+	}
+	liveDirs := make([]string, 0, len(narrowedRefs))
+	for _, r := range narrowedRefs {
+		liveDirs = append(liveDirs, r.Path)
+	}
+	return ReconcileSandboxRoots(ctx, branchRoot, seedRoot, liveDirs, loadRetainedJobs)
+}
 
 // ReconcileSandboxRoots removes unreferenced branches and seeds of detached roots.
 // Retained job trees and topology remain available after a project root moves.
