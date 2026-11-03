@@ -100,7 +100,7 @@ func TestCheckpointBarrierDrainsPendingUnstableWritesAndExcludesNewMutations(t *
 	}
 
 	// Also verify Publisher.Publish captures pending UNSTABLE data through its callbacks.
-	unstablePayload2 := []byte("staged-unstable-for-publisher\n")
+	unstablePayload2 := []byte("staged-unstable-for-publisher!\n")
 	if st := sendTestNFSWrite(t, rpcConn, fileFH, 0, unstablePayload2, uint32(nfsserver.Unstable), uint32(os.Getuid()), uint32(os.Getgid())); st != nfs.NFSStatusOk {
 		t.Fatalf("expected NFSStatusOk staging second UNSTABLE write after barrier release, got %v", st)
 	}

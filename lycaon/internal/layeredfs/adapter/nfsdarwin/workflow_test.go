@@ -24,6 +24,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// Loopback kernel NFS mounts served by the same Go process require at least 2 Ps so
+	// kernel VM page faults (e.g. mmap memory accesses that do not enter runtime.entersyscall)
+	// cannot starve the in-process NFS server goroutines when go-test-digest sets GOMAXPROCS=1.
+	if runtime.GOMAXPROCS(0) < 2 {
+		runtime.GOMAXPROCS(2)
+	}
 	gittestsetup.Enable()
 	os.Exit(m.Run())
 }

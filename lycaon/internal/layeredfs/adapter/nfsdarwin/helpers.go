@@ -177,22 +177,22 @@ func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAliv
 	}
 	if serverAlive {
 		tCtx, cancel := context.WithTimeout(uCtx, 3*time.Second)
-		err := exec.CommandContext(tCtx, umountBin, m.mountPath).Run()
+		_ = exec.CommandContext(tCtx, umountBin, m.mountPath).Run()
 		cancel()
-		if err == nil && !isMountOwnedAndActive(m, false) {
+		if !isMountOwnedAndActive(m, false) {
 			return nil
 		}
 	}
 	fCtx, fCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	out, fErr := exec.CommandContext(fCtx, umountBin, "-f", m.mountPath).CombinedOutput()
 	fCancel()
-	if fErr == nil && !isMountOwnedAndActive(m, false) {
+	if !isMountOwnedAndActive(m, false) {
 		return nil
 	}
 	dCtx, dCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	dOut, dErr := exec.CommandContext(dCtx, diskutilBin, "unmount", "force", m.mountPath).CombinedOutput()
 	dCancel()
-	if dErr == nil && !isMountOwnedAndActive(m, false) {
+	if !isMountOwnedAndActive(m, false) {
 		return nil
 	}
 	return &adapter.AdapterError{
