@@ -140,6 +140,7 @@ func New(t testing.TB, options Options) *Fixture {
 	background := options.Background
 	if background == nil {
 		background = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+		background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 		t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
 	}
 	natives := map[string]command.NativeOperation{}
