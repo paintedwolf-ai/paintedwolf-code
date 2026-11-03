@@ -90,7 +90,7 @@ func (l *WorkerContextLoader) BuildWorkerPromptContext(ctx context.Context, chil
 		}
 		out.Checklist = checklist
 	}
-	out, err = attachWorkerScanDigest(out, sess.WorkspacePath, delegation.WorkflowRunID, l.Scans)
+	out, err = attachWorkerScanDigest(ctx, out, sess.WorkspacePath, delegation.WorkflowRunID, l.Scans)
 	if err != nil {
 		return out, err
 	}

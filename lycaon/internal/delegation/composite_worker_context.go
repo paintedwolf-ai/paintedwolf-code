@@ -77,7 +77,7 @@ func buildTaskSpawnWorkerContext(ctx context.Context, c *CompositeWorkerContext,
 		}
 	}
 	var err error
-	out, err = attachWorkerScanDigest(out, sess.WorkspacePath, runID, scans)
+	out, err = attachWorkerScanDigest(ctx, out, sess.WorkspacePath, runID, scans)
 	if err != nil {
 		return out, err
 	}

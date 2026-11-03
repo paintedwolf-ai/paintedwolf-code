@@ -8,18 +8,25 @@ import (
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // digestScans holds one scan bound to a run and a newer ambient one.
-type digestScans struct{}
+type digestScans struct{ check func(context.Context) }
 
-func (digestScans) List(context.Context, []string, int) ([]api.CodeScan, error) {
+func (s digestScans) List(ctx context.Context, _ []string, _ int) ([]api.CodeScan, error) {
+	if s.check != nil {
+		s.check(ctx)
+	}
 	return []api.CodeScan{{ID: "ambient-scan", ScannerID: "lycaon-sast", Status: api.CodeScanStatusComplete}}, nil
 }
 
-func (digestScans) ListByWorkflowRunID(_ context.Context, runID string) ([]api.CodeScan, error) {
+func (s digestScans) ListByWorkflowRunID(ctx context.Context, runID string) ([]api.CodeScan, error) {
+	if s.check != nil {
+		s.check(ctx)
+	}
 	if runID != "run-1" {
 		return nil, nil
 	}
@@ -32,14 +39,25 @@ func scanDigestContext(t *testing.T, agent string, tools []string, runID string)
 	task := &api.WorkerTask{ID: "job-1", ChildSessionID: sess.ID, ParentSessionID: sess.ParentSessionID, AgentType: agent, WorkflowRunID: runID}
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "load agents", orchestration.LoadRequiredAgentRegistry(t.Context(), agents))
+	ctx, cancel := context.WithCancel(workercontext.WithJob(t.Context(), task.ID))
+	defer cancel()
+	scans := digestScans{check: func(got context.Context) {
+		if workercontext.Job(got) != task.ID {
+			t.Fatalf("scan context lost job: %q", workercontext.Job(got))
+		}
+		cancel()
+		if got.Err() != context.Canceled {
+			t.Fatal("scan context lost invocation cancellation")
+		}
+	}}
 	c := &delegation.CompositeWorkerContext{
-		Delegation: &delegation.WorkerContextLoader{Store: delegation.NewMemoryStore(), Tasks: contextTaskLookup{task: task}, Scans: digestScans{}},
+		Delegation: &delegation.WorkerContextLoader{Store: delegation.NewMemoryStore(), Tasks: contextTaskLookup{task: task}, Scans: scans},
 		Tools: delegation.LegToolListerFunc(func(context.Context, *api.Session, string) []string {
 			return append([]string(nil), tools...)
 		}),
 		AgentsFor: func(*api.Session) profiles.AgentProfileResolver { return agents },
 	}
-	got, err := c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
+	got, err := c.BuildWorkerPromptContext(ctx, sess.ID, sess)
 	testutil.FailErr(t, "build worker context", err)
 	return strings.Join(got.ScanDigest, "\n")
 }
