@@ -149,6 +149,9 @@ func (b agentBatchPlanner) planAgentBatch(ctx context.Context, inputs []AgentEdi
 		return batch, true, nil
 	}
 	for _, item := range batch {
+		if err := s.admitExecutionPin(ctx, item.document, item.input); err != nil {
+			return nil, false, err
+		}
 		if item.input.ReviewedRevision != 0 && item.input.ReviewedRevision != item.document.Revision {
 			return nil, false, ErrRevisionConflict
 		}

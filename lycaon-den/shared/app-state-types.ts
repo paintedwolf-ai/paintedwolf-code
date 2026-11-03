@@ -111,7 +111,8 @@ export type ContextNavItemId =
   | "cost"
   | "artifacts"
   | "blueprints"
-  | "extensions";
+  | "extensions"
+  | "running";
 
 /** Default order of Context entries. */
 export const CONTEXT_NAV_CATALOG: readonly ContextNavItemId[] = [
@@ -122,6 +123,7 @@ export const CONTEXT_NAV_CATALOG: readonly ContextNavItemId[] = [
   "artifacts",
   "blueprints",
   "extensions",
+  "running",
 ] as const;
 
 /** Default pinned set — Artifacts and Extensions start hidden. */
@@ -131,12 +133,15 @@ export const DEFAULT_CONTEXT_NAV_VISIBLE: readonly ContextNavItemId[] = [
   "security",
   "cost",
   "blueprints",
+  "running",
 ] as const;
 
 /** Pinned Context entries in the project nav (device-wide). */
 export type DenContextNavPrefs = {
   /** Ordered ids shown in Context. Absent → {@link DEFAULT_CONTEXT_NAV_VISIBLE}; empty shows none. */
   visible?: ContextNavItemId[];
+  /** True once pre-existing visible lists have received the one-time Running pin migration. */
+  runningPinnedMigrated?: boolean;
 };
 
 /** First-run provider setup latch. */

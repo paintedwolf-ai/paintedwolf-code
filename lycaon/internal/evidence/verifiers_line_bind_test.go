@@ -215,4 +215,3 @@ func TestGrepContextLinesAreIndexed(t *testing.T) {
 		t.Fatal("expected out-of-range line 25 to fail")
 	}
 }
-

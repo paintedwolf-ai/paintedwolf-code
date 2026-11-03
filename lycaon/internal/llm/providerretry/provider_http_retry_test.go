@@ -168,6 +168,25 @@ func TestHTTPRetryCapacitySchedule(t *testing.T) {
 	if retryReasonForFault(Fault{Kind: FaultUnreachable}) != RetryReasonUnreachable {
 		t.Fatal("an undelivered request should be named as such")
 	}
+	if retryReasonForFault(Fault{Kind: FaultInterrupted}) != RetryReasonInterrupted {
+		t.Fatal("an interrupted response should be named as such")
+	}
+	if !(Fault{Kind: FaultInterrupted}).Transport() {
+		t.Fatal("FaultInterrupted should be a transport fault")
+	}
+	withInterrupted := policy
+	withInterrupted.Transport = &ProviderTransportRetry{
+		MaxRetries: 1,
+		MaxWaitMs:  1000,
+		BackoffMs:  []int{1},
+		Faults:     []FaultKind{FaultInterrupted},
+	}
+	if err := ValidateHTTPRetry(withInterrupted); err != nil {
+		t.Fatalf("valid interrupted transport policy: %v", err)
+	}
+	if !ShouldRetryFault(withInterrupted, 0, Fault{Kind: FaultInterrupted}) {
+		t.Fatal("FaultInterrupted attempt 0 should retry")
+	}
 
 	overlap := policy
 	overlap.Statuses = []int{429, 503}

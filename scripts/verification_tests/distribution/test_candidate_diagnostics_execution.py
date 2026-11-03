@@ -96,14 +96,21 @@ class PartialCandidateDiagnosticsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "fresh"):
             retain(self.source, existing, "c" * 40)
 
-    def test_controller_identity_and_a_bounded_nonempty_set_are_required(self):
+    def test_failed_preparation_records_no_packages_without_candidate_authority(self):
+        output = self.root / "empty"
+        report = retain(self.source, output, "c" * 40)
+        self.assertEqual(report["packages"], [])
+        self.assertEqual((report["source_commit"], report["source_tree"]), (self.commit, self.tree))
+        self.assertEqual(json.loads((output / "diagnostics.json").read_text()), report)
+        for field in ("complete_candidate", "installed_qualified", "publication_authority"):
+            self.assertIs(report[field], False)
+
+    def test_controller_identity_and_a_bounded_set_are_required(self):
         with self.assertRaisesRegex(ValueError, "immutable controller commit"):
             retain(self.source, self.root / "short", "main")
-        with self.assertRaisesRegex(ValueError, "bounded nonempty"):
-            retain(self.source, self.root / "empty", "c" * 40)
         for index in range(17):
             self.package("deb", f"painted-wolf-code-{index}.deb")
-        with self.assertRaisesRegex(ValueError, "bounded nonempty"):
+        with self.assertRaisesRegex(ValueError, "bounded"):
             retain(self.source, self.root / "unbounded", "c" * 40)
         self.assertFalse((self.root / "unbounded").exists())
 

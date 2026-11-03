@@ -128,9 +128,9 @@ func TestPutRefusesCorruptContentAddressedEntry(t *testing.T) {
 
 func TestPutAtAtomicallyReplacesSameSizeContent(t *testing.T) {
 	store := blobstore.Store{Root: t.TempDir()}
-	_, err := store.PutAt("tool-output/result.txt", strings.NewReader("old"), bytebound.Materialization(10))
+	_, err := store.PutAt(t.Context(), "tool-output/result.txt", strings.NewReader("old"), bytebound.Materialization(10))
 	testutil.FailErr(t, "put old", err)
-	_, err = store.PutAt("tool-output/result.txt", strings.NewReader("new"), bytebound.Materialization(10))
+	_, err = store.PutAt(t.Context(), "tool-output/result.txt", strings.NewReader("new"), bytebound.Materialization(10))
 	testutil.FailErr(t, "put new", err)
 	raw, err := os.ReadFile(filepath.Join(store.Root, "tool-output", "result.txt"))
 	testutil.FailErr(t, "read replacement", err)
@@ -144,7 +144,7 @@ func TestPutAtAtomicallyReplacesSameSizeContent(t *testing.T) {
 func TestRemoveAtBeforeKeepsRecentReplacement(t *testing.T) {
 	store := blobstore.Store{Root: t.TempDir()}
 	rel := "tool-output/result.txt"
-	_, err := store.PutAt(rel, strings.NewReader("new"), bytebound.Materialization(10))
+	_, err := store.PutAt(t.Context(), rel, strings.NewReader("new"), bytebound.Materialization(10))
 	testutil.FailErr(t, "put recent body", err)
 	removed, err := store.RemoveAtBefore(rel, time.Now().Add(-time.Minute))
 	testutil.FailErr(t, "retain recent body", err)
@@ -672,7 +672,7 @@ func TestPutDedupesIdenticalContentDespiteCompression(t *testing.T) {
 func TestRecompressShrinksAndRoundTripsIdenticalPlaintext(t *testing.T) {
 	store := blobstore.Store{Root: t.TempDir()}
 	plain := recompressiblePayload()
-	blob, err := store.PutAt("model-content/aa/bb", strings.NewReader(plain), bytebound.Materialization(int64(len(plain))))
+	blob, err := store.PutAt(t.Context(), "model-content/aa/bb", strings.NewReader(plain), bytebound.Materialization(int64(len(plain))))
 	testutil.FailErr(t, "put", err)
 
 	before, err := os.ReadFile(filepath.Join(store.Root, filepath.FromSlash(blob.Rel)))
@@ -700,7 +700,7 @@ func TestRecompressShrinksAndRoundTripsIdenticalPlaintext(t *testing.T) {
 func TestRecompressReportsNoChangeWhenAlreadyOptimal(t *testing.T) {
 	store := blobstore.Store{Root: t.TempDir()}
 	plain := recompressiblePayload()
-	blob, err := store.PutAt("model-content/aa/bb", strings.NewReader(plain), bytebound.Materialization(int64(len(plain))))
+	blob, err := store.PutAt(t.Context(), "model-content/aa/bb", strings.NewReader(plain), bytebound.Materialization(int64(len(plain))))
 	testutil.FailErr(t, "put", err)
 
 	changed, err := store.Recompress(blob)

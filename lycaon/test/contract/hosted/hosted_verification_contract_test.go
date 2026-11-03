@@ -10,6 +10,7 @@ import (
 )
 
 type hostedStep struct {
+	ID       string `yaml:"id"`
 	Name     string
 	Uses     string
 	Run      string
@@ -78,7 +79,7 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	slices.Sort(dependencies)
 	expectedCondition := "${{ !cancelled() }}"
 	if gate == "check" {
-		expectedCondition = "${{ !cancelled() && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}"
+		expectedCondition = "${{ !cancelled() && inputs.lane == '' && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}"
 	}
 	if gate == "ship-gates" {
 		expectedCondition = "${{ !cancelled() && inputs.rehearsal_run_id == '' }}"

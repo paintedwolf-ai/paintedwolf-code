@@ -17,6 +17,9 @@ import (
 func (m *Service) Apply(ctx context.Context, id string, in promptinput.Input) (string, error) {
 	visibleContent := strings.TrimSpace(in.Text)
 	userPrompt := in.UserInstruction()
+	if err := m.deliverWaitEnds(ctx, id); err != nil {
+		return "", err
+	}
 	if err := m.deliverKicks(ctx, id); err != nil {
 		return "", err
 	}

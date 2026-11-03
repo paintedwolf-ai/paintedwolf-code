@@ -6,6 +6,7 @@ components:
       type: string
       description: Closed machine-readable error identity emitted by the private Den-sidecar API.
       enum:
+        - approval_capacity_exceeded
         - source_view_not_found
         - source_view_revision_changed
         - source_view_capacity
@@ -109,6 +110,7 @@ components:
         - invalid_workflow_revision
         - invalid_workflow_replacement_target
         - message_not_found
+        - command_program_not_found
         - not_found
         - path_not_found
         - persist_not_confirmed

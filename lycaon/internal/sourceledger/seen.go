@@ -119,12 +119,12 @@ func (s *History) seenRows(ctx context.Context, projectID string, roots map[stri
 	return out, err
 }
 
-// seenFile reports false for a head that is neither content nor a deletion,
+// seenFile reports false for a head that is neither content, a link nor a deletion,
 // which no editor presents.
 func (s *History) seenFile(ctx context.Context, projectID string, row seenRow, withoutUserEdits bool) (SeenFile, bool, error) {
 	file := SeenFile{FileID: row.fileID, RootID: row.rootID, Path: row.path, ThroughOrdinal: row.through}
 	switch row.state {
-	case "content":
+	case "content", "link":
 		file.Tip = Tip{State: api.SourceTipStateContent, SHA256: row.contentSHA256}
 	case "absent":
 		file.Tip = Tip{State: api.SourceTipStateAbsent}

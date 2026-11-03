@@ -44,57 +44,70 @@ func (bp *BlockPlane) Enforces(anchor string) bool {
 // Evaluate runs EvaluateBlock after optional observation fill (MCP pre/post).
 // Returns a formatted reject when OAR fires a block Decision.
 func (bp *BlockPlane) Evaluate(ctx context.Context, anchor, tool, profile string, args map[string]any, observe func(*oar.GuardContext) error) error {
-	if bp == nil || bp.Pipeline == nil {
-		return nil
-	}
-	if !bp.Pipeline.AnchorEnforced(anchor) {
-		return nil
-	}
-	gc := oar.NewGuardContext()
-	fillOccurrenceIdentity(ctx, gc)
-	gc.ObserveToolCall(tool, args)
-	gc.Session.Profile = profile
-	gc.Session.PermissionProfile = profile
-	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
-	gc.DeriveToolClassFacts()
-	if observe != nil {
-		if err := observe(gc); err != nil {
-			return err
-		}
-	} else if bp.MCPCatalog != nil {
-		oar.ObserveMCPStructuralPre(gc, tool, bp.MCPCatalog)
-	}
-	res, err := bp.Pipeline.EvaluateBlock(ctx, anchor, gc)
-	if err != nil {
+	decision, err := bp.evaluateBlock(ctx, anchor, tool, profile, args, observe)
+	if err != nil || decision == nil {
 		return err
 	}
-	if res == nil || !res.Enforced || res.Decision == nil {
-		return nil
-	}
-	if res.Decision.Effect != oar.EffectBlock {
-		return nil
-	}
 	if bp.Renderer == nil {
-		if d := strings.TrimSpace(res.Decision.Code); d != "" {
+		if d := strings.TrimSpace(decision.Code); d != "" {
 			return toolrejection.FormatDecisionReject(d, nil, nil)
 		}
 		return nil
 	}
-	rendered, rerr := bp.Renderer.Render(ctx, oar.StageFromAnchor(anchor), res.Decision)
+	rendered, rerr := bp.Renderer.Render(ctx, oar.StageFromAnchor(anchor), decision)
 	if rerr != nil {
 		return rerr
 	}
 	if rd, ok := oar.FirstBlock(rendered); ok && rd.Text != "" {
 		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy)
 	}
-	if d := strings.TrimSpace(res.Decision.Code); d != "" {
+	if d := strings.TrimSpace(decision.Code); d != "" {
 		return toolrejection.FormatDecisionReject(d, nil, nil)
 	}
 	return nil
 }
 
+// evaluateBlock keeps one occurrence/fact/effect algorithm for both interfaces.
+func (bp *BlockPlane) evaluateBlock(ctx context.Context, anchor, tool, profile string, args map[string]any, observe func(*oar.GuardContext) error) (*oar.Decision, error) {
+	if bp == nil || bp.Pipeline == nil {
+		return nil, nil
+	}
+	if !bp.Pipeline.AnchorEnforced(anchor) {
+		return nil, nil
+	}
+	gc := oar.NewGuardContext()
+	gc.ObserveToolCall(tool, args)
+	fillOccurrenceIdentity(ctx, gc)
+	gc.Session.Profile = profile
+	gc.Session.PermissionProfile = profile
+	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
+	gc.DeriveToolClassFacts()
+	if observe != nil {
+		if err := observe(gc); err != nil {
+			return nil, err
+		}
+	} else if bp.MCPCatalog != nil {
+		oar.ObserveMCPStructuralPre(gc, tool, bp.MCPCatalog)
+	}
+	res, err := bp.Pipeline.EvaluateBlock(ctx, anchor, gc)
+	if err != nil {
+		return nil, err
+	}
+	if res == nil || !res.Enforced || res.Decision == nil {
+		return nil, nil
+	}
+	if res.Decision.Effect != oar.EffectBlock {
+		return nil, nil
+	}
+	return res.Decision, nil
+}
+
 // RejectFromObservation runs EvaluateBlock for anchor with ToolReject as facts.
 func (bp *BlockPlane) RejectFromObservation(ctx context.Context, anchor, tool, profile string, args map[string]any, tr *toolrejection.ToolReject) error {
+	return bp.rejectFromObservation(ctx, anchor, tool, profile, args, tr, nil)
+}
+
+func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, profile string, args map[string]any, tr *toolrejection.ToolReject, observe func(*oar.GuardContext) error) error {
 	if bp == nil || bp.Pipeline == nil || tr == nil {
 		return nil
 	}
@@ -102,8 +115,8 @@ func (bp *BlockPlane) RejectFromObservation(ctx context.Context, anchor, tool, p
 		return nil
 	}
 	gc := oar.NewGuardContext()
-	fillOccurrenceIdentity(ctx, gc)
 	gc.ObserveToolCall(tool, args)
+	fillOccurrenceIdentity(ctx, gc)
 	gc.Session.Profile = profile
 	gc.Session.PermissionProfile = profile
 	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
@@ -111,6 +124,11 @@ func (bp *BlockPlane) RejectFromObservation(ctx context.Context, anchor, tool, p
 		oar.ObserveMCPStructuralPre(gc, tool, bp.MCPCatalog)
 	}
 	ApplyToolRejectObservations(gc, tr)
+	if observe != nil {
+		if err := observe(gc); err != nil {
+			return err
+		}
+	}
 	res, err := bp.Pipeline.EvaluateBlock(ctx, anchor, gc)
 	if err != nil {
 		if gc.ObservedRejectCode == "" {
@@ -156,6 +174,10 @@ func ApplyToolRejectObservations(gc *oar.GuardContext, tr *toolrejection.ToolRej
 	}
 	code := strings.TrimSpace(tr.Code)
 	gc.ObservedRejectCode = code
+	if tr.CapabilityContract != nil {
+		snapshot := *tr.CapabilityContract
+		gc.Invocation.CapabilityContract = &snapshot
+	}
 	// [OAR-PROF-3] A handler or host-state failure is not an argument check.
 	if tr.ArgumentValidation {
 		gc.Invocation.ArgValidationErrors = AppendUnique(gc.Invocation.ArgValidationErrors, code)
@@ -190,9 +212,6 @@ func ApplyToolRejectObservations(gc *oar.GuardContext, tr *toolrejection.ToolRej
 		return
 	}
 	applyObservationToken(gc, obs)
-	if strings.HasPrefix(code, "USE_") {
-		gc.Invocation.HabitRedirectMatch = code
-	}
 	switch code {
 	case "COMMAND_NOT_ARGV":
 		gc.Invocation.CommandNotArgv = true

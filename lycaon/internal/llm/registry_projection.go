@@ -86,7 +86,7 @@ func providerFeaturesFromSnapshot(snapshot *providerRegistrySnapshot, id string)
 }
 
 // List is catalog membership. A missing live provider is not ready.
-func (r *Registry) List(ctx context.Context) []api.ProviderMeta {
+func (r *registryCatalog) List(ctx context.Context) []api.ProviderMeta {
 	out := make([]api.ProviderMeta, 0)
 	hydrated := make(map[string][]modelinfo.Entry)
 	snapshot := r.snapshot.Load()
@@ -127,7 +127,7 @@ func (r *Registry) List(ctx context.Context) []api.ProviderMeta {
 	return out
 }
 
-func (r *Registry) listMetaForEntry(
+func (r *registryCatalog) listMetaForEntry(
 	ctx context.Context,
 	entry CatalogEntry,
 	snapshot *providerRegistrySnapshot,
@@ -173,7 +173,7 @@ func (r *Registry) listMetaForEntry(
 	return meta, merged.Models
 }
 
-func (r *Registry) catalogOnlyMeta(entry CatalogEntry, snapshot *providerRegistrySnapshot) api.ProviderMeta {
+func (r *registryCatalog) catalogOnlyMeta(entry CatalogEntry, snapshot *providerRegistrySnapshot) api.ProviderMeta {
 	stored := false
 	if snapshot != nil {
 		stored = snapshot.credentialStored[entry.ID]
@@ -200,7 +200,7 @@ func (r *Registry) catalogOnlyMeta(entry CatalogEntry, snapshot *providerRegistr
 	return meta
 }
 
-func (r *Registry) credentialSource(entry CatalogEntry, configured, stored bool) string {
+func (r *registryCatalog) credentialSource(entry CatalogEntry, configured, stored bool) string {
 	if stored {
 		return "stored"
 	}
@@ -218,7 +218,7 @@ func cloneProviderMetaList(in []api.ProviderMeta) []api.ProviderMeta {
 }
 
 // ListCached returns stale data while one refresh runs.
-func (r *Registry) ListCached(ctx context.Context) []api.ProviderMeta {
+func (r *registryCatalog) ListCached(ctx context.Context) []api.ProviderMeta {
 	out, has, fresh, generation := r.listCache.Read()
 	if fresh {
 		return out
@@ -232,7 +232,7 @@ func (r *Registry) ListCached(ctx context.Context) []api.ProviderMeta {
 	return data
 }
 
-func (r *Registry) scheduleListCacheRefresh(ctx context.Context, generation uint64) {
+func (r *registryCatalog) scheduleListCacheRefresh(ctx context.Context, generation uint64) {
 	if !r.listCache.BeginRefresh() {
 		return
 	}
@@ -245,11 +245,11 @@ func (r *Registry) scheduleListCacheRefresh(ctx context.Context, generation uint
 }
 
 // InvalidateListCache advances the cache generation after publication.
-func (r *Registry) InvalidateListCache() {
+func (r *registryCore) InvalidateListCache() {
 	r.listCache.Invalidate()
 }
 
-func (r *Registry) providerUsageQuota(ctx context.Context, entry CatalogEntry) *api.ProviderUsageQuota {
+func (r *registryCatalog) providerUsageQuota(ctx context.Context, entry CatalogEntry) *api.ProviderUsageQuota {
 	if entry.Kind != "cloudflare-workers-ai" || !r.IsConfigured(entry.ID) {
 		return nil
 	}

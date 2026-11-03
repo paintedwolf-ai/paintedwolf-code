@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/hitl/approval_plan.go",
+  "kind": "data_record",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Approval plans bind one held action to its ordered choices, exact authority deltas and canonical identity. Mode and object identity belong in these existing private carriers while public presentation omits handles. Keep canonicalization and compilation at the plan owner rather than add an alternate socket approval grammar. Freeze this reviewed shape at 391 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 391,
+  "boundaries": {
+    "lycaon/internal/hitl/grant_socket_binding_identity_test.go": "d3c76c978a9025cede822d1322158da1a000f6f64ae042e6e8b222b78dbec831",
+    "lycaon/internal/api/capabilityadmin/socket_pending_restart_test.go": "8fb3f2cbf56291f2263ab73eaf4f1a01771ab4e2a75f624fe6a4c81f78297786",
+    "lycaon/internal/hitl/socket_pending_ownership_test.go": "619a31697aa348e4e84a9566b945c12931301ef211b33305259341e8b47d089c",
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac"
+  }
+}

@@ -36,7 +36,7 @@ func TestDisposeSessionEndsJobsOutsideTheLeadersGroup(t *testing.T) {
 	testutil.FailErr(t, "start background", err)
 	job := waitForJobPID(t, pidFile)
 
-	testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(t.Context(), "sess-1"))
+	testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(t.Context(), "sess-1", bgprocess.TerminationChatDeleted))
 	if reg.HasRunning("sess-1") {
 		t.Fatal("session still has running processes after dispose")
 	}
@@ -89,5 +89,5 @@ func TestDisposeSessionWaitsForBoundedDetachedOutputDrain(t *testing.T) {
 	_ = waitForJobPID(t, pidFile)
 	ctx, cancel := context.WithTimeout(context.Background(), exec.TerminateGrace+exec.PipelineWaitDelay+5*time.Second)
 	defer cancel()
-	testutil.FailErr(t, "dispose detached output drain", reg.Lifecycle.DisposeSession(ctx, "sess-1"))
+	testutil.FailErr(t, "dispose detached output drain", reg.Lifecycle.DisposeSession(ctx, "sess-1", bgprocess.TerminationChatDeleted))
 }

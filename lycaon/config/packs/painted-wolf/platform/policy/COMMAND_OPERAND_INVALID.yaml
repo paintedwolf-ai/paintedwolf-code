@@ -1,0 +1,44 @@
+oar: '1.0'
+id: COMMAND_OPERAND_INVALID
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  - paintedwolf.diagnostic_pre_evaluation
+  - paintedwolf.parser_invalid_utf8
+  - paintedwolf.parser_message
+  - paintedwolf.parser_nul_byte
+  - paintedwolf.parser_utf8_bom
+  - paintedwolf.source_column
+  - paintedwolf.source_line
+when: paintedwolf.rejection_code == "COMMAND_OPERAND_INVALID"
+effect: block
+copy:
+  what: '{% if paintedwolf.parser_message %}Shell source encoding error{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column
+    }}{% endif %}: {{ paintedwolf.parser_message }}.{% else %}A command operand was refused.{% endif %}'
+  cause: '{% if paintedwolf.diagnostic_pre_evaluation %}This source unit did not execute. Earlier parent operations may have run.{% else %}{{ paintedwolf.rejection_reason
+    }}{% endif %}'
+  why: ''
+  fix: '{% if paintedwolf.parser_utf8_bom %}Remove the leading byte-order mark from this source unit.{% else %}{% if paintedwolf.parser_nul_byte %}Shell source cannot
+    contain a NUL byte. Supply binary bytes as input data rather than source.{% else %}{% if paintedwolf.parser_invalid_utf8 %}Encode this source unit as valid UTF-8.{%
+    endif %}{% endif %}{% endif %}'
+  instead: ''
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command operand was not admitted
+x-paintedwolf-scenarios:
+- id: representation
+  vars:
+    tool: command
+    reason: Source scripts require UTF-8 without BOM.
+  expect_contains:
+  - 'Code: COMMAND_OPERAND_INVALID'
+  - UTF-8 without BOM

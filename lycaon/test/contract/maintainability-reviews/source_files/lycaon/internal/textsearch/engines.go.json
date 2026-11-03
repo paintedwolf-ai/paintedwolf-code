@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/textsearch/engines.go",
+  "kind": "algorithm",
+  "workstream": "command-search-throughput",
+  "disposition": "retain",
+  "reason": "Retain the 315-line compilation and engine-dispatch module after moving exact literal matching into its own immutable algorithm owner. This file validates compiled representations, admits per-call scalar sessions and applies shared regex resource bounds. The remaining compilation and fallback logic share one semantic boundary; further subdivision would separate the resource checks from the engine selection they constrain. Differential literal/scalar, failed-proof work, cancellation and session-release contracts support this ceiling.",
+  "reviewed_commit": "d36f6ab1de7811aa1c7f569da5003181edc005e9",
+  "ceiling": 315,
+  "boundaries": {
+    "lycaon/internal/textsearch/literal_fold_test.go": "47e7412af9916e92e0fd0ee5e07137ed014f91dd3af5eb309a10a5836d2ff737",
+    "lycaon/internal/textsearch/session_admission_test.go": "2ebb8cb027786cf01ee6a770df708f4558885ff256b52f1731fa4741ab7d4339",
+    "lycaon/internal/textsearch/line_admission_test.go": "2919a57e5fab6cac8cf8ddb2501102639c18a56b26a9d667039879de73864e2d"
+  }
+}

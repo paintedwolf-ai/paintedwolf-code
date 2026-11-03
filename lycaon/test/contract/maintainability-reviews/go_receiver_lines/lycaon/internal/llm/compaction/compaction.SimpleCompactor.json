@@ -1,0 +1,18 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/llm/compaction/compaction.SimpleCompactor",
+  "kind": "algorithm",
+  "workstream": "bounded-compaction-reduction",
+  "disposition": "retain",
+  "reason": "The 524 receiver lines own one compaction algorithm: bounded page selection, measured acceptance, source projection, and continuation synthesis. Page and measurement helpers keep those phases explicit without introducing another retention owner. Retain this exact ceiling while source-budget, cumulative-reduction, suffix-independence, ranking, retry, and complete-source coverage contracts constrain changes.",
+  "reviewed_commit": "515c793b129a749bbdcc5716ff59e46531e0e71c",
+  "ceiling": 524,
+  "boundaries": {
+    "lycaon/internal/llm/compaction/reduction_page_test.go": "a07033f0e585db2c27dab8528132d95e1ae6e2985e32d5780c0b1ca2bdce853d",
+    "lycaon/internal/llm/compaction/reduction_progress_test.go": "9ca47f808a47ec4344e8e02e8289b5f785c0838768a6d76fdf75fd8d983e0698",
+    "lycaon/internal/llm/compaction/reduction_coverage_test.go": "49b19425a18631c14122d1d6818555aeec02251fc054172342c8e27073d8b95e",
+    "lycaon/internal/llm/compaction/reduction_ranking_test.go": "cd2fb407f9a0ad90c3524c01eee0a9d9c0af7a56a2d7065a90c9c22646d4b91b",
+    "lycaon/internal/llm/compaction/reduction_retry_test.go": "32f6bc4c2f33597f3f1bc130f992a8e0ab484447270ffb5d945cb9311e8dc228"
+  },
+  "reviewed_shape": "955957988b945cb570e4e5dfc47fff7d28ec80149da09fa51eda8ba3eeb01472"
+}

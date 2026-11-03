@@ -5,57 +5,117 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "sed [-n] [-E|-r] [-e SCRIPT ...|SCRIPT] [-i [EMPTY_SUFFIX]] [--] [PATH ...]",
+      "argv": "sed [-nsuEz] [-e SCRIPT ...|-f FILE ...|SCRIPT] [-i[SUFFIX]|-i SUFFIX|-I SUFFIX] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
             "-n",
-            "--quiet"
+            "--quiet",
+            "--silent"
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sed-option-n-quiet",
+          "fixture_id": "sed-option-n-quiet-silent",
           "consumption": "fixed",
           "sample_values": []
         },
         {
           "spellings": [
             "-E",
-            "-r"
+            "-r",
+            "--regexp-extended"
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sed-option-E-r",
+          "fixture_id": "sed-option-E-r-regexpextended",
           "consumption": "fixed",
           "sample_values": []
         },
         {
           "spellings": [
-            "-e"
+            "-e",
+            "--expression"
           ],
           "arity": 1,
           "value_role": "script",
-          "fixture_id": "sed-option-e",
+          "fixture_id": "sed-option-e-expression",
           "consumption": "fixed",
           "sample_values": [
-            "s/a/b/"
+            "p"
           ]
         },
         {
           "spellings": [
-            "-i"
+            "-f",
+            "--file"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "sed-option-f-file",
+          "consumption": "fixed",
+          "sample_values": [
+            "script.sed"
+          ]
+        },
+        {
+          "spellings": [
+            "-i",
+            "--in-place"
           ],
           "arity": -1,
-          "value_role": "optional-empty-suffix",
-          "fixture_id": "sed-option-i",
-          "consumption": "optional-empty-only",
+          "value_role": "backup-suffix",
+          "fixture_id": "sed-option-i-inplace",
+          "consumption": "optional-attached-or-empty",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--separate"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sed-option-s-separate",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z",
+            "--null-data"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sed-option-z-nulldata",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-I"
+          ],
+          "arity": 1,
+          "value_role": "backup-suffix",
+          "fixture_id": "sed-option-I",
+          "consumption": "fixed",
           "sample_values": [
-            ""
+            ".bak"
           ]
+        },
+        {
+          "spellings": [
+            "-u",
+            "--unbuffered"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sed-option-u-unbuffered",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sed [-n] [-E|-r] [-e SCRIPT ...|SCRIPT] [-i [EMPTY_SUFFIX]] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sed [-nsuEz] [-e SCRIPT ...|-f FILE ...|SCRIPT] [-i[SUFFIX]|-i SUFFIX|-I SUFFIX] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -77,6 +137,16 @@
             "recovery"
           ],
           "mode": "-i"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "w-command"
         }
       ],
       "platform_capabilities": [
@@ -112,7 +182,7 @@
           }
         }
       },
-      "notes": "sed.json defines address grammar and p/d/q/a/i/c/s. Both GNU -i SCRIPT FILE and BSD -i empty-string SCRIPT FILE mean no-backup replacement; nonempty backup suffix unsupported. P14 parses/transforms; P16 publishes. Reject w/e/r/W/R and s///e/w before effects including computed scripts. Default BRE, -E/-r ERE; output uses original record bytes/newline policy.",
+      "notes": "Sed supports the GNU grammar and noncolliding BSD spellings; sed.json defines the grammar. -i edits each file in place through staged pinned publication, with an attached backup suffix (-i.bak, GNU) or a following empty word (BSD -i ''); a suffix containing * names the backup with the file name substituted. -s and -i number lines per file. -z separates records with NUL. w FILE and s///w FILE publish through the same owner. Default BRE, -E/-r ERE, on the shared POSIX engine. BSD -i SUFFIX (a separate word that is not a valid script, followed by the script) and -I SUFFIX are accepted too; -u is accepted (output is never held back).",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -132,10 +202,15 @@
       "fixture_ids": [
         "sed-operands-valid",
         "sed-rejection",
-        "sed-option-n-quiet",
-        "sed-option-E-r",
-        "sed-option-e",
-        "sed-option-i"
+        "sed-option-n-quiet-silent",
+        "sed-option-E-r-regexpextended",
+        "sed-option-e-expression",
+        "sed-option-f-file",
+        "sed-option-i-inplace",
+        "sed-option-s-separate",
+        "sed-option-z-nulldata",
+        "sed-option-I",
+        "sed-option-u-unbuffered"
       ]
     },
     {
@@ -143,7 +218,7 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "awk [-F SEP] [-v NAME=VALUE ...] PROGRAM [--] [PATH ...]",
+      "argv": "awk [-F SEP] [-v NAME=VALUE ...] (-f FILE ...|PROGRAM) [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -168,10 +243,22 @@
           "sample_values": [
             "fixture=alpha"
           ]
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "awk-option-f",
+          "consumption": "fixed",
+          "sample_values": [
+            "prog.awk"
+          ]
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. awk [-F SEP] [-v NAME=VALUE ...] PROGRAM [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. awk [-F SEP] [-v NAME=VALUE ...] (-f FILE ...|PROGRAM) [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -218,7 +305,7 @@
           }
         }
       },
-      "notes": "GoAWK v1.32.0 adapter; NoExec/NoFileReads/NoFileWrites; nonnil empty Environ. AWK grammar: BEGIN/END, expression/range patterns, fields $0/$1..$NF, NR/NF, print/printf/sub/gsub/split/length/tolower/toupper; host input files preserve FILENAME/FNR. Refuse system(), pipes, getline secondary files and direct file redirection before effects. Bound work and allocation; no ambient filesystem/environment.",
+      "notes": "GoAWK v1.32.0 adapter; NoExec/NoFileReads/NoFileWrites; nonnil empty Environ. AWK grammar: BEGIN/END, expression/range patterns, fields $0/$1..$NF, NR/NF, print/printf/sub/gsub/split/length/tolower/toupper; host input files preserve FILENAME/FNR. Refuse system(), pipes, getline secondary files and direct file redirection before effects. Bound work and allocation; no ambient filesystem/environment. -f FILE reads the program from files (repeatable), as GNU, BSD and busybox awk do.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -239,7 +326,8 @@
         "awk-operands-valid",
         "awk-rejection",
         "awk-option-F",
-        "awk-option-v"
+        "awk-option-v",
+        "awk-option-f"
       ]
     },
     {
@@ -250,7 +338,7 @@
       "argv": "printf FORMAT [ARG ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. printf FORMAT [ARG ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -322,7 +410,7 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "echo [-n] [-e|-E] [--] [TEXT ...]",
+      "argv": "echo [-neE] [TEXT ...]",
       "forms": [
         {
           "spellings": [
@@ -355,8 +443,8 @@
           "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. echo [-n] [-e|-E] [--] [TEXT ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. echo [-neE] [TEXT ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -401,7 +489,7 @@
           }
         }
       },
-      "notes": "Default literal escapes, space separator and LF; -n omits LF, -e enables printf-style escapes, -E disables; last wins. Never evaluate text as grammar. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
+      "notes": "GNU/bash echo: leading words made only of -n, -e and -E are options (last of -e/-E wins); every later word, including --, is text. -n omits LF, -e enables backslash escapes (\\c stops output). Never evaluate text as grammar. Scalar NUL is refused before dispatch.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -431,7 +519,7 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "sort [-rnu z] [-k KEY ...] [-t SEP] [--] [PATH ...]",
+      "argv": "sort [-bcfhnrsuVz] [-k KEY ...] [-t SEP] [-o OUTPUT] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -502,10 +590,89 @@
           "fixture_id": "sort-option-z-zeroterminated",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-h",
+            "--human-numeric-sort"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-h-humannumericsort",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-V",
+            "--version-sort"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-V-versionsort",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--ignore-case"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-f-ignorecase",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-b",
+            "--ignore-leading-blanks"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-b-ignoreleadingblanks",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--stable"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-s-stable",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c",
+            "--check"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-c-check",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o",
+            "--output"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "sort-option-o-output",
+          "consumption": "fixed",
+          "sample_values": [
+            "sorted.txt"
+          ]
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sort [-rnu z] [-k KEY ...] [-t SEP] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sort [-bcfhnrsuVz] [-k KEY ...] [-t SEP] [-o OUTPUT] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -517,6 +684,16 @@
             "read"
           ],
           "mode": "always"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "-o"
         }
       ],
       "platform_capabilities": [
@@ -552,7 +729,7 @@
           }
         }
       },
-      "notes": "Byte order, stable exact-byte tie-break; -n exact decimal sign/fraction comparison, no float rounding. KEY start[,end] one-based field[.character], optional n/r flags; default blanks fields, -t one-byte delimiter. Merge-sort byte-metered spill, long record refusal, -z NUL records. Output final record delimiter.",
+      "notes": "Byte order (C locale), whole-record byte tie-break unless -s or -u. -n exact decimal, -h human SI suffixes, -V GNU version order, -f folds lowercase to uppercase, -b ignores leading blanks; KEY F[.C][bfhnrV][,F[.C][bfhnrV]]; -t one byte. -c reports the first disorder (status 1). -o publishes complete output through staged pinned publication and may name an input. Merge-sort byte-metered spill, long record refusal, -z NUL records.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -577,7 +754,14 @@
         "sort-option-u-unique",
         "sort-option-k-key",
         "sort-option-t-fieldseparator",
-        "sort-option-z-zeroterminated"
+        "sort-option-z-zeroterminated",
+        "sort-option-h-humannumericsort",
+        "sort-option-V-versionsort",
+        "sort-option-f-ignorecase",
+        "sort-option-b-ignoreleadingblanks",
+        "sort-option-s-stable",
+        "sort-option-c-check",
+        "sort-option-o-output"
       ]
     },
     {
@@ -585,7 +769,7 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "uniq [-cdu] [--] [INPUT [OUTPUT]]",
+      "argv": "uniq [-cdiuz] [-f N] [-s N] [-w N] [--] [INPUT [OUTPUT]]",
       "forms": [
         {
           "spellings": [
@@ -619,10 +803,71 @@
           "fixture_id": "uniq-option-u-unique",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-i",
+            "--ignore-case"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uniq-option-i-ignorecase",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--skip-fields"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "uniq-option-f-skipfields",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-s",
+            "--skip-chars"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "uniq-option-s-skipchars",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-w",
+            "--check-chars"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "uniq-option-w-checkchars",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-z",
+            "--zero-terminated"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uniq-option-z-zeroterminated",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. uniq [-cdu] [--] [INPUT [OUTPUT]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. uniq [-cdiuz] [-f N] [-s N] [-w N] [--] [INPUT [OUTPUT]]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -660,7 +905,7 @@
       ],
       "example": {
         "program": "printf 'a\\na\\n' | uniq -c",
-        "stdout": "2 a\n",
+        "stdout": "      2 a\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -679,7 +924,7 @@
           }
         }
       },
-      "notes": "Adjacent exact-byte records, fixed unpadded count+space, d repeated only,u single only; -d and -u together select none. OUTPUT is staged owner publication.",
+      "notes": "GNU uniq: adjacent records compared after skipping -f fields and -s bytes, within -w bytes, -i ASCII case-insensitive. -c prefixes a count right-aligned in 7 columns and a space; -d repeated groups, -u single ones, both none. OUTPUT is staged pinned publication.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -701,7 +946,12 @@
         "uniq-rejection",
         "uniq-option-c-count",
         "uniq-option-d-repeated",
-        "uniq-option-u-unique"
+        "uniq-option-u-unique",
+        "uniq-option-i-ignorecase",
+        "uniq-option-f-skipfields",
+        "uniq-option-s-skipchars",
+        "uniq-option-w-checkchars",
+        "uniq-option-z-zeroterminated"
       ]
     },
     {
@@ -709,7 +959,7 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "cut (-f LIST [-d SEP]|-c LIST|-b LIST) [--] [PATH ...]",
+      "argv": "cut (-f LIST [-d SEP|-w] [-s]|-c LIST|-b LIST) [--complement] [--output-delimiter STR] [-nz] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -762,10 +1012,74 @@
           "sample_values": [
             "1"
           ]
+        },
+        {
+          "spellings": [
+            "-s",
+            "--only-delimited"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cut-option-s-onlydelimited",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--complement"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cut-option-complement",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--output-delimiter"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "cut-option-outputdelimiter",
+          "consumption": "fixed",
+          "sample_values": [
+            ","
+          ]
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cut-option-n",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z",
+            "--zero-terminated"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cut-option-z-zeroterminated",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-w"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cut-option-w",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cut (-f LIST [-d SEP]|-c LIST|-b LIST) [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cut (-f LIST [-d SEP|-w] [-s]|-c LIST|-b LIST) [--complement] [--output-delimiter STR] [-nz] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -812,7 +1126,7 @@
           }
         }
       },
-      "notes": "LIST one-based N,N-M,-M,N-, comma union in source order, no duplicate output. Exactly one selector; default field tab. -c Unicode scalar, -b exact bytes; invalid text rejects -c. Missing delimiter preserves whole record; no silent byte-character conflation.",
+      "notes": "LIST one-based N,N-M,-M,N-, union in record order. Exactly one selector; default field TAB; -s drops records without the delimiter; --complement selects the rest; --output-delimiter joins selected fields or byte/character ranges. -c Unicode scalar, -b exact bytes, -n accepted (GNU ignores it); invalid text rejects -c. BSD -w splits fields on runs of blanks and joins them with a TAB.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -835,7 +1149,13 @@
         "cut-option-f-fields",
         "cut-option-d-delimiter",
         "cut-option-c-characters",
-        "cut-option-b-bytes"
+        "cut-option-b-bytes",
+        "cut-option-s-onlydelimited",
+        "cut-option-complement",
+        "cut-option-outputdelimiter",
+        "cut-option-n",
+        "cut-option-z-zeroterminated",
+        "cut-option-w"
       ]
     },
     {
@@ -843,7 +1163,7 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "tr [-d] [-s] SET1 [SET2]",
+      "argv": "tr [-cCdst] SET1 [SET2]",
       "forms": [
         {
           "spellings": [
@@ -866,10 +1186,33 @@
           "fixture_id": "tr-option-s-squeezerepeats",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c",
+            "-C",
+            "--complement"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tr-option-c-C-complement",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--truncate-set1"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tr-option-t-truncateset1",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tr [-d] [-s] SET1 [SET2]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tr [-cCdst] SET1 [SET2]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -916,7 +1259,7 @@
           }
         }
       },
-      "notes": "Byte alphabet independent of locale; ranges and ASCII [:class:] plus escapes. Translation pads short SET2 with its final byte; deletion uses SET1; squeeze final chosen set; refuse multibyte class semantics.",
+      "notes": "Byte alphabet independent of locale; ranges, ASCII [:class:], [=c=], [c*n] and [c*] repeats, escapes. -c complements SET1 in byte order; -t truncates SET1 to SET2; otherwise a short SET2 is padded with its final byte. Squeeze uses the last set given. Bytes outside ASCII in sets refuse.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -937,15 +1280,18 @@
         "tr-operands-valid",
         "tr-rejection",
         "tr-option-d-delete",
-        "tr-option-s-squeezerepeats"
+        "tr-option-s-squeezerepeats",
+        "tr-option-c-C-complement",
+        "tr-option-t-truncateset1"
       ]
     },
     {
       "name": "xargs",
+      "operands_end_options": true,
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "xargs [-0] [-n COUNT] [-I PLACEHOLDER] [--] [COMMAND [ARG ...]]",
+      "argv": "xargs [-0rtxo] [-d DELIM] [-E EOF] [-n COUNT|-L LINES|-I R|-J R] [-s SIZE] [-P PROCS] [--] [COMMAND [ARG ...]]",
       "forms": [
         {
           "spellings": [
@@ -973,19 +1319,171 @@
         },
         {
           "spellings": [
-            "-I"
+            "-I",
+            "--replace"
           ],
           "arity": 1,
           "value_role": "placeholder",
-          "fixture_id": "xargs-option-I",
+          "fixture_id": "xargs-option-I-replace",
           "consumption": "fixed",
           "sample_values": [
-            "fixture"
+            "{}"
           ]
+        },
+        {
+          "spellings": [
+            "-L",
+            "--max-lines"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "xargs-option-L-maxlines",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-P",
+            "--max-procs"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "xargs-option-P-maxprocs",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-d",
+            "--delimiter"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "xargs-option-d-delimiter",
+          "consumption": "fixed",
+          "sample_values": [
+            ","
+          ]
+        },
+        {
+          "spellings": [
+            "-r",
+            "--no-run-if-empty"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "xargs-option-r-norunifempty",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "xargs-option-t-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-J"
+          ],
+          "arity": 1,
+          "value_role": "placeholder",
+          "fixture_id": "xargs-option-J",
+          "consumption": "fixed",
+          "sample_values": [
+            "%"
+          ]
+        },
+        {
+          "spellings": [
+            "-E"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "xargs-option-E",
+          "consumption": "fixed",
+          "sample_values": [
+            "EOF"
+          ]
+        },
+        {
+          "spellings": [
+            "-e",
+            "--eof"
+          ],
+          "arity": -1,
+          "value_role": "text",
+          "fixture_id": "xargs-option-e-eof",
+          "consumption": "optional-attached-value",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-i"
+          ],
+          "arity": -1,
+          "value_role": "placeholder",
+          "fixture_id": "xargs-option-i",
+          "consumption": "optional-attached-value",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l"
+          ],
+          "arity": -1,
+          "value_role": "count",
+          "fixture_id": "xargs-option-l",
+          "consumption": "optional-attached-value",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--max-chars"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "xargs-option-s-maxchars",
+          "consumption": "fixed",
+          "sample_values": [
+            "4096"
+          ]
+        },
+        {
+          "spellings": [
+            "-x",
+            "--exit"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "xargs-option-x-exit",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o",
+            "--open-tty"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "xargs-option-o-opentty",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. xargs [-0] [-n COUNT] [-I PLACEHOLDER] [--] [COMMAND [ARG ...]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. xargs [-0rtxo] [-d DELIM] [-E EOF] [-n COUNT|-L LINES|-I R|-J R] [-s SIZE] [-P PROCS] [--] [COMMAND [ARG ...]]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -996,7 +1494,7 @@
           "requires": [
             "bound-child-effect-set"
           ],
-          "mode": "each-nonempty-serial-batch"
+          "mode": "each-batch"
         }
       ],
       "platform_capabilities": [
@@ -1032,7 +1530,7 @@
           }
         }
       },
-      "notes": "Empty input launches none. Default echo, fixed whitespace splitting with quote/backslash argv grammar; -0 exact NUL-delimited words. -I one input line/record replaces literal placeholder within args; input never reparsed as program. Serial ordered batches, each normal binder/receipt, bound argv. -n positive; -I and -n incompatible.",
+      "notes": "GNU xargs: empty input runs COMMAND once with no items unless -r (or -I, which runs per line). Default echo, blank/newline splitting with quote/backslash grammar; -0 exact NUL items, -d one delimiter byte (C escapes allowed) with no quote grammar. -I one input line per batch, replacing the placeholder in arguments; -L N nonblank lines per batch; -n N items per batch. Batches run in input order, -P N at most min(N, concurrent_processes) at once (0 means the bound); output of each batch is delivered in input order. -t prints each command line to stderr first. Each batch is its own bound child; input never becomes program text. BSD -J R replaces one whole argument R with the batch's items; -E/-e EOF stops input at a logical EOF item; GNU -i[R] and -l[N] are -I R (default {}) and -L N (default 1); -s caps each command line's bytes; -x refuses a batch that does not fit; -o is accepted, as children never read a terminal.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -1054,7 +1552,20 @@
         "xargs-rejection",
         "xargs-option-0-null",
         "xargs-option-n-maxargs",
-        "xargs-option-I"
+        "xargs-option-I-replace",
+        "xargs-option-L-maxlines",
+        "xargs-option-P-maxprocs",
+        "xargs-option-d-delimiter",
+        "xargs-option-r-norunifempty",
+        "xargs-option-t-verbose",
+        "xargs-option-J",
+        "xargs-option-E",
+        "xargs-option-e-eof",
+        "xargs-option-i",
+        "xargs-option-l",
+        "xargs-option-s-maxchars",
+        "xargs-option-x-exit",
+        "xargs-option-o-opentty"
       ]
     },
     {
@@ -1065,7 +1576,7 @@
       "argv": "test EXPRESSION",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. test EXPRESSION",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete true/success result",
         "1": "complete false result (false/test only)",
@@ -1143,7 +1654,7 @@
       "argv": "[ EXPRESSION ]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. [ EXPRESSION ]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete true/success result",
         "1": "complete false result (false/test only)",
@@ -1221,7 +1732,7 @@
       "argv": "[[ EXPRESSION ]]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. [[ EXPRESSION ]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete true/success result",
         "1": "complete false result (false/test only)",
@@ -1299,7 +1810,7 @@
       "argv": "true [ARG ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. true",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete true/success result",
         "1": "complete false result (false/test only)",
@@ -1374,7 +1885,7 @@
       "argv": "false [ARG ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. false",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete true/success result",
         "1": "complete false result (false/test only)",
@@ -1449,7 +1960,7 @@
       "argv": ": [ARG ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. : [ARG ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete true/success result",
         "1": "complete false result (false/test only)",
@@ -1524,7 +2035,7 @@
       "argv": "sleep SECONDS",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sleep SECONDS",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1571,7 +2082,7 @@
           }
         }
       },
-      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. The full timer interval runs on the program clock. A program with no runnable work parks during long waits and resumes with its complete result.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -1601,7 +2112,7 @@
       "argv": "which [--] NAME ...",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. which [--] NAME ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1629,7 +2140,7 @@
       ],
       "example": {
         "program": "which -- cat",
-        "stdout": "cat: native\n",
+        "stdout": "cat\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -1699,7 +2210,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. command (-v|-V) [--] NAME ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1799,7 +2310,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. type [-a|-t] [--] NAME ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1872,6 +2383,7 @@
     },
     {
       "name": "env",
+      "operands_end_options": true,
       "aliases": [],
       "family": "pure",
       "owner": "processes",
@@ -1903,7 +2415,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. env [-i] [-u NAME ...] [NAME=VALUE ...] [COMMAND ARG ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1987,7 +2499,7 @@
       "argv": "printenv [--] [NAME ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. printenv [--] [NAME ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2064,7 +2576,7 @@
       "argv": "export [NAME[=VALUE] ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. export [NAME[=VALUE] ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2141,7 +2653,7 @@
       "argv": "unset NAME ...",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. unset NAME ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2215,10 +2727,31 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "pwd",
-      "forms": [],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. pwd",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "argv": "pwd [-L|-P]",
+      "forms": [
+        {
+          "spellings": [
+            "-L"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pwd-option-L",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pwd-option-P",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. pwd [-L|-P]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2246,7 +2779,7 @@
       ],
       "example": {
         "program": "pwd",
-        "stdout": ".\n",
+        "stdout": "<authorized-native-root>\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -2356,7 +2889,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. uname [-a|-s|-n|-r|-v|-m]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2439,7 +2972,7 @@
       "argv": "whoami",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. whoami",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2557,7 +3090,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. id [-u|-g|-G] [-n]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2638,7 +3171,7 @@
       "argv": "hostname",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. hostname",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2712,21 +3245,117 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "date [-u] [+FORMAT]",
+      "argv": "date [-u] [-d STRING|-r FILE|SECONDS|-j -f FORMAT STRING] [-v ADJUST ...] [-I[FMT]|-R|--rfc-3339=FMT|+FORMAT]",
       "forms": [
         {
           "spellings": [
-            "-u"
+            "-u",
+            "--utc",
+            "--universal"
           ],
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "date-option-u",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--date"
+          ],
+          "arity": 1,
+          "value_role": "date",
+          "fixture_id": "date-option-d-date",
+          "consumption": "fixed",
+          "sample_values": [
+            "2026-10-26 +1 day"
+          ]
+        },
+        {
+          "spellings": [
+            "-r",
+            "--reference"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "date-option-r-reference",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-I",
+            "--iso-8601"
+          ],
+          "arity": -1,
+          "value_role": "timespec",
+          "fixture_id": "date-option-I-iso8601",
+          "consumption": "optional-attached-value",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-R",
+            "--rfc-email"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "date-option-R-rfcemail",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--rfc-3339"
+          ],
+          "arity": 1,
+          "value_role": "timespec",
+          "fixture_id": "date-option-rfc3339",
+          "consumption": "fixed",
+          "sample_values": [
+            "seconds"
+          ]
+        },
+        {
+          "spellings": [
+            "-j"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "date-option-j",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "date-option-f",
+          "consumption": "fixed",
+          "sample_values": [
+            "%Y-%m-%d"
+          ]
+        },
+        {
+          "spellings": [
+            "-v"
+          ],
+          "arity": 1,
+          "value_role": "adjustment",
+          "fixture_id": "date-option-v",
+          "consumption": "fixed",
+          "sample_values": [
+            "-1d"
+          ]
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. date [-u] [+FORMAT]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. date [-u] [-d STRING|-r FILE|SECONDS|-j -f FORMAT STRING] [-v ADJUST ...] [-I[FMT]|-R|--rfc-3339=FMT|+FORMAT]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2773,7 +3402,7 @@
           }
         }
       },
-      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. date reads the clock once, in the program TZ (UTC when unset; -u forces UTC). -d takes the GNU date grammar (yesterday, 2 days ago, next monday, @SECONDS, ISO 8601); -r reads a file's modification time through read authority, or SECONDS when no such file exists; -j -f FORMAT STRING parses as strptime with unset fields from now; each -v adjusts a field ([+-]N y m w d H M S or a weekday or month name). +FORMAT takes every C-locale conversion with - _ 0 ^ # flags and widths; -I and --rfc-3339 take date, hours, minutes, seconds or ns. The clock is never set.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -2793,7 +3422,1438 @@
       "fixture_ids": [
         "date-operands-valid",
         "date-rejection",
-        "date-option-u"
+        "date-option-u",
+        "date-option-d-date",
+        "date-option-r-reference",
+        "date-option-I-iso8601",
+        "date-option-R-rfcemail",
+        "date-option-rfc3339",
+        "date-option-j",
+        "date-option-f",
+        "date-option-v"
+      ]
+    },
+    {
+      "name": "seq",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "seq [-w] [-s SEP] [-t TERM] [-f FORMAT] [FIRST [INCREMENT]] LAST",
+      "forms": [
+        {
+          "spellings": [
+            "-w",
+            "--equal-width"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "seq-option-w-equalwidth",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--separator"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "seq-option-s-separator",
+          "consumption": "fixed",
+          "sample_values": [
+            ","
+          ]
+        },
+        {
+          "spellings": [
+            "-f",
+            "--format"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "seq-option-f-format",
+          "consumption": "fixed",
+          "sample_values": [
+            "%g"
+          ]
+        },
+        {
+          "spellings": [
+            "-t",
+            "--terminator"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "seq-option-t-terminator",
+          "consumption": "fixed",
+          "sample_values": [
+            "\\n"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. seq [-w] [-s SEP] [-t TERM] [-f FORMAT] [FIRST [INCREMENT]] LAST",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "seq 3",
+        "stdout": "1\n2\n3\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU seq: exact decimal arithmetic with the widest operand precision; -w pads with leading zeros, -s separates (final LF kept), -f one floating conversion. Output is bounded by stream_bytes. BSD -t ends the output with TERM instead of a newline (escapes allowed).",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "seq-operands-valid",
+        "seq-rejection",
+        "seq-option-w-equalwidth",
+        "seq-option-s-separator",
+        "seq-option-f-format",
+        "seq-option-t-terminator"
+      ]
+    },
+    {
+      "name": "tac",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "tac [-s SEP] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-s",
+            "--separator"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "tac-option-s-separator",
+          "consumption": "fixed",
+          "sample_values": [
+            ","
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tac [-s SEP] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'a\\nb\\n' | tac",
+        "stdout": "b\na\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU tac: records reversed per input, separator after each record (default LF).",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "tac-operands-valid",
+        "tac-rejection",
+        "tac-option-s-separator"
+      ]
+    },
+    {
+      "name": "rev",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "rev [--] [PATH ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rev [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'abc\\n' | rev",
+        "stdout": "cba\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Reverse each line by Unicode scalar; invalid bytes reverse as single bytes.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "rev-operands-valid",
+        "rev-rejection"
+      ]
+    },
+    {
+      "name": "paste",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "paste [-s] [-d LIST] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-s",
+            "--serial"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "paste-option-s-serial",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--delimiters"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "paste-option-d-delimiters",
+          "consumption": "fixed",
+          "sample_values": [
+            ","
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. paste [-s] [-d LIST] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'a\\nb\\n' | paste -s -d , -",
+        "stdout": "a,b\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU paste: merge corresponding lines with TAB or the cycling -d list (\\n \\t \\\\ \\0 escapes); -s joins each file's lines.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "paste-operands-valid",
+        "paste-rejection",
+        "paste-option-s-serial",
+        "paste-option-d-delimiters"
+      ]
+    },
+    {
+      "name": "comm",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "comm [-123i] [--] FILE1 FILE2",
+      "forms": [
+        {
+          "spellings": [
+            "-1"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "comm-option-1",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-2"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "comm-option-2",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-3"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "comm-option-3",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-i"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "comm-option-i",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--check-order"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "comm-option-checkorder",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--nocheck-order"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "comm-option-nocheckorder",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. comm [-123i] [--] FILE1 FILE2",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "comm -12 a b",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Compare two byte-sorted files: column 1 only in FILE1, 2 only in FILE2, 3 in both, TAB indented; - is standard input. BSD -i compares case-insensitively; GNU order checks are accepted.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "comm-operands-valid",
+        "comm-rejection",
+        "comm-option-1",
+        "comm-option-2",
+        "comm-option-3",
+        "comm-option-i",
+        "comm-option-checkorder",
+        "comm-option-nocheckorder"
+      ]
+    },
+    {
+      "name": "join",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "join [-i] [-t C] [-1 F] [-2 F] [-j F] [-a N ...] [-v N] [-e EMPTY] [-o LIST] [--] FILE1 FILE2",
+      "forms": [
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "join-option-t",
+          "consumption": "fixed",
+          "sample_values": [
+            ","
+          ]
+        },
+        {
+          "spellings": [
+            "-1"
+          ],
+          "arity": 1,
+          "value_role": "field",
+          "fixture_id": "join-option-1",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-2"
+          ],
+          "arity": 1,
+          "value_role": "field",
+          "fixture_id": "join-option-2",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-j"
+          ],
+          "arity": 1,
+          "value_role": "field",
+          "fixture_id": "join-option-j",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 1,
+          "value_role": "file-number",
+          "fixture_id": "join-option-a",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-v"
+          ],
+          "arity": 1,
+          "value_role": "file-number",
+          "fixture_id": "join-option-v",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-e"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "join-option-e",
+          "consumption": "fixed",
+          "sample_values": [
+            "-"
+          ]
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 1,
+          "value_role": "list",
+          "fixture_id": "join-option-o",
+          "consumption": "fixed",
+          "sample_values": [
+            "0"
+          ]
+        },
+        {
+          "spellings": [
+            "-i",
+            "--ignore-case"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "join-option-i-ignorecase",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. join [-i] [-t C] [-1 F] [-2 F] [-j F] [-a N ...] [-v N] [-e EMPTY] [-o LIST] [--] FILE1 FILE2",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "join a b",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU join on byte-sorted inputs: default blank-separated fields, join field first, then the remaining fields of each file; -a/-v print unpairable lines, -o selects 0 and N.F fields with -e for missing ones. -i compares join fields case-insensitively.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "join-operands-valid",
+        "join-rejection",
+        "join-option-t",
+        "join-option-1",
+        "join-option-2",
+        "join-option-j",
+        "join-option-a",
+        "join-option-v",
+        "join-option-e",
+        "join-option-o",
+        "join-option-i-ignorecase"
+      ]
+    },
+    {
+      "name": "fold",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "fold [-bs] [-w WIDTH] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-b",
+            "--bytes"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "fold-option-b-bytes",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--spaces"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "fold-option-s-spaces",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-w",
+            "--width"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "fold-option-w-width",
+          "consumption": "fixed",
+          "sample_values": [
+            "80"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. fold [-bs] [-w WIDTH] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'abcdef\\n' | fold -w 2",
+        "stdout": "ab\ncd\nef\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU fold: wrap at WIDTH columns (default 80) counting tab stops, backspace and carriage return, or bytes with -b; -s breaks after the last blank.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "fold-operands-valid",
+        "fold-rejection",
+        "fold-option-b-bytes",
+        "fold-option-s-spaces",
+        "fold-option-w-width"
+      ]
+    },
+    {
+      "name": "column",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "column [-tx] [-s SEP] [-o OUTSEP] [-c WIDTH] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-t",
+            "--table"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "column-option-t-table",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--separator"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "column-option-s-separator",
+          "consumption": "fixed",
+          "sample_values": [
+            ","
+          ]
+        },
+        {
+          "spellings": [
+            "-o",
+            "--output-separator"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "column-option-o-outputseparator",
+          "consumption": "fixed",
+          "sample_values": [
+            " | "
+          ]
+        },
+        {
+          "spellings": [
+            "-c",
+            "--output-width"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "column-option-c-outputwidth",
+          "consumption": "fixed",
+          "sample_values": [
+            "80"
+          ]
+        },
+        {
+          "spellings": [
+            "-x",
+            "--fillrows"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "column-option-x-fillrows",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. column [-tx] [-s SEP] [-o OUTSEP] [-c WIDTH] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'a b\\nccc d\\n' | column -t",
+        "stdout": "a    b\nccc  d\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "util-linux column: -t aligns blank- or -s-separated columns with two spaces (-o to change); without -t, fills entries column-major within -c width (default 80) using TAB stops. -x fills rows before columns.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "column-operands-valid",
+        "column-rejection",
+        "column-option-t-table",
+        "column-option-s-separator",
+        "column-option-o-outputseparator",
+        "column-option-c-outputwidth",
+        "column-option-x-fillrows"
+      ]
+    },
+    {
+      "name": "yes",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "yes [STRING ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. yes [STRING ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "yes | head -n 2",
+        "stdout": "y\ny\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Repeat STRING (default y) until the consumer closes; expected consumer closure is a complete result. Bounded by stream_bytes when nothing closes it.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "yes-operands-valid",
+        "yes-rejection"
+      ]
+    },
+    {
+      "name": "nproc",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "nproc [--all] [--ignore N]",
+      "forms": [
+        {
+          "spellings": [
+            "--all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "nproc-option-all",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--ignore"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "nproc-option-ignore",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. nproc [--all] [--ignore N]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "nproc",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Processing units available to the host process; --ignore subtracts, never below one.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "nproc-operands-valid",
+        "nproc-rejection",
+        "nproc-option-all",
+        "nproc-option-ignore"
+      ]
+    },
+    {
+      "name": "iconv",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "iconv [-c] [-f FROM] [-t TO] [-o OUTPUT] [--] [PATH ...] | iconv -l",
+      "forms": [
+        {
+          "spellings": [
+            "-f",
+            "--from-code"
+          ],
+          "arity": 1,
+          "value_role": "encoding",
+          "fixture_id": "iconv-option-f-fromcode",
+          "consumption": "fixed",
+          "sample_values": [
+            "latin1"
+          ]
+        },
+        {
+          "spellings": [
+            "-t",
+            "--to-code"
+          ],
+          "arity": 1,
+          "value_role": "encoding",
+          "fixture_id": "iconv-option-t-tocode",
+          "consumption": "fixed",
+          "sample_values": [
+            "utf-8"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "iconv-option-c",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l",
+            "--list"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "iconv-option-l-list",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o",
+            "--output"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "iconv-option-o-output",
+          "consumption": "fixed",
+          "sample_values": [
+            "out.txt"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. iconv [-c] [-f FROM] [-t TO] [-o OUTPUT] [--] [PATH ...] | iconv -l",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "-o"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'caf\\351' | iconv -f latin1 -t utf-8",
+        "stdout": "café",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Character set conversion through golang.org/x/text/encoding over pinned inputs or standard input; FROM and TO default to UTF-8 and accept IANA names and common spellings (latin1, utf8, ascii, cp1252, utf-16le, utf-32). UTF-16 and UTF-32 read a BOM and otherwise big-endian, and write a BOM with little-endian, as glibc does. //TRANSLIT approximates unencodable characters (accents removed, then ?); -c and //IGNORE omit them. An invalid or unencodable character stops with iconv: illegal input sequence at position N and status 1; with -c the output completes and the status is still 1. -l lists the supported names. -o stages pinned publication like a redirect.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/textutil/iconv.go",
+        "tests": [
+          "lycaon/internal/tools/native/textutil/iconv_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "iconv-operands-valid",
+        "iconv-rejection",
+        "iconv-option-f-fromcode",
+        "iconv-option-t-tocode",
+        "iconv-option-c",
+        "iconv-option-l-list",
+        "iconv-option-o-output"
+      ]
+    },
+    {
+      "name": "envsubst",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "envsubst [-v] [SHELL-FORMAT]",
+      "forms": [
+        {
+          "spellings": [
+            "-v",
+            "--variables"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "envsubst-option-v-variables",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. envsubst [-v] [SHELL-FORMAT]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'h=$HOST\\n' | HOST=web envsubst '$HOST'",
+        "stdout": "h=web\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU envsubst over standard input from the statement's exported environment: $NAME and ${NAME} references are replaced, unset names become empty, and other text (including ${NAME:-word}) is copied. With SHELL-FORMAT only the names it references are replaced; -v prints those names one per line in order of appearance. Managed secret references substitute as their references and resolve only at declared sinks.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/textutil/envsubst.go",
+        "tests": [
+          "lycaon/internal/tools/native/textutil/envsubst_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "envsubst-operands-valid",
+        "envsubst-rejection",
+        "envsubst-option-v-variables"
       ]
     }
   ]

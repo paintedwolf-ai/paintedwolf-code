@@ -1,0 +1,143 @@
+package toolexecution
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+)
+
+type nativeProgressFixture struct{ store *progress.MemoryStore }
+
+func (p nativeProgressFixture) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
+	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
+}
+
+type nativeStartFunc func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error
+
+func (f nativeStartFunc) BeforeNativeOwner(ctx context.Context, b toolcontract.BoundOperation, call string, review toolcontract.ReviewedOperationInputs) error {
+	return f(ctx, b, call, review)
+}
+
+func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t *testing.T) {
+	nativeReadAdmissionFixture(t, "input")
+}
+
+func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
+	t.Helper()
+	parent, tc := frameFixture(t)
+	root := tc.ActiveRootPath()
+	testutil.FailErr(t, "seed original", os.WriteFile(filepath.Join(root, inputPath), []byte("original bytes"), 0600))
+	testutil.FailErr(t, "seed changed", os.WriteFile(filepath.Join(root, "changed"), []byte("wrong bytes"), 0600))
+	classes, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
+	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), tools.NewDefaultRegistry(), "fixture")
+	// Both real preinvoke anchors must see the submitted command envelope,
+	// independently of the raw native path handed to the existing read door.
+	var observationRules []*oar.Rule
+	for _, anchor := range []string{oar.AnchorToolPreInvoke, oar.AnchorToolHandler} {
+		observationRules = append(observationRules, &oar.Rule{ID: anchor, Kind: oar.KindPolicy, Anchor: anchor, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool != "command" || paintedwolf.native_operation != "read" || tool_arg_string("command") != "fixture" || tool_arg_string("path") != ""`})
+	}
+	pipeline := oar.NewGuardPipeline(oar.NewRuleSet(observationRules), nil, nil)
+	pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
+	pipeline.EnableAnchor(oar.AnchorToolHandler)
+	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: pipeline})
+	definition := nativeDefinition(t, "read")
+	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
+	testutil.FailErr(t, "freeze actual profile", err)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "fixture"}}, stageMemory(t, 64<<20))
+	testutil.FailErr(t, "freeze frame", err)
+	t.Cleanup(frame.Close)
+	child := parent
+	child.Identity.ExecutionID = "child"
+	child.Identity.ParentExecutionID = "parent"
+	bound, err := toolcontract.BindOperation(definition, child, "cat", definition.Facts().Commands[0].Effects[0].Mode, nil)
+	testutil.FailErr(t, "bind native read", err)
+	owner := progress.NewMemoryStore()
+	testutil.FailErr(t, "set actual progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
+	args := map[string]any{"path": inputPath}
+	prepared, invoked := false, false
+	var stdout bytes.Buffer
+	effect := NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{ExecutionID: "child", OperationID: "read", Argv: []string{"cat", inputPath}}, Arguments: args, Streams: commandprogram.Streams{Output: &stdout}}
+	effect.PrepareReviewed = func(ctx context.Context, resolved map[string]any, actual tools.ToolContext) (PreparedNativeEffect, error) {
+		args["path"] = "changed"
+		path := resolved["path"].(string)
+		paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, ".")
+		if err != nil {
+			return PreparedNativeEffect{}, err
+		}
+		nativePath, err := paths.Bind(ctx, path, false)
+		if err != nil {
+			return PreparedNativeEffect{}, err
+		}
+		prepared = true
+		return PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			invoked = true
+			file, err := nativePath.Open()
+			if err != nil {
+				return toolcontract.ProducerResult{}, err
+			}
+			defer file.Close()
+			data, err := io.ReadAll(file)
+			if err != nil || string(data) != "original bytes" {
+				t.Fatalf("executed unreviewed input %q: %v", data, err)
+			}
+			if _, err := streams.Output.Write(data); err != nil {
+				return toolcontract.ProducerResult{}, err
+			}
+			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
+		}}, nil
+	}
+	starts := 0
+	observer := nativeStartFunc(func(_ context.Context, actual toolcontract.BoundOperation, call string, review toolcontract.ReviewedOperationInputs) error {
+		decoded, release, decodeErr := review.Arguments(t.Context(), stageMemory(t, 64<<20))
+		if decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		defer release()
+		if decoded["path"] != inputPath || len(review.ArgumentsDigest()) != 64 {
+			t.Fatalf("unfrozen review: %+v", review)
+		}
+		if !prepared || invoked || actual.Invocation().Identity.ExecutionID != "child" || call != "actual-model-call" {
+			t.Fatal("start marker ordering/identity changed")
+		}
+		starts++
+		return nil
+	})
+	admission := stageMemory(t, 64<<20)
+	result, err := executor.InvokeNative(t.Context(), frame, surface, admission, nativeProgressFixture{owner}, observer, effect, tc)
+	testutil.FailErr(t, "invoke actual native read binding", err)
+	if !result.OwnerInvoked || !result.OutputPublishable || result.Producer.EffectCertainty != toolcontract.NoEffect || starts != 1 || admission.InUse().State != 0 || stdout.String() != "original bytes" {
+		t.Fatalf("lost invoked/read distinction or reservation: %+v held%d", result, admission.InUse().State)
+	}
+	invoked = false
+	denial := errors.New("start record refused")
+	result, err = executor.InvokeNative(t.Context(), frame, surface, stageMemory(t, 64<<20), nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+		return denial
+	}), effect, tc)
+	if !errors.Is(err, denial) || result.OwnerInvoked || invoked {
+		t.Fatalf("owner dispatched without start record: %+v %v", result, err)
+	}
+	result, err = executor.InvokeNative(t.Context(), frame, surface, stageMemory(t, 64<<20), nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+		frame.Close()
+		return nil
+	}), effect, tc)
+	if err == nil || result.OwnerInvoked || invoked {
+		t.Fatalf("owner dispatched after frame closed at marker: %+v %v", result, err)
+	}
+}

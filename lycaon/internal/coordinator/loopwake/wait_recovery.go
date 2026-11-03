@@ -47,7 +47,10 @@ func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awa
 	return nil
 }
 
-// Worker deadlines and runnable transitions remain owned by the worker queue transaction.
+// RecoverWaitLeases reconstructs timers, subscriptions and active probes after
+// boot. A parked program did not survive the restart, so its lease resolves
+// with the program's partial result. Worker deadlines and runnable transitions
+// remain owned by the worker queue transaction.
 func RecoverWaitLeases(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store) error {
 	if loop == nil || store == nil {
 		return nil
@@ -57,6 +60,12 @@ func RecoverWaitLeases(ctx context.Context, loop *WaitSubscriptions, store *awai
 		return err
 	}
 	for _, lease := range leases {
+		if programID, parked := leaseProgram(lease); parked {
+			if err := loop.recoverParkedProgram(ctx, store, lease, programID); err != nil {
+				return err
+			}
+			continue
+		}
 		triggers := []WaitTrigger{WaitTriggerTimer}
 		var handles []string
 		for _, condition := range lease.Conditions {

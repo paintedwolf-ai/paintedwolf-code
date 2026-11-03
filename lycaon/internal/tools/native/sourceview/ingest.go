@@ -3,6 +3,7 @@ package sourceview
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
@@ -13,24 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
 
-// FileStatFacts captures the open file descriptor's metadata at the instant of read.
-type FileStatFacts struct {
-	Size, ModTimeNS int64
-	Ino, Dev        uint64
-}
-
-func extractFileStatFacts(info os.FileInfo) FileStatFacts {
-	if info == nil {
-		return FileStatFacts{}
-	}
-	facts := FileStatFacts{Size: info.Size(), ModTimeNS: info.ModTime().UnixNano()}
-	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
-		facts.Ino = uint64(sys.Ino)
-		facts.Dev = uint64(sys.Dev)
-	}
-	return facts
-}
-
 // Access selects the byte budget and rejection codes for one file load.
 type Access uint8
 
@@ -40,10 +23,24 @@ const (
 	// AccessMutate loads a mutation base within readcaps.MaxMutationBytes, the
 	// bound that retained versions, checkpoints, and editor documents share.
 	AccessMutate
+	// AccessCommand bounds operations that genuinely need a complete command input.
+	AccessCommand
 )
 
 // MaxBytes is the raw byte budget for a project file loaded with this access.
 func (a Access) MaxBytes() int64 {
+	if a == AccessCommand {
+		catalog, err := toolcontract.LanguageV1()
+		if err != nil {
+			return 0
+		}
+		for _, limit := range catalog.Language.Limits {
+			if limit.ID == "whole_file_bytes" {
+				return limit.Maximum
+			}
+		}
+		return 0
+	}
 	if a == AccessMutate {
 		return readcaps.MaxMutationBytes
 	}
@@ -53,6 +50,9 @@ func (a Access) MaxBytes() int64 {
 // SizeReject reports a file or proposed content above maxBytes. size is the
 // measured lower bound; zero means a decoder stopped before measuring.
 func (a Access) SizeReject(tool, path string, size, maxBytes int64) error {
+	if a == AccessCommand {
+		return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"command": tool, "path": path, "limit_id": "whole_file_bytes", "resource_unit": "bytes", "maximum": maxBytes, "observed": size}}
+	}
 	code := "READ_FILE_TOO_LARGE"
 	if a == AccessMutate {
 		code = "EDIT_FILE_TOO_LARGE"
@@ -74,13 +74,31 @@ func MutationSizeReject(tool, path string, size int64) error {
 // projectpaths.Resolved.Compressed, a directory-scoped fact, never from
 // sniffing the file's bytes.
 func ReadContentCapped(tool string, access Access, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, error) {
-	body, _, err := ReadContentWithStatCapped(tool, access, loc, displayPath, compressed, maxBytes)
+	return ReadContentCappedFromRoot(tool, access, nil, loc, displayPath, compressed, maxBytes)
+}
+
+// ReadContentCappedFromRoot loads one bounded regular file using an already
+// held ReadRoot when provided, or opening loc.Root when root is nil.
+func ReadContentCappedFromRoot(tool string, access Access, root *fseffect.ReadRoot, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, error) {
+	body, _, err := readContentWithStatCappedFromRoot(tool, access, root, loc, displayPath, compressed, maxBytes)
 	return body, err
 }
 
-// ReadContentWithStatCapped loads one bounded regular file along with the open descriptor's stat facts.
+// ReadContentWithStatCapped binds content and identity to the same opened descriptor.
 func ReadContentWithStatCapped(tool string, access Access, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, FileStatFacts, error) {
-	f, err := fseffect.OpenRead(loc)
+	return readContentWithStatCappedFromRoot(tool, access, nil, loc, displayPath, compressed, maxBytes)
+}
+
+func readContentWithStatCappedFromRoot(tool string, access Access, root *fseffect.ReadRoot, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, FileStatFacts, error) {
+	var (
+		f   *os.File
+		err error
+	)
+	if root != nil {
+		f, err = root.Open(loc.Rel)
+	} else {
+		f, err = fseffect.OpenRead(loc)
+	}
 	if err != nil {
 		return nil, FileStatFacts{}, err
 	}
@@ -94,16 +112,38 @@ func ReadContentWithStatCapped(tool string, access Access, loc fseffect.Location
 	}
 	stat := extractFileStatFacts(info)
 	if compressed {
-		body, cErr := readCompressedContentCapped(tool, access, f, displayPath, maxBytes)
+		body, err := readCompressedContentCapped(tool, access, f, displayPath, maxBytes)
 		stat.Size = int64(len(body))
-		return body, stat, cErr
+		return body, stat, err
 	}
-	if info.Size() > maxBytes {
-		return nil, stat, access.SizeReject(tool, displayPath, info.Size(), maxBytes)
+	size := info.Size()
+	if size > maxBytes {
+		return nil, stat, access.SizeReject(tool, displayPath, size, maxBytes)
 	}
-	body, rErr := readPlainContentCapped(tool, access, f, displayPath, maxBytes)
+	if size >= 0 && size <= 64<<10 {
+		buf := make([]byte, size+1)
+		n, readErr := io.ReadFull(f, buf)
+		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
+			stat.Size = int64(n)
+			return buf[:n], stat, nil
+		}
+		if readErr != nil {
+			return nil, stat, readErr
+		}
+		rest, rerr := io.ReadAll(io.LimitReader(f, maxBytes+1-int64(n)))
+		buf = append(buf[:n], rest...)
+		if int64(len(buf)) > maxBytes {
+			return nil, stat, access.SizeReject(tool, displayPath, int64(len(buf)), maxBytes)
+		}
+		if rerr != nil {
+			return nil, stat, rerr
+		}
+		stat.Size = int64(len(buf))
+		return buf, stat, nil
+	}
+	body, err := readPlainContentCapped(tool, access, f, displayPath, maxBytes)
 	stat.Size = int64(len(body))
-	return body, stat, rErr
+	return body, stat, err
 }
 
 func readPlainContentCapped(tool string, access Access, r io.Reader, path string, maxBytes int64) ([]byte, error) {
@@ -126,4 +166,22 @@ func readCompressedContentCapped(tool string, access Access, r io.Reader, path s
 		return nil, fmt.Errorf("decompress body: %w", err)
 	}
 	return body, nil
+}
+
+// FileStatFacts binds served content to its open descriptor.
+type FileStatFacts struct {
+	Size, ModTimeNS int64
+	Ino, Dev        uint64
+}
+
+func extractFileStatFacts(info os.FileInfo) FileStatFacts {
+	if info == nil {
+		return FileStatFacts{}
+	}
+	facts := FileStatFacts{Size: info.Size(), ModTimeNS: info.ModTime().UnixNano()}
+	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
+		facts.Ino = uint64(sys.Ino)
+		facts.Dev = uint64(sys.Dev)
+	}
+	return facts
 }

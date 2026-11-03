@@ -3,12 +3,13 @@ id: FIND_INVALID_TYPE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - find
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.type
 when: paintedwolf.rejection_code == "FIND_INVALID_TYPE"

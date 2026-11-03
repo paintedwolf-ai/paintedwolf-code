@@ -2,22 +2,19 @@
 package confine
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // helperFlag marks the confined re-exec path.
@@ -76,10 +73,11 @@ const (
 )
 
 type Boundary struct {
-	ProcessControl bool
-	HostExecution  bool
-	Applied        bool
-	Network        NetworkMode
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
+	Applied         bool
+	Network         NetworkMode
 	// EgressOff is why Network is NetworkDeny. Meaningless for any other mode.
 	EgressOff EgressOffCause
 	// SocksProxyEnv records mediated non-HTTP routing.
@@ -111,9 +109,10 @@ func BoundaryOf(c *Confinement) Boundary {
 		return Boundary{}
 	}
 	return Boundary{
-		ProcessControl: c.ProcessControl,
-		Filesystem:     filesystem,
-		Applied:        true, Network: c.Network, EgressOff: c.EgressOff,
+		ProcessControl:  c.ProcessControl,
+		CredentialStore: c.CredentialStore,
+		Filesystem:      filesystem,
+		Applied:         true, Network: c.Network, EgressOff: c.EgressOff,
 		SocksProxyEnv:   c.SocksProxyEnv && c.Network == NetworkProxyOnly && c.SocksProxyAddr != "",
 		WriteRoots:      writeRoots,
 		LocalListen:     c.Network == NetworkDirectIP || c.Browser || c.LocalListen,
@@ -128,8 +127,9 @@ func (b Boundary) DeniesDirectSockets() bool {
 
 // Confinement describes the box for one command.
 type Confinement struct {
-	ProcessControl bool
-	HostExecution  bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
 	// ProjectID routes project-scoped grants.
 	ProjectID string
 	// Roots are attached write locations.
@@ -146,6 +146,8 @@ type Confinement struct {
 	EgressOff EgressOffCause
 	// SocketGrants are exact AF_UNIX connect literals validated at the choke point.
 	SocketGrants []SocketGrant
+	// socketEndpoints are compiled from retained action authority, never input.
+	socketEndpoints map[string]string
 	// DroppedSocketGrants records rejected socket grants.
 	DroppedSocketGrants []SocketGrantDrop
 	// ProtectedWriteGrants are approved protected-path write transactions.
@@ -185,6 +187,9 @@ type Confinement struct {
 	LoopbackConnectPorts []uint16
 	// Browser permits local listeners independently of LocalListen.
 	Browser bool
+	// Process sets resource limits and signal dispositions the target
+	// starts with; they narrow the process, never the boundary.
+	Process ProcessAttributes
 }
 
 // DefaultConfinement builds the boundary for a valid rooted request.
@@ -202,6 +207,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 	}
 	c := &Confinement{
 		ProcessControl:              req.ProcessControl,
+		CredentialStore:             req.CredentialStore,
 		ProjectID:                   req.ProjectID,
 		Roots:                       prepared.Roots,
 		GrantedWriteRoots:           append([]string(nil), prepared.GrantedWriteRoots...),
@@ -263,81 +269,7 @@ func BrowserConfinement(req Request) (*Confinement, bool) {
 // ErrNestedHelper rejects wrapping from a process that is already the confine helper.
 var ErrNestedHelper = errors.New("confine: this process is already applying a sandbox profile")
 
-// Command builds the process for the selected confinement boundary.
-func Command(
-	ctx context.Context,
-	self, name string,
-	args []string,
-	c Confinement,
-) (*exec.Cmd, func(), error) {
-	if IsHelperInvocation(os.Args) {
-		return nil, func() {}, ErrNestedHelper
-	}
-	if c.HostExecution {
-		return exec.CommandContext(ctx, name, args...), func() {}, nil
-	}
-	c, err := validateProfileInputs(c)
-	if err != nil {
-		return nil, func() {}, err
-	}
-	if err := preparePackageCacheDataRoots(c, fseffect.MkdirAll); err != nil {
-		return nil, func() {}, err
-	}
-	profile, err := renderProfile(c)
-	if err != nil {
-		return nil, func() {}, err
-	}
-	// An inherited pipe keeps the profile outside writable pathnames.
-	pr, pw, err := os.Pipe()
-	if err != nil {
-		return nil, func() {}, err
-	}
-	helperArgs := []string{helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD)}
-	// ExtraFiles[0] lands on helperProfileFD in the child.
-	extra := []*os.File{pr}
-	if marker := c.lineage.ChildFile(); marker != nil {
-		helperArgs = append(helperArgs, lineageFDFlag, strconv.Itoa(helperLineageFD))
-		extra = append(extra, marker)
-	}
-	reports, closeReports := refusalReport(c)
-	if reports != nil {
-		// A nil entry leaves the marker's descriptor closed when there is none.
-		for len(extra) < helperRefusalFD-helperProfileFD {
-			extra = append(extra, nil)
-		}
-		extra = append(extra, reports)
-		helperArgs = append(helperArgs, refusalFDFlag, strconv.Itoa(helperRefusalFD))
-	}
-	helperArgs = append(append(helperArgs, "--", name), args...)
-	cmd := exec.CommandContext(ctx, self, helperArgs...)
-	cmd.ExtraFiles = extra
-	go func() {
-		defer func() { _ = pw.Close() }()
-		_, _ = io.WriteString(pw, profile)
-	}()
-	// Releasing the host's own end lets the marker report end-of-file once the
-	// last descendant exits.
-	cleanup := func() {
-		_ = pr.Close()
-		closeReports()
-		c.lineage.Started()
-	}
-	return cmd, cleanup, nil
-}
-
-// BuildProfile renders the boundary the helper applies on this platform: the
-// Seatbelt profile on macOS, the boundary plan on Linux.
-func BuildProfile(c Confinement) (string, error) {
-	c, err := validateProfileInputs(c)
-	if err != nil {
-		return "", err
-	}
-	return renderProfile(c)
-}
-
-// BuildSeatbeltProfile renders the macOS profile for c. It is what BuildProfile
-// applies on macOS and renders on every platform, so the policy it expresses
-// can be read anywhere.
+// BuildSeatbeltProfile renders the macOS profile on every platform.
 func BuildSeatbeltProfile(c Confinement) (string, error) {
 	c, err := validateProfileInputs(c)
 	if err != nil {
@@ -370,6 +302,21 @@ func validateProfileInputs(c Confinement) (Confinement, error) {
 }
 
 func renderSeatbeltProfile(c Confinement) (string, error) {
+	if runtime.GOOS == "darwin" {
+		if err := validateSocketRealization(c.SocketGrants, socketref.RetainedObject); err != nil {
+			return "", err
+		}
+		if err := c.SocketError(); err != nil {
+			return "", err
+		}
+		for _, grant := range c.SocketGrants {
+			if c.socketEndpoints[socketEndpointKey(grant.Binding, "unix")] == "" || c.socketEndpoints[socketEndpointKey(grant.Binding, "unixgram")] == "" {
+				return "", &SocketResolveError{Code: SocketResolveChanged, Path: grant.ApprovedPath, Err: socketref.ErrUnbound}
+			}
+		}
+	} else if err := validateSocketRealization(c.SocketGrants, socketref.KernelPathname); err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	deny := denyReport(c.refusalTag)
 	b.WriteString("(version 1)\n")
@@ -458,6 +405,9 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 	rules.add(fsRule{op: opRead, allow: true, everywhere: true})
 	deny := readDenyMatches(c)
 	if len(deny) > 0 {
+		// Denying file-read* blocks metadata probes too; frameworks such as
+		// macOS Security stat a store before opening it and exit without a
+		// kernel refusal report when stat succeeds on an unreadable file.
 		rules.add(fsRule{op: opRead, matches: deny})
 		// Managed read roots and approved read grants override denied ancestors.
 		allow := SecretReadAllowBackRoots()
@@ -473,10 +423,17 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 				literals = append(literals, g.ResolvedPath)
 			}
 		}
+		if c.CredentialStore {
+			allow = mergeSortedStrings(allow, linuxCredentialStoreReadRoots())
+			literals = mergeSortedStrings(literals, darwinLoginKeychainLiterals())
+		}
 		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(allow, ""), literalMatches(literals, "")...)})
 		// Ancestor metadata permits traversal into allowed descendants.
 		if len(allow) > 0 || len(literals) > 0 {
 			ancestors := traversalAncestors(matchPaths(deny), append(append([]string(nil), allow...), literals...))
+			if c.CredentialStore {
+				ancestors = mergeSortedStrings(ancestors, darwinLoginKeychainMetadataDirs())
+			}
 			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(ancestors, "")})
 		}
 	}
@@ -529,7 +486,13 @@ func readDenyMatches(c Confinement) []fsMatch {
 			}
 		}
 	}
-	out = append(out, subpathMatches(KeyMaterialReadDenyPaths(), FloorReadKeyMaterial)...)
+	for _, p := range KeyMaterialReadDenyPaths() {
+		layer := FloorReadKeyMaterial
+		if !c.CredentialStore && isOSCredentialStoreDenyPath(p) {
+			layer = FloorReadCredentialStore
+		}
+		out = append(out, subpathMatches([]string{p}, layer)...)
+	}
 	return append(out, subpathMatches(resolveEach(c.ReadDenyPaths), FloorReadConfigured)...)
 }
 

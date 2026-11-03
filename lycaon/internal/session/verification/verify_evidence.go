@@ -263,4 +263,3 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 		return false, false, false
 	}
 }
-

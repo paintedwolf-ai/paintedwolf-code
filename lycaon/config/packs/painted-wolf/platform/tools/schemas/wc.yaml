@@ -1,4 +1,4 @@
-description: "Count lines, bytes, and words in files or recursively in directories. bytes is the true file size; truncated marks counts taken from a capped scan. Replaces command: wc -l."
+description: "Count lines (LF bytes), bytes, and words in files or recursively in directories. bytes is the file size, or the editor text size when in_editor; truncated marks counts taken from a capped scan."
 schema:
   type: object
   properties:

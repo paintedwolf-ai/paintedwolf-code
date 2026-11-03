@@ -132,7 +132,7 @@ const (
 const SocketGrantAuthorityWarning = "This service runs outside the sandbox with your permissions and may act on files, processes, devices, or the network."
 
 // SocketGrantRevokeAppliesTo is the fixed revoke consequence copy for socket leases.
-const SocketGrantRevokeAppliesTo = "Applies to the next command or terminal. Already-running processes retain access."
+const SocketGrantRevokeAppliesTo = "Applies to the next local-service operation. Already-running processes and admitted requests retain access."
 
 // --- Settings: Security scanners ---
 

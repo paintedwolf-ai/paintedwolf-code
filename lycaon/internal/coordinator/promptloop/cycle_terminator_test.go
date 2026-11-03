@@ -2,7 +2,6 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -10,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -30,7 +30,7 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 			reg := tools.NewStubRegistry()
 			err := reg.Register(tt.tool, func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 				if tt.tool == "wait" && tctx.Effects.Out != nil {
-					tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
+					tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait"}
 				}
 				return tt.toolOutput, nil
 			})
@@ -49,7 +49,10 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 					},
 				},
 				Tools: ToolsDeps{
-					EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
+					EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, completion *api.ToolCompletion, _ int) (string, guidance.ToolResultFacts) {
+						if tt.tool == "wait" && (completion == nil || completion.State != "parked") {
+							t.Fatalf("enrichment lost parked completion: %+v", completion)
+						}
 						hostArgs := make(map[string]any, len(args)+1)
 						for key, value := range args {
 							hostArgs[key] = value
@@ -78,10 +81,11 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 			calls := []api.ToolCall{{ID: "call-1", Name: tt.tool, Args: map[string]any{}}}
 			history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-			_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+			batchResult, err := loop.Batch.executeToolCallsInTurn(
 				context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 				history, "continue", assistantID, "", nil,
 			)
+			breakLoop := batchResult.breakToolLoop
 			testutil.FailErr(t, "execute decorated cycle terminator", err)
 			if !breakLoop {
 				t.Fatalf("%s result did not end the tool cycle", tt.tool)
@@ -117,10 +121,11 @@ func TestExecuteToolCallsInTurnHumanApprovalEndsCycle(t *testing.T) {
 	calls := []api.ToolCall{{ID: "call-1", Name: "write", Args: map[string]any{"path": "bp.md"}}}
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+	batchResult, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 		history, "continue", assistantID, "", nil,
 	)
+	breakLoop := batchResult.breakToolLoop
 	testutil.FailErr(t, "execute write while awaiting approval", err)
 	if !breakLoop {
 		t.Fatal("landing on human_approval must end the tool cycle")
@@ -189,13 +194,14 @@ func runHostHoldBatch(t *testing.T, held *atomic.Bool, surfaceID string, onCall 
 	if surfaceID != "" {
 		plan, planErr := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, 1)
 		testutil.FailErr(t, "compile "+surfaceID, planErr)
-		st = &promptLoopTurnState{turnToolPlan: plan}
+		st = &promptLoopTurnState{turnBatchState: turnBatchState{turnToolPlan: plan}}
 	}
 
-	_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+	batchResult, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 		history, "continue", assistantID, surfaceID, st,
 	)
+	breakLoop := batchResult.breakToolLoop
 	testutil.FailErr(t, "execute scan_list around a host hold", err)
 	return breakLoop
 }
@@ -225,10 +231,11 @@ func TestExecuteToolCallsInTurnWriteContinuesWhenNotAwaiting(t *testing.T) {
 	calls := []api.ToolCall{{ID: "call-1", Name: "write", Args: map[string]any{"path": "bp.md"}}}
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+	batchResult, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 		history, "continue", assistantID, "", nil,
 	)
+	breakLoop := batchResult.breakToolLoop
 	testutil.FailErr(t, "execute write", err)
 	if breakLoop {
 		t.Fatal("write must not end the cycle when human approval is not awaiting")
@@ -256,7 +263,9 @@ func TestWorkerDecisionSettlesUnattemptedCompletion(t *testing.T) {
 	calls := []api.ToolCall{{ID: "decision", Name: "request_decision"}, {ID: "completion", Name: "complete_leg"}}
 	sess := &api.Session{ID: "worker", ParentSessionID: "parent"}
 	history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls}}
-	history, _, _, _, _, stopped, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
+	batchResult, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
+	history = batchResult.history
+	stopped := batchResult.breakToolLoop
 	testutil.FailErr(t, "pause worker batch", err)
 	if !stopped || completed || len(history) != 3 {
 		t.Fatalf("stopped=%v completed=%v history=%+v", stopped, completed, history)

@@ -16,12 +16,30 @@ const (
 	maxDiagnosticValueDepth   = 10
 )
 
-// Order preserves identities and parser locations before larger inventories.
-// Executable replacements and examples are deliberately absent: partial calls
-// cannot be presented as equivalent repairs.
+// Order preserves effect certainty, identities and parser locations before
+// larger inventories.
+// Whole replacement observations remain data for explicit submission.
+// Diagnostic projection never invents executable source.
 var diagnosticFields = []string{
+	"command_execution",
+	"program_completed_effects", "program_uncertain_effects", "program_replay_available", "program_effect_details_omitted",
+	"program_executed_children", "program_executed_reads", "native_operation", "native_command",
+	"operation_source_unit_id", "operation_source_start_byte", "operation_source_end_byte", "operation_source_line", "operation_source_column",
+	"source_start_byte", "source_end_byte", "source_line", "source_column",
+	"diagnostic_top_level", "parser_kind", "parser_message", "parser_expected", "parser_found",
+	"parser_detected_line", "parser_detected_column", "parser_incomplete", "parser_details_omitted", "source_unit_id_omitted",
+	"source_excerpt", "source_excerpt_start_byte", "source_excerpt_end_byte", "source_excerpt_line", "source_excerpt_column",
+	"diagnostic_stage", "diagnostic_pre_evaluation", "command", "diagnostic_word", "expected_form", "supported_options",
+	"replacement_source_unit_id", "replacement_start_byte", "replacement_end_byte", "replacement_text", "replacement_submission",
+	"limit", "limit_unit", "limit_maximum", "limit_observed",
+	"program_id", "execution_id", "node_id", "source_unit_id", "model_tool_call_id", "program_detail_ref",
+	"program_replay_limitation", "program_static_not_started", "program_static_untaken",
+	"program_progress_state", "program_progress_ref", "program_progress_ref_omitted",
+	"program_progress_owner_invoked", "program_progress_execution_id", "program_progress_detail_ref",
+	"program_completed_details_retained_omitted", "program_unknown_details_retained_omitted", "program_stopped_details_omitted",
+	"program_stopped_details", "program_completed_details", "program_unknown_details",
 	"action", "work_id", "question_id", "revision", "workflow_phase", "agent",
-	"field", "field_path", "path", "expected_type", "json_malformed", "json_encoded",
+	"env_var", "field", "field_path", "path", "expected_type", "json_malformed", "json_encoded",
 	"json_unexpected_token_at", "json_unterminated_string_at", "json_trailing_text_at",
 	"found_under", "belongs_under", "close_before", "did_you_mean", "reason", "text_base_changed",
 	"index", "type", "locators", "locators_truncated", "interactive_truncated", "timeout",
@@ -44,7 +62,15 @@ func boundedHostDiagnostics(details map[string]any, limit int) map[string]any {
 	if decoder.Decode(&source) != nil {
 		return nil
 	}
-	return projectDiagnosticFields(source, limit, 0)
+	out := projectDiagnosticFields(source, limit, 0)
+	for _, name := range []string{"program_completed_details", "program_unknown_details", "program_stopped_details"} {
+		rows, _ := source[name].([]any)
+		kept, _ := out[name].([]any)
+		if _, present := out["program_effect_details_omitted"]; present && len(kept) < len(rows) {
+			out["program_effect_details_omitted"] = true
+		}
+	}
+	return out
 }
 
 func projectDiagnosticFields(source map[string]any, limit, depth int) map[string]any {

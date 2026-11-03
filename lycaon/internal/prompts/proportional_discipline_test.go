@@ -77,14 +77,13 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	survey, err := engine.Render(ctx, "units/survey-first-pass.md", map[string]any{
 		"profile_has_summarize":      true,
 		"profile_has_survey_repo":    true,
-		"profile_has_jq":             true,
-		"profile_has_list_dir":       true,
+		"profile_has_command":        true,
 		"profile_has_scan_drilldown": true,
 	})
 	testutil.FailErr(t, "render survey-first-pass", err)
 	for _, want := range []string{
-		"summarize(", "summarize#N", "list_dir(",
-		"layout_overview|ssot_drift|api_routes", "jq(", "scan_summary", "scan_query", "grep", "read",
+		"summarize(", "summarize#N", "find . -maxdepth 2",
+		"layout_overview|ssot_drift|api_routes", "jq '.field'", "scan_summary", "scan_query", "grep -n", "sed -n",
 	} {
 		if !strings.Contains(survey, want) {
 			t.Fatalf("survey-first-pass missing first-move row %q:\n%s", want, survey)

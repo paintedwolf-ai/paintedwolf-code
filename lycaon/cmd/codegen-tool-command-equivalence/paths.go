@@ -14,11 +14,8 @@ const (
 
 // modulePaths are the only filesystem locations this codegen may read or write.
 type modulePaths struct {
-	root                 string
-	equivalenceYAML      string
-	generatedGo          string
-	generatedReadHabitGo string
-	toolSchemasDir       string
+	root        string
+	languageDir string
 }
 
 func resolveModulePaths(rootFlag string) (modulePaths, error) {
@@ -26,26 +23,11 @@ func resolveModulePaths(rootFlag string) (modulePaths, error) {
 	if err != nil {
 		return modulePaths{}, fmt.Errorf("resolve module root: %w", err)
 	}
-	equivalence := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "tool-command-equivalence.yaml")
-	if err := assertRegularFile(equivalence); err != nil {
-		return modulePaths{}, fmt.Errorf("root %q is not the lycaon module (missing config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml): %w", root, err)
+	language := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "command-language-v1")
+	if err := assertDir(language); err != nil {
+		return modulePaths{}, fmt.Errorf("root %q is not the lycaon module (missing config/packs/painted-wolf/platform/tools/command-language-v1): %w", root, err)
 	}
-	out := modulePaths{
-		root:                 root,
-		equivalenceYAML:      equivalence,
-		generatedGo:          filepath.Join(root, "internal", "toolcommand", "command_equivalence_gen.go"),
-		generatedReadHabitGo: filepath.Join(root, "internal", "confine", "read_habit_catalog_gen.go"),
-		toolSchemasDir:       filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "schemas"),
-	}
-	for _, path := range []string{out.generatedGo, out.generatedReadHabitGo, out.toolSchemasDir} {
-		if err := assertPathUnderRoot(path, root); err != nil {
-			return modulePaths{}, err
-		}
-	}
-	if err := assertDir(out.toolSchemasDir); err != nil {
-		return modulePaths{}, fmt.Errorf("tools/schemas: %w", err)
-	}
-	return out, nil
+	return modulePaths{root: root, languageDir: language}, nil
 }
 
 func assertPathUnderRoot(path, root string) error {
@@ -63,17 +45,6 @@ func assertPathUnderRoot(path, root string) error {
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("path %q escapes root %q", cleanPath, cleanRoot)
-	}
-	return nil
-}
-
-func assertRegularFile(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return fmt.Errorf("%q is a directory", path)
 	}
 	return nil
 }
@@ -99,4 +70,15 @@ func writeTrackedFile(path string, content []byte) error {
 		return err
 	}
 	return os.WriteFile(path, content, codegenFilePerm)
+}
+
+func assertRegularFile(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%q is a directory", path)
+	}
+	return nil
 }

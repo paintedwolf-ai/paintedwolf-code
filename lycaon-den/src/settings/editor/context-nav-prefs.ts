@@ -58,7 +58,7 @@ export async function saveContextNavVisible(
   const visible = normalizeContextNavVisible(ids);
   setVisibleIds(visible);
   await persistAppStateInBackground({
-    contextNav: { visible },
+    contextNav: { visible, runningPinnedMigrated: true },
   });
 }
 

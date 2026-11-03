@@ -192,3 +192,35 @@ func TestBuildPlainTextNoGrammarDiagnostics(t *testing.T) {
 		t.Fatalf("diagnostics = %+v want no_grammar=1", out.Diagnostics)
 	}
 }
+
+func TestBuildCSSOutlineAndSyntaxHealth(t *testing.T) {
+	src := strings.Join([]string{
+		"body {",
+		"  margin: 0;",
+		"}",
+		"#board {",
+		"  display: grid;",
+		"}",
+		".cell {",
+		"  width: 48px;",
+		"}",
+		".cell:hover, .cell:not(.occupied) {",
+		"  background: #eee;",
+		"}",
+	}, "\n")
+	out := fileoutline.AnalyzeText(t.Context(), "style.css", []byte(src))
+	if out.Source != "tree_sitter" || out.Language != "css" {
+		t.Fatalf("source/lang = %q/%q, want tree_sitter/css", out.Source, out.Language)
+	}
+	if out.Parses == nil || !*out.Parses {
+		t.Fatalf("parses = %v, want true", out.Parses)
+	}
+	if len(out.Symbols) != 4 {
+		t.Fatalf("symbols = %+v, want 4 rule-set entries", out.Symbols)
+	}
+	if out.Symbols[0].Name != "body" || out.Symbols[1].Name != "#board" || out.Symbols[1].Kind != "id" ||
+		out.Symbols[2].Name != ".cell" || out.Symbols[2].Kind != "class" ||
+		out.Symbols[3].Name != ".cell:hover, .cell:not(.occupied)" {
+		t.Fatalf("unexpected CSS symbols: %+v", out.Symbols)
+	}
+}

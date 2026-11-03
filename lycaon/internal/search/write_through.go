@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -27,7 +28,82 @@ func SyncMessageWriteThrough(ctx context.Context, tx *sql.Tx, projectID, session
 	rows = append(rows, ProjectToolCalls(projectID, sessionID, msg)...)
 	rows = append(rows, ProjectToolMessage(projectID, sessionID, msg, toolName)...)
 	rows = append(rows, ProjectLifecycleEvidence(projectID, sessionID, msg)...)
+	if err := enrichRowsFromEvidenceRecords(ctx, tx, rows); err != nil {
+		return err
+	}
 	return defaultStore.UpsertRows(ctx, tx, rows)
+}
+
+// enrichRowsFromEvidenceRecords backfills path, line, tool, kind, shape, and trust
+// on handle-bearing rows from the canonical evidence_records row in the same transaction.
+func enrichRowsFromEvidenceRecords(ctx context.Context, tx *sql.Tx, rows []IndexRow) error {
+	for i := range rows {
+		sessionID := strings.TrimSpace(rows[i].SessionID)
+		handle := strings.TrimSpace(rows[i].Handle)
+		if sessionID == "" || handle == "" {
+			continue
+		}
+		var kind, shape, fidelity, sourceTool, path, url, lineRanges string
+		var marksUntrusted, truncated int64
+		err := tx.QueryRowContext(ctx, `
+			SELECT kind, shape, fidelity, source_tool, marks_untrusted, path, url, line_ranges, truncated
+			FROM evidence_records
+			WHERE session_id = ? AND handle = ?
+		`, sessionID, handle).Scan(&kind, &shape, &fidelity, &sourceTool, &marksUntrusted, &path, &url, &lineRanges, &truncated)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("enrich evidence_index row %s from evidence_records: %w", handle, err)
+		}
+		if strings.TrimSpace(rows[i].Path) == "" && strings.TrimSpace(path) != "" {
+			rows[i].Path = cleanToolPath(path)
+		} else if rows[i].Path != "" {
+			rows[i].Path = cleanToolPath(rows[i].Path)
+		}
+		if rows[i].Line <= 0 {
+			rows[i].Line = firstEvidenceRecordLine(lineRanges)
+		}
+		if strings.TrimSpace(rows[i].Tool) == "" && strings.TrimSpace(sourceTool) != "" {
+			rows[i].Tool = strings.TrimSpace(strings.ToLower(sourceTool))
+		}
+		if (rows[i].Kind == "" || rows[i].Kind == HitKindEvidence || rows[i].Kind == HitKindTool) && strings.TrimSpace(kind) != "" {
+			rows[i].Kind = strings.TrimSpace(kind)
+		}
+		if rows[i].Shape == "" && strings.TrimSpace(shape) != "" {
+			rows[i].Shape = strings.TrimSpace(shape)
+		}
+		if strings.TrimSpace(rows[i].Trust) == "" && strings.TrimSpace(fidelity) != "" {
+			rows[i].Trust = strings.TrimSpace(fidelity)
+		}
+		if strings.TrimSpace(rows[i].URL) == "" && strings.TrimSpace(url) != "" {
+			rows[i].URL = strings.TrimSpace(url)
+		}
+		if truncated != 0 {
+			rows[i].Truncated = true
+		}
+		if marksUntrusted != 0 {
+			rows[i].Untrusted = true
+		}
+	}
+	return nil
+}
+
+func firstEvidenceRecordLine(raw string) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
+	}
+	var payload struct {
+		Ranges []evidence.LineRange `json:"ranges"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil || len(payload.Ranges) == 0 {
+		return 0
+	}
+	if payload.Ranges[0].Start > 0 {
+		return payload.Ranges[0].Start
+	}
+	return 0
 }
 
 // rootSessionIDTx walks parent links to the top of the session tree.

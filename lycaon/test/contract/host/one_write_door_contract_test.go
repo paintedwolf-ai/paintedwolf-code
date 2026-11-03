@@ -16,6 +16,7 @@ import (
 
 // doorExemptions identifies writes with lifetimes outside replacement transactions.
 var doorExemptions = map[string]string{
+	"lycaon/internal/fileclone/probe.go":       "O_EXCL volume-capability probe in a private temporary directory; its fsynced input and clone are removed before return, never published as durable content",
 	"lycaon/internal/scan/installed/verify.go": "ephemeral installed-scanner fixtures in an owned temporary directory removed before return",
 	// Content-addressed stores determine the destination after streaming.
 	"lycaon/internal/sourceblob/store.go": "stream-then-name: the object's destination is its digest",

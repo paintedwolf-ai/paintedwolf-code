@@ -37,21 +37,7 @@ LINT_LOAD="$(test_host_load_one)"
 LINT_TIMEOUT_SCALE="$(test_host_timeout_scale "${LINT_CPUS}" "${LINT_LOAD}")"
 LINT_BASE_TIMEOUT="$(awk '$1 == "timeout:" { print $2; exit }' .golangci.yml)"
 LINT_TIMEOUT="$(test_scale_go_duration "${LINT_BASE_TIMEOUT:?missing lint timeout}" "${LINT_TIMEOUT_SCALE}")"
-LINT_FLAGS=(--timeout "${LINT_TIMEOUT}")
 printf 'lint: host load %s on %s CPUs; timeout=%s\n' "${LINT_LOAD}" "${LINT_CPUS}" "${LINT_TIMEOUT}" >&2
 
-go vet ./...
-
-case "${mode}" in
-  fast)
-    "${GOLANGCI}" run --fast-only "${LINT_FLAGS[@]}" "$@" ./...
-    ;;
-  full)
-    "${GOLANGCI}" run "${LINT_FLAGS[@]}" "$@" ./...
-    bash "${ROOT}/scripts/deadcode-check.sh"
-    ;;
-  *)
-    echo "usage: $0 [fast|full] [golangci-lint flags...]" >&2
-    exit 2
-    ;;
-esac
+PYTHONPATH="${ROOT}/scripts${PYTHONPATH:+:${PYTHONPATH}}" \
+  python3 -m ci_policy.lint_scope "${mode}" "${GOLANGCI}" "${LINT_TIMEOUT}" "$@"

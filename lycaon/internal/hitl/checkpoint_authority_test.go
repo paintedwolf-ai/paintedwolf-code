@@ -21,11 +21,11 @@ func TestResolveApprovalOptionRecordsEveryInstalledGrant(t *testing.T) {
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	insertSession(t, sqlDB, sessionID)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "combined"},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "combined"},
+		},
+	}
 	first := hitl.ApprovalGrant{ID: "grant_first", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: "Allow for this chat"}
 	second := hitl.ApprovalGrant{ID: "grant_second", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: "Allow for this chat"}
 	presentation, reasons := approvalPlanPresentation()
@@ -65,14 +65,14 @@ func TestApprovalDecisionStampJoinsLaterToolRow(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval, ToolCallID: "call-stamp",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "git status"},
-},
-Presentation: hitl.ActionPresentation{
-Command: "git status",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "git status"},
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: "git status",
+			},
+		},
 	})
 	testutil.FailErr(t, "request checkpoint", err)
 	mgr.Authority.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
@@ -108,16 +108,16 @@ func TestResolveCheckpointGrantBlockedWhenAuthzLedgerFails(t *testing.T) {
 	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: events.NewMemoryHub()},
 		authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.FailStore{}}})
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
-		SessionID:      sessionID,
-		Kind:           api.CheckpointKindToolApproval,
-		Type:           hitl.DecisionTypeApprove,
-		Title:          "Approve command",
+		SessionID: sessionID,
+		Kind:      api.CheckpointKindToolApproval,
+		Type:      hitl.DecisionTypeApprove,
+		Title:     "Approve command",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo hi"},
+			},
+		},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	mgr.Authority.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
@@ -137,16 +137,16 @@ func TestRepeatDoesNotChangePlanID(t *testing.T) {
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	insertSession(t, sqlDB, sessionID)
 	base := hitl.CheckpointRequest{
-		SessionID:      sessionID,
-		Kind:           api.CheckpointKindToolApproval,
-		Type:           hitl.DecisionTypeApprove,
-		Title:          "Approve command",
+		SessionID: sessionID,
+		Kind:      api.CheckpointKindToolApproval,
+		Type:      hitl.DecisionTypeApprove,
+		Title:     "Approve command",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo hi"},
+			},
+		},
 	}
 	respBase, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, base)
 	testutil.FailErr(t, "RequestCheckpoint base", err)
@@ -188,13 +188,13 @@ func TestManagerResolveExactReplayReturnsCommittedDecision(t *testing.T) {
 	insertSession(t, sqlDB, sessionID)
 
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
-		SessionID:      sessionID,
-		Kind:           api.CheckpointKindToolApproval,
+		SessionID: sessionID,
+		Kind:      api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	approveCurrentOption(t, ctx, mgr, sessionID, resp.CheckpointID)
@@ -212,10 +212,10 @@ func TestManagerRequiresPlanOptionForToolApproval(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+		},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	_, err = mgr.ResolveCheckpoint(ctx, sessionID, resp.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: true}, nil)

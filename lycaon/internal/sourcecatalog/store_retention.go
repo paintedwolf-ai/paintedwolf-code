@@ -383,6 +383,7 @@ func (c *Catalog) Drain(ctx context.Context) error {
 	if c == nil {
 		return nil
 	}
+	c.Literals.cache.seal()
 	c.mu.Lock()
 	var pending []<-chan struct{}
 	for _, rec := range c.records {
@@ -400,7 +401,10 @@ func (c *Catalog) Drain(ctx context.Context) error {
 		case <-done:
 		}
 	}
-	return c.Trees.Drain(ctx)
+	if err := c.Trees.Drain(ctx); err != nil {
+		return err
+	}
+	return c.Literals.cache.join(ctx)
 }
 
 func (c *TreeStores) Drain(ctx context.Context) error {

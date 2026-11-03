@@ -17,7 +17,7 @@ func TestHumanStartSupersedesActiveNonAmbientRun(t *testing.T) {
 	ctx := context.Background()
 
 	first, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "first StartHuman", err)
 	firstPlanID := first.BlueprintPath
@@ -26,7 +26,7 @@ func TestHumanStartSupersedesActiveNonAmbientRun(t *testing.T) {
 	}
 
 	second, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "second StartHuman supersede", err)
 	if second.ID == first.ID {
@@ -53,7 +53,7 @@ func TestHumanStartSupersedesAcrossWorkflows(t *testing.T) {
 	ctx := context.Background()
 
 	first, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman plan", err)
 
@@ -74,7 +74,7 @@ func TestFailedHumanStartLeavesActiveRunUntouched(t *testing.T) {
 	ctx := context.Background()
 
 	active, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman plan", err)
 
@@ -95,7 +95,7 @@ func TestHumanReplacementRequiresReviewedActiveRevision(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	active, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman plan", err)
 
@@ -124,7 +124,7 @@ func TestCoordinatorStartRequiresHumanActionWhenActive(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 
@@ -139,7 +139,7 @@ func TestPlanEmptyStartWaitsForWorkflowRequest(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := workflowCaller(t, mgr)
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	if run.CurrentPhase != "research" {
@@ -167,7 +167,7 @@ func TestPlanExplicitRequestStartsWithoutAsk(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "weather CLI",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "weather CLI",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 	if run.CurrentPhase != "research" {

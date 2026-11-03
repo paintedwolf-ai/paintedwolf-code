@@ -63,10 +63,10 @@ class WorkflowCommandTests(unittest.TestCase):
         matrix = self.command('matrix', 'fast')
         self.assertEqual(matrix.returncode, 0, matrix.stderr)
         rows = json.loads(matrix.stdout)['include']
-        self.assertEqual([row['lane'] for row in rows], ['ready'])
+        self.assertEqual({row['lane'] for row in rows}, {'ready', 'ready-lint'})
         capacity = self.command('max-parallel', 'fast')
         self.assertEqual(capacity.returncode, 0, capacity.stderr)
-        self.assertEqual(int(capacity.stdout), 1)
+        self.assertEqual(int(capacity.stdout), 2)
 
     def test_required_job_verdict_reaches_the_process_exit(self):
         results = json.dumps({'verification': {'result': 'success'}, 'platform': {'result': 'skipped'}})
@@ -80,7 +80,7 @@ class WorkflowCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             summary = Path(directory) / "summary.md"
             measured = Path(directory) / "timings.json"
-            measured.write_text(json.dumps({"runs": [42], "lanes": {"ready": 250}}))
+            measured.write_text(json.dumps({"runs": [42], "lanes": {"ready": 250, "ready-lint": 100}}))
             result = self.command('matrix', 'fast', '--timings', str(measured),
                                   GITHUB_STEP_SUMMARY=str(summary))
             self.assertEqual(result.returncode, 0, result.stderr)

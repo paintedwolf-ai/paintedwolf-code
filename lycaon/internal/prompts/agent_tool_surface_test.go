@@ -43,27 +43,26 @@ func TestLoadAgentToolSurfaceExploreReadonly(t *testing.T) {
 	if data.ToolProfile != "explore_readonly" {
 		t.Fatalf("profile = %q", data.ToolProfile)
 	}
-	foundRead := false
-	foundFind := false
+	foundCommand := false
 	for _, tool := range data.Tools {
-		if tool.Name == "read" {
-			foundRead = true
-			if len(tool.RequiredArgs) != 1 || tool.RequiredArgs[0] != "path" {
-				t.Fatalf("read required = %v", tool.RequiredArgs)
-			}
-		}
-		if tool.Name == "find" {
-			foundFind = true
-		}
-		if tool.Name == "command" {
-			t.Fatal("explore_readonly tool surface must not include command")
+		switch tool.Name {
+		case "command":
+			foundCommand = true
+		case "read", "grep", "find", "list_dir", "jq":
+			t.Fatalf("explore_readonly loads retired routine schema %s up front", tool.Name)
 		}
 	}
-	if !foundRead {
-		t.Fatal("read not in tool surface")
+	requestable := map[string]bool{}
+	for _, tool := range data.Requestable {
+		requestable[tool.Name] = true
 	}
-	if !foundFind {
-		t.Fatal("find not in tool surface")
+	if !foundCommand {
+		t.Fatal("explore_readonly must offer command")
+	}
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq"} {
+		if requestable[retired] {
+			t.Errorf("retired routine schema %s is requestable", retired)
+		}
 	}
 
 }

@@ -17,7 +17,7 @@ dependencies:
     version: "^1.0.0"
 ```
 
-- `manifest_version`, `id`, `name`, canonical SemVer `version`, and `compatibility.extension_api` are required. The document version is currently `1`; the host extension API is currently `1.1.0` and must satisfy the declared range.
+- `manifest_version`, `id`, `name`, canonical SemVer `version`, and `compatibility.extension_api` are required. The document version is currently `1`; the host extension API is currently `1.2.0` and must satisfy the declared range.
 - Optional: `compatibility.requires_capabilities`, `dependencies`, `requires_scanners`, and `feature`. Use capability `approvals` when the pack relies on approval-rule support. A non-stock dependency also requires a `source`; unmet dependencies or host-resource requirements mean the pack does not contribute.
 - Pack ids use plain segments only — `.`, `..`, and dot-prefixed segments are rejected.
 
@@ -49,7 +49,7 @@ OAR policy identity comes from the document, independently of its filename. Dupl
 
 Contribution, credential-slot and detection-pack unit ids carry your pack id, so file names are yours to choose: another pack shipping `commands/format.yaml` is a different declaration, not a competing one. Those units are never `own`-able, because there is only ever one contribution.
 
-Credential-slot units follow the [recognition contract](credential-slots.md). They add names and payload mappings to the bundled baseline; OAR owns advisory effects. Declare capability `host.credential_slots`.
+Credential-slot units follow the [recognition contract](references/credential-slots.md). They add names and payload mappings to the bundled baseline; OAR owns advisory effects. Declare capability `host.credential_slots`.
 
 A detection pack under `host/detection-packs/` carries Sigma rules that add one approval ask or hold a mediated CONNECT. Additive at every scope: a pack id already provided is refused — the first claimant keeps it and stays live — `own:` is refused for these units outright, every unit must come from the pack providing its manifest, and a project may contribute none. Ship `fixtures.yaml` — `pw extensions validate` rehearses each declared case through the production adapters, and fails a rule that falls outside the supported Sigma subset, since nothing it declares would run. Use the `write-detection-pack` skill for rule authoring.
 

@@ -13,7 +13,7 @@ from scripts.linux_release.installed_cases import native_workflows as owner
 
 class NativeWorkflowTests(unittest.TestCase):
     def fixture(self, directory):
-        root = Path(directory)
+        root = Path(directory).resolve()
         packages, output = root / "packages", root / "evidence"
         packages.mkdir(); output.mkdir()
         package = packages / "app.deb"
@@ -117,7 +117,7 @@ class NativeWorkflowTests(unittest.TestCase):
                 command.assert_not_called()
 
     def test_owned_lock_refuses_concurrent_transaction_and_releases_normally(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(Path, "home", return_value=Path(directory)):
+        with tempfile.TemporaryDirectory() as directory, patch.object(Path, "home", return_value=Path(directory).resolve()):
             with owner.native_lock():
                 with self.assertRaisesRegex(owner.CaseUnavailable, "another owned"):
                     with owner.native_lock():

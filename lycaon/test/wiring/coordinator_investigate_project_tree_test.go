@@ -29,16 +29,13 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 			switch stage.Add(1) {
 			case 1:
 				return modelcall.Completion{ToolCalls: []api.ToolCall{{
-					ID: "r1", Name: "request_tools", Args: map[string]any{"need": "write and verify"},
+					ID: "r1", Name: "request_tools", Args: map[string]any{"need": "command and verify"},
 				}}}
 			case 2:
 				return modelcall.Completion{ToolCalls: []api.ToolCall{{
 					ID:   "w1",
-					Name: "write",
-					Args: map[string]any{
-						"path":    "src/foo.go",
-						"content": "package foo\n// investigate project write\n",
-					},
+					Name: "command",
+					Args: map[string]any{"command": "printf '%s' 'package foo\n// investigate project write\n' > src/foo.go"},
 				}}}
 			case 3:
 				return modelcall.Completion{ToolCalls: []api.ToolCall{{

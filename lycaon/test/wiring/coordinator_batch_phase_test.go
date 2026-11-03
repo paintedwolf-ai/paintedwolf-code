@@ -66,11 +66,8 @@ func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
 			Pattern: "Add a // TODO: review here",
 			ToolCalls: []llm.MockToolCall{{
 				ID:   "w1",
-				Name: "write",
-				Args: map[string]any{
-					"path":    "main.go",
-					"content": "// TODO: review here\npackage main\n\nfunc main() {}\n",
-				},
+				Name: "command",
+				Args: map[string]any{"command": "printf '%s' '// TODO: review here\npackage main\n\nfunc main() {}\n' > main.go"},
 			}},
 			FollowUpText: "Added TODO comment.",
 		},

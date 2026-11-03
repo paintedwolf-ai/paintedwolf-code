@@ -2,6 +2,7 @@ package layeredfs
 
 import (
 	"bytes"
+	"errors"
 	"io/fs"
 	"sort"
 	"strings"
@@ -49,51 +50,67 @@ func setAttrPath(c *Core, qpath QualifiedPath, req SetAttrRequest) (EntryAttr, e
 	}
 
 	followFinal := !req.NoFollow
-	res, err := resolvePath(c, qpath, followFinal, true)
-	if err != nil {
-		return EntryAttr{}, err
-	}
-
-	node, err := ensureCopiedUpNode(c, res.qpath)
-	if err != nil {
-		return EntryAttr{}, err
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state.released {
-		return EntryAttr{}, ErrViewReleased
-	}
-	changed := false
-	now := time.Now()
-	if req.Mode != nil {
-		if node.kind == EntrySymlink {
-			return EntryAttr{}, syscall.EOPNOTSUPP
+	for {
+		startGen, err := currentNamespaceGen(c)
+		if err != nil {
+			return EntryAttr{}, err
 		}
-		typeBits := node.mode & fs.ModeType
-		newPerm := req.Mode.Perm() | (*req.Mode & (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky))
-		newMode := typeBits | newPerm
-		if newMode != node.mode {
-			node.mode = newMode
+		res, err := resolvePath(c, qpath, followFinal, true)
+		if err != nil {
+			return EntryAttr{}, err
+		}
+
+		node, err := ensureCopiedUpNode(c, res.qpath, startGen)
+		if errors.Is(err, errNamespaceRetry) {
+			continue
+		}
+		if err != nil {
+			return EntryAttr{}, err
+		}
+
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			return EntryAttr{}, ErrViewReleased
+		}
+		if c.state.nsGen != startGen || node.flags.unlinked || c.state.pathIndex[res.qpath] != node.id {
+			c.mu.Unlock()
+			continue
+		}
+		changed := false
+		now := time.Now()
+		if req.Mode != nil {
+			if node.kind == EntrySymlink {
+				c.mu.Unlock()
+				return EntryAttr{}, syscall.EOPNOTSUPP
+			}
+			typeBits := node.mode & fs.ModeType
+			newPerm := req.Mode.Perm() | (*req.Mode & (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky))
+			newMode := typeBits | newPerm
+			if newMode != node.mode {
+				node.mode = newMode
+				changed = true
+			}
+		}
+		if req.ATime != nil {
+			node.atime = *req.ATime
 			changed = true
 		}
-	}
-	if req.ATime != nil {
-		node.atime = *req.ATime
-		changed = true
-	}
-	if req.MTime != nil {
-		if !node.mtime.Equal(*req.MTime) {
-			node.mtime = *req.MTime
-			changed = true
+		if req.MTime != nil {
+			if !node.mtime.Equal(*req.MTime) {
+				node.mtime = *req.MTime
+				changed = true
+			}
 		}
+		if changed {
+			node.ctime = now
+			node.flags.metadataChanged = !metadataMatchesInitialLocked(node)
+			recordJournalLocked(c, JournalOpSetAttr, res.qpath, nil, node, 0)
+		}
+		attr := nodeToAttrLocked(node)
+		c.mu.Unlock()
+		return attr, nil
 	}
-	if changed {
-		node.ctime = now
-		node.flags.metadataChanged = !metadataMatchesInitialLocked(node)
-		recordJournalLocked(c, JournalOpSetAttr, res.qpath, nil, node, 0)
-	}
-	return nodeToAttrLocked(node), nil
 }
 
 // GetXattr retrieves an extended attribute from qpath.
@@ -148,28 +165,42 @@ func setXattrPath(c *Core, qpath QualifiedPath, name string, value []byte, noFol
 	}
 	defer c.barrier.leaveMutation()
 
-	res, err := resolvePath(c, qpath, !noFollow, true)
-	if err != nil {
-		return err
-	}
-	node, err := ensureCopiedUpNode(c, res.qpath)
-	if err != nil {
-		return err
-	}
+	for {
+		startGen, err := currentNamespaceGen(c)
+		if err != nil {
+			return err
+		}
+		res, err := resolvePath(c, qpath, !noFollow, true)
+		if err != nil {
+			return err
+		}
+		node, err := ensureCopiedUpNode(c, res.qpath, startGen)
+		if errors.Is(err, errNamespaceRetry) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state.released {
-		return ErrViewReleased
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			return ErrViewReleased
+		}
+		if c.state.nsGen != startGen || node.flags.unlinked || c.state.pathIndex[res.qpath] != node.id {
+			c.mu.Unlock()
+			continue
+		}
+		if node.xattrs == nil {
+			node.xattrs = make(map[string][]byte)
+		}
+		node.xattrs[name] = append([]byte(nil), value...)
+		node.ctime = time.Now()
+		node.flags.metadataChanged = !metadataMatchesInitialLocked(node)
+		recordJournalLocked(c, JournalOpSetXattr, res.qpath, nil, node, int64(len(value)))
+		c.mu.Unlock()
+		return nil
 	}
-	if node.xattrs == nil {
-		node.xattrs = make(map[string][]byte)
-	}
-	node.xattrs[name] = append([]byte(nil), value...)
-	node.ctime = time.Now()
-	node.flags.metadataChanged = !metadataMatchesInitialLocked(node)
-	recordJournalLocked(c, JournalOpSetXattr, res.qpath, nil, node, int64(len(value)))
-	return nil
 }
 
 // RemoveXattr deletes an extended attribute from qpath.
@@ -186,28 +217,43 @@ func removeXattrPath(c *Core, qpath QualifiedPath, name string, noFollow bool) e
 	}
 	defer c.barrier.leaveMutation()
 
-	res, err := resolvePath(c, qpath, !noFollow, true)
-	if err != nil {
-		return err
-	}
-	node, err := ensureCopiedUpNode(c, res.qpath)
-	if err != nil {
-		return err
-	}
+	for {
+		startGen, err := currentNamespaceGen(c)
+		if err != nil {
+			return err
+		}
+		res, err := resolvePath(c, qpath, !noFollow, true)
+		if err != nil {
+			return err
+		}
+		node, err := ensureCopiedUpNode(c, res.qpath, startGen)
+		if errors.Is(err, errNamespaceRetry) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state.released {
-		return ErrViewReleased
+		c.mu.Lock()
+		if c.state.released {
+			c.mu.Unlock()
+			return ErrViewReleased
+		}
+		if c.state.nsGen != startGen || node.flags.unlinked || c.state.pathIndex[res.qpath] != node.id {
+			c.mu.Unlock()
+			continue
+		}
+		if _, ok := node.xattrs[name]; !ok {
+			c.mu.Unlock()
+			return syscall.ENODATA
+		}
+		delete(node.xattrs, name)
+		node.ctime = time.Now()
+		node.flags.metadataChanged = !metadataMatchesInitialLocked(node)
+		recordJournalLocked(c, JournalOpRemoveXattr, res.qpath, nil, node, 0)
+		c.mu.Unlock()
+		return nil
 	}
-	if _, ok := node.xattrs[name]; !ok {
-		return syscall.ENODATA
-	}
-	delete(node.xattrs, name)
-	node.ctime = time.Now()
-	node.flags.metadataChanged = !metadataMatchesInitialLocked(node)
-	recordJournalLocked(c, JournalOpRemoveXattr, res.qpath, nil, node, 0)
-	return nil
 }
 
 func metadataMatchesInitialLocked(n *privateNode) bool {

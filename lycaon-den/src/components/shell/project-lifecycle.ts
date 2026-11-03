@@ -13,13 +13,78 @@ import { prepareFilesRootDetach, dropFilesBuffersForRoot } from "../../files/doc
 import { type Project } from "../../api/types.ts";
 import { LycaonApiError } from "../../api/http.ts";
 import { pickProjectFolder } from "../../platform/files/folder.ts";
+import {
+  formatBackgroundCommandWithChat,
+  sameRunningCommandList,
+  type RunningCommandSummary,
+} from "../../session/confirm-chat-delete.ts";
 import { type createProjectsStore } from "../../store/projects-store.ts";
+
+export function extractRootBusyBackgroundProcesses(
+  details: Record<string, unknown> | undefined,
+): RunningCommandSummary[] {
+  const raw = details?.background_processes;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .map((item) => ({
+      process_id:
+        typeof item.process_id === "string"
+          ? item.process_id
+          : typeof item.handle === "string"
+            ? item.handle
+            : undefined,
+      handle: typeof item.handle === "string" ? item.handle : undefined,
+      session_id: typeof item.session_id === "string" ? item.session_id : undefined,
+      session_title: typeof item.session_title === "string" ? item.session_title : undefined,
+      session_archived: Boolean(item.session_archived),
+      command: typeof item.command === "string" ? item.command : undefined,
+      root_id: typeof item.root_id === "string" ? item.root_id : undefined,
+      ports: Array.isArray(item.ports)
+        ? item.ports.filter((p): p is string => typeof p === "string")
+        : undefined,
+    }));
+}
+
+export function formatForcedLifecycleMessage(
+  details: Record<string, unknown> | undefined,
+): string {
+  const record = details ?? {};
+  const count = (key: string) => {
+    const value = record[key];
+    return Array.isArray(value) ? value.length : 0;
+  };
+  const bgProcesses = extractRootBusyBackgroundProcesses(record);
+  const parts = [
+    [count("documents"), "open or unsaved file"],
+    [count("sessions"), "active turn"],
+    [count("workers"), "worker"],
+    [count("overlays"), "unmerged worker result"],
+    [bgProcesses.length, "background command"],
+  ]
+    .filter(([amount]) => Number(amount) > 0)
+    .map(([amount, label]) => `${amount} ${label}${amount === 1 ? "" : "s"}`);
+  const blockers = parts.length > 0 ? parts.join(", ") : "in-flight project work";
+  const summary = `${blockers} will be discarded or stopped. Any edits made before removal completes may also be lost. This cannot be undone.`;
+  if (bgProcesses.length === 0) {
+    return summary;
+  }
+  const lines = [
+    summary,
+    bgProcesses.length === 1
+      ? "1 background command bound to this folder will stop:"
+      : `${bgProcesses.length} background commands bound to this folder will stop:`,
+    ...bgProcesses.map((proc) => `• ${formatBackgroundCommandWithChat(proc)}`),
+  ];
+  return lines.join("\n");
+}
 
 export function createProjectLifecycle(options: {
   projects: Pick<ReturnType<typeof createProjectsStore>, "byId" | "upsert" | "applyPatch">;
   activeProjectId: () => string | null | undefined;
   activeProject: () => Project | null | undefined;
   report: (projectId: string, error: unknown) => void;
+  onOpenRunning?: (projectId: string) => void;
 }) {
   const [moveTarget, setMoveTarget] = createSignal<string | null>(null);
   const [moveBusy, setMoveBusy] = createSignal(false);
@@ -84,25 +149,17 @@ export function createProjectLifecycle(options: {
     title: string,
     okLabel: string,
     error: LycaonApiError,
+    projectId: string,
   ): Promise<boolean> {
-    const details = error.details ?? {};
-    const count = (key: string) => {
-      const value = details[key];
-      return Array.isArray(value) ? value.length : 0;
-    };
-    const parts = [
-      [count("documents"), "open or unsaved file"],
-      [count("sessions"), "active turn"],
-      [count("workers"), "worker"],
-      [count("overlays"), "unmerged worker result"],
-    ]
-      .filter(([amount]) => Number(amount) > 0)
-      .map(([amount, label]) => `${amount} ${label}${amount === 1 ? "" : "s"}`);
-    const blockers = parts.length > 0 ? parts.join(", ") : "in-flight project work";
+    const hasBg = extractRootBusyBackgroundProcesses(error.details).length > 0;
     return confirmDestructive({
       title,
-      message: `${blockers} will be discarded or stopped. Any edits made before removal completes may also be lost. This cannot be undone.`,
+      message: formatForcedLifecycleMessage(error.details),
       okLabel,
+      onOpenRunning:
+        hasBg && options.onOpenRunning
+          ? () => options.onOpenRunning?.(projectId)
+          : undefined,
     });
   }
 
@@ -199,8 +256,39 @@ export function createProjectLifecycle(options: {
       );
     } catch (err) {
       if (!(err instanceof LycaonApiError) || err.code !== "root_busy") throw err;
-      if (!(await confirmForcedLifecycle("Remove folder", "Remove anyway", err))) {
-        return;
+      let busyError: LycaonApiError = err;
+      for (;;) {
+        if (!(await confirmForcedLifecycle("Remove folder", "Remove anyway", busyError, projectId))) {
+          return;
+        }
+        if (typeof client.listProjectBackgroundProcesses === "function") {
+          const currentBg = extractRootBusyBackgroundProcesses(busyError.details);
+          let liveForRoot: RunningCommandSummary[] | null = null;
+          try {
+            const resp = await client.listProjectBackgroundProcesses(projectId);
+            liveForRoot = (resp.processes ?? []).filter(
+              (p) =>
+                p.running &&
+                (p.root_id === rootId ||
+                  currentBg.some((c) => (c.process_id ?? c.handle) === p.process_id)),
+            );
+          } catch {
+            liveForRoot = null;
+          }
+          if (liveForRoot !== null && !sameRunningCommandList(currentBg, liveForRoot)) {
+            busyError = new LycaonApiError(
+              busyError.message,
+              busyError.status,
+              busyError.code,
+              {
+                suggestedAction: busyError.suggestedAction,
+                details: { ...(busyError.details ?? {}), background_processes: liveForRoot },
+              },
+            );
+            continue;
+          }
+        }
+        break;
       }
       updated = await mutateProjectRoots(() =>
         client.detachProjectRoot(projectId, rootId, { force: true }),
@@ -218,10 +306,18 @@ export function createProjectLifecycle(options: {
   };
 }
 
-export function createWorkspaceProjectRemoval(props: Pick<ShellProps, "projects" | "shell" | "recents">) {
+export function createWorkspaceProjectRemoval(
+  props: Pick<ShellProps, "projects" | "shell" | "recents">,
+  onOpenRunning?: (projectId: string) => void,
+) {
   const projectRemovalReview = createProjectRemovalReview();
   const deleteProject = createProjectRemoval({
-    review: (assessment, projectId) => projectRemovalReview.show(assessment, props.projects.summary(projectId)?.displayName ?? "this project"),
+    review: (assessment, projectId) =>
+      projectRemovalReview.show(
+        assessment,
+        props.projects.summary(projectId)?.displayName ?? "this project",
+        onOpenRunning ? () => onOpenRunning(projectId) : undefined,
+      ),
     client: getLycaonClient,
     confirm: confirmDestructive,
     prepare: async (projectId) => {

@@ -1,8 +1,10 @@
 package sandbox
 
 import (
+	"io/fs"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
@@ -16,6 +18,14 @@ func IsHiddenName(name string) bool {
 // IsVCSDirBaseName reports whether baseName is VCS metadata (.git).
 func IsVCSDirBaseName(baseName string) bool {
 	return baseName == vcsDirName
+}
+
+// IsGitlinkDirEntry reports whether entry is a regular .git file whose first line starts with "gitdir:".
+func IsGitlinkDirEntry(baseName, absPath string, entry fs.DirEntry) bool {
+	if !IsVCSDirBaseName(baseName) || entry == nil || entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 {
+		return false
+	}
+	return gitrepo.IsGitlinkFile(absPath)
 }
 
 // IsEngineOverlayBaseName reports whether baseName is the project settings overlay.

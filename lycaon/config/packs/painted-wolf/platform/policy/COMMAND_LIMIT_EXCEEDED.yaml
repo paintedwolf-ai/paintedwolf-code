@@ -1,0 +1,44 @@
+oar: '1.0'
+id: COMMAND_LIMIT_EXCEEDED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.resource_unit
+  - paintedwolf.limit_id
+  - paintedwolf.maximum
+  - paintedwolf.observed
+  - paintedwolf.diagnostic_top_level
+  - paintedwolf.limit_observation_known
+when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
+effect: block
+copy:
+  what: 'A command resource limit was reached{% if paintedwolf.limit_id %}: {{ paintedwolf.limit_id }}{% endif %}.{% if paintedwolf.limit_observation_known %} Observed
+    {{ paintedwolf.observed }}{% if paintedwolf.resource_unit %} {{ paintedwolf.resource_unit }}{% endif %}; maximum {{ paintedwolf.maximum }}.{% endif %}'
+  cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}The command stopped at the recorded boundary.{% endif
+    %}'
+  fix: '{% if paintedwolf.diagnostic_top_level %}Reduce the size or complexity of the submitted shell source before resubmitting it.{% endif %}'
+  instead: ''
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command reached a resource limit
+x-paintedwolf-scenarios:
+- id: captured_unit
+  vars:
+    tool: command
+    limit_id: ast_nodes
+    resource_unit: nodes
+    maximum: 8192
+    observed: 8193
+  expect_contains:
+  - 'Code: COMMAND_LIMIT_EXCEEDED'
+  - ast_nodes
+  - '8192'
+  - '8193'

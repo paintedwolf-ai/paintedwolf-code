@@ -31,17 +31,21 @@ type Cookie struct {
 	SameSite string    `json:"same_site,omitempty"`
 	Expires  time.Time `json:"expires,omitempty"`
 	Created  time.Time `json:"created"`
+	// NativeIssuer is an opaque response-issuer receipt, never live authority.
+	NativeIssuer string `json:"native_issuer,omitempty"`
 }
 
 // Store holds the cookies of one jar and counts the traffic through it.
 type Store struct {
-	mu      sync.Mutex
-	cookies []Cookie
-	now     func() time.Time
-	sent    int
-	stored  int
-	changed bool
-	changes []cookieChange
+	mu            sync.Mutex
+	cookies       []Cookie
+	now           func() time.Time
+	sent          int
+	stored        int
+	changed       bool
+	changes       []cookieChange
+	nativeIssuer  string
+	allowDelivery func(Cookie) bool
 }
 
 // New loads unexpired cookies without marking the store dirty.
@@ -129,7 +133,7 @@ func (s *Store) Names() []string {
 // NamesForURL returns only names eligible for this destination, without counting
 // a send or exposing values. It shares Lookup's domain/path/security selection.
 func (s *Store) NamesForURL(u *url.URL) []string {
-	matched := s.matching(u)
+	matched := s.Selected(u)
 	seen := make(map[string]bool, len(matched))
 	out := make([]string, 0, len(matched))
 	for _, cookie := range matched {
@@ -145,8 +149,11 @@ func (s *Store) NamesForURL(u *url.URL) []string {
 // Lookup returns the value of the cookie named name that a request to u would
 // carry, choosing the same cookie the request would send first.
 func (s *Store) Lookup(u *url.URL, name string) (string, bool) {
-	for _, c := range s.matching(u) {
+	for _, c := range s.Selected(u) {
 		if c.Name == name {
+			if !s.deliveryAllowed(c) {
+				return "", true
+			}
 			return c.Value, true
 		}
 	}
@@ -167,9 +174,9 @@ func (s *Store) Changed() bool {
 	return s.changed
 }
 
-// matching is RFC 6265 §5.4 selection: the cookies a request to u carries,
+// Selected returns copied cookie facts using RFC 6265 §5.4 selection: the cookies a request to u carries,
 // longest path first, then oldest first. It does not count the traffic.
-func (s *Store) matching(u *url.URL) []Cookie {
+func (s *Store) Selected(u *url.URL) []Cookie {
 	if u == nil {
 		return nil
 	}
@@ -203,9 +210,12 @@ func (s *Store) matching(u *url.URL) []Cookie {
 
 // Cookies implements http.CookieJar.
 func (s *Store) Cookies(u *url.URL) []*http.Cookie {
-	matched := s.matching(u)
+	matched := s.Selected(u)
 	out := make([]*http.Cookie, 0, len(matched))
 	for _, c := range matched {
+		if !s.deliveryAllowed(c) {
+			continue
+		}
 		// Only name and value travel on a request; the attributes are the ones
 		// the origin set, so the cookie describes itself the way it was stored.
 		out = append(out, &http.Cookie{ //nolint:gosec // G124 grades response attributes; a request Cookie header carries none
@@ -240,6 +250,7 @@ func (s *Store) SetCookies(u *url.URL, cookies []*http.Cookie) {
 		if !ok {
 			continue
 		}
+		c.NativeIssuer = s.nativeIssuer
 		s.changes = append(s.changes, cookieChange{cookie: c, remove: remove})
 		s.replace(c, remove, now)
 	}
@@ -324,7 +335,7 @@ func (s *Store) replace(c Cookie, remove bool, now time.Time) {
 // samePersistedForm reports whether two cookies would encode identically.
 // Created is excluded: it is carried forward from the cookie being replaced.
 func (c Cookie) samePersistedForm(other Cookie) bool {
-	return c.Value == other.Value && c.HostOnly == other.HostOnly && c.Secure == other.Secure &&
+	return c.NativeIssuer == other.NativeIssuer && c.Value == other.Value && c.HostOnly == other.HostOnly && c.Secure == other.Secure &&
 		c.HTTPOnly == other.HTTPOnly && c.SameSite == other.SameSite && c.Expires.Equal(other.Expires)
 }
 

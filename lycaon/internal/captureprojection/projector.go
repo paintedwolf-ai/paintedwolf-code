@@ -4,7 +4,6 @@ package captureprojection
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -12,9 +11,7 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"image/png"
-	"io"
 	"math"
-	"sort"
 	"strings"
 	"sync"
 	"unicode"
@@ -165,128 +162,14 @@ func (p *Projector) TextSpans(
 	}}, byteSpans(value, matched), nil
 }
 
-// byteSpans converts rune-offset matches to input byte offsets in one pass.
+// byteSpans adapts the shared rune-to-original-byte conversion.
 func byteSpans(value string, hits []secretmatch.Match) []Span {
-	if len(hits) == 0 {
-		return nil
-	}
-	bounds := make([]int, 0, 2*len(hits))
-	for _, hit := range hits {
-		bounds = append(bounds, hit.Start, hit.End)
-	}
-	sort.Ints(bounds)
-	at := make(map[int]int, len(bounds))
-	next, runeIdx := 0, 0
-	for byteIdx := range value {
-		for next < len(bounds) && bounds[next] == runeIdx {
-			at[bounds[next]] = byteIdx
-			next++
-		}
-		runeIdx++
-	}
-	for next < len(bounds) {
-		at[bounds[next]] = len(value)
-		next++
-	}
-	out := make([]Span, 0, len(hits))
-	for _, hit := range hits {
-		start, end := at[hit.Start], at[hit.End]
-		if end > start {
-			out = append(out, Span{Start: start, End: end})
-		}
+	input := secretmatch.MatchByteSpans(value, hits)
+	out := make([]Span, len(input))
+	for i, span := range input {
+		out[i] = Span{span.Start, span.End}
 	}
 	return out
-}
-
-// JSON screens strings and object keys while preserving JSON structure.
-func (p *Projector) JSON(ctx context.Context, scope Scope, label string, raw []byte) ([]byte, Metadata, error) {
-	if p == nil || p.matcher == nil {
-		return nil, Metadata{}, ErrUnavailable
-	}
-	if len(raw) == 0 {
-		return nil, Metadata{StructuredCoverage: true}, nil
-	}
-	var value any
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := decoder.Decode(&value); err != nil {
-		return nil, Metadata{}, fmt.Errorf("decode captured JSON: %w", err)
-	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		if err == nil {
-			return nil, Metadata{}, fmt.Errorf("decode captured JSON: multiple values")
-		}
-		return nil, Metadata{}, fmt.Errorf("decode captured JSON trailer: %w", err)
-	}
-	meta := Metadata{StructuredCoverage: true}
-	projected, err := p.projectJSONValue(ctx, scope, label, value, &meta)
-	if err != nil {
-		return nil, Metadata{}, err
-	}
-	out, err := json.Marshal(projected)
-	if err != nil {
-		return nil, Metadata{}, fmt.Errorf("encode screened capture JSON: %w", err)
-	}
-	return out, meta, nil
-}
-
-func (p *Projector) projectJSONValue(
-	ctx context.Context, scope Scope, label string, value any, meta *Metadata,
-) (any, error) {
-	switch typed := value.(type) {
-	case string:
-		projected, err := p.Text(ctx, scope, label, typed)
-		if err != nil {
-			return nil, err
-		}
-		mergeMetadata(meta, projected.Metadata)
-		return projected.Value, nil
-	case []any:
-		out := make([]any, len(typed))
-		for i := range typed {
-			projected, err := p.projectJSONValue(ctx, scope, label, typed[i], meta)
-			if err != nil {
-				return nil, err
-			}
-			out[i] = projected
-		}
-		return out, nil
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		keys := make([]string, 0, len(typed))
-		for key := range typed {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			projectedKey, err := p.Text(ctx, scope, label+".key", key)
-			if err != nil {
-				return nil, err
-			}
-			mergeMetadata(meta, projectedKey.Metadata)
-			safeKey := uniqueJSONKey(out, projectedKey.Value)
-			projected, err := p.projectJSONValue(ctx, scope, label+"."+safeKey, typed[key], meta)
-			if err != nil {
-				return nil, err
-			}
-			out[safeKey] = projected
-		}
-		return out, nil
-	default:
-		return value, nil
-	}
-}
-
-func uniqueJSONKey(values map[string]any, key string) string {
-	if _, exists := values[key]; !exists {
-		return key
-	}
-	for i := 2; ; i++ {
-		candidate := fmt.Sprintf("%s#%d", key, i)
-		if _, exists := values[candidate]; !exists {
-			return candidate
-		}
-	}
 }
 
 func mergeMetadata(dst *Metadata, src Metadata) {
@@ -501,8 +384,8 @@ func (m RasterMask) Union(o RasterMask) RasterMask {
 	out := RasterMask{
 		rects: append(append([]Rect(nil), m.rects...), o.rects...), cssWidth: max(m.cssWidth, o.cssWidth), cssHeight: max(m.cssHeight, o.cssHeight),
 		Metadata: Metadata{
-			RedactedCount:  max(m.Metadata.RedactedCount, o.Metadata.RedactedCount),
-			CatalogVersion: m.Metadata.CatalogVersion,
+			RedactedCount:      max(m.Metadata.RedactedCount, o.Metadata.RedactedCount),
+			CatalogVersion:     m.Metadata.CatalogVersion,
 			StructuredCoverage: m.Metadata.StructuredCoverage && o.Metadata.StructuredCoverage,
 		},
 	}

@@ -3,13 +3,14 @@ id: EXTRACT_PATH_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - extract_archive
 requires:
   profiles:
   - filesystem
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.path
 when: paintedwolf.rejection_code == "EXTRACT_PATH_DENIED"

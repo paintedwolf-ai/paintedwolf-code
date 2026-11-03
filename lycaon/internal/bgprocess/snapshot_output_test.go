@@ -2,6 +2,7 @@ package bgprocess
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -72,7 +73,20 @@ func TestSnapshotReportsRingEviction(t *testing.T) {
 }
 
 func TestTerminalPublicationAndOutputPreserveTermination(t *testing.T) {
-	for _, reason := range []TerminationReason{TerminationTimedOut, TerminationStopped, TerminationExited, "", "future_reason"} {
+	for _, reason := range []TerminationReason{
+		TerminationTimedOut,
+		TerminationStoppedByAgent,
+		TerminationStoppedByUser,
+		TerminationChatDeleted,
+		TerminationProjectDeleted,
+		TerminationRootDetached,
+		TerminationAppQuit,
+		TerminationWorkerCompleted,
+		TerminationWorkerCancelled,
+		TerminationExited,
+		"",
+		"future_reason",
+	} {
 		t.Run(string(reason), func(t *testing.T) {
 			h := newProjectionHarness(t, DefaultRingBufferBytes)
 			h.write("stderr", "exited successfully; timed out; stopped; permission denied")
@@ -99,5 +113,19 @@ func TestTerminalPublicationAndOutputPreserveTermination(t *testing.T) {
 				t.Fatalf("output lost terminal facts: %+v", raw)
 			}
 		})
+	}
+}
+
+func TestReadOutputSerializesEmptyChunksArrayWhenSilent(t *testing.T) {
+	h := newProjectionHarness(t, DefaultRingBufferBytes)
+	out, err := h.reg.Output.ReadOutput(t.Context(), "s1", "h1")
+	testutil.FailErr(t, "read silent process output", err)
+	if out.Chunks == nil || len(out.Chunks) != 0 || !out.Running {
+		t.Fatalf("silent process output = %+v", out)
+	}
+	encoded, err := json.Marshal(out)
+	testutil.FailErr(t, "marshal silent process output", err)
+	if !strings.Contains(string(encoded), `"chunks":[]`) {
+		t.Fatalf("json = %s, want empty chunks array", encoded)
 	}
 }

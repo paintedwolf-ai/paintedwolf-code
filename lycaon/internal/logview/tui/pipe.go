@@ -25,20 +25,20 @@ type clearStatusMsg struct{ gen int }
 // use role/body export (no │ gutters); other panes strip box-drawing from a
 // no-wrap render.
 func (m *Model) pipeExport() string {
-	text := m.pipeExportRaw()
+	text := m.pipe().pipeExportRaw()
 	if text == "" {
 		return ""
 	}
 	return strings.TrimRight(text, "\n") + "\n"
 }
 
-func (m *Model) pipeExportRaw() string {
+func (m modelPipe) pipeExportRaw() string {
 	if m.level == levelTurn && !m.diffMode && m.agent != nil && m.turnIdx < len(m.agent.Turns) {
 		return logview.ExportPromptPlain(m.plain, m.agent.Turns[m.turnIdx], logview.PromptOptions{
 			HideSystem: !m.showSystem,
 		})
 	}
-	return cleanPipeText(m.renderDetail(m.plain.WithWidth(0)))
+	return cleanPipeText(m.render().renderDetail(m.plain.WithWidth(0)))
 }
 
 // cleanPipeText drops box-drawing chrome from a painted detail render so paste
@@ -70,42 +70,42 @@ func cleanPipeText(s string) string {
 	return strings.TrimRight(strings.Join(out, "\n"), "\n")
 }
 
-func (m *Model) startPipe() {
+func (m modelPipe) startPipe() {
 	m.piping = true
 	m.pipeCmd = ""
 	m.status = ""
 }
 
-func (m *Model) clearPipe() {
+func (m modelPipe) clearPipe() {
 	m.piping = false
 	m.pipeCmd = ""
 }
 
-func (m *Model) handlePipeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m modelPipe) handlePipeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		cmd := strings.TrimSpace(m.pipeCmd)
 		m.clearPipe()
 		next := m.runPipe(cmd)
-		return m, next
+		return m.Model, next
 	case "esc":
 		m.clearPipe()
-		return m, nil
+		return m.Model, nil
 	case "backspace":
 		if m.pipeCmd != "" {
 			m.pipeCmd = m.pipeCmd[:len(m.pipeCmd)-1]
 		}
-		return m, nil
+		return m.Model, nil
 	default:
 		if len(msg.Runes) > 0 {
 			m.pipeCmd += string(msg.Runes)
 		}
-		return m, nil
+		return m.Model, nil
 	}
 }
 
 // runPipe sends the detail buffer to the clipboard (empty cmd) or to `$SHELL -c cmd`.
-func (m *Model) runPipe(cmd string) tea.Cmd {
+func (m modelPipe) runPipe(cmd string) tea.Cmd {
 	text := m.pipeExport()
 	lines := strings.Count(text, "\n")
 	if strings.TrimSpace(text) == "" {
@@ -131,7 +131,7 @@ func (m *Model) runPipe(cmd string) tea.Cmd {
 	return m.flashStatus("piped → " + cmd)
 }
 
-func (m *Model) flashStatus(text string) tea.Cmd {
+func (m modelPipe) flashStatus(text string) tea.Cmd {
 	m.statusGen++
 	gen := m.statusGen
 	m.status = text
@@ -142,7 +142,8 @@ func (m *Model) flashStatus(text string) tea.Cmd {
 
 func runPipeCommand(text, cmdline string) (stdout string, err error) {
 	shell, args := pipeShell(cmdline)
-	c, cleanup, err := execpkg.PrepareCommand(context.Background(), shell, args, execpkg.ExecOpts{
+	ctx := context.Background()
+	c, cleanup, err := execpkg.PrepareCommand(ctx, shell, args, execpkg.ExecOpts{
 		Launch: execpkg.HostLaunch("logview_pipe"),
 	})
 	if err != nil {
@@ -153,7 +154,7 @@ func runPipeCommand(text, cmdline string) (stdout string, err error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	c.Stdout = &stdoutBuf
 	c.Stderr = &stderrBuf
-	err = c.Run()
+	err = execpkg.RunPrepared(ctx, c)
 	out := stdoutBuf.String()
 	if err != nil {
 		if s := strings.TrimSpace(stderrBuf.String()); s != "" {

@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"bytes"
+	"context"
 	"mime"
 	"strings"
 	"unicode/utf8"
@@ -32,7 +33,7 @@ type bodyPlacement struct {
 
 // placeResponseBody decides how a response body reaches the caller. A landed
 // or discarded body was never buffered, so there is nothing to place.
-func placeResponseBody(resp outboundhttp.Response, tctx tools.ToolContext, landed bool, discarded bool) bodyPlacement {
+func placeResponseBody(ctx context.Context, resp outboundhttp.Response, tctx tools.ToolContext, landed bool, discarded bool) bodyPlacement {
 	switch {
 	case landed, discarded, !resp.BodyObserved:
 		return bodyPlacement{omitted: true}
@@ -41,7 +42,7 @@ func placeResponseBody(resp outboundhttp.Response, tctx tools.ToolContext, lande
 	case len(resp.Body) <= maxInlineBody:
 		return bodyPlacement{inline: string(resp.Body), encoding: "utf-8"}
 	}
-	rel, ok := landHostData(tctx, resp.Body)
+	rel, ok := landHostData(ctx, tctx, resp.Body)
 	if !ok {
 		return bodyPlacement{omitted: true, encoding: "utf-8", spillFailed: true}
 	}
@@ -50,7 +51,7 @@ func placeResponseBody(resp outboundhttp.Response, tctx tools.ToolContext, lande
 
 // landHostData writes an oversized body to the host-data tool-output store,
 // which projectpaths resolves for read and the host reclaims on its own.
-func landHostData(tctx tools.ToolContext, body []byte) (string, bool) {
+func landHostData(ctx context.Context, tctx tools.ToolContext, body []byte) (string, bool) {
 	root := strings.TrimSpace(tctx.Host.HostDataDir)
 	if root == "" {
 		return "", false
@@ -58,7 +59,7 @@ func landHostData(tctx tools.ToolContext, body []byte) (string, bool) {
 	rel := tooloutput.ToolOutputSpillRelPath(string(body))
 	store := blobstore.Store{Root: root}
 	bound := bytebound.Materialization(tooloutput.DefaultMaxSpillFileBytes)
-	if _, err := store.PutAt(rel, bytes.NewReader(body), bound); err != nil {
+	if _, err := store.PutAt(ctx, rel, bytes.NewReader(body), bound); err != nil {
 		return "", false
 	}
 	return rel, true

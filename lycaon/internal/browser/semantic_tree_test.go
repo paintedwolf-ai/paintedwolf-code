@@ -39,4 +39,9 @@ func TestSnapshotTreeOmitsNonRenderingText(t *testing.T) {
 	if !strings.Contains(tree, "rendered row") {
 		t.Fatalf("snapshot tree dropped rendered content:\n%s", tree)
 	}
+	for _, want := range []string{`"viewport":`, `"rect":`} {
+		if !strings.Contains(tree, want) {
+			t.Fatalf("snapshot missing layout geometry %q:\n%s", want, tree)
+		}
+	}
 }
