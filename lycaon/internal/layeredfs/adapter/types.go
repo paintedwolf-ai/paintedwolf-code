@@ -74,9 +74,12 @@ const (
 
 // CacheRevalidation describes the adapter's attribute/directory cache coherence guarantees.
 type CacheRevalidation struct {
-	Mode                 string        `json:"mode"`
-	ExplicitInvalidation bool          `json:"explicit_invalidation"`
-	AttributeTTL         time.Duration `json:"attribute_ttl"`
+	Mode                       string        `json:"mode"`
+	ExplicitInvalidation       bool          `json:"explicit_invalidation"`
+	InvalidationVerified       bool          `json:"invalidation_verified"`
+	NegativeLookupInvalidation bool          `json:"negative_lookup_invalidation"`
+	DirCookieInvalidation      bool          `json:"dir_cookie_invalidation"`
+	AttributeTTL               time.Duration `json:"attribute_ttl"`
 }
 
 // MetadataCapabilities describes filesystem metadata and locking support exposed by an adapter.
@@ -96,6 +99,7 @@ type AdapterFacts struct {
 	PreparationKind           PreparationKind      `json:"preparation_kind"`
 	UntouchedSourceVisibility SourceVisibility     `json:"untouched_source_visibility"`
 	CacheRevalidation         CacheRevalidation    `json:"cache_revalidation"`
+	AttributionCompleteness   string               `json:"attribution_completeness,omitempty"`
 	MetadataCapabilities      MetadataCapabilities `json:"metadata_capabilities"`
 	SupportsPrivateGit        bool                 `json:"supports_private_git"`
 	SupportsCheckpointBarrier bool                 `json:"supports_checkpoint_barrier"`

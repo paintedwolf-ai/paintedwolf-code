@@ -45,8 +45,10 @@ func NewEagerCopyAdapter(fallbackReason ReasonCode) *EagerCopyAdapter {
 			CacheRevalidation: CacheRevalidation{
 				Mode:                 "fixed_private_seed",
 				ExplicitInvalidation: false,
+				InvalidationVerified: false,
 				AttributeTTL:         0,
 			},
+			AttributionCompleteness: "materialized_snapshot",
 			MetadataCapabilities: MetadataCapabilities{
 				SupportsSymlinks:   true,
 				SupportsHardLinks:  true,

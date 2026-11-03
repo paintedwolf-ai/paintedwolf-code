@@ -117,6 +117,22 @@ type WorkerWriteCoordinator interface {
 	EnsureBranch(ctx context.Context, tctx ToolContext) (ToolContext, error)
 }
 
+// WorkerFileObservationFacts carries structured file identity, layer, and digest
+// facts captured directly at the read or write operation boundary.
+type WorkerFileObservationFacts struct {
+	RootID, RelPath, AbsPath, SHA256, Layer string
+	Size, ModTimeNS                         int64
+	Ino, Dev                                uint64
+	Complete                                bool
+}
+
+// WorkerObservationCoordinator receives structured read/write observation facts
+// for isolated worker workspaces without re-reading files from disk.
+type WorkerObservationCoordinator interface {
+	ObserveWorkerRead(ctx context.Context, tctx ToolContext, facts WorkerFileObservationFacts)
+	ObserveWorkerWrite(ctx context.Context, tctx ToolContext, facts WorkerFileObservationFacts)
+}
+
 // PrimaryMutationRecorder records primary-tree paths for rewind checkpoints.
 type PrimaryMutationRecorder interface {
 	RecordPrimaryMutation(ctx context.Context, sessionID, relPath string)

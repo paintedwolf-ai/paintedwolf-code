@@ -83,7 +83,9 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 			return tctx, err
 		}
 		tctx.Source.BranchWorkspace = branchState
+		_, _ = m.BindPreparedBranch(root, task.ID, sess.ID)
 	}
+	m.EnsureTracker(task.ID, sess.ID, firstNonEmpty(task.WorkspacePath, sess.WorkspacePath), strings.TrimSpace(task.WorkspaceRoot), tctx.Source.Roots)
 	return tctx, nil
 }
 
@@ -126,6 +128,7 @@ func (m *Service) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext,
 	if m.Touches != nil {
 		m.Touches.RecordTouch(tctx.Identity.WorkerJobID, relPath)
 	}
+	m.RecordUpperWrite(tctx.Identity.WorkerJobID, "", "", tctx.Source.WorkerBranchRoot, tctx.Source.Roots, relPath)
 	sessionID := strings.TrimSpace(tctx.Identity.HandoffSessionID)
 	agent := strings.TrimSpace(tctx.Identity.HandoffAgentID)
 	if sessionID == "" || agent == "" || m.calls == nil {
@@ -136,7 +139,10 @@ func (m *Service) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext,
 }
 
 // AfterWorkerWrite refreshes the board so pulse lines show live touches.
-func (m *Service) AfterWorkerWrite(ctx context.Context, tctx tools.ToolContext, _ string) {
+func (m *Service) AfterWorkerWrite(ctx context.Context, tctx tools.ToolContext, relPath string) {
+	if m != nil && strings.TrimSpace(relPath) != "" {
+		m.RecordUpperWrite(tctx.Identity.WorkerJobID, "", "", tctx.Source.WorkerBranchRoot, tctx.Source.Roots, relPath)
+	}
 	if m == nil || m.events == nil || strings.TrimSpace(tctx.Identity.ProjectID) == "" {
 		return
 	}
@@ -200,6 +206,8 @@ func (m *Service) EnsureBranch(ctx context.Context, tctx tools.ToolContext) (too
 		return tctx, err
 	}
 	tctx.Source.BranchWorkspace = branchState
+	_, _ = m.BindPreparedBranch(root, jobID)
+	m.EnsureTracker(jobID, "", task.WorkspacePath, root, tctx.Source.Roots)
 	return tctx, nil
 }
 
@@ -223,6 +231,7 @@ func (m *Service) ReleaseReservations(ctx context.Context, parentSessionID, jobI
 	if m.Touches != nil {
 		m.Touches.ClearJob(jobID)
 	}
+	m.CleanupTracker(jobID)
 	if m.calls == nil {
 		return nil
 	}

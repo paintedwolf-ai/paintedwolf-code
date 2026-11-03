@@ -112,6 +112,9 @@ func markSnapshotCompleteWithClaim(branchRoot string, choice WorkspaceStrategySe
 		return err
 	}
 	cpFacts := choice.Facts
+	if view != nil && view.Facts.AdapterID != "" {
+		cpFacts = view.Facts
+	}
 	meta.FormatVersion, meta.SnapshotComplete = JobMetaFormatV2, true
 	meta.AdapterID, meta.PreparationKind = choice.AdapterID, choice.Facts.PreparationKind
 	meta.VisibilityMode, meta.FallbackReason = choice.Facts.UntouchedSourceVisibility, choice.Facts.FallbackReason

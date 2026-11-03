@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/call"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,17 +29,33 @@ type Calls interface {
 	ListActiveReservations(context.Context, string) ([]call.ActiveReservation, error)
 }
 type Service struct {
-	store       Sessions
-	workspace   Workspace
-	tasks       Tasks
-	calls       Calls
-	events      *events.Publisher
-	Touches     *TouchLedger
-	branchState func(string) (tools.BranchWorkspace, error)
+	WorkspaceTrackerRegistry
+	WorkspaceObservationOps
+	store                  Sessions
+	workspace              Workspace
+	tasks                  Tasks
+	calls                  Calls
+	events                 *events.Publisher
+	Touches                *TouchLedger
+	branchState            func(string) (tools.BranchWorkspace, error)
+	unregisterRepoObserver func()
 }
 
 func New(sessions Sessions, workspace Workspace, branchState func(string) (tools.BranchWorkspace, error)) *Service {
-	return &Service{store: sessions, workspace: workspace, branchState: branchState, Touches: NewTouchLedger()}
+	s := &Service{store: sessions, workspace: workspace, branchState: branchState, Touches: NewTouchLedger()}
+	s.WorkspaceTrackerRegistry.svc = s
+	s.WorkspaceObservationOps.svc = s
+	s.SetViewCapabilitiesResolver(resolvePreparedBranchViewCapabilities)
+	s.unregisterRepoObserver = repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
+		handleWorkspaceRepoChange(s, ctx, ev)
+	})
+	return s
+}
+
+func (m *Service) Close() {
+	if m != nil && m.unregisterRepoObserver != nil {
+		m.unregisterRepoObserver()
+	}
 }
 func (m *Service) SetTasks(tasks Tasks)                     { m.tasks = tasks }
 func (m *Service) SetPublisher(publisher *events.Publisher) { m.events = publisher }

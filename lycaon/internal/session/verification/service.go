@@ -3,9 +3,11 @@ package verification
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/transcript"
@@ -25,8 +27,30 @@ type Workflow interface {
 	ActivePhaseRequiresEvidence(ctx context.Context, sessionID, evidenceType string) bool
 }
 
+// WorkspaceTrackerProvider resolves worker-workspace-scoped observation trackers and check bindings.
+type WorkspaceTrackerProvider interface {
+	TrackerForSession(jobID, sessionID, workspaceRoot, workspacePath string) (*observation.Tracker, string)
+	BindingForCheck(jobID, sessionID, workspaceRoot, checkID string) (observation.VerificationBinding, bool)
+	BindVerificationReceipt(jobID, childSessionID, workspacePath, branchRoot, checkID, checkpointID string, scopeRoots []string) (observation.VerificationBinding, bool)
+}
+
+// ObservationBindings manages session- and workspace-scoped observation trackers and check bindings.
+type ObservationBindings struct {
+	ServiceConfigOps
+	svc               *Service
+	workspaceTrackers WorkspaceTrackerProvider
+	obsMu             sync.RWMutex
+	obsTrackers       map[string]*observation.Tracker
+	obsBindings       map[string]observation.VerificationBinding
+	obsCheckpoints    map[string]string
+}
+
+// ServiceConfigOps provides dependency configuration setters on Service.
+type ServiceConfigOps struct{ svc *Service }
+
 // Service binds terminal verification evidence to the current source revision.
 type Service struct {
+	ObservationBindings
 	Evidence           *closeoutevidence.Service
 	store              Store
 	workspace          *sessionscope.Service
@@ -41,27 +65,53 @@ type Service struct {
 }
 
 func New(store Store, workspace *sessionscope.Service, transcript *transcript.Service) *Service {
-	return &Service{store: store, workspace: workspace, transcript: transcript}
+	s := &Service{store: store, workspace: workspace, transcript: transcript}
+	s.ObservationBindings.svc = s
+	s.ObservationBindings.ServiceConfigOps.svc = s
+	return s
 }
-func (m *Service) SetDataDir(dir string)         { m.dataDir = strings.TrimSpace(dir) }
-func (m *Service) SetWorkers(workers Workers)    { m.workerQueue = workers }
-func (m *Service) SetWorkflow(workflow Workflow) { m.workflows = workflow }
-func (m *Service) SetSourceObservations(source *sourceledger.Inventory) {
-	m.sourceObservations = source
+
+func (c *ServiceConfigOps) SetDataDir(dir string)      { c.svc.dataDir = strings.TrimSpace(dir) }
+func (c *ServiceConfigOps) SetWorkers(workers Workers) { c.svc.workerQueue = workers }
+func (c *ServiceConfigOps) SetWorkflow(workflow Workflow) {
+	c.svc.workflows = workflow
 }
-func (m *Service) SetRevisionSource(source func(context.Context, string) (string, string)) {
-	m.verificationSource = source
+func (c *ServiceConfigOps) SetSourceObservations(source *sourceledger.Inventory) {
+	c.svc.sourceObservations = source
 }
-func (m *Service) ReadSourceRecords(ctx context.Context, sess *api.Session) ([]evidence.Record, error) {
-	if m == nil || m.evidenceStore == nil || sess == nil {
+func (c *ServiceConfigOps) SetRevisionSource(source func(context.Context, string) (string, string)) {
+	c.svc.verificationSource = source
+}
+func (c *ServiceConfigOps) SetWorkspaceTrackers(p WorkspaceTrackerProvider) {
+	c.svc.workspaceTrackers = p
+}
+func (c *ServiceConfigOps) SetEvidenceStore(s inspector.EvidenceStore) {
+	if c != nil && c.svc != nil {
+		c.svc.evidenceStore = s
+	}
+}
+func (c *ServiceConfigOps) SetVerifyConfig(r VerifyConfigResolver) {
+	if c != nil && c.svc != nil {
+		c.svc.verifyConfig = r
+	}
+}
+
+func (c *ServiceConfigOps) ReadSourceRecords(ctx context.Context, sess *api.Session) ([]evidence.Record, error) {
+	if c == nil || c.svc == nil || c.svc.evidenceStore == nil || sess == nil {
 		return nil, nil
 	}
-	runID := sessiontree.RootID(ctx, m.store, sess.ID)
-	return m.evidenceStore.ReadAll(ctx, m.EvidenceRootFor(sess), runID, VerifySlot, evidence.GateTypeVerify)
+	runID := sessiontree.RootID(ctx, c.svc.store, sess.ID)
+	return c.svc.evidenceStore.ReadAll(ctx, c.svc.EvidenceRootFor(sess), runID, VerifySlot, evidence.GateTypeVerify)
 }
-func (m *Service) RequiresPhaseVerify(ctx context.Context, sessionID string) bool {
-	if m == nil || m.workflows == nil {
+func (c *ServiceConfigOps) RequiresPhaseVerify(ctx context.Context, sessionID string) bool {
+	if c == nil || c.svc == nil || c.svc.workflows == nil {
 		return false
 	}
-	return m.workflows.ActivePhaseRequiresEvidence(ctx, sessionID, "verify")
+	return c.svc.workflows.ActivePhaseRequiresEvidence(ctx, sessionID, "verify")
+}
+func (c *ServiceConfigOps) SourceVerifyCommand(ctx context.Context, projectDir string) string {
+	if c == nil || c.svc == nil || c.svc.verifyConfig == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.svc.verifyConfig.VerifyTestCommand(projectDir))
 }

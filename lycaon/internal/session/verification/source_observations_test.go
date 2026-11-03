@@ -11,6 +11,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -147,5 +149,86 @@ func TestSourceObservationsReportUnavailableRecords(t *testing.T) {
 	out := m.SourceObservations(t.Context(), sess, nil)
 	if out == nil || !out.RecordsUnavailable || len(out.Checks) != 0 {
 		t.Fatalf("unavailable records became proof: %+v", out)
+	}
+}
+
+func TestObservedDependencyAndIncompleteAttributionInvalidateVerificationChecks(t *testing.T) {
+	ctx := t.Context()
+	sessions := store.NewMemory()
+	sess, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+	testutil.FailErr(t, "create session", err)
+	sess.ProjectID, sess.WorkspacePath = "project", t.TempDir()
+
+	m := New(sessions, scope.New(sessions), nil)
+	m.SetDataDir(t.TempDir())
+	m.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
+	m.SetRevisionSource(func(context.Context, string) (string, string) {
+		return "rev-1", "root-1"
+	})
+
+	facts := observation.LiveMountVisibilityFacts("fuse-linux", true, true, true, observation.CompletenessComplete)
+	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-verify", Facts: facts})
+	testutil.FailErr(t, "NewTracker", err)
+	m.SetObservationTracker(sess.ID, tracker)
+
+	depPath := layeredfs.QualifiedPath{RootID: "other-root", Rel: "shared/schema.json"}
+	tracker.RecordServerFSObservation(layeredfs.ObservationEvent{
+		Path:   depPath,
+		Layer:  layeredfs.LayerTrunk,
+		Kind:   layeredfs.ObserveRead,
+		Size:   16,
+		SHA256: "sha-schema-v1",
+	})
+
+	when := time.Now().UTC()
+	rec := checkRecord("chk-cross-root", "rev-1", "root-1", when)
+	rec.RunID = sess.ID
+	testutil.FailErr(t, "append check", m.evidenceStore.Append(ctx, m.EvidenceRootFor(sess), rec))
+	_, boundOK := m.BindCheckObservation(sess.ID, "chk-cross-root", "ckpt-1", []string{"primary", "other-root"})
+	if !boundOK {
+		t.Fatal("expected BindCheckObservation to succeed")
+	}
+
+	history := []api.Message{{Role: api.MessageRoleUser, Content: "Verify", CreatedAt: when.Add(-time.Second)}}
+
+	// Unrelated trunk change outside observed set with complete attribution keeps check current.
+	tracker.RecordTrunkChange(observation.TrunkChangeEvent{
+		Path:      layeredfs.QualifiedPath{RootID: "primary", Rel: "docs/readme.md"},
+		Kind:      observation.TrunkWriteInPlace,
+		NewSHA256: "sha-readme-v2",
+		NewSize:   20,
+	})
+	obs1 := m.SourceObservations(ctx, sess, history)
+	if obs1 == nil || len(obs1.Checks) != 1 || obs1.Checks[0].Match != SourceCurrent {
+		t.Fatalf("expected unrelated change outside complete observed set to keep SourceCurrent, got %+v", obs1)
+	}
+	passed, _, _ := m.GateState(ctx, sess, history)
+	if !passed {
+		t.Fatal("expected GateState to pass before observed dependency change")
+	}
+
+	// Cross-root observed dependency change marks check stale and fails GateState.
+	tracker.RecordTrunkChange(observation.TrunkChangeEvent{
+		Path:      depPath,
+		Kind:      observation.TrunkAtomicReplace,
+		NewSHA256: "sha-schema-v2",
+		NewSize:   18,
+	})
+	obs2 := m.SourceObservations(ctx, sess, history)
+	if obs2 == nil || len(obs2.Checks) != 1 || obs2.Checks[0].Match != SourceChanged {
+		t.Fatalf("expected cross-root dependency change to mark SourceChanged, got %+v", obs2)
+	}
+	if obs2.Checks[0].StaleReason != observation.StaleReasonObservedDependencyChanged {
+		t.Fatalf("expected StaleReasonObservedDependencyChanged, got %q", obs2.Checks[0].StaleReason)
+	}
+	if obs2.TrunkChanged == nil || obs2.TrunkChanged.GrantsAuthority || obs2.TrunkChanged.EstablishesMergeBase {
+		t.Fatalf("unexpected trunk.changed notice: %+v", obs2.TrunkChanged)
+	}
+	if len(obs2.PromotionPreviewHints) == 0 || obs2.PromotionPreviewHints[0].SubstitutesExactBaseCheck {
+		t.Fatalf("unexpected promotion preview hints: %+v", obs2.PromotionPreviewHints)
+	}
+	passedAfter, repairAfter, _ := m.GateState(ctx, sess, history)
+	if passedAfter || !repairAfter {
+		t.Fatalf("expected stale observed check to fail GateState (passed=%v repair=%v)", passedAfter, repairAfter)
 	}
 }
