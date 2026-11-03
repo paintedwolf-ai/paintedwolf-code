@@ -4,13 +4,14 @@
   "kind": "runtime_service",
   "workstream": "immutable-worker-checkpoints",
   "disposition": "retain",
-  "reason": "Retain HostPromotion as the single host promotion transaction and rollback boundary across target preimage capture, retained-inode hard-link staging, two-phase rollback (pre-apply vs post-apply divergence checks), O(1) postimage xattr folding, readonly directory recovery ordering, and Git ref CAS undo. Splitting target undo from ref and journal recovery would scatter rollback sequencing.",
-  "reviewed_commit": "c50ace99c158a639cb398b5009fdfc9480c84add",
+  "reason": "Retain HostPromotion as the single host promotion transaction and rollback boundary across target preimage capture, retained-inode hard-link staging, two-phase rollback (pre-apply vs post-apply divergence checks), O(1) postimage xattr folding, readonly directory recovery ordering, and Git ref CAS undo. Splitting target undo from ref and journal recovery would scatter rollback sequencing. Growth to 1041 lines adds one retention capability decision, which keeps a lone-name target on another volume restorable from its before-image blob and refuses aliased targets, and removes per-path progress markers with the component record. Neither is a new subsystem.",
+  "reviewed_commit": "fbcec5502a6566a5e779fb02a85b29eaab2a3fad",
   "ceiling": 30,
   "boundaries": {
     "lycaon/internal/layeredfs/checkpoint/host_transaction_test.go": "4159aca00132629f947dd215b913e172f95d2392101ae6a8cc2fdf81dfb02b5f",
     "lycaon/internal/layeredfs/checkpoint/host_refs_test.go": "451f1694159276a9e2fb5443e390b8067616eab96b8104ad23b348d9ee9c8088",
-    "lycaon/internal/layeredfs/checkpoint/promotion_directory_guard_test.go": "d6d214fce78a9be33b0afa0b92e01a797ba7e04e31a8a4845c2d60e760f764c3"
+    "lycaon/internal/layeredfs/checkpoint/promotion_directory_guard_test.go": "d6d214fce78a9be33b0afa0b92e01a797ba7e04e31a8a4845c2d60e760f764c3",
+    "lycaon/internal/layeredfs/checkpoint/host_volume_test.go": "9e52b6e72353d217b2f86197ac7a941753cea8ea17b34951f24a41e495e26ccc"
   },
-  "reviewed_shape": "376ea71a4da1925e0e4f788c671476853fceb1fa39e9128ef9d5a84add58486c"
+  "reviewed_shape": "f33767e98ed77c7b1df0909cab379810cee4ac526a8d3adfbc5cdc1d2ba1ad20"
 }

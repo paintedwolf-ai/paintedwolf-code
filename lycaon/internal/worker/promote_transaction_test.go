@@ -119,6 +119,71 @@ func TestPromoteTransactionRecoversCommittedTargets(t *testing.T) {
 	}
 }
 
+func TestPromoteTransactionRecoversUnstartedAndPartialRetentionPreparation(t *testing.T) {
+	root := t.TempDir()
+	dataDir := t.TempDir()
+	task := &api.WorkerTask{ID: "job-unstarted-prep", WorkspacePath: root, WorkspaceRoot: filepath.Join(root, "branch")}
+	testutil.FailErr(t, "mkdir branch", os.MkdirAll(task.WorkspaceRoot, 0o755))
+	pathA := filepath.Join(root, "a.sh")
+	pathB := filepath.Join(root, "b.sh")
+	testutil.FailErr(t, "seed a.sh", os.WriteFile(pathA, []byte("old-a\n"), 0o755))
+	testutil.FailErr(t, "seed b.sh", os.WriteFile(pathB, []byte("old-b\n"), 0o640))
+	fdA, err := os.Open(pathA)
+	testutil.FailErr(t, "open a.sh", err)
+	defer func() { _ = fdA.Close() }()
+	statA, err := fdA.Stat()
+	testutil.FailErr(t, "stat a.sh", err)
+	fdB, err := os.Open(pathB)
+	testutil.FailErr(t, "open b.sh", err)
+	defer func() { _ = fdB.Close() }()
+	statB, err := fdB.Stat()
+	testutil.FailErr(t, "stat b.sh", err)
+
+	plans := []promoteMutation{
+		{path: "a.sh", original: []byte("old-a\n"), originalExists: true, originalMode: 0o755, target: []byte("new-a\n"), targetExists: true},
+		{path: "b.sh", original: []byte("old-b\n"), originalExists: true, originalMode: 0o640, target: []byte("new-b\n"), targetExists: true},
+	}
+	promote := PromoteRootsForTask(task, nil)
+
+	// Crash immediately after begin, before apply creates any retained original.
+	tx1, err := beginPromoteTransaction(dataDir, task.ID, plans)
+	testutil.FailErr(t, "begin tx1", err)
+	found, err := recoverPromoteTransaction(dataDir, task.ID, promote, task)
+	testutil.FailErr(t, "recover unstarted tx1", err)
+	if !found {
+		t.Fatal("expected unstarted tx1 journal to be found")
+	}
+	testutil.FailErr(t, "close recovered tx1", tx1.close())
+
+	// Crash with one of two originals retained, before any primary mutation.
+	tx2, err := beginPromoteTransaction(dataDir, task.ID, plans)
+	testutil.FailErr(t, "begin tx2", err)
+	_, err = retainPromoteOriginals(tx2.path, promote, task, plans[:1], promoteTransactionEffects{})
+	testutil.FailErr(t, "partial retain a.sh", err)
+	slotA := filepath.Join(promoteTransactionRetainedDir(tx2.path), promoteRetainedSlot("a.sh"))
+	if _, err := os.Stat(slotA); err != nil {
+		t.Fatalf("expected partial retained slot for a.sh: %v", err)
+	}
+
+	found, err = recoverPromoteTransaction(dataDir, task.ID, promote, task)
+	testutil.FailErr(t, "recover partially retained tx2", err)
+	if !found {
+		t.Fatal("expected partially retained tx2 journal to be found")
+	}
+	testutil.FailErr(t, "close recovered tx2", tx2.close())
+	if _, err := os.Stat(promoteTransactionRetainedDir(tx2.path)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected partial retained dir removed with the journal, stat err = %v", err)
+	}
+
+	curA, err := os.Stat(pathA)
+	testutil.FailErr(t, "stat a.sh after recovery", err)
+	curB, err := os.Stat(pathB)
+	testutil.FailErr(t, "stat b.sh after recovery", err)
+	if !os.SameFile(curA, statA) || !os.SameFile(curB, statB) {
+		t.Fatal("expected untouched primary inodes preserved across unstarted and partial-retention recovery")
+	}
+}
+
 func TestPromoteTransactionRefusesToOverwriteDivergentPrimary(t *testing.T) {
 	root := t.TempDir()
 	dataDir := t.TempDir()

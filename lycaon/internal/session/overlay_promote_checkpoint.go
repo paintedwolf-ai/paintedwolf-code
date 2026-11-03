@@ -158,8 +158,9 @@ func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef
 	return store, manifest, promoter, true, nil
 }
 
-// SyncTaskCheckpointToWorkspace rehydrates task.WorkspaceRoot from the published checkpoint manifest.
-func SyncTaskCheckpointToWorkspace(task *api.WorkerTask) error {
+// SyncTaskCheckpointToWorkspace rehydrates task.WorkspaceRoot from the published
+// checkpoint manifest, in the layout promotion reads through PromoteRoots.
+func SyncTaskCheckpointToWorkspace(task *api.WorkerTask, roots []projectroot.RootRef) error {
 	if task == nil {
 		return nil
 	}
@@ -178,66 +179,80 @@ func SyncTaskCheckpointToWorkspace(task *api.WorkerTask) error {
 	if err := os.MkdirAll(task.WorkspaceRoot, 0o755); err != nil {
 		return err
 	}
-	multiRoot := len(manifest.SelectedRoots) > 1
-	if !multiRoot {
-		for _, entry := range manifest.Entries {
-			id := strings.TrimSpace(entry.Path.RootID)
-			if id != "" && id != "primary" && id != "root-0" && (task == nil || id != strings.TrimSpace(task.WorkspaceRootID)) {
-				multiRoot = true
-				break
-			}
-		}
-	}
+	replaced := checkpointNonDirectoryEntries(manifest)
 	for _, entry := range manifest.Entries {
-		targetDir := task.WorkspaceRoot
-		if multiRoot {
-			branchDir, bErr := projectroot.BranchDirForID(entry.Path.RootID)
-			if bErr != nil {
-				return bErr
-			}
-			targetDir = filepath.Join(task.WorkspaceRoot, branchDir)
-			if err := os.MkdirAll(targetDir, 0o755); err != nil {
-				return err
-			}
+		if beneathCheckpointNonDirectory(entry.Path, replaced) {
+			continue
 		}
-		if err := applyManifestEntryToRoot(store, targetDir, entry, true); err != nil {
+		targetDir, err := checkpointBranchDir(task, roots, entry.Path.RootID)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
+			return err
+		}
+		if err := applyManifestEntryToRoot(store, targetDir, entry); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// ApplyTaskCheckpointAttributes applies checkpoint file modes, symlinks, directories, deletions, and xattrs to target roots.
-func ApplyTaskCheckpointAttributes(task *api.WorkerTask, roots []projectroot.RootRef) error {
-	store, manifest, hasCP, err := OpenTaskCheckpointStore(task)
-	if err != nil || !hasCP {
-		return err
+func checkpointBranchDir(task *api.WorkerTask, roots []projectroot.RootRef, rootID string) (string, error) {
+	if len(roots) <= 1 {
+		return task.WorkspaceRoot, nil
 	}
-	if rec, exists, lErr := store.LoadPromotionRecord("tx-" + manifest.CheckpointID); lErr != nil || (exists && rec.State == checkpoint.PromotionStateApplied) {
-		return lErr
-	}
-	targetRoots, err := TargetRootsForTaskCheckpoint(task, roots, manifest)
-	if err != nil {
-		return err
-	}
-	for _, entry := range manifest.Entries {
-		if err := applyManifestEntryToRoot(store, targetRoots[entry.Path.RootID], entry, false); err != nil {
-			return err
+	rootID = strings.TrimSpace(rootID)
+	for _, root := range roots {
+		alias := rootID == "primary" || rootID == "root-0" || rootID == "" || rootID == strings.TrimSpace(task.WorkspaceRootID)
+		if root.ID == rootID || (root.IsPrimary && alias) {
+			dir, err := projectroot.BranchDirForID(root.ID)
+			if err != nil {
+				return "", err
+			}
+			return filepath.Join(task.WorkspaceRoot, dir), nil
 		}
 	}
-	return nil
+	return "", fmt.Errorf("%w: unresolved checkpoint root id %q", layeredfs.ErrInvalidRoot, rootID)
 }
 
-func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry checkpoint.ManifestEntry, writeRegularBytes bool) error {
+func checkpointNonDirectoryEntries(manifest checkpoint.Manifest) map[layeredfs.QualifiedPath]bool {
+	replaced := make(map[layeredfs.QualifiedPath]bool)
+	for _, entry := range manifest.Entries {
+		if !entry.Deleted && (entry.Kind == layeredfs.EntrySymlink || entry.Kind == layeredfs.EntryRegular) {
+			replaced[entry.Path] = true
+		}
+	}
+	return replaced
+}
+
+// A child recorded beneath a path that became a file or symlink no longer exists
+// in the final tree, and following that entry would leave the branch.
+func beneathCheckpointNonDirectory(path layeredfs.QualifiedPath, replaced map[layeredfs.QualifiedPath]bool) bool {
+	for parent := filepath.Dir(path.Rel); parent != "." && parent != string(filepath.Separator); parent = filepath.Dir(parent) {
+		if replaced[layeredfs.QualifiedPath{RootID: path.RootID, Rel: parent}] {
+			return true
+		}
+	}
+	return false
+}
+
+func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry checkpoint.ManifestEntry) error {
 	if !filepath.IsLocal(entry.Path.Rel) || entry.Path.Rel == "." {
 		return fmt.Errorf("%w: invalid entry path %q", checkpoint.ErrInvalidManifest, entry.Path.Rel)
 	}
-	abs := filepath.Join(rootDir, filepath.FromSlash(entry.Path.Rel))
+	root, err := os.OpenRoot(rootDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	rel := filepath.FromSlash(entry.Path.Rel)
+	abs := filepath.Join(rootDir, rel)
 	if entry.Deleted || entry.Kind == layeredfs.EntryAbsent {
-		return os.RemoveAll(abs)
+		return root.RemoveAll(rel)
 	}
 	if entry.DirectoryReplaced {
-		if err := os.RemoveAll(abs); err != nil {
+		if err := root.RemoveAll(rel); err != nil {
 			return err
 		}
 	}
@@ -247,43 +262,37 @@ func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry che
 		if mode == 0 {
 			mode = 0o755
 		}
-		if err := os.MkdirAll(abs, mode|0o700); err != nil {
+		if err := root.MkdirAll(rel, mode|0o700); err != nil {
 			return err
 		}
-		if err := os.Chmod(abs, mode); err != nil {
+		if err := root.Chmod(rel, mode); err != nil {
 			return err
 		}
 		return checkpoint.ApplyPathXattrs(abs, entry.Final.Xattrs)
 	case layeredfs.EntrySymlink:
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		if err := root.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
 			return err
 		}
-		if err := os.RemoveAll(abs); err != nil {
+		if err := root.RemoveAll(rel); err != nil {
 			return err
 		}
-		return os.Symlink(entry.Final.LinkTarget, abs)
+		return root.Symlink(entry.Final.LinkTarget, rel)
 	case layeredfs.EntryRegular:
 		mode := entry.Final.Mode.Perm()
 		if mode == 0 {
 			mode = 0o644
 		}
-		if writeRegularBytes {
-			raw, rErr := store.ReadBlob(entry.Final.SHA256)
-			if rErr != nil {
-				return rErr
-			}
-			if _, err := fseffect.Replace(fseffect.ReplaceRequest{
-				Location: fseffect.Location{Root: rootDir, Rel: filepath.FromSlash(entry.Path.Rel)},
-				Source:   bytes.NewReader(raw),
-				Mode:     mode,
-				DirMode:  0o755,
-			}); err != nil {
-				return err
-			}
-		} else if entry.Final.Mode != 0 {
-			if err := os.Chmod(abs, mode); err != nil {
-				return err
-			}
+		raw, err := store.ReadBlob(entry.Final.SHA256)
+		if err != nil {
+			return err
+		}
+		if _, err := fseffect.Replace(fseffect.ReplaceRequest{
+			Location: fseffect.Location{Root: rootDir, Rel: rel},
+			Source:   bytes.NewReader(raw),
+			Mode:     mode,
+			DirMode:  0o755,
+		}); err != nil {
+			return err
 		}
 		return checkpoint.ApplyPathXattrs(abs, entry.Final.Xattrs)
 	default:

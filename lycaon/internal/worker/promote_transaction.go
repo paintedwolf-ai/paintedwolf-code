@@ -1,45 +1,53 @@
 package worker
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-const promoteTransactionVersion = 1
-
-type promoteTransactionJournal struct {
-	Version   int                      `json:"version"`
-	JobID     string                   `json:"job_id"`
-	Mutations []promoteJournalMutation `json:"mutations"`
-}
-
-type promoteJournalMutation struct {
-	Path             string `json:"path"`
-	Original         []byte `json:"original,omitempty"`
-	OriginalExists   bool   `json:"original_exists"`
-	OriginalMode     uint32 `json:"original_mode,omitempty"`
-	OriginalIdentity string `json:"original_identity,omitempty"`
-	TargetSHA256     string `json:"target_sha256,omitempty"`
-	TargetExists     bool   `json:"target_exists"`
-	TargetMode       uint32 `json:"target_mode,omitempty"`
-}
 
 type promoteTransaction struct {
 	path    string
 	journal promoteTransactionJournal
 	plans   []promoteMutation
+	effects promoteTransactionEffects
+}
+
+type promoteStep string
+
+const (
+	promoteStepPreparedDurable  promoteStep = "prepared-durable"
+	promoteStepStaleCleared     promoteStep = "stale-cleared"
+	promoteStepOriginalRetained promoteStep = "original-retained"
+	promoteStepApplyingDurable  promoteStep = "applying-durable"
+	promoteStepPrimaryMutated   promoteStep = "primary-mutated"
+)
+
+// promoteTransactionEffects holds the seams a crash-ordering contract observes.
+type promoteTransactionEffects struct {
+	reached  func(step promoteStep, path string) error
+	hardLink func(fseffect.HardLinkRequest) error
+}
+
+func (e promoteTransactionEffects) reach(step promoteStep, path string) error {
+	if e.reached == nil {
+		return nil
+	}
+	return e.reached(step, path)
+}
+
+func (e promoteTransactionEffects) link(req fseffect.HardLinkRequest) error {
+	if e.hardLink == nil {
+		return fseffect.HardLink(req)
+	}
+	return e.hardLink(req)
 }
 
 type promoteTransactionUnstartedError struct{ cause error }
@@ -48,9 +56,14 @@ func (e *promoteTransactionUnstartedError) Error() string { return e.cause.Error
 func (e *promoteTransactionUnstartedError) Unwrap() error { return e.cause }
 
 func beginPromoteTransaction(dataDir, jobID string, plans []promoteMutation) (*promoteTransaction, error) {
+	return beginPromoteTransactionWith(dataDir, jobID, plans, promoteTransactionEffects{})
+}
+
+func beginPromoteTransactionWith(dataDir, jobID string, plans []promoteMutation, effects promoteTransactionEffects) (*promoteTransaction, error) {
 	journal := promoteTransactionJournal{
 		Version:   promoteTransactionVersion,
 		JobID:     jobID,
+		Phase:     promotePhasePrepared,
 		Mutations: make([]promoteJournalMutation, 0, len(plans)),
 	}
 	for _, plan := range plans {
@@ -72,8 +85,19 @@ func beginPromoteTransaction(dataDir, jobID string, plans []promoteMutation) (*p
 			TargetMode:     uint32(targetMode.Perm()),
 		})
 	}
-	tx := &promoteTransaction{path: promoteTransactionPath(dataDir, jobID), journal: journal, plans: append([]promoteMutation(nil), plans...)}
+	tx := &promoteTransaction{path: promoteTransactionPath(dataDir, jobID), journal: journal, plans: append([]promoteMutation(nil), plans...), effects: effects}
 	if err := writePromoteTransaction(tx.path, journal); err != nil {
+		return nil, err
+	}
+	if err := effects.reach(promoteStepPreparedDurable, ""); err != nil {
+		return nil, err
+	}
+	// Only now is a predecessor's rollback authority gone. A prepared journal gives
+	// slots no meaning, so a removal lost to a crash cannot be mistaken for retention.
+	if err := os.RemoveAll(promoteTransactionRetainedDir(tx.path)); err != nil {
+		return nil, fmt.Errorf("clear retained promote originals: %w", err)
+	}
+	if err := effects.reach(promoteStepStaleCleared, ""); err != nil {
 		return nil, err
 	}
 	return tx, nil
@@ -82,29 +106,37 @@ func beginPromoteTransaction(dataDir, jobID string, plans []promoteMutation) (*p
 func (tx *promoteTransaction) apply(ctx context.Context, promote PromoteRoots, task *api.WorkerTask) error {
 	for _, plan := range tx.plans {
 		if err := context.Cause(ctx); err != nil {
-			return err
+			return &promoteTransactionUnstartedError{cause: err}
 		}
 		if err := verifyPromoteOriginal(promote, task, plan); err != nil {
 			return &promoteTransactionUnstartedError{cause: err}
 		}
 	}
-	identities, err := retainPromoteOriginals(tx.path, promote, task, tx.plans)
+	retained, err := retainPromoteOriginals(tx.path, promote, task, tx.plans, tx.effects)
 	if err != nil {
 		return &promoteTransactionUnstartedError{cause: err}
 	}
-	if len(identities) > 0 {
-		for i := range tx.journal.Mutations {
-			tx.journal.Mutations[i].OriginalIdentity = identities[tx.journal.Mutations[i].Path]
-		}
-		if err := writePromoteTransaction(tx.path, tx.journal); err != nil {
-			return &promoteTransactionUnstartedError{cause: err}
-		}
+	tx.journal.Phase = promotePhaseApplying
+	for i := range tx.journal.Mutations {
+		mutation := &tx.journal.Mutations[i]
+		mutation.OriginalRetention, mutation.OriginalIdentity = retained[mutation.Path].retention, retained[mutation.Path].identity
+	}
+	// Replace syncs the file, renames, then syncs the parent, so the phase is
+	// durable when it returns and every mutation below has a rollback authority.
+	if err := writePromoteTransaction(tx.path, tx.journal); err != nil {
+		return &promoteTransactionUnstartedError{cause: err}
+	}
+	if err := tx.effects.reach(promoteStepApplyingDurable, ""); err != nil {
+		return err
 	}
 	for _, plan := range tx.plans {
 		if err := context.Cause(ctx); err != nil {
 			return err
 		}
 		if err := applyTargetPromoteMutation(promote, task, plan); err != nil {
+			return err
+		}
+		if err := tx.effects.reach(promoteStepPrimaryMutated, plan.path); err != nil {
 			return err
 		}
 	}
@@ -174,10 +206,14 @@ func recoverPromoteTransaction(dataDir, jobID string, promote PromoteRoots, task
 		return false, err
 	}
 	if !found {
+		// Close removes the journal first, so these slots carry no authority.
+		if err := os.RemoveAll(promoteTransactionRetainedDir(path)); err != nil {
+			return false, fmt.Errorf("clear retained promote originals: %w", err)
+		}
 		return false, nil
 	}
-	if journal.Version != promoteTransactionVersion || journal.JobID != jobID {
-		return true, fmt.Errorf("promote transaction identity mismatch for %q", jobID)
+	if err := validatePromoteJournal(journal, jobID); err != nil {
+		return true, err
 	}
 	if err := rollbackPromoteJournalAt(path, promote, task, journal); err != nil {
 		return true, err
@@ -185,11 +221,12 @@ func recoverPromoteTransaction(dataDir, jobID string, promote PromoteRoots, task
 	return true, nil
 }
 
-func rollbackPromoteJournal(promote PromoteRoots, task *api.WorkerTask, journal promoteTransactionJournal) error {
-	return rollbackPromoteJournalAt("", promote, task, journal)
-}
-
 func rollbackPromoteJournalAt(txPath string, promote PromoteRoots, task *api.WorkerTask, journal promoteTransactionJournal) error {
+	// The applying phase is durable before any mutation, so its absence proves
+	// the primaries were never touched and retained slots are not needed.
+	if journal.Phase == promotePhasePrepared {
+		return nil
+	}
 	restores := make([]promoteJournalMutation, 0, len(journal.Mutations))
 	for _, mutation := range journal.Mutations {
 		if err := validateRetainedPromoteOriginal(txPath, mutation); err != nil {
@@ -217,14 +254,13 @@ func rollbackPromoteJournalAt(txPath string, promote PromoteRoots, task *api.Wor
 	var errs []error
 	for i := len(restores) - 1; i >= 0; i-- {
 		mutation := restores[i]
-		plan := promoteMutation{path: mutation.Path, original: mutation.Original, originalExists: mutation.OriginalExists, originalMode: os.FileMode(mutation.OriginalMode)}
 		verify := func(target fseffect.Target) error {
 			if err := verifyPromoteTarget(target, mutation.TargetExists, os.FileMode(mutation.TargetMode), mutation.TargetSHA256, mutation.Path); err == nil {
 				return nil
 			}
 			return verifyPromoteTarget(target, mutation.OriginalExists, os.FileMode(mutation.OriginalMode), contentSHA256(mutation.Original), mutation.Path)
 		}
-		if err := restorePromoteOriginalMutation(txPath, promote, task, plan, verify); err != nil {
+		if err := restorePromoteOriginalMutation(txPath, promote, task, mutation, verify); err != nil {
 			errs = append(errs, fmt.Errorf("restore %s: %w", mutation.Path, err))
 		}
 	}
@@ -239,77 +275,6 @@ func promoteStateMatches(exists bool, mode os.FileMode, content []byte, wantExis
 		return true
 	}
 	return mode.Perm() == wantMode.Perm() && contentSHA256(content) == wantSHA
-}
-
-func promoteTransactionPath(dataDir, jobID string) string {
-	digest := sha256.Sum256([]byte(jobID))
-	return filepath.Join(dataDir, "promote-transactions", hex.EncodeToString(digest[:])+".json")
-}
-
-func writePromoteTransaction(path string, journal promoteTransactionJournal) error {
-	raw, err := json.Marshal(journal)
-	if err != nil {
-		return fmt.Errorf("encode promote transaction: %w", err)
-	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create promote transaction directory: %w", err)
-	}
-	if err := syncPromoteDirectory(filepath.Dir(dir)); err != nil {
-		return err
-	}
-	_, err = fseffect.Replace(fseffect.ReplaceRequest{
-		Location: fseffect.PathLocation(path),
-		Source:   bytes.NewReader(raw), Mode: 0o600, DirMode: 0o700,
-	})
-	if err != nil {
-		return fmt.Errorf("persist promote transaction: %w", err)
-	}
-	return nil
-}
-
-func readPromoteTransaction(path string) (promoteTransactionJournal, bool, error) {
-	raw, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return promoteTransactionJournal{}, false, nil
-	}
-	if err != nil {
-		return promoteTransactionJournal{}, false, fmt.Errorf("read promote transaction: %w", err)
-	}
-	var journal promoteTransactionJournal
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&journal); err != nil {
-		return promoteTransactionJournal{}, false, fmt.Errorf("decode promote transaction: %w", err)
-	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		return promoteTransactionJournal{}, false, fmt.Errorf("decode promote transaction: trailing data")
-	}
-	return journal, true, nil
-}
-
-func removePromoteTransaction(path string) error {
-	_ = os.RemoveAll(promoteTransactionRetainedDir(path))
-	err := os.Remove(path)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("remove promote transaction: %w", err)
-	}
-	return syncPromoteDirectory(filepath.Dir(path))
-}
-
-func syncPromoteDirectory(path string) error {
-	dir, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("open promote transaction directory: %w", err)
-	}
-	defer func() { _ = dir.Close() }()
-	if err := fssync.File(dir); err != nil {
-		return fmt.Errorf("sync promote transaction directory: %w", err)
-	}
-	return nil
 }
 
 func contentSHA256(content []byte) string {

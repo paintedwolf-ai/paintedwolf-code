@@ -169,6 +169,11 @@ func (host *HostPromotion) removeHostComponentRecord(tx hostTransaction) error {
 	if m.WorkerID != tx.WorkerID {
 		return ErrOwnershipMismatch
 	}
+	// Markers go first: without its record a marker is inert, but a stale marker
+	// under a live record would suppress the effect on retry.
+	if err := removeAppliedPathMarkers(host.store.promotionsDir, "tx-"+m.CheckpointID); err != nil {
+		return err
+	}
 	for _, name := range []string{"tx-" + m.CheckpointID + ".json", "git-import-" + m.WorkerID + "--" + m.CheckpointID + ".json"} {
 		if filepath.Base(name) != name {
 			return ErrInvalidManifest

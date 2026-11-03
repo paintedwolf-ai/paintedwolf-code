@@ -1,13 +1,11 @@
 package checkpoint
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -24,19 +22,20 @@ func (host *HostPromotion) retainTargetInode(
 		return "", layeredfs.ErrInvalidRoot
 	}
 	slot := fmt.Sprintf("slot-%06d", idx)
-	err := fseffect.HardLink(fseffect.HardLinkRequest{
+	err := host.retainLink(fseffect.HardLinkRequest{
 		Source:   fseffect.Location{Root: rootDir, Rel: path.Rel},
 		Location: fseffect.Location{Root: host.store.promotionsDir, Rel: filepath.Join("host-retained", slot)},
 		DirMode:  0o700,
 		Replace:  true,
 	})
-	if err != nil {
-		if errors.Is(err, syscall.EXDEV) && host.hasSurvivingInRootPeer(path.RootID, image.identity, after) {
+	if fseffect.HardLinkUnavailable(err) {
+		// A lone name is restorable from its before-image blob; aliases need the inode.
+		if image.links <= 1 || host.hasSurvivingInRootPeer(path.RootID, image.identity, after) {
 			return "", nil
 		}
-		if errors.Is(err, syscall.EXDEV) {
-			return "", fmt.Errorf("checkpoint: cannot retain target inode across filesystems for %s: %w", pathKey(path), err)
-		}
+		return "", fmt.Errorf("checkpoint: cannot retain hard-linked target inode for %s: %w", pathKey(path), err)
+	}
+	if err != nil {
 		return "", err
 	}
 	retained, rErr := host.captureRetainedTarget(slot)

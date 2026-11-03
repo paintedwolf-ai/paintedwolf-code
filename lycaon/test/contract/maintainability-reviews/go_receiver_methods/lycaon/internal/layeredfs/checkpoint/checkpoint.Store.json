@@ -4,12 +4,12 @@
   "kind": "runtime_service",
   "workstream": "immutable-worker-checkpoints",
   "disposition": "retain",
-  "reason": "Retain the 18-method immutable store as the content-addressed blob, manifest, host-recovery and journal persistence boundary. Manifest validation, host recovery slots and roll-forward recovery share storage paths; publication and promotion remain separate owners.",
-  "reviewed_commit": "c50ace99c158a639cb398b5009fdfc9480c84add",
+  "reason": "Retain the 18-method immutable store as the content-addressed blob, manifest, host-recovery and journal persistence boundary. Manifest validation, host recovery slots and roll-forward recovery share storage paths; publication and promotion remain separate owners. Reviewed unchanged after store_read.go gained the applied-path marker helpers; only its import set moved.",
+  "reviewed_commit": "fbcec5502a6566a5e779fb02a85b29eaab2a3fad",
   "ceiling": 18,
   "boundaries": {
     "lycaon/internal/layeredfs/checkpoint/checkpoint_test.go": "05c5d651fffc5236e5e757f3c1b670ac96924301e947d1cfbadcbed24713f88f",
     "lycaon/internal/layeredfs/checkpoint/promotion_test.go": "15b3f49a90d062f63ff21f95208d2eb408caf442a2defc0a98f9baaa140bcaf2"
   },
-  "reviewed_shape": "a79d2d996c4ba12fb452ac5e45b9d18cd85eb03ad9c7dadfd569a6c580df8fe4"
+  "reviewed_shape": "e807e0e1cc133117955fa8ba20e21a5762ba57c3ee793ba7b458c7e55721d09e"
 }

@@ -96,7 +96,9 @@ func MkdirAll(loc Location, mode os.FileMode) (createdCount int, err error) {
 	return createdCount, fsyncFD(currentFD)
 }
 
-func platformHardLink(req HardLinkRequest) error {
+func platformHardLink(req HardLinkRequest) error { return hardLinkWithSync(req, fsyncFD) }
+
+func hardLinkWithSync(req HardLinkRequest, sync func(int) error) error {
 	src, err := cleanLocation(req.Source)
 	if err != nil {
 		return err
@@ -148,6 +150,10 @@ func platformHardLink(req HardLinkRequest) error {
 		_ = unix.Unlinkat(dstParent.fd, tmpName, 0)
 		held.retire()
 	}()
+	// A durable name must never reference bytes or a link count that a crash can lose.
+	if err := syncStagedHardLink(dstParent, tmpName, sync); err != nil {
+		return err
+	}
 
 	if req.BeforeCommit != nil {
 		if err := req.BeforeCommit(targetAt{parent: dstParent}); err != nil {
@@ -164,7 +170,16 @@ func platformHardLink(req HardLinkRequest) error {
 	} else if err := unix.Renameat(dstParent.fd, tmpName, dstParent.fd, dstParent.name); err != nil {
 		return err
 	}
-	return fsyncFD(dstParent.fd)
+	return sync(dstParent.fd)
+}
+
+func syncStagedHardLink(parent *openedParent, name string, sync func(int) error) error {
+	fd, err := unix.Openat(parent.fd, name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = unix.Close(fd) }()
+	return sync(fd)
 }
 
 func stageHardLinkAt(srcParent *openedParent, srcStat *unix.Stat_t, dstParent *openedParent) (string, stagingHold, error) {

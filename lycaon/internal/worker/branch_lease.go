@@ -260,7 +260,7 @@ func (s mergeEngine) holdBranch(ctx context.Context, jobID string) (*BranchLease
 	task, exists := s.Queue.Get(jobID)
 	checkpointed := exists && task != nil && session.CheckpointStoreDirForTask(task) != ""
 	if checkpointed {
-		if err := session.SyncTaskCheckpointToWorkspace(task); err != nil {
+		if err := session.SyncTaskCheckpointToWorkspace(task, s.taskRootRefs(ctx, task)); err != nil {
 			return nil, fmt.Errorf("rehydrate checkpoint branch: %w", err)
 		}
 	}

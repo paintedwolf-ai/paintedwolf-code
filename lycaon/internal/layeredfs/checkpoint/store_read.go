@@ -1,6 +1,7 @@
 package checkpoint
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -157,7 +158,67 @@ func (s *Store) LoadPromotionRecord(txID string) (PromotionJournalRecord, bool, 
 	if err := json.Unmarshal(raw, &rec); err != nil {
 		return PromotionJournalRecord{}, false, err
 	}
+	applied, err := loadAppliedPathMarkers(s.promotionsDir, txID)
+	if err != nil {
+		return PromotionJournalRecord{}, false, err
+	}
+	rec.AppliedPaths = append(rec.AppliedPaths, applied...)
 	return rec, true, nil
+}
+
+// appliedPathMarker is the per-path progress fact behind a promotion record. One
+// small durable file per path keeps a promotion's journal writes linear.
+type appliedPathMarker struct {
+	Index int                     `json:"index"`
+	Path  layeredfs.QualifiedPath `json:"path"`
+}
+
+func appliedPathMarkersDir(promotionsDir, txID string) string {
+	return filepath.Join(promotionsDir, txID+".applied")
+}
+
+func recordAppliedPath(promotionsDir, txID string, index int, path layeredfs.QualifiedPath) error {
+	raw, err := json.Marshal(appliedPathMarker{Index: index, Path: path})
+	if err != nil {
+		return err
+	}
+	return writeAtomicJSONOrText(promotionsDir, filepath.Join(txID+".applied", fmt.Sprintf("path-%09d.json", index)), raw, 0o600)
+}
+
+func loadAppliedPathMarkers(promotionsDir, txID string) ([]layeredfs.QualifiedPath, error) {
+	dir := appliedPathMarkersDir(promotionsDir, txID)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	paths := make([]layeredfs.QualifiedPath, 0, len(entries))
+	for _, entry := range entries {
+		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var marker appliedPathMarker
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&marker); err != nil {
+			return nil, fmt.Errorf("%w: applied path marker %s: %w", ErrInvalidManifest, entry.Name(), err)
+		}
+		if entry.Name() != fmt.Sprintf("path-%09d.json", marker.Index) || !filepath.IsLocal(marker.Path.Rel) {
+			return nil, fmt.Errorf("%w: applied path marker %s", ErrInvalidManifest, entry.Name())
+		}
+		paths = append(paths, marker.Path)
+	}
+	return paths, nil
+}
+
+func removeAppliedPathMarkers(promotionsDir, txID string) error {
+	if err := os.RemoveAll(appliedPathMarkersDir(promotionsDir, txID)); err != nil {
+		return err
+	}
+	return syncDir(promotionsDir)
 }
 
 func (pr *Promoter) loadPromotionRecord(txID string) (PromotionJournalRecord, bool, error) {

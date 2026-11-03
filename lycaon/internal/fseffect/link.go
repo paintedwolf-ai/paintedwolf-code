@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 )
 
 type rootLinkTarget struct {
@@ -26,6 +27,17 @@ type HardLinkRequest struct {
 
 // HardLink creates or atomically replaces an entry as a hard link to Source.
 func HardLink(req HardLinkRequest) error { return platformHardLink(req) }
+
+// HardLinkUnavailable reports that the filesystem pair cannot hold a second
+// name for the inode, as distinct from a failure of this particular link.
+func HardLinkUnavailable(err error) bool {
+	for _, cause := range []error{ErrUnsupported, syscall.EXDEV, syscall.ENOTSUP, syscall.EOPNOTSUPP, syscall.EPERM, syscall.ENOSYS} {
+		if errors.Is(err, cause) {
+			return true
+		}
+	}
+	return false
+}
 
 func (t rootLinkTarget) Open() (*os.File, error)     { return t.root.Open(t.name) }
 func (t rootLinkTarget) Lstat() (os.FileInfo, error) { return t.root.Lstat(t.name) }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
@@ -19,10 +20,11 @@ type HostPromotion struct {
 	authorizedGitDirs []string
 	activeTx          *hostTransaction
 	activeIndex       map[layeredfs.QualifiedPath]int
+	retainLink        func(fseffect.HardLinkRequest) error
 }
 
 func NewHostPromotion(checkpoint *Promoter) *HostPromotion {
-	return &HostPromotion{checkpoint: checkpoint, store: checkpoint.cfg.Store, targets: checkpoint.targets, authorizedGitDirs: checkpoint.cfg.AuthorizedGitDirs}
+	return &HostPromotion{checkpoint: checkpoint, store: checkpoint.cfg.Store, targets: checkpoint.targets, authorizedGitDirs: checkpoint.cfg.AuthorizedGitDirs, retainLink: fseffect.HardLink}
 }
 
 // Apply persists undo and staged post-images before any checkpoint publication.

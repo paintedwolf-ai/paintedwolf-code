@@ -153,6 +153,10 @@ func (host *HostPromotion) prepareHostTargets(preview *PromotionPreview) ([]host
 				}
 				image.RetainedSlot = slot
 				retainedSlots[key] = slot
+				if slot == "" && image.links <= 1 {
+					// Restored from its blob, this path can no longer match the old inode.
+					image.HardLinkGroup = ""
+				}
 			}
 		}
 		out = append(out, hostTargetUndo{Path: path, Before: image, After: after[path]})
