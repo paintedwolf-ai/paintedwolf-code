@@ -1,10 +1,13 @@
 package checkpoint
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"slices"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -57,8 +60,7 @@ func (pr *Promoter) observeTarget(qpath layeredfs.QualifiedPath) (TargetObservat
 		return obs, err
 	}
 	if !info.Mode().IsRegular() && !info.IsDir() {
-		obs.Kind = layeredfs.EntryAbsent
-		return obs, nil
+		return TargetObservation{}, fmt.Errorf("checkpoint: unsupported target entry type %s", info.Mode())
 	}
 	file, err := root.Open(qpath.Rel)
 	if err != nil {
@@ -75,10 +77,20 @@ func (pr *Promoter) observeTarget(qpath layeredfs.QualifiedPath) (TargetObservat
 	obs.Mode, obs.Size, obs.ModTime = held.Mode(), held.Size(), held.ModTime()
 	if held.IsDir() {
 		obs.Kind = layeredfs.EntryDirectory
-		entries, readErr := file.ReadDir(1)
-		if readErr != nil && !errors.Is(readErr, io.EOF) {
+		entries, readErr := file.ReadDir(-1)
+		if readErr != nil {
 			return TargetObservation{}, readErr
 		}
+		names := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			names = append(names, entry.Name()+"\x00"+entry.Type().String())
+		}
+		slices.Sort(names)
+		raw, err := json.Marshal(names)
+		if err != nil {
+			return TargetObservation{}, err
+		}
+		obs.DirectorySHA256 = sha256Hex(raw)
 		obs.DirEmpty = len(entries) == 0
 		return obs, nil
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"maps"
 	"sync/atomic"
 	"time"
 
@@ -12,14 +13,15 @@ import (
 
 // TargetObservation captures the live integration target state for a path at Preview time.
 type TargetObservation struct {
-	Path       layeredfs.QualifiedPath `json:"path"`
-	Kind       layeredfs.EntryKind     `json:"kind"`
-	Mode       fs.FileMode             `json:"mode,omitempty"`
-	Size       int64                   `json:"size,omitempty"`
-	ModTime    time.Time               `json:"mod_time,omitempty"`
-	SHA256     string                  `json:"sha256,omitempty"`
-	LinkTarget string                  `json:"link_target,omitempty"`
-	DirEmpty   bool                    `json:"dir_empty,omitempty"`
+	Path            layeredfs.QualifiedPath `json:"path"`
+	Kind            layeredfs.EntryKind     `json:"kind"`
+	Mode            fs.FileMode             `json:"mode,omitempty"`
+	Size            int64                   `json:"size,omitempty"`
+	ModTime         time.Time               `json:"mod_time,omitempty"`
+	SHA256          string                  `json:"sha256,omitempty"`
+	LinkTarget      string                  `json:"link_target,omitempty"`
+	DirectorySHA256 string                  `json:"directory_sha256,omitempty"`
+	DirEmpty        bool                    `json:"dir_empty,omitempty"`
 }
 
 // PlannedActionKind identifies the promotion operation to execute on the target tree.
@@ -133,6 +135,23 @@ func (pr *Promoter) Preview(_ context.Context, req PreviewRequest) (*PromotionPr
 			return nil, err
 		}
 		targetObs[pathKey(entry.Path)] = cur
+
+		if cur.Kind == layeredfs.EntryDirectory && (entry.Deleted || entry.Kind == layeredfs.EntryAbsent || entry.DirectoryReplaced) {
+			observed, err := pr.observeRemovedDirectory(m, entry.Path)
+			if err != nil {
+				return nil, err
+			}
+			if observed == nil {
+				if resolution, ok := req.Resolutions[entry.Path]; ok && resolution.Choice == ResolutionKeepTarget {
+					continue
+				}
+				conflict := newConflict(entry, cur, ConflictDirectoryReplaced, "directory contains target entries without matching deleted checkpoint bases")
+				conflict.SupportedResolutions = []ResolutionChoice{ResolutionKeepTarget}
+				conflicts = append(conflicts, *conflict)
+				continue
+			}
+			maps.Copy(targetObs, observed)
+		}
 
 		change, conflict, mergedThreeWay, err := pr.evaluateEntry(entry, cur, groupPrimary)
 		if err != nil {

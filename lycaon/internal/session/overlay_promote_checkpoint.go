@@ -57,7 +57,7 @@ func boundTaskCheckpointID(jobID string) string {
 }
 
 // RevalidateTaskCheckpointPreview checks whether any bound PromotionPreview target observations drifted.
-func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask) error {
+func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) error {
 	if task == nil {
 		return nil
 	}
@@ -67,7 +67,7 @@ func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask) 
 	if bound == nil {
 		return nil
 	}
-	store, _, promoter, ok, err := NewTaskCheckpointPromoter(task, nil)
+	store, _, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
 	if err != nil || !ok {
 		return err
 	}
@@ -80,17 +80,10 @@ func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask) 
 	if latest != bound.CheckpointID {
 		return checkpoint.ErrStalePreviewCheckpointChanged
 	}
-	curPreview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{CheckpointID: bound.CheckpointID})
-	if err != nil {
+	if err := context.Cause(ctx); err != nil {
 		return err
 	}
-	for k, oldObs := range bound.TargetObservations {
-		curObs, exists := curPreview.TargetObservations[k]
-		if !exists || curObs.Kind != oldObs.Kind || curObs.SHA256 != oldObs.SHA256 || curObs.Size != oldObs.Size {
-			return fmt.Errorf("%w: target %s changed since preview", checkpoint.ErrStalePreviewTargetChanged, k)
-		}
-	}
-	return nil
+	return promoter.RevalidatePreviewTargets(bound, nil)
 }
 
 // TargetRootsForTaskCheckpoint resolves the target root map for a task's checkpoint manifest and rejects unmapped RootIDs.

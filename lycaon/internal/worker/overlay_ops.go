@@ -137,7 +137,7 @@ func (s mergeEngine) buildValidatedPromotePlans(
 			"reason": err.Error(),
 		})
 	}
-	mergePlans, err := prepareMergeMutations(ctx, work.task, assessment)
+	mergePlans, err := prepareMergeMutations(ctx, work.task, work.roots, assessment)
 	if err != nil {
 		return nil, nil, api.WorkerMergeResult{}, err
 	}

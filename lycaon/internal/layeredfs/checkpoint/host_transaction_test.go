@@ -1,6 +1,8 @@
 package checkpoint
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -11,7 +13,7 @@ import (
 )
 
 func TestHostTransactionRecovery(t *testing.T) {
-	for _, phase := range []string{"complete", "partial", "file divergence", "unrecorded child"} {
+	for _, phase := range []string{"complete", "partial", "file divergence", "unrecorded child", "unknown journal field", "bad journal version", "escaping image digest", "changed root"} {
 		t.Run(phase, func(t *testing.T) {
 			primary := t.TempDir()
 			testutil.FailErr(t, "seed original", os.WriteFile(filepath.Join(primary, "a.txt"), []byte("original\n"), 0640))
@@ -61,11 +63,52 @@ func TestHostTransactionRecovery(t *testing.T) {
 			if phase == "unrecorded child" {
 				testutil.FailErr(t, "external child", os.WriteFile(filepath.Join(primary, "nested/foreign"), []byte("external\n"), 0600))
 			}
+			var preservedJournal []byte
+			if phase == "unknown journal field" || phase == "bad journal version" || phase == "escaping image digest" {
+				path := filepath.Join(store.promotionsDir, "host-transaction.json")
+				raw, err := os.ReadFile(path)
+				testutil.FailErr(t, "read recovery record", err)
+				var document map[string]any
+				testutil.FailErr(t, "decode recovery fixture", json.Unmarshal(raw, &document))
+				switch phase {
+				case "unknown journal field":
+					document["unknown_effect"] = true
+				case "bad journal version":
+					document["version"] = 99
+				case "escaping image digest":
+					document["targets"].([]any)[0].(map[string]any)["before"].(map[string]any)["sha256"] = "../../outside"
+				}
+				preservedJournal, err = json.Marshal(document)
+				testutil.FailErr(t, "encode invalid fixture", err)
+				testutil.FailErr(t, "write invalid fixture", os.WriteFile(path, preservedJournal, 0600))
+			}
+			if phase == "changed root" {
+				retained := filepath.Join(t.TempDir(), "retained-root")
+				testutil.FailErr(t, "retain original target root", os.Rename(primary, retained))
+				testutil.FailErr(t, "replace target root", os.Mkdir(primary, 0755))
+				testutil.FailErr(t, "new root content", os.WriteFile(filepath.Join(primary, "a.txt"), []byte("external\n"), 0600))
+			}
 			// Recovery uses persisted facts rather than the old Promoter's memory.
 			reopened, err := NewPromoter(config)
 			testutil.FailErr(t, "reopen promoter", err)
 			err = reopened.RollbackHostTransaction(t.Context())
-			if phase == "file divergence" || phase == "unrecorded child" {
+			if preservedJournal != nil {
+				if err == nil {
+					t.Fatal("invalid recovery journal was accepted")
+				}
+				raw, readErr := os.ReadFile(filepath.Join(store.promotionsDir, "host-transaction.json"))
+				testutil.FailErr(t, "read refused journal", readErr)
+				if !bytes.Equal(raw, preservedJournal) {
+					t.Fatal("invalid recovery journal was mutated")
+				}
+				body, readErr := os.ReadFile(filepath.Join(primary, "a.txt"))
+				testutil.FailErr(t, "read unchanged target", readErr)
+				if string(body) != "worker\n" {
+					t.Fatalf("invalid journal changed target=%q", body)
+				}
+				return
+			}
+			if phase == "file divergence" || phase == "unrecorded child" || phase == "changed root" {
 				if err == nil {
 					t.Fatal("recovery overwrote an external change")
 				}

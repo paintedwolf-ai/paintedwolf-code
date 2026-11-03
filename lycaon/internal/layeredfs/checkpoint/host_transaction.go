@@ -1,10 +1,12 @@
 package checkpoint
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -15,13 +17,14 @@ import (
 // Its before-images describe the tree after the host's ordinary file writes;
 // recovery restores those images before the host rolls its own journal back.
 type hostTransaction struct {
-	Version      int              `json:"version"`
-	CheckpointID string           `json:"checkpoint_id"`
-	WorkerID     string           `json:"worker_id"`
-	RollingBack  bool             `json:"rolling_back,omitempty"`
-	RolledBack   bool             `json:"rolled_back,omitempty"`
-	Targets      []hostTargetUndo `json:"targets"`
-	Refs         []hostRefUndo    `json:"refs,omitempty"`
+	Version      int                         `json:"version"`
+	CheckpointID string                      `json:"checkpoint_id"`
+	WorkerID     string                      `json:"worker_id"`
+	RollingBack  bool                        `json:"rolling_back,omitempty"`
+	RolledBack   bool                        `json:"rolled_back,omitempty"`
+	Roots        map[string]hostRootIdentity `json:"roots"`
+	Targets      []hostTargetUndo            `json:"targets"`
+	Refs         []hostRefUndo               `json:"refs,omitempty"`
 }
 
 type hostTargetUndo struct {
@@ -73,7 +76,11 @@ func (pr *Promoter) PrepareHostTransaction(ctx context.Context, preview *Promoti
 	if err := context.Cause(ctx); err != nil {
 		return err
 	}
-	return pr.saveHostTransaction(hostTransaction{Version: 1, CheckpointID: m.CheckpointID, WorkerID: m.WorkerID, Targets: targets, Refs: refs})
+	roots, err := pr.hostRootIdentities()
+	if err != nil {
+		return err
+	}
+	return pr.saveHostTransaction(hostTransaction{Roots: roots, Version: 1, CheckpointID: m.CheckpointID, WorkerID: m.WorkerID, Targets: targets, Refs: refs})
 }
 
 // RollbackHostTransaction restores only recorded checkpoint effects, refusing divergence.
@@ -133,11 +140,16 @@ func (pr *Promoter) loadHostTransaction() (hostTransaction, bool, error) {
 	if err != nil {
 		return tx, false, err
 	}
-	if err := json.Unmarshal(raw, &tx); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&tx); err != nil {
 		return tx, true, err
 	}
-	if tx.Version != 1 || filepath.Base(tx.CheckpointID) != tx.CheckpointID || tx.CheckpointID == "." || tx.CheckpointID == "" {
+	if err := decoder.Decode(new(any)); err != io.EOF {
 		return tx, true, ErrInvalidManifest
+	}
+	if err := pr.validateHostTransaction(tx); err != nil {
+		return tx, true, err
 	}
 	return tx, true, nil
 }

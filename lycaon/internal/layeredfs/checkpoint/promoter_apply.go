@@ -77,7 +77,7 @@ func (pr *Promoter) Apply(ctx context.Context, req ApplyRequest) (*PromotionJour
 		return &rec, nil
 	}
 
-	if err := pr.revalidateUnappliedTargets(req.Preview, rec.AppliedPaths); err != nil {
+	if err := pr.RevalidatePreviewTargets(req.Preview, rec.AppliedPaths); err != nil {
 		return nil, err
 	}
 
@@ -169,7 +169,8 @@ func (pr *Promoter) Reject(_ context.Context, checkpointID, reason string) (*Pro
 	return &rec, nil
 }
 
-func (pr *Promoter) revalidateUnappliedTargets(preview *PromotionPreview, applied []layeredfs.QualifiedPath) error {
+// RevalidatePreviewTargets checks the bound target facts, excluding journaled applied paths on retry.
+func (pr *Promoter) RevalidatePreviewTargets(preview *PromotionPreview, applied []layeredfs.QualifiedPath) error {
 	for _, obs := range preview.TargetObservations {
 		if hasPath(applied, obs.Path) {
 			continue
@@ -197,7 +198,7 @@ func sameTargetObservation(a, b TargetObservation) bool {
 	case layeredfs.EntrySymlink:
 		return a.LinkTarget == b.LinkTarget
 	case layeredfs.EntryDirectory:
-		return a.DirEmpty == b.DirEmpty
+		return a.DirEmpty == b.DirEmpty && a.Mode.Perm() == b.Mode.Perm() && a.DirectorySHA256 == b.DirectorySHA256
 	}
 	return false
 }

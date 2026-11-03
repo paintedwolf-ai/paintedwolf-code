@@ -52,8 +52,8 @@ func (s mergeEngine) clearReconcilePaths(sessionID string) {
 	s.Reconcile.ClearMergeReconcilePaths(sessionID)
 }
 
-func prepareMergeMutations(ctx context.Context, task *api.WorkerTask, assessment PromoteAssessment) ([]promoteMutation, error) {
-	if err := session.RevalidateTaskCheckpointPreview(ctx, task); err != nil {
+func prepareMergeMutations(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, assessment PromoteAssessment) ([]promoteMutation, error) {
+	if err := session.RevalidateTaskCheckpointPreview(ctx, task, roots); err != nil {
 		return nil, err
 	}
 	byPath := map[string]PromoteMergeResult{}
