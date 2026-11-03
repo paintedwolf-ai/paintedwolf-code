@@ -190,6 +190,11 @@ does not supply the dropped arguments, so this feedback cannot identify a field,
 byte offset, container stack, or repaired call. Unknown parser errors retain
 generic guidance. Recovery retains its existing two-attempt allowance.
 
+An unsuccessful process exit without a typed refusal produces no sandbox
+warning. Its exit status, output, deadline or stop facts remain in the receipt;
+actual boundary refusals keep their specific recovery. The retired
+`SANDBOX_REFUSAL_REPORT_SILENT` code remains reserved for historical outcomes.
+
 ## Reachable-remedy rule
 
 Feedback must not tell an agent to call a tool it does not have, approve its own request, write outside its scope, or bypass a workflow gate. Remedy rendering receives the current tool/worker surface and selects only reachable paths. If no direct remedy exists, the feedback names which party must act (coordinator, user, or a device setting) and the agent returns that dependency rather than looping.
