@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
@@ -166,5 +169,52 @@ func TestReconcileStaleSandboxesRemovesOrphanMeta(t *testing.T) {
 	}
 	if _, err := os.Stat(meta); !os.IsNotExist(err) {
 		t.Fatal("orphan meta should be removed")
+	}
+}
+
+func TestReconcileOwnedWorkerViewsSettlesOnlyUnretainedRecordedIdentities(t *testing.T) {
+	cpStore, err := checkpoint.NewStore(t.TempDir())
+	testutil.FailErr(t, "NewStore", err)
+	coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
+		RootDir:         t.TempDir(),
+		CheckpointStore: cpStore,
+	})
+	testutil.FailErr(t, "NewCoordinator", err)
+
+	for _, w := range []struct {
+		id, view string
+	}{
+		{"job-keep", "view-keep"},
+		{"job-stale", "view-stale"},
+	} {
+		testutil.FailErr(t, "SaveWorkerJournal", coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
+			FormatVersion: recovery.FormatVersion,
+			WorkerID:      w.id,
+			ViewID:        w.view,
+			TaskID:        "t-1",
+			ProjectID:     "p-1",
+			AdapterID:     adapter.AdapterFUSELinux,
+		}))
+		testutil.FailErr(t, "RecordMountIdentity", coord.RecordMountIdentity(recovery.MountIdentityRecord{
+			ViewID:         w.view,
+			WorkerID:       w.id,
+			AdapterID:      adapter.AdapterFUSELinux,
+			RuntimeViewDir: t.TempDir(),
+			BackingDir:     t.TempDir(),
+		}))
+	}
+
+	settled, err := workspace.ReconcileOwnedWorkerViews(
+		t.Context(), coord, []string{"job-keep", "job-stale"}, map[string]struct{}{"job-keep": {}},
+	)
+	testutil.FailErr(t, "ReconcileOwnedWorkerViews", err)
+	if settled != 1 {
+		t.Fatalf("settled = %d want 1", settled)
+	}
+	if _, ok, _ := coord.LoadMountIdentity("job-keep", "view-keep"); !ok {
+		t.Fatal("expected retained job-keep mount identity untouched")
+	}
+	if _, ok, _ := coord.LoadMountIdentity("job-stale", "view-stale"); ok {
+		t.Fatal("expected stale job-stale mount identity settled and removed")
 	}
 }
