@@ -202,7 +202,7 @@ func importRefsToTrunk(ctx context.Context, m *Manager, req RefImportRequest) (*
 }
 
 // LoadImportJournal reads the persisted ImportJournalRecord for (jobID, checkpointID).
-func (m *Manager) LoadImportJournal(jobID, checkpointID string) (ImportJournalRecord, error) {
+func LoadImportJournal(m *Manager, jobID, checkpointID string) (ImportJournalRecord, error) {
 	raw, err := os.ReadFile(importJournalPath(m, jobID, checkpointID))
 	if err != nil {
 		return ImportJournalRecord{}, err

@@ -225,11 +225,11 @@ func TestSecurityConfinementGitlinksConfigAndNativeTools(t *testing.T) {
 	if err := CheckNativeToolPath("sub/.git/HEAD", true); !errors.Is(err, ErrNativeToolGitMutationForbidden) {
 		t.Fatalf("expected ErrNativeToolGitMutationForbidden on submodule .git, got %v", err)
 	}
-	testutil.FailErr(t, "SetAccessOrigin OriginNativeTool", mgr.SetAccessOrigin("view-sec", OriginNativeTool))
+	testutil.FailErr(t, "SetAccessOrigin OriginNativeTool", SetAccessOrigin(mgr, "view-sec", OriginNativeTool))
 	if _, err := core.WriteFile(qp(".git/injected"), []byte("bad"), 0o644); !errors.Is(err, ErrNativeToolGitMutationForbidden) {
 		t.Fatalf("expected ErrNativeToolGitMutationForbidden on Core write under OriginNativeTool, got %v", err)
 	}
-	testutil.FailErr(t, "restore OriginFilesystem", mgr.SetAccessOrigin("view-sec", OriginFilesystem))
+	testutil.FailErr(t, "restore OriginFilesystem", SetAccessOrigin(mgr, "view-sec", OriginFilesystem))
 
 	// 3. Unauthorized external gitlink target and cross-worker gitlink redirection must be rejected.
 	badRoot := filepath.Join(fix.tmpDir, "bad-gitlink-repo")
@@ -245,8 +245,8 @@ func TestSecurityConfinementGitlinksConfigAndNativeTools(t *testing.T) {
 	}
 
 	// Pointing gitlink at another worker's private .git directory must also be refused.
-	worker1GitDir, err := mgr.PrivateGitDir("view-sec", ".")
-	testutil.FailErr(t, "PrivateGitDir view-sec", err)
+	worker1GitDir, err := readyPrivateGitDir(mgr, "view-sec", ".")
+	testutil.FailErr(t, "readyPrivateGitDir view-sec", err)
 	testutil.FailErr(t, "write cross-worker .git file", os.WriteFile(filepath.Join(badRoot, ".git"), []byte("gitdir: "+worker1GitDir+"\n"), 0o644))
 	if _, err := badCore.Stat(qp(".git")); !errors.Is(err, ErrUnauthorizedGitTarget) {
 		t.Fatalf("expected ErrUnauthorizedGitTarget for cross-worker gitlink, got %v", err)

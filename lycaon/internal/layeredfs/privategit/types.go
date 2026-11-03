@@ -102,6 +102,22 @@ type RemotePolicy struct {
 	CredentialCheck func(ctx context.Context, op, remote, targetURL string) error
 }
 
+// MountedViewBinding records the adapter/supervisor-owned mount identity and lifecycle
+// facts that bind a worker view, root, and layeredfs.Core to a mounted workspace path (#1671).
+type MountedViewBinding struct {
+	ViewID       string
+	WorkerID     string
+	RootID       string
+	TrunkDir     string
+	MountPath    string
+	AdapterID    string
+	Core         *layeredfs.Core
+	MountID      string
+	ConnectionID string
+	Active       bool
+	IsActive     func() bool
+}
+
 // SeedLimits bounds materialized fallback workspace seeding.
 type SeedLimits struct {
 	MaxEntries int64

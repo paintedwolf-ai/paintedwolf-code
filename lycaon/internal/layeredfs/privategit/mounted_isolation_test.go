@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
-func TestPrepareViewGitOperationDoesNotCopyTrunkOrWalkUnchangedFiles(t *testing.T) {
+func TestPrepareViewGitOperationMountedBindingAndCopiedWorktreeDoubleIsolation(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
 	trunk := filepath.Join(tmp, "trunk")
@@ -38,33 +38,15 @@ func TestPrepareViewGitOperationDoesNotCopyTrunkOrWalkUnchangedFiles(t *testing.
 	trunkBefore := snapshotDirectoryTreeDigests(t, trunk)
 	mgr := newTestManager(t, tmp)
 
-	// (a) Verify missing, unmounted/unpopulated, trunk-aliased, or hardlinked mountWorktreeDir fails closed with ErrMountedWorktreeUnavailable.
-	unboundCore, err := layeredfs.New(layeredfs.Config{
-		ViewID: "view-unbound", BackingDir: filepath.Join(tmp, "core-unbound"), GitInterceptor: mgr,
-		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true}},
-	})
-	testutil.FailErr(t, "layeredfs.New unbound", err)
-	defer func() { _ = unboundCore.ReleaseView() }()
-	testutil.FailErr(t, "MountedClaim unbound", mgr.MountedClaim("view-unbound", "worker-unbound", "primary", trunk, unboundCore))
-	if _, _, _, uErr := PrepareViewGitOperation(t.Context(), trunk, "worker-unbound"); !errors.Is(uErr, ErrMountedWorktreeUnavailable) {
-		t.Fatalf("expected ErrMountedWorktreeUnavailable on unbound MountedClaim, got %v", uErr)
-	}
-	emptyDir := filepath.Join(tmp, "empty-unmounted")
-	testutil.FailErr(t, "mkdir emptyDir", os.MkdirAll(emptyDir, 0o755))
-	hardlinkDir := filepath.Join(tmp, "hardlink-projection")
-	testutil.FailErr(t, "mkdir hardlinkDir", os.MkdirAll(hardlinkDir, 0o755))
-	testutil.FailErr(t, "hardlink clean_000.txt", os.Link(filepath.Join(trunk, "clean_000.txt"), filepath.Join(hardlinkDir, "clean_000.txt")))
-	for _, badWT := range []string{"", filepath.Join(tmp, "missing-wt"), trunk, emptyDir, hardlinkDir} {
-		if bErr := mgr.BindMountedWorktree("view-unbound", badWT); !errors.Is(bErr, ErrMountedWorktreeUnavailable) {
-			t.Fatalf("expected ErrMountedWorktreeUnavailable for BindMountedWorktree(%q), got %v", badWT, bErr)
-		}
-		if cErr := mgr.MountedClaimWithWorktree("view-bad", "worker-bad", "primary", trunk, badWT, unboundCore); !errors.Is(cErr, ErrMountedWorktreeUnavailable) {
-			t.Fatalf("expected ErrMountedWorktreeUnavailable for MountedClaimWithWorktree(%q), got %v", badWT, cErr)
-		}
-	}
-	_ = mgr.ReleaseView("view-unbound")
+	// (a) Verify absent and mismatched MountedViewBindings fail closed with ErrMountedWorktreeUnavailable.
+	verifyAbsentAndMismatchedMountBindings(t, mgr, tmp, trunk)
 
-	// (b) Verify mounted mode uses the bound mounted worktree with zero hardlinks to trunk and protects trunk from in-place write/truncate/chmod.
+	// (b) Verify a legitimately empty active mounted view (where all visible entries were deleted) succeeds,
+	// and deactivating or revoking the mount binding fails closed with ErrMountedWorktreeUnavailable.
+	verifyLegitimatelyEmptyActiveMountedView(t, mgr, tmp, trunk)
+
+	// (c) Verify private Git metadata initialization and copied-worktree unit-test double / materialized seed isolation.
+	// Note: newMountedViewWithManager uses populateCopiedWorktreeTestDouble (a unit-test double, not a kernel mount).
 	core := newMountedViewWithManager(t, mgr, "view-mounted", trunk)
 	wtDir, finish, managed, err := PrepareViewGitOperation(t.Context(), trunk, "worker-view-mounted")
 	testutil.FailErr(t, "PrepareViewGitOperation", err)
@@ -95,7 +77,7 @@ func TestPrepareViewGitOperationDoesNotCopyTrunkOrWalkUnchangedFiles(t *testing.
 	_, err = exec.Commit(t.Context(), "worker mounted commit")
 	testutil.FailErr(t, "git commit", err)
 
-	// (c) Verify materialized mode (eagercopy) also shares zero trunk inodes and protects trunk from in-place write/truncate/chmod.
+	// (d) Verify materialized mode (eagercopy) shares zero trunk inodes and protects trunk from in-place write/truncate/chmod.
 	matDir := filepath.Join(tmp, "materialized-wt")
 	_, err = mgr.InitializeMaterializedSeed(t.Context(), MaterializedSeedConfig{
 		ViewID: "view-mat", WorkerID: "worker-view-mat", TrunkDir: trunk, TargetDir: matDir,
@@ -104,7 +86,116 @@ func TestPrepareViewGitOperationDoesNotCopyTrunkOrWalkUnchangedFiles(t *testing.
 	assertInPlaceWriteAndChmodIsolated(t, trunk, matDir, "clean_042.txt")
 
 	trunkAfter := snapshotDirectoryTreeDigests(t, trunk)
-	assertDigestMapsEqual(t, "canonical trunk bytes and modes after mounted and materialized in-place mutations", trunkBefore, trunkAfter)
+	assertDigestMapsEqual(t, "canonical trunk bytes and modes after copied-double and materialized in-place mutations", trunkBefore, trunkAfter)
+}
+
+func verifyAbsentAndMismatchedMountBindings(t *testing.T, mgr *Manager, tmp, trunk string) {
+	t.Helper()
+	unboundCore, err := layeredfs.New(layeredfs.Config{
+		ViewID: "view-unbound", BackingDir: filepath.Join(tmp, "core-unbound"), GitInterceptor: mgr,
+		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "layeredfs.New unbound", err)
+	defer func() { _ = unboundCore.ReleaseView() }()
+
+	otherCore, err := layeredfs.New(layeredfs.Config{
+		ViewID: "view-other", BackingDir: filepath.Join(tmp, "core-other"), GitInterceptor: mgr,
+		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "layeredfs.New other", err)
+	defer func() { _ = otherCore.ReleaseView() }()
+
+	candDir := filepath.Join(tmp, "candidate-mount")
+	testutil.FailErr(t, "mkdir candDir", os.MkdirAll(candDir, 0o755))
+	otherTrunk := filepath.Join(tmp, "other-trunk")
+	testutil.FailErr(t, "mkdir otherTrunk", os.MkdirAll(otherTrunk, 0o755))
+
+	testutil.FailErr(t, "MountedClaim unbound", mgr.MountedClaim("view-unbound", "worker-unbound", "primary", trunk, unboundCore))
+	defer func() { _ = mgr.ReleaseView("view-unbound") }()
+
+	if _, _, _, uErr := PrepareViewGitOperation(t.Context(), trunk, "worker-unbound"); !errors.Is(uErr, ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable on unbound MountedClaim, got %v", uErr)
+	}
+	if bErr := mgr.BindMountedWorktree("view-unbound", candDir); !errors.Is(bErr, ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable when no MountedViewBinding is registered, got %v", bErr)
+	}
+	if cErr := mgr.MountedClaimWithWorktree("view-no-bind", "worker-no-bind", "primary", trunk, candDir, otherCore); !errors.Is(cErr, ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable on MountedClaimWithWorktree without binding, got %v", cErr)
+	}
+
+	validBase := MountedViewBinding{
+		ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary",
+		TrunkDir: trunk, MountPath: candDir, AdapterID: "fuselinux",
+		Core: unboundCore, MountID: "mnt-1", Active: true,
+	}
+	badBindings := []MountedViewBinding{
+		{ViewID: "wrong-view", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: candDir, AdapterID: "fuselinux", Core: unboundCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "wrong-worker", RootID: "primary", TrunkDir: trunk, MountPath: candDir, AdapterID: "fuselinux", Core: unboundCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "wrong-root", TrunkDir: trunk, MountPath: candDir, AdapterID: "fuselinux", Core: unboundCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: candDir, AdapterID: "fuselinux", Core: otherCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: otherTrunk, MountPath: candDir, AdapterID: "fuselinux", Core: unboundCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: trunk, AdapterID: "fuselinux", Core: unboundCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: filepath.Join(tmp, "missing-dir"), AdapterID: "fuselinux", Core: unboundCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: candDir, AdapterID: "eagercopy", Core: unboundCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: candDir, AdapterID: "materialized", Core: unboundCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: candDir, AdapterID: "", Core: unboundCore, MountID: "mnt-1", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: candDir, AdapterID: "fuselinux", Core: unboundCore, MountID: "", Active: true},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: candDir, AdapterID: "fuselinux", Core: unboundCore, MountID: "mnt-1", Active: false},
+		{ViewID: "view-unbound", WorkerID: "worker-unbound", RootID: "primary", TrunkDir: trunk, MountPath: candDir, AdapterID: "fuselinux", Core: unboundCore, MountID: "mnt-1", Active: true, IsActive: func() bool { return false }},
+	}
+	_ = validBase
+	for i, bad := range badBindings {
+		if err := mgr.BindMountedView(bad); !errors.Is(err, ErrMountedWorktreeUnavailable) {
+			t.Fatalf("case %d: expected ErrMountedWorktreeUnavailable from BindMountedView(%+v), got %v", i, bad, err)
+		}
+		if err := mgr.RegisterMountedViewBinding(bad); !errors.Is(err, ErrMountedWorktreeUnavailable) {
+			t.Fatalf("case %d: expected ErrMountedWorktreeUnavailable from RegisterMountedViewBinding(%+v), got %v", i, bad, err)
+		}
+	}
+}
+
+func verifyLegitimatelyEmptyActiveMountedView(t *testing.T, mgr *Manager, tmp, trunk string) {
+	t.Helper()
+	emptyActiveDir := filepath.Join(tmp, "empty-active-mount")
+	testutil.FailErr(t, "mkdir emptyActiveDir", os.MkdirAll(emptyActiveDir, 0o755))
+	emptyCore, err := layeredfs.New(layeredfs.Config{
+		ViewID: "view-empty-active", BackingDir: filepath.Join(tmp, "core-empty-active"), GitInterceptor: mgr,
+		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "layeredfs.New empty-active", err)
+	defer func() {
+		_ = mgr.ReleaseView("view-empty-active")
+		_ = emptyCore.ReleaseView()
+	}()
+
+	isLive := true
+	testutil.FailErr(t, "MountedClaimWithBinding empty active", mgr.MountedClaimWithBinding(MountedViewBinding{
+		ViewID: "view-empty-active", WorkerID: "worker-empty-active", RootID: "primary",
+		TrunkDir: trunk, MountPath: emptyActiveDir, AdapterID: "nfsdarwin",
+		Core: emptyCore, MountID: "mnt-empty-active", Active: true,
+		IsActive: func() bool { return isLive },
+	}))
+
+	wtDir, finish, managed, err := PrepareViewGitOperation(t.Context(), trunk, "worker-empty-active")
+	testutil.FailErr(t, "PrepareViewGitOperation on legitimately empty active mounted view", err)
+	if !managed || wtDir != emptyActiveDir {
+		t.Fatalf("expected empty active mounted view to bind %q, got managed=%v wtDir=%q", emptyActiveDir, managed, wtDir)
+	}
+	stOut, code, err := gitexec.Run(t.Context(), wtDir, []string{"status", "--porcelain=v1"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	if err != nil || code != 0 || !strings.Contains(string(stOut), " D clean_000.txt") {
+		t.Fatalf("expected git status in legitimately empty active mounted view to report deleted files, got (code %d, err %v):\n%s", code, err, string(stOut))
+	}
+	testutil.FailErr(t, "finish empty active view", finish())
+
+	isLive = false
+	if _, _, _, dErr := PrepareViewGitOperation(t.Context(), trunk, "worker-empty-active"); !errors.Is(dErr, ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable when IsActive() becomes false, got %v", dErr)
+	}
+	isLive = true
+	mgr.RevokeMountedViewBinding("view-empty-active", "primary")
+	if _, _, _, rErr := PrepareViewGitOperation(t.Context(), trunk, "worker-empty-active"); !errors.Is(rErr, ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable after RevokeMountedViewBinding, got %v", rErr)
+	}
 }
 
 func assertInPlaceWriteAndChmodIsolated(t *testing.T, trunkDir, worktreeDir, rel string) {
@@ -139,15 +230,20 @@ func TestTwoWorkersSharingTrunkIsolatedViewResolution(t *testing.T) {
 	fix := buildRichRepoFixture(t)
 	mgr := newTestManager(t, fix.tmpDir)
 
-	_ = newMountedViewWithManager(t, mgr, "view-alpha", fix.trunkDir)
+	coreAlpha := newMountedViewWithManager(t, mgr, "view-alpha", fix.trunkDir)
 	_ = newMountedViewWithManager(t, mgr, "view-beta", fix.trunkDir)
 
 	mountAlias := filepath.Join(fix.tmpDir, "mounted-alpha")
-	populateDisposableTestMount(t, fix.trunkDir, mountAlias)
+	populateCopiedWorktreeTestDouble(t, fix.trunkDir, mountAlias)
+	testutil.FailErr(t, "RegisterMountedViewBinding", mgr.RegisterMountedViewBinding(MountedViewBinding{
+		ViewID: "view-alpha", WorkerID: "worker-view-alpha", RootID: "primary",
+		TrunkDir: fix.trunkDir, MountPath: mountAlias, AdapterID: "fuselinux",
+		Core: coreAlpha, MountID: "unit-mount-alpha-rebind", Active: true,
+	}))
 	testutil.FailErr(t, "BindMountedWorktree", mgr.BindMountedWorktree("view-alpha", mountAlias))
 
-	wtAlpha := mgr.ViewWorktreeDir("view-alpha")
-	wtBeta := mgr.ViewWorktreeDir("view-beta")
+	wtAlpha := viewWorktreeDir(mgr, "view-alpha")
+	wtBeta := viewWorktreeDir(mgr, "view-beta")
 	if wtAlpha != mountAlias || wtBeta == "" || wtAlpha == wtBeta {
 		t.Fatalf("expected distinct private worktree dirs, got alpha=%q beta=%q", wtAlpha, wtBeta)
 	}
@@ -182,118 +278,4 @@ func TestTwoWorkersSharingTrunkIsolatedViewResolution(t *testing.T) {
 	if _, ok := LookupExecutor(mgr, wtAlpha, "worker-view-beta"); ok {
 		t.Fatalf("LookupExecutor must reject mismatched workerID and worktreeDir")
 	}
-}
-
-func TestRetainedObjectPoolSurvivesSourcePruningAndFsck(t *testing.T) {
-	t.Parallel()
-	fix := buildRichRepoFixture(t)
-
-	gittest.Run(t, fix.trunkDir, "checkout", "-b", "prune-me")
-	testutil.FailErr(t, "write prune_me.txt", os.WriteFile(filepath.Join(fix.trunkDir, "prune_me.txt"), []byte("retained-in-pool\n"), 0o644))
-	gittest.CommitAll(t, fix.trunkDir, "base commit to be pruned in source")
-	prunedBaseOID := strings.TrimSpace(gittest.Run(t, fix.trunkDir, "rev-parse", "HEAD"))
-	gittest.Run(t, fix.trunkDir, "checkout", "main")
-
-	mgr := newTestManager(t, fix.tmpDir)
-	core := newMountedViewWithManager(t, mgr, "view-pool", fix.trunkDir)
-	exec := NewGitExecutor(mgr, "view-pool", RemotePolicy{})
-
-	_, err := exec.Checkout(t.Context(), "prune-me")
-	testutil.FailErr(t, "worker checkout prune-me", err)
-
-	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "worker_pool.txt"}, []byte("worker-created-object\n"), 0o644)
-	testutil.FailErr(t, "write worker_pool.txt", err)
-	_, err = exec.Run(t.Context(), ".", "add", "worker_pool.txt")
-	testutil.FailErr(t, "git add worker_pool.txt", err)
-	_, err = exec.Commit(t.Context(), "worker commit retained in shared pool")
-	testutil.FailErr(t, "worker commit", err)
-
-	wtDir := mgr.ViewWorktreeDir("view-pool")
-	workerHeadOut, _, err := gitexec.Run(t.Context(), wtDir, []string{"rev-parse", "HEAD"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	testutil.FailErr(t, "rev-parse worker HEAD", err)
-	workerHeadOID := strings.TrimSpace(string(workerHeadOut))
-
-	gittest.Run(t, fix.trunkDir, "branch", "-D", "prune-me")
-	gittest.Run(t, fix.trunkDir, "reflog", "expire", "--expire=now", "--expire-unreachable=now", "--all")
-	gittest.Run(t, fix.trunkDir, "gc", "--prune=now")
-
-	if _, code, _ := gitexec.Run(t.Context(), fix.trunkDir, []string{"cat-file", "-e", prunedBaseOID}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); code == 0 {
-		t.Fatalf("expected %s to be pruned from canonical trunk", prunedBaseOID)
-	}
-
-	_, err = exec.Run(t.Context(), ".", "fsck", "--full")
-	testutil.FailErr(t, "worker git fsck --full after source prune", err)
-	showOut, err := exec.Run(t.Context(), ".", "show", "--stat", workerHeadOID)
-	testutil.FailErr(t, "worker git show after source prune", err)
-	if !strings.Contains(showOut, "worker_pool.txt") {
-		t.Fatalf("expected worker commit content in git show, got:\n%s", showOut)
-	}
-
-	for _, oid := range []string{prunedBaseOID, workerHeadOID} {
-		if _, code, cErr := gitexec.Run(t.Context(), mgr.Store().RootDir(), []string{"--git-dir=" + mgr.Store().RootDir(), "cat-file", "-e", oid}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); cErr != nil || code != 0 {
-			t.Fatalf("expected retained object store to directly contain %s (code %d): %v", oid, code, cErr)
-		}
-	}
-}
-
-func TestInjectedCaptureAndObjectRetentionFailuresPreserveRecovery(t *testing.T) {
-	t.Parallel()
-	fix := buildRichRepoFixture(t)
-	mgr := newTestManager(t, fix.tmpDir)
-	idxPath := filepath.Join(fix.trunkDir, ".git", "index")
-	origIdx, err := os.ReadFile(idxPath)
-	testutil.FailErr(t, "read trunk index", err)
-	testutil.FailErr(t, "corrupt trunk index", os.WriteFile(idxPath, []byte("corrupt-index-bytes"), 0o644))
-
-	core := newMountedViewWithManager(t, mgr, "view-fail-recover", fix.trunkDir)
-	if _, _, _, pErr := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-fail-recover"); !errors.Is(pErr, ErrCorruptObjectStore) {
-		t.Fatalf("expected ErrCorruptObjectStore on corrupt source index capture, got %v", pErr)
-	}
-	if _, sErr := core.Stat(layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/HEAD"}); !errors.Is(sErr, layeredfs.ErrGitPending) {
-		t.Fatalf("expected ErrGitPending on Stat(.git/HEAD) while source index is corrupt, got %v", sErr)
-	}
-
-	testutil.FailErr(t, "restore trunk index", os.WriteFile(idxPath, origIdx, 0o644))
-	wtDir, finish, managed, err := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-fail-recover")
-	testutil.FailErr(t, "PrepareViewGitOperation after index repair", err)
-	if !managed || wtDir == "" {
-		t.Fatalf("expected managed worktree after repair, got managed=%v wtDir=%q", managed, wtDir)
-	}
-	testutil.FailErr(t, "finish after repair", finish())
-
-	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "recover_me.txt"}, []byte("precious-worker-work\n"), 0o644)
-	testutil.FailErr(t, "write recover_me.txt", err)
-	injectedRetainErr := errors.New("injected retention failure")
-	mgr.cfg.FailObjectRetentionHook = func(vID, _ string) error {
-		if vID == "view-fail-recover" {
-			return injectedRetainErr
-		}
-		return nil
-	}
-
-	_, finFail, _, err := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-fail-recover")
-	testutil.FailErr(t, "PrepareViewGitOperation before finish failure", err)
-	if fErr := finFail(); !errors.Is(fErr, ErrCorruptObjectStore) {
-		t.Fatalf("expected finish() to propagate ErrCorruptObjectStore on retention failure, got %v", fErr)
-	}
-	exec := NewGitExecutor(mgr, "view-fail-recover", RemotePolicy{})
-	if _, addErr := exec.Run(t.Context(), ".", "add", "recover_me.txt"); !errors.Is(addErr, ErrCorruptObjectStore) {
-		t.Fatalf("expected exec.Run(add) to propagate ErrCorruptObjectStore on retention failure, got %v", addErr)
-	}
-	if _, comErr := exec.Commit(t.Context(), "commit survives retention failure"); !errors.Is(comErr, ErrCorruptObjectStore) {
-		t.Fatalf("expected exec.Commit to propagate ErrCorruptObjectStore on retention failure, got %v", comErr)
-	}
-	if _, cpErr := mgr.CaptureCheckpointGitState(t.Context(), "view-fail-recover", "cp-fail"); !errors.Is(cpErr, ErrCorruptObjectStore) {
-		t.Fatalf("expected CaptureCheckpointGitState to propagate ErrCorruptObjectStore on retention failure, got %v", cpErr)
-	}
-
-	mgr.cfg.FailObjectRetentionHook = nil
-	gotBytes, err := core.ReadFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "recover_me.txt"})
-	testutil.FailErr(t, "ReadFile recover_me.txt after retention failure", err)
-	if string(gotBytes) != "precious-worker-work\n" {
-		t.Fatalf("expected worker file preserved for recovery, got %q", string(gotBytes))
-	}
-	cp, err := mgr.CaptureCheckpointGitState(t.Context(), "view-fail-recover", "cp-recovered")
-	testutil.FailErr(t, "CaptureCheckpointGitState after clearing hook", err)
-	testutil.FailErr(t, "VerifyCheckpointHistory after recovery", mgr.VerifyCheckpointHistory(t.Context(), cp))
 }

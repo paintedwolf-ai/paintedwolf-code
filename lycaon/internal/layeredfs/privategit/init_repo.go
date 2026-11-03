@@ -36,10 +36,7 @@ func initializePrivateRepo(
 		return nil, err
 	}
 	if !view.materialized {
-		if strings.TrimSpace(view.worktreeDir) == "" {
-			return nil, fmt.Errorf("%w: %w: view %q has no bound mounted worktree", layeredfs.ErrGitPending, ErrMountedWorktreeUnavailable, view.viewID)
-		}
-		if _, vErr := validateMountedWorktreeDir(layout.worktreeDir, targetWorktreeDir); vErr != nil {
+		if vErr := verifyActiveMountedView(mgr, view, layout.worktreeDir, targetWorktreeDir); vErr != nil {
 			return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, vErr)
 		}
 	}

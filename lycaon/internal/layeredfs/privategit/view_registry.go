@@ -139,8 +139,8 @@ func lookupManagerView(mgr *Manager, rootOrBranchDir, workerID string) (*managed
 	return nil, false, nil
 }
 
-// ViewWorktreeDir returns the private worktree stage directory for viewID.
-func (m *Manager) ViewWorktreeDir(viewID string) string {
+// viewWorktreeDir returns the private worktree stage directory for viewID.
+func viewWorktreeDir(m *Manager, viewID string) string {
 	v, err := getManagedView(m, viewID)
 	if err != nil {
 		return ""
@@ -191,6 +191,11 @@ func prepareManagedViewOperation(
 	view *managedView,
 ) (string, func() error, bool, error) {
 	noop := func() error { return nil }
+	if !view.materialized {
+		if err := verifyActiveMountedView(mgr, view, "", ""); err != nil {
+			return "", noop, true, err
+		}
+	}
 	if _, err := mgr.InterceptGitAccess(view.viewID, layeredfs.QualifiedPath{
 		RootID: view.rootID,
 		Rel:    ".git",

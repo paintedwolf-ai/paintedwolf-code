@@ -119,12 +119,16 @@ func setupAdapterWorkerView(t *testing.T, trunkDir, adapter string) (*privategit
 	})
 	testutil.FailErr(t, "layeredfs.New", err)
 	t.Cleanup(func() { _ = core.ReleaseView() })
-	mountDir := filepath.Join(t.TempDir(), "mounted-"+adapter)
-	testutil.FailErr(t, "mkdir mountDir", os.MkdirAll(mountDir, 0o755))
+	wtDoubleDir := filepath.Join(t.TempDir(), "unit-wt-double-"+adapter)
+	testutil.FailErr(t, "mkdir wtDoubleDir", os.MkdirAll(wtDoubleDir, 0o755))
 	readmeBytes, rErr := os.ReadFile(filepath.Join(trunkDir, "README.md"))
 	testutil.FailErr(t, "read trunk README.md", rErr)
-	testutil.FailErr(t, "seed mountDir README.md", os.WriteFile(filepath.Join(mountDir, "README.md"), readmeBytes, 0o644))
-	testutil.FailErr(t, "MountedClaimWithWorktree", mgr.MountedClaimWithWorktree(viewID, workerID, "primary", trunkDir, mountDir, core))
+	testutil.FailErr(t, "seed wtDoubleDir README.md", os.WriteFile(filepath.Join(wtDoubleDir, "README.md"), readmeBytes, 0o644))
+	testutil.FailErr(t, "MountedClaimWithBinding", mgr.MountedClaimWithBinding(privategit.MountedViewBinding{
+		ViewID: viewID, WorkerID: workerID, RootID: "primary",
+		TrunkDir: trunkDir, MountPath: wtDoubleDir, AdapterID: adapter,
+		Core: core, MountID: "unit-mount-" + adapter, Active: true,
+	}))
 	wtDir, finish, _, err := privategit.PrepareManagerViewOperation(t.Context(), mgr, trunkDir, workerID)
 	testutil.FailErr(t, "PrepareManagerViewOperation", err)
 	_ = finish()

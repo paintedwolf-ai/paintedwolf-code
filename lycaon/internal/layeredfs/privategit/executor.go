@@ -123,6 +123,11 @@ func executeViewGitCommand(
 	if err != nil {
 		return "", err
 	}
+	if !view.materialized {
+		if err := verifyActiveMountedView(e.mgr, view, "", ""); err != nil {
+			return "", err
+		}
+	}
 	repoRel = cleanSlashRel(repoRel)
 	gitRel := ".git"
 	if repoRel != "." {

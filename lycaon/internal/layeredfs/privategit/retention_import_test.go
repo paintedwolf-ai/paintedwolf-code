@@ -224,8 +224,8 @@ func TestFetchRepackNoBorrowedPackCopyAndPushEgressPolicy(t *testing.T) {
 	_, err = approvedExec.Repack(t.Context(), "-a", "-d")
 	testutil.FailErr(t, "approved Repack", err)
 
-	privGitDir, err := mgr.PrivateGitDir("view-net", ".")
-	testutil.FailErr(t, "PrivateGitDir", err)
+	privGitDir, err := readyPrivateGitDir(mgr, "view-net", ".")
+	testutil.FailErr(t, "readyPrivateGitDir", err)
 	storePacks, _ := os.ReadDir(filepath.Join(mgr.Store().ObjectsDir(), "pack"))
 	privPacks, _ := os.ReadDir(filepath.Join(privGitDir, "objects", "pack"))
 	storePackNames := make(map[string]bool)
@@ -248,4 +248,50 @@ func TestFetchRepackNoBorrowedPackCopyAndPushEgressPolicy(t *testing.T) {
 	if credChecked < 2 {
 		t.Fatalf("expected CredentialCheck to run for fetch and push, got %d", credChecked)
 	}
+}
+
+func TestInjectedCaptureAndObjectRetentionFailuresPreserveRecovery(t *testing.T) {
+	t.Parallel()
+	fix := buildRichRepoFixture(t)
+	mgr := newTestManager(t, fix.tmpDir)
+	idxPath := filepath.Join(fix.trunkDir, ".git", "index")
+	origIdx, err := os.ReadFile(idxPath)
+	testutil.FailErr(t, "read trunk index", err)
+	testutil.FailErr(t, "corrupt trunk index", os.WriteFile(idxPath, []byte("corrupt-index-bytes"), 0o644))
+
+	core := newMountedViewWithManager(t, mgr, "view-fail-recover", fix.trunkDir)
+	if _, _, _, pErr := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-fail-recover"); !errors.Is(pErr, ErrCorruptObjectStore) {
+		t.Fatalf("expected ErrCorruptObjectStore on corrupt source index capture, got %v", pErr)
+	}
+	if _, sErr := core.Stat(layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/HEAD"}); !errors.Is(sErr, layeredfs.ErrGitPending) {
+		t.Fatalf("expected ErrGitPending on Stat(.git/HEAD) while source index is corrupt, got %v", sErr)
+	}
+
+	testutil.FailErr(t, "restore trunk index", os.WriteFile(idxPath, origIdx, 0o644))
+	wtDir, finish, managed, err := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-fail-recover")
+	testutil.FailErr(t, "PrepareViewGitOperation after index repair", err)
+	if !managed || wtDir == "" {
+		t.Fatalf("expected managed worktree after repair, got managed=%v wtDir=%q", managed, wtDir)
+	}
+	testutil.FailErr(t, "finish after repair", finish())
+
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "recover_me.txt"}, []byte("precious-worker-work\n"), 0o644)
+	testutil.FailErr(t, "write recover_me.txt", err)
+	injectedRetainErr := errors.New("injected retention failure")
+	mgr.cfg.FailObjectRetentionHook = func(vID, _ string) error {
+		if vID == "view-fail-recover" {
+			return injectedRetainErr
+		}
+		return nil
+	}
+
+	_, finFail, _, err := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-fail-recover")
+	testutil.FailErr(t, "PrepareViewGitOperation before finish failure", err)
+	if fErr := finFail(); !errors.Is(fErr, ErrCorruptObjectStore) {
+		t.Fatalf("expected finish() to propagate ErrCorruptObjectStore on retention failure, got %v", fErr)
+	}
+	mgr.cfg.FailObjectRetentionHook = nil
+	cp, err := mgr.CaptureCheckpointGitState(t.Context(), "view-fail-recover", "cp-recovered")
+	testutil.FailErr(t, "CaptureCheckpointGitState after clearing hook", err)
+	testutil.FailErr(t, "VerifyCheckpointHistory after recovery", mgr.VerifyCheckpointHistory(t.Context(), cp))
 }

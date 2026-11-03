@@ -45,6 +45,7 @@ type Manager struct {
 	views           map[string]*managedView
 	viewsByWorker   map[string]*managedView
 	viewsByWorktree map[string]*managedView
+	mountBindings   map[string]MountedViewBinding
 	checkpoints     map[string]*CheckpointGitState
 }
 
@@ -75,6 +76,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		views:           make(map[string]*managedView),
 		viewsByWorker:   make(map[string]*managedView),
 		viewsByWorktree: make(map[string]*managedView),
+		mountBindings:   make(map[string]MountedViewBinding),
 		checkpoints:     make(map[string]*CheckpointGitState),
 	}, nil
 }
@@ -137,6 +139,11 @@ func (m *Manager) InterceptGitAccess(
 	if origin == OriginNativeTool && writeIntent {
 		return layeredfs.GitInterceptOutcome{}, ErrNativeToolGitMutationForbidden
 	}
+	if !view.materialized {
+		if err := verifyActiveMountedView(m, view, "", ""); err != nil {
+			return layeredfs.GitInterceptOutcome{}, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, err)
+		}
+	}
 
 	if err := ensureViewRepoInitialized(context.Background(), m, view, repoRel); err != nil {
 		return layeredfs.GitInterceptOutcome{}, err
@@ -145,7 +152,7 @@ func (m *Manager) InterceptGitAccess(
 }
 
 // SetAccessOrigin sets the active confinement origin for a view (filesystem vs native_tool).
-func (m *Manager) SetAccessOrigin(viewID string, origin AccessOrigin) error {
+func SetAccessOrigin(m *Manager, viewID string, origin AccessOrigin) error {
 	view, err := getManagedView(m, viewID)
 	if err != nil {
 		return err
@@ -180,11 +187,6 @@ func (m *Manager) RepoMetrics(viewID, repoRel string) (InitMetrics, bool) {
 	return repo.metrics, true
 }
 
-// PrivateGitDir returns the initialized private .git directory path for repoRel in viewID.
-func (m *Manager) PrivateGitDir(viewID, repoRel string) (string, error) {
-	return readyPrivateGitDir(m, viewID, repoRel)
-}
-
 // ReleaseView releases active view leases from the retained store without invalidating
 // any retained checkpoint leases (#1671).
 func (m *Manager) ReleaseView(viewID string) error {
@@ -198,6 +200,7 @@ func (m *Manager) ReleaseView(viewID string) error {
 		if wt := canonicalCleanPath(view.worktreeDir); wt != "" {
 			delete(m.viewsByWorktree, wt)
 		}
+		delete(m.mountBindings, mountBindingKey(view.viewID, view.rootID))
 	}
 	m.mu.Unlock()
 	if !ok {

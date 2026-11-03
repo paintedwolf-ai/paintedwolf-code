@@ -94,9 +94,12 @@ func newTestManager(t *testing.T, baseDir string) *Manager {
 	return mgr
 }
 
-func populateDisposableTestMount(t *testing.T, trunkDir, mountDir string) {
+// populateCopiedWorktreeTestDouble copies non-.git working-tree entries into a separate
+// unit-test double directory. This is a unit-test double for exercising privategit metadata
+// virtualization and MountedViewBinding enforcement, not a real kernel FUSE/NFS mount.
+func populateCopiedWorktreeTestDouble(t *testing.T, trunkDir, worktreeDoubleDir string) {
 	t.Helper()
-	testutil.FailErr(t, "mkdir mountDir", os.MkdirAll(mountDir, 0o755))
+	testutil.FailErr(t, "mkdir worktreeDoubleDir", os.MkdirAll(worktreeDoubleDir, 0o755))
 	err := filepath.WalkDir(trunkDir, func(path string, d fs.DirEntry, wErr error) error {
 		if wErr != nil {
 			return wErr
@@ -111,7 +114,7 @@ func populateDisposableTestMount(t *testing.T, trunkDir, mountDir string) {
 			}
 			return nil
 		}
-		dst := filepath.Join(mountDir, rel)
+		dst := filepath.Join(worktreeDoubleDir, rel)
 		info, iErr := d.Info()
 		if iErr != nil {
 			return iErr
@@ -129,30 +132,25 @@ func populateDisposableTestMount(t *testing.T, trunkDir, mountDir string) {
 		}
 		return copyWorkingTreeFile(path, dst, info.Mode())
 	})
-	testutil.FailErr(t, "populateDisposableTestMount", err)
+	testutil.FailErr(t, "populateCopiedWorktreeTestDouble", err)
 }
 
-func newMountedViewWithManager(
-	t *testing.T,
-	mgr *Manager,
-	viewID, trunkDir string,
-	authorized ...string,
-) *layeredfs.Core {
+func newMountedViewWithManager(t *testing.T, mgr *Manager, viewID, trunkDir string, authorized ...string) *layeredfs.Core {
 	t.Helper()
 	backing := filepath.Join(mgr.cfg.BackingDir, "core-backing-"+viewID)
-	mountDir := filepath.Join(mgr.cfg.BackingDir, "test-mount-"+viewID)
+	wtDoubleDir := filepath.Join(mgr.cfg.BackingDir, "unit-wt-double-"+viewID)
 	testutil.FailErr(t, "mkdir core backing", os.MkdirAll(backing, 0o700))
-	populateDisposableTestMount(t, trunkDir, mountDir)
+	populateCopiedWorktreeTestDouble(t, trunkDir, wtDoubleDir)
 	core, err := layeredfs.New(layeredfs.Config{
-		ViewID:         viewID,
-		BackingDir:     backing,
-		GitInterceptor: mgr,
-		Roots: []layeredfs.RootSpec{
-			{ID: "primary", Label: "primary", TrunkPath: trunkDir, IsPrimary: true},
-		},
+		ViewID: viewID, BackingDir: backing, GitInterceptor: mgr,
+		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunkDir, IsPrimary: true}},
 	})
 	testutil.FailErr(t, "layeredfs.New", err)
-	testutil.FailErr(t, "MountedClaimWithWorktree", mgr.MountedClaimWithWorktree(viewID, "worker-"+viewID, "primary", trunkDir, mountDir, core, authorized...))
+	testutil.FailErr(t, "MountedClaimWithBinding", mgr.MountedClaimWithBinding(MountedViewBinding{
+		ViewID: viewID, WorkerID: "worker-" + viewID, RootID: "primary",
+		TrunkDir: trunkDir, MountPath: wtDoubleDir, AdapterID: "fuselinux",
+		Core: core, MountID: "unit-mount-" + viewID, Active: true,
+	}, authorized...))
 	t.Cleanup(func() {
 		_ = mgr.ReleaseView(viewID)
 		_ = core.ReleaseView()
