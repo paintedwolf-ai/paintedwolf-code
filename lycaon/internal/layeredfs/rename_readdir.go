@@ -61,6 +61,9 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 	}
 	dstExists := dstErr == nil
 	if dstExists {
+		if srcRes.privNode != nil && dstRes.privNode != nil && srcRes.privNode.id == dstRes.privNode.id {
+			return nil
+		}
 		if srcRes.attr.Kind == EntryDirectory && dstRes.attr.Kind != EntryDirectory {
 			return syscall.ENOTDIR
 		}
@@ -96,16 +99,22 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.state.released {
+		c.mu.Unlock()
 		return ErrViewReleased
 	}
 
 	var replacedNodeID NodeID
+	var replacedNode *privateNode
 	var orphanBacking string
 	if existingID, ok := c.state.pathIndex[dstPath]; ok {
+		if existingID == srcNode.id {
+			c.mu.Unlock()
+			return nil
+		}
 		replacedNodeID = existingID
-		if existingNode := c.state.nodesByID[existingID]; existingNode != nil && existingNode.id != srcNode.id {
+		if existingNode := c.state.nodesByID[existingID]; existingNode != nil {
+			replacedNode = existingNode
 			delete(existingNode.paths, dstPath)
 			existingNode.ctime = time.Now()
 			if len(existingNode.paths) == 0 {
@@ -143,8 +152,15 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 		opKind = JournalOpReplaceDir
 	}
 	recordJournalLocked(c, opKind, dstPath, &srcPath, srcNode, 0)
+	var workDirFD = -1
 	if orphanBacking != "" && c.backing.workDirFile != nil {
-		_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), orphanBacking)
+		workDirFD = int(c.backing.workDirFile.Fd())
+	}
+	c.mu.Unlock()
+	if orphanBacking != "" && workDirFD >= 0 && replacedNode != nil {
+		replacedNode.flags.ioMu.Lock()
+		_ = unlinkBackingFile(workDirFD, orphanBacking)
+		replacedNode.flags.ioMu.Unlock()
 	}
 	return nil
 }
@@ -154,9 +170,17 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 	if err != nil {
 		return err
 	}
+	srcPrefix := srcPath.Rel + "/"
 	for _, p := range subtreePaths {
 		if _, err := ensureCopiedUpNode(c, p); err != nil {
 			return err
+		}
+		if strings.HasPrefix(p.Rel, srcPrefix) {
+			suffix := strings.TrimPrefix(p.Rel, srcPrefix)
+			dstChild := QualifiedPath{RootID: dstPath.RootID, Rel: joinRel(dstPath.Rel, suffix)}
+			if _, err := ensureBaseCaptured(c, dstChild); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -166,7 +190,6 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 		return ErrViewReleased
 	}
 
-	srcPrefix := srcPath.Rel + "/"
 	var affected []QualifiedPath
 	for qp := range c.state.pathIndex {
 		if qp.RootID == srcPath.RootID && (qp.Rel == srcPath.Rel || strings.HasPrefix(qp.Rel, srcPrefix)) {
