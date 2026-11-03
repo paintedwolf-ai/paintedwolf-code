@@ -32,8 +32,8 @@ copy:
   fix: '{% if paintedwolf.process_running %}{% if paintedwolf.can_command_output %}Use command_output on this job''s handle to inspect its outcome. {%
     endif %}{% if paintedwolf.can_command_stop %}If unneeded, request command_stop once and observe exit. {% endif %}Do not replace running work. {% endif
     %}{% if paintedwolf.supports_socket_paths %}{% if paintedwolf.refused_socket_paths %}{% if paintedwolf.missing_capability_socket_paths %}Declare the
-    exact service in `capability_request.socket_paths`. {% endif %}For external clients, select the whole bound endpoint reference from that field''s
-    schema (Docker: `DOCKER_HOST`); native socket arguments use the path. If already bound, inspect the refusal before retrying. Preserve completed effects
+    exact service in `capability_request.socket_paths`. {% endif %}For external clients, set their endpoint option to the whole bound endpoint reference from that field''s
+    schema; native socket arguments use the path. If already bound, inspect the refusal before retrying. Preserve completed effects
     and resolve uncertain outcomes first.{% endif %}{% endif %}'
   instead: ''
 x-paintedwolf-category: recoverable
