@@ -84,6 +84,7 @@ type ToolsDeps struct {
 	CompactToolWire             func(ctx context.Context, sess *api.Session, toolName, content string, opts compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta)
 	HeldCalls                   HeldCallRunner
 	HeldCallBudget              time.Duration
+	CommitProgramObservation   func(ctx context.Context, sessionID, tool string, receipt *api.CommandProgramReceipt, content string) (string, error)
 	CommitEvidenceToolResult    func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (handle string, patchedContent string, err error)
 	RecordSourceRunEvidence     func(ctx context.Context, sessionID string, sess *api.Session, toolName string, run tools.SourceRunCapture)
 	ConfirmVerifyResult         func(sess *api.Session, content string) string
