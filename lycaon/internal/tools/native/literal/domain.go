@@ -2,6 +2,7 @@ package literal
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
@@ -85,11 +86,19 @@ func runSummarize(inv *invocation) error {
 		return err
 	}
 	focus, _ := inv.value("--focus")
+	cursor, _ := inv.value("--cursor")
 	diskCtx := inv.tc
 	diskCtx.Source.EditorDocuments = nil
-	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Observe: inv.pinOpened}, diskCtx)
+	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Cursor: cursor, Observe: inv.pinOpened}, diskCtx)
 	if err != nil {
 		return err
+	}
+	resp.NextActions = slices.Clone(resp.NextActions)
+	for i, action := range resp.NextActions {
+		resp.NextActions[i], err = action.CommandFollowup()
+		if err != nil {
+			return fmt.Errorf("summarize follow-up: %w", err)
+		}
 	}
 	return inv.structured(resp)
 }

@@ -24,7 +24,7 @@ func TestCoordinatorReadLineLimitInSurfaceRender(t *testing.T) {
 	mergeWidestUnitBlocks(t, engine, "implement_synthesis", vars)
 	rendered, err := engine.Render(context.Background(), "agents/coordinator-surface-build.md", vars)
 	contractcheck.FailErr(t, "render surface", err)
-	if !strings.Contains(rendered, "summarize(path=…, task=…)") {
+	if !strings.Contains(rendered, "summarize --path PATH --focus QUESTION") {
 		t.Fatalf("rendered surface missing survey orientation ladder:\n%s", rendered)
 	}
 }
