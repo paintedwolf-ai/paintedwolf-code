@@ -39,7 +39,7 @@ func TestMutationCandidateRecoveryCopy(t *testing.T) {
 				if strings.Contains(fix, "was absent") != (state == "new") {
 					t.Fatalf("absence claim does not match observation: %s", fix)
 				}
-				if state == "new" && !strings.Contains(fix, "retry a complete `write`") {
+				if state == "new" && !strings.Contains(fix, "retry a complete staged command redirect") {
 					t.Fatalf("new candidate lacks creation remedy: %s", fix)
 				}
 				if len(fix) > 1000 {

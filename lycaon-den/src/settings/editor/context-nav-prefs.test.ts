@@ -16,12 +16,13 @@ describe("context-nav-prefs", () => {
     syncContextNavPrefsFromSnapshot();
   });
 
-  it("defaults hide Artifacts and Extensions", () => {
+  it("defaults hide Artifacts and Extensions and include Running", () => {
     expect(resolveContextNavVisible(undefined)).toEqual([
       ...DEFAULT_CONTEXT_NAV_VISIBLE,
     ]);
     expect(resolveContextNavVisible(undefined)).toContain("security");
     expect(resolveContextNavVisible(undefined)).toContain("cost");
+    expect(resolveContextNavVisible(undefined)).toContain("running");
     expect(resolveContextNavVisible(undefined)).not.toContain("artifacts");
     expect(resolveContextNavVisible(undefined)).not.toContain("extensions");
   });

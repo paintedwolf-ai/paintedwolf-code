@@ -11,7 +11,7 @@ from unittest.mock import patch
 from scripts.linux_release.pacman_publication import configuration
 from scripts.linux_release.repository_objects import encoded
 from scripts.linux_release.repository_operations import identity, transition
-from scripts.linux_release.repository_setup_identity import package_identity
+from scripts.linux_release.repository_setup import package_identity
 from scripts.release_distribution_contract.release_facts import DeliveryFacts
 
 SOURCE, VERSION, ORIGIN = 'a' * 40, '1.2.3', 'https://downloads.example.invalid'

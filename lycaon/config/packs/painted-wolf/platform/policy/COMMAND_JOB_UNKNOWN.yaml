@@ -1,0 +1,31 @@
+oar: '1.0'
+id: COMMAND_JOB_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "COMMAND_JOB_UNKNOWN"
+effect: block
+copy:
+  what: The job reference did not resolve in this invocation's job scope.
+  cause: Shell job references do not identify arbitrary host processes.
+  why: ''
+  fix: Use `jobs` to inspect current job references. Select only the job matching the intended work; an unknown reference does not identify a replacement process
+    to signal.
+  instead: ''
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: the job reference names no job of this session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_JOB_UNKNOWN'

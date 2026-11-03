@@ -14,16 +14,16 @@ func TestSocketContainmentSubtractsOnlyCoveredBoundaryMembers(t *testing.T) {
 	oneDigest := confine.SocketPathsDigest(grants[:1])
 	twoDigest := confine.SocketPathsDigest(grants[1:])
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Sockets: hitl.ActionSockets{
-SocketGrants: grants,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{SocketCount: 2, SocketPathsDigest: confine.SocketPathsDigest(grants)},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants: grants,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{SocketCount: 2, SocketPathsDigest: confine.SocketPathsDigest(grants)},
+		},
+	}
 	for _, tc := range []struct {
 		name    string
 		digests []string

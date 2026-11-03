@@ -266,24 +266,230 @@
         },
         {
           "spellings": [
+            "-f",
             "--fail"
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "curl-option-fail",
+          "fixture_id": "curl-option-f-fail",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k",
+            "--insecure"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-k-insecure",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--compressed"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-compressed",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-A",
+            "--user-agent"
+          ],
+          "arity": 1,
+          "value_role": "header",
+          "fixture_id": "curl-option-A-useragent",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture/1.0"
+          ]
+        },
+        {
+          "spellings": [
+            "-G",
+            "--get"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-G-get",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--json"
+          ],
+          "arity": 1,
+          "value_role": "body",
+          "fixture_id": "curl-option-json",
+          "consumption": "fixed",
+          "sample_values": [
+            "{\"state\":\"ok\"}"
+          ]
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--fail-with-body"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-failwithbody",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-r",
+            "--range"
+          ],
+          "arity": 1,
+          "value_role": "range",
+          "fixture_id": "curl-option-r-range",
+          "consumption": "fixed",
+          "sample_values": [
+            "0-99"
+          ]
+        },
+        {
+          "spellings": [
+            "-T",
+            "--upload-file"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "curl-option-T-uploadfile",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "--cacert"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "curl-option-cacert",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "--capath"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "curl-option-capath",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-E",
+            "--cert"
+          ],
+          "arity": 1,
+          "value_role": "certificate",
+          "fixture_id": "curl-option-E-cert",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "--key"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "curl-option-key",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "--cert-type"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "curl-option-certtype",
+          "consumption": "fixed",
+          "sample_values": [
+            "PEM"
+          ]
+        },
+        {
+          "spellings": [
+            "--pass"
+          ],
+          "arity": 1,
+          "value_role": "credentials",
+          "fixture_id": "curl-option-pass",
+          "consumption": "fixed",
+          "sample_values": [
+            "synthetic"
+          ]
+        },
+        {
+          "spellings": [
+            "--resolve"
+          ],
+          "arity": 1,
+          "value_role": "address",
+          "fixture_id": "curl-option-resolve",
+          "consumption": "fixed",
+          "sample_values": [
+            "api.example.test:443:127.0.0.1"
+          ]
+        },
+        {
+          "spellings": [
+            "--connect-to"
+          ],
+          "arity": 1,
+          "value_role": "address",
+          "fixture_id": "curl-option-connectto",
+          "consumption": "fixed",
+          "sample_values": [
+            "api.example.test:443:127.0.0.1:8443"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. curl [OPTIONS] URL",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
-        "0": "complete HTTP transfer (HTTP errors unless --fail)",
-        "22": "--fail HTTP status>=400; incomplete/ineligible body publication",
+        "0": "complete HTTP transfer (HTTP errors unless --fail or --fail-with-body)",
+        "22": "--fail or --fail-with-body HTTP status>=400; incomplete/ineligible body publication",
         "2": "usage",
         "6": "DNS",
         "7": "connect",
-        "28": "timeout"
+        "28": "timeout",
+        "58": "client certificate, key or passphrase unusable",
+        "77": "--cacert or --capath bundle unusable",
+        "56": "receive failure, including a peer's TLS alert such as a refused client certificate",
+        "60": "peer certificate not verified by the system roots or the --cacert/--capath bundle"
       },
       "effects": [
         {
@@ -296,6 +502,9 @@
         },
         {
           "requires": [
+            "read-request-inputs",
+            "egress",
+            "secret-disclosure",
             "write",
             "review",
             "revision",
@@ -337,7 +546,7 @@
           }
         }
       },
-      "notes": "Existing HTTP owner, ordered repeated headers, body/redirect/cookie/screens. -s suppress progress (no routine progress output), -S keeps error, -sS bundle. -i/-D raw screened status+headers CRLF; -w only %{http_code},%{size_download},%{url_effective},%{time_total},%% and escaped LF/tab. -D - stdout; -o /dev/null typed sink. -b name=value or jar path, -c jar staged. URLencode variants name=value/name@path/@path/=value and multipart @path read through authority. -k/--insecure unsupported. No automatic HTTP retry or replay; non-idempotent unknown stays unknown. Loopback requires actual owned live listener or explicit current authority.",
+      "notes": "Existing HTTP owner, ordered repeated headers, body/redirect/cookie/screens. -s suppress progress (no routine progress output), -S keeps error, -sS bundle. -i/-D received status+headers CRLF; -w %{http_code},%{size_download},%{url_effective},%{time_total},%{time_namelookup},%{time_connect},%{time_appconnect},%{time_starttransfer},%{remote_ip},%{remote_port},%{content_type},%{http_version},%{num_redirects},%{redirect_url},%{size_upload},%{size_header},%{speed_download},%{exitcode},%% and escaped LF/tab, computed from the owner's observations of the exchange. -D - stdout; -o /dev/null typed sink. -b name=value or jar path, -c jar staged. URLencode variants name=value/name@path/@path/=value and multipart @path read through authority. -k/--insecure refuses with COMMAND_TLS_VERIFICATION_REQUIRED, also beside --cacert: the egress policy has no unverified TLS mode. --cacert FILE and --capath DIR are read through read authority and add trust for this request only; verification stays on. -E/--cert FILE[:PASS], --key FILE and --pass PASS read PEM client identity through read authority; a PKCS#8 encrypted key opens with the passphrase, which may be a managed secret reference and is never echoed. --cert-type accepts PEM only. -T FILE uploads exact bytes as the body (PUT unless -X), with the sent body identity on the receipt; -T - reads stdin; a URL without a file part gets the file name appended. --resolve HOST:PORT:ADDR and --connect-to HOST1:PORT1:HOST2:PORT2 change only where the hop connects: the override passes the same destination policy and loopback authority as a URL naming it, and the URL host stays for SNI, Host, cookies and secret-sink origin. -v writes * connection and TLS lines, > request line and headers as written and < response headers to stderr; Authorization and Proxy-Authorization show only their scheme. --fail-with-body exits 22 for status>=400 and keeps the body. -r RANGE sends Range: bytes=RANGE and reports 206 or 416 as received. --compressed requests deflate, gzip and decodes the body; -i/-D keep the received Content-Encoding. -A sets User-Agent. -G sends data parts as the query of a GET. --json sends concatenated JSON with application/json Content-Type and Accept unless set. -f is --fail. -x/--proxy, --noproxy and --retry stay unsupported: egress is mediated and there is no automatic HTTP retry or replay; non-idempotent unknown stays unknown. Loopback requires actual owned live listener or explicit current authority.",
       "reuse": {
         "implementation": "lycaon/internal/httpaction/tool.go",
         "tests": [
@@ -378,7 +587,24 @@
         "curl-option-maxtime",
         "curl-option-connecttimeout",
         "curl-option-unixsocket",
-        "curl-option-fail"
+        "curl-option-f-fail",
+        "curl-option-k-insecure",
+        "curl-option-compressed",
+        "curl-option-A-useragent",
+        "curl-option-G-get",
+        "curl-option-json",
+        "curl-option-v-verbose",
+        "curl-option-failwithbody",
+        "curl-option-r-range",
+        "curl-option-T-uploadfile",
+        "curl-option-cacert",
+        "curl-option-capath",
+        "curl-option-E-cert",
+        "curl-option-key",
+        "curl-option-certtype",
+        "curl-option-pass",
+        "curl-option-resolve",
+        "curl-option-connectto"
       ]
     }
   ]

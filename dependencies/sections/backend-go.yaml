@@ -43,6 +43,9 @@ groups:
       github.com/odvcencio/gotreesitter:
         notes: |
           Replaced by the vendored copy; see the vendored catalogs section.
+      github.com/benhoyt/goawk:
+        notes: |
+          Replaced by the vendored copy; see the vendored catalogs section.
 
   - title: Protocols, providers, and security engines
     packages:
@@ -147,6 +150,12 @@ groups:
         friction: low
         notes: |
           Schema validation for MCP, OAR, and tools.
+      github.com/bluekeyes/go-gitdiff:
+        urgency: high
+        friction: low
+        notes: |
+          Parses unified and Git diffs, including binary patches, for the native patch and
+          git apply commands. Patch input is untrusted model and repository content.
       github.com/itchyny/gojq:
         urgency: moderate
         friction: low

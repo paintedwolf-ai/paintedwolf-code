@@ -2,178 +2,25 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
-	"sync"
+	"time"
 
-	"github.com/lycaon/lycaon/internal/idset"
-	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/scan/obligation"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// CheckpointRefImporterFunc imports checkpointed private Git refs (#1671) as a distinct recorded effect.
-type CheckpointRefImporterFunc func(ctx context.Context, txID, workerID string, git checkpoint.PrivateGitSnapshot) (map[string]string, error)
-
-var (
-	refImporterMu     sync.Mutex
-	refImportersByJob = map[string]CheckpointRefImporterFunc{}
-)
-
-// RegisterCheckpointRefImporter registers an optional per-job #1671 namespaced Git ref importer callback.
-func RegisterCheckpointRefImporter(jobID string, fn CheckpointRefImporterFunc) {
-	refImporterMu.Lock()
-	defer refImporterMu.Unlock()
-	if fn == nil {
-		delete(refImportersByJob, jobID)
-	} else {
-		refImportersByJob[jobID] = fn
-	}
-}
-
-func checkpointRefImporterFor(s *MergeService, jobID string) CheckpointRefImporterFunc {
-	if s != nil && s.CheckpointRefImporter != nil {
-		return s.CheckpointRefImporter
-	}
-	refImporterMu.Lock()
-	defer refImporterMu.Unlock()
-	return refImportersByJob[jobID]
-}
-
-func markPreviewBindIntent(_ *MergeService, jobID string)    { session.MarkTaskCheckpointPreviewBindIntent(jobID) }
-func clearBoundCheckpointPreview(_ *MergeService, jobID string) { session.ClearTaskCheckpointPreview(jobID) }
-
-func syncCheckpointBranchFiles(q MergeQueue, jobID string) {
-	if q != nil {
-		if task, ok := q.Get(jobID); ok {
-			_ = session.SyncTaskCheckpointToWorkspace(task)
-		}
-	}
-}
-
-func holdRehydratedCheckpointBranch(ctx context.Context, q MergeQueue, jobID string) (*BranchLease, bool) {
-	if q == nil {
-		return nil, false
-	}
-	task, ok := q.Get(jobID)
-	if !ok || task == nil || session.CheckpointStoreDirForTask(task) == "" {
-		return nil, false
-	}
-	if err := session.SyncTaskCheckpointToWorkspace(task); err != nil || strings.TrimSpace(task.WorkspaceRoot) == "" {
-		return nil, false
-	}
-	lease, err := LeaseExistingBranch(ctx, task)
-	return lease, err == nil
-}
-
-func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, bool, error) {
-	var roots []projectroot.RootRef
-	if svc != nil {
-		roots = svc.taskRootRefs(ctx, task)
-	}
-	store, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots, checkpointRefImporterFor(svc, task.ID))
-	if err != nil || !ok {
-		return PromoteAssessment{}, ok, err
-	}
-	cpPreview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{
-		CheckpointID: manifest.CheckpointID, ExpectedWorkerID: manifest.WorkerID, ExpectedProjectID: task.ProjectID,
-	})
-	if err != nil {
-		return PromoteAssessment{}, true, err
-	}
-	session.MaybeBindTaskCheckpointPreview(task.ID, cpPreview)
-
-	wanted := make(map[string]struct{}, len(mergePaths))
-	for _, p := range mergePaths {
-		wanted[filepath.ToSlash(filepath.Clean(strings.TrimSpace(p)))] = struct{}{}
-	}
-	promote := PromoteRootsForTask(task, roots)
-	out := PromoteAssessment{primary: make(map[string]promotePrimarySnapshot, len(mergePaths))}
-	for _, rel := range mergePaths {
-		if primaryAbs, _, fErr := promote.fileAbs(task, rel); fErr == nil {
-			b, ex, mode, _ := readOptionalPromoteFile(primaryAbs)
-			out.primary[rel] = promotePrimarySnapshot{content: b, exists: ex, mode: mode}
-		}
-	}
-	seen := make(map[string]bool, len(mergePaths))
-	for _, ch := range cpPreview.PlannedChanges {
-		rel := filepath.ToSlash(filepath.Clean(ch.Path.Rel))
-		if len(wanted) > 0 {
-			if _, match := wanted[rel]; !match {
-				continue
-			}
-		}
-		seen[rel] = true
-		out.CleanPaths = append(out.CleanPaths, rel)
-		if ch.Action == checkpoint.ActionDelete {
-			out.DeletedPaths = append(out.DeletedPaths, rel)
-		} else if ch.Action == checkpoint.ActionWriteRegular || ch.Action == checkpoint.ActionReplaceDirWithRegular {
-			out.MergeResults = append(out.MergeResults, PromoteMergeResult{Path: rel, Content: string(ch.MergedBytes), Encoding: textfile.UTF8})
-		}
-	}
-	for _, conf := range cpPreview.Conflicts {
-		rel := filepath.ToSlash(filepath.Clean(conf.Path.Rel))
-		if len(wanted) > 0 {
-			if _, match := wanted[rel]; !match {
-				continue
-			}
-		}
-		seen[rel] = true
-		pc := convertCheckpointConflict(store, out.primary[rel], conf, rel)
-		if svc != nil {
-			pc.OverlapJobIDs = svc.overlapJobsForPath(ctx, sessionID, rel, task.ID)
-			out.OverlapJobIDs = idset.UnionSorted(out.OverlapJobIDs, pc.OverlapJobIDs)
-		}
-		out.Conflicts = append(out.Conflicts, pc)
-	}
-	for _, raw := range mergePaths {
-		rel := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
-		if rel != "" && !seen[rel] {
-			seen[rel] = true
-			out.CleanPaths = append(out.CleanPaths, rel)
-		}
-	}
-	enrichAssessmentPromoteOrders(ctx, svc, sessionID, task, &out)
-	return out, true, nil
-}
-
-func convertCheckpointConflict(store *checkpoint.Store, prim promotePrimarySnapshot, conf checkpoint.PromotionConflict, rel string) PromoteConflict {
-	var baseStr, branchStr string
-	if conf.Base.Kind == "regular" && conf.Base.SHA256 != "" {
-		if b, err := store.ReadBlob(conf.Base.SHA256); err == nil {
-			baseStr = string(b)
-		}
-	}
-	if conf.WorkerFinal.SHA256 != "" {
-		if b, err := store.ReadBlob(conf.WorkerFinal.SHA256); err == nil {
-			branchStr = string(b)
-		}
-	}
-	return PromoteConflict{
-		Path: rel, Reason: api.WorkerPromoteReasonThreeWayUnresolved,
-		Base: baseStr, Primary: string(prim.content), Branch: branchStr,
-		Summary: []string{fmt.Sprintf("%s: %s", conf.Kind, conf.Message)},
-	}
-}
-
-func commitCheckpointPromotionJournal(ctx context.Context, s *MergeService, task *api.WorkerTask) error {
-	if task == nil {
-		return nil
-	}
-	var roots []projectroot.RootRef
-	if s != nil {
-		roots = s.taskRootRefs(ctx, task)
-	}
-	return session.CommitTaskCheckpointJournal(ctx, task, roots, checkpointRefImporterFor(s, task.ID))
-}
-
-func (s *MergeService) registerReconcilePaths(sessionID string, assessment PromoteAssessment) {
-	if s == nil || s.Reconcile == nil {
+func (s mergeEngine) registerReconcilePaths(sessionID string, assessment PromoteAssessment) {
+	if s.MergeService == nil || s.Reconcile == nil {
 		return
 	}
 	var paths []string
@@ -185,8 +32,8 @@ func (s *MergeService) registerReconcilePaths(sessionID string, assessment Promo
 	}
 }
 
-func (s *MergeService) recordPromoteOutput(sessionID, jobID string, out *api.WorkerMergeResult) {
-	if s == nil || s.Reconcile == nil || out == nil {
+func (s mergeEngine) recordPromoteOutput(sessionID, jobID string, out *api.WorkerMergeResult) {
+	if s.MergeService == nil || s.Reconcile == nil || out == nil {
 		return
 	}
 	if rows := promotionstate.NormalizePromotePathStatusRows(out.PathStatus); len(rows) > 0 {
@@ -198,14 +45,15 @@ func (s *MergeService) recordPromoteOutput(sessionID, jobID string, out *api.Wor
 	}
 }
 
-func (s *MergeService) clearReconcilePaths(sessionID string) {
-	if s != nil && s.Reconcile != nil {
-		s.Reconcile.ClearMergeReconcilePaths(sessionID)
+func (s mergeEngine) clearReconcilePaths(sessionID string) {
+	if s.MergeService == nil || s.Reconcile == nil {
+		return
 	}
+	s.Reconcile.ClearMergeReconcilePaths(sessionID)
 }
 
-func prepareMergeMutations(task *api.WorkerTask, assessment PromoteAssessment) ([]promoteMutation, error) {
-	if err := session.RevalidateTaskCheckpointPreview(task); err != nil {
+func prepareMergeMutations(ctx context.Context, task *api.WorkerTask, assessment PromoteAssessment) ([]promoteMutation, error) {
+	if err := session.RevalidateTaskCheckpointPreview(ctx, task); err != nil {
 		return nil, err
 	}
 	byPath := map[string]PromoteMergeResult{}
@@ -234,11 +82,13 @@ func prepareMergeMutations(task *api.WorkerTask, assessment PromoteAssessment) (
 		if !ok {
 			continue
 		}
-		target, err := textfile.EncodeBounded(result.Content, result.Encoding, textfile.LimitsForRaw(promoteConflictMaxFileBytes))
+		target, err := textfile.EncodeBounded(result.Content, result.Encoding,
+			textfile.LimitsForRaw(promoteConflictMaxFileBytes))
 		if err != nil {
 			return nil, err
 		}
-		plan.target, plan.targetExists = target, true
+		plan.target = target
+		plan.targetExists = true
 		plans = append(plans, plan)
 	}
 	return plans, nil
@@ -256,10 +106,11 @@ func notifyMergeWorktreeChanged(ctx context.Context, task *api.WorkerTask, roots
 		if abs, err := filepath.Abs(p); err == nil {
 			p = abs
 		}
-		if _, ok := seen[p]; !ok {
-			seen[p] = struct{}{}
-			dirs = append(dirs, p)
+		if _, ok := seen[p]; ok {
+			return
 		}
+		seen[p] = struct{}{}
+		dirs = append(dirs, p)
 	}
 	for _, r := range roots {
 		add(r.Path)
@@ -268,18 +119,25 @@ func notifyMergeWorktreeChanged(ctx context.Context, task *api.WorkerTask, roots
 		add(task.WorkspacePath)
 	}
 	for _, dir := range dirs {
-		repochange.Notify(ctx, repochange.Event{ProjectDir: dir, Kind: repochange.WorktreeChanged, Source: repochange.SourceGitHost})
+		repochange.Notify(ctx, repochange.Event{
+			ProjectDir: dir,
+			Kind:       repochange.WorktreeChanged,
+			Source:     repochange.SourceGitHost,
+		})
 	}
 }
 
-func (s *MergeService) rejectConflict(jobID string, assessment PromoteAssessment) error {
+func (s mergeEngine) rejectConflict(jobID string, assessment PromoteAssessment) error {
 	conflictPaths := make([]string, 0, len(assessment.Conflicts))
 	for _, c := range assessment.Conflicts {
 		conflictPaths = append(conflictPaths, c.Path)
 	}
 	data := map[string]any{
-		"job_id": jobID, "conflict_count": len(assessment.Conflicts), "paths": conflictPaths,
-		"path_status": buildPathStatus(assessment, nil), "ready_resolutions": promoteRecoveryChoices(assessment),
+		"job_id":            jobID,
+		"conflict_count":    len(assessment.Conflicts),
+		"paths":             conflictPaths,
+		"path_status":       buildPathStatus(assessment, nil),
+		"ready_resolutions": promoteRecoveryChoices(assessment),
 	}
 	if overlap := allOverlapJobIDs(assessment); len(overlap) > 0 {
 		data["overlap_job_ids"] = overlap
@@ -295,4 +153,188 @@ func promoteRecoveryChoices(assessment PromoteAssessment) []map[string]any {
 		choices = append(choices, map[string]any{"path": item.Path, "action": item.Action, "needs_review": item.NeedsReview, "conflict_tier": item.ConflictTier})
 	}
 	return choices
+}
+
+// recoverInterruptedPromote rolls back an expired promotion.
+func (s mergeEngine) recoverInterruptedPromote(ctx context.Context, task *api.WorkerTask, jobID string) error {
+	reclaimed, err := s.reclaimOrphanedApply(ctx, task, jobID)
+	if err != nil {
+		return err
+	}
+	if !reclaimed {
+		return s.reject(OverlayPromoteNotPendingCode, map[string]any{
+			"job_id": jobID,
+			"reason": "another promote is applying this overlay",
+		})
+	}
+	return nil
+}
+
+// reclaimOrphanedApply restores one expired promotion.
+func (s mergeEngine) reclaimOrphanedApply(ctx context.Context, task *api.WorkerTask, jobID string) (bool, error) {
+	if s.Store == nil {
+		return false, fmt.Errorf("recover interrupted promote: merge store not configured")
+	}
+	token, ok, err := s.Store.ReclaimExpiredMergeApply(ctx, jobID)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	roots := s.taskRootRefs(ctx, task)
+	promote := PromoteRootsForTask(task, roots)
+	found, err := recoverPromoteTransaction(s.hostDataDirFor(task), jobID, promote, task)
+	if err != nil {
+		return true, fmt.Errorf("recover interrupted promote: %w", err)
+	}
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
+	err = s.Store.ReleaseMergeApply(cleanupCtx, jobID, token)
+	cancel()
+	if err != nil {
+		return true, fmt.Errorf("recover interrupted promote status: %w", err)
+	}
+	if found {
+		if err := removePromoteTransaction(promoteTransactionPath(s.hostDataDirFor(task), jobID)); err != nil {
+			slog.WarnContext(ctx, "recovered promote journal cleanup deferred", "job_id", jobID, "err", err)
+		}
+	}
+	return true, nil
+}
+
+func (s mergeEngine) failPromoteTransaction(tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
+	var unstarted *promoteTransactionUnstartedError
+	if errors.As(cause, &unstarted) {
+		return errors.Join(cause, tx.close(), revertPending())
+	}
+	rollbackErr := tx.rollback(promote, task)
+	if rollbackErr != nil {
+		return errors.Join(cause, rollbackErr)
+	}
+	closeErr := tx.close()
+	return errors.Join(cause, closeErr, revertPending())
+}
+
+func (s mergeEngine) closeCommittedPromoteTransaction(ctx context.Context, tx *promoteTransaction, jobID string) {
+	if err := tx.close(); err != nil {
+		slog.WarnContext(ctx, "committed promote journal cleanup deferred", "job_id", jobID, "err", err)
+	}
+}
+
+type promoteFinishInput struct {
+	sessionID     string
+	task          *api.WorkerTask
+	jobID         string
+	out           *api.WorkerMergeResult
+	resolved      []string
+	landed        []string
+	detail        string
+	claim         *mergeApplyClaim
+	facts         promotionSourceFacts
+	childStatuses []MergeStatusUpdate
+}
+
+func (s mergeEngine) finishPromoteState(ctx context.Context, in promoteFinishInput) error {
+	fullPaths := s.jobPromotePaths(ctx, in.task)
+	fullAssessment, err := s.assessMerge(ctx, in.sessionID, in.task, fullPaths)
+	if err != nil {
+		return err
+	}
+	remaining := remainingPromoteWork(fullAssessment, in.resolved)
+	if fullAssessment.checkpointID != "" && mergeComplete(remaining) {
+		if err := commitCheckpointPromotionJournal(ctx, s.MergeService, in.task); err != nil {
+			return err
+		}
+		session.ClearTaskCheckpointPreview(in.jobID)
+		_, latest, _, ok, err := session.NewTaskCheckpointPromoter(in.task, s.taskRootRefs(ctx, in.task), nil)
+		if err != nil {
+			return err
+		}
+		if ok && latest.CheckpointID != fullAssessment.checkpointID {
+			latestAssessment, err := s.assessMerge(ctx, in.sessionID, in.task, s.jobPromotePaths(ctx, in.task))
+			if err != nil {
+				return err
+			}
+			remaining = remainingPromoteWork(latestAssessment, nil)
+		}
+	}
+	in.out.Applied = append([]string(nil), in.resolved...)
+	fillMergeResult(in.out, remaining, promoteOutputOpts{Detail: in.detail})
+	if mergeComplete(remaining) {
+		return s.commitCompletedPromotion(ctx, in)
+	}
+	s.registerReconcilePaths(in.sessionID, remaining)
+	if err := s.releaseMergeClaim(ctx, in.claim); err != nil {
+		return fmt.Errorf("persist pending overlay: %w", err)
+	}
+	in.out.Status = api.WorkerMergeStatusPending
+	return nil
+}
+
+func (s mergeEngine) commitCompletedPromotion(ctx context.Context, in promoteFinishInput) error {
+	plan := obligation.Plan{}
+	if s.Scans != nil && in.task != nil {
+		var planErr error
+		plan, planErr = s.Scans.PrepareOverlayPromotion(ctx, *in.task, in.landed, deletedPromotionPaths(in.facts.changes))
+		if planErr != nil {
+			return fmt.Errorf("prepare landed change: %w", planErr)
+		}
+	}
+	if cause := context.Cause(ctx); cause != nil {
+		return cause
+	}
+	in.facts.stageDocuments(ctx)
+	in.claim.stop()
+	commitCtx, cancel := promoteCleanupContext(ctx)
+	err := s.Store.CommitPromotion(commitCtx, in.jobID, in.claim.token, PromotionCommit{
+		Plan: plan, Recorder: s.SourceLedger, Documents: in.facts.documentWriter(),
+		Records: in.facts.records, Changes: in.facts.changes, ChildStatuses: in.childStatuses,
+	})
+	cancel()
+	if err != nil {
+		return fmt.Errorf("commit merged overlay: %w", err)
+	}
+	in.facts.documents.release(ctx, true)
+	s.clearReconcilePaths(in.sessionID)
+	s.finalizeMergedOverlay(ctx, in.task, in.jobID, plan)
+	in.out.Status = api.WorkerMergeStatusMerged
+	return nil
+}
+
+func (s mergeEngine) finalizeMergedOverlay(ctx context.Context, task *api.WorkerTask, jobID string, plan obligation.Plan) {
+	if s.Scans != nil && !plan.Empty() {
+		if err := s.Scans.PublishObligation(ctx, plan); err != nil {
+			slog.WarnContext(ctx, "scan obligation publication deferred", "landed_change_id", plan.ID, "scan_id", plan.ScanID, "err", err)
+		}
+	}
+	if s.Coord != nil && task != nil {
+		_ = s.Coord.ReleaseReservations(ctx, task.ParentSessionID, jobID)
+	}
+	if s.Closeout != nil && task != nil && task.DelegationID != "" {
+		_ = s.Closeout.RetryCloseout(ctx, task.DelegationID)
+	}
+	if err := s.teardownBranch(task); err != nil {
+		slog.WarnContext(ctx, "merged overlay cleanup deferred", "job_id", jobID, "err", err)
+		return
+	}
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
+	err := s.Store.ClearWorkerWorkspace(cleanupCtx, jobID)
+	cancel()
+	if err != nil {
+		slog.WarnContext(ctx, "merged overlay metadata cleanup deferred", "job_id", jobID, "err", err)
+	}
+}
+
+func deletedPromotionPaths(changes []sourcefeed.Change) []string {
+	deleted := make([]string, 0)
+	for _, change := range changes {
+		if change.Op == api.SourceChangeOpDelete {
+			deleted = append(deleted, change.Path)
+		}
+	}
+	return deleted
+}
+
+func promoteCleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 }

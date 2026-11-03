@@ -5,18 +5,12 @@ selector:
   tool:
   - command
   - verify
-message: >-
-  Pipe output contains terminal screen-control sequences; it is not a terminal snapshot. Preserve the command outcome before arranging any screen capture.
-what: >-
-  {{ tool }} returned pipe output containing terminal screen-control sequences, not a groundable screen snapshot. Preserve its outcome and side effects. For screen evidence, use an existing terminal handle when available; do not replay a mutation just to capture its display.
-cause: >-
-  A flat output stream records control bytes without the rendered terminal state.
-why: Claims about what a terminal screen shows need a tui# terminal snapshot, not flat
-  `command`/`verify` stdout.
-fix: >-
-  Inspect any existing result or live terminal handle first. If terminal_snapshot is offered for that handle, capture the required state there. Start a new capture only when the task needs it and replay is safe: an offered command terminal_capture field provides a one-shot capture; offered terminal_open, terminal_send and terminal_snapshot tools support interaction. Cite the returned tui handle.
-instead: >-
-  Use an observed terminal snapshot for screen claims, or state that only pipe output is available. Do not claim a command failed merely because its display was not captured.
+message: The output contains terminal screen-control sequences. A byte stream alone does not establish the rendered screen.
+what: The output contains terminal screen-control sequences. A byte stream alone does not establish the rendered screen.
+cause: ''
+why: ''
+fix: ''
+instead: ''
 scenarios:
 - id: alt_screen_from_command
   vars:

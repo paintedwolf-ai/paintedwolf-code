@@ -11,29 +11,29 @@ import (
 
 func directIPLadderAction() hitl.ProposedAction {
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "ntpdate time.nist.gov"},
-},
-Presentation: hitl.ActionPresentation{
-Command: "ntpdate time.nist.gov",
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-direct",
-ProjectDir: "/tmp/proj",
-},
-Egress: hitl.ActionEgress{
-DirectIPRequested: true,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{
-			FSJailed: true,
-			Egress:   hitl.ContainedEgressDirectIP,
-			Roots:    []string{"/tmp/proj"},
-			DirectIP: true,
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "ntpdate time.nist.gov"},
 		},
-},
-}
+		Presentation: hitl.ActionPresentation{
+			Command: "ntpdate time.nist.gov",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-direct",
+			ProjectDir: "/tmp/proj",
+		},
+		Egress: hitl.ActionEgress{
+			DirectIPRequested: true,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed: true,
+				Egress:   hitl.ContainedEgressDirectIP,
+				Roots:    []string{"/tmp/proj"},
+				DirectIP: true,
+			},
+		},
+	}
 }
 
 func directIPTestLease() hitl.DirectIPLease {

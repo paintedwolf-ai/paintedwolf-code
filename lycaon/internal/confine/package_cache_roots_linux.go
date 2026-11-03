@@ -50,7 +50,7 @@ func packageCacheDataRoots() []string {
 
 // Missing Linux roots cannot acquire a Landlock rule. Materialize only the
 // declared stores; directory availability never widens the boundary's authority.
-func preparePackageCacheDataRoots(c Confinement, mkdir func(fseffect.Location, os.FileMode) error) error {
+func preparePackageCacheDataRoots(c Confinement, mkdir func(fseffect.Location, os.FileMode) (int, error)) error {
 	rules, err := filesystemRules(c)
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ func preparePackageCacheDataRoots(c Confinement, mkdir func(fseffect.Location, o
 		if path == "" || !rules.Verdict(AccessWrite, path).Allowed {
 			continue
 		}
-		err := mkdir(fseffect.Location{Root: string(filepath.Separator), Rel: strings.TrimPrefix(path, string(filepath.Separator))}, 0o700)
+		_, err := mkdir(fseffect.Location{Root: string(filepath.Separator), Rel: strings.TrimPrefix(path, string(filepath.Separator))}, 0o700)
 		if err != nil {
 			// An optional cache's OS permissions must not prevent unrelated work.
 			slog.Debug("package store directory unavailable", "path", path, "error", err)

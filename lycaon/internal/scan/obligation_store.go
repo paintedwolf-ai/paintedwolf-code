@@ -27,7 +27,7 @@ type LandedChange struct {
 }
 
 // WarmingObligationIDs returns durable scans still waiting for snapshot publication.
-func (s *SQLStore) WarmingObligationIDs(ctx context.Context, limit int) ([]string, error) {
+func (s *sqlRunStore) WarmingObligationIDs(ctx context.Context, limit int) ([]string, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
@@ -38,7 +38,7 @@ func (s *SQLStore) WarmingObligationIDs(ctx context.Context, limit int) ([]strin
 }
 
 // LandedChangeForScan returns exact attribution metadata for ingestion.
-func (s *SQLStore) LandedChangeForScan(ctx context.Context, scanID string) (*LandedChange, error) {
+func (s *sqlRunStore) LandedChangeForScan(ctx context.Context, scanID string) (*LandedChange, error) {
 	if s == nil || s.db == nil || strings.TrimSpace(scanID) == "" {
 		return nil, nil
 	}
@@ -53,7 +53,7 @@ func (s *SQLStore) LandedChangeForScan(ctx context.Context, scanID string) (*Lan
 }
 
 // LatestRequiredLandedChangeForDelegation returns the newest required generation.
-func (s *SQLStore) LatestRequiredLandedChangeForDelegation(ctx context.Context, delegationID string) (*LandedChange, error) {
+func (s *sqlRunStore) LatestRequiredLandedChangeForDelegation(ctx context.Context, delegationID string) (*LandedChange, error) {
 	if s == nil || s.db == nil || strings.TrimSpace(delegationID) == "" {
 		return nil, nil
 	}
@@ -68,7 +68,7 @@ func (s *SQLStore) LatestRequiredLandedChangeForDelegation(ctx context.Context, 
 }
 
 // LatestRequiredScanForDelegation returns the cumulative landing scan.
-func (s *SQLStore) LatestRequiredScanForDelegation(ctx context.Context, delegationID string) (*api.CodeScan, error) {
+func (s *sqlRunStore) LatestRequiredScanForDelegation(ctx context.Context, delegationID string) (*api.CodeScan, error) {
 	landed, err := s.LatestRequiredLandedChangeForDelegation(ctx, delegationID)
 	if err != nil || landed == nil {
 		return nil, err
@@ -103,7 +103,7 @@ func landedChangeFromRow(row db.LandedChanges) (*LandedChange, error) {
 }
 
 // CancelPendingScans makes the product main authoritative for queued work.
-func (s *SQLStore) CancelPendingScans(ctx context.Context, reason string) ([]api.CodeScan, error) {
+func (s *sqlRunStore) CancelPendingScans(ctx context.Context, reason string) ([]api.CodeScan, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
@@ -142,7 +142,7 @@ func (s *SQLStore) CancelPendingScans(ctx context.Context, reason string) ([]api
 }
 
 // bindHeadSHA updates provenance after the filesystem commit and snapshot publication.
-func (s *SQLStore) bindHeadSHA(ctx context.Context, scanID, headSHA string) error {
+func (s *sqlRunStore) bindHeadSHA(ctx context.Context, scanID, headSHA string) error {
 	if s == nil || s.db == nil || strings.TrimSpace(headSHA) == "" {
 		return nil
 	}

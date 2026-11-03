@@ -3,6 +3,7 @@
 package sourcerewind
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 type Documents interface {
@@ -48,8 +50,9 @@ type Operation struct {
 
 type File struct {
 	sourceledger.RewindFile
-	RootPath string
-	Mode     uint32
+	RootPath     string
+	AllowedRoots []string
+	Mode         uint32
 }
 
 func (s *Service) Prepare(ctx context.Context, p *project.Project, sessionID string, anchors []string) (*Operation, error) {
@@ -90,6 +93,23 @@ func (s *Service) Prepare(ctx context.Context, p *project.Project, sessionID str
 			continue
 		}
 		f := File{RewindFile: file, RootPath: root, Mode: 0o644}
+		for _, attached := range p.Roots {
+			f.AllowedRoots = append(f.AllowedRoots, attached.Path)
+		}
+		invalidLink := false
+		for _, state := range []sourceledger.RestorableVersion{file.Expected, file.Target} {
+			if state.State != "link" {
+				continue
+			}
+			if err := projectpaths.AdmitLinkTargetRoots(filepath.Join(root, filepath.FromSlash(state.Path)), string(state.Content), f.AllowedRoots); err != nil {
+				issue("link_target_outside_workspace")
+				invalidLink = true
+				break
+			}
+		}
+		if invalidLink {
+			continue
+		}
 		if err := matchState(root, file.Expected); err != nil {
 			issue("working_file_changed")
 			continue
@@ -200,9 +220,12 @@ func (f File) validate() error {
 			return err
 		}
 		switch v.State {
-		case "content":
+		case "content", "link":
 			if textfile.SHA256(v.Content) != v.SHA256 {
 				return fmt.Errorf("rewind content integrity mismatch")
+			}
+			if v.State == "link" && (len(v.Content) == 0 || bytes.IndexByte(v.Content, 0) >= 0) {
+				return fmt.Errorf("invalid retained symbolic link target")
 			}
 		case "absent":
 			if len(v.Content) != 0 || v.SHA256 != "" {

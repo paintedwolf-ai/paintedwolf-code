@@ -2,7 +2,9 @@ package native
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -16,39 +18,88 @@ func reviewAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutat
 	if metadata {
 		preview.PreviewNote = m.MetadataChange
 	}
-	if err := tc.ReviewFileChanges(ctx, tools.FileChange{Preview: preview, Path: m.AbsPath, FromPath: m.FromAbsPath}); err != nil {
+	checkProgress := func() error {
+		if tc.Effects.CheckMutationProgress == nil || preview.RootID == "" || m.Op == api.SourceChangeOpDelete {
+			return nil
+		}
+		return tc.Effects.CheckMutationProgress(ctx, preview.RootID, m.AbsPath)
+	}
+	if err := checkProgress(); err != nil {
+		return err
+	}
+	if err := tc.ReviewFileChanges(ctx, tools.FileChange{Preview: preview, Path: m.AbsPath, FromPath: m.FromAbsPath, RecoveryLoss: m.Unrecoverable}); err != nil {
+		return err
+	}
+	if err := checkProgress(); err != nil {
 		return err
 	}
 	verifyTarget := verifyMutationSnapshot
-	if m.Op == api.SourceChangeOpDelete || m.Op == api.SourceChangeOpRename {
+	if m.Op == api.SourceChangeOpDelete || m.Op == api.SourceChangeOpRename || m.IsLink {
 		// A removed or replaced entry is the entry itself, never a link's target.
 		verifyTarget = verifyEntrySnapshot
 	}
-	if err := verifyTarget(target, m.BeforeSHA256, m.IsDir); err != nil {
+	if err := verifyTarget(ctx, target, m.BeforeSHA256, m.IsDir); err != nil {
 		return err
 	}
 	if m.FromAbsPath != "" {
-		return verifyMutationSnapshot(from, m.AfterSHA256, m.IsDir)
+		return verifyMutationSnapshot(ctx, from, m.AfterSHA256, m.IsDir)
 	}
 	return nil
 }
 
-func verifyMutationSnapshot(location fseffect.Location, expected string, directory bool) error {
-	current, err := captureAgentFileAt(location)
+func reviewHeldAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutation, target fseffect.Location, held fseffect.Target) error {
+	preview := agentMutationPreview(tc, m, target, fseffect.Location{})
+	checkProgress := func() error {
+		if tc.Effects.CheckMutationProgress == nil || preview.RootID == "" {
+			return nil
+		}
+		return tc.Effects.CheckMutationProgress(ctx, preview.RootID, m.AbsPath)
+	}
+	if err := checkProgress(); err != nil {
+		return err
+	}
+	if err := tc.ReviewFileChanges(ctx, tools.FileChange{Preview: preview, Path: m.AbsPath, FromPath: m.FromAbsPath, RecoveryLoss: m.Unrecoverable}); err != nil {
+		return err
+	}
+	if err := checkProgress(); err != nil {
+		return err
+	}
+	return verifyHeldMutationSnapshot(ctx, target, held, m.BeforeSHA256)
+}
+
+func verifyMutationSnapshot(ctx context.Context, location fseffect.Location, expected string, directory bool) error {
+	current, err := captureAgentFileAt(location, ctx, nil, false)
 	return snapshotMatches(location, current, err, expected, directory)
 }
 
-func verifyEntrySnapshot(location fseffect.Location, expected string, directory bool) error {
-	current, err := captureRemovedEntry(location)
+// The staged replacement has already revalidated its reviewed parent before
+// this check. Read the actual target beneath that held descriptor.
+func verifyHeldMutationSnapshot(ctx context.Context, location fseffect.Location, target fseffect.Target, expected string) error {
+	file, err := target.Open()
+	var current agentFileEvidence
+	if err == nil {
+		current, err = captureAgentFile(ctx, file, nil, false)
+	} else if os.IsNotExist(err) {
+		err = nil
+	}
+	return snapshotMatches(location, current, err, expected, false)
+}
+
+func verifyEntrySnapshot(ctx context.Context, location fseffect.Location, expected string, directory bool) error {
+	current, err := captureRemovedEntry(ctx, location, nil, false)
 	return snapshotMatches(location, current, err, expected, directory)
 }
+
+// errMutationSnapshotMoved marks a target that changed while its mutation was
+// prepared or reviewed.
+var errMutationSnapshotMoved = errors.New("file changed while preparing or reviewing the change")
 
 func snapshotMatches(location fseffect.Location, current agentFileEvidence, err error, expected string, directory bool) error {
 	if err != nil {
 		return err
 	}
 	if current.sha256 != expected || (current.exists && current.isDir != directory) {
-		return fmt.Errorf("file changed while preparing or reviewing the change: %s", location.Rel)
+		return fmt.Errorf("%w: %s", errMutationSnapshotMoved, location.Rel)
 	}
 	return nil
 }
@@ -68,6 +119,10 @@ func agentMutationPreview(tc tools.ToolContext, m agentMutation, target, from fs
 		}
 	}
 	if m.IsDir {
+		if m.MetadataChange != "" {
+			p.PreviewNote = m.MetadataChange
+			return p
+		}
 		p.PreviewNote = "This changes a directory."
 		return p
 	}

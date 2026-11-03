@@ -53,3 +53,48 @@ func TestFindByRootPathPrefersRegistryOrder(t *testing.T) {
 		t.Fatalf("FindByRootPath = %v, want recent", got)
 	}
 }
+
+func TestFindAllByRootPathOrdersSingleRootBeforeMultiRoot(t *testing.T) {
+	list := []Project{
+		projectWithRoots("multi-recent", "/repos/main", "/repos/shared"),
+		projectWithRoots("single", "/repos/shared"),
+		projectWithRoots("multi-older", "/repos/shared", "/repos/docs"),
+	}
+	matches := FindAllByRootPath(list, "/repos/shared")
+	if len(matches) != 3 {
+		t.Fatalf("len(matches) = %d, want 3", len(matches))
+	}
+	wantIDs := []string{"single", "multi-recent", "multi-older"}
+	for i, want := range wantIDs {
+		if matches[i].ID != want {
+			t.Fatalf("matches[%d].ID = %q, want %q", i, matches[i].ID, want)
+		}
+	}
+	if !IsSingleRootForPath(&matches[0], "/repos/shared") {
+		t.Fatal("expected single-root project to report IsSingleRootForPath=true")
+	}
+	if IsSingleRootForPath(&matches[1], "/repos/shared") {
+		t.Fatal("expected multi-root project to report IsSingleRootForPath=false")
+	}
+	if got := FindByRootPath(list, "/repos/shared"); got == nil || got.ID != "single" {
+		t.Fatalf("FindByRootPath = %v, want single", got)
+	}
+}
+
+func TestToFolderDetectProjectIncludesNameAndRootMetadata(t *testing.T) {
+	named := projectWithRoots("p1", "/repos/alpha", "/repos/beta")
+	named.Name = "Workspace"
+	dto := ToFolderDetectProject(&named, "/repos/beta")
+	if dto.ID != "p1" || dto.Name != "Workspace" || dto.IsSingleRoot || len(dto.Roots) != 2 {
+		t.Fatalf("ToFolderDetectProject(multi) = %+v", dto)
+	}
+
+	unnamed := projectWithRoots("p2", "/repos/solo")
+	singleDTO := ToFolderDetectProject(&unnamed, "/repos/solo")
+	if singleDTO.ID != "p2" || singleDTO.Name != "solo" || !singleDTO.IsSingleRoot || len(singleDTO.Roots) != 1 {
+		t.Fatalf("ToFolderDetectProject(single) = %+v", singleDTO)
+	}
+	if empty := ToFolderDetectProject(nil, "/repos/solo"); empty.ID != "" {
+		t.Fatalf("ToFolderDetectProject(nil) = %+v, want empty", empty)
+	}
+}

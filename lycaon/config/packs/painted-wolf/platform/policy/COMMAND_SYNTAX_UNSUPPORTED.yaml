@@ -1,0 +1,42 @@
+oar: '1.0'
+id: COMMAND_SYNTAX_UNSUPPORTED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.source_line
+  - paintedwolf.source_column
+  - paintedwolf.expected_form
+  - paintedwolf.diagnostic_pre_evaluation
+  - paintedwolf.diagnostic_top_level
+  - paintedwolf.parser_message
+when: paintedwolf.rejection_code == "COMMAND_SYNTAX_UNSUPPORTED"
+effect: block
+copy:
+  what: 'Unsupported shell form{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% if paintedwolf.parser_message
+    %}: {{ paintedwolf.parser_message }}{% else %}{% if paintedwolf.expected_form %}: {{ paintedwolf.expected_form }}{% endif %}{% endif %}.'
+  cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}{% if paintedwolf.diagnostic_pre_evaluation %}This
+    source unit did not execute. Earlier commands that finished still count.{% else %}Earlier commands that finished still count.{% endif %}{% endif %}'
+  fix: '{% if paintedwolf.expected_form %}Supported form: {{ paintedwolf.expected_form }}. Preserve the intended operation and earlier effects.{% endif %}'
+  instead: ''
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command syntax unit was not admitted
+x-paintedwolf-scenarios:
+- id: captured_unit
+  vars:
+    tool: command
+    source_line: 3
+    source_column: 7
+    expected_form: supported syntax
+  expect_contains:
+  - 'Code: COMMAND_SYNTAX_UNSUPPORTED'
+  - '3:7'
+  - supported syntax

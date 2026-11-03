@@ -49,7 +49,7 @@ func (denyToolPolicy) ListForPrompt(context.Context, *api.Session, string) []too
 }
 
 func promptLoopFixtureTools() []tools.ToolMeta {
-	names := []string{"read", "write", "state_update", "task", "summarize"}
+	names := []string{"command", "edit", "read", "write", "state_update", "task", "summarize"}
 	metas := make([]tools.ToolMeta, len(names))
 	for i, name := range names {
 		metas[i] = tools.ToolMeta{Name: name, ArgsSchema: map[string]any{"type": "object"}}
@@ -131,10 +131,10 @@ func (s *sequentialLLMClient) Stream(ctx context.Context, req modelcall.Completi
 			if strings.TrimSpace(completion.Content) != "" {
 				ch <- modelcall.StreamChunk{Content: completion.Content}
 			}
-			ch <- modelcall.StreamChunk{ToolCalls: completion.ToolCalls, Done: true}
+			ch <- modelcall.StreamChunk{ToolCalls: completion.ToolCalls, FinishReason: completion.FinishReason, Done: true}
 			return
 		}
-		ch <- modelcall.StreamChunk{Content: completion.Content, Done: true}
+		ch <- modelcall.StreamChunk{Content: completion.Content, FinishReason: completion.FinishReason, Done: true}
 	}()
 	return ch, nil
 }

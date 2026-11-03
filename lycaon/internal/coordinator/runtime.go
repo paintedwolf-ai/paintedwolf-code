@@ -198,6 +198,20 @@ func (r *Runtime) CoordinatorLoop() *loopwake.LoopEngine {
 	return r.coordLoop
 }
 
+// ReleaseSession clears turn-scoped coordinator state while retaining unconsumed process completions.
+func (r *Runtime) ReleaseSession(ctx context.Context, sessionID string) {
+	if r == nil {
+		return
+	}
+	r.depsMu.Lock()
+	loop := r.coordLoop
+	r.depsMu.Unlock()
+	if loop != nil {
+		loop.ForgetSession(ctx, sessionID)
+	}
+	r.Kicks().ClearPending(sessionID)
+}
+
 // ForgetSession releases coordinator runtime state for a deleted session.
 func (r *Runtime) ForgetSession(ctx context.Context, sessionID string) {
 	if r == nil {

@@ -22,10 +22,71 @@ const (
 type TerminationReason string
 
 const (
-	TerminationExited   TerminationReason = "exited"
-	TerminationStopped  TerminationReason = "stopped"
-	TerminationTimedOut TerminationReason = "timed_out"
+	TerminationExited          TerminationReason = "exited"
+	TerminationTimedOut        TerminationReason = "timed_out"
+	TerminationStoppedByAgent  TerminationReason = "stopped_by_agent"
+	TerminationStoppedByUser   TerminationReason = "stopped_by_user"
+	TerminationChatDeleted     TerminationReason = "chat_deleted"
+	TerminationProjectDeleted  TerminationReason = "project_deleted"
+	TerminationRootDetached    TerminationReason = "root_detached"
+	TerminationAppQuit         TerminationReason = "app_quit"
+	TerminationWorkerCompleted TerminationReason = "worker_completed"
+	TerminationWorkerCancelled TerminationReason = "worker_canceled"
 )
+
+// IsStopped reports whether termination was requested rather than reached by process exit or timeout.
+func (r TerminationReason) IsStopped() bool {
+	switch r {
+	case TerminationStoppedByAgent,
+		TerminationStoppedByUser,
+		TerminationChatDeleted,
+		TerminationProjectDeleted,
+		TerminationRootDetached,
+		TerminationAppQuit,
+		TerminationWorkerCompleted,
+		TerminationWorkerCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// DeliversToSession reports whether a terminal command should publish session-scoped completion state.
+func (r TerminationReason) DeliversToSession() bool {
+	switch r {
+	case TerminationChatDeleted,
+		TerminationProjectDeleted,
+		TerminationAppQuit,
+		TerminationWorkerCompleted,
+		TerminationWorkerCancelled:
+		return false
+	default:
+		return true
+	}
+}
+
+type terminationReasonKey struct{}
+
+// WithTerminationReason records the outer teardown reason on ctx when none is already set.
+func WithTerminationReason(ctx context.Context, reason TerminationReason) context.Context {
+	if ctx == nil || reason == "" {
+		return ctx
+	}
+	if existing, ok := ctx.Value(terminationReasonKey{}).(TerminationReason); ok && existing != "" {
+		return ctx
+	}
+	return context.WithValue(ctx, terminationReasonKey{}, reason)
+}
+
+// TerminationReasonFromContext returns the teardown reason on ctx, or fallback when absent.
+func TerminationReasonFromContext(ctx context.Context, fallback TerminationReason) TerminationReason {
+	if ctx != nil {
+		if reason, ok := ctx.Value(terminationReasonKey{}).(TerminationReason); ok && reason != "" {
+			return reason
+		}
+	}
+	return fallback
+}
 
 var (
 	ErrCommandInFlight  = errors.New("awaited command already in flight")
@@ -34,8 +95,9 @@ var (
 
 // Hooks are the registry's only outward lifecycle ports.
 type Hooks struct {
-	Publish  StreamPublisher
-	Complete CompletionPublisher
+	Publish        StreamPublisher
+	PublishProject ProjectBackgroundPublisher
+	Complete       CompletionPublisher
 	// Refused hears refusals the kernel made to a running visible job.
 	Refused RefusalPublisher
 }
@@ -73,6 +135,13 @@ type JobSnapshot struct {
 	Stages     []hostcmd.StageResult
 }
 
+// RootProcess identifies one live background process running under a workspace root.
+type RootProcess struct {
+	Handle    string
+	SessionID string
+	Cwd       string
+}
+
 // StartConflict describes the live jobs that prevented a new command from starting.
 type StartConflict struct {
 	Kind    error
@@ -90,6 +159,10 @@ func (e *StartConflict) Unwrap() error { return e.Kind }
 
 // Completion is the terminal, host-authoritative result for one command job.
 type Completion struct {
+	// UnsavedDocumentPaths records held drafts encountered by a program job.
+	UnsavedDocumentPaths []string
+	// ReleaseNotices returns admission after the completion consumer finishes.
+	ReleaseNotices    func()
 	IsCheck           bool
 	SourceRevision    string
 	SourceRootDigest  string

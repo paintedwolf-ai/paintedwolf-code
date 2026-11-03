@@ -21,9 +21,11 @@ Compatibility begins with identifying what persists independently of the code th
 | `device-config` | provider settings, credentials, and device model policy | evolve explicitly without treating database deletion as a reset |
 | `ephemeral` | indexes, caches, downloaded bytes, scratch | wipe and rebuild on mismatch |
 
-Classification follows the artifact, not the package. A database row can point to ephemeral content-addressed bytes; the row and bytes then have different compatibility classes. Lifecycle deletion recovery manifests and their referenced source objects are `durable-db` history: they travel in backups and remain retained with their pending operation or lifecycle undo entry. New human Trash operations and create/copy history plans use an additive `native_trash` receipt in the durable plan; its presence selects native recovery, and its absence preserves the retained recovery contract of existing rows. The receipt identifies an OS-owned entry and retains no bytes; removal or replacement of that entry makes restoration unavailable. Trash failure/retry fields are co-shipped `bundle` wire.
+Classification follows the artifact, not the package. A database row can point to ephemeral content-addressed bytes; the row and bytes then have different compatibility classes. Lifecycle deletion recovery manifests and their referenced source objects are `durable-db` history: they travel in backups and remain retained with their pending operation or lifecycle undo entry. New human Trash operations, agent removals into `.paintedwolf/recovery/`, and create/copy history plans use an additive `native_trash` receipt in the durable plan; its presence selects native recovery, and its absence preserves the retained recovery contract of existing rows. The receipt identifies an OS-owned or host-protected entry and retains no bytes; removal, reclamation, or replacement of that entry makes restoration unavailable. Trash failure/retry fields are co-shipped `bundle` wire.
 
 ## Main store (`durable-db`)
+
+New source-ledger row identities use time-ordered UUIDs in the existing opaque string columns. Stored identities and causal operation keys keep their exact values. Readers take history order, timestamps, authorization and ownership from their recorded facts, without inferring them from identifiers. This changes neither the stored shape nor existing references.
 
 The main store persists sessions, messages, workflows, evidence, authorization history, project records, and other facts that users expect to survive an application update.
 
@@ -33,17 +35,26 @@ The upgrade corpus records the shape a release ships. `./task upgrade:corpus:pre
 
 The directory-identity migration replaces the flat current-path projection with directory relationships and entry names. It preserves immutable source versions, effects, saved pins, their ordinal and Git boundaries, and lifecycle recovery. The former `source_checkpoint_entries` table was a redundant derived projection with no read consumer; migration retires it, while comparisons continue to resolve the preserved ordinal boundaries. It does not discard retained content or user-created pins.
 
-The manifest-layout migration (revision 5) moves every retained source snapshot onto per-root manifests and keeps its id, counts, quality, and boundaries, so scans, inventories, and command windows that name it still resolve. Chunks no snapshot referenced, and in-flight survey staging, are dropped rather than converted; content they alone named is queued for the blob reclaimer to re-check. The registered revision-4 route first builds a new released-shape file containing retained rows, then applies the registered migration there. All unchanged tables, FTS shadow rows, row identities, and sequence counters are preserved; indexes and triggers are installed after copying. It does not copy or free obsolete source pages. The compact source passes full integrity and foreign-key checks before recovery capture, and the migrated replacement passes the same checks before publication.
+The manifest-layout migration (revision 5) moves every retained source snapshot onto per-root manifests and keeps its id, counts, quality, and boundaries, so scans, inventories, and command windows that name it still resolve. Chunks no snapshot referenced, and in-flight survey staging, are dropped rather than converted; content they alone named is queued for the blob reclaimer to re-check. The reviewed revision-4 route prepares a released-shape working file. When every chunk is referenced, staging is empty, and declared counts match measured primary rows, it clones or copies the sealed whole source, preserving unrelated tables, FTS shadow rows, row identities, counters and indexes directly. Recovery capture verifies the sealed bytes and exact source shape, without an exhaustive audit of historical secondary indexes. Incomplete retention or a structured integrity failure encountered during preparation uses primary-row reconstruction with rebuilt indexes instead; operational failures refuse without an expensive repair retry. The reconstructed path selects retained rows rather than copying discarded rows. The migrated replacement passes a structural `quick_check`, foreign-key checks and each migration’s data invariants before publication.
 
-A schema change records the shipped source identity in `internal/db/released-baselines.json`, advances `SchemaVersion`, and adds an explicit adjacent step under `internal/db/migrations`. A step's `ID`, `Checksum`, source and destination revisions, and exact shapes identify the transformation. Every step embeds its implementation source or executed SQL as `Source`; registration verifies its SHA-256 against `Checksum` before planning. Each step declares its temporary disk requirement in `ScratchBytes`, and the complete route sums those budgets without overflow. Startup recognizes both revision and shape, validates the entire route and its applied ledger, and refuses unknown or newer stores without opening a writer. Users may skip releases: all registered intermediate steps execute in one immediate transaction, including their ledger records and revision stamp; destination shape, whole-file integrity, and foreign keys must pass before commit, and a failed or canceled step rolls the entire chain back. Fresh installs do not manufacture an applied-migration history. Whole-file verification runs after transformation, inside the transaction, so startup does not audit indexes of obsolete data before removing it; recorded damage still refuses the upgrade and recovery capture still precedes mutation.
+A schema change records the shipped source identity in `internal/db/released-baselines.json`, advances `SchemaVersion`, and adds an explicit adjacent step under `internal/db/migrations`. A step's `ID`, `Checksum`, source and destination revisions, and exact shapes identify the transformation. Every step embeds its implementation source or executed SQL as `Source`; registration verifies its SHA-256 against `Checksum` before planning. Each step declares its temporary disk requirement in `ScratchBytes`; the reviewed retained route also derives checked phase-specific reservations from source facts. Startup recognizes both revision and shape, validates the entire route and its applied ledger, and refuses unknown or newer stores without opening a writer. Users may skip releases: all registered intermediate steps execute in one immediate transaction, including their ledger records and revision stamp; destination shape, structural validity, migration data invariants, and foreign keys must pass before commit. In-place failures roll back the chain; a failed or canceled discardable replacement is removed while the original remains intact. Fresh installs do not manufacture an applied-migration history. One final structural check runs after transformation, inside the transaction. Retained recovery requires byte-consistent, hash-verified released-shape material; reconstructed source images receive structural and foreign-key checks before capture. Healthy whole-file candidates preserve the sealed source directly. Exhaustive secondary-index correspondence and uniqueness auditing runs after the application starts serving, with a durable pending obligation committed alongside the upgraded schema. Pending work survives cancellation and clean shutdown; confirmed damage still stops writes. Irreversible recovery/pre-image and database-dependent orphan cleanup waits for successful completion. Recorded damage still refuses the upgrade and recovery capture still precedes schema transformation.
 
-The application holds the installation lease before inspecting or upgrading. `db.OpenWithOptions` requires its `Before` hook to durably capture a complete recovery snapshot before any live schema transformation: copies of the database, retained bodies, and backed-up device configuration, which later live-store garbage collection cannot erase. Credentials and code-loading controls keep their separate custody rules. For a retained rebuild, recovery capture uses the verified compact released-shape file and the complete installation payload, after SQLite checkpoints committed WAL data into the original and seals it without sidecars. This preserves the logical source while changing its physical representation; the sealed original remains available throughout copying and recovery capture. Both publication candidates are self-contained before their names are exchanged. The `After` hook records the database commit; readiness is marked only after required retained references initialize. Failure retains the recovery point, and restoring one is explicit and explains that history returns to the capture point. A database-only `.bak` is not an installation rollback point, and opening the database does not create one merely because the product version changed.
+The application holds the installation lease before inspecting or upgrading. `db.OpenWithOptions` requires its `Before` hook to durably capture a complete recovery snapshot before any live schema transformation: copies of the database, retained bodies, and backed-up device configuration, which later live-store garbage collection cannot erase. Credentials and code-loading controls keep their separate custody rules. For a retained upgrade, recovery capture uses the verified released-shape working file and the complete installation payload, after SQLite checkpoints committed WAL data into the original and seals it without sidecars. This preserves the logical source while changing its physical representation; the sealed original remains available throughout copying and recovery capture. Both publication candidates are self-contained before their names are exchanged. The `After` hook records the database commit; readiness is marked only after required retained references initialize. Failure retains the recovery point, and restoring one is explicit and explains that history returns to the capture point. A database-only `.bak` is not an installation rollback point, and opening the database does not create one merely because the product version changed.
 
 The local `store.db.upgrade.json` journal (or the configured database filename plus `.upgrade.json`) and its `.store-upgrade-*` directory are versioned publication recovery state, excluded from exports and user-clearable caches. A building journal can discard its unpublished replacement and retry. A prepared journal identifies two sealed databases. Publication exchanges their names atomically and syncs both directories, then archives the original. Before exchange, a restart discards the unpublished candidate and rebuilds from the current original, preserving writes a journal-unaware older build may have made after interruption. After exchange, restart recognizes the replacement by filesystem identity and finishes archiving; the live pathname is never absent. Before checkpointing or copying, an empty-file probe exercises the same cross-directory exchange and directory syncs. A filesystem that cannot support publication refuses promptly, without rebuilding on every launch or falling back to an absent-path sequence. An installed journal permits ordinary startup; its original files are retired only after the self-contained recovery point and retained live references reach readiness. The staged restore path can retire its working pre-image after publication because its original archive remains intact.
 
 `db.UpgradeStaged` applies the same registered transformations to an extracted backup before publication; the original archive stays untouched. A cross-file conversion prepares immutable replacement objects before committing their references and retains old material until its recovery point is released. Device-file replacements use the restore transaction's staging, pre-images, exact paths, and resume journal; a SQLite transaction never claims atomicity over filesystem writes.
 
+The reviewed revision-4 retained route inventories only primary trees needed by its frozen transformation; row-reconstruction fallback surveys the remaining source/index trees before its bulk index work and reuses already measured facts. Sort reservations distinguish manifest roots, root lists, metadata, later populated indexes, and bounded checkpoint batches. Blocking structural and foreign-key checks use a 64 MiB cache on one held connection, restoring the prior setting before sorting or commit; the migration's sorter configuration stays unchanged. Private work disables journaling and remains discardable. Capacity reserves bounded single-threaded FILE-sort work on eligible temporary volumes, separately accounts existing-original sharing and canonical recovery cloning or copying, and measures available space again after each allocating phase. One full remaining replacement divergence covers immutable clone readers; earlier divergence is already consumed in the fresh measurement. SQLite's admitted page limit charges actual records, indexes, overflow, free-list, and pointer-map growth. Publication still requires sealing, file/directory sync, and atomic exchange; normal activation opens the published store in WAL mode. The resource proof pins the complete reviewed route and SQLite source identity, including the separately reviewed authority-decoder correction; unreviewed routes retain conservative admission.
+
 The SQL registry transforms database contents only. Archive manifests, local recovery manifests, worker manifests, committed overlays, and device files have their own format versions and decoder owners. A release that changes one of those formats, or the exact backup replacement scope, supplies its versioned decoder and staged transformer with a released fixture proving the conversion. Unsupported versions are refused without mutation; no reader ships for a shape that no release wrote.
+
+Archive format 2 adds `command-programs.yaml` to the complete replacement scope.
+The format 1 reader accepts its exact released file and directory sets, then
+stages the absence of configured command programs as part of the restore.
+Any current file is captured in the transaction's recovery pre-image before
+publication. Unknown scopes and versions remain refused; released ZIP bytes
+are never rewritten.
 
 Release rehearsal requires a healthy candidate whose semantic content survives ordinary APIs, a second startup, and restoration of the released archive into another configuration root. The retained-history fixture covers transcript content, preferences, a durable approval grant, artifact media, source versions, checkpoint pre-images, a completed worker's baseline and overlay, and collaborative editing state (host draft and saved base, CRDT checkpoint and pending update, undo/redo, authorship, save receipts and reservations), which both the host and the shipped editor codecs read. An incompatible released fixture entering recovery fails the gate; separate tests prove non-destructive refusal of unsupported or corrupt stores, and synthetic migrations exercise skipped revisions, snapshot failure, cancellation, and rollback without adding obsolete production readers.
 
@@ -69,22 +80,132 @@ Deleting bytes must produce an explainable unavailable state, not make a durable
 
 ## Portable command records
 
-P03 introduces internal compiled declarations and consumer ports only. It adds no database columns, wire fields, output stores or public tool names. The existing command model call remains the aggregate receipt; child identities are host operations, never invented model calls. The introducing producer must implement the following classification, migrations and generated consumers in the same PR. P24 audits these contracts rather than supplying deferred upgrades.
+Command diagnostic categories and recovery actions are additive `agent-public`
+facts. Existing rejection codes retain their meanings. Explanations and bounded
+source context are co-shipped `bundle` presentation; they do not authorize an
+operation, repair source, or establish replay eligibility. Execution and effect
+claims remain projections of the invocation recorder. This work changes no
+persisted schema or command language version.
 
-| Artifact | Class and retention | Introducing responsibility |
+Recovery availability and diagnostic-knowledge facts are additive host facts in
+the `paintedwolf` namespace. They distinguish missing observations from the
+standard typed zero values without changing OAR defaults. Structural argument
+repairs carry the validating tool identity; unrelated operation schemas do not
+authorize a replacement outer call. Unproven name guesses and remedies are not
+part of the recovery contract. Canonical rejection identities remain readable.
+
+
+The compiled catalog freezes the language, operation definitions and limits for each invocation. The model call owns the aggregate receipt; child identities are host operations. Persistence and wire consumers follow the classifications below.
+
+Command limit identifiers are `agent-public` vocabulary. The shared text-search
+regex owner uses bounded parser and VM work under `regex_work_steps`, caller cancellation and
+allocation admission. Query `query_elapsed_ms` accumulates time inside compiled
+jq evaluation, including its input/output callbacks; reached-input preparation
+between evaluations is outside the clock. Cancellation remains cooperative at
+existing VM boundaries. Neither owner promises CPU accounting or a hard
+wall-time upper bound. Refusal elapsed milliseconds round the measured total up.
+
+The handwritten `command` result uses `refusal.code`, `refusal.feedback` and
+optional `refusal.details` from the actual screened typed rejection, including
+reached limit and source coordinates. This co-shipped `bundle` tool-result shape
+has `agent-public` fact meanings; the generic API tool-result payload has no
+dedicated command-refusal OpenAPI schema. Both native and evaluator feedback
+keep their projection admission through serialization. A frame prepays one
+bounded feedback allowance before effects. An optional `refusal.delivery_failure`
+records capacity, cancellation or unavailable rendering with typed capacity facts
+when present; its feedback and details remain empty. Authority failures propagate
+as errors rather than publishing a result under a changed frame.
+
+| Artifact | Class and retention | Owner |
 |---|---|---|
-| Immutable language/operation version, identity and catalog digest | Internal compiled facts; snapshot frozen for each invocation. Public operation/rejection meanings are `agent-public` and cannot be reused. | P03 definitions; utility producers bind actual typed operations |
-| Program id, static node id, dynamic execution id, parent execution id, explicit actor/session/scope and source span | Live values are ephemeral. Once recorded in invocation history they are `durable-db`; receipt retention follows the session and preserves explainable unavailable states. Same node in a loop has fresh executions; held resumption retains one execution. | P10 receipt schema/migrations and generated consumers |
-| Screened program source and complete output references, output cursor/tombstone and source/delivery mappings | Identity/provenance rows are `durable-db`; screened blobs are retained while referenced by receipts, held effects, review or recovery. Unreferenced output expires after the versioned retention period and obeys its byte ceiling. Preview truncation never truncates complete downstream bytes. Missing bytes produce an unavailable state. Never persist resolved secret values. | P07 output storage and P10 receipt/output producers; retention accompanies each producer |
-| Exact execution input pin (revision, captured representation, hash, ranges) | Live snapshot ephemeral until a receipt, review or held effect references it; retained referenced bytes follow that durable record. An internal read is not model-observation evidence. | P09/P11 source/effect producers |
-| Delivered mapping (response/delivery identity, exact revision, representation and input/output ranges) | `durable-db` when persisted as observation evidence. Only bytes actually delivered may establish a conversational basis. External printed paths and internal captures grant none. | P10/P11 evidence producers |
-| Prepared/held effect and accepted-but-unpublished document version | Existing domain journal/history is `durable-db`; protect exact prepared inputs and recovery references until authoritative settlement. Revalidate before the single approved attempt. Accepted document state and saved publication remain distinct. | Existing mutation/editor domains; P09/P11 adapters |
-| Progress admission, child terminal outcome and aggregate terminal outcome | Separate attributed facts, `durable-db` when recorded. Progress remains its current owner; child recovery stays with the invoked domain; aggregate supervision remains `processes` with `effect_attempt`, not a restartable durable interpreter job. | Existing progress/process boundaries; P10/P22 producers |
-| Session job/listener/resource handles and lifecycle events | Live registry entries ephemeral, PID optional. Retained receipt/resource identity is `durable-db`; UI/event shapes are `bundle`. Session ownership survives wrappers/functions; host loss interrupts rather than resumes instructions. | P22 supervision/resource producers and corresponding wire generation |
-| Variables, functions, expansion state, pipe buffers/spill staging, live capabilities, one-use permits | Ephemeral only. Bound allocations obey the versioned ceilings. No serialized instruction pointer, interpreter checkpoint, whole-program retry or crash replay. Spill retained as history follows the output rules above. | Evaluator/stream/admission producers P04/P07/P08 |
-| Agent-visible command names, syntax version, status/rejection meaning, output-handle vocabulary | `agent-public`. Retire with a named successor; never reuse a meaning. DTO additions are `bundle`, authored through OpenAPI and generated together. | Each introducing producer, not frontend presentation or the later audit |
+| Immutable language/operation version, identity and catalog digest | Internal compiled facts; snapshot frozen for each invocation. Public operation/rejection meanings are `agent-public` and cannot be reused. | Compiled catalog and typed utility operations |
+| Program id, static node id, dynamic execution id, parent execution id, explicit actor/session/scope and source span | Live values are ephemeral. Once recorded in invocation history they are `durable-db`; receipt retention follows the session and preserves explainable unavailable states. Same node in a loop has fresh executions; held resumption retains one execution. | Invocation recorder, migrations and generated receipt consumers |
+| Screened program source and complete output references, output cursor/tombstone and source/delivery mappings | Identity/provenance rows are `durable-db`; screened blobs are retained while referenced by receipts, held effects, review or recovery. Unreferenced output expires after the versioned retention period and obeys its byte ceiling. Preview truncation never truncates complete downstream bytes. Missing bytes produce an unavailable state. Never persist resolved secret values. | Shared output store and invocation output retention |
+| Model delivery window (kind `command_output_window`, version 1) | `durable-db` retained detail body with a complete bounded presentation preview; the output owner's existing claims retain it. The receipt exposes the typed window and full stream reference. Unknown kind/version or incomplete descriptors are refused. No interpreter state or diagnostic `detail_ref` is replaced. | Invocation output owner and generated receipt field |
+| Exact execution input pin (revision, captured representation, hash, ranges) | Live snapshot ephemeral until a receipt, review or held effect references it; retained referenced bytes follow that durable record. An internal read is not model-observation evidence. | Source capture and effect owners |
+| Delivered mapping (response/delivery identity, exact revision, representation and input/output ranges) | `durable-db` when persisted as observation evidence. Only bytes actually delivered may establish a conversational basis. External printed paths and internal captures grant none. | Source delivery and evidence owners |
+| Prepared/held effect and accepted-but-unpublished document version | Existing domain journal/history is `durable-db`; protect exact prepared inputs and recovery references until authoritative settlement. Revalidate before the single approved attempt. Accepted document state and saved publication remain distinct. | Mutation journal and editor publication owners |
+| Progress admission, child terminal outcome and aggregate terminal outcome | Separate attributed facts, `durable-db` when recorded. Progress remains its current owner; child recovery stays with the invoked domain; aggregate supervision remains `processes` with `effect_attempt`, not a restartable durable interpreter job. | Progress, process supervision and invocation recorder |
+| Parked command call: `program_done` lease condition with `program_id`, and its winner's outcome and report | The `wait_leases` row is cache-lifetime state; the condition is an additive key in its JSON, so older rows read unchanged. The parked call's `completion.reason` and the awaiting_wake activity's `tool_name`/`tool_call_id` are `bundle` wire, generated from OpenAPI. `program_done` is host vocabulary a wait call cannot subscribe to. | Wait lease store, loop wake delivery and generated wire consumers |
+| Session job/listener/resource handles and lifecycle events | Live registry entries ephemeral, PID optional. Retained receipt/resource identity is `durable-db`; UI/event shapes are `bundle`. Session ownership survives wrappers/functions; host loss interrupts rather than resumes instructions. | Process supervision, resource registry and generated wire consumers |
+| Variables, functions, expansion state, pipe buffers/spill staging, live capabilities, one-use permits | Ephemeral only. Bound allocations obey the versioned ceilings. No serialized instruction pointer, interpreter checkpoint, whole-program retry or crash replay. Spill retained as history follows the output rules above. | Evaluator, stream and admission owners |
+| Agent-visible command names, syntax version, status/rejection meaning, output-handle vocabulary | `agent-public`. Retire with a named successor; never reuse a meaning. DTO additions are `bundle`, authored through OpenAPI and generated together. | Catalog, operation owners and generated wire consumers |
+| Command result presentation and receipt-bound compaction provenance | Readable refusal/stream framing is `agent-public` presentation. The detached compaction descriptor is ephemeral and excluded from serialization. Canonical history, receipt identities, source bytes and output references are unchanged. | Transcript projection and compaction |
 
 Host-loss recovery reconciles existing mutation journals and releases process/network resources, settles the aggregate interrupted, and preserves completed child outcomes. A later cancellation, refusal or stream error cannot rewrite a prior publication or HTTP effect. The invocation recorder records owner facts and cannot reclassify them. The evaluator delegates remaining obligations to existing workflow/grounding authority rather than inferring completion from stdout.
+
+Compiled native selection, the program attribution frame and conditional
+listener admission are ephemeral, with no serialized interpreter.
+`command_effects` on tool profiles, coordinator surfaces and posture
+catalogs is additive configuration vocabulary; absent declarations close the native surface. Posture overlays intersect their shipped restriction. Operation and effect refusal codes are agent-public and keep actual owner and source
+facts. Existing egress endpoint records may carry the additive
+`authority_refused` outcome after a later payload refusal; prior connected facts
+remain distinct. These changes add no OpenAPI fields or generated DTOs.
+
+The durable checkpoint authority descriptor includes `execution_id` for
+socket/direct-IP once permits. Its canonical reader keeps session and real
+model-call identity distinct from the native child. Absence or an empty value
+preserves structured-only authority and grants no native child. Schema revision
+5 registers the explicit revision 4 to 5 checkpoint-data transformation; revision
+4 is an existing known intermediate with unchanged SQL shape, not a newly
+claimed released baseline. Shipped revisions 1 through 3 and their migration
+checksums remain unchanged. The step makes old structured-only scope explicit,
+preserves semantic grant and plan identities, and refuses unknown authority
+shapes without committing any part of the transaction. Checkpoint/session
+retention remains unchanged; live permit caches remain ephemeral. The wire
+projection does not publish these private authority descriptors, so this field
+adds no OpenAPI DTO. The invocation recorder owns persisted reviewed-input,
+inspection and progress records with their migrations.
+
+Native checkpoint inspection adds a `native_arguments_representation` marker
+and an explicit argument-view wrapper containing representation, canonical
+inspection bytes, their digest, and the distinct original reviewed-input
+digest. Schema 4 cannot assert this native format; its conversion refuses that
+marker. Absence preserves the existing structured inspection shape. This data
+is private `durable-db` presentation metadata under checkpoint retention and
+never restored owner input or an executable argument map. The plan's original
+semantic action digest remains the authority identity.
+
+Screening traverses original scalar bytes and field names before the lossless
+view is encoded. Introducing publication/export consumers must use the same
+admitted lossless decoder and existing raw-value capture screening boundary;
+screening Base64 text as ordinary JSON cannot prove the protected bytes were
+screened. Versioned restore refuses unknown representation, digest mismatch,
+noncanonical keys/tags and malformed scalar values under the host resource
+ledger. A screened view's digest never replaces the original reviewed digest.
+
+## Layered worker workspaces, checkpoints, and retention
+
+> [!NOTE]
+> **Milestone 14 target contract ([#1656](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1656)).** On current `main`, worker workspaces persist format-1 materialized branch metadata (`lycaon/internal/workspace`), full-tree baseline manifests (`lycaon/internal/workspacebaseline`), and sealed overlay manifests. The section below defines the Milestone 14 target persistence, durability, retention, and recovery contract tracked in [#1657](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1657), [#1658](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1658), [#1662](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1662), [#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663), [#1665](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1665), [#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666), and [#1671](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1671); this transition note will be removed once those implementations land.
+
+In the Milestone 14 target architecture (planned `lycaon/internal/layeredfs` and `lycaon/internal/workspace`), layered worker workspaces separate durable worker results and recovery journals from live runtime mounts and disposable caches. Six terms govern persisted state and runtime reconstruction:
+
+- **View spec:** worker and project identities, selected root mappings, source generation, adapter, private storage, and retained parent checkpoint IDs.
+- **Working storage:** mutable private content and a journal of namespace changes. It is not a published checkpoint.
+- **Base:** the captured bytes, absence, or namespace state against which a particular mutation is integrated. File content and its private initial copy come from the same capture.
+- **Checkpoint:** an immutable private change set, its bases and metadata, repository state, object-retention references, and source observations, published durably under one ID.
+- **Source observation:** what the host actually observed, with its version and provenance. An index timestamp does not prove which bytes a command read.
+- **Promotion:** the host transaction that previews and applies one checkpoint against an integration target.
+
+| Target artifact and owning issue | Class and storage | Lifecycle and compatibility contract |
+|---|---|---|
+| **View spec** and branch metadata ([#1662](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1662), [#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666)) | Persistent host storage (`durable-db` and versioned workspace metadata) | Advances the branch metadata format with upgrade fixtures, recording worker/project identity, source generation, selected root mappings, adapter and fallback facts, view identity, working-journal location, retained parent checkpoint IDs, and latest published checkpoint ID. Retained format-1 materialized branches load with their actual captured seed bases and fixed-source visibility; they are never relabeled as live layered views. Unknown or inconsistent format versions fail closed without speculative repair or deletion. |
+| **Working storage** and namespace/metadata mutation journal ([#1657](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1657), [#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666)) | Persistent host storage (never `tmpfs`) | Holds mutable private content and the versioned structured journal of namespace and metadata operations before checkpoint publication. Interrupted working storage is preserved separately on startup for inspection or salvage rather than treated as a published checkpoint or silently deleted. |
+| Captured **Base** blobs, private file versions, and engine-retained Git objects ([#1657](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1657), [#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663), [#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666), [#1671](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1671)) | Persistent content-addressed storage | Protected by explicit retention references registered before view readiness and atomically published with each `Checkpoint`. Garbage collection and eviction cannot drop any base, private content blob, or Git object still reachable from an active worker, retained checkpoint, stacked child, or in-flight promotion/ref import. |
+| **Checkpoint** manifest ([#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663), [#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666)) | Persistent host storage (versioned, immutable once published) | Published atomically only after worker writers are quiesced, dirty client buffers and writable mappings are flushed, and all referenced content, bases, private Git refs/objects, and parent checkpoint references are synced. Continuing worker writes cannot overwrite published checkpoint content, including through already-open descriptors. A checkpoint is reconstructible only when all referenced content, parent layers, and repository objects remain retained. |
+| **Source observation** records ([#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663), [#1665](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1665)) | `durable-db` when bound to a checkpoint, verification receipt, or promotion preview; `ephemeral` in rebuildable index caches | Records root/path, observed object/version or digest, source generation/time, and provenance (exact native read, server-observed filesystem request, or index-derived inventory). Watcher overflow or missing per-command attribution is recorded explicitly rather than fabricated. |
+| Transition journals for preparation, checkpoint publication, **Promotion**, and release ([#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663), [#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666), [#1671](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1671)) | Persistent recovery state | Journals multi-step filesystem and Git transitions—including file promotion and namespaced ref import (such as `refs/paintedwolf/workers/<job>/<checkpoint>/<ref>`)—so retries after interruption resume or recognize the same transaction without double-applying file edits or overwriting conflicting refs. |
+| Runtime FUSE/NFS mounts (`fuselinux`, `nfsdarwin`), NFS loopback listeners/connections, open view-scoped node/generation handles, and explicitly disposable caches ([#1657](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1657)–[#1661](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1661), [#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666)) | `ephemeral` runtime state | Reconstructed from validated `View spec` metadata and retained `Checkpoint` references. Handles survive rename while the view is active and become invalid on view release or identity reuse. Only explicitly disposable caches may live on temporary storage (`tmpfs`). |
+
+**Target startup recovery, adapter changes, and stacked workers ([#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666)):**
+
+- On startup, the host validates worker identity and transition journals, then loads the last fully published `Checkpoint`. A half-written manifest is never exposed as a published result.
+- A same-boot engine restart cannot assume child processes or mount clients have stopped or that kernel page-cache survival proves a complete operation. Recovery establishes custody and quiescence over surviving writers before reconstructing or settling the worker view.
+- Incomplete `Working storage` from an interrupted command or failed barrier flush is preserved separately for inspection or salvage, identifying interrupted operations and paths from the durable journal where known and reporting unknown scope honestly.
+- Mount, connection, and process reconciliation acts only on resources owned by this engine's worker using held or recorded identities and actual process/mount facts, never by sweeping mounts under a pathname prefix or killing unrelated processes.
+- Releasing a mount or failing a promotion never deletes the only copy of a worker's result. If the selected adapter changes across restarts or after a mount failure, recovery reconstructs a usable view from the validated `Checkpoint` state before marking the workspace ready; it never switches a mutated worker silently to an empty workspace or relabels a live mount.
+- A stacked worker layers over its parent's retained immutable `Checkpoint` plus its own live trunk mapping. Parent continuation or eviction cannot mutate or collect that parent checkpoint. Child checkpoints reference their parent checkpoint ID, preserve parent namespace changes, bases, and transitive Git object retention, and resolve the complete parent chain alongside recorded ancestry/landing facts so promotion never double-applies changes after the parent lands.
 
 ## Workflow definitions
 
@@ -146,6 +267,8 @@ A deliberate breaking change updates Den in the same release. `./task openapi:di
 
 Responses remain additive-friendly: Den ignores unknown properties. Request object schemas are closed so unknown fields cannot silently change intent. Do not create multi-version adapters between co-shipped components.
 
+The Linux launch broker's descriptor-slot layout is co-shipped native `bundle` wire, not persisted state or agent vocabulary. Its optional layout preserves explicitly closed inherited slots across descriptor transport; an omitted layout keeps all supplied slots open. The engine relay and broker move together, with validation and actual-child descriptor invariants covering both sides. No store migration or OpenAPI consumer changes are involved.
+
 Health reports product, store, and schema revisions as distinct facts. Product SemVer does not stand in for the database schema version, and the Den cache revision does not stand in for either.
 
 ## User-repository overlays
@@ -183,6 +306,13 @@ and reused versions at different commits. Signed pointers, all published GitHub 
 count; drafts and unactivated tags do not. Activation receipts retain obligations
 when a GitHub mirror fails or a channel pointer later advances. SemVer 2.0 precedence applies to preview names: use dot-separated numeric prerelease identifiers (`-rc.N`) so multi-digit candidates sort numerically (`1.0.2-rc.10 > 1.0.2-rc.9`) across both release gates and the native updater.
 Full database shape and upgrade rehearsal checks follow with the built candidate.
+
+The native command cutover retires `paintedwolf.habit_redirect_match` in favor of
+`paintedwolf.native_operation` and `paintedwolf.native_command`. The former
+`USE_*_NATIVE` command-to-tool redirects are retired: supported native forms run
+directly, and unavailable forms use `COMMAND_NATIVE_FORM_UNSUPPORTED`. The
+retirement catalog records this lineage; it does not translate old facts or
+restore retired rules.
 
 The release controller is pinned to `refs/heads/main` and reads the selected candidate tree
 (including [`agent-public-retirements.json`](../schemas/agent-public-retirements.json)),
@@ -273,6 +403,63 @@ Credential-file evidence is `device-config` in the additive `credential-file-evi
 
 Security-sensitive grants remain exact. A socket-path grant must not widen to its containing directory during evolution. Credentials stay outside backups and diagnostics regardless of format version.
 
+Socket grants separate saved intent from live authority. The optional
+`socket_binding` in device approval grants, and `binding` in the existing durable
+checkpoint plan's `ApprovalSocketTarget`, record an enforcement mode and an
+opaque instance ID. These are additive receipts in existing configuration and
+JSON plan records; no SQL schema changes or rewriting of old rows is involved.
+The retained descriptor or private socket alias and its ownership leases are
+ephemeral capabilities, never backup or restart recovery data. A missing, unknown
+or released retained instance ID preserves the grant record
+as unavailable and requires a fresh approval. An unknown enforcement mode refuses
+loading without mutating the saved data. Reading saved intent never recaptures a
+pathname.
+
+Saved macOS kernel-pathname grants keep that interpretation, including an absent
+mode, and remain visible as unavailable intent. They cannot authorize a new
+confined launch or native dial. Fresh socket approval requires retained-object
+mode and a live instance ID on both Linux and macOS. There is no automatic
+recapture or migration of saved path intent into live authority. Mode and
+instance enter permission keys, action digests and grant IDs, so service or
+engine restart cannot reuse an unexpired stale approval.
+
+`{{paintedwolf-socket:/absolute/path}}` is additive agent-visible launch
+vocabulary. Its URI path is percent-encoded when necessary. The reference must
+occupy a complete argument or environment value and requires the invocation's
+reviewed live socket binding. Expansion occurs after command-language evaluation
+and before the final exec vectors are captured. Ordinary path operands, embedded
+source, executable selection and environment keys are never rewritten. Native
+socket arguments retain their ordinary path shape and their host-mediated dial.
+The `unix-url:` selector formats the bound stream endpoint with a `unix://`
+prefix. On macOS, `unixgram:` preserves Unix datagram message boundaries;
+Linux retains its existing Unix datagram refusal. Each form uses the same
+reviewed socket object; the default selector is a stream.
+No database or wire fields change, and ephemeral endpoints are not backup data.
+
+Native exact Unix-socket requests on a platform reporting no retained-object realization are refused with the existing structured socket-path refusal and an approved service-endpoint recovery route. This is the Windows socket contract and changes the previous native pathname-dial behavior. Existing saved socket intent and credential/token data remain; there is no pathname fallback, implicit rebinding or new durable wire shape. The unavailable realization and recovery are structured refusal facts rather than inferred error prose.
+
+Native HTTP's local-service secret recipient and captured-token issuer identity
+include that same retained binding. Existing credential and token data stays
+intact; a different bound recipient cannot inherit a pathname-only release
+lease and uses the existing fresh-approval or service sign-in route.
+
+Managed cookie jars are `device-config` protected values. Their unversioned
+`cookies` JSON envelope gains the optional per-cookie `native_issuer` receipt,
+an opaque retained-binding identity written only by an actual response's
+Set-Cookie. Existing entries without it remain readable and retain all values
+and attributes; sending them to a retained socket requires invocation-only
+secret disclosure until that issuer reissues them. A receipt never restores a
+kernel capability, and loading or approving disclosure never rewrites it. The
+per-invocation delivery filter and issuer-review fact are ephemeral host facts;
+no SQL schema, public wire shape or generated consumer changes are involved.
+
+The private approval authority deltas are not the co-shipped API option shape:
+`wireApprovalPlan` projects presentation and decisions without their binding IDs
+or kernel handles. Public grant inventory keeps its existing unavailable state
+and fresh-approval route. Public schema descriptions of matching must reflect
+the host binding contract; any wire shape change still follows OpenAPI bundling
+and generation for all consumers.
+
 Native update `ready.json` format 2 records the exact prepared bundle path and a nullable offer confirmation. Its strict format-1 decoder retains the legacy prepared path and confirmation. `transaction.json` format 2 also names the prepared path; its strict format-1 conversion first saves the original record under `receipts/<id>-format-1.json`, then atomically publishes the converted journal. Unknown journals remain untouched. New preparation names include the account UID, so accounts sharing an application cannot remove each other's preparation. The installed bundle and its parent directory provide cross-account inode locks; private journals never cross account boundaries. The permanent profile-wide `feed-state.lock` serializes replay-state reads, quarantine, and writes. `records.lock` serializes ready, rejection, and journal mutations. Lock files are never replaced or removed during normal operation.
 
 Secret-release leases use `secret_recipients` and a witness bound to that exact recipient set; a destination-only lease cannot establish recipient authority. Startup refuses incompatible entries, including expired ones, and leaves the entire approvals file unchanged. Its error identifies the file and either the invalid YAML line or the invalid grant ID.
@@ -283,7 +470,7 @@ To recover, make a private copy of the reported file, remove only the affected `
 
 ## Ephemeral data
 
-Search indexes, web indexes, source-observation indexes, model and pricing feeds, downloaded extension bodies, browser cache, debug logs, scan scratch, sealed worker branch trees, and unclaimed staging data can be cleared and rebuilt. A worker branch tree is rebuildable only once its overlay is sealed at completion; the baseline and overlay manifests that rebuild it are source history, not scratch. Retained project attachments, artifacts, tool-result spills, and source history are not scratch. The local-data API defines the closed bucket inventory; Den projects it rather than carrying a duplicate list.
+Search indexes, web indexes, source-observation indexes, model and pricing feeds, downloaded extension bodies, browser cache, debug logs, scan scratch, sealed worker branch trees, and unclaimed staging data can be cleared and rebuilt. A worker branch tree is rebuildable only once its overlay is sealed at completion; the baseline and overlay manifests that rebuild it are source history, not scratch. Under the Milestone 14 layered-workspace target contract ([#1662](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1662), [#1663](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1663), [#1666](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1666)), eviction removes disposable runtime or working material only when a complete retained checkpoint can rebuild the result, never removes the only unsealed result or drops referenced bases, content, or retained Git objects, and updates the local-data inventory with distinct retained worker results, interrupted working data, and disposable runtime/cache buckets, with temporary storage (`tmpfs`) restricted to explicitly disposable caches. Retained project attachments, artifacts, tool-result spills, and source history are not scratch. The local-data API defines the closed bucket inventory; Den projects it rather than carrying a duplicate list.
 
 Session scratch (`session_scratch`) is clearable chat working data, not a cache: nothing rebuilds it, and transcripts may name its files. Every chat and worker has a private folder under the host's scratch root. A folder lives until its chat is deleted or a person clears the bucket; clearing keeps the folder of any chat with a turn or process in flight. Scratch is excluded from backups and removed with a store reset.
 
@@ -297,7 +484,7 @@ The archive contains a manifest with format, product and schema versions, a dige
 
 Export and full restore check retained file references from the captured database against the archive inventory: stored source revisions, model and evidence bodies, live artifacts, retained attachments, transcript spills, and worker baselines must be present. Metadata-only revisions and deleted artifacts do not require bodies. If concurrent deletion or a changing file prevents a complete capture, export fails without publishing an archive; retry after active changes finish. This check does not pause the engine or promise a single filesystem-wide instant.
 
-Upgrade recovery points use the same self-contained durable scope as manifest-backed directories under `upgrade-recovery/{UUID}/`. With the installation lease held and subsystem writers absent, the database and its WAL use copy-on-write clones where supported. Otherwise, a normal SQLite checkpoint folds committed WAL frames into the source before a sequential database copy; checkpointing preserves committed history even if capture is interrupted. Capture checks the copied revision and shape and records file hashes; streamed database bytes are hashed during copying and independently checked by the atomic file writer before capture reuses that verified digest. It does not repeat a full scan of obsolete source data: migration validates the final database before commit, and restoration validates SQLite integrity before installation. Concurrent export snapshots retain the SQLite online backup and integrity-check path. Regular payloads use kernel copy-on-write clones on supported filesystems. On Linux, canonical read-only source-content objects use hard links when cloning is unavailable; mutable files and cross-filesystem bodies use a checked streaming copy. Shared source objects retain their original read-only modes and remain available after live-store collection. Each retained file and the complete manifest have integrity digests. Local recovery does not use public ZIP transfer caps and never depends on live-body retention. Free-space checks reserve database work and metadata on clone-capable volumes, or the independently copied payload and metadata when cloning is unavailable. Same-volume immutable Linux source bodies add metadata rather than another payload allocation; restore still reserves independent materialization. A capture stays in the temporary namespace until its payload, manifest, and recovery descriptor are synced, then one directory rename publishes them together; an interrupted capture is reclaimed on the next locked startup, a matching retry reuses a published snapshot instead of copying again, and a pending point targeting another app version is detached before subsystem writers start.
+Upgrade recovery points use the same self-contained durable scope as manifest-backed directories under `upgrade-recovery/{UUID}/`. With the installation lease held and subsystem writers absent, the database and its WAL use copy-on-write clones where supported. Otherwise, a normal SQLite checkpoint folds committed WAL frames into the source before a sequential database copy; checkpointing preserves committed history even if capture is interrupted. Capture checks the copied revision and shape and records file hashes; streamed database bytes are hashed during copying and independently checked by the atomic file writer before capture reuses that verified digest. It does not repeat a full scan of obsolete source data: migration validates the final database before commit, and restoration validates structural SQLite integrity and foreign keys before installation, retaining an exhaustive background audit obligation. Concurrent export snapshots retain the SQLite online backup and integrity-check path. Regular payloads use kernel copy-on-write clones on supported filesystems. On Linux, canonical read-only source-content objects use hard links when cloning is unavailable; mutable files and cross-filesystem bodies use a checked streaming copy. Shared source objects retain their original read-only modes and remain available after live-store collection. Each retained file and the complete manifest have integrity digests. Local recovery does not use public ZIP transfer caps and never depends on live-body retention. Free-space checks reserve database work and metadata on clone-capable volumes, or the independently copied payload and metadata when cloning is unavailable. Same-volume immutable Linux source bodies add metadata rather than another payload allocation; restore still reserves independent materialization. A capture stays in the temporary namespace until its payload, manifest, and recovery descriptor are synced, then one directory rename publishes them together; an interrupted capture is reclaimed on the next locked startup, a matching retry reuses a published snapshot instead of copying again, and a pending point targeting another app version is detached before subsystem writers start.
 
 A backup must identify the current schema or a recognized released schema with a complete upgrade route. Its manifest identity and extracted store are validated independently, only the staged copy is upgraded, and current shape and retained references are checked before live state is replaced. An imported `history-retention.json` is suspended in staging and its checksum updated, so another device's deletion policy cannot start removing local history without review; malformed retention data rejects the archive before any live replacement. A manifest is a claim, not the bytes. Product version travels with a backup as provenance and is not a gate: two builds with different product versions and one identical shape are equally restorable.
 

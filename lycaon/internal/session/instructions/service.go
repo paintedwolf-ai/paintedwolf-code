@@ -39,6 +39,7 @@ type Service struct {
 	transcript       *transcript.Service
 	captures         *checkpointcontrol.Capture
 	deliverKicks     func(context.Context, string) error
+	waitEnds         func(string) []string
 	progress         progress.RunScopedStore
 	workflows        *WorkflowDomains
 	review           ReviewCheckpointer

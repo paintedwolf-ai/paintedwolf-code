@@ -60,7 +60,7 @@ func TestIsSessionAmbientRootMachineState(t *testing.T) {
 
 	catalog := &api.WorkflowRun{
 		ID: "catalog-plan", SessionID: sess.ID, WorkflowID: "plan",
-		WorkflowVersion: "1.0.0", AttachPolicy: "",
+		WorkflowVersion: "1.0.1", AttachPolicy: "",
 		Status: api.WorkflowRunStatusRunning, CurrentPhase: "boot",
 	}
 	if runstate.IsAmbientRun(catalog) {
@@ -82,7 +82,7 @@ func TestExitUsesPersistedAttachmentAfterCatalogChanges(t *testing.T) {
 			if ambient {
 				run, err = mgr.Ambient.StartAmbient(ctx, "sess-1", "implement", "1.0.0")
 			} else {
-				run, err = startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+				run, err = startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 			}
 			testutil.FailErr(t, "start workflow", err)
 			manifest, err := mgr.Resolver.ForRun(ctx, run)

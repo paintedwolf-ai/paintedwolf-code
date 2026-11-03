@@ -216,9 +216,9 @@ func TestWithdrawPreservesIDAndOrd(t *testing.T) {
 	ordBefore := store.Find("slot-1").Ord
 
 	st := &promptLoopTurnState{
-		draftSlotID:          "slot-1",
-		draftSlotAppended:    true,
-		lastAssistantContent: "never committed",
+		draftSlotID:       "slot-1",
+		draftSlotAppended: true,
+		turnStreamState:   turnStreamState{lastAssistantContent: "never committed"},
 	}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Projection: ProjectionDeps{

@@ -2,6 +2,7 @@ package tooloutput
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -64,7 +65,7 @@ func IsStructuredToolJSON(content string) bool {
 
 // WireSpillToolOutput persists overflow at a content address.
 // JSON is indented for paging; opaque bytes stay exact.
-func WireSpillToolOutput(hostDataDir string, content ScreenedOutput, maxBytes, maxSpillBytes int) WireSpillOutcome {
+func WireSpillToolOutput(ctx context.Context, hostDataDir string, content ScreenedOutput, maxBytes, maxSpillBytes int) WireSpillOutcome {
 	body := content.String()
 	out := WireSpillOutcome{Preview: body, OriginalBytes: len(body)}
 	if maxBytes <= 0 || len(body) <= maxBytes {
@@ -72,7 +73,7 @@ func WireSpillToolOutput(hostDataDir string, content ScreenedOutput, maxBytes, m
 	}
 	out.Truncated = true
 	out.Preview = truncateInline(body, maxBytes)
-	out = writeSpill(out, hostDataDir, body, LineAddressableToolJSON(body), maxSpillBytes, false)
+	out = writeSpill(ctx, out, hostDataDir, body, LineAddressableToolJSON(body), maxSpillBytes, false)
 	if out.RejectCode == "" && out.SpillPath == "" {
 		out.RejectCode = ToolOutputSpillUnavailableCode
 		out.RejectData = map[string]any{"bytes": len(body)}
@@ -94,15 +95,15 @@ func WireSpillToolOutput(hostDataDir string, content ScreenedOutput, maxBytes, m
 }
 
 // SpillWholeToolOutput persists a tool wire body in full, line-addressable.
-func SpillWholeToolOutput(hostDataDir string, content ScreenedOutput, maxSpillBytes int) WireSpillOutcome {
+func SpillWholeToolOutput(ctx context.Context, hostDataDir string, content ScreenedOutput, maxSpillBytes int) WireSpillOutcome {
 	body := content.String()
-	return writeSpill(WireSpillOutcome{Truncated: true, OriginalBytes: len(body)}, hostDataDir, body, LineAddressableToolJSON(body), maxSpillBytes, true)
+	return writeSpill(ctx, WireSpillOutcome{Truncated: true, OriginalBytes: len(body)}, hostDataDir, body, LineAddressableToolJSON(body), maxSpillBytes, true)
 }
 
 // SpillWholeRaw persists a screened text body in full, byte-exact.
-func SpillWholeRaw(hostDataDir string, content ScreenedOutput, maxSpillBytes int) WireSpillOutcome {
+func SpillWholeRaw(ctx context.Context, hostDataDir string, content ScreenedOutput, maxSpillBytes int) WireSpillOutcome {
 	body := content.String()
-	return writeSpill(WireSpillOutcome{Truncated: true, OriginalBytes: len(body)}, hostDataDir, body, body, maxSpillBytes, true)
+	return writeSpill(ctx, WireSpillOutcome{Truncated: true, OriginalBytes: len(body)}, hostDataDir, body, body, maxSpillBytes, true)
 }
 
 // LineAddressableToolJSON indents the JSON payload while preserving its envelope.
@@ -119,7 +120,7 @@ func LineAddressableToolJSON(content string) string {
 }
 
 // writeSpill retains renderings without aliasing partial and complete bodies.
-func writeSpill(out WireSpillOutcome, hostDataDir, body, payload string, maxSpillBytes int, requireWhole bool) WireSpillOutcome {
+func writeSpill(ctx context.Context, out WireSpillOutcome, hostDataDir, body, payload string, maxSpillBytes int, requireWhole bool) WireSpillOutcome {
 	hostDataDir = strings.TrimSpace(hostDataDir)
 	if hostDataDir == "" {
 		return out
@@ -149,7 +150,7 @@ func writeSpill(out WireSpillOutcome, hostDataDir, body, payload string, maxSpil
 	// Spill writes are streamed, atomic, and mode 0600.
 	store := blobstore.Store{Root: hostDataDir}
 	bound := bytebound.Materialization(EffectiveMaxSpillFileBytes(maxSpillBytes))
-	if _, err := store.PutAt(relPath, strings.NewReader(spillPayload), bound); err != nil {
+	if _, err := store.PutAt(ctx, relPath, strings.NewReader(spillPayload), bound); err != nil {
 		return out
 	}
 	out.SpillPath = relPath

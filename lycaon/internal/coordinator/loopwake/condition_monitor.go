@@ -6,12 +6,10 @@ import (
 	"net/netip"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -23,15 +21,19 @@ const (
 )
 
 func startConditionMonitor(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, lease awaitstore.Lease) {
-	if loop == nil || store == nil || (!hasActiveCondition(lease.Conditions) && !lease.UntilComplete) {
+	if loop == nil || store == nil || (!hasActiveCondition(lease.Conditions) && !(lease.UntilComplete && hasConditionKind(lease.Conditions, WaitTriggerProcessDone))) {
 		return
 	}
 	go monitorConditions(ctx, loop, store, lease)
 }
 
 func hasActiveCondition(conditions []awaitstore.Condition) bool {
+	return hasConditionKind(conditions, WaitTriggerHTTPReady) || hasConditionKind(conditions, WaitTriggerPortReady)
+}
+
+func hasConditionKind(conditions []awaitstore.Condition, kind WaitTrigger) bool {
 	for _, condition := range conditions {
-		if condition.Kind == "http_ready" || condition.Kind == "port_ready" {
+		if condition.Kind == string(kind) {
 			return true
 		}
 	}
@@ -88,21 +90,8 @@ func reconcileWaitConditions(ctx context.Context, loop *WaitSubscriptions, store
 		if waitDeadlineExpired(lease) {
 			return true
 		}
-		won, err := store.SettleLease(ctx, lease.ID, "resolved", winner)
-		if err != nil {
-			return false
-		}
-		if !won {
-			return true
-		}
-		if strings.TrimSpace(lease.WorkerJobID) == "" {
-			loop.Deliveries.rememberWaitWinner(lease.SessionID, lease.ID, winner)
-		}
-		loop.Waits.breakSleep(ctx, lease.SessionID, winner.Kind, false)
-		if strings.TrimSpace(lease.WorkerJobID) == "" {
-			loop.Nudges.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
-		}
-		return true
+		_, err := loop.resolveLease(ctx, store, lease, winner)
+		return err == nil
 	}
 	return false
 }

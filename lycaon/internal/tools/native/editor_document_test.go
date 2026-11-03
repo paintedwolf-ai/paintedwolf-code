@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
@@ -45,7 +46,22 @@ func (f *fakeEditorDocuments) RememberAgentRead(_ string, sessionID string, docu
 	if f.reads == nil {
 		f.reads = make(map[string]tools.EditorDocumentText)
 	}
+	document.ReadWhole = true
+	document.ReadSpans = nil
 	f.reads[sessionID+"/"+document.ID] = document
+}
+
+func (f *fakeEditorDocuments) RememberAgentReadSpans(_ string, sessionID string, document tools.EditorDocumentText, spans []documentcore.LineSpan) {
+	if f.reads == nil {
+		f.reads = make(map[string]tools.EditorDocumentText)
+	}
+	document.ReadWhole = false
+	document.ReadSpans = append([]documentcore.LineSpan(nil), spans...)
+	f.reads[sessionID+"/"+document.ID] = document
+}
+
+func (f *fakeEditorDocuments) VisitAgentPublications(context.Context, string, sourcebranch.ID, string, int, string, func(tools.EditorDocumentPublicationCandidate) error) error {
+	return nil
 }
 func (f *fakeEditorDocuments) AgentReadBase(_ context.Context, _ string, sessionID, documentID string, frozen *tools.AgentReadBases) (tools.EditorDocumentText, error) {
 	document, ok := f.reads[sessionID+"/"+documentID]
@@ -53,9 +69,12 @@ func (f *fakeEditorDocuments) AgentReadBase(_ context.Context, _ string, session
 		return tools.EditorDocumentText{}, tools.ErrEditorReadRequired
 	}
 	if frozen != nil {
-		if revision, ok := frozen.Lookup(documentID); !ok || revision != document.Revision {
+		basis, ok := frozen.Basis(documentID)
+		if !ok || basis.Revision != document.Revision || (!basis.Whole && len(basis.Spans) == 0) {
 			return tools.EditorDocumentText{}, tools.ErrEditorReadRequired
 		}
+		document.ReadWhole = basis.Whole
+		document.ReadSpans = append([]documentcore.LineSpan(nil), basis.Spans...)
 	}
 	return document, nil
 }
@@ -64,8 +83,12 @@ func (f *fakeEditorDocuments) AgentReadBase(_ context.Context, _ string, session
 // the basis; a result holding anyone else's text withdraws it.
 func (f *fakeEditorDocuments) AdvanceAgentRead(projectID, sessionID string, frozen *tools.AgentReadBases, edit tools.EditorDocumentEdit, document tools.EditorDocumentText) {
 	if document.Text == strings.ReplaceAll(edit.Content, "\r\n", "\n") {
-		f.RememberAgentRead(projectID, sessionID, document)
-		frozen.Advance(document.ID, document.Revision)
+		if document.ReadWhole {
+			f.RememberAgentRead(projectID, sessionID, document)
+		} else {
+			f.RememberAgentReadSpans(projectID, sessionID, document, document.ReadSpans)
+		}
+		frozen.AdvanceBasis(document.ID, documentcore.ReadBasis{Revision: document.Revision, Whole: document.ReadWhole, Spans: document.ReadSpans})
 		return
 	}
 	delete(f.reads, sessionID+"/"+document.ID)
@@ -81,6 +104,31 @@ func (f *fakeEditorDocuments) OpenDocument(_ context.Context, _ string, _ source
 		return tools.EditorDocumentText{}, false, nil
 	}
 	return *doc, true, nil
+}
+
+func (f *fakeEditorDocuments) VisitUnsavedDocuments(_ context.Context, _ string, _ sourcebranch.ID, rootID, path string, descendants bool, visit func(tools.EditorDocumentState) error) error {
+	if f.openErr != nil {
+		return f.openErr
+	}
+	if f.dirtyErr != nil {
+		return f.dirtyErr
+	}
+	for key, doc := range f.docs {
+		if !doc.Dirty && !doc.Diverged {
+			continue
+		}
+		r, p, _ := strings.Cut(key, "/")
+		if rootID != "" && rootID != r {
+			continue
+		}
+		if path != "" && path != p && !(descendants && strings.HasPrefix(p, path+"/")) {
+			continue
+		}
+		if err := visit(tools.EditorDocumentState{ID: doc.ID, RootID: r, Path: p, Revision: doc.Revision, BaseSHA256: doc.BaseSHA256, Absent: doc.Absent}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (f *fakeEditorDocuments) DirtyDocuments(_ context.Context, _ string, _ sourcebranch.ID) ([]tools.EditorDocumentPath, error) {
@@ -517,11 +565,11 @@ func TestMutationRequiresASuccessfulRead(t *testing.T) {
 	testutil.FailErr(t, "write from delivered read", err)
 }
 
-func (f *fakeEditorDocuments) FreezeAgentReads(_ string, sessionID string) map[string]int64 {
-	out := make(map[string]int64)
+func (f *fakeEditorDocuments) FreezeAgentReads(_ string, sessionID string) map[string]documentcore.ReadBasis {
+	out := make(map[string]documentcore.ReadBasis)
 	for key, doc := range f.reads {
 		if strings.HasPrefix(key, sessionID+"/") {
-			out[doc.ID] = doc.Revision
+			out[doc.ID] = documentcore.ReadBasis{Revision: doc.Revision, Whole: doc.ReadWhole, Spans: doc.ReadSpans}
 		}
 	}
 	return out

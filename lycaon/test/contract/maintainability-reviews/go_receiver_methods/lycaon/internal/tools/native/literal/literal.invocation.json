@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/tools/native/literal/literal.invocation",
+  "kind": "algorithm",
+  "workstream": "command-listing-work",
+  "disposition": "retain",
+  "reason": "Invocation owns one command\u2019s bound paths, admitted owners, input lifetime, revision pins, output and status. Directory membership and metadata selection have a separate file boundary while per-invocation work counters stay with the command. Retain this owner below 900 receiver lines, 38 methods and 19 state fields; exact read evidence, input cleanup, refusal and listing-work contracts support this shape.",
+  "reviewed_commit": "60fa46332ba25c3df264bffca0f4b773314d8ce5",
+  "ceiling": 38,
+  "reviewed_shape": "81e2a844c13b7e09f27ad5b12da883469c96824722ecbc10d78ef64c6cef7966",
+  "boundaries": {
+    "lycaon/internal/tools/native/literal/ls_work_test.go": "f6a37a0b84205dd98a1049f7cca89e93149a71ed23951d7e38127b62fce422dd",
+    "lycaon/internal/tools/native/literal/evidence_test.go": "d40244adc138a2997d03906d58f8a607fa725b5cbbd1beefd4daf1f9e9177b85",
+    "lycaon/internal/tools/native/literal/file_stream_test.go": "52d4e059b4b1bc5717af692bf85e4c6dd595ade4f60da0d4420debebe2a1f37f",
+    "lycaon/internal/tools/native/literal/failures_test.go": "2380fb9e744415d42a3f50423416e240bf7b720f701a469ecdca467f48f89483"
+  }
+}

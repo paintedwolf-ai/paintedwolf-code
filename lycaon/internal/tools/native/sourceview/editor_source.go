@@ -2,18 +2,14 @@ package sourceview
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // The receipt note for text served from an unsaved document.
@@ -26,6 +22,7 @@ type Text struct {
 	Disk *textfile.UntrustedDocument
 	// editor is the open document; nil when the file served the text.
 	Editor *tools.EditorDocumentText
+	Stat   FileStatFacts
 }
 
 // SHA256 identifies the served bytes.
@@ -39,55 +36,74 @@ func (s Text) SHA256() string {
 	return ""
 }
 
-// ProjectDocuments returns the shared-document view when this invocation
-// reads the project tree itself; a worker on a private branch reads a copy.
-func ProjectDocuments(tctx tools.ToolContext) (tools.EditorDocuments, bool) {
-	if tctx.Source.EditorDocuments == nil || strings.TrimSpace(tctx.Identity.ProjectID) == "" {
-		return nil, false
-	}
-	if tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
-		return nil, false
-	}
-	return tctx.Source.EditorDocuments, true
-}
-
 // DocumentsFor narrows ProjectDocuments to one resolved path:
 // granted paths outside the roots have no document.
 func DocumentsFor(tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocuments, bool) {
 	if resolved.External || strings.TrimSpace(resolved.Root.ID) == "" {
 		return nil, false
 	}
-	return ProjectDocuments(tctx)
+	return tools.ProjectDocuments(tctx)
 }
 
 // LoadText serves the accepted document when one exists; a failed lookup
 // cannot authorize a filesystem write that would bypass an unknown draft.
 // The document is held to the file's access budget.
 func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolContext, resolved projectpaths.Resolved) (Text, error) {
-	if documents, ok := DocumentsFor(tctx, resolved); ok {
-		branch, err := tctx.SourceBranch(resolved.Root.ID)
-		if err != nil {
-			return Text{}, err
-		}
-		doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel)
-		if errors.Is(err, projectsource.ErrSourceIsDirectory) {
-			return Text{}, DirectoryReject(resolved.DisplayPath)
-		}
-		if err != nil {
-			return Text{}, fmt.Errorf("read collaborative document: %w", err)
-		}
-		if open {
-			if size := int64(len(doc.Text)); size > access.MaxBytes() {
-				return Text{}, access.SizeReject(tool, resolved.DisplayPath, size, access.MaxBytes())
-			}
-			return Text{Content: doc.Text, Editor: &doc}, nil
-		}
-	}
-	disk, err := ReadTextDocument(tool, access, resolved, tctx.Host.MaxToolSpillBytes)
+	doc, open, err := OpenDocument(ctx, tctx, resolved)
 	if err != nil {
 		return Text{}, err
 	}
-	return Text{Content: disk.Text(), Disk: &disk}, nil
+	if open {
+		if size := int64(len(doc.Text)); size > access.MaxBytes() {
+			return Text{}, access.SizeReject(tool, resolved.DisplayPath, size, access.MaxBytes())
+		}
+		st := Text{Content: doc.Text, Editor: &doc, Stat: FileStatFacts{Size: int64(len(doc.Text))}}
+		if access == AccessRead {
+			observeWorkerSourceRead(ctx, tctx, resolved, st)
+		}
+		return st, nil
+	}
+	disk, stat, err := ReadTextDocumentWithStat(tool, access, resolved, tctx.Host.MaxToolSpillBytes)
+	if err != nil {
+		return Text{}, err
+	}
+	st := Text{Content: disk.Text(), Disk: &disk, Stat: stat}
+	if access == AccessRead {
+		observeWorkerSourceRead(ctx, tctx, resolved, st)
+	}
+	return st, nil
+}
+
+func observeWorkerSourceRead(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, st Text) {
+	if resolved.External || resolved.ToolOutput {
+		return
+	}
+	coord, ok := tctx.Source.WorkerCoord.(tools.WorkerObservationCoordinator)
+	if !ok || coord == nil {
+		return
+	}
+	rootID := strings.TrimSpace(resolved.Root.ID)
+	rel := strings.TrimSpace(resolved.ScopeRel)
+	if root, locRel, located := tctx.SourceLocation(resolved.Abs); located {
+		rootID = root.ID
+		rel = locRel
+	}
+	if rootID == "" || rootID == "worker-branch" {
+		rootID = "primary"
+	}
+	if rel == "" {
+		rel = resolved.DisplayPath
+	}
+	sha := st.SHA256()
+	size := st.Stat.Size
+	if size == 0 && len(st.Content) > 0 {
+		size = int64(len(st.Content))
+	}
+	coord.ObserveWorkerRead(ctx, tctx, tools.WorkerFileObservationFacts{
+		RootID: rootID, RelPath: rel, AbsPath: resolved.Abs,
+		SHA256: sha, Size: size, ModTimeNS: st.Stat.ModTimeNS,
+		Ino: st.Stat.Ino, Dev: st.Stat.Dev, Complete: sha != "",
+	})
 }
 
 // Unsaved editor text has no recorded source version.
@@ -121,7 +137,7 @@ type DraftOverlay map[string]string
 // DraftsFor loads the project's unsaved documents for one invocation.
 // Empty when the invocation is not reading the project tree.
 func DraftsFor(ctx context.Context, tctx tools.ToolContext) DraftOverlay {
-	documents, ok := ProjectDocuments(tctx)
+	documents, ok := tools.ProjectDocuments(tctx)
 	if !ok {
 		return nil
 	}

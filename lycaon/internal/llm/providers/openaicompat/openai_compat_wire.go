@@ -145,6 +145,7 @@ func encodeChatCompletionRequest(req modelcall.CompletionRequest, p *Provider, s
 		Model: model,
 		Messages: ProjectMessages(req.Messages, MessageProjection{
 			RoundTripToolCallIDs:    p.profile.RoundTripsToolCallID(),
+			ToolCallIDStyle:         p.profile.ToolCallID,
 			ReasoningWire:           p.profile.ReasoningWire,
 			GoogleThoughtSignatures: p.profile.GoogleThoughtSignatures,
 			ProviderID:              p.id,
@@ -193,6 +194,8 @@ func encodeChatCompletionRequest(req modelcall.CompletionRequest, p *Provider, s
 type MessageProjection struct {
 	// RoundTripToolCallIDs selects wire-issued call identities.
 	RoundTripToolCallIDs bool
+	// ToolCallIDStyle selects the provider's wire tool-call ID format.
+	ToolCallIDStyle providerprofile.ToolCallIDStyle
 	// ReasoningWire selects the assistant-history fields accepted by the provider.
 	ReasoningWire           providerprofile.ReasoningWireStyle
 	GoogleThoughtSignatures bool
@@ -262,7 +265,13 @@ func ProjectMessages(msgs []api.Message, proj MessageProjection) []Message {
 				clear(pendingToolCallIDs)
 				wMsg.ToolCalls = make([]toolCallWire, 0, len(m.ToolCalls))
 				for _, tc := range m.ToolCalls {
-					wireID := pendingToolCallIDs.Add(tc, proj.RoundTripToolCallIDs)
+					var wireID string
+					if proj.ToolCallIDStyle == providerprofile.ToolCallIDAlphanumeric9 {
+						wireID = pendingToolCallIDs.AddAlphanumeric9(tc)
+					} else {
+						roundTrip := proj.RoundTripToolCallIDs || proj.ToolCallIDStyle == providerprofile.ToolCallIDWireRoundTrip
+						wireID = pendingToolCallIDs.Add(tc, roundTrip)
+					}
 					wMsg.ToolCalls = append(wMsg.ToolCalls, toolCallWire{
 						ID:   wireID,
 						Type: string(openai.ToolTypeFunction),
@@ -378,6 +387,7 @@ func mapChatCompletionWire(resp *chatCompletionResponseWire) *modelcall.Completi
 		Reasoning:        reasoningWireText(msg.Reasoning, msg.ReasoningContent),
 		ReasoningDetails: msg.ReasoningDetails,
 		Usage:            NormalizeUsage(resp.Usage),
+		FinishReason:     strings.TrimSpace(string(choice.FinishReason)),
 	}
 	lengthCapped := choice.FinishReason == openai.FinishReasonLength
 	for _, tc := range msg.ToolCalls {
@@ -406,7 +416,7 @@ func toolCallFromWire(tc toolCallWire, lengthCapped bool) api.ToolCall {
 			}
 		}
 	}
-	return api.ToolCall{
+	out := api.ToolCall{
 		ID:            providerwire.NewToolCallID(),
 		WireID:        tc.ID,
 		Name:          tc.Function.Name,
@@ -415,6 +425,10 @@ func toolCallFromWire(tc toolCallWire, lengthCapped bool) api.ToolCall {
 		ArgsMalformed: malformed,
 		ExtraContent:  providerwire.CloneMetadata(tc.ExtraContent),
 	}
+	if truncated {
+		out.SetTruncatedArgsBytes(len(tc.Function.Arguments))
+	}
+	return out
 }
 
 func imageURLPart(mime, base64Data string) ContentPart {

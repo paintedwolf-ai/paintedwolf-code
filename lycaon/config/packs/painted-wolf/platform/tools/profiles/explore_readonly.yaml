@@ -1,33 +1,18 @@
 id: explore_readonly
-description: Read-only exploration — native find/grep and metadata tools (no command)
+description: Read-only exploration — command in read-only mode and metadata tools
+command_effects: [read_only]
 tools:
+  command: sticky
   recall: sticky
-  read: sticky
   record_finding: sticky
   pack_board: sticky
   request_decision: sticky
   request_budget: sticky
   surface_note: sticky
   complete_leg: sticky
-  grep: sticky
-  find: sticky
   summarize: sticky
   survey_repo: sticky
-  jq: sticky
-  stat: sticky
-  wc: sticky
-  list_dir: sticky
-  git_status: sticky
-  git_diff: sticky
-  diff: sticky
-  git_log: true
-  git_show: true
-  git_blame: true
   source_history: true
-  git_ref: true
-  git_branches: true
-  git_compare: true
-  git_stash_list: true
   scan_list: true
   scan_summary: true
   scan_query: true
@@ -59,7 +44,6 @@ deny_tools:
   - git_checkout
   - git_merge
   - git_stash
-  - command
   - secret_*
   - delegate_*
   - state_*

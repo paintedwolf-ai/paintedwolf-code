@@ -8,6 +8,10 @@ import type {
 import { persistLastSessionSnapshot } from "./session-chat-persist.ts";
 import { flushTranscriptRowHeightsToDisk } from "../transcript/layout/transcript-row-heights-persist.ts";
 import { materializeTranscriptWindow } from "../transcript/layout/transcript-window.ts";
+import {
+  clearTranscriptAnnouncementMemory,
+  noteTranscriptAnnouncementBaseline,
+} from "../transcript/presentation/transcript-live-announcement.ts";
 
 export const SESSION_CHAT_CACHE_MAX = 8;
 
@@ -58,13 +62,17 @@ export function getSessionChatCache(
 
 export function dropSessionChatCache(scope: SessionChatScope): void {
   cache.delete(scopeKey(scope));
+  clearTranscriptAnnouncementMemory(scope.sessionId);
 }
 
 export function dropSessionChatCacheForProject(projectId: string): void {
   const pid = projectId.trim();
   if (!pid) return;
-  for (const key of cache.keys()) {
-    if (key.startsWith(`${pid}:`)) cache.delete(key);
+  for (const [key, snap] of cache.entries()) {
+    if (key.startsWith(`${pid}:`)) {
+      cache.delete(key);
+      clearTranscriptAnnouncementMemory(snap.scope.sessionId);
+    }
   }
 }
 
@@ -74,10 +82,12 @@ export function dropSessionChatCacheForSession(sessionId: string): void {
   for (const [key, snap] of cache.entries()) {
     if (snap.scope.sessionId === id) cache.delete(key);
   }
+  clearTranscriptAnnouncementMemory(id);
 }
 
 export function clearSessionChatCacheForTests(): void {
   cache.clear();
+  clearTranscriptAnnouncementMemory();
 }
 
 export function captureSessionChatFromStore(
@@ -149,6 +159,7 @@ export function restoreCachedSessionChat(
 ): boolean {
   const cached = getSessionChatCache(scope);
   if (!cached) return false;
+  noteTranscriptAnnouncementBaseline(cached.scope.sessionId, cached.messages);
   appStore.actions.restoreSessionChatSnapshot(cached);
   return appStore.state.currentSession?.id?.trim() === scope.sessionId.trim();
 }

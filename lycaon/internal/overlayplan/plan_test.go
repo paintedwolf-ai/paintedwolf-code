@@ -83,4 +83,3 @@ func TestBuildOverlayMergePlanExcludesUnfinishedLegsFromPromoteSequence(t *testi
 		t.Fatalf("shared_paths = %v, want status.py", plan.SharedPaths)
 	}
 }
-

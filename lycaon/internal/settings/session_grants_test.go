@@ -50,11 +50,11 @@ func TestSessionGrantReissuesExpiredAuthority(t *testing.T) {
 
 func TestExactGrantCannotMatchUnencodableAction(t *testing.T) {
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"invalid": make(chan int)},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"invalid": make(chan int)},
+		},
+	}
 	grant := hitl.ApprovalGrant{ExactActionSet: []string{"", hitl.GrantKey(action)}}
 	if grantMatchesAction(grant, action) {
 		t.Fatal("unencodable action matched an empty exact-action identity")

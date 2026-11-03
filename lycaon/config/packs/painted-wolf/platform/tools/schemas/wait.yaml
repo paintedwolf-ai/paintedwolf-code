@@ -1,5 +1,5 @@
 tags: [process, sync]
-description: "Park without a worker slot until a condition is satisfied or timeout expires. Use until_complete for exact process handles without periodic timer wakes; omit conditions for a timer. Replaces command: sleep."
+description: "Park without a worker slot until a condition is satisfied or timeout expires. Use until_complete for exact process handles without periodic timer wakes; omit conditions for a timer."
 schema:
   type: object
   properties:

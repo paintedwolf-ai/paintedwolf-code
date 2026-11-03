@@ -3,14 +3,26 @@ package session
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -178,5 +190,147 @@ func TestWorkflowStartDecisionUsesItsBoundRequestOnce(t *testing.T) {
 	opening, text, ok := mgr.Coordinator.Loading.Request(t.Context(), wake, history, "", request)
 	if !ok || opening != "follow-up" || text != "Focus on authentication" {
 		t.Fatalf("follow-up = %q %q %v", opening, text, ok)
+	}
+}
+
+const evidenceBoundarySecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
+
+// evidenceScreenRedactor stands in for the durable secret screen.
+func evidenceScreenRedactor(_ context.Context, msg api.Message) (api.Message, bool) {
+	out := msg
+	out.Content = strings.ReplaceAll(msg.Content, evidenceBoundarySecret, "{{paintedwolf-secret:ci_token}}")
+	return out, out.Content != msg.Content
+}
+
+// evidenceFileBytes reads every verify evidence row this project wrote.
+func evidenceFileBytes(t *testing.T, m *Host, sess *api.Session) []byte {
+	t.Helper()
+	root := m.Verification.EvidenceRootFor(sess)
+	if strings.TrimSpace(root) == "" {
+		t.Fatal("evidence root is unset")
+	}
+	var all []byte
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() || !strings.HasSuffix(path, ".jsonl") {
+			return walkErr
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		all = append(all, data...)
+		return nil
+	})
+	testutil.FailErr(t, "walk evidence dir", err)
+	if len(all) == 0 {
+		t.Fatal("no evidence rows were written")
+	}
+	return all
+}
+
+func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
+	mgr, sess, _ := verifyGateHarness(t, "")
+	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
+	recordVerify(t, mgr, sess, "deploy --token "+evidenceBoundarySecret, 0)
+
+	rows := evidenceFileBytes(t, mgr, sess)
+	if strings.Contains(string(rows), evidenceBoundarySecret) {
+		t.Fatalf("raw credential reached the evidence file: %s", rows)
+	}
+	if !strings.Contains(string(rows), "{{paintedwolf-secret:ci_token}}") {
+		t.Fatalf("evidence row did not keep the reference-bearing command: %s", rows)
+	}
+}
+
+func TestScreenedEvidenceStillMatchesTheDeclaredCommand(t *testing.T) {
+	mgr, sess, history := verifyGateHarness(t, "make test")
+	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
+	recordVerify(t, mgr, sess, "make test", 0)
+
+	passed, _, _ := mgr.Verification.GateState(context.Background(), sess, workSince(history))
+	if !passed {
+		t.Fatal("declared verify command no longer satisfies the gate after screening")
+	}
+}
+
+func TestWaitResumeAcquiresItsOwnDispatchLane(t *testing.T) {
+	for _, canceled := range []bool{false, true} {
+		name := "pending"
+		if canceled {
+			name = "interrupted"
+		}
+		t.Run(name, func(t *testing.T) {
+			manager, sessions := newReceiptTestManager(t)
+			session := newReceiptTestSession(t, manager, sessions)
+			ctx, release := manager.Submissions.LockDispatch(t.Context(), session.ID)
+			defer func() { release() }()
+			started := make(chan struct{})
+			admitted := make(chan struct{}, 1)
+			finished := make(chan error, 1)
+			leaseID := uuid.NewString()
+			pending := true
+			go func() {
+				close(started)
+				_, err := manager.Submissions.WaitResume(context.WithoutCancel(ctx), session.ID, loopwake.WaitDelivery{
+					LeaseID: leaseID, Condition: awaitstore.Condition{Kind: "timer", Outcome: "timed_out"},
+					Pending: func() bool { return pending }, Admitted: func() error { admitted <- struct{}{}; return nil },
+				})
+				finished <- err
+			}()
+			<-started
+			runtime.Gosched()
+			select {
+			case <-admitted:
+				t.Error("wait delivery inherited another execution's dispatch ownership")
+			default:
+			}
+			pending = !canceled
+			release()
+			release = func() {}
+			select {
+			case err := <-finished:
+				testutil.FailErr(t, "deliver wait after dispatch release", err)
+			case <-t.Context().Done():
+				t.Fatal("wait delivery did not acquire the released lane")
+			}
+			ids := sessions.admitted()
+			if canceled && len(ids) != 0 {
+				t.Fatalf("interrupted wait admitted receipts: %v", ids)
+			}
+			if !canceled && (len(ids) != 1 || ids[0] != leaseID) {
+				t.Fatalf("wait admission identities = %v", ids)
+			}
+		})
+	}
+}
+
+func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
+	ctx := t.Context()
+	memory := store.NewMemory()
+	client := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "unexpected follow-up"}}}))
+	mgr := NewHost(memory, Models{Client: client, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sess, err := memory.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "start visible turn", memory.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	loopWorkflowFixture1 := &settlementWorkflowSource{active: &api.WorkflowRun{
+		ID: "run", Revision: 5, Status: api.WorkflowRunStatusRunning, CurrentPhase: "work",
+	}}
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: loopWorkflowFixture1, Approvals: loopWorkflowFixture1, Obligations: loopWorkflowFixture1})
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
+	t.Cleanup(func() { loop.ForgetSession(context.Background(), sess.ID) })
+	finish := loop.Admission.BeginPromptExecution(ctx, sess.ID)
+	observe := mgr.Runner.Coordinator.PromptLoop().Context.Deps.ObservePrompt(sess.ID)
+	loop.Nudges.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	observe(inject.CoordinatorTurnFrame{WorkflowRevision: 5, RunContext: api.CoordinatorRunContext{RunID: "run"}})
+	loop.Waits.EnterSleep(ctx, sess.ID, time.Now().Add(time.Hour), "command", []loopwake.WaitTrigger{loopwake.WaitTriggerTimer, loopwake.WaitTriggerProcessDone}, []string{"process"}, loopwake.SleepMoverHost)
+	loop.Waits.MarkWaitCalled(sess.ID)
+	testutil.FailErr(t, "finish parked prompt", mgr.Runner.Settlement.Finish(ctx, sess.ID, false, false, ""))
+	finish()
+	loop.Turns.WaitForAsyncTurns(t.Context())
+	testutil.FailErr(t, "settle drained wakes", mgr.Runner.Settlement.Drain(ctx, sess.ID))
+	current, err := memory.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read waiting session", err)
+	if current.Status != api.SessionStatusBusy || !loop.Waits.IsSleeping(sess.ID) || len(client.AllRequests()) != 0 {
+		t.Fatalf("status=%s sleeping=%v prompts=%d", current.Status, loop.Waits.IsSleeping(sess.ID), len(client.AllRequests()))
 	}
 }

@@ -104,8 +104,8 @@ func TestMisconfiguredSurfaceBlocked(t *testing.T) {
 	if block("coordinator", "command") {
 		t.Fatal("coordinator profile should allow command")
 	}
-	if block("implement", "write") {
-		t.Fatal("implement should allow write")
+	if block("implement", "edit") {
+		t.Fatal("implement should allow edit")
 	}
 	if block("implement", "command") {
 		t.Fatal("implement should allow command")

@@ -59,6 +59,8 @@ var factDecls = []factDecl{
 
 	{"tool", oarcore.TypeString, FactTierStandard, ProfileTool},
 	{"tool_args", oarcore.TypeMap, FactTierStandard, ProfileTool},
+	{"native_operation", oarcore.TypeString, FactTierHost, ""},
+	{"operation", oarcore.TypeString, FactTierHost, ""},
 	{"response_tools_callable", oarcore.TypeBool, FactTierHost, ""},
 	{"response_structured_output", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_turn_has_text", oarcore.TypeBool, FactTierHost, ""},
@@ -100,7 +102,6 @@ var factDecls = []factDecl{
 	{"pending_user_input", oarcore.TypeBool, FactTierHost, ""},
 	{"stub_valid", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_allowed_for_profile", oarcore.TypeBool, FactTierHost, ""},
-	{"habit_redirect_match", oarcore.TypeString, FactTierHost, ""},
 	{"write_roots", oarcore.TypeListString, FactTierHost, ""},
 	{"pattern_parse_ok", oarcore.TypeBool, FactTierHost, ""},
 	{"arg_validation_errors", oarcore.TypeListString, FactTierStandard, ProfileTool},
@@ -122,6 +123,7 @@ var factDecls = []factDecl{
 	{"refused_write_grants", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_read_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_read_grants", oarcore.TypeListString, FactTierHost, ""},
+	{"refused_credential_store_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"receiving_tool_summarize", oarcore.TypeBool, FactTierHost, ""},
 	{"refused_terminal_read_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_terminal_write_paths", oarcore.TypeListString, FactTierHost, ""},
@@ -241,6 +243,7 @@ var factDecls = []factDecl{
 	{"syntax_check_overridden", oarcore.TypeBool, FactTierHost, ""},
 	{"source_analysis_unavailable", oarcore.TypeBool, FactTierHost, ""},
 	{"http_request_web_page", oarcore.TypeBool, FactTierHost, ""},
+	{"http_request_loopback_other_session", oarcore.TypeBool, FactTierHost, ""},
 }
 
 // observationFn is one parameterized observation function.

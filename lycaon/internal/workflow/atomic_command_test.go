@@ -16,7 +16,7 @@ func TestWorkflowPauseExactReplayReturnsReceiptWithoutDuplicateBoundary(t *testi
 	mgr, sessions, _, _ := testManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		OperationID: uuid.NewString(), WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		OperationID: uuid.NewString(), WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	testutil.FailErr(t, "start workflow", err)
 	expected := run.Revision
@@ -41,7 +41,7 @@ func TestWorkflowAdvanceRejectionReplaysReceipt(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-		OperationID: uuid.NewString(), WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
+		OperationID: uuid.NewString(), WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
 	testutil.FailErr(t, "start workflow", err)
 	commandCtx := runstate.WithExpectedRevision(ctx, run.Revision)
@@ -68,7 +68,7 @@ func TestWorkflowStartOperationReplaysOriginalRunAndRejectsRebinding(t *testing.
 	mgr, _, _, _ := testManager(t)
 	ctx := context.Background()
 	opID := uuid.NewString()
-	req := api.StartWorkflowRunRequest{OperationID: opID, WorkflowID: "plan", WorkflowVersion: "1.0.0"}
+	req := api.StartWorkflowRunRequest{OperationID: opID, WorkflowID: "plan", WorkflowVersion: "1.0.1"}
 	first, err := mgr.Starts.StartHuman(ctx, "sess-1", req)
 	testutil.FailErr(t, "start workflow", err)
 	replayed, err := mgr.Starts.StartHuman(ctx, "sess-1", req)

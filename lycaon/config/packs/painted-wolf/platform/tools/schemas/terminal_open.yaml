@@ -1,15 +1,5 @@
 tags: [terminal]
-description: >-
-  Live host terminal (pty): run a command-class argv command. Prefer command when you
-  only need exit code/tail for yourself. Use this tool when the session must be
-  held or the user should see the screen — then terminal_snapshot. Returns an id
-  held across turns plus the requested observation (screen by default). Never
-  supply known plaintext via later terminal_send — use env/credential helpers.
-  An opaque {{paintedwolf-secret:…}} reference may be sent when an interactive prompt is the
-  only supported input; the host resolves and screens it without showing the value.
-  Takes the
-  same capability_request as command except network destinations: a held session cannot hold
-  one-action direct network authority, so run that under command.
+description: Open a live terminal for an interactive program.
 schema:
   type: object
   properties:
@@ -101,7 +91,15 @@ schema:
           maxItems: 8
           items:
             type: string
-          description: Absolute AF_UNIX socket paths (exact, not globs).
+          description: >-
+            Exact AF_UNIX service paths. For an external program, use a whole
+            `{{paintedwolf-socket:/absolute/path}}` reference as an argv or
+            environment value. Clients needing a Unix URL use
+            `{{paintedwolf-socket:unix-url:/absolute/path}}`.
+            Inside code or configuration, read that environment
+            variable. macOS datagrams use
+            `{{paintedwolf-socket:unixgram:/absolute/path}}`; Linux confinement
+            refuses Unix datagrams. Native socket arguments take the ordinary path.
         local_listen:
           type: object
           description: >-

@@ -28,8 +28,7 @@ func TestApplyDefaultTERM(t *testing.T) {
 		t.Fatalf("inherit dumb should be replaced: %v", got)
 	}
 	keptInline := applyDefaultTERM([]string{"TERM=dumb"}, nil, map[string]string{"TERM": "vt100"})
-	// Inline already merged into env by configureCmdEnv in StartPTY; here we only
-	// check the early-return when inline carries TERM.
+	// Explicit inline TERM takes precedence over the default.
 	if keptInline[0] != "TERM=dumb" {
 		t.Fatalf("inline TERM present should leave env untouched: %v", keptInline)
 	}

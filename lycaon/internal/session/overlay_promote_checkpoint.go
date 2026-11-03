@@ -40,7 +40,7 @@ func ClearTaskCheckpointPreview(jobID string) {
 // MaybeBindTaskCheckpointPreview binds cpPreview to jobID if preview-bind intent was marked.
 func MaybeBindTaskCheckpointPreview(jobID string, cpPreview *checkpoint.PromotionPreview) {
 	previewBindMu.Lock()
-	if previewBindIntentJobs[jobID] {
+	if previewBindIntentJobs[jobID] || boundPreviewsByJob[jobID] == nil {
 		delete(previewBindIntentJobs, jobID)
 		boundPreviewsByJob[jobID] = cpPreview
 	}
@@ -57,7 +57,7 @@ func boundTaskCheckpointID(jobID string) string {
 }
 
 // RevalidateTaskCheckpointPreview checks whether any bound PromotionPreview target observations drifted.
-func RevalidateTaskCheckpointPreview(task *api.WorkerTask) error {
+func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask) error {
 	if task == nil {
 		return nil
 	}
@@ -71,7 +71,7 @@ func RevalidateTaskCheckpointPreview(task *api.WorkerTask) error {
 	if err != nil || !ok {
 		return err
 	}
-	curPreview, err := promoter.Preview(context.Background(), checkpoint.PreviewRequest{CheckpointID: bound.CheckpointID})
+	curPreview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{CheckpointID: bound.CheckpointID})
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,41 @@
+oar: '1.0'
+id: COMMAND_OPTION_UNSUPPORTED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.command
+  - paintedwolf.expected_form
+  - paintedwolf.word
+  - paintedwolf.source_line
+  - paintedwolf.source_column
+when: paintedwolf.rejection_code == "COMMAND_OPTION_UNSUPPORTED"
+effect: block
+copy:
+  what: '{% if paintedwolf.command %}{{ paintedwolf.command }}{% else %}This command{% endif %} cannot use {% if paintedwolf.word %}{{ paintedwolf.word }}{% else
+    %}the supplied option{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}.'
+  cause: '{% if paintedwolf.expected_form %}Supported form: {{ paintedwolf.expected_form }}.{% endif %}'
+  why: This command form does not accept the supplied option.
+  fix: '{% if paintedwolf.expected_form %}Use the supported form for this operation; preserve its other operands and earlier effects.{% endif %}'
+  instead: ''
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: native command option is unsupported
+x-paintedwolf-scenarios:
+- id: path_option
+  vars:
+    tool: command
+    command: basename
+    expected_form: 'basename [--] PATH [SUFFIX]'
+  expect_contains:
+  - 'Code: COMMAND_OPTION_UNSUPPORTED'
+  - basename
+  - PATH
+  - supported form

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -199,6 +200,16 @@ func (l layout) present(templates []string, multiarch string, directories bool) 
 		if strings.ContainsAny(path, "{}") || !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
 			return nil, fmt.Errorf("native generation: invalid launch catalog path %q", template)
 		}
+		if !directories {
+			resolved, err := l.systemExecutable(path)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			path = resolved
+		}
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
 			continue
@@ -214,7 +225,9 @@ func (l layout) present(templates []string, multiarch string, directories bool) 
 		if !kind || !ok || stat.Uid != 0 && stat.Uid != l.owner || info.Mode().Perm()&0o022 != 0 {
 			return nil, fmt.Errorf("native generation: %s is not root-controlled system code", path)
 		}
-		kept = append(kept, path)
+		if !slices.Contains(kept, path) {
+			kept = append(kept, path)
+		}
 	}
 	return kept, nil
 }

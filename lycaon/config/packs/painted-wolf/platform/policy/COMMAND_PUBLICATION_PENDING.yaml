@@ -1,0 +1,27 @@
+oar: '1.0'
+id: COMMAND_PUBLICATION_PENDING
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.path]
+when: paintedwolf.rejection_code == "COMMAND_PUBLICATION_PENDING"
+effect: block
+copy:
+  what: An edit was accepted but not published to disk{% if paintedwolf.path %} at {{ paintedwolf.path }}{% endif %}.
+  cause: The publication did not complete; the accepted edit remains retained.
+  why: ''
+  fix: Preserve the accepted edit; do not repeat it.
+  instead: ''
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_write_publication
+x-paintedwolf-message: command stopped after an accepted edit could not be saved
+x-paintedwolf-scenarios:
+- id: save-failed
+  vars:
+    tool: command
+    path: config/app.json
+  expect_contains:
+  - 'Code: COMMAND_PUBLICATION_PENDING'
+  - not published to disk at config/app.json
+  - do not repeat it

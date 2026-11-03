@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/command/program_dispatch.go",
+  "kind": "runtime_service",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain the 719-line dispatcher module for reached-child preparation, review, execution and failure translation. Adjacent modules define retained plans, domains and owner behavior. Allocation phase and amount fields travel with the actual typed failure; no additional admission decision is introduced. Resource, model-identity and policy-scope contracts support this file boundary.",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
+  "ceiling": 719,
+  "boundaries": {
+    "lycaon/internal/tools/native/command/program_resource_limits_test.go": "efa071232fba618fd89d5c374ce46142907e6bbcbb770f4fe432811bf8a9dd9a",
+    "lycaon/internal/tools/native/command/program_policy_scope_test.go": "ebea2dd668bccd6aea9b80e4eccacb02106952acf46eb782b5c6f187b43b7642",
+    "lycaon/internal/toolexecution/program_model_invocation_test.go": "73da4def333754d6ea8e7a68e4cfc476a5774b8bdfc5880633f327a81a490a3b"
+  }
+}

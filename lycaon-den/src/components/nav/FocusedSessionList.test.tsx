@@ -7,6 +7,10 @@ import type {
   SidebarChatRow,
   SidebarChatSections,
 } from "../../store/projects-sidebar-model.ts";
+import {
+  applyProjectBackgroundEvent,
+  resetProjectBackgroundForTests,
+} from "../../project/project-background-store.ts";
 import { indexAttention } from "../../attention/attention-model.ts";
 import type { AttentionRow } from "../../api/types.ts";
 
@@ -69,6 +73,7 @@ describe("FocusedSessionList", () => {
   beforeEach(() => {
     exportSessionTranscript.mockClear();
     getLycaonClient.mockClear();
+    resetProjectBackgroundForTests();
   });
   it("shows empty state when project has no sessions", () => {
     render(() => (
@@ -632,5 +637,50 @@ describe("FocusedSessionList", () => {
     fireEvent.keyDown(second, { key: "Enter" });
     expect(props.onSelectSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "s2" }));
     fireEvent.keyDown(second, { key: "Escape" });
+  });
+
+  it("shows the running background command indicator with tooltip and updates live as commands start and end", () => {
+    render(() => (
+      <FocusedSessionList
+        {...baseProps()}
+        sections={chats(row({ sessionId: "s1", title: "Dev server", backgroundRunning: 0 }))}
+      />
+    ));
+    expect(screen.queryByTestId("session-background-running")).toBeNull();
+
+    applyProjectBackgroundEvent({
+      revision: 1,
+      action: "started",
+      project_id: "p1",
+      session_id: "s1",
+      process_id: "bg_1",
+      running: true,
+      process: {
+        process_id: "bg_1",
+        project_id: "p1",
+        session_id: "s1",
+        session_title: "Dev server",
+        session_archived: false,
+        command: "python3 -m http.server 8000",
+        working_dir: ".",
+        started_at: "2026-10-30T12:00:00Z",
+        running: true,
+        ports: ["127.0.0.1:8000"],
+      },
+    });
+    const indicator = screen.getByTestId("session-background-running");
+    expect(indicator.getAttribute("data-tip")).toBe("1 background command running");
+    expect(indicator.getAttribute("aria-label")).toBe("1 background command running");
+
+    applyProjectBackgroundEvent({
+      revision: 2,
+      action: "ended",
+      project_id: "p1",
+      session_id: "s1",
+      process_id: "bg_1",
+      running: false,
+      termination_reason: "stopped_by_user",
+    });
+    expect(screen.queryByTestId("session-background-running")).toBeNull();
   });
 });

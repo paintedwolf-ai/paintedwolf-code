@@ -4,6 +4,7 @@ const ELEVATED_EFFECT_LABELS: Record<ElevatedAccessEffect, string> = {
   direct_network: "direct network access",
   host_execution: "host execution",
   process_control: "process control",
+  credential_store: "OS credential store access",
   local_service: "local service access",
 };
 

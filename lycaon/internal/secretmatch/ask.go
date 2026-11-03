@@ -209,6 +209,9 @@ const (
 
 // Alert is the redaction-safe summary for an outbound-secret card.
 type Alert struct {
+	// IssuerUnverified requires invocation-only disclosure of a managed response
+	// value whose issuer is not the current recipient.
+	IssuerUnverified bool `json:"-"`
 	// ReviewValue is ephemeral and never enters checkpoint or capture serialization.
 	ReviewValue      string `json:"-"`
 	SessionID        string

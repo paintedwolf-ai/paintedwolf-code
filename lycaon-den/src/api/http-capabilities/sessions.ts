@@ -40,6 +40,7 @@ import type {
   ProgressDigest,
   ArtifactListResponse,
   InvocationReceiptList,
+  CommandProgramReceiptPage,
   QueueDraft,
   QueueMutateRequest,
   BackgroundProcessStopResult,
@@ -126,6 +127,8 @@ export interface SessionsClient {
   /** Every artifact of the session tree, following pages. */
   listSessionArtifacts(sessionId: string): Promise<ArtifactListResponse>;
   listSessionInvocations(sessionId: string, opts?: { limit?: number; cursor?: string }): Promise<InvocationReceiptList>;
+  /** One bounded page of a command program's host child receipts. */
+  getCommandProgramReceipt(sessionId: string, programId: string, opts?: { limit?: number; cursor?: string; activity_id?: string; signal?: AbortSignal }): Promise<CommandProgramReceiptPage>;
   createSessionArtifact(
     sessionId: string,
     recording: Blob,
@@ -278,6 +281,15 @@ export function createSessionsClient(j: JsonRequester, connection: BackendConnec
           limit: opts?.limit,
           cursor: opts?.cursor,
         })}`,
+      ),
+    getCommandProgramReceipt: (sessionId, programId, opts) =>
+      j(
+        `/v1/sessions/${sessionId}/program-receipts/${encodeURIComponent(programId)}${formatQuery({
+          limit: opts?.limit,
+          cursor: opts?.cursor,
+          activity_id: opts?.activity_id,
+        })}`,
+        { signal: opts?.signal },
       ),
     createSessionArtifact: (sessionId, recording, meta) =>
       j(

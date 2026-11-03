@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"net"
 )
 
 // Denials inside a grant become mounts; denials Landlock already refuses do not.
@@ -150,7 +152,7 @@ func TestNetworkPlanMirrorsBoundaryDerivations(t *testing.T) {
 	}
 	deny := networkPlan(Confinement{Network: NetworkDeny, LocalListen: true, LocalListenPorts: []uint16{8080},
 		SocketGrants: []SocketGrant{{ApprovedPath: "/run/a", ResolvedPath: "/run/a"}}})
-	if deny.LoopbackConnect || !deny.Listen || !reflect.DeepEqual(deny.ListenPorts, []uint16{8080}) || !reflect.DeepEqual(deny.SocketPaths, []string{"/run/a"}) {
+	if deny.LoopbackConnect || !deny.Listen || !reflect.DeepEqual(deny.ListenPorts, []uint16{8080}) || !reflect.DeepEqual(deny.SocketGrants, []linuxsandbox.SocketGrant{{Path: "/run/a", FD: linuxsandbox.SocketReferenceFD}}) {
 		t.Fatalf("deny plan: %+v", deny)
 	}
 }
@@ -169,4 +171,96 @@ func containsPath(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// A draft is editor state; an ordinary Linux launch retains its declared roots.
+func TestLinuxDraftFileKeepsOrdinaryWriteRoot(t *testing.T) {
+	root := t.TempDir()
+	testutil.FailErr(t, "saved draft base", os.WriteFile(filepath.Join(root, "draft.txt"), []byte("one\ntwo\n"), 0600))
+	rules, err := filesystemRules(Confinement{Roots: []string{root}})
+	testutil.FailErr(t, "ordinary draft-path rules", err)
+	plan, err := compileFilesystemPlan(rules)
+	testutil.FailErr(t, "ordinary Linux launch plan", err)
+	found := false
+	for _, path := range plan.WriteRoots {
+		if path == root {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("project write root lost: %+v", plan)
+	}
+}
+
+// UseDelegatedEndpointsForTest stands a fixture socket in for a delegated
+// service endpoint, which tests cannot create at its operating-system path.
+func UseDelegatedEndpointsForTest(t *testing.T, endpoints []linuxsandbox.DelegatedEndpoint) {
+	t.Helper()
+	previous := delegatedEndpoints
+	delegatedEndpoints = endpoints
+	t.Cleanup(func() { delegatedEndpoints = previous })
+}
+
+func TestLinuxCredentialStorePlanAdmitsDBusSocketAndKeyringsReadOnly(t *testing.T) {
+	home := fspath.CanonicalPath(t.TempDir())
+	t.Setenv("HOME", home)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
+
+	t.Cleanup(installKeyMaterialFloor(t, "~/.ssh/", "~/.local/share/keyrings/", "~/.local/share/kwalletd/"))
+
+	keyringsDir := filepath.Join(home, ".local", "share", "keyrings")
+	kwalletDir := filepath.Join(home, ".local", "share", "kwalletd")
+	sshDir := filepath.Join(home, ".ssh")
+	for _, dir := range []string{keyringsDir, kwalletDir, sshDir} {
+		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o700))
+	}
+
+	shortDir, err := os.MkdirTemp("/tmp", "pw-dbus-") //nolint:usetesting // Socket path must fit sun_path.
+	testutil.FailErr(t, "mkdir short socket dir", err)
+	t.Cleanup(func() { _ = os.RemoveAll(shortDir) })
+	shortDir = fspath.CanonicalPath(shortDir)
+	busSock := filepath.Join(shortDir, "bus")
+	ln, err := net.Listen("unix", busSock)
+	testutil.FailErr(t, "listen bus", err)
+	defer func() { _ = ln.Close() }()
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+busSock)
+
+	proj := fspath.CanonicalPath(t.TempDir())
+	base := Confinement{Roots: []string{proj}, Network: NetworkDeny, EgressOff: EgressOffOverride}
+	rawBase, err := renderProfile(base)
+	testutil.FailErr(t, "render base plan", err)
+	planBase, err := linuxsandbox.DecodePlan([]byte(rawBase))
+	testutil.FailErr(t, "decode base plan", err)
+	if len(planBase.Network.SocketGrants) != 0 || planBase.Network.CredentialReadPolicy != nil {
+		t.Fatalf("base plan admitted credential IPC: %+v", planBase.Network)
+	}
+	for _, dir := range []string{keyringsDir, kwalletDir, sshDir} {
+		if !containsPath(planBase.Filesystem.Hidden, dir) {
+			t.Fatalf("base plan did not hide %s: %v", dir, planBase.Filesystem.Hidden)
+		}
+	}
+
+	withCred := base
+	withCred.CredentialStore = true
+	withCred, release, err := prepareCredentialSocket(withCred)
+	testutil.FailErr(t, "retain credential bus", err)
+	defer release()
+	rawCred, err := renderProfile(withCred)
+	testutil.FailErr(t, "render credential_store plan", err)
+	planCred, err := linuxsandbox.DecodePlan([]byte(rawCred))
+	testutil.FailErr(t, "decode credential_store plan", err)
+	if len(planCred.Network.SocketGrants) != 1 || planCred.Network.SocketGrants[0].Path != busSock || !planCred.Network.SocketGrants[0].CredentialRead || planCred.Network.CredentialReadPolicy == nil {
+		t.Fatalf("credential_store plan lacks retained read mediation: %+v", planCred.Network)
+	}
+	for _, dir := range []string{keyringsDir, kwalletDir} {
+		if containsPath(planCred.Filesystem.Hidden, dir) {
+			t.Fatalf("credential_store plan still hid %s: %v", dir, planCred.Filesystem.Hidden)
+		}
+		if verdict := BoundaryOf(&withCred).Filesystem.Verdict(AccessWrite, filepath.Join(dir, "fixture")); verdict.Allowed {
+			t.Fatalf("credential_store boundary admitted a credential write below %s", dir)
+		}
+	}
+	if !containsPath(planCred.Filesystem.Hidden, sshDir) {
+		t.Fatalf("credential_store plan did not keep ~/.ssh hidden: %v", planCred.Filesystem.Hidden)
+	}
 }

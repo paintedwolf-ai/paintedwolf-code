@@ -1,5 +1,5 @@
 tags: [git, inspection]
-description: "List local branches JSON (`available`, `branches` with name/current). Replaces command: git branch."
+description: "List local branches JSON (`available`, `branches` with name/current)."
 schema:
   type: object
   properties:

@@ -34,13 +34,13 @@ func TestCapabilityContractIsCatalogCompiled(t *testing.T) {
 		toolcontract.CapabilityHostResource, toolcontract.CapabilitySocket,
 		toolcontract.CapabilityDirectIP, toolcontract.CapabilityLocalListen,
 		toolcontract.CapabilityLoopbackConnect, toolcontract.CapabilityTerminalCapture,
-		toolcontract.CapabilityWriteRoot,
+		toolcontract.CapabilityWriteRoot, toolcontract.CapabilityCredentialStore,
 	} {
 		if !command.Supports(capability) {
 			t.Fatalf("command lacks capability %d", capability)
 		}
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(command, map[string]any{
+	if reject := capabilityrequest.ValidateCapabilityContract("command", command, map[string]any{
 		"capability_request": map[string]any{"loopback_connect": map[string]any{}},
 	}); reject != nil {
 		t.Fatalf("command loopback_connect reject = %+v", reject)
@@ -49,12 +49,12 @@ func TestCapabilityContractIsCatalogCompiled(t *testing.T) {
 	if !ok {
 		t.Fatal("verify contract missing")
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(verify, map[string]any{
+	if reject := capabilityrequest.ValidateCapabilityContract("verify", verify, map[string]any{
 		"capability_request": map[string]any{"local_listen": map[string]any{}},
 	}); reject != nil {
 		t.Fatalf("verify local-listen reject = %+v", reject)
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(verify, map[string]any{
+	if reject := capabilityrequest.ValidateCapabilityContract("verify", verify, map[string]any{
 		"capability_request": map[string]any{"write_root": filepath.Join(t.TempDir(), "cache")},
 	}); reject != nil {
 		t.Fatalf("verify write_root reject = %+v", reject)
@@ -289,6 +289,7 @@ func TestParseCapabilityRequestAcceptsCatalogFields(t *testing.T) {
 	payloads := map[string]any{
 		"host_resources":   []any{"docker"},
 		"process_control":  true,
+		"credential_store": true,
 		"host_execution":   true,
 		"socket_paths":     []any{"/tmp/a.sock"},
 		"direct_ip":        map[string]any{},
@@ -307,6 +308,52 @@ func TestParseCapabilityRequestAcceptsCatalogFields(t *testing.T) {
 		})
 		if reject != nil {
 			t.Fatalf("%s reject = %+v", field, reject)
+		}
+	}
+}
+
+func TestParseCapabilityRequestCredentialStore(t *testing.T) {
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
+		"capability_request": map[string]any{"credential_store": true},
+	})
+	if reject != nil || req == nil || !req.CredentialStore {
+		t.Fatalf("credential_store: true = (%+v, %+v)", req, reject)
+	}
+	for _, invalid := range []any{false, "true", 1, map[string]any{}} {
+		_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
+			"capability_request": map[string]any{"credential_store": invalid},
+		})
+		if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
+			t.Fatalf("credential_store: %#v reject = %+v, want SANDBOX_CAPABILITY_REQUEST_INVALID", invalid, reject)
+		}
+	}
+	_, reject = capabilityrequest.ParseCapabilityRequest(map[string]any{
+		"capability_request": map[string]any{"credential_store": true, "host_execution": true},
+	})
+	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
+		t.Fatalf("credential_store + host_execution reject = %+v, want SANDBOX_CAPABILITY_REQUEST_INVALID", reject)
+	}
+	for _, toolName := range []string{"command", "verify"} {
+		contract, ok := toolcontract.Lookup(toolName)
+		if !ok {
+			t.Fatalf("missing contract %q", toolName)
+		}
+		if reject := capabilityrequest.ValidateCapabilityContract("fixture", contract, map[string]any{
+			"capability_request": map[string]any{"credential_store": true},
+		}); reject != nil {
+			t.Fatalf("%s credential_store reject = %+v", toolName, reject)
+		}
+	}
+	for _, toolName := range []string{"terminal_open", "http_request"} {
+		contract, ok := toolcontract.Lookup(toolName)
+		if !ok {
+			t.Fatalf("missing contract %q", toolName)
+		}
+		reject := capabilityrequest.ValidateCapabilityContract("fixture", contract, map[string]any{
+			"capability_request": map[string]any{"credential_store": true},
+		})
+		if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
+			t.Fatalf("%s credential_store reject = %+v, want SANDBOX_CAPABILITY_REQUEST_INVALID", toolName, reject)
 		}
 	}
 }
@@ -381,7 +428,7 @@ func TestCapabilityPathAuthorityReadRefusesControlPlane(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{
 		"read_path": filepath.Join(cfg, "credential-vault.age"),
-	}}, "")
+	}}, "", "")
 	if reject == nil || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
 		t.Fatalf("control-plane read path reject = %+v", reject)
 	}
@@ -392,7 +439,7 @@ func TestCapabilityPathAuthorityWriteRefusesControlPlane(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{
 		"write_root": filepath.Join(cfg, "credential-vault.age"),
-	}}, "")
+	}}, "", "")
 	if reject == nil || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
 		t.Fatalf("control-plane write root reject = %+v", reject)
 	}
@@ -479,7 +526,7 @@ func TestCapabilityPathAuthorityLeavesOnlyInvokingScratch(t *testing.T) {
 	scratch := filepath.Join(cfg, "scratch", "own")
 	for _, field := range []string{"read_path", "write_root"} {
 		for _, path := range []string{filepath.Join(scratch, "file"), filepath.Join(cfg, "scratch", "other", "file"), filepath.Join(cfg, "store.db")} {
-			reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{field: path}}, scratch)
+			reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{field: path}}, scratch, "")
 			own := path == filepath.Join(scratch, "file")
 			if (reject == nil) != own {
 				t.Fatalf("%s %s reject=%+v", field, path, reject)

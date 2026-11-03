@@ -3,6 +3,7 @@ package confine_test
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -204,6 +205,13 @@ func unixConnectExit(t *testing.T, self string, c confine.Confinement, sockPath 
 	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 required for AF_UNIX connect probe")
+	}
+	resolved, _ := filepath.EvalSymlinks(sockPath)
+	for _, grant := range c.SocketGrants {
+		if grant.ApprovedPath == sockPath || grant.ResolvedPath == resolved {
+			sockPath = "{{paintedwolf-socket:" + url.PathEscape(grant.ApprovedPath) + "}}"
+			break
+		}
 	}
 	code, _ := confinedRun(t, self, c, "python3", "-c",
 		"import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(1); s.connect(sys.argv[1])",

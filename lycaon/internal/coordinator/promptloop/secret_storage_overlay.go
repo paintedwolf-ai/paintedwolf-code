@@ -76,8 +76,8 @@ func transientMessageFromStored(stored api.Message, raw *api.Message) api.Messag
 }
 
 func prependEvidenceHandles(content string, handles []string) string {
-	for _, handle := range handles {
-		if strings.TrimSpace(handle) != "" {
+	for i := len(handles) - 1; i >= 0; i-- {
+		if handle := strings.TrimSpace(handles[i]); handle != "" {
 			content = guidance.PrependHandleTag(content, handle)
 		}
 	}

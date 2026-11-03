@@ -1,11 +1,18 @@
 import json
 import pathlib
 import sqlite3
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 import yaml
+import focused_outcomes
+from preparation import validate_service_controls, validate_worker_controls
+import smoke
+from smoke_grading import verify_flows
 import smoke_workers
 from smoke_workers import completion_wake
+import test_fixture_contracts
+import test_focused_outcomes
 
 
 class CompletionWakeTests(unittest.TestCase):
@@ -60,3 +67,88 @@ class CompletionWakeTests(unittest.TestCase):
                     db.execute('DELETE FROM messages WHERE ord=5')
             append(5, 'model', 'completion_report', role='assistant')
             self.assertFalse(completion_wake(db, 'session', allowed))
+
+
+class OutcomeControlTests(unittest.TestCase):
+    def test_every_control_executes_in_the_pinned_runtime(self):
+        seen = {}
+
+        def run(runner, suite):
+            seen['focused'] = test_focused_outcomes.local_execute
+            seen['fixture'] = test_fixture_contracts.local_execute
+            seen['cases'] = suite.countTestCases()
+            seen['tempdir'] = tempfile.tempdir
+            return unittest.TestResult()
+
+        case = sorted(test_fixture_contracts.CONTRACTS)[0]
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(smoke, 'artifact_root', return_value=pathlib.Path(temporary)), \
+                patch.object(test_focused_outcomes, 'local_execute'), \
+                patch.object(test_fixture_contracts, 'local_execute'), \
+                patch.object(unittest.TextTestRunner, 'run', run), \
+                patch.object(focused_outcomes, 'execute', return_value=None) as execute:
+            count = smoke.run_outcome_controls({case})
+            self.assertEqual(seen['tempdir'], str(pathlib.Path(temporary) / 'coordinator-oracle-controls'))
+        self.assertIs(seen['focused'], execute)
+        self.assertIs(seen['fixture'], execute)
+        self.assertEqual(count, seen['cases'])
+
+
+class ShortcutPrerequisiteTests(unittest.TestCase):
+    def test_shortcut_must_reach_its_required_successful_prerequisite(self):
+        flow = {'id':'service','kind':'shortcut','must_fail':['client'],'must_pass':['readiness']}
+        suite = {'cases':[{'id':'service'}]}
+        with patch('smoke_grading.grade_flow',return_value={'client':False,'readiness':True}):
+            self.assertEqual(verify_flows(pathlib.Path('.'),[flow],suite)[0]['failed'],['client'])
+        for checks in [{'client':False,'readiness':False},{'client':False}]:
+            with self.subTest(checks=checks), patch('smoke_grading.grade_flow',return_value=checks):
+                with self.assertRaisesRegex(RuntimeError,'required successful checks'):
+                    verify_flows(pathlib.Path('.'),[flow],suite)
+
+    def test_exact_negative_control_rejects_collateral_failure(self):
+        flow={'id':'workflow','kind':'shortcut','must_fail':['wrong-binding'],'exact_failures':True}
+        suite={'cases':[{'id':'workflow'}]}
+        for checks, valid in [({'wrong-binding':False,'workflow-completed':True},True),
+                              ({'wrong-binding':False,'workflow-completed':False},False)]:
+            with self.subTest(checks=checks), patch('smoke_grading.grade_flow',return_value=checks):
+                if valid:
+                    self.assertEqual(verify_flows(pathlib.Path('.'),[flow],suite)[0]['failed'],['wrong-binding'])
+                else:
+                    with self.assertRaisesRegex(RuntimeError,'expected exactly'):
+                        verify_flows(pathlib.Path('.'),[flow],suite)
+
+
+class ServicePreflightTests(unittest.TestCase):
+    def test_readiness_strategies_pass_and_receipt_forgery_fails(self):
+        controls = [
+            {'id': 'capability-background-service', 'kind': 'intended', 'control': 'intended', 'failed': []},
+            {'id': 'capability-background-service', 'kind': 'intended', 'control': 'client-after-delay', 'failed': []},
+            {'id': 'capability-background-service', 'kind': 'intended', 'control': 'client-after-timeout', 'failed': []},
+            {'id': 'capability-background-service', 'kind': 'shortcut', 'control': 'fabricated-receipt',
+             'failed': ['supplied-client-succeeded']},
+        ]
+        validate_service_controls(controls)
+        invalid_controls = [[], *[controls[:i] + controls[i+1:] for i in range(len(controls))]]
+        invalid_controls.extend(controls[:i] + [{**controls[i], 'failed': ['readiness']}] + controls[i+1:]
+                                for i in range(3))
+        invalid_controls.append([*controls[:3], {**controls[3], 'failed': []}])
+        for invalid in invalid_controls:
+            with self.subTest(controls=invalid), self.assertRaisesRegex(ValueError, 'service outcome'):
+                validate_service_controls(invalid)
+
+
+class WorkerPreflightTests(unittest.TestCase):
+    def test_prepared_workers_must_reach_the_full_grader(self):
+        suite = {'cases': [{'id': 'merge', 'setup': {'overlays': [{'label': 'First'}, {'label': 'Second'}]}}]}
+        failures = ['promoted-prepared-worker-First', 'promoted-prepared-worker-Second']
+        control = {'id': 'merge', 'kind': 'shortcut', 'control': 'prepared-workers-unpromoted', 'failed': failures}
+        validate_worker_controls([control], suite)
+        validate_worker_controls([{'id': 'merge', 'kind': 'intended', 'failed': []}], suite)
+        for trials in ([], [{**control, 'failed': failures[:1]}], [{**control, 'id': 'other'}],
+                       [{'id': 'merge', 'kind': 'intended', 'failed': failures}]):
+            with self.subTest(trials=trials), self.assertRaisesRegex(ValueError, 'worker grading controls'):
+                validate_worker_controls(trials, suite)
+
+
+if __name__ == '__main__':
+    unittest.main()

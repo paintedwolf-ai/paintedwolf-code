@@ -7,6 +7,7 @@ import time
 
 from artifact_paths import artifact_root
 from ci_policy.evidence import failure_signature
+from ci_policy import retained_go_failures
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCERPT_LINES = 60
@@ -29,7 +30,23 @@ def failures(root):
         # A run stopped before any stage reported, such as a cancellation, has only the receipt's reason.
         found += stages or [{"stage": ", ".join(record.get("names", [])), "subject": "", "status": record.get("status"),
                              "tests": [], "output": None, "log": None, "reason": record.get("reason")}]
+        found += retained_go_failures.failures(root, record, stages)
     return found
+
+
+def passed_stages(root):
+    """Stages whose receipts recorded a complete pass before the job stopped."""
+    passed = []
+    for receipt in sorted((root / "verification").glob("*/[0-9]*.json")):
+        if receipt.name.endswith(".progress.json"):
+            continue
+        record = json.loads(receipt.read_text())
+        for evidence in record.get("evidence", []):
+            results = evidence.get("results", {})
+            if results and all(result.get("status") == "passed" for result in results.values()):
+                if evidence["stage"] not in passed:
+                    passed.append(evidence["stage"])
+    return passed
 
 
 def excerpt(failure):
@@ -75,6 +92,9 @@ def report(status):
         failure["signature"] = failure_signature(failure)
     (root / "ci").mkdir(parents=True, exist_ok=True)
     (root / "ci" / "failures.json").write_text(json.dumps(found, indent=2) + "\n")
+    if record:
+        record["passed_stages"] = passed_stages(root)
+        path.write_text(json.dumps(record, indent=2) + "\n")
     lines = [f"### Verification: {status}", ""]
     if record:
         elapsed = (record.get("finished_at", time.time()) - record["started_at"]) / 60

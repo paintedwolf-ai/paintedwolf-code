@@ -1,0 +1,31 @@
+oar: '1.0'
+id: COMMAND_PROGRAMS_DISABLED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.can_command_output
+when: paintedwolf.rejection_code == "COMMAND_PROGRAMS_DISABLED"
+effect: block
+copy:
+  what: Command programs are turned off on this host, so this program did not start.
+  cause: This host currently admits no new command programs.
+  why: ''
+  fix: ''
+  instead: ''
+x-paintedwolf-category: blocked
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: command programs are turned off on this host
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_PROGRAMS_DISABLED'

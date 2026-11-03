@@ -168,7 +168,9 @@ func scannerDefinitionFingerprint(e ScannerEntry) string {
 // ExecutionManifest freezes the scanner inputs before a job can be claimed.
 func ExecutionManifest(contract ScannerContract) (api.ScanExecutionManifest, string, error) {
 	if !contract.Valid() {
-		return api.ScanExecutionManifest{}, "", fmt.Errorf("valid scanner contract required")
+		return api.ScanExecutionManifest{}, "", NewConfigFaultError(
+			contract.ScannerID, ConfigFaultInvalidContract, "valid scanner contract required", nil,
+		)
 	}
 	engineDigest := contract.EngineSHA256
 	switch contract.Driver {
@@ -176,7 +178,9 @@ func ExecutionManifest(contract ScannerContract) (api.ScanExecutionManifest, str
 		var err error
 		engineDigest, err = executableSHA256(contract.EngineExecutable)
 		if err != nil {
-			return api.ScanExecutionManifest{}, "", fmt.Errorf("capture scanner executable: %w", err)
+			return api.ScanExecutionManifest{}, "", NewConfigFaultError(
+				contract.ScannerID, ConfigFaultExecutableUnavailable, fmt.Sprintf("capture scanner executable: %v", err), err,
+			)
 		}
 	case DriverLibrary:
 		if engineDigest == "" {
@@ -184,13 +188,22 @@ func ExecutionManifest(contract ScannerContract) (api.ScanExecutionManifest, str
 		}
 	}
 	if (contract.Driver == DriverLibrary || contract.Driver == DriverBundled) && engineDigest == "" {
-		return api.ScanExecutionManifest{}, "", fmt.Errorf("scanner %s has no engine byte identity", contract.ScannerID)
+		return api.ScanExecutionManifest{}, "", NewConfigFaultError(
+			contract.ScannerID, ConfigFaultEngineIdentityMissing,
+			fmt.Sprintf("scanner %s has no engine byte identity", contract.ScannerID), nil,
+		)
 	}
 	if contract.Scope == ScopeSourceHostFloor && (contract.RulesSHA256 == "" || contract.ExclusionsSHA256 == "" || engineDigest == "") {
-		return api.ScanExecutionManifest{}, "", fmt.Errorf("scanner %s has incomplete host-floor execution identity", contract.ScannerID)
+		return api.ScanExecutionManifest{}, "", NewConfigFaultError(
+			contract.ScannerID, ConfigFaultHostFloorIdentityIncomplete,
+			fmt.Sprintf("scanner %s has incomplete host-floor execution identity", contract.ScannerID), nil,
+		)
 	}
 	if contract.Scope == ScopeSecrets && contract.RulesSHA256 == "" {
-		return api.ScanExecutionManifest{}, "", fmt.Errorf("scanner %s has no secret-rule identity", contract.ScannerID)
+		return api.ScanExecutionManifest{}, "", NewConfigFaultError(
+			contract.ScannerID, ConfigFaultSecretRulesIdentityMissing,
+			fmt.Sprintf("scanner %s has no secret-rule identity", contract.ScannerID), nil,
+		)
 	}
 	manifest := api.ScanExecutionManifest{
 		SchemaVersion: "v1", ScannerID: contract.ScannerID, Engine: contract.Engine,

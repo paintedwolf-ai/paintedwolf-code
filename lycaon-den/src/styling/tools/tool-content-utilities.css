@@ -329,3 +329,21 @@ font-size: var(--text-den-compact);
   flex: 0 0 auto;
   white-space: nowrap;
 }
+
+
+@utility den-command-activity-paging {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+
+@utility den-command-activity-output-preview {
+  margin: 0;
+  max-height: 12rem;
+  overflow: hidden;
+  font-size: var(--text-den-hint);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--den-text);
+}

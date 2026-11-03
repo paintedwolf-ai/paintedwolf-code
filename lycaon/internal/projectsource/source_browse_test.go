@@ -319,3 +319,45 @@ func TestSourceBrowseOmitsRegisteredPrivateStage(t *testing.T) {
 		}
 	}
 }
+
+func TestBrowseProjectSourceRootAliasKeepsLogicalPathsAndRefusals(t *testing.T) {
+	p, root := browseFixtureProject(t)
+	alias := filepath.Join(t.TempDir(), "alias")
+	testutil.FailErr(t, "alias source root", os.Symlink(root, alias))
+	p.Roots[0].Path = alias
+	testutil.FailErr(t, "alias source directory", os.Symlink(filepath.Join(root, "src"), filepath.Join(root, "src-alias")))
+	listing, err := BrowseProjectSource(p, "", "src-alias")
+	testutil.FailErr(t, "browse aliased root and directory", err)
+	if listing.RootID != "r1" || listing.Dir != "src-alias" || len(listing.Entries) != 1 || listing.Entries[0].Name != "main.go" {
+		t.Fatalf("alias changed the logical listing: %+v", listing)
+	}
+	testutil.FailErr(t, "seed recovery area", os.MkdirAll(settingsoverlay.RecoveryDir(root), 0o700))
+	for _, dir := range []string{"missing", settingsoverlay.RecoveryRelPath, settingsoverlay.DirName()} {
+		if _, err := BrowseProjectSource(p, "", dir); !errors.Is(err, ErrSourceNotFound) {
+			t.Fatalf("alias lost unavailable-directory refusal for %q: %v", dir, err)
+		}
+	}
+	outside := t.TempDir()
+	testutil.FailErr(t, "alias outside source root", os.Symlink(outside, filepath.Join(root, "escape-alias")))
+	if _, err := BrowseProjectSource(p, "", "escape-alias"); !errors.Is(err, ErrSourcePathDenied) {
+		t.Fatalf("root alias admitted an outside directory: %v", err)
+	}
+}
+
+func TestBrowseProjectSourceRelativeRootCannotHideSymlinkEscape(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	testutil.FailErr(t, "create relative-root fixture", os.Mkdir(root, 0o700))
+	testutil.FailErr(t, "seed source directory", os.Mkdir(filepath.Join(root, "src"), 0o700))
+	testutil.FailErr(t, "alias outside relative root", os.Symlink(t.TempDir(), filepath.Join(root, "escape")))
+	t.Chdir(parent)
+	p := &Project{ID: "p1", Roots: []Root{{ID: "r1", Path: "project", IsPrimary: true}}}
+	listing, err := BrowseProjectSource(p, "", "src")
+	testutil.FailErr(t, "browse under relative configured root", err)
+	if listing.RootID != "r1" || listing.Dir != "src" {
+		t.Fatalf("relative root changed logical identity: %+v", listing)
+	}
+	if _, err := BrowseProjectSource(p, "", "escape"); !errors.Is(err, ErrSourcePathDenied) {
+		t.Fatalf("relative root concealed a symlink escape: %v", err)
+	}
+}

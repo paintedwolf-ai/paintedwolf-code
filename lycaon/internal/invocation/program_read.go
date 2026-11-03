@@ -1,0 +1,181 @@
+package invocation
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+var ErrProgramNotFound = errors.New("program receipt not found")
+
+type programPosition struct {
+	Execution int64
+	Node      string
+}
+
+var programPages = pagecursor.For[programPosition]("invocation-program-receipts")
+
+// ProgramReader exposes bounded durable facts without hydrating retained bodies.
+type ProgramReader interface {
+	ReadProgramPage(context.Context, string, string, string, int) (api.CommandProgramReceiptPage, error)
+	ReadProgramActivityPage(context.Context, string, string, string, string, int) (api.CommandProgramReceiptPage, error)
+}
+
+func (r *SQLRecorder) ReadProgramPage(ctx context.Context, sessionID, programID, cursor string, limit int) (api.CommandProgramReceiptPage, error) {
+	return r.readProgramPage(ctx, sessionID, programID, "", cursor, limit)
+}
+
+func (r *SQLRecorder) ReadProgramActivityPage(ctx context.Context, sessionID, programID, activityID, cursor string, limit int) (api.CommandProgramReceiptPage, error) {
+	return r.readProgramPage(ctx, sessionID, programID, activityID, cursor, limit)
+}
+
+func (r *SQLRecorder) readProgramPage(ctx context.Context, sessionID, programID, activityID, cursor string, limit int) (api.CommandProgramReceiptPage, error) {
+	out := api.CommandProgramReceiptPage{Executions: []api.CommandExecutionReceipt{}, Nodes: []api.CommandProgramNode{}}
+	if r == nil || r.database == nil {
+		return out, fmt.Errorf("invocation recorder is not configured")
+	}
+	if limit < 1 || limit > 100 {
+		return out, fmt.Errorf("program page limit must be 1..100")
+	}
+	scope := pagecursor.Scope(sessionID, programID, activityID)
+	position := programPosition{}
+	var err error
+	if cursor != "" {
+		position, err = programPages.Decode(cursor, scope)
+		if err != nil {
+			return out, err
+		}
+	}
+	tx, err := r.beginProgramRead(ctx)
+	if err != nil {
+		return out, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	out.Program, err = readProgram(ctx, tx, sessionID, programID)
+	if err != nil {
+		return out, err
+	}
+	out.Progress, err = readProgramProgress(ctx, tx, programID)
+	if err != nil {
+		return out, err
+	}
+	out.Activities, err = readProgramActivities(ctx, tx, out.Program)
+	if err != nil {
+		return out, err
+	}
+	selection, err := selectActivityExecutions(out.Activities, activityID)
+	if err != nil {
+		return out, err
+	}
+	next := position
+	out.Executions, next.Execution, err = readExecutions(ctx, tx, programID, position.Execution, limit, selection)
+	if err != nil {
+		return out, err
+	}
+	if err := readExecutionOutputs(ctx, tx, programID, out.Executions); err != nil {
+		return out, err
+	}
+	out.Nodes, next.Node, err = readProgramNodes(ctx, tx, programID, position.Node, limit)
+	if err != nil {
+		return out, err
+	}
+	const countQuery = `SELECT count(*) FROM invocation_program_executions e WHERE e.program_id=? AND e.ordinal>? ` + activityExecutionFilter
+	if err := tx.QueryRowContext(ctx, countQuery, programID, next.Execution, selection.ids, selection.ids).Scan(&out.ExecutionsOmitted); err != nil {
+		return out, err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_nodes WHERE program_id=? AND node_id>?`, programID, next.Node).Scan(&out.NodesOmitted); err != nil {
+		return out, err
+	}
+	if out.ExecutionsOmitted > 0 || out.NodesOmitted > 0 {
+		out.NextCursor, err = programPages.Encode(scope, next)
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, tx.Commit()
+}
+
+func readProgram(ctx context.Context, tx *sql.Tx, session, program string) (api.CommandProgramReceipt, error) {
+	var out api.CommandProgramReceipt
+	var status sql.NullInt64
+	var started string
+	var settled sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT p.id,p.parent_receipt_id,p.language_version,p.catalog_digest,p.source_digest,p.source_ref,p.state,p.status_code,p.stop_code,p.detail_ref,p.progress_state,p.progress_ref,p.started_at,p.settled_at,p.trace_events FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, program, session).Scan(&out.ID, &out.ParentReceiptID, &out.LanguageVersion, &out.CatalogDigest, &out.SourceDigest, &out.SourceRef, &out.State, &status, &out.StopCode, &out.DetailRef, &out.ProgressState, &out.ProgressRef, &started, &settled, &out.ActivityRevision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, ErrProgramNotFound
+	}
+	if err != nil {
+		return out, err
+	}
+	out.Outputs, err = readDeliveryWindows(ctx, tx, program)
+	if err != nil {
+		return out, err
+	}
+	out.StatusCode = optionalStatus(status)
+	out.StartedAt, err = time.Parse(time.RFC3339Nano, started)
+	if err != nil {
+		return out, err
+	}
+	if settled.Valid {
+		at, parseErr := time.Parse(time.RFC3339Nano, settled.String)
+		if parseErr != nil {
+			return out, parseErr
+		}
+		out.SettledAt = &at
+	}
+	return out, nil
+}
+
+func readProgramNodes(ctx context.Context, tx *sql.Tx, program, after string, limit int) ([]api.CommandProgramNode, string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT node_id,source_unit_id,start_byte,end_byte,line,column_number,state FROM invocation_program_nodes WHERE program_id=? AND node_id>? ORDER BY node_id LIMIT ?`, program, after, limit)
+	if err != nil {
+		return nil, after, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]api.CommandProgramNode, 0, limit)
+	for rows.Next() {
+		var node api.CommandProgramNode
+		if err := rows.Scan(&node.ID, &node.SourceUnitID, &node.StartByte, &node.EndByte, &node.Line, &node.Column, &node.State); err != nil {
+			return nil, after, err
+		}
+		after = node.ID
+		out = append(out, node)
+	}
+	return out, after, rows.Err()
+}
+
+func optionalStatus(in sql.NullInt64) *int {
+	if !in.Valid {
+		return nil
+	}
+	status := int(in.Int64)
+	return &status
+}
+
+func readProgramProgress(ctx context.Context, tx *sql.Tx, programID string) (*api.CommandProgramProgressReceipt, error) {
+	var out api.CommandProgramProgressReceipt
+	err := tx.QueryRowContext(ctx, `SELECT execution_id,program_id,root_session_id,state,owner_invoked,arguments_representation,arguments_digest,arguments_ref,detail_ref FROM invocation_program_progress WHERE program_id=?`, programID).Scan(&out.ExecutionID, &out.ProgramID, &out.RootSessionID, &out.State, &out.OwnerInvoked, &out.ArgumentsRepresentation, &out.ArgumentsDigest, &out.ArgumentsRef, &out.DetailRef)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (r *SQLRecorder) beginProgramRead(ctx context.Context) (*sql.Tx, error) {
+	if r == nil || r.database == nil {
+		return nil, fmt.Errorf("invocation recorder is not configured")
+	}
+	if reader, ok := r.database.(db.ReadHandle); ok {
+		return reader.BeginReadTx(ctx)
+	}
+	return r.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+}

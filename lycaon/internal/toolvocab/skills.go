@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 // AgentSurface pairs an agent with the profile its tools come from.
@@ -135,4 +137,28 @@ func optionalToolSet(s skills.Skill) map[string]bool {
 		out[strings.TrimSpace(name)] = true
 	}
 	return out
+}
+
+var stockCatalog = sync.OnceValue(func() *Catalog {
+	c, _ := NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{{ID: "stock"}}, Provenance{})
+	return c
+})
+
+// SkillToolsOffered reports whether offered covers every non-optional tool sk
+// unconditionally names. User-provided skills are not restricted.
+func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
+	if sk.UserProvided {
+		return true
+	}
+	c := stockCatalog()
+	if c == nil {
+		return true
+	}
+	optional := optionalToolSet(sk)
+	for _, tool := range NamedTools(c, sk.Body) {
+		if !optional[tool] && !offered[tool] {
+			return false
+		}
+	}
+	return true
 }

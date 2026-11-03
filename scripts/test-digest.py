@@ -12,6 +12,21 @@ from collections import defaultdict
 from verification_timings import seconds, write_slowest
 
 
+def _failure_lines(lines: list[str], limit: int) -> list[str]:
+    """Keep assertion context and final child/cleanup errors within the line budget."""
+    if limit <= 0:
+        return []
+    if len(lines) <= limit:
+        return lines
+    if limit == 1:
+        return lines[-1:]
+    if limit == 2:
+        return [lines[0], lines[-1]]
+    head = limit // 2
+    tail = limit - head - 1
+    return [*lines[:head], f"... {len(lines) - head - tail} lines omitted ...", *lines[-tail:]]
+
+
 def _display_tests(
     out,
     pkg: str,
@@ -32,7 +47,7 @@ def _display_tests(
 
     for test in standalone:
         out.write(f"      {test}\n")
-        for ln in output.get((pkg, test), [])[:max_lines]:
+        for ln in _failure_lines(output.get((pkg, test), []), max_lines):
             out.write(f"        {ln.strip()}\n")
 
     for root in sorted(by_root):
@@ -41,13 +56,13 @@ def _display_tests(
             full, sub = subs[0]
             out.write(f"      {root}\n")
             out.write(f"        {sub}\n")
-            for ln in output.get((pkg, full), [])[:max_lines]:
+            for ln in _failure_lines(output.get((pkg, full), []), max_lines):
                 out.write(f"          {ln.strip()}\n")
             continue
         out.write(f"      {root}\n")
         for full, sub in subs:
             out.write(f"        {sub}\n")
-            for ln in output.get((pkg, full), [])[:max_lines]:
+            for ln in _failure_lines(output.get((pkg, full), []), max_lines):
                 out.write(f"          {ln.strip()}\n")
 
 
@@ -85,7 +100,7 @@ def main(argv: list[str]) -> int:
         "--lines",
         type=int,
         default=12,
-        help="max assertion lines per failing test (default: 12)",
+        help="max assertion lines per failing test, retaining beginning and end (default: 12)",
     )
     args = parser.parse_args(argv)
 

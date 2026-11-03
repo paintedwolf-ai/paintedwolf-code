@@ -9,7 +9,7 @@ import (
 func TestAssertSessionRunnable(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	if err := mgr.Policy.AssertSessionRunnable(ctx, "sess-1"); err != nil {
 		t.Fatalf("running: %v", err)

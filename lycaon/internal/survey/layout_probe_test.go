@@ -34,7 +34,7 @@ func TestLayoutSnapshotScalesByFoldingCompleteRollups(t *testing.T) {
 		}
 	}
 	snapshot := sourcecatalog.NewSnapshot([]sourcecatalog.Root{{ID: "r1", Path: "/repo"}}, entries)
-	records, examined, coverage, err := layoutRecordsFromSnapshot(t.Context(), "layout", snapshot, "r1", ".", ".", nil, groupCap)
+	records, examined, coverage, err := layoutRecordsFromSnapshot(t.Context(), "layout", snapshot, "r1", ".", ".", nil, groupCap, nil)
 	testutil.FailErr(t, "layout snapshot", err)
 	if examined != len(entries) || coverage.EntriesExamined != len(entries) {
 		t.Fatalf("examined = %d coverage=%d want %d", examined, coverage.EntriesExamined, len(entries))

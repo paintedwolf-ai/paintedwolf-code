@@ -1,4 +1,4 @@
-description: "Query JSON, YAML, or TOML via sandboxed jq. Pass limit/offset for literal values[]. Replaces command: jq, yq."
+description: "Query JSON, YAML, or TOML via sandboxed jq. Pass limit/offset for literal values[]."
 schema:
   additionalProperties: false
   properties:

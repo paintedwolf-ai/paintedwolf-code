@@ -22,7 +22,7 @@ func TestWorkflowModeIntegrationImplementOnEnter(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
 	ctx := context.Background()
 
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
@@ -90,7 +90,7 @@ func TestAdvanceBlockedWhenGatesUnmet(t *testing.T) {
 func TestPlanAutoApproveParamsEffectivePhases(t *testing.T) {
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	plan, err := reg.Get("plan", "1.0.0")
+	plan, err := reg.Get("plan", "1.0.1")
 	testutil.FailErr(t, "Get plan", err)
 	vars := runstate.ApplyMergedParams(nil, map[string]string{
 		"research_depth": "none",

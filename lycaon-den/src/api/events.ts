@@ -94,6 +94,7 @@ export const TOPIC_STORE_INVALIDATION: Readonly<
   progress: ["progress"],
   queue: ["queue"],
   project: ["projects"],
+  project_background: [],
   process: [],
   preview: [],
   // The payload contains the complete attention view.

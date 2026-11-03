@@ -65,6 +65,7 @@ func TestGitOneDoorContract(t *testing.T) {
 
 func scanGitOneDoor(fset *token.FileSet, file *ast.File, rel string, inGitexec bool) []string {
 	var out []string
+	completeReads := map[*ast.CompositeLit]bool{}
 	scanCall := func(n *ast.CallExpr) {
 		if isLookPathGit(n) {
 			out = append(out, fset.Position(n.Pos()).String()+`: LookPath("git")`)
@@ -76,13 +77,8 @@ func scanGitOneDoor(fset *token.FileSet, file *ast.File, rel string, inGitexec b
 			}
 		}
 	}
-	scanLit := func(n *ast.CompositeLit, funcName string) {
-		// Allowlisted by function name rather than by argv pattern, so a second
-		// scope-flagged builder cannot appear unnoticed.
-		if gitConfigReadBuilders[funcName] {
-			return
-		}
-		if isForbiddenGitConfigArgv(n) {
+	scanLit := func(n *ast.CompositeLit) {
+		if isForbiddenGitConfigArgv(n) && !completeReads[n] {
 			out = append(out, fset.Position(n.Pos()).String()+`: git config --local/--global/--system write`)
 		}
 	}
@@ -91,16 +87,18 @@ func scanGitOneDoor(fset *token.FileSet, file *ast.File, rel string, inGitexec b
 		if !ok || fd.Body == nil {
 			continue
 		}
-		name := ""
-		if fd.Name != nil {
-			name = fd.Name.Name
-		}
 		ast.Inspect(fd.Body, func(n ast.Node) bool {
 			switch n := n.(type) {
+			case *ast.ReturnStmt:
+				if len(n.Results) == 1 || (len(n.Results) == 2 && isNilIdent(n.Results[1])) {
+					if lit, ok := n.Results[0].(*ast.CompositeLit); ok && completeConfigReadArgv(lit) {
+						completeReads[lit] = true
+					}
+				}
 			case *ast.CallExpr:
 				scanCall(n)
 			case *ast.CompositeLit:
-				scanLit(n, name)
+				scanLit(n)
 			}
 			return true
 		})
@@ -154,17 +152,7 @@ func gitExecBinaryLiteral(call *ast.CallExpr) (string, bool) {
 	return "", false
 }
 
-// gitConfigReadBuilders names the functions permitted to build a scope-flagged
-// `git config` argv. The scan exists to keep the user's config unwritten, and
-// this one only lists key names. Other readers in the tree need no exemption
-// because they carry no scope flag at all.
-var gitConfigReadBuilders = map[string]bool{
-	"repoConfigAuditArgv": true, // config --local --list --name-only --null
-}
-
-// isForbiddenGitConfigArgv flags argv CompositeLits that pair "config" with a
-// write-scope flag. Read-only builders are allowlisted by function name
-// (gitConfigReadBuilders) in scanGitOneDoor.
+// isForbiddenGitConfigArgv identifies scope-flagged configuration builders.
 func isForbiddenGitConfigArgv(lit *ast.CompositeLit) bool {
 	hasConfig := false
 	hasScope := false
@@ -194,4 +182,26 @@ func stringLitIs(expr ast.Expr, want string) bool {
 	}
 	v, err := strconv.Unquote(lit.Value)
 	return err == nil && v == want
+}
+
+// completeConfigReadArgv recognizes fixed reads with no dynamic option tail.
+func completeConfigReadArgv(lit *ast.CompositeLit) bool {
+	if len(lit.Elts) != 3 && len(lit.Elts) != 5 {
+		return false
+	}
+	if !stringLitIs(lit.Elts[0], "config") || !stringLitIs(lit.Elts[1], "--local") {
+		return false
+	}
+	if len(lit.Elts) == 3 {
+		return stringLitIs(lit.Elts[2], "--list") || stringLitIs(lit.Elts[2], "-l")
+	}
+	if stringLitIs(lit.Elts[2], "--list") && stringLitIs(lit.Elts[3], "--name-only") && stringLitIs(lit.Elts[4], "--null") {
+		return true
+	}
+	return (stringLitIs(lit.Elts[2], "--get") || stringLitIs(lit.Elts[2], "--get-regexp")) && stringLitIs(lit.Elts[3], "--")
+}
+
+func isNilIdent(expr ast.Expr) bool {
+	id, ok := expr.(*ast.Ident)
+	return ok && id.Name == "nil"
 }
