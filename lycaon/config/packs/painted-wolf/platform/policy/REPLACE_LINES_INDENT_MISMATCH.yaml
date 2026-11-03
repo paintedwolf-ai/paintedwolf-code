@@ -3,10 +3,10 @@ id: REPLACE_LINES_INDENT_MISMATCH
 kind: schema
 anchor: tool.rejected
 selector:
-  tool: [replace_lines]
+  paintedwolf.operation: [replace_lines]
 requires:
   profiles: [tool]
-  facts: [paintedwolf.line, paintedwolf.path, paintedwolf.rejection_code]
+  facts: [paintedwolf.line, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.operation]
 when: paintedwolf.rejection_code == "REPLACE_LINES_INDENT_MISMATCH"
 effect: block
 copy:

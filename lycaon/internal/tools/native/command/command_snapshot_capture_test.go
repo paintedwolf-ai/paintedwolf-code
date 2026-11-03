@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -48,39 +50,29 @@ func TestCommandSnapshotCaptureIncompatibleArgs(t *testing.T) {
 	}
 }
 
-func TestCommandDisallowedDesktopCapture(t *testing.T) {
-	cmd, _ := newCommandTool(t)
-	root := t.TempDir()
-	tctx := commandToolContext(root, "sess-1", "worker-1")
-
-	for _, disallowed := range []string{"screencapture -x out.png", "/usr/sbin/screencapture -x out.png", "scrot shot.png", "xwd -root"} {
-		args := map[string]any{
-			"command": disallowed,
-		}
-		_, err := cmd.Run(context.Background(), args, tctx)
-		tr := toolrejection.AsToolReject(err)
-		if tr == nil || tr.Code != "DESKTOP_CAPTURE_DISALLOWED" {
-			t.Fatalf("command %q: expected DESKTOP_CAPTURE_DISALLOWED, got %v", disallowed, err)
-		}
-	}
-}
-
 func TestCommandSnapshotCaptureMissingFileRejection(t *testing.T) {
-	cmd, _ := newCommandTool(t)
-	root := t.TempDir()
-	tctx := commandToolContext(root, "sess-1", "worker-1")
-
-	// Process exits 0 without writing to APP_SNAPSHOT.
-	args := map[string]any{
-		"command": "echo normal-output",
-		"snapshot_capture": map[string]any{
-			"caption": "test capture",
-		},
-	}
-	_, err := cmd.Run(context.Background(), args, tctx)
-	tr := toolrejection.AsToolReject(err)
-	if tr == nil || tr.Code != "SNAPSHOT_FILE_NOT_PRODUCED" {
-		t.Fatalf("expected SNAPSHOT_FILE_NOT_PRODUCED, got %v", err)
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load snapshot feedback", err)
+	formatter := guidance.NewStaticRejectFormatter(hints)
+	for _, envVar := range []string{"APP_SNAPSHOT", "PW_CAPTURE_FILE"} {
+		t.Run(envVar, func(t *testing.T) {
+			cmd, _ := newCommandTool(t)
+			tctx := commandToolContext(t.TempDir(), "sess-1", "worker-1")
+			_, err := cmd.Run(t.Context(), map[string]any{
+				"command":          "echo normal-output",
+				"snapshot_capture": map[string]any{"env_var": envVar},
+			}, tctx)
+			rejected := toolrejection.AsToolReject(err)
+			if rejected == nil || rejected.Code != "SNAPSHOT_FILE_NOT_PRODUCED" || rejected.Data["env_var"] != envVar {
+				t.Fatalf("snapshot refusal lost its configured input: %v", err)
+			}
+			text, err := formatter.Format(rejected.Code, rejected.Data)
+			testutil.FailErr(t, "render snapshot observation", err)
+			if !strings.Contains(text, envVar) || strings.Contains(text, "Fix:") || strings.Contains(text, "Next:") || (envVar != "APP_SNAPSHOT" && strings.Contains(text, "APP_SNAPSHOT")) {
+				t.Fatalf("snapshot feedback guessed a contract or repair: %s", text)
+			}
+		})
 	}
 }
 

@@ -64,6 +64,7 @@ const (
 	HostResourceConnectionLocalService     HostResourceConnectionMode = "local_service"
 	HostResourceConnectionDirectIP         HostResourceConnectionMode = "direct_ip"
 	HostResourceConnectionDynamic          HostResourceConnectionMode = "dynamic"
+	HostResourceConnectionCredentialStore  HostResourceConnectionMode = "credential_store"
 )
 
 // HostResourceLocalServiceTransport is a platform local-service substrate.

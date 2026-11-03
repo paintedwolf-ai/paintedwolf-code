@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/backup/stage.go",
+  "kind": "runtime_service",
+  "workstream": "backup-archive-staging",
+  "disposition": "retain",
+  "reason": "Retain the measured 592-line archive staging transaction within 600 lines. Validation, recovery pre-image capture, pending publication and cleanup share one restore boundary. The versioned replacement-scope contract has its own module; splitting transaction steps would obscure recovery ownership. Exact version scopes, retained release schema routes and restore transaction tests preserve rejection and recovery behavior.",
+  "reviewed_commit": "dc67f34672fb71113a899ce880edc1b3df532628",
+  "ceiling": 600,
+  "boundaries": {
+    "lycaon/internal/backup/archive_scope.go": "f2aafccc2d4e2468f172091d03afd838e159e27759d99ae2e1c49ba34c4b8dfc",
+    "lycaon/internal/backup/archive_scope_test.go": "7d69a96c898e8a0ccaf7ddd52de6563c27cd0a66bc0304efebc05ffc5cc15362",
+    "lycaon/internal/backup/released_archive_test.go": "0727b46b5a431724c633e18192096f3f3152065612bb15f580a9f52b97e5c045",
+    "lycaon/internal/backup/restore_transaction_test.go": "186747724478720db309f06469fddcfb1f52292ff82f5e7200edc6276e78d445"
+  }
+}

@@ -54,6 +54,9 @@ func (g *windowsGuard) configure(cmd *exec.Cmd) {
 	}
 }
 
+// relay has no signal delivery on Windows; the job ends at once.
+func (g *windowsGuard) relay(cmd *exec.Cmd, _ syscall.Signal) bool { g.kill(cmd); return true }
+
 // terminate has no graceful signal on Windows; the job ends at once.
 func (g *windowsGuard) terminate(cmd *exec.Cmd) {
 	g.kill(cmd)
@@ -72,6 +75,13 @@ func (g *windowsGuard) onStarted(cmd *exec.Cmd) error {
 		return fmt.Errorf("assign process to job: %w", err)
 	}
 	return nil
+}
+
+func (g *windowsGuard) wait(cmd *exec.Cmd) error {
+	if cmd == nil {
+		return nil
+	}
+	return cmd.Wait()
 }
 
 func (g *windowsGuard) kill(cmd *exec.Cmd) {

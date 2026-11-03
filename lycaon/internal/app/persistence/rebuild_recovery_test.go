@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"archive/zip"
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -45,7 +46,41 @@ func TestRebuiltUpgradeRetainsRestorableInstallation(t *testing.T) {
 	if builder.UpgradeReady == nil {
 		t.Fatal("upgrade has no readiness completion")
 	}
-	testutil.FailErr(t, "complete readiness", builder.UpgradeReady())
+	pending, err := database.IntegrityAuditPending(t.Context())
+	testutil.FailErr(t, "inspect post-upgrade audit obligation", err)
+	if !pending {
+		t.Fatal("upgrade did not preserve exhaustive verification obligation")
+	}
+	testutil.FailErr(t, "ordinary readiness while audit is pending", builder.UpgradeReady())
+	if _, err := os.Stat(path + db.StoreUpgradeJournalSuffix); err != nil {
+		t.Fatalf("pending audit lost original pre-image custody: %v", err)
+	}
+	_, pendingRecovery, err := backup.LatestUpgradeRecovery(t.Context(), root)
+	testutil.FailErr(t, "find still-pinned recovery", err)
+	if pendingRecovery.ReadyAt != "" {
+		t.Fatal("ordinary readiness stamped unaudited recovery complete")
+	}
+	testutil.FailErr(t, "clean shutdown with unfinished audit", database.Close())
+	openCtx, cancelOpen := context.WithCancel(t.Context())
+	restarted := &Runtime{logger: slog.Default()}
+	database, err = restarted.openUpgradeableStore(openCtx, path)
+	testutil.FailErr(t, "reopen current schema with pending audit", err)
+	cancelOpen()
+	if restarted.UpgradeReady == nil {
+		t.Fatal("current-schema restart lost recovery finalization")
+	}
+	builder = restarted
+	pending, err = database.IntegrityAuditPending(t.Context())
+	testutil.FailErr(t, "read audit obligation after clean restart", err)
+	if !pending {
+		t.Fatal("clean shutdown discharged unfinished verification")
+	}
+	testutil.FailErr(t, "current schema readiness retains custody", builder.UpgradeReady())
+	if _, err := os.Stat(path + db.StoreUpgradeJournalSuffix); err != nil {
+		t.Fatalf("current-schema restart discarded pre-image: %v", err)
+	}
+	testutil.FailErr(t, "complete exhaustive background audit", db.AuditIntegrity(t.Context(), database))
+	testutil.FailErr(t, "finalize audited recovery custody", builder.UpgradeReady())
 	entries, err := os.ReadDir(root)
 	testutil.FailErr(t, "inspect publication cleanup", err)
 	for _, entry := range entries {

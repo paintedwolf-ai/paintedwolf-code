@@ -58,6 +58,7 @@ func TestEffectiveAdvancePolicyShippedManifestContractParity(t *testing.T) {
 	hostKeys := map[string]struct{}{
 		"implement@1.0.0":       {},
 		"plan@1.0.0":            {},
+		"plan@1.0.1":            {},
 		"recon-pack@1.0.0":      {},
 		"security-survey@2.0.0": {},
 		"security-survey@1.0.0": {},
@@ -76,7 +77,7 @@ func TestEffectiveAdvancePolicyShippedManifestContractParity(t *testing.T) {
 					phase.AdvanceWhenGateMet != workflowdef.AdvanceWhenGateMetCoordinator {
 					t.Fatalf("%s phase %q: bad advance %q", key, phase.ID, phase.AdvanceWhenGateMet)
 				}
-				if key == "plan@1.0.0" && phase.ID == "research" &&
+				if m.ID == "plan" && phase.ID == "research" &&
 					phase.AdvanceWhenGateMet != workflowdef.AdvanceWhenGateMetCoordinator {
 					t.Fatalf("plan research advance = %q want coordinator", phase.AdvanceWhenGateMet)
 				}
@@ -132,7 +133,7 @@ func TestPhaseExitProjectorPlanContract(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	reg, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "RegistryFromDirs", err)
-	m, err := reg.Get("plan", "1.0.0")
+	m, err := reg.Get("plan", "1.0.1")
 	contractcheck.FailErr(t, "Get plan", err)
 
 	cases := []struct {

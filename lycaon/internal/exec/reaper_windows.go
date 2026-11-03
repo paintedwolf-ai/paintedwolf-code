@@ -18,6 +18,10 @@ func ensureReaper() error { return nil }
 
 func track(byte, string) func() { return func() {} }
 
+func trackWithRemovePayload(byte, string, string) func() { return func() {} }
+
+func sendReaper(byte, byte, string) bool { return false }
+
 // RunReaper exists only so the shared entrypoint builds; StartReaper never launches it here.
 func RunReaper(io.Reader) int {
 	fmt.Fprintln(os.Stderr, "the process reaper is not used on Windows")

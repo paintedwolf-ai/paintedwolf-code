@@ -1,0 +1,31 @@
+oar: '1.0'
+id: TOOL_OWNER_INTERRUPTED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "TOOL_OWNER_INTERRUPTED"
+effect: block
+copy:
+  what: The operation was interrupted.
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: An interruption does not establish completion.
+  fix: ''
+  instead: ''
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool_owner
+x-paintedwolf-message: Subsystem owner interrupted the action before settlement
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: implement
+    reason: program admission closed
+    tool: command
+  expect_contains:
+  - 'Code: TOOL_OWNER_INTERRUPTED'
+  - program admission closed
+  - does not establish completion

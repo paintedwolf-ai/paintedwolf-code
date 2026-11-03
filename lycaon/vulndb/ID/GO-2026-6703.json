@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/0xJacky/Nginx-UI"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.9.10-0.20250517140552-daee3ac7ade1"
+      },
+      {
+       "fixed": "1.9.10-0.20260728074433-a3999bd78a3b"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-107809",
+  "GHSA-33rr-wq23-g6gg"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6703"
+ },
+ "details": "Nginx-UI AuthRequired token cookie fallback enables CSRF against management APIs in github.com/0xJacky/Nginx-UI",
+ "id": "GO-2026-6703",
+ "modified": "2026-10-19T21:08:26Z",
+ "published": "2026-10-19T21:08:26Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/0xJacky/nginx-ui/security/advisories/GHSA-33rr-wq23-g6gg"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/0xJacky/nginx-ui/commit/a3999bd78a3b97ab22e6b5e9fd478ac57598a954"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/0xJacky/nginx-ui/releases/tag/v2.5.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Nginx-UI AuthRequired token cookie fallback enables CSRF against management APIs in github.com/0xJacky/Nginx-UI"
+}

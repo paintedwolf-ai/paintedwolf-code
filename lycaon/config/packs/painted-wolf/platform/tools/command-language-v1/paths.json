@@ -5,10 +5,31 @@
       "aliases": [],
       "family": "paths",
       "owner": "filesystem",
-      "argv": "cd [--] [PATH]",
-      "forms": [],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cd [--] [PATH]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "argv": "cd [-L|-P] [--] [PATH|-]",
+      "forms": [
+        {
+          "spellings": [
+            "-L"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cd-option-L",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cd-option-P",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cd [-L|-P] [--] [PATH|-]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -82,10 +103,46 @@
       "aliases": [],
       "family": "paths",
       "owner": "filesystem",
-      "argv": "basename [--] PATH [SUFFIX]",
-      "forms": [],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. basename [--] PATH [SUFFIX]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "argv": "basename [-a] [-s SUFFIX] [-z] [--] PATH [SUFFIX] | PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-s",
+            "--suffix"
+          ],
+          "arity": 1,
+          "value_role": "suffix",
+          "fixture_id": "basename-option-s-suffix",
+          "consumption": "fixed",
+          "sample_values": [
+            ".go"
+          ]
+        },
+        {
+          "spellings": [
+            "-a",
+            "--multiple"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "basename-option-a-multiple",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z",
+            "--zero"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "basename-option-z-zero",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. basename [-a] [-s SUFFIX] [-z] [--] PATH [SUFFIX] | PATH ...",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -132,7 +189,7 @@
           }
         }
       },
-      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. basename -s SUFFIX strips SUFFIX from every operand and implies -a; -a takes every operand as a name; -z ends each with NUL.",
       "reuse": {
         "implementation": "lycaon/internal/tools/projectpaths/projectpaths.go",
         "tests": [
@@ -151,7 +208,10 @@
       },
       "fixture_ids": [
         "basename-operands-valid",
-        "basename-rejection"
+        "basename-rejection",
+        "basename-option-s-suffix",
+        "basename-option-a-multiple",
+        "basename-option-z-zero"
       ]
     },
     {
@@ -162,7 +222,7 @@
       "argv": "dirname [--] PATH",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. dirname [--] PATH",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -236,10 +296,91 @@
       "aliases": [],
       "family": "paths",
       "owner": "filesystem",
-      "argv": "realpath [--] PATH ...",
-      "forms": [],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. realpath [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "argv": "realpath [-e|-m] [-s] [-q] [-z] [--relative-to=DIR] [--relative-base=DIR] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-e",
+            "--canonicalize-existing"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "realpath-option-e-canonicalizeexisting",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-m",
+            "--canonicalize-missing"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "realpath-option-m-canonicalizemissing",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--strip",
+            "--no-symlinks"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "realpath-option-s-strip",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "realpath-option-q-quiet",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z",
+            "--zero"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "realpath-option-z-zero",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--relative-to"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "realpath-option-relativeto",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "--relative-base"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "realpath-option-relativebase",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. realpath [-e|-m] [-s] [-q] [-z] [--relative-to=DIR] [--relative-base=DIR] [--] PATH ...",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -286,7 +427,7 @@
           }
         }
       },
-      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. realpath resolves links before .. and requires all but a missing last component (-e every component, -m none); -s resolves no links. --relative-to prints paths relative to DIR; --relative-base keeps paths outside DIR absolute. An operand that does not resolve prints realpath: PATH: REASON (silent under -q), status 1, and the rest continue.",
       "reuse": {
         "implementation": "lycaon/internal/tools/projectpaths/projectpaths.go",
         "tests": [
@@ -305,7 +446,14 @@
       },
       "fixture_ids": [
         "realpath-operands-valid",
-        "realpath-rejection"
+        "realpath-rejection",
+        "realpath-option-e-canonicalizeexisting",
+        "realpath-option-m-canonicalizemissing",
+        "realpath-option-s-strip",
+        "realpath-option-q-quiet",
+        "realpath-option-z-zero",
+        "realpath-option-relativeto",
+        "realpath-option-relativebase"
       ]
     },
     {
@@ -313,7 +461,7 @@
       "aliases": [],
       "family": "paths",
       "owner": "filesystem",
-      "argv": "readlink [-f] [--] PATH ...",
+      "argv": "readlink [-f|-e|-m] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -324,10 +472,32 @@
           "fixture_id": "readlink-option-f",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-e",
+            "--canonicalize-existing"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "readlink-option-e-canonicalizeexisting",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-m",
+            "--canonicalize-missing"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "readlink-option-m-canonicalizemissing",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. readlink [-f] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. readlink [-f|-e|-m] [--] PATH ...",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -374,7 +544,7 @@
           }
         }
       },
-      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. readlink -f, -e and -m canonicalize as realpath, -m, -e; a failure prints nothing and sets status 1.",
       "reuse": {
         "implementation": "lycaon/internal/tools/projectpaths/projectpaths.go",
         "tests": [
@@ -394,7 +564,9 @@
       "fixture_ids": [
         "readlink-operands-valid",
         "readlink-rejection",
-        "readlink-option-f"
+        "readlink-option-f",
+        "readlink-option-e-canonicalizeexisting",
+        "readlink-option-m-canonicalizemissing"
       ]
     },
     {
@@ -416,7 +588,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. native_path [-0] -- PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -494,7 +666,7 @@
       "argv": "source -- PATH",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. source -- PATH",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",

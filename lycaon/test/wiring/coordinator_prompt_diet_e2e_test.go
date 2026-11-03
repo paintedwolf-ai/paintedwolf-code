@@ -29,11 +29,8 @@ func TestCoordinatorPromptDietE2E(t *testing.T) {
 			Pattern: "Add a // TODO: review here",
 			ToolCalls: []llm.MockToolCall{{
 				ID:   "w1",
-				Name: "write",
-				Args: map[string]any{
-					"path":    "main.go",
-					"content": "// TODO: review here\npackage main\n\nfunc main() {}\n",
-				},
+				Name: "command",
+				Args: map[string]any{"command": "printf '%s' '// TODO: review here\npackage main\n\nfunc main() {}\n' > main.go"},
 			}},
 			FollowUpText: MockWorkerCompletionJSON("complete", "Added TODO comment.",
 				[]string{"Added the TODO comment to main.go."}),
@@ -91,7 +88,7 @@ func TestCoordinatorPromptDietE2E(t *testing.T) {
 				t.Errorf("investigate turn %d missing progress procedure %q", i, want)
 			}
 		}
-		for _, want := range []string{"summarize(path=…, task=…)", `list_dir({"path":"."})`} {
+		for _, want := range []string{"summarize(path=…, task=…)", "find . -maxdepth 2 -type d"} {
 			if !strings.Contains(sp, want) {
 				t.Errorf("investigate turn %d missing always-on survey route %q", i, want)
 			}

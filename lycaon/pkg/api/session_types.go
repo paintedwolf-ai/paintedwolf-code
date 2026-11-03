@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -918,4 +919,29 @@ func (t *ToolResult) PrimaryCode() string {
 		return ""
 	}
 	return t.Codes[0]
+}
+
+// truncatedToolCallArgsBytes retains the byte size of raw arguments for a
+// length-truncated tool call without changing the generated OpenAPI ToolCall schema.
+var truncatedToolCallArgsBytes sync.Map
+
+// SetTruncatedArgsBytes records the byte size of raw arguments on a length-truncated tool call.
+func (tc *ToolCall) SetTruncatedArgsBytes(n int) {
+	if tc == nil || strings.TrimSpace(tc.ID) == "" || n <= 0 {
+		return
+	}
+	truncatedToolCallArgsBytes.Store(strings.TrimSpace(tc.ID), n)
+}
+
+// TruncatedArgsBytes returns the recorded raw argument byte size for a truncated tool call.
+func (tc ToolCall) TruncatedArgsBytes() int {
+	if strings.TrimSpace(tc.ID) == "" {
+		return 0
+	}
+	if v, ok := truncatedToolCallArgsBytes.Load(strings.TrimSpace(tc.ID)); ok {
+		if n, ok := v.(int); ok && n > 0 {
+			return n
+		}
+	}
+	return 0
 }

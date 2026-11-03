@@ -24,7 +24,7 @@ func TestProfileDenialLeavesInvokeAsTypedReject(t *testing.T) {
 	if err := reg.Register("write", ran); err != nil {
 		t.Fatalf("register write: %v", err)
 	}
-	exec := NewExecutor(toolprofiles.NewGuidanceRejectPolicy(toolprofiles.NewProfilePolicyEngine(boundary)), reg, "implement")
+	exec := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), reg, "implement")
 
 	tctx := fixtureToolContext(t.TempDir())
 	tctx.Identity.Agent = "no-such-profile"
@@ -145,7 +145,7 @@ func TestExecutorPreservesStructuredFailurePartialOutput(t *testing.T) {
 
 func TestCoordinatorProfileDenialDoesNotInventDispatchState(t *testing.T) {
 	boundary := sandbox.NewBoundary(sandbox.Config{}, []sandbox.ToolProfile{{ID: "coordinator", Tools: map[string]bool{"read": true}}})
-	policy := toolprofiles.NewGuidanceRejectPolicy(toolprofiles.NewProfilePolicyEngine(boundary))
+	policy := toolprofiles.NewProfilePolicyEngine(boundary)
 	for _, name := range []string{"state_update", "write"} {
 		decision, err := policy.Evaluate(t.Context(), platform.PolicyContext{ToolName: name, ProfileID: "coordinator"})
 		if err != nil {
@@ -178,4 +178,3 @@ func TestExecutorCapabilityParseRejectIncludesContractFields(t *testing.T) {
 		t.Fatalf("capability_request_fields = %#v, want command contract fields", reject.Data["capability_request_fields"])
 	}
 }
-

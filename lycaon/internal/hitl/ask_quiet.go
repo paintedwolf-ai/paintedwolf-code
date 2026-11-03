@@ -105,6 +105,8 @@ func quietLabel(segment string, secret *SecretScreen) string {
 		switch {
 		case rest == "process_control":
 			return "this exact command with process control"
+		case rest == "credential_store":
+			return "this exact command reading the OS credential store"
 		case rest == "host_execution":
 			return "this exact command outside the sandbox"
 		case rest == "direct_ip":
@@ -177,5 +179,5 @@ func DecisionFullyQuieted(d *gate.Decision, secret *SecretScreen, actionDigest s
 
 func executionQuietSegment(segment string) bool {
 	prefix := string(api.GateUnobservedChannel) + ":"
-	return segment == prefix+"process_control" || segment == prefix+"host_execution" || strings.HasPrefix(segment, prefix+"native_process:")
+	return segment == prefix+"process_control" || segment == prefix+"credential_store" || segment == prefix+"host_execution" || strings.HasPrefix(segment, prefix+"native_process:")
 }

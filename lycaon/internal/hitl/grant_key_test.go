@@ -13,14 +13,14 @@ import (
 func TestGrantKeyIsOpaque(t *testing.T) {
 	secret := "cargo-token-that-must-not-be-persisted"
 	key := hitl.GrantKey(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "cargo publish --token " + secret},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/tmp/project",
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "cargo publish --token " + secret},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/tmp/project",
+		},
+	})
 	if !strings.HasPrefix(key, "action_") || strings.Contains(key, secret) || strings.Contains(key, "cargo publish") {
 		t.Fatalf("GrantKey exposed action content: %q", key)
 	}
@@ -28,17 +28,17 @@ ProjectDir: "/tmp/project",
 
 func directIPAction(args map[string]any) hitl.ProposedAction {
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: args,
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/tmp/proj",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressDirectIP, Roots: []string{"/tmp/proj"}},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: args,
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/tmp/proj",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressDirectIP, Roots: []string{"/tmp/proj"}},
+		},
+	}
 }
 
 // A lease card promises re-ask when "the command, its declared destinations, or
@@ -71,12 +71,6 @@ func TestGrantKeyIgnoresAuthorityNeutralArgs(t *testing.T) {
 			"timeout_ms":         20000,
 			"capability_request": capReq("https://open.er-api.com:443", "https://api.frankfurter.dev:443"),
 		},
-		"wait window added": {
-			"command":            ".venv/bin/python3 rate_service.py",
-			"timeout_ms":         120000,
-			"wait_ms":            5000,
-			"capability_request": capReq("https://open.er-api.com:443", "https://api.frankfurter.dev:443"),
-		},
 		"destinations reordered": {
 			"command":            ".venv/bin/python3 rate_service.py",
 			"timeout_ms":         120000,
@@ -92,18 +86,29 @@ func TestGrantKeyIgnoresAuthorityNeutralArgs(t *testing.T) {
 	}
 }
 
+func TestVerifyGrantKeyIgnoresItsDeclaredWaitWindow(t *testing.T) {
+	base := directIPAction(map[string]any{"command": "go test ./...", "timeout_ms": 1000})
+	base.Invocation.Tool = "verify"
+	changed := directIPAction(map[string]any{"command": "go test ./...", "timeout_ms": 1000, "wait_ms": 5000})
+	changed.Invocation.Tool = "verify"
+	if hitl.GrantKey(base) != hitl.GrantKey(changed) {
+		t.Fatal("verify's declared wait window changed execution authority")
+	}
+}
+
 // The same canonicalization must not blur anything the boundary depends on.
 func TestGrantKeySeparatesAuthorityBearingArgs(t *testing.T) {
 	base := directIPAction(map[string]any{"command": "curl https://example.org", "timeout_ms": 1000})
 	want := hitl.GrantKey(base)
 	cases := map[string]map[string]any{
-		"different command":   {"command": "curl https://evil.example", "timeout_ms": 1000},
-		"cwd added":           {"command": "curl https://example.org", "timeout_ms": 1000, "cwd": "sub"},
-		"env added":           {"command": "curl https://example.org", "timeout_ms": 1000, "env": map[string]any{"TOKEN": "x"}},
-		"background added":    {"command": "curl https://example.org", "timeout_ms": 1000, "background": true},
-		"socks proxy added":   {"command": "curl https://example.org", "timeout_ms": 1000, "socks_proxy": true},
-		"stdout redirect":     {"command": "curl https://example.org", "timeout_ms": 1000, "stdout_to": "out.txt"},
-		"destination widened": {"command": "curl https://example.org", "timeout_ms": 1000, "capability_request": map[string]any{"direct_ip": true}},
+		"undeclared command wait": {"command": "curl https://example.org", "timeout_ms": 1000, "wait_ms": 5000},
+		"different command":       {"command": "curl https://evil.example", "timeout_ms": 1000},
+		"cwd added":               {"command": "curl https://example.org", "timeout_ms": 1000, "cwd": "sub"},
+		"env added":               {"command": "curl https://example.org", "timeout_ms": 1000, "env": map[string]any{"TOKEN": "x"}},
+		"background added":        {"command": "curl https://example.org", "timeout_ms": 1000, "background": true},
+		"socks proxy added":       {"command": "curl https://example.org", "timeout_ms": 1000, "socks_proxy": true},
+		"stdout redirect":         {"command": "curl https://example.org", "timeout_ms": 1000, "stdout_to": "out.txt"},
+		"destination widened":     {"command": "curl https://example.org", "timeout_ms": 1000, "capability_request": map[string]any{"direct_ip": true}},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -118,14 +123,14 @@ func TestGrantIdentityRefusesUnencodableArguments(t *testing.T) {
 	for name, value := range map[string]any{"channel": make(chan int), "nan": math.NaN()} {
 		t.Run(name, func(t *testing.T) {
 			action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo ok", "invalid": value},
-},
-Scope: hitl.ActionScope{
-SessionID: "session",
-},
-}
+				Invocation: hitl.ActionInvocation{
+					Tool: "command",
+					Args: map[string]any{"command": "echo ok", "invalid": value},
+				},
+				Scope: hitl.ActionScope{
+					SessionID: "session",
+				},
+			}
 			key := hitl.GrantKey(action)
 			if key != "" {
 				t.Fatalf("unencodable action has usable grant key %q", key)
@@ -153,14 +158,14 @@ SessionID: "session",
 
 func TestGrantKeyPreservesEncodedIdentity(t *testing.T) {
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo ok"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/tmp/project",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "echo ok"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/tmp/project",
+		},
+	}
 	const want = "action_aPs33LLXNi1xSHjl-xyDpdMYzbxBlOQuC7LtctsIUDM"
 	if got := hitl.GrantKey(action); got != want {
 		t.Fatalf("valid action identity changed: got %q want %q", got, want)

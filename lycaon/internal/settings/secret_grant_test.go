@@ -220,4 +220,3 @@ func TestOneLocalSecretLeaseCoversCommandLoopbackHTTPAndChatProcesses(t *testing
 		t.Fatal("local secret lease must not cover an external host")
 	}
 }
-

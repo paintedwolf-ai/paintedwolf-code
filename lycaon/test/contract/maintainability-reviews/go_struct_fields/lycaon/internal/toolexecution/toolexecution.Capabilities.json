@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/toolexecution/toolexecution.Capabilities",
+  "kind": "runtime_service",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Capabilities composes per-operation authorization before dispatch. Socket capture, mode-aware reuse, typed adapter refusal, host-resource coverage and normal human review stay at that existing owner. The retained-object implementation is isolated in socketref; moving orchestration to a forwarding controller would obscure the ordered authority checks. Freeze this reviewed shape at 13 fields; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon/internal/toolexecution/socket_resource_binding_test.go": "fec6c227b583c070eabfd6005a55657fc43fe24ee1874b1519cab414439bad90",
+    "lycaon/internal/toolexecution/socket_platform_refusal_test.go": "25bb98b03aaa8833675a01a839052627c70b87483edfca57dbdc9b0475bdef65",
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60"
+  },
+  "reviewed_shape": "c602f3338d44c3cedca45467816ff419a4b562d76711c4649d516d58b5fa5023"
+}

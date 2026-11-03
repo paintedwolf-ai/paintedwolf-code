@@ -15,8 +15,8 @@ func (e *BackgroundCapacityError) Unwrap() error { return ErrBackgroundCapReache
 
 func (r *processTable) backgroundCapacityErrorLocked(sessionID string) *BackgroundCapacityError {
 	err := &BackgroundCapacityError{Limit: r.maxBackground}
-	for _, proc := range r.sessions[sessionID] {
-		if proc.mode != JobModeBackground || !proc.running {
+	for _, proc := range r.ownedProcessesLocked(sessionID) {
+		if proc.mode != JobModeBackground || !(proc.running || proc.pendingDrainLocked()) {
 			continue
 		}
 		if proc.kind == processKindPTY {
@@ -40,8 +40,8 @@ func (e *AwaitedCapacityError) Error() string { return ErrAwaitedCapReached.Erro
 func (e *AwaitedCapacityError) Unwrap() error { return ErrAwaitedCapReached }
 func (r *processTable) awaitedCapacityErrorLocked(sessionID string) *AwaitedCapacityError {
 	e := &AwaitedCapacityError{Limit: r.maxAwaited}
-	for _, proc := range r.sessions[sessionID] {
-		if proc.mode == JobModeAwaited && proc.running {
+	for _, proc := range r.ownedProcessesLocked(sessionID) {
+		if proc.mode == JobModeAwaited && (proc.running || proc.pendingDrainLocked()) {
 			e.Handles = append(e.Handles, proc.Handle)
 		}
 	}

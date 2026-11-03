@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/tools/native/search/search.grepRun",
+  "kind": "algorithm",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain the search algorithm at 964 receiver lines and 32 methods. One run binds matcher options, traversal selection, ordered workers, output modes and cumulative status. Discovery, matching, admitted transport and revision capture have explicit collaborators. Binary JSON record conversion preserves source offsets and identity within that output mode. Exact JSON, differential, pin-transfer and output-bound contracts support this shape.",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
+  "ceiling": 32,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/rg_json_test.go": "7d4206b4029195f16cd610f6eaec937a89077524d08c12230124df43211d9125",
+    "lycaon/internal/tools/native/search/grep_parallel_bounds_test.go": "71bf71f82c028ed1173a08b61ca8d573407af1b8f81262ff18e0d5d834e0a188",
+    "lycaon/internal/tools/native/search/grep_pin_transfer_test.go": "09de0678551b99812680aa0ffb71c3095e048c9ab95e81329204bc7ac8783248"
+  },
+  "reviewed_shape": "0233fa0c1d5d8ecb30336f858bdb302d132f0b0f42a665619cacfe94fa768f3d"
+}

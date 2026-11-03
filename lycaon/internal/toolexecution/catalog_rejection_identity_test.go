@@ -103,13 +103,13 @@ func TestCatalogCapabilityRecoveryUsesInvocationContract(t *testing.T) {
 	bp := stockBlockPlane(t)
 	for _, capabilities := range []toolcontract.Capability{0, toolcontract.CapabilityLoopbackConnect} {
 		contract := toolcontract.Contract{Capabilities: capabilities}
-		reject := capabilityrequest.ValidateCapabilityContract(contract, map[string]any{
+		reject := capabilityrequest.ValidateCapabilityContract("command", contract, map[string]any{
 			"capability_request": map[string]any{"direct_ip": map[string]any{}},
 		})
 		if reject == nil {
 			t.Fatal("unsupported direct IP accepted")
 		}
-		// A dynamically narrowed definition overrides the compiled command contract.
+		// Recovery uses the definition validated for this invocation.
 		err := bp.RejectFromObservation(t.Context(), oar.AnchorToolRejected, "command", "implement", nil, reject)
 		if err == nil {
 			t.Fatal("missing capability refusal")
@@ -137,8 +137,8 @@ func TestCatalogCapabilityRecoveryUsesInvocationContract(t *testing.T) {
 	if strings.Contains(text, "accepts no execution capability request") {
 		t.Fatalf("command capability rejection falsely claimed no capabilities are accepted: %s", text)
 	}
-	if !strings.Contains(text, "Omit capability_request for ordinary project-tree reads and writes") || !strings.Contains(text, "write_root") {
-		t.Fatalf("command capability rejection missing fields or ordinary project-tree guidance: %s", text)
+	if !strings.Contains(text, "write_root") || !strings.Contains(text, "following this tool's schema") {
+		t.Fatalf("parse rejection lost the receiving tool schema: %s", text)
 	}
 }
 
@@ -177,29 +177,42 @@ func TestCatalogEveryIntrinsicRejectionResolvesBeforeFallback(t *testing.T) {
 		checked++
 		t.Run(rule.ID, func(t *testing.T) {
 			calls := append([]string(nil), rule.Selector["tool"]...)
+			operations := rule.Selector["paintedwolf.operation"]
+			if len(calls) == 0 {
+				calls = append(calls, rule.Selector["paintedwolf.operation"]...)
+			}
 			if len(calls) == 0 {
 				calls = []string{"read"}
+				if len(operations) != 0 {
+					calls = []string{"command"}
+				}
+			}
+			if len(operations) == 0 {
+				operations = []string{""}
 			}
 			for _, tool := range calls {
-				cases := rule.Scenarios
-				if len(cases) == 0 {
-					t.Fatal("intrinsic rejection has no authored scenarios")
-				}
-				for _, scenario := range cases {
-					t.Run(tool+"/"+scenario.ID, func(t *testing.T) {
-						gc := oar.NewGuardContext()
-						gc.Session.SessionID = t.Name()
-						gc.ObserveToolCall(tool, nil)
-						toolfeedback.ApplyToolRejectObservations(gc, &toolrejection.ToolReject{Code: rule.ID, Data: scenario.Vars})
-						result, err := bp.Pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
-						testutil.FailErr(t, "evaluate intrinsic rejection", err)
-						if result.Decision == nil || result.Decision.Code != rule.ID || result.Decision.Effect != rule.Effect {
-							t.Fatalf("observed %s on %s resolved as %+v", rule.ID, tool, result.Decision)
-						}
-						if len(result.Decision.Copy) == 0 {
-							t.Fatal("intrinsic rejection lost its evaluated recovery copy")
-						}
-					})
+				for _, operation := range operations {
+					cases := rule.Scenarios
+					if len(cases) == 0 {
+						t.Fatal("intrinsic rejection has no authored scenarios")
+					}
+					for _, scenario := range cases {
+						t.Run(tool+"/"+operation+"/"+scenario.ID, func(t *testing.T) {
+							gc := oar.NewGuardContext()
+							gc.Session.SessionID = t.Name()
+							gc.ObserveToolCall(tool, nil)
+							gc.Published["paintedwolf.native_operation"] = operation
+							toolfeedback.ApplyToolRejectObservations(gc, &toolrejection.ToolReject{Code: rule.ID, Data: scenario.Vars})
+							result, err := bp.Pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
+							testutil.FailErr(t, "evaluate intrinsic rejection", err)
+							if result.Decision == nil || result.Decision.Code != rule.ID || result.Decision.Effect != rule.Effect {
+								t.Fatalf("observed %s on %s resolved as %+v", rule.ID, tool, result.Decision)
+							}
+							if len(result.Decision.Copy) == 0 {
+								t.Fatal("intrinsic rejection lost its evaluated recovery copy")
+							}
+						})
+					}
 				}
 			}
 		})

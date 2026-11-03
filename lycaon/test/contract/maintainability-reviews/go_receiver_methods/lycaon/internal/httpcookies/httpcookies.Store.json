@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/httpcookies/httpcookies.Store",
+  "kind": "runtime_service",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Store remains the single opened jar: RFC selection, issuance, persistence changes and the per-invocation delivery view share one lock. The delivery view filters what leaves without changing stored values, and only accepted Set-Cookie writes the native issuer receipt. A second jar or filter owner would split selection from withholding. Freeze this reviewed shape at 16 methods; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 16,
+  "boundaries": {
+    "lycaon/internal/httpcookies/delivery_test.go": "66465366a6600eb6c46c470acd5841acb401da79774b877c08dac7549269c3bf",
+    "lycaon/internal/api/capabilityadmin/socket_cookie_owner_test.go": "96f91959a93fb4bdaf095e3101e17dddd3e65e3f0c9e48126e04da51c981f19f"
+  },
+  "reviewed_shape": "c9330a15a9477818595b7346ed1eb020240e7c0b08af3a3cda53e7e9c984dc21"
+}

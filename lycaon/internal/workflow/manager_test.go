@@ -115,7 +115,7 @@ func workflowCaller(t testing.TB, mgr *RunManager) context.Context {
 func TestRunManagerLifecycle(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
@@ -199,11 +199,11 @@ func TestStartRejectsDuplicateActiveRun(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	if _, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	}); err != nil {
 		testutil.FailErr(t, "StartHuman", err)
 	}
-	if _, err := mgr.Ambient.StartAmbient(ctx, sessionID, "plan", "1.0.0"); !errors.Is(err, runstate.ErrActiveRunExists) {
+	if _, err := mgr.Ambient.StartAmbient(ctx, sessionID, "plan", "1.0.1"); !errors.Is(err, runstate.ErrActiveRunExists) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -211,7 +211,7 @@ func TestStartRejectsDuplicateActiveRun(t *testing.T) {
 func TestAdvanceWhilePaused(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
@@ -232,7 +232,7 @@ func TestCompleteOnFinalAdvance(t *testing.T) {
 	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 	ctx := workflowCaller(t, mgr)
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)

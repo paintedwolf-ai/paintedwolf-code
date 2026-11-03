@@ -128,7 +128,8 @@ class InstalledPayloadTests(unittest.TestCase):
             uid, gid = file.stat().st_uid, file.stat().st_gid
             entry = Entry("program", 0o755, uid, gid, "file", 8, hashlib.sha256(b"original").hexdigest())
             entries = {"program": entry,
-                       "symbolic": Entry("symbolic", 0o777, uid, gid, "symlink", target="program"),
+                       "symbolic": Entry("symbolic", stat.S_IMODE((root / "symbolic").lstat().st_mode),
+                                         (root / "symbolic").lstat().st_uid, (root / "symbolic").lstat().st_gid, "symlink", target="program"),
                        "hard": replace(entry, name="hard", kind="hardlink", target="program")}
             self.assertEqual(verify(entries, root)["files_and_links"], 3)
             file.write_bytes(b"modified")

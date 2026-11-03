@@ -2,6 +2,7 @@ package prompts_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -74,13 +75,11 @@ func TestLoadSpawnRosterSurfaceImplementDefault(t *testing.T) {
 	if !implementer.CanCommand {
 		t.Fatal("implementer must expose command")
 	}
-	if explorer.CanCommand {
-		t.Fatal("path-explorer must not expose command on explore_readonly")
+	if !explorer.CanCommand {
+		t.Fatal("path-explorer must expose read-only command on explore_readonly")
 	}
-	for _, tool := range explorer.EnabledTools {
-		if tool == "command" {
-			t.Fatalf("path-explorer enabled tools must not include command: %v", explorer.EnabledTools)
-		}
+	if !slices.Contains(explorer.EnabledTools, "command") {
+		t.Fatalf("path-explorer enabled tools must include command: %v", explorer.EnabledTools)
 	}
 
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})

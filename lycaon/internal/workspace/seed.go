@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -629,7 +630,12 @@ func treeAllocatedBytes(ctx context.Context, root string) (int64, error) {
 			if err != nil {
 				return sandbox.SurveyContinue, err
 			}
-			total += max(allocatedFileBytes(info), 0)
+			allocation := fspath.EntryAllocation(info)
+			bytes := info.Size()
+			if allocation.Known {
+				bytes = allocation.Bytes
+			}
+			total += max(bytes, 0)
 			return sandbox.SurveyContinue, nil
 		})
 	return total, err

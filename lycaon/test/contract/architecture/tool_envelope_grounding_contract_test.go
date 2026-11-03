@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -17,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/guidancescan"
-	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
 // toolEnvelopeHintCodes are hint_code values carried inside successful tool JSON payloads.
@@ -155,32 +153,21 @@ func TestGitStatusWireJSONUsesSnakeCase(t *testing.T) {
 	}
 }
 
-func TestGitStatusToolIncludesRecentCommits(t *testing.T) {
+func TestGitInspectionProgramIncludesRecentCommits(t *testing.T) {
 	tmpDir := t.TempDir()
 	contractcheck.FailErr(t, "write tracked", os.WriteFile(filepath.Join(tmpDir, "tracked.txt"), []byte("x"), 0o644))
 	gittest.InitCommit(t, tmpDir, "Initial commit")
-	execTool := toolfixture.ContractToolExecutor(t)
-	out, err := execTool.Invoke(context.Background(), "git_status", map[string]any{}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
-			ActiveRootID: "r1"},
+	outcome := rootProgram(t, "git status --porcelain; git log -1 --format=%s", tools.ToolContext{
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}}, ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
-	contractcheck.FailErr(t, "git_status invoke", err)
-	var obj map[string]any
-	contractcheck.FailErr(t, "decode git_status", json.Unmarshal([]byte(out), &obj))
-	commits, ok := obj["recent_commits"].([]any)
-	if !ok {
-		t.Fatalf("recent_commits missing or wrong type: %s", out)
-	}
-	if len(commits) == 0 {
-		t.Fatalf("expected recent_commits entries: %s", out)
-	}
-	if obj["available"] != true {
-		t.Fatalf("expected available=true: %s", out)
+	out := assertRootProgramSuccess(t, outcome)
+	if out != "Initial commit\n" {
+		t.Fatalf("clean status and recent commit=%q", out)
 	}
 }
 
-func TestFindToolWireDepthSemantics(t *testing.T) {
+func TestFindProgramDepthSemantics(t *testing.T) {
 	tmpDir := t.TempDir()
 	deep := filepath.Join(tmpDir, "a", "b", "c", "d", "e", "f", "g", "h", "i")
 	contractcheck.FailErr(t, "mkdir a", os.MkdirAll(filepath.Join(tmpDir, "a"), 0o755))
@@ -188,51 +175,29 @@ func TestFindToolWireDepthSemantics(t *testing.T) {
 	contractcheck.FailErr(t, "mkdir deep", os.MkdirAll(deep, 0o755))
 	contractcheck.FailErr(t, "write deep", os.WriteFile(filepath.Join(deep, "deep.go"), []byte("x"), 0o644))
 
-	execTool := toolfixture.ContractToolExecutor(t)
-	out, err := execTool.Invoke(context.Background(), "find", map[string]any{
-		"path":      ".",
-		"type":      "file",
-		"name_glob": "**/*.go",
-		"max_depth": float64(3),
-	}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
-			ActiveRootID: "r1"},
+	outcome := rootProgram(t, "find . -maxdepth 3 -type f -name '*.go'", tools.ToolContext{
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}}, ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
-	contractcheck.FailErr(t, "find invoke", err)
-	if strings.Contains(out, "depth_clipped") {
-		t.Fatalf("find output must not use depth_clipped: %s", out)
-	}
-	var obj map[string]any
-	contractcheck.FailErr(t, "decode find", json.Unmarshal([]byte(out), &obj))
-	if obj["deeper_paths_omitted"] != true {
-		t.Fatalf("deeper_paths_omitted = %v want true: %s", obj["deeper_paths_omitted"], out)
-	}
-	notice, _ := obj["depth_notice"].(string)
-	if strings.TrimSpace(notice) == "" {
-		t.Fatalf("depth_notice missing: %s", out)
+	out := assertRootProgramSuccess(t, outcome)
+	if !strings.Contains(out, "shallow.go") || strings.Contains(out, "deep.go") {
+		t.Fatalf("find depth selection=%q", out)
 	}
 }
 
-func TestReadToolWireIncludesLineTotal(t *testing.T) {
+func TestReadProgramIncludesLineTotal(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "sample.txt")
 	content := "alpha\nbeta\ngamma\n"
 	contractcheck.FailErr(t, "write sample", os.WriteFile(path, []byte(content), 0o644))
 
-	execTool := toolfixture.ContractToolExecutor(t)
-	out, err := execTool.Invoke(context.Background(), "read", map[string]any{
-		"path": "sample.txt",
-	}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
-			ActiveRootID: "r1"},
+	outcome := rootProgram(t, "cat -- sample.txt; wc -l < sample.txt", tools.ToolContext{
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}}, ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
-	contractcheck.FailErr(t, "read invoke", err)
-	var obj map[string]any
-	contractcheck.FailErr(t, "decode read", json.Unmarshal([]byte(out), &obj))
-	if obj["total_lines"].(float64) != 3 {
-		t.Fatalf("total_lines = %v want 3: %s", obj["total_lines"], out)
+	out := assertRootProgramSuccess(t, outcome)
+	if !strings.HasPrefix(out, content) || strings.TrimSpace(strings.TrimPrefix(out, content)) != "3" {
+		t.Fatalf("content or line count=%q", out)
 	}
 }
 

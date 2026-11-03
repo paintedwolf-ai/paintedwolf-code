@@ -28,33 +28,43 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 			reject: &toolrejection.ToolReject{Code: "COMMAND_NOT_FOUND", Data: map[string]any{
 				"command": "missing-tool",
 			}},
-			want: []string{"missing-tool", "PATH"},
+			want: []string{"missing-tool", "could not be resolved"},
 		},
 		{
 			tool: "command",
 			reject: &toolrejection.ToolReject{Code: "COMMAND_PWD_NOT_CWD", Data: map[string]any{
 				"command": "go mod tidy", "cwd": "/project", "pwd": "/project/subdir",
 			}},
-			want: []string{"env.PWD", "/project/subdir", "cwd:"},
+			want: []string{"env.PWD", "/project/subdir", "resolved working directory"},
 		},
 		{
 			tool: "command",
 			reject: &toolrejection.ToolReject{Code: "COMMAND_IN_FLIGHT", Data: map[string]any{
 				"handles": []string{"command-1"}, "handles_text": "command-1",
 			}},
-			want: []string{"command-1", "allow_concurrent"},
+			want: []string{"command-1", "command_output"},
 		},
 		{
 			tool: "command",
 			reject: &toolrejection.ToolReject{Code: "COMMAND_DUPLICATE_RUNNING", Data: map[string]any{
 				"handles": []string{"command-1"}, "handles_text": "command-1",
 			}},
-			want: []string{"command-1", "observed exit"},
+			want: []string{"command-1", "does not establish exit"},
 		},
 		{
 			tool:   "command",
 			reject: &toolrejection.ToolReject{Code: "COMMAND_CONCURRENCY_CAP_REACHED", Data: map[string]any{"max_awaited": 4, "count": 4, "live_command_handles": []string{"awaited-command-7"}}},
 			want:   []string{"4", "awaited-command-7"},
+		},
+		{
+			tool:   "command",
+			reject: &toolrejection.ToolReject{Code: "SANDBOX_TRY_LOOPBACK_CONNECT", Data: map[string]any{"port": uint16(8080), "url": "http://127.0.0.1:8080/health"}},
+			want:   []string{"capability_request.loopback_connect", "8080"},
+		},
+		{
+			tool:   "command",
+			reject: &toolrejection.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"host": "api.example.test"}},
+			want:   []string{"The HTTP destination was not authorized"},
 		},
 		{
 			tool:   "wait",
@@ -64,7 +74,8 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.reject.Code, func(t *testing.T) {
-			err := bp.RejectObservation(context.Background(), tc.tool, "implement", nil, tc.reject)
+			ctx := tools.WithRecoveryTools(t.Context(), []string{tc.tool, "command_output", "command_stop"})
+			err := bp.RejectObservation(ctx, tc.tool, "implement", map[string]any{}, tc.reject)
 			if err == nil {
 				t.Fatalf("%s produced no Decision — the agent would receive the bare code", tc.reject.Code)
 			}
@@ -128,6 +139,7 @@ func TestSandboxCapabilityRejectsRenderGuidance(t *testing.T) {
 		"SANDBOX_SOCKET_PATH_NOT_FOUND",
 		"SANDBOX_SOCKET_PATH_NOT_SOCKET",
 		"SANDBOX_SOCKET_PATH_REFUSED",
+		"SANDBOX_TRY_LOOPBACK_CONNECT",
 	}
 	for _, code := range codes {
 		t.Run(code, func(t *testing.T) {

@@ -22,7 +22,9 @@ func TestCompactionSingleWriterContract(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
 	allowed := map[string]bool{
-		"internal/session/history/compaction.go": true,
+		"internal/session/history.Service.runBackgroundCompactionPage": true,
+		"internal/session/history.Service.ForceCompact":                true,
+		"internal/session/history.Service.publishReductionSynthesis":   true,
 	}
 	callers, err := scanCompactionViewWriterCallers(lycaonRoot)
 	contractcheck.FailErr(t, "scan writeCompactionView callers", err)
@@ -32,8 +34,10 @@ func TestCompactionSingleWriterContract(t *testing.T) {
 		}
 		t.Fatalf("writeCompactionView caller %s not allowed: %v", fn, sites)
 	}
-	if len(callers["internal/session/history/compaction.go"]) < 2 {
-		t.Fatalf("expected runBackgroundCompaction and ForceCompact in compaction.go, got %v", callers)
+	for owner := range allowed {
+		if len(callers[owner]) == 0 {
+			t.Errorf("compaction publication owner %s is missing", owner)
+		}
 	}
 }
 
@@ -63,19 +67,33 @@ func scanCompactionViewWriterCallers(lycaonRoot string) (map[string][]string, er
 		if err != nil {
 			return err
 		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
+		for _, decl := range f.Decls {
+			owner := filepath.ToSlash(filepath.Dir(rel)) + ".<package>"
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				owner = filepath.ToSlash(filepath.Dir(rel)) + "."
+				if fn.Recv != nil && len(fn.Recv.List) == 1 {
+					receiver := fn.Recv.List[0].Type
+					if pointer, ok := receiver.(*ast.StarExpr); ok {
+						receiver = pointer.X
+					}
+					if ident, ok := receiver.(*ast.Ident); ok {
+						owner += ident.Name + "."
+					}
+				}
+				owner += fn.Name.Name
 			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel == nil || sel.Sel.Name != "writeCompactionView" {
+			ast.Inspect(decl, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if ok && sel.Sel.Name == "writeCompactionView" {
+					out[owner] = append(out[owner], fset.Position(call.Pos()).String())
+				}
 				return true
-			}
-			pos := fset.Position(call.Pos())
-			out[rel] = append(out[rel], pos.String())
-			return true
-		})
+			})
+		}
 		return nil
 	})
 	return out, err

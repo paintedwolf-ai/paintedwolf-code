@@ -36,6 +36,9 @@ inputs:
   nix:
     description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
     default: 'false'
+  userlands:
+    description: Provision the verified reference userland images before a lane runs test:userlands
+    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -77,6 +80,11 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Prepare disposable runner storage
+      if: inputs.lookup-only != 'true'
+      shell: bash
+      run: PYTHONPATH=scripts python3 -m ci_policy.runner_storage
+
     - name: Set verification compiler profiles
       if: inputs.lookup-only != 'true'
       shell: bash
@@ -177,18 +185,16 @@ runs:
         lookup-only: ${{ inputs.lookup-only }}
         save: ${{ inputs.save-caches }}
 
-    # Source-scanning frontend tests shell out to ripgrep.
-    - name: Install ripgrep
+    # The native search differential contract targets ripgrep 15 JSON.
+    - name: Install ripgrep reference
       if: inputs.lookup-only != 'true' && (inputs.setup != 'harness')
       shell: bash
       run: |
         set -euo pipefail
-        command -v rg >/dev/null && exit 0
-        if [[ "${RUNNER_OS}" == macOS ]]; then
-          HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
-        else
-          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ripgrep
-        fi
+        reference_dir="${RUNNER_TEMP}/ripgrep-reference-15.0.0"
+        ./task setup-dev -- --ci-inputs search-reference "${reference_dir}"
+        "${reference_dir}/rg" --version
+        printf '%s\n' "${reference_dir}" >> "${GITHUB_PATH}"
 
     # Git integration tests resolve the pinned engine from engine-root.
     - name: Fetch pinned git engine
@@ -268,8 +274,7 @@ runs:
       if: inputs.lookup-only != 'true' && (runner.os == 'Linux' && inputs.repository-tools == 'true')
       shell: bash
       run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg minisign pacman-package-manager rpm
+        ./task setup-dev -- --ci-inputs repository-tools
 
     - name: Provision pinned browser
       if: inputs.lookup-only != 'true' && (inputs.browser == 'true')
@@ -280,6 +285,10 @@ runs:
       if: inputs.lookup-only != 'true' && (inputs.nix == 'true')
       shell: bash
       run: ./task nix:check -- --prepare
+
+    - name: Set up reference userland images
+      if: inputs.lookup-only != 'true' && (inputs.userlands == 'true')
+      uses: ./.github/actions/setup-reference-userlands
 
     - name: Save pinned frontend packages
       if: inputs.lookup-only != 'true' && (inputs.save-caches == 'true' && github.ref == 'refs/heads/main' && steps.bun.outputs.cache-hit != 'true')

@@ -5,6 +5,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 func writeNetworkRules(b *strings.Builder, c Confinement) error {
@@ -31,7 +33,7 @@ func writeNetworkRules(b *strings.Builder, c Confinement) error {
 	case NetworkDeny:
 		// Exact local socket grants are rendered below.
 	}
-	writeSocketGrantRules(b, c.SocketGrants)
+	writeSocketGrantRules(b, c)
 	return nil
 }
 
@@ -122,12 +124,31 @@ func writeSystemResolverRule(b *strings.Builder) {
 	}
 }
 
-func writeSocketGrantRules(b *strings.Builder, grants []SocketGrant) {
-	if len(grants) == 0 {
+func writeSocketGrantRules(b *strings.Builder, c Confinement) {
+	if len(c.SocketGrants) == 0 {
 		return
 	}
 	b.WriteString("; exact AF_UNIX socket grants\n")
-	for _, g := range grants {
-		b.WriteString("(allow network-outbound (literal " + sbplString(g.ResolvedPath) + "))\n")
+	for _, g := range c.SocketGrants {
+		if len(c.socketEndpoints) == 0 {
+			b.WriteString("(allow network-outbound (literal " + sbplString(g.ResolvedPath) + "))\n")
+			continue
+		}
+		for _, network := range []string{"unix", "unixgram"} {
+			path := fspath.CanonicalPath(c.socketEndpoints[socketEndpointKey(g.Binding, network)])
+			b.WriteString("(allow network-outbound (literal " + sbplString(path) + "))\n")
+		}
 	}
+}
+
+// ListenPortsLabel renders a port set for logs and grant cards.
+func ListenPortsLabel(ports []uint16) string {
+	if len(ports) == 0 {
+		return "any local port"
+	}
+	parts := make([]string, 0, len(ports))
+	for _, p := range ports {
+		parts = append(parts, strconv.Itoa(int(p)))
+	}
+	return "local port " + strings.Join(parts, ", ")
 }

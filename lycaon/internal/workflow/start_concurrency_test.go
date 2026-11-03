@@ -29,7 +29,7 @@ func TestStartIsSerializedPerSession(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			run, err := mgr.Ambient.StartAmbient(context.Background(), sessionID, "plan", "1.0.0")
+			run, err := mgr.Ambient.StartAmbient(context.Background(), sessionID, "plan", "1.0.1")
 			switch {
 			case err == nil && run != nil:
 				successes.Add(1)
@@ -67,7 +67,7 @@ func TestStartIsSerializedPerSession(t *testing.T) {
 func TestTryAutoAdvanceIdempotentUnderConcurrency(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)

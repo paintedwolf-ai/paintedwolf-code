@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/tools/native/search/search.findRun",
+  "kind": "algorithm",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain find expression evaluation, traversal and ordered actions at 558 receiver lines. Child batches now apply the common resource budget in addition to catalog bounds. The normal dispatcher retains child review and execution authority; batch planning introduces no alternate owner. Expression, action-order and composed large-tree contracts support this ceiling.",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
+  "ceiling": 558,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/find_test.go": "ec430d03c9d359db5e992b7dd0c7c9c39ceb5b323b5b95a957c85fbabbbf9040",
+    "lycaon/internal/toolhost/command_large_queries_stress_test.go": "fdb737c5312dc775cfabebb6d0d74c6b679c343443bbc24d16d431c5010022ac"
+  },
+  "reviewed_shape": "13cc43387f418f48a7cfb09ea30e95bf7fbea31a694979cb03770cb74413392b"
+}

@@ -150,6 +150,7 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	runtime.Authority.capabilities = executor.Capabilities
 	runtime.Authority.metadata = executor.Metadata
 	runtime.Authority.rejections = executor.Rejections
+	runtime.Commands.setProgramExecutor(executor)
 	runtime.Commands.reviews = executor.Approvals
 	runtime.Commands.paths = executor.Boundary
 	runtime.Web.policy = profilePolicy

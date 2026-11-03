@@ -12,7 +12,12 @@ import { isTranscriptTimeItem } from "../presentation/transcript-time-rows.ts";
 import type { DisplayTranscriptItem } from "../projection/transcript-item-model.ts";
 import { transcriptItemOrd } from "../projection/transcript-item-order.ts";
 import { publishTranscriptReaderReach } from "../history/transcript-reader-reach.ts";
-import type { TranscriptUnloadedOrds } from "../history/transcript-runway.ts";
+import {
+  DEFAULT_TRANSCRIPT_ORD_DENSITY_PX,
+  transcriptRunwayHeight,
+  transcriptRunwayOrd,
+  type TranscriptUnloadedOrds,
+} from "../history/transcript-runway.ts";
 import type { MeasuredTranscriptVirtualizer } from "./transcript-virtualizer.ts";
 import {
   DEFAULT_TRANSCRIPT_PAGE_LIMIT,
@@ -37,6 +42,8 @@ export type TranscriptHistoryGeometry = {
   residentStartPx: number;
   /** Scroll offset where the last resident row ends (before the newer runway). */
   residentEndPx: number;
+  /** Height of the unloaded newer runway below the resident window, when known. */
+  afterPx?: number;
   /** Ordinal span of the presented resident window, when any rows are resident. */
   residentSpan: TranscriptOrdSpan | undefined;
   /** Unloaded ordinal counts on each side of the presented resident window. */
@@ -94,9 +101,12 @@ export function createTranscriptHistoryView(opts: {
   ): TranscriptHistoryGeometry | null => {
     if (!opts.enabled()) return null;
     const extent = virtualizer.residentExtent();
+    const runway =
+      typeof virtualizer.runway === "function" ? virtualizer.runway() : undefined;
     return {
       residentStartPx: extent.startPx,
       residentEndPx: extent.endPx,
+      ...(runway ? { afterPx: runway.afterPx } : {}),
       residentSpan: residentOrdSpan(),
       unloaded: unloadedOrds(),
       prepareLanding: (targetPx) => virtualizer.prepareLanding(targetPx),
@@ -201,20 +211,32 @@ export async function loadTranscriptHistoryUntil(
 function ordInRunway(
   targetPx: number,
   layout: TranscriptHistoryGeometry,
+  scrollHeightPx: number,
 ): number | undefined {
   const span = layout.residentSpan;
   if (!span) return undefined;
-  if (
-    layout.unloaded.before > 0 &&
-    layout.residentStartPx > 0 &&
-    targetPx < layout.residentStartPx
-  ) {
-    const ratio = Math.min(1, Math.max(0, targetPx / layout.residentStartPx));
-    const firstOrd = Math.max(1, span.firstOrd - layout.unloaded.before);
-    const beforeSpan = Math.max(0, span.firstOrd - 1 - firstOrd);
-    return Math.round(firstOrd + ratio * beforeSpan);
-  }
-  return undefined;
+  const firstOrd = Math.max(1, span.firstOrd - layout.unloaded.before);
+  const lastOrd = Math.max(span.lastOrd, span.lastOrd + layout.unloaded.after);
+  const afterPx =
+    layout.afterPx ??
+    Math.max(
+      0,
+      scrollHeightPx - layout.residentEndPx,
+      transcriptRunwayHeight(layout.unloaded.after, DEFAULT_TRANSCRIPT_ORD_DENSITY_PX),
+    );
+  return transcriptRunwayOrd({
+    offsetPx: targetPx,
+    originPx: 0,
+    runway: {
+      beforePx: layout.residentStartPx,
+      afterPx,
+      densityPxPerOrd: DEFAULT_TRANSCRIPT_ORD_DENSITY_PX,
+    },
+    residentHeightPx: Math.max(0, layout.residentEndPx - layout.residentStartPx),
+    residentSpan: span,
+    bounds: { firstOrd, lastOrd },
+    unloaded: layout.unloaded,
+  });
 }
 
 function readerReachOrds(
@@ -278,9 +300,14 @@ export function createTranscriptPaging(
       opts.appStore.actions.trimTranscriptPages();
     }
     if (layout) {
-      if (bottom < layout.residentStartPx - reach || top > layout.residentEndPx + reach) {
-        const ord = ordInRunway(top, layout);
-        if (ord !== undefined) return transcriptSeekRequest(transcript, ord);
+      const inBeforeRunway = bottom < layout.residentStartPx - reach;
+      const inAfterRunway = top > layout.residentEndPx + reach;
+      if (inBeforeRunway || inAfterRunway) {
+        const ord = ordInRunway(top, layout, streamTarget.scrollHeight);
+        if (ord !== undefined) {
+          intent.noteSeek(inBeforeRunway ? "older" : "newer");
+          return transcriptSeekRequest(transcript, ord);
+        }
       }
       const toOlder = top - layout.residentStartPx;
       const toNewer = layout.residentEndPx - bottom;

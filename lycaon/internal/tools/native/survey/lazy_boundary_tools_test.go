@@ -22,6 +22,7 @@ func (boundaryToolScopes) Catalog(_ context.Context, root string) *sourcescope.S
 func TestToolsReadExplicitPathsUnderLazyBoundary(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "node_modules/pkg/target.go", "package dependency\n\nfunc BoundaryTarget() {}\n")
+	writeFile(t, root, "src/indexed.go", "package source\n\nfunc BoundaryTarget() {}\n")
 	catalog := sourcecatalog.New()
 	catalog.SetScopes(boundaryToolScopes{})
 	defer func() { testutil.FailErr(t, "drain tool catalog", catalog.Drain(context.Background())) }()
@@ -29,6 +30,16 @@ func TestToolsReadExplicitPathsUnderLazyBoundary(t *testing.T) {
 	_, _, err := catalog.ObserveWithin(t.Context(), tc.Identity.ProjectID, []sourcecatalog.Root{{ID: tc.Source.Roots[0].ID, Path: root}}, 30*time.Second)
 	testutil.FailErr(t, "warm parent before explicit boundary requests", err)
 	boundary := nativefixture.Boundary(t)
+	grepAll, err := (&GrepTool{Boundary: boundary, Catalog: catalog}).Run(t.Context(), map[string]any{"path": ".", "pattern": "BoundaryTarget"}, tc)
+	testutil.FailErr(t, "grep indexed and live source", err)
+	if matches := nativefixture.GrepMatches(t, grepAll); len(matches) != 2 {
+		t.Fatalf("grep indexed and live matches = %+v", matches)
+	}
+	findAll, err := (&FindTool{Boundary: boundary, Catalog: catalog}).Run(t.Context(), map[string]any{"path": ".", "name_glob": "*.go"}, tc)
+	testutil.FailErr(t, "find indexed and live source", err)
+	if found := parseFindResponse(t, findAll); len(found.Results) != 2 {
+		t.Fatalf("find indexed and live results = %+v", found)
+	}
 	summarizeTool := testSummarizeTool(t, root)
 	summarizeTool.Catalog = catalog
 	for _, item := range []struct {

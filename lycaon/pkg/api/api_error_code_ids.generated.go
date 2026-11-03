@@ -7,6 +7,9 @@ package api
 type ApiErrorCode string
 
 const (
+	// ApiErrorCodeApprovalCapacityExceeded Approval authority exceeds the bounded
+	// decision capacity.
+	ApiErrorCodeApprovalCapacityExceeded ApiErrorCode = "approval_capacity_exceeded"
 	// ApiErrorCodeSourceViewNotFound The host does not retain this source view,
 	// presentation, or interest handle for the caller (never issued, expired,
 	// released, evicted, or issued before a restart); reopen it with the same
@@ -301,6 +304,9 @@ const (
 	ApiErrorCodeInvalidWorkflowReplacementTarget ApiErrorCode = "invalid_workflow_replacement_target"
 	// ApiErrorCodeMessageNotFound session message id not found
 	ApiErrorCodeMessageNotFound ApiErrorCode = "message_not_found"
+	// ApiErrorCodeCommandProgramNotFound command program receipt is not retained
+	// for this chat
+	ApiErrorCodeCommandProgramNotFound ApiErrorCode = "command_program_not_found"
 	// ApiErrorCodeNotFound no route matches the request path; resources use
 	// <resource>_not_found
 	ApiErrorCodeNotFound ApiErrorCode = "not_found"
@@ -952,6 +958,7 @@ const (
 )
 
 var allApiErrorCodeValues = []ApiErrorCode{
+	ApiErrorCodeApprovalCapacityExceeded,
 	ApiErrorCodeSourceViewNotFound,
 	ApiErrorCodeSourceViewRevisionChanged,
 	ApiErrorCodeSourceViewCapacity,
@@ -1055,6 +1062,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeInvalidWorkflowRevision,
 	ApiErrorCodeInvalidWorkflowReplacementTarget,
 	ApiErrorCodeMessageNotFound,
+	ApiErrorCodeCommandProgramNotFound,
 	ApiErrorCodeNotFound,
 	ApiErrorCodePathNotFound,
 	ApiErrorCodePersistNotConfirmed,
@@ -1399,6 +1407,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeChoiceSourceNotFound,
 		ApiErrorCodeSearchSourceNotFound,
 		ApiErrorCodeMessageNotFound,
+		ApiErrorCodeCommandProgramNotFound,
 		ApiErrorCodeNotFound,
 		ApiErrorCodePathNotFound,
 		ApiErrorCodeBlueprintNotFound,
@@ -1585,7 +1594,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeUnsupportedEncoding,
 		ApiErrorCodeSourceRawNotImage:
 		return 415
-	case ApiErrorCodeRewindAnchorIneligible,
+	case ApiErrorCodeApprovalCapacityExceeded,
+		ApiErrorCodeRewindAnchorIneligible,
 		ApiErrorCodeRewindModeUnsupported,
 		ApiErrorCodeFeedbackResponseRequired,
 		ApiErrorCodeSourceVersionUnavailable,

@@ -3,12 +3,13 @@ id: SUMMARIZE_CONTENT_TOO_LARGE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - summarize
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.bytes
   - paintedwolf.cap

@@ -1,5 +1,5 @@
 tags: [git, inspection]
-description: "Show commit or file at ref JSON (`available`, `show` with kind diff/blob). Replaces command: git show."
+description: "Show commit or file at ref JSON (`available`, `show` with kind diff/blob)."
 schema:
   type: object
   properties:

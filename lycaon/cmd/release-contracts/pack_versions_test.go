@@ -30,12 +30,12 @@ func TestPackVersionsAndReleasedArchivesAreImmutable(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			source := treeRelease{
-				capabilityPath:                                         []byte("host_facts:\n - name: baseline_fact\n   type: bool\n"),
-				"lycaon/internal/extpacks/manifest.go":                 []byte(`package extpacks; const ExtensionAPIVersion="1.0.0"`),
-				packsRoot + "/painted-wolf/platform/extension.yaml":    []byte("manifest_version: 1\nid: painted-wolf/platform\nname: Platform\nversion: 1.0.0\ncompatibility:\n  extension_api: '^1.0.0'\n"),
-				pack + "/extension.yaml":                               manifest,
-				pack + "/guidance/example.md":                          []byte("released\n"),
-				pack + "/archive/example/1.0.0/workflow.yaml":          []byte("sealed\n"),
+				capabilityPath:                                      []byte("host_facts:\n - name: baseline_fact\n   type: bool\n"),
+				"lycaon/internal/extpacks/manifest.go":              []byte(`package extpacks; const ExtensionAPIVersion="1.0.0"`),
+				packsRoot + "/painted-wolf/platform/extension.yaml": []byte("manifest_version: 1\nid: painted-wolf/platform\nname: Platform\nversion: 1.0.0\ncompatibility:\n  extension_api: '^1.0.0'\n"),
+				pack + "/extension.yaml":                            manifest,
+				pack + "/guidance/example.md":                       []byte("released\n"),
+				pack + "/archive/example/1.0.0/workflow.yaml":       []byte("sealed\n"),
 			}
 			var paths []string
 			for path := range source {

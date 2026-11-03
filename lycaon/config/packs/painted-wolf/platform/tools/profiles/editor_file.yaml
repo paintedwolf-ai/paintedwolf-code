@@ -1,23 +1,17 @@
 id: editor_file
 description: >
-  Editor selection turns — file tools plus bounded readiness probes. No shell,
-  network content fetch, MCP, or spawn/delegate. Used by inline edit and the
-  seven selection verbs.
+  Editor selection turns — file tools, native command reads and writes, and
+  bounded readiness probes. No external programs, network content fetch, MCP,
+  or spawn/delegate. Used by inline edit and the seven selection verbs.
+command_effects: [read_only, mutation]
 tools:
+  command: sticky
   recall: sticky
-  read: sticky
-  write: sticky
   edit: sticky
   replace_lines: sticky
   code_rewrite: sticky
   restore_version: sticky
   summarize: sticky
-  grep: sticky
-  find: sticky
-  list_dir: sticky
-  stat: sticky
-  wc: true
-  jq: sticky
   jq_edit: true
   scan_query: sticky
   scan_list: sticky
@@ -33,7 +27,6 @@ tools:
   held_stop: true
 wait_conditions: [http_ready, port_ready]
 deny_tools:
-  - command
   - command_output
   - command_stop
   - web_search

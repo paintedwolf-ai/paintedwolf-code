@@ -156,11 +156,13 @@ type ObservationSink interface {
 
 // FaultHooks provides deterministic test hooks for concurrency barriers and fault injection.
 type FaultHooks struct {
-	BeforeAppendLock      func(qpath QualifiedPath, data []byte)
-	WriteAtFunc           func(qpath QualifiedPath, file *os.File, data []byte, offset int64) (int, error)
-	LowerXattrHook        func(qpath QualifiedPath) error
-	WorkingFileHashReader func(qpath QualifiedPath, r io.Reader) (io.Reader, error)
-	JournalSyncHook       func(phase string) error
+	BeforeAppendLock       func(qpath QualifiedPath, data []byte)
+	WriteAtFunc            func(qpath QualifiedPath, file *os.File, data []byte, offset int64) (int, error)
+	LowerXattrHook         func(qpath QualifiedPath) error
+	WorkingFileHashReader  func(qpath QualifiedPath, r io.Reader) (io.Reader, error)
+	JournalSyncHook        func(phase string) error
+	ReleaseWaitHook        func(stage string)
+	NamespacePreCommitHook func(op string, qpath QualifiedPath)
 }
 
 type Config struct {

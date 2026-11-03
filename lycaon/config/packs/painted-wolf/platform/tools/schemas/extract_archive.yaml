@@ -1,5 +1,5 @@
 tags: [filesystem]
-description: "Unpack .zip or .tar.gz into a write-scoped directory (replaces unzip/tar xzf; HITL ask by default). Replaces command: unzip."
+description: "Unpack .zip or .tar.gz into a write-scoped directory (replaces unzip/tar xzf; HITL ask by default)."
 schema:
   type: object
   properties:

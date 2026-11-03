@@ -80,10 +80,7 @@ func unlinkBackingFile(dirFD int, name string) error {
 }
 
 func renameBackingFile(dirFD int, oldName, newName string) error {
-	if err := unix.Renameat(dirFD, oldName, dirFD, newName); err != nil {
-		return err
-	}
-	return syncFD(dirFD)
+	return unix.Renameat(dirFD, oldName, dirFD, newName)
 }
 
 func syncFD(fd int) error {

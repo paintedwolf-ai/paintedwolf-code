@@ -13,122 +13,52 @@ requires:
   facts:
   - paintedwolf.rejection_code
   - paintedwolf.command
-  - paintedwolf.shell_metacharacters
+  - paintedwolf.rejection_reason
+  - paintedwolf.directory_change
+  - paintedwolf.terminal_capture
+  - paintedwolf.use_env_param
+  - paintedwolf.use_cwd_param
   - paintedwolf.use_pipeline_array
   - paintedwolf.use_stdin_param
   - paintedwolf.use_background_param
-  - paintedwolf.directory_change
-  - paintedwolf.env_assignment
-  - paintedwolf.use_substitution_result
-  - paintedwolf.scratch_var
-  - paintedwolf.sequence_unsupported
-  - paintedwolf.reissue_via_command
-  - paintedwolf.command_not_argv
-  - paintedwolf.terminal_capture
-  - paintedwolf.rejection_reason
+  - paintedwolf.can_command
 when: paintedwolf.rejection_code == "COMMAND_NOT_ARGV"
 effect: block
 copy:
-  what: '{% if paintedwolf.shell_metacharacters %}command rejected — unquoted shell metacharacters in `{{ paintedwolf.command
-    }}`{% else %}command `{{ paintedwolf.command }}` is not a single argv vector{% endif %}'
+  what: 'This invocation could not be admitted as literal executable arguments{% if paintedwolf.command %}: `{{ paintedwolf.command }}`{% endif %}.'
   cause: '{{ paintedwolf.rejection_reason }}'
-  why: '{% if paintedwolf.directory_change %}
+  why: Each admitted stage uses literal arguments; shell expansions are not evaluated on this surface.
+  fix: '{% if paintedwolf.directory_change %}{% if paintedwolf.use_cwd_param %}To select this call''s working directory, use its `cwd` argument and supply the executable
+    to run there.{% endif %}
 
-    Each invocation starts in its own `cwd`; running `cd` cannot change the working directory of later commands.
+    {% else %}{% if paintedwolf.terminal_capture %}A captured call runs one executable with literal arguments. Its result supplies `exit_code`; shell sequences are
+    not part of this capture.
 
-    {% else %}{% if paintedwolf.terminal_capture %}
+    {% else %}{% if paintedwolf.use_env_param %}This tool accepts literal environment values in its `env` object; supply the executable in its `command` argument.
 
-    `command` with `terminal_capture` captures one program in one terminal screen. Sequences and pipelines run multiple
-    programs; shell substitutions are not expanded.
+    {% else %}{% if paintedwolf.use_pipeline_array %}This tool accepts a `pipeline` array for its stages; follow its declared argument schema.
 
-    {% else %}{% if paintedwolf.reissue_via_command %}
+    {% else %}{% if paintedwolf.use_stdin_param %}This tool accepts literal input in `stdin`; shell substitutions are not evaluated in that field.
 
-    Structured composition, not a shell — and this surface holds exactly one process, so it has no parameter to
-    wire a `|` into and nowhere to run the later commands of a sequence. `$(...)`, `$VAR`, and backticks are rejected
-    because nothing expands them: their value is not knowable from the line, so the command that ran would not be
-    the command that was approved. Inside quotes all of them are literal argument text.
+    {% else %}{% if paintedwolf.use_background_param %}This tool''s `background` field requests an independently running job and returns its handle.
 
-    {% else %}
-
-    Structured composition, not a shell. `&&`, `||`, and `;` sequence whole commands and are accepted: the host
-    splits them itself and runs each side as its own process, so the line still states exactly what executes. `$(...)`,
-    `$VAR`, and backticks are rejected because nothing expands them — their value is not knowable from the line,
-    so the command that ran would not be the command that was approved. `|` pipelines and redirections (`<`, `>`,
-    `>>`, `2>`, `&>`, `2>&1`) are wired by the host; here-documents are not. Inside quotes all of them are literal
-    argument text.
-
-    {% endif %}{% endif %}{% endif %}'
-  fix: '{% if paintedwolf.directory_change %}
-
-    Remove `cd` and its directory argument from `command`. Set `cwd` to that directory and start `command` with
-    the executable. For the workspace root use `cwd: "."`; for a subdirectory use its workspace-relative path.
-
-    {% else %}{% if paintedwolf.terminal_capture %}
-
-    Keep `terminal_capture` and send one argv line. The result already includes `exit_code`; do not append `echo
-    $?`. Put environment assignments in `env`. For composed execution, omit `terminal_capture` and use the sequence
-    or `pipeline` form of `command`, then capture the final program separately.
-
-    {% else %}{% if paintedwolf.reissue_via_command %}
-
-    This surface takes one argv line and has no composition parameters — no `pipeline`, no `background`, and no
-    `&&`/`||`/`;` sequence. Send the single program you need here, or run the composed form under `command`, which
-    carries those parameters.
-
-    {% else %}{% if paintedwolf.env_assignment %}
-
-    Put each environment variable in the `env` object and start `command` with the executable.
-
-    {% else %}{% if paintedwolf.use_pipeline_array %}
-
-    Use the `pipeline` array (e.g. `pipeline: ["git log --oneline", "head -20"]`) or write `|` inside `command`
-    with one argv vector per element.
-
-    {% else %}{% if paintedwolf.use_stdin_param %}
-
-    Pass the here-document body as `stdin` (literal), or name a file with `< path` or `stdin_from`.
-
-    {% else %}{% if paintedwolf.use_background_param %}
-
-    `&` detaches a command. Pass `background: true` to run one command as a concurrent job and read its handle;
-    use `&&` if you meant "run the next one after this succeeds".
-
-    {% else %}{% if paintedwolf.use_substitution_result %}
-
-    {% if paintedwolf.scratch_var %}Write the scratch path as `@scratch/<path>`: the host resolves it in arguments (`cat @scratch/notes.txt`), `cwd`, and stream redirects. Inside a script, read `$SCRATCH_DIR` from the environment.
-    {% else %}Nothing expands `$(...)`, `$VAR`, or backticks. Run the inner command as its own call, read the value from its
-    result, then pass that value as a literal argument. For an environment variable, pass `env: {...}` on this call.{% endif %}
-
-    {% else %}{% if paintedwolf.shell_metacharacters %}
-
-    Quote arguments that need shell characters inside a single stage (e.g. `python3 -c "import x; print(x.Y)"`).
-    `&&`, `||`, `;`, and `|` are accepted unquoted across stages.
-
-    {% else %}
-
-    Retry with one argv vector per stage (e.g. `go test ./...`, `pytest .`, `cargo test`), a `&&` sequence, or a
-    `pipeline` array.
-
-    {% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
-  instead: '{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{%
-    else %}{% if not paintedwolf.reissue_via_command %}`&&`/`||`/`;`/`|` sequence/pipe commands,
-    `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form
-    under `command`{% endif %}{% endif %}{% endif %}'
+    {% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.can_command %}For a Bash program, the offered command tool accepts program text without capture.{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_surface
 x-paintedwolf-message: command rejected
 x-paintedwolf-scenarios:
 - id: directory_change
-  tool: command
+  tool: terminal_open
   vars:
     command: cd src && tool --check
     reason: '`cd` changes only its own process; pass cwd'
     directory_change: true
+    use_cwd_param: true
   expect_contains:
   - 'Code: COMMAND_NOT_ARGV'
-  - Remove `cd` and its directory argument
-  - 'cwd: "."'
-  - Set `cwd` and remove `cd` from `command`
+  - '`cwd` argument'
+  - executable
 - id: capture_sequence
   tool: command
   vars:
@@ -139,21 +69,22 @@ x-paintedwolf-scenarios:
     terminal_capture: true
   expect_contains:
   - 'Code: COMMAND_NOT_ARGV'
-  - omit `terminal_capture`
-  - read `exit_code` from its result
+  - one executable
+  - '`exit_code`'
 - id: capture_pipe
   tool: command
   vars:
     command: tool --check | tee output.txt
     reason: command contains unquoted shell metacharacters
     shell_metacharacters: true
-    use_pipeline_array: true
+    reissue_via_command: true
     terminal_capture: true
   expect_contains:
   - 'Code: COMMAND_NOT_ARGV'
-  - omit `terminal_capture`
-  - capture the final program separately
+  - one executable
+  - literal arguments
 - id: substitution
+  tool: verify
   vars:
     command: git checkout $(git rev-parse HEAD)
     profile_id: implement
@@ -161,11 +92,11 @@ x-paintedwolf-scenarios:
     shell_metacharacters: true
     use_substitution_result: true
   expect_contains:
-  - 'Rejected:'
   - 'Code: COMMAND_NOT_ARGV'
-  - Nothing expands
-  - literal argument
+  - shell expansions are not evaluated
+  - git checkout
 - id: scratch_variable
+  tool: verify
   vars:
     command: cat $SCRATCH_DIR/notes.txt
     profile_id: implement
@@ -174,31 +105,34 @@ x-paintedwolf-scenarios:
     use_substitution_result: true
     scratch_var: true
   expect_contains:
-  - 'Rejected:'
   - 'Code: COMMAND_NOT_ARGV'
-  - 'cat @scratch/notes.txt'
-  - SCRATCH_DIR
+  - shell expansions are not evaluated
+  - $SCRATCH_DIR/notes.txt
 - id: background_operator
+  tool: verify
   vars:
     command: python3 -m http.server 8000 &
     profile_id: implement
     reason: '`&` backgrounds a command rather than sequencing it: `&`'
     use_background_param: true
   expect_contains:
-  - 'Rejected:'
   - 'Code: COMMAND_NOT_ARGV'
-  - 'background: true'
+  - '`background` field'
+  - handle
 - id: environment_assignment
+  tool: terminal_open
   vars:
     command: TOKEN=value
     profile_id: implement
     reason: environment assignments belong in env
     env_assignment: true
+    use_env_param: true
   expect_contains:
   - 'Code: COMMAND_NOT_ARGV'
   - '`env` object'
-  - start `command` with the executable
+  - literal environment
 - id: shell_metacharacters
+  tool: verify
   vars:
     command: cat <<'EOF' > out.txt
     profile_id: implement
@@ -206,10 +140,10 @@ x-paintedwolf-scenarios:
     shell_metacharacters: true
     use_stdin_param: true
   expect_contains:
-  - 'Rejected:'
   - 'Code: COMMAND_NOT_ARGV'
-  - stdin_from
+  - literal input in `stdin`
 - id: pipeline_pipe
+  tool: verify
   vars:
     command: git log --oneline | head -20
     profile_id: implement
@@ -217,9 +151,8 @@ x-paintedwolf-scenarios:
     shell_metacharacters: true
     use_pipeline_array: true
   expect_contains:
-  - 'Rejected:'
   - 'Code: COMMAND_NOT_ARGV'
-  - pipeline
+  - '`pipeline` array'
   - git log --oneline
 - id: terminal_pipe
   tool: terminal_open
@@ -229,10 +162,10 @@ x-paintedwolf-scenarios:
     reason: 'command contains unquoted shell metacharacters: `|`'
     shell_metacharacters: true
     reissue_via_command: true
+    can_command: true
   expect_contains:
-  - 'Rejected:'
   - 'Code: COMMAND_NOT_ARGV'
-  - run the composed form under `command`
+  - offered command tool accepts program text without capture
 - id: terminal_sequence
   tool: terminal_open
   vars:
@@ -241,7 +174,28 @@ x-paintedwolf-scenarios:
     reason: this surface runs one program; `&&`, `||`, and `;` run several
     sequence_unsupported: true
     reissue_via_command: true
+    can_command: true
   expect_contains:
-  - 'Rejected:'
   - 'Code: COMMAND_NOT_ARGV'
-  - holds exactly one process
+  - offered command tool accepts program text without capture
+- id: snapshot_sequence
+  tool: command
+  vars:
+    command: tool --check && tool --report
+    reason: this surface runs one program
+    sequence_unsupported: true
+    reissue_via_command: true
+  expect_contains:
+  - 'Code: COMMAND_NOT_ARGV'
+  - literal executable arguments
+  - tool --check && tool --report
+- id: snapshot_environment_assignment
+  tool: command
+  vars:
+    command: TOKEN=value tool --check
+    reason: environment assignments belong in env
+    env_assignment: true
+  expect_contains:
+  - 'Code: COMMAND_NOT_ARGV'
+  - literal executable arguments
+  - TOKEN=value tool --check

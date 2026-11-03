@@ -37,7 +37,13 @@ func (m *Service) nudgeProcessWait(ctx context.Context, sessionID, handle string
 // HandleCommandCompletion records a settled command or verify and wakes a matching wait.
 func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgprocess.Completion) {
 	defer completion.IndexWatch.Release()
+	if completion.ReleaseNotices != nil {
+		defer completion.ReleaseNotices()
+	}
 	if m == nil || strings.TrimSpace(completion.SessionID) == "" {
+		return
+	}
+	if !completion.TerminationReason.DeliversToSession() {
 		return
 	}
 	sess, err := m.store.Get(ctx, completion.SessionID)
@@ -51,14 +57,25 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		}, completion.FinishedAt)
 	}
 	digest := CommandCompletionDigest(completion)
+	for _, path := range completion.UnsavedDocumentPaths {
+		if note, err := guidance.RenderCatalog(ctx, guidance.SurveyCommandUnsavedDraftRef, map[string]any{"path": path}); err == nil {
+			digest += "\n" + note
+		}
+	}
 	if sess != nil {
 		digest = m.withPostToolGuidance(ctx, sess, completion.OriginTool, digest, guidance.ToolResultFacts{
 			Confine: completion.Observation, IndexWatch: completion.IndexWatch,
 		})
 	}
 	m.processReports.publish(completion.SessionID, completion.Handle, digest)
-	env := anchor.Envelope{CommandCompletionDigest: digest}
+	env := anchor.Envelope{
+		Subject:                 strings.TrimSpace(completion.Handle),
+		CommandCompletionDigest: digest,
+	}
 	if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
+		return
+	}
+	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent {
 		return
 	}
 	if sess == nil || !sess.IsWorkerChild() {
@@ -77,7 +94,10 @@ func (m *Service) HandleCommandRefusal(ctx context.Context, notice bgprocess.Ref
 	}
 	digest := m.withPostToolGuidance(ctx, sess, notice.OriginTool, commandRefusalDigest(notice),
 		guidance.ToolResultFacts{Confine: notice.Observation})
-	env := anchor.Envelope{CommandRefusalDigest: digest}
+	env := anchor.Envelope{
+		Subject:              strings.TrimSpace(notice.Handle),
+		CommandRefusalDigest: digest,
+	}
 	if m.nudgeProcessWait(ctx, notice.SessionID, notice.Handle, anchor.ProcessRefused, env) {
 		return
 	}
@@ -107,7 +127,7 @@ func CommandCompletionDigest(completion bgprocess.Completion) string {
 		completion.Elapsed().Round(time.Millisecond), finishedAt,
 	)
 	if len(completion.Stages) > 0 {
-		digest += "\ncommand=" + truncateUTF8Head(completion.Stages[0].Command, maxCommandBytes)
+		digest += "\ncommand=" + truncateUTF8Head(hostcmd.CommandLine(completion.Stages), maxCommandBytes)
 	}
 	if completion.Failure != nil {
 		digest += "\nexec_failure=" + string(completion.Failure.Kind) + ": " + truncateUTF8Head(completion.Failure.Detail, maxCommandBytes)

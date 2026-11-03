@@ -1,4 +1,30 @@
-"""Check the application's declared scanner requirements before candidate entry."""
+"""Check the application's declared scanner requirements and write boundary probes before candidate entry."""
+import errno
+import json
+import shlex
+
+PROGRAM = """import json, pathlib, sys
+output, receipt, call = sys.argv[1:]
+try:
+    pathlib.Path(output).write_bytes(b'boundary probe')
+except OSError as error:
+    result = {'call': call, 'errno': error.errno}
+else:
+    result = {'call': call, 'errno': 0}
+pathlib.Path(receipt).write_text(json.dumps(result))
+"""
+
+
+def command(target, receipt, call):
+    return shlex.join(['python3', '-B', '-c', PROGRAM, str(target), str(receipt), call])
+
+
+def require_denied(receipt, target, call):
+    result = json.loads(receipt.read_text())
+    if (result.get('call') != call or type(result.get('errno')) is not int
+            or result['errno'] not in {errno.EACCES, errno.EPERM} or target.exists()):
+        raise RuntimeError('ungranted write did not preserve the permission boundary: ' + json.dumps(result))
+    return result
 
 
 def requested_full_pass(response, project_id):
@@ -61,17 +87,17 @@ def project_scans(overview, requested):
 def project_baseline(overview):
     if overview.get('enabled') is not True:
         raise ValueError('application scanners are disabled')
-    scanners=overview.get('scanners',[])
-    if not scanners or len({s['id'] for s in scanners})!=len(scanners):
+    scanners = overview.get('scanners', [])
+    if not scanners or len({s['id'] for s in scanners}) != len(scanners):
         raise ValueError('application baseline has no unique scanner selection')
     if any(s.get('available') is not True for s in scanners):
         raise ValueError('application scanner is unavailable')
-    baseline=overview.get('baseline')
+    baseline = overview.get('baseline')
     if baseline is None:
         return None
-    if not baseline.get('snapshot_id') or baseline.get('unobserved_directories',0)!=0:
+    if not baseline.get('snapshot_id') or baseline.get('unobserved_directories', 0) != 0:
         raise ValueError('fixture baseline is incomplete')
     if overview.get('last_full') or overview.get('running'):
         raise ValueError('fixture unexpectedly starts with a full scan')
-    return {'project_id':overview['project_id'],'snapshot_id':baseline['snapshot_id'],
-            'scanners':sorted(s['id'] for s in scanners)}
+    return {'project_id': overview['project_id'], 'snapshot_id': baseline['snapshot_id'],
+            'scanners': sorted(s['id'] for s in scanners)}

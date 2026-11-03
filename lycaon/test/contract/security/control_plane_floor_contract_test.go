@@ -56,15 +56,15 @@ func TestControlPlaneFloorGateAndResolverAgree(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tc.tool,
-Files: []string{tc.path},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-SessionScratchRoot: scratch,
-},
-})
+				Invocation: hitl.ActionInvocation{
+					Tool:  tc.tool,
+					Files: []string{tc.path},
+				},
+				Scope: hitl.ActionScope{
+					ProjectDir:         proj,
+					SessionScratchRoot: scratch,
+				},
+			})
 			testutil.FailErr(t, "gate.Evaluate", err)
 
 			var resolveErr error

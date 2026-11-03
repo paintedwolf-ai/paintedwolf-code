@@ -415,9 +415,16 @@ components:
           format: date-time
         tool_name:
           type: string
+          description: >-
+            The running tool, or on awaiting_wake the tool call that parked
+            the session (`wait`, or `command` whose program waits). Absent on
+            a host-armed awaiting_wake lease.
         tool_call_id:
           type: string
           pattern: '^[A-Za-z0-9_.:-]+$'
+          description: >-
+            The call tool_name names. On awaiting_wake it binds the lease to the
+            parked call, whose result carries completion state parked.
         progress:
           x-go-pointer: true
           $ref: events.yaml#/components/schemas/ToolProgress
@@ -429,7 +436,8 @@ components:
             Subscriptions that will end an awaiting_wake lease, in the host's own
             vocabulary (timer, next_worker_done, process_done, …). Present only on
             awaiting_wake, and what the client names rather than inferring a
-            subject from the sleep reason.
+            subject from the sleep reason. A parked command's lease subscribes
+            to program_done, which only the host arms.
         decision_trigger:
           $ref: turn-load.yaml#/components/schemas/TurnLoadTrigger
           description: >-
@@ -443,9 +451,12 @@ components:
       required: [phase, files_searched, files_skipped, matches]
       description: Measured discovery work. Counts are observations, not a completion estimate.
       properties:
+        command_program:
+          x-go-pointer: true
+          $ref: session/command-programs.yaml#/components/schemas/CommandProgramReceipt
         phase:
           type: string
-          enum: [selecting, searching]
+          enum: [selecting, searching, executing]
         files_searched:
           type: integer
           minimum: 0
@@ -479,6 +490,23 @@ components:
         effect:
           type: string
           enum: [block, warn, nudge, allow, transform]
+    BackgroundProcessTerminationReason:
+      type: string
+      description: >-
+        Why a background process ended: natural exit, timeout, explicit stop
+        by the agent or user, or host teardown of the owning chat, project,
+        detached root, app process, or worker runtime.
+      enum:
+      - exited
+      - timed_out
+      - stopped_by_agent
+      - stopped_by_user
+      - chat_deleted
+      - project_deleted
+      - root_detached
+      - app_quit
+      - worker_completed
+      - worker_canceled
     BackgroundProcessEvent:
       x-go-generate: true
       type: object
@@ -512,6 +540,8 @@ components:
         exit_code:
           x-go-pointer: true
           type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
         truncated:
           type: boolean
         reset:
@@ -568,6 +598,8 @@ components:
         exit_code:
           x-go-pointer: true
           type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
     BackgroundProcessChunk:
       x-go-generate: true
       type: object
@@ -614,6 +646,8 @@ components:
         exit_code:
           x-go-pointer: true
           type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
     BackgroundProcessStopResult:
       x-go-generate: true
       type: object
@@ -635,6 +669,8 @@ components:
         exit_code:
           x-go-pointer: true
           type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
     PreviewActionOverlay:
       x-go-generate: true
       type: object
@@ -1079,3 +1115,126 @@ components:
           type: array
           items:
             $ref: events.yaml#/components/schemas/BackgroundProcess
+    ProjectBackgroundProcess:
+      x-go-generate: true
+      type: object
+      required:
+      - process_id
+      - session_id
+      - session_archived
+      - command
+      - working_dir
+      - ports
+      - started_at
+      - running
+      additionalProperties: false
+      description: >-
+        One running or recently ended background command in a project, with live
+        session metadata and attributed listening endpoints.
+      properties:
+        process_id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+          description: Display name of the owning project when listing across projects.
+        session_id:
+          type: string
+          format: uuid
+        session_title:
+          type: string
+        session_archived:
+          type: boolean
+        command:
+          type: string
+        root_id:
+          type: string
+          format: uuid
+        working_dir:
+          type: string
+          description: Working directory relative to the matched project root.
+        ports:
+          type: array
+          items:
+            type: string
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          x-go-pointer: true
+          type: string
+          format: date-time
+        running:
+          type: boolean
+        exit_code:
+          x-go-pointer: true
+          type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
+    ProjectBackgroundProcessListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - processes
+      - revision
+      additionalProperties: false
+      properties:
+        processes:
+          type: array
+          items:
+            $ref: events.yaml#/components/schemas/ProjectBackgroundProcess
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monotonic per-project background command revision.
+    ProjectBackgroundEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - project_id
+      - process_id
+      - session_id
+      - action
+      - revision
+      - running
+      additionalProperties: false
+      description: >-
+        Project-scoped background command lifecycle or listening port change.
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        process_id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        session_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum:
+          - started
+          - ports_changed
+          - ended
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        running:
+          type: boolean
+        ports:
+          type: array
+          items:
+            type: string
+        exit_code:
+          x-go-pointer: true
+          type: integer
+        termination_reason:
+          $ref: '#/components/schemas/BackgroundProcessTerminationReason'
+        process:
+          x-go-pointer: true
+          $ref: events.yaml#/components/schemas/ProjectBackgroundProcess

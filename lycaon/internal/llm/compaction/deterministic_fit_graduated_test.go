@@ -144,7 +144,7 @@ func TestDeterministicFitMonotonicInBudget(t *testing.T) {
 // continuation record the rest of the history was summarized into.
 func TestDeterministicFitPreservesCheckpointHead(t *testing.T) {
 	msgs := append([]ContextMessage{
-		{Role: string(api.MessageRoleUser), Content: "checkpoint", CompactionCheckpoint: true},
+		{Role: string(api.MessageRoleUser), Content: "checkpoint", ContextMessageCompaction: ContextMessageCompaction{CompactionCheckpoint: true}},
 		{Role: string(api.MessageRoleAssistant), Content: "summary of prior work"},
 	}, fitRows(100)...)
 

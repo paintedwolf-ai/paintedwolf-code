@@ -23,9 +23,10 @@ type Entry struct {
 	DiscoveredPricing *pricing.Rate   `yaml:"-"`
 
 	// Zero-value request controls are omitted.
-	Temperature     *float64 `yaml:"temperature,omitempty"`
-	MaxTokens       int      `yaml:"max_tokens,omitempty"`
-	ReasoningEffort string   `yaml:"reasoning_effort,omitempty"`
+	Temperature       *float64 `yaml:"temperature,omitempty"`
+	MaxTokens         int      `yaml:"max_tokens,omitempty"`
+	ProviderMaxTokens int      `yaml:"provider_max_tokens,omitempty"`
+	ReasoningEffort   string   `yaml:"reasoning_effort,omitempty"`
 	// ReasoningEffortLevels overrides the family mapping for this provider's model.
 	ReasoningEffortLevels ReasoningEffortLevels `yaml:"reasoning_effort_levels,omitempty"`
 	// Capabilities is the resolved assignment evidence.
@@ -40,6 +41,11 @@ type Entry struct {
 	// ContextLength caps the usable token window.
 	ContextLength int `yaml:"context_length,omitempty"`
 
+	// ContextLengthSource records how ContextLength was determined (for example,
+	// "config", "llamacpp-props", "v1/models", "lmstudio", "omlx", "ollama-show",
+	// or "provider-overflow").
+	ContextLengthSource string `yaml:"-"`
+
 	// Neuron rates support providers that bill in those units.
 	InputNeuronsPerM  float64 `yaml:"input_neurons_per_m,omitempty"`
 	OutputNeuronsPerM float64 `yaml:"output_neurons_per_m,omitempty"`
@@ -49,6 +55,9 @@ type Entry struct {
 
 	// ThinkStyle overrides the family policy for one model.
 	ThinkStyle string `yaml:"think_style,omitempty"`
+
+	// ContinuationPolicy overrides the family reasoning replay policy for one model.
+	ContinuationPolicy string `yaml:"continuation_policy,omitempty"`
 
 	// Untyped marks discovery rows without capability evidence.
 	Untyped bool `yaml:"-"`

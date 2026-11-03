@@ -3,12 +3,13 @@ id: EXTRACT_ZIP_SLIP
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - extract_archive
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.entry
   - paintedwolf.extraction_started

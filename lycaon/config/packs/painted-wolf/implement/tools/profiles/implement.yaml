@@ -1,25 +1,15 @@
 id: implement
 description: Implementer — product edits and command execution via command
+command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   recall: sticky
-  read: sticky
-  write: sticky
   edit: sticky
   replace_lines: sticky
   restore_version: sticky
   code_rewrite: sticky
-  grep: sticky
-  find: sticky
   summarize: sticky
   survey_repo: sticky
-  list_dir: sticky
-  stat: sticky
-  wc: sticky
   chmod: true
-  delete: sticky
-  copy: true
-  move: true
-  mkdir: sticky
   chown: true
   scan_pack: true
   scan_list: true
@@ -32,14 +22,10 @@ tools:
   request_budget: sticky
   web_search: true
   fetch_url: true
-  http_request: true
   handoff_reserve: true
   handoff_release: true
   handoff_release_all: true
-  diff: sticky
-  jq: sticky
   jq_edit: true
-  extract_archive: true
   source_history: true
   process_list: true
   process_signal: true

@@ -72,7 +72,7 @@ tools:
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   command:
     kind: command
-    title_keys: [command, pipeline]
+    title_keys: [command]
     running_label: "Running command…"
     # Visible for the await window and while a yielded/background handle is live.
     visibility: long_running

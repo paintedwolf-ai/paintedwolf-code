@@ -128,8 +128,8 @@ paths:
       operationId: detectFolder
       summary: Project identity and extension suggestions for a folder
       description: >
-        Returns path, project_id when the folder is already a root, and project
-        extension suggestions allowed by its trust settings.
+        Returns path, matching projects that already include the folder as a root,
+        and project extension suggestions allowed by its trust settings.
       parameters:
       - name: path
         in: query

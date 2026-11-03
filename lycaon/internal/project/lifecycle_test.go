@@ -184,9 +184,13 @@ func TestSQLLifecycleMutationsProtectDirtyEditorDocuments(t *testing.T) {
 	document := &editordoc.Document{
 		ID: "document-1", ProjectID: p.ID, FileID: fileID,
 		RootID: root.ID, Path: "notes.txt",
-		Draft: "unsaved", BaseContent: "saved", BaseSHA256: "base", Encoding: "utf-8",
-		SizeBytes: 5, EOL: "lf", BaseEOL: "lf", Revision: 1, Dirty: true,
-		CreatedAt: now, UpdatedAt: now,
+		Draft: "unsaved", Revision: 1, Dirty: true,
+		DocumentBase: editordoc.DocumentBase{
+			BaseContent: "saved", BaseSHA256: "base", Encoding: "utf-8",
+			SizeBytes: 5, EOL: "lf", BaseEOL: "lf",
+			CreatedAt:     now,
+			DocumentState: editordoc.DocumentState{UpdatedAt: now},
+		},
 	}
 	testutil.FailErr(t, "insert dirty document", editordoc.NewStore(sqlDB).Insert(ctx, document))
 
@@ -382,13 +386,14 @@ func TestRegistryRootLifecycleParity(t *testing.T) {
 			label := "Backend"
 			change, err := reg.PatchRoot(ctx, p.ID, p.Roots[1].ID, project.PatchRootParams{Label: &label})
 			testutil.FailErr(t, "rename root", err)
-			if !change.Changed || change.RootContextChanged || change.Before.RootsGeneration != change.After.RootsGeneration {
+			// A rename retires the old @label spelling, so it advances the generation.
+			if !change.Changed || !change.RootContextChanged || change.After.RootsGeneration != beforeGeneration+1 {
 				t.Fatalf("label change = %#v", change)
 			}
 			primary := true
 			change, err = reg.PatchRoot(ctx, p.ID, p.Roots[0].ID, project.PatchRootParams{IsPrimary: &primary})
 			testutil.FailErr(t, "primary no-op", err)
-			if change.Changed || change.After.RootsGeneration != beforeGeneration {
+			if change.Changed || change.After.RootsGeneration != beforeGeneration+1 {
 				t.Fatalf("primary no-op = %#v", change)
 			}
 			duplicate := "api"

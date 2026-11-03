@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/api/api.HarnessControl",
+  "kind": "projection",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Harness approval cards remain one projection over the production checkpoint owner. Socket capture and card construction now have a focused helper; the handler owns its invocation scope through durable admission. Splitting the remaining multi-axis HTTP projection would expose assembly details without narrowing authority. Freeze this reviewed shape at 472 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 472,
+  "boundaries": {
+    "lycaon/internal/api/harness_socket_approval_test.go": "276a971446258b043c852f5da24f1bec11ccd2c65413dc00666fb399e617d6c5",
+    "lycaon/internal/hitl/socket_pending_ownership_test.go": "619a31697aa348e4e84a9566b945c12931301ef211b33305259341e8b47d089c"
+  },
+  "reviewed_shape": "21f154dba54dbc65437b01179aba541d4f2ac6c06a9e688c8d98ee98df06d2fe"
+}

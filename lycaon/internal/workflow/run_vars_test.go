@@ -17,7 +17,7 @@ import (
 func TestStampRunVarsAbsorbsRevisionBumpAfterCallerLoad(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun", err)
 
 	// The snapshot a background writer would have been holding.
@@ -61,7 +61,7 @@ func TestStampRunVarsAbsorbsRevisionBumpAfterCallerLoad(t *testing.T) {
 func TestStampRunVarsConcurrentWritersAllLand(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun", err)
 
 	const writers = 6
@@ -101,7 +101,7 @@ func TestStampRunVarsConcurrentWritersAllLand(t *testing.T) {
 func TestStampRunVarsDeclinedMutationDoesNotWrite(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun", err)
 	before, err := mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get", err)
@@ -125,7 +125,7 @@ func TestStampRunVarsDeclinedMutationDoesNotWrite(t *testing.T) {
 func TestStampRunVarsMutationErrorIsNotRetried(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun", err)
 
 	sentinel := errors.New("mutation refused")

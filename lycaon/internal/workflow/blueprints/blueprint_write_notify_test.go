@@ -20,7 +20,7 @@ func TestPlanStartMintsConventionPath(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "StartHuman plan", err)
 	path := filepath.ToSlash(strings.TrimSpace(run.BlueprintPath))
@@ -85,7 +85,7 @@ func TestNotifyRetargetsProvisionalPathOnce(t *testing.T) {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
 	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0",
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "start plan", err)
 	if !blueprint.IsProvisionalPath(run.BlueprintPath) {

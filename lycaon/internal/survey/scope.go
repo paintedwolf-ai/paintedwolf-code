@@ -12,4 +12,5 @@ type Scope struct {
 	ToolCtx       tools.ToolContext
 	SourceCatalog *sourcecatalog.Catalog
 	ReadFilter    sandbox.ReadFilter
+	LayoutDepth   *int64
 }

@@ -5,9 +5,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/browserengine"
+	"github.com/lycaon/lycaon/internal/contactsheet"
+	"github.com/lycaon/lycaon/internal/llm/providerwire"
+	_ "golang.org/x/image/webp"
 )
 
 const (
@@ -18,7 +25,7 @@ const (
 	// CaptureModeTimeline records the flow as it paints, with its events on one clock.
 	CaptureModeTimeline = "timeline"
 	// FilmstripMime is the store/wire mime for an ordered capture filmstrip container.
-	FilmstripMime = "application/vnd.lycaon.filmstrip+zip"
+	FilmstripMime = contactsheet.FilmstripMime
 )
 
 // CaptureFrame is one settled shot inside a filmstrip (assert on State/Snapshot, not pixels).
@@ -84,6 +91,15 @@ func PackFilmstripZip(frames []CaptureFrame) ([]byte, error) {
 			Index: fr.Index, File: name, Caption: fr.Caption,
 		})
 	}
+	if poster, err := ComposeFilmstripSheet(frames); err == nil && len(poster) > 0 {
+		pw, err := zw.CreateHeader(&zip.FileHeader{Name: "poster.png", Method: zip.Store})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := pw.Write(poster); err != nil {
+			return nil, err
+		}
+	}
 	manRaw, err := json.Marshal(manifest)
 	if err != nil {
 		return nil, err
@@ -99,6 +115,33 @@ func PackFilmstripZip(frames []CaptureFrame) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// ComposeFilmstripSheet renders settled filmstrip frames into one labeled contact-sheet PNG.
+func ComposeFilmstripSheet(frames []CaptureFrame) ([]byte, error) {
+	if len(frames) == 0 {
+		return nil, fmt.Errorf("filmstrip requires at least one frame")
+	}
+	cells := make([]contactsheet.Cell, 0, len(frames))
+	for _, fr := range frames {
+		img, _, err := image.Decode(bytes.NewReader(fr.Bytes))
+		if err != nil {
+			return nil, fmt.Errorf("decode filmstrip frame %d: %w", fr.Index, err)
+		}
+		cells = append(cells, contactsheet.Cell{
+			Image: img,
+			Label: contactsheet.FilmstripFrameLabel(fr.Index, fr.Caption),
+		})
+	}
+	return contactsheet.Compose(cells, contactsheet.Options{
+		MaxEdge: providerwire.MaxImageDimension,
+		Columns: min(4, len(cells)),
+	})
+}
+
+// FilmstripPoster extracts or composes the contact-sheet PNG from a filmstrip zip archive.
+func FilmstripPoster(archive []byte) ([]byte, error) {
+	return contactsheet.FilmstripPoster(archive, providerwire.MaxImageDimension)
 }
 
 // actionCaption labels a filmstrip frame with the step that produced it.

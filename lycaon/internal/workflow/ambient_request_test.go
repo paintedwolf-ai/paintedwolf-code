@@ -113,7 +113,7 @@ func TestEnsureSessionWorkflowWorkersAndReadFailures(t *testing.T) {
 
 func TestAmbientAttachmentNeverReplacesActiveCatalogRun(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	run, err := startRun(t.Context(), mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(t.Context(), mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "start catalog workflow", err)
 	_, err = mgr.Ambient.StartAmbient(hostctx.WithHumanWorkflowStart(t.Context()), run.SessionID, "implement", "1.0.0")
 	if !errors.Is(err, runstate.ErrActiveRunExists) {

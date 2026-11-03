@@ -32,6 +32,9 @@ func (a *AgentService) PreviewAgentEdits(ctx context.Context, inputs []AgentEdit
 		if err != nil {
 			return nil, err
 		}
+		if err := s.admitExecutionPin(ctx, d, in); err != nil {
+			return nil, err
+		}
 		plan, err := s.planAgentEdit(ctx, d, in)
 		if err != nil {
 			return nil, err

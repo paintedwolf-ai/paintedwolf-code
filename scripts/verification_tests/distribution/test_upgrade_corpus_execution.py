@@ -19,6 +19,16 @@ def sha(value):
 
 
 class CorpusIntegrityTests(unittest.TestCase):
+    def test_archive_reader_accepts_released_and_current_formats_only(self):
+        for version in (1, 2, 0, 3, True):
+            with self.subTest(version=version):
+                self.write_archive(lambda manifest: manifest.update(format_version=version))
+                if type(version) is int and version in {1, 2}:
+                    fixture_files.checked_archive(self.fixture)
+                else:
+                    with self.assertRaisesRegex(ValueError, "format differs"):
+                        fixture_files.checked_archive(self.fixture)
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

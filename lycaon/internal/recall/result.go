@@ -63,6 +63,7 @@ type Hit struct {
 	TS       string   `json:"observed_at,omitempty"`
 	Path     string   `json:"path,omitempty"`
 	Line     int      `json:"line,omitempty"`
+	EndLine  int      `json:"end_line,omitempty"`
 	URL      string   `json:"url,omitempty"`
 	Currency Currency `json:"currency,omitempty"`
 	Snippet  string   `json:"snippet,omitempty"`

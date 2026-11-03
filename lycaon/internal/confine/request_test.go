@@ -5,10 +5,12 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -43,21 +45,35 @@ func TestBuildProfileExactSocketLiterals(t *testing.T) {
 	dir := shortTempDir(t)
 	sock := socketGrant(t, filepath.Join(dir, "svc.sock"))
 	wild := socketGrant(t, filepath.Join(dir, "star*.sock"))
-
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
+	c := confine.Confinement{
 		Roots:        []string{dir},
 		Network:      confine.NetworkDeny,
 		SocketGrants: []confine.SocketGrant{sock, wild},
-	})
+	}
+	wantPath := sock.ResolvedPath
+	if runtime.GOOS == "darwin" {
+		lease, err := confine.BindAction(&c, confine.EgressCommand{ToolCallID: t.Name()})
+		testutil.FailErr(t, "bind profile socket endpoints", err)
+		defer lease.Close(t.Context())
+		args, _, err := confine.ResolveSocketArguments(&c, []string{"{{paintedwolf-socket:" + sock.ApprovedPath + "}}"}, nil)
+		testutil.FailErr(t, "resolve profile socket endpoint", err)
+		wantPath, err = filepath.EvalSymlinks(args[0])
+		testutil.FailErr(t, "resolve protected endpoint literal", err)
+	} else {
+		for i := range c.SocketGrants {
+			c.SocketGrants[i].Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
+		}
+	}
+	p, err := confine.BuildSeatbeltProfile(c)
 	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	if !strings.Contains(p, "; exact AF_UNIX socket grants") {
 		t.Fatalf("socket block marker missing:\n%s", p)
 	}
-	wantLit := `(allow network-outbound (literal "` + sock.ResolvedPath + `"))`
+	wantLit := `(allow network-outbound (literal "` + wantPath + `"))`
 	if !strings.Contains(p, wantLit) {
 		t.Fatalf("missing exact literal:\n%s", p)
 	}
-	if !strings.Contains(p, `star*.sock`) {
+	if runtime.GOOS != "darwin" && !strings.Contains(p, `star*.sock`) {
 		t.Fatalf("wildcard filename must appear as literal path:\n%s", p)
 	}
 	if strings.Contains(p, "(allow network*)") {
@@ -162,6 +178,44 @@ func TestDirectIPRequestSelectsDirectMode(t *testing.T) {
 	}
 }
 
+func TestDefaultConfinementCredentialStorePropagation(t *testing.T) {
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
+	t.Setenv("LYCAON_SANDBOX", "")
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
+	if !confine.Available() {
+		t.Skip("confine unavailable on this platform")
+	}
+	dir := t.TempDir()
+	c, ok := confine.DefaultConfinement(confine.Request{
+		Roots:           []string{dir},
+		CredentialStore: true,
+	})
+	if !ok || c == nil || !c.CredentialStore {
+		t.Fatalf("DefaultConfinement CredentialStore = (%v, %+v)", ok, c)
+	}
+	b := confine.BoundaryOf(c)
+	if !b.CredentialStore {
+		t.Fatalf("BoundaryOf CredentialStore = %+v", b)
+	}
+	r := confine.ReportOf(b)
+	if !r.CredentialStore {
+		t.Fatalf("ReportOf CredentialStore = %+v", r)
+	}
+
+	hostConf, ok := confine.DefaultConfinement(confine.Request{
+		Roots:           []string{dir},
+		HostExecution:   true,
+		CredentialStore: true,
+	})
+	if !ok || hostConf == nil || hostConf.CredentialStore {
+		t.Fatalf("HostExecution must not set CredentialStore: ok=%v c=%+v", ok, hostConf)
+	}
+	if confine.BoundaryOf(hostConf).CredentialStore {
+		t.Fatal("HostExecution boundary must not set CredentialStore")
+	}
+}
+
 // shortTempDir stays within the socket path limit.
 func shortTempDir(t *testing.T) string {
 	t.Helper()
@@ -176,7 +230,11 @@ func socketGrant(t *testing.T, path string) confine.SocketGrant {
 	listenUnix(t, path)
 	resolved, err := filepath.EvalSymlinks(path)
 	testutil.FailErr(t, "EvalSymlinks", err)
-	return confine.SocketGrant{ApprovedPath: path, ResolvedPath: resolved}
+	ctx, scope := socketref.WithScope(t.Context())
+	t.Cleanup(scope.Close)
+	grant, err := confine.CaptureSocketGrant(ctx, confine.SocketGrant{ApprovedPath: path, ResolvedPath: resolved})
+	testutil.FailErr(t, "capture reviewed command socket", err)
+	return grant
 }
 
 func listenUnix(t *testing.T, path string) net.Listener {

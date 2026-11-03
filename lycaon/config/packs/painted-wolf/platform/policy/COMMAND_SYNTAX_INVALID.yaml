@@ -1,0 +1,61 @@
+oar: '1.0'
+id: COMMAND_SYNTAX_INVALID
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.source_line
+  - paintedwolf.source_column
+  - paintedwolf.expected_form
+  - paintedwolf.diagnostic_pre_evaluation
+  - paintedwolf.diagnostic_top_level
+  - paintedwolf.parser_expected
+  - paintedwolf.parser_expected_closer
+  - paintedwolf.parser_expected_following
+  - paintedwolf.parser_invalid_utf8
+  - paintedwolf.parser_message
+  - paintedwolf.parser_nul_byte
+  - paintedwolf.parser_single_quote
+  - paintedwolf.parser_unclosed_heredoc
+  - paintedwolf.parser_unclosed_quote
+  - paintedwolf.parser_utf8_bom
+  - paintedwolf.source_excerpt
+  - paintedwolf.source_excerpt_column
+  - paintedwolf.source_excerpt_line
+when: paintedwolf.rejection_code == "COMMAND_SYNTAX_INVALID"
+effect: block
+copy:
+  what: 'Shell syntax error{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}: {% if paintedwolf.parser_message %}{{ paintedwolf.parser_message }}{% else %}{{ paintedwolf.expected_form }}{% endif %}.'
+  cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}{% if paintedwolf.diagnostic_pre_evaluation %}This source unit did not execute. Earlier parent operations may have run.{% else %}The source unit was refused; earlier parent effects remain recorded.{% endif %}{% endif %}'
+  why: '{% if paintedwolf.source_excerpt %}Source excerpt at {{ paintedwolf.source_excerpt_line }}:{{ paintedwolf.source_excerpt_column }}: {{ paintedwolf.source_excerpt }}{% endif %}'
+  fix: >-
+    {% if paintedwolf.parser_unclosed_quote %}Close the quoted string{% if paintedwolf.parser_expected %} with `{{ paintedwolf.parser_expected }}`{% endif %}. {% if paintedwolf.parser_single_quote %}Single-quoted strings cannot contain a literal apostrophe. For multiline literal data, use a quoted heredoc to avoid nested quoting.{% else %}Review literal quote characters and escapes around this span.{% endif %}
+    {% else %}{% if paintedwolf.parser_unclosed_heredoc %}End the heredoc with {% if paintedwolf.parser_expected %}{{ paintedwolf.parser_expected }}{% else %}its delimiter{% endif %} alone on its own line.
+    {% else %}{% if paintedwolf.parser_expected_closer %}Complete the open shell construct{% if paintedwolf.parser_expected %} with {{ paintedwolf.parser_expected }}{% endif %}.
+    {% else %}{% if paintedwolf.parser_expected_following %}Complete the construct with {% if paintedwolf.parser_expected %}{{ paintedwolf.parser_expected }}{% else %}the required shell expression{% endif %} at the reported location.
+    {% else %}{% if paintedwolf.parser_utf8_bom %}Remove the leading byte-order mark; keep the source as UTF-8.
+    {% else %}{% if paintedwolf.parser_nul_byte %}Remove the NUL byte from the shell source. Pass binary input as data rather than source.
+    {% else %}{% if paintedwolf.parser_invalid_utf8 %}Encode the shell source as valid UTF-8.
+    {% else %}Correct the shell syntax at the reported location. Preserve the operation and its literal contents.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}
+  instead: '{% if paintedwolf.diagnostic_top_level %}Resubmit the complete corrected command.{% else %}Inspect completed and uncertain operations before submitting the remaining work.{% endif %}'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command syntax unit was not admitted
+x-paintedwolf-scenarios:
+- id: captured_unit
+  vars:
+    tool: command
+    source_line: 3
+    source_column: 7
+    expected_form: supported syntax
+  expect_contains:
+  - 'Code: COMMAND_SYNTAX_INVALID'
+  - '3:7'
+  - earlier parent effects

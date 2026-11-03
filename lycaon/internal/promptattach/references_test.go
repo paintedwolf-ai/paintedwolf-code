@@ -513,4 +513,3 @@ func TestIngestReferences_pathFileImageUsesReadImage(t *testing.T) {
 		t.Fatalf("fence missing image hint: %s", res.Fences()[0])
 	}
 }
-

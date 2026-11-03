@@ -1,5 +1,5 @@
 tags: [git, mutation]
-description: "Save explicit repository paths temporarily, apply a saved stash, or explicitly drop one. Save preserves unrelated edits and index entries. Apply retains the stash even on success; use drop separately after verifying restoration. Conflicts and partial effects are reported in structured state. Replaces command: git stash."
+description: "Save explicit repository paths temporarily, apply a saved stash, or explicitly drop one. Save preserves unrelated edits and index entries. Apply retains the stash even on success; use drop separately after verifying restoration. Conflicts and partial effects are reported in structured state."
 schema:
   type: object
   properties:

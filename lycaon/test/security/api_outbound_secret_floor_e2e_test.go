@@ -155,7 +155,7 @@ func TestOutboundSecretFloorJ4WebSearchApprove(t *testing.T) {
 
 func TestOutboundSecretFloorJ5ReadAloneDoesNotAsk(t *testing.T) {
 	script := newScriptedLLM().on("j5_strict",
-		toolStep("Reading.", call("r1", "read", map[string]any{"path": ".env"})),
+		toolStep("Reading.", call("r1", "command", map[string]any{"command": "cat .env"})),
 		loadSchemasStep("rt1", "web_search"),
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": "weather today"})),
 		textStep("Done."),
@@ -198,7 +198,7 @@ promptDone:
 
 func TestOutboundSecretFloorJ5SendingTheValueAsks(t *testing.T) {
 	script := newScriptedLLM().on("j5_send",
-		toolStep("Reading.", call("r1", "read", map[string]any{"path": ".env"})),
+		toolStep("Reading.", call("r1", "command", map[string]any{"command": "cat .env"})),
 		loadSchemasStep("rt1", "web_search"),
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": "what is " + outboundSecretCanary})),
 		textStep("Done."),
@@ -239,7 +239,7 @@ func TestOutboundSecretFloorJ5SendingTheValueAsks(t *testing.T) {
 // Container-harvested values raise approval even without a matching token pattern.
 func TestOutboundSecretFloorJ5HarvestedValueAsks(t *testing.T) {
 	script := newScriptedLLM().on("j5_harvest",
-		toolStep("Reading.", call("r1", "read", map[string]any{"path": ".env"})),
+		toolStep("Reading.", call("r1", "command", map[string]any{"command": "cat .env"})),
 		loadSchemasStep("rt1", "web_search"),
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": "what is " + outboundHarvestCanary})),
 		textStep("Done."),
