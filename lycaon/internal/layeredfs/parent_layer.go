@@ -1,0 +1,163 @@
+package layeredfs
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+)
+
+type osFileReadHandle struct {
+	file *os.File
+}
+
+func (h *osFileReadHandle) Read(p []byte) (int, error) {
+	return h.file.Read(p)
+}
+
+func (h *osFileReadHandle) ReadAt(p []byte, off int64) (int, error) {
+	return h.file.ReadAt(p, off)
+}
+
+func (h *osFileReadHandle) Seek(offset int64, whence int) (int64, error) {
+	return h.file.Seek(offset, whence)
+}
+
+func (h *osFileReadHandle) Close() error {
+	if h == nil || h.file == nil {
+		return nil
+	}
+	return h.file.Close()
+}
+
+// MemoryParentLayer is an in-memory and backing-file ParentLayer implementation
+// for retained parent checkpoints (#1663, #1666).
+type MemoryParentLayer struct {
+	id      string
+	mu      sync.RWMutex
+	entries map[QualifiedPath]ParentEntry
+}
+
+// NewMemoryParentLayer creates a retained parent checkpoint layer with the given ID.
+func NewMemoryParentLayer(id string) *MemoryParentLayer {
+	return &MemoryParentLayer{
+		id:      id,
+		entries: make(map[QualifiedPath]ParentEntry),
+	}
+}
+
+// ID returns the parent checkpoint ID.
+func (l *MemoryParentLayer) ID() string {
+	return l.id
+}
+
+// SetEntry records or updates an entry in the parent layer.
+func (l *MemoryParentLayer) SetEntry(qpath QualifiedPath, entry ParentEntry) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	qpath.Rel = cleanRelPath(qpath.Rel)
+	if len(entry.Xattrs) > 0 {
+		cp := make(map[string][]byte, len(entry.Xattrs))
+		for k, v := range entry.Xattrs {
+			cp[k] = append([]byte(nil), v...)
+		}
+		entry.Xattrs = cp
+	}
+	l.entries[qpath] = entry
+}
+
+// Lookup resolves a qualified path in the parent checkpoint layer.
+func (l *MemoryParentLayer) Lookup(qpath QualifiedPath) (ParentEntry, bool, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	qpath.Rel = cleanRelPath(qpath.Rel)
+	entry, ok := l.entries[qpath]
+	if !ok {
+		return ParentEntry{}, false, nil
+	}
+	return cloneParentEntry(entry), true, nil
+}
+
+// OpenContent opens the immutable backing file for a regular file in the parent checkpoint.
+func (l *MemoryParentLayer) OpenContent(qpath QualifiedPath) (*osFileReadHandle, error) {
+	l.mu.RLock()
+	qpath.Rel = cleanRelPath(qpath.Rel)
+	entry, ok := l.entries[qpath]
+	l.mu.RUnlock()
+	if !ok || entry.Kind != EntryRegular {
+		return nil, os.ErrNotExist
+	}
+	if entry.BackingAbs == "" {
+		return nil, fmt.Errorf("parent layer %s missing backing file for %v", l.id, qpath)
+	}
+	f, err := os.Open(entry.BackingAbs)
+	if err != nil {
+		return nil, err
+	}
+	return &osFileReadHandle{file: f}, nil
+}
+
+// ListDir returns the immediate child entries recorded under dir in this parent layer.
+func (l *MemoryParentLayer) ListDir(dir QualifiedPath) (map[string]ParentEntry, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	dirRel := cleanRelPath(dir.Rel)
+	prefix := ""
+	if dirRel != "." {
+		prefix = dirRel + "/"
+	}
+	out := make(map[string]ParentEntry)
+	for qp, entry := range l.entries {
+		if qp.RootID != dir.RootID {
+			continue
+		}
+		if qp.Rel == "." || qp.Rel == dirRel {
+			continue
+		}
+		var rest string
+		if prefix == "" {
+			rest = qp.Rel
+		} else {
+			if !strings.HasPrefix(qp.Rel, prefix) {
+				continue
+			}
+			rest = strings.TrimPrefix(qp.Rel, prefix)
+		}
+		if rest == "" || strings.Contains(rest, "/") {
+			continue
+		}
+		out[rest] = cloneParentEntry(entry)
+	}
+	return out, nil
+}
+
+func cloneParentEntry(e ParentEntry) ParentEntry {
+	if len(e.Xattrs) > 0 {
+		cp := make(map[string][]byte, len(e.Xattrs))
+		for k, v := range e.Xattrs {
+			cp[k] = append([]byte(nil), v...)
+		}
+		e.Xattrs = cp
+	}
+	return e
+}
+
+func cleanRelPath(rel string) string {
+	rel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(rel)))
+	rel = strings.TrimPrefix(rel, "./")
+	if rel == "" || rel == "/" {
+		return "."
+	}
+	return rel
+}
+
+func sortedNames[V any](m map[string]V) []string {
+	names := make([]string, 0, len(m))
+	for k := range m {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
+}
