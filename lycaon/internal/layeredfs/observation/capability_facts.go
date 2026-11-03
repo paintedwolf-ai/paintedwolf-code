@@ -200,12 +200,9 @@ func ViewCapabilitiesFromAdapterFacts(viewID string, facts adapter.AdapterFacts)
 	default:
 		mode = VisibilityUnknown
 	}
-	completeness := normalizeCompletenessValue(AttributionCompleteness(strings.TrimSpace(facts.AttributionCompleteness)))
-	if completeness == "" {
-		completeness = CompletenessUnknown
-	}
+	completeness := CompletenessUnknown
 	invalidation := mode == VisibilityLive && facts.CacheRevalidation.ExplicitInvalidation
-	verified := invalidation && facts.CacheRevalidation.InvalidationVerified
+	verified := false
 	return ViewCapabilityDescriptor{
 		ViewID:                             strings.TrimSpace(viewID),
 		AdapterName:                        string(facts.AdapterID),
@@ -215,8 +212,8 @@ func ViewCapabilitiesFromAdapterFacts(viewID string, facts adapter.AdapterFacts)
 		LiveVisible:                        mode == VisibilityLive,
 		SupportsInvalidation:               invalidation,
 		SupportsInvalidationUpcall:         invalidation,
-		SupportsNegativeLookupInvalidation: invalidation && facts.CacheRevalidation.NegativeLookupInvalidation,
-		SupportsDirCookieInvalidation:      invalidation && facts.CacheRevalidation.DirCookieInvalidation,
+		SupportsNegativeLookupInvalidation: invalidation,
+		SupportsDirCookieInvalidation:      invalidation,
 		InvalidationVerified:               verified,
 		Completeness:                       completeness,
 		AttributionCompleteness:            completeness,
