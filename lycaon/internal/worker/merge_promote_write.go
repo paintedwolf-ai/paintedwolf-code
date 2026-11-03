@@ -184,6 +184,9 @@ func (s mergeEngine) reclaimOrphanedApply(ctx context.Context, task *api.WorkerT
 	}
 	roots := s.taskRootRefs(ctx, task)
 	promote := PromoteRootsForTask(task, roots)
+	if err := session.RollbackTaskCheckpointJournal(ctx, task, roots); err != nil {
+		return true, fmt.Errorf("recover checkpoint promotion: %w", err)
+	}
 	found, err := recoverPromoteTransaction(s.hostDataDirFor(task), jobID, promote, task)
 	if err != nil {
 		return true, fmt.Errorf("recover interrupted promote: %w", err)
@@ -206,6 +209,11 @@ func (s mergeEngine) failPromoteTransaction(tx *promoteTransaction, promote Prom
 	var unstarted *promoteTransactionUnstartedError
 	if errors.As(cause, &unstarted) {
 		return errors.Join(cause, tx.close(), revertPending())
+	}
+	cleanupCtx, cancel := promoteCleanupContext(context.Background())
+	defer cancel()
+	if err := session.RollbackTaskCheckpointJournal(cleanupCtx, task, promote.Roots); err != nil {
+		return errors.Join(cause, err)
 	}
 	rollbackErr := tx.rollback(promote, task)
 	if rollbackErr != nil {
@@ -241,11 +249,6 @@ func (s mergeEngine) finishPromoteState(ctx context.Context, in promoteFinishInp
 		return err
 	}
 	remaining := remainingPromoteWork(fullAssessment, in.resolved)
-	if fullAssessment.checkpointID != "" && mergeComplete(remaining) {
-		if err := commitCheckpointPromotionJournal(ctx, s.MergeService, in.task); err != nil {
-			return err
-		}
-	}
 	in.out.Applied = append([]string(nil), in.resolved...)
 	fillMergeResult(in.out, remaining, promoteOutputOpts{Detail: in.detail})
 	if mergeComplete(remaining) {

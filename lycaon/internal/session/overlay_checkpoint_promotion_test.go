@@ -153,14 +153,14 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 	testutil.FailErr(t, "remove blocker", os.Remove(blockedParent))
 	testutil.FailErr(t, "re-seed removed.txt", os.WriteFile(removedPath, []byte("old\n"), 0o644))
 
-	testutil.FailErr(t, "CommitTaskCheckpointJournal", session.CommitTaskCheckpointJournal(t.Context(), task, nil, nil))
+	testutil.FailErr(t, "CommitTaskCheckpointJournal", session.CommitTaskCheckpointJournal(t.Context(), task, nil))
 	if _, err := os.Stat(removedPath); !os.IsNotExist(err) {
 		t.Fatalf("expected removed.txt to be deleted, stat err = %v", err)
 	}
 
 	// Recreate file at old deletion path after promotion completes; retry must NOT re-delete it.
 	testutil.FailErr(t, "recreate removed.txt", os.WriteFile(removedPath, []byte("recreated post-promote\n"), 0o644))
-	testutil.FailErr(t, "retry CommitTaskCheckpointJournal", session.CommitTaskCheckpointJournal(t.Context(), task, nil, nil))
+	testutil.FailErr(t, "retry CommitTaskCheckpointJournal", session.CommitTaskCheckpointJournal(t.Context(), task, nil))
 	testutil.FailErr(t, "retry ApplyTaskCheckpointAttributes", session.ApplyTaskCheckpointAttributes(task, nil))
 	if gotBytes, err := os.ReadFile(removedPath); err != nil || !strings.Contains(string(gotBytes), "recreated post-promote") {
 		t.Fatalf("post-promotion recreated file was clobbered or unreadable: %q (%v)", string(gotBytes), err)

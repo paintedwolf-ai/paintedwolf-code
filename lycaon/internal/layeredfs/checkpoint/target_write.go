@@ -27,27 +27,26 @@ func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
 	}
 	switch ch.Action {
 	case ActionMkdir, ActionReplaceWithDirectory:
-		mode := pickMode(ch.Mode, 0755).Perm()
-		if err := root.MkdirAll(ch.Path.Rel, mode); err != nil {
-			return err
-		}
-		dir, err := root.Open(ch.Path.Rel)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = dir.Close() }()
-		if err := dir.Chmod(mode); err != nil {
-			return err
-		}
-		return applyFileXattrs(dir, ch.Xattrs)
+		return pr.makeTargetDirectory(root, ch.Path, pickMode(ch.Mode, 0755).Perm(), ch.Xattrs)
 	case ActionWriteRegular, ActionReplaceDirWithRegular:
 		return pr.writeTargetRegular(root, ch)
 	case ActionSymlink, ActionHardLink:
-		if err := root.MkdirAll(filepath.Dir(ch.Path.Rel), 0755); err != nil {
+		if err := pr.ensureTargetParents(root, ch.Path); err != nil {
 			return err
 		}
 		if ch.Action == ActionHardLink && (ch.HardLinkSource == nil || ch.HardLinkSource.RootID != ch.Path.RootID) {
 			return syscall.EXDEV
+		}
+		if ch.Action == ActionHardLink {
+			source, err := root.Open(ch.HardLinkSource.Rel)
+			if err != nil {
+				return err
+			}
+			err = pr.recordHostPostimage(ch.Path, source)
+			_ = source.Close()
+			if err != nil {
+				return err
+			}
 		}
 		if err := root.RemoveAll(ch.Path.Rel); err != nil {
 			return err
@@ -71,7 +70,7 @@ func (pr *Promoter) writeTargetRegular(root *os.Root, ch PlannedChange) error {
 		}
 	}
 	parent := filepath.Dir(ch.Path.Rel)
-	if err := root.MkdirAll(parent, 0755); err != nil {
+	if err := pr.ensureTargetParents(root, ch.Path); err != nil {
 		return err
 	}
 	var random [16]byte
@@ -105,6 +104,9 @@ func (pr *Promoter) writeTargetRegular(root *os.Root, ch PlannedChange) error {
 		return err
 	}
 	if err := applyFileXattrs(file, ch.Xattrs); err != nil {
+		return err
+	}
+	if err := pr.recordHostPostimage(ch.Path, file); err != nil {
 		return err
 	}
 	if err := file.Sync(); err != nil {

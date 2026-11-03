@@ -100,24 +100,23 @@ type OverlayDocumentSynchronizer interface {
 
 // MergeService applies coordinator merge tools to worker branches.
 type MergeService struct {
-	Queue                 MergeQueue
-	Store                 MergeStore
-	Reports               ChangeReportDeps
-	Evidence              SourceEvidenceContext
-	Workspace             WorkerWorkspaceManager
-	Reject                *guidance.StaticRejectFormatter
-	Sessions              MergeSessionLister
-	Reconcile             MergeReconcileRegistrar
-	Captures              PromoteCapture
-	Coord                 WorkerCoordinationCleanup
-	Closeout              DelegationCloseoutRetry
-	Projects              ProjectStore
-	Scans                 OverlayScanHook
-	SourceLedger          sourceledger.PromoteRecorder
-	SourceHistory         sourceledger.JobHistory
-	Documents             OverlayDocumentSynchronizer
-	CheckpointRefImporter CheckpointRefImporterFunc
-	DataDir               string
+	Queue         MergeQueue
+	Store         MergeStore
+	Reports       ChangeReportDeps
+	Evidence      SourceEvidenceContext
+	Workspace     WorkerWorkspaceManager
+	Reject        *guidance.StaticRejectFormatter
+	Sessions      MergeSessionLister
+	Reconcile     MergeReconcileRegistrar
+	Captures      PromoteCapture
+	Coord         WorkerCoordinationCleanup
+	Closeout      DelegationCloseoutRetry
+	Projects      ProjectStore
+	Scans         OverlayScanHook
+	SourceLedger  sourceledger.PromoteRecorder
+	SourceHistory sourceledger.JobHistory
+	Documents     OverlayDocumentSynchronizer
+	DataDir       string
 }
 
 // PreviewForSession assesses one overlay without changing state.

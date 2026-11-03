@@ -19,3 +19,8 @@ func applyFileXattrs(_ *os.File, attrs map[string][]byte) error {
 	}
 	return nil
 }
+
+func readFileXattrs(_ *os.File) (map[string][]byte, error) { return nil, nil }
+func restoreFileXattrs(file *os.File, attrs map[string][]byte) error {
+	return applyFileXattrs(file, attrs)
+}

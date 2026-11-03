@@ -42,7 +42,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 			_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "cp-reviewed", Trigger: checkpoint.TriggerWorkerCompletion})
 			testutil.FailErr(t, "publish reviewed checkpoint", err)
 			task := &api.WorkerTask{ID: "job-bound-preview", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay}
-			_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, nil, nil)
+			_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, nil)
 			testutil.FailErr(t, "prepare reviewed checkpoint", err)
 			if !ok {
 				t.Fatal("published checkpoint was not selected")
@@ -59,7 +59,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 			if missing {
 				testutil.FailErr(t, "remove reviewed manifest", os.Remove(filepath.Join(store.RootDir(), "checkpoints", "cp-reviewed", "manifest.json")))
 			}
-			_, selected, _, ok, err := session.NewTaskCheckpointPromoter(task, nil, nil)
+			_, selected, _, ok, err := session.NewTaskCheckpointPromoter(task, nil)
 			if missing {
 				if !ok || !errors.Is(err, checkpoint.ErrCheckpointNotFound) {
 					t.Fatalf("missing reviewed checkpoint fell back: selected=%q ok=%t err=%v", selected.CheckpointID, ok, err)
@@ -70,7 +70,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 			if !ok || selected.CheckpointID != preview.CheckpointID {
 				t.Fatalf("checkpoint changed after preview: selected=%q reviewed=%q", selected.CheckpointID, preview.CheckpointID)
 			}
-			testutil.FailErr(t, "commit reviewed checkpoint", session.CommitTaskCheckpointJournal(t.Context(), task, nil, nil))
+			testutil.FailErr(t, "commit reviewed checkpoint", session.CommitTaskCheckpointJournal(t.Context(), task, nil))
 			body, err := os.ReadFile(filepath.Join(primary, "result.txt"))
 			testutil.FailErr(t, "read promoted result", err)
 			if string(body) != "reviewed\n" {

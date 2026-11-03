@@ -11,43 +11,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	"path/filepath"
 	"strings"
-	"sync"
 )
-
-// CheckpointRefImporterFunc imports checkpointed private Git refs as a distinct recorded effect.
-type CheckpointRefImporterFunc func(ctx context.Context, txID, workerID string, git checkpoint.PrivateGitSnapshot) (map[string]string, error)
-
-var (
-	refImporterMu     sync.Mutex
-	refImportersByJob = map[string]CheckpointRefImporterFunc{}
-)
-
-// RegisterCheckpointRefImporter registers an optional per-job namespaced Git ref importer callback.
-func RegisterCheckpointRefImporter(jobID string, fn CheckpointRefImporterFunc) {
-	refImporterMu.Lock()
-	defer refImporterMu.Unlock()
-	if fn == nil {
-		delete(refImportersByJob, jobID)
-	} else {
-		refImportersByJob[jobID] = fn
-	}
-}
-
-func checkpointRefImporterFor(s *MergeService, jobID string) CheckpointRefImporterFunc {
-	if s != nil && s.CheckpointRefImporter != nil {
-		return s.CheckpointRefImporter
-	}
-	refImporterMu.Lock()
-	defer refImporterMu.Unlock()
-	return refImportersByJob[jobID]
-}
 
 func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, bool, error) {
 	var roots []projectroot.RootRef
 	if svc != nil {
 		roots = svc.taskRootRefs(ctx, task)
 	}
-	store, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots, checkpointRefImporterFor(svc, task.ID))
+	store, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots)
 	if err != nil || !ok {
 		return PromoteAssessment{}, ok, err
 	}
@@ -140,5 +111,5 @@ func commitCheckpointPromotionJournal(ctx context.Context, s *MergeService, task
 	if s != nil {
 		roots = s.taskRootRefs(ctx, task)
 	}
-	return session.CommitTaskCheckpointJournal(ctx, task, roots, checkpointRefImporterFor(s, task.ID))
+	return session.CommitTaskCheckpointJournal(ctx, task, roots)
 }

@@ -255,7 +255,14 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 						t.Fatalf("failed commit left checkpoint effect %s: %v", rel, err)
 					}
 				}
-				return
+				if task, ok := q.Get(jobID); !ok || task.MergeStatus != api.WorkerMergeStatusPending {
+					t.Fatalf("failed completion status=%+v", task)
+				}
+				if _, found, err := cpStore.LoadPromotionRecord("tx-" + manifest.CheckpointID); err != nil || found {
+					t.Fatalf("failed completion retained component record: found=%t err=%v", found, err)
+				}
+				_, err = sqlDB.ExecContext(ctx, `DROP TRIGGER reject_checkpoint_completion`)
+				testutil.FailErr(t, "remove completion fault", err)
 			}
 			promoteOut, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
 			testutil.FailErr(t, "PromoteOverlay", err)

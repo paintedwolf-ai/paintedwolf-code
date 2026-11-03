@@ -67,7 +67,7 @@ func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask) 
 	if bound == nil {
 		return nil
 	}
-	store, _, promoter, ok, err := NewTaskCheckpointPromoter(task, nil, nil)
+	store, _, promoter, ok, err := NewTaskCheckpointPromoter(task, nil)
 	if err != nil || !ok {
 		return err
 	}
@@ -147,7 +147,7 @@ func DefaultCheckpointRefImporter(store *checkpoint.Store, manifest checkpoint.M
 }
 
 // NewTaskCheckpointPromoter creates a checkpoint.Promoter bound to task's published checkpoint store and target roots.
-func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef, refImporter func(context.Context, string, string, checkpoint.PrivateGitSnapshot) (map[string]string, error)) (*checkpoint.Store, checkpoint.Manifest, *checkpoint.Promoter, bool, error) {
+func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef) (*checkpoint.Store, checkpoint.Manifest, *checkpoint.Promoter, bool, error) {
 	store, manifest, ok, err := OpenTaskCheckpointStore(task)
 	if err != nil || !ok {
 		return nil, checkpoint.Manifest{}, nil, ok, err
@@ -156,9 +156,7 @@ func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef
 	if err != nil {
 		return nil, checkpoint.Manifest{}, nil, true, err
 	}
-	if refImporter == nil {
-		refImporter = DefaultCheckpointRefImporter(store, manifest, targetRoots)
-	}
+	refImporter := DefaultCheckpointRefImporter(store, manifest, targetRoots)
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{Store: store, TargetRoots: targetRoots, RefImporter: refImporter})
 	if err != nil {
 		return nil, checkpoint.Manifest{}, nil, true, err
@@ -300,8 +298,8 @@ func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry che
 }
 
 // CommitTaskCheckpointJournal transactionally applies and journals a task's checkpoint promotion and #1671 ref import.
-func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, importer func(context.Context, string, string, checkpoint.PrivateGitSnapshot) (map[string]string, error)) error {
-	store, manifest, promoter, ok, err := NewTaskCheckpointPromoter(task, roots, importer)
+func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) error {
+	store, manifest, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
 	if err != nil || !ok {
 		return err
 	}
@@ -313,6 +311,18 @@ func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, root
 	if err != nil {
 		return err
 	}
+	if err := promoter.PrepareHostTransaction(ctx, cpPreview); err != nil {
+		return err
+	}
 	_, err = promoter.Apply(ctx, checkpoint.ApplyRequest{TransactionID: txID, Preview: cpPreview, ImportGitRefs: true})
 	return err
+}
+
+// RollbackTaskCheckpointJournal unwinds checkpoint effects before ordinary host file undo.
+func RollbackTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) error {
+	_, _, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
+	if err != nil || !ok {
+		return err
+	}
+	return promoter.RollbackHostTransaction(ctx)
 }
