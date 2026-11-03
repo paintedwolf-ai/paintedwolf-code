@@ -21,7 +21,6 @@ const (
 
 // PromotionState identifies the durable state of a promotion transaction in the journal.
 type PromotionState string
-
 const (
 	PromotionStateIntent   PromotionState = "intent"
 	PromotionStateApplying PromotionState = "applying"
@@ -31,7 +30,6 @@ const (
 
 // ApplyFaultStage identifies a fault-injection boundary during promotion Apply.
 type ApplyFaultStage string
-
 const (
 	ApplyFaultNone                 ApplyFaultStage = ""
 	ApplyFaultMidFileApply         ApplyFaultStage = "mid_file_apply"
@@ -284,7 +282,11 @@ func (pr *Promoter) writeTargetRegular(targetAbs string, ch PlannedChange) error
 	if err := os.MkdirAll(parentDir, 0o755); err != nil {
 		return err
 	}
-	return writeAtomicJSONOrText(parentDir, filepath.Base(targetAbs), data, pickMode(ch.Mode, 0o644).Perm())
+	mode := pickMode(ch.Mode, 0o644).Perm()
+	if err := writeAtomicJSONOrText(parentDir, filepath.Base(targetAbs), data, mode); err != nil {
+		return err
+	}
+	return os.Chmod(targetAbs, mode)
 }
 
 func hasPath(list []layeredfs.QualifiedPath, target layeredfs.QualifiedPath) bool {

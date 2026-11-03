@@ -135,8 +135,9 @@ func (s *Store) LoadRetentionRecord(checkpointID string) (RetentionRecord, error
 	return rec, nil
 }
 
-func (pr *Promoter) loadPromotionRecord(txID string) (PromotionJournalRecord, bool, error) {
-	raw, err := os.ReadFile(filepath.Join(pr.cfg.Store.promotionsDir, txID+".json"))
+// LoadPromotionRecord loads a durable promotion journal record by transaction ID.
+func (s *Store) LoadPromotionRecord(txID string) (PromotionJournalRecord, bool, error) {
+	raw, err := os.ReadFile(filepath.Join(s.promotionsDir, txID+".json"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return PromotionJournalRecord{}, false, nil
@@ -148,6 +149,10 @@ func (pr *Promoter) loadPromotionRecord(txID string) (PromotionJournalRecord, bo
 		return PromotionJournalRecord{}, false, err
 	}
 	return rec, true, nil
+}
+
+func (pr *Promoter) loadPromotionRecord(txID string) (PromotionJournalRecord, bool, error) {
+	return pr.cfg.Store.LoadPromotionRecord(txID)
 }
 
 func (pr *Promoter) savePromotionRecord(rec PromotionJournalRecord) error {

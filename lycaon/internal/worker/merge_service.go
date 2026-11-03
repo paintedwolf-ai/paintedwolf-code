@@ -105,23 +105,24 @@ type OverlayDocumentSynchronizer interface {
 
 // MergeService applies coordinator merge tools to worker branches.
 type MergeService struct {
-	Queue         MergeQueue
-	Store         MergeStore
-	Reports       ChangeReportDeps
-	Evidence      SourceEvidenceContext
-	Workspace     WorkerWorkspaceManager
-	Reject        *guidance.StaticRejectFormatter
-	Sessions      MergeSessionLister
-	Reconcile     MergeReconcileRegistrar
-	Captures      PromoteCapture
-	Coord         WorkerCoordinationCleanup
-	Closeout      DelegationCloseoutRetry
-	Projects      ProjectStore
-	Scans         OverlayScanHook
-	SourceLedger  sourceledger.PromoteRecorder
-	SourceHistory sourceledger.JobHistory
-	Documents     OverlayDocumentSynchronizer
-	DataDir       string
+	Queue                 MergeQueue
+	Store                 MergeStore
+	Reports               ChangeReportDeps
+	Evidence              SourceEvidenceContext
+	Workspace             WorkerWorkspaceManager
+	Reject                *guidance.StaticRejectFormatter
+	Sessions              MergeSessionLister
+	Reconcile             MergeReconcileRegistrar
+	Captures              PromoteCapture
+	Coord                 WorkerCoordinationCleanup
+	Closeout              DelegationCloseoutRetry
+	Projects              ProjectStore
+	Scans                 OverlayScanHook
+	SourceLedger          sourceledger.PromoteRecorder
+	SourceHistory         sourceledger.JobHistory
+	Documents             OverlayDocumentSynchronizer
+	CheckpointRefImporter CheckpointRefImporterFunc
+	DataDir               string
 }
 
 // PreviewForSession assesses one overlay without changing state.
@@ -138,7 +139,7 @@ func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, 
 	if strings.TrimSpace(task.ParentSessionID) != sessionID {
 		return api.WorkerMergeResult{}, s.reject(OverlayPromoteSessionMismatchCode, map[string]any{"job_id": jobID})
 	}
-	if strings.TrimSpace(task.WorkspaceRoot) == "" {
+	if strings.TrimSpace(task.WorkspaceRoot) == "" && session.CheckpointStoreDirForTask(task) == "" {
 		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID, "reason": "no isolated branch"})
 	}
 	if task.MergeStatus != api.WorkerMergeStatusPending {
@@ -175,6 +176,7 @@ func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, 
 		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNoPathsCode, map[string]any{"job_id": jobID, "remaining_overlay_paths": changed})
 	}
 	out.Paths = mergePaths
+	markPreviewBindIntent(s, jobID)
 	assessment, err := s.assessMerge(ctx, sessionID, task, mergePaths)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
@@ -423,6 +425,7 @@ func (s *MergeService) finishPromoteState(
 	facts promotionSourceFacts,
 	childStatuses []MergeStatusUpdate,
 ) error {
+	clearBoundCheckpointPreview(s, jobID)
 	fullPaths := s.jobPromotePaths(ctx, task)
 	fullAssessment, err := s.assessMerge(ctx, sessionID, task, fullPaths)
 	if err != nil {
@@ -432,6 +435,9 @@ func (s *MergeService) finishPromoteState(
 	out.Applied = append([]string(nil), resolved...)
 	fillMergeResult(out, remaining, promoteOutputOpts{Detail: detail})
 	if mergeComplete(remaining) {
+		if err := commitCheckpointPromotionJournal(ctx, s, task); err != nil {
+			return err
+		}
 		// Clean no-ops produce a terminal merge.
 		plan := obligation.Plan{}
 		if s.Scans != nil && task != nil {
@@ -502,6 +508,9 @@ func deletedPromotionPaths(changes []sourcefeed.Change) []string {
 func (s *MergeService) assessMerge(ctx context.Context, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, error) {
 	if task == nil {
 		return PromoteAssessment{}, nil
+	}
+	if assess, ok, err := assessCheckpointTask(ctx, s, sessionID, task, mergePaths); ok || err != nil {
+		return assess, err
 	}
 	return AssessPromotePaths3Way(ctx, s, sessionID, task, mergePaths)
 }
@@ -585,9 +594,13 @@ func normalizeMergePaths(ctx context.Context, paths []string, task api.WorkerTas
 // holdBranch leases the overlay's branch tree for a merge read, rebuilding a
 // reclaimed tree. A tree that cannot be rebuilt rejects as not pending.
 func (s *MergeService) holdBranch(ctx context.Context, jobID string) (*BranchLease, error) {
+	syncCheckpointBranchFiles(s.Queue, jobID)
 	_, lease, err := s.Queue.EnsureWorkerBranch(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, ErrWorkerBranchUnavailable) {
+			if lease, ok := holdRehydratedCheckpointBranch(ctx, s.Queue, jobID); ok {
+				return lease, nil
+			}
 			return nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{
 				"job_id": jobID, "reason": "overlay workspace unavailable",
 			})

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -198,5 +200,68 @@ func TestResolveWorkerSummaryStatus(t *testing.T) {
 	got = session.ResolveWorkerSummaryStatus(t.Context(), api.WorkerSummaryStatusComplete, task)
 	if got != api.WorkerSummaryStatusOpen {
 		t.Fatalf("unmet status = %q want partial", got)
+	}
+}
+
+func TestOverlayChangedPathsAndDivergenceFromPublishedCheckpoint(t *testing.T) {
+	primary := t.TempDir()
+	testutil.FailErr(t, "write primary", os.WriteFile(filepath.Join(primary, "checkpointed.go"), []byte("package p\n// v1\n"), 0o644))
+	testutil.FailErr(t, "write deleted", os.WriteFile(filepath.Join(primary, "deleted.go"), []byte("package p\n// del\n"), 0o644))
+
+	overlay := t.TempDir()
+	storeDir := filepath.Join(overlay, session.TaskCheckpointStoreSubdir)
+	store, err := checkpoint.NewStore(storeDir)
+	testutil.FailErr(t, "NewStore", err)
+
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID:     "view-session-cp",
+		BackingDir: t.TempDir(),
+		Roots:      []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "New Core", err)
+	defer func() { _ = core.ReleaseView() }()
+
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "checkpointed.go"}, []byte("package p\n// v2\n"), 0o644)
+	testutil.FailErr(t, "WriteFile checkpointed", err)
+	testutil.FailErr(t, "Unlink deleted", core.Unlink(layeredfs.QualifiedPath{RootID: "primary", Rel: "deleted.go"}, false))
+
+	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
+		WorkerID:         "job-cp-session",
+		TaskID:           "job-cp-session",
+		ProjectID:        testdbseed.DefaultProjectID,
+		SourceGeneration: "gen-1",
+		Core:             core,
+		Store:            store,
+	})
+	testutil.FailErr(t, "NewPublisher", err)
+
+	_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{
+		CheckpointID: "chk-session-1",
+		Trigger:      checkpoint.TriggerWorkerCompletion,
+	})
+	testutil.FailErr(t, "Publish", err)
+
+	// Uncheckpointed file in live overlay workspace must not leak into published checkpoint inspection.
+	testutil.FailErr(t, "write uncheckpointed", os.WriteFile(filepath.Join(overlay, "uncheckpointed.go"), []byte("package p\n// dirty\n"), 0o644))
+
+	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
+	task := &api.WorkerTask{
+		ID:            "job-cp-session",
+		ProjectID:     testdbseed.DefaultProjectID,
+		WorkspacePath: primary,
+		WorkspaceRoot: overlay,
+		Scope:         &scope,
+	}
+
+	if !session.OverlayAwaitingPromote(t.Context(), task) {
+		t.Fatal("expected OverlayAwaitingPromote true for published checkpoint")
+	}
+	changed := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil)
+	if len(changed) != 2 || changed[0] != "checkpointed.go" || changed[1] != "deleted.go" {
+		t.Fatalf("OverlayWorkspaceChangedPaths = %v, want [checkpointed.go deleted.go]", changed)
+	}
+	div := session.OverlayWorkspaceDivergencePaths(task, nil)
+	if len(div) != 2 || div[0] != "checkpointed.go" || div[1] != "deleted.go" {
+		t.Fatalf("OverlayWorkspaceDivergencePaths = %v, want [checkpointed.go deleted.go]", div)
 	}
 }

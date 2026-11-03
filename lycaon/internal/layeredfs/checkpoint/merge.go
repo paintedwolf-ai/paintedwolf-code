@@ -100,28 +100,35 @@ func diffLineAnchored(base, mod []string) ([]lineEdit, bool) {
 	bPos, mPos := 0, 0
 	for i := 0; i < len(bAnchors); i++ {
 		bIdx, mIdx := bAnchors[i], mAnchors[i]
-		if bIdx > bPos || mIdx > mPos {
-			if !slicesEqual(base[bPos:bIdx], mod[mPos:mIdx]) {
-				edits = append(edits, lineEdit{
-					startIdx: bPos,
-					endIdx:   bIdx,
-					repl:     append([]string(nil), mod[mPos:mIdx]...),
-				})
-			}
+		if ed, ok := trimmedLineEdit(base, mod, bPos, bIdx, mPos, mIdx); ok {
+			edits = append(edits, ed)
 		}
 		bPos = bIdx + 1
 		mPos = mIdx + 1
 	}
-	if bPos < len(base) || mPos < len(mod) {
-		if !slicesEqual(base[bPos:], mod[mPos:]) {
-			edits = append(edits, lineEdit{
-				startIdx: bPos,
-				endIdx:   len(base),
-				repl:     append([]string(nil), mod[mPos:]...),
-			})
-		}
+	if ed, ok := trimmedLineEdit(base, mod, bPos, len(base), mPos, len(mod)); ok {
+		edits = append(edits, ed)
 	}
 	return edits, true
+}
+
+func trimmedLineEdit(base, mod []string, bStart, bEnd, mStart, mEnd int) (lineEdit, bool) {
+	for bStart < bEnd && mStart < mEnd && base[bStart] == mod[mStart] {
+		bStart++
+		mStart++
+	}
+	for bEnd > bStart && mEnd > mStart && base[bEnd-1] == mod[mEnd-1] {
+		bEnd--
+		mEnd--
+	}
+	if bStart == bEnd && mStart == mEnd {
+		return lineEdit{}, false
+	}
+	return lineEdit{
+		startIdx: bStart,
+		endIdx:   bEnd,
+		repl:     append([]string(nil), mod[mStart:mEnd]...),
+	}, true
 }
 
 func findSharedUniqueAnchors(base, mod []string) ([]int, []int) {
