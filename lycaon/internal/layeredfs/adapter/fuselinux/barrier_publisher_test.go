@@ -13,12 +13,12 @@ import (
 	"sync"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"golang.org/x/sys/unix"
 )
 
 func seedBoundedFlushFixture(t *testing.T, trunkDir, untouchedDir string) []byte {
@@ -79,6 +79,16 @@ func TestBoundedTrackedPathClientFlushSkipsUntouchedUnreadableAndFIFOEntries(t *
 		_, _ = adp.Release(t.Context(), viewID)
 	})
 
+	if err := os.WriteFile(filepath.Join(prep.PrimaryWorkPath, "edited.txt"), []byte("after-edit\n"), 0o644); err != nil {
+		t.Fatalf("write edited.txt: %v", err)
+	}
+	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", "printf 'from-shell\\n' > shell.txt")
+	cmd.Dir = prep.PrimaryWorkPath
+	fuselinux.DetachMountEntry(cmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("shell write failed: %v (%s)", err, string(out))
+	}
+
 	mf, err := os.OpenFile(filepath.Join(prep.PrimaryWorkPath, "mapped.txt"), os.O_RDWR, 0o644)
 	if err != nil {
 		t.Fatalf("OpenFile mapped.txt: %v", err)
@@ -89,16 +99,7 @@ func TestBoundedTrackedPathClientFlushSkipsUntouchedUnreadableAndFIFOEntries(t *
 		t.Fatalf("Mmap: %v", err)
 	}
 	defer func() { _ = syscall.Munmap(mappedSlice) }()
-	copy(mappedSlice, []byte("bounded-mmap-ok!\n"))
-
-	if err := os.WriteFile(filepath.Join(prep.PrimaryWorkPath, "edited.txt"), []byte("after-edit\n"), 0o644); err != nil {
-		t.Fatalf("write edited.txt: %v", err)
-	}
-	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", "printf 'from-shell\\n' > shell.txt")
-	cmd.Dir = prep.PrimaryWorkPath
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("shell write failed: %v (%s)", err, string(out))
-	}
+	copyToMapping(mappedSlice, []byte("bounded-mmap-ok!\n"))
 
 	var syncMu sync.Mutex
 	var syncedPaths []string
@@ -109,7 +110,7 @@ func TestBoundedTrackedPathClientFlushSkipsUntouchedUnreadableAndFIFOEntries(t *
 		return nil
 	}, nil)
 	_ = adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := fuselinux.SyncMappedRegion(mappedSlice); err != nil {
+		if err := unix.Msync(mappedSlice, unix.MS_SYNC); err != nil {
 			return err
 		}
 		return mf.Sync()
@@ -188,15 +189,18 @@ func TestCheckpointBarrierCancellationDuringHeldInFlightFUSEMutation(t *testing.
 	go func() {
 		writeDone <- os.WriteFile(filepath.Join(prep.PrimaryWorkPath, "held.txt"), []byte("mutated-after-hold\n"), 0o644)
 	}()
-	select {
-	case <-enteredCh:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for FUSE mutation to enter OnMutationHook")
-	}
+	<-enteredCh
 
+	// Cancel only once the barrier is waiting on the held mutation.
 	srv := adp.ServerForView(viewID)
-	cancelCtx, cancel := context.WithTimeout(t.Context(), 80*time.Millisecond)
+	cancelCtx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+	go func() {
+		for !srv.IsBarrierActive() {
+			runtime.Gosched()
+		}
+		cancel()
+	}()
 	_, _, bErr := adp.CheckpointBarrier(cancelCtx, viewID)
 	var aErr *adapter.AdapterError
 	if bErr == nil || !errors.As(bErr, &aErr) || aErr.ReasonCode != adapter.ReasonContextCanceled {
@@ -254,10 +258,10 @@ func TestPublisherHoldsAdapterServerBarrierDuringCaptureAndPreservesPriorCheckpo
 	}
 	defer func() { _ = syscall.Munmap(mappedSlice) }()
 	wantCP1 := []byte("cp1-mmap-payload\n")
-	copy(mappedSlice, wantCP1)
+	copyToMapping(mappedSlice, wantCP1)
 
 	_ = adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := fuselinux.SyncMappedRegion(mappedSlice); err != nil {
+		if err := unix.Msync(mappedSlice, unix.MS_SYNC); err != nil {
 			return err
 		}
 		return mf.Sync()
@@ -277,6 +281,7 @@ func TestPublisherHoldsAdapterServerBarrierDuringCaptureAndPreservesPriorCheckpo
 
 	srv := adp.ServerForView(viewID)
 	var gateVerified bool
+	gatedWrite := make(chan error, 1)
 	pubRes1, err := pub.Publish(t.Context(), checkpoint.PublishRequest{
 		CheckpointID: "cp-1", Trigger: checkpoint.TriggerExplicitCapture,
 		FaultInjector: func(stage checkpoint.FaultStage) error {
@@ -284,9 +289,10 @@ func TestPublisherHoldsAdapterServerBarrierDuringCaptureAndPreservesPriorCheckpo
 				if !srv.IsBarrierActive() {
 					return errors.New("expected Server.IsBarrierActive()==true during FaultAfterBarrier")
 				}
-				if wErr := os.WriteFile(filepath.Join(prep.PrimaryWorkPath, "blocked.txt"), []byte("blocked\n"), 0o644); wErr == nil {
-					return errors.New("expected FUSE mutation during active barrier to be rejected")
-				}
+				go func() {
+					gatedWrite <- os.WriteFile(filepath.Join(prep.PrimaryWorkPath, "blocked.txt"), []byte("blocked\n"), 0o644)
+				}()
+				awaitCondition(t, "mutation held at the barrier gate", func() bool { return srv.GatedMutationsForTest() > 0 })
 				gateVerified = true
 			}
 			return nil
@@ -294,6 +300,10 @@ func TestPublisherHoldsAdapterServerBarrierDuringCaptureAndPreservesPriorCheckpo
 	})
 	if err != nil || !gateVerified || srv.IsBarrierActive() {
 		t.Fatalf("Publish cp-1 failed: gateVerified=%v active=%v err=%v", gateVerified, srv.IsBarrierActive(), err)
+	}
+	// The held write completes for the worker once the barrier ends, outside the checkpoint.
+	if wErr := <-gatedWrite; wErr != nil {
+		t.Fatalf("write held by the barrier must succeed after it ends: %v", wErr)
 	}
 	verifyPublishedCP1AndFailedCP2(t, adp, pub, cpStore, srv, pubRes1, mappedSlice, wantCP1)
 }
@@ -316,7 +326,7 @@ func verifyPublishedCP1AndFailedCP2(
 	if err != nil || !bytes.Equal(blobBytes, wantCP1) {
 		t.Fatalf("expected cp-1 blob %q, got %q err=%v", string(wantCP1), string(blobBytes), err)
 	}
-	copy(mappedSlice, []byte("cp2-unflushed!!!\n"))
+	copyToMapping(mappedSlice, []byte("cp2-unflushed!!!\n"))
 	adp.SetConfigCallbacksForTest(func(p string) error {
 		return errors.New("injected flush failure on " + p)
 	}, nil)

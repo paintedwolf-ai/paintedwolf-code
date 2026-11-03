@@ -20,10 +20,6 @@ type kernelMountEntry struct {
 	superOptions  string
 }
 
-func msyncMappedRegion(_ []byte) error {
-	return fmt.Errorf("fuselinux: msync requires linux")
-}
-
 func statDeviceID(_ string) (uint64, error) {
 	return 0, fmt.Errorf("fuselinux: statDeviceID requires linux")
 }
@@ -38,8 +34,20 @@ func verifyKernelMountInfo(_ string, _ string, _ uint32, _ uint32) (kernelMountE
 	return kernelMountEntry{}, fmt.Errorf("fuselinux: mountinfo requires linux")
 }
 
-func checkKernelMountTable(_ string, _ string) (bool, bool) {
+func checkKernelMountTable(_, _, _ string) (bool, bool) {
 	return false, false
+}
+
+func deadViewMountPaths(_ context.Context, _ string, _ uint32) ([]string, error) {
+	return nil, fmt.Errorf("fuselinux: mountinfo requires linux")
+}
+
+func mountPathsWithin(_ string) ([]string, error) {
+	return nil, fmt.Errorf("fuselinux: mountinfo requires linux")
+}
+
+func syncMountedFilesystem(_ string) error {
+	return fmt.Errorf("fuselinux: syncfs requires linux")
 }
 
 func canonicalPath(path string) string {
@@ -54,10 +62,10 @@ func mountAndStartFUSEServer(_ context.Context, _ Config, _ ServerConfig, _ *lay
 	return nil, fmt.Errorf("fuselinux: FUSE server requires linux")
 }
 
+func (s *Server) optOutOfFUSEPoll(_ string) error {
+	return fmt.Errorf("fuselinux: FUSE server requires linux")
+}
+
 func notifyInvalInode(_ *Server, _ uint64) {}
 
 func notifyInvalEntry(_ *Server, _ uint64, _ string) {}
-
-func (s *Server) writeReply(_ uint64, _ int32, _ []byte) error { return nil }
-
-func (s *Server) handleRequest(_ []byte, _ bool) {}

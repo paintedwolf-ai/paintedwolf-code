@@ -24,9 +24,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if runtime.GOMAXPROCS(0) < 4 {
-		runtime.GOMAXPROCS(4)
-	}
 	gittestsetup.Enable()
 	os.Exit(m.Run())
 }
@@ -36,6 +33,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 		t.Skip("real FUSE mount requires linux")
 	}
 
+	allowUndetachedGitEntry(t)
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")
 	backingDir := filepath.Join(tmp, "backing")
@@ -104,6 +102,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	shCmd := exec.CommandContext(t.Context(), "/bin/sh", "-c",
 		"mkdir -p pkg && printf 'package pkg\n' > pkg/feature.go && cat README.md")
 	shCmd.Dir = mountPath
+	fuselinux.DetachMountEntry(shCmd)
 	shOut, err := shCmd.CombinedOutput()
 	if err != nil || string(shOut) != "updated by worker over fuse\n" {
 		t.Fatalf("shell command in mount failed: err=%v out=%q", err, string(shOut))
@@ -159,6 +158,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	shellGitCmd := exec.CommandContext(t.Context(), "/bin/sh", "-c",
 		"git --no-optional-locks status --porcelain=v1 && git rev-parse HEAD && git branch --list")
 	shellGitCmd.Dir = mountPath
+	fuselinux.DetachMountEntry(shellGitCmd)
 	shellGitOut, err := shellGitCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("unrestricted shell git in mountPath failed: %v\n%s", err, string(shellGitOut))

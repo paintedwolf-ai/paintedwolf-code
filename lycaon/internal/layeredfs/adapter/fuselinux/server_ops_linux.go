@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -28,22 +29,11 @@ const (
 	fattrMtimeNow = 1 << 8
 )
 
-func (s *Server) handleRequest(req []byte, controlLane bool) {
+func (s *Server) serveRequest(st *fuseRequestState, req []byte) {
+	defer s.requests.unregister(st.unique)
 	opcode := binary.LittleEndian.Uint32(req[4:8])
-	unique := binary.LittleEndian.Uint64(req[8:16])
 	nodeID := binary.LittleEndian.Uint64(req[16:24])
 	body := req[fuseHeaderInSize:]
-
-	if opcode == fuseOpForget || opcode == fuseOpBatchForget {
-		return
-	}
-	if opcode == fuseOpInterrupt {
-		handleInterrupt(s, body)
-		return
-	}
-
-	reqState := registerRequest(s, unique, opcode, nodeID, controlLane)
-	defer unregisterRequest(s, unique)
 
 	var payload []byte
 	var errno int32
@@ -59,7 +49,7 @@ func (s *Server) handleRequest(req []byte, controlLane bool) {
 	case fuseOpOpen:
 		payload, errno = s.opOpen(nodeID, body)
 	case fuseOpRead:
-		payload, errno = s.opRead(nodeID, body)
+		payload, errno = s.opRead(body)
 	case fuseOpStatfs:
 		payload, errno = s.opStatfs()
 	case fuseOpRelease:
@@ -67,7 +57,7 @@ func (s *Server) handleRequest(req []byte, controlLane bool) {
 	case fuseOpFsync:
 		payload, errno = s.opFsync(body)
 	case fuseOpFsyncdir:
-		payload, errno = nil, 0
+		payload, errno = s.opFsyncdir()
 	case fuseOpFlush:
 		payload, errno = s.opFlush(nodeID, body)
 	case fuseOpOpendir:
@@ -76,8 +66,6 @@ func (s *Server) handleRequest(req []byte, controlLane bool) {
 		payload, errno = s.opReaddir(nodeID, body)
 	case fuseOpReleasedir:
 		payload, errno = s.opReleasedir(body)
-	case fuseOpAccess:
-		payload, errno = s.opAccess(nodeID)
 	case fuseOpGetxattr:
 		payload, errno = s.opGetxattr(nodeID, body)
 	case fuseOpListxattr:
@@ -85,26 +73,30 @@ func (s *Server) handleRequest(req []byte, controlLane bool) {
 	case fuseOpGetlk:
 		payload, errno = s.opGetlk(nodeID, body)
 	case fuseOpSetlk, fuseOpSetlkw:
-		payload, errno = s.opSetlk(reqState, nodeID, body, opcode == fuseOpSetlkw)
+		payload, errno = s.opSetlk(st, nodeID, body)
 	case fuseOpDestroy:
 		payload, errno = nil, 0
-	case fuseOpLseek:
-		payload, errno = nil, -int32(syscall.ENOSYS)
-	default:
+	case fuseOpPoll:
+		s.pollRequests.Add(1)
+		payload, errno = pollUnsupported()
+	case fuseOpSetattr, fuseOpSymlink, fuseOpMknod, fuseOpMkdir, fuseOpUnlink, fuseOpRmdir, fuseOpRename,
+		fuseOpRename2, fuseOpLink, fuseOpWrite, fuseOpCreate, fuseOpSetxattr, fuseOpRemovexattr:
 		payload, errno = s.dispatchMutatingOp(opcode, nodeID, body)
+	default:
+		payload, errno = nil, -int32(syscall.ENOSYS)
 	}
-	_ = s.writeReply(unique, errno, payload)
+	_ = s.writeReply(st.unique, errno, payload)
 }
 
 func (s *Server) dispatchMutatingOp(opcode uint32, nodeID uint64, body []byte) ([]byte, int32) {
-	if !s.enterMutation() {
-		return nil, -int32(syscall.EAGAIN)
+	if errno := s.gate.enter(); errno != 0 {
+		return nil, errno
 	}
-	defer s.leaveMutation()
+	defer s.gate.leave()
 
-	rel, _ := s.resolveNodeRel(nodeID)
+	rel, _ := s.nodes.resolveNodeRel(nodeID)
 	if rel != "" {
-		s.recordDirtyRel(rel)
+		s.nodes.recordDirtyRel(rel)
 	}
 	if s.cfg.OnMutationHook != nil {
 		s.cfg.OnMutationHook(opcode, rel)
@@ -130,31 +122,35 @@ func (s *Server) dispatchMutatingOp(opcode uint32, nodeID uint64, body []byte) (
 	case fuseOpLink:
 		return s.opLink(nodeID, body)
 	case fuseOpWrite:
-		return s.opWrite(nodeID, body)
+		return s.opWrite(body)
 	case fuseOpCreate:
 		return s.opCreate(nodeID, body)
 	case fuseOpSetxattr:
 		return s.opSetxattr(nodeID, body)
-	case fuseOpRemovexattr:
-		return s.opRemovexattr(nodeID, body)
 	default:
-		return nil, -int32(syscall.ENOSYS)
+		return s.opRemovexattr(nodeID, body)
 	}
 }
 
+// opInit pins the kernel ABI and grants only the wanted capabilities. Writeback caching and
+// passthrough are never granted: they would let writes bypass first-mutation capture.
 func (s *Server) opInit(body []byte) ([]byte, int32) {
-	var maxReadahead uint32 = DefaultMaxReadAhead
-	var reqFlags uint32
-	if len(body) >= 16 {
-		maxReadahead = binary.LittleEndian.Uint32(body[8:12])
-		reqFlags = binary.LittleEndian.Uint32(body[12:16])
+	if len(body) < 16 {
+		return nil, -int32(syscall.EINVAL)
 	}
-	wantFlags := uint32(fuseCapPOSIXLocks | fuseCapAtomicOTrunc | fuseCapBigWrites | fuseCapFlockLocks)
+	kernelMajor := binary.LittleEndian.Uint32(body[0:4])
+	kernelMinor := binary.LittleEndian.Uint32(body[4:8])
+	if kernelMajor != FUSEProtocolMajor || kernelMinor < FUSEProtocolMinor {
+		return nil, -int32(syscall.EPROTO)
+	}
+	maxReadahead := binary.LittleEndian.Uint32(body[8:12])
+	granted := binary.LittleEndian.Uint32(body[12:16]) & uint32(fuseCapPOSIXLocks|fuseCapAtomicOTrunc|fuseCapBigWrites|fuseCapFlockLocks)
+	s.negotiated.Store(&NegotiatedProtocol{KernelMajor: kernelMajor, KernelMinor: kernelMinor, GrantedFlags: granted})
 	out := make([]byte, 64)
 	binary.LittleEndian.PutUint32(out[0:4], FUSEProtocolMajor)
 	binary.LittleEndian.PutUint32(out[4:8], FUSEProtocolMinor)
 	binary.LittleEndian.PutUint32(out[8:12], maxReadahead)
-	binary.LittleEndian.PutUint32(out[12:16], reqFlags&wantFlags)
+	binary.LittleEndian.PutUint32(out[12:16], granted)
 	binary.LittleEndian.PutUint16(out[16:18], 64)
 	binary.LittleEndian.PutUint16(out[18:20], 48)
 	binary.LittleEndian.PutUint32(out[20:24], DefaultMaxWrite)
@@ -164,7 +160,7 @@ func (s *Server) opInit(body []byte) ([]byte, int32) {
 }
 
 func (s *Server) opLookup(nodeID uint64, body []byte) ([]byte, int32) {
-	parentRel, ok := s.resolveNodeRel(nodeID)
+	parentRel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -172,34 +168,39 @@ func (s *Server) opLookup(nodeID uint64, body []byte) ([]byte, int32) {
 	if name == "" {
 		return nil, -int32(syscall.ENOENT)
 	}
+	if s.pollProbeActive.Load() && nodeID == fuseRootID && name == pollProbeName {
+		return encodeEntryOut(s, pollProbeNodeID, pollProbeNodeID, pollProbeAttr()), 0
+	}
 	childRel := joinRel(parentRel, name)
 	attr, err := s.core.Lstat(s.qpath(childRel))
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.ensureNode(childRel, attr)
-	return encodeEntryOut(s, fn.fuseID, attr), 0
+	fn := s.nodes.acquireNode(childRel, attr)
+	return encodeEntryOut(s, fn.fuseID, fn.ino, attr), 0
 }
 
 func (s *Server) opGetattr(nodeID uint64, body []byte) ([]byte, int32) {
-	if rel, ok := s.resolveNodeRel(nodeID); ok {
+	if nodeID == pollProbeNodeID {
+		return encodeAttrOut(s, pollProbeNodeID, pollProbeAttr()), 0
+	}
+	if rel, ok := s.nodes.resolveNodeRel(nodeID); ok {
 		attr, err := s.core.Lstat(s.qpath(rel))
 		if err != nil {
 			return nil, mapFUSEErrno(err)
 		}
-		fn := s.ensureNode(rel, attr)
-		return encodeAttrOut(s, fn.fuseID, attr), 0
+		return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
 	}
 	var fh uint64
 	if len(body) >= 16 {
 		fh = binary.LittleEndian.Uint64(body[8:16])
 	}
-	if h, ok := s.lookupOpenHandleForNode(fh, nodeID); ok && h.hid != 0 {
+	if h, ok := s.nodes.lookupOpenHandleForNode(fh, nodeID); ok && h.hid != 0 {
 		attr, err := s.core.StatHandle(h.hid)
 		if err != nil {
 			return nil, mapFUSEErrno(err)
 		}
-		return encodeAttrOut(s, nodeID, attr), 0
+		return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
 	}
 	return nil, -int32(syscall.ENOENT)
 }
@@ -209,14 +210,13 @@ func (s *Server) opSetattr(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.EINVAL)
 	}
 	valid := binary.LittleEndian.Uint32(body[0:4])
-	fh := binary.LittleEndian.Uint64(body[8:16])
-	rel, ok := s.resolveNodeRel(nodeID)
-	if !ok && valid&fattrFH != 0 {
-		if h, hok := s.lookupHandle(fh); hok && h.rel != "" {
-			rel, ok = h.rel, true
-		}
-	}
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
+		// Core mutates attributes by path only, and a replaced or unlinked object has no path.
+		// Its old name may now belong to another file, so the request must not reach it.
+		if valid&fattrFH != 0 {
+			return nil, -int32(syscall.ESTALE)
+		}
 		return nil, -int32(syscall.ENOENT)
 	}
 	req := layeredfs.SetAttrRequest{NoFollow: true}
@@ -256,12 +256,11 @@ func (s *Server) opSetattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	fn := s.ensureNode(rel, attr)
-	return encodeAttrOut(s, fn.fuseID, attr), 0
+	return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
 }
 
 func (s *Server) opReadlink(nodeID uint64) ([]byte, int32) {
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -272,34 +271,70 @@ func (s *Server) opReadlink(nodeID uint64) ([]byte, int32) {
 	return []byte(target), 0
 }
 
+// opFsync acknowledges only what backing storage established. Linux fsync on any descriptor
+// covers the file, but Core has nothing to sync for a read-only handle, so the private backing
+// file is synced directly in that case.
 func (s *Server) opFsync(body []byte) ([]byte, int32) {
 	if len(body) < 8 {
+		return nil, -int32(syscall.EINVAL)
+	}
+	h, ok := s.nodes.lookupHandle(binary.LittleEndian.Uint64(body[0:8]))
+	if !ok || h.isDir || h.hid == 0 {
+		return nil, -int32(syscall.EBADF)
+	}
+	if err := s.core.SyncHandle(h.hid); err != nil {
+		return nil, mapFUSEErrno(err)
+	}
+	if h.writable {
 		return nil, 0
 	}
-	fh := binary.LittleEndian.Uint64(body[0:8])
-	if h, ok := s.lookupHandle(fh); ok && !h.isDir && h.hid != 0 {
-		if err := s.core.SyncHandle(h.hid); err != nil && !errors.Is(err, layeredfs.ErrStaleHandle) {
-			return nil, mapFUSEErrno(err)
-		}
+	attr, err := s.core.StatHandle(h.hid)
+	if errors.Is(err, layeredfs.ErrStaleHandle) {
+		return nil, 0 // SyncHandle validated the handle: it reads a lower layer with no private data.
+	}
+	if err != nil {
+		return nil, mapFUSEErrno(err)
+	}
+	if attr.Layer != layeredfs.LayerPrivate || attr.NodeID == 0 {
+		return nil, 0
+	}
+	backing, err := s.core.OpenBackingReader(attr.NodeID, attr.Generation)
+	if err != nil {
+		return nil, mapFUSEErrno(err)
+	}
+	defer func() { _ = backing.Close() }()
+	file, ok := backing.(interface{ Sync() error })
+	if !ok {
+		return nil, -int32(syscall.EIO)
+	}
+	if err := s.syncBacking(file); err != nil {
+		return nil, mapFUSEErrno(err)
 	}
 	return nil, 0
 }
 
-func (s *Server) opStatfs() ([]byte, int32) {
-	out := make([]byte, 80)
-	binary.LittleEndian.PutUint64(out[0:8], 1024*1024)
-	binary.LittleEndian.PutUint64(out[8:16], 1024*1024)
-	binary.LittleEndian.PutUint64(out[16:24], 1024*1024)
-	binary.LittleEndian.PutUint64(out[24:32], 1024*1024)
-	binary.LittleEndian.PutUint64(out[32:40], 1024*1024)
-	binary.LittleEndian.PutUint32(out[40:44], 4096)
-	binary.LittleEndian.PutUint32(out[44:48], 255)
-	binary.LittleEndian.PutUint32(out[48:52], 4096)
-	return out, 0
+// opFsyncdir persists the journal, which is where the private namespace is durably recorded.
+func (s *Server) opFsyncdir() ([]byte, int32) {
+	if _, err := s.core.SnapshotJournal(); err != nil {
+		return nil, mapFUSEErrno(err)
+	}
+	return nil, 0
 }
 
-func (s *Server) opAccess(_ uint64) ([]byte, int32) {
-	// Returning ENOSYS instructs Linux FUSE (fc->no_access = 1) to evaluate permissions in VFS
-	// from fuse_attr without round-tripping FUSE_ACCESS during vfork+chdir.
-	return nil, -int32(syscall.ENOSYS)
+// opStatfs reports the storage that private writes actually consume.
+func (s *Server) opStatfs() ([]byte, int32) {
+	var st unix.Statfs_t
+	if err := unix.Statfs(s.cfg.BackingDir, &st); err != nil {
+		return nil, mapFUSEErrno(err)
+	}
+	out := make([]byte, 80)
+	binary.LittleEndian.PutUint64(out[0:8], st.Blocks)
+	binary.LittleEndian.PutUint64(out[8:16], st.Bfree)
+	binary.LittleEndian.PutUint64(out[16:24], st.Bavail)
+	binary.LittleEndian.PutUint64(out[24:32], st.Files)
+	binary.LittleEndian.PutUint64(out[32:40], st.Ffree)
+	binary.LittleEndian.PutUint32(out[40:44], uint32(st.Bsize))
+	binary.LittleEndian.PutUint32(out[44:48], uint32(st.Namelen))
+	binary.LittleEndian.PutUint32(out[48:52], uint32(st.Frsize))
+	return out, 0
 }

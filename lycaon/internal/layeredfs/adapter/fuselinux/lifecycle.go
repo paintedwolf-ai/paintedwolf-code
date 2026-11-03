@@ -174,12 +174,16 @@ func (a *Adapter) FlushClientData(ctx context.Context, viewID string) error {
 		if err := verifyMountAndServerForBarrier(st, viewID, rootID, m, "flush_client"); err != nil {
 			return err
 		}
-		fSync, dSync, err := a.syncMountedRootFiles(ctx, st, rootID, m)
-		if err != nil {
-			return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "flush_client", ReasonCode: classifyBarrierError(err), Diagnostic: err.Error(), Cause: err}
+		// An active barrier already flushed this root with writers quiesced. Flushing through the
+		// mount again could only wait on that barrier's own mutation gate.
+		if !m.server.IsBarrierActive() {
+			fSync, dSync, err := a.syncMountedRootFiles(ctx, st, rootID, m)
+			if err != nil {
+				return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "flush_client", ReasonCode: classifyBarrierError(err), Diagnostic: err.Error(), Cause: err}
+			}
+			totalFiles += fSync
+			totalDirs += dSync
 		}
-		totalFiles += fSync
-		totalDirs += dSync
 		if err := m.server.FlushForCheckpoint(ctx, viewID); err != nil {
 			return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "flush_client", ReasonCode: classifyBarrierError(err), Diagnostic: err.Error(), Cause: err}
 		}
@@ -268,29 +272,6 @@ func (a *Adapter) CheckpointBarrier(ctx context.Context, viewID string) (adapter
 	}
 	return receipt, releaseFn, nil
 }
-
-// KillServerForView forcibly closes the FUSE server for viewID to simulate a mid-session server crash.
-func (a *Adapter) KillServerForView(viewID string) error {
-	a.mu.RLock()
-	st, ok := a.views[viewID]
-	a.mu.RUnlock()
-	if !ok || st == nil {
-		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "kill_server", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
-	}
-	for rootID, m := range st.mounts {
-		m.serverDead.Store(true)
-		if m.server != nil {
-			_ = m.server.Close()
-		}
-		if st.privateGitMgr != nil {
-			st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
-		}
-	}
-	return nil
-}
-
-// SimulateServerDeath is an alias for KillServerForView.
-func (a *Adapter) SimulateServerDeath(viewID string) error { return a.KillServerForView(viewID) }
 
 // Release revokes private-git bindings, unmounts each root while retaining view state on failure,
 // closes FUSE servers only after unmount succeeds, releases Core, and removes RuntimeViewDir.

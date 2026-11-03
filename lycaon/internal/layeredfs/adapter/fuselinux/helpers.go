@@ -16,38 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
 
-// DisownMountForTest mutates the recorded mount ownership metadata for viewID so tests can
-// verify that Release and unmountOwnedRoot refuse to unmount an unowned or mismatched path.
-func (a *Adapter) DisownMountForTest(viewID, unownedPath string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	st, ok := a.views[viewID]
-	if !ok || st == nil {
-		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "disown", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
-	}
-	m := st.mounts[st.primaryRoot]
-	if m == nil {
-		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "disown", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
-	}
-	m.mountPath = canonicalPath(unownedPath)
-	m.facts.MountPath = m.mountPath
-	m.facts.FSName = "lycaon-unowned-fake"
-	return nil
-}
-
-// SetFusermountBinForTest updates FusermountBin so tests can inject unmount failures and restore them on retry.
-func (a *Adapter) SetFusermountBinForTest(fusermountBin string) {
-	a.mu.Lock()
-	if fusermountBin != "" {
-		a.cfg.FusermountBin = fusermountBin
-	} else if resolved, err := exec.LookPath("fusermount3"); err == nil && resolved != "" {
-		a.cfg.FusermountBin = resolved
-	} else {
-		a.cfg.FusermountBin = DefaultFusermountBin
-	}
-	a.mu.Unlock()
-}
-
 // InvalidatePath sends an explicit FUSE kernel cache invalidation for qpath on viewID.
 func (a *Adapter) InvalidatePath(viewID string, qpath layeredfs.QualifiedPath) error {
 	a.mu.RLock()
@@ -125,7 +93,10 @@ func (a *Adapter) LastFlushStatsForView(viewID string) (filesSynced, dirsSynced 
 	return st.lastFilesSynced, st.lastDirsSynced
 }
 
-func (a *Adapter) syncClientPath(ctx context.Context, targetPath string) (isDir bool, synced bool, err error) {
+// syncClientPath flushes one path through the mount so kernel dirty pages reach the server.
+// A worker's own file modes can make a path unopenable, which must not wedge checkpoints; the
+// whole mount is written back instead, and the path's data is then covered by the server flush.
+func (a *Adapter) syncClientPath(ctx context.Context, mountRoot, targetPath string) (isDir bool, synced bool, err error) {
 	if cErr := ctx.Err(); cErr != nil {
 		return false, false, cErr
 	}
@@ -133,6 +104,9 @@ func (a *Adapter) syncClientPath(ctx context.Context, targetPath string) (isDir 
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, false, nil
+		}
+		if errors.Is(err, os.ErrPermission) {
+			return false, false, syncMountedFilesystem(mountRoot)
 		}
 		return false, false, err
 	}
@@ -151,10 +125,17 @@ func (a *Adapter) syncClientPath(ctx context.Context, targetPath string) (isDir 
 			return mode.IsDir(), false, fnErr
 		}
 	}
-	f, err := os.Open(targetPath)
+	openFlag := os.O_RDONLY
+	if mode.IsRegular() && mode&0o400 == 0 && mode&0o200 != 0 {
+		openFlag = os.O_WRONLY
+	}
+	f, err := os.OpenFile(targetPath, openFlag, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, false, nil
+		}
+		if errors.Is(err, os.ErrPermission) {
+			return mode.IsDir(), false, syncMountedFilesystem(mountRoot)
 		}
 		return mode.IsDir(), false, err
 	}
@@ -169,7 +150,7 @@ func (a *Adapter) syncClientPath(ctx context.Context, targetPath string) (isDir 
 	return mode.IsDir(), true, nil
 }
 
-func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) []string {
+func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) ([]string, error) {
 	relSet := map[string]struct{}{".": {}}
 	addRel := func(rel string) {
 		cur := cleanFuseRel(rel)
@@ -184,23 +165,25 @@ func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) []stri
 		relSet["."] = struct{}{}
 	}
 	if st.core != nil {
-		if changes, err := st.core.EnumerateChanges(false); err == nil {
-			for _, ce := range changes {
-				if ce.Path.RootID != rootID {
-					continue
-				}
-				if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
-					addRel(path.Dir(cleanFuseRel(ce.Path.Rel)))
-					continue
-				}
-				if ce.Kind != layeredfs.EntrySymlink {
-					addRel(ce.Path.Rel)
-				}
+		changes, err := st.core.EnumerateChanges(false)
+		if err != nil {
+			return nil, err
+		}
+		for _, ce := range changes {
+			if ce.Path.RootID != rootID {
+				continue
+			}
+			if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
+				addRel(path.Dir(cleanFuseRel(ce.Path.Rel)))
+				continue
+			}
+			if ce.Kind != layeredfs.EntrySymlink {
+				addRel(ce.Path.Rel)
 			}
 		}
 	}
 	if m.server != nil {
-		for _, r := range m.server.DirtyCandidatePaths() {
+		for _, r := range m.server.nodes.dirtyCandidatePaths() {
 			addRel(r)
 		}
 	}
@@ -222,12 +205,16 @@ func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) []stri
 		out = append(out, filepath.Join(m.mountPath, filepath.FromSlash(r)))
 	}
 	out = append(out, m.mountPath)
-	return out
+	return out, nil
 }
 
 func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootID string, m *rootMount) (filesSynced, dirsSynced int, err error) {
-	for _, p := range collectBoundedFlushPaths(st, rootID, m) {
-		isDir, synced, sErr := a.syncClientPath(ctx, p)
+	paths, err := collectBoundedFlushPaths(st, rootID, m)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, p := range paths {
+		isDir, synced, sErr := a.syncClientPath(ctx, m.mountPath, p)
 		if sErr != nil {
 			return filesSynced, dirsSynced, sErr
 		}
@@ -242,7 +229,16 @@ func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootI
 	return filesSynced, dirsSynced, nil
 }
 
+// removeRuntimeDir refuses while anything is still mounted below path: recursive removal would
+// otherwise delete a live view's or another filesystem's contents through the mount.
 func (a *Adapter) removeRuntimeDir(path string) error {
+	remaining, err := mountPathsWithin(path)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("mounts remain below runtime dir: %s", strings.Join(remaining, ", "))
+	}
 	a.mu.RLock()
 	fn := a.cfg.RemoveAllFn
 	a.mu.RUnlock()
@@ -267,7 +263,7 @@ func isMountOwnedAndActive(m *rootMount, _ bool) bool {
 	if m == nil || m.mountPath == "" {
 		return false
 	}
-	found, matchesSource := checkKernelMountTable(m.mountPath, m.facts.FSName)
+	found, matchesSource := checkKernelMountTable(m.mountPath, m.facts.FSName, m.facts.DevMajorMinor)
 	return found && matchesSource
 }
 
@@ -282,6 +278,26 @@ func runFusermountUnmount(ctx context.Context, fusermountBin, mountPath string, 
 		return fmt.Errorf("fusermount3 %v: %w (%s)", args, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// ReclaimDeadMounts detaches this user's view mounts under runtimeRoot whose serving engine died.
+// Only the mount is removed: processes still holding it see ENOTCONN and are never signaled.
+func (a *Adapter) ReclaimDeadMounts(ctx context.Context, runtimeRoot string) ([]string, error) {
+	dead, err := deadViewMountPaths(ctx, runtimeRoot, uint32(os.Getuid()))
+	if err != nil {
+		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "reclaim", ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: err.Error(), Cause: err}
+	}
+	a.mu.RLock()
+	fusermountBin := a.cfg.FusermountBin
+	a.mu.RUnlock()
+	reclaimed := make([]string, 0, len(dead))
+	for _, mountPath := range dead {
+		if uErr := runFusermountUnmount(ctx, fusermountBin, mountPath, true); uErr != nil {
+			return reclaimed, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "reclaim", ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: uErr.Error(), Cause: uErr}
+		}
+		reclaimed = append(reclaimed, mountPath)
+	}
+	return reclaimed, nil
 }
 
 func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAlive bool) error {

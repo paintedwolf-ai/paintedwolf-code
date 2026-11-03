@@ -5,21 +5,24 @@ package fuselinux
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"io/fs"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"golang.org/x/sys/unix"
 )
 
 func (s *Server) opSetxattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
 	valSize := int(binary.LittleEndian.Uint32(body[0:4]))
+	flags := int(binary.LittleEndian.Uint32(body[4:8]))
 	rest := body[8:]
 	nulIdx := bytes.IndexByte(rest, 0)
 	if nulIdx <= 0 {
@@ -34,11 +37,22 @@ func (s *Server) opSetxattr(nodeID uint64, body []byte) ([]byte, int32) {
 		valBytes = valBytes[:valSize]
 	}
 	qp := s.qpath(rel)
+	if flags&(unix.XATTR_CREATE|unix.XATTR_REPLACE) != 0 {
+		_, getErr := s.core.GetXattr(qp, name, true)
+		switch {
+		case getErr == nil && flags&unix.XATTR_CREATE != 0:
+			return nil, -int32(syscall.EEXIST)
+		case errors.Is(getErr, syscall.ENODATA) && flags&unix.XATTR_REPLACE != 0:
+			return nil, -int32(syscall.ENODATA)
+		case getErr != nil && !errors.Is(getErr, syscall.ENODATA):
+			return nil, mapFUSEErrno(getErr)
+		}
+	}
 	if err := s.core.SetXattr(qp, name, valBytes, true); err != nil {
 		return nil, mapFUSEErrno(err)
 	}
 	if attr, lerr := s.core.Lstat(qp); lerr == nil {
-		s.ensureNode(rel, attr)
+		s.nodes.refreshNode(nodeID, attr)
 	}
 	return nil, 0
 }
@@ -47,7 +61,7 @@ func (s *Server) opGetxattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -81,7 +95,7 @@ func (s *Server) opListxattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
 	}
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -107,7 +121,7 @@ func (s *Server) opListxattr(nodeID uint64, body []byte) ([]byte, int32) {
 }
 
 func (s *Server) opRemovexattr(nodeID uint64, body []byte) ([]byte, int32) {
-	rel, ok := s.resolveNodeRel(nodeID)
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
@@ -126,7 +140,7 @@ func (s *Server) opRemovexattr(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, mapFUSEErrno(err)
 	}
 	if attr, lerr := s.core.Lstat(qp); lerr == nil {
-		s.ensureNode(rel, attr)
+		s.nodes.refreshNode(nodeID, attr)
 	}
 	return nil, 0
 }
@@ -135,22 +149,17 @@ func isUnsupportedSystemXattr(name string) bool {
 	return name == "system.posix_acl_access" || name == "system.posix_acl_default"
 }
 
-func encodeEntryOut(s *Server, nodeID uint64, attr layeredfs.EntryAttr) []byte {
+func encodeEntryOut(s *Server, nodeID, ino uint64, attr layeredfs.EntryAttr) []byte {
 	out := make([]byte, 128)
 	binary.LittleEndian.PutUint64(out[0:8], nodeID)
 	binary.LittleEndian.PutUint64(out[8:16], 1)
-	fillFuseAttr(s, out[40:128], nodeID, attr)
+	fillFuseAttr(s, out[40:128], ino, attr)
 	return out
 }
 
-func encodeAttrOut(s *Server, nodeID uint64, attr layeredfs.EntryAttr) []byte {
+func encodeAttrOut(s *Server, ino uint64, attr layeredfs.EntryAttr) []byte {
 	out := make([]byte, 104)
-	if nodeID == fuseRootID {
-		// Cache the immutable mount root directory attributes in VFS so vfork+chdir(mountPath)
-		// before execve never blocks waiting for a user-space round-trip.
-		binary.LittleEndian.PutUint64(out[0:8], 3600)
-	}
-	fillFuseAttr(s, out[16:104], nodeID, attr)
+	fillFuseAttr(s, out[16:104], ino, attr)
 	return out
 }
 

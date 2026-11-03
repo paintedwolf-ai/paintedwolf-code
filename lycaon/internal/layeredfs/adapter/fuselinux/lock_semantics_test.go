@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
+	"golang.org/x/sys/unix"
 )
 
 func TestLockHelperSubprocess(t *testing.T) {
@@ -30,6 +32,8 @@ func TestLockHelperSubprocess(t *testing.T) {
 		}
 	}()
 
+	// A thread-directed signal must reach the thread blocked in fcntl.
+	runtime.LockOSThread()
 	sc := bufio.NewScanner(os.Stdin)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
@@ -46,6 +50,8 @@ func TestLockHelperSubprocess(t *testing.T) {
 
 func handleLockHelperCommand(fds map[string]*os.File, fields []string) string {
 	switch fields[0] {
+	case "TID":
+		return fmt.Sprintf("OK %d %d", os.Getpid(), unix.Gettid())
 	case "OPEN":
 		f, err := os.OpenFile(fields[2], os.O_RDWR, 0o644)
 		if err != nil {
@@ -94,10 +100,10 @@ func handlePOSIXLockCmd(f *os.File, fields []string) string {
 		if err == nil {
 			return "OK"
 		}
-		if errors.Is(err, syscall.EINTR) || errors.Is(err, syscall.Errno(512)) {
-			return "EINTR"
+		if errors.Is(err, syscall.ENOLCK) {
+			return "ENOLCK"
 		}
-		if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EBUSY) {
+		if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EACCES) {
 			return "CONFLICT"
 		}
 		return "ERR " + err.Error()
@@ -170,6 +176,16 @@ func startLockWorkerProc(t *testing.T, name string) *lockWorkerProc {
 		_ = cmd.Wait()
 	})
 	return w
+}
+
+// openWithThread opens fd1 and returns the pid and the thread that serves this worker's commands.
+func (w *lockWorkerProc) openWithThread(path string) (pid, tid int) {
+	w.t.Helper()
+	w.exec("OPEN fd1 "+path, "OK ")
+	fields := strings.Fields(w.exec("TID", "OK "))
+	pid, _ = strconv.Atoi(fields[1])
+	tid, _ = strconv.Atoi(fields[2])
+	return pid, tid
 }
 
 func (w *lockWorkerProc) send(command string) {

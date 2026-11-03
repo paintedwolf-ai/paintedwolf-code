@@ -4,14 +4,19 @@ package fuselinux
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
+
+const deadMountProbeBound = 5 * time.Second
 
 type kernelMountEntry struct {
 	mountID       string
@@ -21,13 +26,6 @@ type kernelMountEntry struct {
 	filesystem    string
 	source        string
 	superOptions  string
-}
-
-func msyncMappedRegion(region []byte) error {
-	if len(region) == 0 {
-		return nil
-	}
-	return unix.Msync(region, unix.MS_SYNC)
 }
 
 func statDeviceID(path string) (uint64, error) {
@@ -76,6 +74,11 @@ func verifyKernelMountInfo(mountPath, expectedFSName string, uid, gid uint32) (k
 	if expectedFSName != "" && matched.source != "" && matched.source != expectedFSName {
 		return kernelMountEntry{}, fmt.Errorf("fuselinux: unexpected mount source %q (want %q)", matched.source, expectedFSName)
 	}
+	for _, want := range []string{"nosuid", "nodev"} {
+		if !hasMountOption(matched.mountOptions, want) {
+			return kernelMountEntry{}, fmt.Errorf("fuselinux: mount options %q missing %s", matched.mountOptions, want)
+		}
+	}
 	wantUID := fmt.Sprintf("user_id=%d", uid)
 	wantGID := fmt.Sprintf("group_id=%d", gid)
 	hasUID := false
@@ -102,7 +105,18 @@ func verifyKernelMountInfo(mountPath, expectedFSName string, uid, gid uint32) (k
 	return *matched, nil
 }
 
-func checkKernelMountTable(mountPath, expectedFSName string) (bool, bool) {
+func hasMountOption(options, want string) bool {
+	for _, opt := range strings.Split(options, ",") {
+		if opt == want {
+			return true
+		}
+	}
+	return false
+}
+
+// checkKernelMountTable matches the mount at mountPath against its recorded source and, once
+// known, the connection's device number, so another mount at the same path is never adopted.
+func checkKernelMountTable(mountPath, expectedFSName, expectedDev string) (bool, bool) {
 	canonicalMount := canonicalPath(mountPath)
 	entries, err := readMountInfoEntries()
 	if err != nil {
@@ -118,10 +132,83 @@ func checkKernelMountTable(mountPath, expectedFSName string) (bool, bool) {
 	if matched == nil {
 		return false, false
 	}
-	if expectedFSName == "" {
-		return true, true
+	if expectedFSName != "" && matched.source != expectedFSName {
+		return true, false
 	}
-	return true, matched.source == expectedFSName
+	if expectedDev != "" && matched.devMajorMinor != expectedDev {
+		return true, false
+	}
+	return true, true
+}
+
+// deadViewMountPaths returns this user's view mounts under runtimeRoot whose FUSE connection has
+// ended. statfs always reaches the connection, and ENOTCONN is the kernel's report that it is gone. A mount that does not answer within the probe
+// bound still has a server, however slow, and is left alone.
+func deadViewMountPaths(ctx context.Context, runtimeRoot string, uid uint32) ([]string, error) {
+	entries, err := readMountInfoEntries()
+	if err != nil {
+		return nil, err
+	}
+	root := canonicalPath(runtimeRoot)
+	wantOwner := fmt.Sprintf("user_id=%d", uid)
+	var dead []string
+	for _, entry := range entries {
+		if entry.filesystem != "fuse."+DefaultSubtype || !hasMountOption(entry.superOptions, wantOwner) || !pathWithin(root, entry.mountPoint) {
+			continue
+		}
+		if connectionEnded(ctx, entry.mountPoint) {
+			dead = append(dead, entry.mountPoint)
+		}
+	}
+	return dead, nil
+}
+
+func pathWithin(root, candidate string) bool {
+	rel, err := filepath.Rel(root, filepath.Clean(candidate))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
+}
+
+// mountPathsWithin lists every mount at or below root, of any filesystem type.
+func mountPathsWithin(root string) ([]string, error) {
+	entries, err := readMountInfoEntries()
+	if err != nil {
+		return nil, err
+	}
+	canonicalRoot := canonicalPath(root)
+	var within []string
+	for _, entry := range entries {
+		if pathWithin(canonicalRoot, entry.mountPoint) {
+			within = append(within, entry.mountPoint)
+		}
+	}
+	return within, nil
+}
+
+func connectionEnded(ctx context.Context, mountPoint string) bool {
+	probeCtx, cancel := context.WithTimeout(ctx, deadMountProbeBound)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		var st unix.Statfs_t
+		result <- unix.Statfs(mountPoint, &st)
+	}()
+	select {
+	case err := <-result:
+		return errors.Is(err, unix.ENOTCONN)
+	case <-probeCtx.Done():
+		return false
+	}
+}
+
+// syncMountedFilesystem writes back every dirty page of the mount holding path. It serves files
+// a descriptor cannot be opened on; per-inode errors are reported only through fsync.
+func syncMountedFilesystem(path string) error {
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer func() { _ = unix.Close(fd) }()
+	return unix.Syncfs(fd)
 }
 
 func readMountInfoEntries() ([]kernelMountEntry, error) {

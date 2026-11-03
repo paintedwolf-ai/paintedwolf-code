@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"golang.org/x/sys/unix"
 )
 
 func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
@@ -62,7 +63,7 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 		t.Fatalf("expected CheckpointBarrier without FlushClientHook to fail, got rec=%+v err=%v", rec2, err)
 	}
 
-	// 3. Open mapped.txt on the FUSE mount, mmap MAP_SHARED, mutate in memory, and flush via SyncMappedRegion.
+	// 3. Open mapped.txt on the FUSE mount, mmap MAP_SHARED, mutate in memory, and flush with msync.
 	mappedPath := filepath.Join(prep.PrimaryWorkPath, "mapped.txt")
 	mf, err := os.OpenFile(mappedPath, os.O_RDWR, 0o644)
 	if err != nil {
@@ -77,10 +78,10 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 	defer func() { _ = syscall.Munmap(mappedSlice) }()
 
 	wantMapped := []byte("mutated-by-mmap!\n")
-	copy(mappedSlice, wantMapped)
+	copyToMapping(mappedSlice, wantMapped)
 
 	if err := adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := fuselinux.SyncMappedRegion(mappedSlice); err != nil {
+		if err := unix.Msync(mappedSlice, unix.MS_SYNC); err != nil {
 			return err
 		}
 		return mf.Sync()
