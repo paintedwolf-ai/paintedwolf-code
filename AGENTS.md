@@ -119,7 +119,7 @@ Live model benchmarks require explicit authorization. Fix causes; never `t.Skip`
 failures to get green. Test conventions: [backend](lycaon/AGENTS.md#testing) and
 [frontend](lycaon-den/AGENTS.md#testing).
 
-**Both gates enforce size budgets; exact-landing qualification enforces changed-statement coverage.** Files,
+**Both gates enforce size budgets and changed Go statement coverage; exact-landing qualification also enforces frontend and script coverage.** Files,
 directories, and Go types must not grow above category limits without justified
 exceptions. Warnings create architectural review obligations after merge; hard limits block new or
 growing excess. Unchanged legacy excess is tracked; explicit caps and prompt
