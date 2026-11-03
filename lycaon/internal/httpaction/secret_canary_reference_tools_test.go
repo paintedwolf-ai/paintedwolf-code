@@ -145,7 +145,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 	runner := hostcmd.NewRunner()
-	command := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
+	capturedCommand := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Programs: program.Runtime}
 	verifyExecutor := program.Runtime.Executor
 	verifyExecutor.Approvals.SetCheckpointManager(t.Context(), review, authority)
@@ -181,7 +181,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	testutil.FailErr(t, "register command output", registry.Register("command_output", (&command.CommandOutputTool{Registry: program.Background}).Run))
 	verifyExecutor.SetProgramEntry("verify", nil)
 	testutil.FailErr(t, "register program verify", program.Runtime.Registry.Register("verify", verify.Run))
-	testutil.FailErr(t, "register command", registry.Register("command", command.Run))
+	testutil.FailErr(t, "register command", registry.Register("command", capturedCommand.Run))
 	testutil.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	testutil.FailErr(t, "register terminal tools", native.RegisterTerminalSessionTools(registry, background))
 
