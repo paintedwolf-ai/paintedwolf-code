@@ -83,9 +83,10 @@ type PreviewRequest struct {
 
 // PromoterConfig configures a transactional Promoter.
 type PromoterConfig struct {
-	Store       *Store
-	TargetRoots map[string]string
-	RefImporter func(ctx context.Context, txID, workerID string, git PrivateGitSnapshot) (map[string]string, error)
+	Store             *Store
+	TargetRoots       map[string]string
+	AuthorizedGitDirs []string
+	RefImporter       func(ctx context.Context, txID, workerID string, git PrivateGitSnapshot) (map[string]string, error)
 }
 
 // Promoter executes exact-base three-way preview and transactional promotion.

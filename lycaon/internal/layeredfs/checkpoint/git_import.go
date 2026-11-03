@@ -1,59 +1,49 @@
 package checkpoint
 
 import (
-	"bytes"
-	"compress/zlib"
-	"crypto/sha1"
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
-	"golang.org/x/sys/unix"
+	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
-// ApplyPathXattrs applies extended attributes to abs, ignoring ENOTSUP/EOPNOTSUPP.
-func ApplyPathXattrs(abs string, xattrs map[string][]byte) error {
-	for k, v := range xattrs {
-		if err := unix.Setxattr(abs, k, v, 0); err != nil && !errors.Is(err, unix.ENOTSUP) && !errors.Is(err, unix.EOPNOTSUPP) {
-			return err
-		}
-	}
-	return nil
+// GitRefImportRecord durably records checkpoint ref import intent and expected prior OIDs before ref mutation.
+type GitRefImportRecord struct {
+	CheckpointID string            `json:"checkpoint_id,omitempty"`
+	WorkerID     string            `json:"worker_id"`
+	PlannedRefs  map[string]string `json:"planned_refs"`
+	ExpectedOld  map[string]string `json:"expected_old,omitempty"`
+	Completed    bool              `json:"completed"`
 }
 
-// WriteLooseGitObject writes a standard zlib-compressed loose Git object into objectsDir and returns its SHA-1 hex OID.
-func WriteLooseGitObject(objectsDir, objType string, payload []byte) (string, error) {
-	raw := append([]byte(fmt.Sprintf("%s %d\x00", objType, len(payload))), payload...)
-	oid := hexObjSHA1(raw)
-	var compressed bytes.Buffer
-	zw := zlib.NewWriter(&compressed)
-	_, wErr := zw.Write(raw)
-	if err := errors.Join(wErr, zw.Close(), os.MkdirAll(filepath.Join(objectsDir, oid[:2]), 0o755)); err != nil {
-		return "", err
+// ResolveGitDirs resolves the worktree gitDir and shared commonGitDir for repoRoot,
+// rejecting symlinks and requiring external gitdir/commondir paths to reside under authorizedDirs.
+func ResolveGitDirs(repoRoot string, authorizedDirs ...string) (gitDir, commonGitDir string, err error) {
+	if repoRoot = filepath.Clean(strings.TrimSpace(repoRoot)); repoRoot == "" || repoRoot == "." {
+		return "", "", fmt.Errorf("checkpoint: repository root is required")
 	}
-	return oid, writeAtomicJSONOrText(filepath.Join(objectsDir, oid[:2]), oid[2:], compressed.Bytes(), 0o444)
-}
-
-// ResolveGitDirs resolves the worktree gitDir and shared commonGitDir for repoRoot (supporting linked-worktree .git files).
-func ResolveGitDirs(repoRoot string) (gitDir, commonGitDir string, err error) {
+	if err := validateResolvedGitDir(repoRoot); err != nil {
+		return "", "", fmt.Errorf("%w: %v", ErrUnauthorizedGitDir, err)
+	}
 	dotGit := filepath.Join(repoRoot, ".git")
 	st, err := os.Lstat(dotGit)
-	if err != nil {
-		return "", "", fmt.Errorf("checkpoint: resolve .git at %s: %w", dotGit, err)
+	if err != nil || st.Mode()&os.ModeSymlink != 0 {
+		return "", "", fmt.Errorf("%w: resolve .git at %s (%v)", ErrUnauthorizedGitDir, dotGit, err)
 	}
 	if st.IsDir() {
 		gitDir = dotGit
 	} else if st.Mode().IsRegular() {
-		raw, rErr := os.ReadFile(dotGit)
+		raw, rErr := readBoundedFile(dotGit, 4096)
 		line := strings.TrimSpace(string(raw))
-		if rErr != nil || !strings.HasPrefix(line, "gitdir:") {
+		if rErr != nil || !strings.HasPrefix(line, "gitdir:") || strings.ContainsAny(line, "\r\n\x00") {
 			return "", "", fmt.Errorf("checkpoint: invalid .git file at %s", dotGit)
 		}
 		target := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
@@ -64,46 +54,131 @@ func ResolveGitDirs(repoRoot string) (gitDir, commonGitDir string, err error) {
 	} else {
 		return "", "", fmt.Errorf("checkpoint: unsupported .git entry at %s", dotGit)
 	}
-	if gst, sErr := os.Stat(gitDir); sErr != nil || !gst.IsDir() {
-		return "", "", fmt.Errorf("checkpoint: gitdir %s unavailable", gitDir)
+	if err := validateResolvedGitDir(gitDir); err != nil {
+		return "", "", err
 	}
-	commonGitDir = gitDir
-	if rawCommon, cErr := os.ReadFile(filepath.Join(gitDir, "commondir")); cErr == nil {
+	if commonGitDir, err = resolveCommonGitDir(gitDir); err != nil {
+		return "", "", err
+	}
+	allowed := append([]string{repoRoot}, authorizedDirs...)
+	if !isPathWithinAuthorized(gitDir, allowed) || !isPathWithinAuthorized(commonGitDir, allowed) {
+		return "", "", fmt.Errorf("%w: gitdir=%s commondir=%s", ErrUnauthorizedGitDir, gitDir, commonGitDir)
+	}
+	return gitDir, commonGitDir, nil
+}
+
+func resolveCommonGitDir(gitDir string) (string, error) {
+	commonGitDir, commonFile := gitDir, filepath.Join(gitDir, "commondir")
+	if cst, err := os.Lstat(commonFile); err == nil {
+		if cst.Mode()&os.ModeSymlink != 0 || !cst.Mode().IsRegular() {
+			return "", fmt.Errorf("%w: invalid commondir entry at %s", ErrUnauthorizedGitDir, commonFile)
+		}
+		rawCommon, rErr := readBoundedFile(commonFile, 4096)
+		if rErr != nil {
+			return "", rErr
+		}
 		if rel := strings.TrimSpace(string(rawCommon)); rel != "" {
+			if strings.ContainsAny(rel, "\r\n\x00") {
+				return "", fmt.Errorf("checkpoint: invalid commondir content at %s", commonFile)
+			}
 			if !filepath.IsAbs(rel) {
 				rel = filepath.Join(gitDir, rel)
 			}
 			commonGitDir = filepath.Clean(rel)
 		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
 	}
-	if cst, sErr := os.Stat(commonGitDir); sErr != nil || !cst.IsDir() {
-		return "", "", fmt.Errorf("checkpoint: commondir %s unavailable", commonGitDir)
-	}
-	return gitDir, commonGitDir, nil
+	return commonGitDir, validateResolvedGitDir(commonGitDir)
 }
 
-// ImportAndValidateCheckpointGitRefs imports missing Git objects, validates object closure, and writes checkpoint/worker refs.
-func ImportAndValidateCheckpointGitRefs(storeDir, checkpointID, workerID string, git PrivateGitSnapshot, targetRoots map[string]string) (map[string]string, error) {
+func validateResolvedGitDir(dir string) error {
+	st, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("checkpoint: git directory %s unavailable: %w", dir, err)
+	}
+	if st.Mode()&os.ModeSymlink != 0 || !st.IsDir() {
+		return fmt.Errorf("%w: invalid git directory %s", ErrUnauthorizedGitDir, dir)
+	}
+	return nil
+}
+
+func isPathWithinAuthorized(target string, allowed []string) bool {
+	absTarget, err := filepath.Abs(target)
+	realTarget, rErr := filepath.EvalSymlinks(absTarget)
+	if err != nil || rErr != nil {
+		return false
+	}
+	for _, root := range allowed {
+		absRoot, aErr := filepath.Abs(strings.TrimSpace(root))
+		realRoot, eErr := filepath.EvalSymlinks(absRoot)
+		if strings.TrimSpace(root) != "" && aErr == nil && eErr == nil && (realTarget == realRoot || strings.HasPrefix(realTarget, realRoot+string(filepath.Separator))) {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateGitRefSegment validates a single path component of a Git ref name.
+func ValidateGitRefSegment(seg, label string) error {
+	if seg == "" || seg == "." || seg == ".." || strings.HasPrefix(seg, ".") || strings.HasSuffix(seg, ".") || strings.HasSuffix(seg, ".lock") {
+		return fmt.Errorf("checkpoint: invalid %s segment %q", label, seg)
+	}
+	if strings.Contains(seg, "..") || strings.Contains(seg, "@{") {
+		return fmt.Errorf("checkpoint: forbidden sequence in %s segment %q", label, seg)
+	}
+	for _, r := range seg {
+		if r <= 0x20 || r == 0x7f || strings.ContainsRune(`~^:?*[\`, r) {
+			return fmt.Errorf("checkpoint: illegal character in %s segment %q", label, seg)
+		}
+	}
+	return nil
+}
+
+// ValidateGitRefName strictly validates a Git reference name and returns its normalized suffix under refs/.
+func ValidateGitRefName(ref string) (string, error) {
+	if ref == "" || strings.TrimSpace(ref) != ref || strings.Contains(ref, `\`) || strings.HasPrefix(ref, "/") || strings.HasSuffix(ref, "/") || strings.Contains(ref, "//") {
+		return "", fmt.Errorf("checkpoint: invalid git ref name %q", ref)
+	}
+	trimmed := strings.TrimPrefix(ref, "refs/")
+	if trimmed == "" {
+		return "", fmt.Errorf("checkpoint: empty git ref name %q", ref)
+	}
+	for _, seg := range strings.Split(trimmed, "/") {
+		if err := ValidateGitRefSegment(seg, "ref"); err != nil {
+			return "", err
+		}
+	}
+	return trimmed, nil
+}
+
+type plannedRefWrite struct{ dstRef, oid string }
+
+// ImportAndValidateCheckpointGitRefs imports retained Git objects from the checkpoint store,
+// validates reachable object closure, records durable import intent, and updates refs via git update-ref CAS.
+func ImportAndValidateCheckpointGitRefs(
+	ctx context.Context, storeDir, checkpointID, workerID string, git PrivateGitSnapshot,
+	targetRoots map[string]string, authorizedGitDirs ...string,
+) (map[string]string, error) {
 	if len(git.Refs) == 0 {
 		return nil, nil
 	}
-	cleanWorker, err := cleanNamespaceSegment(workerID, "worker")
-	if err != nil {
+	cleanWorker, cleanCheckpoint := strings.TrimSpace(workerID), strings.TrimSpace(checkpointID)
+	if err := ValidateGitRefSegment(cleanWorker, "worker"); err != nil {
 		return nil, err
 	}
-	cleanCheckpoint := ""
-	if strings.TrimSpace(checkpointID) != "" {
-		if cleanCheckpoint, err = cleanNamespaceSegment(checkpointID, "checkpoint"); err != nil {
+	if cleanCheckpoint != "" {
+		if err := ValidateGitRefSegment(cleanCheckpoint, "checkpoint"); err != nil {
 			return nil, err
 		}
 	}
 	primaryDir := selectPrimaryRootDir(targetRoots)
-	gitDir, commonGitDir, err := ResolveGitDirs(primaryDir)
+	gitDir, commonGitDir, err := ResolveGitDirs(primaryDir, authorizedGitDirs...)
 	if err != nil {
 		return nil, err
 	}
 	targetObjectsDir := filepath.Join(commonGitDir, "objects")
-	if err := errors.Join(os.MkdirAll(targetObjectsDir, 0o755), copyCandidateGitObjects(storeDir, targetObjectsDir)); err != nil {
+	if err := errors.Join(ensureMinimalGitDirLayout(gitDir, commonGitDir), copyCandidateGitObjects(storeDir, cleanCheckpoint, targetObjectsDir)); err != nil {
 		return nil, err
 	}
 	refNames := make([]string, 0, len(git.Refs))
@@ -112,187 +187,114 @@ func ImportAndValidateCheckpointGitRefs(storeDir, checkpointID, workerID string,
 	}
 	sort.Strings(refNames)
 
-	verifiedOIDs := make(map[string]bool, len(refNames)*2)
-	type plannedRefWrite struct{ dstRef, oid string }
+	verifiedOIDs := make(map[string]bool, len(refNames)*4)
 	var writes []plannedRefWrite
 	for _, refName := range refNames {
+		cleanRel, nameErr := ValidateGitRefName(refName)
+		if nameErr != nil {
+			return nil, nameErr
+		}
 		oid := strings.ToLower(strings.TrimSpace(git.Refs[refName]))
-		if !isHexOID(oid) {
+		if !isHexOID(oid) || isAllZeroOID(oid) {
 			return nil, fmt.Errorf("checkpoint: invalid git oid %q for ref %q", oid, refName)
 		}
-		if err := verifyReachableGitObject(targetObjectsDir, oid, verifiedOIDs); err != nil {
+		if err := verifyReachableGitObject(ctx, primaryDir, commonGitDir, targetObjectsDir, oid, verifiedOIDs); err != nil {
 			return nil, fmt.Errorf("checkpoint: unreachable or corrupt git object for ref %s (%s): %w", refName, oid, err)
-		}
-		cleanRel := filepath.ToSlash(filepath.Clean(strings.TrimPrefix(strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(refName)), "/"), "refs/")))
-		if cleanRel == "" || cleanRel == "." || strings.HasPrefix(cleanRel, "..") {
-			return nil, fmt.Errorf("checkpoint: invalid git ref name %q", refName)
 		}
 		writes = append(writes, plannedRefWrite{dstRef: "refs/lycaon/workers/" + cleanWorker + "/" + cleanRel, oid: oid})
 		if cleanCheckpoint != "" {
 			writes = append(writes, plannedRefWrite{dstRef: "refs/lycaon/checkpoints/" + cleanCheckpoint + "/" + cleanRel, oid: oid})
 		}
 	}
+	return applyCheckpointRefTransaction(ctx, primaryDir, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker, writes)
+}
+
+func applyCheckpointRefTransaction(
+	ctx context.Context, primaryDir, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker string, writes []plannedRefWrite,
+) (map[string]string, error) {
+	planned := make(map[string]string, len(writes))
 	for _, w := range writes {
-		for _, baseDir := range []string{commonGitDir, gitDir} {
-			if raw, rErr := os.ReadFile(filepath.Join(baseDir, filepath.FromSlash(w.dstRef))); rErr == nil {
-				if existing := strings.ToLower(strings.TrimSpace(string(raw))); existing != w.oid {
-					return nil, fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, w.dstRef, existing, w.oid)
+		planned[w.dstRef] = w.oid
+	}
+	intentName := "git-import-" + cleanWorker + "--" + cleanCheckpoint + ".json"
+	if strings.TrimSpace(storeDir) != "" {
+		if raw, err := os.ReadFile(filepath.Join(storeDir, "promotions", intentName)); err == nil {
+			var existing GitRefImportRecord
+			if uErr := json.Unmarshal(raw, &existing); uErr != nil {
+				return nil, uErr
+			}
+			if existing.WorkerID != cleanWorker || !maps.Equal(existing.PlannedRefs, planned) {
+				return nil, fmt.Errorf("%w: conflicting durable ref import intent", ErrCheckpointRefConflict)
+			}
+		}
+	}
+	expectedOld := make(map[string]string, len(writes))
+	var stdinBuf strings.Builder
+	for _, w := range writes {
+		curOID := resolveExistingGitRef(commonGitDir, gitDir, w.dstRef)
+		if curOID != "" && curOID != w.oid {
+			return nil, fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, w.dstRef, curOID, w.oid)
+		}
+		expectedOld[w.dstRef] = curOID
+		op := "create"
+		if curOID == w.oid {
+			op = "verify"
+		}
+		_, _ = fmt.Fprintf(&stdinBuf, "%s %s %s\n", op, w.dstRef, w.oid)
+	}
+	rec := GitRefImportRecord{CheckpointID: cleanCheckpoint, WorkerID: cleanWorker, PlannedRefs: planned, ExpectedOld: expectedOld}
+	if err := saveGitRefImportRecord(storeDir, intentName, rec); err != nil {
+		return nil, err
+	}
+	out, code, err := gitexec.Run(ctx, primaryDir, []string{"--git-dir=" + commonGitDir, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(stdinBuf.String())})
+	if err != nil || code != 0 {
+		return nil, fmt.Errorf("%w: update-ref failed: %v (%s)", ErrCheckpointRefConflict, err, strings.TrimSpace(string(out)))
+	}
+	rec.Completed = true
+	return planned, saveGitRefImportRecord(storeDir, intentName, rec)
+}
+
+func saveGitRefImportRecord(storeDir, intentName string, rec GitRefImportRecord) error {
+	if strings.TrimSpace(storeDir) == "" {
+		return nil
+	}
+	raw, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeAtomicJSONOrText(filepath.Join(storeDir, "promotions"), intentName, raw, 0o600)
+}
+
+func resolveExistingGitRef(commonGitDir, gitDir, dstRef string) string {
+	for _, baseDir := range []string{commonGitDir, gitDir} {
+		if raw, err := readBoundedFile(filepath.Join(baseDir, filepath.FromSlash(dstRef)), 256); err == nil {
+			if oid := strings.ToLower(strings.TrimSpace(string(raw))); isHexOID(oid) {
+				return oid
+			}
+		}
+	}
+	for _, baseDir := range []string{commonGitDir, gitDir} {
+		if raw, err := readBoundedFile(filepath.Join(baseDir, "packed-refs"), 8<<20); err == nil {
+			for _, line := range strings.Split(string(raw), "\n") {
+				f := strings.Fields(strings.TrimSpace(line))
+				if len(f) >= 2 && !strings.HasPrefix(f[0], "#") && !strings.HasPrefix(f[0], "^") && f[1] == dstRef && isHexOID(strings.ToLower(f[0])) {
+					return strings.ToLower(f[0])
 				}
 			}
-		}
-	}
-	imported := make(map[string]string, len(writes))
-	for _, w := range writes {
-		refPath := filepath.Join(commonGitDir, filepath.FromSlash(w.dstRef))
-		if raw, rErr := os.ReadFile(refPath); rErr != nil || strings.ToLower(strings.TrimSpace(string(raw))) != w.oid {
-			if err := writeAtomicJSONOrText(filepath.Dir(refPath), filepath.Base(refPath), []byte(w.oid+"\n"), 0o644); err != nil {
-				return nil, err
-			}
-		}
-		imported[w.dstRef] = w.oid
-	}
-	return imported, nil
-}
-
-func cleanNamespaceSegment(raw, label string) (string, error) {
-	s := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
-	if s == "" || s == "." || strings.HasPrefix(s, "/") || strings.Contains(s, "..") {
-		return "", fmt.Errorf("checkpoint: invalid %s id %q for ref import", label, raw)
-	}
-	return s, nil
-}
-
-func isHexOID(s string) bool { _, err := hex.DecodeString(s); return err == nil && (len(s) == 40 || len(s) == 64) }
-
-func selectPrimaryRootDir(targetRoots map[string]string) string {
-	for _, k := range []string{"primary", "root-0", ""} {
-		if d := strings.TrimSpace(targetRoots[k]); d != "" {
-			return d
-		}
-	}
-	for _, d := range targetRoots {
-		if d = strings.TrimSpace(d); d != "" {
-			return d
 		}
 	}
 	return ""
 }
 
-func copyCandidateGitObjects(storeDir, targetObjectsDir string) error {
-	if strings.TrimSpace(storeDir) == "" {
-		return nil
-	}
-	parent := filepath.Dir(storeDir)
-	for _, srcObjects := range []string{
-		filepath.Join(storeDir, "objects"), filepath.Join(storeDir, "git", "objects"),
-		filepath.Join(parent, ".lycaon-private-git", "objects"), filepath.Join(parent, ".git", "objects"),
-	} {
-		if st, err := os.Stat(srcObjects); err != nil || !st.IsDir() || filepath.Clean(srcObjects) == filepath.Clean(targetObjectsDir) {
-			continue
-		}
-		err := filepath.WalkDir(srcObjects, func(path string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil || d.IsDir() {
-				return walkErr
-			}
-			rel, rErr := filepath.Rel(srcObjects, path)
-			if rErr != nil || filepath.ToSlash(rel) == "info/alternates" {
-				return rErr
-			}
-			dst := filepath.Join(targetObjectsDir, rel)
-			if _, statErr := os.Stat(dst); statErr == nil {
-				return nil
-			}
-			raw, readErr := os.ReadFile(path)
-			if readErr != nil {
-				return readErr
-			}
-			return writeAtomicJSONOrText(filepath.Dir(dst), filepath.Base(dst), raw, 0o444)
-		})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func verifyReachableGitObject(objectsDir, oid string, seen map[string]bool) error {
-	if seen[oid] {
-		return nil
-	}
-	f, err := os.Open(filepath.Join(objectsDir, oid[:2], oid[2:]))
+func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
+	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	zr, err := zlib.NewReader(f)
-	if err != nil {
-		return err
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
+	if err != nil || int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("checkpoint: read %s failed or exceeded limit: %w", path, err)
 	}
-	defer func() { _ = zr.Close() }()
-	raw, err := io.ReadAll(zr)
-	if err != nil {
-		return err
-	}
-	if (len(oid) == 40 && hexObjSHA1(raw) != oid) || (len(oid) == 64 && hexObjSHA256(raw) != oid) {
-		return fmt.Errorf("digest mismatch for loose object %s", oid)
-	}
-	nul := bytes.IndexByte(raw, 0)
-	hdrParts := strings.SplitN(string(raw[:max(0, nul)]), " ", 2)
-	if nul <= 0 || len(hdrParts) != 2 {
-		return fmt.Errorf("malformed loose object header for %s", oid)
-	}
-	if size, sErr := strconv.Atoi(hdrParts[1]); sErr != nil || size != len(raw[nul+1:]) {
-		return fmt.Errorf("size mismatch for %s", oid)
-	}
-	seen[oid] = true
-	body := raw[nul+1:]
-	switch hdrParts[0] {
-	case "blob":
-		return nil
-	case "commit", "tag":
-		return verifyCommitOrTagBody(objectsDir, body, hdrParts[0] == "commit", seen)
-	case "tree":
-		for len(body) > 0 {
-			hb := len(oid) / 2
-			n := bytes.IndexByte(body, 0)
-			if n <= 0 || n+1+hb > len(body) {
-				return fmt.Errorf("malformed tree entry")
-			}
-			if err := verifyReachableGitObject(objectsDir, hex.EncodeToString(body[n+1:n+1+hb]), seen); err != nil {
-				return err
-			}
-			body = body[n+1+hb:]
-		}
-		return nil
-	default:
-		return fmt.Errorf("unsupported git object type %q", hdrParts[0])
-	}
-}
-
-func hexObjSHA1(b []byte) string   { s := sha1.Sum(b); return hex.EncodeToString(s[:]) }
-func hexObjSHA256(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
-
-func verifyCommitOrTagBody(objectsDir string, body []byte, isCommit bool, seen map[string]bool) error {
-	foundPrimary := false
-	for _, line := range strings.Split(string(body), "\n") {
-		if line == "" {
-			break
-		}
-		fields := strings.Fields(line)
-		if isCommit && len(fields) == 2 && (fields[0] == "tree" || fields[0] == "parent") {
-			foundPrimary = foundPrimary || fields[0] == "tree"
-			if err := verifyReachableGitObject(objectsDir, fields[1], seen); err != nil {
-				return err
-			}
-		} else if !isCommit && len(fields) == 2 && fields[0] == "object" {
-			foundPrimary = true
-			if err := verifyReachableGitObject(objectsDir, fields[1], seen); err != nil {
-				return err
-			}
-		}
-	}
-	if !foundPrimary {
-		return fmt.Errorf("missing required target object header")
-	}
-	return nil
+	return data, nil
 }

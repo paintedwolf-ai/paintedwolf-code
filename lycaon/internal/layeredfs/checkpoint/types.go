@@ -31,6 +31,7 @@ var (
 	ErrStalePreviewTargetChanged = errors.New("checkpoint: integration target changed since preview")
 	ErrUnresolvedConflict        = errors.New("checkpoint: unresolved promotion conflict")
 	ErrCheckpointRefConflict     = errors.New("checkpoint: destination git ref conflict")
+	ErrUnauthorizedGitDir        = errors.New("checkpoint: gitdir or commondir outside authorized roots")
 )
 
 // TriggerKind identifies the boundary that requested checkpoint publication.

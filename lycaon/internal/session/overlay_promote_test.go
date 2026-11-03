@@ -198,14 +198,11 @@ func TestResolveWorkerSummaryStatus(t *testing.T) {
 }
 
 func TestOverlayChangedPathsAndDivergenceFromPublishedCheckpoint(t *testing.T) {
-	primary := t.TempDir()
+	primary, overlay := t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "write primary", os.WriteFile(filepath.Join(primary, "checkpointed.go"), []byte("package p\n// v1\n"), 0o644))
 	testutil.FailErr(t, "write deleted", os.WriteFile(filepath.Join(primary, "deleted.go"), []byte("package p\n// del\n"), 0o644))
-
-	overlay := t.TempDir()
 	store, err := checkpoint.NewStore(filepath.Join(overlay, session.TaskCheckpointStoreSubdir))
 	testutil.FailErr(t, "NewStore", err)
-
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID: "view-session-cp", BackingDir: t.TempDir(),
 		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
@@ -216,26 +213,17 @@ func TestOverlayChangedPathsAndDivergenceFromPublishedCheckpoint(t *testing.T) {
 	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "checkpointed.go"}, []byte("package p\n// v2\n"), 0o644)
 	testutil.FailErr(t, "WriteFile checkpointed", err)
 	testutil.FailErr(t, "Unlink deleted", core.Unlink(layeredfs.QualifiedPath{RootID: "primary", Rel: "deleted.go"}, false))
-
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		WorkerID: "job-cp-session", TaskID: "job-cp-session", ProjectID: testdbseed.DefaultProjectID,
 		SourceGeneration: "gen-1", Core: core, Store: store,
 	})
 	testutil.FailErr(t, "NewPublisher", err)
-
-	_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{
-		CheckpointID: "chk-session-1", Trigger: checkpoint.TriggerWorkerCompletion,
-	})
+	_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "chk-session-1", Trigger: checkpoint.TriggerWorkerCompletion})
 	testutil.FailErr(t, "Publish", err)
-
 	testutil.FailErr(t, "write uncheckpointed", os.WriteFile(filepath.Join(overlay, "uncheckpointed.go"), []byte("package p\n// dirty\n"), 0o644))
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
-	task := &api.WorkerTask{
-		ID: "job-cp-session", ProjectID: testdbseed.DefaultProjectID,
-		WorkspacePath: primary, WorkspaceRoot: overlay, Scope: &scope,
-	}
-
+	task := &api.WorkerTask{ID: "job-cp-session", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, Scope: &scope}
 	if !session.OverlayAwaitingPromote(t.Context(), task) {
 		t.Fatal("expected OverlayAwaitingPromote true for published checkpoint")
 	}
@@ -251,9 +239,7 @@ func TestOverlayChangedPathsAndDivergenceFromPublishedCheckpoint(t *testing.T) {
 
 func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(t *testing.T) {
 	baseDir := t.TempDir()
-	commonGit := filepath.Join(baseDir, "common-git")
-	worktreeGit := filepath.Join(baseDir, "worktree-git")
-	primary := filepath.Join(baseDir, "worktree")
+	commonGit, worktreeGit, primary := filepath.Join(baseDir, "common-git"), filepath.Join(baseDir, "worktree-git"), filepath.Join(baseDir, "worktree")
 	for _, d := range []string{filepath.Join(commonGit, "objects"), worktreeGit, primary} {
 		testutil.FailErr(t, "MkdirAll", os.MkdirAll(d, 0o755))
 	}
@@ -265,7 +251,11 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 	testutil.FailErr(t, "NewStore", err)
 
 	danglingOID := "1111111111111111111111111111111111111111"
-	importer := session.DefaultCheckpointRefImporter(store, checkpoint.Manifest{CheckpointID: "chk-1", WorkerID: "w-1"}, map[string]string{"primary": primary})
+	unauthImporter := session.DefaultCheckpointRefImporter(store, checkpoint.Manifest{CheckpointID: "chk-1", WorkerID: "w-1"}, map[string]string{"primary": primary})
+	if _, err := unauthImporter(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": danglingOID}}); !errors.Is(err, checkpoint.ErrUnauthorizedGitDir) {
+		t.Fatalf("expected ErrUnauthorizedGitDir for external worktree gitdir without grant, got %v", err)
+	}
+	importer := session.DefaultCheckpointRefImporter(store, checkpoint.Manifest{CheckpointID: "chk-1", WorkerID: "w-1"}, map[string]string{"primary": primary}, worktreeGit, commonGit)
 	if _, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": danglingOID}}); err == nil {
 		t.Fatal("expected error for dangling object OID, got nil")
 	}
@@ -277,8 +267,7 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 	blobOID, err := checkpoint.WriteLooseGitObject(objsDir, "blob", []byte("hello world\n"))
 	testutil.FailErr(t, "write blob", err)
 	blobRaw, _ := hex.DecodeString(blobOID)
-	treePayload := append([]byte("100644 file.txt\x00"), blobRaw...)
-	treeOID, err := checkpoint.WriteLooseGitObject(objsDir, "tree", treePayload)
+	treeOID, err := checkpoint.WriteLooseGitObject(objsDir, "tree", append([]byte("100644 file.txt\x00"), blobRaw...))
 	testutil.FailErr(t, "write tree", err)
 	commitOID, err := checkpoint.WriteLooseGitObject(objsDir, "commit", []byte(fmt.Sprintf("tree %s\nauthor A <a@b.c> 1 +0000\ncommitter A <a@b.c> 1 +0000\n\nmsg\n", treeOID)))
 	testutil.FailErr(t, "write commit", err)
@@ -354,9 +343,7 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 	testutil.FailErr(t, "recreate removed.txt", os.WriteFile(removedPath, []byte("recreated post-promote\n"), 0o644))
 	testutil.FailErr(t, "retry CommitTaskCheckpointJournal", session.CommitTaskCheckpointJournal(t.Context(), task, nil, nil))
 	testutil.FailErr(t, "retry ApplyTaskCheckpointAttributes", session.ApplyTaskCheckpointAttributes(task, nil))
-	gotBytes, err := os.ReadFile(removedPath)
-	testutil.FailErr(t, "ReadFile recreated removed.txt", err)
-	if !strings.Contains(string(gotBytes), "recreated post-promote") {
-		t.Fatalf("post-promotion recreated file was clobbered: %q", string(gotBytes))
+	if gotBytes, err := os.ReadFile(removedPath); err != nil || !strings.Contains(string(gotBytes), "recreated post-promote") {
+		t.Fatalf("post-promotion recreated file was clobbered or unreadable: %q (%v)", string(gotBytes), err)
 	}
 }

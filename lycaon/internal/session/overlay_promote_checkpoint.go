@@ -115,16 +115,16 @@ func TargetRootsForTaskCheckpoint(task *api.WorkerTask, roots []projectroot.Root
 }
 
 // DefaultCheckpointRefImporter imports and validates checkpointed private Git objects and refs into the target repository.
-func DefaultCheckpointRefImporter(store *checkpoint.Store, manifest checkpoint.Manifest, targetRoots map[string]string) func(context.Context, string, string, checkpoint.PrivateGitSnapshot) (map[string]string, error) {
+func DefaultCheckpointRefImporter(store *checkpoint.Store, manifest checkpoint.Manifest, targetRoots map[string]string, authorizedGitDirs ...string) func(context.Context, string, string, checkpoint.PrivateGitSnapshot) (map[string]string, error) {
 	storeDir := ""
 	if store != nil {
 		storeDir = store.RootDir()
 	}
-	return func(_ context.Context, _ string, workerID string, git checkpoint.PrivateGitSnapshot) (map[string]string, error) {
+	return func(ctx context.Context, _ string, workerID string, git checkpoint.PrivateGitSnapshot) (map[string]string, error) {
 		if strings.TrimSpace(workerID) == "" {
 			workerID = manifest.WorkerID
 		}
-		return checkpoint.ImportAndValidateCheckpointGitRefs(storeDir, manifest.CheckpointID, workerID, git, targetRoots)
+		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, storeDir, manifest.CheckpointID, workerID, git, targetRoots, authorizedGitDirs...)
 	}
 }
 
