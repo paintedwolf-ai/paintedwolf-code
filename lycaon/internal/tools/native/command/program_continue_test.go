@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/programtest"
@@ -81,7 +82,7 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 				t.Fatalf("live snapshot %+v", snap)
 			}
 			if stop {
-				_, err = f.Background.Lifecycle.Stop(f.Session, running.Handle)
+				_, err = f.Background.Lifecycle.Stop(f.Session, running.Handle, bgprocess.TerminationStoppedByAgent)
 				testutil.FailErr(t, "stop original program", err)
 			} else {
 				close(release)
