@@ -102,12 +102,12 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
                 fallback={<p class="den-dialog__hint" role="status">Extension references could not be assessed. All extensions will be kept.</p>}
                 keyed
               >{(assessment) => <>
-                <Show when={(assessment.background_processes?.length ?? 0) > 0}>
+                <Show when={assessment.background_processes?.length}>{count => (
                   <div data-testid="project-removal-background-processes">
                     <p class="den-dialog__hint">
-                      {assessment.background_processes!.length === 1
+                      {count() === 1
                         ? "1 background command is running in this project and will stop when the project is deleted:"
-                        : `${assessment.background_processes!.length} background commands are running in this project and will stop when the project is deleted:`}
+                        : `${count()} background commands are running in this project and will stop when the project is deleted:`}
                     </p>
                     <ul class="den-dialog__hint">
                       <For each={assessment.background_processes}>{(proc) => (
@@ -115,7 +115,7 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
                       )}</For>
                     </ul>
                   </div>
-                </Show>
+                )}</Show>
                 <Show when={assessment.extensions.length > 0}>
                   <p class="den-dialog__hint">These extensions were installed from this project. They are shared across this device. Choose which to remove after the project is deleted.</p>
                   <For each={assessment.extensions}>{(pack, index) => (
