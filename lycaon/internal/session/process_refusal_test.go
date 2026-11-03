@@ -108,6 +108,9 @@ func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
 		if tools.ToolOffered(ctx, "command_stop") && !strings.Contains(text, "observe its exit") {
 			t.Errorf("stop guidance omitted observed exit: %s", text)
 		}
+		if strings.Contains(text, "capability_request.host_execution") || strings.Contains(text, "capability_request.write_root") {
+			t.Errorf("wake invented a retry recipe without invocation arguments: %s", text)
+		}
 		if strings.Contains(text, "and rerun it") {
 			t.Errorf("wake bypassed observed exit: %s", text)
 		}
