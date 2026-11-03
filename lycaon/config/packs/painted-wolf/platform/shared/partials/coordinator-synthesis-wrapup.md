@@ -20,7 +20,7 @@ Then draft once.
 
 | Tool | Why |
 |------|-----|
-| command mutations, `edit`, `replace_lines`, `restore_version`, `code_rewrite`, `chmod` | Product mutations — done on investigate/dispatch via workers |
+| command mutations and `restore_version` | Product mutations — done on investigate/dispatch via workers |
 | Execution checks through `command` or `verify` | Execution checks — done before wrapup |
 | `task`, `worker_cancel`, `wait` | Delegation and orchestration — workers are idle |
 | `update_progress` (new `- [ ]`) | Reconcile only here — close rows in place |
@@ -29,7 +29,7 @@ Then draft once.
 
 **Do not narrate fixes.** Do not say "I'll edit…", "I'll run `task()`…", or loop searches hoping to fix code — those tools are absent. If tests or code are still broken, stop; the host mis-routed you.
 
-**Survey tools** (`command`{% if profile_has_summarize %}, `summarize`{% endif %}{% if profile_has_survey_repo %}, `survey_repo`{% endif %}, `scan_pack`{% if web_search_enabled %}, `web_search`, `fetch_url`{% endif %}) may orient the narrative; paths they return may go in `cited_evidence`.
+**Survey tools** (`command`, `scan_pack`{% if web_search_enabled %}, `web_search`, `fetch_url`{% endif %}) may orient the narrative; paths they return may go in `cited_evidence`.
 {% if profile_has_recall %}
 **Need a detail a leg's report did not carry?** `recall` it now — a finished leg's observations are still reachable, and the handle it prints is citable here. The closing turn has no tools, so get it on this turn or write the report without it.
 {% endif %}

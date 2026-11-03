@@ -62,7 +62,7 @@ func TestValidationGuidanceFollowsCompiledAvailability(t *testing.T) {
 				for _, loader := range []bool{false, true} {
 					for _, selected := range []bool{false, true} {
 						t.Run(fmt.Sprintf("%s/verify=%d/command=%d/loader=%v/selected=%v", surface, verify, command, loader, selected), func(t *testing.T) {
-							offered := []string{"read", "edit"}
+							offered := []string{"restore_version"}
 							var deferred []string
 							if loader {
 								offered = append(offered, "request_tools")
@@ -77,7 +77,7 @@ func TestValidationGuidanceFollowsCompiledAvailability(t *testing.T) {
 							}
 							plan := toolsurface.Compile(offered, deferred)
 							vars := prompts.CoordinatorPolicyTemplateVars(plan.ImmediateNames(), plan.DeferredNames())
-							vars["has_file_tools"] = true // The fixture offers read/edit in an attached workspace.
+							vars["has_file_tools"] = true // The fixture offers restoration in an attached workspace.
 							if surface == "partials/agent-tool-surface.md" {
 								data := prompts.AgentToolSurfaceData{ToolProfile: "implement"}
 								for _, name := range plan.ImmediateNames() {

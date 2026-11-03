@@ -19,8 +19,6 @@ func (r *MutationServices) SetContentApply(contentApply native.ContentApplyGate)
 		r.writeTool.ContentApply = contentApply
 	}
 
-
-
 	if r.restoreVersionTool != nil {
 		r.restoreVersionTool.ContentApply = contentApply
 	}

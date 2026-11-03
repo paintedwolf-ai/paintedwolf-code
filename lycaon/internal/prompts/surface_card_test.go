@@ -13,7 +13,7 @@ import (
 // tests cover the whole chain the model sees.
 func renderSurfaceCard(t *testing.T, label, rule, mode string, sticky, deferred []string) string {
 	t.Helper()
-	vars := prompts.CoordinatorSurfaceCardVars(label, rule, sticky, deferred).TemplateVars()
+	vars := prompts.CoordinatorSurfaceCardVars(label, rule, sticky, deferred, true).TemplateVars()
 	vars["execution_mode"] = mode
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	out, err := engine.Render(context.Background(), "partials/coordinator-surface-card.md", vars)
@@ -92,5 +92,18 @@ func TestSurfaceCardFallsBackToFamily(t *testing.T) {
 	none := renderSurfaceCard(t, "", "", "", []string{"recall"}, nil)
 	if strings.TrimSpace(none) != "" {
 		t.Fatalf("no label and no family must render no card, got %q", none)
+	}
+}
+
+func TestSurfaceCardCommandEffects(t *testing.T) {
+	for _, mutates := range []bool{false, true} {
+		immediate := prompts.CoordinatorSurfaceCardVars("", "", []string{"command"}, nil, mutates)
+		if immediate.MayEdit != mutates || immediate.MayRun != mutates || immediate.EditDeferred {
+			t.Fatalf("immediate command mutation=%t: %+v", mutates, immediate)
+		}
+		deferred := prompts.CoordinatorSurfaceCardVars("", "", nil, []string{"command"}, mutates)
+		if deferred.MayEdit || deferred.MayRun || deferred.EditDeferred != mutates {
+			t.Fatalf("deferred command mutation=%t: %+v", mutates, deferred)
+		}
 	}
 }

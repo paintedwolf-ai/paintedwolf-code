@@ -82,7 +82,7 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	})
 	testutil.FailErr(t, "render survey-first-pass", err)
 	for _, want := range []string{
-		"summarize(", "summarize#N", "find . -maxdepth 2",
+		"summarize --path", "summarize#N", "find . -maxdepth 2",
 		"layout_overview|ssot_drift|api_routes", "jq '.field'", "scan_summary", "scan_query", "grep -n", "sed -n",
 	} {
 		if !strings.Contains(survey, want) {

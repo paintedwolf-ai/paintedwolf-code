@@ -125,6 +125,9 @@ func (r *DefaultRegistry) RegisterDerived(meta ToolMeta, handler ToolHandler) er
 
 // RegisterDefinition publishes handler, metadata, and contract together.
 func (r *DefaultRegistry) RegisterDefinition(def Definition) error {
+	if r.catalog != nil && toolcontract.IsCommandOperation(def.Meta.Name) {
+		return fmt.Errorf("operation %q runs through command and cannot register a callable handler", def.Meta.Name)
+	}
 	def, err := validateDefinition(def)
 	if err != nil {
 		return err
