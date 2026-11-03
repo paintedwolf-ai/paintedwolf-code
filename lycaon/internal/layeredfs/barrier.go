@@ -12,12 +12,12 @@ import (
 // If any durability or snapshot step fails, ReleaseView preserves settled recovery state and
 // returns the error so the caller can retry or inspect recovery state.
 func (c *Core) ReleaseView() error {
-	alreadyReleased, joinedAttempt, attemptSeq := c.barrier.beginRelease()
+	alreadyReleased, joinedAttempt, att := c.barrier.beginRelease()
 	if alreadyReleased {
 		return nil
 	}
 	if joinedAttempt {
-		return c.barrier.waitReleaseAttempt(attemptSeq)
+		return waitReleaseAttempt(c, att)
 	}
 
 	c.mu.Lock()
@@ -71,7 +71,7 @@ func (c *Core) ReleaseView() error {
 	}
 
 	if releaseErr != nil {
-		c.barrier.endReleaseAttempt(releaseErr)
+		c.barrier.endReleaseAttempt(att, releaseErr)
 		return releaseErr
 	}
 
@@ -82,7 +82,7 @@ func (c *Core) ReleaseView() error {
 
 	c.roots.close()
 	c.backing.close()
-	c.barrier.endReleaseAttempt(nil)
+	c.barrier.endReleaseAttempt(att, nil)
 	return nil
 }
 
@@ -92,6 +92,11 @@ type BarrierToken struct {
 	Seq    uint64
 }
 
+type releaseAttempt struct {
+	done chan struct{}
+	err  error
+}
+
 type barrierCoordinator struct {
 	viewID      string
 	mu          sync.Mutex
@@ -99,8 +104,7 @@ type barrierCoordinator struct {
 	active      bool
 	closing     bool
 	released    bool
-	releasing   bool
-	releaseErr  error
+	curAttempt  *releaseAttempt
 	inFlight    int64
 	opsInFlight int64
 	seq         uint64
@@ -155,20 +159,20 @@ func (b *barrierCoordinator) leaveOp() {
 	b.mu.Unlock()
 }
 
-func (b *barrierCoordinator) beginRelease() (bool, bool, uint64) {
+func (b *barrierCoordinator) beginRelease() (bool, bool, *releaseAttempt) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.released {
-		return true, false, b.seq
+		return true, false, nil
 	}
-	if b.releasing {
-		return false, true, b.seq
+	if b.curAttempt != nil {
+		return false, true, b.curAttempt
 	}
+	att := &releaseAttempt{done: make(chan struct{})}
 	b.closing = true
-	b.releasing = true
-	b.seq++
+	b.curAttempt = att
 	b.cond.Broadcast()
-	return false, false, b.seq
+	return false, false, att
 }
 
 func (b *barrierCoordinator) waitDrain() {
@@ -179,10 +183,11 @@ func (b *barrierCoordinator) waitDrain() {
 	b.mu.Unlock()
 }
 
-func (b *barrierCoordinator) endReleaseAttempt(err error) {
+func (b *barrierCoordinator) endReleaseAttempt(att *releaseAttempt, err error) {
 	b.mu.Lock()
-	b.releasing = false
-	b.releaseErr = err
+	att.err = err
+	close(att.done)
+	b.curAttempt = nil
 	if err == nil {
 		b.released = true
 	}
@@ -190,14 +195,12 @@ func (b *barrierCoordinator) endReleaseAttempt(err error) {
 	b.mu.Unlock()
 }
 
-func (b *barrierCoordinator) waitReleaseAttempt(attemptSeq uint64) error {
-	b.mu.Lock()
-	for b.releasing && b.seq == attemptSeq {
-		b.cond.Wait()
+func waitReleaseAttempt(c *Core, att *releaseAttempt) error {
+	<-att.done
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
+		c.cfg.FaultHooks.ReleaseWaitHook()
 	}
-	err := b.releaseErr
-	b.mu.Unlock()
-	return err
+	return att.err
 }
 
 // BeginCheckpointBarrier blocks new mutation admission, waits for active mutations to drain,
