@@ -287,7 +287,11 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	}
 	cwd, display := d.paths.Cwd(), d.paths.Cwd().DisplayPath
 	line := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
-	child, err := d.prepareDefinition(ctx, definition, request, map[string]any{"command": line, "cwd": display})
+	arguments := externalValueArguments(request, line, display)
+	for field, value := range d.run.envelope {
+		arguments[field] = value
+	}
+	child, err := d.prepareDefinition(ctx, definition, request, arguments)
 	if err != nil {
 		return d.prepareChildFailure(streams, "external", request, err)
 	}
@@ -315,12 +319,16 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: streams, Inspection: d.run.capture,
 		// The existing command review, detection and policy read these fields.
-		Arguments: d.run.launchArguments(line, display),
+		Arguments: arguments,
 		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
-		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+		PrepareReviewed: func(_ context.Context, resolved map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+			execution, err := externalResolvedRequest(request, resolved)
+			if err != nil {
+				return toolexecution.PreparedNativeEffect{}, err
+			}
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: d.recordExternalStage}.Launch(ctx, request, streams)
+					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: d.recordExternalStage}.Launch(ctx, execution, streams)
 				})
 			}}, nil
 		},
