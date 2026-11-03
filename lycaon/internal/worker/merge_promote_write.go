@@ -205,12 +205,12 @@ func (s mergeEngine) reclaimOrphanedApply(ctx context.Context, task *api.WorkerT
 	return true, nil
 }
 
-func (s mergeEngine) failPromoteTransaction(tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
+func (s mergeEngine) failPromoteTransaction(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
 	var unstarted *promoteTransactionUnstartedError
 	if errors.As(cause, &unstarted) {
 		return errors.Join(cause, tx.close(), revertPending())
 	}
-	cleanupCtx, cancel := promoteCleanupContext(context.Background())
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
 	defer cancel()
 	if err := session.RollbackTaskCheckpointJournal(cleanupCtx, task, promote.Roots); err != nil {
 		return errors.Join(cause, err)

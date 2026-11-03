@@ -48,72 +48,74 @@ type hostRefUndo struct {
 	After  string `json:"after"`
 }
 
-// PrepareHostTransaction persists undo before checkpoint effects join a host transaction.
+// prepare persists undo before checkpoint effects join a host transaction.
 // The host uses the built-in namespaced Git importer, whose refs can be restored by CAS.
-func (pr *Promoter) PrepareHostTransaction(ctx context.Context, preview *PromotionPreview) error {
+func (host *HostPromotion) prepare(ctx context.Context, preview *PromotionPreview) error {
 	if preview == nil || len(preview.Conflicts) != 0 {
 		return ErrUnresolvedConflict
 	}
-	old, found, err := pr.loadHostTransaction()
+	old, found, err := host.loadHostTransaction()
 	if err != nil {
 		return err
 	}
 	if found && !old.RolledBack {
 		return fmt.Errorf("checkpoint: unfinished host transaction requires recovery")
 	}
-	m, err := pr.cfg.Store.LoadManifest(preview.CheckpointID)
+	m, err := host.store.LoadManifest(preview.CheckpointID)
 	if err != nil {
 		return err
 	}
-	targets, err := pr.prepareHostTargets(preview)
+	targets, err := host.prepareHostTargets(preview)
 	if err != nil {
 		return err
 	}
-	refs, err := pr.prepareHostRefs(ctx, m)
+	refs, err := host.prepareHostRefs(ctx, m)
 	if err != nil {
 		return err
 	}
 	if err := context.Cause(ctx); err != nil {
 		return err
 	}
-	roots, err := pr.hostRootIdentities()
+	roots, err := host.hostRootIdentities()
 	if err != nil {
 		return err
 	}
-	return pr.saveHostTransaction(hostTransaction{Roots: roots, Version: 1, CheckpointID: m.CheckpointID, WorkerID: m.WorkerID, Targets: targets, Refs: refs})
+	return host.saveHostTransaction(hostTransaction{Roots: roots, Version: 1, CheckpointID: m.CheckpointID, WorkerID: m.WorkerID, Targets: targets, Refs: refs})
 }
 
-// RollbackHostTransaction restores only recorded checkpoint effects, refusing divergence.
+// Rollback restores only recorded checkpoint effects, refusing divergence.
 // The completion marker makes recovery idempotent even if the host's later undo crashes.
-func (pr *Promoter) RollbackHostTransaction(ctx context.Context) error {
-	tx, found, err := pr.loadHostTransaction()
+func (host *HostPromotion) Rollback(ctx context.Context) error {
+	host.checkpoint.applyMu.Lock()
+	defer host.checkpoint.applyMu.Unlock()
+	tx, found, err := host.loadHostTransaction()
 	if err != nil || !found || tx.RolledBack {
 		return err
 	}
-	if err := pr.validateHostTargets(tx.Targets); err != nil {
+	if err := host.validateHostTargets(tx.Targets); err != nil {
 		return err
 	}
 	tx.RollingBack = true
-	if err := pr.saveHostTransaction(tx); err != nil {
+	if err := host.saveHostTransaction(tx); err != nil {
 		return err
 	}
-	if err := pr.rollbackHostRefs(ctx, tx.Refs); err != nil {
+	if err := host.rollbackHostRefs(ctx, tx.Refs); err != nil {
 		return err
 	}
-	if err := pr.restoreHostTargets(tx.Targets); err != nil {
+	if err := host.restoreHostTargets(tx.Targets); err != nil {
 		return err
 	}
 	// An applied component record must never suppress file/ref effects on retry.
-	if err := pr.removeHostComponentRecord(tx); err != nil {
+	if err := host.removeHostComponentRecord(tx); err != nil {
 		return err
 	}
 	tx.RolledBack = true
-	return pr.saveHostTransaction(tx)
+	return host.saveHostTransaction(tx)
 }
 
-func (pr *Promoter) removeHostComponentRecord(tx hostTransaction) error {
+func (host *HostPromotion) removeHostComponentRecord(tx hostTransaction) error {
 	// Validate identity through the manifest before constructing component filenames.
-	m, err := pr.cfg.Store.LoadManifest(tx.CheckpointID)
+	m, err := host.store.LoadManifest(tx.CheckpointID)
 	if err != nil {
 		return err
 	}
@@ -124,16 +126,16 @@ func (pr *Promoter) removeHostComponentRecord(tx hostTransaction) error {
 		if filepath.Base(name) != name {
 			return ErrInvalidManifest
 		}
-		if err := os.Remove(filepath.Join(pr.cfg.Store.promotionsDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.Remove(filepath.Join(host.store.promotionsDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
-	return syncDir(pr.cfg.Store.promotionsDir)
+	return syncDir(host.store.promotionsDir)
 }
 
-func (pr *Promoter) loadHostTransaction() (hostTransaction, bool, error) {
+func (host *HostPromotion) loadHostTransaction() (hostTransaction, bool, error) {
 	var tx hostTransaction
-	raw, err := os.ReadFile(filepath.Join(pr.cfg.Store.promotionsDir, "host-transaction.json"))
+	raw, err := os.ReadFile(filepath.Join(host.store.promotionsDir, "host-transaction.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return tx, false, nil
 	}
@@ -148,24 +150,24 @@ func (pr *Promoter) loadHostTransaction() (hostTransaction, bool, error) {
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return tx, true, ErrInvalidManifest
 	}
-	if err := pr.validateHostTransaction(tx); err != nil {
+	if err := host.validateHostTransaction(tx); err != nil {
 		return tx, true, err
 	}
 	return tx, true, nil
 }
 
-func (pr *Promoter) saveHostTransaction(tx hostTransaction) error {
+func (host *HostPromotion) saveHostTransaction(tx hostTransaction) error {
 	raw, err := json.Marshal(tx)
 	if err != nil {
 		return err
 	}
-	return writeAtomicJSONOrText(pr.cfg.Store.promotionsDir, "host-transaction.json", raw, 0600)
+	return writeAtomicJSONOrText(host.store.promotionsDir, "host-transaction.json", raw, 0600)
 }
 
 // recordHostPostimage records attributes from an owned staging object before publication.
 // Filesystems may add attributes at creation; predicting an empty set loses those facts.
-func (pr *Promoter) recordHostPostimage(path layeredfs.QualifiedPath, file *os.File) error {
-	tx, found, err := pr.loadHostTransaction()
+func (host *HostPromotion) recordHostPostimage(path layeredfs.QualifiedPath, file *os.File) error {
+	tx, found, err := host.loadHostTransaction()
 	if err != nil || !found || tx.RolledBack || tx.RollingBack {
 		return err
 	}
@@ -186,7 +188,7 @@ func (pr *Promoter) recordHostPostimage(path layeredfs.QualifiedPath, file *os.F
 			return ErrStalePreviewTargetChanged
 		}
 		target.After.Xattrs = attrs
-		return pr.saveHostTransaction(tx)
+		return host.saveHostTransaction(tx)
 	}
 	return fmt.Errorf("checkpoint: unrecorded host target %s", pathKey(path))
 }

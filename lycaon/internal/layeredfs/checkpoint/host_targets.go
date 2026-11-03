@@ -14,8 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-func (pr *Promoter) captureHostTarget(path layeredfs.QualifiedPath) (hostTargetImage, error) {
-	obs, err := pr.observeTarget(path)
+func (host *HostPromotion) captureHostTarget(path layeredfs.QualifiedPath) (hostTargetImage, error) {
+	obs, err := host.targets.observeTarget(path)
 	if err != nil {
 		return hostTargetImage{}, err
 	}
@@ -25,7 +25,7 @@ func (pr *Promoter) captureHostTarget(path layeredfs.QualifiedPath) (hostTargetI
 		image.Size = 0
 		return image, nil
 	}
-	root, err := pr.openTargetRoot(path.RootID)
+	root, err := host.targets.openTargetRoot(path.RootID)
 	if err != nil {
 		return image, err
 	}
@@ -47,7 +47,7 @@ func (pr *Promoter) captureHostTarget(path layeredfs.QualifiedPath) (hostTargetI
 		if sha256Hex(body) != obs.SHA256 {
 			return image, ErrStalePreviewTargetChanged
 		}
-		_, _, err = pr.cfg.Store.WriteBlobBytes(body)
+		_, _, err = host.store.WriteBlobBytes(body)
 		if err != nil {
 			return image, err
 		}
@@ -57,11 +57,11 @@ func (pr *Promoter) captureHostTarget(path layeredfs.QualifiedPath) (hostTargetI
 	return image, nil
 }
 
-func (pr *Promoter) captureHostTree(path layeredfs.QualifiedPath, images map[layeredfs.QualifiedPath]hostTargetImage) error {
+func (host *HostPromotion) captureHostTree(path layeredfs.QualifiedPath, images map[layeredfs.QualifiedPath]hostTargetImage) error {
 	if _, found := images[path]; found {
 		return nil
 	}
-	image, err := pr.captureHostTarget(path)
+	image, err := host.captureHostTarget(path)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (pr *Promoter) captureHostTree(path layeredfs.QualifiedPath, images map[lay
 	if image.Kind != layeredfs.EntryDirectory {
 		return nil
 	}
-	root, err := pr.openTargetRoot(path.RootID)
+	root, err := host.targets.openTargetRoot(path.RootID)
 	if err != nil {
 		return err
 	}
@@ -86,23 +86,23 @@ func (pr *Promoter) captureHostTree(path layeredfs.QualifiedPath, images map[lay
 	}
 	for _, child := range children {
 		next := layeredfs.QualifiedPath{RootID: path.RootID, Rel: filepath.Join(path.Rel, child.Name())}
-		if err := pr.captureHostTree(next, images); err != nil {
+		if err := host.captureHostTree(next, images); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (pr *Promoter) prepareHostTargets(preview *PromotionPreview) ([]hostTargetUndo, error) {
+func (host *HostPromotion) prepareHostTargets(preview *PromotionPreview) ([]hostTargetUndo, error) {
 	before := map[layeredfs.QualifiedPath]hostTargetImage{}
 	for _, change := range preview.PlannedChanges {
-		if err := pr.captureHostTree(change.Path, before); err != nil {
+		if err := host.captureHostTree(change.Path, before); err != nil {
 			return nil, err
 		}
 		// Record parents created implicitly by MkdirAll, without capturing unrelated trees.
 		for parent := filepath.Dir(change.Path.Rel); parent != "."; parent = filepath.Dir(parent) {
 			path := layeredfs.QualifiedPath{RootID: change.Path.RootID, Rel: parent}
-			obs, err := pr.observeTarget(path)
+			obs, err := host.targets.observeTarget(path)
 			if err != nil {
 				return nil, err
 			}
@@ -114,7 +114,7 @@ func (pr *Promoter) prepareHostTargets(preview *PromotionPreview) ([]hostTargetU
 	}
 	after := maps.Clone(before)
 	for _, change := range preview.PlannedChanges {
-		if err := pr.planHostTarget(after, change); err != nil {
+		if err := host.planHostTarget(after, change); err != nil {
 			return nil, err
 		}
 	}
@@ -130,7 +130,7 @@ func (pr *Promoter) prepareHostTargets(preview *PromotionPreview) ([]hostTargetU
 	return out, nil
 }
 
-func (pr *Promoter) planHostTarget(images map[layeredfs.QualifiedPath]hostTargetImage, ch PlannedChange) error {
+func (host *HostPromotion) planHostTarget(images map[layeredfs.QualifiedPath]hostTargetImage, ch PlannedChange) error {
 	if ch.Action == ActionNoop {
 		return nil
 	}
@@ -159,7 +159,7 @@ func (pr *Promoter) planHostTarget(images map[layeredfs.QualifiedPath]hostTarget
 		body := ch.MergedBytes
 		if body == nil && ch.MergedSHA256 != "" {
 			var err error
-			body, err = pr.cfg.Store.ReadBlob(ch.MergedSHA256)
+			body, err = host.store.ReadBlob(ch.MergedSHA256)
 			if err != nil {
 				return err
 			}
@@ -175,7 +175,7 @@ func (pr *Promoter) planHostTarget(images map[layeredfs.QualifiedPath]hostTarget
 		next, found = images[*ch.HardLinkSource]
 		if !found {
 			var err error
-			next, err = pr.captureHostTarget(*ch.HardLinkSource)
+			next, err = host.captureHostTarget(*ch.HardLinkSource)
 			if err != nil {
 				return err
 			}
@@ -208,13 +208,13 @@ func sameHostTarget(a, b hostTargetImage) bool {
 	return a.Kind == b.Kind && a.Mode == b.Mode && a.SHA256 == b.SHA256 && a.Size == b.Size && a.LinkTarget == b.LinkTarget && maps.EqualFunc(a.Xattrs, b.Xattrs, bytes.Equal)
 }
 
-func (pr *Promoter) validateHostTargets(targets []hostTargetUndo) error {
+func (host *HostPromotion) validateHostTargets(targets []hostTargetUndo) error {
 	known := map[layeredfs.QualifiedPath]hostTargetImage{}
 	for _, target := range targets {
 		if !filepath.IsLocal(target.Path.Rel) || target.Path.Rel == "." {
 			return ErrInvalidManifest
 		}
-		if err := pr.captureHostTree(target.Path, known); err != nil {
+		if err := host.captureHostTree(target.Path, known); err != nil {
 			return err
 		}
 	}
@@ -231,12 +231,12 @@ func (pr *Promoter) validateHostTargets(targets []hostTargetUndo) error {
 	return nil
 }
 
-func (pr *Promoter) restoreHostTargets(targets []hostTargetUndo) error {
+func (host *HostPromotion) restoreHostTargets(targets []hostTargetUndo) error {
 	ordered := slices.Clone(targets)
 	slices.SortFunc(ordered, func(a, b hostTargetUndo) int { return len(b.Path.Rel) - len(a.Path.Rel) })
 	// Remove only recorded entries, never an unobserved child added concurrently.
 	for _, target := range ordered {
-		current, err := pr.captureHostTarget(target.Path)
+		current, err := host.captureHostTarget(target.Path)
 		if err != nil {
 			return err
 		}
@@ -247,7 +247,7 @@ func (pr *Promoter) restoreHostTargets(targets []hostTargetUndo) error {
 			return fmt.Errorf("checkpoint: target changed during recovery: %s", pathKey(target.Path))
 		}
 		if current.Kind != layeredfs.EntryAbsent && (target.Before.Kind == layeredfs.EntryAbsent || target.Before.Kind == "" || current.Kind != target.Before.Kind) {
-			root, err := pr.openTargetRoot(target.Path.RootID)
+			root, err := host.targets.openTargetRoot(target.Path.RootID)
 			if err != nil {
 				return err
 			}
@@ -277,18 +277,18 @@ func (pr *Promoter) restoreHostTargets(targets []hostTargetUndo) error {
 		default:
 			return ErrInvalidManifest
 		}
-		current, err := pr.captureHostTarget(target.Path)
+		current, err := host.captureHostTarget(target.Path)
 		if err != nil {
 			return err
 		}
 		if sameHostTarget(current, before) {
 			continue
 		}
-		if err := pr.applyPlannedChange(change); err != nil {
+		if err := host.targets.applyPlannedChange(change); err != nil {
 			return err
 		}
 		if before.Kind == layeredfs.EntryRegular || before.Kind == layeredfs.EntryDirectory {
-			root, err := pr.openTargetRoot(target.Path.RootID)
+			root, err := host.targets.openTargetRoot(target.Path.RootID)
 			if err != nil {
 				return err
 			}

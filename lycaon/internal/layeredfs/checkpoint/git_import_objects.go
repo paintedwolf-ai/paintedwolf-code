@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- SHA-1 is the object identifier in the admitted Git repository format.
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -29,14 +29,14 @@ func WriteLooseGitObject(objectsDir, objType string, payload []byte) (string, er
 	var compressed bytes.Buffer
 	zw := zlib.NewWriter(&compressed)
 	_, wErr := zw.Write(raw)
-	if err := errors.Join(wErr, zw.Close(), os.MkdirAll(filepath.Join(objectsDir, oid[:2]), 0o755)); err != nil {
+	if err := errors.Join(wErr, zw.Close(), os.MkdirAll(filepath.Join(objectsDir, oid[:2]), 0o750)); err != nil {
 		return "", err
 	}
 	return oid, writeAtomicJSONOrText(filepath.Join(objectsDir, oid[:2]), oid[2:], compressed.Bytes(), 0o444)
 }
 
 func ensureMinimalGitDirLayout(gitDir, commonGitDir string) error {
-	if err := errors.Join(os.MkdirAll(filepath.Join(commonGitDir, "objects"), 0o755), os.MkdirAll(filepath.Join(commonGitDir, "refs"), 0o755)); err != nil {
+	if err := errors.Join(os.MkdirAll(filepath.Join(commonGitDir, "objects"), 0o750), os.MkdirAll(filepath.Join(commonGitDir, "refs"), 0o750)); err != nil {
 		return err
 	}
 	if _, err := os.Lstat(filepath.Join(commonGitDir, "config")); errors.Is(err, os.ErrNotExist) {
@@ -92,7 +92,7 @@ func copyCandidateGitObjects(storeDir, checkpointID, targetObjectsDir string) er
 }
 
 func copyFileStreamingAtomic(srcPath, dstPath string, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o750); err != nil {
 		return err
 	}
 	in, err := os.Open(srcPath)
@@ -159,7 +159,7 @@ func readAndVerifyLooseGitObject(f *os.File, oid string) (string, []byte, error)
 		return "", nil, err
 	}
 	defer func() { _ = zr.Close() }()
-	h := sha1.New()
+	h := sha1.New() // #nosec G401 -- Verify standard Git object identifiers, not security signatures.
 	if len(oid) == 64 {
 		h = sha256.New()
 	}
@@ -269,7 +269,10 @@ func verifyTreeBody(ctx context.Context, repoRoot, commonGitDir, objectsDir stri
 	return nil
 }
 
-func hexObjSHA1(b []byte) string { s := sha1.Sum(b); return hex.EncodeToString(s[:]) }
+func hexObjSHA1(b []byte) string {
+	s := sha1.Sum(b) /* #nosec G401 -- Standard Git object identifier. */
+	return hex.EncodeToString(s[:])
+}
 func isHexOID(s string) bool {
 	_, err := hex.DecodeString(s)
 	return err == nil && (len(s) == 40 || len(s) == 64)

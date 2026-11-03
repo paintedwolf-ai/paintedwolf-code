@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -89,8 +90,10 @@ type PromoterConfig struct {
 
 // Promoter executes exact-base three-way preview and transactional promotion.
 type Promoter struct {
-	cfg PromoterConfig
-	seq atomic.Uint64
+	cfg     PromoterConfig
+	seq     atomic.Uint64
+	applyMu sync.Mutex
+	targets *promotionTargets
 }
 
 // NewPromoter creates a Promoter bound to a Store and target roots.
@@ -98,7 +101,8 @@ func NewPromoter(cfg PromoterConfig) (*Promoter, error) {
 	if cfg.Store == nil || len(cfg.TargetRoots) == 0 {
 		return nil, fmt.Errorf("checkpoint: Store and TargetRoots are required")
 	}
-	return &Promoter{cfg: cfg}, nil
+	cfg.TargetRoots = maps.Clone(cfg.TargetRoots)
+	return &Promoter{cfg: cfg, targets: &promotionTargets{store: cfg.Store, roots: cfg.TargetRoots}}, nil
 }
 
 // Preview computes a deterministic three-way promotion preview solely from the immutable checkpoint.
@@ -118,7 +122,7 @@ func (pr *Promoter) Preview(_ context.Context, req PreviewRequest) (*PromotionPr
 	requiresVerify := false
 
 	for _, obs := range m.SourceObservations {
-		cur, err := pr.observeTarget(obs.Path)
+		cur, err := pr.targets.observeTarget(obs.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +134,7 @@ func (pr *Promoter) Preview(_ context.Context, req PreviewRequest) (*PromotionPr
 
 	groupPrimary := make(map[string]layeredfs.QualifiedPath)
 	for _, entry := range m.Entries {
-		cur, err := pr.observeTarget(entry.Path)
+		cur, err := pr.targets.observeTarget(entry.Path)
 		if err != nil {
 			return nil, err
 		}

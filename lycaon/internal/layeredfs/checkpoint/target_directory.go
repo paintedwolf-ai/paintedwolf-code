@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-func (pr *Promoter) ensureTargetParents(root *os.Root, path layeredfs.QualifiedPath) error {
+func (tree *promotionTargets) ensureTargetParents(root *os.Root, path layeredfs.QualifiedPath) error {
 	var missing []string
 	for parent := filepath.Dir(path.Rel); parent != "."; parent = filepath.Dir(parent) {
 		info, err := root.Stat(parent)
@@ -27,15 +27,15 @@ func (pr *Promoter) ensureTargetParents(root *os.Root, path layeredfs.QualifiedP
 	}
 	for index := len(missing) - 1; index >= 0; index-- {
 		parent := layeredfs.QualifiedPath{RootID: path.RootID, Rel: missing[index]}
-		if err := pr.makeTargetDirectory(root, parent, 0755, nil); err != nil {
+		if err := tree.makeTargetDirectory(root, parent, 0755, nil); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (pr *Promoter) makeTargetDirectory(root *os.Root, path layeredfs.QualifiedPath, mode os.FileMode, attrs map[string][]byte) error {
-	if err := pr.ensureTargetParents(root, path); err != nil {
+func (tree *promotionTargets) makeTargetDirectory(root *os.Root, path layeredfs.QualifiedPath, mode os.FileMode, attrs map[string][]byte) error {
+	if err := tree.ensureTargetParents(root, path); err != nil {
 		return err
 	}
 	if info, err := root.Lstat(path.Rel); err == nil {
@@ -54,8 +54,10 @@ func (pr *Promoter) makeTargetDirectory(root *os.Root, path layeredfs.QualifiedP
 		if err := applyFileXattrs(file, attrs); err != nil {
 			return err
 		}
-		if err := pr.recordHostPostimage(path, file); err != nil {
-			return err
+		if tree.recordPostimage != nil {
+			if err := tree.recordPostimage(path, file); err != nil {
+				return err
+			}
 		}
 		return syncFile(file)
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -95,8 +97,10 @@ func (pr *Promoter) makeTargetDirectory(root *os.Root, path layeredfs.QualifiedP
 	if err := syncFile(file); err != nil {
 		return err
 	}
-	if err := pr.recordHostPostimage(path, file); err != nil {
-		return err
+	if tree.recordPostimage != nil {
+		if err := tree.recordPostimage(path, file); err != nil {
+			return err
+		}
 	}
 	if _, err := root.Lstat(path.Rel); !errors.Is(err, os.ErrNotExist) {
 		if err != nil {

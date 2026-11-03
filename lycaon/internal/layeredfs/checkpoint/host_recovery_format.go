@@ -17,10 +17,10 @@ type hostRootIdentity struct {
 	Identity string `json:"identity"`
 }
 
-func (pr *Promoter) hostRootIdentities() (map[string]hostRootIdentity, error) {
-	roots := make(map[string]hostRootIdentity, len(pr.cfg.TargetRoots))
-	for id, path := range pr.cfg.TargetRoots {
-		root, err := pr.openTargetRoot(id)
+func (host *HostPromotion) hostRootIdentities() (map[string]hostRootIdentity, error) {
+	roots := make(map[string]hostRootIdentity, len(host.targets.roots))
+	for id, path := range host.targets.roots {
+		root, err := host.targets.openTargetRoot(id)
 		if err != nil {
 			return nil, err
 		}
@@ -54,18 +54,18 @@ func hostComponent(id string) bool {
 	return id != "" && id != "." && id != ".." && filepath.IsLocal(id) && filepath.Base(id) == id && !strings.ContainsAny(id, `/\`)
 }
 
-func (pr *Promoter) validateHostTransaction(tx hostTransaction) error {
+func (host *HostPromotion) validateHostTransaction(tx hostTransaction) error {
 	if tx.Version != 1 || !hostComponent(tx.CheckpointID) || !hostComponent(tx.WorkerID) {
 		return ErrInvalidManifest
 	}
-	roots, err := pr.hostRootIdentities()
+	roots, err := host.hostRootIdentities()
 	if err != nil {
 		return err
 	}
 	if !maps.Equal(roots, tx.Roots) {
 		return fmt.Errorf("checkpoint: recovery target roots changed")
 	}
-	m, err := pr.cfg.Store.LoadManifest(tx.CheckpointID)
+	m, err := host.store.LoadManifest(tx.CheckpointID)
 	if err != nil {
 		return err
 	}

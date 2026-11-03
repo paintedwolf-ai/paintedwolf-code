@@ -131,7 +131,8 @@ func (p *Publisher) Publish(ctx context.Context, req PublishRequest) (PublishRes
 	p.active = true
 	p.mu.Unlock()
 
-	go p.drainLoop()
+	//nolint:contextcheck // A coalesced batch must not borrow one waiting caller's actor context.
+	go p.drainLoop() // #nosec G118 -- Publication owns queued results beyond caller cancellation.
 
 	select {
 	case out := <-item.done:
@@ -189,7 +190,7 @@ func (p *Publisher) executeBatch(ctx context.Context, batch []*pendingPublish) (
 	}()
 
 	if err := p.flushRegisteredMappings(); err != nil {
-		return PublishResult{}, fmt.Errorf("%w: %v", ErrFlushFailed, err)
+		return PublishResult{}, fmt.Errorf("%w: %w", ErrFlushFailed, err)
 	}
 
 	token, err := p.cfg.Core.BeginCheckpointBarrier(ctx)
@@ -207,7 +208,7 @@ func (p *Publisher) executeBatch(ctx context.Context, batch []*pendingPublish) (
 
 	// Step 2: Flush client dirty data, including writable mappings, through the adapter.
 	if err := p.flushClients(ctx, inject); err != nil {
-		return PublishResult{}, fmt.Errorf("%w: %v", ErrFlushFailed, err)
+		return PublishResult{}, fmt.Errorf("%w: %w", ErrFlushFailed, err)
 	}
 
 	// Step 3 & 4: Enumerate journaled logical changes, persist blobs, enforce limits, stage manifest.
@@ -260,7 +261,7 @@ func (p *Publisher) commitRetentionAndPublish(
 	inject func(FaultStage) error,
 ) error {
 	if err := inject(FaultOnRetentionCommit); err != nil {
-		return fmt.Errorf("%w: %v", ErrRetentionFailed, err)
+		return fmt.Errorf("%w: %w", ErrRetentionFailed, err)
 	}
 	rec := RetentionRecord{
 		CheckpointID: m.CheckpointID,
@@ -269,11 +270,11 @@ func (p *Publisher) commitRetentionAndPublish(
 		CommittedAt:  time.Now().UTC(),
 	}
 	if err := p.cfg.Store.writeRetentionRecord(rec); err != nil {
-		return fmt.Errorf("%w: %v", ErrRetentionFailed, err)
+		return fmt.Errorf("%w: %w", ErrRetentionFailed, err)
 	}
 	if p.cfg.Callbacks.CommitRetention != nil {
 		if err := p.cfg.Callbacks.CommitRetention(ctx, m.CheckpointID, blobs, rec.GitObjects); err != nil {
-			return fmt.Errorf("%w: %v", ErrRetentionFailed, err)
+			return fmt.Errorf("%w: %w", ErrRetentionFailed, err)
 		}
 	}
 	return p.cfg.Store.commitManifestAndLatest(m.CheckpointID)

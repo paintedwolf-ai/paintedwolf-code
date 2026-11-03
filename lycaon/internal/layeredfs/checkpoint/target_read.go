@@ -13,8 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-func (pr *Promoter) openTargetRoot(id string) (*os.Root, error) {
-	name, ok := pr.cfg.TargetRoots[id]
+func (tree *promotionTargets) openTargetRoot(id string) (*os.Root, error) {
+	name, ok := tree.roots[id]
 	if !ok {
 		return nil, layeredfs.ErrInvalidRoot
 	}
@@ -40,8 +40,8 @@ func (pr *Promoter) openTargetRoot(id string) (*os.Root, error) {
 	return root, nil
 }
 
-func (pr *Promoter) observeTarget(qpath layeredfs.QualifiedPath) (TargetObservation, error) {
-	root, err := pr.openTargetRoot(qpath.RootID)
+func (tree *promotionTargets) observeTarget(qpath layeredfs.QualifiedPath) (TargetObservation, error) {
+	root, err := tree.openTargetRoot(qpath.RootID)
 	if err != nil {
 		return TargetObservation{}, err
 	}
@@ -103,8 +103,8 @@ func (pr *Promoter) observeTarget(qpath layeredfs.QualifiedPath) (TargetObservat
 	return obs, nil
 }
 
-func (pr *Promoter) readObservedTarget(observed TargetObservation) ([]byte, error) {
-	root, err := pr.openTargetRoot(observed.Path.RootID)
+func (tree *promotionTargets) readObservedTarget(observed TargetObservation) ([]byte, error) {
+	root, err := tree.openTargetRoot(observed.Path.RootID)
 	if err != nil {
 		return nil, err
 	}

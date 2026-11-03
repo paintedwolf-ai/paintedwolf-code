@@ -9,8 +9,8 @@ import (
 	"syscall"
 )
 
-func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
-	root, err := pr.openTargetRoot(ch.Path.RootID)
+func (tree *promotionTargets) applyPlannedChange(ch PlannedChange) error {
+	root, err := tree.openTargetRoot(ch.Path.RootID)
 	if err != nil {
 		return err
 	}
@@ -20,6 +20,8 @@ func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
 		return nil
 	case ActionDelete:
 		return root.RemoveAll(ch.Path.Rel)
+	case ActionWriteRegular, ActionMkdir, ActionSymlink, ActionHardLink:
+		// These actions retain the current namespace until publication below.
 	case ActionReplaceWithDirectory, ActionReplaceDirWithRegular:
 		if err := root.RemoveAll(ch.Path.Rel); err != nil {
 			return err
@@ -27,11 +29,11 @@ func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
 	}
 	switch ch.Action {
 	case ActionMkdir, ActionReplaceWithDirectory:
-		return pr.makeTargetDirectory(root, ch.Path, pickMode(ch.Mode, 0755).Perm(), ch.Xattrs)
+		return tree.makeTargetDirectory(root, ch.Path, pickMode(ch.Mode, 0755).Perm(), ch.Xattrs)
 	case ActionWriteRegular, ActionReplaceDirWithRegular:
-		return pr.writeTargetRegular(root, ch)
+		return tree.writeTargetRegular(root, ch)
 	case ActionSymlink, ActionHardLink:
-		if err := pr.ensureTargetParents(root, ch.Path); err != nil {
+		if err := tree.ensureTargetParents(root, ch.Path); err != nil {
 			return err
 		}
 		if ch.Action == ActionHardLink && (ch.HardLinkSource == nil || ch.HardLinkSource.RootID != ch.Path.RootID) {
@@ -42,7 +44,9 @@ func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
 			if err != nil {
 				return err
 			}
-			err = pr.recordHostPostimage(ch.Path, source)
+			if tree.recordPostimage != nil {
+				err = tree.recordPostimage(ch.Path, source)
+			}
 			_ = source.Close()
 			if err != nil {
 				return err
@@ -60,17 +64,17 @@ func (pr *Promoter) applyPlannedChange(ch PlannedChange) error {
 	}
 }
 
-func (pr *Promoter) writeTargetRegular(root *os.Root, ch PlannedChange) error {
+func (tree *promotionTargets) writeTargetRegular(root *os.Root, ch PlannedChange) error {
 	data := ch.MergedBytes
 	if data == nil && ch.MergedSHA256 != "" {
 		var err error
-		data, err = pr.cfg.Store.ReadBlob(ch.MergedSHA256)
+		data, err = tree.store.ReadBlob(ch.MergedSHA256)
 		if err != nil {
 			return err
 		}
 	}
 	parent := filepath.Dir(ch.Path.Rel)
-	if err := pr.ensureTargetParents(root, ch.Path); err != nil {
+	if err := tree.ensureTargetParents(root, ch.Path); err != nil {
 		return err
 	}
 	var random [16]byte
@@ -106,8 +110,10 @@ func (pr *Promoter) writeTargetRegular(root *os.Root, ch PlannedChange) error {
 	if err := applyFileXattrs(file, ch.Xattrs); err != nil {
 		return err
 	}
-	if err := pr.recordHostPostimage(ch.Path, file); err != nil {
-		return err
+	if tree.recordPostimage != nil {
+		if err := tree.recordPostimage(ch.Path, file); err != nil {
+			return err
+		}
 	}
 	if err := file.Sync(); err != nil {
 		return err

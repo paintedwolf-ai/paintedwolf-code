@@ -62,7 +62,7 @@ func (v *virtual2MLower) OpenRead(rel string) (layeredfs.ReadSeekCloser, layered
 	return &bytesReaderCloser{Reader: bytes.NewReader(s)}, le, nil
 }
 
-func (v *virtual2MLower) Readlink(_ string) (string, error)            { return "", fs.ErrInvalid }
+func (v *virtual2MLower) Readlink(_ string) (string, error)             { return "", fs.ErrInvalid }
 func (v *virtual2MLower) ListXattr(_ string) (map[string][]byte, error) { return nil, nil }
 
 type bytesReaderCloser struct{ *bytes.Reader }

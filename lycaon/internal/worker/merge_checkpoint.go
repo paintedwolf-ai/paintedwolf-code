@@ -52,10 +52,12 @@ func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID stri
 		}
 		seen[rel] = true
 		out.CleanPaths = append(out.CleanPaths, rel)
-		if ch.Action == checkpoint.ActionDelete {
+		switch ch.Action {
+		case checkpoint.ActionDelete:
 			out.DeletedPaths = append(out.DeletedPaths, rel)
-		} else if ch.Action == checkpoint.ActionWriteRegular || ch.Action == checkpoint.ActionReplaceDirWithRegular {
+		case checkpoint.ActionWriteRegular, checkpoint.ActionReplaceDirWithRegular:
 			out.MergeResults = append(out.MergeResults, PromoteMergeResult{Path: rel, Content: string(ch.MergedBytes), Encoding: textfile.UTF8})
+		default:
 		}
 	}
 	for _, conf := range cpPreview.Conflicts {

@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,7 +33,6 @@ type Store struct {
 	checkpointsDir string
 	retentionDir   string
 	promotionsDir  string
-	mu             sync.RWMutex
 	tempSeq        atomic.Uint64
 }
 
@@ -227,7 +225,7 @@ func (s *Store) writeRetentionRecord(rec RetentionRecord) error {
 }
 
 func writeAtomicJSONOrText(dir, name string, raw []byte, mode fs.FileMode) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 	tmpPath := filepath.Join(dir, "."+name+".tmp")

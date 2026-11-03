@@ -44,7 +44,10 @@ func (p *Publisher) captureAndStageManifest(
 		return Manifest{}, nil, err
 	}
 
-	metaBytes := estimateMetadataBytes(entries, req.SourceObservations, req.PrivateGit)
+	metaBytes, err := estimateMetadataBytes(entries, req.SourceObservations, req.PrivateGit)
+	if err != nil {
+		return Manifest{}, nil, fmt.Errorf("%w: metadata: %w", ErrInvalidManifest, err)
+	}
 	totalBytes := changedBytes + metaBytes + req.PrivateGit.RetainedObjectBytes
 	if p.cfg.MaxCheckpointBytes > 0 && totalBytes > p.cfg.MaxCheckpointBytes {
 		return Manifest{}, nil, fmt.Errorf("%w: got %d bytes, limit %d", ErrOverlayByteLimitExceeded, totalBytes, p.cfg.MaxCheckpointBytes)
@@ -218,13 +221,13 @@ func mergeBatchRequests(p *Publisher, batch []*pendingPublish) PublishRequest {
 	return first
 }
 
-func estimateMetadataBytes(entries []ManifestEntry, obs []SourceObservation, git PrivateGitSnapshot) int64 {
-	raw, _ := json.Marshal(struct {
+func estimateMetadataBytes(entries []ManifestEntry, obs []SourceObservation, git PrivateGitSnapshot) (int64, error) {
+	raw, err := json.Marshal(struct {
 		E []ManifestEntry
 		O []SourceObservation
 		G PrivateGitSnapshot
 	}{entries, obs, git})
-	return int64(len(bytes.TrimSpace(raw)))
+	return int64(len(bytes.TrimSpace(raw))), err
 }
 
 func uniqueSortedStrings(in []string) []string {

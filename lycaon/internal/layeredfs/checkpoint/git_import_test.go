@@ -195,7 +195,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 	intentRec := GitRefImportRecord{
 		CheckpointID: "chk-crash", WorkerID: "w-1",
 		PlannedRefs: map[string]string{
-			"refs/lycaon/workers/w-1/heads/ok":         oidA,
+			"refs/lycaon/workers/w-1/heads/ok":           oidA,
 			"refs/lycaon/checkpoints/chk-crash/heads/ok": oidA,
 		},
 	}

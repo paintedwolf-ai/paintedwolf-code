@@ -2,6 +2,7 @@ package checkpoint
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
-func (pr *Promoter) prepareHostRefs(_ context.Context, m Manifest) ([]hostRefUndo, error) {
+func (host *HostPromotion) prepareHostRefs(_ context.Context, m Manifest) ([]hostRefUndo, error) {
 	if len(m.PrivateGit.Refs) == 0 {
 		return nil, nil
 	}
@@ -19,8 +20,8 @@ func (pr *Promoter) prepareHostRefs(_ context.Context, m Manifest) ([]hostRefUnd
 	if err := ValidateGitRefSegment(m.CheckpointID, "checkpoint"); err != nil {
 		return nil, err
 	}
-	primary := selectPrimaryRootDir(pr.cfg.TargetRoots)
-	gitDir, common, err := ResolveGitDirs(primary, pr.cfg.AuthorizedGitDirs...)
+	primary := selectPrimaryRootDir(host.targets.roots)
+	gitDir, common, err := ResolveGitDirs(primary, host.authorizedGitDirs...)
 	if err != nil {
 		return nil, err
 	}
@@ -50,12 +51,12 @@ func (pr *Promoter) prepareHostRefs(_ context.Context, m Manifest) ([]hostRefUnd
 	return refs, nil
 }
 
-func (pr *Promoter) rollbackHostRefs(ctx context.Context, refs []hostRefUndo) error {
+func (host *HostPromotion) rollbackHostRefs(ctx context.Context, refs []hostRefUndo) error {
 	if len(refs) == 0 {
 		return nil
 	}
-	primary := selectPrimaryRootDir(pr.cfg.TargetRoots)
-	gitDir, common, err := ResolveGitDirs(primary, pr.cfg.AuthorizedGitDirs...)
+	primary := selectPrimaryRootDir(host.targets.roots)
+	gitDir, common, err := ResolveGitDirs(primary, host.authorizedGitDirs...)
 	if err != nil {
 		return err
 	}
@@ -85,7 +86,7 @@ func (pr *Promoter) rollbackHostRefs(ctx context.Context, refs []hostRefUndo) er
 	}
 	output, code, err := gitexec.Run(ctx, primary, []string{"--git-dir=" + common, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(input.String())})
 	if err != nil || code != 0 {
-		return fmt.Errorf("checkpoint: rollback refs: %v (%s)", err, strings.TrimSpace(string(output)))
+		return errors.Join(err, fmt.Errorf("%w: rollback refs failed (exit %d): %s", ErrCheckpointRefConflict, code, strings.TrimSpace(string(output))))
 	}
 	return nil
 }

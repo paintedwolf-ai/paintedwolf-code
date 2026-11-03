@@ -13,7 +13,7 @@ func (pr *Promoter) observeRemovedDirectory(m Manifest, parent layeredfs.Qualifi
 	for _, entry := range m.Entries {
 		entries[entry.Path] = entry
 	}
-	root, err := pr.openTargetRoot(parent.RootID)
+	root, err := pr.targets.openTargetRoot(parent.RootID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (pr *Promoter) observeRemovedDirectory(m Manifest, parent layeredfs.Qualifi
 			if !known || (!entry.Deleted && entry.Kind != layeredfs.EntryAbsent) {
 				return false, nil
 			}
-			current, err := pr.observeTarget(childPath)
+			current, err := pr.targets.observeTarget(childPath)
 			if err != nil {
 				return false, err
 			}

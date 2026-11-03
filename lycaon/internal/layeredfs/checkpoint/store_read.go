@@ -27,7 +27,7 @@ func (s *Store) LoadManifest(checkpointID string) (Manifest, error) {
 	}
 	var m Manifest
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return Manifest{}, fmt.Errorf("%w: %v", ErrInvalidManifest, err)
+		return Manifest{}, fmt.Errorf("%w: %w", ErrInvalidManifest, err)
 	}
 	if m.FormatVersion != FormatVersion || m.CheckpointID != checkpointID {
 		return Manifest{}, fmt.Errorf("%w: version=%d id=%q", ErrInvalidManifest, m.FormatVersion, m.CheckpointID)

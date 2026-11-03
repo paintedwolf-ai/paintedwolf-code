@@ -304,10 +304,7 @@ func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, root
 	if err != nil {
 		return err
 	}
-	if err := promoter.PrepareHostTransaction(ctx, cpPreview); err != nil {
-		return err
-	}
-	_, err = promoter.Apply(ctx, checkpoint.ApplyRequest{TransactionID: txID, Preview: cpPreview, ImportGitRefs: true})
+	_, err = checkpoint.NewHostPromotion(promoter).Apply(ctx, checkpoint.ApplyRequest{TransactionID: txID, Preview: cpPreview, ImportGitRefs: true})
 	return err
 }
 
@@ -317,5 +314,5 @@ func RollbackTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, ro
 	if err != nil || !ok {
 		return err
 	}
-	return promoter.RollbackHostTransaction(ctx)
+	return checkpoint.NewHostPromotion(promoter).Rollback(ctx)
 }

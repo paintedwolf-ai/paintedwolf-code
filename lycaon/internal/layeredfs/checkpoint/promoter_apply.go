@@ -54,6 +54,14 @@ type ApplyRequest struct {
 
 // Apply revalidates target observations, journals intent, and executes file promotion and ref import idempotently.
 func (pr *Promoter) Apply(ctx context.Context, req ApplyRequest) (*PromotionJournalRecord, error) {
+	pr.applyMu.Lock()
+	defer pr.applyMu.Unlock()
+	return pr.apply(ctx, req, pr.cfg.RefImporter)
+}
+
+type checkpointRefImporter func(context.Context, string, string, PrivateGitSnapshot) (map[string]string, error)
+
+func (pr *Promoter) apply(ctx context.Context, req ApplyRequest, importRefs checkpointRefImporter) (*PromotionJournalRecord, error) {
 	if req.Preview == nil {
 		return nil, fmt.Errorf("checkpoint: Preview is required")
 	}
@@ -106,7 +114,7 @@ func (pr *Promoter) Apply(ctx context.Context, req ApplyRequest) (*PromotionJour
 			if hasPath(rec.AppliedPaths, ch.Path) {
 				continue
 			}
-			if err := pr.applyPlannedChange(ch); err != nil {
+			if err := pr.targets.applyPlannedChange(ch); err != nil {
 				return nil, err
 			}
 			rec.AppliedPaths = append(rec.AppliedPaths, ch.Path)
@@ -133,8 +141,8 @@ func (pr *Promoter) Apply(ctx context.Context, req ApplyRequest) (*PromotionJour
 	}
 
 	if rec.RefImportStatus == EffectPending {
-		if pr.cfg.RefImporter != nil {
-			imported, err := pr.cfg.RefImporter(ctx, txID, m.WorkerID, m.PrivateGit)
+		if importRefs != nil {
+			imported, err := importRefs(ctx, txID, m.WorkerID, m.PrivateGit)
 			if err != nil {
 				return nil, err
 			}
@@ -175,7 +183,7 @@ func (pr *Promoter) RevalidatePreviewTargets(preview *PromotionPreview, applied 
 		if hasPath(applied, obs.Path) {
 			continue
 		}
-		cur, err := pr.observeTarget(obs.Path)
+		cur, err := pr.targets.observeTarget(obs.Path)
 		if err != nil {
 			return err
 		}

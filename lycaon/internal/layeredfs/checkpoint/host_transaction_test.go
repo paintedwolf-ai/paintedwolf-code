@@ -13,14 +13,21 @@ import (
 )
 
 func TestHostTransactionRecovery(t *testing.T) {
-	for _, phase := range []string{"complete", "partial", "file divergence", "unrecorded child", "unknown journal field", "bad journal version", "escaping image digest", "changed root"} {
+	for _, phase := range []string{"complete", "partial", "file divergence", "unrecorded child", "unknown journal field", "bad journal version", "escaping image digest", "changed root", "hard link restoration"} {
 		t.Run(phase, func(t *testing.T) {
 			primary := t.TempDir()
 			testutil.FailErr(t, "seed original", os.WriteFile(filepath.Join(primary, "a.txt"), []byte("original\n"), 0640))
+			if phase == "hard link restoration" {
+				testutil.FailErr(t, "seed original hard link", os.Link(filepath.Join(primary, "a.txt"), filepath.Join(primary, "b.txt")))
+			}
 			core, err := layeredfs.New(layeredfs.Config{ViewID: "undo-view", BackingDir: t.TempDir(), Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}}})
 			testutil.FailErr(t, "create worker view", err)
 			defer func() { _ = core.ReleaseView() }()
 			qp := func(rel string) layeredfs.QualifiedPath { return layeredfs.QualifiedPath{RootID: "primary", Rel: rel} }
+			if phase == "hard link restoration" {
+				_, err := core.Lstat(qp("b.txt"))
+				testutil.FailErr(t, "observe original hard-link alias", err)
+			}
 			_, err = core.WriteFile(qp("a.txt"), []byte("worker\n"), 0755)
 			testutil.FailErr(t, "worker edit", err)
 			_, err = core.Mkdir(qp("nested"), 0750)
@@ -38,7 +45,6 @@ func TestHostTransactionRecovery(t *testing.T) {
 			testutil.FailErr(t, "promoter", err)
 			preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "checkpoint"})
 			testutil.FailErr(t, "preview", err)
-			testutil.FailErr(t, "prepare host undo", promoter.PrepareHostTransaction(t.Context(), preview))
 			request := ApplyRequest{Preview: preview}
 			failure := errors.New("interrupted checkpoint effects")
 			if phase == "partial" {
@@ -49,7 +55,7 @@ func TestHostTransactionRecovery(t *testing.T) {
 					return nil
 				}
 			}
-			_, err = promoter.Apply(t.Context(), request)
+			_, err = NewHostPromotion(promoter).Apply(t.Context(), request)
 			if phase == "partial" {
 				if !errors.Is(err, failure) {
 					t.Fatalf("fault = %v", err)
@@ -91,7 +97,7 @@ func TestHostTransactionRecovery(t *testing.T) {
 			// Recovery uses persisted facts rather than the old Promoter's memory.
 			reopened, err := NewPromoter(config)
 			testutil.FailErr(t, "reopen promoter", err)
-			err = reopened.RollbackHostTransaction(t.Context())
+			err = NewHostPromotion(reopened).Rollback(t.Context())
 			if preservedJournal != nil {
 				if err == nil {
 					t.Fatal("invalid recovery journal was accepted")
@@ -124,7 +130,7 @@ func TestHostTransactionRecovery(t *testing.T) {
 				return
 			}
 			testutil.FailErr(t, "recover checkpoint", err)
-			testutil.FailErr(t, "repeat checkpoint recovery", reopened.RollbackHostTransaction(t.Context()))
+			testutil.FailErr(t, "repeat checkpoint recovery", NewHostPromotion(reopened).Rollback(t.Context()))
 			body, err := os.ReadFile(filepath.Join(primary, "a.txt"))
 			testutil.FailErr(t, "read original", err)
 			info, err := os.Stat(filepath.Join(primary, "a.txt"))
@@ -132,14 +138,20 @@ func TestHostTransactionRecovery(t *testing.T) {
 			if string(body) != "original\n" || info.Mode().Perm() != 0640 {
 				t.Fatalf("recovered bytes=%q mode=%o", body, info.Mode().Perm())
 			}
+			if phase == "hard link restoration" {
+				alias, err := os.Stat(filepath.Join(primary, "b.txt"))
+				testutil.FailErr(t, "stat restored hard link", err)
+				if !os.SameFile(info, alias) {
+					t.Fatal("rollback restored bytes but broke the original hard-link group")
+				}
+			}
 			if _, err := os.Lstat(filepath.Join(primary, "nested")); !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("created directory survived: %v", err)
 			}
 			// The old component's applied record must not suppress a subsequent retry.
 			preview, err = reopened.Preview(t.Context(), PreviewRequest{CheckpointID: "checkpoint"})
 			testutil.FailErr(t, "preview retry", err)
-			testutil.FailErr(t, "prepare retry", reopened.PrepareHostTransaction(t.Context(), preview))
-			_, err = reopened.Apply(t.Context(), ApplyRequest{Preview: preview})
+			_, err = NewHostPromotion(reopened).Apply(t.Context(), ApplyRequest{Preview: preview})
 			testutil.FailErr(t, "retry checkpoint", err)
 			link, err := os.Readlink(filepath.Join(primary, "nested/link"))
 			testutil.FailErr(t, "read retried link", err)

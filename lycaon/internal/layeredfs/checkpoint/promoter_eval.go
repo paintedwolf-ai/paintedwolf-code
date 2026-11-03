@@ -47,7 +47,7 @@ func (pr *Promoter) evaluateAmbiguousCandidates(
 		workerBytes = b
 	}
 	if cur.Kind == layeredfs.EntryRegular {
-		b, err := pr.readObservedTarget(cur)
+		b, err := pr.targets.readObservedTarget(cur)
 		if err != nil {
 			return nil, err
 		}
@@ -256,7 +256,7 @@ func (pr *Promoter) evaluateRegular(
 		}, nil, false, nil
 	}
 
-	targetBytes, err := pr.readObservedTarget(cur)
+	targetBytes, err := pr.targets.readObservedTarget(cur)
 	if err != nil {
 		return PlannedChange{}, nil, false, err
 	}

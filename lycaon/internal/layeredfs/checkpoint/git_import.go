@@ -31,12 +31,15 @@ func ResolveGitDirs(repoRoot string, authorizedDirs ...string) (gitDir, commonGi
 		return "", "", fmt.Errorf("checkpoint: repository root is required")
 	}
 	if err := validateResolvedGitDir(repoRoot); err != nil {
-		return "", "", fmt.Errorf("%w: %v", ErrUnauthorizedGitDir, err)
+		return "", "", fmt.Errorf("%w: %w", ErrUnauthorizedGitDir, err)
 	}
 	dotGit := filepath.Join(repoRoot, ".git")
 	st, err := os.Lstat(dotGit)
-	if err != nil || st.Mode()&os.ModeSymlink != 0 {
-		return "", "", fmt.Errorf("%w: resolve .git at %s (%v)", ErrUnauthorizedGitDir, dotGit, err)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: resolve .git at %s: %w", ErrUnauthorizedGitDir, dotGit, err)
+	}
+	if st.Mode()&os.ModeSymlink != 0 {
+		return "", "", fmt.Errorf("%w: .git is a symbolic link at %s", ErrUnauthorizedGitDir, dotGit)
 	}
 	if st.IsDir() {
 		gitDir = dotGit
@@ -248,7 +251,7 @@ func applyCheckpointRefTransaction(
 	}
 	out, code, err := gitexec.Run(ctx, primaryDir, []string{"--git-dir=" + commonGitDir, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(stdinBuf.String())})
 	if err != nil || code != 0 {
-		return nil, fmt.Errorf("%w: update-ref failed: %v (%s)", ErrCheckpointRefConflict, err, strings.TrimSpace(string(out)))
+		return nil, errors.Join(err, fmt.Errorf("%w: update-ref failed (exit %d): %s", ErrCheckpointRefConflict, code, strings.TrimSpace(string(out))))
 	}
 	rec.Completed = true
 	return planned, saveGitRefImportRecord(storeDir, intentName, rec)

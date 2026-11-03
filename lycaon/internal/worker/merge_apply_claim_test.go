@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/session"
@@ -101,87 +102,12 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			publishLater := tc.publishLater
 
 			ctx := t.Context()
-			sqlDB := testdbfixture.Open(t, "store.db")
-			sqlStore := NewSQLStore(sqlDB)
-			q := NewSQLQueue(sqlDB, 8)
-			primary := t.TempDir()
-			testdbseed.InsertSessionWithRoot(t, sqlDB, "parent-cp", testdbseed.DefaultProjectID, primary)
-
-			baseContent := "package app\n\nfunc A() int { return 1 }\n\nfunc B() int { return 2 }\n"
-			testutil.FailErr(t, "write primary base", os.WriteFile(filepath.Join(primary, "app.go"), []byte(baseContent), 0o644))
-
-			jobID, err := q.Enqueue(ctx, api.WorkerTask{
-				ID:              "job-cp-promote",
-				ParentSessionID: "parent-cp",
-				ProjectID:       testdbseed.DefaultProjectID,
-				WorkspacePath:   primary,
-				AgentType:       "implementer",
-				Prompt:          "update B",
-				Brief:           "Update B",
-				Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite},
-			})
-			testutil.FailErr(t, "Enqueue", err)
-			t.Cleanup(func() { session.ClearTaskCheckpointPreview(jobID) })
-
-			overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
-			testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(overlay, 0o755))
-			baselinePath := testbaseline.Durable(t, sqlDB, jobID, primary)
-			cpStoreDir := filepath.Join(filepath.Dir(baselinePath), session.TaskCheckpointStoreSubdir)
-			cpStore, err := checkpoint.NewStore(cpStoreDir)
-			testutil.FailErr(t, "NewStore", err)
-
-			core, err := layeredfs.New(layeredfs.Config{
-				ViewID:     "view-cp-promote",
-				BackingDir: t.TempDir(),
-				Roots:      []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
-			})
-			testutil.FailErr(t, "New Core", err)
-			defer func() { _ = core.ReleaseView() }()
-
-			lp := layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}
-			workerContent := "package app\n\nfunc A() int { return 1 }\n\nfunc B() int { return 22 }\n"
-			_, err = core.WriteFile(lp, []byte(workerContent), 0o644)
-			testutil.FailErr(t, "WriteFile worker", err)
-
-			scriptLP := layeredfs.QualifiedPath{RootID: "primary", Rel: "run.sh"}
-			_, err = core.WriteFile(scriptLP, []byte("#!/bin/sh\necho ok\n"), 0o755)
-			testutil.FailErr(t, "WriteFile run.sh", err)
-
-			linkLP := layeredfs.QualifiedPath{RootID: "primary", Rel: "link.txt"}
-			_, err = core.Symlink("app.go", linkLP)
-			testutil.FailErr(t, "Symlink link.txt", err)
-
-			testutil.FailErr(t, "MkdirAll primary .git/objects", os.MkdirAll(filepath.Join(primary, ".git", "objects"), 0o755))
-			featureOID, err := checkpoint.WriteLooseGitObject(filepath.Join(cpStoreDir, "objects"), "blob", []byte("feature-snapshot\n"))
-			testutil.FailErr(t, "WriteLooseGitObject", err)
-
-			pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
-				WorkerID:         jobID,
-				TaskID:           jobID,
-				ProjectID:        testdbseed.DefaultProjectID,
-				SourceGeneration: "gen-1",
-				Core:             core,
-				Store:            cpStore,
-			})
-			testutil.FailErr(t, "NewPublisher", err)
-
-			pubRes, err := pub.Publish(ctx, checkpoint.PublishRequest{
-				CheckpointID: "chk-promote-1",
-				Trigger:      checkpoint.TriggerWorkerCompletion,
-				PrivateGit: checkpoint.PrivateGitSnapshot{
-					HeadRef: "refs/heads/feature",
-					Refs:    map[string]string{"refs/heads/feature": featureOID},
-				},
-			})
-			testutil.FailErr(t, "Publish", err)
-			manifest := pubRes.Manifest
-
-			_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, baselinePath)
-			testutil.FailErr(t, "SetWorkerWorkspace", err)
-			testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
-
-			// Tear down the active worker view directory completely after checkpoint publication.
-			testutil.FailErr(t, "RemoveAll overlay view", os.RemoveAll(overlay))
+			fixture := newPublishedCheckpointWorker(t)
+			sqlDB, q, primary, jobID := fixture.db, fixture.queue, fixture.primary, fixture.jobID
+			cpStore, core, lp, pub := fixture.store, fixture.core, fixture.path, fixture.publisher
+			manifest, workerContent := fixture.manifest, fixture.workerContent
+			featureOID := fixture.featureOID
+			var err error
 
 			// Trunk advances non-overlappingly on func A().
 			trunkUpdated := "package app\n\nfunc A() int { return 10 }\n\nfunc B() int { return 2 }\n"
@@ -416,4 +342,105 @@ func TestMergeServiceCheckpointExactBaseConflictSurface(t *testing.T) {
 	if !sawAmbiguous || !sawThreeWay {
 		t.Fatalf("expected ConflictAmbiguousBase and ConflictContentOverlap in summaries, got %+v", previewOut.Conflicts)
 	}
+}
+
+// publishedCheckpointWorker owns a completed worker and its immutable checkpoint;
+// the promotion tests can advance trunk, refresh review, and inject commit faults.
+type publishedCheckpointWorker struct {
+	db                                        *db.Store
+	queue                                     *SQLQueue
+	primary, jobID, workerContent, featureOID string
+	store                                     *checkpoint.Store
+	core                                      *layeredfs.Core
+	path                                      layeredfs.QualifiedPath
+	publisher                                 *checkpoint.Publisher
+	manifest                                  checkpoint.Manifest
+}
+
+func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
+	t.Helper()
+	ctx := t.Context()
+	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlStore := NewSQLStore(sqlDB)
+	q := NewSQLQueue(sqlDB, 8)
+	primary := t.TempDir()
+	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent-cp", testdbseed.DefaultProjectID, primary)
+
+	baseContent := "package app\n\nfunc A() int { return 1 }\n\nfunc B() int { return 2 }\n"
+	testutil.FailErr(t, "write primary base", os.WriteFile(filepath.Join(primary, "app.go"), []byte(baseContent), 0o644))
+
+	jobID, err := q.Enqueue(ctx, api.WorkerTask{
+		ID:              "job-cp-promote",
+		ParentSessionID: "parent-cp",
+		ProjectID:       testdbseed.DefaultProjectID,
+		WorkspacePath:   primary,
+		AgentType:       "implementer",
+		Prompt:          "update B",
+		Brief:           "Update B",
+		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite},
+	})
+	testutil.FailErr(t, "Enqueue", err)
+	t.Cleanup(func() { session.ClearTaskCheckpointPreview(jobID) })
+
+	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
+	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(overlay, 0o755))
+	baselinePath := testbaseline.Durable(t, sqlDB, jobID, primary)
+	cpStoreDir := filepath.Join(filepath.Dir(baselinePath), session.TaskCheckpointStoreSubdir)
+	cpStore, err := checkpoint.NewStore(cpStoreDir)
+	testutil.FailErr(t, "NewStore", err)
+
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID:     "view-cp-promote",
+		BackingDir: t.TempDir(),
+		Roots:      []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "New Core", err)
+	t.Cleanup(func() { _ = core.ReleaseView() })
+
+	lp := layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}
+	workerContent := "package app\n\nfunc A() int { return 1 }\n\nfunc B() int { return 22 }\n"
+	_, err = core.WriteFile(lp, []byte(workerContent), 0o644)
+	testutil.FailErr(t, "WriteFile worker", err)
+
+	scriptLP := layeredfs.QualifiedPath{RootID: "primary", Rel: "run.sh"}
+	_, err = core.WriteFile(scriptLP, []byte("#!/bin/sh\necho ok\n"), 0o755)
+	testutil.FailErr(t, "WriteFile run.sh", err)
+
+	linkLP := layeredfs.QualifiedPath{RootID: "primary", Rel: "link.txt"}
+	_, err = core.Symlink("app.go", linkLP)
+	testutil.FailErr(t, "Symlink link.txt", err)
+
+	testutil.FailErr(t, "MkdirAll primary .git/objects", os.MkdirAll(filepath.Join(primary, ".git", "objects"), 0o755))
+	featureOID, err := checkpoint.WriteLooseGitObject(filepath.Join(cpStoreDir, "objects"), "blob", []byte("feature-snapshot\n"))
+	testutil.FailErr(t, "WriteLooseGitObject", err)
+
+	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
+		WorkerID:         jobID,
+		TaskID:           jobID,
+		ProjectID:        testdbseed.DefaultProjectID,
+		SourceGeneration: "gen-1",
+		Core:             core,
+		Store:            cpStore,
+	})
+	testutil.FailErr(t, "NewPublisher", err)
+
+	pubRes, err := pub.Publish(ctx, checkpoint.PublishRequest{
+		CheckpointID: "chk-promote-1",
+		Trigger:      checkpoint.TriggerWorkerCompletion,
+		PrivateGit: checkpoint.PrivateGitSnapshot{
+			HeadRef: "refs/heads/feature",
+			Refs:    map[string]string{"refs/heads/feature": featureOID},
+		},
+	})
+	testutil.FailErr(t, "Publish", err)
+	manifest := pubRes.Manifest
+
+	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, baselinePath)
+	testutil.FailErr(t, "SetWorkerWorkspace", err)
+	testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
+
+	// Tear down the active worker view directory completely after checkpoint publication.
+	testutil.FailErr(t, "RemoveAll overlay view", os.RemoveAll(overlay))
+
+	return publishedCheckpointWorker{db: sqlDB, queue: q, primary: primary, jobID: jobID, workerContent: workerContent, featureOID: featureOID, store: cpStore, core: core, path: lp, publisher: pub, manifest: manifest}
 }

@@ -13,14 +13,14 @@ import (
 type ConflictKind string
 
 const (
-	ConflictMissingExactBase   ConflictKind = "missing_exact_base"
-	ConflictInvalidBaseDigest  ConflictKind = "invalid_base_digest"
-	ConflictAmbiguousBase      ConflictKind = "ambiguous_base"
-	ConflictContentOverlap     ConflictKind = "content_overlap"
-	ConflictModifyDelete       ConflictKind = "modify_delete"
-	ConflictAddAddDifference   ConflictKind = "add_add_difference"
-	ConflictDirectoryReplaced  ConflictKind = "directory_replacement_conflict"
-	ConflictTypeMismatch       ConflictKind = "type_mismatch"
+	ConflictMissingExactBase  ConflictKind = "missing_exact_base"
+	ConflictInvalidBaseDigest ConflictKind = "invalid_base_digest"
+	ConflictAmbiguousBase     ConflictKind = "ambiguous_base"
+	ConflictContentOverlap    ConflictKind = "content_overlap"
+	ConflictModifyDelete      ConflictKind = "modify_delete"
+	ConflictAddAddDifference  ConflictKind = "add_add_difference"
+	ConflictDirectoryReplaced ConflictKind = "directory_replacement_conflict"
+	ConflictTypeMismatch      ConflictKind = "type_mismatch"
 )
 
 // ResolutionChoice identifies a supported manual resolution strategy for a PromotionConflict.
