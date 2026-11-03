@@ -36,6 +36,17 @@ func TestProgramObservationCommitsWithoutSourceBindings(t *testing.T) {
 			sess, err := owner.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			receipt := &api.CommandProgramReceipt{ID: "program", ParentReceiptID: "invocation", State: "running"}
+			if handle, err := owner.CommitProgramObservation(t.Context(), sess.ID, "command", nil, "unbound"); err != nil || handle != "" {
+				t.Fatalf("unbound outcome acquired handle: %q %v", handle, err)
+			}
+			cancelled, cancel := context.WithCancel(t.Context())
+			cancel()
+			if handle, err := owner.CommitProgramObservation(cancelled, sess.ID, "command", receipt, "cancelled"); err == nil || handle != "" {
+				t.Fatalf("cancelled observation committed: %q %v", handle, err)
+			}
+			if handle, err := owner.CommitProgramObservation(t.Context(), "missing", "command", receipt, "wrong session"); err == nil || handle != "" {
+				t.Fatalf("missing session acquired evidence: %q %v", handle, err)
+			}
 			first, err := owner.CommitProgramObservation(t.Context(), sess.ID, "command", receipt, "src/unseen.go:42: invented source")
 			testutil.FailErr(t, "commit running observation", err)
 			receipt.State = "completed"
