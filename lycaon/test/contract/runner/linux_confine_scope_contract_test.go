@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -56,6 +58,20 @@ func TestLinuxConfineScopeRunsFullAndNamesLiveTests(t *testing.T) {
 		violations = append(violations, "no scope runs the protected launch suite (./internal/launchguard/...) unfiltered")
 	}
 	contractcheck.FailViolations(t, linuxConfineScript+" scope is incomplete", violations)
+}
+
+func TestLinuxConfineScopeCoversSharedProcessStatDecoder(t *testing.T) {
+	t.Parallel()
+	scopes := linuxConfineScopes(t, contractcheck.RepoRoot(t))
+	for _, name := range []string{"TestParseLinuxStatPreservesKernelFacts", "TestParseLinuxStatRejectsMalformedRecords", "TestParseLinuxStatBoundsTheEntireRecord"} {
+		covered := false
+		for _, scope := range scopes {
+			covered = covered || scope.covers("./internal/osprocess", name)
+		}
+		if !covered {
+			t.Errorf("applied Linux scope omits shared process-stat decoder test %s", name)
+		}
+	}
 }
 
 // Every command supervisor test runs on each architecture; a new one cannot fall outside the filter.
@@ -157,9 +173,36 @@ func TestInstalledHelperSuiteIsNotASecurityJourney(t *testing.T) {
 func TestLinuxConfineRunsOnBothArchitectures(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	job := extractYAMLJob(contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml"), "upgrade-corpus")
-	if !strings.Contains(job, "run: ./task test:confine:linux\n") || !strings.Contains(job, "runs-on: ubuntu-latest") {
-		t.Error("the amd64 upgrade-corpus job must run ./task test:confine:linux")
+	var workflow struct {
+		Jobs map[string]struct {
+			Runner string                 `yaml:"runs-on"`
+			Steps  []struct{ Run string } `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	contractcheck.FailErr(t, "decode platform workflow", yaml.Unmarshal([]byte(contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml")), &workflow))
+	job := workflow.Jobs["upgrade-corpus"]
+	if job.Runner != "ubuntu-latest" {
+		t.Error("the amd64 upgrade-corpus job must use its declared Linux runner")
+	}
+	want := []string{"sandbox", "supervisor", "launch", "browser", "helpers"}
+	var legs []string
+	for _, step := range job.Steps {
+		args := strings.Fields(step.Run)
+		if len(args) < 2 || args[0] != "./task" || args[1] != "test:confine:linux" {
+			continue
+		}
+		if len(args) == 2 {
+			legs = append(legs, want...)
+		} else if len(args) > 3 && args[2] == "--" {
+			legs = append(legs, args[3:]...)
+		} else {
+			t.Fatalf("invalid confinement selection: %v", args)
+		}
+	}
+	slices.Sort(legs)
+	slices.Sort(want)
+	if !slices.Equal(legs, want) {
+		t.Errorf("amd64 confinement legs = %v, want each declared leg once: %v", legs, want)
 	}
 	var plan struct {
 		CI map[string]struct {
@@ -177,4 +220,19 @@ func TestLinuxConfineRunsOnBothArchitectures(t *testing.T) {
 		}
 	}
 	t.Error("no release and nightly CI lane runs test:confine:linux on ubuntu-24.04-arm")
+}
+
+func TestLinuxPrivilegeQualificationIsSelectedWithItsNativeTag(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	for _, scope := range linuxConfineScopes(t, root) {
+		if !scope.covers("./internal/exec", "TestLinuxNativePrivilegeQualification") {
+			continue
+		}
+		if !strings.Contains(scope.Command, "--tags nativeprivileges") || !strings.Contains(scope.Command, "PW_NATIVE_PRIVILEGE_QUALIFICATION=ci") {
+			t.Fatal("native privilege qualification is selected without its required fixture build/setup mode")
+		}
+		return
+	}
+	t.Fatal("applied Linux lane omits genuine privilege qualification")
 }

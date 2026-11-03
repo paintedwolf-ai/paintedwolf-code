@@ -70,6 +70,7 @@ func Stage(ctx context.Context, opts StageOpts) (StageResult, error) {
 type stagedFileWriter func(context.Context, FileEntry, string, string) error
 
 func stageManifest(ctx context.Context, opts StageOpts, manifest Manifest, localSnapshot bool, write stagedFileWriter) (StageResult, error) {
+	manifest = upgradeArchiveScope(manifest)
 	liveName, err := liveStoreFilename(opts.ConfigDir, opts.DBPath)
 	if err != nil {
 		return StageResult{}, err
@@ -382,8 +383,10 @@ func parseAndValidateArchive(path string, expectedPaths, expectedDirs []string) 
 }
 
 func validateManifestEntries(manifest Manifest, expectedPaths, expectedDirs []string, entries map[string]uint64) error {
-	if manifest.FormatVersion != FormatVersion {
-		return &InvalidError{Detail: fmt.Sprintf("unsupported format_version %d", manifest.FormatVersion)}
+	var err error
+	expectedPaths, expectedDirs, err = archiveScope(manifest.FormatVersion, expectedPaths, expectedDirs)
+	if err != nil {
+		return err
 	}
 	if len(manifest.Files) == 0 || len(manifest.ReplaceRelPaths) == 0 {
 		return &InvalidError{Detail: "manifest lists no files or replacement scope"}

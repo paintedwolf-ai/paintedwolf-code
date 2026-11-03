@@ -17,7 +17,7 @@ func TestWriteReadRoundTrip(t *testing.T) {
 	store := contentblob.StoreFor(t.TempDir(), "project-1")
 	plaintext := []byte("hello content-addressed world")
 
-	sha, byteSize, storedSize, err := contentblob.Write(store, plaintext)
+	sha, byteSize, storedSize, err := contentblob.Write(t.Context(), store, plaintext)
 	testutil.FailErr(t, "write", err)
 
 	wantSum := sha256.Sum256(plaintext)
@@ -42,9 +42,9 @@ func TestWriteIsIdempotentAndDeduplicates(t *testing.T) {
 	store := contentblob.StoreFor(t.TempDir(), "project-1")
 	plaintext := []byte("repeat write of the same bytes")
 
-	sha1, byteSize1, storedSize1, err := contentblob.Write(store, plaintext)
+	sha1, byteSize1, storedSize1, err := contentblob.Write(t.Context(), store, plaintext)
 	testutil.FailErr(t, "first write", err)
-	sha2, byteSize2, storedSize2, err := contentblob.Write(store, plaintext)
+	sha2, byteSize2, storedSize2, err := contentblob.Write(t.Context(), store, plaintext)
 	testutil.FailErr(t, "second write", err)
 
 	if sha1 != sha2 || byteSize1 != byteSize2 || storedSize1 != storedSize2 {
@@ -66,7 +66,7 @@ func TestReadMissingDigestErrors(t *testing.T) {
 // loss and refuse on damage.
 func TestReadCorruptObjectIsNotReportedMissing(t *testing.T) {
 	store := contentblob.StoreFor(t.TempDir(), "project-1")
-	sha, _, _, err := contentblob.Write(store, []byte("intact body"))
+	sha, _, _, err := contentblob.Write(t.Context(), store, []byte("intact body"))
 	testutil.FailErr(t, "write", err)
 	rel, err := contentblob.RelPath(sha)
 	testutil.FailErr(t, "rel path", err)
@@ -96,7 +96,7 @@ func TestWriteReadModelOutputShapedEnvelope(t *testing.T) {
 	raw, err := json.Marshal(envelope)
 	testutil.FailErr(t, "marshal envelope", err)
 
-	sha, _, _, err := contentblob.Write(store, raw)
+	sha, _, _, err := contentblob.Write(t.Context(), store, raw)
 	testutil.FailErr(t, "write envelope", err)
 
 	got, err := contentblob.Read(store, sha)
@@ -121,7 +121,7 @@ func TestWriteReadEvidenceShapedBody(t *testing.T) {
 	raw, err := json.Marshal(body)
 	testutil.FailErr(t, "marshal body", err)
 
-	sha, _, _, err := contentblob.Write(store, raw)
+	sha, _, _, err := contentblob.Write(t.Context(), store, raw)
 	testutil.FailErr(t, "write body", err)
 
 	got, err := contentblob.Read(store, sha)

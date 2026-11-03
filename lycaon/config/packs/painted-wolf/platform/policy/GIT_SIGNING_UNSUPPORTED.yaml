@@ -3,10 +3,11 @@ id: GIT_SIGNING_UNSUPPORTED
 kind: policy
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - git_commit
 requires:
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
   profiles:
     - filesystem

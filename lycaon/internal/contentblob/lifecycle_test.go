@@ -20,7 +20,7 @@ func TestPublicationLeaseProtectsReusedDigestAcrossRootAliases(t *testing.T) {
 	projectID := testdbseed.DefaultProjectID
 	testdbseed.InsertSession(t, database, "session", projectID)
 	store := contentblob.StoreFor(root, projectID)
-	sha, size, stored, err := contentblob.Write(store, []byte("reused historical body"))
+	sha, size, stored, err := contentblob.Write(t.Context(), store, []byte("reused historical body"))
 	testutil.FailErr(t, "write body", err)
 	q := db.New(database)
 	testutil.FailErr(t, "record body", q.UpsertContentBlobObject(t.Context(), db.UpsertContentBlobObjectParams{ProjectID: projectID, Sha256: sha, ByteSize: size, StoredSize: stored, CreatedAt: db.FormatTime(time.Now())}))
@@ -48,7 +48,7 @@ func TestFailedUnlinkPreservesReclaimReceipt(t *testing.T) {
 	projectID := testdbseed.DefaultProjectID
 	testdbseed.InsertProject(t, database, projectID)
 	store := contentblob.StoreFor(root, projectID)
-	sha, size, stored, err := contentblob.Write(store, []byte("queued body"))
+	sha, size, stored, err := contentblob.Write(t.Context(), store, []byte("queued body"))
 	testutil.FailErr(t, "write body", err)
 	q := db.New(database)
 	testutil.FailErr(t, "record body", q.UpsertContentBlobObject(t.Context(), db.UpsertContentBlobObjectParams{ProjectID: projectID, Sha256: sha, ByteSize: size, StoredSize: stored, CreatedAt: db.FormatTime(time.Now())}))

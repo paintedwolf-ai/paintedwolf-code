@@ -708,7 +708,7 @@ func TestEvaluateWorkerSummaryRewritesCorrectedLines(t *testing.T) {
 			},
 		},
 		{
-			Role: api.MessageRoleTool,
+			Role:       api.MessageRoleTool,
 			ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: grepJSON},
 		},
 	}
@@ -766,4 +766,3 @@ func TestEvaluateWorkerSummaryNoBriefStillChecksCitations(t *testing.T) {
 		t.Fatal("expected citation check to be recorded even without brief")
 	}
 }
-

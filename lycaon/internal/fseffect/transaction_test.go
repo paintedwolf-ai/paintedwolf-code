@@ -122,7 +122,7 @@ func TestReplaceCommitsAndVerifiesThroughHeldParent(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "Replace", err)
-	if result.Bytes != int64(len("complete\n")) {
+	if result.Bytes != int64(len("complete\n")) || result.Publication != fseffect.PublicationVerified {
 		t.Fatalf("Replace bytes = %d", result.Bytes)
 	}
 	got, err := os.ReadFile(filepath.Join(root, "nested", "file.txt"))
@@ -162,6 +162,22 @@ func TestUpdateModeAppliesThroughHeldParent(t *testing.T) {
 	testutil.FailErr(t, "stat target", err)
 	if info.Mode().Perm() != 0o755 {
 		t.Fatalf("mode = %o, want 755", info.Mode().Perm())
+	}
+}
+
+func TestUpdateModeAppliesToDirectoryThroughHeldParent(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "copied")
+	testutil.FailErr(t, "seed directory", os.Mkdir(target, 0o755))
+	_, err := fseffect.UpdateMode(fseffect.ModeUpdateRequest{
+		Location: fseffect.Location{Root: root, Rel: "copied"},
+		Update:   func(os.FileMode) os.FileMode { return 0o700 },
+	})
+	testutil.FailErr(t, "update directory mode", err)
+	info, err := os.Stat(target)
+	testutil.FailErr(t, "stat directory", err)
+	if !info.IsDir() || info.Mode().Perm() != 0o700 {
+		t.Fatalf("directory mode = %v, want 0700", info.Mode())
 	}
 }
 
@@ -244,11 +260,15 @@ func TestChownAppliesAndRefusesSymlinkTarget(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "owned.txt")
 	testutil.FailErr(t, "seed target", os.WriteFile(target, []byte("x"), 0o644))
-	testutil.FailErr(t, "Chown", fseffect.Chown(fseffect.Location{Root: root, Rel: "owned.txt"}, os.Getuid(), os.Getgid()))
+	outcome, err := fseffect.ChangeOwnership(fseffect.OwnershipRequest{Location: fseffect.Location{Root: root, Rel: "owned.txt"}, UID: os.Getuid(), GID: os.Getgid()})
+	testutil.FailErr(t, "change ownership", err)
+	if !outcome.Applied || outcome.Capability != fseffect.MetadataAvailable {
+		t.Fatalf("ownership outcome = %+v", outcome)
+	}
 	outside := filepath.Join(t.TempDir(), "outside")
 	testutil.FailErr(t, "seed outside", os.WriteFile(outside, []byte("safe"), 0o600))
 	testutil.FailErr(t, "symlink target", os.Symlink(outside, filepath.Join(root, "out")))
-	if err := fseffect.Chown(fseffect.Location{Root: root, Rel: "out"}, os.Getuid(), os.Getgid()); !errors.Is(err, fseffect.ErrSymlink) {
+	if outcome, err := fseffect.ChangeOwnership(fseffect.OwnershipRequest{Location: fseffect.Location{Root: root, Rel: "out"}, UID: os.Getuid(), GID: os.Getgid()}); !errors.Is(err, fseffect.ErrSymlink) || outcome.Applied {
 		t.Fatalf("Chown symlink target error = %v, want ErrSymlink", err)
 	}
 }
@@ -466,5 +486,20 @@ func TestOpenReadAcceptsCapabilityRoot(t *testing.T) {
 	testutil.FailErr(t, "stat capability root", err)
 	if !info.IsDir() {
 		t.Fatalf("capability root mode = %v", info.Mode())
+	}
+}
+
+func TestMkdirAllCountsOnlyObservedCreations(t *testing.T) {
+	root := t.TempDir()
+	loc := fseffect.Location{Root: root, Rel: "a/b"}
+	count, err := fseffect.MkdirAll(loc, 0o755)
+	testutil.FailErr(t, "create nested directories", err)
+	if count != 2 {
+		t.Fatalf("created=%d want=2", count)
+	}
+	count, err = fseffect.MkdirAll(loc, 0o755)
+	testutil.FailErr(t, "reuse directories", err)
+	if count != 0 {
+		t.Fatalf("existing directories counted as effects: %d", count)
 	}
 }

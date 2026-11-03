@@ -79,7 +79,7 @@ func socketGrantToDomain(grant settings.ApprovalGrant) hitl.ApprovalGrant {
 		ProjectID: grant.ProjectID, ProjectDir: grant.ProjectDir, Title: grant.Title, Coverage: grant.Coverage,
 		GrantedAt: grant.GrantedAt, ExpiresAt: grant.ExpiresAt, ExpiresWhen: grant.ExpiresWhen,
 		ReaskWhen: grant.ReaskWhen, Witness: grant.Witness,
-		ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Source: grant.Source,
+		ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath, Binding: grant.Binding, Unavailable: grant.Unavailable, Source: grant.Source,
 	}
 }
 
@@ -97,8 +97,8 @@ func chatSocketGrantsToDomain(rootSessionID string, grants []approvalstate.Socke
 			ExpiresWhen:   hitl.ExpiresWhenChatDeleted,
 			ReaskWhen:     "the socket target, task, or confinement changes",
 			ApprovedPath:  tg.ApprovedPath,
-			ResolvedPath:  tg.ResolvedPath,
-			Source:        "checkpoint",
+			ResolvedPath:  tg.ResolvedPath, Binding: tg.Binding, Unavailable: tg.Unavailable,
+			Source: "checkpoint",
 		}
 		if tg.ExpiresAt != nil {
 			expires := *tg.ExpiresAt

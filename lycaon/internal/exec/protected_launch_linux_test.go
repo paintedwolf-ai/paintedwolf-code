@@ -4,6 +4,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -63,7 +65,7 @@ func TestProtectedLaunchRefusesWithoutTheBootstrapsBroker(t *testing.T) {
 }
 
 func TestRelayedSupervisorsStaySupervised(t *testing.T) {
-	supervised := &exec.Cmd{Args: []string{"/opt/painted-wolf-code/bin/pw", supervisorCommand, "0", "normal", "/usr/bin/git", "git"}}
+	supervised := &exec.Cmd{Args: []string{"/opt/painted-wolf-code/bin/pw", supervisorCommand, "", "normal", "/usr/bin/git", "git"}}
 	relayed := &exec.Cmd{Args: append([]string{"/opt/painted-wolf-code/bin/pw", relayCommand}, supervised.Args[1:]...)}
 	if !commandSupervisor(supervised) || !commandSupervisor(relayed) || relayedCommand(supervised) || !relayedCommand(relayed) {
 		t.Fatal("relay and supervisor commands are not recognised")
@@ -105,14 +107,14 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 	} {
 		lifetime, status, err := os.Pipe()
 		testutil.FailErr(t, "pipe", err)
-		cmd := &exec.Cmd{Path: "/opt/painted-wolf-code/bin/pw", Args: append([]string{"/opt/painted-wolf-code/bin/pw", supervisorCommand, "0", "normal"}, target...), ExtraFiles: []*os.File{lifetime, status}}
+		cmd := &exec.Cmd{Path: "/opt/painted-wolf-code/bin/pw", Args: append([]string{"/opt/painted-wolf-code/bin/pw", supervisorCommand, "", "normal"}, target...), ExtraFiles: []*os.File{lifetime, status}}
 		testutil.FailErr(t, "relay "+name, relayThrough(cmd, state))
 		if !relayedCommand(cmd) || cmd.Args[2] != supervisorCommand || cmd.ExtraFiles[len(cmd.ExtraFiles)-1] != broker {
 			t.Fatalf("%s launch not relayed with the broker last: %q", name, cmd.Args)
 		}
 		extras, argv, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", cmd.Args[2:])
-		if !ok || extras != 2 || len(argv) < 2 || argv[1] != supervisorCommand {
-			t.Fatalf("%s supervisor relay target = (%d, %q, %v)", name, extras, argv, ok)
+		if !ok || extras != "11" || len(argv) < 2 || argv[1] != supervisorCommand {
+			t.Fatalf("%s supervisor relay target = (%q, %q, %v)", name, extras, argv, ok)
 		}
 		_ = lifetime.Close()
 		_ = status.Close()
@@ -130,8 +132,8 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 		t.Fatalf("prepared command not relayed with broker last: %q", prepared.Args)
 	}
 	extras, argv, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", prepared.Args[2:])
-	if !ok || extras != 1 || !slices.Equal(argv, []string{"/opt/painted-wolf-code/bin/pw", "--confine-helper", "-profile-fd", "3", "--", "/usr/bin/git", "status"}) {
-		t.Fatalf("prepared relay target = (%d, %q, %v)", extras, argv, ok)
+	if !ok || extras != "1" || !slices.Equal(argv, []string{"/opt/painted-wolf-code/bin/pw", "--confine-helper", "-profile-fd", "3", "--", "/usr/bin/git", "status"}) {
+		t.Fatalf("prepared relay target = (%q, %q, %v)", extras, argv, ok)
 	}
 	unrelayCommand(prepared)
 	if relayedCommand(prepared) || prepared.Path != "/opt/painted-wolf-code/bin/pw" || len(prepared.ExtraFiles) != 1 || prepared.ExtraFiles[0] != profileRead {
@@ -163,7 +165,7 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 	if err := relayThrough(&exec.Cmd{Args: []string{"pw", supervisorCommand}}, missing); !errors.Is(err, ErrLaunchBrokerUnavailable) {
 		t.Fatalf("a launch without the broker = %v, want refusal", err)
 	}
-	if _, _, err := StartInOwnGroup(&exec.Cmd{Path: "/nonexistent/binary", Args: []string{"binary"}}); err == nil {
+	if _, err := StartInOwnGroup(t.Context(), &exec.Cmd{Path: "/nonexistent/binary", Args: []string{"binary"}}); err == nil {
 		t.Fatal("StartInOwnGroup with missing binary succeeded")
 	}
 
@@ -203,7 +205,7 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 
 func TestBrokerRelaySubprocess(t *testing.T) {
 	if os.Getenv("PW_TEST_BROKER_RELAY_SUBPROCESS") == "1" {
-		if code := runBrokerRelay([]string{"1", "/bin/true", "true"}); code != 9 {
+		if code := runBrokerRelay([]string{"0", "/bin/true", "true"}); code != 9 {
 			t.Fatalf("runBrokerRelay = %d, want 9", code)
 		}
 		return
@@ -225,13 +227,18 @@ func TestBrokerRelaySubprocess(t *testing.T) {
 			done <- err
 			return
 		}
-		_, fds, err := launchbroker.Decode(payload[:n], control[:oobn])
+		request, fds, err := launchbroker.Decode(payload[:n], control[:oobn])
 		if err != nil {
 			done <- err
 			return
 		}
 		for _, fd := range fds[1:] {
 			_ = unix.Close(fd)
+		}
+		if request.ExtraFileLayout != "0" {
+			done <- fmt.Errorf("relay changed closed-slot layout to %q", request.ExtraFileLayout)
+			_ = unix.Close(fds[0])
+			return
 		}
 		launchbroker.SendEvent(fds[0], launchbroker.Event{Started: os.Getpid()})
 		launchbroker.SendEvent(fds[0], launchbroker.Event{Exited: true, Code: 9})
@@ -248,6 +255,32 @@ func TestBrokerRelaySubprocess(t *testing.T) {
 	cmd.ExtraFiles = []*os.File{nil, brokerChild}
 	testutil.FailErr(t, "run broker relay subprocess", cmd.Run())
 	testutil.FailErr(t, "serve broker relay request", <-done)
+}
+
+func TestPreparedInputsSurviveBrokerAndSupervisorPrefixes(t *testing.T) {
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "create broker pair", err)
+	broker := os.NewFile(uintptr(pair[0]), "broker")
+	defer func() { _ = broker.Close(); _ = unix.Close(pair[1]) }()
+	cmd, release, err := prepareNativeCommand(t.Context(), "/bin/true", nil, ExecOpts{Launch: HostLaunch("broker binding fixture")}, nil, false)
+	testutil.FailErr(t, "prepare bound input", err)
+	defer release()
+	prefix := slices.Clone(cmd.ExtraFiles)
+	state := protectedLaunch{protected: true, broker: broker}
+	testutil.FailErr(t, "relay prepared input", relayThrough(cmd, state))
+	testutil.FailErr(t, "validate relayed input", confine.ValidateProcessInputs(t.Context(), cmd))
+	cmd, cleanup, err := superviseCommand(cmd, func() {}, ProcessPriorityNormal)
+	testutil.FailErr(t, "supervise relayed input", err)
+	defer cleanup()
+	supervisorBroker := protectedState().broker
+	if !relayedCommand(cmd) {
+		testutil.FailErr(t, "relay supervised input", relayThrough(cmd, state))
+		supervisorBroker = broker
+	}
+	if !relayedCommand(cmd) || !commandSupervisor(cmd) || len(cmd.ExtraFiles) != len(prefix)+3 || !slices.Equal(cmd.ExtraFiles[:len(prefix)], prefix) || cmd.ExtraFiles[len(cmd.ExtraFiles)-1] != supervisorBroker {
+		t.Fatalf("supervisor relay changed descriptor prefix: args=%q files=%d", cmd.Args, len(cmd.ExtraFiles))
+	}
+	testutil.FailErr(t, "validate supervised relayed input", confine.ValidateProcessInputs(t.Context(), cmd))
 }
 
 // Inside the module view the caller's programs are not executable by the

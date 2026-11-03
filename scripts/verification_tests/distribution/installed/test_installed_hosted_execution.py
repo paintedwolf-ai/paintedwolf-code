@@ -12,6 +12,11 @@ from linux_release.hosted import desktop as hosted
 
 
 class HostedDesktopTests(unittest.TestCase):
+    def setUp(self):
+        release = patch.object(hosted, 'release', return_value={'ID': 'ubuntu', 'VERSION_ID': '24.04'})
+        release.start()
+        self.addCleanup(release.stop)
+
     def environment(self):
         return {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted',
                 'GITHUB_RUN_ID': '123', 'GITHUB_SHA': 'a' * 40, 'RUNNER_ARCH': 'ARM64'}

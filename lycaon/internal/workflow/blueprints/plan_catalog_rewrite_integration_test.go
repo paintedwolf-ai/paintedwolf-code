@@ -22,7 +22,7 @@ func TestPlanCatalogHappyPathReachesExecutionSubroutine(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 	ctx := context.Background()
 
-	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
@@ -65,7 +65,7 @@ func TestPlanResearchDepthNoneReachesExecutionSubroutine(t *testing.T) {
 	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
 
-	parent, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request"})
+	parent, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request"})
 	testutil.FailErr(t, "Start plan", err)
 	parent = completePlanIntakeT(ctx, t, mgr, parent)
 	parent, err = completePlanResearchAtDepthNone(ctx, mgr, parent)
@@ -92,7 +92,7 @@ func TestPlanResearchDepthNoneReachesExecutionSubroutine(t *testing.T) {
 func TestPlanManifestHasNoImplementWorkflowReadyOnExecute(t *testing.T) {
 	raw, _, err := workflowdef.LoadPackManifestsForCatalog(nil)
 	testutil.FailErr(t, "loadCatalogManifestsWithSources", err)
-	planManifest, ok := raw[workflowdef.ManifestKey("plan", "1.0.0")]
+	planManifest, ok := raw[workflowdef.ManifestKey("plan", "1.0.1")]
 	if !ok {
 		t.Fatal("missing plan manifest")
 	}

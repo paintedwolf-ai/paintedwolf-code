@@ -104,6 +104,7 @@ export const API_OPERATIONS = {
   getChatContent: { method: "GET", path: "/v1/sessions/{id}/messages/{message_id}/content" },
   getChatVault: { method: "GET", path: "/v1/sessions/{id}/vault" },
   getCodeScan: { method: "GET", path: "/v1/projects/{id}/scans/{scan_id}" },
+  getCommandProgramReceipt: { method: "GET", path: "/v1/sessions/{id}/program-receipts/{program_id}" },
   getContributions: { method: "GET", path: "/v1/contributions" },
   getCoordinatorContext: { method: "GET", path: "/v1/sessions/{id}/coordinator-context" },
   getCostSummary: { method: "GET", path: "/v1/cost/summary" },
@@ -446,6 +447,7 @@ export type OperationPathParameters = {
   getChatContent: { id: string | number; message_id: string | number; };
   getChatVault: { id: string | number; };
   getCodeScan: { id: string | number; scan_id: string | number; };
+  getCommandProgramReceipt: { id: string | number; program_id: string | number; };
   getContributions: Record<string, never>;
   getCoordinatorContext: { id: string | number; };
   getCostSummary: Record<string, never>;

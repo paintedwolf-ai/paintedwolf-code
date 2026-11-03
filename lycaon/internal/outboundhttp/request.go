@@ -6,10 +6,15 @@ import (
 	"net/url"
 )
 
+// ResolveMapping sends hops for Host:Port to another destination while the
+// URL keeps its host for SNI, Host, cookies and secret-sink origin. Address
+// pins an IP; otherwise TargetHost (default: the URL host) is resolved under
+// the same policy as the URL host. TargetPort zero keeps the URL port.
 type ResolveMapping struct {
 	Host       string
 	Port       uint16
 	Address    netip.Addr
+	TargetHost string
 	TargetPort uint16
 }
 

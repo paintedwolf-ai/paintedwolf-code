@@ -75,16 +75,16 @@ func TestPlanOptionTitlesAreFrozen(t *testing.T) {
 	store := mustApprovalStore(t)
 	approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "network",
-Args: map[string]any{"host": "api.example.com"},
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-titles",
-ProjectID: "proj-titles",
-ProjectDir: "/tmp/proj",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "network",
+			Args: map[string]any{"host": "api.example.com"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-titles",
+			ProjectID:  "proj-titles",
+			ProjectDir: "/tmp/proj",
+		},
+	}
 	checkOffers := func(label string, offers []hitl.ApprovalGrantOffer) {
 		t.Helper()
 		if len(offers) == 0 {
@@ -101,34 +101,34 @@ ProjectDir: "/tmp/proj",
 	checkOffers("host", approvals.GrantOffers(action, result))
 
 	pathAction := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-Files: []string{"/tmp/proj/a.txt"},
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-titles",
-ProjectID: "proj-titles",
-ProjectDir: "/tmp/proj",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/tmp/proj/a.txt"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-titles",
+			ProjectID:  "proj-titles",
+			ProjectDir: "/tmp/proj",
+		},
+	}
 	checkOffers("path", settings.GrantedPathOffers(pathAction, gate.FileTarget{
 		Path: "/tmp/proj/a.txt", Mode: gate.ModeWrite,
 	}, &gate.Decision{Primary: api.GateSensitiveLocation}, nil))
 
 	cmd := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "git status"},
-},
-Presentation: hitl.ActionPresentation{
-Command: "git status",
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-titles",
-ProjectID: "proj-titles",
-ProjectDir: "/tmp/proj",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "git status"},
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "git status",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-titles",
+			ProjectID:  "proj-titles",
+			ProjectDir: "/tmp/proj",
+		},
+	}
 	checkOffers("exact action", approvals.GrantOffers(cmd, &hitl.ApprovalResult{
 		Decision: &gate.Decision{Primary: api.GateExplicitApprovalRequest},
 	}))
@@ -167,19 +167,19 @@ func TestTwoSubjectCardsCarryGroups(t *testing.T) {
 	t.Parallel()
 	approvals := settings.NewRuleApprovalGate(mustApprovalStore(t), settings.NoSources())
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "network",
-Args: map[string]any{"host": "api.example.com"},
-},
-Scope: hitl.ActionScope{
-SessionID: "sess-groups",
-ProjectID: "proj-groups",
-ProjectDir: "/tmp/proj",
-},
-Resources: hitl.ActionResources{
-HostResources: []string{"camera"},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "network",
+			Args: map[string]any{"host": "api.example.com"},
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-groups",
+			ProjectID:  "proj-groups",
+			ProjectDir: "/tmp/proj",
+		},
+		Resources: hitl.ActionResources{
+			HostResources: []string{"camera"},
+		},
+	}
 	result := &hitl.ApprovalResult{Decision: &gate.Decision{Primary: api.GateUserRule}, HostResourceApproval: true}
 
 	offered := approvals.GrantOffers(action, result)

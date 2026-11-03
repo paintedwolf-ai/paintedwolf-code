@@ -53,6 +53,7 @@ type llmCaptureEntry struct {
 	Iteration         int                          `json:"iteration,omitempty"`
 	MaxIterations     int                          `json:"max_iterations,omitempty"`
 	WorkflowRevision  int64                        `json:"workflow_revision,omitempty"`
+	CommandGuidance   *LLMCommandGuidanceCapture   `json:"command_guidance,omitempty"`
 	ToolNames         []string                     `json:"tool_names,omitempty"`
 	DurationMs        int64                        `json:"duration_ms,omitempty"`
 	TTFTMs            int64                        `json:"ttft_ms,omitempty"`
@@ -69,6 +70,13 @@ type LLMEmptyCompletionCapture struct {
 	Retryable bool   `json:"retryable"`
 	Attempts  int    `json:"attempts"`
 	Reason    string `json:"reason,omitempty"`
+}
+
+// LLMCommandGuidanceCapture records the command guidance templates/partials/units
+// rendered and the structured facts branched on for one turn request.
+type LLMCommandGuidanceCapture struct {
+	Templates []string       `json:"templates,omitempty"`
+	Facts     map[string]any `json:"facts,omitempty"`
 }
 
 // LLMToolCapture is the tool schema recorded with a provider request.
@@ -158,6 +166,7 @@ type LLMRequestDebug struct {
 	MaxIterations     int
 	// WorkflowRevision identifies the coordinator workflow snapshot.
 	WorkflowRevision int64
+	CommandGuidance  *LLMCommandGuidanceCapture
 }
 
 // LogLLMRequest records an outbound provider call and its terminal error.
@@ -184,6 +193,7 @@ func LogLLMRequest(providerID, model, call string, messages []api.Message, toolM
 		Iteration:         debug.Iteration,
 		MaxIterations:     debug.MaxIterations,
 		WorkflowRevision:  debug.WorkflowRevision,
+		CommandGuidance:   redactCommandGuidanceCapture(debug.CommandGuidance),
 		DurationMs:        timing.DurationMs,
 		TTFTMs:            timing.TTFTMs,
 		Error:             RedactCaptureText(strings.TrimSpace(errMsg)),
@@ -234,6 +244,21 @@ func redactToolCaptures(toolMetas []LLMToolCapture) ([]string, []LLMToolCapture)
 		captured = append(captured, meta)
 	}
 	return names, captured
+}
+
+func redactCommandGuidanceCapture(in *LLMCommandGuidanceCapture) *LLMCommandGuidanceCapture {
+	if in == nil || (len(in.Templates) == 0 && len(in.Facts) == 0) {
+		return nil
+	}
+	out := &LLMCommandGuidanceCapture{
+		Templates: append([]string(nil), in.Templates...),
+	}
+	if len(in.Facts) > 0 {
+		if redacted, ok := RedactCaptureValue(in.Facts).(map[string]any); ok {
+			out.Facts = redacted
+		}
+	}
+	return out
 }
 
 // sessionManifestEntry is the topology row for one session.

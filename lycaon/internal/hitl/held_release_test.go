@@ -69,13 +69,13 @@ func (f heldFixture) requestHeld(t *testing.T) string {
 	resp, err := requestSecretApprovalCheckpoint(t, f.ctx, f.mgr, hitl.CheckpointRequest{
 		SessionID: f.sessionID, Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "http_request",
-},
-Scope: hitl.ActionScope{
-SessionID: f.sessionID,
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "http_request",
+			},
+			Scope: hitl.ActionScope{
+				SessionID: f.sessionID,
+			},
+		},
 		SecretScreen: &hitl.SecretScreen{
 			Surface: "http_request", SurfaceLabel: "HTTP request", CanRedact: true, Managed: true,
 			DestinationID: heldRecipients[0].ID, DestinationLabel: heldRecipients[0].Label, Recipients: heldRecipients,
@@ -91,13 +91,13 @@ SessionID: f.sessionID,
 func (f heldFixture) requestUnlock(t *testing.T) string {
 	t.Helper()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "http_request",
-},
-Scope: hitl.ActionScope{
-SessionID: f.sessionID,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "http_request",
+		},
+		Scope: hitl.ActionScope{
+			SessionID: f.sessionID,
+		},
+	}
 	plan, err := hitl.NewUnlockPlan(action, *f.held(), &hitl.SecretScreen{
 		Surface: "http_request", SurfaceLabel: "HTTP request", CanRedact: true, Managed: true, Recipients: heldRecipients,
 	})

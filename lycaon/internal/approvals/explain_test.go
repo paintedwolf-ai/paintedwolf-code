@@ -16,11 +16,11 @@ func TestExplainActionCommandDestructive(t *testing.T) {
 		t.Fatalf("LoadRegistryStock: %v", err)
 	}
 	got := reg.ExplainAction(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "git push origin main"},
-},
-}, settings.TierIrreversible)
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "git push origin main"},
+		},
+	}, settings.TierIrreversible)
 	if got.Key != approvals.KeyCommandDestructive {
 		t.Fatalf("key: got %q want %q", got.Key, approvals.KeyCommandDestructive)
 	}
@@ -35,10 +35,10 @@ func TestExplainActionUnknownUsesFallback(t *testing.T) {
 		t.Fatalf("LoadRegistryStock: %v", err)
 	}
 	got := reg.ExplainAction(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "not_in_registry_xyz",
-},
-}, settings.TierIrreversible)
+		Invocation: hitl.ActionInvocation{
+			Tool: "not_in_registry_xyz",
+		},
+	}, settings.TierIrreversible)
 	if !got.UsedFallback {
 		t.Fatal("expected UsedFallback for unknown tool")
 	}
@@ -88,15 +88,15 @@ func TestMCPExplanationUsesHostIdentity(t *testing.T) {
 	for _, subject := range []string{"Provider with spaces.search", "Provider.with.dots.tool.with.dots", "Provider[ab].read"} {
 		t.Run(subject, func(t *testing.T) {
 			action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "mcp_provider_search",
-Args: map[string]any{"provider": "spoof-provider", "action_label": "spoof-action"},
-},
-Resources: hitl.ActionResources{
-ApprovalCategory: "mcp",
-ApprovalSubject: subject,
-},
-}
+				Invocation: hitl.ActionInvocation{
+					Tool: "mcp_provider_search",
+					Args: map[string]any{"provider": "spoof-provider", "action_label": "spoof-action"},
+				},
+				Resources: hitl.ActionResources{
+					ApprovalCategory: "mcp",
+					ApprovalSubject:  subject,
+				},
+			}
 			vars := approvals.ActionTemplateVars(action)
 			if vars["action_label"] != subject || vars["tool"] != action.Invocation.Tool {
 				t.Fatalf("display altered tool identity: %+v", vars)

@@ -1,0 +1,15 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/settings",
+  "kind": "module",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Settings owns device and project policy persistence and typed grant evaluation. The socket ownership helper participates in the same atomic write/publication transaction; it does not create a second configuration or authorization store. Freeze this reviewed shape at 36 files; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 36,
+  "boundaries": {
+    "lycaon/internal/settings/socket_grant_ownership_test.go": "b35151153c449b1e0eff5e19651fb5e6eea613bbc2df0ba8382c2e4e6d0e7e14",
+    "lycaon/internal/toolexecution/socket_resource_binding_test.go": "fec6c227b583c070eabfd6005a55657fc43fe24ee1874b1519cab414439bad90"
+  },
+  "reviewed_shape": "550d21018b23b8e796e08b4f543c1a55f0d9cca8ef01c8a07519e0931d720330"
+}

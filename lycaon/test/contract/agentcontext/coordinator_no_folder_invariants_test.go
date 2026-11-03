@@ -155,7 +155,7 @@ func TestNoFolderTransitionRestoresFileGuidance(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	zero := renderCoordinatorTripartiteAtRootCount(t, root, 0, surfaceImplementRouting)
 	one := renderCoordinatorTripartiteAtRootCount(t, root, 1, surfaceImplementRouting)
-	for _, tool := range []string{"list_dir", "pack_board"} {
+	for _, tool := range []string{"command", "pack_board"} {
 		if mentionsToolName(zero, tool) {
 			t.Fatalf("0-root prompt mentions %q", tool)
 		}

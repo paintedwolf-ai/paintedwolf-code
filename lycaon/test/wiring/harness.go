@@ -2,6 +2,13 @@ package wiring
 
 import (
 	"context"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
@@ -29,12 +36,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
 )
 
 // Each test supplies its own server catalog.
@@ -75,6 +76,9 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(&o)
+	}
+	if o.globalApprovalPosture != "" {
+		testutil.FailErr(t, "write global approvals", os.WriteFile(filepath.Join(os.Getenv("LYCAON_CONFIG_DIR"), "approvals.yaml"), []byte("approval_posture: "+string(o.globalApprovalPosture)+"\n"), 0o600))
 	}
 
 	cfg := configuration.Config{}

@@ -40,6 +40,9 @@ func (w *surveyWalker) readFailure(rel string, err error) error {
 	if canceled := w.ctx.Err(); canceled != nil {
 		return canceled
 	}
+	if w.opts.OnReadError != nil {
+		return w.opts.OnReadError(rel, err)
+	}
 	if rel == "." || w.opts.OnBoundary == nil {
 		return err
 	}

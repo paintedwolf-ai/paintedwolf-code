@@ -13,6 +13,49 @@ from pathlib import Path
 
 REQUIRED_METRICS = {"ns/op": "ns_per_op", "B/op": "bytes_per_op", "allocs/op": "allocs_per_op"}
 
+BENCHMARK_GATES: dict[str, dict[str, float]] = {
+    "internal/toolhost/BenchmarkCommandProgram/noop": {
+        "bytes_per_op": 1_100_000.0,
+        "allocs_per_op": 4_000.0,
+    },
+    "internal/toolhost/BenchmarkCommandProgram/fifty-statements": {
+        "bytes_per_op": 1_450_000.0,
+        "allocs_per_op": 7_000.0,
+    },
+    "internal/toolhost/BenchmarkCommandProgram/native-child-wc": {
+        "bytes_per_op": 7_200_000.0,
+        "allocs_per_op": 14_000.0,
+    },
+    "internal/toolhost/BenchmarkStructuredWc": {
+        "bytes_per_op": 60_000.0,
+        "allocs_per_op": 700.0,
+    },
+    "internal/toolhost/BenchmarkCommandProgram/pipeline-cat-grep-wc-8MiB": {
+        "bytes_per_op": 97_000_000.0,
+        "allocs_per_op": 482_000.0,
+    },
+    "internal/toolhost/BenchmarkCommandProgram/sort-spill-8MiB": {
+        "bytes_per_op": 138_000_000.0,
+        "allocs_per_op": 1_075_000.0,
+    },
+    "internal/toolhost/BenchmarkCommandProgram/loop-9999-iterations": {
+        "bytes_per_op": 48_500_000.0,
+        "allocs_per_op": 483_000.0,
+    },
+    "internal/toolhost/BenchmarkCommandSearch/grep-r-10k-indexed=false": {
+        "bytes_per_op": 94_000_000.0,
+        "allocs_per_op": 750_000.0,
+    },
+    "internal/toolhost/BenchmarkCommandSearch/grep-r-10k-indexed=true": {
+        "bytes_per_op": 31_000_000.0,
+        "allocs_per_op": 205_000.0,
+    },
+    "internal/toolhost/BenchmarkCommandSearch/find-100k-entries": {
+        "bytes_per_op": 137_000_000.0,
+        "allocs_per_op": 1_110_000.0,
+    },
+}
+
 
 def parse(path: Path) -> dict[str, list[dict[str, float]]]:
     rows: dict[str, list[dict[str, float]]] = {}
@@ -57,18 +100,29 @@ def parse(path: Path) -> dict[str, list[dict[str, float]]]:
     return rows
 
 
-def summarize(rows: dict[str, list[dict[str, float]]]) -> dict[str, dict[str, float]]:
-    report: dict[str, dict[str, float]] = {}
+def summarize(rows: dict[str, list[dict[str, float]]]) -> dict[str, dict[str, float | bool]]:
+    report: dict[str, dict[str, float | bool]] = {}
     for name, samples in sorted(rows.items()):
         ns_values = sorted(sample["ns_per_op"] for sample in samples)
-        report[name] = {
+        median_ns = statistics.median(ns_values)
+        median_bytes = statistics.median(sample["bytes_per_op"] for sample in samples)
+        median_allocs = statistics.median(sample["allocs_per_op"] for sample in samples)
+        entry: dict[str, float | bool] = {
             "count": len(samples),
-            "median_ns_per_op": statistics.median(ns_values),
+            "median_ns_per_op": median_ns,
             "min_ns_per_op": ns_values[0],
             "max_ns_per_op": ns_values[-1],
-            "median_bytes_per_op": statistics.median(sample["bytes_per_op"] for sample in samples),
-            "median_allocs_per_op": statistics.median(sample["allocs_per_op"] for sample in samples),
+            "median_bytes_per_op": median_bytes,
+            "median_allocs_per_op": median_allocs,
         }
+        if name in BENCHMARK_GATES:
+            gate = BENCHMARK_GATES[name]
+            gate_bytes = gate["bytes_per_op"]
+            gate_allocs = gate["allocs_per_op"]
+            entry["gate_bytes_per_op"] = gate_bytes
+            entry["gate_allocs_per_op"] = gate_allocs
+            entry["gate_passed"] = median_bytes <= gate_bytes and median_allocs <= gate_allocs
+        report[name] = entry
     return report
 
 
@@ -100,14 +154,34 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(f"Benchmark report: {args.output}")
+    present_packages = {name.split("/Benchmark", 1)[0] for name in benchmarks}
+    gate_failures: list[str] = [
+        f"{name}: missing gated benchmark"
+        for name in BENCHMARK_GATES
+        if name.split("/Benchmark", 1)[0] in present_packages and name not in benchmarks
+    ]
     for name, values in benchmarks.items():
+        gate_suffix = ""
+        if "gate_passed" in values:
+            gate_bytes = float(values["gate_bytes_per_op"])
+            gate_allocs = float(values["gate_allocs_per_op"])
+            status = "PASS" if values["gate_passed"] else "FAIL"
+            gate_suffix = f" [gate <= {gate_bytes:.0f} B/op, <= {gate_allocs:.0f} allocs/op: {status}]"
+            if float(values["median_bytes_per_op"]) > gate_bytes:
+                gate_failures.append(f"{name}: {float(values['median_bytes_per_op']):.0f} B/op > {gate_bytes:.0f} B/op")
+            if float(values["median_allocs_per_op"]) > gate_allocs:
+                gate_failures.append(
+                    f"{name}: {float(values['median_allocs_per_op']):.0f} allocs/op > {gate_allocs:.0f} allocs/op"
+                )
         print(
-            f"  {name:<58} {values['median_ns_per_op'] / 1e6:10.3f} ms/op "
-            f"{values['median_bytes_per_op']:10.0f} B/op {values['median_allocs_per_op']:8.0f} allocs/op"
+            f"  {name:<58} {float(values['median_ns_per_op']) / 1e6:10.3f} ms/op "
+            f"{float(values['median_bytes_per_op']):10.0f} B/op {float(values['median_allocs_per_op']):8.0f} allocs/op{gate_suffix}"
         )
     for change in result.get("comparison", []):
         marker = "REGRESSION" if change["time_change_percent"] > 10 else "change"
         print(f"  {marker}: {change['name']} {change['time_change_percent']:+.2f}%")
+    if gate_failures:
+        raise SystemExit("benchmark gate exceeded:\n  " + "\n  ".join(gate_failures))
 
 
 if __name__ == "__main__":

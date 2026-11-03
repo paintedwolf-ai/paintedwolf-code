@@ -1,0 +1,61 @@
+package commandconformance
+
+var naturalCases = []Case{
+	{
+		ID:          "natural-find-xargs",
+		Description: "Find files with zero-delimited names and feed them to xargs.",
+		Commands:    []string{"find", "xargs", "cat", "sort"},
+		Forms:       []string{"find:-type", "find:-name", "find:-print0", "xargs:-0"},
+		Program:     `find sub -type f -name '*.txt' -print0 | xargs -0 cat | sort`,
+		References:  allUserlands,
+	},
+	{
+		ID:          "natural-while-read",
+		Description: "Read each complete line from redirected input.",
+		Commands:    []string{"read", "printf"},
+		Forms:       []string{"read:-r", "read:-d"},
+		Program:     `while read -r line; do printf '<%s>\n' "$line"; done < sub/a.txt`,
+		References:  allUserlands,
+	},
+	{
+		ID:          "natural-sed-hold-space",
+		Description: "Accumulate lines in sed hold space and print the result.",
+		Commands:    []string{"sed"},
+		Forms:       []string{"sed:-n"},
+		Program:     `sed -n '1h;2H;${g;p;}' sub/a.txt`,
+		References:  allUserlands,
+	},
+	{
+		ID:          "natural-sort-key",
+		Description: "Order records by a numeric field using attached key spelling.",
+		Commands:    []string{"sort"},
+		Forms:       []string{"sort:-k", "sort:-n", "sort:-r"},
+		Program:     `sort -k3,3nr table.tsv`,
+		References:  allUserlands,
+	},
+	{
+		ID:          "natural-awk-field-sum",
+		Description: "Sum a numeric column while omitting its header.",
+		Commands:    []string{"awk"},
+		Forms:       []string{"awk:-F"},
+		Program:     `awk -F '\t' 'NR > 1 { sum += $3 } END { print sum }' table.tsv`,
+		References:  allUserlands,
+	},
+	{
+		ID:          "natural-jq-pipeline",
+		Description: "Read JSON from a pipe and apply a filter pipeline.",
+		Commands:    []string{"cat", "jq"},
+		Forms:       []string{"jq:-r"},
+		Program:     `cat config.json | jq -r '.items | map(ascii_upcase) | join(",")'`,
+		References:  bashUserlands,
+	},
+	{
+		ID:          "natural-git-log-oneline",
+		Description: "Show the checked-in fixture commit on one line.",
+		Commands:    []string{"git log"},
+		Forms:       []string{"git log:--oneline"},
+		Program:     `git log --oneline`,
+		Git:         true,
+		References:  bashUserlands,
+	},
+}

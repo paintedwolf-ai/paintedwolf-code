@@ -1,0 +1,28 @@
+oar: '1.0'
+id: GIT_REMOTE_HOST_DENIED
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "GIT_REMOTE_HOST_DENIED"
+effect: block
+copy:
+  what: The Git remote's host was not authorized.
+  cause: The host denied network access to this remote before Git contacted it, so the fetch, pull, push, clone or ls-remote did not run.
+  why: Native Git network commands cross the same egress approval boundary as every other network client.
+  fix: Keep earlier results. Use a remote whose host is authorized, or report the blocked remote to the caller.
+  instead: Do not reach the remote through another network client or an external git
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_git_remote
+x-paintedwolf-message: The Git remote's host was not authorized
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: command
+    profile: implement
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: GIT_REMOTE_HOST_DENIED'

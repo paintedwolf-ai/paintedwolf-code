@@ -142,7 +142,8 @@ func (m *Model) flashStatus(text string) tea.Cmd {
 
 func runPipeCommand(text, cmdline string) (stdout string, err error) {
 	shell, args := pipeShell(cmdline)
-	c, cleanup, err := execpkg.PrepareCommand(context.Background(), shell, args, execpkg.ExecOpts{
+	ctx := context.Background()
+	c, cleanup, err := execpkg.PrepareCommand(ctx, shell, args, execpkg.ExecOpts{
 		Launch: execpkg.HostLaunch("logview_pipe"),
 	})
 	if err != nil {
@@ -153,7 +154,7 @@ func runPipeCommand(text, cmdline string) (stdout string, err error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	c.Stdout = &stdoutBuf
 	c.Stderr = &stderrBuf
-	err = c.Run()
+	err = execpkg.RunPrepared(ctx, c)
 	out := stdoutBuf.String()
 	if err != nil {
 		if s := strings.TrimSpace(stderrBuf.String()); s != "" {

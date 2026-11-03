@@ -59,9 +59,20 @@ func (e *Executor) applyPreInvokeBoundary(
 	}
 	// Scratch addresses and globs expand once, before secret resolution and
 	// every card, so each card and the executed argv carry the same arguments.
-	args, err = e.Boundary.expandCommandOperands(ctx, tool, profileID, args, &tc)
-	if err != nil {
-		return nil, tc, err
+	if tc.Invocation.NativeOperation == nil {
+		args, err = e.Boundary.expandCommandOperands(ctx, tool, profileID, args, &tc)
+		if err != nil {
+			return nil, tc, err
+		}
+	}
+	if tc.Invocation.NativeOperation != nil && tc.Invocation.NativeReview == nil {
+		return nil, tc, fmt.Errorf("native operation requires retained exact review lifetime")
+	}
+	if tc.Invocation.NativeReview != nil {
+		args, tc.Invocation.NativeInputs, err = tc.Invocation.NativeReview.Freeze(ctx, tool, args)
+		if err != nil {
+			return nil, tc, err
+		}
 	}
 	// Capture one immutable version for both review and execution; cards retain references.
 	secrets, resolveErr := e.Secrets.resolveSecretReferences(ctx, tool, args, tc)
@@ -143,7 +154,10 @@ func (e *Executor) applyPreInvokeBoundary(
 		tc.Local.LocalListenGranted = true
 		tc.Local.LocalListenPorts = append([]uint16(nil), listenPreflight.Ports...)
 	}
-	if connectPreflight != nil && connectPreflight.Authorized {
+	if connectPreflight != nil && connectPreflight.Authorized && connectPreflight.RequiresOwnedListener {
+		tc.Local.OwnedLoopbackPorts = append([]uint16(nil), connectPreflight.Ports...)
+	}
+	if connectPreflight != nil && connectPreflight.Authorized && !connectPreflight.RequiresOwnedListener {
 		tc.Local.LoopbackConnectGranted = true
 		tc.Local.LoopbackConnectPorts = append([]uint16(nil), connectPreflight.Ports...)
 	}

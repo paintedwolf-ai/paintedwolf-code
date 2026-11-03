@@ -1,0 +1,15 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': project.posture.changed
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-posture-changed
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - Approval posture change that alters outside-folder write review
+  required:
+  - outside the project
+  forbidden:
+  - workflow_advance

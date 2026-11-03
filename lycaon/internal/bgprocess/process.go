@@ -72,8 +72,7 @@ type Process struct {
 	// refusalNotice gathers a burst of refusals before one notice.
 	refusalNotice   *time.Timer
 	livenessUnknown bool
-	// indexWatch is owned by the process until its completion carries it.
-	indexWatch indexwatch.Snapshot
+	resources       completionResources
 	// failure is the run error the exit status does not carry.
 	failure *hostcmd.ExecFailure
 
@@ -86,3 +85,24 @@ type Process struct {
 
 // cursorRange is one absolute byte range of a process's output stream.
 type cursorRange struct{ start, end int64 }
+
+// completionResources stay owned by the process until transfer or discard.
+// Process-held resources move under the process table lock.
+type completionResources struct {
+	indexWatch           indexwatch.Snapshot
+	unsavedDocumentPaths []string
+	releaseNotices       func()
+}
+
+func (r *completionResources) take() completionResources {
+	owned := *r
+	*r = completionResources{}
+	return owned
+}
+
+func (r completionResources) release() {
+	r.indexWatch.Release()
+	if r.releaseNotices != nil {
+		r.releaseNotices()
+	}
+}

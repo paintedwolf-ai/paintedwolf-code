@@ -18,9 +18,24 @@ import (
 	"github.com/lycaon/lycaon/internal/session/protection"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// admittedDirectIPLaunch binds the fixture's actual action lease and carries its
+// live recheck as the agent launch's current authority, as tool producers do.
+func admittedDirectIPLaunch(t *testing.T, subject, sessionID, callID, dir string) exec.LaunchPlan {
+	t.Helper()
+	boundary := &confine.Confinement{Roots: []string{dir}, Network: confine.NetworkDirectIP}
+	identity := confine.EgressCommand{SessionID: sessionID, ToolCallID: callID, ProjectDir: dir}
+	lease, err := confine.BindAction(boundary, identity)
+	testutil.FailErr(t, "admit direct-ip action", err)
+	t.Cleanup(func() { lease.Close(context.Background()) })
+	plan := exec.AgentLaunch(exec.LaunchAgentCommand, subject, boundary)
+	plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
+	return plan
+}
 
 func TestBuildProtectionStateUnknownVsActive(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -34,10 +49,7 @@ func TestBuildProtectionStateUnknownVsActive(t *testing.T) {
 		Request: hostcmd.Request{
 			ProjectDir: dir,
 			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-			Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "protection test", &confine.Confinement{
-				Roots:   []string{dir},
-				Network: confine.NetworkDirectIP,
-			}),
+			Launch:     admittedDirectIPLaunch(t, "protection test", "sess-prot", "call-direct-1", dir),
 		},
 		Runner:     runner,
 		Mode:       bgprocess.JobModeBackground,
@@ -76,10 +88,7 @@ func TestProtectionStateReconstructEmitsOnceWithoutDestinations(t *testing.T) {
 		Request: hostcmd.Request{
 			ProjectDir: dir,
 			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-			Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "reconstruct test", &confine.Confinement{
-				Roots:   []string{dir},
-				Network: confine.NetworkDirectIP,
-			}),
+			Launch:     admittedDirectIPLaunch(t, "reconstruct test", "sess-rec", "call-9", dir),
 		},
 		Runner: runner,
 		Mode:   bgprocess.JobModeBackground, ToolCallID: "call-9",
@@ -125,10 +134,7 @@ func TestRevokeChatGrantAfterRecoveryKeepsBackgroundWarning(t *testing.T) {
 		Request: hostcmd.Request{
 			ProjectDir: dir,
 			Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
-			Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "revocation test", &confine.Confinement{
-				Roots:   []string{dir},
-				Network: confine.NetworkDirectIP,
-			}),
+			Launch:     admittedDirectIPLaunch(t, "revocation test", "sess-rev", "call-rev", dir),
 		},
 		Runner: runner,
 		Mode:   bgprocess.JobModeBackground,
@@ -137,8 +143,18 @@ func TestRevokeChatGrantAfterRecoveryKeepsBackgroundWarning(t *testing.T) {
 	t.Cleanup(func() { _, _ = reg.Lifecycle.Stop("sess-rev", handle) })
 
 	rt := approvalstate.NewSocketCapabilityRuntime()
+	t.Cleanup(rt.Close)
 	approved, resolved := tempSocket(t)
-	rt.GrantChat("sess-rev", confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved}, "grant_t", "cp", "d", nil)
+	grant := confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved}
+	if socketref.Platform().Command == socketref.RetainedObject {
+		owner, err := socketref.Capture(approved)
+		testutil.FailErr(t, "capture actual socket authority", err)
+		t.Cleanup(func() { owner.Close() })
+		grant.Binding = owner.Binding()
+	}
+	if !rt.GrantChat("sess-rev", grant, "grant_t", "cp", "d", nil) {
+		t.Fatal("actual socket grant was not installed")
+	}
 	if len(rt.AppliedGrants("sess-rev")) != 1 {
 		t.Fatal("expected live chat grant")
 	}

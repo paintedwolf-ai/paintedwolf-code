@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/test/contract/hosted/hosted_capacity_contract_test.go",
+  "kind": "test_suite",
+  "workstream": "verification-tools",
+  "disposition": "retain",
+  "reason": "Retain the 377-line workflow capacity contract within 380 lines. One recursive workflow footprint evaluator supports the event-class and global runner bounds. The two-runner readiness assertion uses that same graph and keeps the 20-runner and five-macOS-runner limits. Splitting the readiness assertion into a second evaluator would obscure the shared capacity judgment. Complete hosted workflow contracts qualify the declaration and aggregate dependencies.",
+  "reviewed_commit": "76f38238ae71c66513afbdf8c90998e1c350ea17",
+  "ceiling": 380,
+  "boundaries": {
+    "lycaon/test/contract/hosted/hosted_capacity_contract_test.go": "cfd5a641a2fb9b6ab4c0fe9d1ed420b22a1c8e84288acbb04ab30a3aae940b08",
+    "scripts/verification_tests/ci/test_hosted_plan_execution.py": "2e764b45d04ad45c22d8ec69a2a313e8d5881457c7e325aaaacfd3b17871da5f"
+  }
+}

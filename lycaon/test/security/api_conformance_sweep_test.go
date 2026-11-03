@@ -23,9 +23,9 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	"github.com/lycaon/lycaon/test/wiring"
-	openapi "github.com/lycaon/lycaon/test/openapi"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	openapi "github.com/lycaon/lycaon/test/openapi"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 // conformanceRule names one runtime invariant of the sweep.

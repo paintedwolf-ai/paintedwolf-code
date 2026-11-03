@@ -12,6 +12,11 @@ import verification_execute as execution
 
 
 class HostedExecutionTests(unittest.TestCase):
+    def setUp(self):
+        scope = patch('ci_policy.impact.go_scope', return_value=None)
+        scope.start()
+        self.addCleanup(scope.stop)
+
     def test_setup_timing_requires_an_observed_job_start(self):
         for marker, basis in [('1', 'setup-and-execution'), ('', 'execution'), ('invalid', 'execution')]:
             with tempfile.TemporaryDirectory() as directory, \
@@ -81,7 +86,7 @@ class HostedExecutionTests(unittest.TestCase):
                         patch.object(ci.subprocess, "call", return_value=code) as run:
                     self.assertEqual(ci.run_lane("frontend"), code)
                     run.assert_called_once()
-                    self.assertEqual(run.call_args.args[0], ["./task", "den:typecheck", "den:lint", "den:test"])
+                    self.assertEqual(run.call_args.args[0], ["./task", "den:typecheck", "den:lint", "den:coverage:changes"])
                     self.assertEqual(run.call_args.kwargs["cwd"], ci.ROOT)
                 record = json.loads((root / "ci/run.json").read_text())
                 self.assertEqual(record["status"], status)
@@ -109,13 +114,16 @@ class HostedExecutionTests(unittest.TestCase):
                 self.assertEqual(ci.run_lane("ready"), preflight_code)
                 self.assertEqual(run.call_args_list[0].args[0],
                                  ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
-                self.assertEqual(run.call_count, 4 if preflight_code == 0 else 1)
+                self.assertEqual(run.call_count, 3 if preflight_code == 0 else 1)
+                if preflight_code == 0:
+                    self.assertEqual(run.call_args_list[1].args[0],
+                                     ['./task', 'test:confine:linux', '--', 'supervisor'])
                 record = json.loads((Path(directory) / "ci/run.json").read_text())
                 self.assertEqual(record["preflight"]["exit_code"], preflight_code)
                 self.assertIn("finished_at", record["preflight"])
                 self.assertEqual(record["scope"], scope)
 
-    def test_native_compile_failure_stops_admission_before_general_checks(self):
+    def test_native_changes_reach_checks_without_duplicate_native_compilation(self):
         scope = dict(base='b' * 40, head='a' * 40, full=False,
                      paths=['lycaon-den/src-tauri/crates/desktop-settings-observer/src/main.rs'])
         with tempfile.TemporaryDirectory() as directory, \
@@ -123,7 +131,7 @@ class HostedExecutionTests(unittest.TestCase):
                 patch.object(ci, 'artifact_root', return_value=Path(directory)), \
                 patch.object(ci.subprocess, 'call', side_effect=[0, 1]) as run:
             self.assertEqual(ci.run_lane('ready'), 1)
-            self.assertEqual(run.call_args_list[1].args[0], ['./task', 'den:test:rust', '--', '--compile-only'])
+            self.assertEqual(run.call_args_list[1].args[0], ['./task', *hosted_plan.lanes()['ready']['targets']])
             self.assertEqual(run.call_count, 2)
             record = json.loads((Path(directory) / 'ci/run.json').read_text())
             self.assertEqual(record['phases'][0]['exit_code'], 1)
@@ -314,3 +322,29 @@ class HostedExecutionTests(unittest.TestCase):
                 patch.object(ci.subprocess, 'call', return_value=0) as command:
             ci.run_lane('limits')
         self.assertEqual(command.call_args.kwargs['env']['PW_CHANGE_BASE'], 'b' * 40)
+
+    def test_rotated_preflight_stops_after_first_wave_failure_and_records_phases(self):
+        scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
+        history = json.dumps({'contract_failures': ['./test/contract/persistence']}, separators=(',', ':'))
+        for first_wave_code in (1, 0):
+            with self.subTest(first_wave_code=first_wave_code), tempfile.TemporaryDirectory() as directory, \
+                    patch('ci_policy.impact.change', return_value=scope), \
+                    patch('ci_policy.native_admission.commands', return_value=[]), \
+                    patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=history), \
+                    patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                    patch.object(ci.subprocess, 'call', side_effect=[first_wave_code, 0, 0]) as run:
+                self.assertEqual(ci.run_lane('ready'), first_wave_code)
+                record = json.loads((Path(directory) / 'ci/run.json').read_text())
+                self.assertEqual(record['preflight']['exit_code'], first_wave_code)
+                self.assertEqual(len(record['preflight']['phases']), 1 if first_wave_code else 2)
+                self.assertEqual(record['preflight']['phases'][0]['command'][3], './test/contract/persistence')
+                self.assertEqual(run.call_count, 1 if first_wave_code else 3)
+        for malformed in ('{bad', '[]', '{"failed_targets": 123}'):
+            with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as directory, \
+                    patch('ci_policy.impact.change', return_value=scope), \
+                    patch('ci_policy.native_admission.commands', return_value=[]), \
+                    patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=malformed), \
+                    patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                    patch.object(ci.subprocess, 'call', return_value=0) as run:
+                self.assertEqual(ci.run_lane('ready'), 0)
+                self.assertEqual(run.call_args_list[0].args[0], ['./task', *hosted_plan.lanes()['ready']['preflight']])

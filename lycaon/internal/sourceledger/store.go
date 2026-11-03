@@ -42,9 +42,10 @@ const (
 	// CaptureReconciled is the capture quality of every reconcile-pass record.
 	CaptureReconciled = "reconciled"
 
-	// Tracked links retain their target's bytes as files.
+	// Link entries retain their literal target text as content.
 	EntryKindFile      = "file"
 	EntryKindDirectory = "directory"
+	EntryKindLink      = "link"
 
 	// LandingWorkingFile marks a state the file itself held.
 	LandingWorkingFile = "working_file"
@@ -116,37 +117,37 @@ func New(sqlDB db.Handle, contentDir string) *Store {
 // RecordInput is one exact consequence within a causal operation.
 type RecordInput struct {
 	RecordLocation
-	TextBefore, TextAfter *TextState
-	ProjectID             string
+	TextBefore, TextAfter *TextState `json:",omitempty"`
+	ProjectID             string     `json:",omitempty"`
 	// BranchID is the line of history this lands on; the zero value is the trunk.
-	BranchID             sourcebranch.ID
-	FileID               string
-	DerivedFromVersionID string
-	Op                   api.SourceChangeOp
-	Origin               api.SourceChangeOrigin
+	BranchID             sourcebranch.ID        `json:",omitempty"`
+	FileID               string                 `json:",omitempty"`
+	DerivedFromVersionID string                 `json:",omitempty"`
+	Op                   api.SourceChangeOp     `json:",omitempty"`
+	Origin               api.SourceChangeOrigin `json:",omitempty"`
 	// An empty PersonID uses the acting person for user-origin operations.
-	PersonID       string
-	SessionID      string
-	JobID          string
-	Turn           int
-	ToolCallID     string
-	ToolName       string
-	BatchID        string
-	BeforeSHA256   string
-	AfterSHA256    string
-	Before         []byte
-	After          []byte
-	BeforeSize     int64
-	AfterSize      int64
-	OperationID    string
-	Cause          string
-	CaptureQuality string
-	ActorLabel     string
+	PersonID       string `json:",omitempty"`
+	SessionID      string `json:",omitempty"`
+	JobID          string `json:",omitempty"`
+	Turn           int    `json:",omitempty"`
+	ToolCallID     string `json:",omitempty"`
+	ToolName       string `json:",omitempty"`
+	BatchID        string `json:",omitempty"`
+	BeforeSHA256   string `json:",omitempty"`
+	AfterSHA256    string `json:",omitempty"`
+	Before         []byte `json:",omitempty"`
+	After          []byte `json:",omitempty"`
+	BeforeSize     int64  `json:",omitempty"`
+	AfterSize      int64  `json:",omitempty"`
+	OperationID    string `json:",omitempty"`
+	Cause          string `json:",omitempty"`
+	CaptureQuality string `json:",omitempty"`
+	ActorLabel     string `json:",omitempty"`
 	// Reconciliation binds these effects to the observed ref transition.
-	GitTransitionID string
+	GitTransitionID string `json:",omitempty"`
 	// Reconciliation attributes effects to the active command window.
-	CommandWindowID string
-	TS              time.Time
+	CommandWindowID string    `json:",omitempty"`
+	TS              time.Time `json:",omitempty"`
 }
 
 type Recorder interface {
@@ -290,7 +291,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 	head, err := q.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
 		ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, Path: in.Path,
 	})
-	if err == nil && (head.State == "directory") != (in.EntryKind == EntryKindDirectory) {
+	if err == nil && ((head.State == "directory") != (in.EntryKind == EntryKindDirectory) || (head.State == "link") != (in.EntryKind == EntryKindLink)) {
 		err = sql.ErrNoRows
 	}
 	if err == nil {
@@ -328,7 +329,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 		if err := upsertSourceHead(ctx, q, db.SourceBranchHeads{
 			ProjectID: in.ProjectID, BranchID: in.BranchID.String(),
 			FileID: head.FileID, VersionID: versionID, RootID: in.RootID, Path: in.Path,
-			State: "content", ContentSha256: in.SHA256, Ordinal: head.Ordinal,
+			State: entryState(in.EntryKind, in.SHA256), ContentSha256: in.SHA256, Ordinal: head.Ordinal,
 			ObservedTs: in.TS.Format(time.RFC3339Nano),
 		}); err != nil {
 			return TrackedFile{}, err
@@ -344,7 +345,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 		trunk, trunkErr := q.GetTrunkSourceHeadByPath(ctx, db.GetTrunkSourceHeadByPathParams{
 			ProjectID: in.ProjectID, RootID: in.RootID, Path: in.Path,
 		})
-		if trunkErr == nil && (trunk.State == "directory") == (in.EntryKind == EntryKindDirectory) {
+		if trunkErr == nil && (trunk.State == "directory") == (in.EntryKind == EntryKindDirectory) && (trunk.State == "link") == (in.EntryKind == EntryKindLink) {
 			fileID, derivedFromVersionID = trunk.FileID, trunk.VersionID
 		} else if trunkErr != nil && !errors.Is(trunkErr, sql.ErrNoRows) {
 			return TrackedFile{}, trunkErr
@@ -362,6 +363,8 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 	state := "unresolved"
 	if in.EntryKind == EntryKindDirectory {
 		state = "directory"
+	} else if in.EntryKind == EntryKindLink && in.SHA256 != "" {
+		state = "link"
 	} else if in.SHA256 != "" {
 		state = "content"
 	}
@@ -402,6 +405,7 @@ func nullableString(value string) sql.NullString {
 	return sql.NullString{String: value, Valid: value != ""}
 }
 
+// Ordered opaque keys keep successive row inserts close in their indexes.
 func newID() string {
-	return uuid.NewString()
+	return uuid.Must(uuid.NewV7()).String()
 }

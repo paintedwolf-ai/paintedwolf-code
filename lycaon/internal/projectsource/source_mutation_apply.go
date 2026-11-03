@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"os"
 	"path/filepath"
 
@@ -36,7 +37,7 @@ func applySourceMutation(ctx context.Context, plan *sourceMutationPlan) error {
 	}
 }
 
-func verifySourceMutationApplied(ctx context.Context, plan *sourceMutationPlan) error {
+func verifySourceMutationApplied(ctx context.Context, plan *sourceMutationPlan, memory sourceeffect.Memory) error {
 	if plan == nil || !plan.Changed {
 		return nil
 	}
@@ -49,7 +50,7 @@ func verifySourceMutationApplied(ctx context.Context, plan *sourceMutationPlan) 
 		return nil
 	case "batch_write":
 		for i := range plan.Writes {
-			if err := verifySourceMutationApplied(ctx, &plan.Writes[i]); err != nil {
+			if err := verifySourceMutationApplied(ctx, &plan.Writes[i], memory); err != nil {
 				return fmt.Errorf("verify batch write %s: %w", plan.Writes[i].Path, err)
 			}
 		}
@@ -88,7 +89,7 @@ func verifySourceMutationApplied(ctx context.Context, plan *sourceMutationPlan) 
 		if err := requireSourceIdentity(plan.ToAbs, plan.DestinationIdentity); err != nil {
 			return err
 		}
-		return requireSourceFingerprint(ctx, plan.ToAbs, plan.TreeSHA)
+		return requireSourceFingerprint(ctx, plan.ToAbs, plan.TreeSHA, memory)
 	case "delete":
 		if !plan.DeleteStarted {
 			return ErrSourceMutationDiverged
@@ -101,7 +102,7 @@ func verifySourceMutationApplied(ctx context.Context, plan *sourceMutationPlan) 
 		if err := requireSourceIdentity(plan.AbsPath, plan.DestinationIdentity); err != nil {
 			return err
 		}
-		return requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA)
+		return requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA, memory)
 	default:
 		return fmt.Errorf("verify unknown source mutation kind %q", plan.Kind)
 	}
@@ -163,12 +164,13 @@ func applySourceCreate(plan *sourceMutationPlan) error {
 		return err
 	}
 	if plan.EntryKind == SourceEntryFolder {
-		return fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Path)}, sourceCreateDirMode)
+		_, err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Path)}, sourceCreateDirMode)
+		return err
 	}
 	if plan.CreateParents {
 		parent := filepath.Dir(filepath.FromSlash(plan.Path))
 		if parent != "." {
-			if err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
+			if _, err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
 				return err
 			}
 		}
@@ -216,8 +218,8 @@ func requireSourceIdentity(path, want string) error {
 	return nil
 }
 
-func requireSourceFingerprint(ctx context.Context, path, want string) error {
-	got, err := sourceTreeFingerprint(ctx, path)
+func requireSourceFingerprint(ctx context.Context, path, want string, memory sourceeffect.Memory) error {
+	got, _, err := sourceTreeFingerprint(ctx, path, memory)
 	if err != nil {
 		return err
 	}

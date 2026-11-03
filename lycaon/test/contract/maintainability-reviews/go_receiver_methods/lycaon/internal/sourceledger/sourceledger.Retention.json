@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/sourceledger/sourceledger.Retention",
+  "kind": "runtime_service",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "Retain sixteen methods in the existing capture/maintenance/claim/reclamation lifecycle. The actual writer transaction uses a bounded256-key SQLite window before empty filtering, then original individual nonempty-candidate claim and row reclamation within the remaining256-row budget. Go retains one candidate, not a whole queue; the SQLite window is explicitly bounded rather than claimed allocation-free. Actual claimed-window preservation,513-empty progress, manifest and earlier-candidate rollback contracts plus194 sourceledger tests support this exact shape. No trigger or durable queue representation changes. Growth requires renewed review.",
+  "reviewed_commit": "bf9c3ccddaf7e836691d7ef7035ccf5481c9166c",
+  "ceiling": 16,
+  "boundaries": {
+    "lycaon/internal/sourceledger/recovery_retention.go": "d4eff529dc084e40aa897fda233d2d3a6c554421c3072af66385c496719f7308",
+    "lycaon/internal/sourceledger/recovery_retention_test.go": "de9d516868f9862b80191db2723183a39b7222a6daba1bb569a86085e9e8caaf",
+    "lycaon/internal/sourceledger/recovery_claim_release_test.go": "82d3525842d1a04a69624461b9e37667662b42d988b5de1fdd93ec3f75c90e84"
+  },
+  "reviewed_shape": "47c7855cb2e4f91ef8201426085aa2b738ade9c89d7c90d29659fea6437bcf08"
+}

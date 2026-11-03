@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/outboundhttp/client.go",
+  "kind": "runtime_service",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "The outbound request carries transport, redirect, response-bound and cancellation inputs for one exchange. The internal socket binding travels with that same request and never changes the public HTTP API shape. Keep transport and request lifetime explicit rather than introduce a second Unix HTTP client. Freeze this reviewed shape at 640 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 640,
+  "boundaries": {
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac",
+    "lycaon/internal/httpaction/unix_socket_test.go": "7f6c3cd6c52357e88d12ff4e54a9e30ed953c84cf0ad053cc3345553214e0335"
+  }
+}

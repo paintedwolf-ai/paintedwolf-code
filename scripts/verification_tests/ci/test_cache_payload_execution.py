@@ -2,6 +2,8 @@
 import json
 import os
 from pathlib import Path
+import re
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -10,6 +12,35 @@ from ci_policy import cache_payload
 
 
 class CachePayloadTests(unittest.TestCase):
+    def test_native_cache_inputs_cover_workspace_manifests_and_current_runner_image(self):
+        import yaml
+        root = Path(__file__).resolve().parents[3]
+        for family, workspace in (("rust", "lycaon-den/src-tauri"),
+                                  ("decide", "lycaon/internal/decide/native"),
+                                  ("document-core", "lycaon/internal/documentcore/native")):
+            action = yaml.safe_load((root / f".github/actions/cache-{family}/action.yml").read_text())
+            steps = action["runs"]["steps"]
+            restore = next(step for step in steps if step.get("id") == "restore")
+            patterns = re.findall(r"'([^']+)'", restore["with"]["key"])
+            matched = {path for pattern in patterns for path in root.glob(pattern) if path.is_file()}
+            required = {path for path in (root / workspace).rglob("Cargo.toml")}
+            required |= set((root / workspace).rglob("build.rs"))
+            self.assertTrue(required)
+            self.assertLessEqual(required, matched, family)
+            paths = next(step for step in steps if step.get("id") == "paths")
+            prefixes = []
+            with tempfile.TemporaryDirectory() as directory:
+                for image in ("20261101.1", "20261102.1"):
+                    output = Path(directory) / image
+                    result = subprocess.run(["bash", "-e", "-c", paths["run"]], cwd=root, text=True,
+                                            capture_output=True, check=False,
+                                            env={**os.environ, "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
+                                                 "ImageOS": "ubuntu24", "ImageVersion": image,
+                                                 "GITHUB_WORKSPACE": str(root), "GITHUB_OUTPUT": str(output)})
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    prefixes.append(next(line for line in output.read_text().splitlines() if line.startswith("prefix=")))
+            self.assertNotEqual(*prefixes, family)
+
     def test_all_exact_hits_skip_preparation_on_push(self):
         records = {name: dict(active=True, hit="true") for name in ("go", "rust", "analysis")}
         records["release"] = dict(active=False, hit="")

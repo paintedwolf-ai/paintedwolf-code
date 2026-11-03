@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -54,10 +53,9 @@ func (b *LocalNetworkCheckpointBroker) AwaitCombined(ctx context.Context, in too
 		return tools.LocalNetworkResult{Authorized: true}, nil
 	}
 
-	reach := connectCoGrant(ctx, b.Provenance, invokingSessionID, in.ProjectDir, listenPorts)
 	selfSpawned := len(connectPorts) > 0
 	for _, cp := range connectPorts {
-		if slices.Contains(reach, cp) || sessionOwnsPorts(ctx, b.Provenance, invokingSessionID, in.ProjectDir, []uint16{cp}) {
+		if sessionOwnsPorts(ctx, b.Provenance, invokingSessionID, in.ProjectDir, []uint16{cp}) {
 			continue
 		}
 		selfSpawned = false
@@ -76,11 +74,8 @@ func (b *LocalNetworkCheckpointBroker) AwaitCombined(ctx context.Context, in too
 	verdict, _ := gate.Evaluate(facts, b.posture(in.ProjectDir))
 	if verdict != gate.Ask {
 		b.Listen.GrantSessionPorts(rootSessionID, listenPorts)
-		b.Loopback.GrantSessionPorts(rootSessionID, connectPorts)
-		if len(reach) > 0 {
-			b.Loopback.GrantSessionPorts(rootSessionID, reach)
-		}
-		return tools.LocalNetworkResult{Authorized: true}, nil
+		derived := selfSpawned && !(loopbackGranted && portLeaseCovers(loopbackCovered, connectPorts))
+		return tools.LocalNetworkResult{Authorized: true, ListenPorts: listenPorts, ConnectPorts: connectPorts, ConnectRequiresOwnedListener: derived}, nil
 	}
 
 	if b.Checkpoints == nil {

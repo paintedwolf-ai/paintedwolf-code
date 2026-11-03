@@ -19,12 +19,19 @@ func ApprovalFilePath(tc ToolContext, path string) (string, error) {
 	if filepath.IsAbs(path) {
 		return path, nil
 	}
-	if rel, ok := projectroot.ScratchAddress(path); ok {
-		if strings.TrimSpace(tc.Host.SessionScratchDir) == "" {
-			return "", ErrSessionScratchUnavailable
+	if area, rel, ok := projectroot.SessionAddress(path); ok {
+		dir := tc.Host.SessionScratchDir
+		unavailable := ErrSessionScratchUnavailable
+		if area == projectroot.VirtualOutputLabel {
+			dir = tc.Host.SessionOutputDir
+			unavailable = ErrSessionOutputUnavailable
 		}
-		return projectroot.ScratchPath(tc.Host.SessionScratchDir, rel)
+		if strings.TrimSpace(dir) == "" {
+			return "", unavailable
+		}
+		return projectroot.SessionPath(dir, rel)
 	}
+
 	roots, active := tc.Source.Roots, tc.Source.ActiveRootID
 	if branch := strings.TrimSpace(tc.Source.WorkerBranchRoot); branch != "" {
 		rel, _, err := projectroot.WorkerBranchRelative(roots, active, path)

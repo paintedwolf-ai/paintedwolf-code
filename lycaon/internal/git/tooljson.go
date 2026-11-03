@@ -443,20 +443,6 @@ type BlameToolResponse struct {
 	Error     string         `json:"error,omitempty"`
 }
 
-// RefToolResponse is the git_ref tool wire shape.
-type RefToolResponse struct {
-	Available bool          `json:"available"`
-	Refs      []GitRefEntry `json:"refs,omitempty"`
-	Error     string        `json:"error,omitempty"`
-}
-
-// BranchesToolResponse is the git_branches tool wire shape.
-type BranchesToolResponse struct {
-	Available bool             `json:"available"`
-	Branches  []GitBranchEntry `json:"branches,omitempty"`
-	Error     string           `json:"error,omitempty"`
-}
-
 // RestoreToolResponse is the git_restore tool wire shape.
 type RestoreToolResponse struct {
 	Available bool     `json:"available"`
@@ -502,28 +488,6 @@ func MarshalBlameToolResponse(lines []GitBlameLine, err error) (string, error) {
 		return MarshalToolFailure(err)
 	}
 	raw, err := surveyjson.Marshal(BlameToolResponse{Available: true, Lines: lines})
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
-func MarshalRefToolResponse(refs []GitRefEntry, err error) (string, error) {
-	if err != nil {
-		return MarshalToolFailure(err)
-	}
-	raw, err := surveyjson.Marshal(RefToolResponse{Available: true, Refs: refs})
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
-func MarshalBranchesToolResponse(branches []GitBranchEntry, err error) (string, error) {
-	if err != nil {
-		return MarshalToolFailure(err)
-	}
-	raw, err := surveyjson.Marshal(BranchesToolResponse{Available: true, Branches: branches})
 	if err != nil {
 		return "", err
 	}

@@ -13,9 +13,19 @@ import (
 // GrantKey returns an empty, unusable identity when the action cannot be encoded.
 // Arguments stay out of the ledger because they may contain credentials.
 func GrantKey(action ProposedAction) string {
-	args, err := json.Marshal(grantIdentityArgs(action.Invocation.Tool, action.Invocation.Args))
-	if err != nil {
-		return ""
+	var args []byte
+	var err error
+	if action.Invocation.NativeInputs != nil {
+		exact, ok := action.Invocation.NativeInputs.grantArguments(action.Invocation.Tool)
+		if !ok {
+			return ""
+		}
+		args = []byte("native_review\x00" + exact)
+	} else {
+		args, err = json.Marshal(grantIdentityArgs(action.Invocation.Tool, action.Invocation.Args))
+		if err != nil {
+			return ""
+		}
 	}
 	roots := append([]string(nil), action.Execution.Contained.Roots...)
 	for i := range roots {
@@ -42,6 +52,15 @@ func GrantKey(action ProposedAction) string {
 		strings.Join(hostResources, "\x1f") + "\x00" +
 		strings.Join(families, "\x1f") + "\x00" + string(boundary) + "\x00" +
 		packageIdentity
+	// Bind reviewed socket authority independently of applied profile overlays.
+	if len(action.Sockets.SocketGrants) != 0 {
+		sockets := make([]string, 0, len(action.Sockets.SocketGrants))
+		for _, grant := range action.Sockets.SocketGrants {
+			sockets = append(sockets, grant.ApprovedPath+"\x00"+grant.ResolvedPath+"\x00"+grant.Binding.Key())
+		}
+		sort.Strings(sockets)
+		identity += "\x00socket_authority:" + strings.Join(sockets, "\x1f")
+	}
 	if action.Execution.ProcessAccess != "" {
 		raw, err := json.Marshal(action.Execution.ProcessTargets)
 		if err != nil {
@@ -57,6 +76,12 @@ func GrantKey(action ProposedAction) string {
 	}
 	if action.Execution.Contained.HostExecution {
 		identity += "\x00host_execution"
+	}
+	if action.Mutations.RecoveryLoss {
+		if strings.TrimSpace(action.Invocation.ActionID) == "" {
+			return ""
+		}
+		identity += "\x00recovery_loss:" + action.Invocation.ActionID
 	}
 	if len(action.Mutations.FileChanges) > 0 {
 		changes, err := json.Marshal(action.Mutations.FileChanges)

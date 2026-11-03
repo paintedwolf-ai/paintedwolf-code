@@ -19,16 +19,16 @@ func TestJoinAfterDecisionIsNotPending(t *testing.T) {
 	insertSession(t, sqlDB, sessionID)
 
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
-		SessionID:      sessionID,
-		Kind:           api.CheckpointKindToolApproval,
-		Type:           hitl.DecisionTypeApprove,
-		Title:          "Approve command",
+		SessionID: sessionID,
+		Kind:      api.CheckpointKindToolApproval,
+		Type:      hitl.DecisionTypeApprove,
+		Title:     "Approve command",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo hi"},
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 

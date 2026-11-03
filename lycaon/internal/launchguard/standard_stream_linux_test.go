@@ -81,7 +81,7 @@ func TestProtectedStandardStreamModuleIngress(t *testing.T) {
 	fixture := installLaunchFixture(t)
 	binaries := append([]string(nil), fixture.binaries...)
 	binaries[2] = desktop
-	testutil.FailErr(t, "stage actual GTK desktop with exact selected helpers", sudoFixture(t, "upgrade", fixture.dir, fixtureBinsEnv+"="+strings.Join(binaries, ":")))
+	testutil.FailErr(t, "stage actual GTK desktop with exact selected helpers", sudoFixture(t, "upgrade-gtk", fixture.dir, fixtureBinsEnv+"="+strings.Join(binaries, ":")))
 	protected := run(fixture.bootstrap)
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("caller memfd constructor executed inside protected GTK: %v; facts=%+v", err, protected)

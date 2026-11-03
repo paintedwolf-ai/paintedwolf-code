@@ -131,4 +131,3 @@ func TestGitRemoteHostsForRootsParsesRemotes(t *testing.T) {
 		t.Fatalf("gitlab.internal = %q, want git:upstream", hosts["gitlab.internal"])
 	}
 }
-

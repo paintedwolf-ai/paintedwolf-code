@@ -21,11 +21,17 @@ func (p sourceMutationPlan) ledgerInput(operationID string) sourceledger.RecordI
 		in.Origin, in.PersonID = api.SourceChangeOriginAgent, ""
 		in.JobID, in.ToolCallID, in.ToolName = p.Agent.JobID, p.Agent.ToolCallID, p.Agent.ToolName
 	}
-	if p.EntryKind == SourceEntryFolder {
+	switch p.EntryKind {
+	case SourceEntryFile:
+	case SourceEntryFolder:
 		in.EntryKind = sourceledger.EntryKindDirectory
+	case SourceEntryLink:
+		in.EntryKind = sourceledger.EntryKindLink
 	}
 	if p.NativeTrash != nil && (p.Kind == "delete" || p.Kind == "restore") {
 		in.NativeRecovery = &sourceledger.NativeRecoveryBinding{Key: p.NativeTrash.RecoveryKey, Restore: p.Kind == "restore"}
+	} else if p.EntryRecoveryKey != "" && (p.Kind == "delete" || p.Kind == "restore") {
+		in.NativeRecovery = &sourceledger.NativeRecoveryBinding{Key: p.EntryRecoveryKey, Restore: p.Kind == "restore"}
 	}
 	switch p.Kind {
 	case "write":
@@ -71,7 +77,12 @@ func (p sourceMutationPlan) ledgerInputs(operationID string) []sourceledger.Reco
 // sourceChanges flattens one plan into file changes.
 func (p sourceMutationPlan) sourceChanges() []sourcefeed.Change {
 	if p.AgentEffect != nil {
-		return []sourcefeed.Change{p.AgentEffect.Change}
+		change := p.AgentEffect.Change
+		if change.IsDir == nil && p.AgentEffect.Record.EntryKind != "" {
+			isDir := p.AgentEffect.Record.EntryKind == sourceledger.EntryKindDirectory
+			change.IsDir = &isDir
+		}
+		return []sourcefeed.Change{change}
 	}
 	if p.Kind == "batch_write" {
 		changes := make([]sourcefeed.Change, 0, len(p.Writes))
