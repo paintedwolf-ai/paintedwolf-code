@@ -3,11 +3,15 @@ package adapter
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"golang.org/x/sys/unix"
 )
 
 func TestForcedProbeFailureFullMaterializedWorkerPrivateGitAndCheckpointSuite(t *testing.T) {
@@ -255,57 +259,142 @@ func TestMaterializedCancellationCleansOnlyCanceledPreparation(t *testing.T) {
 	}
 }
 
-func TestWorkspaceSelectionNarrowsMaterializedRootsWhileTaskPathHintsDoNot(t *testing.T) {
+func TestEagerCopySeedMetadataFailureFailsClosedAndUnchangedCaptureIsClean(t *testing.T) {
 	ctx := context.Background()
 	tmp := t.TempDir()
-	rootA := filepath.Join(tmp, "rootA")
-	rootB := filepath.Join(tmp, "rootB")
-	_ = os.MkdirAll(filepath.Join(rootA, "pkg", "alpha"), 0o755)
-	_ = os.MkdirAll(filepath.Join(rootA, "pkg", "beta"), 0o755)
-	_ = os.MkdirAll(filepath.Join(rootB, "docs"), 0o755)
-	_ = os.WriteFile(filepath.Join(rootA, "pkg", "alpha", "service.go"), []byte("package alpha\n"), 0o644)
-	_ = os.WriteFile(filepath.Join(rootA, "pkg", "beta", "excluded.go"), []byte("package beta\n"), 0o644)
-	_ = os.WriteFile(filepath.Join(rootB, "docs", "readme.md"), []byte("# docs\n"), 0o644)
-
-	grants := []RootGrant{
-		{RootID: "rootA", Label: "A", SourcePath: rootA, IsPrimary: true},
-		{RootID: "rootB", Label: "B", SourcePath: rootB},
+	srcRoot := filepath.Join(tmp, "src-meta")
+	subDir := filepath.Join(srcRoot, "subdir")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	adp := NewEagerCopyAdapter(ReasonNone)
+	if err := os.Chmod(subDir, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	scriptFile := filepath.Join(subDir, "script.sh")
+	if err := os.WriteFile(scriptFile, []byte("#!/bin/sh\necho seed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(scriptFile, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("script.sh", filepath.Join(subDir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	xattrSupported := unix.Lsetxattr(scriptFile, "user.seedmeta", []byte("v1"), 0) == nil
+	if xattrSupported {
+		_ = unix.Lsetxattr(subDir, "user.dirmeta", []byte("d1"), 0)
+	}
 
-	// Narrow to rootA subroot pkg/alpha, while passing TaskPathHints pointing to rootB and pkg/beta.
+	adp := NewEagerCopyAdapter(ReasonMountDenied)
+	verifySeedMetadataFailuresCleanUp(t, ctx, adp, tmp, srcRoot, xattrSupported)
+
+	// Now run a clean Prepare and verify non-default permissions + xattrs are preserved and
+	// an unchanged CheckpointBarrier capture produces zero logical or physical changes.
 	view, err := adp.Prepare(ctx, PrepareRequest{
-		ViewID:     "narrowed-view",
-		RuntimeDir: filepath.Join(tmp, "runtime"),
-		Grants:     grants,
-		Selection: WorkspaceSelection{
-			RootIDs:  []string{"rootA"},
-			Subroots: map[string]string{"rootA": "pkg/alpha"},
-		},
-		TaskPathHints: []string{"rootB/docs/readme.md", "rootA/pkg/beta/excluded.go"},
+		ViewID:     "meta-clean-view",
+		RuntimeDir: filepath.Join(tmp, "rt"),
+		Grants:     []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}},
 	})
 	if err != nil {
-		t.Fatalf("Prepare narrowed failed: %v", err)
+		t.Fatalf("clean Prepare failed: %v", err)
 	}
-	if len(view.Roots) != 1 || view.Roots[0].RootID != "rootA" || view.Roots[0].Subroot != "pkg/alpha" {
-		t.Fatalf("expected single narrowed rootA:pkg/alpha, got %+v", view.Roots)
+	defer func() { _, _ = adp.Release(ctx, view.ViewID) }()
+
+	dirInfo, err := os.Lstat(filepath.Join(view.PrimaryWorkPath, "subdir"))
+	if err != nil || dirInfo.Mode().Perm() != 0o775 {
+		t.Fatalf("expected seeded subdir mode 0775 on disk, err=%v mode=%v", err, dirInfo.Mode())
 	}
-	if _, err := view.Core.ReadFile(layeredfs.QualifiedPath{RootID: "rootA", Rel: "service.go"}); err != nil {
-		t.Fatalf("expected service.go in narrowed subroot, err=%v", err)
-	}
-	if _, err := view.Core.ReadFile(layeredfs.QualifiedPath{RootID: "rootA", Rel: "excluded.go"}); !os.IsNotExist(err) {
-		t.Fatalf("excluded sibling subroot must not be materialized: %v", err)
+	fileInfo, err := os.Lstat(filepath.Join(view.PrimaryWorkPath, "subdir", "script.sh"))
+	if err != nil || fileInfo.Mode().Perm() != 0o750 {
+		t.Fatalf("expected seeded script.sh mode 0750 on disk, err=%v mode=%v", err, fileInfo.Mode())
 	}
 
-	// Reject unauthorized root selection.
-	_, unauthErr := adp.Prepare(ctx, PrepareRequest{
-		ViewID:     "unauth-view",
-		RuntimeDir: filepath.Join(tmp, "runtime"),
-		Grants:     grants,
-		Selection:  WorkspaceSelection{RootIDs: []string{"ungranted"}},
+	receipt, relBarrier, err := adp.CheckpointBarrier(ctx, view.ViewID)
+	if err != nil {
+		t.Fatalf("unchanged CheckpointBarrier failed: %v", err)
+	}
+	defer func() { _ = relBarrier() }()
+
+	if !receipt.DirtyDataFlushed || view.Core.Stats().LogicalChanges != 0 {
+		t.Fatalf("expected DirtyDataFlushed and 0 LogicalChanges on unchanged capture, receipt=%+v stats=%+v", receipt, view.Core.Stats())
+	}
+	changes, err := view.Core.EnumerateChanges(false)
+	if err != nil || len(changes) != 0 {
+		t.Fatalf("expected 0 changes on unchanged capture, err=%v changes=%+v", err, changes)
+	}
+	if xattrSupported {
+		val, err := view.Core.GetXattr(layeredfs.QualifiedPath{RootID: "repo", Rel: "subdir/script.sh"}, "user.seedmeta", true)
+		if err != nil || string(val) != "v1" {
+			t.Fatalf("expected preserved seed xattr user.seedmeta=v1 in Core, err=%v val=%q", err, string(val))
+		}
+	}
+}
+
+func verifySeedMetadataFailuresCleanUp(
+	t *testing.T,
+	ctx context.Context,
+	adp *EagerCopyAdapter,
+	tmp, srcRoot string,
+	xattrSupported bool,
+) {
+	t.Helper()
+	// 1. Destination chmod failure during Prepare must fail closed and clean up target/backing dirs.
+	chmodTargetDir := filepath.Join(tmp, "chmod-fail-target")
+	chmodBackingDir := filepath.Join(tmp, "chmod-fail-backing")
+	chmodPathHook = func(p string, mode fs.FileMode) error {
+		if strings.HasSuffix(p, "script.sh") {
+			return syscall.EPERM
+		}
+		return nil
+	}
+	_, err := adp.Prepare(ctx, PrepareRequest{
+		ViewID:         "meta-chmod-fail",
+		RuntimeDir:     filepath.Join(tmp, "rt"),
+		BackingDir:     chmodBackingDir,
+		TargetRootDirs: map[string]string{"repo": chmodTargetDir},
+		Grants:         []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}},
 	})
-	var aErr *AdapterError
-	if !errors.As(unauthErr, &aErr) || aErr.ReasonCode != ReasonUnauthorizedRoot {
-		t.Fatalf("expected ReasonUnauthorizedRoot, got %v", unauthErr)
+	chmodPathHook = nil
+	if !errors.Is(err, syscall.EPERM) {
+		t.Fatalf("expected Prepare to fail with EPERM on destination chmod failure, got %v", err)
+	}
+	if _, statErr := os.Stat(chmodTargetDir); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected failed Prepare to clean up TargetRootDir, statErr=%v", statErr)
+	}
+	if _, statErr := os.Stat(chmodBackingDir); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected failed Prepare to clean up BackingDir, statErr=%v", statErr)
+	}
+	if _, accErr := adp.CommandAccess("meta-chmod-fail"); accErr == nil {
+		t.Fatalf("expected failed Prepare not to publish ready view")
+	}
+
+	// 2. Destination writePathXattrs failure during Prepare must fail closed and clean up target/backing dirs.
+	if !xattrSupported {
+		return
+	}
+	xattrTargetDir := filepath.Join(tmp, "xattr-fail-target")
+	xattrBackingDir := filepath.Join(tmp, "xattr-fail-backing")
+	writePathXattrsHook = func(p, name string, value []byte) error {
+		if strings.HasSuffix(p, "script.sh") {
+			return syscall.EIO
+		}
+		return nil
+	}
+	_, err = adp.Prepare(ctx, PrepareRequest{
+		ViewID:         "meta-xattr-fail",
+		RuntimeDir:     filepath.Join(tmp, "rt"),
+		BackingDir:     xattrBackingDir,
+		TargetRootDirs: map[string]string{"repo": xattrTargetDir},
+		Grants:         []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}},
+	})
+	writePathXattrsHook = nil
+	if !errors.Is(err, syscall.EIO) {
+		t.Fatalf("expected Prepare to fail with EIO on destination writePathXattrs failure, got %v", err)
+	}
+	if _, statErr := os.Stat(xattrTargetDir); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected failed Prepare to clean up TargetRootDir on xattr error, statErr=%v", statErr)
+	}
+	if _, accErr := adp.CommandAccess("meta-xattr-fail"); accErr == nil {
+		t.Fatalf("expected failed Prepare not to publish ready view on xattr error")
 	}
 }

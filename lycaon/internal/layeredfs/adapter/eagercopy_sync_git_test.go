@@ -242,3 +242,56 @@ func verifyJournaledMutationsInCore(t *testing.T, view *PreparedView) {
 		t.Fatalf("expected chmod-only change synced to Core, err=%v mode=%v", err, attr.Mode)
 	}
 }
+
+func TestWorkspaceSelectionNarrowsMaterializedRootsWhileTaskPathHintsDoNot(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	rootA := filepath.Join(tmp, "rootA")
+	rootB := filepath.Join(tmp, "rootB")
+	_ = os.MkdirAll(filepath.Join(rootA, "pkg", "alpha"), 0o755)
+	_ = os.MkdirAll(filepath.Join(rootA, "pkg", "beta"), 0o755)
+	_ = os.MkdirAll(filepath.Join(rootB, "docs"), 0o755)
+	_ = os.WriteFile(filepath.Join(rootA, "pkg", "alpha", "service.go"), []byte("package alpha\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(rootA, "pkg", "beta", "excluded.go"), []byte("package beta\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(rootB, "docs", "readme.md"), []byte("# docs\n"), 0o644)
+
+	grants := []RootGrant{
+		{RootID: "rootA", Label: "A", SourcePath: rootA, IsPrimary: true},
+		{RootID: "rootB", Label: "B", SourcePath: rootB},
+	}
+	adp := NewEagerCopyAdapter(ReasonNone)
+
+	view, err := adp.Prepare(ctx, PrepareRequest{
+		ViewID:     "narrowed-view",
+		RuntimeDir: filepath.Join(tmp, "runtime"),
+		Grants:     grants,
+		Selection: WorkspaceSelection{
+			RootIDs:  []string{"rootA"},
+			Subroots: map[string]string{"rootA": "pkg/alpha"},
+		},
+		TaskPathHints: []string{"rootB/docs/readme.md", "rootA/pkg/beta/excluded.go"},
+	})
+	if err != nil {
+		t.Fatalf("Prepare narrowed failed: %v", err)
+	}
+	if len(view.Roots) != 1 || view.Roots[0].RootID != "rootA" || view.Roots[0].Subroot != "pkg/alpha" {
+		t.Fatalf("expected single narrowed rootA:pkg/alpha, got %+v", view.Roots)
+	}
+	if _, err := view.Core.ReadFile(layeredfs.QualifiedPath{RootID: "rootA", Rel: "service.go"}); err != nil {
+		t.Fatalf("expected service.go in narrowed subroot, err=%v", err)
+	}
+	if _, err := view.Core.ReadFile(layeredfs.QualifiedPath{RootID: "rootA", Rel: "excluded.go"}); !os.IsNotExist(err) {
+		t.Fatalf("excluded sibling subroot must not be materialized: %v", err)
+	}
+
+	_, unauthErr := adp.Prepare(ctx, PrepareRequest{
+		ViewID:     "unauth-view",
+		RuntimeDir: filepath.Join(tmp, "runtime"),
+		Grants:     grants,
+		Selection:  WorkspaceSelection{RootIDs: []string{"ungranted"}},
+	})
+	var aErr *AdapterError
+	if !errors.As(unauthErr, &aErr) || aErr.ReasonCode != ReasonUnauthorizedRoot {
+		t.Fatalf("expected ReasonUnauthorizedRoot, got %v", unauthErr)
+	}
+}

@@ -3,6 +3,7 @@ package adapter
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"syscall"
@@ -11,7 +12,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var readPathXattrsHook func(path string) error
+var (
+	readPathXattrsHook  func(path string) error
+	writePathXattrsHook func(path, name string, value []byte) error
+	chmodPathHook       func(path string, mode fs.FileMode) error
+)
 
 func readPathXattrs(p string) (map[string][]byte, error) {
 	if readPathXattrsHook != nil {
@@ -96,10 +101,30 @@ func isIgnorableXattrErr(err error) bool {
 		errors.Is(err, syscall.Errno(93))
 }
 
-func writePathXattrs(p string, xattrs map[string][]byte) {
+func writePathXattrs(p string, xattrs map[string][]byte) error {
 	for k, v := range xattrs {
-		_ = unix.Lsetxattr(p, k, v, 0)
+		if writePathXattrsHook != nil {
+			if err := writePathXattrsHook(p, k, v); err != nil {
+				return fmt.Errorf("write xattr %q on %q: %w", k, p, err)
+			}
+		}
+		if err := unix.Lsetxattr(p, k, v, 0); err != nil {
+			return fmt.Errorf("write xattr %q on %q: %w", k, p, err)
+		}
 	}
+	return nil
+}
+
+func chmodPath(p string, mode fs.FileMode) error {
+	if chmodPathHook != nil {
+		if err := chmodPathHook(p, mode); err != nil {
+			return fmt.Errorf("chmod %q to %v: %w", p, mode, err)
+		}
+	}
+	if err := os.Chmod(p, mode); err != nil {
+		return fmt.Errorf("chmod %q to %v: %w", p, mode, err)
+	}
+	return nil
 }
 
 func cloneBaseCaptureRecord(b layeredfs.BaseCapture) layeredfs.BaseCapture {

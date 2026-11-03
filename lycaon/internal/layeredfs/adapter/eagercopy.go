@@ -145,16 +145,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 
 	outcome, err := seedSelectedRoots(ctx, req, runtimeViewDir, narrowed, selectedIDs, maxEntries, maxBytes, a.gitStores)
 	if err != nil {
-		releaseGitLeases(outcomeStore(outcome), outcomeLeases(outcome))
-		_ = os.RemoveAll(runtimeViewDir)
-		if req.BackingDir != "" {
-			_ = os.RemoveAll(req.BackingDir)
-		}
-		for _, dir := range req.TargetRootDirs {
-			if strings.TrimSpace(dir) != "" {
-				_ = os.RemoveAll(dir)
-			}
-		}
+		cleanupFailedPrepare(req, runtimeViewDir, outcome, nil)
 		if limErr, ok := err.(*PreparationLimitError); ok {
 			limErr.CleanedIncompleteSeed = true
 		}
@@ -177,15 +168,12 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		ObservationSink: req.ObservationSink,
 	})
 	if err != nil {
-		releaseGitLeases(gitStore, outcome.gitLeases)
-		_ = os.RemoveAll(runtimeViewDir)
+		cleanupFailedPrepare(req, runtimeViewDir, outcome, nil)
 		return nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
 
 	if err := registerSeededLowerProviders(core, backingDir, outcome.preparedRoots, outcome.bases, outcome.filePaths); err != nil {
-		releaseGitLeases(gitStore, outcome.gitLeases)
-		_ = core.ReleaseView()
-		_ = os.RemoveAll(runtimeViewDir)
+		cleanupFailedPrepare(req, runtimeViewDir, outcome, core)
 		return nil, err
 	}
 
@@ -193,9 +181,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 	syncedMap := make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture, len(outcome.bases))
 	for _, b := range outcome.bases {
 		if rErr := core.RegisterSeedBase(b); rErr != nil {
-			releaseGitLeases(gitStore, outcome.gitLeases)
-			_ = core.ReleaseView()
-			_ = os.RemoveAll(runtimeViewDir)
+			cleanupFailedPrepare(req, runtimeViewDir, outcome, core)
 			return nil, rErr
 		}
 		seedMap[b.Path] = b

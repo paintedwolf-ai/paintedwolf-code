@@ -198,13 +198,19 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 		if err := a.chargeUsage(g.RootID, 1, 0); err != nil {
 			return err
 		}
-		if err := os.MkdirAll(dstPath, mode.Perm()|0o700); err != nil {
+		dirPerm := mode.Perm() | 0o700
+		if err := os.MkdirAll(dstPath, dirPerm); err != nil {
 			return err
 		}
-		writePathXattrs(dstPath, xattrs)
+		if err := chmodPath(dstPath, dirPerm); err != nil {
+			return err
+		}
+		if err := writePathXattrs(dstPath, xattrs); err != nil {
+			return err
+		}
 		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryDirectory,
-			Mode: mode, ModTime: info.ModTime(), Xattrs: xattrs, CapturedAt: time.Now(),
+			Mode: fs.ModeDir | dirPerm, ModTime: info.ModTime(), Xattrs: xattrs, CapturedAt: time.Now(),
 		})
 		return nil
 
@@ -216,10 +222,12 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath str
 		if err := a.chargeUsage(g.RootID, 1, int64(len(target))); err != nil {
 			return err
 		}
-		if err := os.Symlink(target, dstPath); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.Symlink(target, dstPath); err != nil {
 			return err
 		}
-		writePathXattrs(dstPath, xattrs)
+		if err := writePathXattrs(dstPath, xattrs); err != nil {
+			return err
+		}
 		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntrySymlink,
 			Mode: mode, Size: int64(len(target)), ModTime: info.ModTime(), LinkTarget: target, Xattrs: xattrs, CapturedAt: time.Now(),
@@ -252,7 +260,12 @@ func (a *seedAccumulator) seedRegularFile(rootID string, qp layeredfs.QualifiedP
 				return err
 			}
 		}
-		writePathXattrs(dstPath, xattrs)
+		if err := chmodPath(dstPath, info.Mode().Perm()); err != nil {
+			return err
+		}
+		if err := writePathXattrs(dstPath, xattrs); err != nil {
+			return err
+		}
 		a.out.filePaths[qp] = dstPath
 		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryRegular,
@@ -274,16 +287,22 @@ func (a *seedAccumulator) seedRegularFile(rootID string, qp layeredfs.QualifiedP
 	}
 	h := sha256.New()
 	n, copyErr := io.Copy(io.MultiWriter(outFile, h), io.LimitReader(in, remainingBytes+1))
-	_ = outFile.Close()
-	if copyErr != nil {
-		return copyErr
+	closeErr := outFile.Close()
+	if err := errors.Join(copyErr, closeErr); err != nil {
+		return err
 	}
 	if err := a.chargeUsage(rootID, 0, n); err != nil {
 		return err
 	}
-	_ = os.Chmod(dstPath, info.Mode().Perm())
-	writePathXattrs(dstPath, xattrs)
-	_ = os.Chtimes(dstPath, info.ModTime(), info.ModTime())
+	if err := chmodPath(dstPath, info.Mode().Perm()); err != nil {
+		return err
+	}
+	if err := writePathXattrs(dstPath, xattrs); err != nil {
+		return err
+	}
+	if err := os.Chtimes(dstPath, info.ModTime(), info.ModTime()); err != nil {
+		return err
+	}
 	a.out.filePaths[qp] = dstPath
 	a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
 		Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryRegular,

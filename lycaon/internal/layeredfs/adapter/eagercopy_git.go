@@ -88,6 +88,22 @@ func releaseGitLeases(store *privategit.RetainedObjectStore, leases []string) {
 	}
 }
 
+func cleanupFailedPrepare(req PrepareRequest, runtimeViewDir string, out *seedOutcome, core *layeredfs.Core) {
+	releaseGitLeases(outcomeStore(out), outcomeLeases(out))
+	if core != nil {
+		_ = core.ReleaseView()
+	}
+	_ = os.RemoveAll(runtimeViewDir)
+	if req.BackingDir != "" {
+		_ = os.RemoveAll(req.BackingDir)
+	}
+	for _, dir := range req.TargetRootDirs {
+		if strings.TrimSpace(dir) != "" {
+			_ = os.RemoveAll(dir)
+		}
+	}
+}
+
 type seededGitInterceptor struct {
 	redirects map[layeredfs.QualifiedPath]layeredfs.QualifiedPath
 }
