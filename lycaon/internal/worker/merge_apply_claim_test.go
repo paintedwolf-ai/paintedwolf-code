@@ -89,12 +89,16 @@ func TestMergeApplyLeaseLossCancelsActiveWriter(t *testing.T) {
 }
 
 func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
-	for _, publishLater := range []bool{false, true} {
-		name := "reviewed checkpoint"
-		if publishLater {
-			name = "new checkpoint requires refreshed preview"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name                     string
+		publishLater, failCommit bool
+	}{
+		{name: "reviewed checkpoint"},
+		{name: "new checkpoint requires refreshed preview", publishLater: true},
+		{name: "durable failure rolls back checkpoint effects", failCommit: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			publishLater := tc.publishLater
 
 			ctx := t.Context()
 			sqlDB := testdbfixture.Open(t, "store.db")
@@ -231,6 +235,27 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 				}
 				manifest, err = cpStore.LoadLatestManifest()
 				testutil.FailErr(t, "load refreshed manifest", err)
+			}
+			if tc.failCommit {
+				_, err := sqlDB.ExecContext(ctx, `CREATE TRIGGER reject_checkpoint_completion
+					BEFORE UPDATE OF merge_status ON worker_jobs WHEN NEW.merge_status = 'merged'
+					BEGIN SELECT RAISE(ABORT, 'fixture rejected checkpoint completion'); END`)
+				testutil.FailErr(t, "install durable commit fault", err)
+				_, err = svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
+				if err == nil {
+					t.Fatal("promotion ignored durable commit failure")
+				}
+				body, readErr := os.ReadFile(filepath.Join(primary, "app.go"))
+				testutil.FailErr(t, "read primary after failed commit", readErr)
+				if string(body) != trunkStale {
+					t.Fatalf("failed commit left promoted bytes: %q; error: %v", body, err)
+				}
+				for _, rel := range []string{"run.sh", "link.txt", ".git/refs/lycaon/workers/" + jobID + "/heads/feature"} {
+					if _, err := os.Lstat(filepath.Join(primary, rel)); !errors.Is(err, os.ErrNotExist) {
+						t.Fatalf("failed commit left checkpoint effect %s: %v", rel, err)
+					}
+				}
+				return
 			}
 			promoteOut, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
 			testutil.FailErr(t, "PromoteOverlay", err)
