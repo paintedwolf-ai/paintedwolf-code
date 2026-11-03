@@ -11,9 +11,21 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func hasLayeredOverlayDivergence(ctx context.Context, task *api.WorkerTask) (bool, bool) {
+	if task == nil || strings.TrimSpace(task.WorkspaceRoot) == "" {
+		return false, false
+	}
+	paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(ctx, task.WorkspaceRoot)
+	if !handled {
+		return false, false
+	}
+	return err != nil || len(paths) > 0, true
+}
 
 // Complete commits the result only while the claim remains current.
 func (q *SQLQueue) Complete(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
@@ -39,9 +51,15 @@ func (q *SQLQueue) completeAdmitted(ctx context.Context, claimed *api.WorkerTask
 				task = loaded
 			}
 		}
+		layeredDiverges, layeredHandled := hasLayeredOverlayDivergence(ctx, task)
 		switch {
 		case strings.TrimSpace(result.Status) == "needs_decision":
 			// Decision branches stay attached and non-promotable.
+		case layeredHandled && layeredDiverges:
+			mergeStatus = api.WorkerMergeStatusPending
+		case layeredHandled && !layeredDiverges:
+			mergeStatus = api.WorkerMergeStatusAborted
+			teardown = true
 		case session.OverlayAwaitingPromote(ctx, task):
 			mergeStatus = api.WorkerMergeStatusPending
 		case q.overlayDivergesFromProject(ctx, task):

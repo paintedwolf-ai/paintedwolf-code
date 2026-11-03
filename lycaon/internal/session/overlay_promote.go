@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,6 +29,15 @@ func OverlayWorkspaceChangedPaths(ctx context.Context, task *api.WorkerTask, roo
 func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) ([]string, error) {
 	if task == nil || task.WorkspaceRoot == "" || !OverlayWorkspaceAvailable(task) {
 		return nil, nil
+	}
+	if paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(ctx, task.WorkspaceRoot); handled {
+		if err != nil {
+			return nil, err
+		}
+		if len(roots) > 0 {
+			return FilterOverlayPromoteCandidatePathsForRoots(roots, paths), nil
+		}
+		return promotionstate.FilterOverlayPromoteCandidatePaths(paths), nil
 	}
 	baseline, err := workspacebaseline.Open(ctx, task.WorkspaceBaselinePath, workspacebaseline.ContentStore(task.WorkspaceBaselinePath))
 	if err != nil {
@@ -79,6 +89,12 @@ func OverlayWorkspaceDivergencePaths(task *api.WorkerTask, roots []projectroot.R
 	overlay := strings.TrimSpace(task.WorkspaceRoot)
 	if overlay == "" || !OverlayWorkspaceAvailable(task) {
 		return nil
+	}
+	if paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(context.Background(), overlay); handled && err == nil {
+		if len(roots) > 1 {
+			return FilterOverlayPromoteCandidatePathsForRoots(roots, paths)
+		}
+		return promotionstate.FilterOverlayPromoteCandidatePaths(paths)
 	}
 	if len(roots) > 1 {
 		projSnap, err := SnapshotWorkspaceFromRoots(roots)
