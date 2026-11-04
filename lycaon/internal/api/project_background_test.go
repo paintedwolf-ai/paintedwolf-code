@@ -625,7 +625,7 @@ func TestProjectBackgroundEventsAndReconnectReplay(t *testing.T) {
 			}
 			var envEvent struct {
 				Topic   wire.EventTopic             `json:"topic"`
-				Payload wire.ProjectBackgroundEvent `json:"payload"`
+				Payload wire.ProjectBackgroundEvent `json:"data"`
 			}
 			testutil.FailErr(t, "decode SSE envelope", json.Unmarshal([]byte(strings.TrimSpace(data)), &envEvent))
 			if envEvent.Topic == wire.EventTopicProjectBackground {
