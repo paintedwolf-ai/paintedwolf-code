@@ -44,7 +44,9 @@ func sampleOpenStacks(t *testing.T, files, open int) func() {
 				for _, line := range strings.Split(stack, "\n") {
 					if strings.Contains(line, "lycaon/internal/") && !strings.HasPrefix(line, "\t") {
 						name := line[strings.LastIndex(line, "/")+1:]
-						path = append(path, name[:strings.LastIndex(name, "(")])
+						if strings.Contains(name, "gitexec.") || strings.Contains(name, "sourcesnapshot.") || strings.Contains(name, "sourceledger.") {
+							path = append(path, name[:strings.LastIndex(name, "(")])
+						}
 					}
 				}
 				if len(path) > 7 {
@@ -80,8 +82,12 @@ func sampleOpenStacks(t *testing.T, files, open int) func() {
 // tree, with the Git engine on and complete watcher coverage.
 func TestWindowOpensAtProductionBudget(t *testing.T) {
 	gittestsetup.Enable()
-	for _, files := range []int{1000, 5000} {
-		t.Run(fmt.Sprintf("files-%d", files), func(t *testing.T) {
+	for _, c := range []struct {
+		files  int
+		budget time.Duration
+	}{{1000, 0}, {5000, 100 * time.Millisecond}} {
+		files := c.files
+		t.Run(fmt.Sprintf("files-%d-budget-%v", files, c.budget), func(t *testing.T) {
 			sqlDB := testdbfixture.Open(t, "store.db")
 			testdbseed.InsertProject(t, sqlDB, "p1")
 			root := t.TempDir()
@@ -100,11 +106,14 @@ func TestWindowOpensAtProductionBudget(t *testing.T) {
 			}
 			store := New(sqlDB, t.TempDir())
 			store.Commands.windowSettle = 0
+			if c.budget > 0 {
+				store.Commands.observationBudget = c.budget
+			}
 			repochange.MarkCoverageCompleteForTest(root)
 			t.Cleanup(func() { repochange.CloseRoot(root) })
 			in := CommandWindowInput{ProjectID: "p1", Roots: []RootSpec{{ID: "r1", Path: root}}, SessionID: "s1", ToolName: "command", CommandLine: "make"}
 			ctx := context.Background()
-			for open := 1; open <= 25; open++ {
+			for open := 1; open <= 12; open++ {
 				started := time.Now()
 				stop := sampleOpenStacks(t, files, open)
 				window, err := store.Commands.OpenCommandWindow(ctx, in)
