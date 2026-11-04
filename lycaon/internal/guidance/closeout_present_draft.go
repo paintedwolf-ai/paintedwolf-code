@@ -26,6 +26,10 @@ func PresentCloseoutMarkdown(draft CloseoutDraft, resolved DraftCitationResoluti
 				return citationmd.Rendition{Text: citationmd.FileLink(path, outcome.Resolution.Line, outcome.Resolution.EndLine)}
 			}
 		case citationmd.KindWebLink, citationmd.KindWorkspaceLink:
+			// A schemeless link keeps the scheme that was actually observed.
+			if accepted && o.Link.Form == citationmd.LinkAutolink && strings.HasPrefix(strings.ToLower(o.Link.Label), "www.") {
+				return citationmd.Rendition{Text: "<" + outcome.ObservedURL + ">"}
+			}
 			if accepted {
 				return citationmd.Rendition{Keep: true}
 			}

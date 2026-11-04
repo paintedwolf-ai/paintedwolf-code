@@ -324,6 +324,78 @@
     "code": []
   },
   {
+    "name": "escaped-looking url",
+    "source": "\\https://x.test/a\n",
+    "links": [
+      "https://x.test/a"
+    ],
+    "code": []
+  },
+  {
+    "name": "escaped-looking www",
+    "source": "\\www.x.test\n",
+    "links": [
+      "http://www.x.test"
+    ],
+    "code": []
+  },
+  {
+    "name": "real escape before a bracket",
+    "source": "\\[https://x.test/a\n",
+    "links": [
+      "https://x.test/a"
+    ],
+    "code": []
+  },
+  {
+    "name": "ideographic space ends a url",
+    "source": "https://x.test/a　次\n",
+    "links": [
+      "https://x.test/a"
+    ],
+    "code": []
+  },
+  {
+    "name": "no-break space ends a url",
+    "source": "https://x.test/a x\n",
+    "links": [
+      "https://x.test/a"
+    ],
+    "code": []
+  },
+  {
+    "name": "em space ends a url",
+    "source": "https://x.test/a x\n",
+    "links": [
+      "https://x.test/a"
+    ],
+    "code": []
+  },
+  {
+    "name": "worded bracket around a url",
+    "source": "[see https://x.test/a]\n",
+    "links": [
+      "https://x.test/a]"
+    ],
+    "code": []
+  },
+  {
+    "name": "labelled bracket around a url",
+    "source": "[docs: https://x.test/a]\n",
+    "links": [
+      "https://x.test/a]"
+    ],
+    "code": []
+  },
+  {
+    "name": "web scheme with no slashes",
+    "source": "[x](https:x.test)\n",
+    "links": [
+      "https:x.test"
+    ],
+    "code": []
+  },
+  {
     "name": "ftp stays out of scope",
     "source": "see ftp://x.test/p now\n",
     "links": [],

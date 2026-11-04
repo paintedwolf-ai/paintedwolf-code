@@ -97,12 +97,10 @@ const (
 	LinkInline    LinkForm = "inline"
 	LinkReference LinkForm = "reference"
 	LinkAutolink  LinkForm = "autolink"
-	LinkRawHTML   LinkForm = "raw_html"
 )
 
-// Link is a standard Markdown link or another form that renders as one.
-// Destination is the resolved destination, for a reference link the one its
-// definition names.
+// Link is a standard Markdown link or a bare URL that renders as one. Destination
+// is the resolved destination, for a reference link the one its definition names.
 type Link struct {
 	Form        LinkForm
 	Label       string
@@ -171,6 +169,8 @@ const (
 	ZoneLink       ZoneKind = "link"
 	ZoneImage      ZoneKind = "image"
 	ZoneAutolink   ZoneKind = "autolink"
+	// ZoneEscapedDocument is a whole source past a budget, displayed literally.
+	ZoneEscapedDocument ZoneKind = "escaped_document"
 )
 
 // Zone is a source range the custom scanner never enters. Links, images and
@@ -191,6 +191,8 @@ type Document struct {
 	// Zones are the literal zones the parse honoured, in source order.
 	Zones []Zone
 	parts []part
+	// overBudget means the source displays as one escaped literal block.
+	overBudget bool
 }
 
 // partKind is how a non-text region of the source presents.
@@ -198,6 +200,8 @@ type partKind int
 
 const (
 	partLiteral partKind = iota
+	partRawHTML
+	partHTMLBlock
 	partLink
 	partNode
 	partDamaged
@@ -210,6 +214,11 @@ type part struct {
 	span  Span
 	first int
 	count int
+	// link is a link part's parse; broken means it raised an issue.
+	link   *Link
+	broken bool
+	// definition is a link definition's destination.
+	definition string
 }
 
 // boundedToken returns at most maxIssueTokenBytes of token without splitting a

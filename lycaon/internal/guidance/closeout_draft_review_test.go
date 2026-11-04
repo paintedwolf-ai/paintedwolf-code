@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"strings"
 	"testing"
 	"time"
 
@@ -144,13 +143,11 @@ func TestDraftWWWMatchesEitherScheme(t *testing.T) {
 		{Handle: "web#2", Kind: "web", Shape: evidence.ShapeURL, URL: "http://www.b.test/p"},
 	})
 	for source, want := range map[string]guidance.CitationOutcome{
-		"www.a.test/p":                         guidance.CitationGrounded,
-		"www.b.test/p":                         guidance.CitationGrounded,
-		"[www.a.test/p]":                       guidance.CitationGrounded,
-		"www.c.test/p":                         guidance.CitationNotObserved,
-		"[x](http://www.a.test/p)":             guidance.CitationNotObserved,
-		`<a href="https://www.a.test/p">x</a>`: guidance.CitationGrounded,
-		`<a href="https://www.z.test/p">x</a>`: guidance.CitationNotObserved,
+		"www.a.test/p":             guidance.CitationGrounded,
+		"www.b.test/p":             guidance.CitationGrounded,
+		"[www.a.test/p]":           guidance.CitationGrounded,
+		"www.c.test/p":             guidance.CitationNotObserved,
+		"[x](http://www.a.test/p)": guidance.CitationNotObserved,
 	} {
 		if got := onlyOutcome(t, source, evidence.CitationRoots{}, ev); got.Outcome != want {
 			t.Errorf("%s = %+v", source, got)
@@ -176,19 +173,81 @@ func TestDraftSourceLinkRoots(t *testing.T) {
 	}
 }
 
-// M3: an unobserved raw anchor loses its tag at presentation.
-func TestPresentRawAnchors(t *testing.T) {
+// B2: a mutation supports coordinates on its path, traced to it; the read it retired
+// keeps its own outcome; a mutation that reports its lines is held to them.
+func TestDraftCoordinatesAfterMutation(t *testing.T) {
 	t.Parallel()
-	ev := evidence.AssembleLedger([]evidence.Record{{Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, URL: "https://seen.test/p"}})
+	retired := evidence.Record{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", SupersededBy: "edit#1", LineRanges: []evidence.LineRange{{Start: 1, End: 100}}}
+	edited := evidence.AssembleLedger([]evidence.Record{retired, {Handle: "edit#1", Kind: "edit", Shape: evidence.ShapeFileRegion, Path: "a.go"}})
+	written := evidence.AssembleLedger([]evidence.Record{{Handle: "write#1", Kind: "write", Shape: evidence.ShapeFileRegion, Path: "n.go"}})
+	observed := evidence.AssembleLedger([]evidence.Record{
+		{Handle: "edit#1", Kind: "edit", Shape: evidence.ShapeFileRegion, Path: "a.go"},
+		{Handle: "read#2", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 1, End: 10}}},
+		{Handle: "write#3", Kind: "write", Shape: evidence.ShapeFileRegion, Path: "a.go"},
+	})
+	deleted := evidence.AssembleLedger([]evidence.Record{{Handle: "delete#1", Kind: "delete", Shape: evidence.ShapeFileRegion, Path: "gone.go"}})
+	reported := evidence.AssembleLedger([]evidence.Record{{Handle: "edit#1", Kind: "edit", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 40, End: 45}}}})
+	cases := []struct {
+		name, source string
+		ev           evidence.Ledger
+		want         guidance.CitationOutcome
+		handle       string
+		verdict      evidence.Verdict
+	}{
+		{"B2 line after an edit", "[a.go:42]", edited, guidance.CitationGrounded, "edit#1", evidence.VerdictTraced},
+		{"range after an edit", "[a.go:42-43]", edited, guidance.CitationGrounded, "edit#1", evidence.VerdictTraced},
+		{"link after an edit", "[x](a.go#L42)", edited, guidance.CitationGrounded, "edit#1", evidence.VerdictTraced},
+		{"explicit edit line", "[edit#1:42]", edited, guidance.CitationGrounded, "edit#1", evidence.VerdictTraced},
+		{"line after a write", "[n.go:1]", written, guidance.CitationGrounded, "write#1", evidence.VerdictTraced},
+		{"the observing record outranks the mutation", "[a.go:2]", observed, guidance.CitationGrounded, "read#2", ""},
+		{"past the read, the mutation still supports it", "[a.go:999]", observed, guidance.CitationGrounded, "write#3", evidence.VerdictTraced},
+		{"a deleted file has no line", "[gone.go:42]", deleted, guidance.CitationUnverifiable, "delete#1", ""},
+		{"retired read keeps its outcome", "[read#1:42]", edited, guidance.CitationGrounded, "read#1", ""},
+		{"retired read past its lines", "[read#1:200]", edited, guidance.CitationUnverifiable, "read#1", ""},
+		{"reported lines inside", "[a.go:41]", reported, guidance.CitationGrounded, "edit#1", ""},
+		{"reported lines outside", "[a.go:50]", reported, guidance.CitationUnverifiable, "edit#1", ""},
+		{"another path is not the edit's", "[b.go:1]", edited, guidance.CitationNotObserved, "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := onlyOutcome(t, tc.source, evidence.CitationRoots{}, tc.ev)
+			if got.Outcome != tc.want || got.Resolution.Handle != tc.handle {
+				t.Fatalf("outcome = %+v", got)
+			}
+			if tc.verdict != "" && got.Resolution.Verdict != tc.verdict {
+				t.Fatalf("verdict = %s", got.Resolution.Verdict)
+			}
+		})
+	}
+}
+
+// N1: the observed scheme survives on an accepted www link.
+func TestPresentWWWKeepsObservedScheme(t *testing.T) {
+	t.Parallel()
+	ev := evidence.AssembleLedger([]evidence.Record{{Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, URL: "https://www.a.test/p"}})
 	roots := evidence.CitationRoots{}
-	render := func(source string) string {
+	for source, want := range map[string]string{
+		"see www.a.test/p now":   "see <https://www.a.test/p> now",
+		"[www.a.test/p]":         "[<https://www.a.test/p>]",
+		"[see www.a.test/p]":     "[see <https://www.a.test/p>]",
+		"see www.other.test now": `see www\.other.test now`,
+	} {
 		draft := guidance.ParseCloseoutDraft(source, guidance.DraftParseOptions(roots, ev))
-		return guidance.PresentCloseoutMarkdown(draft, guidance.ResolveDraftCitations(roots, "implement_synthesis", draft, guidance.CloseoutEvidence{Ledger: ev}, nil))
+		resolved := guidance.ResolveDraftCitations(roots, "implement_synthesis", draft, guidance.CloseoutEvidence{Ledger: ev}, nil)
+		if got := guidance.PresentCloseoutMarkdown(draft, resolved); got != want {
+			t.Errorf("%s = %q, want %q", source, got, want)
+		}
 	}
-	if got := render(`a <a href="https://seen.test/p">b</a> c`); got != `a <a href="https://seen.test/p">b</a> c` {
-		t.Fatalf("observed = %q", got)
-	}
-	if got := render(`a <a href="https://other.test/p">b</a> c`); strings.Contains(got, "other.test") || !strings.Contains(got, "b") {
-		t.Fatalf("unobserved = %q", got)
+}
+
+// B4: the ledger's kinds are read once, not for each bracket.
+func TestKnownEvidenceKindIsPrecomputed(t *testing.T) {
+	t.Parallel()
+	ev := evidence.AssembleLedger([]evidence.Record{{Handle: "custom#1", Kind: "custom", Shape: evidence.ShapeOpaque}})
+	known := guidance.KnownEvidenceKind(ev)
+	clear(ev.Handles)
+	if !known("custom") {
+		t.Fatal("the set was not taken at construction")
 	}
 }

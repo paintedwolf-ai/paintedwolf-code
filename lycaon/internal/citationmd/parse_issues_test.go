@@ -114,15 +114,9 @@ func TestParseBudgets(t *testing.T) {
 	if len(doc.Occurrences) != 1 {
 		t.Fatalf("occurrences = %+v", doc.Occurrences)
 	}
-	if got := Project(doc); strings.Contains(got, "read#") {
-		t.Fatalf("node past the budget reached display: %q", got)
-	}
 	huge := Parse("prose [read#1] prose", Options{MaxSourceBytes: 10})
 	if got := issueCodes(huge); !reflect.DeepEqual(got, []IssueCode{IssueSourceBudget}) {
 		t.Fatalf("issues = %+v", huge.Issues)
-	}
-	if got := Project(huge); got != "prose prose" {
-		t.Fatalf("over-budget source presented %q", got)
 	}
 	long := boundedToken(strings.Repeat("é", 400))
 	if len(long) > maxIssueTokenBytes || strings.ContainsRune(long, '\uFFFD') {
@@ -131,7 +125,7 @@ func TestParseBudgets(t *testing.T) {
 }
 
 // Sources built to make the block or link parser quadratic are not parsed at that
-// cost: they report a structured issue and keep a display with no protocol nodes.
+// cost: they report a structured issue, and nothing is taken from them.
 func TestParseStructureBudget(t *testing.T) {
 	t.Parallel()
 	nested := func(unit string, depth int) string { return strings.Repeat(unit, depth) + "x" }
@@ -150,12 +144,11 @@ func TestParseStructureBudget(t *testing.T) {
 	}
 	for _, source := range refused {
 		doc := Parse(source, Options{})
-		if got := issueCodes(doc); len(got) == 0 || got[0] != IssueStructureBudget {
+		if got := issueCodes(doc); len(got) != 1 || got[0] != IssueStructureBudget {
 			t.Errorf("%.20q: issues = %+v", source, got)
 		}
-		// The issue blocks acceptance; a fallback still has the prose to show.
-		if got := Project(doc); got == "" || strings.Contains(got, "[read#") {
-			t.Errorf("%.20q: refused source presented %.20q", source, got)
+		if len(doc.Occurrences) != 0 {
+			t.Errorf("%.20q: occurrences = %d", source, len(doc.Occurrences))
 		}
 	}
 	allowed := []string{
