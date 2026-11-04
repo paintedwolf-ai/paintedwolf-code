@@ -93,6 +93,17 @@ func TestKernelRefusalOfAUnixListenerNeedsHostExecution(t *testing.T) {
 	}
 }
 
+func TestDiskSpaceQueriesAreNotRefused(t *testing.T) {
+	self := requireSeatbelt(t)
+	requireRefusalWatch(t)
+	project, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve project", err)
+	refusals, out := refusalsOf(t, self, []string{project}, "/bin/df", "-k", "/")
+	if refusals.Witness != confine.WitnessKernel || len(refusals.Refusals) > 0 {
+		t.Fatalf("df witness = %s, refusals = %+v\noutput: %s", refusals.Witness, refusals.Refusals, out)
+	}
+}
+
 func TestOrdinaryToolchainsStartWithoutRefusals(t *testing.T) {
 	self := requireSeatbelt(t)
 	requireRefusalWatch(t)
