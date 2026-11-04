@@ -1607,6 +1607,48 @@
       "emit": "guard:visual_capture",
       "summary": "querySelectorAll rejected selector {{ paintedwolf.measure_selector }}."
     },
+    "MID_TURN_NOTE_ARTIFACT_UNKNOWN": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; use an observed artifact id or omit the directive",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} artifact directive(s) name an artifact not presentable in this request: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_HANDLE_UNGROUND": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_HANDLE_UNGROUND; correct the named citation rather than removing every citation",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation(s) did not resolve: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_INVALID_SYNTAX": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_INVALID_SYNTAX; correct the node",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation or directive node(s) could not be read: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_MARKDOWN_EMBED": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_MARKDOWN_EMBED; use the artifact directive",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] The update used {{ paintedwolf.offender_count }} visual artifact id(s) as an image source: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_UNGROUNDED": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_UNGROUNDED; do not repeat the same text uncited",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] Your text alongside the last tool calls cited nothing."
+    },
+    "MID_TURN_NOTE_URL_ONLY_UNGROUND": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_URL_ONLY_UNGROUND; observe the page before citing it",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} link(s) were not observed: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_WAIT_FALLBACK": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_WAIT_FALLBACK; carry the explanation forward",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "`wait` proceeds, but your earlier text remains an unpublished draft: the user has not received it."
+    },
     "MKDIR_BULK_DENIED": {
       "branch_instruction": "Keep each batch bounded and preserve completed results",
       "category": "recoverable",
@@ -3325,10 +3367,10 @@
       "summary": "Wait condition {{ paintedwolf.condition }} is unavailable in profile {{ paintedwolf.profile }}."
     },
     "WAIT_HIDDEN_TEXT": {
-      "branch_instruction": "Retry with the same wait conditions after choosing either recovery path.",
+      "branch_instruction": "Empty text does not clear this. Keep the same wait conditions and add the cited update.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "`wait` has not started; this tool turn contains assistant text hidden from the user"
+      "summary": "`wait` has not started; your latest update is an unpublished draft the user has not received"
     },
     "WAIT_PROBE_SECRET_UNSUPPORTED": {
       "branch_instruction": "Do not reveal or persist the protected value",
