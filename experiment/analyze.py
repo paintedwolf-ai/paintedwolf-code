@@ -75,6 +75,19 @@ def copied(text, original_lines, expected_lines):
     return found
 
 
+def true_labels(text, original):
+    """Lines carrying a real line-number label: prefix number is the file line of the text after it."""
+    src = original.split('\n'); out = []
+    for line in (text or '').split('\n'):
+        m = re.match(r'^( *\d+): (.*)$', line)
+        if not m or line in src:
+            continue
+        n = int(m.group(1))
+        if 0 < n <= len(src) and (src[n-1] == m.group(2) or (m.group(2) and m.group(2) in src[n-1])):
+            out.append(line)
+    return out
+
+
 def rejected(result):
     head = result[:3000]
     codes = [a or b or c for a, b, c in CODE.findall(head)]
@@ -132,7 +145,7 @@ def scan(d):
     # edits
     edits = [c for c in calls if c['name'] == 'edit']
     r['edit_calls'] = len(edits); r['replace_lines_calls'] = names.get('replace_lines', 0)
-    copies, fails, ee, codes = 0, 0, [], collections.Counter()
+    copies, fails, ee, codes = 0, 0, [], collections.Counter(); tl_old = tl_new = 0
     for c in edits:
         a = c.get('args') or {}
         co, cn = copied(a.get('old_string'), ol, el), copied(a.get('new_string'), ol, el)
@@ -142,8 +155,9 @@ def scan(d):
         copies += bool(co or cn); fails += not ok
         for x in code:
             codes[x] += 1
+        tl_old += len(true_labels(a.get('old_string'), original)); tl_new += len(true_labels(a.get('new_string'), original))
         ee.append(dict(old=a.get('old_string'), new=a.get('new_string'), copied_old=co, copied_new=cn, codes=code, ok=ok, agent=c.get('agent'), result=res[:400] if not ok else ''))
-    r.update(label_copies=copies, edit_failures=fails, codes=dict(codes), edits=ee)
+    r.update(label_copies=copies, edit_failures=fails, codes=dict(codes), edits=ee, true_label_old=tl_old, true_label_new=tl_new)
     # final state
     st = (d/'git-status.txt').read_text() if (d/'git-status.txt').exists() else ''
     changed = [l[3:] for l in st.splitlines()]
