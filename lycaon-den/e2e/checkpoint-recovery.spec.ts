@@ -12,7 +12,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
-import { harnessSocketPath, listenHarnessSocket } from "./harness-socket.ts";
+import { harnessSocketPath, listenHarnessSocket } from "./fixtures/harness-socket.ts";
 import type { CheckpointListResponse } from "../src/api/types.ts";
 
 async function foregroundSession(page: Page): Promise<string> {

@@ -9,7 +9,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
-import { harnessSocketPath, listenHarnessSocket } from "./harness-socket.ts";
+import { harnessSocketPath, listenHarnessSocket } from "./fixtures/harness-socket.ts";
 
 const SOCKET_PATH = harnessSocketPath(`painted-wolf-harness-approval-${process.pid}.sock`);
 let closeSocket: () => Promise<void>;

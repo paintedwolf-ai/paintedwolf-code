@@ -10,7 +10,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
-import { harnessSocketPath, listenHarnessSocket } from "./harness-socket.ts";
+import { harnessSocketPath, listenHarnessSocket } from "./fixtures/harness-socket.ts";
 
 webE2e.describe("checkpoint tool approval parity", () => {
   webE2e("fresh session has no tool approval card", async ({ page }) => {

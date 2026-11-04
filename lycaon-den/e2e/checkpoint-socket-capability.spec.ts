@@ -9,7 +9,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
-import { listenHarnessSocket } from "./harness-socket.ts";
+import { listenHarnessSocket } from "./fixtures/harness-socket.ts";
 import type { CheckpointListResponse } from "../src/api/types.ts";
 
 /**
