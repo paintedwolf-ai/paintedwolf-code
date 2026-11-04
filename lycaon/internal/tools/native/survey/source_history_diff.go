@@ -20,6 +20,8 @@ const (
 	// rewrite of a 2,000-line file.
 	sourceHistoryDiffMaxCells = 16 << 20
 
+	diffFinalNewlineNote = "this file's lines are unchanged; only its final newline differs"
+
 	sourceHistoryNoSessionEffectNote      = "no effect recorded on this path since the session began; head is the baseline state"
 	sourceHistoryDeletedBeforeSessionNote = "this file was already deleted when the session began"
 )
@@ -303,6 +305,9 @@ func comparisonDiff(comp sourceledger.Comparison, fromLabel, toLabel string) (di
 	diff, err := sourceview.UnifiedDiffWithin(fromLabel, toLabel, comp.Before.Content, comp.After.Content, 3, sourceHistoryDiffMaxCells)
 	if err != nil {
 		return "", diffTooLargeNote(len(comp.Before.Content), len(comp.After.Content), comp.Before.VersionID, comp.After.VersionID)
+	}
+	if diff == "" && comp.Before.Content != comp.After.Content {
+		return "", diffFinalNewlineNote
 	}
 	return diff, ""
 }

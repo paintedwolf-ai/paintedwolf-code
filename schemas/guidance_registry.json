@@ -2734,7 +2734,7 @@
       "branch_instruction": "Branch on Code; pass version_id",
       "category": "recoverable",
       "emit": "guard:source_history",
-      "summary": "source_history mode {{ paintedwolf.mode }} requires version_id."
+      "summary": "source_history mode {{ paintedwolf.mode }} needs version_id here."
     },
     "SOURCE_VERSION_UNAVAILABLE": {
       "branch_instruction": "Branch on Code; query metadata instead of content",

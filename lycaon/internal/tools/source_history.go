@@ -40,6 +40,8 @@ type SourceTree struct {
 type SourceTreeReader interface {
 	TreeChanges(context.Context, SourceTree) ([]workspacebaseline.Change, error)
 	TreePathChange(ctx context.Context, tree SourceTree, path string) (workspacebaseline.PathComparison, error)
+	// TreeMovesUnchanged names the moves whose live content is the baseline's.
+	TreeMovesUnchanged(ctx context.Context, tree SourceTree, moves []workspacebaseline.PathMove) (map[workspacebaseline.PathMove]bool, error)
 }
 
 // SourceWindowReader lists a session's command windows that have not settled.

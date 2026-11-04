@@ -30,6 +30,14 @@ type fakeTree struct {
 	path  workspacebaseline.PathComparison
 	calls int
 	seen  tools.SourceTree
+	// source answers TreePathChange for a move's source, by path.
+	source map[string]workspacebaseline.PathComparison
+	// unchanged lists the moves whose bytes kept the baseline's.
+	unchanged map[workspacebaseline.PathMove]bool
+}
+
+func (f *fakeTree) TreeMovesUnchanged(context.Context, tools.SourceTree, []workspacebaseline.PathMove) (map[workspacebaseline.PathMove]bool, error) {
+	return f.unchanged, f.err
 }
 
 func (f *fakeTree) TreeChanges(_ context.Context, tree tools.SourceTree) ([]workspacebaseline.Change, error) {
@@ -41,11 +49,14 @@ func (f *fakeTree) TreeChanges(_ context.Context, tree tools.SourceTree) ([]work
 	return f.changes, f.err
 }
 
-func (f *fakeTree) TreePathChange(_ context.Context, tree tools.SourceTree, _ string) (workspacebaseline.PathComparison, error) {
+func (f *fakeTree) TreePathChange(_ context.Context, tree tools.SourceTree, path string) (workspacebaseline.PathComparison, error) {
 	f.calls++
 	f.seen = tree
 	if f.stall != nil {
 		<-f.stall
+	}
+	if compared, ok := f.source[path]; ok {
+		return compared, f.err
 	}
 	return f.path, f.err
 }
@@ -206,6 +217,45 @@ func TestSourceHistoryOverviewACOV20LedgerPathsAreNotDuplicated(t *testing.T) {
 	}
 }
 
+func TestSourceHistoryOverviewACOV21MoveCoversOnlyUnchangedDescendants(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "b", fromPath: "a", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
+	h.recordOnWorker(effectSeed{path: "c", fromPath: "b", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
+	same := workspacebaseline.PathMove{From: "a/same.go", To: "c/same.go"}
+	tree := &fakeTree{
+		changes: treeChanges(
+			"a/edited.go", "deleted", "a/same.go", "deleted", "c/edited.go", "created", "c/gen.txt", "created",
+			"c/same.go", "created", "other/same.go", "created", "unrelated.go", "deleted",
+		),
+		unchanged: map[workspacebaseline.PathMove]bool{same: true},
+	}
+	result := runOverviewCall(t, h.tool, h.workerWith(tree))
+	rows := map[string]bool{}
+	for _, row := range result.Files {
+		rows[row.Path] = row.Unrecorded
+	}
+	want := map[string]bool{"c": false, "a/edited.go": true, "c/edited.go": true, "c/gen.txt": true, "other/same.go": true, "unrelated.go": true}
+	if fmt.Sprint(rows) != fmt.Sprint(want) {
+		t.Fatalf("rows = %v, want %v", rows, want)
+	}
+}
+
+func TestSourceHistoryOverviewACOV21FailedMoveCheckIsStated(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "b", fromPath: "a", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
+	worker := h.workerWith(failingMoves{&fakeTree{changes: treeChanges("a/x.go", "deleted", "b/x.go", "created")}})
+	result := runOverviewCall(t, h.tool, worker)
+	if !strings.Contains(result.Note, overviewTreeUnknownNote) {
+		t.Fatalf("result = %+v, want the comparison stated as incomplete", result)
+	}
+}
+
+type failingMoves struct{ *fakeTree }
+
+func (failingMoves) TreeMovesUnchanged(context.Context, tools.SourceTree, []workspacebaseline.PathMove) (map[workspacebaseline.PathMove]bool, error) {
+	return nil, errors.New("manifest unreadable")
+}
+
 func TestSourceHistoryOverviewACOV18ReusesTheRowCapAndTruncationNote(t *testing.T) {
 	h := newHistoryHarness(t)
 	var changes []workspacebaseline.Change
@@ -311,11 +361,43 @@ func TestSourceHistoryDiffACDF15ANoTextSideSaysSoInsteadOfDiffing(t *testing.T) 
 	}
 }
 
-func TestSourceHistoryDiffACDF15ATouchedFileSaysItsTextIsUnchanged(t *testing.T) {
+// An empty line diff says what is actually known about the bytes.
+func TestSourceHistoryDiffACDF22EmptyDiffStatesWhatIsKnown(t *testing.T) {
+	for _, c := range []struct {
+		name          string
+		kind          workspacebaseline.ChangeKind
+		before, after string
+		note          string
+	}{
+		{"final newline removed", workspacebaseline.ChangeModified, "a\n", "a", diffFinalNewlineNote},
+		{"final newline added", workspacebaseline.ChangeModified, "a", "a\n", diffFinalNewlineNote},
+		{"lone newline emptied", workspacebaseline.ChangeModified, "\n", "", diffFinalNewlineNote},
+		{"timestamp only", workspacebaseline.ChangeModified, "a\n", "a\n", treeDiffTouchedNote},
+		{"created empty", workspacebaseline.ChangeCreated, "", "", treeDiffCreatedEmptyNote},
+		{"deleted empty", workspacebaseline.ChangeDeleted, "", "", treeDiffDeletedEmptyNote},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newHistoryHarness(t)
+			compared := workspacebaseline.PathComparison{Kind: c.kind, Before: c.before, After: c.after, HasBefore: true, HasAfter: true}
+			result := runTreeDiff(t, h, &fakeTree{path: compared}, "f.txt")
+			if result.Diff != "" || result.Note != c.note {
+				t.Fatalf("result = %+v, want no diff and note %q", result, c.note)
+			}
+		})
+	}
+}
+
+func TestSourceHistoryDiffACDF22FinalNewlineChangeInTheLedgerIsStated(t *testing.T) {
 	h := newHistoryHarness(t)
-	result := runTreeDiff(t, h, &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "same\n", After: "same\n", HasBefore: true, HasAfter: true}}, "touched.go")
-	if !result.Unrecorded || result.Diff != "" || result.Note != treeDiffTouchedNote {
-		t.Fatalf("result = %+v, want an empty diff and the touched note", result)
+	h.beginSession(historySession)
+	h.record(effectSeed{path: "f.txt", content: "a", before: "a\n"})
+	if result := h.sessionDiff("f.txt"); result.Diff != "" || result.Note != diffFinalNewlineNote {
+		t.Fatalf("default diff = %+v, want the final-newline note", result)
+	}
+	result, err := h.diff(map[string]any{"path": "f.txt", "version_id": h.head("f.txt").VersionID})
+	testutil.FailErr(t, "explicit diff", err)
+	if result.Diff != "" || result.Note != diffFinalNewlineNote {
+		t.Fatalf("explicit diff = %+v, want the final-newline note", result)
 	}
 }
 
@@ -390,6 +472,123 @@ func TestSourceHistoryDiffACDF20PathInNeitherBaselineNorTreeIsAbsent(t *testing.
 	}
 }
 
+func created(after string) workspacebaseline.PathComparison {
+	return workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeCreated, After: after, HasBefore: true, HasAfter: true}
+}
+
+func TestSourceHistoryDiffACDF21FileMoveDiffsFromTheLedgersPredecessor(t *testing.T) {
+	for _, c := range []struct {
+		name          string
+		live          string
+		removed, kept []string
+		note          string
+	}{
+		{name: "pure rename", live: "body\n", note: treeDiffMovedNote},
+		{name: "rename then a program's edit", live: "changed\n", removed: []string{"body"}, kept: []string{"changed"}, note: treeDiffPastRecordNote},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newHistoryHarness(t)
+			h.record(effectSeed{path: "old.go", content: "body\n", session: "s0", op: api.SourceChangeOpCreate})
+			h.recordOnWorker(effectSeed{path: "new.go", fromPath: "old.go", content: "body\n", op: api.SourceChangeOpRename})
+			result := runTreeDiff(t, h, &fakeTree{path: created(c.live)}, "new.go")
+			removed, kept := diffChanges(result.Diff)
+			if !result.Recorded || result.Unrecorded || result.BaseVersionID == "" || result.Note != c.note ||
+				fmt.Sprint(removed) != fmt.Sprint(c.removed) || fmt.Sprint(kept) != fmt.Sprint(c.kept) {
+				t.Fatalf("result = %+v, want recorded from its predecessor, removed %q, added %q, note %q", result, c.removed, c.kept, c.note)
+			}
+		})
+	}
+}
+
+// A moved directory's descendant has no row of its own, so its bytes are the
+// baseline's at the source.
+func TestSourceHistoryDiffACDF21DescendantOfAMoveDiffsFromTheBaseline(t *testing.T) {
+	deleted := workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeDeleted, Before: "body\n", HasBefore: true, HasAfter: true}
+	for _, c := range []struct {
+		name          string
+		source        workspacebaseline.PathComparison
+		live          string
+		removed, kept []string
+		note          string
+	}{
+		{name: "unedited", source: deleted, live: "body\n", note: treeDiffMovedNote},
+		{name: "edited by a program", source: deleted, live: "changed\n", removed: []string{"body"}, kept: []string{"changed"}},
+		{name: "source the baseline never held", source: workspacebaseline.PathComparison{Absent: true}, live: "body\n", kept: []string{"body"}},
+		{name: "source reads as matching its baseline", source: workspacebaseline.PathComparison{}, live: "body\n", note: treeDiffNoTextNote},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newHistoryHarness(t)
+			h.recordOnWorker(effectSeed{path: "b", fromPath: "a", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
+			testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Join(h.dir, "b"), 0o755))
+			tree := &fakeTree{path: created(c.live), source: map[string]workspacebaseline.PathComparison{"a/x.go": c.source}}
+			result := runTreeDiff(t, h, tree, "b/x.go")
+			removed, kept := diffChanges(result.Diff)
+			if !result.Recorded || result.Unrecorded || result.Note != c.note || fmt.Sprint(removed) != fmt.Sprint(c.removed) || fmt.Sprint(kept) != fmt.Sprint(c.kept) {
+				t.Fatalf("result = %+v, want recorded, removed %q, added %q, note %q", result, c.removed, c.kept, c.note)
+			}
+		})
+	}
+}
+
+func TestSourceHistoryDiffACDF21OldNameOfAMoveIsAbsentAndRecorded(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "dir/old.go", content: "body\n", op: api.SourceChangeOpCreate})
+	h.recordOnWorker(effectSeed{path: "dir/new.go", fromPath: "dir/old.go", op: api.SourceChangeOpRename})
+	gone := workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeDeleted, Before: "body\n", HasBefore: true, HasAfter: true}
+	result := runTreeDiff(t, h, &fakeTree{path: gone}, "dir/old.go")
+	if !result.Recorded || result.Unrecorded || result.State != "absent" {
+		t.Fatalf("result = %+v, want recorded and absent", result)
+	}
+	// A deletion the ledger holds nothing about stays unrecorded.
+	result = runTreeDiff(t, h, &fakeTree{path: gone}, "dir/other.go")
+	if result.Recorded || !result.Unrecorded || result.State != "absent" {
+		t.Fatalf("result = %+v, want unrecorded and absent", result)
+	}
+}
+
+func TestSourceHistoryDiffACDF21FollowsAChainOfDirectoryMoves(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "b", fromPath: "a", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
+	h.recordOnWorker(effectSeed{path: "c", fromPath: "b", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
+	tree := &fakeTree{path: created("body\n"), source: map[string]workspacebaseline.PathComparison{
+		"a/sub/x.go": {Kind: workspacebaseline.ChangeDeleted, Before: "base\n", HasBefore: true, HasAfter: true},
+	}}
+	testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Join(h.dir, "c", "sub"), 0o755))
+	result := runTreeDiff(t, h, tree, "c/sub/x.go")
+	removed, added := diffChanges(result.Diff)
+	if !result.Recorded || fmt.Sprint(removed) != "[base]" || fmt.Sprint(added) != "[body]" {
+		t.Fatalf("result = %+v, want the first location's baseline against the live file", result)
+	}
+}
+
+// A move's base text keeps its origin: its exposure is recorded at the old name.
+func TestSourceHistoryACDF19MovedCredentialFileOnAWriteLeg(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.record(effectSeed{path: ".env", content: "TOKEN=old\n", session: "s0", op: api.SourceChangeOpCreate})
+	h.recordOnWorker(effectSeed{path: "settings.txt", fromPath: ".env", content: "TOKEN=old\n", op: api.SourceChangeOpRename})
+	h.writeFile("settings.txt", "TOKEN=new\n")
+	worker := h.workerWith(&fakeTree{path: created("TOKEN=new\n")})
+	recorder := &deliveredRecorder{}
+	worker.Effects.CredentialFiles = recorder
+	_, err := h.tool.Run(t.Context(), map[string]any{"path": "settings.txt", "mode": "diff"}, worker)
+	testutil.FailErr(t, "diff", err)
+	if len(recorder.reads) != 1 || recorder.reads[0].Path != ".env" || recorder.reads[0].Content != "TOKEN=old\n" {
+		t.Fatalf("delivered %+v, want the old name's text", recorder.reads)
+	}
+}
+
+// Lost bytes say nothing about whether the live file moved past its record.
+func TestSourceHistoryDiffACDF23LostRecordIsNotCalledAChange(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
+	testutil.FailErr(t, "drop stored content", os.RemoveAll(h.blobs))
+	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "native\n", HasBefore: true, HasAfter: true}}
+	result := runTreeDiff(t, h, tree, "native.go")
+	if result.VersionID != "" || result.Note != treeDiffRecordUnavailableNote || result.Diff == "" {
+		t.Fatalf("result = %+v, want the diff and the unavailable note", result)
+	}
+}
+
 // The ledger rejecting its own record does not stop the tree from answering, and
 // still reaches the caller when the tree has nothing to say.
 func TestSourceHistoryDiffACDF16LedgerRejectionYieldsToTheTree(t *testing.T) {
@@ -401,7 +600,7 @@ func TestSourceHistoryDiffACDF16LedgerRejectionYieldsToTheTree(t *testing.T) {
 	seed(h)
 	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "generated\n", HasBefore: true, HasAfter: true}}
 	result := runTreeDiff(t, h, tree, "native.go")
-	if !result.Recorded || result.VersionID != "" || result.BaseVersionID != "" || result.Note != treeDiffPastRecordNote || result.Diff == "" {
+	if !result.Recorded || result.VersionID != "" || result.BaseVersionID != "" || result.Note != treeDiffRecordUnavailableNote || result.Diff == "" {
 		t.Fatalf("result = %+v, want the tree's diff with no versions", result)
 	}
 
@@ -444,12 +643,6 @@ func TestSourceHistoryOverviewACOV19LedgerLookupFailureIsStated(t *testing.T) {
 	result := runOverviewCall(t, h.tool, worker)
 	if len(result.Files) != 1 || !strings.Contains(result.Note, overviewTreeUnknownNote) {
 		t.Fatalf("result = %+v, want the ledger row and the note", result)
-	}
-}
-
-func TestDisplayPathLocationNeedsAPrimaryRoot(t *testing.T) {
-	if _, _, err := displayPathLocation(nil, "gen.txt"); err == nil {
-		t.Fatal("a path resolved with no roots")
 	}
 }
 

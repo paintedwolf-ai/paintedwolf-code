@@ -12,7 +12,7 @@ schema:
       description: Repo-relative file path (required except for mine and overview)
     version_id:
       type: string
-      description: version mode (required) or diff mode (optional; omitted compares head with the session baseline) — retained source version ID from an effect row or read receipt
+      description: version mode (required) or diff mode (optional; omitted diffs the session baseline with head, or on a worker branch the live file) — retained source version ID from an effect row or read receipt
     base_version_id:
       type: string
       description: diff mode, requires version_id — earlier source version ID to diff against (defaults to the version's parent version; can be "current" or "head" to compare against the working file)

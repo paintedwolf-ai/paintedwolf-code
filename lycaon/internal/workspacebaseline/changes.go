@@ -2,12 +2,16 @@ package workspacebaseline
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -97,7 +101,7 @@ func (r *Reader) ChangeSet(ctx context.Context, roots []projectroot.RootRef, bra
 // statChange compares one baseline entry with the tree by metadata alone.
 func statChange(abs string, before File) (ChangeKind, error) {
 	after, err := os.Lstat(abs)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !pathGone(err) {
 		return "", err
 	}
 	if err != nil || after.IsDir() {
@@ -107,6 +111,11 @@ func statChange(abs string, before File) (ChangeKind, error) {
 		return ChangeModified, nil
 	}
 	return "", nil
+}
+
+// pathGone includes a parent that became a file, which reports ENOTDIR.
+func pathGone(err error) bool {
+	return os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR)
 }
 
 // PathComparison is one path's change with the text of each side. Kind is empty
@@ -141,7 +150,7 @@ func (r *Reader) ComparePath(ctx context.Context, roots []projectroot.RootRef, b
 		}
 	} else {
 		info, err := os.Lstat(abs)
-		if err != nil && !os.IsNotExist(err) {
+		if err != nil && !pathGone(err) {
 			return PathComparison{}, err
 		}
 		out.Absent = err != nil
@@ -197,6 +206,39 @@ func liveText(base, rel string, kind ChangeKind) (string, bool) {
 		return "", false
 	}
 	return doc.Text(), true
+}
+
+// PathMove is one manifest path and the path its content may have moved to.
+type PathMove struct{ From, To string }
+
+// MoveUnchanged reports whether the file now at To has the bytes the baseline holds
+// at From. A body the baseline did not pin, or a file it cannot read, is no match.
+func (r *Reader) MoveUnchanged(ctx context.Context, roots []projectroot.RootRef, branch string, move PathMove) (bool, error) {
+	before, inBaseline, err := r.Lookup(ctx, move.From)
+	if err != nil {
+		return false, err
+	}
+	if !inBaseline || before.Deleted || before.Opaque || before.SHA256 == "" {
+		return false, nil
+	}
+	base, rel, err := branchLocation(roots, branch, move.To)
+	if err != nil {
+		return false, err
+	}
+	file, err := fseffect.OpenRead(fseffect.Location{Root: base, Rel: rel})
+	if err != nil {
+		return false, nil
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() != before.Size {
+		return false, nil
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return false, nil
+	}
+	return hex.EncodeToString(hash.Sum(nil)) == before.SHA256, nil
 }
 
 func branchPath(roots []projectroot.RootRef, branch, path string) (string, error) {

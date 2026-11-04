@@ -122,6 +122,10 @@ func runWorkerScriptOnHarness(t *testing.T, agentType string, scope *api.TaskSco
 	writeTestProjectApprovalsAllowWrite(t, dir)
 	testutil.FailErr(t, "seed main.go", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644))
 	testutil.FailErr(t, "seed obsolete.go", os.WriteFile(filepath.Join(dir, "obsolete.go"), []byte("package obsolete\n"), 0o644))
+	testutil.FailErr(t, "mkdir pkg", os.Mkdir(filepath.Join(dir, "pkg"), 0o755))
+	for _, name := range []string{"one.go", "two.go"} {
+		testutil.FailErr(t, "seed "+name, os.WriteFile(filepath.Join(dir, "pkg", name), []byte("package pkg // "+name+"\n"), 0o644))
+	}
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create parent", err)
 
@@ -178,8 +182,10 @@ func TestSourceHistoryACOV15WorkerWithNothingToShow(t *testing.T) {
 			historyCall("overview", map[string]any{}),
 		)
 		overview := decodeWorkerHistory(t, results, "overview")
-		if !overview.Recorded || overview.Branch != jobID || len(overview.Files) != 0 || overview.Note == "" {
-			t.Fatalf("overview = %+v, want recorded, no rows and a note on branch %s", overview, jobID)
+		// The comparison ran and found nothing: a broken one would add its own note.
+		const noRows = "the ledger recorded nothing on your branch this session; a file it never tracked may still have changed"
+		if !overview.Recorded || overview.Branch != jobID || len(overview.Files) != 0 || overview.Note != noRows {
+			t.Fatalf("overview = %+v, want recorded, no rows and only the empty-list note on branch %s", overview, jobID)
 		}
 	})
 	t.Run("read-scoped worker on the trunk", func(t *testing.T) {
@@ -382,5 +388,67 @@ func TestSourceHistoryACDF20NativeCreateThenProgramDeleteIsAbsent(t *testing.T) 
 	diff := decodeWorkerHistory(t, results, "diff")
 	if !diff.Recorded || diff.Unrecorded || diff.State != "absent" || diff.Diff != "" || diff.Note == "" {
 		t.Fatalf("diff = %+v, want a recorded absent answer with a note and no text", diff)
+	}
+}
+
+func TestSourceHistoryACDF21NativeMoveOnAWorkerBranch(t *testing.T) {
+	_, results := runWorkerScript(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		commandCall("move", `mv main.go moved.go`),
+		historyCall("new", map[string]any{"path": "moved.go", "mode": "diff"}),
+		historyCall("old", map[string]any{"path": "main.go", "mode": "diff"}),
+		historyCall("overview", map[string]any{}),
+	)
+	moved := decodeWorkerHistory(t, results, "new")
+	if !moved.Recorded || moved.Unrecorded || moved.Diff != "" || moved.Note == "" {
+		t.Fatalf("new name = %+v, want a recorded empty diff with a note", moved)
+	}
+	old := decodeWorkerHistory(t, results, "old")
+	if !old.Recorded || old.Unrecorded || old.State != "absent" {
+		t.Fatalf("old name = %+v, want recorded and absent", old)
+	}
+	overview := decodeWorkerHistory(t, results, "overview")
+	if len(overview.Files) != 1 || overview.Files[0].Path != "moved.go" || overview.Files[0].Unrecorded {
+		t.Fatalf("rows = %+v, want the ledger's one row", overview.Files)
+	}
+}
+
+// An unedited descendant of a moved directory is covered by the move; a file a
+// program wrote or changed there keeps its row, so nothing generated is hidden.
+func TestSourceHistoryACOV21DirectoryMoveOnAWorkerBranch(t *testing.T) {
+	_, results := runWorkerScript(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		commandCall("move", `mv pkg lib`),
+		commandCall("generate", `external -- /bin/sh -c 'printf "package pkg // changed\n" > lib/two.go; printf "generated\n" > lib/gen.txt'`),
+		historyCall("overview", map[string]any{}),
+		historyCall("unedited", map[string]any{"path": "lib/one.go", "mode": "diff"}),
+		historyCall("changed", map[string]any{"path": "lib/two.go", "mode": "diff"}),
+		historyCall("source", map[string]any{"path": "pkg/one.go", "mode": "diff"}),
+	)
+	rows := map[string]workerHistoryRow{}
+	for _, row := range decodeWorkerHistory(t, results, "overview").Files {
+		rows[row.Path] = row
+	}
+	if len(rows) != 4 {
+		t.Fatalf("rows = %+v, want lib, lib/gen.txt and both sides of lib/two.go", rows)
+	}
+	if row, ok := rows["lib"]; !ok || row.Unrecorded {
+		t.Fatalf("rows = %+v, want the move's recorded row", rows)
+	}
+	unrecordedRow(t, decodeWorkerHistory(t, results, "overview").Files, "lib/gen.txt", "create")
+	unrecordedRow(t, decodeWorkerHistory(t, results, "overview").Files, "lib/two.go", "create")
+	unrecordedRow(t, decodeWorkerHistory(t, results, "overview").Files, "pkg/two.go", "delete")
+
+	unedited := decodeWorkerHistory(t, results, "unedited")
+	if !unedited.Recorded || unedited.Unrecorded || unedited.Diff != "" || unedited.Note == "" {
+		t.Fatalf("unedited = %+v, want a recorded empty diff with a note", unedited)
+	}
+	changed := decodeWorkerHistory(t, results, "changed")
+	if !strings.Contains(changed.Diff, "- package pkg // two.go") || !strings.Contains(changed.Diff, "+ package pkg // changed") {
+		t.Fatalf("changed = %+v, want the moved file's baseline against the live file", changed)
+	}
+	source := decodeWorkerHistory(t, results, "source")
+	if !source.Recorded || source.Unrecorded || source.State != "absent" {
+		t.Fatalf("source = %+v, want recorded and absent", source)
 	}
 }
