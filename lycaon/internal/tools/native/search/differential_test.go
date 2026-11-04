@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -83,6 +84,8 @@ func references(t *testing.T) []reference {
 	}
 	return out
 }
+
+var byteCountsSearched = regexp.MustCompile(`"bytes_searched":\d+`)
 
 func runReference(t *testing.T, ref reference, dir string, argv []string) (string, int) {
 	t.Helper()
@@ -287,6 +290,11 @@ func TestDifferentialAgainstInstalledReferences(t *testing.T) {
 				}
 				if c.json {
 					want, gotOut = normalizeElapsed(want), normalizeElapsed(gotOut)
+				}
+				if slices.Contains(c.argv, "bin.dat") {
+					// How far one release reads a binary file differs by platform: 15.0.0 reports 5 bytes
+					// searched on Linux and 13 on macOS for this record.
+					want, gotOut = byteCountsSearched.ReplaceAllString(want, `"bytes_searched":0`), byteCountsSearched.ReplaceAllString(gotOut, `"bytes_searched":0`)
 				}
 				if gotOut != want || got.result.Status != status {
 					t.Fatalf("native stdout %q status %d\nreference stdout %q status %d", gotOut, got.result.Status, want, status)
