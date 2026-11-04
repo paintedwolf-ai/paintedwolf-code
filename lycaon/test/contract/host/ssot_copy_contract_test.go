@@ -130,15 +130,15 @@ func TestWorkerKickTemplatesIncludeProseOnlyPartial(t *testing.T) {
 			t.Fatalf("%s must include completion-envelope-only-turn partial", name)
 		}
 	}
-	// Coordinator closeouts use prose with a citations fence.
+	// Coordinator closeouts are Markdown with inline citations.
 	coordDir := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "guidance")
 	coordCloseout, err := os.ReadFile(filepath.Join(coordDir, "coordinator-closeout.md"))
 	contractcheck.FailErr(t, "read coordinator-closeout.md", err)
 	if strings.Contains(string(coordCloseout), "completion-envelope-only-turn.md") {
 		t.Fatal("coordinator-closeout.md must not include the worker-only envelope partial")
 	}
-	if !strings.Contains(string(coordCloseout), "cited_evidence") {
-		t.Fatal("coordinator-closeout.md must teach the citations fence")
+	if !strings.Contains(string(coordCloseout), "[verify:") {
+		t.Fatal("coordinator-closeout.md must teach inline citations")
 	}
 }
 
@@ -159,7 +159,7 @@ func TestProjectPathPresentationIsSharedAcrossCoordinatorPrompts(t *testing.T) {
 	partialPath := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "shared", "partials", "project-path-presentation.md")
 	partial, err := os.ReadFile(partialPath)
 	contractcheck.FailErr(t, "read project path presentation partial", err)
-	for _, want := range []string{"[label](full/repo-relative/path/)", "never bare words", "[label](source://root-id/path/to/file)"} {
+	for _, want := range []string{"[path/to/file:line]", "never bare words", "[label](source://root-id/path/to/file#L12)"} {
 		if !strings.Contains(string(partial), want) {
 			t.Fatalf("project path presentation partial missing %q", want)
 		}

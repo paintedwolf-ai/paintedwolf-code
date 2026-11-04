@@ -336,7 +336,7 @@ func TestFinalReportPresentsEveryCaptureRoute(t *testing.T) {
 			})
 			testutil.FailErr(t, "render final report for capture route", err)
 			for _, want := range []string{
-				"`artifact_ids`",
+				"[artifact:<uuid>]",
 				"capture",
 			} {
 				if !strings.Contains(out, want) {
@@ -347,7 +347,7 @@ func TestFinalReportPresentsEveryCaptureRoute(t *testing.T) {
 	}
 	out, err := engine.Render(context.Background(), "partials/coordinator-final-report.md", map[string]any{})
 	testutil.FailErr(t, "render final report without capture routes", err)
-	if strings.Contains(out, "final capture follows") || strings.Contains(out, "`artifact_ids`: visual UUIDs") {
+	if strings.Contains(out, "final capture follows") || strings.Contains(out, "`[artifact:<uuid>]` takes visual UUIDs") {
 		t.Fatal("unavailable capture must not introduce a completion requirement")
 	}
 }
@@ -361,7 +361,7 @@ func TestVisualWrapupPresentsExistingStills(t *testing.T) {
 	testutil.FailErr(t, "render wrapup", err)
 	for _, want := range []string{
 		"Present existing stills",
-		"artifact_ids",
+		"[artifact:<uuid>]",
 		"cannot open a running page",
 		"render_view",
 		"never runtime proof",

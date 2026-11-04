@@ -28,6 +28,7 @@ func phaseGuardDraft(markdown string) guidance.CloseoutDraft {
 	return guidance.ParseCloseoutDraft(markdown, citationmd.Options{})
 }
 
+// AC-COMPAT-09: WORKFLOW_REPORT_PHASE_REQUIRED_BEFORE_CLOSEOUT fires on Markdown.
 func TestCloseoutBlocksCompletionReportBeforeReportPhase(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(phaseGuardWorkflowView{state: workflowfacts.WorkflowPhaseGuardState{

@@ -149,7 +149,7 @@ type midTurnHarness struct {
 }
 
 // newMidTurnHarness runs real publication and the real wait observation. Its
-// wait refusal stands in for OAR, which TestWaitHiddenTextPolicy covers.
+// wait refusal stands in for OAR, which TestBeforeWaitReadsSurfaceAndDurableNotes covers.
 func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 	t.Helper()
 	h := &midTurnHarness{ledger: &midTurnLedgerStub{}, sess: &api.Session{ID: "coordinator", Posture: api.SessionPostureBuild}}
@@ -560,27 +560,46 @@ func TestExhaustedRepairWithoutFactsPermitsSilentWait(t *testing.T) {
 	}
 }
 
-// A note goes through the same storage screen as every row: what lands on disk
-// is the redacted revision, and the carrier's text is what was audited.
-func TestPublishedNoteUsesTheStorageSafeRevision(t *testing.T) {
-	h := newMidTurnHarness(t, publishingSurface)
-	h.loop.Projection.Deps.RedactMessageForStorage = func(_ context.Context, msg api.Message) (api.Message, bool) {
-		if !api.IsAgentNoteMessage(msg) {
-			return msg, false
-		}
-		msg.Content = strings.ReplaceAll(msg.Content, "s3cret", "[redacted]")
-		return msg, true
+// Decision 004: the audit parses the screened revision, the bytes that publish.
+// History can hold the raw overlay of a redacted carrier, so redaction may shift
+// spans or change a token after the raw text would have validated.
+func TestMidTurnAuditParsesTheScreenedRevision(t *testing.T) {
+	observed := []api.Message{
+		midTurnUser(),
+		{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "r1", Name: "read"}}},
+		{ID: "result", Role: api.MessageRoleTool, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{ToolCallID: "r1", Tool: "read", Outcome: api.ToolResultOutcomeCompleted}},
 	}
-	h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "The key is s3cret.", "recall")
-	for _, msg := range h.appended {
-		if api.IsAgentNoteMessage(msg) {
-			if msg.Content != "The key is [redacted]." {
-				t.Fatalf("stored note = %q", msg.Content)
+	cases := []struct {
+		name, secret, text, want string
+		published                bool
+	}{
+		{name: "redaction shifts the citation's span", secret: "s3cret", text: "The key s3cret lives at [read#1:2].", want: "The key [redacted] lives at [a.go:2](a.go#L2).", published: true},
+		{name: "redaction removes the citation", secret: "read#1:2", text: "The key lives at [read#1:2]."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newMidTurnHarness(t, publishingSurface)
+			h.ledger.records = []evidence.Record{{
+				Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go",
+				Body: []string{"1|one", "2|two"}, LineRanges: []evidence.LineRange{{Start: 1, End: 2}},
+			}}
+			h.loop.Projection.Deps.RedactMessageForStorage = func(_ context.Context, msg api.Message) (api.Message, bool) {
+				if !strings.Contains(msg.Content, tc.secret) {
+					return msg, false
+				}
+				msg.Content = strings.ReplaceAll(msg.Content, tc.secret, "[redacted]")
+				return msg, true
 			}
-			return
-		}
+			history, _ := h.respond(t, observed, publishingSurface, "c1", tc.text, "recall")
+			note, ok := noteFor(history, "c1")
+			if ok != tc.published {
+				t.Fatalf("published = %v, want %v: %+v", ok, tc.published, note)
+			}
+			if tc.published && (note.Content != tc.want || note.Grounding == nil || !note.Grounding.Traced) {
+				t.Fatalf("note = %q grounding %+v, want %q traced", note.Content, note.Grounding, tc.want)
+			}
+		})
 	}
-	t.Fatal("no note stored")
 }
 
 // A host progress note is labelled data for the model, not its own speech.

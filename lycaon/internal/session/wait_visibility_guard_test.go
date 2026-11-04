@@ -16,6 +16,7 @@ type pinnedSurface string
 
 func (s pinnedSurface) PromptTurnSurfaceID(string) string { return string(s) }
 
+// AC-COMPAT-09: WAIT_HIDDEN_TEXT fires through the real guard and stock policy.
 func TestBeforeWaitReadsSurfaceAndDurableNotes(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	calls := []api.ToolCall{{ID: "wait-1", Name: "wait"}}

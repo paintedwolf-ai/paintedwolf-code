@@ -2,7 +2,10 @@ package promptloop
 
 import (
 	"context"
+	"maps"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -207,6 +210,83 @@ func TestMarkdownCloseoutRulesFireOnTheirTriggers(t *testing.T) {
 			for _, retired := range retiredCloseoutWords {
 				if strings.Contains(body, retired) {
 					t.Fatalf("refusal teaches retired %q:\n%s", retired, body)
+				}
+			}
+		})
+	}
+}
+
+// pongoReferenceRE finds the expression inside an output node or a tag.
+var pongoReferenceRE = regexp.MustCompile(`(?s)\{\{(.*?)\}\}|\{%-?\s*(?:if|elif|for)\s+(.*?)\s*-?%\}`)
+
+var pongoIdentifierRE = regexp.MustCompile(`"[^"]*"|\|\s*\w+(?::\s*"[^"]*")?|[A-Za-z_][A-Za-z0-9_.]*`)
+
+// kickVariables is every context name a template reads. A loop's own variable and
+// a member of one are not context names.
+func kickVariables(t *testing.T, ref string) map[string]bool {
+	t.Helper()
+	raw, _, err := prompts.DefaultBundledLayout().ReadBundled(ref)
+	testutil.FailErr(t, "read "+ref, err)
+	out := map[string]bool{}
+	locals := map[string]bool{"forloop": true}
+	for _, match := range pongoReferenceRE.FindAllStringSubmatch(string(raw), -1) {
+		expr := match[1] + match[2]
+		if local, source, isLoop := strings.Cut(expr, " in "); isLoop {
+			locals[strings.TrimSpace(local)] = true
+			expr = source
+		}
+		for _, token := range pongoIdentifierRE.FindAllString(expr, -1) {
+			if token[0] == '"' || token[0] == '|' || token == "and" || token == "or" || token == "not" {
+				continue
+			}
+			out[strings.SplitN(token, ".", 2)[0]] = true
+		}
+	}
+	for local := range locals {
+		delete(out, local)
+	}
+	return out
+}
+
+// AC-COMPAT-08: a repair kick reads exactly what the real path sends it. A name the
+// builder never sends renders as a silent fallback, which is how a retired form or an
+// empty document reaches the model. A key the kick does not read must belong to the
+// facts the refusal's policy copy reads, or to the builder both kicks share.
+func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
+	const documentContent = "Done [read#1:2].\n\n```json\n{\"headline\":\"H\",\"cited_evidence\":[{\"evidence\":\"read#1\"}]}\n```"
+	for _, tc := range []struct {
+		kick, content string
+		reportPhase   bool
+		// sharedOnly are sent to both repair kicks by one builder.
+		sharedOnly []string
+	}{
+		{kick: "coordinator-citation-grounding", content: "Done [read#9:1].", sharedOnly: []string{"pinned_body_chars", "worker_leg"}},
+		{kick: "coordinator-report-document", content: documentContent, reportPhase: true, sharedOnly: []string{"drafted_synthesis", "can_recall", "worker_leg"}},
+	} {
+		t.Run(tc.kick, func(t *testing.T) {
+			c := newCloseoutContract(t)
+			var sent map[string]any
+			engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+			c.loop.Closeout.Deps.RenderHostKick = func(ctx context.Context, id string, data map[string]any) (string, error) {
+				if id == tc.kick {
+					sent = data
+				}
+				return engine.RenderKick(ctx, id, data)
+			}
+			c.drive(t, "implement_synthesis", tc.content, tc.reportPhase, contractHistory(tc.content))
+			if sent == nil {
+				t.Fatalf("%s never rendered", tc.kick)
+			}
+			reads := kickVariables(t, "guidance/"+tc.kick+".md")
+			for name := range reads {
+				if _, ok := sent[name]; !ok {
+					t.Errorf("%s reads %q, which the real path does not send (sent %v)", tc.kick, name, slices.Sorted(maps.Keys(sent)))
+				}
+			}
+			policyFacts := guidance.GroundingHintData([]string{"offender"}, evidence.Ledger{})
+			for name := range sent {
+				if _, isPolicyFact := policyFacts[name]; !reads[name] && !isPolicyFact && !slices.Contains(tc.sharedOnly, name) {
+					t.Errorf("%s is sent %q and does not read it", tc.kick, name)
 				}
 			}
 		})

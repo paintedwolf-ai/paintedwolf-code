@@ -99,7 +99,7 @@ func TestValidationGuidanceFollowsCompiledAvailability(t *testing.T) {
 								}
 							}
 							reachable := verify == toolsurface.Immediate || command == toolsurface.Immediate || (loader && (verify == toolsurface.Deferred || command == toolsurface.Deferred))
-							if reachable && !strings.Contains(got, "verification.method") {
+							if reachable && !strings.Contains(got, "reports scope") {
 								t.Fatalf("reachable validation guidance omitted: %s", got)
 							}
 							needsRequest := loader && command != toolsurface.Immediate && ((verify != toolsurface.Immediate && (command == toolsurface.Deferred || verify == toolsurface.Deferred)) || (selected && command == toolsurface.Deferred))
