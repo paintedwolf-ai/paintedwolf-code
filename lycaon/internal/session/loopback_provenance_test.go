@@ -30,6 +30,7 @@ type provenanceFixture struct {
 	startErr       error
 	now            []socketListener
 	nowErr         error
+	withheld       bool
 	sessions       map[int]string
 	containers     []dockerContainerInfo
 	nativeObserver nativeListenerObserver
@@ -39,12 +40,12 @@ func (f *provenanceFixture) resolver(ctx context.Context) *DefaultLoopbackProven
 	started := false
 	return newLoopbackProvenance(
 		ctx,
-		func(context.Context) ([]socketListener, error) {
+		func(context.Context) (listenerView, error) {
 			if !started {
 				started = true
-				return f.atStart, f.startErr
+				return listenerView{listeners: f.atStart, complete: !f.withheld}, f.startErr
 			}
-			return f.now, f.nowErr
+			return listenerView{listeners: f.now, complete: !f.withheld}, f.nowErr
 		},
 		func(pid int) (string, bool) {
 			s, ok := f.sessions[pid]
@@ -232,6 +233,32 @@ func TestHeldByOtherSeparatesFreeOwnedAndForeignPorts(t *testing.T) {
 	}
 }
 
+// A host that withholds sockets leaves a port's absence unknown. What was
+// directly observed still decides, so a chat's own server keeps working.
+func TestWithheldListenerTableNeverReportsAPortFree(t *testing.T) {
+	ctx := context.Background()
+	workspace := "/workspace/my-app"
+	f := &provenanceFixture{
+		withheld:   true,
+		now:        []socketListener{listenerAt(4242, "127.0.0.1:8000")},
+		sessions:   map[int]string{4242: "chat-1"},
+		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 3000, LoopbackOnly: true})},
+	}
+	p := f.resolver(t.Context())
+	if !p.HeldByOther(ctx, "chat-1", workspace, 8123) {
+		t.Error("a port missing from a withheld table was reported free")
+	}
+	if p.HeldByOther(ctx, "chat-1", workspace, 8000) {
+		t.Error("a chat's observed listener was reported held by another")
+	}
+	if owned, evidence := p.IsSessionOwned(ctx, "chat-1", workspace, 8000); !owned || evidence.Method != ProvenanceLineage {
+		t.Errorf("a chat's observed listener: owned=%v evidence=%+v", owned, evidence)
+	}
+	if owned, evidence := p.IsSessionOwned(ctx, "chat-1", workspace, 3000); owned || evidence.Method != ProvenanceUnverified {
+		t.Errorf("container port under a withheld start snapshot: owned=%v evidence=%+v", owned, evidence)
+	}
+}
+
 func TestHostListenersSeesALiveListener(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "listen", err)
@@ -243,7 +270,7 @@ func TestHostListenersSeesALiveListener(t *testing.T) {
 	if err != nil {
 		t.Skipf("host socket table unavailable: %v", err)
 	}
-	held := onPort(all, port)
+	held := onPort(all.listeners, port)
 	if len(held) != 1 || held[0].PID != os.Getpid() || held[0].Addr != netip.MustParseAddr("127.0.0.1") {
 		t.Fatalf("listener on %d from the host table = %+v, want this process on 127.0.0.1", port, held)
 	}

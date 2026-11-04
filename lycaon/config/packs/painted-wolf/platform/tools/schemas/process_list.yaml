@@ -6,7 +6,8 @@ description: >-
   snapshot. Unavailable metadata does not mean exited. Use listening_port to
   find which process holds a port: matching processes carry their listeners,
   and unattributed_listeners lists held sockets whose process could not be
-  read. Use command_output and command_stop for jobs you launched with command.
+  read. If snapshot_complete is false with no next_after_pid, a port with no
+  entry may still be held. Use command_output and command_stop for jobs you launched with command.
 schema:
   type: object
   properties:

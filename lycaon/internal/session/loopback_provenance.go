@@ -65,6 +65,13 @@ type socketListener struct {
 	Addr netip.Addr
 }
 
+// listenerView is one read of the host's listening TCP sockets. complete is
+// false when the host withheld sockets, so a port with no row may still be held.
+type listenerView struct {
+	listeners []socketListener
+	complete  bool
+}
+
 // loopbackBound reports whether the listener accepts only local connections.
 func (l socketListener) loopbackBound() bool {
 	return l.Addr.IsValid() && l.Addr.Unmap().IsLoopback()
@@ -74,10 +81,10 @@ func (l socketListener) loopbackBound() bool {
 // container engine. It never infers ownership from timing or workspace files.
 type DefaultLoopbackProvenance struct {
 	// baseline holds the ports listening at engine start; nil when that
-	// snapshot failed, so absence from it proves nothing.
+	// snapshot failed or was withheld, so absence from it proves nothing.
 	baseline map[uint16]bool
 	// listeners reads the host's listening TCP sockets.
-	listeners func(ctx context.Context) ([]socketListener, error)
+	listeners func(ctx context.Context) (listenerView, error)
 	// lineageSession names the session whose action launched pid.
 	lineageSession func(pid int) (string, bool)
 	observeNative  nativeListenerObserver
@@ -97,7 +104,7 @@ func NewLoopbackProvenance(ctx context.Context) *DefaultLoopbackProvenance {
 
 func newLoopbackProvenance(
 	parent context.Context,
-	listeners func(context.Context) ([]socketListener, error),
+	listeners func(context.Context) (listenerView, error),
 	lineageSession func(int) (string, bool),
 	containers func(context.Context) []dockerContainerInfo,
 	observeNative nativeListenerObserver,
@@ -105,9 +112,9 @@ func newLoopbackProvenance(
 	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers, observeNative: observeNative}
 	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
-	if current, err := listeners(ctx); err == nil {
-		p.baseline = make(map[uint16]bool, len(current))
-		for _, l := range current {
+	if current, err := listeners(ctx); err == nil && current.complete {
+		p.baseline = make(map[uint16]bool, len(current.listeners))
+		for _, l := range current.listeners {
 			p.baseline[l.Port] = true
 		}
 	}
@@ -134,7 +141,7 @@ func (p *DefaultLoopbackProvenance) IsSessionOwned(ctx context.Context, sessionI
 			Description: fmt.Sprintf("port %d cannot be attributed: the current listener table is unavailable", port),
 		}
 	}
-	return p.ownership(ctx, sessionID, workspaceDir, port, onPort(current, port))
+	return p.ownership(ctx, sessionID, workspaceDir, port, onPort(current.listeners, port))
 }
 
 // HeldByOther implements LoopbackProvenanceResolver.
@@ -146,9 +153,9 @@ func (p *DefaultLoopbackProvenance) HeldByOther(ctx context.Context, sessionID, 
 	if err != nil {
 		return true
 	}
-	held := onPort(current, port)
+	held := onPort(current.listeners, port)
 	if len(held) == 0 {
-		return false
+		return !current.complete
 	}
 	owned, _ := p.ownership(ctx, sessionID, workspaceDir, port, held)
 	return !owned
@@ -247,13 +254,13 @@ func onPort(listeners []socketListener, port uint16) []socketListener {
 }
 
 // hostListeners reads the kernel's listening TCP sockets.
-func hostListeners(context.Context) ([]socketListener, error) {
+func hostListeners(context.Context) (listenerView, error) {
 	table, err := lineage.Listeners(lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}})
 	if err != nil {
-		return nil, err
+		return listenerView{}, err
 	}
 	var out []socketListener
-	for _, l := range table {
+	for _, l := range table.Listeners {
 		if len(l.Holders) == 0 {
 			out = append(out, socketListener{Port: l.Addr.Port(), Addr: l.Addr.Addr()})
 		}
@@ -261,7 +268,7 @@ func hostListeners(context.Context) ([]socketListener, error) {
 			out = append(out, socketListener{PID: holder.PID, Port: l.Addr.Port(), Addr: l.Addr.Addr()})
 		}
 	}
-	return out, nil
+	return listenerView{listeners: out, complete: table.Complete}, nil
 }
 
 // discoverDockerSockets returns container engine sockets named by the

@@ -15,6 +15,9 @@ type SocketObservation struct {
 	// handle is the raw kernel handle the host-wide socket table also reports.
 	// It stays unexported so kernel addresses never reach logs or receipts.
 	handle uint64
+	// uid is the socket's owner where the walk reports one, for a listener the
+	// host-wide table withheld.
+	uid uint32
 }
 
 func sameEndpoint(a, b netip.AddrPort) bool {

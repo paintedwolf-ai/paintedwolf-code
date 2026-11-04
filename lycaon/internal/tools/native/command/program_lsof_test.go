@@ -97,11 +97,12 @@ func TestProgramEntryLsofNamesHostListenersOnlyAfterApproval(t *testing.T) {
 
 // fixedPorts answers lsof from a fixed holder table.
 type fixedPorts struct {
-	holders []hostprocess.PortHolder
-	queries []lineage.ListenerQuery
+	holders  []hostprocess.PortHolder
+	queries  []lineage.ListenerQuery
+	withheld bool
 }
 
-func (p *fixedPorts) PortHolders(_ context.Context, _ string, query lineage.ListenerQuery) ([]hostprocess.PortHolder, error) {
+func (p *fixedPorts) PortHolders(_ context.Context, _ string, query lineage.ListenerQuery) (hostprocess.PortHolderTable, error) {
 	p.queries = append(p.queries, query)
 	var out []hostprocess.PortHolder
 	for _, holder := range p.holders {
@@ -109,7 +110,7 @@ func (p *fixedPorts) PortHolders(_ context.Context, _ string, query lineage.List
 			out = append(out, holder)
 		}
 	}
-	return out, nil
+	return hostprocess.PortHolderTable{Holders: out, Complete: !p.withheld}, nil
 }
 
 // A session job's listener, held by the job's process or by a process it
@@ -184,6 +185,20 @@ func TestProgramEntryLsofKeepsJobIdentityAndUnknownHolders(t *testing.T) {
 	}
 	if fmt.Sprint(ports.queries) != fmt.Sprint(wantQueries) {
 		t.Fatalf("listener queries %v, want %v", ports.queries, wantQueries)
+	}
+}
+
+// A withheld table turns "no row" into an unknown, and says so.
+func TestProgramEntryLsofSaysAWithheldTableLeavesAPortUnknown(t *testing.T) {
+	f := newProgramFixture(t)
+	f.Runtime.Ports = &fixedPorts{withheld: true}
+	review := &lsofReview{}
+	review.install(f)
+	out, err := f.call(t, t.Context(), "lsof -i :3000")
+	testutil.FailErr(t, "lsof", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.Status != 1 || outcome.Stdout != "" || !strings.Contains(outcome.Stderr, "may still be held") {
+		t.Fatalf("withheld lsof %s", out)
 	}
 }
 
