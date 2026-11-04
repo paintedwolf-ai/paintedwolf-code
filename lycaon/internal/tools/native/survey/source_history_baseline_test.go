@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -199,6 +201,17 @@ func TestSourceHistoryDiffACDF08RealComparisonClassifiesEachSide(t *testing.T) {
 
 // A window on trusted coverage settles after the program returned, through the
 // next inventory pass of the real ledger. The overview waits on that, not a fake.
+// listingSignal reports the first listing, which comes just before the wait.
+type listingSignal struct {
+	tools.SourceWindowReader
+	listed func()
+}
+
+func (l listingSignal) OpenSessionWindows(projectID, sessionID string) []sourceledger.SessionWindow {
+	defer l.listed()
+	return l.SourceWindowReader.OpenSessionWindows(projectID, sessionID)
+}
+
 func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) {
 	repochange.DisableWatchersForTest()
 	t.Cleanup(repochange.ResetWatchersForTest)
@@ -212,7 +225,9 @@ func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) 
 	h.beginSession(historySession)
 	endSettle := make(chan time.Time)
 	h.store.Commands.SetWindowSettleGateForTest(endSettle)
-	h.tctx.Source.History.Windows = h.store.Commands
+	waiting := make(chan struct{})
+	h.tctx.Source.History.Windows = listingSignal{h.store.Commands, sync.OnceFunc(func() { close(waiting) })}
+	h.tool.settleBudget = time.Hour
 	window, err := h.store.Commands.OpenCommandWindow(t.Context(), sourceledger.CommandWindowInput{
 		ProjectID: historyProject, Roots: roots, SessionID: historySession, ToolName: "command",
 	})
@@ -223,11 +238,6 @@ func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) 
 		t.Fatal("window settled with its pass still owed")
 	}
 
-	waiting := make(chan struct{})
-	h.tool.settleExpiry = func() <-chan time.Time {
-		close(waiting)
-		return nil
-	}
 	overview := make(chan overviewResult, 1)
 	go func() {
 		out, err := h.tool.Run(context.WithoutCancel(t.Context()), map[string]any{}, h.tctx)

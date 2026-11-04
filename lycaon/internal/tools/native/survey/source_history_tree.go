@@ -2,22 +2,25 @@ package survey
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const (
-	overviewTreeBudget      = overviewSettleBudget
+	overviewTreeBudget      = tools.WindowSettleBudget
 	overviewTreeUnknownNote = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
 	treeDiffNoTextNote      = "this file changed, but its baseline or live side has no text to compare"
 	treeDiffTouchedNote     = "this file's timestamp changed; its text did not"
+	treeDiffPastRecordNote  = "this file changed after its last recorded version, so the live side names no version"
 )
 
 func sourceTreeOf(tctx tools.ToolContext) tools.SourceTree {
@@ -119,31 +122,39 @@ func displayPathLocation(roots []projectroot.RootRef, path string) (rootID, rel 
 	return primary.ID, path, nil
 }
 
-// treeDiffOr answers a worker's default diff from its tree when the ledger has no
-// effect on the path, and otherwise returns the ledger's answer in resp.
-func (t *SourceHistoryTool) treeDiffOr(
+// workerSessionDiff diffs the baseline against the live file. A path that matches
+// its baseline, or a comparison that could not run, leaves the ledger's answer. A
+// ledger rejection only says the record cannot be compared; the tree still can.
+func (t *SourceHistoryTool) workerSessionDiff(
 	ctx context.Context,
 	tctx tools.ToolContext,
+	ledger tools.SourceHistory,
 	display, rootID, rel string,
-	resp sourceHistoryResponse,
+	recorded ledgerDiff,
+	recordedErr error,
 ) (string, error) {
-	if tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindWorker {
-		return marshalSourceHistory(display, resp)
+	var reject *toolrejection.ToolReject
+	if recordedErr != nil && !errors.As(recordedErr, &reject) {
+		return "", recordedErr
 	}
-	ledger := tctx.Source.History
+	ledgerAnswer := func(note string) (string, error) {
+		if recordedErr != nil {
+			return "", recordedErr
+		}
+		recorded.resp.Note = joinNotes(recorded.resp.Note, note)
+		return marshalSourceHistory(display, recorded.resp)
+	}
 	if ledger.Tree == nil {
-		resp.Note = joinNotes(resp.Note, overviewTreeUnknownNote)
-		return marshalSourceHistory(display, resp)
+		return ledgerAnswer(overviewTreeUnknownNote)
 	}
 	compared, err := ledger.Tree.TreePathChange(ctx, sourceTreeOf(tctx), projectroot.DisplayPath(tctx.Source.Roots, rootID, rel))
 	if err != nil {
-		resp.Note = joinNotes(resp.Note, overviewTreeUnknownNote)
-		return marshalSourceHistory(display, resp)
+		return ledgerAnswer(overviewTreeUnknownNote)
 	}
 	if compared.Kind == "" {
-		return marshalSourceHistory(display, resp)
+		return ledgerAnswer("")
 	}
-	out := sourceHistoryResponse{Mode: "diff", Path: display, Unrecorded: true, Since: &sourceHistorySince{}}
+	out := sourceHistoryResponse{Mode: "diff", Path: display, Recorded: recorded.hasEffect, Unrecorded: !recorded.hasEffect, Since: &sourceHistorySince{}}
 	if compared.Kind == workspacebaseline.ChangeDeleted {
 		out.State = "absent"
 	}
@@ -157,14 +168,39 @@ func (t *SourceHistoryTool) treeDiffOr(
 			return "", fmt.Errorf("record credential file read: %w", err)
 		}
 	}
+	// A version is named only when its bytes are the side being shown.
+	if comp := recorded.comp; comp != nil && sideHolds(comp.Before, compared.Before) {
+		out.BaseVersionID = comp.Before.VersionID
+	}
+	if recorded.hasEffect {
+		if comp := recorded.comp; comp != nil && sideHolds(comp.After, compared.After) {
+			out.VersionID = comp.After.VersionID
+		} else {
+			out.Note = treeDiffPastRecordNote
+		}
+	}
 	out.Diff = comparisonDiff(sourceledger.Comparison{
 		Before: sourceledger.ComparisonSide{Content: compared.Before},
 		After:  sourceledger.ComparisonSide{Content: compared.After},
-	}, treeDiffLabel(display, "session baseline", compared.Kind == workspacebaseline.ChangeCreated), treeDiffLabel(display, "live", compared.Kind == workspacebaseline.ChangeDeleted))
+	},
+		treeDiffLabel(display, treeSideName("session baseline", out.BaseVersionID), compared.Kind == workspacebaseline.ChangeCreated),
+		treeDiffLabel(display, treeSideName("live", out.VersionID), compared.Kind == workspacebaseline.ChangeDeleted),
+	)
 	if out.Diff == "" {
 		out.Note = treeDiffTouchedNote
 	}
 	return marshalSourceHistory(display, out)
+}
+
+func sideHolds(side sourceledger.ComparisonSide, text string) bool {
+	return (side.Availability == sourceledger.ContentAvailable || side.Availability == sourceledger.ContentAbsent) && side.Content == text
+}
+
+func treeSideName(side, versionID string) string {
+	if versionID == "" {
+		return side
+	}
+	return versionID + ", " + side
 }
 
 func treeDiffLabel(display, side string, absent bool) string {
@@ -175,8 +211,8 @@ func treeDiffLabel(display, side string, absent bool) string {
 }
 
 func joinNotes(first, second string) string {
-	if first == "" {
-		return second
+	if first == "" || second == "" {
+		return first + second
 	}
 	return first + "; " + second
 }

@@ -269,13 +269,71 @@ func TestSourceHistoryDiffACDF15UnchangedPathKeepsTheLedgerAnswer(t *testing.T) 
 	}
 }
 
-func TestSourceHistoryDiffACDF15PathWithAnEffectKeepsTheLedgerAnswer(t *testing.T) {
+// A generator rewrote the file after the agent's last recorded write, so the live
+// side is the generator's and no version holds it.
+func TestSourceHistoryDiffACDF16LiveFileWinsOverTheRecord(t *testing.T) {
 	h := newHistoryHarness(t)
 	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
-	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, HasBefore: true, HasAfter: true}}
+	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "generated\n", HasBefore: true, HasAfter: true}}
 	result := runTreeDiff(t, h, tree, "native.go")
-	if result.Unrecorded || !result.Recorded || tree.calls != 0 {
-		t.Fatalf("result = %+v after %d comparisons, want the ledger's own diff", result, tree.calls)
+	if !result.Recorded || result.Unrecorded || result.VersionID != "" || result.BaseVersionID == "" || result.Note != treeDiffPastRecordNote {
+		t.Fatalf("result = %+v, want the ledger's baseline, no live version and the note", result)
+	}
+	removed, added := diffChanges(result.Diff)
+	if fmt.Sprint(removed) != "[before]" || fmt.Sprint(added) != "[generated]" {
+		t.Fatalf("removed %q added %q in %q", removed, added, result.Diff)
+	}
+}
+
+func TestSourceHistoryDiffACDF16LiveFileAtItsRecordNamesTheVersions(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
+	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "native\n", HasBefore: true, HasAfter: true}}
+	result := runTreeDiff(t, h, tree, "native.go")
+	if !result.Recorded || result.Unrecorded || result.VersionID == "" || result.BaseVersionID == "" || result.Note != "" {
+		t.Fatalf("result = %+v, want both versions named", result)
+	}
+}
+
+func TestSourceHistoryDiffACDF16BaselineTheLedgerCannotVouchForNamesNoVersion(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
+	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "older\n", After: "native\n", HasBefore: true, HasAfter: true}}
+	result := runTreeDiff(t, h, tree, "native.go")
+	if result.BaseVersionID != "" || result.VersionID == "" {
+		t.Fatalf("result = %+v, want no base version for bytes the ledger does not hold", result)
+	}
+}
+
+func TestSourceHistoryDiffACDF16PathMatchingItsBaselineKeepsTheLedgerAnswer(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
+	result := runTreeDiff(t, h, &fakeTree{}, "native.go")
+	if !result.Recorded || result.Unrecorded || result.VersionID == "" || result.Diff == "" {
+		t.Fatalf("result = %+v, want the ledger's own diff", result)
+	}
+}
+
+// The ledger rejecting its own record does not stop the tree from answering, and
+// still reaches the caller when the tree has nothing to say.
+func TestSourceHistoryDiffACDF16LedgerRejectionYieldsToTheTree(t *testing.T) {
+	seed := func(h *historyHarness) {
+		h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
+		testutil.FailErr(t, "drop stored content", os.RemoveAll(h.blobs))
+	}
+	h := newHistoryHarness(t)
+	seed(h)
+	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "generated\n", HasBefore: true, HasAfter: true}}
+	result := runTreeDiff(t, h, tree, "native.go")
+	if !result.Recorded || result.VersionID != "" || result.BaseVersionID != "" || result.Note != treeDiffPastRecordNote || result.Diff == "" {
+		t.Fatalf("result = %+v, want the tree's diff with no versions", result)
+	}
+
+	h = newHistoryHarness(t)
+	seed(h)
+	h.writeFile("native.go", "on disk\n")
+	if out, err := h.tool.Run(t.Context(), map[string]any{"path": "native.go", "mode": "diff"}, h.workerWith(&fakeTree{})); err == nil {
+		t.Fatalf("diff = %q, want the ledger's rejection when the tree has nothing to say", out)
 	}
 }
 
