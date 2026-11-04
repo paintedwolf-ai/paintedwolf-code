@@ -69,17 +69,6 @@ func UnionCloseoutEvidence(ctx context.Context, reader CloseoutEvidenceReader, p
 	return out, nil
 }
 
-// WindowHasCitableObservations reports a tool row in the current intent window
-// that minted evidence. Control tools mint none.
-func WindowHasCitableObservations(history []api.Message) bool {
-	for _, msg := range history[max(api.UserIntentBoundary(history), 0):] {
-		if msg.Role == api.MessageRoleTool && len(msg.EvidenceHandles) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 // userIntentTime is when the current user intent arrived, or zero when the
 // history holds none and every leg of the session counts.
 func userIntentTime(history []api.Message) time.Time {
