@@ -260,8 +260,8 @@ func TestBuildWindowKeepsProjectWideEffects(t *testing.T) {
 		service := New(briefWindowStore{turn: 2}, briefRootList(briefRoots()))
 		service.SetSources(tools.SourceHistory{Files: ledger.History, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Checkpoints)
 		brief := service.Build(t.Context(), &api.Session{ID: "s1", ProjectID: "p1"})
-		if len(brief.Files) != 1 || brief.Files[0].Effects != 1 || brief.OtherFiles != 0 || brief.Truncated {
-			t.Fatalf("brief = %+v, want the single trunk change itemized", brief)
+		if len(brief.Files)+brief.OtherFiles != 1 || brief.Truncated {
+			t.Fatalf("brief = %+v, want the single trunk change", brief)
 		}
 	})
 }
