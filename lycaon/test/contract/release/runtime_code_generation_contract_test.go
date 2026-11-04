@@ -57,4 +57,3 @@ func goList(t *testing.T, root, goos string, args ...string) string {
 	}
 	return string(out)
 }
-
