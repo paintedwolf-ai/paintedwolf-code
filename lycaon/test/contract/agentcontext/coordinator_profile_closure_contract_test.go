@@ -37,6 +37,8 @@ var coordinatorPromptlessAllowlist = map[string]string{
 	"jq_edit":             "structured document write on implement_investigate; calling convention in tool schema",
 	"process_list":        "implement_investigate surface; orchestrate modes delegate via task()",
 	"process_signal":      "implement_investigate surface; orchestrate modes delegate via task()",
+	"command_output":      "inspects retained foreground command continuations",
+	"command_stop":        "stops retained foreground command continuations",
 	"delegate_dispatch":   "delegation primitive; calling convention covered by topology docs",
 	"task":                "delegation primitive; surfaced via leg-finished kick",
 	"workflow_persist":    "low-level upsert; coordinator uses compose/compose_from_template instead",
