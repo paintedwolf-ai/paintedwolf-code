@@ -132,15 +132,14 @@ function manualCompletions(request: APIRequestContext, sessionId: string) {
   };
   return {
     waitForNextRequest: nextRequest,
-    // The handle the host stamped on a settled result.
-    async evidenceHandle(callId: string) {
-      const response = await request.get(`${apiUrl}/v1/sessions/${sessionId}/messages`, { headers });
+    // The handle the model is shown on the latest tool result of its next request.
+    async latestHandle() {
+      const response = await request.get(`${apiUrl}/harness/llm/pending?wait=30000&session_id=${sessionId}`, { headers });
       expect(response.ok(), await response.text()).toBeTruthy();
-      const { messages } = (await response.json()) as {
-        messages: Array<{ evidence_handles?: string[]; tool_result?: { tool_call_id?: string } }>;
-      };
-      const handle = messages.find((row) => row.tool_result?.tool_call_id === callId)?.evidence_handles?.[0];
-      expect(handle).toBeTruthy();
+      const { messages } = (await response.json()) as { messages: Array<{ role: string; content: string }> };
+      const result = messages.filter((row) => row.role === "tool").at(-1)?.content ?? "";
+      const handle = result.match(/\[([a-z_-]+#\d+)\]/)?.[1];
+      expect(handle, result).toBeTruthy();
       return handle!;
     },
     async respond(content: string, calls: Array<{ name: string; args: Record<string, unknown> }> = []) {
@@ -240,7 +239,7 @@ webE2e.describe("agent mid-turn note", () => {
         await expect(notes.filter({ hasText: "I'll look at the auth path." })).toHaveCount(1, { timeout: 30_000 });
         await expect(notes.first().getByTestId("citation-evidence-chicklet")).toHaveCount(0);
         await driver.completed(firstRead!);
-        const handle = await llm.evidenceHandle(firstRead!);
+        const handle = await llm.latestHandle();
 
         // After an observation: uncited text stays out of the transcript.
         await llm.respond("This uncited claim stays private.", [read]);
