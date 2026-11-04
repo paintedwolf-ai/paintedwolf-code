@@ -108,6 +108,9 @@ class KilledMountOwnerTests(unittest.TestCase):
             if not alive(report["pid"]) or sys.platform == "darwin":
                 run_lease.force_unmount(report["mount"])
             time.sleep(0.05)
+        # Its lease stays held until it exits, and collection leaves a held run alone.
+        while alive(report["pid"]) and time.monotonic() < deadline:
+            time.sleep(0.05)
 
     def capability(self, run):
         path = self.queue.root / f"fixture-{run.name}.resource"
