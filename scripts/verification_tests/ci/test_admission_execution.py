@@ -22,7 +22,7 @@ class AdmissionTests(unittest.TestCase):
         scope = dict(full=False, paths=['lycaon-den/src/a.ts'])
         lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
         # Any Den source can change the DOM a screen reader queries.
-        self.assertEqual(lanes, {'limits', 'contracts', 'integration-build', 'frontend', 'behavior', 'webkit-gtk'})
+        self.assertEqual(lanes, {'limits', 'build', 'frontend', 'behavior', 'webkit-gtk'})
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
         self.assertIn('behavior', full)
         self.assertIn('runner', full)
@@ -60,7 +60,7 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(impact.broad_scope(paths), (False, []))
         scope = dict(full=False, paths=paths)
         lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
-        self.assertEqual(lanes, {'limits', 'contracts', 'integration-build', 'behavior'})
+        self.assertEqual(lanes, {'limits', 'build', 'behavior'})
         with patch.object(impact.subprocess, 'run') as run:
             run.return_value = impact.subprocess.CompletedProcess([], 0, stdout=json.dumps({
                 'ImportPath': 'github.com/lycaon/lycaon/test/smoke', 'Dir': str(impact.ROOT / 'lycaon/test/smoke')}))

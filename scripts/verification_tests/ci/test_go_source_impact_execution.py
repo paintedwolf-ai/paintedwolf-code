@@ -8,7 +8,7 @@ from ci_policy import hosted_plan, impact
 
 class GoSourceImpactTests(unittest.TestCase):
     def test_go_source_roots_keep_the_backend_lanes(self):
-        expected = {"limits", "contracts", "integration-build", "behavior", "lint", "vulnerabilities", "command-scale"}
+        expected = {"limits", "build", "behavior", "lint", "vulnerabilities", "command-scale"}
         for path in ["lycaon/internal/a/a.go", "lycaon/cmd/engine/main.go",
                      "lycaon/test/contract/release/corpus_test.go", "lycaon/test/wiring/host_test.go",
                      "lycaon/test/security/scan_test.go", "lycaon/test/contract/snapshot_test.go"]:

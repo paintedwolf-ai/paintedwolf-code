@@ -151,15 +151,15 @@ class MeasuredTimingsTests(unittest.TestCase):
         lanes = hosted_plan.lanes()
         unmeasured = hosted_plan.matrix("integration")["include"]
         measured = {row["timing_row"]: 60 for row in unmeasured}
-        measured.update({"contracts": 300, "frontend": 800, "native": 600, "runner": 320, "webkit-gtk": 900})
+        measured.update({"build": 300, "frontend": 800, "native": 600, "runner": 320, "webkit-gtk": 900})
         rows = hosted_plan.matrix("integration", timings={"lanes": measured, "packages": {}})["include"]
         selection = lambda rows: sorted((row["lane"], row["shard"], row["minutes"]) for row in rows)
         self.assertEqual(selection(rows), selection(unmeasured))
         self.assertEqual({row["lane"] for row in rows[:3]}, {"limits", "lint", "runner"})
-        rest = [row["lane"] for row in rows if lanes[row["lane"]].get("priority", "normal") in {"compile", "normal"}]
-        self.assertEqual(rest[:3], ["native", "webkit-gtk", "frontend"])
+        rest = [row["lane"] for row in rows if lanes[row["lane"]].get("priority", "normal") == "normal"]
+        self.assertEqual(rest[:3], ["webkit-gtk", "frontend", "native"])
         self.assertLess([row["lane"] for row in rows].index("runner"),
-                        [row["lane"] for row in rows].index("contracts"))
+                        [row["lane"] for row in rows].index("build"))
 
     def test_plan_without_measurements_orders_by_budget(self):
         data = copy.deepcopy(planning.catalog())
