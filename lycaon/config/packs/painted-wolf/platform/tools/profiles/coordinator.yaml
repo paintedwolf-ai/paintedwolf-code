@@ -30,7 +30,7 @@ tools:
   fanout_plan: sticky
   submit_verdict: sticky
   state_start: sticky
-  source_history: true
+  source_history: sticky
   git_checkout: sticky
   git_merge: sticky
   git_stash: sticky

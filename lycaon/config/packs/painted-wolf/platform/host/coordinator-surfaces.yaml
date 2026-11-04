@@ -88,6 +88,7 @@ implement_investigate:
     - recall
     - command
     - summarize
+    - source_history
     - skills_read
     - update_progress
     - ask_user
@@ -102,7 +103,6 @@ implement_investigate:
     - restore_version
     - code_rewrite
     - jq_edit
-    - source_history
     - chmod
     - chown
     # process and terminal
@@ -275,13 +275,13 @@ observe_investigate:
     - command
     - summarize
     - survey_repo
+    - source_history
     - skills_read
     - update_progress
     - ask_user
     - surface_note
     - request_tools
   loadable:
-    - source_history
     - scan_pack
     - scan_query
     - scan_summary
