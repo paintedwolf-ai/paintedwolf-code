@@ -69,7 +69,29 @@ type SnapshotBudget = {
   remaining: number;
   nodeCount: number;
   truncated: boolean;
+  minLeft: number;
+  minTop: number;
+  maxRight: number;
+  maxBottom: number;
 };
+
+type CompactRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function compactRect(el: Element): CompactRect | undefined {
+  const box = el.getBoundingClientRect();
+  if (!(box.width > 0 || box.height > 0)) return undefined;
+  return {
+    x: Math.round(box.x),
+    y: Math.round(box.y),
+    width: Math.round(box.width),
+    height: Math.round(box.height),
+  };
+}
 
 /** Elements whose text never renders: code, styles, and inert templates. */
 const NON_RENDERING = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"]);
@@ -142,6 +164,7 @@ function interactiveMap(): { items: Json[]; truncated: boolean } {
       name: name || undefined,
       testid: el.getAttribute("data-testid") || undefined,
       disabled: isDisabled(el),
+      rect: compactRect(el),
     });
     if (out.length >= 40) return { items: out, truncated: true };
   }
@@ -172,6 +195,13 @@ function a11yNode(el: Element, depth: number, budget: SnapshotBudget): Json | nu
   budget.nodeCount++;
   const role = el.getAttribute("role") || el.tagName.toLowerCase();
   const name = boundedAccessibleName(el, MAX_SNAPSHOT_NAME);
+  const rect = compactRect(el);
+  if (rect) {
+    budget.minLeft = Math.min(budget.minLeft, rect.x);
+    budget.minTop = Math.min(budget.minTop, rect.y);
+    budget.maxRight = Math.max(budget.maxRight, rect.x + rect.width);
+    budget.maxBottom = Math.max(budget.maxBottom, rect.y + rect.height);
+  }
   const kids: Json[] = [];
   let inspectedChildren = 0;
   for (const child of el.children) {
@@ -189,8 +219,38 @@ function a11yNode(el: Element, depth: number, budget: SnapshotBudget): Json | nu
     role,
     name: name || undefined,
     testid: el.getAttribute("data-testid") || undefined,
+    rect,
     children: kids.length ? kids : undefined,
     children_omitted: omitted > 0 ? omitted : undefined,
+  };
+}
+
+function viewportSummary(budget: SnapshotBudget): Json {
+  const doc = document.documentElement;
+  const body = document.body;
+  const width = Math.round(window.innerWidth || doc?.clientWidth || 0);
+  const height = Math.round(window.innerHeight || doc?.clientHeight || 0);
+  const scrollWidth = Math.max(
+    width,
+    Math.round(doc?.scrollWidth || 0),
+    Math.round(body?.scrollWidth || 0),
+    Math.round(budget.maxRight),
+  );
+  const scrollHeight = Math.max(
+    height,
+    Math.round(doc?.scrollHeight || 0),
+    Math.round(body?.scrollHeight || 0),
+    Math.round(budget.maxBottom),
+  );
+  const overflowX = width > 0 && (scrollWidth > width + 1 || budget.minLeft < -1);
+  const overflowY = height > 0 && (scrollHeight > height + 1 || budget.minTop < -1);
+  return {
+    width,
+    height,
+    scroll_width: scrollWidth,
+    scroll_height: scrollHeight,
+    overflow_x: overflowX || undefined,
+    overflow_y: overflowY || undefined,
   };
 }
 
@@ -199,11 +259,17 @@ export function readSnapshot(): Json {
     remaining: MAX_SNAPSHOT_NODES,
     nodeCount: 0,
     truncated: false,
+    minLeft: 0,
+    minTop: 0,
+    maxRight: 0,
+    maxBottom: 0,
   };
+  const tree = a11yNode(document.body, 0, budget);
   return {
     url: location.href.slice(0, MAX_URL_LENGTH),
     title: document.title.slice(0, MAX_TITLE_LENGTH),
-    tree: a11yNode(document.body, 0, budget),
+    viewport: viewportSummary(budget),
+    tree,
     node_count: budget.nodeCount,
     truncated: budget.truncated || undefined,
   };

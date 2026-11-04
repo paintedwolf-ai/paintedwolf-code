@@ -19,17 +19,24 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 	var reasoningDetails []json.RawMessage
 	var usage TokenUsage
 	var attemptUsage *TokenUsage
-	var providerID, model string
+	var providerID, model, finishReason string
 	var fallback, scripted bool
 	for chunk := range ch {
-		if chunk.ResetReasoning {
+		if chunk.ResetAttempt() {
+			content.Reset()
+			tokens = nil
 			reasoning.Reset()
 			reasoningDetails = nil
+			toolCalls = nil
 			attemptUsage = &TokenUsage{}
+			finishReason = ""
 		}
 		if chunk.ProviderID != "" {
 			providerID = chunk.ProviderID
 			model = chunk.Model
+		}
+		if chunk.FinishReason != "" {
+			finishReason = chunk.FinishReason
 		}
 		fallback = fallback || chunk.Fallback
 		scripted = scripted || chunk.Scripted
@@ -63,6 +70,7 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 				AttemptUsage:     attemptUsage,
 				ProviderID:       providerID,
 				Model:            model,
+				FinishReason:     finishReason,
 				Fallback:         fallback,
 				Scripted:         scripted,
 			}, tokens, chunk.Err
@@ -80,6 +88,7 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 		AttemptUsage:     attemptUsage,
 		ProviderID:       providerID,
 		Model:            model,
+		FinishReason:     finishReason,
 		Fallback:         fallback,
 		Scripted:         scripted,
 	}, tokens, nil
@@ -94,7 +103,7 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 	var reasoningDetails []json.RawMessage
 	var usage TokenUsage
 	var attemptUsage *TokenUsage
-	var providerID, model string
+	var providerID, model, finishReason string
 	var fallback, scripted bool
 	snapshot := func() *Completion {
 		return &Completion{
@@ -106,19 +115,27 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 			AttemptUsage:     attemptUsage,
 			ProviderID:       providerID,
 			Model:            model,
+			FinishReason:     finishReason,
 			Fallback:         fallback,
 			Scripted:         scripted,
 		}
 	}
 	for chunk := range ch {
-		if chunk.ResetReasoning {
+		if chunk.ResetAttempt() {
+			content.Reset()
+			tokens = nil
 			reasoning.Reset()
 			reasoningDetails = nil
+			toolCalls = nil
 			attemptUsage = &TokenUsage{}
+			finishReason = ""
 		}
 		if chunk.ProviderID != "" {
 			providerID = chunk.ProviderID
 			model = chunk.Model
+		}
+		if chunk.FinishReason != "" {
+			finishReason = chunk.FinishReason
 		}
 		fallback = fallback || chunk.Fallback
 		scripted = scripted || chunk.Scripted
@@ -145,7 +162,7 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 		if chunk.Err != nil {
 			return snapshot(), tokens, chunk.Err
 		}
-		if onProgress != nil && (chunk.Content != "" || chunk.Reasoning != "" || len(chunk.ToolCalls) > 0) {
+		if onProgress != nil && (chunk.ResetAttempt() || chunk.Content != "" || chunk.Reasoning != "" || len(chunk.ToolCalls) > 0) {
 			onProgress(snapshot())
 		}
 		if chunk.Done {

@@ -78,7 +78,7 @@ func splitRevisionRange(spec string) (left, right, sep string, ok bool) {
 // compared with its first parent; a local branch other than the checked-out one
 // with HEAD from their merge base; A..B compares A with B and A...B the merge base
 // with B. found is false when the spec names nothing here.
-func (m *Manager) ResolveRevision(ctx context.Context, projectDir, spec string) (RevisionComparison, bool, error) {
+func (m *gitCommitManager) ResolveRevision(ctx context.Context, projectDir, spec string) (RevisionComparison, bool, error) {
 	if !ValidRevisionSpec(spec) {
 		return RevisionComparison{}, false, ErrRevisionSpecRejected
 	}
@@ -99,7 +99,7 @@ func (m *Manager) ResolveRevision(ctx context.Context, projectDir, spec string) 
 	return m.resolveCommitRevision(ctx, dir, spec)
 }
 
-func (m *Manager) resolveCommitRevision(ctx context.Context, dir, spec string) (RevisionComparison, bool, error) {
+func (m *gitCommitManager) resolveCommitRevision(ctx context.Context, dir, spec string) (RevisionComparison, bool, error) {
 	oid, found, err := revisionCommit(ctx, dir, spec)
 	if err != nil || !found {
 		return RevisionComparison{}, false, err
@@ -114,7 +114,7 @@ func (m *Manager) resolveCommitRevision(ctx context.Context, dir, spec string) (
 }
 
 // The checked-out branch has nothing beyond HEAD, so its tip commit stands for it.
-func (m *Manager) resolveBranchRevision(ctx context.Context, dir, branch, tip string) (RevisionComparison, bool, error) {
+func (m *gitCommitManager) resolveBranchRevision(ctx context.Context, dir, branch, tip string) (RevisionComparison, bool, error) {
 	current, err := currentBranchRef(ctx, dir)
 	if err != nil {
 		return RevisionComparison{}, false, err
@@ -138,7 +138,7 @@ func (m *Manager) resolveBranchRevision(ctx context.Context, dir, branch, tip st
 	return RevisionComparison{Spec: branch, Kind: RevisionBranch, Label: branch + "...HEAD", Before: base, After: head}, true, nil
 }
 
-func (m *Manager) resolveRevisionRange(ctx context.Context, dir, spec, left, right, sep string) (RevisionComparison, bool, error) {
+func (m *gitCommitManager) resolveRevisionRange(ctx context.Context, dir, spec, left, right, sep string) (RevisionComparison, bool, error) {
 	// Git reads an omitted side as HEAD.
 	if left == "" {
 		left = "HEAD"
@@ -163,7 +163,7 @@ func (m *Manager) resolveRevisionRange(ctx context.Context, dir, spec, left, rig
 	return RevisionComparison{Spec: spec, Kind: RevisionRange, Label: left + sep + right, Before: before, After: after}, true, nil
 }
 
-func (m *Manager) commitAgainstParent(ctx context.Context, dir, oid string) (RevisionComparison, error) {
+func (m *gitCommitManager) commitAgainstParent(ctx context.Context, dir, oid string) (RevisionComparison, error) {
 	details, err := m.CommitDetails(ctx, dir, oid)
 	if err != nil {
 		return RevisionComparison{}, err

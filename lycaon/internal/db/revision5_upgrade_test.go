@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/db/migrations"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -122,6 +124,45 @@ func TestRevision5AdmitsLinksAndKeepsSourceIdentities(t *testing.T) {
 	}
 	_, err = upgraded.Exec(`INSERT INTO source_files(id,project_id,entry_kind,created_ts) VALUES('new-link','fixture-project','link','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "record link entry after upgrade", err)
+}
+
+func TestRevision5BackfillsSessionProgressIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	source := releasedRevision4Store(t, path)
+	_, err := source.ExecContext(t.Context(), `
+		INSERT INTO sessions(id,project_id,owner_person_id,posture,created_at,activity_at,updated_at) VALUES('sess-checklist','fixture-project',(SELECT id FROM people WHERE role='owner'),'build','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+		INSERT INTO sessions(id,project_id,owner_person_id,posture,created_at,activity_at,updated_at) VALUES('sess-empty','fixture-project',(SELECT id FROM people WHERE role='owner'),'build','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+		INSERT INTO session_progress(session_id,workflow_run_id,content,updated_at) VALUES('sess-checklist','run-1',char(35,32)||'Goal'||char(10,10)||'Ship'||char(10,10,35,35,32)||'Progress'||char(10)||'- [x] First'||char(10)||'- [ ] Second'||char(10)||'- [~] Third','2026-01-01T00:00:00Z');
+		INSERT INTO session_progress(session_id,workflow_run_id,content,updated_at) VALUES('sess-empty','run-1',char(35,32)||'Goal'||char(10,10)||'Empty'||char(10,10,35,35,32)||'Progress'||char(10),'2026-01-01T00:00:00Z'`)
+	testutil.FailErr(t, "seed released progress rows", err)
+	testutil.FailErr(t, "close source", source.Close())
+	testutil.FailErr(t, "upgrade released source", UpgradeStaged(t.Context(), path))
+	testutil.FailErr(t, "restart upgraded store", UpgradeStaged(t.Context(), path))
+	upgraded, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open upgraded store", err)
+	defer upgraded.Close()
+	var itemIDsRaw string
+	var docVer int64
+	testutil.FailErr(t, "read backfilled checklist row", upgraded.QueryRow(`SELECT item_ids_json, document_version FROM session_progress WHERE session_id='sess-checklist'`).Scan(&itemIDsRaw, &docVer))
+	var ids []string
+	testutil.FailErr(t, "decode backfilled item_ids_json", json.Unmarshal([]byte(itemIDsRaw), &ids))
+	if len(ids) != 3 || docVer != 1 {
+		t.Fatalf("backfilled ids=%v docVer=%d, want 3 ids and version 1", ids, docVer)
+	}
+	seen := map[string]struct{}{}
+	for _, id := range ids {
+		if _, err := uuid.Parse(id); err != nil {
+			t.Fatalf("backfilled id %q is not a UUID: %v", id, err)
+		}
+		if _, dup := seen[id]; dup {
+			t.Fatalf("duplicate backfilled id %q", id)
+		}
+		seen[id] = struct{}{}
+	}
+	testutil.FailErr(t, "read empty checklist row", upgraded.QueryRow(`SELECT item_ids_json, document_version FROM session_progress WHERE session_id='sess-empty'`).Scan(&itemIDsRaw, &docVer))
+	if itemIDsRaw != "[]" || docVer != 1 {
+		t.Fatalf("empty checklist item_ids_json=%q docVer=%d, want [] and 1", itemIDsRaw, docVer)
+	}
 }
 
 // A store claiming revision 5 with the revision-4 shape is an unknown shape:

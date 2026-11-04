@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -24,7 +25,7 @@ func (m *Service) ObserveToolCall(ctx context.Context, sess *api.Session, tctx t
 }
 
 func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string) {
-	if m.skillBody == nil {
+	if m.skillBody == nil || m.skills == nil {
 		return
 	}
 	catalog, err := turnload.LoadCatalog()
@@ -41,6 +42,7 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 		return
 	}
 	roster, _ := m.skills(ctx, sess, tctx.Identity.Agent, roots)
+	roster = eligibleSkillsForOfferedTools(roster, m.toolEventOfferedTools(ctx, sess, tctx, tool, len(roots)))
 	card := turnload.ToolCard{Name: tool, Description: m.toolDescription(ctx, sess, tctx.Identity.Agent, tool)}
 	finishDeciding := m.beginDeciding(ctx, sess, sess.ID, api.TurnLoadTriggerToolEvent, tctx.Identity.ToolCallID)
 	outcome := turnload.RankToolEvent(ctx, m.Decider(), catalog.ToolEvent, request, card, roster)
@@ -77,6 +79,32 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 		"elapsed_ms", time.Since(started).Milliseconds())
 }
 
+func (m *Service) toolEventOfferedTools(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string, rootCount int) map[string]bool {
+	floor, _, _ := m.turnToolSets(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, rootCount)
+	offered := nameSet(floor)
+	for _, name := range tctx.Turn.TurnOfferedToolNames {
+		if name = strings.TrimSpace(name); name != "" {
+			offered[name] = true
+		}
+	}
+	for _, name := range tctx.Turn.TurnToolPlan.ImmediateNames() {
+		if name = strings.TrimSpace(name); name != "" {
+			offered[name] = true
+		}
+	}
+	if m != nil && m.Ledger != nil && sess != nil {
+		for name := range m.Ledger.Active(sess.ID) {
+			offered[name] = true
+		}
+	}
+	for _, with := range toolcontract.WithCompanions([]string{tool}) {
+		if with = strings.TrimSpace(with); with != "" {
+			offered[with] = true
+		}
+	}
+	return offered
+}
+
 // renderToolEventSkill reads the selected skill's body into the turn; a body
 // that fails to render leaves the turn without a skill.
 func (m *Service) renderToolEventSkill(ctx context.Context, sessionID string, tctx tools.ToolContext, tool string, read turnload.SkillRank, roster []skills.Skill) *turnload.SkillPreload {
@@ -92,7 +120,13 @@ func (m *Service) renderToolEventSkill(ctx context.Context, sessionID string, tc
 		if strings.TrimSpace(body) == "" {
 			return nil
 		}
-		preload := &turnload.SkillPreload{Name: read.Name, Score: read.Score, Body: body, Tool: tool}
+		preload := &turnload.SkillPreload{
+			Name:      read.Name,
+			Score:     read.Score,
+			Body:      body,
+			Tool:      tool,
+			Resources: append([]string(nil), roster[i].Resources...),
+		}
 		m.Ledger.SetPreload(sessionID, preload)
 		return preload
 	}
@@ -102,6 +136,9 @@ func (m *Service) renderToolEventSkill(ctx context.Context, sessionID string, tc
 // toolDescription is the bounded description the engine reads for a tool,
 // from the same policy that offers the tool to the prompt.
 func (m *Service) toolDescription(ctx context.Context, sess *api.Session, profileID, tool string) string {
+	if m == nil || m.policy == nil {
+		return ""
+	}
 	policy := m.policy()
 	if policy == nil {
 		return ""

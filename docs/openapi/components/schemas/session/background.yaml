@@ -35,6 +35,6 @@ components:
           pattern: '^[A-Za-z0-9_.:-]+$'
         capability:
           type: string
-          enum: [process_control, host_execution]
+          enum: [process_control, credential_store, host_execution]
         status:
           $ref: "#/components/schemas/SessionBackgroundDirectStatus"

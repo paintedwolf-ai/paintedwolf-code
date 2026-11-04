@@ -2,13 +2,24 @@ package worker
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
+	"reflect"
 	"strings"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/db"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerresults"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+const defaultRunStopReleaseTimeout = 5 * time.Second
 
 // WorkerRunStopSession records worker hold/cancel outcomes on the coordinator transcript.
 type WorkerRunStopSession interface {
@@ -22,11 +33,12 @@ type DelegationRunStopper interface {
 
 // RunStopService coordinates worker and delegation shutdown.
 type RunStopService struct {
-	Queue         WorkerQueue
-	Holds         WorkerRunStopSession
-	Cancellations WorkerCancellationProjection
-	Reports       ChangeReportDeps
-	Delegations   DelegationRunStopper
+	Queue          WorkerQueue
+	Holds          WorkerRunStopSession
+	Cancellations  WorkerCancellationProjection
+	Reports        ChangeReportDeps
+	Delegations    DelegationRunStopper
+	ReleaseTimeout time.Duration
 }
 
 // CancelWorkersByRunID cancels and settles every worker in the run.
@@ -38,17 +50,19 @@ func (s *RunStopService) CancelWorkersByRunID(ctx context.Context, runID, reason
 	if runID == "" {
 		return nil
 	}
-	tasks, err := s.Queue.ListByWorkflowRunID(ctx, runID,
+	tasks, err := s.Queue.ListByWorkflowRunID(context.WithoutCancel(ctx), runID,
 		api.WorkerStatusPending, api.WorkerStatusHeld, api.WorkerStatusRunning, api.WorkerStatusWaiting)
 	if err != nil {
 		return err
 	}
+	releaseCtx, cancel := s.releaseContext(ctx)
+	defer cancel()
 	var errs []error
-	if err := requestWorkerCancellations(ctx, s.Queue, tasks); err != nil {
+	if err := requestWorkerCancellations(releaseCtx, s.Queue, tasks); err != nil {
 		errs = append(errs, err)
 	}
 	for _, task := range tasks {
-		if err := s.cancelTask(ctx, task, reason); err != nil {
+		if err := s.cancelTask(releaseCtx, task, reason); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -64,13 +78,15 @@ func (s *RunStopService) SettleWorkerCancellationsByRunID(ctx context.Context, r
 	if runID == "" {
 		return nil
 	}
-	tasks, err := s.Queue.ListCancellationRequestsByRunID(ctx, runID)
+	tasks, err := s.Queue.ListCancellationRequestsByRunID(context.WithoutCancel(ctx), runID)
 	if err != nil {
 		return err
 	}
+	releaseCtx, cancel := s.releaseContext(ctx)
+	defer cancel()
 	var errs []error
 	for _, task := range tasks {
-		if err := s.cancelTask(ctx, task, reason); err != nil {
+		if err := s.cancelTask(releaseCtx, task, reason); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -117,22 +133,28 @@ func (s *RunStopService) cancelTask(ctx context.Context, task api.WorkerTask, re
 		return nil
 	}
 	if err := s.Queue.StopExecution(ctx, jobID); err != nil {
+		if isWorkerReleaseTimeout(ctx, err) {
+			slog.WarnContext(ctx, "fenced workflow worker did not exit within release timeout; poller will settle cancellation",
+				"component", "worker", "job_id", jobID, "workflow_run_id", task.WorkflowRunID)
+			return nil
+		}
 		return err
 	}
+	settleCtx := context.WithoutCancel(ctx)
 	if current, ok := s.Queue.Get(jobID); ok {
 		task = *current
 	}
 	if task.Status.IsTerminal() {
 		return nil
 	}
-	result := hostCancellationResult(ctx, task, reason, s.reports())
+	result := hostCancellationResult(settleCtx, task, reason, s.reports())
 	report := *result.ChangeReport
-	if err := s.Queue.FinishCanceled(ctx, jobID, &result); err != nil {
+	if err := s.Queue.FinishCanceled(settleCtx, jobID, &result); err != nil {
 		return err
 	}
 	sessionID := strings.TrimSpace(task.ParentSessionID)
 	if s.Cancellations != nil && sessionID != "" {
-		return s.Cancellations.Append(ctx, sessionID, workeroutcomes.CancellationInput{
+		return s.Cancellations.Append(settleCtx, sessionID, workeroutcomes.CancellationInput{
 			JobID:          jobID,
 			AgentType:      task.AgentType,
 			ChildSessionID: task.ChildSessionID,
@@ -142,6 +164,17 @@ func (s *RunStopService) cancelTask(ctx context.Context, task api.WorkerTask, re
 		})
 	}
 	return nil
+}
+
+func (s *RunStopService) releaseContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	timeout := defaultRunStopReleaseTimeout
+	if s != nil && s.ReleaseTimeout > 0 {
+		timeout = s.ReleaseTimeout
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (s *RunStopService) holdTask(ctx context.Context, task api.WorkerTask) error {
@@ -179,3 +212,94 @@ var _ interface {
 	HoldPendingWorkersByRunID(ctx context.Context, runID string) error
 	CancelDelegationsByRunID(ctx context.Context, runID string) error
 } = (*RunStopService)(nil)
+
+var (
+	errDecisionMissing     = errors.New("pending decision not found")
+	errDecisionJobMismatch = errors.New("pending decision belongs to another job")
+	errDecisionChanged     = errors.New("pending decision changed before resolution")
+)
+
+// DecisionStateError distinguishes an unchanged decision on a non-suspended job.
+type DecisionStateError struct {
+	JobID  string
+	Status string
+}
+
+func (e *DecisionStateError) Error() string {
+	return fmt.Sprintf("worker %s is %s, not suspended for a decision", e.JobID, e.Status)
+}
+
+// DecisionResolver commits a decision answer and worker resume.
+type DecisionResolver interface {
+	Resolve(context.Context, api.WorkerDecisionRequest, api.Message) error
+}
+
+// SQLDecisionResolver resolves decisions in one database transaction.
+type SQLDecisionResolver struct {
+	messages *sessionstore.SQL
+	queue    *SQLQueue
+}
+
+func NewSQLDecisionResolver(messages *sessionstore.SQL, queue *SQLQueue) *SQLDecisionResolver {
+	return &SQLDecisionResolver{messages: messages, queue: queue}
+}
+
+func (r *SQLDecisionResolver) Resolve(ctx context.Context, expected api.WorkerDecisionRequest, message api.Message) error {
+	if r == nil || r.messages == nil || r.queue == nil || r.messages.DB() == nil || r.messages.DB() != r.queue.db {
+		return fmt.Errorf("decision resolver not configured")
+	}
+	return r.resolve(ctx, expected, message)
+}
+
+func (r *SQLDecisionResolver) resolve(ctx context.Context, expected api.WorkerDecisionRequest, message api.Message) error {
+	childSessionID := strings.TrimSpace(expected.ChildSessionID)
+	jobID := strings.TrimSpace(expected.WorkerID)
+	err := r.messages.AppendMessagesWith(ctx, childSessionID, func(tx *sql.Tx) error {
+		queries := db.New(tx)
+		row, err := queries.GetWorkerDecision(ctx, childSessionID)
+		if db.IsNoRows(err) {
+			return errDecisionMissing
+		}
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(row.JobID) != jobID {
+			return errDecisionJobMismatch
+		}
+		var current api.WorkerDecisionRequest
+		if err := json.Unmarshal([]byte(row.DecisionJson), &current); err != nil {
+			return fmt.Errorf("decode decision: %w", err)
+		}
+		if !reflect.DeepEqual(current, expected) {
+			return errDecisionChanged
+		}
+		resumed, err := queries.ResumeWorkerJobDecision(ctx, db.ResumeWorkerJobDecisionParams{
+			ID:             jobID,
+			ChildSessionID: db.NullString(childSessionID),
+		})
+		if err != nil {
+			return err
+		}
+		if resumed != 1 {
+			job, loadErr := queries.GetWorkerJob(ctx, jobID)
+			if loadErr != nil {
+				return loadErr
+			}
+			return &DecisionStateError{JobID: jobID, Status: job.Status}
+		}
+		if err := queries.ClearWorkerOutcomeDelivery(ctx, jobID); err != nil {
+			return err
+		}
+		if err := jobstate.EnqueueJobEventTx(ctx, tx, r.queue.store.outbox, jobID); err != nil {
+			return err
+		}
+		return queries.DeleteWorkerDecision(ctx, childSessionID)
+	}, message)
+	if err != nil {
+		return err
+	}
+	r.queue.store.notify()
+	r.queue.PublishEnqueued(ctx, jobID)
+	r.queue.NotifyRunnable()
+	return nil
+}

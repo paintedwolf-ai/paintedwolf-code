@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -252,7 +252,7 @@ func TestSurfaceNoteThenSiblingToolContinues(t *testing.T) {
 	history := []api.Message{{
 		ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls,
 	}}
-	history, turnTools, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+	batchResult, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,
@@ -267,6 +267,9 @@ func TestSurfaceNoteThenSiblingToolContinues(t *testing.T) {
 		"",
 		nil,
 	)
+	history = batchResult.history
+	turnTools := batchResult.turnTools
+	breakLoop := batchResult.breakToolLoop
 	testutil.FailErr(t, "executeToolCallsInTurn", err)
 
 	if breakLoop {

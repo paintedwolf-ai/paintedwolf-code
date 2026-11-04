@@ -11,12 +11,14 @@ func (p Plan) BoundedRetainedStorage() bool {
 
 func (p Plan) reviewedRetainedRoute() bool {
 	const sourceID = "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
-	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "3a065b2adccf2628ce0e203a4e04962c974b462a7cae85e8996ba4e7696fe9e6"}) {
+	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "71741e5f8d9a6ead298d061e3726d0b045b32ca62570409144eb52a2740151f5"}) {
 		return false
 	}
 	if p.Source != manifestLayoutSource || p.CopyPlan() == nil || len(p.steps) != 1 {
 		return false
 	}
+	// The manifest writer bounds its re-derivable memos and maintains target
+	// indexes during insertion, preserving the source-sized sorter proof.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "3d9ef50b62e8914d35715d79b4cc5f4723c48b30b534fc6e230f870d44721f51"
+		p.steps[0].Checksum == "cb788e40a6e86625f2e9ec812cbcc54943c19e085791cdd05c285cb4eed4b30d"
 }

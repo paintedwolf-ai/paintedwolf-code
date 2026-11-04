@@ -43,20 +43,22 @@ type ParkedProgramResult struct {
 
 // programEvaluation is one bound program handed from its call to evaluation.
 type programEvaluation struct {
-	run          *programRun
-	call         *programCall
-	park         *programPark
-	plan         commandsurface.ProgramSnapshot
-	ports        commandprogram.EvaluationPorts
-	dispatcher   *ProgramDispatcher
-	stdout       *programStream
-	stderr       *programStream
-	outputs      *invocation.ProgramOutputRetention
-	scope        captureprojection.Scope
-	documents    *programDocuments
-	paths        *projectpaths.ProgramPaths
-	verification func() commandSourceIdentity
-	release      func()
+	ctx            context.Context
+	run            *programRun
+	call           *programCall
+	park           *programPark
+	plan           commandsurface.ProgramSnapshot
+	ports          commandprogram.EvaluationPorts
+	dispatcher     *ProgramDispatcher
+	stdout         *programStream
+	stderr         *programStream
+	outputs        *invocation.ProgramOutputRetention
+	scope          captureprojection.Scope
+	documents      *programDocuments
+	paths          *projectpaths.ProgramPaths
+	verification   func() commandSourceIdentity
+	failureAttempt *commandFailureAttempt
+	release        func()
 	// callTC is the call's own tool context; evaluation writes its effects to
 	// run.tc's private outcome until the result belongs to the call.
 	callTC tools.ToolContext
@@ -91,6 +93,11 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
 		out.CommandProgram, out.SourceRun = e.run.tc.Effects.Out.CommandProgram, e.run.tc.Effects.Out.SourceRun
+		out.Facts = out.Facts.Merge(e.run.tc.Effects.Out.Facts)
+		if e.run.tc.Effects.Out.ExternalAccess != nil {
+			out.ExternalAccess = e.run.tc.Effects.Out.ExternalAccess
+		}
+		out.SourceDeliveryHandles = append([]string(nil), e.run.tc.Effects.Out.SourceDeliveryHandles...)
 	}
 	return ending.result, ending.err
 }
@@ -131,8 +138,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		parked.Settle(settleCtx, ending.result, ending.err)
 	}()
 	if out := e.callTC.Effects.Out; out != nil {
-		if projection, err := r.Recorder.ProjectProgram(callCtx, run.tc.Identity.SessionID, programID, 1); err == nil {
-			receipt := projection.Program
+		if receipt, err := r.Recorder.ActivitySummary(callCtx, run.tc.Identity.SessionID, programID); err == nil {
 			out.CommandProgram = &receipt
 		}
 	}
@@ -212,7 +218,7 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 // finish evaluates the program under supervision, settles it and returns its
 // bounded result, whether the call still holds it or it parked.
 func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
-	run, ctx := e.run, e.call.ctx
+	run, ctx := e.run, e.ctx
 	defer e.call.end()
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, run.root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
@@ -256,6 +262,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	if settledNow {
+		recordProgramAttempt(r.FailureTracker, e.failureAttempt, ctx, outcome)
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
 	}
 	out, err := surveyjson.Marshal(outcome)

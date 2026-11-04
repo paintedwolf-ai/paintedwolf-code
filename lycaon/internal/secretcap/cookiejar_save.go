@@ -14,7 +14,7 @@ import (
 
 // SaveCookieJar atomically commits accepted cookie operations and their receipt.
 // Only persistence is locked; unchanged values still receive an operation receipt.
-func (s *Service) SaveCookieJar(ctx context.Context, req CookieJarRequest, jar *CookieJar) (*Metadata, error) {
+func (s *secretJarService) SaveCookieJar(ctx context.Context, req CookieJarRequest, jar *CookieJar) (*Metadata, error) {
 	if jar == nil {
 		return nil, nil
 	}
@@ -69,7 +69,7 @@ func (s *Service) SaveCookieJar(ctx context.Context, req CookieJarRequest, jar *
 	return &meta, err
 }
 
-func (s *Service) cookieJarSaveTarget(ctx context.Context, req CookieJarRequest, jar *CookieJar) (db.ManagedSecrets, bool, error) {
+func (s *secretJarService) cookieJarSaveTarget(ctx context.Context, req CookieJarRequest, jar *CookieJar) (db.ManagedSecrets, bool, error) {
 	var row db.ManagedSecrets
 	var found bool
 	var err error
@@ -88,7 +88,7 @@ func (s *Service) cookieJarSaveTarget(ctx context.Context, req CookieJarRequest,
 	return row, found, err
 }
 
-func (s *Service) cookieJarCurrent(ctx context.Context, id string) (db.ManagedSecretVersions, []httpcookies.Cookie, error) {
+func (s *secretJarService) cookieJarCurrent(ctx context.Context, id string) (db.ManagedSecretVersions, []httpcookies.Cookie, error) {
 	current, found, err := s.currentVersion(ctx, id)
 	if err != nil {
 		return current, nil, err
@@ -107,7 +107,7 @@ func (s *Service) cookieJarCurrent(ctx context.Context, id string) (db.ManagedSe
 	return current, cookies, nil
 }
 
-func (s *Service) createCookieJar(ctx context.Context, req CookieJarRequest, jar *CookieJar, merged *httpcookies.Store) (*Metadata, error) {
+func (s *secretJarService) createCookieJar(ctx context.Context, req CookieJarRequest, jar *CookieJar, merged *httpcookies.Store) (*Metadata, error) {
 	if len(merged.Snapshot()) == 0 {
 		return nil, s.inTx(ctx, s.cookieJarSaveRecorder(ctx, req, ""))
 	}
@@ -137,7 +137,7 @@ func (s *Service) createCookieJar(ctx context.Context, req CookieJarRequest, jar
 	return &meta, err
 }
 
-func (s *Service) cookieJarSaveRecorder(ctx context.Context, req CookieJarRequest, id string) func(*db.Queries) error {
+func (s *secretJarService) cookieJarSaveRecorder(ctx context.Context, req CookieJarRequest, id string) func(*db.Queries) error {
 	return func(q *db.Queries) error {
 		return q.CreateCookieJarSave(ctx, db.CreateCookieJarSaveParams{
 			ProjectID: req.ProjectID, ChatSessionID: req.ChatSessionID, SessionID: req.SessionID,
@@ -146,7 +146,7 @@ func (s *Service) cookieJarSaveRecorder(ctx context.Context, req CookieJarReques
 	}
 }
 
-func (s *Service) cookieJarSavedOperation(ctx context.Context, req CookieJarRequest, jar *CookieJar) (*Metadata, bool, error) {
+func (s *secretJarService) cookieJarSavedOperation(ctx context.Context, req CookieJarRequest, jar *CookieJar) (*Metadata, bool, error) {
 	saved, err := s.queries.GetCookieJarSave(ctx, db.GetCookieJarSaveParams{
 		ProjectID: req.ProjectID, SessionID: req.SessionID, OperationID: req.OperationID,
 	})

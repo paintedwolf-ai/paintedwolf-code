@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
@@ -39,7 +41,6 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"os"
 )
 
 func (b *serveBuilder) wireRuntimeServices() error {
@@ -64,7 +65,7 @@ func (b *serveBuilder) wireRuntimeServices() error {
 func (b *serveBuilder) wireRuntimeObservers() error {
 	b.sessions.Manager.SetEventPublisher(b.events.Publisher)
 	b.delegations.Queue.SetEventPublisher(b.events.Publisher)
-	releaseObservers := observations.Bind(b.events.Publisher, b.storage.Sessions, b.boards.Progress, b.workflows.Store.Runs, b.sessions.Manager.Coordinator.ProgressClosure.AfterWrite, b.boards.RepoProvider, b.execution.Host.Survey.InvalidateFileAge, b.providers.Service)
+	releaseObservers := observations.Bind(b.events.Publisher, b.storage.Sessions, b.boards.Progress, b.workflows.Store.Runs, b.boards.RepoProvider, b.execution.Host.Survey.InvalidateFileAge, b.providers.Service)
 	b.startup.resources.Track("runtime-observers", 22, releaseObservers)
 	return nil
 }

@@ -1,7 +1,11 @@
 package search
 
 import (
+	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -34,11 +38,11 @@ func TestRgJSONMessages(t *testing.T) {
 {"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":32,"bytes_printed":453,"matched_lines":2,"matches":3}}}
 {"data":{"elapsed_total":{},"stats":{"bytes_printed":453,"bytes_searched":32,"elapsed":{},"matched_lines":2,"matches":3,"searches":1,"searches_with_match":1}},"type":"summary"}
 `, 0},
-		{"binary bytes stay in their record", []string{"rg", "--json", "alpha", "bin"}, "",
+		{"binary bytes delimit records", []string{"rg", "--json", "alpha", "bin"}, "",
 			`{"type":"begin","data":{"path":{"text":"bin"}}}
-{"type":"match","data":{"path":{"text":"bin"},"lines":{"text":"a\u0000alpha\n"},"line_number":1,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":2,"end":7}]}}
-{"type":"end","data":{"path":{"text":"bin"},"binary_offset":1,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":1,"bytes_printed":226,"matched_lines":1,"matches":1}}}
-{"data":{"elapsed_total":{},"stats":{"bytes_printed":226,"bytes_searched":1,"elapsed":{},"matched_lines":1,"matches":1,"searches":1,"searches_with_match":1}},"type":"summary"}
+{"type":"match","data":{"path":{"text":"bin"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":2,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"bin"},"binary_offset":1,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":8,"bytes_printed":219,"matched_lines":1,"matches":1}}}
+{"data":{"elapsed_total":{},"stats":{"bytes_printed":219,"bytes_searched":8,"elapsed":{},"matched_lines":1,"matches":1,"searches":1,"searches_with_match":1}},"type":"summary"}
 `, 0},
 		{"context", []string{"rg", "--json", "-C1", "two", "a.txt"}, "",
 			`{"type":"begin","data":{"path":{"text":"a.txt"}}}
@@ -71,5 +75,52 @@ func TestRgJSONMessages(t *testing.T) {
 				t.Fatalf("stdout %q status %d err %v\nwant   %q status %d", normalizeElapsed(r.stdout), r.result.Status, r.err, c.stdout, c.status)
 			}
 		})
+	}
+}
+
+func TestRgJSONBinaryRecordsKeepOriginalOffsetsAndInput(t *testing.T) {
+	const content = "a\x00alpha\nalpha\x00tail\n"
+	h := newHarness(t, map[string]string{"input": content})
+	result := h.exec("", "rg", "--json", "alpha", "input")
+	if result.err != nil || result.result.Status != 0 {
+		t.Fatalf("search: %v status %d", result.err, result.result.Status)
+	}
+	lines := strings.Split(strings.TrimSpace(result.stdout), "\n")
+	if len(lines) != 5 {
+		t.Fatalf("events: %s", result.stdout)
+	}
+	for i := range 2 {
+		var event struct {
+			Data struct {
+				Lines      struct{ Text string }
+				LineNumber int                        `json:"line_number"`
+				Offset     int                        `json:"absolute_offset"`
+				Matches    []struct{ Start, End int } `json:"submatches"`
+			}
+		}
+		if err := json.Unmarshal([]byte(lines[i+1]), &event); err != nil {
+			testutil.FailErr(t, "unmarshal JSON document", err)
+		}
+		if event.Data.Lines.Text != "alpha\n" || event.Data.LineNumber != i+2 || event.Data.Offset != 2+i*6 || len(event.Data.Matches) != 1 || event.Data.Matches[0].Start != 0 || event.Data.Matches[0].End != 5 {
+			t.Fatalf("event %s", lines[i+1])
+		}
+	}
+	var end struct {
+		Data struct {
+			Binary int `json:"binary_offset"`
+			Stats  struct {
+				Searched int `json:"bytes_searched"`
+			}
+		}
+	}
+	if err := json.Unmarshal([]byte(lines[3]), &end); err != nil {
+		testutil.FailErr(t, "unmarshal JSON document", err)
+	}
+	if end.Data.Binary != 1 || end.Data.Stats.Searched != len(content) {
+		t.Fatalf("end event %s", lines[3])
+	}
+	pins := h.pins.pins[result.execution]
+	if len(pins) != 1 || pins[0].ContentSHA256 != textfile.SHA256([]byte(content)) {
+		t.Fatalf("binary source identity changed: %+v", pins)
 	}
 }

@@ -183,12 +183,15 @@ func TestRemotePackageDestinationBannerGivesNonWideningRecovery(t *testing.T) {
 	for _, want := range []string{
 		"Code: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED",
 		"gitea.example.com",
-		"install or add the package",
-		"later command",
+		"cannot be widened in the same invocation",
+		"Repeating the same action cannot grant",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("remote package guidance missing %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "Fix:") || strings.Contains(out, "Next:") {
+		t.Fatalf("destination denial invented a widening or retry recipe: %s", out)
 	}
 	if !facts.HasCode(isolation.CodeRemotePackageDestinationDenied) {
 		t.Fatalf("facts = %+v", facts)

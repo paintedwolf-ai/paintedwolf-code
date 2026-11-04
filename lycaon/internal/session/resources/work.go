@@ -4,7 +4,10 @@ import "context"
 
 type Cancellation interface{ Cancel(string) }
 type SessionCancellation interface{ CancelSession(string) }
-type Coordinator interface{ ForgetSession(context.Context, string) }
+type Coordinator interface {
+	ReleaseSession(context.Context, string)
+	ForgetSession(context.Context, string)
+}
 type SessionForgetter interface{ ForgetSession(string) }
 
 // Work cancels live execution before dropping the state it can still access.
@@ -31,9 +34,15 @@ func (w *Work) Cancel(ctx context.Context, id string) {
 		w.Research.CancelSession(id)
 	}
 	if w.Coordinator != nil {
-		w.Coordinator.ForgetSession(ctx, id)
+		w.Coordinator.ReleaseSession(ctx, id)
 	}
 	if w.Workflow != nil {
 		w.Workflow.ForgetSession(id)
+	}
+}
+
+func (w *Work) Dispose(ctx context.Context, id string) {
+	if w.Coordinator != nil {
+		w.Coordinator.ForgetSession(ctx, id)
 	}
 }

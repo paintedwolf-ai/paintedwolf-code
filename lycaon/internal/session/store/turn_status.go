@@ -8,15 +8,16 @@ import (
 )
 
 // LatestTurnStatus reads the session turn head, including a resumed execution.
-func (s *SQL) LatestTurnStatus(ctx context.Context, sessionID string) (TurnStatus, error) {
-	status, err := s.queries.GetLatestTurnStatus(ctx, strings.TrimSpace(sessionID))
+func (t *sqlTurns) LatestTurnStatus(ctx context.Context, sessionID string) (TurnStatus, error) {
+	status, err := t.core.queries.GetLatestTurnStatus(ctx, strings.TrimSpace(sessionID))
 	if db.IsNoRows(err) {
 		return "", nil
 	}
 	return TurnStatus(status), err
 }
 
-func (s *Memory) LatestTurnStatus(ctx context.Context, sessionID string) (TurnStatus, error) {
+func (t *memoryTurns) LatestTurnStatus(ctx context.Context, sessionID string) (TurnStatus, error) {
+	s := t.core
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

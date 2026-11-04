@@ -11,6 +11,7 @@ import (
 
 // TurnStateInjectInput carries variables for inject.turn_state.
 type TurnStateInjectInput struct {
+	ProgressSnapshot         string
 	ProgressMissing          bool
 	ProfileHasUpdateProgress bool
 	VerifyRequired           bool
@@ -24,6 +25,7 @@ func RenderTurnStateBlock(ctx context.Context, renderer *prompts.InjectRenderer,
 		return "", fmt.Errorf("inject renderer not configured")
 	}
 	vars := map[string]any{
+		"progress_snapshot":           in.ProgressSnapshot,
 		"progress_missing":            in.ProgressMissing,
 		"profile_has_update_progress": in.ProfileHasUpdateProgress,
 		"verify_required":             in.VerifyRequired,

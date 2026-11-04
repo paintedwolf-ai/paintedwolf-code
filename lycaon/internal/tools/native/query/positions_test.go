@@ -1,7 +1,6 @@
 package query
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -14,58 +13,6 @@ import (
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 )
 
-func TestQueryPositionsPreserveLineAndColumnAcrossChunkBoundaries(t *testing.T) {
-	data := []byte("first\né😀\nlast value")
-	for _, chunk := range []int{1, 2, 7, 8, 63} {
-		h := newHarness(t, nil)
-		inv := &invocation{ctx: t.Context(), owners: h.owners}
-		positions, err := newInputPositions(inv, 1024, "input")
-		testutil.FailErr(t, "newInputPositions failed", err)
-		for start := 0; start < len(data); start += chunk {
-			if _, err = positions.Write(data[start:min(start+chunk, len(data))]); err != nil {
-				testutil.FailErr(t, "positions.Write failed", err)
-			}
-		}
-		for offset := int64(0); offset <= int64(len(data)); offset++ {
-			wantLine, wantColumn := lineColumn(data, offset)
-			line, column := positions.lineColumn(offset)
-			end := offset
-			if next := bytes.IndexByte(data[offset:], '\n'); next >= 0 {
-				end += int64(next) + 1
-			} else {
-				end = int64(len(data))
-			}
-			wantCurrent := bytes.Count(data[:end], []byte{'\n'})
-			if line != wantLine || column != wantColumn || positions.lineAt(offset) != wantCurrent {
-				t.Fatalf("chunk %d offset %d line/column %d/%d want %d/%d current %d want %d", chunk, offset, line, column, wantLine, wantColumn, positions.lineAt(offset), wantCurrent)
-			}
-		}
-		positions.close()
-	}
-}
-
-func TestQueryPositionsAdmitCompactMetadataAndRelease(t *testing.T) {
-	h := newHarness(t, nil)
-	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
-	testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
-	h.owners.Revisions.Memory = memory
-	positions, err := newInputPositions(&invocation{ctx: t.Context(), owners: h.owners}, 64<<20, "input")
-	testutil.FailErr(t, "newInputPositions failed", err)
-	chunk := []byte(strings.Repeat("x", (64<<10)-1) + "\n")
-	for range 64 {
-		if _, err = positions.Write(chunk); err != nil {
-			testutil.FailErr(t, "positions.Write failed", err)
-		}
-	}
-	if len(positions.buffer.Bytes) != 512<<10 || memory.InUse().State > 512<<10 {
-		t.Fatalf("body retained: %d metadata, held %+v", len(positions.buffer.Bytes), memory.InUse())
-	}
-	positions.close()
-	if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
-		t.Fatalf("position leases remain %+v", memory.InUse())
-	}
-}
-
 type queryBytesWithFailure struct {
 	err  error
 	sent bool
@@ -75,17 +22,16 @@ func TestQueryInputBoundaryWithSmallLimit(t *testing.T) {
 	for _, text := range []string{" true", " true "} {
 		h := newHarness(t, nil)
 		in := &inputs{inv: &invocation{ctx: t.Context(), owners: h.owners, out: &output{}}, limit: 5, label: "input"}
-		positions, err := newInputPositions(in.inv, in.limit, in.label)
-		testutil.FailErr(t, "prepare bounded query positions", err)
-		in.positions = positions
-		in.stream = nativejq.NewValueStream(queryInputReader{input: strings.NewReader(text), owner: in})
+		in.stream = nativejq.NewBoundedValueStream(t.Context(), queryInputReader{input: strings.NewReader(text), owner: in}, nativejq.DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, nil, 1<<20)
 		value, ok := in.Next()
 		if len(text) == 5 {
 			if !ok || value != true || in.stop != nil {
 				t.Fatalf("at-limit query value=%v accepted=%t refusal=%v", value, ok, in.stop)
 			}
-		} else if reject := toolrejection.AsToolReject(in.stop); ok || reject == nil || reject.Code != "JQ_INPUT_TOO_LARGE" {
+		} else if reject := toolrejection.AsToolReject(in.stop); ok || reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" {
 			t.Fatalf("over-limit query value=%v accepted=%t refusal=%v", value, ok, in.stop)
+		} else if reject.Data["limit_id"] != "stream_throughput_bytes" || reject.Data["maximum"] != int64(5) || reject.Data["observed"] != int64(6) {
+			t.Fatalf("query input limit facts changed: %+v", reject.Data)
 		}
 		in.close()
 	}
@@ -102,12 +48,9 @@ func (r *queryBytesWithFailure) Read(p []byte) (int, error) {
 func TestQueryReadRefusalCannotBecomeSuccessfulBufferedValue(t *testing.T) {
 	h := newHarness(t, nil)
 	in := &inputs{inv: &invocation{ctx: context.Background(), owners: h.owners}, limit: 1024, label: "input"}
-	positions, err := newInputPositions(in.inv, in.limit, in.label)
-	testutil.FailErr(t, "newInputPositions failed", err)
-	in.positions = positions
 	defer in.close()
 	refused := &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED"}
-	in.stream = nativejq.NewValueStream(queryInputReader{input: &queryBytesWithFailure{err: refused}, owner: in})
+	in.stream = nativejq.NewBoundedValueStream(t.Context(), queryInputReader{input: &queryBytesWithFailure{err: refused}, owner: in}, nativejq.DecodeLimits{MaximumDepth: 128, MaximumScalarBytes: 1024}, nil, 1<<20)
 	if _, ok := in.nextValue(); ok || !errors.Is(in.stop, refused) {
 		t.Fatalf("buffered value escaped refusal: ok %v stop %v", ok, in.stop)
 	}

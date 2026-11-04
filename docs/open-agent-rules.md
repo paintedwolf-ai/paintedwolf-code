@@ -12,6 +12,12 @@ A rule does not execute code, parse transcript prose, grant capability, or mutat
 
 **Machine truth:** [`schemas/oar/`](../schemas/oar) (vendored rule, capability, config, and fixture schemas plus conformance cases) · `lycaon/internal/oar/`, `oarcore/`, `oarcopy/` · pack `policy/` units under [`lycaon/config/packs/painted-wolf/`](../lycaon/config/packs/painted-wolf) · [anchor catalog](../lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml) and `host/bindings/` · spec: <https://openagentrules.org/spec/1.0/>
 
+The OAR draft controls document loading, typed defaults, evaluation and copy
+rendering. Every copy member is optional. The host may present a code-only
+outcome; it must not turn omitted copy into an invented remedy. Host-specific
+knowledge facts distinguish unreported observations from measured zero without
+changing the standard fact defaults.
+
 ## Why rules are separate from host code
 
 Policies such as when to nudge an agent to ground a claim, block an unsafe completion claim, or warn on a suspicious observation need to evolve as declarative content. Putting each case in control-flow code would mix facts, wording, timing, and enforcement. OAR separates them: host code observes and freezes facts; an anchor defines when evaluation is meaningful; a rule composes typed predicates; an effect maps to one host channel; a binding or template explains the result. The host stays authoritative because it supplies the facts and implements every effect.

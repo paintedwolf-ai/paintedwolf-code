@@ -121,7 +121,7 @@ func TestOfferedToolNamesEmptyIsStamped(t *testing.T) {
 }
 
 func TestEmptyToolOfferReplacesPriorTurnAllowlist(t *testing.T) {
-	st := &promptLoopTurnState{offeredToolNames: []string{"read"}}
+	st := &promptLoopTurnState{turnStreamState: turnStreamState{offeredToolNames: []string{"read"}}}
 	st.stampOfferedToolNames(nil)
 	if st.offeredToolNames == nil || len(st.offeredToolNames) != 0 {
 		t.Fatalf("offered tools = %v, want stamped empty allowlist", st.offeredToolNames)

@@ -60,11 +60,24 @@ func mergeAssignableModels(
 func applyModelContextCaps(kind string, models, local []modelinfo.Entry) {
 	for i := range models {
 		configured, ok := catalogPricingForID(kind, local, models[i].ID)
-		if !ok || configured.ContextLength <= 0 {
+		if !ok {
+			continue
+		}
+		if configured.ProviderMaxTokens > models[i].ProviderMaxTokens {
+			models[i].ProviderMaxTokens = configured.ProviderMaxTokens
+		}
+		if configured.MaxTokens > 0 {
+			if models[i].MaxTokens > configured.MaxTokens && models[i].MaxTokens > models[i].ProviderMaxTokens {
+				models[i].ProviderMaxTokens = models[i].MaxTokens
+			}
+			models[i].MaxTokens = configured.MaxTokens
+		}
+		if configured.ContextLength <= 0 {
 			continue
 		}
 		if models[i].ContextLength <= 0 || configured.ContextLength < models[i].ContextLength {
 			models[i].ContextLength = configured.ContextLength
+			models[i].ContextLengthSource = "config"
 		}
 	}
 }
@@ -348,6 +361,7 @@ func mergeCatalogWithDiscovery(
 		byID[m.ID] = m
 		order = append(order, m.ID)
 	}
+	seenLive := make(map[string]struct{}, len(discovered))
 	for _, d := range discovered {
 		id := strings.TrimSpace(d.ID)
 		if id == "" {
@@ -355,10 +369,12 @@ func mergeCatalogWithDiscovery(
 		}
 		if existing, ok := byID[id]; ok {
 			byID[id] = enrichFromDiscovery(existing, d)
+			seenLive[id] = struct{}{}
 			continue
 		}
 		if matched, ok := lookupEquivalent(kind, byID, id); ok {
 			byID[matched] = enrichFromDiscovery(byID[matched], d)
+			seenLive[matched] = struct{}{}
 			continue
 		}
 		if d.Untyped {
@@ -368,7 +384,21 @@ func mergeCatalogWithDiscovery(
 		// Typed discovery may append conversation-filtered live ids.
 		entry := mergeDiscoveredModelEntry(kind, local, d)
 		byID[entry.ID] = entry
+		seenLive[entry.ID] = struct{}{}
 		order = append(order, entry.ID)
+	}
+	if kind == "cerebras" {
+		for _, m := range base {
+			if _, ok := seenLive[m.ID]; ok {
+				continue
+			}
+			if _, declared := declaredModelEntry(kind, local, m.ID); declared {
+				continue
+			}
+			entry := byID[m.ID]
+			entry.Callable = modelinfo.Evidence(modelinfo.CapabilityUnsupported, "provider-listing")
+			byID[m.ID] = entry
+		}
 	}
 	out := make([]modelinfo.Entry, 0, len(order))
 	seen := make(map[string]struct{}, len(order))
@@ -392,10 +422,15 @@ func enrichFromDiscovery(base, discovered modelinfo.Entry) modelinfo.Entry {
 	}
 	if discovered.ContextLength > 0 {
 		out.ContextLength = discovered.ContextLength
+		out.ContextLengthSource = discovered.ContextLengthSource
+	}
+	if discovered.ProviderMaxTokens > out.ProviderMaxTokens {
+		out.ProviderMaxTokens = discovered.ProviderMaxTokens
 	}
 	// The live transport's own output ceiling outranks the feed's.
 	if discovered.MaxTokens > 0 {
 		out.MaxTokens = discovered.MaxTokens
+		out.ProviderMaxTokens = discovered.MaxTokens
 	}
 	if discovered.ThinkingAlwaysOn {
 		out.ThinkingAlwaysOn = true
@@ -452,9 +487,15 @@ func untypedAllowlistIntersect(kind string, local, discovered []modelinfo.Entry)
 	}
 	allow := modelIDSet(local)
 	kept := make([]modelinfo.Entry, 0)
-	for _, d := range discovered {
+	var wildcardProps *modelinfo.Entry
+	for i := range discovered {
+		d := discovered[i]
 		id := strings.TrimSpace(d.ID)
 		if id == "" {
+			continue
+		}
+		if id == "*" && d.ContextLength > 0 {
+			wildcardProps = &discovered[i]
 			continue
 		}
 		if _, ok := allow[id]; ok {
@@ -466,6 +507,17 @@ func untypedAllowlistIntersect(kind string, local, discovered []modelinfo.Entry)
 				kept = append(kept, d)
 				break
 			}
+		}
+	}
+	if len(kept) == 0 && wildcardProps != nil {
+		for _, m := range local {
+			id := strings.TrimSpace(m.ID)
+			if id == "" {
+				continue
+			}
+			synth := *wildcardProps
+			synth.ID = id
+			kept = append(kept, synth)
 		}
 	}
 	return applyDiscoveredModels(kind, local, kept)
@@ -553,6 +605,7 @@ func modelEntryFromFeed(m modelfeed.Model) modelinfo.Entry {
 			e.ContextLength = m.Limit.Context
 		}
 		e.MaxTokens = feedOutputLimit(*m.Limit)
+		e.ProviderMaxTokens = e.MaxTokens
 	}
 	if m.Modalities.Input != nil {
 		e.Capabilities.Vision = modelinfo.Evidence(modelinfo.CapabilityUnsupported, "models.dev")
@@ -590,7 +643,16 @@ func overlayLocalModel(base, local modelinfo.Entry) modelinfo.Entry {
 	if local.Temperature != nil {
 		out.Temperature = local.Temperature
 	}
+	if base.ProviderMaxTokens > out.ProviderMaxTokens {
+		out.ProviderMaxTokens = base.ProviderMaxTokens
+	}
+	if local.ProviderMaxTokens > out.ProviderMaxTokens {
+		out.ProviderMaxTokens = local.ProviderMaxTokens
+	}
 	if local.MaxTokens != 0 {
+		if out.ProviderMaxTokens == 0 && base.MaxTokens > local.MaxTokens {
+			out.ProviderMaxTokens = base.MaxTokens
+		}
 		out.MaxTokens = local.MaxTokens
 	}
 	if local.ReasoningEffort != "" {
@@ -601,12 +663,20 @@ func overlayLocalModel(base, local modelinfo.Entry) modelinfo.Entry {
 	}
 	if local.ContextLength != 0 {
 		out.ContextLength = local.ContextLength
+		if local.ContextLengthSource != "" {
+			out.ContextLengthSource = local.ContextLengthSource
+		} else {
+			out.ContextLengthSource = "config"
+		}
 	}
 	if local.ThinkingAlwaysOn {
 		out.ThinkingAlwaysOn = true
 	}
 	if local.ThinkStyle != "" {
 		out.ThinkStyle = local.ThinkStyle
+	}
+	if local.ContinuationPolicy != "" {
+		out.ContinuationPolicy = local.ContinuationPolicy
 	}
 	out.Capabilities = modelinfo.MergeCapabilities(out.Capabilities, local.Capabilities)
 	if local.InputNeuronsPerM != 0 {

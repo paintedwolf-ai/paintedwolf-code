@@ -4,9 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/session/decisions"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
-	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
@@ -24,6 +21,9 @@ import (
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/decisions"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/page"
@@ -110,7 +110,7 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.Progress = progress.NewSQLStore(r.deps.Storage.Database)
 	r.deps.Workflows.Manager.Fanout.Progress = r.Progress
 	r.deps.Sessions.Manager.SetProgressStore(r.Progress)
-	if err := native.RegisterUpdateProgressTool(r.deps.Execution.Host.Registry, r.Progress, r.rootSessionKey); err != nil {
+	if err := native.RegisterUpdateProgressTool(r.deps.Execution.Host.Registry, r.Progress, r.rootSessionKey, r.deps.Sessions.Manager.Coordinator.ProgressClosure); err != nil {
 		return fmt.Errorf("update_progress tool: %w", err)
 	}
 	if err := native.RegisterCompleteLegTool(r.deps.Execution.Host.Registry, r.deps.DecodeCompleteLeg); err != nil {

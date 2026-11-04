@@ -53,6 +53,10 @@ values:
     payload: queue.yaml#/components/schemas/QueueEvent
   - id: project
     payload: project/identity.yaml#/components/schemas/ProjectEvent
+  - id: project_background
+    payload: events.yaml#/components/schemas/ProjectBackgroundEvent
+    comment: >-
+      Project-scoped background command lifecycle and listening port changes.
   - id: process
     payload: events.yaml#/components/schemas/BackgroundProcessEvent
   - id: preview

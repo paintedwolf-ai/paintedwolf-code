@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/argv"
+	"github.com/lycaon/lycaon/internal/confine"
 )
 
 // Default pseudo-terminal geometry and environment.
@@ -55,10 +56,11 @@ type PTY interface {
 
 // ptySession is the shared concrete PTY handle.
 type ptySession struct {
-	main    *os.File
-	cmd     *exec.Cmd
-	guard   runGuard
-	cleanup func()
+	main        *os.File
+	cmd         *exec.Cmd
+	guard       runGuard
+	cleanup     func()
+	confinement *confine.Confinement
 
 	waitOnce sync.Once
 	waitErr  error
@@ -81,8 +83,13 @@ func (p *ptySession) Cmd() *exec.Cmd { return p.cmd }
 func (p *ptySession) Wait() error {
 	p.waitOnce.Do(func() {
 		if p.cmd != nil {
-			p.waitErr = p.cmd.Wait()
+			if p.guard != nil {
+				p.waitErr = p.guard.wait(p.cmd)
+			} else {
+				p.waitErr = p.cmd.Wait()
+			}
 		}
+		p.waitErr = errors.Join(p.waitErr, p.confinement.SocketError())
 	})
 	return p.waitErr
 }

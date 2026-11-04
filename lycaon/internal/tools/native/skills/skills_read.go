@@ -57,7 +57,11 @@ func (t *SkillsReadTool) Run(ctx context.Context, args map[string]any, tctx tool
 		}
 		return skillDiscovery(tctx, need, cursor, "catalog", "", catalog)
 	}
-	if resource != "" && turnload.ExactSkill(need, catalog) == "" {
+	exact := turnload.ExactSkill(need, catalog)
+	if isSkillEntryPath(exact, resource) {
+		resource = ""
+	}
+	if resource != "" && exact == "" {
 		return "", skillUnknown(need)
 	}
 	outcome := t.lookup(ctx, tctx, need, catalog)
@@ -77,6 +81,9 @@ func (t *SkillsReadTool) Run(ctx context.Context, args map[string]any, tctx tool
 			continue
 		}
 		activated := sk
+		if isSkillEntryPath(sk.Name, resource) {
+			resource = ""
+		}
 		if resource != "" {
 			body, err := sk.ReadResource(resource)
 			if err != nil {
@@ -190,6 +197,25 @@ func (t *SkillsReadTool) catalog(ctx context.Context, tctx tools.ToolContext) []
 		return nil
 	}
 	return t.Skills(ctx, tctx)
+}
+
+func isSkillEntryPath(skillName, resource string) bool {
+	rel := strings.TrimSpace(resource)
+	for strings.HasPrefix(rel, "./") {
+		rel = strings.TrimPrefix(rel, "./")
+	}
+	if strings.EqualFold(rel, "SKILL.md") {
+		return true
+	}
+	if skillName == "" {
+		return false
+	}
+	for _, prefix := range []string{skillName + "/", "skills/" + skillName + "/"} {
+		if len(rel) > len(prefix) && strings.EqualFold(rel[:len(prefix)], prefix) && strings.EqualFold(rel[len(prefix):], "SKILL.md") {
+			return true
+		}
+	}
+	return false
 }
 
 func skillUnknown(need string) error {
