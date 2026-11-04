@@ -28,7 +28,11 @@ func UniqueRoots(in []string) []string {
 
 func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string) hitl.ActionConfineInputs {
 	var readDenyPaths []string
-	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
+	writeLeg := strings.TrimSpace(tctx.Source.WorkerBranchRoot) != ""
+	if writeLeg || strings.TrimSpace(tctx.Identity.WorkerJobID) != "" {
+		readDenyPaths = append(readDenyPaths, confine.WorkerReadDenyRoots(writeLeg)...)
+	}
+	if writeLeg {
 		readDenyPaths = append(readDenyPaths, tctx.Source.WorkerSourceRoots...)
 	}
 	overlayReadPaths := tctx.Files.SessionReadPaths

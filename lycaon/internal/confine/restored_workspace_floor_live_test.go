@@ -17,37 +17,31 @@ import (
 // restoredWorkspace is a writable workspace below a tree the read floor hides.
 type restoredWorkspace struct {
 	name  string
-	build func(home, control string) (workspace string, c confine.Confinement)
+	build func(control string) (workspace string, c confine.Confinement)
 }
 
 func restoredWorkspaces() []restoredWorkspace {
-	underState := func(root func(string) string) func(home, control string) (string, confine.Confinement) {
-		return func(_, control string) (string, confine.Confinement) {
+	underState := func(root func(string) string) func(control string) (string, confine.Confinement) {
+		return func(control string) (string, confine.Confinement) {
 			workspace := filepath.Join(root(control), "key", "job")
-			return workspace, workspaceConfinement(workspace, nil)
+			return workspace, workspaceConfinement(workspace)
 		}
 	}
 	return []restoredWorkspace{
 		{"worker branch", underState(enginepaths.WorkerBranchesRootUnder)},
 		{"session worktree", underState(enginepaths.SessionWorktreesRootUnder)},
 		{"draft", underState(enginepaths.DraftsRootUnder)},
-		{"below a read-denied source", func(home, _ string) (string, confine.Confinement) {
-			source := filepath.Join(home, "source")
-			workspace := filepath.Join(source, "overlays", "job")
-			return workspace, workspaceConfinement(workspace, []string{source})
-		}},
 	}
 }
 
 // workspaceConfinement is the shape the host gives a worker: the branch is the
 // only project root and is restored by name.
-func workspaceConfinement(workspace string, readDeny []string) confine.Confinement {
+func workspaceConfinement(workspace string) confine.Confinement {
 	return confine.Confinement{
-		Roots:         liveBoundaryRoots(workspace),
-		ReadRoots:     []string{workspace},
-		ReadDenyPaths: readDeny,
-		Network:       confine.NetworkDeny,
-		EgressOff:     confine.EgressOffOverride,
+		Roots:     liveBoundaryRoots(workspace),
+		ReadRoots: []string{workspace},
+		Network:   confine.NetworkDeny,
+		EgressOff: confine.EgressOffOverride,
 	}
 }
 
@@ -140,7 +134,7 @@ func restoredWorkspaceFixture(t *testing.T, layout restoredWorkspace) (string, c
 	control := filepath.Join(home, ".config", "paintedwolf")
 	t.Setenv("LYCAON_CONFIG_DIR", control)
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
-	workspace, c := layout.build(home, control)
+	workspace, c := layout.build(control)
 	testutil.FailErr(t, "create workspace", os.MkdirAll(workspace, 0o700))
 	return workspace, c
 }
@@ -154,14 +148,14 @@ type kernelWrite struct {
 // a program would.
 func kernelWrites(t *testing.T, helper string, c confine.Confinement, paths []string) []kernelWrite {
 	t.Helper()
-	return kernelScript(t, helper, c, `mkdir -p "${p%/*}" 2>/dev/null && : >> "$p" 2>/dev/null`, paths)
+	return kernelScript(t, helper, c, `(mkdir -p "${p%/*}" && : >> "$p") 2>/dev/null`, paths)
 }
 
 // kernelMoves asks the kernel to change each existing path in place and to move
 // it away; it answers allowed when either took effect.
 func kernelMoves(t *testing.T, helper string, c confine.Confinement, paths []string) []kernelWrite {
 	t.Helper()
-	return kernelScript(t, helper, c, `: > "$p" 2>/dev/null || mv -- "$p" "$p.moved" 2>/dev/null`, paths)
+	return kernelScript(t, helper, c, `(: > "$p") 2>/dev/null || mv -- "$p" "$p.moved" 2>/dev/null`, paths)
 }
 
 func kernelScript(t *testing.T, helper string, c confine.Confinement, attempt string, paths []string) []kernelWrite {

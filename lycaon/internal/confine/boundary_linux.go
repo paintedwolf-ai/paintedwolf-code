@@ -309,7 +309,10 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		pc.fs.ReadOnly = append(pc.fs.ReadOnly, p)
 	}
 	for p := range pc.hidden {
-		pc.fs.Hidden = append(pc.fs.Hidden, p)
+		// A placeholder inside a placeholder has no mountpoint to cover.
+		if !pc.concealed(filepath.Dir(p)) {
+			pc.fs.Hidden = append(pc.fs.Hidden, p)
+		}
 	}
 	for p := range pc.restored {
 		if coveredBy(pc.hidden, p) || coveredBy(pc.readOnly, p) {
@@ -387,9 +390,10 @@ func (pc *planCompiler) allowWrite(path string) {
 }
 
 // denyWrite masks a path read-only when a grant would otherwise reach it; its
-// exceptions are restored.
+// exceptions are restored. Only a path still behind its placeholder needs no
+// mask: one a restoration brought back is as reachable as any other.
 func (pc *planCompiler) denyWrite(path string, except []string) {
-	if coveredBy(pc.hidden, path) || !coveredByList(pc.grants, path) {
+	if pc.concealed(path) || !coveredByList(pc.grants, path) {
 		return
 	}
 	pc.readOnly[path] = true
@@ -398,6 +402,23 @@ func (pc *planCompiler) denyWrite(path string, except []string) {
 			pc.restored[e] = true
 		}
 	}
+}
+
+// concealed reports whether the nearest placeholder or restoration at or above
+// path is a placeholder. A restoration of the same path covers its placeholder.
+func (pc *planCompiler) concealed(path string) bool {
+	nearest, hidden := -1, false
+	for ancestor := range pc.hidden {
+		if PathAtOrUnder(path, ancestor) && len(ancestor) > nearest {
+			nearest, hidden = len(ancestor), true
+		}
+	}
+	for ancestor := range pc.restored {
+		if PathAtOrUnder(path, ancestor) && len(ancestor) >= nearest {
+			nearest, hidden = len(ancestor), false
+		}
+	}
+	return hidden
 }
 
 // loaderName is the basename a write filter protects at any depth below its
