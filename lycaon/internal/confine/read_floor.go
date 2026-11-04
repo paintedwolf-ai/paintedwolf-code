@@ -28,7 +28,8 @@ func addControlPlaneReadFloor(rules *FilesystemRules, c Confinement) {
 	if c.SessionScratchRoot != "" {
 		allowed = append(allowed, fspath.CanonicalPath(c.SessionScratchRoot))
 	}
-	matches := subpathMatches(allowed, "")
+	addManagedReadRoots(rules, subpathMatches(denied, FloorReadControlPlane), allowed)
+	var matches []fsMatch
 	reachable := append([]string(nil), allowed...)
 	for _, g := range excludedWorkspaceGrants(c) {
 		reachable = append(reachable, g.ResolvedPath)
@@ -38,11 +39,50 @@ func addControlPlaneReadFloor(rules *FilesystemRules, c Confinement) {
 			matches = append(matches, fsMatch{literal: g.ResolvedPath})
 		}
 	}
-	if len(matches) == 0 {
+	rules.add(fsRule{op: opRead, allow: true, matches: matches})
+	if len(reachable) == 0 {
 		return
 	}
-	rules.add(fsRule{op: opRead, allow: true, matches: matches})
 	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(traversalAncestors(denied, reachable), "")})
+}
+
+// addManagedReadRoots reopens managed read roots beneath a read denial. They
+// override denied ancestors only: a denial below a managed root still holds,
+// and only an approved read grant lifts that.
+func addManagedReadRoots(rules *FilesystemRules, denied []fsMatch, managed []string) {
+	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(managed, "")})
+	var below []fsMatch
+	var belowPaths []string
+	for _, m := range denied {
+		path := m.literal
+		if path == "" {
+			path = m.subpath
+		}
+		if path != "" && strictlyUnderAny(path, managed) {
+			below = append(below, m)
+			belowPaths = append(belowPaths, path)
+		}
+	}
+	if len(below) == 0 {
+		return
+	}
+	rules.add(fsRule{op: opRead, matches: below})
+	var inner []string
+	for _, root := range managed {
+		if strictlyUnderAny(root, belowPaths) {
+			inner = append(inner, root)
+		}
+	}
+	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(inner, "")})
+}
+
+func strictlyUnderAny(path string, ancestors []string) bool {
+	for _, ancestor := range ancestors {
+		if path != ancestor && PathAtOrUnder(path, ancestor) {
+			return true
+		}
+	}
+	return false
 }
 
 // workspaceReadAllowBacks lists the managed workspaces an invocation may read.

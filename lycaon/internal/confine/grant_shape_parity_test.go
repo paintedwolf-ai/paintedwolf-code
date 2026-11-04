@@ -30,7 +30,7 @@ func newGrantShapeFixture(t *testing.T) grantShapeFixture {
 		project: filepath.Join(root, "project"),
 		outside: outsideTemporaryWriteRoots(t),
 	}
-	f.control = filepath.Join(f.home, ".config", "paintedwolf")
+	f.control = filepath.Join(root, "state", "paintedwolf")
 	f.data = filepath.Join(f.project, "data")
 	t.Setenv("HOME", f.home)
 	t.Setenv("LYCAON_CONFIG_DIR", f.control)
@@ -112,6 +112,8 @@ func (f grantShapeFixture) shapes() map[string]confine.Confinement {
 			c.ReadDenyPaths = []string{f.data}
 			c.ProtectedReadGrants = grant(f.project)
 		}),
+		"read root above the denial": shape(func(c *confine.Confinement) { c.ReadDenyPaths = []string{f.data}; c.ReadRoots = []string{f.project} }),
+		"read root above the floors": shape(func(c *confine.Confinement) { c.ReadRoots = []string{filepath.Dir(f.home)} }),
 		"read root beside the denial": shape(func(c *confine.Confinement) {
 			c.ReadDenyPaths = []string{f.data}
 			c.ReadRoots = []string{filepath.Join(f.data, "nested")}
@@ -151,10 +153,34 @@ func TestKernelAgreesWithVerdictUnderEveryGrantShape(t *testing.T) {
 			for _, probe := range probes {
 				verdict := rules.Verdict(probe.access, probe.path)
 				if allowed := kernelPermits(t, helper, c, probe); allowed != verdict.Allowed {
-					t.Errorf("%s: kernel allowed=%v, verdict=%+v", probe.name, allowed, verdict)
+					_, out := confinedRun(t, helper, c, "/bin/ls", "-l", probe.path)
+					t.Errorf("%s: kernel allowed=%v, verdict=%+v: %s", probe.name, allowed, verdict, out)
 				}
 			}
 		})
+	}
+}
+
+// A managed read root reopens what is denied above it, never what is denied
+// below it: that takes an approved read grant.
+func TestReadRootDoesNotLiftTheDenialsBeneathIt(t *testing.T) {
+	f := newGrantShapeFixture(t)
+	secret := filepath.Join(f.data, "certificate.pem")
+	token := filepath.Join(f.control, "api.token")
+	key := filepath.Join(f.home, ".ssh", "known_hosts")
+	c := confine.Confinement{Roots: []string{f.project}, ReadDenyPaths: []string{f.data}, ReadRoots: []string{filepath.Dir(f.home)}}
+	rules := confine.BoundaryOf(&c).Filesystem
+	for _, denied := range []string{secret, token, key} {
+		if got := rules.Verdict(confine.AccessRead, denied); got.Allowed {
+			t.Errorf("read root above %s reopened it", denied)
+		}
+	}
+	if got := rules.Verdict(confine.AccessRead, filepath.Join(f.project, "src", "main.go")); !got.Allowed {
+		t.Errorf("read root refused an ordinary file: %+v", got)
+	}
+	c.ProtectedReadGrants = []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(f.project)}
+	if got := confine.BoundaryOf(&c).Filesystem.Verdict(confine.AccessRead, secret); !got.Allowed {
+		t.Errorf("an approved directory grant did not lift the denial beneath it: %+v", got)
 	}
 }
 

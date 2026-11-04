@@ -387,21 +387,23 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 	deny := readDenyMatches(c)
 	if len(deny) > 0 {
 		rules.add(fsRule{op: opRead, matches: deny})
-		// Managed read roots and approved read grants override denied ancestors.
 		allow := workspaceReadAllowBacks(c)
 		allow = append(allow, resolveEach(c.ReadRoots)...)
 		if c.SessionScratchRoot != "" {
 			allow = append(allow, fspath.CanonicalPath(c.SessionScratchRoot))
 		}
-		var literals []string
+		addManagedReadRoots(&rules, deny, allow)
+		// An approved read grant also lifts the denials beneath it.
+		var subtrees, literals []string
 		for _, g := range c.ProtectedReadGrants {
 			if g.Subtree {
-				allow = append(allow, g.ResolvedPath)
+				subtrees = append(subtrees, g.ResolvedPath)
 			} else {
 				literals = append(literals, g.ResolvedPath)
 			}
 		}
-		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(allow, ""), literalMatches(literals, "")...)})
+		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(subtrees, ""), literalMatches(literals, "")...)})
+		allow = append(allow, subtrees...)
 		// Ancestor metadata permits traversal into allowed descendants.
 		if len(allow) > 0 || len(literals) > 0 {
 			ancestors := traversalAncestors(matchPaths(deny), append(append([]string(nil), allow...), literals...))
