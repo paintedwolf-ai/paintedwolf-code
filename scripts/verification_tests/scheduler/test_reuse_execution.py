@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from ci_policy import resources
 import verification_reuse as reuse
-from verification_execute import StageEvents, merge_failures
+from verification_execute import StageEvents
 
 WRAPPER = Path(__file__).resolve().parents[2] / "go-test-exec.py"
 
@@ -175,11 +175,14 @@ class EventTests(unittest.TestCase):
             self.assertEqual(watcher.failures(), {"d": {}})
             self.assertEqual(watcher.failures(), {})
 
-    def test_failure_facts_survive_a_later_package_report(self):
-        known = {}
-        merge_failures(known, {"a": {"tests": ["TestA"]}})
-        merge_failures(known, {"a": {}, "b": {}})
-        self.assertEqual(known, {"a": {"tests": ["TestA"]}, "b": {}})
+    def test_terminal_event_in_a_later_read_keeps_the_failure_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            events, raw = Path(directory) / "events.jsonl", Path(directory) / "raw.json"
+            watcher = StageEvents(events, raw)
+            events.write_text(json.dumps({"package": "a", "exit_code": 1, "tests": ["TestA"]}) + "\n")
+            self.assertEqual(watcher.failures(), {"a": {"tests": ["TestA"]}})
+            raw.write_text(json.dumps({"Package": "a", "Action": "fail"}) + "\n")
+            self.assertEqual(watcher.failures(), {})
 
     def test_package_durations_keep_recent_measurements_per_stage(self):
         with tempfile.TemporaryDirectory() as directory:
