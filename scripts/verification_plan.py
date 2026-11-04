@@ -16,7 +16,7 @@ SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RE
                  "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_EVENTS", "PW_TEST_STAGE_PROGRESS",
                  "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY",
                  "PW_TEST_PACKAGE_IDENTITIES", "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT",
-                 "PW_REPO_SNAPSHOT_TOKEN"}
+                 "PW_REPO_SNAPSHOT_TOKEN", "PW_TEST_KEEP_GOING"}
 # Verification is offline and fixtures are repository-local, so proxy routes stay
 # out of a shared, replayable stage.
 NETWORK_ENV = {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
@@ -118,6 +118,8 @@ def catalog():
         selection = go_selection(flags, name)
         if not selection["shareable"] or selection["packages"]:
             raise ValueError(f"verification {name} requires shareable Go flags")
+        if not isinstance(recipe.get("report_all_failures", False), bool):
+            raise ValueError(f"verification {name} declares report_all_failures as a boolean")
     environment = value["environment"]
     if (not isinstance(environment, dict) or set(environment) != {"names", "prefixes"}
             or not all(isinstance(items, list) and all(isinstance(item, str) and item for item in items)
@@ -352,6 +354,7 @@ def expand(names, cli=()):
                 packages = scoped_packages(name, selection["packages"], recipe["packages"])
             stages.append({"kind": "go", "name": name, "options": recipe["options"],
                            "exclude": recipe.get("exclude", ""), "bundled": recipe.get("bundled", False),
+                           "report_all_failures": recipe.get("report_all_failures", False),
                            "packages": packages, "flags": flags})
         elif name in data["tasks"]:
             arguments = list(data["tasks"][name])
