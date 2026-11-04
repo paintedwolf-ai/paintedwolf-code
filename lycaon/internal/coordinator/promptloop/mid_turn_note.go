@@ -85,7 +85,9 @@ func (l *toolBatch) auditCarrier(ctx context.Context, sess *api.Session, session
 			return guidance.MidTurnNoteAudit{Outcome: guidance.MidTurnSilent}
 		}
 		if msg.ID == carrierID {
-			text = hostmarker.StripParrotedTransportMarkers(msg.Content)
+			// History may hold the raw overlay of a redacted carrier.
+			screened, _ := l.Projection.storageSafeMessage(ctx, msg)
+			text = hostmarker.StripParrotedTransportMarkers(screened.Content)
 		}
 	}
 	if strings.TrimSpace(text) == "" {

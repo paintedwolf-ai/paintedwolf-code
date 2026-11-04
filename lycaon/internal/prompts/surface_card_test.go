@@ -89,6 +89,17 @@ func TestSurfaceCardFallsBackToFamily(t *testing.T) {
 		t.Fatalf("family fallback must carry the family rule: %q", family)
 	}
 
+	// The investigate family states what happens to text only where it is published.
+	for _, publishes := range []bool{true, false} {
+		vars := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{PublishesText: publishes}, []string{"recall"}, nil).TemplateVars()
+		vars["execution_mode"] = "investigate"
+		out, err := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}).Render(context.Background(), "partials/coordinator-surface-card.md", vars)
+		testutil.FailErr(t, "render investigate family", err)
+		if got := strings.Contains(out, "Text alongside tool calls reaches the user"); got != publishes {
+			t.Fatalf("publishes = %v, card = %q", publishes, out)
+		}
+	}
+
 	none := renderSurfaceCard(t, "", "", "", []string{"recall"}, nil)
 	if strings.TrimSpace(none) != "" {
 		t.Fatalf("no label and no family must render no card, got %q", none)

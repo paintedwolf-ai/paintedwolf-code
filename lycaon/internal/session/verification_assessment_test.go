@@ -41,7 +41,7 @@ func TestInspectionCannotSatisfyExplicitWorkflowTestGate(t *testing.T) {
 	}
 }
 
-// D4: the whole finish path reads the draft's verification, so a blocked report is
+// AC-COMPAT-09, D4: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT fires on Markdown. The whole finish path reads the draft's verification, so a blocked report is
 // the working escape from SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT.
 func TestBeforeFinishReadsVerificationFromTheDraft(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
