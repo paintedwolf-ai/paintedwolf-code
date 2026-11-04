@@ -171,6 +171,7 @@ func (e *promptSurface) resolveTurnRoster(
 	roster := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, repoKnownEmpty, webSearchEnabled)
 	return &roster
 }
+
 // sourceHistoryOffered answers from the compile the turn's plan starts from: the
 // plan freezes after assembly, and nothing later adds a catalog tool the surface
 // leaves out.
