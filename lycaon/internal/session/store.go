@@ -54,7 +54,6 @@ type QueryStore interface {
 	MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionID string) (uint64, error)
 	GetCompactionView(ctx context.Context, sessionID string) (*store.CompactionView, bool, error)
 	CompactionViewCurrent(ctx context.Context, sessionID string, coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) (bool, error)
-	CompactionSourceClock(context.Context, string) (int64, error)
 	ListDraftVersions(ctx context.Context, sessionID, slotID string) ([]api.DraftVersion, error)
 	CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error)
 	// GetWorktreeBinding returns the session's worktree binding; ok=false when unbound.

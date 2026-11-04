@@ -28,12 +28,11 @@ type CompactionReport struct {
 	TargetTokens         int
 	TargetMet            bool
 	Reason               string
-	// SummaryFailure is the typed provider failure behind a rejected page.
-	SummaryFailure    error
-	CacheHit          bool
-	MeasurementMethod string
-	TextTokensBefore  int
-	TextTokensAfter   int
+	SummaryFailure       error
+	CacheHit             bool
+	MeasurementMethod    string
+	TextTokensBefore     int
+	TextTokensAfter      int
 }
 
 // SessionInfo supplies session metadata for compaction snapshots.

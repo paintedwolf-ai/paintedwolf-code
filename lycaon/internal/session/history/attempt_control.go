@@ -24,21 +24,16 @@ func (m *Service) attemptControl() attemptController {
 	return attemptController{m: m, ledger: m.Runner.attempts}
 }
 
-// capture reads the tail before the clock: a row appended between the two reads
-// counts as new, and a row appended after the capture is seen by the scan and
-// still counts as new, which at worst repeats one attempt.
+// capture reads the last row and the mutation clock together. A row appended after
+// this is seen by the scan yet still counts as new, which at worst repeats one attempt.
 func (c attemptController) capture(ctx context.Context, sess *api.Session, sc *compaction.SimpleCompactor) (attemptPass, error) {
-	tail, err := c.m.store.ReadMessageWindow(ctx, sess.ID, messageview.MessageWindow{Limit: 1})
+	tail, err := c.m.store.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 1})
 	if err != nil {
 		return attemptPass{}, err
 	}
-	clock, err := c.m.store.CompactionSourceClock(ctx, sess.ID)
-	if err != nil {
-		return attemptPass{}, err
-	}
-	pass := attemptPass{source: attemptSource{seq: clock}}
-	if len(tail) > 0 {
-		pass.source.ord, pass.source.id = tail[0].Ord, tail[0].ID
+	pass := attemptPass{source: attemptSource{seq: tail.Watermark}}
+	if n := len(tail.Messages); n > 0 {
+		pass.source.ord, pass.source.id = tail.Messages[n-1].Ord, tail.Messages[n-1].ID
 	}
 	pass.key, err = c.key(ctx, sess, sc)
 	return pass, err

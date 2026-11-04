@@ -8,10 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -426,5 +431,44 @@ func TestClassifyAttemptFailureUsesTypedErrors(t *testing.T) {
 				t.Fatalf("classified %v as %s, want %s", tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestAttemptSourceFollowsStoreSemantics(t *testing.T) {
+	database := testdbfixture.Open(t, "attempt-source.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	sql := store.NewSQL(database)
+	sess, err := sql.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "append rows", sql.AppendMessages(t.Context(), sess.ID,
+		api.Message{ID: "first", Role: api.MessageRoleAssistant, Content: "one"},
+		api.Message{ID: "second", Role: api.MessageRoleAssistant, Content: "two"}))
+	svc := &Service{store: sql, Runner: NewRunner()}
+	sc := compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	pass, err := svc.attemptControl().capture(t.Context(), sess, sc)
+	testutil.FailErr(t, "capture", err)
+	if pass.source.id != "second" {
+		t.Fatalf("captured %+v, want the last row", pass.source)
+	}
+	current := func() bool {
+		ok, err := sql.CompactionViewCurrent(t.Context(), sess.ID, pass.source.ord, pass.source.id, pass.source.seq)
+		testutil.FailErr(t, "validate source", err)
+		return ok
+	}
+	if !current() {
+		t.Fatal("captured source is not current")
+	}
+	testutil.FailErr(t, "append", sql.AppendMessages(t.Context(), sess.ID, api.Message{ID: "third", Role: api.MessageRoleAssistant, Content: "three"}))
+	if !current() {
+		t.Fatal("an append invalidated the attempted source")
+	}
+	msg, err := sql.GetMessage(t.Context(), sess.ID, "first")
+	testutil.FailErr(t, "read row", err)
+	msg.Content = "edited"
+	_, err = sql.UpdateMessage(t.Context(), sess.ID, "first", msg)
+	testutil.FailErr(t, "edit row", err)
+	if current() {
+		t.Fatal("an edit left the attempted source current")
 	}
 }

@@ -24,7 +24,7 @@ type Store interface {
 	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
 	GetCompactionView(context.Context, string) (*store.CompactionView, bool, error)
 	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)
-	CompactionSourceClock(context.Context, string) (int64, error)
+	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
 	PutCompactionView(context.Context, string, store.CompactionView) error
 }
 
