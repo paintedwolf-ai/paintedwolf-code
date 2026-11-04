@@ -259,8 +259,8 @@ func TestEightEditBurstDoesNotSlideTheTailAC_KV_06(t *testing.T) {
 		starts := tailStarts(t, svc, mem, sess, 60, 2000, strings.Repeat("o", 1000))
 		moves := distinctInOrder(starts)
 		t.Logf("tail starts: %v", moves)
-		if len(moves) > 4 || len(moves) >= len(starts)/4 {
-			t.Fatalf("tail slid behind a view: %v over %d appends", moves, len(starts))
+		if !slices.Equal(moves, burstTailStarts) {
+			t.Fatalf("tail starts behind a view %v, want %v", moves, burstTailStarts)
 		}
 	})
 }
@@ -305,7 +305,7 @@ func TestOversizedBodiesHoldTheirProjectionAC_KV_06(t *testing.T) {
 
 // burstTailStarts is the exact sequence over the burst fixture: one anchored
 // advance when the batch crosses the bound, then a hold until the next crossing.
-var burstTailStarts = []int64{}
+var burstTailStarts = []int64{65, 129, 193}
 
 type fixedBudgets struct{ window int }
 
@@ -387,7 +387,7 @@ func TestTighterFitFeedsLaterProjectionAC_KV_04(t *testing.T) {
 	}
 }
 
-var tightFitStarts = []int64{}
+var tightFitStarts = []int64{3, 33, 65, 97, 129, 161, 193, 225, 257, 289, 321, 353}
 
 func TestSecondCollapseSignatureHoldsBehindAViewAC_KV_07(t *testing.T) {
 	// Fixture shape only: a stable prefix of view rows, then a long active turn.
@@ -413,7 +413,17 @@ func TestSecondCollapseSignatureHoldsBehindAViewAC_KV_07(t *testing.T) {
 			} else {
 				moved++
 				if fitted.Debug.HistoryCut.Change == "" {
-					t.Fatalf("step %d: first difference at %s with no cutoff change", step, previous[common].ID)
+					dump := func(rows []api.Message) string {
+						var b strings.Builder
+						for _, row := range rows[max(0, common-3):min(len(rows), common+3)] {
+							fmt.Fprintf(&b, "[%s ord=%d pin=%v %d] ", row.ID, row.Ord, row.ContextPinned, len(row.Content))
+						}
+						if at := indexOfID(rows, historyCoverageNoticeID); at >= 0 {
+							b.WriteString(rows[at].Content[:min(90, len(rows[at].Content))])
+						}
+						return b.String()
+					}
+					t.Fatalf("step %d: first difference at %s (%d) with no cutoff change\nprev %s\nnext %s", step, previous[common].ID, common, dump(previous), dump(fitted.Messages))
 				}
 			}
 		}
