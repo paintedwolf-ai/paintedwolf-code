@@ -109,10 +109,22 @@ func TestProgramJobsStaySessionScopedWhilePsRunsForBothSessions(t *testing.T) {
 	}
 }
 
-func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
-	if runtime.GOOS != "darwin" || !confine.Available() {
-		t.Skip("darwin + seatbelt sandbox required")
+// requireAppliedBoundary fails on Linux when confinement is missing, since the
+// capability report is the finding.
+func requireAppliedBoundary(t *testing.T) {
+	t.Helper()
+	if confine.Available() {
+		return
 	}
+	if runtime.GOOS == "linux" {
+		caps, _ := confine.LinuxCapabilities()
+		t.Fatalf("linux confinement unavailable on this host: %+v", caps)
+	}
+	t.Skip("this host has no confinement adapter")
+}
+
+func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
+	requireAppliedBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 
@@ -154,10 +166,8 @@ func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 	}
 }
 
-func TestProgramExternalMacOSShimToolsWriteDarwinUserTempWithoutStderr(t *testing.T) {
-	if runtime.GOOS != "darwin" || !confine.Available() {
-		t.Skip("darwin + seatbelt sandbox required")
-	}
+func TestProgramExternalSystemToolsRunWithoutStderr(t *testing.T) {
+	requireAppliedBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	t.Setenv("TMPDIR", t.TempDir())

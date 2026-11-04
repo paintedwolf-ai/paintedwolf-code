@@ -67,7 +67,7 @@ func TestBrowserProfileFollowsTheRequestedLoopbackPorts(t *testing.T) {
 }
 
 func TestBrowserConfinementKeepsANarrowedRequest(t *testing.T) {
-	t.Parallel()
+	confine.TestingSetAutoConfine(t)
 	c, ok := confine.BrowserConfinement(confine.Request{
 		Roots:                []string{t.TempDir()},
 		LoopbackConnect:      true,

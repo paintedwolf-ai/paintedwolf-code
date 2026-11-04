@@ -676,7 +676,7 @@ func TestBoundaryBrowserProfileEnforces(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	built, ok := confine.BrowserConfinement(confine.Request{Roots: []string{proj}})
 	if !ok || built == nil {
-		t.Fatal("expected BrowserConfinement on darwin")
+		t.Fatal("expected BrowserConfinement where confinement is available")
 	}
 	c := *built
 
@@ -704,7 +704,7 @@ func TestBoundaryBrowserProfileEnforces(t *testing.T) {
 	}
 }
 
-// Development build roots under ~/.config/paintedwolf-dev must compile cleanly without Seatbelt errors.
+// Development build roots under ~/.config/paintedwolf-dev must apply cleanly.
 func TestBoundaryBrowserProfileUnderDevelopmentBuild(t *testing.T) {
 	self := requireLiveBoundary(t)
 	confine.TestingSetAutoConfine(t)
@@ -725,7 +725,7 @@ func TestBoundaryBrowserProfileUnderDevelopmentBuild(t *testing.T) {
 		Roots: []string{browserCache, profileDir, draftDir},
 	})
 	if !ok || built == nil {
-		t.Fatal("expected BrowserConfinement on darwin")
+		t.Fatal("expected BrowserConfinement where confinement is available")
 	}
 
 	code, out := confinedRun(t, self, *built, "/usr/bin/true")
@@ -772,7 +772,7 @@ func TestBoundaryFSBlastBoundary(t *testing.T) {
 	_ = os.Remove(escape)
 	if code := confinedExit(t, self, c, "/bin/sh", "-c", "echo x > "+escape); code == 0 {
 		_ = os.Remove(escape)
-		t.Fatal("write outside root must be denied by Seatbelt")
+		t.Fatal("write outside root must be denied by the boundary")
 	}
 	_ = os.Remove(escape)
 
@@ -806,7 +806,7 @@ func TestBoundaryFSBlastBoundary(t *testing.T) {
 		testutil.FailErr(t, "create directory", err)
 	}
 	if code := confinedExit(t, self, c, "/bin/rm", "-rf", build); code != 0 {
-		t.Fatalf("in-project rm -rf ./build must succeed under Seatbelt, exit=%d", code)
+		t.Fatalf("in-project rm -rf ./build must succeed under the boundary, exit=%d", code)
 	}
 	if _, err := os.Stat(build); !os.IsNotExist(err) {
 		t.Fatalf("in-project build dir should be gone, stat err=%v", err)
@@ -827,7 +827,7 @@ func TestBoundaryEgress(t *testing.T) {
 		t.Fatalf("DefaultConfinement must be proxy-only: on=%v c=%+v", on, c)
 	}
 	defer confine.SetBrokerForTest(nil, egressproxy.Addrs{HTTP: "127.0.0.1:8080", SOCKS: "127.0.0.1:1080"})()
-	lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "seatbelt-boundary"})
+	lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "egress-boundary"})
 	testutil.FailErr(t, "bind egress", err)
 	defer lease.Close(t.Context())
 
@@ -944,9 +944,6 @@ func TestBoundaryProxyOnlyEgress(t *testing.T) {
 	c := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkProxyOnly, ProxyAddr: proxyAddr}
 
 	code, out := confinedRun(t, self, c, "/usr/bin/curl", "-s", "--max-time", "3", ts.URL)
-	if strings.Contains(out, "seatbelt:") {
-		t.Fatalf("proxy-only SBPL profile failed to compile: %s", out)
-	}
 	// The action proxy address is reachable.
 	if code != 0 {
 		t.Fatalf("curl to the proxy address should succeed under proxy-only egress, exit=%d out=%s", code, out)

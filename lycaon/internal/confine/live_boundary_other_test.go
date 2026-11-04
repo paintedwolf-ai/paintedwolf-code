@@ -34,5 +34,11 @@ func requireLiveBoundary(t *testing.T) string {
 
 var warmPythonShim sync.Once
 
+// The unified log carries every refusal the kernel makes.
+const liveRefusalWitness = confine.WitnessKernel
+
+// Seatbelt's process control widens signals to any process the account owns.
+const processControlSignalsOutside = true
+
 // liveBoundaryRoots adds what a confined helper needs beside roots.
 func liveBoundaryRoots(roots ...string) []string { return roots }
