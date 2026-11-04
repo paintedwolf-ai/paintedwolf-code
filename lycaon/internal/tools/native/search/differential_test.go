@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -70,6 +72,10 @@ func references(t *testing.T) []reference {
 			if !bytes.Contains(version, []byte("GNU findutils")) {
 				continue
 			}
+		case "rg":
+			if !judgesRgJSON(version) {
+				continue
+			}
 		}
 		candidate.path = path
 		if !slices.ContainsFunc(out, func(r reference) bool { return r.path == path && r.kind == candidate.kind }) {
@@ -77,6 +83,21 @@ func references(t *testing.T) []reference {
 		}
 	}
 	return out
+}
+
+var ripgrepVersion = regexp.MustCompile(`ripgrep (\d+)\.(\d+)`)
+
+// judgesRgJSON reports whether a ripgrep emits the JSON the catalog targets,
+// observed from 15.1. Ripgrep 13 omits replacements and counts no searches on an
+// empty match limit, so it cannot judge these forms.
+func judgesRgJSON(version []byte) bool {
+	match := ripgrepVersion.FindSubmatch(version)
+	if match == nil {
+		return false
+	}
+	major, _ := strconv.Atoi(string(match[1]))
+	minor, _ := strconv.Atoi(string(match[2]))
+	return major > 15 || (major == 15 && minor >= 1)
 }
 
 func runReference(t *testing.T, ref reference, dir string, argv []string) (string, int) {
@@ -296,5 +317,15 @@ func TestDifferentialAgainstInstalledReferences(t *testing.T) {
 	}
 	if compared == 0 {
 		t.Fatalf("installed references %v matched no differential case", refs)
+	}
+}
+
+func TestRipgrepReferenceVersionGate(t *testing.T) {
+	for version, want := range map[string]bool{
+		"ripgrep 13.0.0": false, "ripgrep 15.0.0": false, "ripgrep 15.1.0": true, "ripgrep 16.0.1": true, "rg": false,
+	} {
+		if got := judgesRgJSON([]byte(version)); got != want {
+			t.Errorf("%q judges = %v, want %v", version, got, want)
+		}
 	}
 }
