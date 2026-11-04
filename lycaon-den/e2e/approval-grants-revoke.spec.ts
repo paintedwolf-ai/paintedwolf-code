@@ -9,8 +9,15 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
+import { listenHarnessSocket } from "./harness-socket.ts";
 
-const SOCKET_PATH = "/tmp/painted-wolf-harness-approval.sock";
+const SOCKET_PATH = `/tmp/painted-wolf-harness-approval-${process.pid}.sock`;
+let closeSocket: () => Promise<void>;
+
+webE2e.beforeAll(async () => {
+  closeSocket = await listenHarnessSocket(SOCKET_PATH);
+});
+webE2e.afterAll(() => closeSocket());
 
 async function grantIDForPattern(
   request: import("@playwright/test").APIRequestContext,

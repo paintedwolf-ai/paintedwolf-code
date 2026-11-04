@@ -1,3 +1,4 @@
+import { realpathSync, rmSync, symlinkSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import {
   activateProject,
@@ -8,6 +9,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
+import { listenHarnessSocket } from "./harness-socket.ts";
 import type { CheckpointListResponse } from "../src/api/types.ts";
 
 /**
@@ -29,8 +31,13 @@ webE2e(
     await activateProject(page, project.id);
     const sessionId = await openNewChatSession(page);
 
-    const approved = "/tmp/lyc-harness-svc.sock";
-    const resolved = "/private/tmp/lyc-harness-svc.sock";
+    // The card shows both paths, so the approved one must resolve elsewhere.
+    const target = `/tmp/lyc-harness-svc-target-${process.pid}.sock`;
+    const approved = `/tmp/lyc-harness-svc-${process.pid}.sock`;
+    await listenHarnessSocket(target);
+    rmSync(approved, { force: true });
+    symlinkSync(target, approved);
+    const resolved = realpathSync(target);
     const inject = await request.post(`${apiUrl}/harness/checkpoints/tool_approval`, {
       headers: { ...auth, "Content-Type": "application/json" },
       data: {
