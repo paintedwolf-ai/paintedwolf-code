@@ -13,8 +13,8 @@ when: paintedwolf.git_no_repository_on_write_leg
 effect: warn
 copy:
   what: A Git read in this command found no repository on this write leg.
-  cause: A write leg works in a copy of the project without Git metadata, so Git reported its own fatal and status 128.
-  why: The command ran normally and Git's answer stands. Another directory or a retry cannot give Git a repository here.
+  cause: This directory has no repository, and the leg's own copy of the project has no Git metadata, so Git reported its own fatal and status 128.
+  why: The command ran normally and Git's answer stands. A retry in this directory gets the same answer.
   fix: >-
     {% if paintedwolf.source_history_offered %}Call `source_history()` for what changed on your branch this session,
     every actor, and `source_history(path, mode="diff")` for one file's change since the session began.

@@ -110,6 +110,16 @@ func TestACOP01WriteLegWarningStatesWhetherThePlanOffersSourceHistory(t *testing
 	}
 }
 
+// The warning's reasons must hold for any directory a read names, not only the
+// leg's own copy.
+func TestACOP01WriteLegWarningFiresForAnAbsoluteDirectoryOutsideTheLeg(t *testing.T) {
+	f := newGitProgramFixture(t, true)
+	outcome := runGitProgram(t, f, "git -C '"+t.TempDir()+"' status")
+	if outcome.Refusal != nil || outcome.Status != 128 || !f.warned() {
+		t.Fatalf("outcome = %+v warned %v, want Git's status 128 and the warning", outcome, f.warned())
+	}
+}
+
 func TestACOP01ManyReadsInOneProgramStateOneWarning(t *testing.T) {
 	f := newGitProgramFixture(t, true)
 	runGitProgram(t, f, "git status; git log; git diff -- a.go")
