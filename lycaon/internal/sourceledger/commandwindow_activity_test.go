@@ -546,6 +546,7 @@ func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
 
 	// The next open stores only what the first did not, and finds the rest in place.
 	writeRootFile(t, root, "c.txt", "before c\n")
+	deliverWrites(ctx, root, "c.txt")
 	store.Commands.retainFiles = windowRetainFiles
 	resumed := openTestWindow(t, store, ctx, root, "make again")
 	if pins := pinned(resumed.ID); len(pins) == 0 || !pins[sourceblob.ContentSHA([]byte("before c\n"))] {
