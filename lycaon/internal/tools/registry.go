@@ -193,6 +193,8 @@ type InvocationSource struct {
 	WorkerBranchRoot    string
 	// RecordViewProcess durably names a process started in the worker's view, so recovery can settle it.
 	RecordViewProcess func(pid int) error
+	// WorkerViewBoundary reads what a process of this worker must not reach, as of its launch.
+	WorkerViewBoundary func() confine.ViewBoundary
 	// WorkerSourceRoots are primary roots captured into the private branch.
 	WorkerSourceRoots []string
 	// BranchWorkspace validates and prepares the branch.

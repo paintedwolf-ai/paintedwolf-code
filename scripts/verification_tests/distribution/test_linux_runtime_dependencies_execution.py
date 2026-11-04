@@ -25,6 +25,7 @@ REQUIRED = {
         "xkbcommon": {"libxkbcommon0"},
         "ALSA": {"libasound2t64", "libasound2"},
         "APT adapter": {"python3-apt"},
+        "FUSE helper": {"fuse3"},
     },
     "rpm": {
         "NSS": {"nss"},
@@ -33,6 +34,7 @@ REQUIRED = {
         "GBM": {"mesa-libgbm"},
         "xkbcommon": {"libxkbcommon"},
         "ALSA": {"alsa-lib"},
+        "FUSE helper": {"fuse3"},
     },
     "pacman": {
         "NSS": {"nss"},
@@ -41,6 +43,7 @@ REQUIRED = {
         "GBM": {"mesa"},
         "xkbcommon": {"libxkbcommon"},
         "ALSA": {"alsa-lib"},
+        "FUSE helper": {"fuse3"},
     },
 }
 PACKAGE_NAME = re.compile(r"\s*([^\s(<>=]+)")

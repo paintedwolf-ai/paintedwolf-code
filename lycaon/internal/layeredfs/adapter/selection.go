@@ -142,6 +142,15 @@ type ConfinementEnforcer interface {
 	VerifyView(ctx context.Context, view *PreparedView) error
 }
 
+// ConfinementFailureReason is the typed reason an enforcer's refusal carries.
+func ConfinementFailureReason(err error) ReasonCode {
+	var aErr *AdapterError
+	if errors.As(err, &aErr) && aErr.ReasonCode != ReasonNone {
+		return aErr.ReasonCode
+	}
+	return ReasonConfinementUnavailable
+}
+
 // Selector chooses one workspace adapter from structured probe capabilities and manages fallback.
 type Selector struct {
 	TargetOS        string

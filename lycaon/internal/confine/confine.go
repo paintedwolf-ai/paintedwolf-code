@@ -138,6 +138,8 @@ type Confinement struct {
 	ReadRoots []string
 	// ReadDenyPaths are per-action read exclusions.
 	ReadDenyPaths []string
+	// View is what this command's mounted worker view keeps out of its reach.
+	View ViewBoundary
 	// EgressOff records the observed deny cause.
 	EgressOff EgressOffCause
 	// SocketGrants are exact AF_UNIX connect literals validated at the choke point.
@@ -207,6 +209,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		SessionScratchRoot:          prepared.SessionScratchRoot,
 		ReadRoots:                   prepared.ReadRoots,
 		ReadDenyPaths:               prepared.ReadDenyPaths,
+		View:                        prepared.View,
 		SocketGrants:                prepared.SocketGrants,
 		DroppedSocketGrants:         prepared.Dropped,
 		ProtectedWriteGrants:        prepared.ProtectedWrites,
@@ -312,6 +315,7 @@ func renderSeatbeltProfile(c Confinement) (string, error) {
 	if err := writeNetworkRules(&b, c); err != nil {
 		return "", err
 	}
+	writeViewListenerDenials(&b, c.View, deny)
 	writeHostCapabilityDenials(&b, deny)
 	return b.String(), nil
 }
@@ -439,6 +443,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		{regex: "^/dev/disk", layer: FloorControlPlane},
 		{regex: "^/dev/rdisk", layer: FloorControlPlane},
 	}})
+	addViewStorageFloor(&rules, c.View)
 	if err := rules.checkStringLengths(); err != nil {
 		return rules, err
 	}
@@ -529,6 +534,9 @@ func writeHostCapabilityDenials(b *strings.Builder, deny string) {
 		b.WriteString("  " + strings.TrimSpace(deny) + "\n")
 	}
 	b.WriteString(")\n")
+	// A process that could detach its own view would lose the only path to its work.
+	b.WriteString("(deny file-mount" + deny + ")\n")
+	b.WriteString("(deny file-unmount" + deny + ")\n")
 }
 
 // pathUnder reports whether path is root or lies beneath it, with the remainder

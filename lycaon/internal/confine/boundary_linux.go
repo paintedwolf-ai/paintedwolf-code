@@ -145,6 +145,10 @@ func renderProfile(c Confinement) (string, error) {
 	if err := validateSocketRealization(c.SocketGrants, socketref.RetainedObject); err != nil {
 		return "", err
 	}
+	if len(c.View.DeniedLoopbackPorts) > 0 {
+		// A FUSE view has no listener, and the plan cannot express a refused port.
+		return "", &linuxsandbox.Unsupported{Code: linuxsandbox.UnsupportedNetworkGrant, Detail: "denied loopback ports"}
+	}
 	rules, err := filesystemRules(c)
 	if err != nil {
 		return "", err

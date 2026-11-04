@@ -52,6 +52,8 @@ type Config struct {
 	MaxConcurrentRequests int
 	MaxLockWaiters        int
 	ConfinementCheckFn    func(ctx context.Context, probeCfg adapter.ProbeConfig) error
+	// ConfinementVerifyFn proves direct backing denial against Probe's real mounted view.
+	ConfinementVerifyFn func(ctx context.Context, view *adapter.PreparedView) error
 	MountHookForTest      func(viewID, rootID, mountDir string) error
 	ClientSyncFn          func(path string) error
 	RemoveAllFn           func(path string) error
@@ -266,6 +268,12 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 	if trunkRaw, tErr := os.ReadFile(filepath.Join(trunkDir, "probe.txt")); tErr != nil || string(trunkRaw) != "seed\n" {
 		res.ReasonCode, res.Diagnostic = adapter.ReasonBackingConfinementFailed, "trunk file mutated during probe"
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic}
+	}
+	if a.cfg.ConfinementVerifyFn != nil {
+		if vErr := a.cfg.ConfinementVerifyFn(ctx, prep); vErr != nil {
+			res.ReasonCode, res.Diagnostic, res.BackingDenialVerified = adapter.ConfinementFailureReason(vErr), vErr.Error(), false
+			return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: vErr}
+		}
 	}
 
 	if _, rErr := a.Release(ctx, probeViewID); rErr != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -12,11 +13,14 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/denialprobe"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
@@ -30,6 +34,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -40,33 +45,6 @@ type fixtureConfinement struct{}
 
 func (fixtureConfinement) Available(context.Context, adapter.ProbeConfig) error    { return nil }
 func (fixtureConfinement) VerifyView(context.Context, *adapter.PreparedView) error { return nil }
-
-// kernelMountCheck is the check supplied until real confinement lands. It proves a kernel mount sits
-// on each root and the backing store is private to this user. That is fixture evidence: no sandboxed
-// process is denied anything here, which is what real enforcement must add.
-type kernelMountCheck struct{}
-
-func (kernelMountCheck) Available(context.Context, adapter.ProbeConfig) error { return nil }
-
-func (kernelMountCheck) VerifyView(_ context.Context, view *adapter.PreparedView) error {
-	for _, root := range view.Roots {
-		mounted, err := differentDevice(root.WorkspacePath)
-		if err != nil {
-			return err
-		}
-		if !mounted {
-			return fmt.Errorf("root %s is not a kernel mount", root.RootID)
-		}
-	}
-	info, err := os.Stat(view.BackingDir)
-	if err != nil {
-		return err
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("backing dir mode %o is not private", info.Mode().Perm())
-	}
-	return nil
-}
 
 func differentDevice(path string) (bool, error) {
 	self, err := os.Stat(path)
@@ -218,18 +196,25 @@ func TestOrdinaryWorkerClaimFallsBackWithTheConfinementReason(t *testing.T) {
 	testutil.FailErr(t, "destroy branch", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 }
 
-// Runs on a real kernel mount with the host's real adapter and services. kernelMountCheck is the one
-// fixture: it stands in for the enforcement a later lane supplies.
+// Runs on a real kernel mount through the production selector, its real enforcer and real services.
+// Only a host with no way to mount skips; a host that mounts but does not enforce fails here.
 func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
-	selector := platform.NewSelector(platform.Config{Confinement: kernelMountCheck{}})
-	fixture := newLayeredWorkerFixture(t, selector)
+	confine.TestingSetAutoConfine(t)
+	if !confine.Available() {
+		t.Skip("this host applies no confinement")
+	}
+	fixture := newLayeredWorkerFixture(t, workspace.DefaultWorkspaceSelector())
 	task := fixture.claim(t)
 	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
 	if !ok {
 		t.Fatal("claim recorded no workspace state")
 	}
 	if snap.Adapter.PreparationKind != adapter.PreparationMounted {
-		t.Skipf("this host cannot mount a view: %s", snap.Adapter.FallbackReason)
+		switch snap.Adapter.FallbackReason {
+		case adapter.ReasonFUSEDeviceUnavailable, adapter.ReasonFUSEHelperUnavailable, adapter.ReasonUnsupportedPlatform:
+			t.Skipf("this host cannot mount a view: %s", snap.Adapter.FallbackReason)
+		}
+		t.Fatalf("an enforcing host fell back: %s", snap.Adapter.FallbackReason)
 	}
 	destroyed := false
 	binding := &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}
@@ -263,6 +248,8 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 			t.Fatalf("%s reachable by a live consumer: %v", name, err)
 		}
 	}
+
+	assertWorkerProcessIsDenied(t, root, fixture.source, view.Prepared)
 
 	testutil.FailErr(t, "create on mount", os.WriteFile(filepath.Join(root, "added.go"), []byte("package added\n"), 0o644))
 	testutil.FailErr(t, "edit on mount", os.WriteFile(filepath.Join(root, "main.go"), []byte("package changed\n"), 0o644))
@@ -319,6 +306,63 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	}
 	if _, err := os.Stat(enginepaths.MetaDirForBranchRoot(root)); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("settlement left branch metadata: %v", err)
+	}
+}
+
+// assertWorkerProcessIsDenied builds the boundary a worker's own command gets, through the path its
+// tool context takes, with the broadest loopback grant, and asks the kernel what it refuses.
+func assertWorkerProcessIsDenied(t *testing.T, root, source string, view *adapter.PreparedView) {
+	t.Helper()
+	// No egress broker runs here, and the view's denials do not depend on egress.
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
+	tctx := tools.ToolContext{}
+	tctx.Source.WorkerBranchRoot = root
+	tctx.Source.WorkerSourceRoots = []string{source}
+	tctx.Source.WorkerViewBoundary = workspace.BranchViewBoundary(root)
+	tctx.Local.LoopbackConnectGranted = true
+	box, ok := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tctx, nil)))
+	if !ok {
+		t.Fatal("a worker command got no boundary")
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	testutil.FailErr(t, "control listener", err)
+	defer func() { _ = listener.Close() }()
+
+	allowed := []denialprobe.Step{
+		{Kind: denialprobe.ReadFile, Path: filepath.Join(root, "main.go")},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(root, "worker-probe")},
+		{Kind: denialprobe.Connect, Port: uint16(listener.Addr().(*net.TCPAddr).Port)}, //nolint:gosec // a listener's own port.
+	}
+	denied := []denialprobe.Step{
+		{Kind: denialprobe.ListDir, Path: view.BackingDir},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(view.BackingDir, "worker-probe")},
+		{Kind: denialprobe.ReadFile, Path: filepath.Join(source, "main.go")},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(source, "worker-probe")},
+	}
+	for _, port := range view.ListenerPorts {
+		denied = append(denied, denialprobe.Step{Kind: denialprobe.Connect, Port: port})
+	}
+	denied = append(denied, denialprobe.Step{Kind: denialprobe.Unmount, Path: root})
+	results, err := viewconfine.Launch(t.Context(), box, root, append(allowed, denied...))
+	testutil.FailErr(t, "launch worker probe", err)
+	for i, result := range results {
+		if i < len(allowed) && !result.Succeeded() {
+			t.Fatalf("a worker could not %s %s %d: errno %d", result.Kind, result.Path, result.Port, result.Errno)
+		}
+		if i >= len(allowed) && !result.Denied() {
+			t.Fatalf("a worker was not refused %s %s %d: errno %d", result.Kind, result.Path, result.Port, result.Errno)
+		}
+	}
+	if mounted, err := differentDevice(root); err != nil || !mounted {
+		t.Fatalf("the view left its mount: mounted=%v err=%v", mounted, err)
+	}
+	if raw, err := os.ReadFile(filepath.Join(root, "main.go")); err != nil || string(raw) != "package main\n" {
+		t.Fatalf("the kernel client stopped working after the denials: %q err=%v", raw, err)
+	}
+	for _, leftover := range []string{filepath.Join(source, "worker-probe"), filepath.Join(root, "worker-probe")} {
+		if _, err := os.Lstat(leftover); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("probe left %s: %v", leftover, err)
+		}
 	}
 }
 

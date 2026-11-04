@@ -14,11 +14,19 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/confine/denialprobe"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/lineage"
 )
 
 func runHelperIfInvoked() {
+	if denialprobe.Invoked(os.Args) {
+		if err := denialprobe.Serve(os.Args[2], os.Stdout); err != nil {
+			fmt.Fprint(os.Stderr, HelperStderrPrefix+err.Error()+"\n")
+			exitHelper(HelperFailureExit)
+		}
+		exitHelper(0)
+	}
 	if len(os.Args) == 2 && os.Args[1] == linuxsandbox.PerformerFlag {
 		if err := linuxsandbox.ServePerformer(); err != nil {
 			fmt.Fprint(os.Stderr, HelperStderrPrefix+err.Error()+"\n")

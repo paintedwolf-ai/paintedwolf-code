@@ -96,6 +96,8 @@ type ActionConfineInputs struct {
 	OverlayReadPaths []string
 	// ReadDenyPaths are host-selected read exclusions.
 	ReadDenyPaths []string
+	// View is what the action's mounted worker view keeps out of its reach.
+	View confine.ViewBoundary
 	// ReadRoots are host-selected allow-backs below denied ancestors.
 	ReadRoots        []string
 	SocketGrants     []confine.SocketGrant
@@ -128,6 +130,7 @@ func ActionConfineRequest(in ActionConfineInputs) confine.Request {
 		PolicyWriteGrants:    append([]confine.ProtectedPathGrant(nil), in.PolicyWriteGrants...),
 		ProtectedReadGrants:  reads,
 		ReadDenyPaths:        append([]string(nil), in.ReadDenyPaths...),
+		View:                 in.View,
 		ReadRoots:            append([]string(nil), in.ReadRoots...),
 		SocksProxyEnv:        in.SocksProxyEnv,
 	}

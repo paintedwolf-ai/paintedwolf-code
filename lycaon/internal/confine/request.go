@@ -77,7 +77,10 @@ type Request struct {
 	ReadRoots         []string
 	// ReadDenyPaths are host-resolved per-action exclusions.
 	ReadDenyPaths []string
-	SocketGrants  []SocketGrant
+	// View is a host fact about the live views, not reviewed authority, so a view starting between
+	// review and launch does not change what was reviewed.
+	View         ViewBoundary `json:"-"`
+	SocketGrants []SocketGrant
 	// ProtectedWriteGrants are exact protected-path write exceptions.
 	ProtectedWriteGrants []ProtectedPathGrant
 	// PolicyWriteGrants expire with this invocation and cover reviewed
@@ -116,6 +119,7 @@ type preparedRequest struct {
 	GrantedWriteRoots     []string
 	ReadRoots             []string
 	ReadDenyPaths         []string
+	View                  ViewBoundary
 	SocketGrants          []SocketGrant
 	Dropped               []SocketGrantDrop
 	ProtectedWrites       []ProtectedPathGrant
@@ -181,6 +185,7 @@ func prepareRequest(req Request) (preparedRequest, error) {
 		GrantedWriteRoots:     grantedWriteRoots,
 		ReadRoots:             readRoots,
 		ReadDenyPaths:         readDenyPaths,
+		View:                  req.View.normalized(),
 		SocketGrants:          applied,
 		Dropped:               dropped,
 		ProtectedWrites:       protected,

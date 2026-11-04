@@ -244,6 +244,10 @@ type PreparedView struct {
 	PrimaryWorkPath string                       `json:"primary_work_path"`
 	BackingDir      string                       `json:"backing_dir"`
 	RuntimeViewDir  string                       `json:"runtime_view_dir"`
+	// SourcePaths are the live trees this view serves, which its processes never reach directly.
+	SourcePaths []string `json:"source_paths,omitempty"`
+	// ListenerPorts are the loopback ports the view's server accepts its kernel client on.
+	ListenerPorts []uint16 `json:"listener_ports,omitempty"`
 	TaskPathHints   []string                     `json:"task_path_hints,omitempty"`
 	SeededGitRepos  map[string]SeedGitInitResult `json:"seeded_git_repos,omitempty"`
 	ObservedEntries int64                        `json:"observed_entries"`

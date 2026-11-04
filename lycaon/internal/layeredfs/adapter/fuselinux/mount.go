@@ -171,6 +171,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 		Roots:           preparedRoots,
 		BackingDir:      absBacking,
 		RuntimeViewDir:  runtimeViewDir,
+		SourcePaths:     append([]string(nil), denyPaths...),
 		TaskPathHints:   append([]string(nil), req.TaskPathHints...),
 	}
 

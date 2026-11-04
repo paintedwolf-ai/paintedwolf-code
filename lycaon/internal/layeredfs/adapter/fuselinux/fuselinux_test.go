@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
 
@@ -82,6 +83,44 @@ func TestAdapterFactsAndFailureClassifications(t *testing.T) {
 		if res, err := deniedAdp.Probe(t.Context(), adapter.ProbeConfig{}); err == nil || res.ReasonCode != adapter.ReasonFUSEMountDenied {
 			t.Fatalf("expected ReasonFUSEMountDenied from MountHookForTest, got res=%+v err=%v", res, err)
 		}
+	}
+}
+
+// A missing FUSE dependency reaches selection as its own reason, not a generic mount failure.
+func TestSelectionFallsBackWithTheMissingDependencyReason(t *testing.T) {
+	cfgs := map[adapter.ReasonCode]fuselinux.Config{
+		adapter.ReasonFUSEDeviceUnavailable: {HostOS: "linux", ConfinementCheckFn: confinementVerified, FuseDevicePath: "/nonexistent/dev/fuse"},
+	}
+	if runtime.GOOS == "linux" {
+		cfgs[adapter.ReasonFUSEHelperUnavailable] = fuselinux.Config{HostOS: "linux", ConfinementCheckFn: confinementVerified, FusermountBin: "/nonexistent/bin/fusermount3"}
+	}
+	for want, cfg := range cfgs {
+		selector := adapter.NewSelector("linux", fuselinux.New(cfg), nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+		chosen, probe, err := selector.Select(t.Context(), adapter.ProbeConfig{})
+		testutil.FailErr(t, "Select", err)
+		if chosen.Facts().PreparationKind != adapter.PreparationMaterialized || chosen.Facts().FallbackReason != want || probe.ReasonCode != want {
+			t.Fatalf("want %s: facts=%+v probe=%+v", want, chosen.Facts(), probe)
+		}
+	}
+}
+
+// Probe proves denial on its real mounted view, and a refusal there keeps its typed reason.
+func TestProbeRefusesAViewTheEnforcerCannotVerify(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("real FUSE mount requires linux")
+	}
+	adp := fuselinux.New(fuselinux.Config{
+		ConfinementCheckFn: confinementVerified,
+		ConfinementVerifyFn: func(context.Context, *adapter.PreparedView) error {
+			return &adapter.AdapterError{ReasonCode: adapter.ReasonBackingConfinementFailed, Diagnostic: "not refused"}
+		},
+	})
+	res, err := adp.Probe(t.Context(), adapter.ProbeConfig{RuntimeDir: t.TempDir()})
+	if err == nil || res.Supported || res.BackingDenialVerified || res.ReasonCode != adapter.ReasonBackingConfinementFailed {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	if res.CleanedUp {
+		t.Fatalf("a refused probe reports full completion: %+v", res)
 	}
 }
 

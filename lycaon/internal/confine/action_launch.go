@@ -32,6 +32,8 @@ func (l *ActionLease) captureLaunch(c *Confinement) {
 	frozen.GrantedWriteRoots = slices.Clone(c.GrantedWriteRoots)
 	frozen.ReadRoots = slices.Clone(c.ReadRoots)
 	frozen.ReadDenyPaths = slices.Clone(c.ReadDenyPaths)
+	frozen.View.DeniedPaths = slices.Clone(c.View.DeniedPaths)
+	frozen.View.DeniedLoopbackPorts = slices.Clone(c.View.DeniedLoopbackPorts)
 	frozen.SocketGrants = slices.Clone(c.SocketGrants)
 	frozen.DroppedSocketGrants = slices.Clone(c.DroppedSocketGrants)
 	frozen.ProtectedWriteGrants = slices.Clone(c.ProtectedWriteGrants)
