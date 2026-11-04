@@ -12,6 +12,19 @@ import stat
 import sys
 
 
+def holds_a_mount(candidate: Path) -> bool:
+    """A mount a test left behind answers from another device, or fails to answer at all."""
+    device = candidate.lstat().st_dev
+    for directory, children, _ in os.walk(candidate):
+        for name in children:
+            try:
+                if (Path(directory) / name).lstat().st_dev != device:
+                    return True
+            except OSError:
+                return True
+    return False
+
+
 def remove_unleased(candidate: Path) -> None:
     if candidate.is_symlink() or not candidate.is_dir():
         return
@@ -23,6 +36,10 @@ def remove_unleased(candidate: Path) -> None:
         try:
             fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
+            return
+        # Removing through a stranded mount would reach its backing store or hang this runner.
+        if holds_a_mount(candidate):
+            print(f"test run keeps {candidate}: a mount remains inside it", file=sys.stderr)
             return
         # Test fixtures can leave read-only directories behind.
         os.chmod(candidate, os.stat(candidate).st_mode | stat.S_IRWXU)
