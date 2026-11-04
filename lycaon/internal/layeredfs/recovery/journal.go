@@ -68,6 +68,7 @@ func NewCoordinator(cfg CoordinatorConfig) (*Coordinator, error) {
 			return nil, fmt.Errorf("recovery: mkdir %s: %w", d, err)
 		}
 	}
+	c.ensureSpaceReserve()
 	return c, nil
 }
 

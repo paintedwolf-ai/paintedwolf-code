@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -53,7 +54,14 @@ type salvagedWork struct {
 func preserveInQuarantine(c *Coordinator, rec InterruptedWorkingRecord, fill func(staging string) (salvagedWork, error)) (*InterruptedWorkingRecord, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	preserved, err := preserveInQuarantineLocked(c, rec, fill)
+	if errors.Is(err, syscall.ENOSPC) && c.releaseSpaceReserve() {
+		return preserveInQuarantineLocked(c, rec, fill)
+	}
+	return preserved, err
+}
 
+func preserveInQuarantineLocked(c *Coordinator, rec InterruptedWorkingRecord, fill func(staging string) (salvagedWork, error)) (*InterruptedWorkingRecord, error) {
 	// One record per view makes a retried salvage find its finished work. The record lands
 	// last, so a partial quarantine is never reported as preserved.
 	id := fmt.Sprintf("intr-%s-%s", rec.WorkerID, rec.ViewID)

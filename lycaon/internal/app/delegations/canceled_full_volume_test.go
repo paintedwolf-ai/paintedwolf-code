@@ -65,4 +65,10 @@ func TestCancelFinishesOnAFullVolume(t *testing.T) {
 	if got := retainedFile(t, onlyRecord(t, f.engine, task.ID), "app.txt"); got != "unpromoted edit\n" {
 		t.Fatalf("retained %q", got)
 	}
+
+	// The next engine finds the room gone and takes back only what is free.
+	f.boot()
+	if records, err := f.engine.Recovery.ListInterruptedRecords(task.ID); err != nil || len(records) != 1 {
+		t.Fatalf("records after restart %+v err=%v", records, err)
+	}
 }
