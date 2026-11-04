@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	publicationRule = "Text you write alongside tool calls is shown to the user when valid"
-	privateTextRule = "Text you write alongside tool calls on this step is private working context"
+	publicationRule = "Text alongside tool calls is shown to the user when valid"
+	privateTextRule = "Text alongside tool calls on this step is private working context"
 	finalAnswerRule = "Write your final answer as Markdown, citing where each claim is made"
 	verifyRule      = "`[verify: targeted - reason]`"
 	artifactRule    = "`[artifact:<uuid>]`"
@@ -81,7 +81,7 @@ func TestEverySurfaceRendersThePublicationAndCitationRules(t *testing.T) {
 			if !row.PublishesMidTurnText {
 				want, refuse = privateTextRule, publicationRule
 			}
-			for _, needed := range []string{want, finalAnswerRule, verifyRule, artifactRule} {
+			for _, needed := range []string{want, finalAnswerRule, verifyRule, artifactRule, "cites a receipt inline"} {
 				if !strings.Contains(text, needed) {
 					t.Errorf("missing %q", needed)
 				}

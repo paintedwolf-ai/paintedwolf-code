@@ -26,8 +26,8 @@ type SurfaceCardVars struct {
 	Rule          string
 	PublishesText bool
 	MayEdit       bool
-	MayRun      bool
-	MayDispatch bool
+	MayRun        bool
+	MayDispatch   bool
 	// EditDeferred distinguishes unloaded editing tools from unavailable ones.
 	EditDeferred bool
 	// OnlyTools enumerates sticky tools when no rule or capability summarizes them.
