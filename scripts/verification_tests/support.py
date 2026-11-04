@@ -85,6 +85,8 @@ if pathlib.Path(os.environ['FIXTURE_HOLD']).exists():
  while not pathlib.Path(os.environ['FIXTURE_RELEASE']).exists(): time.sleep(.01)
 assert (root/'source.txt').is_file(), 'source lease was lost'
 subprocess.run([sys.executable,str(root/'scripts/test-execution.py'),'holding'],check=True)
+output=pathlib.Path(os.environ.get('FIXTURE_OUTPUT','missing'))/name.replace(':','_')
+if output.is_file(): sys.stdout.buffer.write(output.read_bytes()); sys.stdout.flush()
 print('fixture '+name, flush=True)
 sys.exit(1 if name == os.environ.get('FIXTURE_FAIL') else 0)
 '''
@@ -173,6 +175,13 @@ sys.exit(code)
         out, err = process.communicate(timeout=self.state_timeout + 5)
         self.assertEqual(process.returncode, code, out + err)
         return out + err
+
+    def wait_result(self, job_id, code):
+        """A failed wait follows its stdout JSON with a digest on stderr."""
+        process = self.start("--wait", job_id)
+        out, err = process.communicate(timeout=self.state_timeout + 5)
+        self.assertEqual(process.returncode, code, out + err)
+        return json.loads(out)
 
     def records(self):
         return [json.loads(line) for line in self.calls.read_text().splitlines()] if self.calls.exists() else []
