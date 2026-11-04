@@ -126,6 +126,7 @@ func TestEvictVerifiedCheckpointBranchAndRebuildWithLocalDataInventory(t *testin
 	coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
 		RootDir:         t.TempDir(),
 		CheckpointStore: cpStore,
+		MountReconciler: recovery.ConnectionReconciler{},
 	})
 	testutil.FailErr(t, "recovery.NewCoordinator", err)
 

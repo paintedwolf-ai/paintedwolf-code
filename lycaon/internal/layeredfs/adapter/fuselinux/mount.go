@@ -144,7 +144,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 		if custom := strings.TrimSpace(req.TargetRootDirs[g.RootID]); custom != "" {
 			mountDir = filepath.Clean(custom)
 		}
-		rm, mErr := a.mountSingleRoot(ctx, req.ViewID, g, mountDir, absBacking, core)
+		rm, mErr := a.mountSingleRoot(ctx, req.ViewID, runtimeViewDir, g, mountDir, absBacking, core)
 		if mErr != nil {
 			rollback()
 			return nil, mErr
@@ -199,7 +199,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 
 func (a *Adapter) mountSingleRoot(
 	ctx context.Context,
-	viewID string,
+	viewID, runtimeViewDir string,
 	grant adapter.RootGrant,
 	mountDir string,
 	backingDir string,
@@ -232,6 +232,16 @@ func (a *Adapter) mountSingleRoot(
 	mountOpts := FormatMountOptions(fsName)
 	uid := uint32(os.Getuid())
 	gid := uint32(os.Getgid())
+
+	// The identity lands before the mount exists, so a crash inside this function leaves a
+	// record to settle by; an orphan mount without one could never be attributed.
+	record, err := newConnectionRecord(viewID, grant.RootID, canonMount, fsName)
+	if err != nil {
+		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "prepare", ReasonCode: adapter.ReasonFUSEMountDenied, Diagnostic: err.Error(), Cause: err}
+	}
+	if err := adapter.WriteRecordedConnection(runtimeViewDir, record); err != nil {
+		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "prepare", ReasonCode: adapter.ReasonFUSEMountDenied, Diagnostic: err.Error(), Cause: err}
+	}
 
 	srv, err := mountAndStartFUSEServer(ctx, a.cfg, ServerConfig{
 		ViewID:                viewID,
@@ -306,6 +316,12 @@ func (a *Adapter) mountSingleRoot(
 		CachePolicy: DefaultCachePolicy,
 		ParentDev:   parentDev, MountedDev: mountedDev,
 		OwnerUID: uid, OwnerGID: gid,
+	}
+	recordMountFacts(&record, facts)
+	if err := adapter.WriteRecordedConnection(runtimeViewDir, record); err != nil {
+		_ = srv.Close()
+		_ = runFusermountUnmount(context.Background(), a.cfg.FusermountBin, canonMount, true)
+		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "prepare", ReasonCode: adapter.ReasonFUSEMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
 	return &rootMount{grant: grant, mountPath: canonMount, server: srv, facts: facts}, nil
 }

@@ -4,43 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// CancelAndSettleWorkerView fences and stops worker execution, settles its owned view/mount
-// via coord.CancelAndRelease (retaining custody on UnresolvedSettlementError), and finalizes
-// the cancellation only after runtime settlement succeeds (#1666).
-func CancelAndSettleWorkerView(
-	ctx context.Context,
-	q *SQLQueue,
-	jobID string,
-	coord *recovery.Coordinator,
-	req recovery.CancelReleaseRequest,
-	result *api.WorkerResult,
-) (*recovery.CancelReleaseResult, error) {
-	if err := q.StopExecution(ctx, jobID); err != nil {
-		return nil, err
-	}
-	var relRes *recovery.CancelReleaseResult
-	if coord != nil {
-		if req.WorkerID == "" {
-			req.WorkerID = jobID
-		}
-		var err error
-		relRes, err = coord.CancelAndRelease(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if err := q.FinishCanceled(ctx, jobID, result); err != nil {
-		return relRes, err
-	}
-	return relRes, nil
-}
 
 // Cancel aborts or settles a canceled worker.
 func (q *SQLQueue) Cancel(ctx context.Context, jobID string, result *api.WorkerResult) error {
@@ -117,8 +87,34 @@ func (q *SQLQueue) RequestClaimCancellation(ctx context.Context, claimed *api.Wo
 	return won, err
 }
 
-// FinishCanceled records cancellation after execution exits.
+// WorkerRuntimeSettler proves a worker's view and writers are gone before cancellation commits.
+type WorkerRuntimeSettler interface {
+	SettleBranchRuntime(ctx context.Context, jobID, root string) error
+}
+
+// settleCanceledRuntime runs on every cancellation path because each one finishes here. On
+// failure the job stays cancel-requested, so maintenance retries it and its data stays put.
+func (q *SQLQueue) settleCanceledRuntime(ctx context.Context, jobID string) error {
+	task, ok := q.Get(jobID) //nolint:contextcheck // Get has internal sqlQueueGetTimeout
+	if !ok || task.Status.IsTerminal() || strings.TrimSpace(task.WorkspaceRoot) == "" {
+		return nil
+	}
+	q.mu.Lock()
+	ws := q.workerWorkspace
+	q.mu.Unlock()
+	if settler, ok := ws.(WorkerRuntimeSettler); ok {
+		if err := settler.SettleBranchRuntime(ctx, jobID, task.WorkspaceRoot); err != nil {
+			return err
+		}
+	}
+	return workspace.RefuseMountedBranch(task.WorkspaceRoot)
+}
+
+// FinishCanceled records cancellation after execution exits and its runtime settled.
 func (q *SQLQueue) FinishCanceled(ctx context.Context, jobID string, result *api.WorkerResult) error {
+	if err := q.settleCanceledRuntime(ctx, jobID); err != nil {
+		return err
+	}
 	if result == nil {
 		q.mu.Lock()
 		deps := q.cancelReports

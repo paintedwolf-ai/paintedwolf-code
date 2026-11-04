@@ -167,27 +167,11 @@ func prepareStackedWorkerView(ctx context.Context, c *Coordinator, req StackedVi
 		return nil, err
 	}
 
-	var mountPaths []string
-	for _, r := range view.Roots {
-		mountPaths = append(mountPaths, r.WorkspacePath)
+	if err := recordPreparedViewIdentity(c, req.ChildWorkerID, req.Adapter, view); err != nil {
+		_, _ = req.Adapter.Release(ctx, view.ViewID)
+		_ = c.ReleaseClaim(claimID)
+		return nil, err
 	}
-	_ = c.RecordMountIdentity(MountIdentityRecord{
-		ViewID:         view.ViewID,
-		WorkerID:       req.ChildWorkerID,
-		AdapterID:      req.Adapter.ID(),
-		MountPaths:     mountPaths,
-		RuntimeViewDir: view.RuntimeViewDir,
-		BackingDir:     view.BackingDir,
-		BootID:         c.cfg.CurrentBootID,
-	})
-	_ = c.UpsertInventoryEntry(InventoryEntry{
-		ID:       "inv-runtime-" + view.ViewID,
-		Bucket:   BucketDisposableRuntimeCache,
-		WorkerID: req.ChildWorkerID,
-		ViewID:   view.ViewID,
-		Path:     view.RuntimeViewDir,
-		PinnedBy: []string{view.ViewID},
-	})
 
 	return &StackedWorkerSession{
 		ChildWorkerID:       req.ChildWorkerID,

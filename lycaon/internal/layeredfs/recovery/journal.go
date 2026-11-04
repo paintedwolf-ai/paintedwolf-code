@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/fssync"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -230,6 +230,37 @@ func loadMountIdentity(c *Coordinator, workerID, viewID string) (MountIdentityRe
 	return rec, true, nil
 }
 
+// ListMountIdentities returns every recorded view identity of workerID. An unreadable record
+// is refused: it may name a mount, so its absence cannot be assumed.
+func (c *Coordinator) ListMountIdentities(workerID string) ([]MountIdentityRecord, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entries, err := os.ReadDir(c.mountsDir)
+	if err != nil {
+		return nil, err
+	}
+	prefix := workerID + "__"
+	var out []MountIdentityRecord
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(c.mountsDir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var rec MountIdentityRecord
+		if err := decodeVersionedJSON(raw, &rec); err != nil {
+			return nil, err
+		}
+		// Worker ids may themselves contain the separator, so the prefix only narrows.
+		if rec.WorkerID == workerID {
+			out = append(out, rec)
+		}
+	}
+	return out, nil
+}
+
 // RemoveMountIdentity deletes a settled worker view's mount identity record.
 func (c *Coordinator) RemoveMountIdentity(workerID, viewID string) error {
 	c.mu.Lock()
@@ -279,43 +310,11 @@ func writeAtomicJSON(c *Coordinator, dir, name string, val any) error {
 			return err
 		}
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, "."+name+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := f.Name()
-	_, wErr := f.Write(raw)
-	cErr := f.Chmod(0o600)
-	sErr := syncFile(f)
-	closeErr := f.Close()
-	if err := errors.Join(wErr, cErr, sErr, closeErr); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, filepath.Join(dir, name)); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	return syncDir(dir)
-}
-
-func syncFile(f *os.File) error {
-	if fssync.Relaxed() {
-		return nil
-	}
-	return f.Sync()
-}
-
-func syncDir(dirPath string) error {
-	if fssync.Relaxed() {
-		return nil
-	}
-	df, err := os.Open(dirPath)
-	if err != nil {
-		return err
-	}
-	return errors.Join(df.Sync(), df.Close())
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: dir, Rel: name},
+		Source:   bytes.NewReader(raw),
+		Mode:     0o600,
+		DirMode:  0o700,
+	})
+	return err
 }

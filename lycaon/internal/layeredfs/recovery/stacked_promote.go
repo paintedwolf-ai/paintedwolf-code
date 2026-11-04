@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -111,16 +112,22 @@ func promoteStackedCheckpoint(ctx context.Context, c *Coordinator, req StackedPr
 		return nil, err
 	}
 	workerID := plan.EffectiveManifest.WorkerID
-	_ = c.RecordTransition(workerID, "", PhaseFilePromotion, StateBegin, req.ChildCheckpointID, "promote_stacked", nil, false)
+	if err := recordPromotionTransition(c, workerID, StateBegin, req.ChildCheckpointID, "promote_stacked"); err != nil {
+		return nil, err
+	}
 
+	// The claim is durable before any target changes, and only success releases it, so a failed
+	// promotion's whole chain stays available for repair.
 	claimID := "claim-promote-" + req.ChildCheckpointID
-	_ = c.AcquireClaim(RetentionClaim{
+	if err := c.AcquireClaim(RetentionClaim{
 		ClaimID:       claimID,
 		Kind:          ClaimPromotion,
 		HolderID:      req.ChildCheckpointID,
 		WorkerID:      workerID,
 		CheckpointIDs: plan.ResolvedChain,
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	txID := req.TransactionID
 	if txID == "" {
@@ -141,14 +148,13 @@ func promoteStackedCheckpoint(ctx context.Context, c *Coordinator, req StackedPr
 		},
 	})
 	if err != nil {
-		_ = c.RecordTransition(workerID, "", PhaseFilePromotion, StateFailed, req.ChildCheckpointID, err.Error(), nil, false)
-		return nil, err
+		return nil, errors.Join(err, recordPromotionTransition(c, workerID, StateFailed, req.ChildCheckpointID, "promote_stacked"))
 	}
 
-	_ = c.ReleaseClaim(claimID)
 	promotedDigests := buildPromotedTargetDigests(plan.EffectiveManifest, req.TargetRoots)
 	for _, landedCP := range append(append([]string(nil), plan.UnlandedAncestors...), req.ChildCheckpointID) {
-		_ = c.RecordCheckpointLanded(LandingReceipt{
+		// A missing receipt could apply this result twice, so failure keeps the claim and reports.
+		if err := c.RecordCheckpointLanded(LandingReceipt{
 			FormatVersion:     FormatVersion,
 			CheckpointID:      landedCP,
 			TransactionID:     rec.TransactionID,
@@ -159,10 +165,24 @@ func promoteStackedCheckpoint(ctx context.Context, c *Coordinator, req StackedPr
 			PromotedDigests:   promotedDigests,
 			ImportedRefs:      rec.ImportedRefs,
 			LandedAt:          time.Now().UTC(),
-		})
+		}); err != nil {
+			return rec, err
+		}
 	}
-	_ = c.RecordTransition(workerID, "", PhaseFilePromotion, StateCommitted, req.ChildCheckpointID, "promote_stacked", nil, false)
-	return rec, nil
+	if err := c.ReleaseClaim(claimID); err != nil {
+		return rec, err
+	}
+	return rec, recordPromotionTransition(c, workerID, StateCommitted, req.ChildCheckpointID, "promote_stacked")
+}
+
+// recordPromotionTransition journals a promotion of a worker that has a journal; a checkpoint can
+// outlive its worker's journal once that worker's own result was released.
+func recordPromotionTransition(c *Coordinator, workerID string, state TransitionState, checkpointID, op string) error {
+	err := c.RecordTransition(workerID, "", PhaseFilePromotion, state, checkpointID, op, nil, false)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func isAncestorLandedOnTarget(c *Coordinator, anc checkpoint.Manifest, targetRoots map[string]string) bool {

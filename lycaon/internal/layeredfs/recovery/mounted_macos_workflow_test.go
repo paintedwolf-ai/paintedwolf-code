@@ -56,6 +56,7 @@ func TestMountedMacOSWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t 
 		GitStore:        gitMgr.Store(),
 		GitManager:      gitMgr,
 		CurrentBootID:   "boot-macos-1",
+		MountReconciler: recovery.ConnectionReconciler{},
 	})
 	if err != nil {
 		t.Fatal(err)

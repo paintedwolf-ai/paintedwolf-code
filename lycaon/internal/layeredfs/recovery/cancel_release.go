@@ -69,11 +69,10 @@ func cancelAndRelease(ctx context.Context, c *Coordinator, req CancelReleaseRequ
 	}
 
 	var procRec ProcessSettlementReceipt
-	if c.cfg.ProcessCtrl != nil && hasIdent && len(ident.RecordedPIDs) > 0 {
-		procRec, err = c.cfg.ProcessCtrl.SettleProcesses(req.WorkerID, viewID, ident.RecordedPIDs)
-		if err != nil || !procRec.Settled || len(procRec.SurvivingPIDs) > 0 {
-			return nil, recordUnresolvedSettlement(c, req.WorkerID, viewID, backingDir, procRec.SurvivingPIDs, false, nil,
-				"worker processes did not terminate within cancellation bounds", err)
+	if hasIdent {
+		procRec, err = settleRecordedProcesses(ctx, c, ident)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -89,10 +88,9 @@ func cancelAndRelease(ctx context.Context, c *Coordinator, req CancelReleaseRequ
 	if c.cfg.GitManager != nil {
 		_ = c.cfg.GitManager.ReleaseView(viewID)
 	}
-	_ = c.ReleaseClaim("claim-view-" + viewID)
-	_ = c.ReleaseClaim("claim-unsettled-" + viewID)
-	_ = c.RemoveMountIdentity(req.WorkerID, viewID)
-	_ = c.RemoveInventoryEntry("inv-runtime-" + viewID)
+	if err := errors.Join(c.ReleaseClaim("claim-view-"+viewID), forgetSettledView(c, req.WorkerID, viewID)); err != nil {
+		return nil, err
+	}
 
 	if err := c.RecordTransition(req.WorkerID, viewID, PhaseRelease, StateCommitted, j.LastPublishedCheckpointID, "cancel_and_release", nil, false); err != nil {
 		return nil, err
@@ -139,8 +137,12 @@ func captureOrPreserveBeforeRelease(
 		if pErr == nil {
 			m := pubRes.Manifest
 			j.LastPublishedCheckpointID = m.CheckpointID
-			_ = c.SaveWorkerJournal(*j)
-			_ = c.CommitCheckpointRetention(ctx, req.WorkerID, m.CheckpointID, nil, m.PrivateGit.RetainedObjects, m.ParentCheckpoints)
+			if err := c.CommitCheckpointRetention(ctx, req.WorkerID, m.CheckpointID, nil, m.PrivateGit.RetainedObjects, m.ParentCheckpoints); err != nil {
+				return nil, nil, err
+			}
+			if err := c.SaveWorkerJournal(*j); err != nil {
+				return nil, nil, err
+			}
 			return &m, nil, nil
 		}
 	}
@@ -171,6 +173,8 @@ func captureOrPreserveBeforeRelease(
 	return nil, nil, nil
 }
 
+// settleMountAndAdapterRelease releases a view this process serves through its adapter. A view
+// from an earlier process, or one a retry already released, settles by its recorded identity.
 func settleMountAndAdapterRelease(
 	ctx context.Context,
 	c *Coordinator,
@@ -179,28 +183,29 @@ func settleMountAndAdapterRelease(
 	hasIdent bool,
 	ident MountIdentityRecord,
 ) error {
-	if c.cfg.MountReconciler != nil && hasIdent {
-		mRec, mErr := c.cfg.MountReconciler.ReconcileWorkerMount(ident)
-		if mErr != nil || !mRec.Settled || len(mRec.BusyPaths) > 0 {
-			return recordUnresolvedSettlement(c, req.WorkerID, viewID, backingDir, nil, true, mRec.BusyPaths,
-				"worker mount connection remained busy during release", mErr)
-		}
-	}
 	if req.Adapter != nil {
 		relRec, rErr := req.Adapter.Release(ctx, viewID)
-		if rErr != nil || !relRec.Settled {
+		if rErr == nil && relRec.Settled {
+			return nil
+		}
+		if relRec.ReasonCode != adapter.ReasonViewNotFound {
 			return recordUnresolvedSettlement(c, req.WorkerID, viewID, backingDir, nil, true, nil,
 				"adapter release did not settle handles or mount", rErr)
 		}
 	} else if req.View != nil && req.View.Core != nil {
-		if err := req.View.Core.ReleaseView(); err != nil {
+		if err := req.View.Core.ReleaseView(); err != nil && !errors.Is(err, layeredfs.ErrViewReleased) {
 			return recordUnresolvedSettlement(c, req.WorkerID, viewID, backingDir, nil, true, nil,
 				"core view release failed to settle", err)
 		}
 	}
+	if hasIdent {
+		return settleRecordedMount(ctx, c, ident)
+	}
 	return nil
 }
 
+// recordUnresolvedSettlement keeps the identity record and adds a durable claim, so eviction,
+// deletion and collection all see the custody until a retry settles it.
 func recordUnresolvedSettlement(
 	c *Coordinator,
 	workerID, viewID, backingDir string,
@@ -210,7 +215,7 @@ func recordUnresolvedSettlement(
 	reason string,
 	cause error,
 ) error {
-	_ = c.AcquireClaim(RetentionClaim{
+	claimErr := c.AcquireClaim(RetentionClaim{
 		ClaimID:  "claim-unsettled-" + viewID,
 		Kind:     ClaimUnresolvedSettlement,
 		HolderID: viewID,
@@ -226,6 +231,6 @@ func recordUnresolvedSettlement(
 		Reason:              reason,
 		RetainedCustody:     true,
 		RetainedStorageRefs: []string{backingDir},
-		Cause:               cause,
+		Cause:               errors.Join(cause, claimErr),
 	}
 }

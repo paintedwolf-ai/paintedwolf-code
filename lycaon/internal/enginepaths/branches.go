@@ -14,6 +14,10 @@ const WorkerBranchesDirName = "worker-branches"
 // storage enables copy-on-write worker branches.
 const WorkerSeedsDirName = "worker-seeds"
 
+// WorkerRecoveryDirName holds worker lifecycle journals, retained checkpoints and
+// quarantined interrupted work outside any tree a worker can reach.
+const WorkerRecoveryDirName = "worker-recovery"
+
 // WorkerBranchPathSegment is the layout marker in every absolute worker-branch path.
 // The config-root leaf is omitted so every engine state root matches.
 const WorkerBranchPathSegment = "/" + WorkerBranchesDirName + "/"
@@ -21,6 +25,11 @@ const WorkerBranchPathSegment = "/" + WorkerBranchesDirName + "/"
 // WorkerBranchesRootUnder returns the worker-branch base directory under an engine state root.
 func WorkerBranchesRootUnder(stateRoot string) string {
 	return filepath.Join(strings.TrimSpace(stateRoot), WorkerBranchesDirName)
+}
+
+// WorkerRecoveryRootUnder returns the worker recovery base under an engine state root.
+func WorkerRecoveryRootUnder(stateRoot string) string {
+	return filepath.Join(strings.TrimSpace(stateRoot), WorkerRecoveryDirName)
 }
 
 // WorkerSeedsRootUnder returns the central worker-seed base under an engine state root.

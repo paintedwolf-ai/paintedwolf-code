@@ -3,6 +3,7 @@
 package recovery
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -119,6 +120,7 @@ type WorkerLifecycleJournal struct {
 	BootID                    string                       `json:"boot_id"`
 	ParentCheckpointIDs       []string                     `json:"parent_checkpoint_ids,omitempty"`
 	LastPublishedCheckpointID string                       `json:"last_published_checkpoint_id,omitempty"`
+	BackingDir                string                       `json:"backing_dir,omitempty"`
 	ActivePhase               TransitionPhase              `json:"active_phase,omitempty"`
 	ActiveOperation           string                       `json:"active_operation,omitempty"`
 	ActivePaths               []layeredfs.QualifiedPath    `json:"active_paths,omitempty"`
@@ -174,21 +176,21 @@ type InterruptedWorkingRecord struct {
 	CreatedAt        time.Time                 `json:"created_at"`
 }
 
-// MountIdentityRecord binds runtime mount/process facts to a specific worker view.
+// MountIdentityRecord binds runtime mount and process facts to a specific worker view.
+// Its presence means the view's runtime has not been shown settled.
 type MountIdentityRecord struct {
-	FormatVersion  int               `json:"format_version"`
-	ViewID         string            `json:"view_id"`
-	WorkerID       string            `json:"worker_id"`
-	AdapterID      adapter.AdapterID `json:"adapter_id"`
-	MountID        string            `json:"mount_id,omitempty"`
-	ConnectionID   string            `json:"connection_id,omitempty"`
-	ExportSource   string            `json:"export_source,omitempty"`
-	MountPaths     []string          `json:"mount_paths,omitempty"`
-	RuntimeViewDir string            `json:"runtime_view_dir"`
-	BackingDir     string            `json:"backing_dir"`
-	BootID         string            `json:"boot_id"`
-	RecordedPIDs   []int             `json:"recorded_pids,omitempty"`
-	UpdatedAt      time.Time         `json:"updated_at"`
+	FormatVersion     int                          `json:"format_version"`
+	ViewID            string                       `json:"view_id"`
+	WorkerID          string                       `json:"worker_id"`
+	AdapterID         adapter.AdapterID            `json:"adapter_id"`
+	Mounted           bool                         `json:"mounted,omitempty"`
+	Connections       []adapter.RecordedConnection `json:"connections,omitempty"`
+	MountPaths        []string                     `json:"mount_paths,omitempty"`
+	RuntimeViewDir    string                       `json:"runtime_view_dir"`
+	BackingDir        string                       `json:"backing_dir"`
+	BootID            string                       `json:"boot_id"`
+	RecordedProcesses []adapter.ProcessIdentity    `json:"recorded_processes,omitempty"`
+	UpdatedAt         time.Time                    `json:"updated_at"`
 }
 
 // ProcessSettlementReceipt reports the result of stopping a worker's recorded process lineage.
@@ -202,13 +204,12 @@ type ProcessSettlementReceipt struct {
 
 // ProcessController supervises and settles processes belonging exclusively to a specific worker lineage.
 type ProcessController interface {
-	SettleProcesses(workerID, viewID string, recordedPIDs []int) (ProcessSettlementReceipt, error)
+	SettleProcesses(ctx context.Context, workerID, viewID string, recorded []adapter.ProcessIdentity) (ProcessSettlementReceipt, error)
 }
 
 // MountSettlementReceipt reports reconciliation of a specific worker view's mounts and connections.
 type MountSettlementReceipt struct {
 	ViewID            string
-	MountID           string
 	UnmountedPaths    []string
 	BusyPaths         []string
 	ConnectionAborted bool
@@ -217,7 +218,7 @@ type MountSettlementReceipt struct {
 
 // MountReconciler settles or aborts a specific worker view's mount/connection by recorded identity.
 type MountReconciler interface {
-	ReconcileWorkerMount(rec MountIdentityRecord) (MountSettlementReceipt, error)
+	ReconcileWorkerMount(ctx context.Context, rec MountIdentityRecord) (MountSettlementReceipt, error)
 }
 
 // FaultInjector injects deterministic faults at named recovery/lifecycle phase boundaries.
