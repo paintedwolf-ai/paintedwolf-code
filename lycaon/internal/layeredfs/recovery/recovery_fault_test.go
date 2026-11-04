@@ -67,6 +67,7 @@ func newRecoveryFixture(t *testing.T) *recoveryFixture {
 		GitStore:        gitMgr.Store(),
 		GitManager:      gitMgr,
 		CurrentBootID:   "boot-1",
+		MountReconciler: recovery.ConnectionReconciler{},
 	})
 	if err != nil {
 		t.Fatal(err)

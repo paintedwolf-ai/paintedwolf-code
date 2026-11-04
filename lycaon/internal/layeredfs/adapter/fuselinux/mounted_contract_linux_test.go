@@ -375,9 +375,13 @@ func TestReleaseNeverDeletesThroughAMountItCouldNotRemove(t *testing.T) {
 	if !errors.As(err, &aErr) || aErr.ReasonCode != adapter.ReasonCleanupFailed || rec.Settled {
 		t.Fatalf("expected cleanup_failed with a mount remaining, got rec=%+v err=%v", rec, err)
 	}
-	reclaimed, err := v.adp.ReclaimDeadMounts(t.Context(), v.runtimeDir)
-	if err != nil || len(reclaimed) != 1 {
-		t.Fatalf("reclaim after failed release: %v err=%v", reclaimed, err)
+	connections, err := adapter.LoadRecordedConnections(filepath.Join(v.runtimeDir, v.viewID))
+	if err != nil || len(connections) != 1 {
+		t.Fatalf("recorded connections: %+v err=%v", connections, err)
+	}
+	settled, err := v.adp.SettleRecordedConnection(t.Context(), connections[0])
+	if err != nil || settled.Disposition != adapter.ConnectionDetached || settled.ConnectionAborted {
+		t.Fatalf("settle after failed release: %+v err=%v", settled, err)
 	}
 	if rec, err := v.adp.Release(t.Context(), v.viewID); err != nil || !rec.Settled {
 		t.Fatalf("retry after reclaim: rec=%+v err=%v", rec, err)
@@ -769,8 +773,12 @@ func TestEngineDeathLeavesReclaimableMountAndOnlyDeadOnesAreReclaimed(t *testing
 	}
 	t.Cleanup(func() { _, _ = adp.Release(context.Background(), "view-live") })
 
-	if none, err := adp.ReclaimDeadMounts(t.Context(), runtimeRoot); err != nil || len(none) != 0 {
-		t.Fatalf("reclaim with no dead mounts: %v err=%v", none, err)
+	recorded, err := adapter.LoadRecordedConnections(filepath.Join(runtimeRoot, "view-dead"))
+	if err != nil || len(recorded) != 1 || recorded[0].DevMajorMinor == "" || recorded[0].Server.PID != engine.Process.Pid {
+		t.Fatalf("recorded connection of the serving engine: %+v err=%v", recorded, err)
+	}
+	if alive, err := adp.SettleRecordedConnection(t.Context(), recorded[0]); err != nil || alive.Disposition != adapter.ConnectionServerAlive {
+		t.Fatalf("settle while the server lives: %+v err=%v", alive, err)
 	}
 
 	if err := engine.Process.Kill(); err != nil {
@@ -782,9 +790,9 @@ func TestEngineDeathLeavesReclaimableMountAndOnlyDeadOnesAreReclaimed(t *testing
 		t.Fatalf("dead mount statfs: %v", err)
 	}
 
-	reclaimed, err := adp.ReclaimDeadMounts(t.Context(), runtimeRoot)
-	if err != nil || len(reclaimed) != 1 || reclaimed[0] != deadMount {
-		t.Fatalf("reclaimed %v err=%v, want only %s", reclaimed, err, deadMount)
+	settled, err := adp.SettleRecordedConnection(t.Context(), recorded[0])
+	if err != nil || settled.Disposition != adapter.ConnectionDetached || settled.ConnectionAborted {
+		t.Fatalf("settle after engine death: %+v err=%v", settled, err)
 	}
 	if err := unix.Statfs(deadMount, &st); errors.Is(err, unix.ENOTCONN) {
 		t.Fatalf("dead mount still attached")

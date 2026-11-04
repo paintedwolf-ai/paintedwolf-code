@@ -280,26 +280,6 @@ func runFusermountUnmount(ctx context.Context, fusermountBin, mountPath string, 
 	return nil
 }
 
-// ReclaimDeadMounts detaches this user's view mounts under runtimeRoot whose serving engine died.
-// Only the mount is removed: processes still holding it see ENOTCONN and are never signaled.
-func (a *Adapter) ReclaimDeadMounts(ctx context.Context, runtimeRoot string) ([]string, error) {
-	dead, err := deadViewMountPaths(ctx, runtimeRoot, uint32(os.Getuid()))
-	if err != nil {
-		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "reclaim", ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: err.Error(), Cause: err}
-	}
-	a.mu.RLock()
-	fusermountBin := a.cfg.FusermountBin
-	a.mu.RUnlock()
-	reclaimed := make([]string, 0, len(dead))
-	for _, mountPath := range dead {
-		if uErr := runFusermountUnmount(ctx, fusermountBin, mountPath, true); uErr != nil {
-			return reclaimed, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "reclaim", ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: uErr.Error(), Cause: uErr}
-		}
-		reclaimed = append(reclaimed, mountPath)
-	}
-	return reclaimed, nil
-}
-
 func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAlive bool) error {
 	if m == nil || m.mountPath == "" || !isMountOwnedAndActive(m, serverAlive) {
 		return nil

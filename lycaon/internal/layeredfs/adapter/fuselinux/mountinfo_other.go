@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
 
 type kernelMountEntry struct {
@@ -38,8 +39,16 @@ func checkKernelMountTable(_, _, _ string) (bool, bool) {
 	return false, false
 }
 
-func deadViewMountPaths(_ context.Context, _ string, _ uint32) ([]string, error) {
-	return nil, fmt.Errorf("fuselinux: mountinfo requires linux")
+func findRecordedMount(adapter.RecordedConnection) (kernelMountEntry, recordedMountState, error) {
+	return kernelMountEntry{}, recordedMountAbsent, fmt.Errorf("fuselinux: mountinfo requires linux")
+}
+
+func connectionEnded(context.Context, string) bool { return false }
+
+func servingProcessEnded(adapter.ProcessIdentity) bool { return false }
+
+func abortConnection(string) error {
+	return fmt.Errorf("fuselinux: connection abort requires linux")
 }
 
 func mountPathsWithin(_ string) ([]string, error) {

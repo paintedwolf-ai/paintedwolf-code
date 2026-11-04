@@ -2,6 +2,7 @@ package recovery_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -21,8 +22,12 @@ type mockProcessMountRig struct {
 	settledPIDs                        []int
 }
 
-func (m *mockProcessMountRig) SettleProcesses(workerID, viewID string, pids []int) (recovery.ProcessSettlementReceipt, error) {
+func (m *mockProcessMountRig) SettleProcesses(_ context.Context, workerID, viewID string, recorded []adapter.ProcessIdentity) (recovery.ProcessSettlementReceipt, error) {
 	m.settledWorkers = append(m.settledWorkers, workerID)
+	pids := make([]int, 0, len(recorded))
+	for _, process := range recorded {
+		pids = append(pids, process.PID)
+	}
 	m.settledPIDs = append(m.settledPIDs, pids...)
 	if m.failProcessSettle {
 		return recovery.ProcessSettlementReceipt{WorkerID: workerID, ViewID: viewID, SurvivingPIDs: pids, Settled: false}, errors.New("writer process still active")
@@ -30,12 +35,12 @@ func (m *mockProcessMountRig) SettleProcesses(workerID, viewID string, pids []in
 	return recovery.ProcessSettlementReceipt{WorkerID: workerID, ViewID: viewID, StoppedPIDs: pids, Settled: true}, nil
 }
 
-func (m *mockProcessMountRig) ReconcileWorkerMount(rec recovery.MountIdentityRecord) (recovery.MountSettlementReceipt, error) {
+func (m *mockProcessMountRig) ReconcileWorkerMount(_ context.Context, rec recovery.MountIdentityRecord) (recovery.MountSettlementReceipt, error) {
 	m.settledMountViews = append(m.settledMountViews, rec.ViewID)
 	if m.failMountSettle {
-		return recovery.MountSettlementReceipt{ViewID: rec.ViewID, MountID: rec.MountID, BusyPaths: rec.MountPaths, Settled: false}, errors.New("mount busy")
+		return recovery.MountSettlementReceipt{ViewID: rec.ViewID, BusyPaths: rec.MountPaths, Settled: false}, errors.New("mount busy")
 	}
-	return recovery.MountSettlementReceipt{ViewID: rec.ViewID, MountID: rec.MountID, UnmountedPaths: rec.MountPaths, ConnectionAborted: true, Settled: true}, nil
+	return recovery.MountSettlementReceipt{ViewID: rec.ViewID, UnmountedPaths: rec.MountPaths, ConnectionAborted: true, Settled: true}, nil
 }
 
 func TestStorageLossOrderingENOSPCAndCorruptMetadata(t *testing.T) {
@@ -176,10 +181,10 @@ func TestSameBootSurvivingWriterSettlementAndScopedReconciliation(t *testing.T) 
 	for _, w := range []struct {
 		workerID string
 		viewID   string
-		pids     []int
+		pids     []adapter.ProcessIdentity
 	}{
-		{"worker-1", "view-w1", []int{4101, 4102}},
-		{"worker-2", "view-w2", []int{5201}},
+		{"worker-1", "view-w1", []adapter.ProcessIdentity{{PID: 4101, Started: 1}, {PID: 4102, Started: 1}}},
+		{"worker-2", "view-w2", []adapter.ProcessIdentity{{PID: 5201, Started: 1}}},
 	} {
 		_ = coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
 			FormatVersion:             recovery.FormatVersion,
@@ -195,12 +200,11 @@ func TestSameBootSurvivingWriterSettlementAndScopedReconciliation(t *testing.T) 
 			ViewID:         w.viewID,
 			WorkerID:       w.workerID,
 			AdapterID:      fx.mountedAdp.ID(),
-			MountID:        "mnt-" + w.viewID,
 			MountPaths:     []string{"/tmp/shared-prefix/" + w.viewID},
 			RuntimeViewDir: view1.RuntimeViewDir,
 			BackingDir:     view1.BackingDir,
 			BootID:         "boot-same",
-			RecordedPIDs:   w.pids,
+			RecordedProcesses: w.pids,
 		})
 	}
 
@@ -222,8 +226,6 @@ func TestSameBootSurvivingWriterSettlementAndScopedReconciliation(t *testing.T) 
 	_, err = coord.CancelAndRelease(ctx, recovery.CancelReleaseRequest{
 		WorkerID: "worker-1",
 		ViewID:   "view-w1",
-		View:     view1,
-		Adapter:  fx.mountedAdp,
 	})
 	if !errors.As(err, &unsettled) || !unsettled.MountBusy || !unsettled.RetainedCustody {
 		t.Fatalf("expected UnresolvedSettlementError for busy mount, got %v", err)

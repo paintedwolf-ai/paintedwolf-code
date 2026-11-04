@@ -7,51 +7,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// EnsureWorkerBranchFromCheckpoint acquires a BranchLease for task and, if its branch tree was
-// evicted, reconstructs the tree from the worker's last validated published checkpoint (#1666).
-func EnsureWorkerBranchFromCheckpoint(
-	ctx context.Context,
-	task *api.WorkerTask,
-	ws *workspace.Manager,
-	coord *recovery.Coordinator,
-	req recovery.RecoverRequest,
-) (*BranchLease, *recovery.RecoveryResult, error) {
-	if task == nil || !task.EffectiveScope().IsWrite() {
-		return nil, nil, fmt.Errorf("%w: %s is not a write worker", ErrWorkerBranchUnavailable, taskIDOrBlank(task))
-	}
-	root := strings.TrimSpace(task.WorkspaceRoot)
-	if root == "" {
-		return nil, nil, fmt.Errorf("%w: %s has no branch", ErrWorkerBranchUnavailable, task.ID)
-	}
-	release, err := workspace.AcquireBranchUse(ctx, root)
-	if err != nil {
-		return nil, nil, err
-	}
-	if workspace.BranchTreePresent(root) {
-		workspace.TouchBranchUse(root)
-		return &BranchLease{Root: root, release: release}, nil, nil
-	}
-	if ws == nil || coord == nil {
-		release()
-		return nil, nil, fmt.Errorf("%w: %s branch tree is missing and checkpoint rebuilder is unavailable", ErrWorkerBranchUnavailable, task.ID)
-	}
-	if req.WorkerID == "" {
-		req.WorkerID = task.ID
-	}
-	recRes, _, err := ws.RebuildWorkerWorkspaceFromCheckpoint(ctx, root, coord, req)
-	if err != nil {
-		release()
-		return nil, nil, fmt.Errorf("rebuild checkpoint worker branch %s: %w", task.ID, err)
-	}
-	return &BranchLease{Root: root, release: release}, recRes, nil
-}
 
 // ErrWorkerBranchUnavailable reports a branch tree that is gone and cannot be
 // rebuilt: the job has no sealed overlay to rebuild it from.
@@ -71,6 +31,28 @@ func (l *BranchLease) Release() {
 	}
 	l.release()
 	l.release = nil
+}
+
+// CheckpointBranchRebuilder reconstructs a tree from its worker's retained checkpoint, and
+// reports false when no checkpoint applies.
+type CheckpointBranchRebuilder interface {
+	RebuildRecoveredBranch(ctx context.Context, root, jobID string) (bool, error)
+}
+
+// BranchEvictor is the eviction path for every retention caller: a queue whose workspace manager
+// knows the recovery rules applies them, and anything else evicts on the sealed record.
+func BranchEvictor(queue WorkerQueue) func(ctx context.Context, branchRoot string) error {
+	if sql, ok := queue.(*SQLQueue); ok {
+		sql.mu.Lock()
+		ws := sql.workerWorkspace
+		sql.mu.Unlock()
+		if evictor, ok := ws.(interface {
+			EvictWorkerBranch(ctx context.Context, branchRoot string) error
+		}); ok {
+			return evictor.EvictWorkerBranch
+		}
+	}
+	return workspace.EvictJobTree
 }
 
 // WorkerBranches materializes a job's branch tree on demand. A tree that
@@ -96,6 +78,16 @@ func ensureWorkerBranch(ctx context.Context, task *api.WorkerTask, ws WorkerWork
 	if workspace.BranchTreePresent(root) {
 		workspace.TouchBranchUse(root)
 		return &BranchLease{Root: root, release: release}, nil
+	}
+	if rebuilder, ok := ws.(CheckpointBranchRebuilder); ok {
+		rebuilt, err := rebuilder.RebuildRecoveredBranch(ctx, root, task.ID)
+		if err != nil {
+			release()
+			return nil, fmt.Errorf("rebuild worker branch %s from checkpoint: %w", task.ID, err)
+		}
+		if rebuilt {
+			return &BranchLease{Root: root, release: release}, nil
+		}
 	}
 	if strings.TrimSpace(task.WorkspaceOverlayPath) == "" || ws == nil {
 		release()

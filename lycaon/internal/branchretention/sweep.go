@@ -83,7 +83,7 @@ func Sweep(ctx context.Context, deps Deps, cfg Config) (Report, error) {
 			break
 		}
 		if err := deps.Evict(ctx, tree.Root); err != nil {
-			if errors.Is(err, workspace.ErrBranchInUse) {
+			if errors.Is(err, workspace.ErrBranchInUse) || errors.Is(err, workspace.ErrBranchRetained) {
 				report.Skipped++
 				continue
 			}

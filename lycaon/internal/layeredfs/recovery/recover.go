@@ -70,7 +70,7 @@ func recoverWorkerView(ctx context.Context, c *Coordinator, req RecoverRequest) 
 	if prevViewID == "" {
 		prevViewID = j.ViewID
 	}
-	procReceipt, mountReceipt, prevBacking, err := settleOwnedRuntimeForRecovery(c, req.WorkerID, prevViewID, req.PreviousBackingDir)
+	procReceipt, mountReceipt, prevBacking, err := settleOwnedRuntimeForRecovery(ctx, c, req.WorkerID, prevViewID, req.PreviousBackingDir)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +103,7 @@ func recoverWorkerView(ctx context.Context, c *Coordinator, req RecoverRequest) 
 
 	j.ViewID = view.ViewID
 	j.AdapterID = req.Adapter.ID()
+	j.BackingDir = view.BackingDir
 	j.BootID = c.cfg.CurrentBootID
 	j.ActivePhase = ""
 	j.ActiveOperation = ""
@@ -158,7 +159,9 @@ func rebuildWithAdapter(ctx context.Context, c *Coordinator, req RebuildAdapterR
 			}
 			cpID = pubRes.Manifest.CheckpointID
 			j.LastPublishedCheckpointID = cpID
-			_ = c.SaveWorkerJournal(j)
+			if err := c.SaveWorkerJournal(j); err != nil {
+				return nil, err
+			}
 		} else if cpID != "" {
 			if m, vErr := c.VerifyCheckpointReconstructible(ctx, cpID); vErr == nil {
 				if hasUnsealedMutationsBeyondCheckpoint(req.CurrentView.BackingDir, m) {
@@ -194,8 +197,9 @@ func rebuildWithAdapter(ctx context.Context, c *Coordinator, req RebuildAdapterR
 				Cause:           rErr,
 			}
 		}
-		_ = c.RemoveMountIdentity(req.WorkerID, req.CurrentView.ViewID)
-		_ = c.RemoveInventoryEntry("inv-runtime-" + req.CurrentView.ViewID)
+		if err := forgetSettledView(c, req.WorkerID, req.CurrentView.ViewID); err != nil {
+			return nil, err
+		}
 	}
 
 	j.ViewID = newView.ViewID
