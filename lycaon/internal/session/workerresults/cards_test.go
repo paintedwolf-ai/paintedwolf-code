@@ -115,7 +115,7 @@ func TestTerminalWorkerPublicationRetiresPinnedCloseoutBeforeWake(t *testing.T) 
 				if got := recovery.RecordGroundingFriction(t.Context(), parent.ID); got.Remaining != before.Remaining-1 {
 					t.Fatalf("publication reset friction: before=%+v after=%+v", before, got)
 				}
-				if state := recovery.CloseoutStallState(t.Context(), other.ID); !state.Active || state.Draft.Synthesis != guidance.ParseCloseoutDraft("stale body", citationmd.Options{}) {
+				if state := recovery.CloseoutStallState(t.Context(), other.ID); !state.Active || state.Draft.Synthesis != "stale body" {
 					t.Fatalf("unrelated root changed: %+v", state)
 				}
 				// No parent wake or worker-result acknowledgement is needed for retirement.
