@@ -18,9 +18,7 @@ import (
 
 func buildMountTransition(t *testing.T, output string) {
 	t.Helper()
-	if err := buildMountTransitionImage(output); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "build mount transition image", buildMountTransitionImage(output))
 }
 
 func buildMountTransitionImage(output string) error {

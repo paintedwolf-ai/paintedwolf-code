@@ -328,9 +328,7 @@ func sudoFixture(t *testing.T, mode, dir string, extra ...string) error {
 
 func goBuild(t *testing.T, output, pkg string, ldflags string, options ...string) {
 	t.Helper()
-	if err := buildBinary(output, pkg, ldflags, options...); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "build fixture binary", buildBinary(output, pkg, ldflags, options...))
 }
 
 func buildBinary(output, pkg string, ldflags string, options ...string) error {

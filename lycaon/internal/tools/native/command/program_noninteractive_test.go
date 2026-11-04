@@ -129,4 +129,3 @@ func TestProgramPythonReceivesEOFWithoutControllingTerminal(t *testing.T) {
 		t.Fatalf("Python did not receive EOF without a terminal: %+v", got)
 	}
 }
-
