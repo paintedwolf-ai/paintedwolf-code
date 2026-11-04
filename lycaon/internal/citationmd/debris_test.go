@@ -46,6 +46,7 @@ func TestLinksNowherePresentTheirLabel(t *testing.T) {
 		{"Listed by [the output](output:program:3ae4:stdout) above.", "Listed by the output above."},
 		{"Run [this](javascript:alert(1)).", "Run this."},
 		{"Mail [me](mailto:a@example.test).", "Mail [me](mailto:a@example.test)."},
+		{"Call [us](tel:+15550100).", "Call [us](tel:+15550100)."},
 		{"Jump to [the end](#end).", "Jump to [the end](#end)."},
 		{"See [it](file:///tmp/a.go).", "See [it](file:///tmp/a.go)."},
 	} {
