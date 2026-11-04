@@ -93,11 +93,8 @@ type openCommandWindow struct {
 	// one ended and its settle grace has not finished.
 	active bool
 	holds  int
-	// waiters are holds waiting for the window to re-anchor.
-	waiters int
-	// anchoring is non-nil while the window re-anchors; anchorErr is its result.
-	anchoring chan struct{}
-	anchorErr error
+	// anchoring is non-nil while the window re-anchors.
+	anchoring *windowAnchor
 	// quiet is non-nil during a settle grace, and closes when a hold or the
 	// close ends that grace early.
 	quiet chan struct{}
@@ -504,7 +501,7 @@ func (s *Commands) closeCommandWindow(ctx context.Context, w *openCommandWindow)
 	s.windowsMu.Unlock()
 	if anchoring != nil {
 		select {
-		case <-anchoring:
+		case <-anchoring.done:
 		case <-ctx.Done():
 		}
 	}
