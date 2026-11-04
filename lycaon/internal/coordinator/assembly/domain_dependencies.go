@@ -21,7 +21,7 @@ type promptSurfaceDeps struct {
 	EffectivePromptSurface  func(ctx context.Context, sess *api.Session) prompts.AgentPromptSurface
 	ImplementSessionState   func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
-	LoadExecutionModeState  func(ctx context.Context, sessionID string) surface.ExecutionModeState
+	ExecutionModes          *surface.ExecutionModeStateStore
 	LoadedTools             func(sessionID string) map[string]bool
 	OmittedUnits            func(sessionID string) map[string]bool
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
@@ -59,7 +59,7 @@ type turnContextDeps struct {
 }
 
 type promptProjection interface {
-	loadExecutionModeState(context.Context, string) surface.ExecutionModeState
+	loadExecutionModeState(string) surface.ExecutionModeState
 	loadedTools(*api.Session) map[string]bool
 	resolveCoordinatorProfile(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) (surface.TurnProfile, surface.ImplementSessionState)
 	resolveTurnRoster(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) *inject.AgentRoster
@@ -74,7 +74,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		EffectivePromptSurface:  snapshot.EffectivePromptSurface,
 		ImplementSessionState:   snapshot.ImplementSessionState,
 		Limits:                  snapshot.Limits,
-		LoadExecutionModeState:  snapshot.LoadExecutionModeState,
+		ExecutionModes:          snapshot.ExecutionModes,
 		LoadedTools:             snapshot.LoadedTools,
 		OmittedUnits:            snapshot.OmittedUnits,
 		ProjectOverlayRootPaths: snapshot.ProjectOverlayRootPaths,

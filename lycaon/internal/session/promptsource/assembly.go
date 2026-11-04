@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/heldcall"
@@ -80,15 +79,10 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		SiblingNoteDelivery:   m.Notes,
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,
-		LoadExecutionModeState: func(_ context.Context, sessionID string) surface.ExecutionModeState {
-			return rt.ExecutionModeStore().Load(sessionID)
-		},
-		SaveExecutionModeState: func(_ context.Context, sessionID, family string) {
-			rt.ExecutionModeStore().Save(sessionID, family)
-		},
-		WorkflowHints: m.Hints,
-		GateFeedback:  m.Feedback,
-		ScanGuidance:  m.Scan,
+		ExecutionModes:        rt.ExecutionModeStore(),
+		WorkflowHints:         m.Hints,
+		GateFeedback:          m.Feedback,
+		ScanGuidance:          m.Scan,
 		RepoKnownEmpty: func(ctx context.Context, workspacePath string) bool {
 			return repoinfo.MeasuredEmpty(ctx, m.Repository, workspacePath)
 		},
