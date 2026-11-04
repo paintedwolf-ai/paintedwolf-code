@@ -172,9 +172,14 @@ func writeKeptLink(out *shaper, doc Document, p part) {
 		out.protect([]byte(source))
 		return
 	}
-	out.literal([]byte(doc.Source[p.span.Start:label.End]))
+	opening := doc.Source[p.span.Start:label.Start]
+	out.literal([]byte(opening + labelAutolink.ReplaceAllString(doc.Source[label.Start:label.End], "&lt;$1")))
 	out.protect([]byte(doc.Source[label.End:p.span.End]))
 }
+
+// labelAutolink is an autolink inside a link's label, which the frontend's parser
+// would render as a second, unvalidated link.
+var labelAutolink = regexp.MustCompile(`<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:)`)
 
 // separateFromEscape keeps a preceding backslash from escaping a rewritten autolink.
 func separateFromEscape(out *shaper, text string) {
@@ -301,7 +306,7 @@ func FileLink(path string, line, endLine int) string {
 }
 
 var labelEscaper = strings.NewReplacer(
-	`\`, `\\`, `[`, `\[`, `]`, `\]`, `*`, `\*`, `_`, `\_`, "`", "\\`", `<`, `\<`, `&`, `\&`, `~`, `\~`,
+	`\`, `\\`, `[`, `\[`, `]`, `\]`, `(`, `\(`, `)`, `\)`, `*`, `\*`, `_`, `\_`, "`", "\\`", `<`, `\<`, `&`, `\&`, `~`, `\~`,
 )
 
 func escapeLabel(label string) string { return labelEscaper.Replace(label) }
@@ -334,6 +339,9 @@ func unescapePath(dest string) string {
 // PlainLabel is an unvalidated link's text with no link semantics: any protocol node
 // in it is removed, and a URL in it stays readable but cannot link.
 func PlainLabel(link Link) string {
+	if link.Form == LinkAutolink {
+		return neutralizeURLs(escapeLabel(link.Label))
+	}
 	label := strings.TrimSpace(Render(Parse(link.Label, Options{}), func(o Occurrence) Rendition {
 		if o.Link != nil {
 			return Rendition{Text: o.Link.Label}

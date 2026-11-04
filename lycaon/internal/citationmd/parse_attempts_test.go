@@ -272,6 +272,13 @@ func TestBracketedBareLinkPresentation(t *testing.T) {
 	if got := PlainLabel(Link{Label: "a https://x.test/p and WWW.y.test"}); got != "a https&#58;//x.test/p and WWW&#46;y.test" {
 		t.Fatalf("label = %q", got)
 	}
+	bare := Link{Form: LinkAutolink, Label: "https://x.test/u[t](https://x.test/t)"}
+	if got := PlainLabel(bare); got != `https&#58;//x.test/u\[t\]\(https&#58;//x.test/t\)` {
+		t.Fatalf("bare label = %q", got)
+	}
+	if got := Project(Parse("[<https://x.test/c> y](z)", Options{})); got != "[&lt;https://x.test/c> y](z)" {
+		t.Fatalf("autolink in a label = %q", got)
+	}
 }
 
 // Whole-response fence and recovery under CRLF.
