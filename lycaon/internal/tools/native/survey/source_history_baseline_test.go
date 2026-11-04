@@ -245,7 +245,7 @@ func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) 
 	repochange.Notify(t.Context(), repochange.Event{ProjectDir: h.dir, Kind: repochange.WorktreeChanged, Paths: []string{"gen.txt"}, Source: repochange.SourceWatcher})
 	close(endSettle)
 
-	result := testutil.AwaitValue(t, "the overview returns once settled", overview)
+	result := testutil.Receive(t, "the overview returns once settled", overview)
 	if len(result.OpenWindows) != 0 {
 		t.Fatalf("open windows = %+v, want the settled window gone", result.OpenWindows)
 	}
