@@ -14,6 +14,9 @@ type ViewBoundary struct {
 	DeniedPaths []string
 	// ReopenedPaths are the worker's own roots, below a denied path.
 	ReopenedPaths []string
+	// ReopenedReadPaths stay read-only below a denied path, such as the object store a private
+	// repository borrows from.
+	ReopenedReadPaths []string
 	// WriteDeniedPaths stay readable and are refused for writing, after everything above: a pristine
 	// tree is the exact base of a later merge.
 	WriteDeniedPaths []string
@@ -24,7 +27,7 @@ type ViewBoundary struct {
 
 func (v ViewBoundary) normalized() ViewBoundary {
 	return ViewBoundary{
-		DeniedPaths: normalizePathList(v.DeniedPaths), ReopenedPaths: normalizePathList(v.ReopenedPaths),
+		DeniedPaths: normalizePathList(v.DeniedPaths), ReopenedPaths: normalizePathList(v.ReopenedPaths), ReopenedReadPaths: normalizePathList(v.ReopenedReadPaths),
 		WriteDeniedPaths: normalizePathList(v.WriteDeniedPaths), DeniedLoopbackPorts: normalizeListenPorts(v.DeniedLoopbackPorts),
 	}
 }
@@ -36,8 +39,9 @@ func addViewStorageFloor(rules *FilesystemRules, view ViewBoundary) {
 	rules.add(fsRule{op: opRead, matches: subpathMatches(denied, FloorReadControlPlane)})
 	rules.add(fsRule{op: opWrite, matches: subpathMatches(denied, FloorControlPlane)})
 	reopened := resolveEach(slices.Clone(view.ReopenedPaths))
-	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(reopened, "")})
-	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(traversalAncestors(denied, reopened), "")})
+	readable := append(resolveEach(slices.Clone(view.ReopenedReadPaths)), reopened...)
+	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(readable, "")})
+	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(traversalAncestors(denied, readable), "")})
 	rules.add(fsRule{op: opWrite, allow: true, matches: subpathMatches(reopened, "")})
 	rules.add(fsRule{op: opWrite, matches: subpathMatches(resolveEach(slices.Clone(view.WriteDeniedPaths)), FloorControlPlane)})
 }

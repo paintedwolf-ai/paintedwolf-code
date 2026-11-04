@@ -85,6 +85,11 @@ func NormalizeRepoRel(path string) string {
 	return strings.TrimPrefix(path, "/")
 }
 
+// PrivateGitDirUnder is the private Git storage beneath a worker-branch base.
+func PrivateGitDirUnder(branchesRoot string) string {
+	return filepath.Join(strings.TrimSpace(branchesRoot), ".adapter", "privategit")
+}
+
 // PristineTreeForBranchRoot is a materialized workspace's exact base. It sits beside the working tree
 // rather than in it, and a worker reads it and never writes it.
 func PristineTreeForBranchRoot(branchTreeRoot string) string {

@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
 // probeBound ends a probe stuck on a mount. Running out proves nothing, so it counts as unavailable.
@@ -51,6 +52,7 @@ func Boundary(view *adapter.PreparedView) confine.ViewBoundary {
 	}
 	if base := enginepaths.WorkerBranchesRootOf(view.PrimaryWorkPath); base != "" {
 		boundary.DeniedPaths = append(boundary.DeniedPaths, base)
+		boundary.ReopenedReadPaths = []string{privategit.RetainedObjectsDir(enginepaths.PrivateGitDirUnder(base))}
 		for _, root := range view.Roots {
 			boundary.ReopenedPaths = append(boundary.ReopenedPaths, root.WorkspacePath)
 		}

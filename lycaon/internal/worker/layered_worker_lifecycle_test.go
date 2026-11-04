@@ -385,6 +385,12 @@ func assertWorkerShellGitWorks(t *testing.T, root, source, worktree string) {
 	if err != nil || code != 0 || !strings.Contains(string(out), "initial") {
 		t.Fatalf("a worker's git under its boundary: code=%d err=%v out=%q", code, err, out)
 	}
+	store := privategit.RetainedObjectsDir(enginepaths.PrivateGitDirUnder(enginepaths.WorkerBranchesRootOf(root)))
+	results, err := viewconfine.Launch(t.Context(), box, root, []denialprobe.Step{{Kind: denialprobe.CreateFile, Path: filepath.Join(store, "worker-probe")}})
+	testutil.FailErr(t, "launch store probe", err)
+	if !results[0].Denied() {
+		t.Fatalf("a worker could write the object store: errno %d", results[0].Errno)
+	}
 }
 
 // assertWorkerProcessIsDenied builds the boundary a worker's own command gets, through the path its
