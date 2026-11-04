@@ -410,7 +410,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 		"pipeline":   `external -- /bin/sh -c '` + waitForRelease + `' | external -- /bin/sh -c 'cat >/dev/null'`,
 		"xargs":      `echo go | xargs -n1 /bin/sh -c '` + waitForRelease + `'`,
 		"env":        `env MARK=1 /bin/sh -c '` + waitForRelease + `'`,
-		"timeout":    `timeout 3600 /bin/sh -c '` + waitForRelease + `'`,
+		"timeout":    `timeout 60 /bin/sh -c '` + waitForRelease + `'`,
 		"nohup":      `nohup /bin/sh -c '` + waitForRelease + `'`,
 		"substitute": `echo "$(/bin/sh -c '` + waitForRelease + `')"`,
 	} {
