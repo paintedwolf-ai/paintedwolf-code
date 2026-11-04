@@ -445,6 +445,48 @@ func TestParseBudgets(t *testing.T) {
 	}
 }
 
+// Sources built to make the block or link parser quadratic are refused, with a
+// structured issue, rather than parsed at that cost.
+func TestParseStructureBudget(t *testing.T) {
+	t.Parallel()
+	nested := func(unit string, depth int) string { return strings.Repeat(unit, depth) + "x" }
+	refused := []string{
+		strings.Repeat("[a](", 1<<14),
+		strings.Repeat("![a](", 1<<14),
+		strings.Repeat("[read#1](", 1<<14),
+		nested(">", maxContainerDepth+1),
+		nested("> ", maxContainerDepth+1),
+		nested("- ", maxContainerDepth+1),
+		nested("* ", maxContainerDepth+1),
+		nested("+ ", maxContainerDepth+1),
+		nested("1. ", maxContainerDepth+1),
+		nested("2) ", maxContainerDepth+1),
+		"ok\n" + nested("> - ", maxContainerDepth),
+	}
+	for _, source := range refused {
+		doc := Parse(source, Options{})
+		if got := issueCodes(doc); !reflect.DeepEqual(got, []IssueCode{IssueStructureBudget}) || len(doc.Occurrences) != 0 {
+			t.Errorf("%.20q: issues = %+v", source, got)
+		}
+		if got := Project(doc); got != "" {
+			t.Errorf("%.20q: refused source presented %.20q", source, got)
+		}
+	}
+	allowed := []string{
+		nested("> ", maxContainerDepth) + " [read#1]",
+		strings.Repeat("> plain\n", maxContainerDepth+1) + "[read#1]",
+		strings.Repeat("1234567890. no ", 8) + "[read#1]",
+		"-x *y 1.z " + strings.Repeat("a [b](c) ", 2000) + "[read#1]",
+		strings.Repeat("*a_ a* ", 1<<13) + "[read#1]",
+		strings.Repeat("   ", 100),
+	}
+	for _, source := range allowed {
+		if doc := Parse(source, Options{}); len(doc.Issues) != 0 {
+			t.Errorf("%.20q: issues = %+v", source, doc.Issues)
+		}
+	}
+}
+
 // A single token's cost is linear: an occurrence-dense source stays within its
 // budget and records every node up to it.
 func TestParseBoundedByNodeCount(t *testing.T) {

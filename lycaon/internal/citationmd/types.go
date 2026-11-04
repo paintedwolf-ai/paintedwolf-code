@@ -14,6 +14,12 @@ const (
 	MaxOccurrences = 1024
 	// maxIssueTokenBytes bounds the source text an issue carries.
 	maxIssueTokenBytes = 256
+	// maxLinkWork bounds the bytes link attempts may rescan in one parse. It
+	// stops only a source built to be quadratic: thousands of attempts on one
+	// very long line.
+	maxLinkWork = 1 << 28
+	// maxContainerDepth bounds nested block containers on one line.
+	maxContainerDepth = 64
 )
 
 // Options configures one parse or projection.
@@ -125,6 +131,7 @@ const (
 	IssueNodeTooLong             IssueCode = "node_too_long"
 	IssueOccurrenceBudget        IssueCode = "occurrence_budget_exceeded"
 	IssueSourceBudget            IssueCode = "source_budget_exceeded"
+	IssueStructureBudget         IssueCode = "structure_budget_exceeded"
 )
 
 // Issue is one explicit parse defect. Token holds a bounded prefix of the span.
@@ -166,7 +173,7 @@ type Document struct {
 	// Zones are the literal zones the parse honoured, in source order.
 	Zones []Zone
 	parts []part
-	// overBudget means the source was refused unparsed and has no safe display.
+	// overBudget means the source was refused whole and has no safe display.
 	overBudget bool
 }
 

@@ -23,7 +23,13 @@ func Parse(source string, opts Options) Document {
 		doc.Issues = append(doc.Issues, Issue{Code: IssueSourceBudget, Token: boundedToken(source)})
 		return doc
 	}
+	if containerDepthExceeded(source) {
+		return refuseStructure(doc)
+	}
 	shape := parseStructure(source)
+	if shape.exhausted {
+		return refuseStructure(doc)
+	}
 	builder := &documentBuilder{doc: &doc, budget: opts.occurrenceBudget()}
 	machine := newNodeMachine(opts, builder)
 	zones := shape.zones
@@ -49,6 +55,12 @@ func Parse(source string, opts Options) Document {
 	}
 	machine.finish()
 	builder.finishBudget()
+	return doc
+}
+
+func refuseStructure(doc Document) Document {
+	doc.overBudget = true
+	doc.Issues = append(doc.Issues, Issue{Code: IssueStructureBudget, Token: boundedToken(doc.Source)})
 	return doc
 }
 

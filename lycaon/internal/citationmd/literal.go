@@ -20,31 +20,40 @@ type inlineExtent struct {
 	labelEnd int
 }
 
-type extentLog map[ast.Node]inlineExtent
+// parseLog is what one parse records beside the AST: where inline nodes ended,
+// a fact goldmark does not keep, and the work its link parser has done.
+type parseLog struct {
+	extents  map[ast.Node]inlineExtent
+	linkWork int
+}
 
-var extentLogKey = parser.NewContextKey()
+var parseLogKey = parser.NewContextKey()
 
-// extentRecorder wraps an inline parser to capture where its node ended, a fact
-// goldmark's AST does not keep.
+// extentRecorder wraps an inline parser to capture where its node ended. A link
+// attempt rescans the rest of its line, so attempts are charged against
+// maxLinkWork and refused once it is spent; the parse is then discarded.
 type extentRecorder struct {
 	parser.InlineParser
 }
 
 func (r extentRecorder) Parse(parent ast.Node, block text.Reader, pc parser.Context) ast.Node {
-	_, entry := block.Position()
+	log, _ := pc.Get(parseLogKey).(*parseLog)
+	line, entry := block.PeekLine()
+	if len(line) > 1 && line[0] == ']' && line[1] == '(' {
+		if log.linkWork += len(line); log.linkWork > maxLinkWork {
+			return nil
+		}
+	}
 	node := r.InlineParser.Parse(parent, block, pc)
 	if node == nil {
 		return nil
 	}
 	_, after := block.Position()
-	log, _ := pc.Get(extentLogKey).(extentLog)
 	switch node.(type) {
-	case *ast.CodeSpan, *ast.RawHTML:
-		log[node] = inlineExtent{start: entry.Start, end: after.Start}
+	case *ast.CodeSpan, *ast.RawHTML, *ast.AutoLink:
+		log.extents[node] = inlineExtent{start: entry.Start, end: after.Start}
 	case *ast.Link, *ast.Image:
-		log[node] = inlineExtent{start: node.Pos(), end: after.Start, labelEnd: entry.Start}
-	case *ast.AutoLink:
-		log[node] = inlineExtent{start: entry.Start, end: after.Start}
+		log.extents[node] = inlineExtent{start: node.Pos(), end: after.Start, labelEnd: entry.Start}
 	}
 	return node
 }
@@ -56,7 +65,9 @@ func (r extentRecorder) CloseBlock(parent ast.Node, block text.Reader, pc parser
 	}
 }
 
-// markdownParser is CommonMark plus GFM, matching the dialect Den renders.
+// markdownParser is the dialect Den renders, CommonMark plus GFM, less the
+// emphasis and strikethrough parsers: they cannot change a literal zone or a link
+// boundary, and their delimiter matching is quadratic in a block's delimiters.
 var markdownParser = sync.OnceValue(func() parser.Parser {
 	configured := parser.NewParser(
 		parser.WithBlockParsers(parser.DefaultBlockParsers()...),
@@ -66,21 +77,21 @@ var markdownParser = sync.OnceValue(func() parser.Parser {
 			util.Prioritized(extentRecorder{parser.NewLinkParser()}, 200),
 			util.Prioritized(extentRecorder{parser.NewAutoLinkParser()}, 300),
 			util.Prioritized(extentRecorder{parser.NewRawHTMLParser()}, 400),
-			util.Prioritized(parser.NewEmphasisParser(), 500),
 			util.Prioritized(extentRecorder{extension.NewLinkifyParser()}, 999),
 		),
 	)
 	md := goldmark.New(goldmark.WithParser(configured))
 	extension.Table.Extend(md)
-	extension.Strikethrough.Extend(md)
 	extension.TaskList.Extend(md)
 	return md.Parser()
 })
 
 // structure is one Markdown parse: its literal zones and the links among them.
+// exhausted means the parse spent its budget and its zones must not be trusted.
 type structure struct {
-	zones []Zone
-	links map[int]*Link
+	zones     []Zone
+	links     map[int]*Link
+	exhausted bool
 }
 
 // LiteralZones returns the source's literal zones from one structural parse.
@@ -107,11 +118,11 @@ func TextRanges(source string) []Span {
 
 func parseStructure(source string) structure {
 	data := []byte(source)
-	log := extentLog{}
+	log := &parseLog{extents: map[ast.Node]inlineExtent{}}
 	pc := parser.NewContext()
-	pc.Set(extentLogKey, log)
+	pc.Set(parseLogKey, log)
 	doc := markdownParser().Parse(text.NewReader(data), parser.WithContext(pc))
-	out := structure{links: map[int]*Link{}}
+	out := structure{links: map[int]*Link{}, exhausted: log.linkWork > maxLinkWork}
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -122,7 +133,7 @@ func parseStructure(source string) structure {
 	return out
 }
 
-func (s *structure) visit(n ast.Node, data []byte, log extentLog) ast.WalkStatus {
+func (s *structure) visit(n ast.Node, data []byte, log *parseLog) ast.WalkStatus {
 	switch node := n.(type) {
 	case *ast.FencedCodeBlock:
 		s.addBlock(ZoneFence, fenceSpan(node, data))
@@ -158,14 +169,14 @@ func (s *structure) addBlock(kind ZoneKind, span Span) {
 	}
 }
 
-func (s *structure) addInline(kind ZoneKind, log extentLog, n ast.Node) {
-	if extent, ok := log[n]; ok {
+func (s *structure) addInline(kind ZoneKind, log *parseLog, n ast.Node) {
+	if extent, ok := log.extents[n]; ok {
 		s.zones = append(s.zones, Zone{Kind: kind, Span: Span{extent.start, extent.end}})
 	}
 }
 
-func (s *structure) addLink(node *ast.Link, data []byte, log extentLog) {
-	extent, ok := log[node]
+func (s *structure) addLink(node *ast.Link, data []byte, log *parseLog) {
+	extent, ok := log.extents[node]
 	if !ok {
 		return
 	}
@@ -183,8 +194,8 @@ func (s *structure) addLink(node *ast.Link, data []byte, log extentLog) {
 	}
 }
 
-func (s *structure) addAutolink(node *ast.AutoLink, data []byte, log extentLog) {
-	extent, ok := log[node]
+func (s *structure) addAutolink(node *ast.AutoLink, data []byte, log *parseLog) {
+	extent, ok := log.extents[node]
 	if !ok {
 		return
 	}
@@ -201,6 +212,57 @@ func (s *structure) addAutolink(node *ast.AutoLink, data []byte, log extentLog) 
 		}
 		s.links[span.Start] = &Link{Form: LinkAutolink, Label: string(label), LabelSpan: labelSpan, Destination: string(node.URL(data))}
 	}
+}
+
+// containerDepthExceeded reports a line nested past maxContainerDepth, whose
+// cost in the block parser is quadratic in its depth.
+func containerDepthExceeded(source string) bool {
+	for at := 0; at < len(source); at++ {
+		depth := 0
+		for at < len(source) && source[at] != '\n' {
+			width := containerMarkerWidth(source[at:])
+			if width == 0 {
+				break
+			}
+			at += width
+			if depth++; depth > maxContainerDepth {
+				return true
+			}
+		}
+		for at < len(source) && source[at] != '\n' {
+			at++
+		}
+	}
+	return false
+}
+
+// containerMarkerWidth measures whitespace or one container marker at the start
+// of rest; whitespace alone counts no deeper only because a marker must follow.
+func containerMarkerWidth(rest string) int {
+	at := 0
+	for at < len(rest) && isSpaceByte(rest[at]) {
+		at++
+	}
+	if at == len(rest) {
+		return 0
+	}
+	switch c := rest[at]; {
+	case c == '>':
+		return at + 1
+	case c == '-' || c == '+' || c == '*':
+		if at+1 < len(rest) && isSpaceByte(rest[at+1]) {
+			return at + 2
+		}
+	case c >= '0' && c <= '9':
+		digits := at
+		for digits < len(rest) && rest[digits] >= '0' && rest[digits] <= '9' && digits-at < 9 {
+			digits++
+		}
+		if digits+1 < len(rest) && (rest[digits] == '.' || rest[digits] == ')') && isSpaceByte(rest[digits+1]) {
+			return digits + 2
+		}
+	}
+	return 0
 }
 
 func cleanDestination(raw []byte) string {
