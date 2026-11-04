@@ -104,13 +104,16 @@ const (
 
 // SecretHit carries match metadata and provenance without the matched bytes.
 type SecretHit struct {
-	Surface     string
-	RuleID      string
-	RuleTitle   string
-	Occurrences int
-	Source      SecretSource
-	SourceKind  string
-	SourceTool  string
+	// IssuerUnverified prevents recipient trust or prior releases from
+	// substituting for this invocation's response-value disclosure.
+	IssuerUnverified bool
+	Surface          string
+	RuleID           string
+	RuleTitle        string
+	Occurrences      int
+	Source           SecretSource
+	SourceKind       string
+	SourceTool       string
 	// DestinationTrusted is a standing device decision bound to the resolved
 	// transport identity; a repointed destination reports false.
 	DestinationTrusted bool

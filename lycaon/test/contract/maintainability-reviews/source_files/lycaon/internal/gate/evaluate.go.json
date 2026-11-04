@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/gate/evaluate.go",
+  "kind": "algorithm",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "The gate evaluates typed host facts in one closed predicate catalog. Uncovered socket count is reviewed independently of broader action leases; explicit authorized socket subtraction remains at the producer. Retain this bounded algorithm so posture, provenance and reuse semantics remain consistent across all gates. The unverified-issuer fact joins the existing secret outbound predicate and reuse derivation, so recipient trust and standing releases cannot substitute for issuer review. Freeze this reviewed shape at 686 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
+  "ceiling": 686,
+  "boundaries": {
+    "lycaon/internal/gate/socket_lease_test.go": "ed1889d7c0070987969ddc0ca1db111b8f9de4933d0d50f1f23fe57a2ff24077",
+    "lycaon/internal/gate/evaluate_test.go": "8ea22f3a71a3bf346688c3cb4a61c0fc205bbb614f3b1985016ff6bce4aba74a",
+    "lycaon/internal/toolexecution/socket_resource_binding_test.go": "fec6c227b583c070eabfd6005a55657fc43fe24ee1874b1519cab414439bad90",
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac"
+  }
+}

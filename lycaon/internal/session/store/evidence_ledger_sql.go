@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/bloblifecycle"
 	"github.com/lycaon/lycaon/internal/contentblob"
@@ -18,31 +17,33 @@ import (
 )
 
 type storedLineRangesPayload struct {
-	Version      int                       `json:"v"`
-	Ranges       []evidence.LineRange      `json:"ranges,omitempty"`
-	PathsTouched []string                  `json:"paths_touched,omitempty"`
-	URLsTouched  []string                  `json:"urls_touched,omitempty"`
-	URLTitles    map[string]string         `json:"url_titles,omitempty"`
-	GrepLines    map[string]map[int]string `json:"grep_lines,omitempty"`
-	PathTiers    map[string]string         `json:"path_tiers,omitempty"`
-	Surface      string                    `json:"surface,omitempty"`
-	ArtifactID   string                    `json:"artifact_id,omitempty"`
-	FrameIndex   int                       `json:"frame_index,omitempty"`
+	Version        int                       `json:"v"`
+	SourceDelivery *evidence.SourceDelivery  `json:"source_delivery,omitempty"`
+	Ranges         []evidence.LineRange      `json:"ranges,omitempty"`
+	PathsTouched   []string                  `json:"paths_touched,omitempty"`
+	URLsTouched    []string                  `json:"urls_touched,omitempty"`
+	URLTitles      map[string]string         `json:"url_titles,omitempty"`
+	GrepLines      map[string]map[int]string `json:"grep_lines,omitempty"`
+	PathTiers      map[string]string         `json:"path_tiers,omitempty"`
+	Surface        string                    `json:"surface,omitempty"`
+	ArtifactID     string                    `json:"artifact_id,omitempty"`
+	FrameIndex     int                       `json:"frame_index,omitempty"`
 }
 
 func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 	aux := evidence.CloneRecordForStore(rec)
 	payload := storedLineRangesPayload{
-		Version:      1,
-		Ranges:       rec.LineRanges,
-		PathsTouched: aux.PathsTouched,
-		URLsTouched:  aux.URLsTouched,
-		URLTitles:    aux.URLTitles,
-		GrepLines:    aux.GrepLines,
-		PathTiers:    aux.PathTiers,
-		Surface:      rec.Surface,
-		ArtifactID:   rec.ArtifactID,
-		FrameIndex:   rec.FrameIndex,
+		Version:        1,
+		SourceDelivery: rec.SourceDelivery,
+		Ranges:         rec.LineRanges,
+		PathsTouched:   aux.PathsTouched,
+		URLsTouched:    aux.URLsTouched,
+		URLTitles:      aux.URLTitles,
+		GrepLines:      aux.GrepLines,
+		PathTiers:      aux.PathTiers,
+		Surface:        rec.Surface,
+		ArtifactID:     rec.ArtifactID,
+		FrameIndex:     rec.FrameIndex,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -64,6 +65,7 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 		return fmt.Errorf("unsupported evidence record payload version %d", payload.Version)
 	}
 	rec.LineRanges = payload.Ranges
+	rec.SourceDelivery = payload.SourceDelivery
 	evidence.ApplyRecordAux(rec, evidence.RecordAux{
 		PathsTouched: payload.PathsTouched,
 		URLsTouched:  payload.URLsTouched,
@@ -75,29 +77,6 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 	rec.ArtifactID = payload.ArtifactID
 	rec.FrameIndex = payload.FrameIndex
 	return nil
-}
-
-// marshalEvidenceBody stores captured bodies by digest in the caller's transaction.
-func (s *SQL) marshalEvidenceBody(ctx context.Context, q *db.Queries, projectID string, rec evidence.Record) (string, error) {
-	if len(rec.Body) == 0 {
-		return "", nil
-	}
-	raw, err := json.Marshal(rec.Body)
-	if err != nil {
-		return "", fmt.Errorf("marshal evidence body: %w", err)
-	}
-	blobStore := contentblob.StoreFor(s.dataDir, projectID)
-	sha, byteSize, storedSize, err := contentblob.Write(blobStore, raw)
-	if err != nil {
-		return "", fmt.Errorf("write evidence body blob: %w", err)
-	}
-	if err := q.UpsertContentBlobObject(ctx, db.UpsertContentBlobObjectParams{
-		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
-	}); err != nil {
-		return "", fmt.Errorf("upsert content blob object: %w", err)
-	}
-	return sha, nil
 }
 
 // unmarshalEvidenceBody restores rec.Body from its content blob. Missing blob files
@@ -181,7 +160,7 @@ func (s *SQL) UpsertEvidenceRecord(ctx context.Context, sessionID string, rec ev
 	if err != nil {
 		return fmt.Errorf("resolve evidence record project: %w", err)
 	}
-	inserted, err := s.upsertEvidenceRecord(ctx, qtx, sessionID, projectID, rec)
+	inserted, err := writeEvidenceRecord(ctx, qtx, s.dataDir, sessionID, projectID, rec)
 	if err != nil {
 		return err
 	}
@@ -196,55 +175,6 @@ func (s *SQL) UpsertEvidenceRecord(ctx context.Context, sessionID string, rec ev
 		}
 	}
 	return nil
-}
-
-func (s *SQL) upsertEvidenceRecord(ctx context.Context, q *db.Queries, sessionID, projectID string, rec evidence.Record) (bool, error) {
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	handle := strings.TrimSpace(rec.Handle)
-	if sessionID == "" || handle == "" {
-		return false, fmt.Errorf("session: upsert evidence requires session_id and handle")
-	}
-	lineRanges, err := marshalEvidenceLineRanges(rec)
-	if err != nil {
-		return false, err
-	}
-	sha, err := s.marshalEvidenceBody(ctx, q, projectID, rec)
-	if err != nil {
-		return false, err
-	}
-	ordinal := evidenceOrdinalFromHandle(handle)
-	truncated := 0
-	if rec.Truncated {
-		truncated = 1
-	}
-	survey := 0
-	if rec.Survey {
-		survey = 1
-	}
-	n, err := q.InsertEvidenceRecordIfAbsent(ctx, db.InsertEvidenceRecordIfAbsentParams{
-		SessionID:         sessionID,
-		ProjectID:         projectID,
-		Handle:            handle,
-		Ordinal:           int64(ordinal),
-		Kind:              rec.Kind,
-		Shape:             rec.Shape,
-		Fidelity:          rec.Fidelity,
-		SourceTool:        rec.SourceTool,
-		MarksUntrusted:    boolInt(evidence.RecordMarksUntrustedContent(rec)),
-		Path:              rec.Path,
-		Url:               rec.URL,
-		LineRanges:        lineRanges,
-		ContentBlobSha256: sha,
-		Truncated:         int64(truncated),
-		Survey:            int64(survey),
-	})
-	if err != nil {
-		return false, fmt.Errorf("upsert evidence record: %w", err)
-	}
-	return n > 0, nil
 }
 
 // projectUntrustedLedger projects inherited and worker URL markers.
@@ -438,7 +368,7 @@ func (s *SQL) commitEvidenceToolResult(ctx context.Context, sessionID, projectDi
 	if err := s.supersedePathsForRecord(ctx, qtx, sessionID, handle, rec, live); err != nil {
 		return "", content, err
 	}
-	inserted, err := s.upsertEvidenceRecord(ctx, qtx, sessionID, projectID, rec)
+	inserted, err := writeEvidenceRecord(ctx, qtx, s.dataDir, sessionID, projectID, rec)
 	if err != nil {
 		return "", content, err
 	}
@@ -448,7 +378,7 @@ func (s *SQL) commitEvidenceToolResult(ctx context.Context, sessionID, projectDi
 	}
 
 	for _, hrec := range highlightRecs {
-		hin, err := s.upsertEvidenceRecord(ctx, qtx, sessionID, projectID, hrec)
+		hin, err := writeEvidenceRecord(ctx, qtx, s.dataDir, sessionID, projectID, hrec)
 		if err != nil {
 			return "", content, err
 		}
@@ -459,7 +389,7 @@ func (s *SQL) commitEvidenceToolResult(ctx context.Context, sessionID, projectDi
 	}
 	if strings.EqualFold(toolName, "read") {
 		if marker, ok := secretExposureReadRecord(evidencePathArg(args)); ok {
-			inserted, err := s.upsertEvidenceRecord(ctx, qtx, sessionID, projectID, marker)
+			inserted, err := writeEvidenceRecord(ctx, qtx, s.dataDir, sessionID, projectID, marker)
 			if err != nil {
 				return "", content, err
 			}

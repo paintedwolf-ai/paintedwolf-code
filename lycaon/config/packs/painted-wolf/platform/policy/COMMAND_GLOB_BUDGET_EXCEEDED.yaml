@@ -22,7 +22,7 @@ copy:
   why: The host expands unquoted globs before approval so the reviewed argv is the argv that runs. A bounded walk
     keeps that expansion from stalling the call; nothing was truncated.
   fix: Narrow the pattern to a smaller directory or file set, quote it (`'*.go'`) so the program receives it
-    literally, or use `find` or `grep` to select paths.
+    literally, or use a bounded search program through `command` to select paths.
   instead: Narrow or quote the pattern
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect

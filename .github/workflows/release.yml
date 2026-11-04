@@ -54,7 +54,7 @@ jobs:
           REHEARSAL_RUN_ID: ${{ inputs.rehearsal_run_id }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: PYTHONPATH=scripts python3 -m release_upgrade.replay
-      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -228,7 +228,7 @@ jobs:
           path: .release-controller
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
         with:
           go-version-file: .release-controller/lycaon/go.mod
           cache: false
@@ -350,7 +350,7 @@ jobs:
           path: .release-controller
           persist-credentials: false
 
-      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -780,7 +780,7 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: .release-controller
           persist-credentials: false
-      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
         with:
           go-version-file: .release-controller/lycaon/go.mod
           cache: false
@@ -843,7 +843,7 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false

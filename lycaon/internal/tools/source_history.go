@@ -23,6 +23,7 @@ type SourceFileHistory interface {
 	ReadRestorableVersion(context.Context, string, string) (sourceledger.RestorableVersion, error)
 	QueryFileVersions(context.Context, string, string, int, int64) (sourceledger.FileVersionsResult, error)
 	ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error)
+	ResolveDeletedPath(context.Context, string, sourcebranch.ID, string, string) (sourceledger.DeletedPath, error)
 	EffectsBetween(context.Context, string, int64, int64, int) ([]sourceledger.Effect, error)
 }
 

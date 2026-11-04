@@ -3,6 +3,7 @@ package secretmatch
 import (
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // RedactionSource names the evidence that justified one replacement.
@@ -70,32 +71,35 @@ func rewriteMatches(s string, hits []Match, references bool) (string, []Replacem
 	}
 	merged = splitIntervalsOnLineBreaks(runes, merged)
 
-	out := make([]rune, 0, len(runes))
-	written := make([]Replacement, 0, len(merged))
-	cursor := 0
+	bounds := make([]int, 0, 2*len(merged))
 	for _, iv := range merged {
-		out = append(out, runes[cursor:iv.start]...)
-		marker := redactedPlaceholder
-		if iv.reference != "" {
-			marker = []rune(iv.reference)
-		}
-		written = append(written, Replacement{
-			RedactionSpan: RedactionSpan{
-				Start:       len(out),
-				Length:      len(marker),
-				RuleID:      iv.by.RuleID,
-				Title:       iv.by.Title,
-				Source:      iv.by.Source,
-				Fingerprint: iv.by.Fingerprint,
-			},
-			Reference:   iv.reference,
-			SourceStart: iv.start,
-			SourceEnd:   iv.end,
-		})
-		out = append(out, marker...)
-		cursor = iv.end
+		bounds = append(bounds, iv.start, iv.end)
 	}
-	return string(append(out, runes[cursor:]...)), written
+	offsets := byteOffsets(s, bounds)
+	var out strings.Builder
+	written := make([]Replacement, 0, len(merged))
+	cursor, outputRunes := 0, 0
+	for _, iv := range merged {
+		start, end := offsets[iv.start], offsets[iv.end]
+		kept := s[cursor:start]
+		out.WriteString(kept)
+		outputRunes += utf8.RuneCountInString(kept)
+		marker := RedactedMarker
+		if iv.reference != "" {
+			marker = iv.reference
+		}
+		width := utf8.RuneCountInString(marker)
+		written = append(written, Replacement{
+			RedactionSpan: RedactionSpan{Start: outputRunes, Length: width, RuleID: iv.by.RuleID,
+				Title: iv.by.Title, Source: iv.by.Source, Fingerprint: iv.by.Fingerprint},
+			Reference: iv.reference, SourceStart: iv.start, SourceEnd: iv.end,
+		})
+		out.WriteString(marker)
+		outputRunes += width
+		cursor = end
+	}
+	out.WriteString(s[cursor:])
+	return out.String(), written
 }
 
 // mergeIntervals unions overlapping in-bounds matches under the preferred one.
@@ -170,22 +174,31 @@ func taggedMarker(tag string) []rune {
 	return append(append(append([]rune(nil), body...), ':'), append([]rune(tag), ']')...)
 }
 
-// ApplyPseudonyms widens markers back to front so offsets stay valid.
+// ApplyPseudonyms widens markers while preserving every other input byte.
 func ApplyPseudonyms(redacted string, spans []RedactionSpan) string {
 	if len(spans) == 0 {
 		return redacted
 	}
-	ordered := make([]RedactionSpan, len(spans))
-	copy(ordered, spans)
-	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Start > ordered[j].Start })
-	runes := []rune(redacted)
+	ordered := append([]RedactionSpan(nil), spans...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Start < ordered[j].Start })
+	bounds := make([]int, 0, 2*len(ordered))
+	for _, span := range ordered {
+		bounds = append(bounds, span.Start, span.Start+span.Length)
+	}
+	offsets := byteOffsets(redacted, bounds)
+	var out strings.Builder
+	cursor := 0
 	for _, span := range ordered {
 		tag := PseudonymFor(span.Fingerprint)
-		if tag == "" || span.Start < 0 || span.Start+span.Length > len(runes) {
+		start, okStart := offsets[span.Start]
+		end, okEnd := offsets[span.Start+span.Length]
+		if tag == "" || !okStart || !okEnd || start < cursor || end < start {
 			continue
 		}
-		tail := append(taggedMarker(tag), runes[span.Start+span.Length:]...)
-		runes = append(runes[:span.Start], tail...)
+		out.WriteString(redacted[cursor:start])
+		out.WriteString(string(taggedMarker(tag)))
+		cursor = end
 	}
-	return string(runes)
+	out.WriteString(redacted[cursor:])
+	return out.String()
 }

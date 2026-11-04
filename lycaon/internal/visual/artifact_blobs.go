@@ -210,4 +210,3 @@ func (b durableBlobs) resetProjectStorageReconciliation(projectID string) {
 	b.s.reconciled.Delete(projectID)
 	b.s.reconcileStates.delete(projectID)
 }
-

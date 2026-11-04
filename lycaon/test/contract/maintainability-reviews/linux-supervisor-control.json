@@ -2,14 +2,16 @@
   "category": "go_receiver_lines",
   "artifact": "lycaon/internal/confine/linuxsandbox/linuxsandbox.supervisor",
   "kind": "runtime_service",
-  "workstream": "linux-confinement",
+  "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "The 303 receiver lines coordinate one sandbox lifetime and its socket policy. Descriptor transport owns poller-safe receive and close behavior without adding supervisor methods or authority. Keep the lifecycle together under the existing measured ceiling.",
-  "reviewed_commit": "07355e29fbe8ad8af3f01c96ce46ed49a6259bbe",
-  "ceiling": 303,
-  "reviewed_shape": "72571879dd739889f4dd686a4a0d16fc48ffeaa343dff336c3242fdd197917f7",
+  "reason": "The supervisor owns one command lifetime, target notifications and descriptor transport. A focused socketReferences owner retires retained destinations and duplicates each admitted operation under a lock; notification workers remain in the existing supervisor lifecycle. Keep decision and performed syscall together so late workers cannot reach a recycled descriptor. Freeze this reviewed shape at 473 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "3b4b35978ef37d6c801fcb06f03518b63a97eb6e",
+  "ceiling": 473,
   "boundaries": {
-    "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "7f5441a76fd0614539a9ee94d826e74c039b6478965a054f0cbf8851b250941e",
-    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "cc13d705fd92e394627944bf53e9e635fb4df2c9ec288c1e956779f55e998ab8"
-  }
+    "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "60da39c003d211d5be4b674fa95dcc64fc96e19b65c5c64c791bbec5a2b437f9",
+    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "a8ed4a436b1554875bb9468d0e9312eb75296ac0045fc33de3bf2d714782936c",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
+    "lycaon/internal/confine/linuxsandbox/socket_reference_linux_test.go": "ed52e4f0723a36228dbe8200552b7ac94c5e8180c3a2fcf8256b575bba55fa47"
+  },
+  "reviewed_shape": "7d6094957c023db0bc93ab2895a93e3bfecfafef3cc4e3eeef9a4f206bf84b8a"
 }

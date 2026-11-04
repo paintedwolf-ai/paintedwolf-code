@@ -18,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
-const planStartBody = `{"workflow_id":"plan","workflow_version":"1.0.0","request":"Plan the fixture change"}`
+const planStartBody = `{"workflow_id":"plan","workflow_version":"1.0.1","request":"Plan the fixture change"}`
 
 func buildWorkflowHarnessWithManifest(t *testing.T, manifest workflowdef.Manifest) (*wiring.Harness, wire.Session) {
 	t.Helper()

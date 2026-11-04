@@ -1,4 +1,6 @@
 """Merge phases preserve the full recipe and stop before expensive work on failure."""
+from collections import Counter
+from itertools import product
 import io
 import json
 import zipfile
@@ -13,20 +15,40 @@ from unittest.mock import patch
 
 from ci_policy import merge_preflight as preflight
 from ci_policy import hosted_plan
+import verification_plan
 
 
 class MergePreflightTests(unittest.TestCase):
-    def test_fast_coverage_measurements_ignore_unrelated_paths(self):
+    def setUp(self):
+        scope = patch('ci_policy.impact.go_scope', return_value=None)
+        scope.start()
+        self.addCleanup(scope.stop)
+
+    def test_landing_frontend_and_script_assertions_run_without_changed_statements(self):
         import coverage_changes as coverage
         for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['scripts/example.sh'],
                       ['lycaon-den/src/model.test.ts', 'lycaon-den/src/style.css']):
-            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call') as call, \
+            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call', return_value=0) as call, \
                     patch.object(coverage.python_coverage, 'measure') as measure:
                 scope = SimpleNamespace(paths=paths)
-                self.assertEqual(coverage.run_den(scope), ([], False, 'no changed frontend source'))
-                self.assertEqual(coverage.run_python(scope), ([], False, 'no changed scripts Python'))
-                call.assert_not_called()
+                self.assertEqual(coverage.run_den(scope), ([], False, 'complete frontend tests; no changed source to measure'))
+                self.assertEqual(coverage.run_python(scope), ([], False, 'complete script tests; no changed source to measure'))
+                self.assertEqual(call.call_count, 2)
                 measure.assert_not_called()
+                self.assertNotIn('--changed', call.call_args_list[0].args[0])
+                self.assertIn('runner_tests.py', call.call_args_list[1].args[0][1])
+
+    def history_state(self, failed=()):
+        return {"failed_targets": list(failed), "passed_targets": [], "native_failed": [],
+                "native_passed": [], "contract_failures": []}
+
+    def test_landing_assertion_failures_block_even_without_changed_statements(self):
+        import coverage_changes as coverage
+        with patch.object(coverage.subprocess, 'call', return_value=1):
+            for run in (coverage.run_den, coverage.run_python):
+                findings, failed, _ = run(SimpleNamespace(paths=[]))
+                self.assertTrue(failed)
+                self.assertEqual(findings[0].level, 'error')
 
     def history_archive(self, record=None, failures=None):
         record = record if record is not None else {
@@ -46,19 +68,20 @@ class MergePreflightTests(unittest.TestCase):
         artifact = dict(id=40, name='receipt-verification-fast-ready-2', expired=False, size_in_bytes=200)
         unrelated = [{**previous, 'id': 25, 'pull_requests': [{'number': 8}]},
                      {**previous, 'id': 26, 'workflow_id': 11}, {**previous, 'id': 30}]
-        cases = [(previous, 'budgets'), ({**previous, 'conclusion': 'success'}, ''),
-                 ({**previous, 'conclusion': 'cancelled'}, ''), ({**previous, 'status': 'in_progress'}, '')]
+        cases = [(previous, ['budgets']), ({**previous, 'conclusion': 'success'}, []),
+                 ({**previous, 'conclusion': 'cancelled'}, []), ({**previous, 'status': 'in_progress'}, [])]
         for run, expected in cases:
             with self.subTest(run=run), patch.object(preflight, 'repository', return_value='repos/o/r'), \
                     patch.object(preflight, 'api', side_effect=[{'workflow_id': 10},
                         {'workflow_runs': [run, {**previous, 'id': 19}, *unrelated]}, {'artifacts': [artifact]}]) as api, \
                     patch.object(preflight.subprocess, 'check_output', return_value=self.history_archive()) as fetch:
-                self.assertEqual(preflight.previous_target(event, '30', ['budgets']), expected)
+                self.assertEqual(preflight.previous_plan(event, '30', ['budgets']),
+                                 self.history_state(expected) if expected else {})
                 self.assertEqual(fetch.call_count, int(bool(expected)))
                 self.assertIn('/workflows/10/runs?event=pull_request', api.call_args_list[1].args[0])
         for event in ({}, {'pull_request': {}}):
             with patch.object(preflight, 'api') as api:
-                self.assertEqual(preflight.previous_target(event, '30', ['budgets']), '')
+                self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
                 api.assert_not_called()
 
     def test_uncertain_history_never_reorders(self):
@@ -74,10 +97,31 @@ class MergePreflightTests(unittest.TestCase):
                     patch.object(preflight, 'api', side_effect=[{'workflow_id': 10},
                         {'workflow_runs': [run]}, {'artifacts': artifacts}]), \
                     patch.object(preflight.subprocess, 'check_output', return_value=raw):
-                self.assertEqual(preflight.previous_target(event, '30', ['budgets']), '')
+                self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
+
         with patch.object(preflight, 'repository', return_value='repos/o/r'), \
                 patch.object(preflight, 'api', side_effect=OSError):
-            self.assertEqual(preflight.previous_target(event, '30', ['budgets']), '')
+            self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), {})
+
+    def test_metadata_only_failure_preserves_the_previous_execution_cursor(self):
+        event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a'}}}
+        previous = dict(id=20, workflow_id=10, event='pull_request', pull_requests=[{'number': 7}],
+                        run_attempt=2, status='completed', conclusion='failure')
+        artifact = dict(id=40, name='receipt-verification-fast-ready-2', expired=False, size_in_bytes=200)
+        empty = io.BytesIO()
+        with zipfile.ZipFile(empty, 'w') as archive:
+            archive.writestr('ci/failures.json', '[]')
+        for artifacts, payloads in (([], [self.history_archive()]),
+                                    ([{**artifact, 'id': 41}], [empty.getvalue(), self.history_archive()])):
+            with self.subTest(artifacts=artifacts), patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                    patch.object(preflight, 'api', side_effect=[{'workflow_id': 10},
+                        {'workflow_runs': [{**previous, 'id': 21}, previous]},
+                        {'artifacts': artifacts}, {'artifacts': [artifact]}]), \
+                    patch.object(preflight.subprocess, 'check_output', side_effect=payloads):
+                state = preflight.previous_plan(event, '30', ['build', 'budgets'])
+            self.assertEqual(state['failed_targets'], ['budgets'])
+            phases = preflight.ready_commands(['build', 'budgets'], [], state)
+            self.assertEqual(phases, [['./task', 'budgets'], ['./task', 'build']])
 
     def test_branch_query_finds_history_behind_unrelated_workflow_traffic(self):
         run = dict(id=20, workflow_id=10, event='pull_request', pull_requests=[{'number': 7}],
@@ -92,20 +136,23 @@ class MergePreflightTests(unittest.TestCase):
                 patch.object(preflight, 'api', side_effect=api), \
                 patch.object(preflight.subprocess, 'check_output', return_value=self.history_archive()):
             event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a&b'}}}
-            self.assertEqual(preflight.previous_target(event, '30', ['budgets']), 'budgets')
+            self.assertEqual(preflight.previous_plan(event, '30', ['budgets']), self.history_state(['budgets']))
 
-    def test_receipt_requires_matching_identity_and_one_declared_failed_stage(self):
+    def test_receipt_requires_matching_identity_and_declared_failed_stages(self):
         run = {'id': 20, 'run_attempt': 2}
         record = dict(lane='ready', shard='', status='failed', identity={'run': '20', 'attempt': '2'})
         for change in ({'lane': 'limits'}, {'status': 'passed'}, {'shard': '1/2'},
                        {'identity': {'run': '21', 'attempt': '2'}}, {'identity': {'run': '20', 'attempt': '1'}}):
-            self.assertEqual(preflight.failed_target(self.history_archive({**record, **change}), run, ['budgets']), '')
+            self.assertIsNone(preflight.receipt_state(self.history_archive({**record, **change}), run, ['budgets']))
         for failures in ([], [None], [{'stage': 'test:contract', 'status': 'failed'}],
-                         [{'stage': 'budgets', 'status': 'unverified'}],
-                         [{'stage': stage, 'status': 'failed'} for stage in ('budgets', 'build')]):
-            self.assertEqual(preflight.failed_target(self.history_archive(failures=failures), run, ['budgets', 'build']), '')
+                         [{'stage': 'budgets', 'status': 'unverified'}]):
+            self.assertIsNone(preflight.receipt_state(self.history_archive(failures=failures), run, ['budgets', 'build']))
         repeated = [{'stage': 'budgets', 'status': 'failed'}] * 2
-        self.assertEqual(preflight.failed_target(self.history_archive(failures=repeated), run, ['budgets']), 'budgets')
+        self.assertEqual(preflight.receipt_state(self.history_archive(failures=repeated), run, ['budgets']),
+                         self.history_state(['budgets']))
+        failures = [{'stage': stage, 'status': 'failed'} for stage in ('budgets', 'build')]
+        self.assertEqual(preflight.receipt_state(self.history_archive(failures=failures), run, ['budgets', 'build']),
+                         self.history_state(['budgets', 'build']))
 
     def test_ready_history_checks_repeat_failure_before_native_compilation(self):
         from ci_policy import hosted_execution as execution
@@ -126,14 +173,118 @@ class MergePreflightTests(unittest.TestCase):
                 expected = [['./task', *hosted_plan.lanes()['ready']['preflight']]]
                 compile_native = ['./task', 'decide:test', '--', '--compile-only']
                 if active:
+                    idx = targets.index(early)
                     expected += [['./task', early]]
                     if not verdict:
-                        expected += [compile_native, ['./task', *[target for target in targets if target != early]]]
+                        if targets[idx + 1:]:
+                            expected += [['./task', *targets[idx + 1:]]]
+                        expected += [compile_native]
+                        if targets[:idx]:
+                            expected += [['./task', *targets[:idx]]]
                 else:
                     expected += [compile_native, ['./task', *targets]]
                 self.assertEqual(commands, expected)
                 record = json.loads((Path(directory) / 'ci/run.json').read_text())
                 self.assertEqual([phase['command'] for phase in record['phases']], expected[1:])
+
+    def test_wrap_around_defers_passed_native_compilation_and_stops_on_after_failure(self):
+        from ci_policy import hosted_execution as execution
+        scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
+        targets = hosted_plan.lanes()['ready']['targets']
+        idx = targets.index('test:short')
+        history = json.dumps({'failed_targets': ['test:short'], 'passed_targets': targets[:idx],
+                              'native_passed': ['decide:test']}, separators=(',', ':'))
+        compile_native, after_cmd, before_cmd = ['./task', 'decide:test', '--', '--compile-only'], ['./task', *targets[idx + 1:]], ['./task', *targets[:idx]]
+        for after_verdict in (0, 1):
+            with self.subTest(after_verdict=after_verdict), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(execution, 'artifact_root', return_value=Path(directory)), \
+                    patch('ci_policy.impact.change', return_value=scope), \
+                    patch('ci_policy.native_admission.commands', return_value=[compile_native]), \
+                    patch.dict(os.environ, GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=history), \
+                    patch.object(execution.subprocess, 'call', side_effect=lambda cmd, **_: after_verdict if cmd == after_cmd else 0) as call:
+                self.assertEqual(execution.run_lane('ready'), after_verdict)
+                expected = [['./task', *hosted_plan.lanes()['ready']['preflight']], ['./task', 'test:short'], after_cmd]
+                if after_verdict == 0:
+                    expected += [compile_native, before_cmd]
+                self.assertEqual([entry.args[0] for entry in call.call_args_list], expected)
+
+    def test_history_only_reorders_the_complete_inventory(self):
+        targets = ["build", "lint:full", "coverage:changes"]
+        native = [["./task", "den:test:rust", "--", "--compile-only"],
+                  ["./task", "decide:test", "--", "--compile-only"]]
+        native_names = [command[1] for command in native]
+        expected = Counter(targets + native_names)
+        for states in product(("unverified", "failed", "passed"), repeat=len(targets) + len(native)):
+            history = {}
+            for prefix, names, statuses in (("", targets, states[:len(targets)]),
+                                            ("native_", native_names, states[len(targets):])):
+                for status in ("failed", "passed"):
+                    key = prefix + status + ("_targets" if not prefix else "")
+                    history[key] = [name for name, state in zip(names, statuses) if state == status] * 2
+                    history[key].append("unknown:history-entry")
+            with self.subTest(states=states):
+                inventory = []
+                for command in preflight.ready_commands(targets, native, history):
+                    self.assertEqual(command[0], "./task")
+                    if command in native:
+                        inventory.append(command[1])
+                    else:
+                        inventory.extend(command[1:])
+                self.assertEqual(Counter(inventory), expected)
+
+    def test_native_only_and_private_group_rotation_preserve_all_targets(self):
+        native_cmds = [['./task', 'den:test:rust', '--', '--compile-only'], ['./task', 'decide:test', '--', '--compile-only']]
+        history = {'failed_targets': [], 'passed_targets': ['build'], 'native_failed': ['den:test:rust'], 'native_passed': []}
+        self.assertEqual(preflight.ready_commands(['build', 'budgets', 'coverage:changes'], native_cmds, history), [
+            ['./task', 'den:test:rust', '--', '--compile-only'], ['./task', 'budgets', 'coverage:changes'],
+            ['./task', 'decide:test', '--', '--compile-only'], ['./task', 'build']])
+        with patch.object(preflight, 'invocation', side_effect=lambda items: [
+            m for item in items for m in (['member:a', 'member:b'] if item == 'group:check' else [item])
+        ]):
+            self.assertEqual(preflight.ready_commands(['build', 'group:check', 'docs:links'], native_cmds[1:],
+                                                      {'failed_targets': ['group:check'], 'passed_targets': ['build']}),
+                             [['./task', 'member:a', 'member:b'], ['./task', 'docs:links'], native_cmds[1], ['./task', 'build']])
+
+    def test_receipt_without_passed_stages_recovers_early_target_pass_from_phases(self):
+        record = {'lane': 'ready', 'shard': '', 'status': 'failed', 'identity': {'run': '20', 'attempt': '2'},
+                  'phases': [{'command': ['./task', 'budgets'], 'exit_code': 0},
+                             {'command': ['./task', 'decide:test', '--', '--compile-only'], 'exit_code': 0},
+                             {'command': ['./task', 'build', 'coverage:changes'], 'exit_code': 1}]}
+        state = preflight.receipt_state(self.history_archive(record, [{'stage': 'coverage:changes', 'status': 'failed'}]),
+                                        {'id': 20, 'run_attempt': 2}, ['build', 'budgets', 'coverage:changes'])
+        self.assertEqual((state['failed_targets'], state['passed_targets'], state['native_passed']),
+                         (['coverage:changes'], ['budgets'], ['decide:test']))
+
+    def test_multi_run_lookback_preserves_target_cursor_across_preflight_failure(self):
+        event = {'pull_request': {'number': 7, 'head': {'ref': 'fix/a&b'}}}
+        base = dict(workflow_id=10, event='pull_request', pull_requests=[{'number': 7}], run_attempt=1, status='completed', conclusion='failure')
+        run_20, run_21 = {**base, 'id': 20}, {**base, 'id': 21}
+        art = dict(id=40, name='receipt-verification-fast-ready-1', expired=False, size_in_bytes=200)
+        zip_20 = self.history_archive({'lane': 'ready', 'shard': '', 'status': 'failed', 'identity': {'run': '20', 'attempt': '1'},
+                                       'passed_stages': ['build']}, [{'stage': 'coverage:changes', 'status': 'failed'}])
+        zip_21 = self.history_archive({'lane': 'ready', 'shard': '', 'status': 'failed', 'identity': {'run': '21', 'attempt': '1'}},
+                                      [{'stage': 'test:contract', 'subject': 'github.com/lycaon/lycaon/test/contract/persistence', 'status': 'failed'}])
+        with patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                patch.object(preflight, 'api', side_effect=[{'workflow_id': 10}, {'workflow_runs': [run_21, run_20]}, {'artifacts': [art]}, {'artifacts': [art]}]), \
+                patch.object(preflight.subprocess, 'check_output', side_effect=[zip_21, zip_20]):
+            plan = preflight.previous_plan(event, '30', ['build', 'coverage:changes'])
+        self.assertEqual((plan['contract_failures'], plan['failed_targets'], plan['passed_targets']),
+                         (['./test/contract/persistence'], ['coverage:changes'], ['build']))
+        for prior_conclusion in ('success', 'cancelled', 'timed_out'):
+            with self.subTest(prior_conclusion=prior_conclusion), patch.object(preflight, 'repository', return_value='repos/o/r'), \
+                    patch.object(preflight, 'api', side_effect=[{'workflow_id': 10}, {'workflow_runs': [run_21, {**run_20, 'conclusion': prior_conclusion}]}, {'artifacts': [art]}]), \
+                    patch.object(preflight.subprocess, 'check_output', return_value=zip_21) as fetch:
+                plan = preflight.previous_plan(event, '30', ['build', 'coverage:changes'])
+                self.assertEqual((plan['contract_failures'], plan['failed_targets'], fetch.call_count), (['./test/contract/persistence'], [], 1))
+
+    def test_preflight_contract_rotation_includes_internal_contracts_and_partitions_exhaustively(self):
+        packages = preflight.contract_packages()
+        for expected in ('./test/contract', './test/contract/internal/sizebudget', './test/contract/internal/wirespec', './test/contract/persistence'):
+            self.assertIn(expected, packages)
+        waves = preflight.preflight_commands(['test:contract', '--', './test/contract/...'], {'contract_failures': ['./test/contract/persistence']})
+        first_pkgs, second_pkgs = waves[0][3:], waves[1][3:]
+        idx = packages.index('./test/contract/persistence')
+        self.assertEqual(first_pkgs + second_pkgs, packages[idx:] + packages[:idx])
 
     def test_fixed_platform_arguments_survive_merge_preflight(self):
         for arguments in (["launch"], ["nix"]):
@@ -144,11 +295,13 @@ class MergePreflightTests(unittest.TestCase):
     def test_packages_are_partitioned_once_with_contracts_first(self):
         packages = ["module/internal/a", "module/test/contract/hosted", "module/test/contract", "module/test/smoke"]
         with patch.object(preflight.subprocess, "run") as run:
-            run.return_value.stdout = "\n".join(json.dumps({"ImportPath": name}) for name in packages)
+            run.return_value.stdout = "\n".join(json.dumps({"ImportPath": name,
+                "Dir": str(preflight.ROOT / 'lycaon' / name.removeprefix('module/'))}) for name in packages)
             phases = preflight.package_phases(None)
-            self.assertEqual(phases[0], ["module/test/contract", "module/test/contract/hosted"])
-            self.assertEqual(sorted(sum(phases, [])), sorted(packages))
+            self.assertEqual(phases[0], ["./test/contract", "./test/contract/hosted"])
+            self.assertEqual(sorted(sum(phases, [])), sorted(name.replace('module/', './') for name in packages))
             self.assertEqual(len(sum(phases, [])), len(packages))
+            self.assertTrue(verification_plan.go_selection(sum(phases, []), 'test:full')['shareable'])
             self.assertEqual(run.call_args.args[0][-1], "./...")
             self.assertEqual(run.call_args.kwargs["env"]["GOPROXY"], "off")
             self.assertEqual(run.call_args.kwargs["env"]["GOTOOLCHAIN"], "local")
@@ -157,7 +310,8 @@ class MergePreflightTests(unittest.TestCase):
 
     def test_uncertain_or_incomplete_selection_cannot_skip_contracts(self):
         for payload in ("", '{"ImportPath":"module/internal/a"}',
-                        '{"ImportPath":"module/test/contract/a","DepsErrors":[{}]}'):
+                        '{"ImportPath":"module/test/contract/a","DepsErrors":[{}]}',
+                        json.dumps({'ImportPath': 'foreign/test/contract/a', 'Dir': '/outside/module'})):
             with self.subTest(payload=payload), patch.object(preflight.subprocess, "run") as run:
                 run.return_value.stdout = payload
                 with self.assertRaises(ValueError):

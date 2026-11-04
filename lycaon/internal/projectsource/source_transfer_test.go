@@ -67,7 +67,7 @@ func TestSourceFingerprintReportsAndCancelsWithinOneFile(t *testing.T) {
 	})
 	progress := newSourceWorkProgress(ctx, "verifying")
 	progress.last = time.Time{}
-	_, err = fingerprintSourceFile(ctx, info, func() (*os.File, error) { return os.Open(path) }, progress)
+	_, err = fingerprintSourceFile(ctx, info, func() (*os.File, error) { return os.Open(path) }, progress, make([]byte, 32<<10))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("verification cancellation = %v", err)
 	}
@@ -91,7 +91,7 @@ func TestSourceFingerprintRejectsEditsDuringRead(t *testing.T) {
 	})
 	progress := newSourceWorkProgress(ctx, "verifying")
 	progress.last = time.Time{}
-	_, err = fingerprintSourceFile(ctx, info, func() (*os.File, error) { return os.Open(path) }, progress)
+	_, err = fingerprintSourceFile(ctx, info, func() (*os.File, error) { return os.Open(path) }, progress, make([]byte, 32<<10))
 	if !errors.Is(err, ErrSourceMutationDiverged) {
 		t.Fatalf("changed source accepted: %v", err)
 	}

@@ -62,14 +62,14 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "write",
 		ToolCalls: []llm.MockToolCall{{
-			ID: "call_write", Name: "write", Args: map[string]any{"path": settingsoverlay.Rel("blueprints/a.md"), "content": "x"},
+			ID: "call_write", Name: "edit", Args: map[string]any{"path": settingsoverlay.Rel("blueprints/a.md"), "old_string": "before", "new_string": "x"},
 		}},
 		FollowUpText: "done",
 	}}})
 
 	approvalDir := t.TempDir()
 	configtest.Overlay(t, map[config.Rel]string{
-		config.SecurityApprovals: "rules:\n  - category: tool\n    pattern: write\n    effect: ask\n",
+		config.SecurityApprovals: "rules:\n  - category: tool\n    pattern: edit\n    effect: ask\n",
 	})
 	approvalStore, err := settings.NewApprovalStoreAt(filepath.Join(approvalDir, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
@@ -87,7 +87,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	boundary := sandbox.NewBoundary(sandboxCfg, profiles)
 
 	reg := tools.NewDefaultRegistry()
-	if err := reg.Register("write", func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+	if err := reg.Register("edit", func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
 		if err := reviewPromptWrite(ctx, args, tc); err != nil {
 			return "", err
 		}
@@ -116,7 +116,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	mgr.SetProgressStore(prog)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	recordRequestedLoad(t, store, sess.ID, "write")
+	recordRequestedLoad(t, store, sess.ID, "edit")
 	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
 	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
@@ -129,6 +129,11 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 
 	var decisionID string
 	testutil.WaitFor(t, func() bool {
+		select {
+		case err := <-done:
+			t.Fatalf("prompt completed before approval: %v", err)
+		default:
+		}
 		pending, err := hitlMgr.ListPending(ctx, sess.ID, nil)
 		if err == nil && len(pending) == 1 {
 			decisionID = pending[0].ID
@@ -178,14 +183,14 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "write",
 		ToolCalls: []llm.MockToolCall{{
-			ID: "call_write", Name: "write", Args: map[string]any{"path": settingsoverlay.Rel("blueprints/a.md"), "content": "x"},
+			ID: "call_write", Name: "edit", Args: map[string]any{"path": settingsoverlay.Rel("blueprints/a.md"), "old_string": "before", "new_string": "x"},
 		}},
 		FollowUpText: "done",
 	}}})
 
 	approvalDir := t.TempDir()
 	configtest.Overlay(t, map[config.Rel]string{
-		config.SecurityApprovals: "rules:\n  - category: tool\n    pattern: write\n    effect: ask\n",
+		config.SecurityApprovals: "rules:\n  - category: tool\n    pattern: edit\n    effect: ask\n",
 	})
 	approvalStore, err := settings.NewApprovalStoreAt(filepath.Join(approvalDir, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
@@ -204,7 +209,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 
 	reg := tools.NewDefaultRegistry()
 	var mutations atomic.Int32
-	if err := reg.Register("write", func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+	if err := reg.Register("edit", func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
 		if err := reviewPromptWrite(ctx, args, tc); err != nil {
 			return "", err
 		}
@@ -237,7 +242,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	mgr.SetProgressStore(prog)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	recordRequestedLoad(t, store, sess.ID, "write")
+	recordRequestedLoad(t, store, sess.ID, "edit")
 	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
 	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
@@ -250,6 +255,11 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 
 	var decisionID string
 	testutil.WaitFor(t, func() bool {
+		select {
+		case err := <-done:
+			t.Fatalf("prompt completed before approval: %v", err)
+		default:
+		}
 		pending, err := hitlMgr.ListPending(ctx, sess.ID, nil)
 		if err == nil && len(pending) == 1 {
 			decisionID = pending[0].ID
@@ -292,7 +302,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 
 func reviewPromptWrite(ctx context.Context, args map[string]any, tc tools.ToolContext) error {
 	path, _ := args["path"].(string)
-	content, _ := args["content"].(string)
+	content, _ := args["new_string"].(string)
 	return tc.ReviewFileChanges(ctx, tools.FileChange{
 		Path:    filepath.Join(tc.ActiveRootPath(), path),
 		Preview: api.ApprovalFileChange{Path: path, Operation: "create", After: content},

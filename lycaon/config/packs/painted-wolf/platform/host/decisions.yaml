@@ -62,7 +62,7 @@ turn:
   guides:
     question: Which of this guidance does completing this request need?
     option_words: 8
-    omittable: [native-find-tool, native-summarize-tool, native-recall-tool, claim-evidence]
+    omittable: [native-summarize-tool, native-recall-tool, claim-evidence]
     omit_below: 0.3
     confidence_floor: 0.5
   # Joint heads only: a confident answer_only kind can veto tool loading.

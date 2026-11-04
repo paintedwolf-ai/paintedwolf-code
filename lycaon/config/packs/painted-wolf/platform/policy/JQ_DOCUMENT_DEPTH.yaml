@@ -3,13 +3,14 @@ id: JQ_DOCUMENT_DEPTH
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - jq
   - jq_edit
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.max_depth
   - paintedwolf.path

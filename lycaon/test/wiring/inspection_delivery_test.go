@@ -22,11 +22,11 @@ func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 		Fallback: func(_ context.Context, _ llm.Snapshot) modelcall.Completion {
 			switch calls.Add(1) {
 			case 1:
-				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "offer-write", Name: "request_tools", Args: map[string]any{"need": "write"}}}}
+				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "offer-write", Name: "request_tools", Args: map[string]any{"need": "command"}}}}
 			case 2:
-				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "edit-guide", Name: "write", Args: map[string]any{"path": "docs/guide.md", "content": "Updated operating instructions.\n"}}}}
+				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "edit-guide", Name: "command", Args: map[string]any{"command": "printf 'Updated operating instructions.\\n' > docs/guide.md"}}}}
 			case 3:
-				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "inspect-guide", Name: "read", Args: map[string]any{"path": "docs/guide.md"}}}}
+				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "inspect-guide", Name: "command", Args: map[string]any{"command": "cat docs/guide.md"}}}}
 			case 4:
 				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "deliver", Name: "update_progress", Args: map[string]any{"content": "## Progress\n- [x] wiring test plan\n"}}}}
 			default:
@@ -63,7 +63,7 @@ func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 	completed := false
 	for _, msg := range messages {
 		for _, call := range msg.ToolCalls {
-			if call.Name == "verify" || call.Name == "command" {
+			if call.Name == "verify" {
 				t.Fatalf("unexpected executable validation: %s", call.Name)
 			}
 		}
@@ -71,6 +71,11 @@ func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 			strings.Contains(msg.Content, "No executable checks were needed") {
 			completed = true
 		}
+	}
+	var unexpectedOperations int
+	testutil.FailErr(t, "inspect command operations", h.DB.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions WHERE operation_id NOT IN ('printf','write','read')`).Scan(&unexpectedOperations))
+	if unexpectedOperations != 0 {
+		t.Fatalf("inspection invoked %d unexpected operations", unexpectedOperations)
 	}
 	if !completed {
 		t.Fatal("delivered work has no user-facing closeout")

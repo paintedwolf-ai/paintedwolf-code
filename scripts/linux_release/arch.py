@@ -15,6 +15,7 @@ import sys
 import tempfile
 
 from .arch_substrate import build as build_in_substrate
+from .payload import load as load_payload
 
 from release_semver import pacman_package_version, parse, parse_release_build
 
@@ -95,6 +96,7 @@ def recipe(root: Path, payload: Path, architecture: str, product: str) -> str:
         "DEPENDS": " ".join(shlex.quote(row.format(**floors)) for row in catalog["depends"]),
         "OPTDEPENDS": " ".join(shlex.quote(row.format(**floors)) for row in catalog["recommends"]),
         "INSTALL": "install=" + shlex.quote(install.name) if install.is_file() else "",
+        "BOOTSTRAP": shlex.quote(load_payload(root / 'packaging/linux/payload.json')['setuid_bootstrap']['path']),
         "PAYLOAD": " ".join(sources),
         "SHA256": " ".join(hashes),
     }

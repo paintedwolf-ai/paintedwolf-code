@@ -54,6 +54,7 @@ func TestRenderCatalogUtilityAndSurvey(t *testing.T) {
 		UtilitySessionTitleSystemRef,
 		UtilityProjectNameSystemRef,
 		UtilityTodayLineRef,
+		UtilityCommandOutputOmittedRef,
 		SurveyGrepSpecificsRef,
 		SurveyFindSpecificsRef,
 		SurveyReadSpecificsRef,
@@ -69,6 +70,8 @@ func TestRenderCatalogUtilityAndSurvey(t *testing.T) {
 			"file_count": 12, "count": 8, "bytes": 4000,
 			"goal": "ship", "tool": "command", "command": "ls",
 			"user_intent": "ship the feature", "gated_action": "command ls",
+			"omitted_lines": "4,182", "omitted_size": "184 KB",
+			"output_path": "@output/prog.stdout", "next_line": 251, "end_line": 400,
 		})
 		testutil.FailErr(t, "RenderCatalog "+ref, err)
 		if strings.TrimSpace(out) == "" {

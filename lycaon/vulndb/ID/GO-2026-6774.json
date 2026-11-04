@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/0xJacky/Nginx-UI"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.9.10-0.20260703131214-23d1934099b0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-84319",
+  "GHSA-5r62-gj48-897x"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6774"
+ },
+ "details": "Nginx UI: MCP configuration tools bypass restricted directive validation and allow secondary authenticated users to execute NJS in Nginx worker context in github.com/0xJacky/Nginx-UI",
+ "id": "GO-2026-6774",
+ "modified": "2026-10-19T21:08:35Z",
+ "published": "2026-10-19T21:08:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/0xJacky/nginx-ui/security/advisories/GHSA-5r62-gj48-897x"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-84319"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/0xJacky/nginx-ui/commit/23d1934099b05b2a01589b48129dc3d3159d91c2"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/0xJacky/nginx-ui/releases/tag/v2.4.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Nginx UI: MCP configuration tools bypass restricted directive validation and allow secondary authenticated users to execute NJS in Nginx worker context in github.com/0xJacky/Nginx-UI"
+}

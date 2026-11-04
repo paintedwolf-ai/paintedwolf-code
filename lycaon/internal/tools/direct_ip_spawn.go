@@ -15,7 +15,7 @@ func FinalizeDirectIPForSpawn(tctx ToolContext) *toolrejection.ToolReject {
 			"reason": "missing direct IP capability runtime",
 		}}
 	}
-	ok, err := tctx.Direct.DirectIPCapabilityRuntime.ConsumePermit(tctx.Identity.SessionID, tctx.Identity.ToolCallID, tctx.Direct.DirectIPActionDigest, tctx.Direct.DirectIPRequestDigest, tctx.Direct.DirectIPConfineDigest)
+	ok, err := tctx.Direct.DirectIPCapabilityRuntime.ConsumePermit(tctx.PermitIdentity(), tctx.Direct.DirectIPActionDigest, tctx.Direct.DirectIPRequestDigest, tctx.Direct.DirectIPConfineDigest)
 	if err != nil {
 		return &toolrejection.ToolReject{Code: isolation.CodeDirectIPAuthorizationChanged, Data: map[string]any{
 			"reason": err.Error(),

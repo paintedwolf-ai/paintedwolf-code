@@ -19,29 +19,29 @@ func TestEnsureCreatesOnePrivateFolderPerSession(t *testing.T) {
 	dir, err := folders.Ensure("chat-1")
 	testutil.FailErr(t, "ensure chat-1", err)
 	want := filepath.Join(fspath.CanonicalPath(stateRoot), "scratch", "chat-1")
-	if dir != want {
-		t.Fatalf("Ensure = %q, want %q", dir, want)
+	if dir.Scratch != want {
+		t.Fatalf("Ensure = %+v, want %q", dir, want)
 	}
-	info, err := os.Stat(dir)
+	info, err := os.Stat(dir.Scratch)
 	testutil.FailErr(t, "stat folder", err)
 	if !info.IsDir() || info.Mode().Perm() != 0o700 {
 		t.Fatalf("folder mode = %v, want a 0700 directory", info.Mode())
 	}
 
-	testutil.FailErr(t, "write probe", os.WriteFile(filepath.Join(dir, "probe.txt"), []byte("kept"), 0o600))
+	testutil.FailErr(t, "write probe", os.WriteFile(filepath.Join(dir.Scratch, "probe.txt"), []byte("kept"), 0o600))
 	again, err := folders.Ensure("chat-1")
 	testutil.FailErr(t, "ensure again", err)
 	if again != dir {
-		t.Fatalf("second Ensure = %q, want %q", again, dir)
+		t.Fatalf("second Ensure = %+v, want %+v", again, dir)
 	}
-	if raw, err := os.ReadFile(filepath.Join(dir, "probe.txt")); err != nil || string(raw) != "kept" {
+	if raw, err := os.ReadFile(filepath.Join(dir.Scratch, "probe.txt")); err != nil || string(raw) != "kept" {
 		t.Fatalf("Ensure disturbed existing contents: %q, %v", raw, err)
 	}
 
 	worker, err := folders.Ensure("worker-child")
 	testutil.FailErr(t, "ensure worker", err)
-	if filepath.Dir(worker) != filepath.Dir(dir) {
-		t.Fatalf("worker folder %q is not a sibling of %q", worker, dir)
+	if filepath.Dir(worker.Scratch) != filepath.Dir(dir.Scratch) {
+		t.Fatalf("worker folder %+v is not a sibling of %+v", worker, dir)
 	}
 }
 
@@ -53,7 +53,7 @@ func TestEnsureRefusesAPlantedLink(t *testing.T) {
 	testutil.FailErr(t, "plant link", os.Symlink(target, filepath.Join(stateRoot, "scratch", "chat-1")))
 
 	if dir, err := folders.Ensure("chat-1"); err == nil {
-		t.Fatalf("Ensure followed a planted link to %q", dir)
+		t.Fatalf("Ensure followed a planted link to %+v", dir)
 	}
 }
 
@@ -63,7 +63,7 @@ func TestEnsureRefusesALinkedScratchRoot(t *testing.T) {
 	testutil.FailErr(t, "plant root link", os.Symlink(t.TempDir(), filepath.Join(stateRoot, "scratch")))
 
 	if dir, err := folders.Ensure("chat-1"); err == nil {
-		t.Fatalf("Ensure followed a linked scratch root to %q", dir)
+		t.Fatalf("Ensure followed a linked scratch root to %+v", dir)
 	}
 }
 
@@ -87,15 +87,15 @@ func TestRemoveDeletesOnlyNamedSessions(t *testing.T) {
 	testutil.FailErr(t, "ensure worker-1", err)
 	other, err := folders.Ensure("chat-2")
 	testutil.FailErr(t, "ensure chat-2", err)
-	testutil.FailErr(t, "write other", os.WriteFile(filepath.Join(other, "keep.txt"), []byte("x"), 0o600))
+	testutil.FailErr(t, "write other", os.WriteFile(filepath.Join(other.Scratch, "keep.txt"), []byte("x"), 0o600))
 
 	testutil.FailErr(t, "remove tree", folders.Remove("chat-1", "worker-1", "never-created"))
-	for _, dir := range []string{coordinator, worker} {
+	for _, dir := range []string{coordinator.Scratch, coordinator.Output, worker.Scratch, worker.Output} {
 		if _, err := os.Stat(dir); !os.IsNotExist(err) {
 			t.Fatalf("%q survived Remove: %v", dir, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(other, "keep.txt")); err != nil {
+	if _, err := os.Stat(filepath.Join(other.Scratch, "keep.txt")); err != nil {
 		t.Fatalf("unrelated session scratch was removed: %v", err)
 	}
 }
@@ -106,7 +106,7 @@ func TestReclaimKeepsSessionsInUse(t *testing.T) {
 	testutil.FailErr(t, "ensure idle", err)
 	busy, err := folders.Ensure("busy")
 	testutil.FailErr(t, "ensure busy", err)
-	testutil.FailErr(t, "write busy", os.WriteFile(filepath.Join(busy, "live.txt"), []byte("x"), 0o600))
+	testutil.FailErr(t, "write busy", os.WriteFile(filepath.Join(busy.Scratch, "live.txt"), []byte("x"), 0o600))
 
 	var released []string
 	kept, err := folders.Reclaim(t.Context(), func(id string) (func(), bool) {
@@ -122,10 +122,10 @@ func TestReclaimKeepsSessionsInUse(t *testing.T) {
 	if !slices.Equal(released, []string{"idle"}) {
 		t.Fatalf("released = %v, want [idle]", released)
 	}
-	if _, err := os.Stat(idle); !os.IsNotExist(err) {
+	if _, err := os.Stat(idle.Scratch); !os.IsNotExist(err) {
 		t.Fatalf("idle scratch survived Reclaim: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(busy, "live.txt")); err != nil {
+	if _, err := os.Stat(filepath.Join(busy.Scratch, "live.txt")); err != nil {
 		t.Fatalf("busy scratch was removed: %v", err)
 	}
 }
@@ -146,7 +146,7 @@ func TestInventoryCountsFilesNotFolders(t *testing.T) {
 		t.Fatal("an empty folder reported content")
 	}
 
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "out.txt"), []byte("hello"), 0o600))
+	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir.Scratch, "out.txt"), []byte("hello"), 0o600))
 	present, bytes, err = folders.Inventory(t.Context())
 	testutil.FailErr(t, "inventory", err)
 	if !present || bytes != 5 {

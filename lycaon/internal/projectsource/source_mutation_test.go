@@ -81,7 +81,7 @@ func TestSourceMutationRecoveryFinishesAppliedWrite(t *testing.T) {
 		Response:                  []byte(`{"Path":"recover.txt"}`),
 	}
 	now := time.Now().UTC()
-	row := &sourceMutationRow{ID: opID, ProjectID: p.ID, Kind: "write", InputDigest: response,
+	row := &sourceMutationRow{memory: testSourceOperationMemory(t), ID: opID, ProjectID: p.ID, Kind: "write", InputDigest: response,
 		Plan: plan, Status: sourceMutationPrepared, CreatedAt: now, UpdatedAt: now}
 	testutil.FailErr(t, "insert mutation", service.Journal.insert(t.Context(), row))
 	testutil.FailErr(t, "apply file before crash", applyProjectSourceWrite(writePlan))
@@ -259,7 +259,7 @@ func TestFileAppliedReceiptReprovesAndReappliesLostFilesystemEffect(t *testing.T
 	before, after := []byte("before"), []byte("after")
 	testutil.FailErr(t, "seed source", os.WriteFile(path, before, 0o640))
 	now := time.Now().UTC()
-	row := &sourceMutationRow{
+	row := &sourceMutationRow{memory: testSourceOperationMemory(t),
 		ID: uuid.NewString(), ProjectID: p.ID, Kind: "write", InputDigest: "digest",
 		Status: sourceMutationFileApplied, CreatedAt: now, UpdatedAt: now,
 		Plan: sourceMutationPlan{

@@ -13,8 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/filekind"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/repomap"
-	"github.com/odvcencio/gotreesitter/grammars"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/odvcencio/gotreesitter/grammars"
 )
 
 type definitionLanguageFixture struct {

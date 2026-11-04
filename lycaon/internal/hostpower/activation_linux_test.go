@@ -3,6 +3,7 @@
 package hostpower
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -11,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/lycaon/lycaon/internal/linuxbus"
@@ -32,19 +32,22 @@ func activationBus(t *testing.T) (string, string) {
 	config := fmt.Sprintf(`<busconfig><type>session</type><listen>unix:path=%s</listen><auth>EXTERNAL</auth><servicedir>%s</servicedir><policy context="default"><allow user="*"/><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>`, path, services)
 	configPath := filepath.Join(directory, "bus.conf")
 	testutil.FailErr(t, "private activation configuration", os.WriteFile(configPath, []byte(config), 0o600))
-	cmd := exec.Command("dbus-daemon", "--nofork", "--config-file="+configPath)
+	cmd := exec.CommandContext(t.Context(), "dbus-daemon", "--nofork", "--config-file="+configPath, "--print-address=1")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
+	ready, err := cmd.StdoutPipe()
+	testutil.FailErr(t, "create activation bus readiness pipe", err)
 	testutil.FailErr(t, "start activation bus", cmd.Start())
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	for t.Context().Err() == nil {
-		if _, err := os.Stat(path); err == nil {
-			return path, marker
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		if t.Failed() {
+			t.Logf("activation bus stderr: %s", stderr.String())
 		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatalf("activation bus did not start: %s", stderr.String())
-	return "", ""
+	})
+	_, err = bufio.NewReader(ready).ReadString('\n')
+	testutil.FailErr(t, "wait for activation bus readiness", err)
+	return path, marker
 }
 
 func TestPowerActivationFixtureProcess(t *testing.T) {

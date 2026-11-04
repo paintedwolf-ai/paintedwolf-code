@@ -77,24 +77,28 @@ func (s *Installation) installApprovalDelta(ctx context.Context, checkpointID st
 		}
 		requested := make([]confine.SocketGrant, 0, len(delta.Sockets))
 		for _, target := range delta.Sockets {
-			requested = append(requested, confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath})
+			grant := confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding}
+			if err := confine.RevalidateSocketGrant(grant); err != nil {
+				return nil, err
+			}
+			requested = append(requested, grant)
 		}
-		already := s.Sockets.AuthorizedGrants("", delta.SessionID, delta.ToolCallID, delta.ActionDigest, requested)
+		already := s.Sockets.AuthorizedGrants("", delta.PermitIdentity(), delta.ActionDigest, requested)
 		covered := make(map[string]struct{}, len(already))
 		for _, grant := range already {
-			covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath] = struct{}{}
+			covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath+"\x00"+grant.Binding.Key()] = struct{}{}
 		}
 		created := make([]confine.SocketGrant, 0, len(requested))
 		for _, grant := range requested {
-			if _, ok := covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath]; ok {
+			if _, ok := covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath+"\x00"+grant.Binding.Key()]; ok {
 				continue
 			}
-			s.Sockets.IssuePermit(delta.SessionID, delta.ToolCallID, delta.ActionDigest, grant)
+			s.Sockets.IssuePermit(firstSocketChat(delta), delta.PermitIdentity(), delta.ActionDigest, grant)
 			created = append(created, grant)
 		}
 		return func() {
 			for _, grant := range created {
-				s.Sockets.RevokePermit(delta.SessionID, delta.ToolCallID, delta.ActionDigest, grant)
+				s.Sockets.RevokePermit(delta.PermitIdentity(), delta.ActionDigest, grant)
 			}
 		}, nil
 	case hitl.AuthorityDirectIPPermit:
@@ -102,11 +106,11 @@ func (s *Installation) installApprovalDelta(ctx context.Context, checkpointID st
 			return nil, fmt.Errorf("direct-IP approval authority is not configured")
 		}
 		lease := *delta.DirectIPLease
-		if s.DirectIP.Authorized(delta.SessionID, delta.ToolCallID, lease.ActionDigest) {
+		if s.DirectIP.Authorized(delta.PermitIdentity(), lease.ActionDigest) {
 			return nil, nil
 		}
-		s.DirectIP.IssuePermit(delta.SessionID, delta.ToolCallID, lease.ActionDigest, lease.RequestDigest, lease.ConfinementDigest)
-		return func() { s.DirectIP.RevokePermit(delta.SessionID, delta.ToolCallID, lease.ActionDigest) }, nil
+		s.DirectIP.IssuePermit(delta.PermitIdentity(), lease.ActionDigest, lease.RequestDigest, lease.ConfinementDigest)
+		return func() { s.DirectIP.RevokePermit(delta.PermitIdentity(), lease.ActionDigest) }, nil
 	case hitl.AuthorityGrantedPath:
 		if s.GrantedPaths == nil || delta.Grant == nil || delta.GrantedPath == nil {
 			return nil, fmt.Errorf("granted-path approval authority is not configured")
@@ -182,8 +186,8 @@ func (s *Installation) RollbackApprovalOption(ctx context.Context, checkpointID 
 		case hitl.AuthoritySocketPermit:
 			if s.Sockets != nil {
 				for _, target := range delta.Sockets {
-					s.Sockets.RevokePermit(delta.SessionID, delta.ToolCallID, delta.ActionDigest,
-						confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath})
+					s.Sockets.RevokePermit(delta.PermitIdentity(), delta.ActionDigest,
+						confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding})
 				}
 			}
 		case hitl.AuthoritySocketChat:
@@ -192,7 +196,7 @@ func (s *Installation) RollbackApprovalOption(ctx context.Context, checkpointID 
 			}
 		case hitl.AuthorityDirectIPPermit:
 			if s.DirectIP != nil && delta.DirectIPLease != nil {
-				s.DirectIP.RevokePermit(delta.SessionID, delta.ToolCallID, delta.DirectIPLease.ActionDigest)
+				s.DirectIP.RevokePermit(delta.PermitIdentity(), delta.DirectIPLease.ActionDigest)
 			}
 		case hitl.AuthorityDirectIPChat:
 			if s.DirectIP != nil && delta.Grant != nil {
@@ -233,4 +237,11 @@ func (s *Installation) RollbackApprovalOption(ctx context.Context, checkpointID 
 		}
 	}
 	return nil
+}
+
+func firstSocketChat(delta hitl.ApprovalAuthorityDelta) string {
+	if delta.ChatSession() != "" {
+		return delta.ChatSession()
+	}
+	return delta.SessionID
 }

@@ -79,7 +79,11 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 	client := &alwaysSameToolClient{args: args}
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	reg := tools.NewStubRegistry()
+	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "ok", nil
+	}))
+	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = fmttr
@@ -159,7 +163,11 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	client := &alwaysSameToolClient{args: args, ignoreCloseout: true}
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	reg := tools.NewStubRegistry()
+	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "ok", nil
+	}))
+	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = fmttr
@@ -313,8 +321,13 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 	}}
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	reg := tools.NewStubRegistry()
+	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "ok", nil
+	}))
+	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.LoadedTools = workersLoaded
 
 	loop := promptloop.NewPromptLoopForTest(deps)
 	res, err := loop.Run(ctx, promptloop.PromptRunInput{
@@ -341,7 +354,10 @@ func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	reg := tools.NewStubRegistry()
-	reg.SetFail("read", guidance.NewRefusal("TOOL_ARGS_INVALID",
+	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "ok", nil
+	}))
+	reg.SetFail("command", guidance.NewRefusal("TOOL_ARGS_INVALID",
 		"Rejected: missing path\n\nCode: TOOL_ARGS_INVALID\n"))
 
 	client := &schemaRejectThenProseClient{
@@ -352,6 +368,7 @@ func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.LoadedTools = workersLoaded
 	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "forced closeout: " + cause.Text()}
 	}
@@ -398,7 +415,7 @@ func (c *schemaRejectThenProseClient) Complete(ctx context.Context, req modelcal
 	if c.calls > c.proseAfter {
 		return &modelcall.Completion{Content: "Need a different argument shape."}, nil
 	}
-	return &modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "tc1", Name: "read", Args: c.args}}}, nil
+	return &modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "tc1", Name: "command", Args: c.args}}}, nil
 }
 
 func (c *schemaRejectThenProseClient) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
@@ -433,8 +450,13 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	var escalateCalls int
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	reg := tools.NewStubRegistry()
+	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "ok", nil
+	}))
+	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.LoadedTools = workersLoaded
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = guidance.NewStaticRejectFormatter(&guidance.HintConfig{
 		HintCodes: map[string]guidance.HintEntry{
@@ -470,7 +492,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 		t.Fatalf("closeout content = %q", result.LastAssistantContent)
 	}
 
-	if total := guard.CodeRejectResponses(sess.ID, "read", "PROGRESS_ITEM_NOT_CLOSED"); total < loopguard.DoomLoopMaxCodeRepeats {
+	if total := guard.CodeRejectResponses(sess.ID, "command", "PROGRESS_ITEM_NOT_CLOSED"); total < loopguard.DoomLoopMaxCodeRepeats {
 		t.Fatalf("code reject total = %d want >= %d — pre-invoke refusals must accrue", total, loopguard.DoomLoopMaxCodeRepeats)
 	}
 	if escalateCalls == 0 {
@@ -509,7 +531,7 @@ func (c *varyingArgsToolClient) Complete(ctx context.Context, req modelcall.Comp
 	}
 	calls := make([]api.ToolCall, max(1, c.batchSize))
 	for i := range calls {
-		calls[i] = api.ToolCall{ID: uuid.NewString(), Name: "read", Args: map[string]any{"path": "README.md", "attempt": c.calls, "item": i}}
+		calls[i] = api.ToolCall{ID: uuid.NewString(), Name: "command", Args: map[string]any{"path": "README.md", "attempt": c.calls, "item": i}}
 	}
 	return &modelcall.Completion{ToolCalls: calls}, nil
 }

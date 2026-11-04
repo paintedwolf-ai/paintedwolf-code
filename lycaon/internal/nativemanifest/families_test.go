@@ -14,7 +14,7 @@ func TestBundledFamiliesValid(t *testing.T) {
 	if err := cfg.ValidateFamilies(); err != nil {
 		t.Fatalf("ValidateFamilies: %v", err)
 	}
-	for _, want := range []string{"command", "terminal", "page"} {
+	for _, want := range []string{"processes", "held_call", "terminal", "page"} {
 		if len(cfg.FamilyMembers(want)) == 0 {
 			t.Fatalf("missing family %s", want)
 		}

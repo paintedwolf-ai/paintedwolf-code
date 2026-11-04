@@ -1,0 +1,30 @@
+oar: '1.0'
+id: COMMAND_EXTERNAL_HIDDEN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "COMMAND_EXTERNAL_HIDDEN"
+effect: block
+copy:
+  what: The external selector is turned off on this host, so this statement did not run.
+  cause: This host runs native utilities by their own names and every other program directly by name.
+  why: With the selector off, a native name always reaches its native owner.
+  fix: Write the command by its ordinary name, without external --. Earlier statements' output and effects are in this result.
+  instead: Run the command by its ordinary name without external --
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: the external selector is turned off on this host
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: COMMAND_EXTERNAL_HIDDEN'

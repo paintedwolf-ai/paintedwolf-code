@@ -1,6 +1,10 @@
 package survey
 
-import "bytes"
+import (
+	"bytes"
+
+	"github.com/lycaon/lycaon/internal/textsearch"
+)
 
 // Pagination discards skipped matches without retaining them.
 func (s *grepSearch) scanPaginatedText(rel string, content []byte, bytesTruncated bool) error {
@@ -28,29 +32,21 @@ func (s *grepSearch) collectMatches(rel string, content []byte) ([]grepMatch, er
 	return matches, err
 }
 
+// forEachTextMatch runs the shared line scan with the tool's RE2 contract.
 // Only matching lines allocate surrounding context.
 func (s *grepSearch) forEachTextMatch(rel string, content []byte, yield func(grepMatch) bool) error {
-	lineNo := 0
-	for start := 0; start < len(content); {
-		if err := s.ctx.Err(); err != nil {
-			return err
+	_, err := textsearch.ScanReader(s.ctx, bytes.NewReader(content), 0, nil, textsearch.RegexpSelector{Re: s.re}, textsearch.ScanOptions{MaxSelected: -1, TrimCR: true}, func(line textsearch.Line) error {
+		record := content[line.Start:line.End]
+		entry := grepMatch{Path: rel, Line: line.Number, Content: string(record), Match: string(record[line.Span.Start:line.Span.End])}
+		if s.contextLines > 0 {
+			entry.ContextBefore, entry.ContextAfter = grepLineContext(content, line.Start, grepLineEnd(content, line.Start), s.contextLines)
 		}
-		lineNo++
-		end := grepLineEnd(content, start)
-		line := string(bytes.TrimSuffix(content[start:end], []byte{'\r'}))
-		matched, matchText := lineMatches(line, s.re)
-		if matched {
-			entry := grepMatch{Path: rel, Line: lineNo, Content: line, Match: matchText}
-			if s.contextLines > 0 {
-				entry.ContextBefore, entry.ContextAfter = grepLineContext(content, start, end, s.contextLines)
-			}
-			if !yield(entry) {
-				return nil
-			}
+		if !yield(entry) {
+			return textsearch.ErrStopScan
 		}
-		start = end + 1
-	}
-	return nil
+		return nil
+	})
+	return err
 }
 
 func grepLineEnd(content []byte, start int) int {

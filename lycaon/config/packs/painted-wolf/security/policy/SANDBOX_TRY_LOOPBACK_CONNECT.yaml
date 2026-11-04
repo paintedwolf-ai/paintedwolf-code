@@ -2,13 +2,6 @@ oar: '1.0'
 id: SANDBOX_TRY_LOOPBACK_CONNECT
 kind: policy
 anchor: tool.rejected
-selector:
-  tool:
-    - wait
-    - capture_page
-    - measure_page
-    - page_open
-    - http_request
 requires:
   profiles:
     - tool

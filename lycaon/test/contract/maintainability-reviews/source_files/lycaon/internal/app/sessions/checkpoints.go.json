@@ -1,14 +1,17 @@
 {
   "category": "source_files",
   "artifact": "lycaon/internal/app/sessions/checkpoints.go",
-  "kind": "module",
-  "workstream": "approval-intent-lifecycle",
+  "kind": "construction",
+  "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Session wiring binds existing approval, capability, and repetition owners. Denial suppression belongs to HITL and the repetition guard reads its persisted intent. Retain explicit wiring here without creating another authority owner.",
-  "reviewed_commit": "10d0822c7c4275eb12a9ae9e2d26324df60cfe43",
-  "ceiling": 312,
+  "reason": "Session wiring connects checkpoint, socket runtime, grant, secret and teardown owners explicitly. Pending approval callbacks drain at phase 25 and socket stores close at phase 26 after consumers. Retain visible ordering instead of another lifecycle wrapper. Freeze this reviewed shape at 314 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 314,
   "boundaries": {
-    "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b",
-    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "5a78b3c87377e0209a42f85f50b6332847a460719df2946e071d57a33130c8de"
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "208fae3de9908d220200f08279b6edae18047b84322b2e1418fad9851fe69e5c",
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "9b31a80db071a85866026f0099eb1d4947f1abbbda314310e11998a45bf8184c",
+    "lycaon/internal/app/configuration/socket_lifetime_test.go": "6e5c6341dd41536cac08103ca93bd7212534f2067cf8175bac53677a3792ba37",
+    "lycaon/internal/app/security/exceptional_test.go": "2c6dde913657a90a8dae3b9b0807d77941b1f704f0e1829ded1001d3efbc47d8",
+    "lycaon/internal/hitl/socket_pending_ownership_test.go": "619a31697aa348e4e84a9566b945c12931301ef211b33305259341e8b47d089c"
   }
 }

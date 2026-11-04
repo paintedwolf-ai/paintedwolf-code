@@ -136,3 +136,43 @@ func TestExpandedPlanRendersToTheArgvThatRuns(t *testing.T) {
 		t.Fatalf("rendered %q lost its redirection or connector", rendered)
 	}
 }
+
+func TestExpandGlobsUsesLinkedDirectoriesWithoutGlobstarDescent(t *testing.T) {
+	root := globTree(t, "real/x.go")
+	testutil.FailErr(t, "link directory", os.Symlink("real", filepath.Join(root, "linked")))
+	cases := []struct {
+		line string
+		want []string
+	}{
+		{"ls */x.go", []string{"linked/x.go", "real/x.go"}},
+		{"ls linked/*.go", []string{"linked/x.go"}},
+		{"ls **/x.go", []string{"real/x.go"}},
+		{"ls *", []string{"linked", "real"}},
+	}
+	for _, c := range cases {
+		got, _, err := expandLine(t, c.line, commandsurface.GlobScope{Dir: root})
+		testutil.FailErr(t, "expand "+c.line, err)
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s expanded to %q, want %q", c.line, got, c.want)
+		}
+	}
+}
+
+func TestMatchGlobDeductsItsBudget(t *testing.T) {
+	root := globTree(t, "a.go", "b.go", "sub/c.go")
+	files := commandsurface.OSGlobFiles{Dir: root}
+	budget := commandsurface.GlobBudget{Matches: 2, Visits: 4}
+	matches, err := commandsurface.MatchGlob(context.Background(), files, "*.go", &budget)
+	testutil.FailErr(t, "match within budget", err)
+	if !reflect.DeepEqual(matches, []string{"a.go", "b.go"}) || budget != (commandsurface.GlobBudget{Matches: 0, Visits: 1}) {
+		t.Fatalf("matches %q budget %+v", matches, budget)
+	}
+	_, err = commandsurface.MatchGlob(context.Background(), files, "sub/*.go", &budget)
+	var exceeded *commandsurface.GlobBudgetError
+	if !errors.As(err, &exceeded) || exceeded.Limit != commandsurface.GlobLimitMatches || exceeded.Max != 0 {
+		t.Fatalf("match past budget: %v", err)
+	}
+	if commandsurface.GlobActive(`a\*b`) || !commandsurface.GlobActive("a/b?") {
+		t.Fatal("glob activity misread escapes")
+	}
+}

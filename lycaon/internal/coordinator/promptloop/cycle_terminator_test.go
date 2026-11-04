@@ -30,7 +30,7 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 			reg := tools.NewStubRegistry()
 			err := reg.Register(tt.tool, func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 				if tt.tool == "wait" && tctx.Effects.Out != nil {
-					tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
+					tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait"}
 				}
 				return tt.toolOutput, nil
 			})
@@ -49,7 +49,10 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 					},
 				},
 				Tools: ToolsDeps{
-					EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
+					EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, completion *api.ToolCompletion, _ int) (string, guidance.ToolResultFacts) {
+						if tt.tool == "wait" && (completion == nil || completion.State != "parked") {
+							t.Fatalf("enrichment lost parked completion: %+v", completion)
+						}
 						hostArgs := make(map[string]any, len(args)+1)
 						for key, value := range args {
 							hostArgs[key] = value

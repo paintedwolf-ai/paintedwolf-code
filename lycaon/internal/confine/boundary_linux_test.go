@@ -150,7 +150,7 @@ func TestNetworkPlanMirrorsBoundaryDerivations(t *testing.T) {
 	}
 	deny := networkPlan(Confinement{Network: NetworkDeny, LocalListen: true, LocalListenPorts: []uint16{8080},
 		SocketGrants: []SocketGrant{{ApprovedPath: "/run/a", ResolvedPath: "/run/a"}}})
-	if deny.LoopbackConnect || !deny.Listen || !reflect.DeepEqual(deny.ListenPorts, []uint16{8080}) || !reflect.DeepEqual(deny.SocketPaths, []string{"/run/a"}) {
+	if deny.LoopbackConnect || !deny.Listen || !reflect.DeepEqual(deny.ListenPorts, []uint16{8080}) || !reflect.DeepEqual(deny.SocketGrants, []linuxsandbox.SocketGrant{{Path: "/run/a", FD: linuxsandbox.SocketReferenceFD}}) {
 		t.Fatalf("deny plan: %+v", deny)
 	}
 }
@@ -169,4 +169,32 @@ func containsPath(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// A draft is editor state; an ordinary Linux launch retains its declared roots.
+func TestLinuxDraftFileKeepsOrdinaryWriteRoot(t *testing.T) {
+	root := t.TempDir()
+	testutil.FailErr(t, "saved draft base", os.WriteFile(filepath.Join(root, "draft.txt"), []byte("one\ntwo\n"), 0600))
+	rules, err := filesystemRules(Confinement{Roots: []string{root}})
+	testutil.FailErr(t, "ordinary draft-path rules", err)
+	plan, err := compileFilesystemPlan(rules)
+	testutil.FailErr(t, "ordinary Linux launch plan", err)
+	found := false
+	for _, path := range plan.WriteRoots {
+		if path == root {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("project write root lost: %+v", plan)
+	}
+}
+
+// UseDelegatedEndpointsForTest stands a fixture socket in for a delegated
+// service endpoint, which tests cannot create at its operating-system path.
+func UseDelegatedEndpointsForTest(t *testing.T, endpoints []linuxsandbox.DelegatedEndpoint) {
+	t.Helper()
+	previous := delegatedEndpoints
+	delegatedEndpoints = endpoints
+	t.Cleanup(func() { delegatedEndpoints = previous })
 }

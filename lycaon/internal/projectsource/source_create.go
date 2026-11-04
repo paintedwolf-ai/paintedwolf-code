@@ -27,6 +27,7 @@ type SourceEntryKind string
 const (
 	SourceEntryFile   SourceEntryKind = "file"
 	SourceEntryFolder SourceEntryKind = "folder"
+	SourceEntryLink   SourceEntryKind = "link"
 )
 
 // ErrSourceKindInvalid is a create for neither a file nor a folder.

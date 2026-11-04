@@ -3,16 +3,21 @@ package httpaction
 
 import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/socketref"
 
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
+	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -84,9 +89,10 @@ type requestSpec struct {
 	redirects     string
 	disposition   responseDisposition
 	contest       string
-	// unixSocket is the argument as stated; socket is the reviewed path dialed.
+	// unixSocket is the argument; socket labels the retained destination in receipts.
 	unixSocket    string
 	socket        string
+	socketBinding socketref.Binding
 	hostHeader    string
 	resolve       []outboundhttp.ResolveMapping
 	tokenJar      string
@@ -98,114 +104,239 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		return fmt.Errorf("registry and sandbox boundary required")
 	}
 	return reg.Register("http_request", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		ctx = withRequestFiles(ctx)
-		spec, err := parseRequestSpec(ctx, deps.Boundary, tctx, args)
-		if err != nil {
-			return "", invalid(err)
+		ex, err := exchange(ctx, deps, args, tctx, ExchangeOptions{}, modelResponse)
+		var transport *TransportFailure
+		if errors.As(err, &transport) {
+			return "", transport.Reject
 		}
-		capability, reject := capabilityrequest.ParseCapabilityRequest(args)
-		if reject != nil {
-			return "", reject
-		}
-		allowAddress, reject := loopbackPolicy(capability, tctx)
-		if reject != nil {
-			return "", reject
-		}
-		if reject := checkLoopbackAuthority(spec, allowAddress); reject != nil {
-			return "", reject
-		}
-		jar, jarReq, err := openCookieJar(ctx, deps, tctx, args)
 		if err != nil {
 			return "", err
 		}
-		tokenJar, tokenJarReq, err := openTokenJar(ctx, deps, tctx, args)
-		if err != nil {
-			return "", err
-		}
-		if spec.unixSocket != "" {
-			grant, reject := tools.ClaimDeclaredSocket(ctx, tctx, spec.unixSocket)
-			if reject != nil {
-				return "", reject
-			}
-			spec.socket = grant.ResolvedPath
-		}
-		ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
-			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
-			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID,
-		})
-		screened, err := screenRequest(ctx, deps, spec, args, tctx)
-		if err != nil {
-			return "", err
-		}
-		// Stored cookies are attached after screening and scoped to their origin.
-		outbound, reject := resolveCookieReferences(screened, jar, spec.target)
-		if reject != nil {
-			return "", reject
-		}
-		// A token is placed at its issuer the same way; anywhere else the
-		// screen decides the disclosure before the value touches the wire.
-		placements, reject := placedTokens(outbound, tokenJar, spec)
-		if reject != nil {
-			return "", reject
-		}
-		release, reject := releaseForeignTokens(ctx, deps, spec, tctx, spec.tokenJar, placements)
-		if reject != nil {
-			return "", reject
-		}
-		outbound, reject = substituteTokens(outbound, placements, release)
-		if reject != nil {
-			return "", reject
-		}
-		ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
-			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
-			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
-		})
-		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
-		resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]))
-		if err != nil {
-			return "", sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err)
-		}
-		if bufferedBody != nil {
-			resp.Body = bufferedBody
-		}
-		issuerID, issuerLabel := responseIssuer(spec, resp)
-		tokenRec, tokenReject := captureResponseTokens(ctx, deps, tokenJar, tokenJarReq, spec.captureTokens, resp, issuerID, issuerLabel)
-		if tokenReject != nil {
-			return "", tokenReject
-		}
-		// The response is scrubbed before it is placed, landed, or spilled.
-		resp, bodyRedacted := scrubResponse(resp, tokenJar, tctx.Effects.Secrets)
-		if bufferedBody != nil {
-			receipt, err := inboundwrite.Write(ctx, deps.Boundary, tctx, spec.disposition.path, resp.Body, "HTTP_REQUEST_RESPONSE_PATH_DENIED")
-			if err != nil {
-				return "", err
-			}
-			landed = &receipt
-		}
-		finalURL, redirects := observedURLs(tctx.Effects.Secrets, resp.FinalURL, resp.Redirects)
+		resp := ex.resp
 		out := result{
-			Status: resp.Status, FinalURL: finalURL, Headers: resp.Headers, Redirects: redirects,
-			SentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)),
+			Status: resp.Status, FinalURL: ex.finalURL, Headers: resp.Headers, Redirects: ex.redirects,
+			SentHeaders: ex.sentHeaders,
 			DurationMS:  resp.DurationMS, TimingMS: resp.Timing, TLS: resp.TLS,
 			Bytes: resp.Bytes, SHA256: resp.SHA256, ContentType: resp.ContentType,
-			Redacted: outbound.redacted, ReceiptToken: outbound.receipt, UnixSocket: spec.socket,
-			Tokens: tokenRec, BodyRedacted: bodyRedacted,
+			Redacted: ex.outbound.redacted, ReceiptToken: ex.outbound.receipt, UnixSocket: ex.spec.socket,
+			Tokens: ex.tokens, BodyRedacted: ex.bodyRedacted,
 		}
-		placement := placeResponseBody(resp, tctx, landed != nil, spec.disposition.discard)
+		placement := placeResponseBody(ctx, resp, tctx, ex.landed != nil, ex.spec.disposition.discard)
 		out.Body, out.BodyEncoding = placement.inline, placement.encoding
 		out.BodyOmitted, out.BodySpillPath = placement.omitted, placement.spillPath
 		out.BodyUnavailable = placement.spillFailed
-		if landed != nil {
-			out.ResponsePath, out.Written = landed.Path, true
+		if ex.landed != nil {
+			out.ResponsePath, out.Written = ex.landed.Path, true
 		}
-		out.Cookies = saveCookieJar(ctx, deps, jarReq, jar)
-		reportWebPage(tctx, spec, resp, placement, finalURL)
+		out.Cookies = ex.cookies
+		reportWebPage(tctx, ex.spec, resp, placement, ex.finalURL)
 		if tctx.Effects.Out != nil {
-			tctx.Effects.Out.RetrievedFrom = retrievedFrom(spec, resp.FinalURL)
+			tctx.Effects.Out.RetrievedFrom = retrievedFrom(ex.spec, resp.FinalURL)
 		}
 		encoded, err := surveyjson.MarshalIndent(out, "", "  ")
 		return string(encoded), err
 	})
+}
+
+// ExchangeOptions select a typed frontend's response handling. Jar replaces
+// a named cookie jar with a frontend-owned one; MaxBodyBytes keeps the whole
+// received body in Exchange.Response.Body up to that bound; RedirectLimit
+// bounds followed redirects within the owner's maximum; ConnectTimeout bounds
+// each hop's connection separately from the exchange timeout.
+type ExchangeOptions struct {
+	Jar            http.CookieJar
+	MaxBodyBytes   int64
+	RedirectLimit  int
+	ConnectTimeout time.Duration
+	// WireHeaders keeps complete headers and any observable cleartext block.
+	WireHeaders bool
+	// TLS adds request-scoped trust and a client certificate.
+	TLS *outboundhttp.ClientTLS
+	// Dial replaces the resolve argument: address and connect-to overrides
+	// pass the same loopback authority and destination policy as the URL.
+	Dial []outboundhttp.ResolveMapping
+}
+
+// Exchange is a command frontend's unmodified response. Presentation and
+// screening belong to the command's model-delivery boundary. SentBodyBytes
+// and SentBodySHA256 identify the request body as it went on the wire.
+type Exchange struct {
+	Response       outboundhttp.Response
+	FinalURL       string
+	Redirects      []outboundhttp.Hop
+	SentHeaders    []outboundhttp.Header
+	SentBodyBytes  int64
+	SentBodySHA256 string
+}
+
+// Perform runs one request with the same screening, approval, secret,
+// cookie, token, loopback and egress handling as the http_request tool. args
+// is that tool's declared argument record; response_path and named cookie
+// jars stay with the tool. A transport failure is a *TransportFailure.
+func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions) (Exchange, error) {
+	if _, present := args["response_path"]; present {
+		return Exchange{}, invalid(fmt.Errorf("response_path belongs to the http_request tool"))
+	}
+	if opts.Jar != nil {
+		if _, present := args["cookie_jar"]; present {
+			return Exchange{}, invalid(fmt.Errorf("a frontend cookie jar replaces cookie_jar"))
+		}
+	}
+	if _, present := args["resolve"]; present && len(opts.Dial) > 0 {
+		return Exchange{}, invalid(fmt.Errorf("frontend dial overrides replace resolve"))
+	}
+	ex, err := exchange(ctx, deps, args, tctx, opts, commandResponse)
+	if err != nil {
+		return Exchange{}, err
+	}
+	sum := sha256.Sum256(ex.outbound.body)
+	return Exchange{Response: ex.resp, FinalURL: ex.finalURL, Redirects: ex.redirects, SentHeaders: ex.sentHeaders,
+		SentBodyBytes: int64(len(ex.outbound.body)), SentBodySHA256: hex.EncodeToString(sum[:])}, nil
+}
+
+// TransportFailure is a request the owner started that failed in transport.
+// Reject is the owner's typed rejection; Cause keeps the transport error (an
+// *outboundhttp.ExchangeError recording requests started and responses
+// received) for frontends that report their own status codes.
+type TransportFailure struct {
+	Reject *toolrejection.ToolReject
+	Cause  error
+}
+
+func (f *TransportFailure) Error() string   { return f.Reject.Error() }
+func (f *TransportFailure) Unwrap() []error { return []error{f.Reject, f.Cause} }
+
+type exchanged struct {
+	spec         requestSpec
+	outbound     outboundRequest
+	resp         outboundhttp.Response
+	landed       *inboundwrite.Receipt
+	finalURL     string
+	redirects    []outboundhttp.Hop
+	sentHeaders  []outboundhttp.Header
+	tokens       *tokenReceipt
+	cookies      *cookieReceipt
+	bodyRedacted bool
+}
+
+type responseUse uint8
+
+const (
+	modelResponse responseUse = iota
+	commandResponse
+)
+
+// exchange is the owner's complete request lifecycle up to presentation.
+func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions, use responseUse) (exchanged, error) {
+	ctx = withRequestFiles(ctx)
+	spec, err := parseRequestSpec(ctx, deps.Boundary, tctx, args)
+	if err != nil {
+		return exchanged{}, invalid(err)
+	}
+	if len(opts.Dial) > 0 {
+		spec.resolve = opts.Dial
+	}
+	capability, reject := capabilityrequest.ParseCapabilityRequest(args)
+	if reject != nil {
+		return exchanged{}, reject
+	}
+	allowAddress, reject := loopbackPolicy(capability, tctx)
+	if reject != nil {
+		return exchanged{}, reject
+	}
+	if reject := checkLoopbackAuthority(spec, allowAddress); reject != nil {
+		return exchanged{}, reject
+	}
+	jar, jarReq, err := openCookieJar(ctx, deps, tctx, args)
+	if err != nil {
+		return exchanged{}, err
+	}
+	tokenJar, tokenJarReq, err := openTokenJar(ctx, deps, tctx, args)
+	if err != nil {
+		return exchanged{}, err
+	}
+	if spec.unixSocket != "" {
+		grant, reject := tools.ClaimDeclaredSocket(ctx, tctx, spec.unixSocket)
+		if reject != nil {
+			return exchanged{}, reject
+		}
+		spec.socket = grant.ResolvedPath
+		spec.socketBinding = grant.Binding
+	}
+	ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
+		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
+		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID,
+	})
+	screened, err := screenRequest(ctx, deps, spec, args, tctx)
+	if err != nil {
+		return exchanged{}, err
+	}
+	cookieSpec := spec
+	cookieSpec.target, err = outboundhttp.NormalizeURL(screened.url)
+	if err != nil {
+		return exchanged{}, invalid(err)
+	}
+	cookieSpec.hostHeader = screened.hostHeader
+	screened.beforeCookieHop, err = prepareCookieDelivery(ctx, deps, cookieSpec, jar)
+	if err != nil {
+		return exchanged{}, err
+	}
+	// Stored cookies and references use the same reviewed delivery view.
+	outbound, reject := resolveCookieReferences(screened, jar, spec.target)
+	if reject != nil {
+		return exchanged{}, reject
+	}
+	// A token is placed at its issuer the same way; anywhere else the
+	// screen decides the disclosure before the value touches the wire.
+	placements, reject := placedTokens(outbound, tokenJar, spec)
+	if reject != nil {
+		return exchanged{}, reject
+	}
+	release, reject := releaseForeignTokens(ctx, deps, spec, tctx, spec.tokenJar, placements)
+	if reject != nil {
+		return exchanged{}, reject
+	}
+	outbound, reject = substituteTokens(outbound, placements, release)
+	if reject != nil {
+		return exchanged{}, reject
+	}
+	ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
+		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
+		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
+		ActionID: tctx.EffectActionID(),
+	})
+	defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
+	resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
+	if err != nil {
+		if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
+			return exchanged{}, capabilityrequest.SocketResolveReject(&confine.SocketResolveError{Code: confine.SocketResolveChanged, Path: spec.unixSocket, Err: err})
+		}
+		return exchanged{}, &TransportFailure{Reject: sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err), Cause: err}
+	}
+	if bufferedBody != nil {
+		resp.Body = bufferedBody
+	}
+	issuerID, issuerLabel := responseIssuer(spec, resp)
+	tokenRec, tokenReject := captureResponseTokens(ctx, deps, tokenJar, tokenJarReq, spec.captureTokens, resp, issuerID, issuerLabel)
+	if tokenReject != nil {
+		return exchanged{}, tokenReject
+	}
+	bodyRedacted := false
+	finalURL, redirects := resp.FinalURL, resp.Redirects
+	if use == modelResponse {
+		resp, bodyRedacted = scrubResponse(resp, tokenJar, tctx.Effects.Secrets)
+		finalURL, redirects = observedURLs(tctx.Effects.Secrets, resp.FinalURL, resp.Redirects)
+	}
+	if bufferedBody != nil {
+		receipt, err := inboundwrite.Write(ctx, deps.Boundary, tctx, spec.disposition.path, resp.Body, "HTTP_REQUEST_RESPONSE_PATH_DENIED")
+		if err != nil {
+			return exchanged{}, err
+		}
+		landed = &receipt
+	}
+	return exchanged{spec: spec, outbound: outbound, resp: resp, landed: landed, finalURL: finalURL, redirects: redirects,
+		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)), tokens: tokenRec,
+		cookies: saveCookieJar(ctx, deps, jarReq, jar), bodyRedacted: bodyRedacted}, nil
 }
 
 // parseRequestSpec validates declared fields before screening or transport.
@@ -289,26 +420,46 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 func send(
 	ctx context.Context, deps Deps, tctx tools.ToolContext, spec requestSpec, outbound outboundRequest,
 	jar *secretcap.CookieJar, tokenJar *secretcap.TokenJar, tokenJarReq secretcap.TokenJarRequest,
-	allowAddress func(netip.Addr, uint16) bool, timeout time.Duration,
+	allowAddress func(netip.Addr, uint16) bool, timeout time.Duration, opts ExchangeOptions,
 ) (outboundhttp.Response, *inboundwrite.Receipt, []byte, error) {
 	req := outboundhttp.Request{
 		Class:  egressclass.AgentHTTPRequest,
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
 		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
-		UnixSocket: spec.socket,
-		HostHeader: outbound.hostHeader,
-		Resolve:    spec.resolve,
+		UnixSocket:    spec.socket,
+		SocketBinding: spec.socketBinding,
+		HostHeader:    outbound.hostHeader,
+		Resolve:       spec.resolve,
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.
-	if spec.socket == "" {
-		req.BeforeHop = func(hopCtx context.Context, hopURL *url.URL) error {
-			return egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method)
+	req.BeforeHop = func(hopCtx context.Context, hopURL *url.URL) error {
+		if spec.socket == "" {
+			if reject := checkHopLoopbackAuthority(hopURL, spec.resolve, allowAddress); reject != nil {
+				return reject
+			}
+			if err := egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method); err != nil {
+				return err
+			}
 		}
+		if outbound.beforeCookieHop != nil {
+			return outbound.beforeCookieHop(hopCtx, hopURL)
+		}
+		return nil
 	}
 	if jar != nil {
 		req.Jar = jar.Store
 	}
+	if opts.Jar != nil {
+		req.Jar = opts.Jar
+	}
+	if opts.MaxBodyBytes > 0 {
+		req.MaxBodyBytes = opts.MaxBodyBytes
+	}
+	if opts.RedirectLimit > 0 {
+		req.RedirectLimit = opts.RedirectLimit
+	}
+	req.ConnectTimeout, req.WireHeaders, req.TLS = opts.ConnectTimeout, opts.WireHeaders, opts.TLS
 	var landed *inboundwrite.Receipt
 	var bufferedResponsePathBytes []byte
 	if spec.disposition.path != "" {
@@ -430,24 +581,37 @@ func retrievedFrom(spec requestSpec, finalURL string) string {
 	return ""
 }
 
-// firstHop is the loopback address and port the first hop dials; ok is false
-// when it dials a unix socket or a non-loopback destination.
-func (spec requestSpec) firstHop() (addr netip.Addr, port uint16, ok bool) {
-	if spec.socket != "" || spec.unixSocket != "" || spec.target == nil {
+// hopLoopbackTarget is the loopback address and port a hop dials; ok is
+// false when it dials a non-loopback destination.
+func hopLoopbackTarget(target *url.URL, resolve []outboundhttp.ResolveMapping) (addr netip.Addr, port uint16, ok bool) {
+	if target == nil {
 		return netip.Addr{}, 0, false
 	}
-	port, err := outboundhttp.EffectivePort(spec.target)
+	port, err := outboundhttp.EffectivePort(target)
 	if err != nil {
 		return netip.Addr{}, 0, false
 	}
-	if mapped, target, found := outboundhttp.MappedDial(spec.resolve, spec.target.Hostname(), port); found {
-		mapped = mapped.Unmap()
-		return mapped, target, mapped.IsLoopback()
+	host := target.Hostname()
+	if dial, found := outboundhttp.MappedDial(resolve, host, port); found {
+		if dial.Address.IsValid() {
+			mapped := dial.Address.Unmap()
+			return mapped, dial.Port, mapped.IsLoopback()
+		}
+		host, port = dial.Host, dial.Port
 	}
-	if !egress.SyntacticLoopback(spec.target.Hostname()) {
+	if !egress.SyntacticLoopback(host) {
 		return netip.Addr{}, 0, false
 	}
 	return netip.MustParseAddr("127.0.0.1"), port, true
+}
+
+// firstHop is the loopback address and port the first hop dials; ok is false
+// when it dials a unix socket or a non-loopback destination.
+func (spec requestSpec) firstHop() (addr netip.Addr, port uint16, ok bool) {
+	if spec.socket != "" || spec.unixSocket != "" {
+		return netip.Addr{}, 0, false
+	}
+	return hopLoopbackTarget(spec.target, spec.resolve)
 }
 
 func (spec requestSpec) dialsLoopback() bool {
@@ -455,15 +619,22 @@ func (spec requestSpec) dialsLoopback() bool {
 	return ok
 }
 
-func checkLoopbackAuthority(spec requestSpec, allowAddress func(netip.Addr, uint16) bool) *toolrejection.ToolReject {
-	addr, port, ok := spec.firstHop()
+func checkHopLoopbackAuthority(target *url.URL, resolve []outboundhttp.ResolveMapping, allowAddress func(netip.Addr, uint16) bool) *toolrejection.ToolReject {
+	addr, port, ok := hopLoopbackTarget(target, resolve)
 	if !ok || (allowAddress != nil && allowAddress(addr, port)) {
 		return nil
 	}
 	return &toolrejection.ToolReject{
 		Code: isolation.CodeTryLoopbackConnect,
-		Data: map[string]any{"port": port, "url": spec.target.String()},
+		Data: map[string]any{"port": port, "url": target.String()},
 	}
+}
+
+func checkLoopbackAuthority(spec requestSpec, allowAddress func(netip.Addr, uint16) bool) *toolrejection.ToolReject {
+	if spec.socket != "" || spec.unixSocket != "" {
+		return nil
+	}
+	return checkHopLoopbackAuthority(spec.target, spec.resolve, allowAddress)
 }
 
 func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.ToolContext) (func(netip.Addr, uint16) bool, *toolrejection.ToolReject) {
@@ -477,6 +648,9 @@ func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.Too
 				ports[p] = true
 			}
 		}
+	}
+	for _, p := range tctx.Local.OwnedLoopbackPorts {
+		ports[p] = true
 	}
 	if request != nil && request.LoopbackConnect != nil {
 		if len(request.LoopbackConnect.Ports) == 0 && len(ports) == 0 && !allLoopback {

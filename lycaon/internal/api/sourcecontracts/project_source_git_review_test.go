@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 

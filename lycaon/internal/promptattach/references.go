@@ -253,7 +253,7 @@ func ingestExternalFileRef(deps ReferenceDeps, previewBudget *TurnPreviewBudget,
 		return FramedPart{}, nil, attacherr.OutOfJail(fmt.Sprintf("references[%d]: external path must be absolute", i))
 	}
 	abs := filepath.Clean(fspath.CanonicalPath(rawPath))
-	if confine.ControlPlanePathDenied(abs, false, "") {
+	if confine.ControlPlanePathDenied(abs, false, "", "") {
 		return FramedPart{}, nil, attacherr.OutOfJail(fmt.Sprintf("references[%d]: %s is a protected path", i, abs))
 	}
 	info, err := os.Stat(abs)
@@ -367,7 +367,7 @@ func ingestExternalFolderRef(deps ReferenceDeps, i int, ref api.PromptReferenceE
 		return FramedPart{}, attacherr.OutOfJail(fmt.Sprintf("references[%d]: external path must be absolute", i))
 	}
 	abs := filepath.Clean(fspath.CanonicalPath(rawPath))
-	if confine.ControlPlanePathDenied(abs, false, "") {
+	if confine.ControlPlanePathDenied(abs, false, "", "") {
 		return FramedPart{}, attacherr.OutOfJail(fmt.Sprintf("references[%d]: %s is a protected path", i, abs))
 	}
 	info, err := os.Stat(abs)

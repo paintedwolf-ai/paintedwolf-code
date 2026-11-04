@@ -15,4 +15,5 @@ sha256sums=(@SHA256@)
 
 package() {
   cp -a "$srcdir/payload/." "$pkgdir/"
+  chmod 4755 "$pkgdir"@BOOTSTRAP@
 }

@@ -2,14 +2,16 @@
   "category": "go_receiver_methods",
   "artifact": "lycaon/internal/hitl/hitl.Checkpoints",
   "kind": "runtime_service",
-  "workstream": "approval-intent-lifecycle",
+  "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Checkpoint admission, expiry, cancellation, and human resolution share the resolution locks and settlement events. Retain this lifecycle owner with intent-scoped suppression; capability runtimes do not own denial history.",
-  "reviewed_commit": "10d0822c7c4275eb12a9ae9e2d26324df60cfe43",
+  "reason": "Checkpoint admission, human resolution, cancellation, expiry and shutdown share resolution locks and settlement events. The pending checkpoint owns socket leases before durable insertion and terminal settlement releases them after accepted authority transfers. Retain this lifecycle rather than separate the reference owner from the journal owner. Freeze this reviewed shape at 25 methods; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
   "ceiling": 25,
   "boundaries": {
-    "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b",
-    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "5a78b3c87377e0209a42f85f50b6332847a460719df2946e071d57a33130c8de"
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "208fae3de9908d220200f08279b6edae18047b84322b2e1418fad9851fe69e5c",
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "9b31a80db071a85866026f0099eb1d4947f1abbbda314310e11998a45bf8184c",
+    "lycaon/internal/hitl/socket_pending_ownership_test.go": "619a31697aa348e4e84a9566b945c12931301ef211b33305259341e8b47d089c",
+    "lycaon/internal/api/capabilityadmin/socket_pending_restart_test.go": "8fb3f2cbf56291f2263ab73eaf4f1a01771ab4e2a75f624fe6a4c81f78297786"
   },
-  "reviewed_shape": "71e522983ec58b85f8673727a742535eb1bd22c3793de6dd3abea6b679f98db4"
+  "reviewed_shape": "9f15d351896f668b74774d19f8a880dda9503ca16d6c60f5fafe51610b6658cb"
 }

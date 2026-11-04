@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -36,6 +37,21 @@ type Executor struct {
 	Rejections     *Rejections
 	Secrets        *Secrets
 	defaultProfile string
+	// programEntries are tools whose handler is a command program entry: the
+	// outer call is only envelope-validated and each reached child is admitted.
+	// The entry's retained interactions keep the outer boundary.
+	programEntries map[string]func(map[string]any) bool
+}
+
+// SetProgramEntry marks tool as a program entry. Its call passes envelope
+// schema validation only; per-child InvokeNative admission carries review,
+// detection, capability and policy for every native operation and launch.
+// retained reports a call of that tool that keeps the outer boundary.
+func (e *Executor) SetProgramEntry(tool string, retained func(map[string]any) bool) {
+	if e.programEntries == nil {
+		e.programEntries = map[string]func(map[string]any) bool{}
+	}
+	e.programEntries[tool] = retained
 }
 
 // Metadata owns tool definitions and schema presentation.
@@ -44,6 +60,8 @@ type Metadata struct {
 	registry     *tools.DefaultRegistry
 	toolSchemas  *toolschema.Config
 	schemaSource func(ctx context.Context, sessionID string) *toolschema.Config
+	// externalHidden withdraws the command schema's external selector copy.
+	externalHidden bool
 }
 
 // Approvals owns approval coordination and checkpoint lifetime.
@@ -87,6 +105,7 @@ type Capabilities struct {
 	Boundary            *Boundary
 	Rejections          *Rejections
 	Secrets             *Secrets
+	socketAdapter       *socketref.Adapter
 	socketRuntime       tools.SocketCapabilityRuntime
 	durableSockets      tools.DurableSocketSource
 	directIPRuntime     tools.DirectIPCapabilityRuntime

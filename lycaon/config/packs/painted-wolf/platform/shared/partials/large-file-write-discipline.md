@@ -1,3 +1,3 @@
-- **Whole-file rewrites:** if a change would replace most of a file that read back as `mode: outline`, reshape — targeted `edit`s, or split and `write` modules. Never regenerate a large file as one turn.
-- **Files over {{ native_edit_limit_mib }} MiB:** native edits reject{% if profile_has_command %} — change them with `command` (`sed`, `awk`, `python`, `jq`){% endif %}.
-- A full-file rewrite is a sequence of tool calls across turns. Do **not** reproduce file contents in the message body; put changes in tool calls so each lands and can be verified.
+- If a prior read returned `mode: outline` and most of the file changes, use targeted `edit`s or split modules with staged redirects; never regenerate a large file in one turn.
+- Native edits reject files over {{ native_edit_limit_mib }} MiB{% if profile_has_command %}; use `command` (`sed`, `awk`, `python`, `jq`) for larger files{% endif %}.
+- Rewrite through tool calls across turns so each change lands and can be verified. Keep file contents out of message prose.

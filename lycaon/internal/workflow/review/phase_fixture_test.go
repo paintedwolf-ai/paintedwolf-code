@@ -72,7 +72,7 @@ func advancePlanThroughExpand(ctx context.Context, mgr *workflow.RunManager, run
 
 func walkPlanRunToReview(ctx context.Context, t *testing.T, mgr *workflow.RunManager, blueprintMgr *blueprint.Manager, sessionID string) *api.WorkflowRun {
 	t.Helper()
-	run, err := startRun(ctx, mgr, sessionID, "plan", "1.0.0")
+	run, err := startRun(ctx, mgr, sessionID, "plan", "1.0.1")
 	testutil.FailErr(t, "startRun", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)

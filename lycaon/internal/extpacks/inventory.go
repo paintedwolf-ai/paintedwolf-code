@@ -97,11 +97,11 @@ var projectScopeByKind = map[string]ProjectScopeClass{
 	// Sealed copies serve existing runs; projects cannot replace them.
 	ArchiveKindRoot: ScopeDeviceOnly,
 	"agents":        ScopeShared,
-	"guidance":  ScopeShared,
-	"shared":    ScopeShared,
-	"policy":    ScopeAdditive,
-	"approvals": ScopeAdditive,
-	"playbooks": ScopeAdditive,
+	"guidance":      ScopeShared,
+	"shared":        ScopeShared,
+	"policy":        ScopeAdditive,
+	"approvals":     ScopeAdditive,
+	"playbooks":     ScopeAdditive,
 	// Contributions require device installation.
 	"contributions/commands":         ScopeDeviceOnly,
 	"contributions/menus":            ScopeDeviceOnly,
