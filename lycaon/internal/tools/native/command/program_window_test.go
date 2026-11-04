@@ -163,7 +163,7 @@ func TestProgramWindowACCW04WorkerBranchOpensNone(t *testing.T) {
 	configure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
 		configure(tc)
-		tc.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
+		tc.Source.SourceWorkspaceKind, tc.Identity.WorkerJobID = api.SourceWorkspaceKindWorker, "job-1"
 	}
 	outcome := f.run(t, writeGen)
 	if outcome.Status != 0 || outcome.SourceWindow != nil {
