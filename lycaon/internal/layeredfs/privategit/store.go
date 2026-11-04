@@ -186,7 +186,8 @@ func (s *RetainedObjectStore) ActiveLeases() int {
 	return len(s.leases)
 }
 
-// Close restores write permissions on store directories so temporary test roots can be removed cleanly.
+// Close restores write permissions on store directories, so the engine's data directory stays removable
+// once it stops. Opening the store again restores the read-only boundary.
 func (s *RetainedObjectStore) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

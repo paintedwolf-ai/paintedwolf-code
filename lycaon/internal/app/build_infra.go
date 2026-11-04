@@ -30,6 +30,7 @@ func (b *serveBuilder) wireToolRuntime() error {
 	if err != nil {
 		return err
 	}
+	b.startup.resources.Track("worker-private-git", 125, func(context.Context) error { return privateGit.Store().Close() })
 	b.startup.resources.Track("egress-approvals", 56, b.execution.Host.Authority.ReleaseEgressApprovals)
 	b.startup.resources.Track("egress-policy", 160, func(context.Context) error { b.execution.Host.Authority.ReleaseEgressPolicy(); return nil })
 	b.providers.BindCurator()

@@ -295,3 +295,12 @@ func TestInjectedCaptureAndObjectRetentionFailuresPreserveRecovery(t *testing.T)
 	testutil.FailErr(t, "CaptureCheckpointGitState after clearing hook", err)
 	testutil.FailErr(t, "VerifyCheckpointHistory after recovery", mgr.VerifyCheckpointHistory(t.Context(), cp))
 }
+
+func TestCollectingAnEmptyStoreLeavesItsHostDirectoryRemovable(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "store")
+	store, err := NewRetainedObjectStore(root)
+	testutil.FailErr(t, "open store", err)
+	_, err = store.CollectGarbage(t.Context())
+	testutil.FailErr(t, "collect", err)
+	testutil.FailErr(t, "remove host directory", os.RemoveAll(root))
+}

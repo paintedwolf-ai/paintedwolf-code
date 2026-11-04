@@ -40,7 +40,12 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 	defer s.mu.Unlock()
 
 	unlockStoreWriteBoundary(s)
-	defer lockStoreReadOnlyBoundary(s)
+	// A store left with nothing retained has nothing to protect, as at open.
+	defer func() {
+		if storeHoldsObjects(s.objectsDir) {
+			lockStoreReadOnlyBoundary(s)
+		}
+	}()
 
 	leasedOIDs := make(map[string]struct{})
 	leasedPacks := make(map[string]struct{})
