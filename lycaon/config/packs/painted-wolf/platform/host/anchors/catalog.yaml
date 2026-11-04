@@ -677,7 +677,7 @@ anchors:
         other_files: { type: "int", required: true }
         other_effects: { type: "int", required: true }
         truncated: { type: "bool", required: true }
-        citable: { type: "bool", required: true }
+        citable: { type: "bool", required: false }
 
   - id: inject.synthesis_evidence
     title: Synthesis evidence inject
