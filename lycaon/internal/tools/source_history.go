@@ -16,9 +16,9 @@ type SourceHistory struct {
 
 type SourceFileHistory interface {
 	ResolveHead(context.Context, string, sourcebranch.ID, string, string) (sourceledger.BranchHead, error)
-	LatestFileEffect(context.Context, string, string) (sourceledger.Effect, bool, error)
+	LatestFileEffect(context.Context, string, sourcebranch.ID, string) (sourceledger.Effect, bool, error)
 	SessionActivityFloor(context.Context, string, string) (int64, bool, error)
-	QueryFileEffects(context.Context, string, string, int64, int64, int) (sourceledger.FileEffectsResult, error)
+	QueryFileEffects(context.Context, string, sourcebranch.ID, string, int64, int64, int) (sourceledger.FileEffectsResult, error)
 	QueryAttribution(context.Context, string, sourcebranch.ID, string, string) (sourceledger.AttributionResult, error)
 	ReadRestorableVersion(context.Context, string, string) (sourceledger.RestorableVersion, error)
 	QueryFileVersions(context.Context, string, string, int, int64) (sourceledger.FileVersionsResult, error)
