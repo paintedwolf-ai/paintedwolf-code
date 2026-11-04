@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -99,7 +101,7 @@ func (r *Reader) ChangeSet(ctx context.Context, roots []projectroot.RootRef, bra
 // statChange compares one baseline entry with the tree by metadata alone.
 func statChange(abs string, before File) (ChangeKind, error) {
 	after, err := os.Lstat(abs)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !pathGone(err) {
 		return "", err
 	}
 	if err != nil || after.IsDir() {
@@ -109,6 +111,11 @@ func statChange(abs string, before File) (ChangeKind, error) {
 		return ChangeModified, nil
 	}
 	return "", nil
+}
+
+// pathGone includes a parent that became a file, which reports ENOTDIR.
+func pathGone(err error) bool {
+	return os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR)
 }
 
 // PathComparison is one path's change with the text of each side. Kind is empty
@@ -143,7 +150,7 @@ func (r *Reader) ComparePath(ctx context.Context, roots []projectroot.RootRef, b
 		}
 	} else {
 		info, err := os.Lstat(abs)
-		if err != nil && !os.IsNotExist(err) {
+		if err != nil && !pathGone(err) {
 			return PathComparison{}, err
 		}
 		out.Absent = err != nil

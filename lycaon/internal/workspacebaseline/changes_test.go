@@ -78,6 +78,73 @@ func TestChangeSetStopsOnACanceledContext(t *testing.T) {
 	}
 }
 
+// Cancellation partway through each phase of a comparison stops it there: the
+// manifest pass after an entry, and the tree walk once only a walk remains.
+func TestChangeSetStopsWhenCanceledMidComparison(t *testing.T) {
+	files := map[string][]byte{}
+	for i := range 64 {
+		files[fmt.Sprintf("f%02d.txt", i)] = []byte("x\n")
+	}
+	t.Run("manifest pass", func(t *testing.T) {
+		branch, reader := sealedBranch(t, files)
+		ctx := &cancelAfterChecks{Context: t.Context(), remaining: 8}
+		if _, err := reader.ChangeSet(ctx, nil, branch); !errors.Is(err, context.Canceled) {
+			t.Fatalf("err = %v, want canceled", err)
+		}
+		if ctx.checks > 16 {
+			t.Fatalf("comparison checked its context %d times after being canceled", ctx.checks)
+		}
+	})
+	t.Run("tree walk", func(t *testing.T) {
+		branch, reader := sealedBranch(t, files)
+		// The manifest pass checks once per entry, and the walk follows it. Removing
+		// the check from either pass leaves too few to reach the cancellation.
+		ctx := &cancelAfterChecks{Context: t.Context(), remaining: len(files) + 8}
+		_, err := reader.ChangeSet(ctx, nil, branch)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err = %v, want canceled", err)
+		}
+	})
+}
+
+// cancelAfterChecks reports cancellation once its Err has been read enough times.
+type cancelAfterChecks struct {
+	context.Context
+	remaining, checks int
+}
+
+func (c *cancelAfterChecks) Err() error {
+	c.checks++
+	if c.remaining > 0 {
+		c.remaining--
+		return c.Context.Err()
+	}
+	return context.Canceled
+}
+
+func TestChangeSetListsFilesUnderAParentThatBecameAFile(t *testing.T) {
+	branch, reader := sealedBranch(t, map[string][]byte{"dir/x.go": []byte("x\n"), "keep.txt": []byte("keep\n")})
+	testutil.FailErr(t, "remove dir", os.RemoveAll(filepath.Join(branch, "dir")))
+	writeFile(t, filepath.Join(branch, "dir"), []byte("now a file\n"), 0o644)
+
+	changes, err := reader.ChangeSet(t.Context(), nil, branch)
+	testutil.FailErr(t, "change set", err)
+	want := []workspacebaseline.Change{{Path: "dir", Kind: workspacebaseline.ChangeCreated}, {Path: "dir/x.go", Kind: workspacebaseline.ChangeDeleted}}
+	if fmt.Sprint(changes) != fmt.Sprint(want) {
+		t.Fatalf("changes = %+v, want %+v", changes, want)
+	}
+	inBaseline, err := reader.ComparePath(t.Context(), nil, branch, "dir/x.go")
+	testutil.FailErr(t, "compare baseline path", err)
+	if inBaseline.Kind != workspacebaseline.ChangeDeleted || inBaseline.Before != "x\n" {
+		t.Fatalf("baseline path = %+v, want deleted", inBaseline)
+	}
+	never, err := reader.ComparePath(t.Context(), nil, branch, "dir/never.go")
+	testutil.FailErr(t, "compare unknown path", err)
+	if !never.Absent || never.Kind != "" {
+		t.Fatalf("unknown path = %+v, want absent", never)
+	}
+}
+
 func TestComparePathReadsBothSides(t *testing.T) {
 	large := bytes.Repeat([]byte("L"), workspacebaseline.MaxContentBytes+1)
 	branch, reader := sealedBranch(t, map[string][]byte{
