@@ -212,6 +212,7 @@ func (p *grepFiles) worker() {
 	inv.ctx = p.ctx
 	walker := newWalker(&inv)
 	defer walker.close()
+	frame := new(grepWorkerFrame)
 	for {
 		if p.ctx.Err() != nil {
 			return
@@ -223,14 +224,22 @@ func (p *grepFiles) worker() {
 			if !ok {
 				return
 			}
-			p.search(job, walker)
+			p.search(job, walker, frame)
 		}
 	}
 }
 
-func (p *grepFiles) search(job *grepFileJob, walker *walker) {
+// grepWorkerFrame is one worker's search state, rewritten for each file so a
+// wide tree does not allocate an invocation and a run per file.
+type grepWorkerFrame struct {
+	inv   invocation
+	local grepRun
+}
+
+func (p *grepFiles) search(job *grepFileJob, walker *walker, frame *grepWorkerFrame) {
 	defer close(job.events)
-	inv := p.invocation
+	frame.inv = p.invocation
+	inv := &frame.inv
 	inv.ctx, inv.pins, inv.flushedPins, inv.releases = p.ctx, nil, 0, nil
 	inv.status = 0
 	writer := &grepFileWriter{sink: &grepEventSink{ctx: p.ctx, events: job.events, buffers: p.buffers}}
@@ -251,9 +260,10 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 		inv.flushedPins = len(inv.pins)
 		return nil
 	}
-	local := p.template
-	local.inv, local.walker, local.files = &inv, walker, nil
-	local.selection.inv = &inv
+	frame.local = p.template
+	local := &frame.local
+	local.inv, local.walker, local.files = inv, walker, nil
+	local.selection.inv = inv
 	local.selected, local.stopped = false, false
 	local.index.stats = contentSearchStats{}
 	if local.json != nil {
