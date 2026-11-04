@@ -60,7 +60,7 @@ type inlineState struct {
 	textEscaped bool
 	defEligible bool
 	// label is the text since the last `[`, kept to a definition's label bound.
-	label []byte
+	label       []byte
 	codeLen     int
 	codeRun     int
 	codeHolding bool
@@ -478,9 +478,17 @@ func (p *Projector) definitionByte(b byte) bool {
 		s.held = append(s.held, b)
 		return true
 	}
+	p.settleDefinition()
+	return false
+}
+
+// settleDefinition decides a held definition at its end, with the next byte
+// unconsumed.
+func (p *Projector) settleDefinition() {
+	s := &p.inline
 	if !definitionTail.Match(s.held) {
 		p.failNodeHold(holdDestination)
-		return false
+		return
 	}
 	label := s.label
 	if s.pending != nil {
@@ -492,7 +500,6 @@ func (p *Projector) definitionByte(b byte) bool {
 	p.at--
 	p.releaseHold()
 	p.at = saved
-	return false
 }
 
 func (p *Projector) labelByte(b byte) bool {
@@ -558,6 +565,8 @@ func (p *Projector) settleAtBoundary() {
 		p.failHold(holdAngle)
 	case modeLabel, modeLabelEnd:
 		p.failHold(holdLabel)
+	case modeDefinition:
+		p.settleDefinition()
 	default:
 		p.failNodeHold(holdDestination)
 	}
