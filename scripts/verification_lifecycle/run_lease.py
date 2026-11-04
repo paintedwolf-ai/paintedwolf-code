@@ -12,8 +12,6 @@ import sys
 import time
 from typing import NamedTuple
 
-from verification_lifecycle import custody
-
 UNMOUNT_TIMEOUT_SECONDS = 15
 OWNER_RELEASE_SECONDS = 15
 # Short paths keep Unix sockets within platform limits; test-run-isolation.sh names the same root.
@@ -123,12 +121,17 @@ def release_stranded_connections(candidate: Path, killed: frozenset = frozenset(
     leaves all of that in place. On macOS a kill cannot be observed from outside, so a dead holder is
     one this process signalled, by its birth identity, and a forced unmount wakes it.
     """
-    prefix = within(candidate)
     linux = sys.platform == "linux"
+    if not linux and not killed:
+        return False
+    prefix = within(candidate)
     connections = fuse_connections(prefix) if linux else [
         Connection(point, "") for point in mount_points() if point.startswith(prefix)]
     if not connections:
         return False
+    # The ordinary lease paths run without the scheduler's modules, so only this one loads them.
+    from verification_lifecycle import custody
+
     holders = custody.lease_holders(candidate / ".lease") - {os.getpid()}
     if not holders or not all(thread_group_dying(pid) if linux else (pid, custody.birth(pid)) in killed
                               for pid in holders):

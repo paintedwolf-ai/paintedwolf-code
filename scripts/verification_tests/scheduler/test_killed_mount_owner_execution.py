@@ -194,11 +194,20 @@ class KilledMountOwnerTests(unittest.TestCase):
 
 
 class StrandedConnectionFactTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "only Linux exposes another process's pending signals")
     def test_a_thread_without_a_pending_kill_is_not_dying(self):
         self.assertFalse(run_lease.thread_group_dying(os.getpid()))
 
+    @unittest.skipUnless(sys.platform == "linux", "only Linux exposes another process's pending signals")
     def test_a_process_with_no_record_has_no_claim(self):
         self.assertTrue(run_lease.thread_group_dying(2 ** 22 + 1))
+
+    @unittest.skipIf(sys.platform == "linux", "Linux proves death from the process itself")
+    def test_a_holder_this_process_did_not_kill_is_not_proven_dead(self):
+        with tempfile.TemporaryDirectory() as run:
+            with mock.patch.object(run_lease, "mount_points") as table:
+                self.assertFalse(run_lease.release_stranded_connections(Path(run)))
+            table.assert_not_called()
 
     def test_collection_failure_is_reported_not_raised(self):
         with mock.patch.object(run_lease, "prune", side_effect=OSError("unreadable")):
