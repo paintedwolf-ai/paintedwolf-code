@@ -40,25 +40,16 @@ func TaskToolArgs(agentType, goal string, writePaths ...string) map[string]any {
 	return args
 }
 
-// MockCoordinatorCloseoutJSON builds envelope-only coordinator closeout JSON for wiring mocks.
-func MockCoordinatorCloseoutJSON(synthesis string, citedPaths ...string) string {
-	evidence := make([]map[string]any, 0, len(citedPaths))
-	for _, p := range citedPaths {
-		evidence = append(evidence, map[string]any{"path": p, "line": 1, "excerpt": "x"})
+// MockCoordinatorCloseoutMarkdown builds envelope-only coordinator closeout JSON for wiring mocks.
+func MockCoordinatorCloseoutMarkdown(synthesis string, citedPaths ...string) string {
+	if len(citedPaths) == 0 {
+		return synthesis + ` [main.go:1 "package main"]`
 	}
-	if len(evidence) == 0 {
-		evidence = []map[string]any{{"path": "main.go", "line": 1, "excerpt": "package main"}}
+	citations := make([]string, 0, len(citedPaths))
+	for _, path := range citedPaths {
+		citations = append(citations, "["+path+`:1 "x"]`)
 	}
-	payload := map[string]any{
-		"synthesis":      synthesis,
-		"cited_evidence": evidence,
-		"cited_urls":     []string{},
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return "{}"
-	}
-	return string(raw)
+	return synthesis + " " + strings.Join(citations, " ")
 }
 
 // MockWorkerCompletionJSON builds a worker finish-turn JSON report for wiring mocks.

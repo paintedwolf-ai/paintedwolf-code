@@ -47,7 +47,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 					Args: map[string]any{"content": "## Progress\n- [x] wiring test plan\n"},
 				}}}
 			default:
-				return modelcall.Completion{Content: MockCoordinatorCloseoutJSON(
+				return modelcall.Completion{Content: MockCoordinatorCloseoutMarkdown(
 					"Updated src/foo.go in the project tree.", "src/foo.go",
 				)}
 			}
