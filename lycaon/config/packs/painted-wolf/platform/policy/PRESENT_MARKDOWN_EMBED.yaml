@@ -16,7 +16,7 @@ copy:
   what: Synthesis used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image.
   cause: Images are presented through artifact_ids in the trailing report metadata, not ![…](uuid) inside prose
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: Remove bare artifact UUIDs from markdown image URLs and HTML image sources. Put only IDs actually returned by a producer into final-report artifact_ids so the client can present those images. Preserve the answer and its valid formatting; omit an image whose artifact ID was never observed.
+  fix: Send the whole reply again, body and trailing fence, without the image syntax; it replaces the pinned body. Put only IDs actually returned by a producer into final-report artifact_ids so the client can present those images, and describe in prose what each shows. Preserve the answer and its valid formatting; omit an image whose artifact ID was never observed.
   instead: Use artifact_ids in the trailing metadata fence for observed artifacts; do not use a bare artifact UUID as an image URL
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_synthesis

@@ -62,11 +62,12 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	report := read.Report
 	if l.Deps.CloseoutStallState != nil {
 		if retained := l.Deps.CloseoutStallState(ctx, sessionID); retained.Active {
-			if pinned := guidance.UsableCloseoutSynthesis(retained.Drafted); pinned != "" {
+			repair := retained.Repair()
+			if pinned := guidance.UsableCloseoutSynthesis(retained.Drafted); pinned != "" && !repair.Body {
 				report.Synthesis = pinned
 			}
 			if original, ok := guidance.ParseCoordinatorCompletionReport(retained.Drafted); ok {
-				report = guidance.PinCloseoutReport(original, report, guidance.RepairsReportDocument(retained.ForcedBy))
+				report = guidance.PinCloseoutReport(original, report, repair)
 			}
 		} else {
 			st.closeoutRetry.prevKey = ""

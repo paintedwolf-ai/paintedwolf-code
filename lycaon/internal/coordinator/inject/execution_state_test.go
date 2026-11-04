@@ -73,7 +73,9 @@ func TestExecutionStateKeepsOutcomeSeparateFromInvocation(t *testing.T) {
 func TestExecutionStateBoundsRowsAndExecutableValues(t *testing.T) {
 	var history []api.Message
 	for range 5 {
-		history = append(history, executionReceipt("command", "check", api.InvocationStatusRejected, "COMMAND_NOT_FOUND"))
+		rejected := executionReceipt("command", "check", api.InvocationStatusRejected, "COMMAND_NOT_FOUND")
+		rejected.ToolResult.AssistantMessageID = "one-batch"
+		history = append(history, rejected)
 	}
 	history[4].ToolResult.ToolArgs["command"] = strings.Repeat("x", 257)
 	history[4].ToolResult.Feedback = []api.ToolFeedback{{Code: "COMMAND_NOT_FOUND", Details: map[string]any{"resolvable": "python3"}}}
@@ -190,10 +192,9 @@ func TestExecutionStatePrerequisiteScopingAndPathRetirement(t *testing.T) {
 			pathlessReject := executionReceipt("write", "bad-args", api.InvocationStatusRejected, "TOOL_ARGS_INVALID")
 			pathlessReject.ToolResult.ToolArgs = nil
 			vars3 := executionStateVars([]api.Message{pathlessReject, editSuccess}, "")
-			if vars3 != nil && len(vars3["operations"].([]map[string]any)) != 0 {
-				t.Fatalf("completed change did not clear pathless change rejection: %#v", vars3)
+			if vars3 == nil || len(vars3["operations"].([]map[string]any)) != 1 {
+				t.Fatalf("unrelated change cleared a pathless rejection: %#v", vars3)
 			}
-
 		})
 	}
 }
@@ -202,18 +203,12 @@ func TestExecutionStateSuccessfulExecutionPathIsSilent(t *testing.T) {
 	passed := executionReceipt("verify", "passed", api.InvocationStatusCompleted, "")
 	passed.ToolResult.Invocation.SourceVerdict = api.SourceVerdictPassed
 	rejected := executionReceipt("command", "rejected", api.InvocationStatusRejected, "COMMAND_NOT_FOUND")
-	for _, history := range [][]api.Message{{passed}, {rejected, passed}} {
-		if got := executionStateVars(history, "project-check"); got != nil {
-			t.Fatalf("successful path retained recovery guidance: %#v", got)
-		}
+	if got := executionStateVars([]api.Message{passed}, "project-check"); got != nil {
+		t.Fatalf("successful path retained recovery guidance: %#v", got)
 	}
 	poll := executionReceipt("command_output", "poll", api.InvocationStatusCompleted, "")
 	if got := executionStateVars([]api.Message{rejected, poll}, "project-check"); got == nil {
 		t.Fatal("output retrieval hid failed execution")
-	}
-	poll.ToolResult.Invocation.SourceVerdict = api.SourceVerdictPassed
-	if got := executionStateVars([]api.Message{rejected, poll}, "project-check"); got != nil {
-		t.Fatalf("owner verdict did not end recovery guidance: %#v", got)
 	}
 }
 

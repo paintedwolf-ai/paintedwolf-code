@@ -1826,6 +1826,12 @@
       "emit": "guard:policy_write_request",
       "summary": "A persistent terminal cannot carry instruction-file write approval."
     },
+    "PRESENT_IMAGE_UNOBSERVED": {
+      "branch_instruction": "Present captures through artifact_ids; embed only an image URL that was fetched in this chat",
+      "category": "recoverable",
+      "emit": "guard:coordinator_synthesis",
+      "summary": "Synthesis embedded {{ paintedwolf.offender_count }} image(s) from a source this chat never observed. The client shows no image for it, so the reply presents a capture that does not exist."
+    },
     "PRESENT_MARKDOWN_EMBED": {
       "branch_instruction": "Use artifact_ids in the trailing metadata fence for observed artifacts; do not use a bare artifact UUID as an image URL",
       "category": "recoverable",
