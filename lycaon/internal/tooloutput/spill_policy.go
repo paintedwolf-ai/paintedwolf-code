@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -169,6 +170,16 @@ func RemoveSpillBefore(hostDataDir, wireRel string, cutoff time.Time) (bool, err
 		return false, nil
 	}
 	return (blobstore.Store{Root: strings.TrimSpace(hostDataDir)}).RemoveAtBefore(wireRel, cutoff)
+}
+
+// RenewSpillGrace restarts reclamation's grace for a settled tool-output body
+// whose path was just handed out. Its bytes and address stay the same.
+func RenewSpillGrace(hostDataDir, wireRel string, now time.Time) error {
+	wireRel = filepath.ToSlash(strings.TrimSpace(wireRel))
+	if !strings.HasPrefix(wireRel, ToolOutputSpillDir+"/") || !IsAgentWireSpillRel(wireRel) {
+		return nil
+	}
+	return os.Chtimes(DiskPath(hostDataDir, wireRel), now, now)
 }
 
 func spillPayloadForWrite(content string, maxSpillBytes int, requireWhole bool) (payload string, capped, reject bool) {
