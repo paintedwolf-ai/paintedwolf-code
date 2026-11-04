@@ -91,7 +91,7 @@ git bisect reset`, tc)
 }
 
 // A program's window has settled by the time the overview reads, so its effects
-// list under the session's identity with their window.
+// list with their window. A window is observation, not authorship, so the actor stays external.
 func TestSourceHistoryOverviewACCW02ProgramEffectsListSettled(t *testing.T) {
 	repochange.DisableWatchersForTest()
 	t.Cleanup(repochange.ResetWatchersForTest)
@@ -137,8 +137,8 @@ func TestSourceHistoryOverviewACCW02ProgramEffectsListSettled(t *testing.T) {
 	}
 	for _, file := range overview.Files {
 		if file.Path == "gen.txt" {
-			if file.WindowID != out.SourceWindow.ID || file.Settled == nil || !*file.Settled || file.Actor != "you" {
-				t.Fatalf("generated row = %+v, want the session's settled window %s", file, out.SourceWindow.ID)
+			if file.WindowID != out.SourceWindow.ID || file.Settled == nil || !*file.Settled || file.Actor != "external" {
+				t.Fatalf("generated row = %+v, want an observed change in settled window %s", file, out.SourceWindow.ID)
 			}
 			return
 		}
