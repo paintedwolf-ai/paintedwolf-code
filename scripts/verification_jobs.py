@@ -13,6 +13,7 @@ import time
 import uuid
 
 from artifact_paths import artifact_root
+from verification_digest import deliver, job_digest
 from verification_plan import EXIT_UNVERIFIED, outcome_exit
 from verification_state import read_json, write_json
 
@@ -154,7 +155,10 @@ def wait(root, job_id, lock_file):
     # The caller reads the runner's verdict; the tool's own code stays visible.
     result["task_exit_code"] = result["exit_code"]
     result["exit_code"] = outcome_exit(result["task_exit_code"], result.get("state") == "completed")
-    print(json.dumps(result))
+    print(json.dumps(result), flush=True)
+    # Stdout stays one JSON document for callers that parse it.
+    if result["exit_code"]:
+        deliver(job_digest(directory, result), sys.stderr)
     return result["exit_code"]
 
 
