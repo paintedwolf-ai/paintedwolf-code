@@ -219,8 +219,14 @@ func TestProcessListFindsTheHolderOfAListeningPort(t *testing.T) {
 		testutil.FailErr(t, "list listening port", err)
 		var listed listenerListing
 		testutil.FailErr(t, "decode listing", json.Unmarshal([]byte(raw), &listed))
-		if len(listed.Processes) != 1 || listed.UnattributedListeners == nil || len(listed.UnattributedListeners) != 0 || !listed.SnapshotComplete {
+		if len(listed.Processes) != 1 || listed.UnattributedListeners == nil || len(listed.UnattributedListeners) != 0 {
 			t.Fatalf("listing for %d: %s", c.port, raw)
+		}
+		// Whether this host withholds sockets decides the listing's completeness.
+		table, err := lineage.Listeners(lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}, Port: uint16(c.port)})
+		testutil.FailErr(t, "read listener table", err)
+		if listed.SnapshotComplete != table.Complete {
+			t.Fatalf("listing for %d: snapshot_complete=%v, table complete=%v", c.port, listed.SnapshotComplete, table.Complete)
 		}
 		row := listed.Processes[0]
 		want := []hostprocess.ListeningSocket{{Protocol: lineage.ProtocolTCP, Address: netip.MustParseAddr("127.0.0.1"), Port: c.port, UID: uint32(os.Getuid())}}
