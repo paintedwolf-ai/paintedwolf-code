@@ -410,8 +410,8 @@ ORDER BY e.ordinal DESC LIMIT sqlc.arg(page_limit);
 -- Each attached root admits only the branch given for it, trunk included, so
 -- other branches neither fill nor truncate the page.
 -- name: ListSourceEffectsAfterOrdinalOnBranch :many
-WITH scoped_roots AS (
- SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id FROM json_each(CAST(sqlc.arg(root_branches) AS TEXT)) r
+WITH scope_input AS (SELECT CAST(sqlc.arg(root_branches) AS TEXT) AS roots), scoped_roots AS (
+ SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id FROM scope_input, json_each(roots) r
 )
 SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(e.before_version_id, '') AS before_version_id,

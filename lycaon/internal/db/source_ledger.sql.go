@@ -2298,8 +2298,8 @@ func (q *Queries) ListSourceEffectsAfterOrdinal(ctx context.Context, arg ListSou
 }
 
 const listSourceEffectsAfterOrdinalOnBranch = `-- name: ListSourceEffectsAfterOrdinalOnBranch :many
-WITH scoped_roots AS (
- SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id FROM json_each(CAST(sqlc.arg(root_branches) AS TEXT)) r
+WITH scope_input AS (SELECT CAST(?5 AS TEXT) AS roots), scoped_roots AS (
+ SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id FROM scope_input, json_each(roots) r
 )
 SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(e.before_version_id, '') AS before_version_id,
@@ -2322,6 +2322,7 @@ type ListSourceEffectsAfterOrdinalOnBranchParams struct {
 	Ordinal       int64  `json:"ordinal"`
 	BeforeOrdinal int64  `json:"before_ordinal"`
 	PageLimit     int64  `json:"page_limit"`
+	RootBranches  string `json:"root_branches"`
 }
 
 type ListSourceEffectsAfterOrdinalOnBranchRow struct {
@@ -2362,6 +2363,7 @@ func (q *Queries) ListSourceEffectsAfterOrdinalOnBranch(ctx context.Context, arg
 		arg.Ordinal,
 		arg.BeforeOrdinal,
 		arg.PageLimit,
+		arg.RootBranches,
 	)
 	if err != nil {
 		return nil, err
