@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -64,13 +65,21 @@ type workerHistoryResult struct {
 	Since    *struct {
 		Ordinal int64 `json:"ordinal"`
 	} `json:"since"`
-	Files []struct {
-		Path  string `json:"path"`
-		Actor string `json:"actor"`
-	} `json:"files"`
-	BaseVersionID string `json:"base_version_id"`
-	VersionID     string `json:"version_id"`
-	Diff          string `json:"diff"`
+	Files         []workerHistoryRow `json:"files"`
+	BaseVersionID string             `json:"base_version_id"`
+	VersionID     string             `json:"version_id"`
+	State         string             `json:"state"`
+	Unrecorded    bool               `json:"unrecorded"`
+	Diff          string             `json:"diff"`
+}
+
+type workerHistoryRow struct {
+	Path       string `json:"path"`
+	Op         string `json:"op"`
+	Actor      string `json:"actor"`
+	At         string `json:"at"`
+	VersionID  string `json:"version_id"`
+	Unrecorded bool   `json:"unrecorded"`
 }
 
 func decodeWorkerHistory(t *testing.T, results map[string]string, callID string) workerHistoryResult {
@@ -106,6 +115,7 @@ func runWorkerScript(t *testing.T, agentType string, scope *api.TaskScope, scrip
 	dir := t.TempDir()
 	writeTestProjectApprovalsAllowWrite(t, dir)
 	testutil.FailErr(t, "seed main.go", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644))
+	testutil.FailErr(t, "seed obsolete.go", os.WriteFile(filepath.Join(dir, "obsolete.go"), []byte("package obsolete\n"), 0o644))
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create parent", err)
 
@@ -201,5 +211,96 @@ func TestSourceHistoryACDF14WriteWorkerDiffStartsAtTheBranchPreimage(t *testing.
 	}
 	if len(added) != 1 || added[0] != "+ // edited" {
 		t.Fatalf("added lines = %q in %q, want the worker's one line", added, diff.Diff)
+	}
+}
+
+// generatorCall runs an external program, which leaves no ledger row on a worker
+// branch: it creates gen.txt, rewrites main.go and removes obsolete.go.
+func generatorCall(id string) api.ToolCall {
+	return commandCall(id, `external -- /bin/sh -c 'printf "generated\n" > gen.txt; printf "package main\n// generated\n" > main.go; rm obsolete.go'`)
+}
+
+func unrecordedRow(t *testing.T, rows []workerHistoryRow, path, op string) {
+	t.Helper()
+	for _, row := range rows {
+		if row.Path != path {
+			continue
+		}
+		if !row.Unrecorded || row.Op != op || row.Actor != "" || row.At != "" || row.VersionID != "" {
+			t.Fatalf("row %+v, want unrecorded %s with no actor, time or version", row, op)
+		}
+		return
+	}
+	t.Fatalf("rows = %+v, missing %s", rows, path)
+}
+
+func TestSourceHistoryACOV18ExternalProgramChangesAppearUnrecorded(t *testing.T) {
+	jobID, results := runWorkerScript(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		generatorCall("generate"),
+		historyCall("overview", map[string]any{}),
+	)
+	overview := decodeWorkerHistory(t, results, "overview")
+	if !overview.Recorded || overview.Branch != jobID || len(overview.Files) != 3 {
+		t.Fatalf("overview = %+v, want three rows on branch %s", overview, jobID)
+	}
+	unrecordedRow(t, overview.Files, "gen.txt", "create")
+	unrecordedRow(t, overview.Files, "main.go", "write")
+	unrecordedRow(t, overview.Files, "obsolete.go", "delete")
+}
+
+func TestSourceHistoryACOV20PathWithALedgerRowIsNotDuplicated(t *testing.T) {
+	_, results := runWorkerScript(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		commandCall("write", `printf 'package main\n// edited\n' > main.go`),
+		generatorCall("generate"),
+		historyCall("overview", map[string]any{}),
+	)
+	overview := decodeWorkerHistory(t, results, "overview")
+	seen := map[string]int{}
+	for _, row := range overview.Files {
+		seen[row.Path]++
+		if row.Path == "main.go" && (row.Unrecorded || row.Actor != "you" || row.VersionID == "") {
+			t.Fatalf("main.go row = %+v, want the ledger's own row", row)
+		}
+	}
+	if seen["main.go"] != 1 || seen["gen.txt"] != 1 || seen["obsolete.go"] != 1 {
+		t.Fatalf("rows = %+v, want one row per path", overview.Files)
+	}
+}
+
+func TestSourceHistoryACDF15DefaultDiffOnAnUnrecordedFile(t *testing.T) {
+	_, results := runWorkerScript(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		generatorCall("generate"),
+		historyCall("created", map[string]any{"path": "gen.txt", "mode": "diff"}),
+		historyCall("modified", map[string]any{"path": "main.go", "mode": "diff"}),
+		historyCall("deleted", map[string]any{"path": "obsolete.go", "mode": "diff"}),
+	)
+	for _, c := range []struct {
+		call, state string
+		added, gone []string
+	}{
+		{call: "created", added: []string{"+ generated"}},
+		{call: "modified", added: []string{"+ // generated"}},
+		{call: "deleted", state: "absent", gone: []string{"- package obsolete"}},
+	} {
+		diff := decodeWorkerHistory(t, results, c.call)
+		if diff.Recorded || !diff.Unrecorded || diff.BaseVersionID != "" || diff.VersionID != "" || diff.State != c.state {
+			t.Fatalf("%s = %+v, want an unrecorded diff with no versions and state %q", c.call, diff, c.state)
+		}
+		var added, gone []string
+		for line := range strings.SplitSeq(diff.Diff, "\n") {
+			switch {
+			case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+			case strings.HasPrefix(line, "+"):
+				added = append(added, line)
+			case strings.HasPrefix(line, "-"):
+				gone = append(gone, line)
+			}
+		}
+		if !slices.Equal(added, c.added) || !slices.Equal(gone, c.gone) {
+			t.Fatalf("%s added %q removed %q in %q, want %q and %q", c.call, added, gone, diff.Diff, c.added, c.gone)
+		}
 	}
 }
