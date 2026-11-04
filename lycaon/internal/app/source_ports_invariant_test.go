@@ -60,7 +60,7 @@ func TestBuildSourceInvocationRecordsAndReadsOneDurableHistory(t *testing.T) {
 	manager.Runner.Instructions.ReviewCheckpoint(t.Context(), sess.ID, second)
 	testutil.FailErr(t, "open second source turn", manager.Runner.Transcript.AppendPlain(t.Context(), sess.ID, second))
 	brief := manager.SourceBriefs.Build(t.Context(), sess)
-	if brief.OtherFiles != 1 || brief.OtherEffects != 1 || len(brief.Files) != 0 {
+	if brief.OtherFiles != 0 || len(brief.Files) != 1 || brief.Files[0].Effects != 1 || brief.Files[0].WorkingSet {
 		t.Fatalf("source brief lost the checkpoint-bound foreign change: %+v", brief)
 	}
 }
