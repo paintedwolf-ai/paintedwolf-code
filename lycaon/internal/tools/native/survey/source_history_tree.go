@@ -16,15 +16,16 @@ import (
 )
 
 const (
-	sourceTreeBudget         = tools.WindowSettleBudget
-	overviewTreeUnknownNote  = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
-	treeDiffNoTextNote       = "this file changed, but its baseline or live side has no text to compare"
-	treeDiffTouchedNote      = "this file's timestamp changed; its text did not"
-	treeDiffCreatedEmptyNote = "this new file is empty"
-	treeDiffDeletedEmptyNote = "this deleted file was empty"
-	treeDiffMovedNote        = "this file moved and its text did not change"
-	treeDiffAbsentNote       = "neither your tree nor its baseline holds this file, so it has no change to show; source_history(path) has its record"
-	treeDiffPastRecordNote   = "this file changed after its last recorded version, so the live side names no version"
+	sourceTreeBudget              = tools.WindowSettleBudget
+	overviewTreeUnknownNote       = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
+	treeDiffNoTextNote            = "this file changed, but its baseline or live side has no text to compare"
+	treeDiffTouchedNote           = "this file's timestamp changed; its text did not"
+	treeDiffCreatedEmptyNote      = "this new file is empty"
+	treeDiffDeletedEmptyNote      = "this deleted file was empty"
+	treeDiffMovedNote             = "this file moved and its text did not change"
+	treeDiffAbsentNote            = "neither your tree nor its baseline holds this file, so it has no change to show; source_history(path) has its record"
+	treeDiffRecordUnavailableNote = "the ledger no longer holds this file's recorded bytes, so the live side names no version"
+	treeDiffPastRecordNote        = "this file changed after its last recorded version, so the live side names no version"
 )
 
 func sourceTreeOf(tctx tools.ToolContext) tools.SourceTree {
@@ -232,9 +233,13 @@ func (t *SourceHistoryTool) workerSessionDiff(
 		out.BaseVersionID = comp.Before.VersionID
 	}
 	if recorded.hasEffect {
-		if comp := recorded.comp; comp != nil && sideHolds(comp.After, compared.After) {
+		comp := recorded.comp
+		switch {
+		case comp == nil || !sideReadable(comp.After):
+			out.Note = treeDiffRecordUnavailableNote
+		case comp.After.Content == compared.After:
 			out.VersionID = comp.After.VersionID
-		} else {
+		default:
 			out.Note = treeDiffPastRecordNote
 		}
 	}
@@ -289,7 +294,11 @@ func deliverTreeSides(ctx context.Context, tctx tools.ToolContext, compared work
 }
 
 func sideHolds(side sourceledger.ComparisonSide, text string) bool {
-	return (side.Availability == sourceledger.ContentAvailable || side.Availability == sourceledger.ContentAbsent) && side.Content == text
+	return sideReadable(side) && side.Content == text
+}
+
+func sideReadable(side sourceledger.ComparisonSide) bool {
+	return side.Availability == sourceledger.ContentAvailable || side.Availability == sourceledger.ContentAbsent
 }
 
 func treeSideName(side, versionID string) string {

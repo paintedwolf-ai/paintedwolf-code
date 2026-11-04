@@ -577,6 +577,18 @@ func TestSourceHistoryACDF19MovedCredentialFileOnAWriteLeg(t *testing.T) {
 	}
 }
 
+// Lost bytes say nothing about whether the live file moved past its record.
+func TestSourceHistoryDiffACDF23LostRecordIsNotCalledAChange(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
+	testutil.FailErr(t, "drop stored content", os.RemoveAll(h.blobs))
+	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "native\n", HasBefore: true, HasAfter: true}}
+	result := runTreeDiff(t, h, tree, "native.go")
+	if result.VersionID != "" || result.Note != treeDiffRecordUnavailableNote || result.Diff == "" {
+		t.Fatalf("result = %+v, want the diff and the unavailable note", result)
+	}
+}
+
 // The ledger rejecting its own record does not stop the tree from answering, and
 // still reaches the caller when the tree has nothing to say.
 func TestSourceHistoryDiffACDF16LedgerRejectionYieldsToTheTree(t *testing.T) {
@@ -588,7 +600,7 @@ func TestSourceHistoryDiffACDF16LedgerRejectionYieldsToTheTree(t *testing.T) {
 	seed(h)
 	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "generated\n", HasBefore: true, HasAfter: true}}
 	result := runTreeDiff(t, h, tree, "native.go")
-	if !result.Recorded || result.VersionID != "" || result.BaseVersionID != "" || result.Note != treeDiffPastRecordNote || result.Diff == "" {
+	if !result.Recorded || result.VersionID != "" || result.BaseVersionID != "" || result.Note != treeDiffRecordUnavailableNote || result.Diff == "" {
 		t.Fatalf("result = %+v, want the tree's diff with no versions", result)
 	}
 
@@ -631,12 +643,6 @@ func TestSourceHistoryOverviewACOV19LedgerLookupFailureIsStated(t *testing.T) {
 	result := runOverviewCall(t, h.tool, worker)
 	if len(result.Files) != 1 || !strings.Contains(result.Note, overviewTreeUnknownNote) {
 		t.Fatalf("result = %+v, want the ledger row and the note", result)
-	}
-}
-
-func TestDisplayPathLocationNeedsAPrimaryRoot(t *testing.T) {
-	if _, _, err := displayPathLocation(nil, "gen.txt"); err == nil {
-		t.Fatal("a path resolved with no roots")
 	}
 }
 

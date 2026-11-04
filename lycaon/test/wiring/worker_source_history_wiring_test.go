@@ -182,8 +182,10 @@ func TestSourceHistoryACOV15WorkerWithNothingToShow(t *testing.T) {
 			historyCall("overview", map[string]any{}),
 		)
 		overview := decodeWorkerHistory(t, results, "overview")
-		if !overview.Recorded || overview.Branch != jobID || len(overview.Files) != 0 || overview.Note == "" {
-			t.Fatalf("overview = %+v, want recorded, no rows and a note on branch %s", overview, jobID)
+		// The comparison ran and found nothing: a broken one would add its own note.
+		const noRows = "the ledger recorded nothing on your branch this session; a file it never tracked may still have changed"
+		if !overview.Recorded || overview.Branch != jobID || len(overview.Files) != 0 || overview.Note != noRows {
+			t.Fatalf("overview = %+v, want recorded, no rows and only the empty-list note on branch %s", overview, jobID)
 		}
 	})
 	t.Run("read-scoped worker on the trunk", func(t *testing.T) {
