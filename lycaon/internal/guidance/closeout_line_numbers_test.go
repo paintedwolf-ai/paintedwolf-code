@@ -215,6 +215,7 @@ func TestWorkspaceLinkRepairTakesHandleOrPath(t *testing.T) {
 	}{
 		{name: "handle keeps the label", directive: "[cite: c1 => read#5:30]", want: "The deadline [read#5:30] is ignored"},
 		{name: "path retargets the link", directive: "[cite: c1 => a/client.go:30]", want: "The [deadline](a/client.go#L30) is ignored"},
+		{name: "a path with no line drops nothing the label says", directive: "[cite: c1 => a/client.go]", want: "The [deadline](a/client.go) is ignored"},
 		{name: "a url on a workspace link is the real mismatch", directive: "[cite: c1 => <https://example.test/x>]", defect: RepairWrongKind},
 		{name: "a handle on a web link is the real mismatch", directive: "[cite: c2 => read#5:30]", defect: RepairWrongKind},
 	} {
@@ -231,5 +232,33 @@ func TestWorkspaceLinkRepairTakesHandleOrPath(t *testing.T) {
 		if got, want := citationmd.Narrative(read.Draft.Parsed), citationmd.Narrative(draft.Parsed); got != want {
 			t.Fatalf("%s changed the narrative: %q, want %q", tc.name, got, want)
 		}
+	}
+}
+
+// A label that is only a coordinate says nothing but the coordinate. Live, a directive
+// left "main.go:19-23" as prose beside the repaired citation, on lines no one verified.
+func TestCoordinateLabelDoesNotOutliveItsCoordinate(t *testing.T) {
+	t.Parallel()
+	const path = "cmd/gateway/main.go"
+	ev := CloseoutEvidence{Ledger: evidence.AssembleLedger([]evidence.Record{catPlain("read#3", path, 31)})}
+	opts := DraftParseOptions(evidence.CitationRoots{}, ev.Ledger)
+	draft := ParseCloseoutDraft("The handler [cmd/gateway/main.go:19-23](cmd/gateway/main.go#L19-L23) builds it.", opts)
+	retained := RetainedCloseout{Active: true}
+	retained.Retain(draft)
+	want := "The handler [" + path + "](" + path + ") builds it."
+	for _, directive := range []string{"[cite: c1 => read#3]", "[cite: c1 => " + path + "]"} {
+		read := ReadCloseoutReport(directive, retained, false, opts)
+		if len(read.RepairDefects) != 0 {
+			t.Fatalf("%s: %+v", directive, read.RepairDefects)
+		}
+		after := ResolveDraftCitations(evidence.CitationRoots{}, "implement_investigate", read.Draft, ev, nil)
+		if got := PresentCloseoutMarkdown(read.Draft, after); got != want {
+			t.Fatalf("%s presented %q, want %q", directive, got, want)
+		}
+	}
+	// Unrepaired, as when no turn is left, the unverified lines still do not show.
+	resolved := ResolveDraftCitations(evidence.CitationRoots{}, "implement_investigate", draft, ev, nil)
+	if got := PresentCloseoutMarkdown(draft, resolved); got != "The handler "+path+" builds it." {
+		t.Fatalf("rejected link presented %q", got)
 	}
 }
