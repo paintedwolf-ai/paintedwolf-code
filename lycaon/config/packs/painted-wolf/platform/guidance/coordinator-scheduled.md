@@ -7,4 +7,4 @@ Scheduled wake — your `wait()` **timer** trigger fired.
 {% for o in gate_obligations %}- `{{ o.id }}`: {{ o.purpose }}
 {% if o.missing %}{% for m in o.missing %}  - missing: {{ m }}
 {% endfor %}{% endif %}{% for s in o.satisfy %}  {{ forloop.Counter }}. {{ s }}
-{% endfor %}{% endfor %}{% else %}Check roster and pack board.{% if batch_phase != "closed" %}{% if not pending_overlay_jobs %} Dispatch `task()` when needed. Idle + answer delivered → prose only; do **not** re-arm a timer wait. Else **`wait(timeout_ms=…, conditions=[…])`** or **`wait(resume=true)`** if siblings fly — text only if it is a cited update.{% endif %}{% else %} Batch closed — do not call `wait()`; end the turn.{% endif %}{% endif %}
+{% endfor %}{% endfor %}{% else %}Check roster and pack board.{% if batch_phase != "closed" %}{% if not pending_overlay_jobs %} Dispatch `task()` when needed. Idle + answer delivered → prose only; do **not** re-arm a timer wait. Else **`wait(timeout_ms=…, conditions=[…])`** or **`wait(resume=true)`** if siblings fly — text only if cited.{% endif %}{% else %} Batch closed — do not call `wait()`; end the turn.{% endif %}{% endif %}
