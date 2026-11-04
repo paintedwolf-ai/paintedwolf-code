@@ -11,7 +11,7 @@ func (s *snapshotCollector) sweepSnapshots(ctx context.Context, cutoff string) (
 		page: func() ([]sweepCandidate, error) {
 			rows, err := s.queries.ListSourceSnapshotSweepCandidates(ctx, db.ListSourceSnapshotSweepCandidatesParams{
 				CreatedBefore: cutoff,
-				AfterCreated: s.cursor.afterCreated, AfterID: s.cursor.afterID, BatchLimit: snapshotSweepBatch,
+				AfterCreated:  s.cursor.afterCreated, AfterID: s.cursor.afterID, BatchLimit: snapshotSweepBatch,
 			})
 			candidates := make([]sweepCandidate, len(rows))
 			for i, row := range rows {
