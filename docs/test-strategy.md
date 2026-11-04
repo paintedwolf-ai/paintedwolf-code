@@ -859,12 +859,11 @@ clients that require manual installation.
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier runs three
-jobs side by side. `ready-lint` runs complete `lint:full` analysis. `ready-tests`
-splits repository contracts and affected short Go tests across two shards, balanced
-by measured package durations. `ready` compiles the host and runs size budgets,
-changed Go statement coverage, comment checks, test failure-message checks,
-documentation links, Den typecheck, Den lint, and frontend seam canaries, with
-budgets and changed coverage first.
+jobs side by side. `ready-tests` splits repository contracts and affected short Go
+tests across two shards, balanced by measured package durations. `ready` runs size
+budgets and changed Go statement coverage first, then compiles the host and runs
+comment checks, test failure-message checks, documentation links, Den typecheck,
+Den lint, frontend seam canaries, and complete `lint:full` analysis.
 Coverage executes eligible changed packages' own short tests, so `ready-tests`
 omits those packages from its identical short recipe. Test-only, generated,
 exempt, and untested packages keep their affected short selection. Unknown recipes
@@ -1459,9 +1458,13 @@ requests can be replaced by later maintenance requests; an explicit dispatch
 restores a needed candidate without affecting a selected release.
 
 These caps are maxima, not reservations. Hosted runners start waiting jobs in
-the order they were queued, and nothing reorders or preempts runs, so at the rare
-moment every class peaks together a job waits for a runner rather than failing.
-Caps do not establish queue latency guarantees.
+the order they were queued, and nothing reorders or preempts runs, so when every
+class peaks together a job waits for a runner rather than failing. A cap decides how
+quickly a fixed amount of work finishes, not how much runner time it takes, so
+average occupancy does not change with it. Recorded occupancy averages about eight
+of the twenty runners, and jobs without a matrix cap start within seconds. Raising a
+cap is worthwhile while lanes wait on the cap rather than on a runner; check that
+before changing one. Caps do not establish queue latency guarantees.
 On macOS, qualification, warming, and nightly hold one runner each and a release
 two, five in all; the merge queue and the admission tier run on Linux.
 

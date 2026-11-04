@@ -1006,9 +1006,10 @@
         "comments:check",
         "test:fail-messages:check",
         "docs:links",
-        "den:test:fast"
+        "den:test:fast",
+        "lint:full"
       ],
-      "minutes": 180,
+      "minutes": 120,
       "profiles": [
         "fast"
       ],
@@ -1038,17 +1039,6 @@
       "suite": "all",
       "setup": "verification",
       "shards": 2
-    },
-    "ready-lint": {
-      "targets": [
-        "lint:full"
-      ],
-      "minutes": 180,
-      "profiles": [
-        "fast"
-      ],
-      "suite": "all",
-      "setup": "analysis"
     },
     "limits": {
       "targets": [

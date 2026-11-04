@@ -29,15 +29,14 @@ class HostedScheduleTests(unittest.TestCase):
         self.assertEqual(rows, hosted_plan.matrix("integration", timings={"lanes": seconds})["include"])
 
     def test_selected_profile_only_requires_its_own_rows(self):
-        rows = hosted_plan.matrix("fast", timings={"lanes": {"ready": 300, "ready-lint": 600, "ready-tests 1/2": 400, "ready-tests 2/2": 400}})["include"]
+        rows = hosted_plan.matrix("fast", timings={"lanes": {"ready": 300, "ready-tests 1/2": 400, "ready-tests 2/2": 400}})["include"]
         self.assertEqual(sorted((row["lane"], row["expected_seconds"], row["timing_basis"]) for row in rows),
-                         [("ready", 300, "measured"), ("ready-lint", 600, "measured"),
-                          ("ready-tests", 400, "measured"), ("ready-tests", 400, "measured")])
+                         [("ready", 300, "measured"), ("ready-tests", 400, "measured"), ("ready-tests", 400, "measured")])
 
     def test_invalid_measurements_use_catalog_budgets(self):
         for value in [True, False, 0, -1, float("nan"), float("inf"), "300", None]:
             with self.subTest(value=value):
-                rows = hosted_plan.matrix("fast", timings={"lanes": {"ready": value, "ready-lint": 300}})["include"]
+                rows = hosted_plan.matrix("fast", timings={"lanes": {"ready": value, "ready-tests 1/2": 300, "ready-tests 2/2": 300}})["include"]
                 self.assertEqual(rows[0]["timing_basis"], "catalog-budget")
                 self.assertEqual(rows[0]["expected_seconds"], rows[0]["minutes"] * 60)
 
