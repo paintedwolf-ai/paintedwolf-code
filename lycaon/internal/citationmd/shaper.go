@@ -18,11 +18,11 @@ type shaper struct {
 	// blocks, where Markdown escapes mean nothing.
 	protected  []Span
 	htmlBlocks []Span
-	emitted   bool
-	visible   bool
-	removed   bool
-	dropped   bool
-	skipSpace bool
+	emitted    bool
+	visible    bool
+	removed    bool
+	dropped    bool
+	skipSpace  bool
 	// restore is the indent of a line emptied by removal, which the next text line
 	// takes, so that an old continuation line cannot become indented code.
 	restore    []byte

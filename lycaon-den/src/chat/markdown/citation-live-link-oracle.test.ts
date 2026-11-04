@@ -51,7 +51,7 @@ describe("accepted speech renders no unvalidated live link", () => {
   });
 
   it("reads correctly with a cited path in the same run", () => {
-    const rows = corpus.cases.filter(({ source }) => source.includes("a.go") && /see a\.go|a\.go now/.test(source));
+    const rows = corpus.cases.filter(({ source }) => !source.startsWith("\\") && /see a\.go|a\.go now/.test(source));
     expect(rows.length).toBeGreaterThan(4);
     for (const { source, present } of rows) {
       const text = render(present, true).textContent ?? "";
