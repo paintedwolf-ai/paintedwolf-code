@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/filelock"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
@@ -51,7 +52,7 @@ func BranchLastUsed(branchRoot string) time.Time {
 	if info, err := os.Stat(filepath.Join(enginepaths.MetaDirForBranchRoot(branchRoot), branchLastUsedFile)); err == nil {
 		return info.ModTime()
 	}
-	if info, err := os.Stat(branchRoot); err == nil {
+	if info, err := adapter.BoundedLstat(branchRoot); err == nil {
 		return info.ModTime()
 	}
 	return time.Time{}

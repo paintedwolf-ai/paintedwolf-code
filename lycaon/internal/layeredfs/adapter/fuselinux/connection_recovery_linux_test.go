@@ -68,6 +68,9 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 	adp := fuselinux.New(fuselinux.Config{})
 	testutil.FailErr(t, "kill engine", engine.Process.Kill())
 	waitFor(t, "zombie leader", func() bool { return processState(engine.Process.Pid) == "Z" })
+	if mounted, err := adapter.MountBoundaryPresent(mountPath); err != nil || !mounted {
+		t.Fatalf("a wedged mount must read as present without hanging: mounted=%t err=%v", mounted, err)
+	}
 	if !recorded[0].Server.Ended() && !fuselinux.ThreadGroupDyingForTest(filepath.Join("/proc", strconv.Itoa(engine.Process.Pid))) {
 		t.Fatal("wedged zombie was not proven dead")
 	}

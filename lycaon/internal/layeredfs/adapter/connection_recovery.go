@@ -107,6 +107,39 @@ type ConnectionRecovery interface {
 	SettleRecordedConnection(ctx context.Context, rec RecordedConnection) (ConnectionSettlement, error)
 }
 
+// statBound limits how long one stat may wait on a filesystem that might be a wedged mount.
+const statBound = 5 * time.Second
+
+// ErrStatUnanswered reports a path whose filesystem did not answer within the bound.
+var ErrStatUnanswered = errors.New("adapter: filesystem did not answer")
+
+// BoundedLstat stats a path that might be a mount root. A connection whose server is stuck never
+// answers, so an unbounded stat would hang the startup path that exists to settle it. The waiting
+// goroutine ends when the connection does.
+func BoundedLstat(path string) (fs.FileInfo, error) {
+	return boundedStat(path, statBound, os.Lstat)
+}
+
+func boundedStat(path string, bound time.Duration, stat func(string) (fs.FileInfo, error)) (fs.FileInfo, error) {
+	type answer struct {
+		info fs.FileInfo
+		err  error
+	}
+	result := make(chan answer, 1)
+	go func() {
+		info, err := stat(path)
+		result <- answer{info, err}
+	}()
+	timer := time.NewTimer(bound)
+	defer timer.Stop()
+	select {
+	case got := <-result:
+		return got.info, got.err
+	case <-timer.C:
+		return nil, fmt.Errorf("%w: %s", ErrStatUnanswered, path)
+	}
+}
+
 // WriteRecordedConnection durably publishes one root's connection identity in its view's
 // runtime directory.
 func WriteRecordedConnection(runtimeViewDir string, rec RecordedConnection) error {

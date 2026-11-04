@@ -229,7 +229,7 @@ func removeJobSandbox(root string) error {
 }
 
 func sandboxDirModTime(root string) (time.Time, error) {
-	info, err := os.Stat(root)
+	info, err := adapter.BoundedLstat(root)
 	if err != nil {
 		return time.Time{}, err
 	}

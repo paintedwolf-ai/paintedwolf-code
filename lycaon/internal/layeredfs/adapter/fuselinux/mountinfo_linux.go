@@ -155,10 +155,12 @@ func findRecordedMount(rec adapter.RecordedConnection) (kernelMountEntry, record
 	if err != nil {
 		return kernelMountEntry{}, recordedMountAbsent, err
 	}
-	canonical := canonicalPath(rec.MountPath)
+	// The path was canonical when recorded. Resolving it again would stat through the mount,
+	// which never returns on the wedged connection this exists to find.
+	recorded := filepath.Clean(rec.MountPath)
 	var matched *kernelMountEntry
 	for i := range entries {
-		if filepath.Clean(entries[i].mountPoint) == canonical {
+		if filepath.Clean(entries[i].mountPoint) == recorded {
 			matched = &entries[i]
 		}
 	}

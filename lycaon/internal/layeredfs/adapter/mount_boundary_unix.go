@@ -13,7 +13,7 @@ import (
 // MountBoundaryPresent reports whether path is the root of another filesystem. A stat the
 // filesystem itself fails counts: a dead or hung mount answers with an error, never data.
 func MountBoundaryPresent(path string) (bool, error) {
-	info, err := os.Lstat(path)
+	info, err := BoundedLstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
