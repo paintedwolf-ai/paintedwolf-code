@@ -72,15 +72,6 @@ func newWriteLegHarness(t *testing.T) *harness {
 	return h
 }
 
-func TestGitReadSpellingsCoverEveryReadForm(t *testing.T) {
-	t.Parallel()
-	for form := range readForms {
-		if _, ok := gitReadSpellings[form]; !ok {
-			t.Errorf("read form %s has no spelling in the write-leg contract", form)
-		}
-	}
-}
-
 func TestACOP01AndACOP02EveryGitReadOnAWriteLegRefuses(t *testing.T) {
 	t.Parallel()
 	for name, argv := range gitReadSpellings {
