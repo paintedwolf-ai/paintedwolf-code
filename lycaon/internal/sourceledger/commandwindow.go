@@ -12,14 +12,20 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// commandWindowSettle allows trailing watcher events.
-const commandWindowSettle = 2 * time.Second
+const (
+	// commandWindowSettle allows trailing watcher events.
+	commandWindowSettle = 2 * time.Second
+	// A window's start waits this long for events already on their way.
+	windowStartQuietGrace = 150 * time.Millisecond
+	windowStartQuietWait  = 750 * time.Millisecond
+)
 
 // CommandWindowInput opens one host-run command's observation window.
 type CommandWindowInput struct {
@@ -194,6 +200,10 @@ func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []Ro
 	req, err := s.windowInventoryRequest(ctx, projectID, roots)
 	if err != nil {
 		return "", err
+	}
+	// A save that just landed moves the change token only once its event arrives.
+	for _, root := range roots {
+		repochange.WaitQuiet(ctx, root.Path, windowStartQuietGrace, windowStartQuietWait)
 	}
 	req.Force = !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(roots))
 	req.Wait = true

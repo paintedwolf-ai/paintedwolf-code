@@ -172,6 +172,9 @@ func TestOpenWaitsForAWatcherEventStillInFlight(t *testing.T) {
 	repochange.MarkCoverageCompleteForTest(root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
+	// The first pass binds the watcher, which moves the token; after the second
+	// the open has no pass of its own to wait through.
+	forceTestPass(t, store, ctx, root)
 	forceTestPass(t, store, ctx, root)
 
 	writeRootFile(t, root, "notes.md", "a person's save\n")
