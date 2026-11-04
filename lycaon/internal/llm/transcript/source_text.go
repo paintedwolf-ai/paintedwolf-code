@@ -3,6 +3,7 @@ package transcript
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
@@ -243,12 +244,22 @@ func numberedSourceBlock(block map[string]json.RawMessage, key string) (sourceTe
 	if end-start+1 != len(lines) {
 		return sourceText{}, false
 	}
+	bare := make([]string, len(lines))
 	for i, line := range lines {
 		prefix := fmt.Sprintf("%6d: ", start+i)
 		if !strings.HasPrefix(line, prefix) {
 			return sourceText{}, false
 		}
-		lines[i] = strings.TrimPrefix(line, prefix)
+		bare[i] = strings.TrimPrefix(line, prefix)
+	}
+	// A file's trailing newline is not a line: end the block at the last line shown.
+	if n := len(bare); n > 1 && bare[n-1] == "" {
+		bare, lines = bare[:n-1], lines[:n-1]
+		end--
+		block["end_line"] = json.RawMessage(fmt.Sprint(end))
+	}
+	if os.Getenv("PW_EXP_NUMBERED_SOURCE") != "1" {
+		lines = bare
 	}
 	delete(block, key)
 	result := sourceText{text: strings.Join(lines, "\n"), start: start, end: end}
