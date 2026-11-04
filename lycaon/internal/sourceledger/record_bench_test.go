@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -93,6 +94,7 @@ func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool
 		}
 	}
 	if committed {
+		gittestsetup.Enable()
 		gittest.Init(b, root)
 		gittest.CommitAll(b, root, "Tree")
 	}
