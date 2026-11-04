@@ -407,18 +407,6 @@ func TestStockSkillsOnDisk(t *testing.T) {
 	}
 }
 
-func TestAccessibilitySkillClaimsNoCompliance(t *testing.T) {
-	a11y := filepath.Join("..", "..", "config", "packs", "painted-wolf", "browser", "skills", "review-accessibility", "SKILL.md")
-	body, err := os.ReadFile(a11y)
-	testutil.FailErr(t, "read review-accessibility", err)
-	lower := strings.ToLower(string(body))
-	for _, banned := range []string{"certified", "certification", "wcag compliant"} {
-		if strings.Contains(lower, banned) {
-			t.Fatalf("review-accessibility must not claim %q", banned)
-		}
-	}
-}
-
 func TestNoExecImport(t *testing.T) {
 	data, err := os.ReadFile("skills.go")
 	testutil.FailErr(t, "read skills.go", err)

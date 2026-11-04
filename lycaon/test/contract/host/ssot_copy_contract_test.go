@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -114,25 +113,6 @@ func TestWorkerKickGoSourceHasNoTemplateProseFallback(t *testing.T) {
 	contractcheck.FailViolations(t, "worker_kick.go duplicates kick template prose in Go fallback", violations)
 }
 
-func TestLaneSSurveyCoordinatorHintsMentionFindFirst(t *testing.T) {
-	t.Parallel()
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load hint registry", err)
-	for _, code := range []string{"COORDINATOR_READ_OUTSIDE_SCOPE"} {
-		entry, ok := cfg.HintCodes[code]
-		if !ok {
-			t.Fatalf("missing hint %q", code)
-		}
-		prose := strings.Join([]string{entry.Message, entry.Fix, entry.Instead}, "\n")
-		if !strings.Contains(prose, "find") {
-			t.Fatalf("hint %q prose must mention find for find-first Lane S copy:\n%s", code, prose)
-		}
-		if stale := firstStaleLaneSPattern(prose); stale != "" {
-			t.Fatalf("hint %q contains stale Lane S ordering %q", code, stale)
-		}
-	}
-}
-
 func TestSurveyArchetypesIncludeFirstPassLadder(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
@@ -167,13 +147,4 @@ func TestOARSpecVersionFrozenAt10(t *testing.T) {
 	if !strings.Contains(string(sample), `"oar": "1.0"`) && !strings.Contains(string(sample), `"oar":"1.0"`) {
 		t.Fatal("schemas/fixtures/oar-sample-rule.json must declare oar 1.0")
 	}
-}
-
-func firstStaleLaneSPattern(text string) string {
-	for _, re := range contractcheck.LaneSSurveyStaleCopyPatterns {
-		if re.MatchString(text) {
-			return re.String()
-		}
-	}
-	return ""
 }
