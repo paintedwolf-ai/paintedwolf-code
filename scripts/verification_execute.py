@@ -224,6 +224,7 @@ class StageEvents:
         self.paths = {"events": Path(events), "raw": Path(raw)}
         self.offsets = {"events": 0, "raw": 0}
         self.partial = {"events": b"", "raw": b""}
+        self.known = {}
 
     def lines(self, source):
         try:
@@ -245,18 +246,25 @@ class StageEvents:
         return values
 
     def failures(self):
-        """A test binary's failing exit, a terminal package failure, or a build failure establishes that the
-        package failed; a signal is an interruption, not a result."""
-        found = {}
+        """Packages newly known to have failed, each with every detail read so far. A test binary's failing
+        exit, a terminal package failure, or a build failure establishes the failure; a signal is an
+        interruption, not a result. The wrapper's event and Go's terminal event can arrive in separate reads."""
+        fresh = set()
         for event in self.lines("events"):
             if isinstance(event.get("package"), str) and type(event.get("exit_code")) is int and event["exit_code"] > 0:
-                found[event["package"]] = {key: event[key] for key in ("output", "tests", "resource_limit") if key in event}
+                self.known[event["package"]] = {key: event[key] for key in ("output", "tests", "resource_limit") if key in event}
+                fresh.add(event["package"])
         for event in self.lines("raw"):
             if event.get("Action") == "fail" and isinstance(event.get("Package"), str) and not event.get("Test"):
-                found.setdefault(event["Package"], {})
+                package, detail = event["Package"], {}
             elif event.get("Action") == "build-fail" and isinstance(event.get("ImportPath"), str):
-                found.setdefault(event["ImportPath"].split(" [", 1)[0], {"build_failed": True})
-        return found
+                package, detail = event["ImportPath"].split(" [", 1)[0], {"build_failed": True}
+            else:
+                continue
+            if package not in self.known:
+                self.known[package] = detail
+                fresh.add(package)
+        return {package: self.known[package] for package in fresh}
 
 
 class Executor:
