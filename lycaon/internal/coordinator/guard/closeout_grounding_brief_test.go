@@ -27,9 +27,7 @@ func (r briefLedgerReader) WorkerLegs(context.Context, string, time.Time) ([]gui
 func briefOnlyTurn(t *testing.T, draft guidance.CloseoutDraft) guard.CloseoutGroundingVerdict {
 	t.Helper()
 	root := t.TempDir()
-	row, err := evidence.NewSourceChangeRecord(1, map[string]string{"path": "config.txt", "actor": "external", "op": "write"})
-	testutil.FailErr(t, "row record", err)
-	ledger := evidence.AssembleLedger([]evidence.Record{row, {
+	ledger := evidence.AssembleLedger([]evidence.Record{evidence.NewSourceChangeRecord(1), {
 		Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Fidelity: evidence.FidelityStructured,
 		Path: "data/old.txt", LineRanges: []evidence.LineRange{{Start: 1, End: 1}}, Body: []string{"1: old"},
 	}})

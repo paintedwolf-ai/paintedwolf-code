@@ -129,7 +129,7 @@ A coordinator's speech is Markdown, with citations inline where each claim is ma
 
 | Form | Meaning |
 |---|---|
-| `[read#3]`, `[leg-a:read#3]`, `[task#1]` | An observed handle, optionally namespaced by worker leg |
+| `[read#3]`, `[leg-a:read#3]`, `[task#1]`, `[source_change#1]` | An observed handle, optionally namespaced by worker leg |
 | `[read#3:42]`, `[read#3:42-58]` | A line, or a fully observed inclusive range, in that observation |
 | `[read#3:42 "if err != nil"]` | A line and excerpt, re-anchored within the existing bound |
 | `[internal/a.go:42]`, `["docs/design notes.md":12]` | A workspace path and coordinate; quote a path with spaces |
@@ -175,7 +175,7 @@ A coordinator speaks before the turn ends by writing text alongside its tool cal
 | An image source this chat never observed | Withheld, `MID_TURN_NOTE_IMAGE_UNOBSERVED` |
 | Evidence the host cannot read | Withheld, `MID_TURN_NOTE_EVIDENCE_UNREADABLE`; never treated as pre-evidence |
 
-The audit uses only evidence already observed, so a first response cannot cite the `task#1` that its own pending call would create. A later one can, and a dispatch handle is recorded only for an accepted dispatch. `[task#1]` proves the dispatch, a survey handle the recorded survey, and `[command#4]` that command's execution and status; none proves more, and none is refused because an unrelated content record exists. Direct notes have no argument length limit beyond normal response limits and the inline node limit.
+The audit uses only evidence already observed, so a first response cannot cite the `task#1` that its own pending call would create. A later one can, and a dispatch handle is recorded only for an accepted dispatch. `[task#1]` proves the dispatch, a survey handle the recorded survey, and `[command#4]` that command's execution and status; none proves more, and none is refused because an unrelated content record exists. A `[source_change#1]` proves the source ledger recorded a row of the turn's source-change brief: it supports no line or excerpt, its file stays unobserved, and the brief creates no citation duty on a turn with no observations. Its handle is minted with the brief and is not served by `recall`, because assembly restates the brief on every call. Direct notes have no argument length limit beyond normal response limits and the inline node limit.
 
 An unresolved handle or URL spends the shared grounding friction, so a session that burns it mid-turn reaches closeout exhaustion sooner. Missing citations and syntax errors charge nothing, because uncited narration and a malformed node make no evidence claim.
 

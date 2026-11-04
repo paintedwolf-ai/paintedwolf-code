@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/bloblifecycle"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 )
@@ -21,8 +20,6 @@ func (s *SQL) PutTurnSourceBrief(ctx context.Context, sessionID, openingMessageI
 	if sessionID == "" || openingMessageID == "" || mint == nil {
 		return nil
 	}
-	release := bloblifecycle.AcquirePublication(s.dataDir)
-	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

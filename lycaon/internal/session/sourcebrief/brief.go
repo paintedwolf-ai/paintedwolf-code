@@ -65,10 +65,7 @@ func (m *Service) Record(ctx context.Context, sess *api.Session, openingMessageI
 		return
 	}
 	mint := func(firstOrdinal int) (string, []evidence.Record, error) {
-		cited, records, err := citableBrief(brief, firstOrdinal)
-		if err != nil {
-			return "", nil, err
-		}
+		cited, records := citableBrief(brief, firstOrdinal)
 		raw, err := json.Marshal(cited)
 		return string(raw), records, err
 	}

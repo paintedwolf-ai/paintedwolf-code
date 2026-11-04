@@ -37,11 +37,7 @@ func briefWithRows(t *testing.T, briefJSON string, rows int) evidence.SourceChan
 	return func(first int) (string, []evidence.Record, error) {
 		records := make([]evidence.Record, 0, rows)
 		for i := range rows {
-			rec, err := evidence.NewSourceChangeRecord(first+i, map[string]string{"path": "config.txt"})
-			if err != nil {
-				return "", nil, err
-			}
-			records = append(records, rec)
+			records = append(records, evidence.NewSourceChangeRecord(first+i))
 		}
 		return briefJSON, records, nil
 	}
@@ -108,8 +104,8 @@ func TestTurnSourceBriefMintsCitableRecordsParity(t *testing.T) {
 				if rec.Kind != evidence.KindSourceChange || rec.Shape != evidence.ShapeStructuredEvent || rec.Fidelity != evidence.FidelityStructured {
 					t.Fatalf("%s = %+v", handle, rec)
 				}
-				if rec.Path != "" || len(rec.LineRanges) != 0 || rec.Survey || len(rec.Body) != 1 {
-					t.Fatalf("%s must state one fact and observe no file: %+v", handle, rec)
+				if rec.Path != "" || len(rec.LineRanges) != 0 || rec.Survey || len(rec.Body) != 0 {
+					t.Fatalf("%s must observe no file: %+v", handle, rec)
 				}
 			}
 			if len(ledger.ByPath) != 0 {
