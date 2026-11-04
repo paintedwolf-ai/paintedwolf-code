@@ -55,10 +55,37 @@ func (q *SQLQueue) StopExecution(ctx context.Context, jobID string) error {
 
 // RequestCancellation durably fences claims and execution outcomes before joining runtime.
 func (q *SQLQueue) RequestCancellation(ctx context.Context, jobID string) (bool, error) {
-	n, err := q.store.queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
-		ID: jobID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+	var n int64
+	err := q.retryOnFullDisk(func() (err error) {
+		n, err = q.store.queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
+			ID: jobID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+		})
+		return err
 	})
 	return n == 1, err
+}
+
+// SpaceReserveReleaser frees room set aside for finishing a cancel on a full volume.
+type SpaceReserveReleaser interface {
+	ReleaseSpaceReserve() bool
+}
+
+var _ SpaceReserveReleaser = (*workspace.Manager)(nil)
+
+// retryOnFullDisk gives a cancellation write one more try with the reserve freed. A worker that
+// filled the volume the database shares must still be cancelable, or nothing can free the space.
+func (q *SQLQueue) retryOnFullDisk(write func() error) error {
+	err := write()
+	if !db.IsDiskFull(err) {
+		return err
+	}
+	q.mu.Lock()
+	ws := q.workerWorkspace
+	q.mu.Unlock()
+	if releaser, ok := ws.(SpaceReserveReleaser); ok && releaser.ReleaseSpaceReserve() {
+		return write()
+	}
+	return err
 }
 
 // RequestClaimCancellation preserves a stopped attempt when runtime cleanup must be retried.
@@ -67,22 +94,24 @@ func (q *SQLQueue) RequestClaimCancellation(ctx context.Context, claimed *api.Wo
 		return false, fmt.Errorf("claimed worker task required")
 	}
 	var won bool
-	err := q.store.inTx(ctx, func(queries *db.Queries, _ *sql.Tx) error {
-		job, err := queries.GetWorkerJob(ctx, claimed.ID)
-		if db.IsNoRows(err) {
-			return nil
-		}
-		if err != nil {
+	err := q.retryOnFullDisk(func() error {
+		return q.store.inTx(ctx, func(queries *db.Queries, _ *sql.Tx) error {
+			job, err := queries.GetWorkerJob(ctx, claimed.ID)
+			if db.IsNoRows(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if job.Status != "running" || db.StringFromNull(job.ClaimToken) != claimed.ClaimToken || job.CancelRequestedAt.Valid {
+				return nil
+			}
+			n, err := queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
+				ID: claimed.ID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+			})
+			won = n == 1
 			return err
-		}
-		if job.Status != "running" || db.StringFromNull(job.ClaimToken) != claimed.ClaimToken || job.CancelRequestedAt.Valid {
-			return nil
-		}
-		n, err := queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
-			ID: claimed.ID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
 		})
-		won = n == 1
-		return err
 	})
 	return won, err
 }
@@ -165,8 +194,11 @@ func (q *SQLQueue) finalizeCanceled(ctx context.Context, jobID string, result *a
 	if task.Status.IsTerminal() {
 		return nil
 	}
-	won, err := q.store.CancelJob(ctx, jobID, result)
-	if err != nil {
+	var won bool
+	if err := q.retryOnFullDisk(func() (err error) {
+		won, err = q.store.CancelJob(ctx, jobID, result)
+		return err
+	}); err != nil {
 		return err
 	}
 	if !won {

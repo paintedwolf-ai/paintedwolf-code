@@ -38,7 +38,7 @@ func (c *Coordinator) ensureSpaceReserve() {
 	}
 }
 
-// releaseSpaceReserve reports whether it freed anything. The next engine start sets it aside again.
-func (c *Coordinator) releaseSpaceReserve() bool {
+// ReleaseSpaceReserve reports whether it freed anything. The next engine start sets it aside again.
+func (c *Coordinator) ReleaseSpaceReserve() bool {
 	return os.Remove(filepath.Join(c.cfg.RootDir, spaceReserveName)) == nil
 }

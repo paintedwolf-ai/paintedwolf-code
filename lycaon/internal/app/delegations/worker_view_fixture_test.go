@@ -80,7 +80,11 @@ type engineFixture struct {
 
 func newEngineFixture(t *testing.T) *engineFixture {
 	t.Helper()
-	database := testdbfixture.Open(t, "store.db")
+	return newEngineFixtureOn(t, testdbfixture.Open(t, "store.db"))
+}
+
+func newEngineFixtureOn(t *testing.T, database *db.Store) *engineFixture {
+	t.Helper()
 	project := t.TempDir()
 	testutil.FailErr(t, "seed app", os.WriteFile(filepath.Join(project, "app.txt"), []byte("trunk\n"), 0o644))
 	testutil.FailErr(t, "seed keep", os.WriteFile(filepath.Join(project, "keep.txt"), []byte("keep\n"), 0o644))

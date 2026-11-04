@@ -65,6 +65,11 @@ func (m *Manager) RetainCanceledWork(ctx context.Context, jobID, root, baselineP
 	return nil
 }
 
+// ReleaseSpaceReserve frees the room set aside for finishing a cancel on a full volume.
+func (m *Manager) ReleaseSpaceReserve() bool {
+	return m.recovery != nil && m.recovery.ReleaseSpaceReserve()
+}
+
 func changedWorkingFiles(ctx context.Context, root, baselinePath string, roots []projectroot.RootRef) ([]recovery.ChangedWorkingFile, error) {
 	baseline, err := workspacebaseline.Open(ctx, baselinePath, workspacebaseline.ContentStore(baselinePath))
 	if err != nil {

@@ -55,7 +55,7 @@ func preserveInQuarantine(c *Coordinator, rec InterruptedWorkingRecord, fill fun
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	preserved, err := preserveInQuarantineLocked(c, rec, fill)
-	if errors.Is(err, syscall.ENOSPC) && c.releaseSpaceReserve() {
+	if errors.Is(err, syscall.ENOSPC) && c.ReleaseSpaceReserve() {
 		return preserveInQuarantineLocked(c, rec, fill)
 	}
 	return preserved, err

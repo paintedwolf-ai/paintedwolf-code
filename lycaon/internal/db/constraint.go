@@ -20,3 +20,9 @@ func IsUniqueConstraint(err error) bool {
 		return false
 	}
 }
+
+// IsDiskFull reports SQLite refusing a write because its volume has no room.
+func IsDiskFull(err error) bool {
+	var sqliteErr *sqlite.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code()&0xff == sqlite3.SQLITE_FULL
+}
