@@ -447,7 +447,9 @@ class Executor:
                 if failed or len(results) == len(packages):
                     self.settle(request, index, stage, packages, results, failed)
                     if failed:
-                        self.receipt(request, failed["status"], failed["exit_code"])
+                        named = sorted(p for p, r in results.items() if r["status"] == "failed")
+                        self.receipt(request, failed["status"], failed["exit_code"],
+                                     f"{len(named)} packages failed: {', '.join(named)}" if named else None)
                         break
                     continue
                 waiting.append((request, stage, [p for p in packages if p not in cached], index))
@@ -539,11 +541,13 @@ class Executor:
         failures = job["events"].failures()
         if not failures:
             return
+        job.setdefault("failures", {}).update(failures)
         stage_id = job["result"]["stage_id"]
         for request, index, stage, needed in job["needs"]:
             ticket = request["ticket"]
             failed = [p for p in needed if p in failures]
-            if ticket in self.finished or not failed:
+            # A request that declares complete reporting keeps the stage alive for its other packages.
+            if ticket in self.finished or not failed or stage.get("complete_failures"):
                 continue
             results = {p: {"status": "failed", "exit_code": 1, "stage_id": stage_id, "log": job["result"]["log"],
                            "raw": str(job["events"].paths["raw"]), **failures[p]} for p in failed}
@@ -590,12 +594,15 @@ class Executor:
             expected_code = 0 if report.get("process_exit_code") == report.get("digest_exit_code") == 0 else 1
             valid = report.get("completed", False) and code == expected_code
             outcomes = reuse.read_events(job["events_path"])
+            details = {**job.get("failures", {}), **job["events"].failures()}
             for package in packages:
                 action = report.get("packages", {}).get(package)
                 status = "unverified" if not valid or action not in {"pass", "skip", "fail"} else (
                     "failed" if action == "fail" else "passed")
                 cache[package] = {"status": status, "exit_code": {"passed": 0, "failed": 1, "unverified": 2}[status],
                                   "stage_id": stage_id, "log": str(log), "report": str(result_path)}
+                if status == "failed":
+                    cache[package].update(details.get(package, {}))
                 if status == "passed" and outcomes.get(package, {}).get("reused"):
                     cache[package]["reused"] = outcomes[package]["reused"]
             reused = sum(1 for p in packages if "reused" in cache[p])

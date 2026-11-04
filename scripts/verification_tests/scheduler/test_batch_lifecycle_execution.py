@@ -398,6 +398,51 @@ print('fixture '+name, flush=True)'''))
         self.await_condition(lambda: not self.queue.status()["runs"] and not self.queue.status()["operations"])
         self.assertFalse(self.release.exists())
 
+    def test_a_complete_digest_reports_every_failed_package_in_one_receipt(self):
+        self.catalog["go"]["test:digest"]["complete_failures"] = True
+        self.save_catalog()
+        self.hold.touch()
+        run = self.start("test:digest", "--", "./bad", "./also/bad", "./good", env={**self.env, "FIXTURE_EARLY": "1"})
+        self.queued(1)
+        self.queue.resume()
+        # Both failures are published while the stage still runs, and neither answers the request.
+        self.await_condition(lambda: len(self.records()) == 1)
+        self.assertIsNone(run.poll())
+        self.release.touch()
+        self.collect(run, 1)
+        receipt = self.receipts()[0]
+        results = receipt["evidence"][0]["results"]
+        self.assertEqual({p: r["status"] for p, r in results.items()},
+                         {"fixture/also/bad": "failed", "fixture/bad": "failed", "fixture/good": "passed"})
+        self.assertEqual(results["fixture/bad"]["tests"], ["TestBad"])
+        self.assertEqual(receipt["status"], "failed")
+        self.assertIn("2 packages failed", receipt["reason"])
+
+    def test_a_gate_sharing_a_complete_digest_still_ends_at_its_first_failure(self):
+        self.catalog["go"]["test:gate"] = {"packages": ["./..."], "options": []}
+        self.catalog["selection"]["test:gate"] = "go"
+        self.catalog["go"]["test:digest"]["complete_failures"] = True
+        self.save_catalog()
+        self.hold.touch()
+        env = {**self.env, "FIXTURE_EARLY": "1"}
+        gate = self.start("test:gate", "--", "./bad", "./good", env=env)
+        self.queued(1)
+        digest = self.start("test:digest", "--", "./bad", "./good", env=env)
+        self.queued(2)
+        self.queue.resume()
+        self.collect(gate, 1)
+        self.assertIsNone(digest.poll())
+        self.release.touch()
+        self.collect(digest, 1)
+        by_name = {r["names"][0]: r for r in self.receipts()}
+        self.assertEqual(len(by_name["test:gate"]["evidence"][0]["results"]), 1)
+        self.assertEqual(len(by_name["test:digest"]["evidence"][0]["results"]), 2)
+
+    def test_complete_failures_must_be_declared_as_a_boolean(self):
+        self.catalog["go"]["test:digest"]["complete_failures"] = "yes"
+        self.save_catalog()
+        self.collect(self.start("test:digest", "--", "./good"), 2)
+
     def test_declared_invocation_overlaps_shared_work_and_undeclared_one_waits(self):
         self.parallel_profiles()
         self.catalog["resources"]["test:invoke"] = {"locks": ["frontend"], "workers": 1}

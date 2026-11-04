@@ -97,7 +97,8 @@
       "options": [],
       "packages": [
         "./..."
-      ]
+      ],
+      "complete_failures": true
     },
     "test:short": {
       "options": [],

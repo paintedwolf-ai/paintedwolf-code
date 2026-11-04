@@ -853,6 +853,10 @@ spec paths and `-t`, `den:harness:test` takes Playwright filters, and
 `lint:fast`, `lint:full`, and `oar:conformance` forward their arguments to the
 underlying tool and run outside a shared batch with their declared resources.
 
+A scoped `test:digest` for a change includes the `./test/contract/...` packages
+the change can affect, so a composition failure appears with the rest of that
+request's failures.
+
 Declared grammars are checked against the tree before admission: Go package
 directories and `.go` files must exist under `lycaon/`; `-p`, `-parallel`,
 `-count`, `-cpu`, `-timeout`, and `-shuffle` must hold values `go test` accepts;
@@ -955,7 +959,10 @@ include source identity, stage evidence, and stages left unverified. A Go packag
 that passed by replaying an earlier result carries `reused` with the batch and
 stage that recorded it. A request whose Go package failed while its stage was
 still running returns at once; its evidence names the failed tests and links the
-package's output under `<stage-id>-failures/`. Shared logs can contain unrelated
+package's output under `<stage-id>-failures/`. A `test:digest` request instead
+waits for its whole package selection, because its recipe declares
+`complete_failures`, so one receipt names every failed package with its tests and
+output. Shared logs can contain unrelated
 failures; use the request receipt for its outcome. The retention budget is 20
 completed batches and 512 MiB, with artifacts and source refs pruned together;
 the newest batch and active readers remain protected. Canceling one request
