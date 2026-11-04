@@ -155,225 +155,231 @@ func waitUntilAdmissionClosed(c *Core) {
 func TestReleaseDrainsInFlightWriteAccountingAndPreservesRecoveryState(t *testing.T) {
 	t.Parallel()
 
-	t.Run("write_handle_paused_after_bytes_written_commits_accounting_before_release_completes", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		trunk := filepath.Join(tmp, "trunk")
-		backing := filepath.Join(tmp, "backing")
-		testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
-		testutil.FailErr(t, "mkdir backing", os.MkdirAll(backing, 0o700))
+	t.Run("write_handle_paused_after_bytes_written_commits_accounting_before_release_completes", testReleaseCommitsAccountingOfPausedWrite)
 
-		bytesWrittenCh := make(chan struct{})
-		allowCommitCh := make(chan struct{})
-		var pauseOnce sync.Once
+	t.Run("partial_write_paused_during_release_preserves_partial_accounting", testReleasePreservesPartialWriteAccounting)
 
-		core, err := New(Config{
-			ViewID:     "view-release-writehandle",
-			BackingDir: backing,
-			Roots: []RootSpec{
-				{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true},
+	t.Run("in_flight_lower_read_drains_before_release_closes_descriptors", testReleaseDrainsLowerRead)
+}
+
+func testReleaseCommitsAccountingOfPausedWrite(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	trunk := filepath.Join(tmp, "trunk")
+	backing := filepath.Join(tmp, "backing")
+	testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
+	testutil.FailErr(t, "mkdir backing", os.MkdirAll(backing, 0o700))
+
+	bytesWrittenCh := make(chan struct{})
+	allowCommitCh := make(chan struct{})
+	var pauseOnce sync.Once
+
+	core, err := New(Config{
+		ViewID:     "view-release-writehandle",
+		BackingDir: backing,
+		Roots: []RootSpec{
+			{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true},
+		},
+		FaultHooks: &FaultHooks{
+			WriteAtFunc: func(qpath QualifiedPath, file *os.File, data []byte, offset int64) (int, error) {
+				n, wErr := file.WriteAt(data, offset)
+				if qpath.Rel == "inflight.txt" {
+					pauseOnce.Do(func() {
+						close(bytesWrittenCh)
+						<-allowCommitCh
+					})
+				}
+				return n, wErr
 			},
-			FaultHooks: &FaultHooks{
-				WriteAtFunc: func(qpath QualifiedPath, file *os.File, data []byte, offset int64) (int, error) {
-					n, wErr := file.WriteAt(data, offset)
-					if qpath.Rel == "inflight.txt" {
-						pauseOnce.Do(func() {
-							close(bytesWrittenCh)
-							<-allowCommitCh
-						})
-					}
-					return n, wErr
-				},
-			},
-		})
-		testutil.FailErr(t, "New Core", err)
-
-		qp := QualifiedPath{RootID: "primary", Rel: "inflight.txt"}
-		hid, _, err := core.Open(qp, OpenReadWrite|OpenCreate, 0o644)
-		testutil.FailErr(t, "Open inflight.txt", err)
-
-		payload := []byte("committed-across-release-drain")
-		var writeN int
-		var writeErr error
-		writeDone := make(chan struct{})
-		go func() {
-			defer close(writeDone)
-			writeN, writeErr = core.WriteHandle(hid, payload, 0)
-		}()
-
-		<-bytesWrittenCh
-
-		releaseDone := make(chan error, 1)
-		go func() {
-			releaseDone <- core.ReleaseView()
-		}()
-
-		waitUntilAdmissionClosed(core)
-
-		// New mutations while release is draining must be rejected with ErrViewReleased.
-		if _, err := core.WriteFile(QualifiedPath{RootID: "primary", Rel: "late.txt"}, []byte("no"), 0o644); !errors.Is(err, ErrViewReleased) {
-			t.Fatalf("expected ErrViewReleased for new WriteFile during release drain, got %v", err)
-		}
-
-		close(allowCommitCh)
-		<-writeDone
-		testutil.FailErr(t, "in-flight WriteHandle", writeErr)
-		if writeN != len(payload) {
-			t.Fatalf("expected writeN=%d, got %d", len(payload), writeN)
-		}
-		testutil.FailErr(t, "ReleaseView", <-releaseDone)
-
-		// Held handle is now invalidated after release completes.
-		if _, err := core.ReadHandle(hid, make([]byte, 4), 0); !errors.Is(err, ErrViewReleased) {
-			t.Fatalf("expected ErrViewReleased on ReadHandle after release, got %v", err)
-		}
-
-		// Recovery state must preserve the committed write accounting and digest.
-		wantSum := sha256.Sum256(payload)
-		wantHex := hex.EncodeToString(wantSum[:])
-
-		changes, err := core.EnumerateChanges(true)
-		testutil.FailErr(t, "EnumerateChanges after ReleaseView", err)
-		if len(changes) != 1 || changes[0].Final.Size != int64(len(payload)) || changes[0].Final.SHA256 != wantHex {
-			t.Fatalf("expected settled ChangeEntry with size=%d sha=%s, got %+v", len(payload), wantHex, changes)
-		}
-		persisted, err := core.LoadPersistedJournal()
-		testutil.FailErr(t, "LoadPersistedJournal after ReleaseView", err)
-		if len(persisted.Changes) != 1 || persisted.Changes[0].Final.Size != int64(len(payload)) {
-			t.Fatalf("expected persisted journal change size=%d, got %+v", len(payload), persisted.Changes)
-		}
-		ops := core.JournalOperations()
-		hasWriteOp := false
-		for _, op := range ops {
-			if op.Kind == JournalOpWrite && op.Path == qp && op.Size == int64(len(payload)) {
-				hasWriteOp = true
-			}
-		}
-		if !hasWriteOp {
-			t.Fatalf("expected JournalOpWrite with size=%d in journal operations, got %+v", len(payload), ops)
-		}
+		},
 	})
+	testutil.FailErr(t, "New Core", err)
 
-	t.Run("write_via_node_handle_partial_write_paused_during_release_preserves_partial_accounting", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		trunk := filepath.Join(tmp, "trunk")
-		backing := filepath.Join(tmp, "backing")
-		testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
-		testutil.FailErr(t, "mkdir backing", os.MkdirAll(backing, 0o700))
+	qp := QualifiedPath{RootID: "primary", Rel: "inflight.txt"}
+	hid, _, err := core.Open(qp, OpenReadWrite|OpenCreate, 0o644)
+	testutil.FailErr(t, "Open inflight.txt", err)
 
-		bytesWrittenCh := make(chan struct{})
-		allowCommitCh := make(chan struct{})
-		var pauseOnce sync.Once
+	payload := []byte("committed-across-release-drain")
+	var writeN int
+	var writeErr error
+	writeDone := make(chan struct{})
+	go func() {
+		defer close(writeDone)
+		writeN, writeErr = core.WriteHandle(hid, payload, 0)
+	}()
 
-		core, err := New(Config{
-			ViewID:     "view-release-nodehandle",
-			BackingDir: backing,
-			Roots: []RootSpec{
-				{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true},
-			},
-			FaultHooks: &FaultHooks{
-				WriteAtFunc: func(qpath QualifiedPath, file *os.File, data []byte, offset int64) (int, error) {
-					if qpath.Rel == "ro_node.txt" {
-						half := len(data) / 2
-						n, _ := file.WriteAt(data[:half], offset)
-						pauseOnce.Do(func() {
-							close(bytesWrittenCh)
-							<-allowCommitCh
-						})
-						return n, syscall.ENOSPC
-					}
-					return file.WriteAt(data, offset)
-				},
-			},
-		})
-		testutil.FailErr(t, "New Core", err)
+	<-bytesWrittenCh
 
-		qp := QualifiedPath{RootID: "primary", Rel: "ro_node.txt"}
-		hid, _, err := core.CreateFile(qp, 0o444, true)
-		testutil.FailErr(t, "CreateFile ro_node.txt", err)
+	releaseDone := make(chan error, 1)
+	go func() {
+		releaseDone <- core.ReleaseView()
+	}()
 
-		payload := []byte("0123456789ABCDEF")
-		var n int
-		var wErr error
-		writeDone := make(chan struct{})
-		go func() {
-			defer close(writeDone)
-			n, wErr = core.WriteHandle(hid, payload, 0)
-		}()
+	waitUntilAdmissionClosed(core)
 
-		<-bytesWrittenCh
+	// New mutations while release is draining must be rejected with ErrViewReleased.
+	if _, err := core.WriteFile(QualifiedPath{RootID: "primary", Rel: "late.txt"}, []byte("no"), 0o644); !errors.Is(err, ErrViewReleased) {
+		t.Fatalf("expected ErrViewReleased for new WriteFile during release drain, got %v", err)
+	}
 
-		releaseDone := make(chan error, 1)
-		go func() {
-			releaseDone <- core.ReleaseView()
-		}()
+	close(allowCommitCh)
+	<-writeDone
+	testutil.FailErr(t, "in-flight WriteHandle", writeErr)
+	if writeN != len(payload) {
+		t.Fatalf("expected writeN=%d, got %d", len(payload), writeN)
+	}
+	testutil.FailErr(t, "ReleaseView", <-releaseDone)
 
-		waitUntilAdmissionClosed(core)
-		close(allowCommitCh)
-		<-writeDone
+	// Held handle is now invalidated after release completes.
+	if _, err := core.ReadHandle(hid, make([]byte, 4), 0); !errors.Is(err, ErrViewReleased) {
+		t.Fatalf("expected ErrViewReleased on ReadHandle after release, got %v", err)
+	}
 
-		if !errors.Is(wErr, syscall.ENOSPC) || n != 8 {
-			t.Fatalf("expected (8, ENOSPC) from in-flight WriteHandle, got (n=%d, err=%v)", n, wErr)
+	// Recovery state must preserve the committed write accounting and digest.
+	wantSum := sha256.Sum256(payload)
+	wantHex := hex.EncodeToString(wantSum[:])
+
+	changes, err := core.EnumerateChanges(true)
+	testutil.FailErr(t, "EnumerateChanges after ReleaseView", err)
+	if len(changes) != 1 || changes[0].Final.Size != int64(len(payload)) || changes[0].Final.SHA256 != wantHex {
+		t.Fatalf("expected settled ChangeEntry with size=%d sha=%s, got %+v", len(payload), wantHex, changes)
+	}
+	persisted, err := core.LoadPersistedJournal()
+	testutil.FailErr(t, "LoadPersistedJournal after ReleaseView", err)
+	if len(persisted.Changes) != 1 || persisted.Changes[0].Final.Size != int64(len(payload)) {
+		t.Fatalf("expected persisted journal change size=%d, got %+v", len(payload), persisted.Changes)
+	}
+	ops := core.JournalOperations()
+	hasWriteOp := false
+	for _, op := range ops {
+		if op.Kind == JournalOpWrite && op.Path == qp && op.Size == int64(len(payload)) {
+			hasWriteOp = true
 		}
-		testutil.FailErr(t, "ReleaseView", <-releaseDone)
+	}
+	if !hasWriteOp {
+		t.Fatalf("expected JournalOpWrite with size=%d in journal operations, got %+v", len(payload), ops)
+	}
+}
 
-		wantSum := sha256.Sum256(payload[:8])
-		changes, err := core.EnumerateChanges(true)
-		testutil.FailErr(t, "EnumerateChanges after ReleaseView", err)
-		if len(changes) != 1 || changes[0].Final.Size != 8 || changes[0].Final.SHA256 != hex.EncodeToString(wantSum[:]) {
-			t.Fatalf("expected partial write accounting preserved after ReleaseView, got %+v", changes)
-		}
-	})
+func testReleasePreservesPartialWriteAccounting(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	trunk := filepath.Join(tmp, "trunk")
+	backing := filepath.Join(tmp, "backing")
+	testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
+	testutil.FailErr(t, "mkdir backing", os.MkdirAll(backing, 0o700))
 
-	t.Run("in_flight_lower_read_drains_before_release_closes_descriptors", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		trunk := filepath.Join(tmp, "trunk")
-		backing := filepath.Join(tmp, "backing")
-		testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
-		testutil.FailErr(t, "mkdir backing", os.MkdirAll(backing, 0o700))
-		testutil.FailErr(t, "write trunk doc.txt", os.WriteFile(filepath.Join(trunk, "doc.txt"), []byte("hello-lower"), 0o644))
+	bytesWrittenCh := make(chan struct{})
+	allowCommitCh := make(chan struct{})
+	var pauseOnce sync.Once
 
-		inStatCh := make(chan struct{})
-		allowStatFinishCh := make(chan struct{})
-		var hookOnce sync.Once
-
-		core, err := New(Config{
-			ViewID:     "view-release-read-drain",
-			BackingDir: backing,
-			Roots: []RootSpec{
-				{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true},
+	core, err := New(Config{
+		ViewID:     "view-release-nodehandle",
+		BackingDir: backing,
+		Roots: []RootSpec{
+			{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true},
+		},
+		FaultHooks: &FaultHooks{
+			WriteAtFunc: func(qpath QualifiedPath, file *os.File, data []byte, offset int64) (int, error) {
+				if qpath.Rel == "ro_node.txt" {
+					half := len(data) / 2
+					n, _ := file.WriteAt(data[:half], offset)
+					pauseOnce.Do(func() {
+						close(bytesWrittenCh)
+						<-allowCommitCh
+					})
+					return n, syscall.ENOSPC
+				}
+				return file.WriteAt(data, offset)
 			},
-			FaultHooks: &FaultHooks{
-				LowerXattrHook: func(qpath QualifiedPath) error {
-					if qpath.Rel == "doc.txt" {
-						hookOnce.Do(func() {
-							close(inStatCh)
-							<-allowStatFinishCh
-						})
-					}
-					return nil
-				},
-			},
-		})
-		testutil.FailErr(t, "New Core", err)
-
-		statDone := make(chan error, 1)
-		go func() {
-			_, sErr := core.Stat(QualifiedPath{RootID: "primary", Rel: "doc.txt"})
-			statDone <- sErr
-		}()
-
-		<-inStatCh
-		releaseDone := make(chan error, 1)
-		go func() {
-			releaseDone <- core.ReleaseView()
-		}()
-
-		waitUntilAdmissionClosed(core)
-		close(allowStatFinishCh)
-		testutil.FailErr(t, "in-flight Stat", <-statDone)
-		testutil.FailErr(t, "ReleaseView", <-releaseDone)
+		},
 	})
+	testutil.FailErr(t, "New Core", err)
+
+	qp := QualifiedPath{RootID: "primary", Rel: "ro_node.txt"}
+	hid, _, err := core.CreateFile(qp, 0o444, true)
+	testutil.FailErr(t, "CreateFile ro_node.txt", err)
+
+	payload := []byte("0123456789ABCDEF")
+	var n int
+	var wErr error
+	writeDone := make(chan struct{})
+	go func() {
+		defer close(writeDone)
+		n, wErr = core.WriteHandle(hid, payload, 0)
+	}()
+
+	<-bytesWrittenCh
+
+	releaseDone := make(chan error, 1)
+	go func() {
+		releaseDone <- core.ReleaseView()
+	}()
+
+	waitUntilAdmissionClosed(core)
+	close(allowCommitCh)
+	<-writeDone
+
+	if !errors.Is(wErr, syscall.ENOSPC) || n != 8 {
+		t.Fatalf("expected (8, ENOSPC) from in-flight WriteHandle, got (n=%d, err=%v)", n, wErr)
+	}
+	testutil.FailErr(t, "ReleaseView", <-releaseDone)
+
+	wantSum := sha256.Sum256(payload[:8])
+	changes, err := core.EnumerateChanges(true)
+	testutil.FailErr(t, "EnumerateChanges after ReleaseView", err)
+	if len(changes) != 1 || changes[0].Final.Size != 8 || changes[0].Final.SHA256 != hex.EncodeToString(wantSum[:]) {
+		t.Fatalf("expected partial write accounting preserved after ReleaseView, got %+v", changes)
+	}
+}
+
+func testReleaseDrainsLowerRead(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	trunk := filepath.Join(tmp, "trunk")
+	backing := filepath.Join(tmp, "backing")
+	testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
+	testutil.FailErr(t, "mkdir backing", os.MkdirAll(backing, 0o700))
+	testutil.FailErr(t, "write trunk doc.txt", os.WriteFile(filepath.Join(trunk, "doc.txt"), []byte("hello-lower"), 0o644))
+
+	inStatCh := make(chan struct{})
+	allowStatFinishCh := make(chan struct{})
+	var hookOnce sync.Once
+
+	core, err := New(Config{
+		ViewID:     "view-release-read-drain",
+		BackingDir: backing,
+		Roots: []RootSpec{
+			{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true},
+		},
+		FaultHooks: &FaultHooks{
+			LowerXattrHook: func(qpath QualifiedPath) error {
+				if qpath.Rel == "doc.txt" {
+					hookOnce.Do(func() {
+						close(inStatCh)
+						<-allowStatFinishCh
+					})
+				}
+				return nil
+			},
+		},
+	})
+	testutil.FailErr(t, "New Core", err)
+
+	statDone := make(chan error, 1)
+	go func() {
+		_, sErr := core.Stat(QualifiedPath{RootID: "primary", Rel: "doc.txt"})
+		statDone <- sErr
+	}()
+
+	<-inStatCh
+	releaseDone := make(chan error, 1)
+	go func() {
+		releaseDone <- core.ReleaseView()
+	}()
+
+	waitUntilAdmissionClosed(core)
+	close(allowStatFinishCh)
+	testutil.FailErr(t, "in-flight Stat", <-statDone)
+	testutil.FailErr(t, "ReleaseView", <-releaseDone)
 }

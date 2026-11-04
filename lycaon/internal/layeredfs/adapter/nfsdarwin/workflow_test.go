@@ -48,27 +48,10 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	runtimeDir := filepath.Join(tmp, "runtime")
 	pgitDir := filepath.Join(tmp, "privategit")
 	cpStoreDir := filepath.Join(tmp, "checkpoints")
-	for _, d := range []string{trunkDir, backingDir, runtimeDir, pgitDir, cpStoreDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", d, err)
-		}
-	}
+	makeWorkflowDirs(t, trunkDir, backingDir, runtimeDir, pgitDir, cpStoreDir)
 
 	// 1. Seed canonical TrunkRoot Git repository.
-	gittest.Init(t, trunkDir)
-	gittest.Run(t, trunkDir, "checkout", "-b", "main")
-	if err := os.WriteFile(filepath.Join(trunkDir, "README.md"), []byte("initial readme\n"), 0o644); err != nil {
-		t.Fatalf("write trunk README.md: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {
-		t.Fatalf("mkdir trunk src: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(trunkDir, "src", "app.go"), []byte("package src\n"), 0o644); err != nil {
-		t.Fatalf("write trunk src/app.go: %v", err)
-	}
-	gittest.CommitAll(t, trunkDir, "initial trunk commit")
-	trunkInitialHead := strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", "HEAD"))
-	trunkBefore := snapshotTreeDigests(t, trunkDir)
+	trunkInitialHead, trunkBefore := seedWorkflowTrunk(t, trunkDir)
 
 	// 2. Construct privategit.Manager and nfsdarwin.Adapter; prepare and mount the real /sbin/mount_nfs view.
 	gitMgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: pgitDir})
@@ -232,22 +215,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	}
 
 	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
-	relReceipt, err := adp.Release(t.Context(), viewID)
-	if err != nil || !relReceipt.Settled {
-		t.Fatalf("Release failed: receipt=%+v err=%v", relReceipt, err)
-	}
-	if _, err := gitExec.Status(t.Context()); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
-		t.Fatalf("expected ErrMountedWorktreeUnavailable from Status after Release, got %v", err)
-	}
-	if _, err := gitExec.Run(t.Context(), ".", "add", "README.md"); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
-		t.Fatalf("expected ErrMountedWorktreeUnavailable from Add after Release, got %v", err)
-	}
-	if _, err := gitExec.Commit(t.Context(), "post-release"); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
-		t.Fatalf("expected ErrMountedWorktreeUnavailable from Commit after Release, got %v", err)
-	}
-	if _, _, _, err := privategit.PrepareViewGitOperation(t.Context(), trunkDir, workerID); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
-		t.Fatalf("expected ErrMountedWorktreeUnavailable from PrepareViewGitOperation after Release, got %v", err)
-	}
+	assertReleaseClosesPrivateGit(t, adp, gitExec, viewID, trunkDir, workerID)
 
 	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
@@ -305,6 +273,53 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	if resolvedImportedOID != workerHeadOID {
 		t.Fatalf("expected imported ref %s in trunk to resolve to %s, got %s", importedMainRef, workerHeadOID, resolvedImportedOID)
 	}
+}
+
+func assertReleaseClosesPrivateGit(t *testing.T, adp *nfsdarwin.Adapter, gitExec *privategit.GitExecutor, viewID, trunkDir, workerID string) {
+	t.Helper()
+	relReceipt, err := adp.Release(t.Context(), viewID)
+	if err != nil || !relReceipt.Settled {
+		t.Fatalf("Release failed: receipt=%+v err=%v", relReceipt, err)
+	}
+	if _, err := gitExec.Status(t.Context()); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable from Status after Release, got %v", err)
+	}
+	if _, err := gitExec.Run(t.Context(), ".", "add", "README.md"); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable from Add after Release, got %v", err)
+	}
+	if _, err := gitExec.Commit(t.Context(), "post-release"); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable from Commit after Release, got %v", err)
+	}
+	if _, _, _, err := privategit.PrepareViewGitOperation(t.Context(), trunkDir, workerID); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable from PrepareViewGitOperation after Release, got %v", err)
+	}
+}
+
+func makeWorkflowDirs(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+	}
+}
+
+// seedWorkflowTrunk creates the canonical trunk repository and returns its HEAD and tree digests.
+func seedWorkflowTrunk(t *testing.T, trunkDir string) (string, map[string]string) {
+	t.Helper()
+	gittest.Init(t, trunkDir)
+	gittest.Run(t, trunkDir, "checkout", "-b", "main")
+	if err := os.WriteFile(filepath.Join(trunkDir, "README.md"), []byte("initial readme\n"), 0o644); err != nil {
+		t.Fatalf("write trunk README.md: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {
+		t.Fatalf("mkdir trunk src: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(trunkDir, "src", "app.go"), []byte("package src\n"), 0o644); err != nil {
+		t.Fatalf("write trunk src/app.go: %v", err)
+	}
+	gittest.CommitAll(t, trunkDir, "initial trunk commit")
+	return strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", "HEAD")), snapshotTreeDigests(t, trunkDir)
 }
 
 func snapshotTreeDigests(t *testing.T, root string) map[string]string {

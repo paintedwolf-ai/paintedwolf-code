@@ -81,39 +81,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		t.Fatalf("expected task %s in queue", jobID)
 	}
 
-	// Provision a second worker on an unrelated root to verify repochange root isolation.
-	otherPrimary, otherOverlay, otherScope, otherBaseline := overlaySourceFixture(t)
-	otherChild, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
-	testutil.FailErr(t, "CreateChild other", err)
-	otherChild.WorkspacePath = otherPrimary
-	otherChild.ProjectID = testdbseed.DefaultProjectID
-	otherJobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
-		Prompt: "other", Brief: "other", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
-		WorkspacePath: otherPrimary, WorkspaceRoot: otherOverlay, ChildSessionID: otherChild.ID,
-		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &otherScope, WorkspaceBaselinePath: otherBaseline,
-	})
-	testutil.FailErr(t, "EnqueueWithProjectID other", err)
-	otherTask, _ := q.Get(otherJobID)
-	otherCtx := workercontext.WithJob(ctx, otherJobID)
-	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
-		observation.MountedAdapterViewCapabilities(otherJobID, "fuselinux", true, true, true, observation.CompletenessComplete),
-		otherJobID,
-	)
-	testutil.FailErr(t, "BindViewCapabilities other", err)
-	otherTctx, err := mgr.Workers.Workspaces.Enrich(otherCtx, otherChild, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: otherChild.ID, WorkerJobID: otherJobID},
-	})
-	testutil.FailErr(t, "Workspaces.Enrich other", err)
-	_, err = reg.Run(otherCtx, "read", map[string]any{"path": "pkg/dep.py"}, otherTctx)
-	testutil.FailErr(t, "ordinary ReadTool other", err)
-	otherVerifyMsg := currentVerifyPassedMessage(otherOverlay)
-	testutil.FailErr(t, "AppendMessages other", mem.AppendMessages(ctx, otherChild.ID, otherVerifyMsg))
-	mgr.Verification.RecordSourceRunTerminal(otherCtx, otherChild, parent.ID, verification.ProducerVerify, tools.SourceRunCapture{
-		CheckID: "check-verify-other", IsCheck: true, Command: "selected-check", Cwd: ".",
-		Verdict: api.SourceVerdictPassed, SourceRevision: rev, SourceRootDigest: rootDigest,
-	}, time.Now().UTC())
-	otherHistory, err := mem.GetMessages(ctx, otherChild.ID)
-	testutil.FailErr(t, "GetMessages other", err)
+	other := provisionUnrelatedObservedWorker(ctx, t, mgr, mem, reg, q, parent, rev, rootDigest)
 
 	workerCtx := workercontext.WithJob(ctx, jobID)
 	tctx, err := mgr.Workers.Workspaces.Enrich(workerCtx, child, tools.ToolContext{
@@ -168,6 +136,127 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	childHistory, err := mem.GetMessages(ctx, child.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
+	assertUnobservedAndPinnedChangesKeepProof(ctx, workerCtx, t, mgr, primary, child, task, childHistory, curRev)
+
+	// 3. Lower source change on observed pkg/dep.py via real repochange.Notify invalidates GateState & OverlaySourceProof and queues trunk.changed.
+	testutil.FailErr(t, "WriteFile dep v2", os.WriteFile(filepath.Join(primary, "pkg", "dep.py"), []byte("dep = 2\n"), 0o644))
+	repochange.Notify(ctx, repochange.Event{
+		ProjectDir: primary,
+		Kind:       repochange.WorktreeChanged,
+		Changes:    []repochange.WorktreeChange{{Path: "pkg/dep.py", Kind: repochange.WorktreeChangeStructural}},
+		Source:     repochange.SourceWatcher,
+	})
+	proofStale := session.OverlaySourceProof(workerworkspace.WithService(workerCtx, mgr.Workers.Workspaces), task, childHistory, "selected-check", curRev)
+	if status, _, _ := workercompletion.SourceEvidenceView(proofStale); status == workercompletion.EvidenceStatusSatisfied {
+		t.Fatalf("expected observed dependency change via repochange.Notify to invalidate OverlaySourceProof receipt, got %s", status)
+	}
+	assessment, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, task)
+	if !ok || !assessment.VerificationInvalidated || !assessment.Freshness.Stale || assessment.Freshness.StaleReason != observation.StaleReasonObservedDependencyChanged {
+		t.Fatalf("unexpected overlay assessment: %+v (ok=%v)", assessment, ok)
+	}
+	if len(assessment.StaleSourcePaths) != 1 || assessment.StaleSourcePaths[0] != depPath {
+		t.Fatalf("expected StaleSourcePaths=[%v], got %+v", depPath, assessment.StaleSourcePaths)
+	}
+	if passed, _, _ := mgr.Verification.GateState(workerCtx, child, childHistory); passed {
+		t.Fatal("expected Verification.GateState to be invalidated after observed lower path changed")
+	}
+
+	// Verify the second worker on otherPrimary was NOT invalidated or notified by events on primary.
+	if passed, _, _ := mgr.Verification.GateState(other.ctx, other.child, other.history); !passed {
+		t.Fatal("expected worker on unrelated root to remain passed after repochange on primary")
+	}
+	if otherAssess, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, other.task); !ok || otherAssess.VerificationInvalidated {
+		t.Fatalf("expected worker on unrelated root to remain fresh, got %+v (ok=%v)", otherAssess, ok)
+	}
+
+	// Next model turn preparation delivers trunk.changed once without interrupting in-flight calls.
+	turn1, err := mgr.Runner.Preparation.Build(workerCtx, child, child.ID, promptinput.Input{}, "")
+	testutil.FailErr(t, "Preparation.Build turn1", err)
+	if turn1.TrunkNotice == nil || turn1.TrunkNotice.GrantsAuthority || turn1.TrunkNotice.EstablishesMergeBase {
+		t.Fatalf("expected non-authoritative trunk.changed notice on turn 1, got %+v", turn1.TrunkNotice)
+	}
+	if len(turn1.Notices) != 1 || !strings.Contains(turn1.Notices[0], "trunk.changed") || !strings.Contains(turn1.Notices[0], "pkg/dep.py") {
+		t.Fatalf("unexpected turn 1 notices: %+v", turn1.Notices)
+	}
+	turn2, err := mgr.Runner.Preparation.Build(workerCtx, child, child.ID, promptinput.Input{}, "")
+	testutil.FailErr(t, "Preparation.Build turn2", err)
+	if turn2.TrunkNotice != nil || len(turn2.Notices) != 0 {
+		t.Fatalf("expected turn 2 not to duplicate consumed trunk.changed notice, got %+v", turn2.TrunkNotice)
+	}
+
+	// 4. Watcher overflow via real repochange.Notify (WorktreeChangeResync) marks matching root uncertain without affecting unrelated root.
+	repochange.Notify(ctx, repochange.Event{
+		ProjectDir: other.primary,
+		Kind:       repochange.WorktreeChanged,
+		Changes:    []repochange.WorktreeChange{{Path: ".", Kind: repochange.WorktreeChangeResync}},
+		Source:     repochange.SourceWatcher,
+	})
+	if otherAssess, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, other.task); !ok || !otherAssess.VerificationInvalidated || otherAssess.Freshness.StaleReason != observation.StaleReasonWatcherOverflowUncertain {
+		t.Fatalf("expected watcher resync event on otherPrimary to mark otherTask stale with watcher_overflow_uncertain, got %+v (ok=%v)", otherAssess, ok)
+	}
+
+	// 5. ReleaseReservations cleans up the scoped workspace tracker.
+	testutil.FailErr(t, "ReleaseReservations", mgr.Workers.Workspaces.ReleaseReservations(ctx, parent.ID, jobID))
+	if mgr.Workers.Workspaces.TrackerFor(jobID) != nil {
+		t.Fatal("expected ReleaseReservations to clean up scoped tracker for jobID")
+	}
+}
+
+type unrelatedObservedWorker struct {
+	ctx     context.Context
+	child   *api.Session
+	task    *api.WorkerTask
+	primary string
+	history []api.Message
+}
+
+// provisionUnrelatedObservedWorker starts a second worker on its own root, with an observation and
+// passing evidence, to show that events on the first root leave it alone.
+func provisionUnrelatedObservedWorker(
+	ctx context.Context, t *testing.T, mgr *session.Host, mem *store.Memory, reg *tools.StubRegistry, q *worker.InMemoryQueue,
+	parent *api.Session, rev, rootDigest string,
+) unrelatedObservedWorker {
+	t.Helper()
+	otherPrimary, otherOverlay, otherScope, otherBaseline := overlaySourceFixture(t)
+	otherChild, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	testutil.FailErr(t, "CreateChild other", err)
+	otherChild.WorkspacePath = otherPrimary
+	otherChild.ProjectID = testdbseed.DefaultProjectID
+	otherJobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
+		Prompt: "other", Brief: "other", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
+		WorkspacePath: otherPrimary, WorkspaceRoot: otherOverlay, ChildSessionID: otherChild.ID,
+		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &otherScope, WorkspaceBaselinePath: otherBaseline,
+	})
+	testutil.FailErr(t, "EnqueueWithProjectID other", err)
+	otherTask, _ := q.Get(otherJobID)
+	otherCtx := workercontext.WithJob(ctx, otherJobID)
+	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
+		observation.MountedAdapterViewCapabilities(otherJobID, "fuselinux", true, true, true, observation.CompletenessComplete),
+		otherJobID,
+	)
+	testutil.FailErr(t, "BindViewCapabilities other", err)
+	otherTctx, err := mgr.Workers.Workspaces.Enrich(otherCtx, otherChild, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: otherChild.ID, WorkerJobID: otherJobID},
+	})
+	testutil.FailErr(t, "Workspaces.Enrich other", err)
+	_, err = reg.Run(otherCtx, "read", map[string]any{"path": "pkg/dep.py"}, otherTctx)
+	testutil.FailErr(t, "ordinary ReadTool other", err)
+	otherVerifyMsg := currentVerifyPassedMessage(otherOverlay)
+	testutil.FailErr(t, "AppendMessages other", mem.AppendMessages(ctx, otherChild.ID, otherVerifyMsg))
+	mgr.Verification.RecordSourceRunTerminal(otherCtx, otherChild, parent.ID, verification.ProducerVerify, tools.SourceRunCapture{
+		CheckID: "check-verify-other", IsCheck: true, Command: "selected-check", Cwd: ".",
+		Verdict: api.SourceVerdictPassed, SourceRevision: rev, SourceRootDigest: rootDigest,
+	}, time.Now().UTC())
+	otherHistory, err := mem.GetMessages(ctx, otherChild.ID)
+	testutil.FailErr(t, "GetMessages other", err)
+	return unrelatedObservedWorker{ctx: otherCtx, child: otherChild, task: otherTask, primary: otherPrimary, history: otherHistory}
+}
+
+func assertUnobservedAndPinnedChangesKeepProof(
+	ctx, workerCtx context.Context, t *testing.T, mgr *session.Host, primary string, child *api.Session, task *api.WorkerTask,
+	childHistory []api.Message, curRev workercompletion.SourceRevision,
+) {
+	t.Helper()
 	// 1. Unobserved lower source change via real repochange.Notify keeps GateState and OverlaySourceProof valid.
 	testutil.FailErr(t, "WriteFile unrelated", os.WriteFile(filepath.Join(primary, "unrelated.py"), []byte("u = 2\n"), 0o644))
 	repochange.Notify(ctx, repochange.Event{
@@ -197,69 +286,6 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	}
 	if assembled, err := mgr.Runner.Preparation.Build(workerCtx, child, child.ID, promptinput.Input{}, ""); err != nil || assembled.TrunkNotice != nil {
 		t.Fatalf("expected no trunk.changed notice for unobserved/dirty-upper paths, got err=%v notice=%+v", err, assembled.TrunkNotice)
-	}
-
-	// 3. Lower source change on observed pkg/dep.py via real repochange.Notify invalidates GateState & OverlaySourceProof and queues trunk.changed.
-	testutil.FailErr(t, "WriteFile dep v2", os.WriteFile(filepath.Join(primary, "pkg", "dep.py"), []byte("dep = 2\n"), 0o644))
-	repochange.Notify(ctx, repochange.Event{
-		ProjectDir: primary,
-		Kind:       repochange.WorktreeChanged,
-		Changes:    []repochange.WorktreeChange{{Path: "pkg/dep.py", Kind: repochange.WorktreeChangeStructural}},
-		Source:     repochange.SourceWatcher,
-	})
-	proofStale := session.OverlaySourceProof(workerworkspace.WithService(workerCtx, mgr.Workers.Workspaces), task, childHistory, "selected-check", curRev)
-	if status, _, _ := workercompletion.SourceEvidenceView(proofStale); status == workercompletion.EvidenceStatusSatisfied {
-		t.Fatalf("expected observed dependency change via repochange.Notify to invalidate OverlaySourceProof receipt, got %s", status)
-	}
-	assessment, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, task)
-	if !ok || !assessment.VerificationInvalidated || !assessment.Freshness.Stale || assessment.Freshness.StaleReason != observation.StaleReasonObservedDependencyChanged {
-		t.Fatalf("unexpected overlay assessment: %+v (ok=%v)", assessment, ok)
-	}
-	if len(assessment.StaleSourcePaths) != 1 || assessment.StaleSourcePaths[0] != depPath {
-		t.Fatalf("expected StaleSourcePaths=[%v], got %+v", depPath, assessment.StaleSourcePaths)
-	}
-	if passed, _, _ := mgr.Verification.GateState(workerCtx, child, childHistory); passed {
-		t.Fatal("expected Verification.GateState to be invalidated after observed lower path changed")
-	}
-
-	// Verify the second worker on otherPrimary was NOT invalidated or notified by events on primary.
-	if passed, _, _ := mgr.Verification.GateState(otherCtx, otherChild, otherHistory); !passed {
-		t.Fatal("expected worker on unrelated root to remain passed after repochange on primary")
-	}
-	if otherAssess, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, otherTask); !ok || otherAssess.VerificationInvalidated {
-		t.Fatalf("expected worker on unrelated root to remain fresh, got %+v (ok=%v)", otherAssess, ok)
-	}
-
-	// Next model turn preparation delivers trunk.changed once without interrupting in-flight calls.
-	turn1, err := mgr.Runner.Preparation.Build(workerCtx, child, child.ID, promptinput.Input{}, "")
-	testutil.FailErr(t, "Preparation.Build turn1", err)
-	if turn1.TrunkNotice == nil || turn1.TrunkNotice.GrantsAuthority || turn1.TrunkNotice.EstablishesMergeBase {
-		t.Fatalf("expected non-authoritative trunk.changed notice on turn 1, got %+v", turn1.TrunkNotice)
-	}
-	if len(turn1.Notices) != 1 || !strings.Contains(turn1.Notices[0], "trunk.changed") || !strings.Contains(turn1.Notices[0], "pkg/dep.py") {
-		t.Fatalf("unexpected turn 1 notices: %+v", turn1.Notices)
-	}
-	turn2, err := mgr.Runner.Preparation.Build(workerCtx, child, child.ID, promptinput.Input{}, "")
-	testutil.FailErr(t, "Preparation.Build turn2", err)
-	if turn2.TrunkNotice != nil || len(turn2.Notices) != 0 {
-		t.Fatalf("expected turn 2 not to duplicate consumed trunk.changed notice, got %+v", turn2.TrunkNotice)
-	}
-
-	// 4. Watcher overflow via real repochange.Notify (WorktreeChangeResync) marks matching root uncertain without affecting unrelated root.
-	repochange.Notify(ctx, repochange.Event{
-		ProjectDir: otherPrimary,
-		Kind:       repochange.WorktreeChanged,
-		Changes:    []repochange.WorktreeChange{{Path: ".", Kind: repochange.WorktreeChangeResync}},
-		Source:     repochange.SourceWatcher,
-	})
-	if otherAssess, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, otherTask); !ok || !otherAssess.VerificationInvalidated || otherAssess.Freshness.StaleReason != observation.StaleReasonWatcherOverflowUncertain {
-		t.Fatalf("expected watcher resync event on otherPrimary to mark otherTask stale with watcher_overflow_uncertain, got %+v (ok=%v)", otherAssess, ok)
-	}
-
-	// 5. ReleaseReservations cleans up the scoped workspace tracker.
-	testutil.FailErr(t, "ReleaseReservations", mgr.Workers.Workspaces.ReleaseReservations(ctx, parent.ID, jobID))
-	if mgr.Workers.Workspaces.TrackerFor(jobID) != nil {
-		t.Fatal("expected ReleaseReservations to clean up scoped tracker for jobID")
 	}
 }
 
