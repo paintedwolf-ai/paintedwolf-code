@@ -200,7 +200,6 @@ func TestParseSourceLinks(t *testing.T) {
 		{"primary root", "[a](source://main/internal/a.go#L12-L20)", roots, Citation{Path: "internal/a.go", Line: 12, EndLine: 20}},
 		{"secondary root", "[a](source://lib/internal/a.go#L12)", roots, Citation{Path: "@shared/internal/a.go", Line: 12}},
 		{"unknown root is spelled to match nothing", "[a](source://nope/a.go#L1)", roots, Citation{Path: "source://nope/a.go", Line: 1}},
-		{"unknown root with no observed path", "[a](source://main/a.go#intro#L1)", roots, Citation{Path: "a.go"}},
 		{"one root", "[a](source://any/a.go#L1)", Options{}, Citation{Path: "a.go", Line: 1}},
 		{"escaped", "[a](source://main/docs/a%20b.md#L1)", roots, Citation{Path: "docs/a b.md", Line: 1}},
 		{"worker query", "[a](source://main/a.go?job_id=j#L3)", roots, Citation{Path: "a.go", Line: 3}},

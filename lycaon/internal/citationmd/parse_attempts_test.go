@@ -202,7 +202,7 @@ func TestRenderCreatesNoStructure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			doc := Parse(tc.source, Options{})
-			got := Render(doc, func(Occurrence) Rendition { return Rendition{} })
+			got := Render(doc, func(o Occurrence) Rendition { return Rendition{Keep: o.Link != nil} })
 			if got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
 			}
