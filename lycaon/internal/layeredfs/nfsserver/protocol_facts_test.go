@@ -337,10 +337,16 @@ func TestAppleDoubleMatchesTheKernelLayout(t *testing.T) {
 	if _, _, ok := nfsserver.DecodeAppleDoubleXattrs(reserved); ok {
 		t.Fatal("a set reserved word decoded as complete")
 	}
-	stray := bytes.Clone(real)
-	stray[0x200] = 1
-	if _, _, ok := nfsserver.DecodeAppleDoubleXattrs(stray); ok {
-		t.Fatal("bytes outside every field decoded as complete")
+	beforeData := bytes.Clone(real)
+	copy(beforeData[0x63:], []byte{0xc0}) // data_start past the table leaves bytes no field accounts for
+	if _, _, ok := nfsserver.DecodeAppleDoubleXattrs(beforeData); ok {
+		t.Fatal("a value outside the data area decoded as complete")
+	}
+	// Free space past the data area is the kernel's own leftovers, and holds no attribute.
+	free := bytes.Clone(real)
+	free[0x200] = 1
+	if _, got, ok := nfsserver.DecodeAppleDoubleXattrs(free); !ok || len(got) != 2 {
+		t.Fatalf("free space: %d attributes ok=%v", len(got), ok)
 	}
 }
 

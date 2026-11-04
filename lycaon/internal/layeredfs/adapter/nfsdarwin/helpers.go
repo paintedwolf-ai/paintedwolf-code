@@ -263,22 +263,13 @@ func normalizeRootGrants(grants []adapter.RootGrant) ([]layeredfs.RootSpec, stri
 	return coreRoots, primaryRoot, denyPaths, nil
 }
 
-func prepareProbeBaseDir(runtimeRoot string) (string, func(), error) {
+func prepareProbeBaseDir(runtimeRoot string) (string, error) {
 	if strings.TrimSpace(runtimeRoot) != "" {
 		if err := os.MkdirAll(runtimeRoot, 0o700); err != nil {
-			return "", nil, err
+			return "", err
 		}
-		d, err := os.MkdirTemp(runtimeRoot, "nfsdarwin-probe-*")
-		if err != nil {
-			return "", nil, err
-		}
-		return d, func() { _ = os.RemoveAll(d) }, nil
 	}
-	d, err := os.MkdirTemp("", "nfsdarwin-probe-*")
-	if err != nil {
-		return "", nil, err
-	}
-	return d, func() { _ = os.RemoveAll(d) }, nil
+	return os.MkdirTemp(runtimeRoot, "nfsdarwin-probe-*")
 }
 
 func classifyProbeError(err error) adapter.ReasonCode {

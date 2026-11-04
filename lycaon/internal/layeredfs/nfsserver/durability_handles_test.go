@@ -327,7 +327,7 @@ func TestOnlyACompleteSidecarWithATargetLeavesTheView(t *testing.T) {
 	valid := nfsserver.EncodeAppleDoubleXattrs([32]byte{}, map[string][]byte{"user.a": []byte("one")})
 
 	tamperedValue := bytes.Clone(valid)
-	tamperedValue[len(tamperedValue)-1] = 0x7f // a non-zero byte no field accounts for
+	tamperedValue[0x6c] = 0x7f // a reserved word no reader of the format would ignore
 	wrongCount := bytes.Clone(valid)
 	binary.BigEndian.PutUint16(wrongCount[118:], 200)
 	for name, content := range map[string][]byte{

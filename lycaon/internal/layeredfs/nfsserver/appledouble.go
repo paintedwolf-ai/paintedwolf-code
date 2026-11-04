@@ -113,10 +113,11 @@ func EncodeAppleDoubleXattrs(finderInfo [32]byte, xattrs map[string][]byte) []by
 	return out.Bytes()
 }
 
-// DecodeAppleDoubleXattrs parses a ._ file in the kernel's layout. It succeeds only if every non-zero
-// byte is accounted for by the header, Finder info, attribute table, a value or the resource fork, so
-// a success means the returned attributes are everything the file held. Non-zero Finder info and a
-// resource fork are reported under their attribute names, since that is how the view stores them.
+// DecodeAppleDoubleXattrs parses a ._ file in the kernel's layout. It succeeds only if the header,
+// table and values are consistent and no field that should be empty holds anything, so a success means
+// the returned attributes are everything a reader of the format can get from the file. The area past
+// the header's data length is free space the kernel does not clear when an attribute shrinks. Non-zero
+// Finder info and a resource fork are reported under their attribute names, as the view stores them.
 func DecodeAppleDoubleXattrs(data []byte) ([32]byte, map[string][]byte, bool) {
 	var finderInfo [32]byte
 	if len(data) < appleDoubleEntriesOff || binary.BigEndian.Uint32(data[0:4]) != appleDoubleMagic ||
@@ -138,7 +139,12 @@ func DecodeAppleDoubleXattrs(data []byte) ([32]byte, map[string][]byte, bool) {
 		return finderInfo, nil, false
 	}
 	copy(finderInfo[:], data[appleDoubleFinderOff:])
-	out, valueRanges, entriesEnd, ok := parseAppleDoubleAttrs(data, attrsEnd)
+	dataStart := uint64(binary.BigEndian.Uint32(data[appleDoubleAttrHdrOff+12:]))
+	dataEnd := dataStart + uint64(binary.BigEndian.Uint32(data[appleDoubleAttrHdrOff+16:]))
+	if dataEnd > attrsEnd {
+		return finderInfo, nil, false
+	}
+	out, entriesEnd, ok := parseAppleDoubleAttrs(data, dataStart, dataEnd)
 	if !ok {
 		return finderInfo, nil, false
 	}
@@ -148,66 +154,41 @@ func DecodeAppleDoubleXattrs(data []byte) ([32]byte, map[string][]byte, bool) {
 	if rsrcLen > 0 && !bytes.Equal(data[attrsEnd:], emptyResourceFork) {
 		out[resourceForkXattr] = append([]byte(nil), data[attrsEnd:]...)
 	}
-	if !restIsZero(data[:attrsEnd], entriesEnd, valueRanges) {
+	if !allZero(data[entriesEnd:dataStart]) || !allZero(data[appleDoubleFinderOff+32:appleDoubleAttrHdrOff]) ||
+		!allZero(data[appleDoubleAttrHdrOff+20:appleDoubleEntriesOff-2]) {
 		return finderInfo, nil, false
 	}
 	return finderInfo, out, true
 }
 
-// parseAppleDoubleAttrs walks the attribute table inside [0, attrsEnd) and returns the attributes,
-// where their values lie and where the table ends.
-func parseAppleDoubleAttrs(data []byte, attrsEnd uint64) (map[string][]byte, [][2]uint64, uint64, bool) {
+// parseAppleDoubleAttrs walks the attribute table, which ends at or before dataStart, and returns the
+// attributes and where the table ends. Every value lies inside the data area.
+func parseAppleDoubleAttrs(data []byte, dataStart, dataEnd uint64) (map[string][]byte, uint64, bool) {
 	count := int(binary.BigEndian.Uint16(data[appleDoubleEntriesOff-2:]))
 	out := make(map[string][]byte, count)
-	ranges := make([][2]uint64, 0, count)
 	cursor := uint64(appleDoubleEntriesOff)
 	for range count {
-		if cursor+11 > attrsEnd {
-			return nil, nil, 0, false
+		if cursor+11 > dataStart {
+			return nil, 0, false
 		}
 		valOff := uint64(binary.BigEndian.Uint32(data[cursor:]))
 		valLen := uint64(binary.BigEndian.Uint32(data[cursor+4:]))
 		flags := binary.BigEndian.Uint16(data[cursor+8:])
 		nameLen := uint64(data[cursor+10])
 		nameEnd := cursor + 11 + nameLen
-		if flags != 0 || nameLen < 2 || nameEnd > attrsEnd || data[nameEnd-1] != 0 {
-			return nil, nil, 0, false
+		if flags != 0 || nameLen < 2 || nameEnd > dataStart || data[nameEnd-1] != 0 {
+			return nil, 0, false
 		}
 		name := string(data[cursor+11 : nameEnd-1])
 		_, duplicate := out[name]
 		if duplicate || strings.IndexByte(name, 0) >= 0 || name == finderInfoXattr || name == resourceForkXattr ||
-			valOff < appleDoubleEntriesOff || valOff+valLen > attrsEnd {
-			return nil, nil, 0, false
+			valOff < dataStart || valOff+valLen > dataEnd {
+			return nil, 0, false
 		}
 		out[name] = append([]byte(nil), data[valOff:valOff+valLen]...)
-		ranges = append(ranges, [2]uint64{valOff, valOff + valLen})
 		cursor = (nameEnd + 3) &^ 3
 	}
-	if cursor > attrsEnd {
-		return nil, nil, 0, false
-	}
-	for _, r := range ranges {
-		if r[0] < cursor && r[1] > r[0] {
-			return nil, nil, 0, false
-		}
-	}
-	return out, ranges, cursor, true
-}
-
-// restIsZero checks everything no field accounts for: the attribute area beyond the table and outside
-// every value, the padding after the Finder info, and the ATTR header's reserved words and flags. The
-// header's debug tag and sizes are the kernel's bookkeeping, recomputed whenever it writes the file.
-func restIsZero(attrArea []byte, entriesEnd uint64, values [][2]uint64) bool {
-	sort.Slice(values, func(i, j int) bool { return values[i][0] < values[j][0] })
-	cursor := entriesEnd
-	for _, v := range values {
-		if v[0] > cursor && !allZero(attrArea[cursor:v[0]]) {
-			return false
-		}
-		cursor = max(cursor, v[1])
-	}
-	return allZero(attrArea[cursor:]) && allZero(attrArea[appleDoubleFinderOff+32:appleDoubleAttrHdrOff]) &&
-		allZero(attrArea[appleDoubleAttrHdrOff+20:appleDoubleEntriesOff-2])
+	return out, cursor, cursor <= dataStart
 }
 
 func allZero(b []byte) bool {

@@ -287,12 +287,13 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
 	}
 
-	probeBase, cleanupBase, err := prepareProbeBaseDir(probeCfg.RuntimeDir)
+	probeBase, err := prepareProbeBaseDir(probeCfg.RuntimeDir)
 	if err != nil {
 		res.ReasonCode, res.Diagnostic = adapter.ReasonMountDenied, err.Error()
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
 	}
-	defer cleanupBase()
+	// Runs after the probe view's release, and refuses to delete through a mount that outlived it.
+	defer func() { _ = a.removeRuntimeDir(probeBase) }()
 
 	trunkDir, backingDir, runtimeDir := filepath.Join(probeBase, "trunk"), filepath.Join(probeBase, "backing"), filepath.Join(probeBase, "runtime")
 	for _, d := range []string{trunkDir, backingDir, runtimeDir} {
