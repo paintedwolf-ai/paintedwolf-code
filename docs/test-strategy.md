@@ -662,7 +662,13 @@ first failed or unverified stage, and stages only it still needed stop;
 independent requests continue. A Go package failure (a failing test binary exit,
 a terminal package event, or a build failure) answers every request that needs
 the package while the stage is still running, and the receipt links that
-package's output. A package may pass despite an unrelated package failure only
+package's output. A Go recipe declaring `report_all_failures` (`test:short` and
+`test:contract`) instead finishes its packages before answering, so its receipt
+names every failing package; a known failure stays failed even if the stage is
+later interrupted. A request submitted with `PW_TEST_KEEP_GOING=1`, as the hosted
+`ready` lane does, runs all of its stages before answering. Neither changes
+admission, resource limits, or the exit status, and cancellation still stops the
+work. A package may pass despite an unrelated package failure only
 when its terminal Go event and the completed digest establish that result.
 Missing evidence and infrastructure interruptions are unverified. A Go stage
 whose packages hold test files behind a tier tag it does not enable (a tag some
@@ -868,8 +874,11 @@ it does not repeat admission contracts. Catalog validation requires each fast
 assertion stage exactly once across the jobs.
 Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests.
 Admission uses `test:contract -- ./test/contract/...`
-without a test-name filter. Failure or interruption stops the lane before its
-remaining work. Catalog validation accepts
+without a test-name filter. A failure does not stop the lane: `ready` runs every
+stage and reports every failing package in its receipts, job summary, and
+annotations, so repairs need not rediscover failures one run at a time. Only an
+interruption stops it. A retry with validated failure history retests those failures first and stops if one
+persists, because the earlier run already reported the rest. Catalog validation accepts
 the complete contract tree or existing contract packages and rejects selectors,
 traversal, and duplicate packages.
 Release corpus fixtures assert compatibility command arguments and failure

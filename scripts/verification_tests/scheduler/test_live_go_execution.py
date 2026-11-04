@@ -64,6 +64,35 @@ tasks:
         self.processes.append(process)
         return process
 
+    def test_every_independently_failing_package_reaches_the_receipt_and_annotations(self):
+        self.catalog["go"]["test:digest"]["report_all_failures"] = True
+        self.save_catalog()
+        # Started later than the first failure's report, so termination would lose this outcome.
+        slow = self.repo / "lycaon" / "slowbad"
+        slow.mkdir(exist_ok=True)
+        (slow / "fixture_test.go").write_text(
+            'package slowbad\nimport ("testing"; "time")\n'
+            'func TestSlow(t *testing.T) { time.Sleep(3 * time.Second); t.Fatal("second independent failure") }\n')
+        self.git("add", ".")
+        self.git("-c", "user.name=Verification fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "Second failure")
+        run = self.start("test:digest", "--", "./bad", "./slowbad", "./good")
+        self.queued(1)
+        self.queue.resume()
+        self.collect(run, 1)
+        receipt = self.receipts()[0]
+        results = receipt["evidence"][0]["results"]
+        self.assertEqual(results["fixture/bad"]["status"], "failed")
+        self.assertEqual(results["fixture/slowbad"]["status"], "failed")
+        self.assertEqual(results["fixture/slowbad"]["tests"], ["TestSlow"])
+        self.assertEqual(results["fixture/good"]["status"], "passed")
+        directory = self.artifacts / "verification" / receipt["batch_id"]
+        events = [json.loads(line) for line in (directory / "stage-001-events.jsonl").read_text().splitlines()]
+        self.assertFalse([event for event in events if event["exit_code"] < 0])
+        from ci_policy.verification_report import annotation, failures
+        annotations = [annotation(failure) for failure in failures(self.artifacts)]
+        self.assertIn("::error title=test:digest failed::fixture/bad: TestFixture", annotations)
+        self.assertIn("::error title=test:digest failed::fixture/slowbad: TestSlow", annotations)
+
     def test_real_task_snapshot_go_digest_and_per_request_outcomes(self):
         first = self.start("test:digest", "--", "./good", "./shared")
         self.queued(1)
