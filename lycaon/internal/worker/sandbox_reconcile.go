@@ -108,10 +108,7 @@ func RecoverWorkerViewsAtStartup(ctx context.Context, queue WorkerQueue, views W
 
 func settleRecoveredTask(ctx context.Context, queue WorkerQueue, task *api.WorkerTask, report recovery.WorkerRuntimeReport) error {
 	if !report.Deletable() {
-		// The cancellation fence stops any claim, and its recovery retries settlement until
-		// the job can finish without deleting what custody still protects.
-		_, err := queue.RequestCancellation(ctx, task.ID)
-		return err
+		return fenceUnresolvedTask(ctx, queue, task.ID)
 	}
 	if !report.HadRuntime {
 		return nil
@@ -125,6 +122,13 @@ func settleRecoveredTask(ctx context.Context, queue WorkerQueue, task *api.Worke
 	}
 	lease.Release()
 	return nil
+}
+
+// fenceUnresolvedTask stops any claim. Cancellation recovery then retries settlement until the
+// job can finish without deleting what custody still protects.
+func fenceUnresolvedTask(ctx context.Context, queue WorkerQueue, jobID string) error {
+	_, err := queue.RequestCancellation(ctx, jobID)
+	return err
 }
 
 func failRecoveredTask(ctx context.Context, queue WorkerQueue, task *api.WorkerTask, failure *ViewRecoveryError) error {
