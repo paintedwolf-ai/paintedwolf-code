@@ -379,8 +379,9 @@ func (t *SourceHistoryTool) runVersion(
 		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_NOT_FOUND",
 			Data: map[string]any{
-				"version_id": versionID,
-				"detail":     fmt.Sprintf("version %s was not found in this project", versionID),
+				"source_history_offered": true,
+				"version_id":             versionID,
+				"detail":                 fmt.Sprintf("version %s was not found in this project", versionID),
 			},
 		}
 	}

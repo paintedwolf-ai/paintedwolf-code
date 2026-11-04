@@ -176,6 +176,14 @@ func expectReject(t *testing.T, err error, code string) *toolrejection.ToolRejec
 	return reject
 }
 
+// A source_history reject comes from a call to the tool, so its copy may name it.
+func expectNotFoundFromHistory(t *testing.T, err error) {
+	t.Helper()
+	if reject := expectReject(t, err, "SOURCE_VERSION_NOT_FOUND"); reject.Data["source_history_offered"] != true {
+		t.Fatalf("reject data = %+v, want source_history_offered", reject.Data)
+	}
+}
+
 func TestSourceHistoryDiffACDF06BaseAloneNeedsAVersion(t *testing.T) {
 	h := newHistoryHarness(t)
 	h.beginSession(historySession)
@@ -407,11 +415,11 @@ func TestSourceHistoryDiffExplicitPathRejections(t *testing.T) {
 	h.writeFile("untracked.go", "x\n")
 
 	_, err := h.diff(map[string]any{"path": "a.go", "version_id": "missing"})
-	expectReject(t, err, "SOURCE_VERSION_NOT_FOUND")
+	expectNotFoundFromHistory(t, err)
 	_, err = h.diff(map[string]any{"path": "a.go", "version_id": other})
 	expectReject(t, err, "SOURCE_VERSION_PATH_MISMATCH")
 	_, err = h.diff(map[string]any{"path": "untracked.go", "version_id": version, "base_version_id": "head"})
-	expectReject(t, err, "SOURCE_VERSION_NOT_FOUND")
+	expectNotFoundFromHistory(t, err)
 }
 
 func TestSourceHistoryDiffReportsLedgerFailures(t *testing.T) {
@@ -451,7 +459,7 @@ func TestSourceHistoryDiffReportsLedgerFailures(t *testing.T) {
 	}
 	withFiles(failingDiffFiles{SourceFileHistory: real, head: head, found: true}, fixedComparison{err: sourceledger.ErrHistoryNotFound})
 	_, err := h.diff(map[string]any{"path": "a.go"})
-	expectReject(t, err, "SOURCE_VERSION_NOT_FOUND")
+	expectNotFoundFromHistory(t, err)
 
 	h.tctx.Source.History = tools.SourceHistory{}
 	_, err = h.diff(map[string]any{"path": "a.go"})
