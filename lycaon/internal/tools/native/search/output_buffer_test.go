@@ -50,7 +50,8 @@ func TestPipeOutputGroupsRecordsInBoundedWrites(t *testing.T) {
 	if stdout.String() != want.String() {
 		t.Fatalf("output differs: %d bytes, want %d", stdout.Len(), want.Len())
 	}
-	if limit := want.Len()/outputBufferBytes + 2; stdout.writes > limit {
+	// Delivery splits held output into the sink's 32 KiB pipe chunks.
+	if limit := want.Len()/(32<<10) + 2; stdout.writes > limit {
 		t.Fatalf("%d records took %d writes, want at most %d", lines, stdout.writes, limit)
 	}
 }
