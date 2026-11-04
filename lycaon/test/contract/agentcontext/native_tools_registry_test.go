@@ -1,13 +1,16 @@
 package contract
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
@@ -47,16 +50,11 @@ func TestNativeToolsManifestHasToolSchemas(t *testing.T) {
 
 func TestNativeToolsReadRejectsDirectoryListing(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	// Every content tool refuses directories through sourceview.ReadContentCapped.
-	ingestGo, err := os.ReadFile(filepath.Join(root, "lycaon", "internal", "tools", "native", "sourceview", "ingest.go"))
-	contractcheck.FailErr(t, "read ingest.go", err)
-	if !strings.Contains(string(ingestGo), "DirectoryReject(displayPath)") {
-		t.Fatal("ReadContentCapped must reject directories through DirectoryReject")
-	}
-	rejectsGo, err := os.ReadFile(filepath.Join(root, "lycaon", "internal", "tools", "native", "sourceview", "rejects.go"))
-	contractcheck.FailErr(t, "read rejects.go", err)
-	if !strings.Contains(string(rejectsGo), `Code: "READ_IS_DIRECTORY"`) {
-		t.Fatal("DirectoryReject must retain READ_IS_DIRECTORY")
+	root := t.TempDir()
+	contractcheck.FailErr(t, "mkdir", os.Mkdir(filepath.Join(root, "dir"), 0o755))
+	_, err := sourceview.ReadContentCapped("read", sourceview.Access{}, fseffect.Location{Root: root, Rel: "dir"}, "dir", false, 1024)
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" {
+		t.Fatalf("reading a directory = %v, want READ_IS_DIRECTORY", err)
 	}
 }

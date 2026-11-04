@@ -1,6 +1,9 @@
 package contract
 
 import (
+	"archive/zip"
+	"bytes"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -9,6 +12,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -46,7 +54,7 @@ func TestGitBoundaryEngine(t *testing.T) {
 	assertGitBoundaryNeutralizePrefixIntact(t, root)
 	assertGitBoundaryHooksOffNotOptional(t, root)
 	assertGitBoundaryPinFailsClosed(t, root)
-	assertGitBoundaryWriteSinksWired(t, root)
+	assertGitBoundaryWriteSinksWired(t)
 	assertGitBoundaryNoticeUnits(t, root)
 }
 
@@ -157,25 +165,27 @@ func assertGitBoundaryNoConfigWrites(t *testing.T, root string) {
 
 func assertGitBoundaryNeutralizePrefixIntact(t *testing.T, root string) {
 	t.Helper()
-	src := contractcheck.ReadRepoFile(t, root, "lycaon/internal/gitexec/neutralize.go")
+	neutralize := contractcheck.ParseRepoGoFile(t, root, "lycaon/internal/gitexec/neutralize.go")
+	keys := contractcheck.StringLiterals(contractcheck.PackageVar(t, neutralize, "neutralizePrefixKeys"))
 	for _, key := range gitBoundaryNeutralizeKeys {
-		needle := `"` + key + `"`
-		if !strings.Contains(src, needle) {
+		if !keys[key] {
 			t.Fatalf("neutralizePrefixKeys missing %s — do not drop a neutralization key", key)
 		}
 	}
 	// The emitted prefix includes hooksPath neutralization.
-	if !strings.Contains(src, "core.hooksPath=") {
+	if !contractcheck.StringLiterals(contractcheck.TopLevelFunc(t, neutralize, "neutralizeArgs"))["core.hooksPath="] {
 		t.Fatal("neutralizeArgs must emit core.hooksPath=")
 	}
+	flags := contractcheck.StringLiterals(contractcheck.PackageVar(t, neutralize, "diffDriverFlags"))
 	for _, flag := range gitBoundaryDiffDriverFlags {
-		if !strings.Contains(src, `"`+flag+`"`) {
+		if !flags[flag] {
 			t.Fatalf("diffDriverFlags missing %s — the diff machinery would run a repository-declared program", flag)
 		}
 	}
-	cfg := contractcheck.ReadRepoFile(t, root, "lycaon/internal/gitexec/repoconfig.go")
+	config := contractcheck.ParseRepoGoFile(t, root, "lycaon/internal/gitexec/repoconfig.go")
+	families := contractcheck.KeyedStrings(contractcheck.PackageVar(t, config, "executableSubsectionFamilies"), "Section")
 	for _, section := range gitBoundaryRefusedConfigFamilies {
-		if !strings.Contains(cfg, `Section:     "`+section+`"`) && !strings.Contains(cfg, `Section:   "`+section+`"`) {
+		if !families[section] {
 			t.Fatalf("executableSubsectionFamilies missing %q — a repository could declare an executable driver this host cannot disable", section)
 		}
 	}
@@ -230,48 +240,60 @@ func funcCallsIdent(fd *ast.FuncDecl, name string) bool {
 
 func assertGitBoundaryPinFailsClosed(t *testing.T, root string) {
 	t.Helper()
-	resolveSrc := contractcheck.ReadRepoFile(t, root, "lycaon/internal/gitengine/resolve.go")
-	if !strings.Contains(resolveSrc, `Reason:   "version_mismatch"`) &&
-		!strings.Contains(resolveSrc, `Reason: "version_mismatch"`) {
+	resolve := contractcheck.ParseRepoGoFile(t, root, "lycaon/internal/gitengine/resolve.go")
+	if !contractcheck.KeyedStrings(resolve, "Reason")["version_mismatch"] {
 		t.Fatal("assertPinnedVersion must return UnavailableError{Reason: version_mismatch}")
 	}
-	// Version mismatches stop engine resolution.
+	// Version mismatches stop engine resolution, so the package logs no warning it could continue past.
 	engineDir := filepath.Join(root, "lycaon", "internal", "gitengine")
-	err := filepath.WalkDir(engineDir, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
-			return walkErr
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		text := string(src)
-		for _, bad := range []string{"slog.Warn", "log.Printf", "log.Println", "log.Warn"} {
-			if strings.Contains(text, bad) && strings.Contains(strings.ToLower(text), "version") {
-				t.Errorf("%s: %s near version handling — pin assertion must fail closed, not warn", path, bad)
+	_, files := contractcheck.ParseNonTestGoTree(t, engineDir)
+	for _, file := range files {
+		for _, call := range [][2]string{{"slog", "Warn"}, {"log", "Printf"}, {"log", "Println"}, {"log", "Warn"}} {
+			if contractcheck.CallsSelector(file, call[0], call[1]) {
+				t.Errorf("%s calls %s.%s — pin assertion must fail closed, not warn", file.Name.Name, call[0], call[1])
 			}
 		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk gitengine", err)
+	}
 }
 
-func assertGitBoundaryWriteSinksWired(t *testing.T, root string) {
+// assertGitBoundaryWriteSinksWired drives each write sink. The class distinguishes the Git write guard
+// from the broader metadata floor beneath it, which would refuse these paths without naming one.
+func assertGitBoundaryWriteSinksWired(t *testing.T) {
 	t.Helper()
-	resolveWrite := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/projectpaths/projectpaths.go")
-	if !strings.Contains(resolveWrite, "CheckNativeGitMetadataPath") {
-		t.Fatal("ResolveWrite must call CheckNativeGitMetadataPath")
+	project := t.TempDir()
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: "project"},
+		Source: tools.InvocationSource{
+			Roots:        []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID: "root",
+		},
 	}
-	metadata := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/gitinternals.go")
-	if !strings.Contains(metadata, "IsGitInternalsWritePath(relPath)") {
-		t.Fatal("CheckNativeGitMetadataPath must call IsGitInternalsWritePath")
+	for path, class := range map[string]string{".git/config": "config", ".git/hooks/pre-commit": "hooks"} {
+		_, err := projectpaths.ResolveWrite(t.Context(), nil, tctx, path)
+		assertGitInternalsDenied(t, "ResolveWrite "+path, err, class)
 	}
-	extract := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/native/extract_archive.go")
-	if !strings.Contains(extract, "IsGitInternalsWritePath") {
-		t.Fatal("extract_archive per-entry guard must call IsGitInternalsWritePath")
+
+	var archive bytes.Buffer
+	zipped := zip.NewWriter(&archive)
+	entry, err := zipped.Create(".git/hooks/pre-commit")
+	contractcheck.FailErr(t, "zip entry", err)
+	_, err = entry.Write([]byte("#!/bin/sh\n"))
+	contractcheck.FailErr(t, "zip content", err)
+	contractcheck.FailErr(t, "zip close", zipped.Close())
+	contractcheck.FailErr(t, "write archive", os.WriteFile(filepath.Join(project, "a.zip"), archive.Bytes(), 0o644))
+	tool := &native.ExtractArchiveTool{Boundary: contractcheck.ProdToolBoundary(t)}
+	_, err = tool.Run(t.Context(), map[string]any{"path": "a.zip", "dest": "out"}, tctx)
+	assertGitInternalsDenied(t, "extract_archive", err, "hooks")
+	if _, err := os.Lstat(filepath.Join(project, "out", ".git", "hooks", "pre-commit")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a refused archive entry reached the project: %v", err)
+	}
+}
+
+func assertGitInternalsDenied(t *testing.T, sink string, err error, class string) {
+	t.Helper()
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" || reject.Data["class"] != class {
+		t.Fatalf("%s = %v, want GIT_INTERNALS_WRITE_DENIED of class %s", sink, err, class)
 	}
 }
 
