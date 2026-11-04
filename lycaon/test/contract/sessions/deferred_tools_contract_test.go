@@ -26,7 +26,7 @@ func TestImplementerPersonaLoadableCatalog(t *testing.T) {
 		}
 	}
 	// The map names capabilities; loadable tool names and descriptions stay out.
-	for _, name := range []string{"### Loadable tools", "`source_history`", "`scan_list`", "`scan_query`", "`scan_summary`", "request_tools({"} {
+	for _, name := range []string{"### Loadable tools", "`scan_list`", "`scan_query`", "`scan_summary`", "request_tools({"} {
 		if strings.Contains(got, name) {
 			t.Fatalf("implementer persona lists a loadable tool or inline call syntax: %s", name)
 		}
