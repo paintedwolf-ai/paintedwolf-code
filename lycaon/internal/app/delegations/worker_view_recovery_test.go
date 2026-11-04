@@ -148,6 +148,17 @@ func TestFailedPromotionKeepsCheckpointForRepairAcrossRestart(t *testing.T) {
 			if _, landed, err := engine.Recovery.LoadLandingReceipt("cp-A"); err != nil || landed {
 				t.Fatalf("failed promotion recorded a landing: landed=%t err=%v", landed, err)
 			}
+			// PromoteStackedCheckpoint applies through Promoter.Apply, which resumes on retry rather than rolling back.
+			raw, err := os.ReadFile(filepath.Join(f.project, "app.txt"))
+			testutil.FailErr(t, "read target", err)
+			if string(raw) != "checkpoint-A\n" {
+				t.Fatalf("target after %s = %q", step, raw)
+			}
+			_, err = engine.Recovery.PromoteStackedCheckpoint(t.Context(), request)
+			testutil.FailErr(t, "retry promotion", err)
+			if _, landed, err := engine.Recovery.LoadLandingReceipt("cp-A"); err != nil || !landed {
+				t.Fatalf("retry did not land: landed=%t err=%v", landed, err)
+			}
 		})
 	}
 }
