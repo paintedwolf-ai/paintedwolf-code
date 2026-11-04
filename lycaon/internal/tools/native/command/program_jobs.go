@@ -367,7 +367,9 @@ func (j *SessionJobs) Number(handle string) int {
 func (j *SessionJobs) reap(handle string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	j.order = slices.DeleteFunc(j.order, func(current string) bool { return current == handle })
+	isHandle := func(current string) bool { return current == handle }
+	j.order = slices.DeleteFunc(j.order, isHandle)
+	j.programOrder = slices.DeleteFunc(j.programOrder, isHandle)
 	delete(j.numbers, handle)
 }
 
@@ -408,12 +410,14 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string, activity *comm
 			}
 		}()
 	}
-	if _, _, err := j.Registry.Lifecycle.Wait(ctx, j.SessionID, handle); err != nil {
-		return toolcontract.ProducerResult{}, jobLookupError(err, handle)
-	}
+	_, _, waitErr := j.Registry.Lifecycle.Wait(ctx, j.SessionID, handle)
 	j.mu.Lock()
 	outcome, ok := j.results[handle]
 	j.mu.Unlock()
+	// The registry keeps few finished jobs; this table keeps every outcome.
+	if waitErr != nil && !(ok && errors.Is(waitErr, bgprocess.ErrProcessNotFound)) {
+		return toolcontract.ProducerResult{}, jobLookupError(waitErr, handle)
+	}
 	if !ok {
 		return toolcontract.ProducerResult{}, fmt.Errorf("job %s settled without an outcome", handle)
 	}

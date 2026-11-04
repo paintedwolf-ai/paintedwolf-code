@@ -7,47 +7,31 @@ import (
 	"github.com/lycaon/lycaon/test/commandconformance"
 )
 
-// Each status is what bash -o pipefail reports for the program in a tree with no
-// repository. The reference starts with pipefail because the language always has
-// it, so a failing producer fails its pipeline whichever owner ran each stage.
-func TestPipelineAndJobStatusesMatchReferenceShell(t *testing.T) {
+// The status-* corpus cases compare every composition with bash. These cover what
+// a reference shell cannot run: the external selector and a stopped job, whose
+// shell diagnostic carries a process ID.
+func TestCommandEntryStatusesBeyondReferenceShell(t *testing.T) {
 	runner := newConformanceRunner(t, gate.PostureLight, true)
 	for _, c := range []struct {
 		name    string
 		program string
 		status  int
-		stdout  string
 	}{
-		{name: "native git into native", program: `git status | cat`, status: 128},
-		{name: "native builtin into native", program: `false | cat`, status: 1},
-		{name: "native utility into native", program: `cat missing.txt | cat`, status: 1},
-		{name: "native git into external", program: `git status | external -- /bin/cat`, status: 128},
-		{name: "native utility into external", program: `cat missing.txt | external -- /bin/cat`, status: 1},
-		{name: "external into native", program: `external -- /usr/bin/false | cat`, status: 1},
-		{name: "external into external", program: `external -- /usr/bin/false | external -- /bin/cat`, status: 1},
-		{name: "pipe statuses keep each stage", program: `false | true; printf '%s\n' "${PIPESTATUS[*]}"`, stdout: "1 0\n"},
-
-		{name: "bare wait after native git", program: `git status & wait`},
-		{name: "bare wait after native builtin", program: `false & wait`},
-		{name: "bare wait after native utility", program: `cat missing.txt & wait`},
-		{name: "bare wait after external", program: `external -- /usr/bin/false & wait`},
+		{name: "native into selected external", program: `git status | external -- /bin/cat`, status: 128},
+		{name: "selected external into native", program: `external -- /usr/bin/false | cat`, status: 1},
+		{name: "selected external into selected external", program: `external -- /usr/bin/false | external -- /bin/cat`, status: 1},
+		{name: "bare wait after selected external", program: `external -- /usr/bin/false & wait`},
+		{name: "waited selected external", program: `external -- /usr/bin/false & wait $!`, status: 1},
 		{name: "bare wait after a stopped job", program: `sleep 30 & kill %1; wait`},
-		{name: "bare wait sets the next status", program: `false & wait; printf 'after:%s\n' "$?"`, stdout: "after:0\n"},
-		{name: "bare wait with no jobs", program: `wait`},
-
-		{name: "waited pid after native git", program: `git status & wait $!`, status: 128},
-		{name: "waited job after native git", program: `git status & wait %1`, status: 128},
-		{name: "waited pid after native builtin", program: `false & wait $!`, status: 1},
-		{name: "waited pid after external", program: `external -- /usr/bin/false & wait $!`, status: 1},
-		{name: "last waited operand decides", program: `true & a=$!; false & b=$!; wait "$a" "$b"; printf '%s\n' "$?"; true & a=$!; false & b=$!; wait "$b" "$a"; printf '%s\n' "$?"`, stdout: "1\n0\n"},
+		{name: "waited stopped job", program: `sleep 30 & kill %1; wait %1`, status: 143},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			obs := runner.runCase(t, commandconformance.Case{ID: "status-" + c.name, Program: c.program})
 			if obs.TopLevelReject != "" || obs.Outcome.Refusal != nil {
 				t.Fatalf("unexpected refusal: %+v", obs)
 			}
-			if obs.Outcome.Status != c.status || obs.Outcome.Stdout != c.stdout {
-				t.Fatalf("status = %d stdout = %q, want %d %q", obs.Outcome.Status, obs.Outcome.Stdout, c.status, c.stdout)
+			if obs.Outcome.Status != c.status {
+				t.Fatalf("status = %d, want %d", obs.Outcome.Status, c.status)
 			}
 		})
 	}
