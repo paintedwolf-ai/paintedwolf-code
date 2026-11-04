@@ -75,6 +75,7 @@ func (f *branchScopeFixture) workerContext() tools.ToolContext {
 	tc := f.tc
 	tc.Identity.WorkerJobID = branchScopeWorker.String()
 	tc.Source.WorkerBranchRoot = f.dir
+	tc.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
 	tc.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
 	return tc
 }
@@ -158,7 +159,7 @@ func TestSourceHistoryBranchScope(t *testing.T) {
 		}
 	})
 
-	t.Run("AC-BR-05 read stamp names the newest effect on the read's branch", func(t *testing.T) {
+	t.Run("AC-BR-05 read stamp names the newest effect on the reading branch", func(t *testing.T) {
 		f := newBranchScopeFixture(t)
 		f.record(sourcebranch.Trunk, 2)
 		f.record(branchScopeWorker, 1)
