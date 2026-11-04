@@ -60,16 +60,6 @@ type SourceRunCapture struct {
 	Cwd              string
 }
 
-// AgentNoteCapture is a grounded note produced by one invocation.
-type AgentNoteCapture struct {
-	SourceContext *api.SourceContext
-	MessageID     string
-	Content       string
-	Grounding     *api.CitationGrounding
-	// ArtifactIDs lists stills shown with the note.
-	ArtifactIDs []string
-}
-
 // ToolInvocationOut collects host-side invocation outputs.
 type ToolInvocationOut struct {
 	// DisplaySubject names the resolved target before durable secret screening.
@@ -89,7 +79,6 @@ type ToolInvocationOut struct {
 	OverlayPromotion *api.OverlayPromotion
 	FileEdit         *FileEditCapture
 	Visual           *VisualCapture
-	AgentNote        *AgentNoteCapture
 	// ExternalAccess is Den UI metadata for exceptional external-access on this result.
 	ExternalAccess *api.ExternalAccess
 	// Skill is Den UI metadata for the skill a skills_read activation resolved to.

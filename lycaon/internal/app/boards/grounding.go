@@ -94,19 +94,6 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	}, r.Findings, r.rootSessionKey); err != nil {
 		return fmt.Errorf("record_finding tool: %w", err)
 	}
-	if err := native.RegisterSurfaceNoteTool(r.deps.Execution.Host.Registry, reporttools.SurfaceNoteDeps{
-		Ledger: r.deps.Sessions.Manager.Verification.Evidence,
-		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
-			return r.deps.Storage.Sessions.GetMessages(ctx, sessionID)
-		},
-		Friction: func(ctx context.Context, sessionID, code string) {
-			if r.deps.Sessions != nil && r.deps.Sessions.Manager != nil {
-				r.deps.Sessions.Manager.Runner.Closeouts.RecordGroundingFriction(ctx, sessionID)
-			}
-		},
-	}); err != nil {
-		return fmt.Errorf("surface_note tool: %w", err)
-	}
 	r.Progress = progress.NewSQLStore(r.deps.Storage.Database)
 	r.deps.Workflows.Manager.Fanout.Progress = r.Progress
 	r.deps.Sessions.Manager.SetProgressStore(r.Progress)

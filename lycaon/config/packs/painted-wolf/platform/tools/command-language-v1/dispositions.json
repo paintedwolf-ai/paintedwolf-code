@@ -2262,28 +2262,6 @@
       ]
     },
     {
-      "tool": "surface_note",
-      "owner": "sessions",
-      "disposition": "retain-domain-structured",
-      "command": "",
-      "lifecycle": "db_transaction",
-      "reuse": "Existing native registration and complete typed operation; preserve owner guidance and history. Test reference is stock catalog-closure evidence only; utility records carry operation/adjacent-test references. No unchanged domain algorithm qualification is claimed.",
-      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/surface_note.yaml",
-      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
-      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
-      "selected_disposition": "Retain domain capability",
-      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
-      "existing_semantic_difference": "Host-owned sessions state and lifecycle; see current description",
-      "implementing_issues": [
-        "P10",
-        "P24",
-        "P32",
-        "P33"
-      ],
-      "existing_rejection_code": "",
-      "command_forms": []
-    },
-    {
       "tool": "survey_repo",
       "owner": "survey",
       "disposition": "retain-structured-and-command",

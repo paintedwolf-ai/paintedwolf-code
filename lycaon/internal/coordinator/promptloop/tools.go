@@ -43,7 +43,6 @@ type toolCaptures struct {
 	ownerRef         string
 	fileEdit         *tools.FileEditCapture
 	visual           *tools.VisualCapture
-	note             *tools.AgentNoteCapture
 	externalAccess   *api.ExternalAccess
 	displaySubject   string
 	skill            *api.SkillActivation
@@ -114,7 +113,6 @@ func (t toolInvocation) refusedBy(reject *guidance.Refusal) toolInvocation {
 	// The final refusal selects the card; earlier observations remain attached.
 	t.facts = reject.Facts.Merge(t.facts)
 	t.reject = reject
-	t.captures.note = nil
 	return t
 }
 
@@ -422,8 +420,8 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		overlayPromotion: out.OverlayPromotion,
 		sourceContext:    out.SourceContext,
 		ownerRef:         out.OwnerRef, fileEdit: out.FileEdit, visual: out.Visual,
-		note: out.AgentNote, externalAccess: out.ExternalAccess,
-		skill: out.Skill, process: out.Process, verdict: out.Verdict,
+		externalAccess: out.ExternalAccess,
+		skill:          out.Skill, process: out.Process, verdict: out.Verdict,
 		commandProgram: out.CommandProgram,
 		sourceRun:      out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
 		retrievedFrom: out.RetrievedFrom,

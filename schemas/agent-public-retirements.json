@@ -8,32 +8,61 @@
   },
   "vocabularies": {
     "host_facts": {
+      "paintedwolf.habit_redirect_match": [
+        "paintedwolf.native_operation",
+        "paintedwolf.native_command"
+      ],
+      "paintedwolf.has_completion_report": [
+        "paintedwolf.closeout_has_answer"
+      ],
       "paintedwolf.high_risk_tool": [
         "paintedwolf.tool_is_state",
         "paintedwolf.tool_is_delegation",
         "paintedwolf.tool_is_handoff",
         "paintedwolf.tool_is_task"
       ],
-      "paintedwolf.relocated_field": [
-        "paintedwolf.misplaced_fields",
-        "paintedwolf.found_under",
-        "paintedwolf.belongs_under"
-      ],
       "paintedwolf.nested_under": [
         "paintedwolf.misplaced_fields",
         "paintedwolf.found_under",
         "paintedwolf.belongs_under"
       ],
+      "paintedwolf.relocated_field": [
+        "paintedwolf.misplaced_fields",
+        "paintedwolf.found_under",
+        "paintedwolf.belongs_under"
+      ],
+      "paintedwolf.surface_note_offered": {
+        "content_contract": "paintedwolf.markdown_note",
+        "version": 1
+      },
       "paintedwolf.unparsed_json": [
         "paintedwolf.json_encoded",
         "paintedwolf.json_malformed"
-      ],
-      "paintedwolf.habit_redirect_match": [
-        "paintedwolf.native_operation",
-        "paintedwolf.native_command"
       ]
     },
     "rejection_codes": {
+      "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": [
+        "COORDINATOR_CLOSEOUT_NO_ANSWER"
+      ],
+      "SURFACE_NOTE_ARTIFACT_UNKNOWN": [
+        "MID_TURN_NOTE_ARTIFACT_UNKNOWN"
+      ],
+      "SURFACE_NOTE_HANDLE_UNGROUND": [
+        "MID_TURN_NOTE_HANDLE_UNGROUND"
+      ],
+      "SURFACE_NOTE_INVALID_ARGS": [
+        "MID_TURN_NOTE_INVALID_SYNTAX"
+      ],
+      "SURFACE_NOTE_UNGROUNDED": [
+        "MID_TURN_NOTE_UNGROUNDED"
+      ],
+      "SURFACE_NOTE_URL_ONLY_UNGROUND": [
+        "MID_TURN_NOTE_URL_ONLY_UNGROUND"
+      ],
+      "SURFACE_NOTE_WORKER_SESSION": {
+        "content_contract": "paintedwolf.markdown_note",
+        "version": 1
+      },
       "USE_CHMOD_NATIVE": [
         "COMMAND_NATIVE_FORM_UNSUPPORTED"
       ],
@@ -89,7 +118,12 @@
         "COMMAND_NATIVE_FORM_UNSUPPORTED"
       ]
     },
-    "tools": {},
+    "tools": {
+      "surface_note": {
+        "content_contract": "paintedwolf.markdown_note",
+        "version": 1
+      }
+    },
     "workflow_terms": {},
     "anchors": {},
     "themes": {}

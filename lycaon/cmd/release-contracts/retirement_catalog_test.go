@@ -158,3 +158,22 @@ func TestShippedRetirementCatalogDeclaresMarkdownNote(t *testing.T) {
 		t.Fatalf("string successors changed form: %+v", successors)
 	}
 }
+
+// AC-COMPAT-03: a name list passes the checker whenever its names exist, so only
+// the shipped entries can show these names retire to the content contract.
+func TestShippedRetirementsOfNoteNameTheContentContract(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(configlayout.FindModuleRoot(), "..", filepath.FromSlash(retirementCatalogPath)))
+	testutil.FailErr(t, "read shipped catalog", err)
+	catalog, err := parseRetirements(raw)
+	testutil.FailErr(t, "parse shipped catalog", err)
+	for _, tc := range []struct{ kind, name string }{
+		{"tools", "surface_note"},
+		{"host_facts", "paintedwolf.surface_note_offered"},
+		{"rejection_codes", "SURFACE_NOTE_WORKER_SESSION"},
+	} {
+		got, ok := catalog.Vocabularies[tc.kind][tc.name]
+		if !ok || len(got.Names) != 0 || got.Contract == nil || got.Contract.ContentContract != "paintedwolf.markdown_note" {
+			t.Errorf("%s %s = %+v, want the markdown note contract", tc.kind, tc.name, got)
+		}
+	}
+}

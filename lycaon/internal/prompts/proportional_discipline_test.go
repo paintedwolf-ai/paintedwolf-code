@@ -51,29 +51,6 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	if strings.Count(core, "Branch on invocation facts") != 1 {
 		t.Fatal("coordinator invocation guidance must have one home")
 	}
-	noteCore, err := engine.Render(ctx, "agents/coordinator-core.md", map[string]any{
-		"execution_mode":           "investigate",
-		"has_file_tools":           true,
-		"profile_has_surface_note": true,
-	})
-	testutil.FailErr(t, "render coordinator-core with surface_note", err)
-	for _, want := range []string{
-		"Use `surface_note` for updates the user should see.",
-		"## Mid-turn note (`surface_note`)",
-		"Use `surface_note` for meaningful progress updates or answers to mid-task check-ins, then keep working.",
-		"Keep `summary` under 600 characters.",
-		"`cited_evidence` takes strings",
-		`["write#1"]`,
-		"Avoid routine tool-by-tool updates",
-	} {
-		if !strings.Contains(noteCore, want) {
-			t.Fatalf("surface_note discipline missing %q", want)
-		}
-	}
-	if strings.Contains(noteCore, "Mid-turn non-blocking updates are unavailable") {
-		t.Fatal("surface_note-live core must not claim mid-turn updates unavailable")
-	}
-
 	survey, err := engine.Render(ctx, "units/survey-first-pass.md", map[string]any{
 		"profile_has_summarize":      true,
 		"profile_has_survey_repo":    true,

@@ -75,7 +75,6 @@ type toolCallOutcome struct {
 	taskCommitted      bool
 	handleEligible     bool
 	taskMessageID      string
-	agentNote          *tools.AgentNoteCapture
 	committed          bool
 	storedID           string
 	persistedStored    []api.Message
@@ -238,7 +237,6 @@ func (l *toolBatch) executeToolCallsInTurn(
 					toolArgs:       run[0].Args,
 					toolMsg:        out.toolMsg,
 					handleEligible: out.handleEligible,
-					agentNote:      out.agentNote,
 				}, &lastToolTS, st,
 			)
 			if err != nil {
@@ -370,7 +368,6 @@ func (l *toolBatch) runConcurrentToolBatch(
 				taskCommitted:  out.taskCommitted,
 				handleEligible: out.handleEligible,
 				taskMessageID:  out.toolMsg.ID,
-				agentNote:      out.agentNote,
 				endTurn:        out.endTurn,
 			}
 			l.appendParallelResult(ctx, commit, &outcomes[i])
@@ -449,7 +446,6 @@ type singleToolOutcome struct {
 	taskCommitted  bool
 	handleEligible bool
 	breakToolLoop  bool
-	agentNote      *tools.AgentNoteCapture
 	// endTurn is a host fault that ends the turn once toolMsg is durable.
 	endTurn error
 }
@@ -495,9 +491,6 @@ func (l *toolBatch) executeOneToolCall(
 				"cap", data["cap"])
 			run = l.Tools.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, code, data)
 		}
-	}
-	if !run.succeeded() {
-		run.captures.note = nil
 	}
 	if run.facts.Resolution() == api.ToolResultOutcomeRejected {
 		return l.settleRejectedInvocation(ctx, sess, sessionID, tc, assistantMessageID, run)
@@ -564,6 +557,5 @@ func (l *toolBatch) executeOneToolCall(
 		completion:     run.captures.completion,
 		taskCommitted:  taskSpawnCommitted(tc.Name, toolMsg.ToolResult, run.succeeded()),
 		handleEligible: sess != nil && toolEvidenceEligible(run, tc.Name, tc.Args),
-		agentNote:      run.captures.note,
 	}
 }

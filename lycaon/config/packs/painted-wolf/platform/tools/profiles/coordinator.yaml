@@ -24,7 +24,6 @@ tools:
   workflow_persist: sticky
   workflow_user_feedback: sticky
   ask_user: sticky
-  surface_note: sticky
   workflow_advance: sticky
   workflow_transition: sticky
   fanout_plan: sticky

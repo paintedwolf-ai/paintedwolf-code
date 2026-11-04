@@ -131,7 +131,7 @@ func contains(names []string, want string) bool {
 	return false
 }
 
-// AC-MID-19: publication reaches exactly the surfaces that held surface_note.
+// AC-MID-19: the surfaces that publish tool-step text, by name.
 func TestPublishingSurfaces(t *testing.T) {
 	catalog, err := Load()
 	testutil.FailErr(t, "load", err)

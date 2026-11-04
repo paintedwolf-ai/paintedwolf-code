@@ -163,7 +163,7 @@ func TestListForPromptIncludesDeferredWhenInvokeWouldDeny(t *testing.T) {
 func TestListForPromptFiltersBySessionScope(t *testing.T) {
 	inv := listInvoker{metas: []tools.ToolMeta{
 		{Name: "read"},             // unscoped
-		{Name: "surface_note"},     // addressed_session
+		{Name: "git_checkout"},     // addressed_session
 		{Name: "complete_leg"},     // worker_child
 		{Name: "request_decision"}, // worker_child
 	}}
@@ -171,7 +171,7 @@ func TestListForPromptFiltersBySessionScope(t *testing.T) {
 
 	addressed := listedNames(eng.ListForPrompt(context.Background(),
 		&api.Session{ID: "s1"}, "explore_readonly"))
-	wantAddressed := []string{"read", "surface_note"}
+	wantAddressed := []string{"git_checkout", "read"}
 	if !reflect.DeepEqual(addressed, wantAddressed) {
 		t.Fatalf("addressed session listed %v want %v", addressed, wantAddressed)
 	}

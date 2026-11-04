@@ -8,7 +8,6 @@ tools:
   pack_board: sticky
   request_decision: sticky
   request_budget: sticky
-  surface_note: sticky
   complete_leg: sticky
   summarize: sticky
   survey_repo: sticky

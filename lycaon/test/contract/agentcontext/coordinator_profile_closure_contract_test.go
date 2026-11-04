@@ -64,7 +64,6 @@ var coordinatorPromptlessAllowlist = map[string]string{
 	"web_search":          "coordinator-core invariant 6; inline external lookup when on surface schema",
 	"fetch_url":           "coordinator-core invariant 6; inline external lookup when on surface schema",
 	"skills_read":         "skill activation on investigate and overlay-promote; roster and calling convention ship in the shared agent-skills partial, outside the coordinator corpus globs",
-	"surface_note":        "visible-update discipline is injected from the surface-note-discipline shared partial",
 	"request_tools":       "schema discovery is taught by the shared deferred-tool-catalog partial in the turn recipe",
 	"secret_generate":     "mandatory secret-handling skill and tool schema carry the capability workflow",
 	"secret_list":         "mandatory secret-handling skill and tool schema carry the capability workflow",

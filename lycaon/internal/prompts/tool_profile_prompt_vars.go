@@ -225,7 +225,6 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"profile_has_retrieval":           profileHasRetrievalTool(enabled),
 		"profile_has_skills_read":         enabled["skills_read"],
 		"profile_has_ask_user":            enabled["ask_user"],
-		"profile_has_surface_note":        enabled["surface_note"],
 		"profile_has_recall":              enabled["recall"],
 		"profile_has_terminal_open":       enabled["terminal_open"],
 		"profile_has_terminal_read":       enabled["terminal_read"],

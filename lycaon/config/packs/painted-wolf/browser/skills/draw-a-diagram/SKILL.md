@@ -3,7 +3,6 @@ name: draw-a-diagram
 description: Explain architecture, flows, states, sequences, or changes with a diagram when layout helps more than prose.
 # Named for readers whose profile holds it; other profiles follow the skill without it.
 optional_tools:
-  - surface_note
 ---
 
 # Draw a diagram

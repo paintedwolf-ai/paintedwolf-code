@@ -239,13 +239,14 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 			toolArgs:       raw.ToolResult.ToolArgs,
 			toolMsg:        raw,
 			handleEligible: true,
-			agentNote: &tools.AgentNoteCapture{
-				MessageID: "note-1",
-				Content:   "observed " + storageBoundarySecret,
-			},
 		}, &last, st,
 	)
 	testutil.FailErr(t, "commit storage-safe messages", err)
+	history, err = loop.Batch.commitMidTurnNote(context.Background(), sess.ID, history, api.Message{
+		ID: "note-1", Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote,
+		Visibility: api.MessageVisibilityTranscript, Content: "observed " + storageBoundarySecret,
+	}, &last, st)
+	testutil.FailErr(t, "commit storage-safe note", err)
 	st.history = history
 
 	if strings.Contains(evidence, storageBoundarySecret) || strings.Contains(evidenceArg, storageBoundarySecret) ||

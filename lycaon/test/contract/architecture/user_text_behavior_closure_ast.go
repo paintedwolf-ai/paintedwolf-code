@@ -355,7 +355,6 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"profile_has_summarize":                        true,
 	"profile_has_ask_user":                         true,
 	"profile_has_skills_read":                      true,
-	"profile_has_surface_note":                     true,
 	"profile_has_recall":                           true,
 	"progress_closure_armed":                       true,
 	"card_edit_deferred":                           true,

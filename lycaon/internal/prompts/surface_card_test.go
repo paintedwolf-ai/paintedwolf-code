@@ -23,7 +23,7 @@ func renderSurfaceCard(t *testing.T, label, rule, mode string, sticky, deferred 
 
 func TestSurfaceCardParkAndWrapup(t *testing.T) {
 	park := renderSurfaceCard(t, "waiting on workers", "", "orchestrate",
-		[]string{"recall", "wait", "worker_cancel", "answer_decision", "update_progress", "ask_user", "surface_note"}, nil)
+		[]string{"recall", "wait", "worker_cancel", "answer_decision", "update_progress", "ask_user"}, nil)
 	for _, want := range []string{"waiting on workers", "ask_user"} {
 		if !strings.Contains(park, want) {
 			t.Fatalf("park card missing %q: %q", want, park)

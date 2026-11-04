@@ -17,7 +17,6 @@ tools:
   scan_list: sticky
   record_finding: sticky
   pack_board: sticky
-  surface_note: sticky
   wait: sticky
   skills_read: sticky
   secret_generate: sticky

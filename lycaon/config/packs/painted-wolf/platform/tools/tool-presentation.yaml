@@ -416,10 +416,6 @@ tools:
     title_keys: [query]
     running_label: "Recalling…"
     activity: {headline: "investigating", salience: supporting, role: investigation}
-  surface_note:
-    running_label: "Sharing a note…"
-    title_keys: [summary]
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
   task:
     kind: task
     running_label: "Spawning worker…"

@@ -75,7 +75,6 @@ var (
 		"state_update",
 		"submit_verdict",
 		"summarize",
-		"surface_note",
 		"survey_repo",
 		"update_progress",
 		"verify",
