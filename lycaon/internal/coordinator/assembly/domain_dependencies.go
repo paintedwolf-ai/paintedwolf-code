@@ -63,6 +63,7 @@ type promptProjection interface {
 	resolveCoordinatorProfile(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) (surface.TurnProfile, surface.ImplementSessionState)
 	resolveTurnRoster(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) *inject.AgentRoster
 	sessionCatalogView(context.Context, *api.Session) *catalogview.View
+	sourceHistoryOffered(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) bool
 	taskOffered(*api.Session, string, int) bool
 	workspaceRootsForTurn(context.Context, *api.Session, *TurnAssemblyScratch) ([]map[string]any, int, string, bool)
 }
