@@ -68,6 +68,7 @@ The specification fixes eight core anchor ids; the capability document maps each
 | `tool.post_invoke` | on the complete result, successful or failed, before logging and delivery | core; a block withholds the original result; a transform replaces it and clears parallel captures |
 | `credential.assignment` | on one literal credential assignment observed on a completed tool call | measurements, harvest membership, device HMAC fingerprint |
 | `coordinator.post_turn` | on the assembled final prose once, before turn completion | implements core `agent.post_turn` |
+| `coordinator.mid_turn_note` | when a coordinator's text beside tool calls is withheld from the user | informs through the shared host feedback path; the tools in that response still run, and only an unresolved reference spends grounding friction |
 | `coordinator.closeout_check` | on a provisional closeout claim | a block requests repair; provisional checks cannot multiply a portable rule's counters |
 | `worker.finalize` | on the complete parent envelope before the worker card or digest is stored | implements core `agent.finalize`; a block delivers policy feedback with a partial status and withholds the report, proof, and grounding details |
 | `worker.report_check` | on a provisional worker report | can request repair before final delivery; not the portable finalization boundary |

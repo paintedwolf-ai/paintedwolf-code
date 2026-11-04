@@ -19,7 +19,10 @@ type Harness = {
   llm: {
     manual(): Promise<unknown>;
     pending(waitMs?: number): Promise<{ pending?: boolean }>;
-    respond(reply: { text?: string }): Promise<unknown>;
+    respond(reply: {
+      text?: string;
+      toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
+    }): Promise<unknown>;
   };
   waitForTestid(testid: string, timeoutMs?: number): Promise<{ ok: boolean }>;
   waitForIdle(timeoutMs?: number): Promise<{ ok: boolean }>;
@@ -138,10 +141,7 @@ webE2e(
       const h = (window as unknown as { __harness: Harness }).__harness;
       await h.llm.pending(60_000);
       await h.llm.respond({
-        text: JSON.stringify({
-          synthesis: "Got the fixture.",
-          cited_evidence: [],
-        }),
+        text: "Got the fixture.",
       });
     });
 
@@ -157,13 +157,14 @@ webE2e(
     await page.evaluate(
       async ({ id }) => {
         const h = (window as unknown as { __harness: Harness }).__harness;
+        // A directive presents what this request observed, so the turn views it first.
+        await h.llm.pending(60_000);
+        await h.llm.respond({ toolCalls: [{ id: crypto.randomUUID(), name: "request_tools", args: { need: "view_image" } }] });
+        await h.llm.pending(60_000);
+        await h.llm.respond({ toolCalls: [{ id: crypto.randomUUID(), name: "view_image", args: { handle: id } }] });
         await h.llm.pending(60_000);
         await h.llm.respond({
-          text: JSON.stringify({
-            synthesis: "Same fixture again.",
-            cited_evidence: [],
-            artifact_ids: [id],
-          }),
+          text: `Same fixture again.\n\n[artifact:${id}]`,
         });
       },
       { id: artifactId },

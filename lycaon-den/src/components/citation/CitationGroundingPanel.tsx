@@ -5,7 +5,7 @@ import type {
   CitationGroundingView,
 } from "../../chat/grounding/citation-grounding-model.ts";
 import {
-  GROUNDING_ADVISORY_NOTE_SUFFIX,
+  groundingAdvisoryNote,
   GROUNDING_CITATIONS_SECTION,
   groundingHostAddedNote,
   GROUNDING_PANEL_SCOPE,
@@ -38,6 +38,10 @@ function citationNote(item: CitationRowItem): string | undefined {
   return "note" in item ? item.note?.trim() || undefined : undefined;
 }
 
+function citationEndLine(item: CitationRowItem): number | undefined {
+  return "endLine" in item ? item.endLine : undefined;
+}
+
 function CitationRow(props: {
   item: CitationRowItem;
   projectId?: string;
@@ -67,6 +71,7 @@ function CitationRow(props: {
           ? String(item().line)
           : undefined
       }
+      data-end-line={citationEndLine(item())}
       data-project-id={props.projectId?.trim() || undefined}
     >
       <div class="den-citation-grounding-citation-head">
@@ -85,6 +90,7 @@ function CitationRow(props: {
             projectId={props.projectId ?? ""}
             path={repoPath()}
             line={item().line}
+            endLine={citationEndLine(item())}
             handle={handle()}
             rootRefs={props.rootRefs}
             openable={item().openable}
@@ -462,8 +468,7 @@ export function CitationGroundingPanel(props: Props) {
             class="den-citation-grounding-context den-citation-grounding-context--advisory"
             data-testid="citation-grounding-advisory"
           >
-            {count()} lower-trust citation{count() === 1 ? "" : "s"} in narrative
-            — {GROUNDING_ADVISORY_NOTE_SUFFIX}
+            {groundingAdvisoryNote(count())}
             <Show when={view().proseAdvisoriesSample.length > 0}>
               {": "}
               {view().proseAdvisoriesSample.join(", ")}

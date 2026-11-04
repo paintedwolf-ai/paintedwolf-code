@@ -59,18 +59,30 @@ installed-platform qualification. The command entry must settle the real
 operation, preserve its leases through delivery, and compose this observation
 with current capability and recovery admission.
 
-## Internal tool-step notes
+## Assistant text beside tool calls
 
-Assistant text accompanying native tool calls is an internal working note, hidden
-from the user. Model-facing transcript projection labels that visibility while
-preserving the note, tool calls, arguments, results, and model reasoning. The
-frame is catalog-authored and carries no instruction authority. It appears only
-on nonempty tool-step text; public agent notes and final no-tool replies retain
-their presentation.
+A coordinator's text accompanying tool calls is user-facing on a surface that
+declares `publishes_mid_turn_text`: the host publishes it as an agent note when it
+passes the [mid-turn audit](grounding.md#mid-turn-notes), and otherwise withholds
+it and tells the model why. On every other surface and in every worker it is
+private working context. The system notice states which applies to this session's
+audience. The host never classifies the wording, so a provider with no reasoning
+channel gets the same rule.
 
-Framing happens after canonical history and reasoning rehydration. Repeated
-projection is idempotent. Stored messages and the user-facing transcript remain
-unchanged; execution and completion still come from tool results.
+The model's text stays on its carrier in native position, exactly as it wrote it,
+whether or not it was published. Withheld text is answered by bounded host feedback
+in a separate content part, opening `[HOST: MESSAGE WITHHELD FROM USER]` and saying
+the user has not received it, which never promotes the model's words to host
+authority. That feedback distinguishes missing citations, unresolved references,
+syntax, artifacts, and unreadable evidence, and offers a bounded sample of current
+handles. Models may parrot a transport marker from older history; the host strips
+those exact markers before auditing and projecting, and never strips a sentence by
+its wording.
+
+Projection marks no line. A tool result, host feedback part, compaction summary,
+or tool description has one header line naming its origin and source, and its body
+follows unchanged. Externally authored retrieval bytes keep their nonce frame.
+Execution and completion still come from tool results.
 
 ## Source text in model requests
 
@@ -111,16 +123,22 @@ The channel follows the event lifecycle. A tool argument error is immediate; a c
 
 ## User updates before waiting
 
-`WAIT_HIDDEN_TEXT` blocks a coordinator `wait` when its current tool batch
-contains nonempty assistant text, `surface_note` is offered, and no agent note
-has been committed in that batch. Tool-step assistant text is hidden from the
-user; waiting does not publish it. A prior batch's note does not satisfy this
-boundary, and a rejected note does not count as a committed update.
+`WAIT_HIDDEN_TEXT` blocks a coordinator `wait` while durable history for the
+current user intent holds carrier text with no later note. Text in the same
+response as `wait` is audited first, so a valid update publishes and clears the
+debt. Any later note settles earlier unpublished text: it is a new progress update,
+and the model need not repeat every earlier deduction. Calling `wait` with empty
+text does not clear it. The host does not classify what the text means or demand
+updates on ordinary action calls, and a pre-evidence or dispatch note is ordinary
+recovery.
 
-The model can send a grounded `surface_note` with `wait`, or retry `wait` with
-empty assistant text if no user update is needed. The host does not classify
-what the text means or demand notes on ordinary action calls. Workers and
-surfaces without `surface_note` are unaffected.
+Visibility repair is bounded by `max_wait_visibility_repairs`. When it is spent
+with the debt unchanged, the host publishes one progress note per intent from
+structured worker state, holding only the host's words, and the wait goes ahead;
+with no such facts it goes ahead silently. Either way the draft stays unpublished,
+and `MID_TURN_NOTE_WAIT_FALLBACK` tells the model so. A ledger the host cannot read
+is refused once, and the refusal says the next `wait` goes ahead, because rewriting
+citations cannot fix it. Workers and surfaces that do not publish owe nothing.
 
 ## Argument and artifact recovery
 
@@ -374,7 +392,7 @@ finish can latch reconciliation before further dispatch or editing; an unchanged
 checklist does not clear that latch. Closeout recovery keeps unfinished rows
 pending and directs the coordinator to continue with tools. Completed work is
 recorded in a tool response before a separate, tool-free final response. A tool-free response ends the turn, so
-continuing progress updates use `surface_note`.
+continuing progress updates are text alongside the next tool call.
 
 ### Rejected source candidates
 

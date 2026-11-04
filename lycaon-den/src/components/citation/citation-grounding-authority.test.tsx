@@ -2,10 +2,35 @@ import { render, screen } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import type { CitationGrounding } from "../../api/types.ts";
 import { buildCitationGroundingView } from "../../chat/grounding/citation-grounding-model.ts";
+import { CitationEvidenceChicklet } from "./CitationEvidenceChicklet.tsx";
 import { CitationGroundingBadge } from "./CitationGroundingBadge.tsx";
 import { CitationGroundingPanel } from "./CitationGroundingPanel.tsx";
 
 describe("citation provenance across presentation surfaces", () => {
+  it("presents exempt speech with no grounded or partial state on any surface", () => {
+    const grounding: CitationGrounding = {
+      traced: true,
+      evidence_optional: true,
+      checks: [{ id: "evidence_optional", label: "Citations", kind: "citation",
+        status: "passed", vacuous: true, summary: "No citations required: no tool observations in this turn" }],
+    };
+    const view = buildCitationGroundingView(grounding);
+    render(() => <>
+      <CitationGroundingBadge grounding={grounding} onOpenDetail={() => {}} />
+      <CitationEvidenceChicklet grounding={grounding} rowKey="note-1" />
+      <CitationGroundingPanel view={view} />
+    </>);
+    expect(screen.queryByTestId("citation-grounding-badge")).toBeNull();
+    expect(screen.queryByTestId("citation-evidence-chicklet")).toBeNull();
+    const panel = screen.getByTestId("citation-grounding-panel");
+    expect(panel.getAttribute("data-outcome")).toBe("evidence_optional");
+    expect(panel.classList.contains("den-citation-grounding--traced")).toBe(false);
+    expect(panel.classList.contains("den-citation-grounding--partial")).toBe(false);
+    expect(panel.textContent).toContain("No sources checked");
+    expect(panel.textContent).not.toMatch(/grounded/i);
+    expect(screen.queryByTestId("citation-grounding-check")).toBeNull();
+  });
+
   for (const traced of [false, true]) {
     for (const hostAssembled of [false, true]) {
       for (const hasCitations of [false, true]) {

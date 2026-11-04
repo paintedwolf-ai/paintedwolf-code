@@ -179,6 +179,9 @@ func TestWorkerSynthesisGroundingParity_crossLanguageGoldens(t *testing.T) {
 	cases := map[string]citationGroundingParityGolden{
 		"none.json":     buildParityGoldenNone(),
 		"grounded.json": buildParityGoldenGrounded(t),
+		"evidence_optional.json": {
+			Grounding: *guidance.EvidenceOptionalGrounding(guidance.CoordinatorCompletionReport{}),
+		},
 	}
 	if os.Getenv("UPDATE_CITATION_GROUNDING_PARITY_GOLDENS") == "1" {
 		if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
