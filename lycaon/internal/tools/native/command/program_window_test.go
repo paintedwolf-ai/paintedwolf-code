@@ -241,8 +241,8 @@ func TestProgramWindowACCW09PipelineAndLoopShareOne(t *testing.T) {
 
 func TestProgramWindowIsNotOpenedForAProgramNotFound(t *testing.T) {
 	f := newWindowFixture(t)
-	outcome := f.run(t, `external -- paintedwolf-absent-generator; echo after`)
-	if opens := f.opener.opens.Load(); opens != 0 || outcome.SourceWindow != nil {
+	outcome := f.run(t, `external -- paintedwolf-absent-generator`)
+	if opens := f.opener.opens.Load(); opens != 0 || outcome.Status != 127 || outcome.SourceWindow != nil {
 		t.Fatalf("window opens = %d, outcome = %+v", opens, outcome)
 	}
 }
