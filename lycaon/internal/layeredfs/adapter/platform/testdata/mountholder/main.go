@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
@@ -31,7 +32,7 @@ func main() {
 		fail("seed trunk", err)
 	}
 	request := adapter.PrepareRequest{
-		ViewID: "view-holder", BackingDir: filepath.Join(dir, "backing"), RuntimeDir: filepath.Join(dir, "runtime"),
+		ViewID: "view-holder-" + strconv.Itoa(os.Getpid()), BackingDir: filepath.Join(dir, "backing"), RuntimeDir: filepath.Join(dir, "runtime"),
 		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunk, IsPrimary: true}},
 	}
 	adp, view, useMount, err := prepareView(request)

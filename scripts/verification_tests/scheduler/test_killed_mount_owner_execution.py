@@ -1,5 +1,6 @@
 """A real process killed while holding a real view mount inside its run: teardown settles it alone."""
 
+import fcntl
 import importlib.util
 import json
 import os
@@ -53,33 +54,34 @@ def alive(pid):
 class KilledMountOwnerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tools = tempfile.TemporaryDirectory(prefix="pw-holder-", dir="/tmp")
+        cls.tools = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.tools.cleanup)
         cls.binary = Path(cls.tools.name) / "mountholder"
         subprocess.run(["go", "build", "-o", str(cls.binary), HOLDER], cwd=SCRIPTS.parent / "lycaon", check=True)
 
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="pw-rl-", dir="/tmp")
-        self.addCleanup(self.temporary.cleanup)
-        self.root = Path(os.path.realpath(self.temporary.name))
-        patcher = mock.patch.object(run_lease, "RUN_ROOT", self.root)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.queue = execution.Queue(self.root / "queue-state")
+        # Fixtures live in the real run root, so even a killed fixture is settled like any run.
+        run_lease.RUN_ROOT.mkdir(mode=0o700, exist_ok=True)
+        self.state = tempfile.TemporaryDirectory()
+        self.addCleanup(self.state.cleanup)
+        self.queue = execution.Queue(Path(self.state.name) / "queue")
         self.sequence = 0
 
-    def run_directory(self, name):
-        run = self.root / f"go-test.lease.{name}"
-        (run / "tmp").mkdir(parents=True)
-        lease = (run / ".lease").open("w")
+    def run_directory(self):
+        with (run_lease.RUN_ROOT / ".collection.lock").open("a") as collection:
+            fcntl.flock(collection, fcntl.LOCK_EX)
+            run = Path(os.path.realpath(tempfile.mkdtemp(prefix="go-test.lease.", dir=run_lease.RUN_ROOT)))
+            lease = (run / ".lease").open("w")
         execution.lock_file(lease)
+        (run / "tmp").mkdir()
+        self.addCleanup(run_lease.prune, run_lease.RUN_ROOT, run)
         return run, lease
 
     def holder(self, run, inherited, wedge):
         """Start a holder through a producer that exits, as a digest's descendants outlive it."""
         self.sequence += 1
         ready, stop = run / f"ready-{self.sequence}", run / f"stop-{self.sequence}"
-        environment = {**os.environ, **({"MOUNTHOLDER_WEDGE": "1"} if wedge else {})}
+        environment = {**os.environ, "TMPDIR": str(run / "tmp"), **({"MOUNTHOLDER_WEDGE": "1"} if wedge else {})}
         command = [str(self.binary), str(run / "tmp" / "v"), str(ready), str(stop)]
         producer = ("import subprocess,sys,time\nfrom pathlib import Path\n"
                     f"subprocess.Popen({command!r},pass_fds={inherited!r},start_new_session=True,"
@@ -108,7 +110,7 @@ class KilledMountOwnerTests(unittest.TestCase):
             time.sleep(0.05)
 
     def capability(self, run):
-        path = self.queue.root / "fixture.resource"
+        path = self.queue.root / f"fixture-{run.name}.resource"
         file = path.open("x+")
         execution.lock_file(file)
         entry = {"ticket": path.stem, "kind": "invocation", "state": "running", "name": "fixture",
@@ -128,7 +130,7 @@ class KilledMountOwnerTests(unittest.TestCase):
 
     def outside_mount(self):
         """A live owner's mount in another leased run, whose connection must keep answering."""
-        run, lease = self.run_directory("outside")
+        run, lease = self.run_directory()
         self.addCleanup(lease.close)
         _, report, _ = self.holder(run, (lease.fileno(),), wedge=False)
         return run, report
@@ -138,52 +140,70 @@ class KilledMountOwnerTests(unittest.TestCase):
         self.assertIn(report["mount"], run_lease.mount_points())
         self.assertEqual((Path(report["mount"]) / "f").read_text(), "x")
 
-    def assert_settled(self, run, report):
+    def assert_nothing_left(self, run, report):
         wait_until("the killed owner to exit", lambda: not alive(report["pid"]))
-        self.assertNotIn(report["mount"], run_lease.mount_points())
+        token = f"view-holder-{report['pid']}"
+        self.assertEqual([point for point in run_lease.mount_points() if token in point], [])
         self.assertFalse(run.exists())
+        self.assertEqual(list(Path("/tmp").glob(f"*{token}*")), [])
 
-    def test_terminal_settlement_frees_a_killed_owner_with_no_blocked_batch(self):
-        outside_run, outside = self.outside_mount()
-        run, lease = self.run_directory("killed")
-        capability = self.capability(run)
-        child, report, _ = self.holder(run, (lease.fileno(), capability.file.fileno()), wedge=True)
-        lease.close()
+    def kill_wedged(self, report):
         self.wait_wedged(report)
         os.kill(report["pid"], signal.SIGKILL)
         if sys.platform == "linux":
             wait_until("the kill to arrive", lambda: run_lease.thread_group_dying(report["pid"]))
             self.assertTrue(alive(report["pid"]), "the wedge this test exists for did not form")
+
+    def test_terminal_settlement_frees_a_killed_owner_with_no_blocked_batch(self):
+        outside_run, outside = self.outside_mount()
+        run, lease = self.run_directory()
+        capability = self.capability(run)
+        child, report, _ = self.holder(run, (lease.fileno(), capability.file.fileno()), wedge=True)
+        lease.close()
+        self.kill_wedged(report)
+        if sys.platform == "linux":
             self.assertEqual(custody.lease_holders(capability.path) - {os.getpid()}, {report["pid"]})
 
         tainted = lifetime.TerminalSettlement(self.queue, capability, child).finish()
 
         self.assertFalse(tainted)
         self.assertEqual(capability.entry["terminal_settlement"]["state"], "settled")
-        self.assert_settled(run, report)
+        self.assert_nothing_left(run, report)
         self.assert_outside_untouched(outside_run, outside)
 
     def test_the_next_collection_frees_a_killed_owner_with_no_supervisor(self):
         outside_run, outside = self.outside_mount()
-        run, lease = self.run_directory("orphan")
+        run, lease = self.run_directory()
         _, report, _ = self.holder(run, (lease.fileno(),), wedge=True)
         lease.close()
-        self.wait_wedged(report)
-        os.kill(report["pid"], signal.SIGKILL)
-        if sys.platform == "linux":
-            wait_until("the kill to arrive", lambda: run_lease.thread_group_dying(report["pid"]))
-            self.assertTrue(alive(report["pid"]), "the wedge this test exists for did not form")
-        else:
+        self.kill_wedged(report)
+        if sys.platform != "linux":
             # Nothing proves another process's death here until it has exited.
             wait_until("the killed owner to exit", lambda: not alive(report["pid"]))
 
-        subprocess.run([sys.executable, str(SCRIPTS / "test-run-lease.py"), "prune", str(self.root)], check=True)
+        subprocess.run([sys.executable, str(SCRIPTS / "test-run-lease.py"), "prune", str(run_lease.RUN_ROOT)], check=True)
 
-        self.assert_settled(run, report)
+        self.assert_nothing_left(run, report)
+        self.assert_outside_untouched(outside_run, outside)
+
+    def test_settlement_collects_a_run_whose_server_is_already_dead(self):
+        outside_run, outside = self.outside_mount()
+        run, lease = self.run_directory()
+        capability = self.capability(run)
+        child, report, _ = self.holder(run, (lease.fileno(), capability.file.fileno()), wedge=False)
+        lease.close()
+        os.kill(report["pid"], signal.SIGKILL)
+        wait_until("the server to die", lambda: not alive(report["pid"]))
+        self.assertIn(report["mount"], run_lease.mount_points())
+
+        tainted = lifetime.TerminalSettlement(self.queue, capability, child).finish()
+
+        self.assertFalse(tainted)
+        self.assert_nothing_left(run, report)
         self.assert_outside_untouched(outside_run, outside)
 
     def test_a_held_run_with_a_live_owner_is_not_settled(self):
-        run, lease = self.run_directory("live")
+        run, lease = self.run_directory()
         self.addCleanup(lease.close)
         _, report, stop = self.holder(run, (lease.fileno(),), wedge=False)
         run_lease.collect_runs(frozenset())

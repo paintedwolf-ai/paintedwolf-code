@@ -424,7 +424,7 @@ func (v *mountedView) publishedChanges(t *testing.T) []layeredfs.ChangeEntry {
 // shortPathTo returns a path to dir short enough for a Unix socket address.
 func shortPathTo(t *testing.T, dir string) string {
 	t.Helper()
-	parent, err := os.MkdirTemp("/tmp", "nf")
+	parent, err := os.MkdirTemp("", "nf") //nolint:usetesting // Kernel Unix addresses are bounded.
 	if err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

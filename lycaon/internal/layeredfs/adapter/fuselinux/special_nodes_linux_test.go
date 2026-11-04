@@ -29,7 +29,7 @@ func TestFIFOAndUnixSocketWorkInTheMountAndStayOutOfCheckpoints(t *testing.T) {
 		t.Fatalf("fifo carried %q", out)
 	}
 
-	shortDir, err := os.MkdirTemp("/tmp", "fl")
+	shortDir, err := os.MkdirTemp("", "fl") //nolint:usetesting // Kernel Unix addresses are bounded.
 	if err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

@@ -20,11 +20,7 @@ import (
 )
 
 func TestMountedMacOSWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *testing.T) {
-	baseDir, err := os.MkdirTemp("/tmp", "lycaon-rec-nfs-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(baseDir) })
+	baseDir := t.TempDir()
 
 	trunkDir := filepath.Join(baseDir, "trunk")
 	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {
