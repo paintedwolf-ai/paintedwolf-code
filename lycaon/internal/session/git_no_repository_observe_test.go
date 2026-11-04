@@ -2,9 +2,11 @@ package session
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -21,12 +23,24 @@ func TestACOP01WriteLegGitWarningAnnotatesTheCommand(t *testing.T) {
 		}
 		return out
 	}
-	offered, withheld := render(true), render(false)
-	if offered == output || withheld == output {
-		t.Fatalf("the warning did not annotate the result: %q", offered)
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load hints", err)
+	seen := map[bool]bool{}
+	for _, scenario := range hints.HintCodes[toolrejection.GitNoRepositoryOnWriteLegCode].Scenarios {
+		offered, ok := scenario.Vars["source_history_offered"].(bool)
+		if !ok {
+			t.Fatalf("scenario %q states no source_history_offered", scenario.ID)
+		}
+		seen[offered] = true
+		rendered := render(offered)
+		for _, want := range scenario.ExpectContains {
+			if !strings.Contains(rendered, want) {
+				t.Fatalf("scenario %q: %q missing from the warning:\n%s", scenario.ID, want, rendered)
+			}
+		}
 	}
-	if offered == withheld {
-		t.Fatalf("both profiles were told the same: %q", offered)
+	if !seen[true] || !seen[false] {
+		t.Fatalf("scenarios cover %v, want both answers", seen)
 	}
 	if plain, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "command", map[string]any{"command": "git status"}, output, 1, guidance.ToolResultFacts{}); plain != output {
 		t.Fatalf("a call with no miss was annotated: %q", plain)

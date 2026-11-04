@@ -134,6 +134,29 @@ func TestACOP01ManyReadsInOneProgramStateOneWarning(t *testing.T) {
 	}
 }
 
+// Pipeline stages and jobs run concurrently and each has its own effects' view,
+// which is why the record is shared.
+func TestACOP01ConcurrentReadsStateOneWarning(t *testing.T) {
+	for _, source := range []string{"git status | cat", "git status & wait", "git status & git log & wait"} {
+		t.Run(source, func(t *testing.T) {
+			f := newGitProgramFixture(t, true)
+			outcome := runGitProgram(t, f, source)
+			if outcome.Refusal != nil || outcome.Status != 0 {
+				t.Fatalf("outcome = %+v, want the program to finish", outcome)
+			}
+			count := 0
+			for _, feedback := range f.out.Facts.Feedback {
+				if feedback.Code == toolrejection.GitNoRepositoryOnWriteLegCode {
+					count++
+				}
+			}
+			if count != 1 {
+				t.Fatalf("warnings = %d in %+v, want one", count, f.out.Facts)
+			}
+		})
+	}
+}
+
 func TestACOP02WriteLegProbesRunLikeBash(t *testing.T) {
 	for _, source := range []string{"git status || true", "git status; printf after", "if git status; then printf yes; else printf after; fi"} {
 		t.Run(source, func(t *testing.T) {
