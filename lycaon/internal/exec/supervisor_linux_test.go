@@ -196,8 +196,15 @@ func TestSupervisedPTYInterruptReachesOnlyTheProgram(t *testing.T) {
 	}
 	send("print('ready' + '-for-input')\n")
 	await("ready-for-input")
-	send("\x03")
-	await("KeyboardInterrupt")
+	// An interrupt landing just before the interpreter blocks on its next line
+	// is held until that line arrives, so a later interrupt must wake the read.
+	for !strings.Contains(text(), "KeyboardInterrupt") {
+		if t.Context().Err() != nil {
+			t.Fatalf("terminal never showed the interrupt:\n%q", text())
+		}
+		send("\x03")
+		time.Sleep(100 * time.Millisecond)
+	}
 	send("print('interrupt' + '-survived')\n")
 	await("interrupt-survived")
 	send("raise SystemExit(0)\n")

@@ -150,7 +150,7 @@ func TestProtectedLaunchCoverageOverlayReachesExecutableCalls(t *testing.T) {
 	testutil.FailErr(t, "retain regression overlay", os.WriteFile(overlay, raw, 0o600))
 	binary := filepath.Join(build, "pw-launch")
 	goBuild(t, binary, "github.com/lycaon/lycaon/cmd/pw-launch", linked,
-		"-cover", "-covermode=atomic", "-coverpkg=github.com/lycaon/lycaon/internal/launchguard,github.com/lycaon/lycaon/cmd/pw-launch",
+		"-cover", "-covermode="+nativeCoverageMode(), "-coverpkg=github.com/lycaon/lycaon/internal/launchguard,github.com/lycaon/lycaon/cmd/pw-launch",
 		"-overlay="+overlay, launchCoverageTool(t, overlay))
 	output, err := exec.Command(binary).CombinedOutput()
 	var status *exec.ExitError

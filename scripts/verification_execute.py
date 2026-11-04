@@ -272,6 +272,8 @@ class Executor:
         self.completed = {r["ticket"]: set() for r in self.requests}
         self.running = {r["ticket"]: set() for r in self.requests}
         self.evidence = {r["ticket"]: {} for r in self.requests}
+        self.verdicts = {}
+        self.deferred = set()
         self.finished = set()
         self.cache = {}
         self.selections = {}
@@ -433,8 +435,9 @@ class Executor:
                 self.receipt(request, "cancelled", 130, record.get("reason"))
                 continue
             waiting = []
+            keep_going = request["plan"].get("keep_going")
             for index, stage in enumerate(request["plan"]["stages"]):
-                if index in self.completed[ticket] or index in self.running[ticket]:
+                if index in self.completed[ticket] or index in self.running[ticket] or index in self.evidence[ticket]:
                     continue
                 try:
                     packages = self.packages(stage, ticket) if stage["kind"] == "go" else ["task"]
@@ -443,19 +446,42 @@ class Executor:
                     break
                 cached = self.cache.get(stage_key(stage), {})
                 results = {p: cached[p] for p in packages if p in cached}
-                failed = next((r for r in results.values() if r["status"] != "passed"), None)
-                if failed or len(results) == len(packages):
-                    self.settle(request, index, stage, packages, results, failed)
-                    if failed:
-                        self.receipt(request, failed["status"], failed["exit_code"])
-                        break
+                unpassed = [r for r in results.values() if r["status"] != "passed"]
+                complete = keep_going or stage.get("report_all_failures")
+                if (unpassed and not complete) or len(results) == len(packages):
+                    self.settle(request, index, stage, packages, results, unpassed)
+                    if unpassed:
+                        self.record_verdict(ticket, unpassed)
+                        if not keep_going and not self.collecting(request):
+                            break
                     continue
                 waiting.append((request, stage, [p for p in packages if p not in cached], index))
-            else:
-                if not waiting and not self.running[ticket]:
-                    self.receipt(request, "passed", 0)
+            if ticket in self.finished:
+                continue
+            verdict = self.verdicts.get(ticket)
+            if verdict and not self.collecting(request) and not (keep_going and waiting):
+                self.receipt(request, verdict["status"], verdict["exit_code"])
+                continue
+            if not verdict and not waiting and not self.running[ticket]:
+                self.receipt(request, "passed", 0)
+                continue
+            if keep_going or (not verdict and ticket not in self.deferred):
                 ready.extend(waiting)
         return ready
+
+    def collecting(self, request):
+        """Whether a failure waits for more evidence: the request keeps going until every stage settles, or
+        a running stage it needs declares that it reports every package."""
+        ticket, stages = request["ticket"], request["plan"]["stages"]
+        running = [stages[index] for index in self.running[ticket]]
+        return bool(any(stage.get("report_all_failures") for stage in running)
+                    or (request["plan"].get("keep_going") and running))
+
+    def record_verdict(self, ticket, unpassed):
+        """A known failure outranks an unverified stage, so a later interruption cannot soften the verdict."""
+        current = self.verdicts.get(ticket)
+        if current is None or current["status"] != "failed":
+            self.verdicts[ticket] = next((r for r in unpassed if r["status"] == "failed"), unpassed[0])
 
     def priority(self, item):
         """Longest expected stage first; an unmeasured stage may be the longest, so it leads."""
@@ -529,6 +555,7 @@ class Executor:
                "needs": [(request, index, stage, needed) for request, stage, needed, index in peers]}
         if first["kind"] == "go":
             job["events"] = StageEvents(events, raw)
+            job["failures"] = {}
         return job
 
     def early_failures(self, job):
@@ -536,14 +563,21 @@ class Executor:
         the stage continues only for requests still interested in it."""
         if "events" not in job:
             return
-        failures = job["events"].failures()
+        fresh = job["events"].failures()
+        job["failures"].update(fresh)
+        failures = job["failures"]
         if not failures:
             return
         stage_id = job["result"]["stage_id"]
+        for package in sorted(fresh):
+            print(f"test execution: {stage_id}: {package} failed", flush=True)
         for request, index, stage, needed in job["needs"]:
             ticket = request["ticket"]
             failed = [p for p in needed if p in failures]
             if ticket in self.finished or not failed:
+                continue
+            if self.collecting(request):
+                self.deferred.add(ticket)
                 continue
             results = {p: {"status": "failed", "exit_code": 1, "stage_id": stage_id, "log": job["result"]["log"],
                            "raw": str(job["events"].paths["raw"]), **failures[p]} for p in failed}
@@ -590,12 +624,16 @@ class Executor:
             expected_code = 0 if report.get("process_exit_code") == report.get("digest_exit_code") == 0 else 1
             valid = report.get("completed", False) and code == expected_code
             outcomes = reuse.read_events(job["events_path"])
+            failures = {**job["failures"], **job["events"].failures()}
             for package in packages:
                 action = report.get("packages", {}).get(package)
                 status = "unverified" if not valid or action not in {"pass", "skip", "fail"} else (
                     "failed" if action == "fail" else "passed")
+                if package in failures:
+                    status = "failed"
                 cache[package] = {"status": status, "exit_code": {"passed": 0, "failed": 1, "unverified": 2}[status],
-                                  "stage_id": stage_id, "log": str(log), "report": str(result_path)}
+                                  "stage_id": stage_id, "log": str(log), "report": str(result_path),
+                                  **failures.get(package, {})}
                 if status == "passed" and outcomes.get(package, {}).get("reused"):
                     cache[package]["reused"] = outcomes[package]["reused"]
             reused = sum(1 for p in packages if "reused" in cache[p])
