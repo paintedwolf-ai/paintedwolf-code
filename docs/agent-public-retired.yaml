@@ -24,3 +24,7 @@ retired:
     kind: hint_code
     summary: Peer observations do not prevent another worker from recording independent evidence or corrections.
     date: 2026-09-30
+  - id: SANDBOX_REFUSAL_REPORT_SILENT
+    kind: hint_code
+    summary: Sandbox guidance reports only observed refusal facts; silent refusal-report warning is retired.
+    date: 2026-10-30
