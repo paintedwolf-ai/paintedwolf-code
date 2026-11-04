@@ -10,8 +10,8 @@ import (
 
 func init() { execpkg.SetViewProcessRecorder(recorderForViewDirectory) }
 
-// recorderForViewDirectory names the recorder of the mounted view holding dir. It compares paths
-// only, because a stat here could wait on the view's own server.
+// recorderForViewDirectory names the recorder of the mounted view holding dir. It never resolves dir,
+// because a stat there could wait on the view's own server.
 func recorderForViewDirectory(dir string) func(pid int) error {
 	clean := filepath.Clean(dir)
 	var recorder func(pid int) error
@@ -43,10 +43,20 @@ func viewsHold(views []*adapter.PreparedView, dir string) bool {
 	return false
 }
 
+// holdsPath also accepts the root's canonical spelling, which launchers such as Git use. Only the
+// root's parent is resolved: the root itself may be the mount.
 func holdsPath(root, dir string) bool {
 	if root == "" {
 		return false
 	}
 	clean := filepath.Clean(root)
-	return dir == clean || strings.HasPrefix(dir, clean+string(filepath.Separator))
+	if within(clean, dir) {
+		return true
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(clean))
+	return err == nil && within(filepath.Join(parent, filepath.Base(clean)), dir)
+}
+
+func within(root, dir string) bool {
+	return dir == root || strings.HasPrefix(dir, root+string(filepath.Separator))
 }
