@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from ci_policy import resources
 import verification_reuse as reuse
-from verification_execute import StageEvents
+from verification_execute import StageEvents, merge_failures
 
 WRAPPER = Path(__file__).resolve().parents[2] / "go-test-exec.py"
 
@@ -174,6 +174,12 @@ class EventTests(unittest.TestCase):
                 stream.write('_code": 2}\n')
             self.assertEqual(watcher.failures(), {"d": {}})
             self.assertEqual(watcher.failures(), {})
+
+    def test_failure_facts_survive_a_later_package_report(self):
+        known = {}
+        merge_failures(known, {"a": {"tests": ["TestA"]}})
+        merge_failures(known, {"a": {}, "b": {}})
+        self.assertEqual(known, {"a": {"tests": ["TestA"]}, "b": {}})
 
     def test_package_durations_keep_recent_measurements_per_stage(self):
         with tempfile.TemporaryDirectory() as directory:

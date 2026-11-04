@@ -259,6 +259,13 @@ class StageEvents:
         return found
 
 
+def merge_failures(known, fresh):
+    """The wrapper's event and Go's package failure can arrive on separate polls; neither erases the other's facts."""
+    for package, detail in fresh.items():
+        known[package] = {**known.get(package, {}), **detail}
+    return known
+
+
 class Executor:
     def __init__(self, queue, directory):
         self.queue = queue
@@ -564,7 +571,7 @@ class Executor:
         if "events" not in job:
             return
         fresh = job["events"].failures()
-        job["failures"].update(fresh)
+        merge_failures(job["failures"], fresh)
         failures = job["failures"]
         if not failures:
             return
@@ -624,7 +631,7 @@ class Executor:
             expected_code = 0 if report.get("process_exit_code") == report.get("digest_exit_code") == 0 else 1
             valid = report.get("completed", False) and code == expected_code
             outcomes = reuse.read_events(job["events_path"])
-            failures = {**job["failures"], **job["events"].failures()}
+            failures = merge_failures(job["failures"], job["events"].failures())
             for package in packages:
                 action = report.get("packages", {}).get(package)
                 status = "unverified" if not valid or action not in {"pass", "skip", "fail"} else (
