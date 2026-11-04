@@ -372,6 +372,24 @@ func TestSourceHistoryDiffACDF16PathMatchingItsBaselineKeepsTheLedgerAnswer(t *t
 	}
 }
 
+// A file created natively and removed by a program is gone: its record is not
+// the answer, and neither is the whole file as added.
+func TestSourceHistoryDiffACDF20PathInNeitherBaselineNorTreeIsAbsent(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "tmp.txt", content: "scratch\n", op: api.SourceChangeOpCreate})
+	result := runTreeDiff(t, h, &fakeTree{path: workspacebaseline.PathComparison{Absent: true}}, "tmp.txt")
+	if !result.Recorded || result.Unrecorded || result.State != "absent" || result.Diff != "" || result.VersionID != "" || result.BaseVersionID != "" || result.Note != treeDiffAbsentNote {
+		t.Fatalf("result = %+v, want a recorded absent answer with its note", result)
+	}
+
+	// With no record either, the honest answer is still that nothing is known.
+	h = newHistoryHarness(t)
+	result = runTreeDiff(t, h, &fakeTree{path: workspacebaseline.PathComparison{Absent: true}}, "never.txt")
+	if result.Recorded || result.State != "" || result.Note != sourceHistoryNoRecordNote {
+		t.Fatalf("result = %+v, want the no-record note", result)
+	}
+}
+
 // The ledger rejecting its own record does not stop the tree from answering, and
 // still reaches the caller when the tree has nothing to say.
 func TestSourceHistoryDiffACDF16LedgerRejectionYieldsToTheTree(t *testing.T) {

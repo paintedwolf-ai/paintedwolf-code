@@ -20,6 +20,7 @@ const (
 	overviewTreeUnknownNote = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
 	treeDiffNoTextNote      = "this file changed, but its baseline or live side has no text to compare"
 	treeDiffTouchedNote     = "this file's timestamp changed; its text did not"
+	treeDiffAbsentNote      = "neither your tree nor its baseline holds this file, so it has no change to show; source_history(path) has its record"
 	treeDiffPastRecordNote  = "this file changed after its last recorded version, so the live side names no version"
 )
 
@@ -180,6 +181,11 @@ func (t *SourceHistoryTool) workerSessionDiff(
 	})
 	if err != nil {
 		return ledgerAnswer(overviewTreeUnknownNote)
+	}
+	if compared.Absent && recorded.hasEffect {
+		return marshalSourceHistory(display, sourceHistoryResponse{
+			Mode: "diff", Path: display, Recorded: true, Since: &sourceHistorySince{}, State: "absent", Note: treeDiffAbsentNote,
+		})
 	}
 	if compared.Kind == "" {
 		return ledgerAnswer("")

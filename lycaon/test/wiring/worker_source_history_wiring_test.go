@@ -371,3 +371,16 @@ func TestSourceHistoryACDF19CredentialDiffMarksTheWorkersSession(t *testing.T) {
 		t.Fatal("the worker's session is not marked as exposed")
 	}
 }
+
+func TestSourceHistoryACDF20NativeCreateThenProgramDeleteIsAbsent(t *testing.T) {
+	_, results := runWorkerScript(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		commandCall("write", `printf 'scratch\n' > tmp.txt`),
+		commandCall("remove", `external -- /bin/sh -c 'rm tmp.txt'`),
+		historyCall("diff", map[string]any{"path": "tmp.txt", "mode": "diff"}),
+	)
+	diff := decodeWorkerHistory(t, results, "diff")
+	if !diff.Recorded || diff.Unrecorded || diff.State != "absent" || diff.Diff != "" || diff.Note == "" {
+		t.Fatalf("diff = %+v, want a recorded absent answer with a note and no text", diff)
+	}
+}

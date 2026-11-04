@@ -113,7 +113,9 @@ func statChange(abs string, before File) (ChangeKind, error) {
 // when the path matches its baseline. A side with no text to compare, such as an
 // oversized, binary or special file, leaves its Has flag false.
 type PathComparison struct {
-	Kind          ChangeKind
+	Kind ChangeKind
+	// Absent means neither the baseline nor the tree holds the path.
+	Absent        bool
 	Abs           string
 	Before, After string
 	HasBefore     bool
@@ -142,6 +144,7 @@ func (r *Reader) ComparePath(ctx context.Context, roots []projectroot.RootRef, b
 		if err != nil && !os.IsNotExist(err) {
 			return PathComparison{}, err
 		}
+		out.Absent = err != nil
 		if err == nil && !info.IsDir() {
 			out.Kind = ChangeCreated
 		}
