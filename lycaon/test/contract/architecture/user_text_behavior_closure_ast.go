@@ -326,6 +326,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"host_runner_tools":                            true,
 	"profile_has_verify":                           true,
 	"profile_has_command":                          true,
+	"profile_has_source_history":                   true,
 	"profile_has_http_request":                     true,
 	"http_request_needs_request":                   true,
 	"managed_secrets_needs_request":                true,

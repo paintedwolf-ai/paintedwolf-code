@@ -227,6 +227,7 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"profile_has_ask_user":            enabled["ask_user"],
 		"profile_has_surface_note":        enabled["surface_note"],
 		"profile_has_recall":              enabled["recall"],
+		"profile_has_source_history":      enabled["source_history"],
 		"profile_has_terminal_open":       enabled["terminal_open"],
 		"profile_has_terminal_read":       enabled["terminal_read"],
 		"profile_has_terminal_send":       enabled["terminal_send"],
