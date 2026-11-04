@@ -174,12 +174,31 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("CaptureCheckpointGitState: state=%+v err=%v", cpGitState, err)
 	}
 
+	cpStore := publishWorkflowCheckpoint(t, adp, prep.Core, cpStoreDir, trunkDir, viewID, workerID, checkpointID, cpGitState)
+
+	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
+	relReceipt, err := adp.Release(t.Context(), viewID)
+	if err != nil || !relReceipt.Settled {
+		t.Fatalf("Release failed: receipt=%+v err=%v", relReceipt, err)
+	}
+	if _, err := gitExec.Status(t.Context()); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable from Status after Release, got %v", err)
+	}
+
+	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
+	promoteWorkflowCheckpoint(t, cpStore, gitMgr, trunkDir, workerID, checkpointID, cpGitState)
+
+	assertWorkflowPromoted(t, trunkDir, workerID, checkpointID, workerHeadOID)
+}
+
+func publishWorkflowCheckpoint(t *testing.T, adp *fuselinux.Adapter, core *layeredfs.Core, cpStoreDir, trunkDir, viewID, workerID, checkpointID string, cpGitState *privategit.CheckpointGitState) *checkpoint.Store {
+	t.Helper()
 	cpStore, err := checkpoint.NewStore(cpStoreDir)
 	if err != nil {
 		t.Fatalf("checkpoint.NewStore: %v", err)
 	}
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
-		Core:             prep.Core,
+		Core:             core,
 		Store:            cpStore,
 		WorkerID:         workerID,
 		TaskID:           "task-e2e",
@@ -207,17 +226,11 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	if err != nil || pubRes.Manifest.CheckpointID != checkpointID {
 		t.Fatalf("Publish checkpoint failed: %v", err)
 	}
+	return cpStore
+}
 
-	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
-	relReceipt, err := adp.Release(t.Context(), viewID)
-	if err != nil || !relReceipt.Settled {
-		t.Fatalf("Release failed: receipt=%+v err=%v", relReceipt, err)
-	}
-	if _, err := gitExec.Status(t.Context()); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
-		t.Fatalf("expected ErrMountedWorktreeUnavailable from Status after Release, got %v", err)
-	}
-
-	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
+func promoteWorkflowCheckpoint(t *testing.T, cpStore *checkpoint.Store, gitMgr *privategit.Manager, trunkDir, workerID, checkpointID string, cpGitState *privategit.CheckpointGitState) {
+	t.Helper()
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       cpStore,
 		TargetRoots: map[string]string{"primary": trunkDir},
@@ -245,8 +258,6 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	if err != nil || len(applyRes.ImportedRefs) == 0 {
 		t.Fatalf("promoter.Apply failed: res=%+v err=%v", applyRes, err)
 	}
-
-	assertWorkflowPromoted(t, trunkDir, workerID, checkpointID, workerHeadOID)
 }
 
 func seedWorkflowTrunk(t *testing.T, trunkDir string) string {
