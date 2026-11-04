@@ -9,4 +9,4 @@ Review pending overlays against the requested outcome.
 
 ### This turn
 
-Stacked overlays (`OVERLAY_REBASE_CONFLICT`, `OVERLAY_PARENT_REJECTED`) first, then the ladder through every pending overlay. Once none are pending the host moves you off this surface.
+Stacked overlays (`OVERLAY_REBASE_CONFLICT`, `OVERLAY_PARENT_REJECTED`) first, then the ladder through every pending overlay.
