@@ -16,13 +16,15 @@ import (
 )
 
 const (
-	sourceTreeBudget        = tools.WindowSettleBudget
-	overviewTreeUnknownNote = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
-	treeDiffNoTextNote      = "this file changed, but its baseline or live side has no text to compare"
-	treeDiffTouchedNote     = "this file's timestamp changed; its text did not"
-	treeDiffMovedNote       = "this file moved and its text did not change"
-	treeDiffAbsentNote      = "neither your tree nor its baseline holds this file, so it has no change to show; source_history(path) has its record"
-	treeDiffPastRecordNote  = "this file changed after its last recorded version, so the live side names no version"
+	sourceTreeBudget         = tools.WindowSettleBudget
+	overviewTreeUnknownNote  = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
+	treeDiffNoTextNote       = "this file changed, but its baseline or live side has no text to compare"
+	treeDiffTouchedNote      = "this file's timestamp changed; its text did not"
+	treeDiffCreatedEmptyNote = "this new file is empty"
+	treeDiffDeletedEmptyNote = "this deleted file was empty"
+	treeDiffMovedNote        = "this file moved and its text did not change"
+	treeDiffAbsentNote       = "neither your tree nor its baseline holds this file, so it has no change to show; source_history(path) has its record"
+	treeDiffPastRecordNote   = "this file changed after its last recorded version, so the live side names no version"
 )
 
 func sourceTreeOf(tctx tools.ToolContext) tools.SourceTree {
@@ -236,7 +238,7 @@ func (t *SourceHistoryTool) workerSessionDiff(
 			out.Note = treeDiffPastRecordNote
 		}
 	}
-	diff, tooLarge := comparisonDiff(sourceledger.Comparison{
+	diff, diffNote := comparisonDiff(sourceledger.Comparison{
 		Before: sourceledger.ComparisonSide{VersionID: out.BaseVersionID, Content: compared.Before},
 		After:  sourceledger.ComparisonSide{VersionID: out.VersionID, Content: compared.After},
 	},
@@ -250,15 +252,24 @@ func (t *SourceHistoryTool) workerSessionDiff(
 			return "", err
 		}
 	}
-	switch {
-	case tooLarge != "":
-		out.Note = joinNotes(out.Note, tooLarge)
-	case diff == "" && beforeAt != "":
-		out.Note = treeDiffMovedNote
-	case diff == "":
-		out.Note = treeDiffTouchedNote
+	if diffNote == "" && diff == "" {
+		diffNote = unchangedTextNote(compared.Kind, beforeAt != "")
 	}
+	out.Note = joinNotes(out.Note, diffNote)
 	return marshalSourceHistory(display, out)
+}
+
+// unchangedTextNote says why a changed path has identical text on both sides.
+func unchangedTextNote(kind workspacebaseline.ChangeKind, moved bool) string {
+	switch {
+	case moved:
+		return treeDiffMovedNote
+	case kind == workspacebaseline.ChangeCreated:
+		return treeDiffCreatedEmptyNote
+	case kind == workspacebaseline.ChangeDeleted:
+		return treeDiffDeletedEmptyNote
+	}
+	return treeDiffTouchedNote
 }
 
 // deliverTreeSides records each side where its text came from: a moved file's base

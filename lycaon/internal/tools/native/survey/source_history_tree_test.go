@@ -361,11 +361,43 @@ func TestSourceHistoryDiffACDF15ANoTextSideSaysSoInsteadOfDiffing(t *testing.T) 
 	}
 }
 
-func TestSourceHistoryDiffACDF15ATouchedFileSaysItsTextIsUnchanged(t *testing.T) {
+// An empty line diff says what is actually known about the bytes.
+func TestSourceHistoryDiffACDF22EmptyDiffStatesWhatIsKnown(t *testing.T) {
+	for _, c := range []struct {
+		name          string
+		kind          workspacebaseline.ChangeKind
+		before, after string
+		note          string
+	}{
+		{"final newline removed", workspacebaseline.ChangeModified, "a\n", "a", diffFinalNewlineNote},
+		{"final newline added", workspacebaseline.ChangeModified, "a", "a\n", diffFinalNewlineNote},
+		{"lone newline emptied", workspacebaseline.ChangeModified, "\n", "", diffFinalNewlineNote},
+		{"timestamp only", workspacebaseline.ChangeModified, "a\n", "a\n", treeDiffTouchedNote},
+		{"created empty", workspacebaseline.ChangeCreated, "", "", treeDiffCreatedEmptyNote},
+		{"deleted empty", workspacebaseline.ChangeDeleted, "", "", treeDiffDeletedEmptyNote},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newHistoryHarness(t)
+			compared := workspacebaseline.PathComparison{Kind: c.kind, Before: c.before, After: c.after, HasBefore: true, HasAfter: true}
+			result := runTreeDiff(t, h, &fakeTree{path: compared}, "f.txt")
+			if result.Diff != "" || result.Note != c.note {
+				t.Fatalf("result = %+v, want no diff and note %q", result, c.note)
+			}
+		})
+	}
+}
+
+func TestSourceHistoryDiffACDF22FinalNewlineChangeInTheLedgerIsStated(t *testing.T) {
 	h := newHistoryHarness(t)
-	result := runTreeDiff(t, h, &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "same\n", After: "same\n", HasBefore: true, HasAfter: true}}, "touched.go")
-	if !result.Unrecorded || result.Diff != "" || result.Note != treeDiffTouchedNote {
-		t.Fatalf("result = %+v, want an empty diff and the touched note", result)
+	h.beginSession(historySession)
+	h.record(effectSeed{path: "f.txt", content: "a", before: "a\n"})
+	if result := h.sessionDiff("f.txt"); result.Diff != "" || result.Note != diffFinalNewlineNote {
+		t.Fatalf("default diff = %+v, want the final-newline note", result)
+	}
+	result, err := h.diff(map[string]any{"path": "f.txt", "version_id": h.head("f.txt").VersionID})
+	testutil.FailErr(t, "explicit diff", err)
+	if result.Diff != "" || result.Note != diffFinalNewlineNote {
+		t.Fatalf("explicit diff = %+v, want the final-newline note", result)
 	}
 }
 
