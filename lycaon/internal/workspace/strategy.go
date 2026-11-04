@@ -77,7 +77,8 @@ func firstRegularFile(ctx context.Context, root string, admit sourceAdmit) (stri
 				}
 				return sandbox.SurveyContinue, err
 			}
-			if info.Mode().IsRegular() {
+			// An unreadable file says nothing about what the volume can clone.
+			if info.Mode().IsRegular() && !sourceUnreadable(entry.Abs) {
 				sample = entry.Abs
 				return sandbox.SurveyStop, nil
 			}

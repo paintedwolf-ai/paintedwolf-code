@@ -595,8 +595,9 @@ func TestUnreadableEntriesAreCountedAndAbsent(t *testing.T) {
 		t.Skip("root reads everything")
 	}
 	project := t.TempDir()
-	writeTree(t, project, map[string]string{"kept.txt": "k", "closed/inner.txt": "i", "locked.txt": "l"})
-	closed, locked := filepath.Join(project, "closed"), filepath.Join(project, "locked.txt")
+	// The locked file sorts first, so it is what a clone probe would try.
+	writeTree(t, project, map[string]string{"kept.txt": "k", "closed/inner.txt": "i", "a-locked.txt": "l"})
+	closed, locked := filepath.Join(project, "closed"), filepath.Join(project, "a-locked.txt")
 	testutil.FailErr(t, "close directory", os.Chmod(closed, 0))
 	testutil.FailErr(t, "lock file", os.Chmod(locked, 0))
 	t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
@@ -610,7 +611,7 @@ func TestUnreadableEntriesAreCountedAndAbsent(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(binding.Root, "kept.txt")); err != nil {
 		t.Fatalf("readable file missing: %v", err)
 	}
-	if _, err := os.Lstat(filepath.Join(binding.Root, "locked.txt")); !os.IsNotExist(err) {
+	if _, err := os.Lstat(filepath.Join(binding.Root, "a-locked.txt")); !os.IsNotExist(err) {
 		t.Fatalf("unreadable file present: %v", err)
 	}
 }
