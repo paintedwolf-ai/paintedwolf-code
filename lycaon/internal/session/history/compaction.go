@@ -222,7 +222,7 @@ func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals 
 		Attempts:             m.store,
 		Model:                sess.Model,
 		ProviderID:           sess.ProviderID,
-		WorkingSetStartOrd:   activeWorkingSetStart(originals, activeTurnAllocation(m.compactionConfig(ctx, sess))),
+		WorkingSetStartOrd:   activeWorkingSetStart(originals, activeTurnAllocation(m.compactionConfig(ctx, sess)), m.cutoffs.heldWorkingSet(sess.ID)),
 	}
 	info.ProviderID, info.Model = m.Model(ctx, sess)
 	if prior, ok, err := m.store.GetCompactionView(ctx, sess.ID); err == nil && ok {

@@ -1,6 +1,8 @@
 package history
 
 import (
+	"slices"
+
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -48,32 +50,20 @@ func (u workingSetUsage) exceeds(alloc workingSetAllocation) bool {
 type workingSetBoundary struct {
 	startOrd int64
 	fullTurn bool
+	advanced bool
 }
 
 // selectWorkingSetBoundary chooses a complete-exchange start from the rows after
-// the human opener. The latest exchange stays whole even when it alone exceeds
-// the allocation; later fitting bounds its tool bodies.
-func selectWorkingSetBoundary(rows []api.Message, alloc workingSetAllocation) workingSetBoundary {
-	var used workingSetUsage
-	for i := len(rows) - 1; i >= 0; i-- {
-		if rows[i].Ord <= 0 {
-			continue
-		}
-		used.add(rows[i])
-		if used.exceeds(alloc) {
-			start := completeExchangeStart(rows, i+1)
-			if start >= len(rows) {
-				start = latestExchangeStart(rows)
-			}
-			return workingSetBoundary{startOrd: rows[start].Ord}
-		}
+// the human opener, keeping held while it satisfies alloc. The latest exchange
+// stays whole even when it alone exceeds the allocation; later fitting bounds
+// its tool bodies.
+func selectWorkingSetBoundary(rows []api.Message, alloc workingSetAllocation, held int64) workingSetBoundary {
+	first := slices.IndexFunc(rows, func(row api.Message) bool { return row.Ord > 0 })
+	if first < 0 {
+		return workingSetBoundary{fullTurn: true}
 	}
-	for _, row := range rows {
-		if row.Ord > 0 {
-			return workingSetBoundary{startOrd: row.Ord, fullTurn: true}
-		}
-	}
-	return workingSetBoundary{fullTurn: true}
+	start, advanced := selectCutoff(rows, alloc, held)
+	return workingSetBoundary{startOrd: rows[start].Ord, fullTurn: !advanced && start == first, advanced: advanced}
 }
 
 // completeExchangeStart returns the first index at or after from whose suffix
@@ -112,12 +102,12 @@ func latestExchangeStart(rows []api.Message) int {
 
 // activeWorkingSetStart returns the ordinal summary pages must stop before, or
 // zero when no active human instruction exists.
-func activeWorkingSetStart(rows []api.Message, alloc workingSetAllocation) int64 {
+func activeWorkingSetStart(rows []api.Message, alloc workingSetAllocation, held int64) int64 {
 	idx := api.UserIntentBoundary(rows) - 1
 	if idx < 0 || rows[idx].Ord <= 0 {
 		return 0
 	}
-	if start := selectWorkingSetBoundary(rows[idx+1:], alloc).startOrd; start > 0 {
+	if start := selectWorkingSetBoundary(rows[idx+1:], alloc, held).startOrd; start > 0 {
 		return start
 	}
 	return rows[idx].Ord + 1
@@ -134,14 +124,13 @@ type viewSplice struct {
 // planViewSplice replaces only intent < ord <= min(covered, workingSetStart-1).
 // A summary range spanning the boundary is never clipped: the canonical suffix
 // starts after it, so summarized exchanges are not presented twice.
-func planViewSplice(history []api.Message, view *store.CompactionView, cfg compaction.CompactionConfig) viewSplice {
+func planViewSplice(history []api.Message, view *store.CompactionView, start int64) viewSplice {
 	plan := viewSplice{intentIdx: -1, replacedThrough: view.CoveredThroughOrd}
 	idx := api.UserIntentBoundary(history) - 1
 	if idx < 0 || history[idx].Ord <= 0 {
 		return plan
 	}
 	after := history[idx+1:]
-	start := activeWorkingSetStart(history, activeTurnAllocation(cfg))
 	summarized := int64(0)
 	if view.Continuation != nil {
 		summarized = view.Continuation.ThroughOrd

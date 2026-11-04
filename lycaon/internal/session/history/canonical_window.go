@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"math"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -183,9 +184,16 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 	}
 	reserve := min(2048, max(256, cfg.TargetTokens/8))
 	budget := max(1, cfg.TargetTokens-reserve)
-	for len(tail) > 1 && compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(tail)) > budget {
-		tail = tail[completeExchangeStart(tail, 1):]
-	}
+	// The restored tail holds its start across appends like any other cutoff.
+	alloc := workingSetAllocation{rows: len(tail) + 1, tokens: budget, bytes: math.MaxInt / 2}
+	m.cutoffs.update(sess.ID, m.cutoffKey(ctx, sess, cfg, view.Generation), tail, func(st *cutoffState) {
+		at, advanced := selectCutoff(tail, alloc, st.tail.ord)
+		tail = tail[at:]
+		if advanced {
+			st.change = cutoffTailAdvanced
+		}
+		st.tail = markRow(tail[0])
+	})
 	if len(tail) == 0 || tail[0].Ord <= 1 || tail[0].Ord > view.Continuation.ThroughOrd {
 		return nil, false
 	}

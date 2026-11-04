@@ -158,9 +158,9 @@ func TestLongTurnReplacesOnlyValidatedOlderRangeAC_KV_01(t *testing.T) {
 		return svc, mem, sess, seedTurn(t, mem, sess.ID, 160, "recorded observation")
 	}
 	_, _, _, canonical := seeded(t)
-	start := activeWorkingSetStart(canonical, activeTurnAllocation(cfg))
-	if rows := len(canonical) - indexOfID(canonical, canonical[slices.IndexFunc(canonical, func(row api.Message) bool { return row.Ord == start })].ID); rows != ActiveTurnWorkingSetRows {
-		t.Fatalf("working set holds %d rows, want %d", rows, ActiveTurnWorkingSetRows)
+	start := activeWorkingSetStart(canonical, activeTurnAllocation(cfg), 0)
+	if rows := len(canonical) - indexOfID(canonical, canonical[slices.IndexFunc(canonical, func(row api.Message) bool { return row.Ord == start })].ID); rows > ActiveTurnWorkingSetRows || rows < ActiveTurnWorkingSetRows-2*PrefixGridRowStep {
+		t.Fatalf("working set holds %d rows, want at most %d with its reserve", rows, ActiveTurnWorkingSetRows)
 	}
 
 	t.Run("coverage before the boundary", func(t *testing.T) {
@@ -289,7 +289,7 @@ func TestPublishedSummaryStopsBeforeWorkingSet(t *testing.T) {
 	seedTurn(t, mem, sess.ID, 120, strings.Repeat("recorded observation ", 12))
 	originals, err := mem.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read turn", err)
-	start := activeWorkingSetStart(originals, activeTurnAllocation(cfg))
+	start := activeWorkingSetStart(originals, activeTurnAllocation(cfg), 0)
 	_, err = svc.ForceCompact(t.Context(), sess.ID)
 	testutil.FailErr(t, "force compact", err)
 	view, ok, err := mem.GetCompactionView(t.Context(), sess.ID)
@@ -328,7 +328,7 @@ func TestWorkingSetBoundarySelection(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := selectWorkingSetBoundary(tc.rows, tc.alloc)
+			got := selectWorkingSetBoundary(tc.rows, tc.alloc, 0)
 			if got.startOrd != tc.start || got.fullTurn != tc.full {
 				t.Fatalf("boundary = %+v, want start %d full %v", got, tc.start, tc.full)
 			}

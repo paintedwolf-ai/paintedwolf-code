@@ -38,6 +38,7 @@ type Service struct {
 	router          *llm.StaticModelRouter
 	dataDir         string
 	calibration     scopedstore.LRU[tokenCalibration]
+	cutoffs         cutoffTracker
 	recallAvailable func(context.Context, *api.Session) bool
 }
 
@@ -48,5 +49,10 @@ func (m *Service) SetCompactor(compactor compaction.ContextCompactor) {
 	m.Compactor = compactor
 	m.Limits.SetFallback(compactor)
 }
-func (m *Service) SetDataDir(dir string)              { m.dataDir = dir }
-func (m *Service) ForgetCalibration(sessionID string) { m.calibration.Delete(sessionID) }
+func (m *Service) SetDataDir(dir string) { m.dataDir = dir }
+
+// ForgetProjection drops rebuildable per-session projection state.
+func (m *Service) ForgetProjection(sessionID string) {
+	m.calibration.Delete(sessionID)
+	m.cutoffs.sessions.Delete(sessionID)
+}

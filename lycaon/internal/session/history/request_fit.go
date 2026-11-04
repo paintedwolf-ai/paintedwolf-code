@@ -3,23 +3,32 @@ package history
 import (
 	"context"
 	"math"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-const requestOmissionNoticeID = "host-request-history-reference"
 
 type RequestBudgets interface {
 	RequestBudget(context.Context, string, modelcall.CompletionRequest) modelcall.RequestBudget
 }
 
-// FitRequest reserves the live frame before allocating history and output.
+// FitRequest reserves the live frame before allocating history and output, and
+// reports where fitted history starts so prefix reuse can be attributed.
 func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []api.Message, req modelcall.CompletionRequest, budgets RequestBudgets) (modelcall.CompletionRequest, error) {
+	fitted, err := m.fitRequest(ctx, sess, history, req, budgets)
+	if err == nil && m != nil && sess != nil {
+		fitted.Debug.HistoryCut = m.cutoffs.takeFacts(sess.ID)
+	}
+	return fitted, err
+}
+
+func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []api.Message, req modelcall.CompletionRequest, budgets RequestBudgets) (modelcall.CompletionRequest, error) {
 	cfg := m.compactionConfig(ctx, sess)
 	provider, model := m.Model(ctx, sess)
 	if model != "" {
@@ -29,6 +38,17 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 	}
 	projection := projectRequest(req.Messages, history)
 	projected := m.ApplyView(ctx, sess, projection.history)
+	view := m.requestView(ctx, sess)
+	key := m.requestCutoffKey(ctx, sess, cfg, view)
+	note := func(rows []api.Message) {
+		if m != nil && sess != nil {
+			m.noteFitCut(key, sess.ID, projection.history, rows)
+		}
+	}
+	projected, err := m.applyFitCut(ctx, sess, key, view, projected, cfg)
+	if err != nil {
+		return req, err
+	}
 	req.Messages = projection.replace(projected)
 	projection = projectRequest(req.Messages, projected)
 	measure := func(candidate modelcall.CompletionRequest) modelcall.RequestBudget {
@@ -84,13 +104,16 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 	}
 	fullHistory := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(projection.history))
 	capacity := max(1, (ceiling-frameBudget.Input)*fullHistory/max(1, budget.Input-frameBudget.Input))
-	record := m.requestContinuation(ctx, sess)
+	var record *messageview.Continuation
+	if view != nil && view.Continuation != nil {
+		record = messageview.CloneContinuation(view.Continuation)
+	}
 	for step := 0; step < 12; step++ {
 		if step == 11 {
 			capacity = 1
 		}
 		shrinkTools := capacity <= 1 || hasOversizedToolBody(projection.history)
-		rows, err := m.fitRequestHistory(ctx, sess, projection.history, record, cfg, capacity, shrinkTools)
+		rows, err := m.fitRequestHistory(ctx, sess, projection.history, view, record, cfg, capacity, shrinkTools)
 		if err != nil {
 			return req, err
 		}
@@ -101,12 +124,14 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 			if req.MaxTokens <= 0 && (budget.Output <= 0 || budget.Input+budget.Output+budget.Headroom > budget.Window) {
 				candidate.MaxTokens = budget.Window - budget.Headroom - budget.Input
 			}
+			note(rows)
 			return candidate, nil
 		}
 		if capacity <= 1 {
 			available := budget.Window - budget.Headroom - budget.Input
 			if req.MaxTokens <= 0 && budget.Input <= inputLimit && available >= max(128, budget.MinimumOutput) {
 				candidate.MaxTokens = available
+				note(rows)
 				return candidate, nil
 			}
 			break
@@ -127,23 +152,104 @@ func requestInputLimit(hard, frameInput int) int {
 	return max(hard, frameInput+hard/4)
 }
 
-// requestContinuation returns validated summary coverage only; omissions are named separately.
-func (m *Service) requestContinuation(ctx context.Context, sess *api.Session) *messageview.Continuation {
+// requestView returns the published view only while its source is current;
+// omissions are named separately from what it covers.
+func (m *Service) requestView(ctx context.Context, sess *api.Session) *store.CompactionView {
 	if m == nil || m.store == nil || sess == nil {
 		return nil
 	}
 	view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
-	if err != nil || !ok || view.Continuation == nil {
+	if err != nil || !ok {
 		return nil
 	}
 	if current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq); err != nil || !current {
 		return nil
 	}
-	return messageview.CloneContinuation(view.Continuation)
+	return view
 }
 
-func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
-	rows := append([]api.Message(nil), history...)
+func (m *Service) requestCutoffKey(ctx context.Context, sess *api.Session, cfg compaction.CompactionConfig, view *store.CompactionView) cutoffKey {
+	generation := 0
+	if view != nil {
+		generation = view.Generation
+	}
+	return m.cutoffKey(ctx, sess, cfg, generation)
+}
+
+// applyFitCut replays a held fit cutoff, so requests after the one that chose it
+// render the same rows and notice without refitting.
+func (m *Service) applyFitCut(ctx context.Context, sess *api.Session, key cutoffKey, view *store.CompactionView, rows []api.Message, cfg compaction.CompactionConfig) ([]api.Message, error) {
+	if m == nil || sess == nil || len(rows) == 0 {
+		return rows, nil
+	}
+	held := m.fitHeldCut(key, sess.ID, rows)
+	if held == 0 {
+		return rows, nil
+	}
+	pinned := promptassembly.MarkContextPins(sess, rows, min(8192, max(0, cfg.HardCeilingTokens/5)))
+	kept := pinned[:0:0]
+	firstDropped := int64(0)
+	for _, row := range pinned {
+		switch {
+		case row.ID == historyCoverageNoticeID:
+		case row.Ord > 0 && row.Ord < held && !row.ContextPinned:
+			if firstDropped == 0 {
+				firstDropped = row.Ord
+			}
+		default:
+			kept = append(kept, row)
+		}
+	}
+	return m.withOmissionNotice(ctx, sess, kept, view, firstDropped, true)
+}
+
+// withOmissionNotice names the interval between coverage and the first retained
+// row, derived the same way whether this request cut the rows or an earlier one did.
+func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kept []api.Message, view *store.CompactionView, firstDropped int64, prior bool) ([]api.Message, error) {
+	if firstDropped == 0 && !prior {
+		return kept, nil
+	}
+	covered := int64(0)
+	if view != nil {
+		covered = view.CoveredThroughOrd
+	}
+	at := slices.IndexFunc(kept, func(row api.Message) bool {
+		return row.Ord > 0 && !row.ContextPinned && (row.Ord > covered || firstDropped > 0)
+	})
+	if at < 0 {
+		return kept, nil
+	}
+	through := kept[at].Ord - 1
+	for slices.ContainsFunc(kept, func(row api.Message) bool { return row.Ord == through }) {
+		through--
+	}
+	from := covered + 1
+	if firstDropped > 0 {
+		from = min(from, firstDropped)
+	}
+	if from > through {
+		return kept, nil
+	}
+	notice, err := m.omissionNotice(ctx, sess, historyCoverageNoticeID, from, through)
+	if err != nil {
+		return nil, err
+	}
+	if view == nil {
+		at = 0
+	}
+	return slices.Insert(slices.Clone(kept), at, *notice), nil
+}
+
+func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, view *store.CompactionView, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
+	rows := make([]api.Message, 0, len(history))
+	prior := false
+	for _, row := range history {
+		if row.ID == historyCoverageNoticeID {
+			prior = true
+			continue
+		}
+		rows = append(rows, row)
+	}
 	recall := m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 	if record != nil && record.ThroughOrd > 0 {
 		record = messageview.CloneContinuation(record)
@@ -182,59 +288,63 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	}
 	noticeTokens := 0
 	if lastOrd > 0 {
-		sized, err := m.omissionNotice(ctx, sess, requestOmissionNoticeID, lastOrd, lastOrd)
+		sized, err := m.omissionNotice(ctx, sess, historyCoverageNoticeID, lastOrd, lastOrd)
 		if err != nil {
 			return nil, err
 		}
 		noticeTokens = compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{*sized}))
 	}
 	rows = promptassembly.MarkContextPins(sess, rows, min(8192, max(0, tokens/5)))
-	canShrinkTools := shrinkTools && m != nil && m.store != nil && recall
-	if canShrinkTools {
+	reserve := min(max(2048, tokens/16), tokens/2)
+	contexts := compaction.ContextMessagesFromAPI(rows)
+	fitted := compaction.DeterministicFitWithReserve(cfg, contexts, tokens, reserve)
+	// Dropping old rows comes first: shrinking bodies a later request may keep
+	// whole would rewrite retained history on every call.
+	if shrinkTools && m != nil && m.store != nil && recall && compaction.EstimateMessagesTokens(fitted) > tokens {
 		toolTokens := max(1, tokens-noticeTokens)
 		rows = projectRecordedToolBodies(ctx, rows, toolTokens)
 		if retained := retainedToolTailMessages(rows, toolTokens); retained > 0 {
 			cfg.KeepRecentMessages = retained
 		}
-	}
-	contexts := compaction.ContextMessagesFromAPI(rows)
-	fitted := compaction.DeterministicFit(cfg, contexts, tokens)
-	if canShrinkTools && compaction.EstimateMessagesTokens(fitted) > tokens {
-		rows = projectRecordedToolBodies(ctx, rows)
-		cfg.KeepRecentMessages = max(1, retainedToolTailMessages(rows, 0))
 		contexts = compaction.ContextMessagesFromAPI(rows)
-		fitted = compaction.DeterministicFit(cfg, contexts, tokens)
+		fitted = compaction.DeterministicFitWithReserve(cfg, contexts, tokens, reserve)
+		if compaction.EstimateMessagesTokens(fitted) > tokens {
+			rows = projectRecordedToolBodies(ctx, rows)
+			cfg.KeepRecentMessages = max(1, retainedToolTailMessages(rows, 0))
+			contexts = compaction.ContextMessagesFromAPI(rows)
+			fitted = compaction.DeterministicFitWithReserve(cfg, contexts, tokens, reserve)
+		}
 	}
-	if from, through := omittedOrdinals(rows, fitted); through > 0 {
+	firstDropped, through := omittedOrdinals(rows, fitted)
+	if through > 0 {
 		var err error
-		if fitted, err = m.fitWithOmissionNotice(ctx, sess, cfg, contexts, rows, tokens, from, through); err != nil {
+		if fitted, err = m.fitWithOmissionNotice(ctx, sess, cfg, contexts, rows, tokens, reserve, firstDropped, through); err != nil {
 			return nil, err
 		}
-		if shrinkTools {
-			kept := fitted[:0:0]
-			for _, row := range fitted {
-				if row.ID != "host-context-trim-notice" {
-					kept = append(kept, row)
-				}
+		kept := fitted[:0:0]
+		for _, row := range fitted {
+			if row.ID != historyCoverageNoticeID && row.ID != "host-context-trim-notice" {
+				kept = append(kept, row)
 			}
-			fitted = kept
 		}
+		fitted = kept
+		firstDropped, _ = omittedOrdinals(rows, fitted)
 	}
-	return compaction.ContextMessagesToAPI(fitted, rows), nil
+	return m.withOmissionNotice(ctx, sess, compaction.ContextMessagesToAPI(fitted, rows), view, firstDropped, prior)
 }
 
 // fitWithOmissionNotice refits with the notice pinned; its cost can widen the
 // omission once, and the final text names the interval actually left out.
-func (m *Service) fitWithOmissionNotice(ctx context.Context, sess *api.Session, cfg compaction.CompactionConfig, contexts []compaction.ContextMessage, rows []api.Message, tokens int, from, through int64) ([]compaction.ContextMessage, error) {
+func (m *Service) fitWithOmissionNotice(ctx context.Context, sess *api.Session, cfg compaction.CompactionConfig, contexts []compaction.ContextMessage, rows []api.Message, tokens, reserve int, from, through int64) ([]compaction.ContextMessage, error) {
 	var fitted []compaction.ContextMessage
 	for range 2 {
-		notice, err := m.omissionNotice(ctx, sess, requestOmissionNoticeID, from, through)
+		notice, err := m.omissionNotice(ctx, sess, historyCoverageNoticeID, from, through)
 		if err != nil {
 			return nil, err
 		}
 		reference := compaction.ContextMessage{ID: notice.ID, Role: string(notice.Role), Origin: notice.Origin,
 			Authority: notice.Authority, TrustTier: notice.TrustTier, Content: notice.Content, ContextPinned: true}
-		fitted = compaction.DeterministicFit(cfg, append([]compaction.ContextMessage{reference}, contexts...), tokens)
+		fitted = compaction.DeterministicFitWithReserve(cfg, append([]compaction.ContextMessage{reference}, contexts...), tokens, reserve)
 		nextFrom, nextThrough := omittedOrdinals(rows, fitted)
 		if nextFrom == from && nextThrough == through {
 			break
