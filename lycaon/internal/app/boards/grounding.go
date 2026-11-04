@@ -32,7 +32,6 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // WireGroundingAndFindings wires grounding coordinators, progress, visual, and decision tools.
