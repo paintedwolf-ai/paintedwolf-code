@@ -58,7 +58,8 @@ func TestProgramEntryLsofNamesHostListenersOnlyAfterApproval(t *testing.T) {
 	outcome := decodeOutcome(t, out)
 	lines := strings.Split(strings.TrimSuffix(outcome.Stdout, "\n"), "\n")
 	want := []string{self.Name, strconv.Itoa(os.Getpid()), strconv.Itoa(os.Getuid()), "IPv4", "TCP", fmt.Sprintf("127.0.0.1:%d", port), "(LISTEN)"}
-	if outcome.Status != 0 || outcome.Stderr != "" || len(lines) != 2 || strings.Join(strings.Fields(lines[0]), " ") != "COMMAND PID USER TYPE NAME" || strings.Join(strings.Fields(lines[1]), " ") != strings.Join(want, " ") {
+	// Whether this host withholds sockets from the table is the host's fact.
+	if outcome.Status != 0 || strings.TrimSuffix(outcome.Stderr, lsofWithheldNote) != "" || len(lines) != 2 || strings.Join(strings.Fields(lines[0]), " ") != "COMMAND PID USER TYPE NAME" || strings.Join(strings.Fields(lines[1]), " ") != strings.Join(want, " ") {
 		t.Fatalf("approved lsof %s", out)
 	}
 	out, err = f.call(t, t.Context(), fmt.Sprintf("lsof -t -i :%d", port))
@@ -81,7 +82,7 @@ func TestProgramEntryLsofNamesHostListenersOnlyAfterApproval(t *testing.T) {
 	testutil.FailErr(t, "denied lsof", err)
 	outcome = decodeOutcome(t, out)
 	if outcome.Status != 1 || outcome.Stdout != "" || outcome.Refusal != nil ||
-		outcome.Stderr != fmt.Sprintf("lsof: port %d is held outside this session; host process inspection was not approved, so those holders were not inspected\n", port) {
+		strings.TrimSuffix(outcome.Stderr, lsofWithheldNote) != fmt.Sprintf("lsof: port %d is held outside this session; host process inspection was not approved, so those holders were not inspected\n", port) {
 		t.Fatalf("denied lsof %s", out)
 	}
 	f.Configure = nil
@@ -197,7 +198,7 @@ func TestProgramEntryLsofSaysAWithheldTableLeavesAPortUnknown(t *testing.T) {
 	out, err := f.call(t, t.Context(), "lsof -i :3000")
 	testutil.FailErr(t, "lsof", err)
 	outcome := decodeOutcome(t, out)
-	if outcome.Status != 1 || outcome.Stdout != "" || !strings.Contains(outcome.Stderr, "may still be held") {
+	if outcome.Status != 1 || outcome.Stdout != "" || outcome.Stderr != lsofWithheldNote {
 		t.Fatalf("withheld lsof %s", out)
 	}
 }
