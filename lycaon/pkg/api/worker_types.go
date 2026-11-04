@@ -280,6 +280,17 @@ type OverlayRejectOutcome struct {
 	Orphaned  []string `json:"orphaned_job_ids,omitempty"`
 }
 
+// WorkspaceNotClonableReason says why a worker branch cannot clone its source.
+type WorkspaceNotClonableReason string
+
+const (
+	WorkspaceRootsSpanVolumes         WorkspaceNotClonableReason = "roots_span_volumes"
+	WorkspaceVolumeCannotClone        WorkspaceNotClonableReason = "volume_cannot_clone"
+	WorkspaceVolumeRootInsideAttached WorkspaceNotClonableReason = "volume_root_inside_attached_root"
+	WorkspaceVolumeRootUnwritable     WorkspaceNotClonableReason = "volume_root_unwritable"
+	WorkspaceVolumeNotIdentified      WorkspaceNotClonableReason = "volume_not_identified"
+)
+
 // WorkspaceProvisionStrategy is selected from successful clone operations.
 type WorkspaceProvisionStrategy string
 

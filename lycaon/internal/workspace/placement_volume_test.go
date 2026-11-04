@@ -552,3 +552,28 @@ func TestStateFolderOnSourceVolumeOutsideRootsKeepsTheBranch(t *testing.T) {
 		t.Fatalf("branch left the state folder: %s", binding.Root)
 	}
 }
+
+func TestUnreadableEntriesAreCountedAndAbsent(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	project := t.TempDir()
+	writeTree(t, project, map[string]string{"kept.txt": "k", "closed/inner.txt": "i", "locked.txt": "l"})
+	closed, locked := filepath.Join(project, "closed"), filepath.Join(project, "locked.txt")
+	testutil.FailErr(t, "close directory", os.Chmod(closed, 0))
+	testutil.FailErr(t, "lock file", os.Chmod(locked, 0))
+	t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
+	fixture := newPlacementFixture(t)
+
+	binding, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
+	testutil.FailErr(t, "create", err)
+	if got := binding.Preparation.Roots[0].UnreadableEntries; got != 2 {
+		t.Fatalf("unreadable entries = %d", got)
+	}
+	if _, err := os.Lstat(filepath.Join(binding.Root, "kept.txt")); err != nil {
+		t.Fatalf("readable file missing: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(binding.Root, "locked.txt")); !os.IsNotExist(err) {
+		t.Fatalf("unreadable file present: %v", err)
+	}
+}

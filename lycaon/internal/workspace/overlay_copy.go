@@ -228,6 +228,12 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 				}
 				links.Add(1)
 			case info.Mode().IsRegular():
+				// A clone can succeed without read permission and leave a file the
+				// baseline capture cannot open.
+				if info.Mode().Perm()&0o400 == 0 {
+					unreadable.Add(1)
+					return sandbox.SurveyContinue, nil
+				}
 				src := entry.Abs
 				if opts.fileSource != nil {
 					src = opts.fileSource(entry.Rel, src)
@@ -293,6 +299,10 @@ func finalizeDirectoryMetadata(ctx context.Context, queue []directoryMetadata) e
 			return err
 		}
 		entry := queue[i]
+		// A directory that could not be listed stays an empty, readable one here.
+		if entry.mode.Perm()&0o500 != 0o500 {
+			continue
+		}
 		if err := os.Chmod(entry.dst, entry.mode.Perm()); err != nil {
 			return err
 		}
