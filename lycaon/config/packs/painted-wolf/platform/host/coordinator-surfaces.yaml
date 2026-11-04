@@ -88,7 +88,7 @@ implement_investigate:
   mode_ref: implement-investigate
   card:
     label: investigate
-    rule: Text alongside tool calls is hidden from the user.
+    rule: Text alongside tool calls reaches the user when valid.
   exit: report
   prose_finish: true
   publishes_mid_turn_text: true

@@ -6,7 +6,7 @@ Before the first draft:
 
 1. Reconcile progress once: close or explicitly descope every open row; never draft first and repair the checklist later.
 2. Build the claim set from accepted worker **`findings[]`** and your own tool results — not the brief or `objectives_met`.
-3. Give every path-named factual claim matching **`cited_evidence`**. If a desirable claim exists only in the assignment, omit it or state the coverage gap; do not start a new evidence hunt after drafting.
+3. Give every path-named factual claim an inline citation. If a desirable claim exists only in the assignment, omit it or state the coverage gap; do not start a new evidence hunt after drafting.
 
 Then draft once.
 
@@ -29,7 +29,7 @@ Then draft once.
 
 **Do not narrate fixes.** Do not say "I'll edit…", "I'll run `task()`…", or loop searches hoping to fix code — those tools are absent. If tests or code are still broken, stop; the host mis-routed you.
 
-**Survey tools** (`command`{% if profile_has_summarize %}, `summarize`{% endif %}{% if profile_has_survey_repo %}, `survey_repo`{% endif %}, `scan_pack`{% if web_search_enabled %}, `web_search`, `fetch_url`{% endif %}) may orient the narrative; paths they return may go in `cited_evidence`.
+**Survey tools** (`command`{% if profile_has_summarize %}, `summarize`{% endif %}{% if profile_has_survey_repo %}, `survey_repo`{% endif %}, `scan_pack`{% if web_search_enabled %}, `web_search`, `fetch_url`{% endif %}) may orient the narrative, and what they return can be cited.
 {% if profile_has_recall %}
 **Need a detail a leg's report did not carry?** `recall` it now — a finished leg's observations are still reachable, and the handle it prints is citable here. The closing turn has no tools, so get it on this turn or write the report without it.
 {% endif %}

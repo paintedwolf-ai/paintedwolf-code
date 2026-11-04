@@ -85,6 +85,6 @@ N action steps produce N+1 settled frames (navigate idle + after each action). D
 
 ## Presentation
 
-- Copy producer `artifact_id` values into `artifact_ids` — on `surface_note` to show one mid-run, or on the final report at close.
-- Never embed `![…](artifact-uuid)` or `<img src="artifact-uuid">` in synthesis.
+- Write producer `artifact_id` values as `[artifact:<uuid>]`, in a mid-run update or in your final answer.
+- Never embed `![…](artifact-uuid)` or `<img src="artifact-uuid">` in your text.
 - Stop a `url` server with `command_stop(handle=…)` when the turn is done. `project_dir` leaves nothing to stop.

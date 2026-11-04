@@ -13,7 +13,7 @@ import (
 // tests cover the whole chain the model sees.
 func renderSurfaceCard(t *testing.T, label, rule, mode string, sticky, deferred []string) string {
 	t.Helper()
-	vars := prompts.CoordinatorSurfaceCardVars(label, rule, sticky, deferred).TemplateVars()
+	vars := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{Label: label, Rule: rule}, sticky, deferred).TemplateVars()
 	vars["execution_mode"] = mode
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	out, err := engine.Render(context.Background(), "partials/coordinator-surface-card.md", vars)
