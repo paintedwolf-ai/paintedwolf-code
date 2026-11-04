@@ -1555,10 +1555,11 @@ tasks:
   codegen:dependency-inventory:
     desc: >-
       Project dependencies/policy.yaml, the tree's pins, and the upstream snapshot into
-      docs/operations/dependency-inventory.md and .github/dependabot.yml
+      docs/operations/dependency-inventory.md and .github/dependabot.yml;
+      --nix-bun refreshes the pinned Nix Bun expression (requires Nix)
     dir: '{{.GO_DIR}}'
     cmds:
-      - go run ./cmd/codegen-dependency-inventory --repo ..
+      - go run ./cmd/codegen-dependency-inventory --repo .. {{.CLI_ARGS}}
 
   codegen:dependency-inventory:check:
     desc: Fail if dependencies/ no longer matches the manifests or .github/dependabot.yml is stale (offline)
