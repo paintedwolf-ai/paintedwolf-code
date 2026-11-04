@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import verification_digest as digest  # noqa: E402
+from verification_lifecycle import digest  # noqa: E402
 
 LINKER = "ld: warning: ignoring duplicate libraries: '-lobjc'"
 

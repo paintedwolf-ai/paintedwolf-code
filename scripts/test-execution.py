@@ -585,7 +585,7 @@ def main():
 
 def reported_run(queue, name, command, spec):
     """A requested target outside a shared batch ends with the same block; a nested one execs away in run."""
-    from verification_digest import deliver, invocation_digest
+    from verification_lifecycle.digest import deliver, invocation_digest
     from verification_plan import EXIT_UNVERIFIED, outcome_exit
     try:
         code = run(queue, name, command, spec)

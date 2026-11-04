@@ -13,7 +13,7 @@ import time
 import uuid
 
 from artifact_paths import artifact_root
-from verification_digest import deliver, job_digest
+from verification_lifecycle.digest import deliver, job_digest
 from verification_plan import EXIT_UNVERIFIED, outcome_exit
 from verification_state import read_json, write_json
 

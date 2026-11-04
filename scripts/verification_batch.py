@@ -11,7 +11,7 @@ import time
 import uuid
 
 import verification_advisories as advisories
-from verification_digest import PreviewFilter, deliver, invocation_digest, request_digest
+from verification_lifecycle.digest import PreviewFilter, deliver, invocation_digest, request_digest
 from verification_history import estimate, read_history
 from verification_plan import compatibility, outcome_exit
 from verification_resources import blocked_reason, foreground_git_environment, order_of

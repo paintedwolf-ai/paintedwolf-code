@@ -5,7 +5,7 @@ import signal
 import tempfile
 import unittest
 
-import verification_digest as digest
+from verification_lifecycle import digest
 from verification_tests import support
 
 LINKER = "ld: warning: ignoring duplicate libraries: '-lobjc'"
@@ -139,6 +139,7 @@ class DigestBounds(unittest.TestCase):
             found = digest.targets({"evidence": [{"stage": "test:short", "results": {"p": result}}]}, temp)
             self.assertEqual(found[0]["lines"], ["boom error"])
             self.assertEqual(digest.go_records(None, ["p"])["p"]["failed"], [])
+            self.assertEqual(digest.go_records(temp, ["p"])["p"]["failed"], [])
 
     def test_failures_lead_unverified_results(self):
         results = {"a": {"status": "unverified", "exit_code": 2}, "b": {"status": "failed", "exit_code": 1}}
@@ -333,9 +334,6 @@ class DigestDelivery(support.BatchFixture):
             self.assertEqual(digest.job_digest(temp, result), f"{digest.MARKER}\nonly\n")
 
     def test_ac_ver_03_invocation_outside_a_batch_reports_structured_status(self):
-        self.catalog["tasks"]["test:exclusive"] = None
-        self.catalog["tasks"].pop("test:exclusive")
-        self.save_catalog()
         process = self.start("test:exclusive", env={**self.env, "FIXTURE_FAIL": "test:exclusive"})
         self.await_condition(lambda: bool(self.queue.status()["runs"]))
         self.queue.resume()
@@ -343,6 +341,13 @@ class DigestDelivery(support.BatchFixture):
         lines = self.assert_digest_ends(stdout)
         self.assertEqual(lines[1], "Request test:exclusive: failed, exit 1.")
         self.assertIn("no receipt", lines[-1])
+
+    def test_ac_ver_03_interrupted_invocation_outside_a_batch_is_unverified(self):
+        process = self.start("test:exclusive")
+        self.await_condition(lambda: bool(self.queue.status()["runs"]))
+        os.kill(process.pid, signal.SIGTERM)
+        stdout, _ = self.finish(process, 130)
+        self.assertEqual(self.assert_digest_ends(stdout)[1], "Request test:exclusive: unverified, exit 130.")
 
 
 if __name__ == "__main__":
