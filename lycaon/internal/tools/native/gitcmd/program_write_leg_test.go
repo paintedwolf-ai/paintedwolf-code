@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/gitcmd"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -78,8 +79,32 @@ func TestACOP01WriteLegGitFailsLikeGitAndTheCallIsWarned(t *testing.T) {
 			if !f.warned() {
 				t.Fatalf("facts = %+v, want the warning's fact", f.out.Facts)
 			}
-			if _, stated := f.out.Facts.FeedbackFor(toolrejection.GitNoRepositoryOnWriteLegCode).Details["source_history_offered"].(bool); !stated {
-				t.Fatalf("facts = %+v, want source_history_offered stated", f.out.Facts)
+		})
+	}
+}
+
+// The call's frozen plan decides, through the program's own tool context.
+func TestACOP01WriteLegWarningStatesWhetherThePlanOffersSourceHistory(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		plan toolsurface.Plan
+		want bool
+	}{
+		{"immediate", toolsurface.Compile([]string{"command", "source_history"}, nil), true},
+		{"deferred", toolsurface.Compile([]string{"command"}, []string{"source_history"}), true},
+		{"excluded", toolsurface.Compile([]string{"command"}, nil), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newGitProgramFixture(t, true)
+			configure := f.Configure
+			f.Configure = func(toolCtx *tools.ToolContext) {
+				configure(toolCtx)
+				toolCtx.Turn.TurnToolPlan = tc.plan
+			}
+			runGitProgram(t, f, "git status")
+			details := f.out.Facts.FeedbackFor(toolrejection.GitNoRepositoryOnWriteLegCode).Details
+			if details["source_history_offered"] != tc.want {
+				t.Fatalf("details = %+v, want source_history_offered %v", details, tc.want)
 			}
 		})
 	}
