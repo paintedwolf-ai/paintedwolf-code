@@ -252,12 +252,6 @@ func numberedSourceBlock(block map[string]json.RawMessage, key string) (sourceTe
 		}
 		bare[i] = strings.TrimPrefix(line, prefix)
 	}
-	// A file's trailing newline is not a line: end the block at the last line shown.
-	if n := len(bare); n > 1 && bare[n-1] == "" {
-		bare, lines = bare[:n-1], lines[:n-1]
-		end--
-		block["end_line"] = json.RawMessage(fmt.Sprint(end))
-	}
 	if os.Getenv("PW_EXP_NUMBERED_SOURCE") != "1" {
 		lines = bare
 	}
