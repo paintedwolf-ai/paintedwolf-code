@@ -5,9 +5,33 @@ package checkpoint
 import (
 	"bytes"
 	"errors"
-	"golang.org/x/sys/unix"
 	"os"
+	"syscall"
+
+	"github.com/lycaon/lycaon/internal/fspath"
+	"golang.org/x/sys/unix"
 )
+
+func targetFileIdentity(file *os.File, info os.FileInfo) (string, error) {
+	id, _, err := targetFileIdentityAndLinks(file, info)
+	return id, err
+}
+
+// targetFileIdentityAndLinks names the inode with its birth time or generation:
+// a device and inode number alone match a new file that reused a freed number.
+func targetFileIdentityAndLinks(file *os.File, info os.FileInfo) (string, uint64, error) {
+	id, err := fspath.FileIdentity(file)
+	if err != nil {
+		return "", 0, err
+	}
+	links := uint64(1)
+	if info != nil {
+		if st, ok := info.Sys().(*syscall.Stat_t); ok {
+			links = uint64(st.Nlink)
+		}
+	}
+	return id, links, nil
+}
 
 // ApplyPathXattrs applies extended attributes to abs, ignoring ENOTSUP/EOPNOTSUPP.
 func ApplyPathXattrs(abs string, xattrs map[string][]byte) error {
@@ -20,7 +44,11 @@ func ApplyPathXattrs(abs string, xattrs map[string][]byte) error {
 }
 
 func applyFileXattrs(file *os.File, attrs map[string][]byte) error {
+	current, _ := readFileXattrs(file)
 	for key, value := range attrs {
+		if existing, ok := current[key]; ok && bytes.Equal(existing, value) {
+			continue
+		}
 		if err := unix.Fsetxattr(int(file.Fd()), key, value, 0); err != nil && !errors.Is(err, unix.ENOTSUP) && !errors.Is(err, unix.EOPNOTSUPP) {
 			return err
 		}

@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
@@ -61,8 +62,29 @@ func (s *Store) RootDir() string {
 	return s.rootDir
 }
 
+func isSafeStoreID(id string) bool {
+	clean := strings.TrimSpace(id)
+	return clean != "" && clean == id && hostComponent(clean) && !strings.Contains(clean, ":")
+}
+
+func isHexSHA256(sha string) bool {
+	if len(sha) != 64 {
+		return false
+	}
+	for i := range len(sha) {
+		c := sha[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 // BlobPath returns the content-addressed path for a blob digest.
 func (s *Store) BlobPath(sha string) string {
+	if !isHexSHA256(sha) {
+		return filepath.Join(s.blobsDir, "_invalid_blob_")
+	}
 	return filepath.Join(s.blobsDir, sha)
 }
 
@@ -79,22 +101,23 @@ func (s *Store) WriteBlobBytes(data []byte) (string, string, error) {
 
 // WriteBlob copies r into an independent immutable 0400 blob file and validates its digest and size.
 func (s *Store) WriteBlob(r io.Reader, expectedSHA string, expectedSize int64) (string, error) {
-	seq := s.tempSeq.Add(1)
-	tmpPath := filepath.Join(s.blobsDir, fmt.Sprintf(".blob-%d.tmp", seq))
-	f, err := os.OpenFile(tmpPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return "", err
+	if expectedSHA != "" && !isHexSHA256(expectedSHA) {
+		return "", fmt.Errorf("%w: invalid expected sha256 %q", ErrCorruptBlob, expectedSHA)
 	}
-	h := sha256.New()
-	n, copyErr := io.Copy(io.MultiWriter(f, h), r)
-	chmodErr := f.Chmod(0o400)
-	syncErr := syncFile(f)
-	closeErr := f.Close()
-	if err := errors.Join(copyErr, chmodErr, syncErr, closeErr); err != nil {
+	tmpName := fmt.Sprintf(".blob-%d.tmp", s.tempSeq.Add(1))
+	tmpPath := filepath.Join(s.blobsDir, tmpName)
+	res, err := fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: s.blobsDir, Rel: tmpName},
+		Source:   r,
+		Mode:     0o400,
+		DirMode:  0o700,
+	})
+	if err != nil {
 		_ = os.Remove(tmpPath)
 		return "", err
 	}
-	actualSHA := hex.EncodeToString(h.Sum(nil))
+	actualSHA := res.SHA256
+	n := res.Bytes
 	if (expectedSHA != "" && actualSHA != expectedSHA) || (expectedSize >= 0 && n != expectedSize) {
 		_ = os.Remove(tmpPath)
 		return "", fmt.Errorf("%w: got sha=%s size=%d, want sha=%s size=%d", ErrCorruptBlob, actualSHA, n, expectedSHA, expectedSize)
@@ -106,11 +129,8 @@ func (s *Store) WriteBlob(r io.Reader, expectedSHA string, expectedSize int64) (
 			return actualSHA, nil
 		}
 	}
-	if err := os.Rename(tmpPath, finalPath); err != nil {
+	if err := fseffect.Rename(s.blobsDir, tmpName, actualSHA); err != nil {
 		_ = os.Remove(tmpPath)
-		return "", err
-	}
-	if err := syncDir(s.blobsDir); err != nil {
 		return "", err
 	}
 	return actualSHA, nil
@@ -120,6 +140,9 @@ func (s *Store) WriteBlob(r io.Reader, expectedSHA string, expectedSize int64) (
 func (s *Store) VerifyBlob(sha string, expectedSize int64) (string, error) {
 	if sha == "" {
 		return "", ErrMissingBaseBlob
+	}
+	if !isHexSHA256(sha) {
+		return "", fmt.Errorf("%w: invalid blob sha256 %q", ErrCorruptBlob, sha)
 	}
 	p := s.BlobPath(sha)
 	f, err := os.Open(p)
@@ -147,6 +170,9 @@ func (s *Store) ReadBlob(sha string) ([]byte, error) {
 	if sha == "" {
 		return nil, ErrMissingBaseBlob
 	}
+	if !isHexSHA256(sha) {
+		return nil, fmt.Errorf("%w: invalid blob sha256 %q", ErrCorruptBlob, sha)
+	}
 	raw, err := os.ReadFile(s.BlobPath(sha))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -162,51 +188,34 @@ func (s *Store) ReadBlob(sha string) ([]byte, error) {
 }
 
 func (s *Store) stageManifest(m Manifest, beforeSync func() error) error {
-	cpDir := filepath.Join(s.checkpointsDir, m.CheckpointID)
-	if err := os.MkdirAll(cpDir, 0o700); err != nil {
-		return err
+	if !isSafeStoreID(m.CheckpointID) {
+		return fmt.Errorf("%w: invalid checkpoint id %q", ErrInvalidManifest, m.CheckpointID)
 	}
 	raw, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmpPath := filepath.Join(cpDir, "manifest.json.tmp")
-	_ = os.Remove(tmpPath)
-	f, err := os.OpenFile(tmpPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
-	}
-	_, wErr := f.Write(raw)
-	cErr := f.Chmod(0o400)
-	if wErr != nil || cErr != nil {
-		_ = f.Close()
-		_ = os.Remove(tmpPath)
-		return errors.Join(wErr, cErr)
-	}
-	if beforeSync != nil {
-		if err := beforeSync(); err != nil {
-			_ = f.Close()
-			_ = os.Remove(tmpPath)
-			return err
-		}
-	}
-	sErr := syncFile(f)
-	closeErr := f.Close()
-	if err := errors.Join(sErr, closeErr); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	return nil
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: s.checkpointsDir, Rel: filepath.Join(m.CheckpointID, "manifest.json.tmp")},
+		Source:   bytes.NewReader(raw),
+		Mode:     0o400,
+		DirMode:  0o700,
+		BeforeCommit: func(fseffect.Target, fseffect.Result) error {
+			if beforeSync != nil {
+				return beforeSync()
+			}
+			return nil
+		},
+	})
+	return err
 }
 
 func (s *Store) commitManifestAndLatest(checkpointID string) error {
-	cpDir := filepath.Join(s.checkpointsDir, checkpointID)
-	tmpPath := filepath.Join(cpDir, "manifest.json.tmp")
-	finalPath := filepath.Join(cpDir, "manifest.json")
-	if err := os.Rename(tmpPath, finalPath); err != nil {
-		return err
+	if !isSafeStoreID(checkpointID) {
+		return fmt.Errorf("%w: invalid checkpoint id %q", ErrInvalidManifest, checkpointID)
 	}
-	if err := syncDir(cpDir); err != nil {
+	cpDir := filepath.Join(s.checkpointsDir, checkpointID)
+	if err := fseffect.Rename(cpDir, "manifest.json.tmp", "manifest.json"); err != nil {
 		return err
 	}
 	if err := syncDir(s.checkpointsDir); err != nil {
@@ -216,6 +225,9 @@ func (s *Store) commitManifestAndLatest(checkpointID string) error {
 }
 
 func (s *Store) writeRetentionRecord(rec RetentionRecord) error {
+	if !isSafeStoreID(rec.CheckpointID) {
+		return fmt.Errorf("%w: invalid checkpoint id %q", ErrInvalidManifest, rec.CheckpointID)
+	}
 	raw, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return err
@@ -224,34 +236,17 @@ func (s *Store) writeRetentionRecord(rec RetentionRecord) error {
 }
 
 func writeAtomicJSONOrText(dir, name string, raw []byte, mode fs.FileMode) error {
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, "."+name+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := f.Name()
-	_, wErr := f.Write(raw)
-	mErr := f.Chmod(mode)
-	sErr := syncFile(f)
-	cErr := f.Close()
-	if err := errors.Join(wErr, mErr, sErr, cErr); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, filepath.Join(dir, name)); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	return syncDir(dir)
+	_, err := fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: dir, Rel: name},
+		Source:   bytes.NewReader(raw),
+		Mode:     mode,
+		DirMode:  0o750,
+	})
+	return err
 }
 
 func syncFile(f *os.File) error {
-	if fssync.Relaxed() {
-		return nil
-	}
-	return f.Sync()
+	return fssync.File(f)
 }
 
 func syncDir(dirPath string) error {
@@ -262,7 +257,7 @@ func syncDir(dirPath string) error {
 	if err != nil {
 		return err
 	}
-	sErr := df.Sync()
+	sErr := fssync.File(df)
 	cErr := df.Close()
 	return errors.Join(sErr, cErr)
 }

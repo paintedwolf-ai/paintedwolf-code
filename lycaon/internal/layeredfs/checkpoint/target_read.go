@@ -118,3 +118,18 @@ func (tree *promotionTargets) readObservedTarget(observed TargetObservation) ([]
 	}
 	return body, nil
 }
+
+// TargetFileLinks reports how many names share the regular file at path.
+func TargetFileLinks(path string) (uint64, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		return 0, err
+	}
+	_, links, err := targetFileIdentityAndLinks(file, info)
+	return links, err
+}

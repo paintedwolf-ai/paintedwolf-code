@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 const (
@@ -154,7 +156,7 @@ func publishStagedGitAsset(srcPath, tmpPath, dstPath string) error {
 		_ = os.Remove(tmpPath)
 		return nil
 	}
-	return os.Rename(tmpPath, dstPath)
+	return fseffect.Rename(filepath.Dir(dstPath), filepath.Base(tmpPath), filepath.Base(dstPath))
 }
 
 func isValidDestinationGitAsset(srcPath, dstPath string) bool {
