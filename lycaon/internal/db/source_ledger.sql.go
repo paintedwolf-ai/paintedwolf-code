@@ -2308,14 +2308,16 @@ SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(o.command_window_id, '') AS command_window_id
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = ?1 AND e.file_id = ?2
-  AND e.ordinal > CAST(?3 AS INTEGER) AND e.walk_visible = 1
-  AND (CAST(?4 AS INTEGER) = 0 OR e.ordinal < CAST(?4 AS INTEGER))
-ORDER BY e.ordinal DESC LIMIT ?5
+  AND o.branch_id = ?3
+  AND e.ordinal > CAST(?4 AS INTEGER) AND e.walk_visible = 1
+  AND (CAST(?5 AS INTEGER) = 0 OR e.ordinal < CAST(?5 AS INTEGER))
+ORDER BY e.ordinal DESC LIMIT ?6
 `
 
 type ListSourceEffectsForFilePageParams struct {
 	ProjectID     string `json:"project_id"`
 	FileID        string `json:"file_id"`
+	BranchID      string `json:"branch_id"`
 	AfterOrdinal  int64  `json:"after_ordinal"`
 	BeforeOrdinal int64  `json:"before_ordinal"`
 	PageLimit     int64  `json:"page_limit"`
@@ -2355,6 +2357,7 @@ func (q *Queries) ListSourceEffectsForFilePage(ctx context.Context, arg ListSour
 	rows, err := q.db.QueryContext(ctx, listSourceEffectsForFilePage,
 		arg.ProjectID,
 		arg.FileID,
+		arg.BranchID,
 		arg.AfterOrdinal,
 		arg.BeforeOrdinal,
 		arg.PageLimit,

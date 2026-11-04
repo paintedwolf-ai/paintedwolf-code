@@ -183,14 +183,11 @@ func (t *SourceHistoryTool) runEffects(
 	resp.Tip = &sourceHistoryTip{State: head.State, SHA256Short: sourceview.ShortSHA(head.SHA256), VersionID: head.VersionID}
 	limit := toolkit.BoundedIntArg(args, "limit", sourceHistoryDefaultLimit, 1, sourceHistoryMaxLimit).Effective
 	beforeOrdinal := int64(toolkit.BoundedIntArg(args, "before_ordinal", 0, 0, 1<<62).Effective)
-	page, err := ledger.Files.QueryFileEffects(ctx, tctx.Identity.ProjectID, head.FileID, 0, beforeOrdinal, limit)
+	page, err := ledger.Files.QueryFileEffects(ctx, tctx.Identity.ProjectID, branch, head.FileID, 0, beforeOrdinal, limit)
 	if err != nil {
 		return "", fmt.Errorf("source history effects: %w", err)
 	}
 	for _, effect := range page.Effects {
-		if effect.BranchID != branch {
-			continue
-		}
 		row := sourceHistoryEffect{
 			Actor:     string(effect.ActorClassFor(tctx.Identity.SessionID)),
 			Detail:    effect.ActorDisplay(tctx.Identity.SessionID),

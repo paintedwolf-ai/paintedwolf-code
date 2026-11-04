@@ -1,11 +1,20 @@
 package sourcebrief
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -60,6 +69,73 @@ func TestAssembleSourceChangeBriefScopesToTrunk(t *testing.T) {
 	if !brief.Empty() {
 		t.Fatalf("brief = %+v, want empty — a worker branch is not this tree", brief)
 	}
+}
+
+type briefWindowStore struct {
+	Store
+	turn int
+}
+
+func (s briefWindowStore) ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error) {
+	return messageview.SourceTurn{Number: s.turn}, nil
+}
+
+func (s briefWindowStore) LoadLedger(context.Context, string) (evidence.Ledger, error) {
+	return evidence.Ledger{}, nil
+}
+
+type briefRootList []projectroot.RootRef
+
+func (r briefRootList) Roots(context.Context, *api.Session) ([]projectroot.RootRef, error) {
+	return r, nil
+}
+
+// The project-wide window spans branches; the per-file branch predicate must not narrow it.
+func TestBuildWindowKeepsProjectWideEffects(t *testing.T) {
+	t.Run("AC-BR-04 EffectsBetween and Build are unchanged by per-file scoping", func(t *testing.T) {
+		sqlDB := testdbfixture.Open(t, "store.db")
+		testdbseed.InsertProject(t, sqlDB, "p1")
+		_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots
+ (id, project_id, path, label, is_primary, added_at, kind)
+ VALUES ('r1','p1','/tmp/brief-root','root',1,?,'attached')`, db.FormatTime(time.Now().UTC()))
+		testutil.FailErr(t, "seed root", err)
+		ledger := sourceledger.New(sqlDB, t.TempDir())
+		checkpoint := func(turn int) {
+			_, err := ledger.Checkpoints.CreateStructuralCheckpoint(t.Context(), sourceledger.StructuralCheckpointInput{
+				ProjectID: "p1", Kind: sourceledger.CheckpointTurn, Label: "Turn start", SessionID: "s1", Turn: turn,
+			})
+			testutil.FailErr(t, "create checkpoint", err)
+		}
+		record := func(branch sourcebranch.ID, origin api.SourceChangeOrigin, job, before, after string) {
+			op := api.SourceChangeOpWrite
+			if before == "" {
+				op = api.SourceChangeOpCreate
+			}
+			testutil.FailErr(t, "record effect", ledger.Record(t.Context(), sourceledger.RecordInput{
+				RecordLocation: sourceledger.RecordLocation{RootID: "r1", Path: "a.go"},
+				ProjectID:      "p1", BranchID: branch, JobID: job, Op: op, Origin: origin,
+				Before: []byte(before), After: []byte(after),
+			}))
+		}
+		record(sourcebranch.Trunk, api.SourceChangeOriginUser, "", "", "base\n")
+		checkpoint(1)
+		record(sourcebranch.Trunk, api.SourceChangeOriginUser, "", "base\n", "user\n")
+		record(sourcebranch.ID("job-1"), api.SourceChangeOriginAgent, "job-1", "base\n", "worker\n")
+		checkpoint(2)
+
+		all, err := ledger.History.EffectsBetween(t.Context(), "p1", 0, 0, 10)
+		testutil.FailErr(t, "list effects", err)
+		if len(all) != 3 || all[0].BranchID != "job-1" || all[1].BranchID != sourcebranch.Trunk {
+			t.Fatalf("effects = %+v, want all three across both branches", all)
+		}
+
+		service := New(briefWindowStore{turn: 2}, briefRootList(briefRoots()))
+		service.SetSources(tools.SourceHistory{Files: ledger.History, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Checkpoints)
+		brief := service.Build(t.Context(), &api.Session{ID: "s1", ProjectID: "p1"})
+		if brief.OtherFiles != 1 || brief.OtherEffects != 1 || brief.Truncated {
+			t.Fatalf("brief = %+v, want the single trunk change counted", brief)
+		}
+	})
 }
 
 func TestAssembleSourceChangeBriefQualifiesNonPrimaryRoots(t *testing.T) {

@@ -441,6 +441,7 @@ SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(o.command_window_id, '') AS command_window_id
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = sqlc.arg(project_id) AND e.file_id = sqlc.arg(file_id)
+  AND o.branch_id = sqlc.arg(branch_id)
   AND e.ordinal > CAST(sqlc.arg(after_ordinal) AS INTEGER) AND e.walk_visible = 1
   AND (CAST(sqlc.arg(before_ordinal) AS INTEGER) = 0 OR e.ordinal < CAST(sqlc.arg(before_ordinal) AS INTEGER))
 ORDER BY e.ordinal DESC LIMIT sqlc.arg(page_limit);
