@@ -47,19 +47,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	}
 
 	// 1. Seed canonical TrunkRoot Git repository.
-	gittest.Init(t, trunkDir)
-	gittest.Run(t, trunkDir, "checkout", "-b", "main")
-	if err := os.WriteFile(filepath.Join(trunkDir, "README.md"), []byte("initial readme\n"), 0o644); err != nil {
-		t.Fatalf("write trunk README.md: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {
-		t.Fatalf("mkdir trunk src: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(trunkDir, "src", "app.go"), []byte("package src\n"), 0o644); err != nil {
-		t.Fatalf("write trunk src/app.go: %v", err)
-	}
-	gittest.CommitAll(t, trunkDir, "initial trunk commit")
-	trunkInitialHead := strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", "HEAD"))
+	trunkInitialHead := seedWorkflowTrunk(t, trunkDir)
 	trunkBefore := snapshotTreeDigests(t, trunkDir)
 
 	// 2. Construct privategit.Manager and fuselinux.Adapter; prepare and mount the real fusermount3 view.
@@ -258,6 +246,28 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("promoter.Apply failed: res=%+v err=%v", applyRes, err)
 	}
 
+	assertWorkflowPromoted(t, trunkDir, workerID, checkpointID, workerHeadOID)
+}
+
+func seedWorkflowTrunk(t *testing.T, trunkDir string) string {
+	t.Helper()
+	gittest.Init(t, trunkDir)
+	gittest.Run(t, trunkDir, "checkout", "-b", "main")
+	if err := os.WriteFile(filepath.Join(trunkDir, "README.md"), []byte("initial readme\n"), 0o644); err != nil {
+		t.Fatalf("write trunk README.md: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {
+		t.Fatalf("mkdir trunk src: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(trunkDir, "src", "app.go"), []byte("package src\n"), 0o644); err != nil {
+		t.Fatalf("write trunk src/app.go: %v", err)
+	}
+	gittest.CommitAll(t, trunkDir, "initial trunk commit")
+	return strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", "HEAD"))
+}
+
+func assertWorkflowPromoted(t *testing.T, trunkDir, workerID, checkpointID, workerHeadOID string) {
+	t.Helper()
 	promotedReadme, err := os.ReadFile(filepath.Join(trunkDir, "README.md"))
 	if err != nil || string(promotedReadme) != "updated by worker over fuse\n" {
 		t.Fatalf("expected promoted README.md in trunk, got %q err=%v", string(promotedReadme), err)
