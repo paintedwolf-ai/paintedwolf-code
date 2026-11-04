@@ -181,7 +181,8 @@ func listProjectJobTrees(ctx context.Context, parent, projectKey string) ([]JobT
 				t.Roots = layout.Roots
 			}
 		}
-		if t.Present {
+		// A mount's bytes are not the tree's, and a dead one fails every stat beneath it.
+		if t.Present && RefuseMountedBranch(t.Root) == nil {
 			bytes, err := treeAllocatedBytes(ctx, t.Root)
 			if err != nil {
 				return nil, err

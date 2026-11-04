@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,6 +44,9 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 	engine.Stderr = os.Stderr
 	stdout, err := engine.StdoutPipe()
 	testutil.FailErr(t, "stdout", err)
+	stdin, err := engine.StdinPipe()
+	testutil.FailErr(t, "stdin", err)
+	defer func() { _ = stdin.Close() }()
 	testutil.FailErr(t, "start engine", engine.Start())
 	waited := make(chan error, 1)
 	var mountPath string
@@ -108,7 +112,10 @@ func runWedgedEngine(t *testing.T) {
 	fmt.Println(view.PrimaryWorkPath)
 	go func() { _ = os.WriteFile(filepath.Join(view.PrimaryWorkPath, "other"), []byte("x"), 0o644) }()
 	go func() { _ = file.Sync() }()
-	select {}
+	// A test that dies first must not strand a wedged process: unblocking lets this one exit.
+	_, _ = io.Copy(io.Discard, os.Stdin)
+	close(hold)
+	os.Exit(0)
 }
 
 func waitingRequests(dev string) int {
