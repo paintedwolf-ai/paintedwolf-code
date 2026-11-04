@@ -339,7 +339,7 @@ func TestTighterFitFeedsLaterProjectionAC_KV_04(t *testing.T) {
 	body := strings.Repeat("recorded observation ", 12)
 	seedTurn(t, mem, sess.ID, 40, body)
 	// A frame far above the cold-start estimate makes the final fit the tight bound.
-	frame := strings.Repeat("Standing instructions. ", 6000)
+	frame := strings.Repeat("Standing instructions. ", 5000)
 	budgets := fixedBudgets{window: cfg.ModelContextWindow}
 	var previous []api.Message
 	var starts []int64
