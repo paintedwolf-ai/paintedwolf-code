@@ -12,7 +12,6 @@ if [[ -z "${STATE_DIR}" ]]; then
   export LYCAON_E2E_STATE_DIR="${STATE_DIR}"
 fi
 mkdir -p "${STATE_DIR}"
-DB_PATH="${STATE_DIR}/lycaon.db"
 
 SOURCE_CONFIG="${LYCAON_CONFIG_DIR:-}"
 # Scripted and mocked runs need a provider discovery can answer, not this machine's settings.
@@ -36,6 +35,9 @@ if [[ -z "${SOURCE_CONFIG}" ]]; then
 fi
 CONFIG_DIR="${STATE_DIR}/config"
 mkdir -p "${CONFIG_DIR}"
+# Worker branches live beside the store, and confinement gives a write leg its
+# branch back only under the config directory.
+DB_PATH="${CONFIG_DIR}/store.db"
 for f in providers.local.yaml model-policy.yaml; do
   [[ -f "${SOURCE_CONFIG}/${f}" && ! -f "${CONFIG_DIR}/${f}" ]] && cp "${SOURCE_CONFIG}/${f}" "${CONFIG_DIR}/${f}"
 done
