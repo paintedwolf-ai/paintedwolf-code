@@ -155,7 +155,9 @@ expansion nor `native_path` grants anything: the operation or launch that uses
 the path checks authority exactly as for the absolute spelling, so a relative
 operand that leaves its folder (`../notes.txt`) reaches the same decision as
 its absolute form. `native_path -- PATH ...` stays available for explicit
-conversion of a computed path.
+conversion of a computed path, including a host spill reference such as
+`tool-output/<hash>.txt`. A child process cannot open a converted spill; quote
+the substitution for native readers and pipe those into the child.
 
 Native absolute operands retain their OS component order, including symlinks
 followed by `..`; the confined descriptor walk checks the actual reached
