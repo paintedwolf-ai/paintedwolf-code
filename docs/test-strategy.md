@@ -662,7 +662,13 @@ first failed or unverified stage, and stages only it still needed stop;
 independent requests continue. A Go package failure (a failing test binary exit,
 a terminal package event, or a build failure) answers every request that needs
 the package while the stage is still running, and the receipt links that
-package's output. A package may pass despite an unrelated package failure only
+package's output. A Go recipe declaring `report_all_failures` (`test:short` and
+`test:contract`) instead finishes its packages before answering, so its receipt
+names every failing package; a known failure stays failed even if the stage is
+later interrupted. A request submitted with `PW_TEST_KEEP_GOING=1`, as the hosted
+`ready` lane does, runs all of its stages before answering. Neither changes
+admission, resource limits, or the exit status, and cancellation still stops the
+work. A package may pass despite an unrelated package failure only
 when its terminal Go event and the completed digest establish that result.
 Missing evidence and infrastructure interruptions are unverified. A Go stage
 whose packages hold test files behind a tier tag it does not enable (a tag some
@@ -855,15 +861,24 @@ A ready pull request runs the `fast` profile; the merge queue runs the
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier runs two jobs
 within its declared two-runner budget. `ready-lint` runs complete `lint:full`
 analysis while `ready` first runs the complete repository contract tree, then compiles
-the host and runs size budgets, affected short Go tests, comment checks,
+the host and runs size budgets, changed Go statement coverage, affected short Go tests, comment checks,
 test failure-message checks, documentation links, Den typecheck, Den lint, and frontend seam canaries.
+Budgets and changed Go coverage run before bulk work; a validated prior failure
+runs first, with an identified failed Go package ahead of the remaining short tests.
+Coverage executes eligible changed packages' own short tests, so admission omits
+those packages from its later identical short recipe. Test-only, generated,
+exempt, and untested packages keep their affected short selection. Unknown recipes
+keep their full selection. History changes ordering only and never proves a pass.
 The required aggregate waits for both jobs. Full lint has its own analysis setup;
 it does not repeat admission contracts. Catalog validation requires each fast
 assertion stage exactly once across the jobs.
 Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests.
 Admission uses `test:contract -- ./test/contract/...`
-without a test-name filter. Failure or interruption stops the lane before its
-remaining work. Catalog validation accepts
+without a test-name filter. A failure does not stop the lane: `ready` runs every
+stage and reports every failing package in its receipts, job summary, and
+annotations, so repairs need not rediscover failures one run at a time. Only an
+interruption stops it. A retry with validated failure history retests those failures first and stops if one
+persists, because the earlier run already reported the rest. Catalog validation accepts
 the complete contract tree or existing contract packages and rejects selectors,
 traversal, and duplicate packages.
 Release corpus fixtures assert compatibility command arguments and failure
@@ -1212,8 +1227,8 @@ retry policy.
 ##### Admission and scale execution
 
 Ready admission runs focused Go tests and frontend seam canaries after repository
-contracts. Broad changed-statement coverage and native compilation execute at the
-exact landing source. Frontend and script coverage stages supply the complete
+contracts. Changed Go coverage also runs early in admission; all changed-statement
+coverage and native compilation execute at the exact landing source. Frontend and script coverage stages supply the complete
 assertion suites, avoiding a second uncovered execution in the same qualification.
 The failed/unverified/previously-passed frontier changes order, never the complete
 successful-path inventory. Unknown source scope still selects the complete recipe.

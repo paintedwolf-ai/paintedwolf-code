@@ -62,7 +62,7 @@ def sample_resources(stop, interval=60):
         print(resource_line(), flush=True)
 
 
-HISTORY_KEYS = ("failed_targets", "passed_targets", "native_failed", "native_passed", "contract_failures")
+HISTORY_KEYS = ("failed_targets", "passed_targets", "native_failed", "native_passed", "contract_failures", "failed_packages")
 
 
 def parse_early_history(raw, targets):
@@ -79,6 +79,11 @@ def parse_early_history(raw, targets):
         return {key: [item for item in value if isinstance(item, str)]
                 for key, value in data.items() if key in HISTORY_KEYS and isinstance(value, list)}
     return {"failed_targets": [raw]} if raw in targets else {}
+
+
+def combined_exit(current, result):
+    """A failed check stays failed when a later phase is merely unverified."""
+    return 1 if 1 in (current, result) else current or result
 
 
 def run_lane(name, shard="", merge_group=False):
@@ -139,6 +144,11 @@ def run_lane(name, shard="", merge_group=False):
                 record["packages"] = packages
         early_raw = environment.pop('PW_CI_EARLY_TARGET', '')
         history = parse_early_history(early_raw, targets) if (name == 'ready' and os.environ.get('GITHUB_ACTIONS') == 'true') else {}
+        # A ready run reports every failure, so repairs need not rediscover them one run at a time. A
+        # retry with validated history retests those failures first and stops if one persists.
+        complete = name == 'ready' and not history
+        if name == 'ready':
+            environment['PW_TEST_KEEP_GOING'] = '1'
         if lane.get("preflight"):
             from ci_policy.merge_preflight import preflight_commands
             preflights = preflight_commands(lane["preflight"], history)
@@ -163,21 +173,25 @@ def run_lane(name, shard="", merge_group=False):
             from ci_policy.merge_preflight import ready_commands
             commands = ready_commands(targets, native_commands(scope), history)
             from ci_policy.ready_scope import commands as scoped_commands
-            if code == 0:
-                commands, record['packages'] = scoped_commands(commands, scope)
+            if code == 0 or complete:
+                commands, record['packages'] = scoped_commands(commands, scope, history, lane.get('early_targets', []))
         if code == 0 and merge_group:
             from ci_policy.merge_preflight import commands as ordered_commands
             commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
         for command in commands:
-            if code != 0:
+            # A signal is the job being torn down, not a check's result, so nothing further can report.
+            if code < 0 or (code != 0 and not complete):
                 break
             phase = {"command": command, "started_at": time.time()}
             record["phases"].append(phase)
             path.write_text(json.dumps(record, indent=2) + "\n")
-            code = subprocess.call(command, cwd=ROOT, env=environment)
-            phase.update(exit_code=code, finished_at=time.time())
+            result = subprocess.call(command, cwd=ROOT, env=environment)
+            phase.update(exit_code=result, finished_at=time.time())
+            code = combined_exit(code, result)
+            if result < 0:
+                break
     except (subprocess.SubprocessError, OSError, ValueError) as error:
-        code = 2
+        code = combined_exit(code, 2)
         record["execution_error"] = {"type": type(error).__name__, "message": str(error)}
         if isinstance(error, subprocess.CalledProcessError):
             record["execution_error"].update(command=error.cmd, exit_code=error.returncode, stderr=error.stderr)

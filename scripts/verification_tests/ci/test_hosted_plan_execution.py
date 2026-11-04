@@ -1,7 +1,5 @@
-import copy
-import json
+import copy, json, unittest
 from pathlib import Path
-import unittest
 from unittest.mock import patch
 
 from ci_policy import hosted_plan as ci
@@ -9,13 +7,17 @@ import verification_plan as planning
 
 
 class HostedPlanTests(unittest.TestCase):
+    def catalog_patch(self, mutate=None):
+        data = copy.deepcopy(planning.catalog())
+        if mutate:
+            mutate(data)
+        return patch.object(ci, 'catalog', return_value=data)
+
     def test_native_admission_cannot_omit_targets_or_accept_unsafe_roots(self):
         for declaration in (None, [], {'unknown:test': ['lycaon-den/src-tauri/']},
                 {'den:test:rust': [], 'decide:test': ['lycaon/internal/decide/native/']},
                 {'den:test:rust': ['../outside/'], 'decide:test': ['lycaon/internal/decide/native/']}):
-            data = copy.deepcopy(planning.catalog())
-            data['ci']['ready']['compile_targets'] = declaration
-            with patch.object(ci, 'catalog', return_value=data), self.assertRaises(ValueError):
+            with self.catalog_patch(lambda d: d['ci']['ready'].update(compile_targets=declaration)), self.assertRaises(ValueError):
                 ci.matrix('fast')
 
     def test_tier_partitions_cover_every_local_gate_stage_once(self):
@@ -42,7 +44,7 @@ class HostedPlanTests(unittest.TestCase):
                   for stage in planning.expand(ci.lanes()[row["lane"]]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
         self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast",
-                                       "test:short",
+                                       "test:short", "coverage:changes",
                                        "comments:check", "test:fail-messages:check", "docs:links"})
         self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--", "./test/contract/..."])
         analysis = next(row for row in rows if row['lane'] == 'ready-lint')
@@ -51,7 +53,8 @@ class HostedPlanTests(unittest.TestCase):
         self.assertNotIn('preflight', ci.lanes()['ready-lint'])
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
-        self.assertFalse(set(stages) & {"coverage:changes", "den:coverage:changes", "scripts:coverage:changes"})
+        self.assertFalse(set(stages) & {"den:coverage:changes", "scripts:coverage:changes"})
+        self.assertEqual(ci.lanes()["ready"]["early_targets"], ["budgets", "coverage:changes"])
         landing = [target for lane in ci.lanes().values() if "integration" in lane["profiles"]
                    for target in lane["targets"]]
         for target in ("coverage:changes", "den:coverage:changes", "scripts:coverage:changes"):
@@ -70,9 +73,7 @@ class HostedPlanTests(unittest.TestCase):
             behavior = next(row for row in rows if row['lane'] == 'behavior')
             self.assertTrue(behavior['runtime_engines'])
         for targets in (['test:full'], ['scripts:coverage:changes', 'test:full']):
-            data = copy.deepcopy(planning.catalog())
-            data['ci']['runner']['targets'] = targets
-            with self.subTest(targets=targets), patch.object(ci, 'catalog', return_value=data):
+            with self.subTest(targets=targets), self.catalog_patch(lambda d: d['ci']['runner'].update(targets=targets)):
                 with self.assertRaisesRegex(ValueError, 'requires runtime engines'):
                     ci.lanes()
 
@@ -89,80 +90,54 @@ class HostedPlanTests(unittest.TestCase):
         self.assertNotIn('command-scale', {row['lane'] for row in ci.matrix('fast')['include']})
         self.assertNotIn('command-scale', {row['lane'] for row in ci.matrix('integration',
                          scope={'full': False, 'paths': ['lycaon-den/src/ui.ts']})['include']})
-        data = copy.deepcopy(planning.catalog())
-        data['ci']['stress']['arguments'].append(data['ci']['command-scale']['arguments'][0])
-        with patch.object(ci, 'catalog', return_value=data), self.assertRaisesRegex(ValueError, 'stress partition'):
+        with self.catalog_patch(lambda d: d['ci']['stress']['arguments'].append(d['ci']['command-scale']['arguments'][0])), \
+                self.assertRaisesRegex(ValueError, 'stress partition'):
             ci.lanes()
 
     def test_parallel_analysis_cannot_replace_the_admission_contracts(self):
-        for change in ('contracts', 'scope', 'setup', 'preflight'):
-            data = copy.deepcopy(planning.catalog())
-            analysis = data['ci']['ready-lint']
-            if change == 'contracts':
-                del data['ci']['ready']['preflight']
-            elif change == 'scope':
-                analysis['targets'] = ['lint:fast']
-            elif change == 'setup':
-                analysis['setup'] = 'verification'
-            else:
-                analysis['preflight'] = ['test:contract', '--', './test/contract/...']
-            with self.subTest(change=change), patch.object(ci, 'catalog', return_value=data):
-                with self.assertRaises(ValueError):
-                    ci.matrix('fast')
+        mutations = {
+            'contracts': lambda d: d['ci']['ready'].pop('preflight'),
+            'scope': lambda d: d['ci']['ready-lint'].update(targets=['lint:fast']),
+            'setup': lambda d: d['ci']['ready-lint'].update(setup='verification'),
+            'preflight': lambda d: d['ci']['ready-lint'].update(preflight=['test:contract', '--', './test/contract/...']),
+        }
+        for change, mutate in mutations.items():
+            with self.subTest(change=change), self.catalog_patch(mutate), self.assertRaises(ValueError):
+                ci.matrix('fast')
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
-        for mutation in ("missing", "fast-outside", "fast-twice", "fast-missing", "duplicate", "unknown", "unbounded"):
-            with self.subTest(mutation=mutation):
-                data = copy.deepcopy(planning.catalog())
-                if mutation == "missing":
-                    del data["ci"]["frontend"]
-                elif mutation == "fast-outside":
-                    data["ci"]["ready"]["targets"].append("test:full")
-                elif mutation == "fast-twice":
-                    data["ci"]["ready"]["targets"].append("budgets")
-                elif mutation == 'fast-missing':
-                    del data['ci']['ready-lint']
-                elif mutation == "duplicate":
-                    data["ci"]["duplicate"] = data["ci"]["frontend"]
-                elif mutation == "unknown":
-                    data["ci"]["frontend"]["targets"] = ["not:a:task"]
-                else:
-                    data["ci"]["frontend"]["minutes"] = 360
-                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-                    ci.matrix("check")
+        mutations = {
+            "missing": lambda d: d["ci"].pop("frontend"),
+            "fast-outside": lambda d: d["ci"]["ready"]["targets"].append("test:full"),
+            "fast-twice": lambda d: d["ci"]["ready"]["targets"].append("budgets"),
+            "fast-missing": lambda d: d["ci"].pop("ready-lint"),
+            "duplicate": lambda d: d["ci"].update(duplicate=d["ci"]["frontend"]),
+            "unknown": lambda d: d["ci"]["frontend"].update(targets=["not:a:task"]),
+            "unbounded": lambda d: d["ci"]["frontend"].update(minutes=360),
+        }
+        for mutation, mutate in mutations.items():
+            with self.subTest(mutation=mutation), self.catalog_patch(mutate), self.assertRaises(ValueError):
+                ci.matrix("check")
 
     def test_admission_refuses_invalid_package_selection(self):
-        for mutation in ("missing", "target", "scope", "empty", "sharded", "selector", "traversal", "duplicate", "mixed", "absent"):
-            with self.subTest(mutation=mutation):
-                data = copy.deepcopy(planning.catalog())
-                lane = data["ci"]["ready"]
-                if mutation == "missing":
-                    del lane["preflight"]
-                elif mutation == "target":
-                    lane["preflight"][0] = "test:full"
-                elif mutation == "scope":
-                    lane["preflight"][2] = "./..."
-                elif mutation == "empty":
-                    lane["preflight"] = ["test:contract", "--"]
-                elif mutation == "sharded":
-                    lane["shards"] = 2
-                elif mutation == "selector":
-                    lane["preflight"] += ["-run", "^TestMissing"]
-                elif mutation == "traversal":
-                    lane["preflight"][2] = "./test/contract/../internal"
-                elif mutation == "duplicate":
-                    lane["preflight"].append(lane["preflight"][2])
-                elif mutation == "mixed":
-                    lane["preflight"].append("./test/contract/host")
-                else:
-                    lane["preflight"][2] = "./test/contract/absent"
-                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-                    ci.matrix("fast")
+        mutations = {
+            "missing": lambda lane: lane.pop("preflight"),
+            "target": lambda lane: lane["preflight"].__setitem__(0, "test:full"),
+            "scope": lambda lane: lane["preflight"].__setitem__(2, "./..."),
+            "empty": lambda lane: lane.update(preflight=["test:contract", "--"]),
+            "sharded": lambda lane: lane.update(shards=2),
+            "selector": lambda lane: lane["preflight"].extend(["-run", "^TestMissing"]),
+            "traversal": lambda lane: lane["preflight"].__setitem__(2, "./test/contract/../internal"),
+            "duplicate": lambda lane: lane["preflight"].append(lane["preflight"][2]),
+            "mixed": lambda lane: lane["preflight"].append("./test/contract/host"),
+            "absent": lambda lane: lane["preflight"].__setitem__(2, "./test/contract/absent"),
+        }
+        for mutation, mutate in mutations.items():
+            with self.subTest(mutation=mutation), self.catalog_patch(lambda d: mutate(d["ci"]["ready"])), self.assertRaises(ValueError):
+                ci.matrix("fast")
 
     def test_admission_accepts_existing_contract_packages_without_name_filters(self):
-        data = copy.deepcopy(planning.catalog())
-        data["ci"]["ready"]["preflight"] = ["test:contract", "--", "./test/contract/evidence"]
-        with patch.object(ci, "catalog", return_value=data):
+        with self.catalog_patch(lambda d: d["ci"]["ready"].update(preflight=["test:contract", "--", "./test/contract/evidence"])):
             self.assertEqual(len(ci.matrix("fast")["include"]), 2)
 
     def test_nightly_selection_includes_only_requested_and_unconditional_jobs(self):
@@ -204,9 +179,7 @@ class HostedPlanTests(unittest.TestCase):
         for name, lane in ci.lanes().items():
             if "check" not in lane["profiles"] and not ("release" in lane["profiles"] and "platform" in lane):
                 continue
-            data = copy.deepcopy(planning.catalog())
-            data["ci"][name]["profiles"].remove("nightly")
-            with self.subTest(lane=name), patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+            with self.subTest(lane=name), self.catalog_patch(lambda d: d["ci"][name]["profiles"].remove("nightly")), self.assertRaises(ValueError):
                 ci.lanes()
 
     def test_host_platform_and_time_budgets_are_explicit(self):
@@ -242,27 +215,19 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(nightly["webkit"], "harness")
         self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit", "frontend", "lint", "vulnerabilities"}},
                          {"verification"})
-        for mutation in ("unknown", "missing", "boolean"):
-            with self.subTest(mutation=mutation):
-                data = copy.deepcopy(planning.catalog())
-                lane = data["ci"]["webkit"]
-                if mutation == "unknown":
-                    lane["setup"] = "everything"
-                elif mutation == "missing":
-                    del lane["setup"]
-                else:
-                    del lane["setup"]
-                    lane["native"] = True
-                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-                    ci.matrix("check")
+        mutations = {
+            "unknown": lambda lane: lane.update(setup="everything"),
+            "missing": lambda lane: lane.pop("setup"),
+            "boolean": lambda lane: (lane.pop("setup"), lane.update(native=True)),
+        }
+        for mutation, mutate in mutations.items():
+            with self.subTest(mutation=mutation), self.catalog_patch(lambda d: mutate(d["ci"]["webkit"])), self.assertRaises(ValueError):
+                ci.matrix("check")
 
     def test_frontend_setup_refuses_go_or_shell_targets(self):
         for target in ("build", "decide:test", "den:test:rust", "lint:full"):
-            with self.subTest(target=target):
-                data = copy.deepcopy(planning.catalog())
-                data["ci"]["frontend"]["targets"].append(target)
-                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-                    ci.matrix("check")
+            with self.subTest(target=target), self.catalog_patch(lambda d: d["ci"]["frontend"]["targets"].append(target)), self.assertRaises(ValueError):
+                ci.matrix("check")
 
     def test_e2e_leaves_the_check_gate_and_has_an_explicit_nightly_selection(self):
         gate = [stage["name"] for stage in planning.expand(["check"])]
@@ -276,22 +241,17 @@ class HostedPlanTests(unittest.TestCase):
 
     def test_platform_lanes_run_beside_the_check_gate_and_never_inside_it(self):
         self.assertEqual({ci.lanes()[name]["platform"] for name in ("webkit-gtk", "confinement-arm64")}, {"linux"})
-        for mutation in ("unknown", "macos", "windows", "check", "fast", "repeats"):
-            with self.subTest(mutation=mutation):
-                data = copy.deepcopy(planning.catalog())
-                platform = data["ci"]["webkit-gtk"]
-                if mutation == "unknown":
-                    platform["platform"] = "windows"
-                elif mutation == "macos":
-                    platform["runner"] = "macos-15"
-                elif mutation == "windows":
-                    platform["runner"] = "windows-latest"
-                elif mutation in {"check", "fast"}:
-                    platform["profiles"].append(mutation)
-                else:
-                    platform["targets"].append("den:coverage:changes")
-                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-                    ci.lanes()
+        mutations = {
+            "unknown": lambda p: p.update(platform="windows"),
+            "macos": lambda p: p.update(runner="macos-15"),
+            "windows": lambda p: p.update(runner="windows-latest"),
+            "check": lambda p: p["profiles"].append("check"),
+            "fast": lambda p: p["profiles"].append("fast"),
+            "repeats": lambda p: p["targets"].append("den:coverage:changes"),
+        }
+        for mutation, mutate in mutations.items():
+            with self.subTest(mutation=mutation), self.catalog_patch(lambda d: mutate(d["ci"]["webkit-gtk"])), self.assertRaises(ValueError):
+                ci.lanes()
 
     def test_offline_lanes_learn_which_container_images_they_need(self):
         for profile in ci.PROFILES:
@@ -371,20 +331,15 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual([(row["nix"], row["browser"]) for row in rows], [(True, False)])
 
     def test_lane_arguments_are_explicit(self):
-        for mutation in ("arguments-many-targets", "arguments-empty", "paths"):
-            with self.subTest(mutation=mutation):
-                data = copy.deepcopy(planning.catalog())
-                if mutation == "arguments-many-targets":
-                    data["ci"]["frontend"]["arguments"] = ["browser"]
-                elif mutation == "arguments-empty":
-                    data["ci"]["confinement-arm64"]["arguments"] = []
-                else:
-                    data["ci"]["nix"]["paths"] = ["packaging/nix/"]
-                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-                    ci.matrix("nightly")
-        data = copy.deepcopy(planning.catalog())
-        data["ci"]["confinement-arm64"]["arguments"] = ["nix"]
-        with patch.object(ci, "catalog", return_value=data):
+        mutations = {
+            "arguments-many-targets": lambda d: d["ci"]["frontend"].update(arguments=["browser"]),
+            "arguments-empty": lambda d: d["ci"]["confinement-arm64"].update(arguments=[]),
+            "paths": lambda d: d["ci"]["nix"].update(paths=["packaging/nix/"]),
+        }
+        for mutation, mutate in mutations.items():
+            with self.subTest(mutation=mutation), self.catalog_patch(mutate), self.assertRaises(ValueError):
+                ci.matrix("nightly")
+        with self.catalog_patch(lambda d: d["ci"]["confinement-arm64"].update(arguments=["nix"])):
             row = next(row for row in ci.matrix("nightly")["include"] if row["lane"] == "confinement-arm64")
         self.assertEqual((row["nix"], row["browser"]), (True, False))
 
@@ -408,14 +363,9 @@ class HostedPlanTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ci.max_parallel("unknown")
         for mutation in ("missing", "zero", "fraction"):
-            with self.subTest(mutation=mutation):
-                data = copy.deepcopy(planning.catalog())
-                if mutation == "missing":
-                    del data["capacity"]["max_parallel"]["nightly"]
-                else:
-                    data["capacity"]["max_parallel"]["nightly"] = 0 if mutation == "zero" else 1.5
-                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-                    ci.max_parallel("check")
+            with self.subTest(mutation=mutation), self.catalog_patch(lambda d: d["capacity"]["max_parallel"].pop("nightly")
+                    if mutation == "missing" else d["capacity"]["max_parallel"].update(nightly=0 if mutation == "zero" else 1.5)), self.assertRaises(ValueError):
+                ci.max_parallel("check")
 
     def test_capped_matrix_starts_cheap_frequent_failures_then_its_longest_lanes(self):
         lanes = ci.lanes()
@@ -428,9 +378,7 @@ class HostedPlanTests(unittest.TestCase):
             ordinary = [row for row in rows if row['priority'] != 'compile']
             order = [(ci.PRIORITIES[row['priority']], -row['minutes']) for row in ordinary]
             self.assertEqual(order, sorted(order))
-        data = copy.deepcopy(planning.catalog())
-        data["ci"]["limits"]["priority"] = "invalid"
-        with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+        with self.catalog_patch(lambda d: d["ci"]["limits"].update(priority="invalid")), self.assertRaises(ValueError):
             ci.matrix("integration")
 
     def test_combined_analysis_targets_restore_both_tool_sets(self):
