@@ -143,16 +143,18 @@ func TestHoldDuringTheGraceKeepsTheWindowActive(t *testing.T) {
 	second, err := window.Hold(ctx)
 	testutil.FailErr(t, "hold during the grace", err)
 	endSettle()
-	for _, path := range []string{"during.txt", "still-during.txt"} {
-		writeRootFile(t, root, path, "live\n")
-		deliverWrites(ctx, root, path)
-		forceTestPass(t, store, ctx, root)
-		if effect := newestEffects(t, store, ctx)[path]; effect.CommandWindowID != window.ID {
-			t.Fatalf("drift after a hold during the grace = %+v, want the window", effect)
-		}
-	}
-	if len(idled) != 0 {
+	// A grace still running would idle the window now. This cannot fail correct
+	// code; no pass runs meanwhile, because one would hold that grace back.
+	select {
+	case <-idled:
 		t.Fatal("the ended grace idled a window with a live process")
+	case <-time.After(500 * time.Millisecond):
+	}
+	writeRootFile(t, root, "during.txt", "live\n")
+	deliverWrites(ctx, root, "during.txt")
+	forceTestPass(t, store, ctx, root)
+	if effect := newestEffects(t, store, ctx)["during.txt"]; effect.CommandWindowID != window.ID {
+		t.Fatalf("drift after a hold during the grace = %+v, want the window", effect)
 	}
 	second()
 	testutil.Receive(t, "the window goes idle", idled)
@@ -657,24 +659,26 @@ func TestPartialRetentionLosesOnlyTheBeforeImage(t *testing.T) {
 	}
 }
 
-// What an earlier open stored is pinned without reading the file again, so later
-// opens resume instead of paying for it twice and a file gone since still counts.
-func TestRetentionPinsStoredObjectsWithoutRereadingThem(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+// What an earlier open stored is pinned as it is, so later opens resume instead of
+// paying to read and store it again.
+func TestRetentionPinsStoredObjectsWithoutStoringThemAgain(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "a.txt", "before a\n")
-	writeRootFile(t, root, "b.txt", "before b\n")
-	repochange.MarkCoverageCompleteForTest(root)
-	t.Cleanup(func() { repochange.CloseRoot(root) })
-	forceTestPass(t, store, ctx, root)
 	closeAndSettle(t, ctx, openTestWindow(t, store, ctx, root, "make"))
 
-	// With no event delivered the next open starts from the same inventory.
-	testutil.FailErr(t, "remove a.txt", os.Remove(filepath.Join(root, "a.txt")))
+	// A second store would overwrite this mark.
+	sha := sourceblob.ContentSHA([]byte("before a\n"))
+	const marked = 987654
+	_, err := store.sqlDB.ExecContext(ctx, `UPDATE source_blob_objects SET stored_size = ? WHERE sha256 = ?`, marked, sha)
+	testutil.FailErr(t, "mark the stored object", err)
 	resumed := openTestWindow(t, store, ctx, root, "make again")
-	if pins := windowPins(t, store, ctx, resumed.ID); !pins[sourceblob.ContentSHA([]byte("before a\n"))] || !pins[sourceblob.ContentSHA([]byte("before b\n"))] {
-		t.Fatalf("resumed pins = %v, want both stored objects", pins)
+	if pins := windowPins(t, store, ctx, resumed.ID); !pins[sha] {
+		t.Fatalf("resumed pins = %v, want the stored object", pins)
+	}
+	object, err := store.queries.GetSourceBlobObject(ctx, sha)
+	testutil.FailErr(t, "read the stored object", err)
+	if object.StoredSize != marked {
+		t.Fatalf("stored size = %d, the object was stored again", object.StoredSize)
 	}
 	closeAndSettle(t, ctx, resumed)
 }

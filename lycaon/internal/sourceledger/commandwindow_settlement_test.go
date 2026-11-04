@@ -168,13 +168,14 @@ func TestReanchorDoesNotReuseASlowPassOverTheGap(t *testing.T) {
 
 // An event still on its way when a window opens belongs to before the window.
 func TestOpenWaitsForAWatcherEventStillInFlight(t *testing.T) {
+	// With no real watcher only the event below moves the token, so without the
+	// wait the open has no pass of its own to wait through.
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
 	store, ctx, root := openLedgerOnDisk(t)
 	repochange.MarkCoverageCompleteForTest(root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
-	// The first pass binds the watcher, which moves the token; after the second
-	// the open has no pass of its own to wait through.
-	forceTestPass(t, store, ctx, root)
 	forceTestPass(t, store, ctx, root)
 
 	writeRootFile(t, root, "notes.md", "a person's save\n")
