@@ -413,7 +413,9 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 		{"-s", "-D", "-", "-o", "/dev/null", "-w", `%{http_code} %{size_download} %{url_effective}\n`, server.URL + "/a"},
 		{"-s", "-o", "/dev/null", "-w", facts, server.URL + "/hop/1"},
 		{"-s", "-L", "-o", "/dev/null", "-w", facts, server.URL + "/hop/2"},
-		{"-s", "-A", "probe/1", "-T", "upload.txt", "-w", facts, server.URL + "/echo"},
+		// How many header bytes an upload reports depends on whether this curl sends Expect, which
+		// older ones do for any body and whose interim response they count.
+		{"-s", "-A", "probe/1", "-T", "upload.txt", "-w", strings.ReplaceAll(facts, " %{size_header}", ""), server.URL + "/echo"},
 		{"-s", "-A", "probe/1", "-T", "upload.txt", "-X", "POST", server.URL + "/echo"},
 		{"-s", "--fail-with-body", "-w", facts, server.URL + "/fail"},
 		{"-s", "--fail", "-w", facts, server.URL + "/fail"},
