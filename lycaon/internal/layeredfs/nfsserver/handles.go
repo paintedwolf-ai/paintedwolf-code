@@ -63,6 +63,7 @@ type handleTable struct {
 	unlinked    *list.List
 	coreFor     func(ViewID) *layeredfs.Core
 	sidecars    *sidecarTable
+	listings    *listingIndex
 }
 
 func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, coreFor func(ViewID) *layeredfs.Core) *handleTable {
@@ -78,6 +79,7 @@ func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, cor
 		unlinked:    list.New(),
 		coreFor:     coreFor,
 		sidecars:    sidecars,
+		listings:    newListingIndex(maxHandles),
 	}
 }
 
@@ -98,6 +100,7 @@ func (t *handleTable) RegisterView(viewID ViewID) {
 func (t *handleTable) ReleaseView(core *layeredfs.Core, viewID ViewID) {
 	t.mu.Lock()
 	vHash := computeViewHash(viewID)
+	t.listings.dropView(vHash)
 	delete(t.activeViews, vHash)
 	var toClose []layeredfs.HandleID
 	for k, rec := range t.byKey {
@@ -273,9 +276,17 @@ func (t *handleTable) locate(
 		return qpath, meta, nil
 	}
 	if hasParent {
-		name, found, err := core.FindChildByIdentity(parentPath, hdr.nodeID)
-		if err == nil && found {
-			return locatedChild(core, parentPath, name, hdr.nodeID)
+		key := handleKey{viewHash: hdr.viewHash, nodeID: hdr.parentID}
+		if name, ok := t.listings.name(key, hdr.nodeID); ok {
+			if qpath, meta, err := locatedChild(core, parentPath, name, hdr.nodeID); err == nil {
+				return qpath, meta, nil
+			}
+		}
+		if names, err := core.ChildIdentities(parentPath); err == nil {
+			t.listings.put(key, names)
+			if name, found := names[hdr.nodeID]; found {
+				return locatedChild(core, parentPath, name, hdr.nodeID)
+			}
 		}
 	}
 	if qpath, meta, ok := t.sidecars.locate(core, hdr.nodeID, parentPath, hasParent); ok {

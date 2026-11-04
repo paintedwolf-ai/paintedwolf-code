@@ -193,6 +193,24 @@ func (c *Core) FindChildByIdentity(dir QualifiedPath, id NodeID) (string, bool, 
 	return "", false, nil
 }
 
+// ChildIdentities names every entry of dir by stable identity, without an observation, for the same
+// reason as FindChildByIdentity.
+func (c *Core) ChildIdentities(dir QualifiedPath) (map[NodeID]string, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return nil, err
+	}
+	defer c.barrier.leaveOp()
+	entries, err := readDirUnlocked(c, dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[NodeID]string, len(entries))
+	for _, e := range entries {
+		out[e.StableID()] = e.Name
+	}
+	return out, nil
+}
+
 // AdoptIdentity gives the private object at qpath a stable identity a protocol handle already holds,
 // for an object the adapter presented before it existed in the view.
 func (c *Core) AdoptIdentity(qpath QualifiedPath, id NodeID) {
