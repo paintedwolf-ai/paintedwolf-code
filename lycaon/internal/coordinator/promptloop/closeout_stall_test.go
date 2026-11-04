@@ -77,13 +77,13 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 					t.Fatalf("handler executions=%d, want %d", executed, want)
 				}
 			}()
-			_ = reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+			_ = reg.Register("write", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				executed++
 				if retained.Active {
 					t.Fatal("tool ran before pinned report retired")
 				}
 				if outcome == "failed" {
-					return "", errors.New("read failed")
+					return "", errors.New("write failed")
 				}
 				return "current observation", nil
 			})
@@ -113,10 +113,10 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 				}
 				return nil
 			}}})
-			st := &promptLoopTurnState{turnToolPlan: toolsurface.Compile([]string{"read"}, nil), offeredToolNames: []string{"read"}, turnID: "turn", attemptID: "attempt", closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}}
+			st := &promptLoopTurnState{turnToolPlan: toolsurface.Compile([]string{"write"}, nil), offeredToolNames: []string{"write"}, turnID: "turn", attemptID: "attempt", closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}}
 			sess := &api.Session{ID: "session"}
 			for i := 0; i < 7; i++ {
-				call := api.ToolCall{ID: fmt.Sprint(i), Name: "read", Args: map[string]any{"path": "missing"}}
+				call := api.ToolCall{ID: fmt.Sprint(i), Name: "write", Args: map[string]any{"path": "missing"}}
 				msg := api.Message{ID: fmt.Sprint("assistant", i), Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{call}}
 				st.history = append(st.history, msg)
 				result, err := loop.processPromptLoopAssistantTurn(t.Context(), sess, sess.ID, PromptRunInput{}, i, 20, "implement_investigate", "inspect", st, msg, &modelcall.Completion{ToolCalls: msg.ToolCalls})
@@ -166,10 +166,10 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 	defer release()
 
 	for _, repair := range []struct {
-		code, contract string
+		code, contract, offer string
 	}{
-		{code: guidance.InvestHandleNotObservedCode, contract: "Your answer is retained"},
-		{code: guidance.ReportFenceUnreadableCode, contract: "emit only the report fence"},
+		{code: guidance.InvestHandleNotObservedCode, contract: "Your answer is retained", offer: "use a tool with effects"},
+		{code: guidance.ReportFenceUnreadableCode, contract: "emit only the report fence", offer: "use an offered tool"},
 	} {
 		for _, tc := range []struct {
 			name          string
@@ -202,7 +202,7 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 				st := &promptLoopTurnState{proseFinish: tc.prose, offeredToolNames: tc.offered}
 				_, err := loop.Closeout.rejectCloseoutGrounding(t.Context(), "session", st, nil, "", &oar.Decision{Code: repair.code, Copy: map[string]string{"what": "Closeout refused"}}, markdownRead("Pinned report", false).Draft, nil)
 				testutil.FailErr(t, "render closeout rejection", err)
-				if got := strings.Contains(rendered, "use an offered tool"); got != tc.want {
+				if got := strings.Contains(rendered, repair.offer); got != tc.want {
 					t.Fatalf("offered guidance = %v, want %v: %s", got, tc.want, rendered)
 				}
 				if !strings.Contains(rendered, repair.contract) {
