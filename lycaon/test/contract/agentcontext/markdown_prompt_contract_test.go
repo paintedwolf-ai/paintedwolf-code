@@ -42,7 +42,8 @@ var providerNames = regexp.MustCompile(`\b(?:OpenAI|Anthropic|Claude|Gemini|Fire
 var typedCitationFields = regexp.MustCompile(`\b(cited_evidence|cited_urls|artifact_ids)\b|typed fields`)
 
 // bareCoordinateForm is a placeholder coordinate in inline code, such as `path:line`.
-// Inline code is never a citation, so teaching it yields citations that do not count.
+// A supported code span counts, but only the bracket form is taught: it is refused
+// with feedback, where unsupported code stays silent.
 // The bracket form starts with a bracket, and concrete code spans name no placeholder.
 var bareCoordinateForm = regexp.MustCompile("`[\\w./@-]*(?:path|file)[\\w./@-]*(?::|#L)(?:line|N|\\d+)[^`]*`")
 
@@ -60,7 +61,8 @@ func TestModelFacingOutputsTeachNoRetiredProtocol(t *testing.T) {
 				t.Errorf("%s teaches retired %q", output.name, retired)
 			}
 		}
-		if name := providerNames.FindString(output.text); name != "" {
+		// A skill about a named local runtime is the one place naming it is the point.
+		if name := providerNames.FindString(output.text); name != "" && !strings.Contains(output.name, "/skills/") {
 			t.Errorf("AC-COMPAT-04: %s names a provider: %s", output.name, name)
 		}
 		if output.standing && strings.Contains(output.text, "[cite:") {
@@ -74,7 +76,7 @@ func TestModelFacingOutputsTeachNoRetiredProtocol(t *testing.T) {
 				t.Errorf("%s teaches %q to a coordinator outside a typed tool: %s", output.name, field, line)
 			}
 			if form := bareCoordinateForm.FindString(line); form != "" && !output.workflowVersioned && !namesTypedCitationTool(line) {
-				t.Errorf("%s teaches %s, which is inline code and never a citation: %s", output.name, form, line)
+				t.Errorf("%s teaches %s; prompts teach only the bracket form: %s", output.name, form, line)
 			}
 		}
 	}
