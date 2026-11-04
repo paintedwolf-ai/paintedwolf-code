@@ -644,10 +644,6 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
     prompt: "Which API style?",
     response_type: "text",
   }),
-  surface_note: JSON.stringify({
-    status: "noted",
-    message_id: "note-1",
-  }),
   ...Object.fromEntries(CATALOG_OK_TOOLS.map((tool) => [tool, OK])),
 };
 

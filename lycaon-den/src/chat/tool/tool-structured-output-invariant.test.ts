@@ -138,6 +138,13 @@ describe("tool structured output invariant", () => {
     }
   });
 
+  it("renders a stored surface_note result with the default card", () => {
+    expect(TOOL_STRUCTURED_OUTPUT_FIXTURES.surface_note).toBeUndefined();
+    const output = JSON.stringify({ status: "noted", message_id: "note-1" });
+    const view = buildStructuredToolPresentation(part("surface_note", output));
+    expect(violatesStructuredToolPresentation(view, output)).toBeNull();
+  });
+
   it("formats agent guidance without raw disclosure", () => {
     const view = buildStructuredToolPresentation(
       part("read", TOOL_GUIDANCE_OUTPUT_FIXTURE, {

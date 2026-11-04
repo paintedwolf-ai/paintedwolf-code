@@ -14,6 +14,8 @@ export type ProseCitationIndex = {
   key: string;
   /** Normalized repository paths mapped to the first cited line. */
   paths: Map<string, number | undefined>;
+  /** Last line of the cited range, for paths whose first line starts one. */
+  endLines: Map<string, number>;
   /** Host-marked non-openable cited paths. */
   blocked: ReadonlySet<string>;
 };
@@ -40,7 +42,7 @@ function normalizeCitedPath(raw: string | undefined): string {
   return path;
 }
 
-type CitedRow = { path?: string; line?: number; openable?: boolean };
+type CitedRow = { path?: string; line?: number; end_line?: number; openable?: boolean };
 
 export function buildProseCitationIndex(
   grounding: CitationGrounding | null | undefined,
@@ -55,6 +57,7 @@ export function buildProseCitationIndex(
     ),
   ];
   const paths = new Map<string, number | undefined>();
+  const endLines = new Map<string, number>();
   const blocked = new Set<string>();
   for (const row of rows) {
     const path = normalizeCitedPath(row.path);
@@ -67,20 +70,20 @@ export function buildProseCitationIndex(
       typeof row.line === "number" && Number.isFinite(row.line) && row.line > 0
         ? row.line
         : undefined;
-    if (!paths.has(path)) {
-      paths.set(path, line);
-    } else if (paths.get(path) === undefined && line !== undefined) {
-      paths.set(path, line);
+    if (paths.has(path) && (paths.get(path) !== undefined || line === undefined)) continue;
+    paths.set(path, line);
+    if (line !== undefined && row.end_line !== undefined && row.end_line > line) {
+      endLines.set(path, row.end_line);
     }
   }
   if (paths.size === 0 && blocked.size === 0) return undefined;
   const key = [
     ...[...paths.keys()]
       .sort()
-      .map((p) => `${p}\u0001${paths.get(p) ?? ""}`),
+      .map((p) => `${p}\u0001${paths.get(p) ?? ""}\u0001${endLines.get(p) ?? ""}`),
     ...[...blocked].sort().map((p) => `!${p}`),
   ].join("\u0002");
-  return { key, paths, blocked };
+  return { key, paths, endLines, blocked };
 }
 
 export function buildProseNavigationIndex(
@@ -134,7 +137,8 @@ export function matchProseCitation(
   const { path, line, endLine } = parsed;
 
   if (index.paths.has(path)) {
-    return { path, line: line ?? index.paths.get(path), endLine };
+    if (line !== undefined) return { path, line, endLine };
+    return { path, line: index.paths.get(path), endLine: index.endLines.get(path) };
   }
 
   return undefined;
@@ -166,7 +170,10 @@ export function resolveProsePathTarget(
 ): ProsePathTarget | undefined {
   if (opts?.navigation?.mentions.has(candidate)) {
     const target = matchProseNavigation(opts.navigation, candidate);
-    if (target && target.line == null) target.line = opts.index?.paths.get(target.path);
+    if (target && target.line == null) {
+      target.line = opts.index?.paths.get(target.path);
+      target.endLine = opts.index?.endLines.get(target.path);
+    }
     return target;
   }
   const index = opts?.index;
