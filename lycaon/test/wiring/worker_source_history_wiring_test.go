@@ -327,3 +327,18 @@ func TestSourceHistoryACDF16DiffShowsTheGeneratorsRewriteOfARecordedFile(t *test
 		}
 	}
 }
+
+// A FIFO has no writer, so a blocking open in the diff would never return.
+func TestSourceHistoryACDF17SpecialFileAnswersWithANote(t *testing.T) {
+	_, results := runWorkerScript(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		commandCall("fifo", `external -- /bin/sh -c 'mkfifo pipe'`),
+		historyCall("overview", map[string]any{}),
+		historyCall("diff", map[string]any{"path": "pipe", "mode": "diff"}),
+	)
+	unrecordedRow(t, decodeWorkerHistory(t, results, "overview").Files, "pipe", "create")
+	diff := decodeWorkerHistory(t, results, "diff")
+	if !diff.Unrecorded || diff.Diff != "" || diff.Note == "" {
+		t.Fatalf("diff = %+v, want an unrecorded answer with a note and no text", diff)
+	}
+}

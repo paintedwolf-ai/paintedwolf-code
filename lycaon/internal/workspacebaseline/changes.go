@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -168,13 +169,14 @@ func (r *Reader) baselineText(ctx context.Context, path string, before File, inB
 	return text, true
 }
 
-// liveText reads a regular file. A file it cannot read as text within the branch
-// has no text to compare.
+// liveText reads a regular file. The open does not block, so a FIFO with no writer
+// answers at once. A file it cannot read as text within the branch has no text to
+// compare.
 func liveText(base, rel string, kind ChangeKind) (string, bool) {
 	if kind == ChangeDeleted {
 		return "", true
 	}
-	file, err := os.OpenInRoot(base, rel)
+	file, err := fseffect.OpenRead(fseffect.Location{Root: base, Rel: rel})
 	if err != nil {
 		return "", false
 	}

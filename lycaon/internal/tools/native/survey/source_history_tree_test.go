@@ -24,18 +24,18 @@ import (
 type fakeTree struct {
 	changes []workspacebaseline.Change
 	err     error
-	blocks  bool
-	path    workspacebaseline.PathComparison
-	calls   int
-	seen    tools.SourceTree
+	// stall ignores the context until closed, like a filesystem call that hung.
+	stall chan struct{}
+	path  workspacebaseline.PathComparison
+	calls int
+	seen  tools.SourceTree
 }
 
-func (f *fakeTree) TreeChanges(ctx context.Context, tree tools.SourceTree) ([]workspacebaseline.Change, error) {
+func (f *fakeTree) TreeChanges(_ context.Context, tree tools.SourceTree) ([]workspacebaseline.Change, error) {
 	f.calls++
 	f.seen = tree
-	if f.blocks {
-		<-ctx.Done()
-		return nil, ctx.Err()
+	if f.stall != nil {
+		<-f.stall
 	}
 	return f.changes, f.err
 }
@@ -43,7 +43,26 @@ func (f *fakeTree) TreeChanges(ctx context.Context, tree tools.SourceTree) ([]wo
 func (f *fakeTree) TreePathChange(_ context.Context, tree tools.SourceTree, _ string) (workspacebaseline.PathComparison, error) {
 	f.calls++
 	f.seen = tree
+	if f.stall != nil {
+		<-f.stall
+	}
 	return f.path, f.err
+}
+
+// returnsDespiteStall runs a tool call against a stalled tree and fails if the
+// call waits on it. Removing the budget reaches the failure here, not a test timeout.
+func returnsDespiteStall(t *testing.T, stall chan struct{}, call func() string) string {
+	t.Helper()
+	done := make(chan string, 1)
+	go func() { done <- call() }()
+	defer close(stall)
+	select {
+	case out := <-done:
+		return out
+	case <-time.After(30 * time.Second):
+		t.Fatal("the call waited on a stalled tree comparison")
+		return ""
+	}
 }
 
 func (h *historyHarness) workerWith(tree tools.SourceTreeReader) tools.ToolContext {
@@ -97,12 +116,10 @@ func TestSourceHistoryOverviewACOV18TreeChangesBecomeUnrecordedRows(t *testing.T
 func TestSourceHistoryOverviewACOV19ComparisonFailureListsLedgerRowsAndSaysSo(t *testing.T) {
 	for name, tree := range map[string]tools.SourceTreeReader{
 		"fails":           &fakeTree{err: errors.New("manifest unreadable")},
-		"exceeds budget":  &fakeTree{blocks: true},
 		"reader is unset": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHistoryHarness(t)
-			h.tool.treeBudget = time.Nanosecond
 			h.recordOnWorker(effectSeed{path: "native.go", content: "native\n"})
 			result := runOverviewCall(t, h.tool, h.workerWith(tree))
 			if !result.Recorded || len(result.Files) != 1 || result.Files[0].Path != "native.go" || result.Files[0].Unrecorded {
@@ -112,6 +129,46 @@ func TestSourceHistoryOverviewACOV19ComparisonFailureListsLedgerRowsAndSaysSo(t 
 				t.Fatalf("note = %q, want it to state the comparison did not finish", result.Note)
 			}
 		})
+	}
+}
+
+func TestSourceHistoryOverviewACOV19StalledComparisonEndsAtTheBudget(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.tool.treeBudget = time.Millisecond
+	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n"})
+	tree := &fakeTree{stall: make(chan struct{}), changes: treeChanges("late.go", "created")}
+	worker := h.workerWith(tree)
+	var result overviewResult
+	out := returnsDespiteStall(t, tree.stall, func() string {
+		out, err := h.tool.Run(context.Background(), map[string]any{}, worker)
+		if err != nil {
+			t.Errorf("overview: %v", err)
+		}
+		return out
+	})
+	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &result))
+	if len(result.Files) != 1 || result.Files[0].Path != "native.go" || !strings.Contains(result.Note, overviewTreeUnknownNote) {
+		t.Fatalf("result = %+v, want the ledger row and the note", result)
+	}
+}
+
+func TestSourceHistoryDiffACOV19StalledComparisonEndsAtTheBudget(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.tool.treeBudget = time.Millisecond
+	h.writeFile("gen.txt", "on disk\n")
+	tree := &fakeTree{stall: make(chan struct{})}
+	worker := h.workerWith(tree)
+	var result diffResult
+	out := returnsDespiteStall(t, tree.stall, func() string {
+		out, err := h.tool.Run(context.Background(), map[string]any{"path": "gen.txt", "mode": "diff"}, worker)
+		if err != nil {
+			t.Errorf("diff: %v", err)
+		}
+		return out
+	})
+	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &result))
+	if result.Unrecorded || result.Diff != "" || !strings.Contains(result.Note, overviewTreeUnknownNote) {
+		t.Fatalf("result = %+v, want no diff and the note", result)
 	}
 }
 

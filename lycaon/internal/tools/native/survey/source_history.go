@@ -27,7 +27,7 @@ type SourceHistoryTool struct {
 
 	// settleBudget replaces the overview's settle budget in tests.
 	settleBudget time.Duration
-	// treeBudget replaces the overview's tree comparison budget in tests.
+	// treeBudget replaces the tree comparison budget in tests.
 	treeBudget time.Duration
 }
 

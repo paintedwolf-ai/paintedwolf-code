@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	overviewTreeBudget      = tools.WindowSettleBudget
+	sourceTreeBudget        = tools.WindowSettleBudget
 	overviewTreeUnknownNote = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
 	treeDiffNoTextNote      = "this file changed, but its baseline or live side has no text to compare"
 	treeDiffTouchedNote     = "this file's timestamp changed; its text did not"
@@ -40,13 +40,11 @@ func (t *SourceHistoryTool) addTreeChanges(
 	if ledger.Tree == nil {
 		return false
 	}
-	budget := t.treeBudget
-	if budget == 0 {
-		budget = overviewTreeBudget
-	}
-	compare, cancel := context.WithTimeout(ctx, budget)
+	compare, cancel := t.treeContext(ctx)
 	defer cancel()
-	changes, err := ledger.Tree.TreeChanges(compare, sourceTreeOf(tctx))
+	changes, err := awaitTree(compare, func(ctx context.Context) ([]workspacebaseline.Change, error) {
+		return ledger.Tree.TreeChanges(ctx, sourceTreeOf(tctx))
+	})
 	if err != nil {
 		return false
 	}
@@ -83,6 +81,35 @@ func (t *SourceHistoryTool) addTreeChanges(
 		resp.Files = append(resp.Files, sourceHistoryOverviewFile{Path: change.Path, Op: string(changeOp(change.Kind)), Unrecorded: true})
 	}
 	return true
+}
+
+func (t *SourceHistoryTool) treeContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	budget := t.treeBudget
+	if budget == 0 {
+		budget = sourceTreeBudget
+	}
+	return context.WithTimeout(ctx, budget)
+}
+
+// awaitTree stops waiting when ctx ends. A filesystem call that stalled cannot be
+// interrupted, so it finishes on its own and its result is dropped.
+func awaitTree[T any](ctx context.Context, compare func(context.Context) (T, error)) (T, error) {
+	type result struct {
+		value T
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		value, err := compare(ctx)
+		done <- result{value, err}
+	}()
+	select {
+	case got := <-done:
+		return got.value, got.err
+	case <-ctx.Done():
+		var zero T
+		return zero, ctx.Err()
+	}
 }
 
 func changeOp(kind workspacebaseline.ChangeKind) api.SourceChangeOp {
@@ -147,7 +174,11 @@ func (t *SourceHistoryTool) workerSessionDiff(
 	if ledger.Tree == nil {
 		return ledgerAnswer(overviewTreeUnknownNote)
 	}
-	compared, err := ledger.Tree.TreePathChange(ctx, sourceTreeOf(tctx), projectroot.DisplayPath(tctx.Source.Roots, rootID, rel))
+	compare, cancel := t.treeContext(ctx)
+	defer cancel()
+	compared, err := awaitTree(compare, func(ctx context.Context) (workspacebaseline.PathComparison, error) {
+		return ledger.Tree.TreePathChange(ctx, sourceTreeOf(tctx), projectroot.DisplayPath(tctx.Source.Roots, rootID, rel))
+	})
 	if err != nil {
 		return ledgerAnswer(overviewTreeUnknownNote)
 	}
