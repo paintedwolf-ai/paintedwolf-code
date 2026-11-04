@@ -832,8 +832,6 @@ host_facts:
    type: string
  - name: paintedwolf.argument_schema_matches_tool
    type: bool
- - name: paintedwolf.argument_schema_edits_source
-   type: bool
  - name: paintedwolf.capability_contract_known
    type: bool
  - name: paintedwolf.supports_host_resources

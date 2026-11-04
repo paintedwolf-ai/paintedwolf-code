@@ -27,22 +27,3 @@ func TestForeignCapabilitySnapshotsCannotDescribeTheReceivingTool(t *testing.T) 
 		}
 	}
 }
-
-func TestPublishInvocationRecoveryMarksOnlyEditSourceRepair(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		schemaTool, tool string
-		want             bool
-	}{
-		{"edit", "edit", true},
-		{"edit", "write", false},
-		{"write", "edit", false},
-		{"", "edit", false},
-	} {
-		facts := map[string]any{"paintedwolf.argument_schema_tool": tc.schemaTool}
-		PublishInvocationRecovery(facts, tc.tool, nil, nil)
-		if got := facts["paintedwolf.argument_schema_edits_source"]; got != tc.want {
-			t.Fatalf("schema %q tool %q: got %v", tc.schemaTool, tc.tool, got)
-		}
-	}
-}

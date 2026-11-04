@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -79,7 +80,7 @@ func TestDirectoryReplacementRechecksPolicyBeforeDisplacingDestination(t *testin
 	seedPreparedPolicyFiles(t, root)
 	destination := filepath.Join(root, "destination")
 	if err := os.Mkdir(destination, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error {
 		change()
@@ -104,15 +105,15 @@ func TestDirectoryReplacementRechecksPolicyBeforeDisplacingDestination(t *testin
 func seedPreparedPolicyFiles(t *testing.T, root string) {
 	t.Helper()
 	if err := os.Mkdir(filepath.Join(root, "tree"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	for path, body := range map[string]string{"source.txt": "source bytes", "tree/child.txt": "child bytes"} {
 		if err := os.WriteFile(filepath.Join(root, path), []byte(body), 0o644); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 	}
 	if err := os.Symlink("source.txt", filepath.Join(root, "alias")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 }
 

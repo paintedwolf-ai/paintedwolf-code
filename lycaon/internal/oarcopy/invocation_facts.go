@@ -10,7 +10,6 @@ import (
 func PublishInvocationRecovery(facts map[string]any, tool string, args map[string]any, snapshot *toolcontract.ToolCapabilitySnapshot) {
 	schemaTool, _ := facts["paintedwolf.argument_schema_tool"].(string)
 	facts["paintedwolf.argument_schema_matches_tool"] = schemaTool != "" && schemaTool == tool
-	facts["paintedwolf.argument_schema_edits_source"] = schemaTool == "edit" && tool == "edit"
 	contract, known := toolcontract.Lookup(tool)
 	if snapshot != nil {
 		contract = toolcontract.Contract{Capabilities: snapshot.Capabilities}
