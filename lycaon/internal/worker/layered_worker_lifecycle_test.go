@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
@@ -457,6 +458,61 @@ func TestRecordingARepeatedWriterDropsTheOnesThatEnded(t *testing.T) {
 	if len(identity.RecordedProcesses) > 1 {
 		t.Fatalf("ended writers accumulate: %+v", identity.RecordedProcesses)
 	}
+}
+
+// Fixture evidence: the view has no kernel mount, but the launch paths and the record are real.
+func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
+	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
+	task := fixture.claim(t)
+	t.Cleanup(func() {
+		_ = fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot})
+	})
+	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
+	if !ok {
+		t.Fatal("no claimed view")
+	}
+	coordinator := openFixtureRecovery(t, fixture.branches)
+	recorded := func() []adapter.ProcessIdentity {
+		identity, found, err := coordinator.LoadMountIdentity(task.ID, task.ID)
+		testutil.FailErr(t, "load identity", err)
+		if !found {
+			t.Fatal("no view identity")
+		}
+		return identity.RecordedProcesses
+	}
+	if len(recorded()) != 0 {
+		t.Fatalf("recorded before any launch: %+v", recorded())
+	}
+
+	outside := t.TempDir()
+	_, code, err := gitexec.Run(t.Context(), outside, []string{"--version"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	if err != nil || code != 0 {
+		t.Fatalf("git outside the view: code=%d err=%v", code, err)
+	}
+	if len(recorded()) != 0 {
+		t.Fatalf("a launch outside the view was recorded: %+v", recorded())
+	}
+
+	_, code, err = gitexec.Run(t.Context(), view.Prepared.PrimaryWorkPath, []string{"--version"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	if err != nil || code != 0 {
+		t.Fatalf("git in the view: code=%d err=%v", code, err)
+	}
+	if got := recorded(); len(got) != 1 {
+		t.Fatalf("engine git in the view recorded %+v", got)
+	}
+
+	server, cleanup, err := execpkg.PrepareCommand(t.Context(), "/usr/bin/true", nil, execpkg.ExecOpts{
+		Launch: execpkg.AgentLaunch(execpkg.LaunchLocalMCP, "fixture", nil), Dir: view.Prepared.PrimaryWorkPath,
+	})
+	testutil.FailErr(t, "prepare MCP", err)
+	defer cleanup()
+	testutil.FailErr(t, "start MCP", execpkg.StartPrepared(t.Context(), server))
+	pid := server.Process.Pid
+	got := recorded()
+	if len(got) == 0 || got[len(got)-1].PID != pid {
+		t.Fatalf("MCP launched in the view is not recorded: pid=%d %+v", pid, got)
+	}
+	testutil.FailErr(t, "wait MCP", server.Wait())
 }
 
 func TestAWorkerRepositoryIsPrivateAndLeavesTheCheckpoint(t *testing.T) {

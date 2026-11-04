@@ -385,7 +385,8 @@ func stageSinkWriter(sink argv.Sink, pipe *os.File, call callStreams, files *sta
 	}
 }
 
-func startWiredStages(ctx context.Context, wired []wiredStage, plan LaunchPlan, started func(pid int)) error {
+func startWiredStages(ctx context.Context, wired []wiredStage, plan LaunchPlan, dir string, started func(pid int)) error {
+	record := plan.startRecorder(dir)
 	for i := range wired {
 		err := confine.ValidateProcessInputs(ctx, wired[i].cmd)
 		if err == nil {
@@ -402,8 +403,8 @@ func startWiredStages(ctx context.Context, wired []wiredStage, plan LaunchPlan, 
 			wired[i].pipeWriter = nil
 		}
 		err = wired[i].guard.onStarted(wired[i].cmd)
-		if err == nil && plan.RecordStart != nil {
-			err = plan.RecordStart(wired[i].cmd.Process.Pid)
+		if err == nil && record != nil {
+			err = record(wired[i].cmd.Process.Pid)
 		}
 		if err == nil {
 			err = confine.ConfirmProcessLaunch(ctx, wired[i].cmd)
