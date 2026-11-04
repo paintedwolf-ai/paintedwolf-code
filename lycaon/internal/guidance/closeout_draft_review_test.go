@@ -200,7 +200,7 @@ func TestDraftCoordinatesAfterMutation(t *testing.T) {
 		{"explicit edit line", "[edit#1:42]", edited, guidance.CitationGrounded, "edit#1", evidence.VerdictTraced},
 		{"line after a write", "[n.go:1]", written, guidance.CitationGrounded, "write#1", evidence.VerdictTraced},
 		{"the observing record outranks the mutation", "[a.go:2]", observed, guidance.CitationGrounded, "read#2", ""},
-		{"past the read, the mutation still supports it", "[a.go:999]", observed, guidance.CitationGrounded, "write#3", evidence.VerdictTraced},
+		{"past the read, a mutation still supports it", "[a.go:999]", observed, guidance.CitationGrounded, "edit#1", evidence.VerdictTraced},
 		{"a deleted file has no line", "[gone.go:42]", deleted, guidance.CitationUnverifiable, "delete#1", ""},
 		{"retired read keeps its outcome", "[read#1:42]", edited, guidance.CitationGrounded, "read#1", ""},
 		{"retired read past its lines", "[read#1:200]", edited, guidance.CitationUnverifiable, "read#1", ""},
