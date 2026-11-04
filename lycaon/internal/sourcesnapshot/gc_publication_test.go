@@ -26,7 +26,7 @@ func TestPublicationDoesNotRunMaintenance(t *testing.T) {
 	if got := countRows(t, s, `SELECT COUNT(*) FROM source_manifest_staging`); got != 1 {
 		t.Fatalf("publication reclaimed %d staging rows", 1-got)
 	}
-	if err := s.Sweep(t.Context(), time.Now().Add(-Retention)); err == nil {
+	if _, err := s.Sweep(t.Context(), time.Now().Add(-Retention)); err == nil {
 		t.Fatal("maintenance fault was not exercised")
 	}
 }
@@ -34,17 +34,18 @@ func TestPublicationDoesNotRunMaintenance(t *testing.T) {
 func TestSweepAdmissionAndCancellation(t *testing.T) {
 	s := openSnapshotStore(t)
 	s.sweepMu.Lock()
-	if err := s.Sweep(t.Context(), time.Now()); !errors.Is(err, ErrSweepInProgress) {
+	if _, err := s.Sweep(t.Context(), time.Now()); !errors.Is(err, ErrSweepInProgress) {
 		t.Fatalf("concurrent sweep = %v", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := s.Sweep(ctx, time.Now()); !errors.Is(err, context.Canceled) {
+	if _, err := s.Sweep(ctx, time.Now()); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled sweep = %v", err)
 	}
 	s.sweepMu.Unlock()
 	var absent *Store
-	testutil.FailErr(t, "absent store", absent.Sweep(t.Context(), time.Now()))
+	_, err := absent.Sweep(t.Context(), time.Now())
+	testutil.FailErr(t, "absent store", err)
 }
 
 func TestSweepCandidatePagesIncludeRetainedRows(t *testing.T) {
@@ -65,22 +66,23 @@ func TestSweepCandidatePagesIncludeRetainedRows(t *testing.T) {
 	testutil.FailErr(t, "seed chunks", err)
 	_, err = s.db.ExecContext(ctx, `INSERT INTO source_manifest_layout (manifest_id,first_path,chunk_id) VALUES ('a','file','a')`)
 	testutil.FailErr(t, "retain chunk", err)
-	manifests, err := s.queries.ListSourceManifestSweepCandidates(ctx, db.ListSourceManifestSweepCandidatesParams{BatchLimit: 1})
+	manifests, err := s.queries.ListSourceManifestSweepCandidates(ctx, db.ListSourceManifestSweepCandidatesParams{ChildLimit: 1, BatchLimit: 1})
 	testutil.FailErr(t, "manifest candidate page", err)
-	if len(manifests) != 1 || manifests[0] != "a" {
+	if len(manifests) != 1 || manifests[0].ID != "a" {
 		t.Fatalf("candidate scan skipped retained row: %v", manifests)
 	}
-	chunks, err := s.queries.ListSourceChunkSweepCandidates(ctx, db.ListSourceChunkSweepCandidatesParams{BatchLimit: 1})
+	chunks, err := s.queries.ListSourceChunkSweepCandidates(ctx, db.ListSourceChunkSweepCandidatesParams{ChildLimit: 1, BatchLimit: 1})
 	testutil.FailErr(t, "chunk candidate page", err)
 	if len(chunks) != 1 || chunks[0].ID != "a" {
 		t.Fatalf("candidate scan skipped retained chunk: %v", chunks)
 	}
-	snapshots, err := s.queries.ListSourceSnapshotSweepCandidates(ctx, db.ListSourceSnapshotSweepCandidatesParams{CreatedBefore: now, BatchLimit: 1})
+	snapshots, err := s.queries.ListSourceSnapshotSweepCandidates(ctx, db.ListSourceSnapshotSweepCandidatesParams{ChildLimit: 1, CreatedBefore: now, BatchLimit: 1})
 	testutil.FailErr(t, "snapshot candidate page", err)
 	if len(snapshots) != 1 || snapshots[0].ID != "a" {
 		t.Fatalf("candidate scan skipped retained snapshot: %v", snapshots)
 	}
-	testutil.FailErr(t, "sweep", s.Sweep(ctx, time.Now().Add(-Retention)))
+	_, err = s.Sweep(ctx, time.Now().Add(-Retention))
+	testutil.FailErr(t, "sweep", err)
 	for _, table := range []string{"source_snapshots", "source_manifests", "source_manifest_chunks"} {
 		if got := countRows(t, s, "SELECT COUNT(*) FROM "+table); got != 1 {
 			t.Fatalf("%s retained rows = %d", table, got)
@@ -99,7 +101,8 @@ func TestSweepStagingKeepsActiveProcessAcrossPages(t *testing.T) {
 	_, err = s.db.ExecContext(ctx, `INSERT INTO source_manifest_staging (build_id,path,identity,size,mode)
  VALUES (?, 'active', 'stat', 0, 0)`, newBuildID())
 	testutil.FailErr(t, "seed active build", err)
-	testutil.FailErr(t, "sweep staging", s.Sweep(ctx, time.Now()))
+	_, err = s.Sweep(ctx, time.Now())
+	testutil.FailErr(t, "sweep staging", err)
 	if got := countRows(t, s, `SELECT COUNT(*) FROM source_manifest_staging`); got != 1 {
 		t.Fatalf("staging rows = %d, want active build only", got)
 	}

@@ -197,12 +197,20 @@ WHERE roots_key IN (
     LIMIT sqlc.arg(batch_limit)
 );
 
--- Candidate pages bound examined rows, including retained snapshots.
+-- Candidate pages bound examined rows, including retained snapshots. Each
+-- cascade count stops at child_limit, so a page's own cost stays bounded.
 -- name: ListSourceSnapshotSweepCandidates :many
-SELECT id, created_ts FROM source_snapshots
-WHERE created_ts < sqlc.arg(created_before)
-  AND (created_ts, id) > (sqlc.arg(after_created), sqlc.arg(after_id))
-ORDER BY created_ts, id
+SELECT s.id, s.created_ts,
+    CAST(EXISTS (SELECT 1 FROM source_snapshot_heads h WHERE h.snapshot_id = s.id)
+     OR EXISTS (SELECT 1 FROM source_inventory_state i WHERE i.snapshot_id = s.id)
+     OR EXISTS (SELECT 1 FROM code_scans c WHERE c.source_snapshot_id = s.id)
+     OR EXISTS (SELECT 1 FROM scan_series x WHERE x.last_covered_snapshot_id = s.id) AS INTEGER) AS referenced,
+    CAST((SELECT COUNT(*) FROM (SELECT 1 AS hit FROM source_snapshot_roots r WHERE r.snapshot_id = s.id LIMIT sqlc.arg(child_limit)) AS bounded_r)
+    + (SELECT COUNT(*) FROM (SELECT 1 AS hit FROM source_snapshot_boundaries b WHERE b.snapshot_id = s.id LIMIT sqlc.arg(child_limit)) AS bounded_b) AS INTEGER) AS child_rows
+FROM source_snapshots s
+WHERE s.created_ts < sqlc.arg(created_before)
+  AND (s.created_ts, s.id) > (sqlc.arg(after_created), sqlc.arg(after_id))
+ORDER BY s.created_ts, s.id
 LIMIT sqlc.arg(batch_limit);
 
 -- name: DeleteUnreferencedSourceSnapshot :execrows
@@ -245,7 +253,10 @@ WHERE id IN (
 );
 
 -- name: ListSourceManifestSweepCandidates :many
-SELECT m.id FROM source_manifests m
+SELECT m.id,
+    CAST(EXISTS (SELECT 1 FROM source_snapshot_roots r WHERE r.manifest_id = m.id) AS INTEGER) AS referenced,
+    CAST((SELECT COUNT(*) FROM (SELECT 1 AS hit FROM source_manifest_layout l WHERE l.manifest_id = m.id LIMIT sqlc.arg(child_limit)) AS bounded_l) AS INTEGER) AS child_rows
+FROM source_manifests m
 WHERE m.id > sqlc.arg(after)
 ORDER BY m.id
 LIMIT sqlc.arg(batch_limit);
@@ -255,8 +266,12 @@ DELETE FROM source_manifests
 WHERE id = ?
   AND NOT EXISTS (SELECT 1 FROM source_snapshot_roots r WHERE r.manifest_id = source_manifests.id);
 
+-- Counts the rows a delete would cascade; a stored entry_count is not the bound.
 -- name: ListSourceChunkSweepCandidates :many
-SELECT c.id, c.entry_count FROM source_manifest_chunks c
+SELECT c.id,
+    CAST(EXISTS (SELECT 1 FROM source_manifest_layout l WHERE l.chunk_id = c.id) AS INTEGER) AS referenced,
+    CAST((SELECT COUNT(*) FROM (SELECT 1 AS hit FROM source_manifest_entries e WHERE e.chunk_id = c.id LIMIT sqlc.arg(child_limit)) AS bounded_e) AS INTEGER) AS child_rows
+FROM source_manifest_chunks c
 WHERE c.id > sqlc.arg(after)
 ORDER BY c.id
 LIMIT sqlc.arg(batch_limit);

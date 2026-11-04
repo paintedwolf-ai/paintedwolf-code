@@ -454,24 +454,30 @@ func (q *Queries) InsertSourceSnapshotRoot(ctx context.Context, arg InsertSource
 }
 
 const listSourceChunkSweepCandidates = `-- name: ListSourceChunkSweepCandidates :many
-SELECT c.id, c.entry_count FROM source_manifest_chunks c
-WHERE c.id > ?1
+SELECT c.id,
+    CAST(EXISTS (SELECT 1 FROM source_manifest_layout l WHERE l.chunk_id = c.id) AS INTEGER) AS referenced,
+    CAST((SELECT COUNT(*) FROM (SELECT 1 AS hit FROM source_manifest_entries e WHERE e.chunk_id = c.id LIMIT ?1) AS bounded_e) AS INTEGER) AS child_rows
+FROM source_manifest_chunks c
+WHERE c.id > ?2
 ORDER BY c.id
-LIMIT ?2
+LIMIT ?3
 `
 
 type ListSourceChunkSweepCandidatesParams struct {
+	ChildLimit int64  `json:"child_limit"`
 	After      string `json:"after"`
 	BatchLimit int64  `json:"batch_limit"`
 }
 
 type ListSourceChunkSweepCandidatesRow struct {
 	ID         string `json:"id"`
-	EntryCount int64  `json:"entry_count"`
+	Referenced int64  `json:"referenced"`
+	ChildRows  int64  `json:"child_rows"`
 }
 
+// Counts the rows a delete would cascade; a stored entry_count is not the bound.
 func (q *Queries) ListSourceChunkSweepCandidates(ctx context.Context, arg ListSourceChunkSweepCandidatesParams) ([]ListSourceChunkSweepCandidatesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listSourceChunkSweepCandidates, arg.After, arg.BatchLimit)
+	rows, err := q.db.QueryContext(ctx, listSourceChunkSweepCandidates, arg.ChildLimit, arg.After, arg.BatchLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -479,7 +485,7 @@ func (q *Queries) ListSourceChunkSweepCandidates(ctx context.Context, arg ListSo
 	var items []ListSourceChunkSweepCandidatesRow
 	for rows.Next() {
 		var i ListSourceChunkSweepCandidatesRow
-		if err := rows.Scan(&i.ID, &i.EntryCount); err != nil {
+		if err := rows.Scan(&i.ID, &i.Referenced, &i.ChildRows); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -841,30 +847,40 @@ func (q *Queries) ListSourceManifestStagingPathsBelow(ctx context.Context, arg L
 }
 
 const listSourceManifestSweepCandidates = `-- name: ListSourceManifestSweepCandidates :many
-SELECT m.id FROM source_manifests m
-WHERE m.id > ?1
+SELECT m.id,
+    CAST(EXISTS (SELECT 1 FROM source_snapshot_roots r WHERE r.manifest_id = m.id) AS INTEGER) AS referenced,
+    CAST((SELECT COUNT(*) FROM (SELECT 1 AS hit FROM source_manifest_layout l WHERE l.manifest_id = m.id LIMIT ?1) AS bounded_l) AS INTEGER) AS child_rows
+FROM source_manifests m
+WHERE m.id > ?2
 ORDER BY m.id
-LIMIT ?2
+LIMIT ?3
 `
 
 type ListSourceManifestSweepCandidatesParams struct {
+	ChildLimit int64  `json:"child_limit"`
 	After      string `json:"after"`
 	BatchLimit int64  `json:"batch_limit"`
 }
 
-func (q *Queries) ListSourceManifestSweepCandidates(ctx context.Context, arg ListSourceManifestSweepCandidatesParams) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listSourceManifestSweepCandidates, arg.After, arg.BatchLimit)
+type ListSourceManifestSweepCandidatesRow struct {
+	ID         string `json:"id"`
+	Referenced int64  `json:"referenced"`
+	ChildRows  int64  `json:"child_rows"`
+}
+
+func (q *Queries) ListSourceManifestSweepCandidates(ctx context.Context, arg ListSourceManifestSweepCandidatesParams) ([]ListSourceManifestSweepCandidatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceManifestSweepCandidates, arg.ChildLimit, arg.After, arg.BatchLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListSourceManifestSweepCandidatesRow
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var i ListSourceManifestSweepCandidatesRow
+		if err := rows.Scan(&i.ID, &i.Referenced, &i.ChildRows); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1012,14 +1028,22 @@ func (q *Queries) ListSourceSnapshotRoots(ctx context.Context, snapshotID string
 }
 
 const listSourceSnapshotSweepCandidates = `-- name: ListSourceSnapshotSweepCandidates :many
-SELECT id, created_ts FROM source_snapshots
-WHERE created_ts < ?1
-  AND (created_ts, id) > (?2, ?3)
-ORDER BY created_ts, id
-LIMIT ?4
+SELECT s.id, s.created_ts,
+    CAST(EXISTS (SELECT 1 FROM source_snapshot_heads h WHERE h.snapshot_id = s.id)
+     OR EXISTS (SELECT 1 FROM source_inventory_state i WHERE i.snapshot_id = s.id)
+     OR EXISTS (SELECT 1 FROM code_scans c WHERE c.source_snapshot_id = s.id)
+     OR EXISTS (SELECT 1 FROM scan_series x WHERE x.last_covered_snapshot_id = s.id) AS INTEGER) AS referenced,
+    CAST((SELECT COUNT(*) FROM (SELECT 1 AS hit FROM source_snapshot_roots r WHERE r.snapshot_id = s.id LIMIT ?1) AS bounded_r)
+    + (SELECT COUNT(*) FROM (SELECT 1 AS hit FROM source_snapshot_boundaries b WHERE b.snapshot_id = s.id LIMIT ?1) AS bounded_b) AS INTEGER) AS child_rows
+FROM source_snapshots s
+WHERE s.created_ts < ?2
+  AND (s.created_ts, s.id) > (?3, ?4)
+ORDER BY s.created_ts, s.id
+LIMIT ?5
 `
 
 type ListSourceSnapshotSweepCandidatesParams struct {
+	ChildLimit    int64  `json:"child_limit"`
 	CreatedBefore string `json:"created_before"`
 	AfterCreated  string `json:"after_created"`
 	AfterID       string `json:"after_id"`
@@ -1027,13 +1051,17 @@ type ListSourceSnapshotSweepCandidatesParams struct {
 }
 
 type ListSourceSnapshotSweepCandidatesRow struct {
-	ID        string `json:"id"`
-	CreatedTs string `json:"created_ts"`
+	ID         string `json:"id"`
+	CreatedTs  string `json:"created_ts"`
+	Referenced int64  `json:"referenced"`
+	ChildRows  int64  `json:"child_rows"`
 }
 
-// Candidate pages bound examined rows, including retained snapshots.
+// Candidate pages bound examined rows, including retained snapshots. Each
+// cascade count stops at child_limit, so a page's own cost stays bounded.
 func (q *Queries) ListSourceSnapshotSweepCandidates(ctx context.Context, arg ListSourceSnapshotSweepCandidatesParams) ([]ListSourceSnapshotSweepCandidatesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSourceSnapshotSweepCandidates,
+		arg.ChildLimit,
 		arg.CreatedBefore,
 		arg.AfterCreated,
 		arg.AfterID,
@@ -1046,7 +1074,12 @@ func (q *Queries) ListSourceSnapshotSweepCandidates(ctx context.Context, arg Lis
 	var items []ListSourceSnapshotSweepCandidatesRow
 	for rows.Next() {
 		var i ListSourceSnapshotSweepCandidatesRow
-		if err := rows.Scan(&i.ID, &i.CreatedTs); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedTs,
+			&i.Referenced,
+			&i.ChildRows,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
