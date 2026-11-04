@@ -77,7 +77,7 @@ type effectSeed struct {
 	session, job         string
 	origin               api.SourceChangeOrigin
 	op                   api.SourceChangeOp
-	content              string
+	content, before      string
 }
 
 func (h *historyHarness) record(seed effectSeed) {
@@ -103,6 +103,9 @@ func (h *historyHarness) record(seed effectSeed) {
 	}
 	if seed.content != "" {
 		input.After = []byte(seed.content)
+	}
+	if seed.before != "" {
+		input.Before = []byte(seed.before)
 	}
 	testutil.FailErr(h.t, "record effect", h.store.Record(h.t.Context(), input))
 }
@@ -621,6 +624,15 @@ func TestSourceHistoryOverviewReportsLedgerFailures(t *testing.T) {
 			t.Fatalf("effects failure = %v", err)
 		}
 	})
+	t.Run("current path", func(t *testing.T) {
+		h := newHistoryHarness(t)
+		h.beginSession(historySession)
+		h.record(effectSeed{path: "a.go", content: "a\n"})
+		h.tctx.Source.History.Files = failingRowPath{SourceFileHistory: h.store.History, err: failure}
+		if _, err := h.tool.Run(t.Context(), map[string]any{}, h.tctx); !errors.Is(err, failure) {
+			t.Fatalf("current path failure = %v", err)
+		}
+	})
 	t.Run("branch", func(t *testing.T) {
 		tctx := tctx
 		tctx.Source.History = history
@@ -630,6 +642,15 @@ func TestSourceHistoryOverviewReportsLedgerFailures(t *testing.T) {
 			t.Fatal("a worker without a job resolved a branch")
 		}
 	})
+}
+
+type failingRowPath struct {
+	tools.SourceFileHistory
+	err error
+}
+
+func (f failingRowPath) ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error) {
+	return sourceledger.BranchHead{}, f.err
 }
 
 type failingFloor struct {

@@ -34,6 +34,7 @@ type SourceFileHistory interface {
 	EffectsBetween(context.Context, string, int64, int64, int) ([]sourceledger.Effect, error)
 	EffectsBetweenOnBranch(context.Context, string, map[string]sourcebranch.ID, int64, int64, int) ([]sourceledger.Effect, error)
 	OldestFileEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, int64) (sourceledger.FileEffectBounds, bool, error)
+	OldestPathEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, string, int64) (sourceledger.FileEffectBounds, bool, error)
 }
 
 type SourceComparison interface {

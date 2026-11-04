@@ -651,7 +651,6 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
   ...Object.fromEntries(CATALOG_OK_TOOLS.map((tool) => [tool, OK])),
 };
 
-/** Wire-compacted tool payloads — mirrors Go chunk compactor residue shapes. */
 /** The other shapes `source_history` returns: the no-argument overview and the session-baseline diff. */
 export const SOURCE_HISTORY_MODE_FIXTURES: Record<string, string> = {
   overview: JSON.stringify({
@@ -659,12 +658,12 @@ export const SOURCE_HISTORY_MODE_FIXTURES: Record<string, string> = {
     recorded: true,
     since: { ordinal: 4 },
     files: [
-      { path: "main.go", op: "write", actor: "you", at: "2026-08-26 14:02 UTC", effects: 2, version_id: "v-2", window_id: "w-1", settled: true, during_your_command: true },
+      { path: "gen/main.go", op: "write", actor: "external", at: "2026-08-26 14:02 UTC", effects: 2, version_id: "v-2", window_id: "w-1", settled: true, during_your_command: true },
       { path: "@docs/guide.md", op: "write", actor: "user", at: "2026-08-26 13:50 UTC", effects: 1, version_id: "v-5" },
     ],
     open_windows: [{ id: "w-2", running: true }],
     count: 2,
-    note: "commands in open_windows have not settled, so this list is a floor until they do",
+    note: "commands in open_windows have not settled, so this list may be incomplete",
   }),
   diff: JSON.stringify({
     mode: "diff",
@@ -677,6 +676,7 @@ export const SOURCE_HISTORY_MODE_FIXTURES: Record<string, string> = {
   }),
 };
 
+/** Wire-compacted tool payloads — mirrors Go chunk compactor residue shapes. */
 export const TOOL_COMPACTION_FIXTURES: Record<string, string> = {
   find_spill_list: `[compacted tool_result — list page]\n[find#1]\n${JSON.stringify({
     results: [

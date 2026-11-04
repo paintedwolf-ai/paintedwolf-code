@@ -126,6 +126,33 @@ func (s *History) OldestFileEffectAfterOnBranch(
 	}, true, nil
 }
 
+// OldestPathEffectAfterOnBranch returns the version bounds of the branch's first
+// effect at a location past afterOrdinal, whichever file it belongs to. It finds
+// what a path held when its current file has no predecessor of its own.
+func (s *History) OldestPathEffectAfterOnBranch(
+	ctx context.Context,
+	projectID string,
+	branch sourcebranch.ID,
+	rootID, path string,
+	afterOrdinal int64,
+) (FileEffectBounds, bool, error) {
+	if s == nil {
+		return FileEffectBounds{}, false, fmt.Errorf("ledger not configured")
+	}
+	row, err := s.queries.OldestSourceEffectAtPathAfterOrdinalOnBranch(ctx, db.OldestSourceEffectAtPathAfterOrdinalOnBranchParams{
+		ProjectID: projectID, BranchID: branch.String(), RootID: rootID, Path: path, Ordinal: afterOrdinal,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return FileEffectBounds{}, false, nil
+	}
+	if err != nil {
+		return FileEffectBounds{}, false, err
+	}
+	return FileEffectBounds{
+		BeforeVersionID: row.BeforeVersionID, AfterVersionID: row.AfterVersionID, Ordinal: row.Ordinal,
+	}, true, nil
+}
+
 // FileEffectBounds is the version movement of one effect. BeforeVersionID is
 // empty when the file did not exist before it.
 type FileEffectBounds struct {

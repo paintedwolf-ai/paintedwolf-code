@@ -377,6 +377,10 @@ func (f *fakeSourceLedger) EffectsBetween(context.Context, string, int64, int64,
 func (f *fakeSourceLedger) EffectsBetweenOnBranch(context.Context, string, map[string]sourcebranch.ID, int64, int64, int) ([]sourceledger.Effect, error) {
 	return nil, nil
 }
+func (f *fakeSourceLedger) OldestPathEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, string, int64) (sourceledger.FileEffectBounds, bool, error) {
+	return sourceledger.FileEffectBounds{}, false, nil
+}
+
 func (f *fakeSourceLedger) OldestFileEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, int64) (sourceledger.FileEffectBounds, bool, error) {
 	return sourceledger.FileEffectBounds{}, false, nil
 }

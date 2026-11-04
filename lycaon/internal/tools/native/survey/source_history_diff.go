@@ -13,7 +13,10 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 )
 
-const sourceHistoryNoSessionEffectNote = "no effect recorded on this path since the session began; head is the baseline state"
+const (
+	sourceHistoryNoSessionEffectNote      = "no effect recorded on this path since the session began; head is the baseline state"
+	sourceHistoryDeletedBeforeSessionNote = "this file was already deleted when the session began"
+)
 
 func (t *SourceHistoryTool) runDiff(
 	ctx context.Context,
@@ -97,10 +100,10 @@ func (t *SourceHistoryTool) runDiff(
 	return marshalSourceHistory(display, resp)
 }
 
-// runSessionDiff compares the file now, or its absence once deleted, with its state
-// before the first effect the caller's branch recorded on it this session. Both
-// sides come from the file's own record, so a move within the window is not a path
-// mismatch.
+// runSessionDiff compares the file now, or its absence once deleted, with what the
+// path held before the first effect the caller's branch recorded on it this
+// session. Both sides come from the ledger's record, so a move within the window
+// is not a path mismatch.
 func (t *SourceHistoryTool) runSessionDiff(
 	ctx context.Context,
 	tctx tools.ToolContext,
@@ -139,9 +142,24 @@ func (t *SourceHistoryTool) runSessionDiff(
 	if !found {
 		resp.BaseVersionID = current.versionID
 		resp.Note = sourceHistoryNoSessionEffectNote
+		if current.state == "absent" {
+			resp.Note = sourceHistoryDeletedBeforeSessionNote
+		}
 		return marshalSourceHistory(display, resp)
 	}
-	comp, err := ledger.Comparison.CompareVersionPair(ctx, tctx.Identity.ProjectID, earliest.BeforeVersionID, current.versionID)
+	baseline := earliest.BeforeVersionID
+	if baseline == "" {
+		// A deleted or moved-away file leaves its record under its old identity,
+		// so a new file here is not proof the path was empty at the baseline.
+		atPath, found, err := ledger.Files.OldestPathEffectAfterOnBranch(ctx, tctx.Identity.ProjectID, branch, rootID, rel, floor)
+		if err != nil {
+			return "", fmt.Errorf("source history path baseline: %w", err)
+		}
+		if found {
+			baseline = atPath.BeforeVersionID
+		}
+	}
+	comp, err := ledger.Comparison.CompareVersionPair(ctx, tctx.Identity.ProjectID, baseline, current.versionID)
 	if err != nil {
 		return "", comparisonError(err, current.versionID)
 	}

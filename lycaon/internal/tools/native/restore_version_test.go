@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
@@ -9,9 +10,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRestoreVersionWithExplicitVersionID(t *testing.T) {
@@ -269,5 +274,48 @@ func TestRestoreVersionDefaultsToTheContentBeforeADeletion(t *testing.T) {
 	testutil.FailErr(t, "read restored file", err)
 	if string(data) != "kept\n" {
 		t.Fatalf("restored %q", data)
+	}
+}
+
+// Restoring a deleted path mints a new file identity; the path's baseline survives it.
+func TestRestoreVersionOfADeletedFileIsAnEmptySessionDiffACDF12(t *testing.T) {
+	dir := t.TempDir()
+	st := bindLedgerForWrites(t, dir)
+	tctx := nativefixture.Context(dir)
+	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
+	tctx.Source.SourceLedger = st
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands, tctx.Source.Observations, tctx.Source.GitMutations = st.Commands, st.Inventory, st.Git
+	const body = "package main\n"
+	writeProvenanceFile(t, dir, "a.go", body)
+	testutil.FailErr(t, "record baseline", st.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: "r1", Path: "a.go"}, ProjectID: "p1",
+		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, SessionID: "s0", Turn: 1,
+		OperationID: "create", After: []byte(body),
+	}))
+	baseline, err := st.History.ResolveHead(t.Context(), "p1", sourcebranch.Trunk, "r1", "a.go")
+	testutil.FailErr(t, "resolve baseline", err)
+	_, err = st.Checkpoints.CreateStructuralCheckpoint(t.Context(), sourceledger.StructuralCheckpointInput{
+		ProjectID: "p1", Kind: sourceledger.CheckpointTurn, Label: "Turn start", SessionID: "s1", Turn: 1,
+	})
+	testutil.FailErr(t, "create turn checkpoint", err)
+	testutil.FailErr(t, "delete file", os.Remove(filepath.Join(dir, "a.go")))
+	testutil.FailErr(t, "record deletion", st.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: "r1", Path: "a.go"}, ProjectID: "p1",
+		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent, SessionID: "s1", Turn: 1, OperationID: "delete",
+	}))
+
+	_, err = (&RestoreVersionTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "a.go"}, tctx)
+	testutil.FailErr(t, "restore_version", err)
+	raw, err := (&survey.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "a.go", "mode": "diff"}, tctx)
+	testutil.FailErr(t, "source_history diff", err)
+	var diff struct {
+		BaseVersionID string `json:"base_version_id"`
+		VersionID     string `json:"version_id"`
+		Diff          string `json:"diff"`
+	}
+	testutil.FailErr(t, "decode diff", json.Unmarshal([]byte(raw), &diff))
+	if diff.BaseVersionID != baseline.VersionID || diff.VersionID == "" || diff.Diff != "" {
+		t.Fatalf("diff = %+v, want an empty diff from %s", diff, baseline.VersionID)
 	}
 }

@@ -359,7 +359,7 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 		h := newHistoryHarness(t)
 		h.record(effectSeed{path: "a.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 		h.beginSession(historySession)
-		h.record(effectSeed{path: "a.go", content: "worker\n", branch: "job-1", session: "child", job: "job-1"})
+		h.record(effectSeed{path: "a.go", content: "worker\n", before: "before\n", branch: "job-1", session: "child", job: "job-1"})
 		h.remove("a.go", "job-1")
 		h.writeFile("a.go", "before\n")
 		trunk := deletedDiff(t, h, "a.go")
@@ -440,6 +440,10 @@ func TestSourceHistoryDiffReportsLedgerFailures(t *testing.T) {
 	if _, err := h.diff(map[string]any{"path": "a.go"}); !errors.Is(err, failure) {
 		t.Fatalf("baseline failure = %v", err)
 	}
+	withFiles(failingDiffFiles{SourceFileHistory: real, head: head, found: true, pathErr: failure}, h.store.Comparisons)
+	if _, err := h.diff(map[string]any{"path": "a.go"}); !errors.Is(err, failure) {
+		t.Fatalf("path baseline failure = %v", err)
+	}
 	withFiles(failingDiffFiles{SourceFileHistory: real, head: head, found: true}, fixedComparison{err: failure})
 	if _, err := h.diff(map[string]any{"path": "a.go"}); !errors.Is(err, failure) {
 		t.Fatalf("comparison failure = %v", err)
@@ -462,6 +466,7 @@ type failingDiffFiles struct {
 	head                                     sourceledger.BranchHead
 	found                                    bool
 	headErr, deletedErr, floorErr, oldestErr error
+	pathErr                                  error
 }
 
 func (f failingDiffFiles) ResolveHead(context.Context, string, sourcebranch.ID, string, string) (sourceledger.BranchHead, error) {
@@ -474,6 +479,10 @@ func (f failingDiffFiles) ResolveDeletedPath(context.Context, string, sourcebran
 
 func (f failingDiffFiles) SessionActivityFloor(context.Context, string, string) (int64, bool, error) {
 	return 1, true, f.floorErr
+}
+
+func (f failingDiffFiles) OldestPathEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, string, int64) (sourceledger.FileEffectBounds, bool, error) {
+	return sourceledger.FileEffectBounds{}, false, f.pathErr
 }
 
 func (f failingDiffFiles) OldestFileEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, int64) (sourceledger.FileEffectBounds, bool, error) {
