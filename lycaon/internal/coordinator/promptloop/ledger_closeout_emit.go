@@ -78,7 +78,7 @@ func (l *turnCloseout) emitAssembledCloseout(
 	report = guidance.BindCloseoutPresentArtifacts(report, history)
 
 	msgID := ""
-	if st != nil {
+	if st != nil && st.draftSlotAppended {
 		msgID = st.draftSlotID
 	}
 	appendNew := strings.TrimSpace(msgID) == ""

@@ -13,11 +13,12 @@ import (
 )
 
 // finalTurnGaveNoAnswer reports a final turn the model spent on a call the host will
-// not run, or on nothing at all.
-func finalTurnGaveNoAnswer(err error) bool {
+// not run, or on nothing at all. Earlier in a turn an empty reply stays a provider
+// failure, which the run reports and the user can retry.
+func finalTurnGaveNoAnswer(err error, st *promptLoopTurnState) bool {
 	var toolOnly *ProseTurnToolCallError
 	var empty *failure.ProviderEmptyCompletionError
-	return errors.As(err, &toolOnly) || errors.As(err, &empty)
+	return errors.As(err, &toolOnly) || (st != nil && st.proseFinish && errors.As(err, &empty))
 }
 
 func (l *turnCloseout) canCloseWithoutAnswer(sess *api.Session) bool {

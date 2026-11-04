@@ -279,7 +279,7 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 	iterIndex := closeoutState.turnsRanThisRun
 	assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, iterIndex, maxIter, in.HostTurn)
 	if err != nil {
-		if finalTurnGaveNoAnswer(err) && l.canCloseWithoutAnswer(sess) {
+		if finalTurnGaveNoAnswer(err, closeoutState) && l.canCloseWithoutAnswer(sess) {
 			closeoutState.history = history
 			if _, cerr := l.endWithClosing(ctx, sess, sessionID, userPrompt, l.Context.promptTurnSurface(sessionID), closeoutState); cerr != nil {
 				return history, "", "", cerr
