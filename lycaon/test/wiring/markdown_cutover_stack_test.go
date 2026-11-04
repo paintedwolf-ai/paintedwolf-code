@@ -137,7 +137,7 @@ func TestWaitPathOnTheRealStack(t *testing.T) {
 	const pendingText = "Uncited progress."
 	t.Run("AC-MID-08 a note in the same response lets the wait run", func(t *testing.T) {
 		h, sess, _, err := runStack(t, &stackScriptLLM{steps: []stackStep{
-			commandStep("", "cat notes.txt"),
+			commandStep("", "cat -n notes.txt"),
 			waitStep("The first note is on [notes.txt:1]."),
 			{text: "The notes hold two lines [notes.txt:2]."},
 		}}, "inspect")
@@ -154,7 +154,7 @@ func TestWaitPathOnTheRealStack(t *testing.T) {
 	})
 	t.Run("AC-MID-07 and AC-MID-09 debt refuses a silent wait once, then the bound admits it", func(t *testing.T) {
 		h, sess, _, err := runStack(t, &stackScriptLLM{steps: []stackStep{
-			commandStep("", "cat notes.txt"),
+			commandStep("", "cat -n notes.txt"),
 			waitStep(pendingText),
 			waitStep(""),
 			{text: "The notes hold two lines [notes.txt:2]."},
@@ -183,7 +183,7 @@ func TestWaitPathOnTheRealStack(t *testing.T) {
 func TestMidTurnAndCloseoutSpendOneGroundingPool(t *testing.T) {
 	closeoutAttempts := func(t *testing.T, midTurn int) int {
 		t.Helper()
-		script := &stackScriptLLM{steps: []stackStep{commandStep("", "cat notes.txt")}}
+		script := &stackScriptLLM{steps: []stackStep{commandStep("", "cat -n notes.txt")}}
 		for i := range midTurn {
 			script.steps = append(script.steps, commandStep("See [read#"+strconv.Itoa(900+i)+":1].", "echo step"))
 		}
@@ -219,7 +219,7 @@ func TestMidTurnAndCloseoutSpendOneGroundingPool(t *testing.T) {
 func TestBareJSONIsNoAnswerOnTheRealStack(t *testing.T) {
 	const bare = `{"synthesis":"Done.","cited_evidence":[]}`
 	h, sess, _, err := runStack(t, &stackScriptLLM{steps: []stackStep{
-		commandStep("", "cat notes.txt"),
+		commandStep("", "cat -n notes.txt"),
 		{text: bare},
 		{text: "The notes hold two lines [notes.txt:2]."},
 	}}, "inspect")
