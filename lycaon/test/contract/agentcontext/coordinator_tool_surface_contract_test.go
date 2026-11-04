@@ -79,7 +79,6 @@ var implementInvestigateDeferredTools = []string{
 	"restore_version",
 	"code_rewrite",
 	"jq_edit",
-	"source_history",
 	"chmod",
 	"chown",
 	"process_list",
