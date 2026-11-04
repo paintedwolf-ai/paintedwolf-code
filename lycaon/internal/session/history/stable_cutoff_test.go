@@ -390,7 +390,7 @@ func TestTighterFitFeedsLaterProjectionAC_KV_04(t *testing.T) {
 	}
 }
 
-var tightFitStarts = []int64{3, 33, 65, 97, 129, 161, 193, 225, 257, 289, 321, 353}
+var tightFitStarts = []int64{3, 65, 129, 193, 257, 321, 385, 449}
 
 func TestSecondCollapseSignatureHoldsBehindAViewAC_KV_07(t *testing.T) {
 	// Fixture shape only: a stable prefix of view rows, then a long active turn.
