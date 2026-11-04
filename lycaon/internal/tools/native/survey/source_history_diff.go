@@ -119,7 +119,7 @@ func (t *SourceHistoryTool) runSessionDiff(
 	current, err := resolveDiffEnd(ctx, tctx, ledger, branch, rootID, rel)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		resp.Note = sourceHistoryNoRecordNote
-		return marshalSourceHistory(display, resp)
+		return t.treeDiffOr(ctx, tctx, display, rootID, rel, resp)
 	}
 	if err != nil {
 		return "", fmt.Errorf("source history head: %w", err)
@@ -145,7 +145,7 @@ func (t *SourceHistoryTool) runSessionDiff(
 		if current.state == "absent" {
 			resp.Note = sourceHistoryDeletedBeforeSessionNote
 		}
-		return marshalSourceHistory(display, resp)
+		return t.treeDiffOr(ctx, tctx, display, rootID, rel, resp)
 	}
 	baseline := earliest.BeforeVersionID
 	if baseline == "" {

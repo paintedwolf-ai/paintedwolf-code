@@ -175,6 +175,8 @@ type InvocationSource struct {
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
+	// WorkerBaselinePath is the manifest sealed when the branch was prepared.
+	WorkerBaselinePath string
 	// WorkerSourceRoots are primary roots captured into the private branch.
 	WorkerSourceRoots []string
 	// BranchWorkspace validates and prepares the branch.

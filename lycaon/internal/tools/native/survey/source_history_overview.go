@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const (
@@ -24,13 +25,15 @@ const (
 
 // sourceHistoryOverviewFile is one file's newest change in the session window.
 type sourceHistoryOverviewFile struct {
-	Path      string `json:"path"`
-	Op        string `json:"op"`
-	Actor     string `json:"actor"`
-	Detail    string `json:"detail,omitempty"`
-	At        string `json:"at"`
-	Effects   int    `json:"effects"`
-	VersionID string `json:"version_id,omitempty"`
+	Path string `json:"path"`
+	Op   string `json:"op"`
+	// Unrecorded marks a tree change with no ledger row, so the fields below it are empty.
+	Unrecorded bool   `json:"unrecorded,omitempty"`
+	Actor      string `json:"actor,omitempty"`
+	Detail     string `json:"detail,omitempty"`
+	At         string `json:"at,omitempty"`
+	Effects    int    `json:"effects,omitempty"`
+	VersionID  string `json:"version_id,omitempty"`
 	// Branch appears only when the caller's roots are on different branches.
 	Branch   string `json:"branch,omitempty"`
 	WindowID string `json:"window_id,omitempty"`
@@ -96,9 +99,14 @@ func (t *SourceHistoryTool) runOverview(ctx context.Context, tctx tools.ToolCont
 	if err != nil {
 		return "", fmt.Errorf("source history overview path: %w", err)
 	}
+	var notes []string
+	if tctx.Source.SourceWorkspaceKind == api.SourceWorkspaceKindWorker {
+		if !t.addTreeChanges(ctx, tctx, ledger, rootBranches, effects, &resp) {
+			notes = append(notes, overviewTreeUnknownNote)
+		}
+	}
 	resp.Count = len(resp.Files)
 	resp.OpenWindows = open
-	var notes []string
 	if len(resp.Files) == 0 {
 		notes = append(notes, overviewNoRowsNote)
 	}

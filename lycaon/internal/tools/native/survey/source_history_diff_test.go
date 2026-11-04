@@ -19,6 +19,7 @@ import (
 type diffResult struct {
 	Mode          string `json:"mode"`
 	Recorded      bool   `json:"recorded"`
+	Unrecorded    bool   `json:"unrecorded"`
 	BaseVersionID string `json:"base_version_id"`
 	VersionID     string `json:"version_id"`
 	Diff          string `json:"diff"`

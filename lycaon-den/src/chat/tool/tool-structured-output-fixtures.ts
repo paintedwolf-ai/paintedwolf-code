@@ -660,9 +660,10 @@ export const SOURCE_HISTORY_MODE_FIXTURES: Record<string, string> = {
     files: [
       { path: "gen/main.go", op: "write", actor: "external", at: "2026-08-26 14:02 UTC", effects: 2, version_id: "v-2", window_id: "w-1", settled: true, during_your_command: true },
       { path: "@docs/guide.md", op: "write", actor: "user", at: "2026-08-26 13:50 UTC", effects: 1, version_id: "v-5" },
+      { path: "gen/schema.json", op: "create", unrecorded: true },
     ],
     open_windows: [{ id: "w-2", running: true }],
-    count: 2,
+    count: 3,
     note: "commands in open_windows have not settled, so this list may be incomplete",
   }),
   diff: JSON.stringify({

@@ -27,6 +27,8 @@ type SourceHistoryTool struct {
 
 	// settleExpiry replaces the overview's settle budget in tests.
 	settleExpiry func() <-chan time.Time
+	// treeBudget replaces the overview's tree comparison budget in tests.
+	treeBudget time.Duration
 }
 
 const (
@@ -99,6 +101,8 @@ type sourceHistoryResponse struct {
 	OpenWindows []sourceHistoryOpenWindow   `json:"open_windows,omitempty"`
 
 	// version / diff modes
+	// Unrecorded marks a diff of a tree change with no ledger row.
+	Unrecorded    bool   `json:"unrecorded,omitempty"`
 	VersionID     string `json:"version_id,omitempty"`
 	BaseVersionID string `json:"base_version_id,omitempty"`
 	State         string `json:"state,omitempty"`

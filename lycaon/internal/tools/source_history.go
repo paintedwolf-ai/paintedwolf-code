@@ -2,8 +2,11 @@ package tools
 
 import (
 	"context"
+
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/workspacebaseline"
 )
 
 // SourceHistory supplies independent read services to a tool invocation.
@@ -14,6 +17,21 @@ type SourceHistory struct {
 	Authorship sourceledger.AuthorshipReader
 	// Windows is optional; without it the overview states no window facts.
 	Windows SourceWindowReader
+	// Tree is optional; without it a worker's overview says it could not compare
+	// the branch with its baseline.
+	Tree SourceTreeReader
+}
+
+// SourceTree names a worker branch and the manifest sealed when its leg began.
+type SourceTree struct {
+	BaselinePath, BranchRoot string
+	Roots                    []projectroot.RootRef
+}
+
+// SourceTreeReader compares a worker branch with its baseline, as promotion will.
+type SourceTreeReader interface {
+	TreeChanges(context.Context, SourceTree) ([]workspacebaseline.Change, error)
+	TreePathChange(ctx context.Context, tree SourceTree, path string) (workspacebaseline.PathComparison, error)
 }
 
 // SourceWindowReader lists a session's command windows that have not settled.
