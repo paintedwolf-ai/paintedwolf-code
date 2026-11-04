@@ -70,7 +70,7 @@ func (s *Conversation) replayStream(w http.ResponseWriter, r *http.Request, flus
 		return
 	}
 	// Text the host has not accepted stays on its labelled draft row, never here.
-	if msg.Visibility == wire.MessageVisibilityInternal {
+	if msg.Visibility == wire.MessageVisibilityInternal || msg.Kind == wire.MessageKindDraft {
 		if writePromptChunk(w, flusher, wire.PromptStreamChunk{Reset: true}) {
 			writePromptChunk(w, flusher, wire.PromptStreamChunk{Done: true})
 		}

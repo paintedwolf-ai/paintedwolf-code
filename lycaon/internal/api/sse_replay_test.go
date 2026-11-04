@@ -141,11 +141,14 @@ func TestStreamReplayOmitsUnacceptedText(t *testing.T) {
 		return rec.Body.String()
 	}
 	internal := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Visibility: wire.MessageVisibilityInternal, Content: "Raw [read#3:42]."}
+	draft := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Kind: wire.MessageKindDraft, Visibility: wire.MessageVisibilityTranscript, Content: "Draft [read#3:42]."}
 	accepted := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Visibility: wire.MessageVisibilityTranscript, Content: "Shown [a.go:42](a.go#L42)."}
-	testutil.FailErr(t, "append messages", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID, internal, accepted))
-	streams.CacheReplay(internal.ID, internal.Content, []string{internal.Content})
-	if body := replay(internal.ID); strings.Contains(body, "read#3") {
-		t.Fatalf("unaccepted text replayed: %s", body)
+	testutil.FailErr(t, "append messages", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID, internal, draft, accepted))
+	for _, msg := range []wire.Message{internal, draft} {
+		streams.CacheReplay(msg.ID, msg.Content, []string{msg.Content})
+		if body := replay(msg.ID); strings.Contains(body, "read#3") {
+			t.Fatalf("unaccepted text replayed: %s", body)
+		}
 	}
 	streams.CacheReplay(accepted.ID, "", nil)
 	if body := replay(accepted.ID); !strings.Contains(body, "a.go#L42") {
