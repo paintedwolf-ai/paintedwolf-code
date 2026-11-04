@@ -165,6 +165,7 @@ func TestKernelAgreesWithVerdictUnderEveryGrantShape(t *testing.T) {
 // below it: that takes an approved read grant.
 func TestReadRootDoesNotLiftTheDenialsBeneathIt(t *testing.T) {
 	f := newGrantShapeFixture(t)
+	f.probes(t)
 	secret := filepath.Join(f.data, "certificate.pem")
 	token := filepath.Join(f.control, "api.token")
 	key := filepath.Join(f.home, ".ssh", "known_hosts")

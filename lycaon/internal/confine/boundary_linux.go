@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -313,6 +314,12 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		}
 	}
 	for p := range pc.readOnly {
+		// A read restoration beneath a placeholder has nothing to cover until it
+		// is mounted, and the helper seals it unless a write grant reaches it.
+		if pc.restored[p] && coveredBy(pc.hidden, p) {
+			pc.fs.WriteRoots = slices.DeleteFunc(pc.fs.WriteRoots, func(root string) bool { return root == p })
+			continue
+		}
 		pc.fs.ReadOnly = append(pc.fs.ReadOnly, p)
 	}
 	for p := range pc.hidden {
