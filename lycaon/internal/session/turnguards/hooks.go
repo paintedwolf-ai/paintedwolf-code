@@ -47,7 +47,7 @@ func (m *Service) BeforeTool(
 		guard.PrepareVerifyCall(tool, declaredVerify, args)
 	}
 	if reject, skip, err := m.ToolPolicy.Block(ctx, oar.AnchorCoordinatorPreInvoke, sess, tool, args, func(gc *oar.GuardContext) error {
-		guard.ObserveWaitVisibility(sess, history, tool, tools.ToolOffered(ctx, "surface_note"), gc)
+		guard.ObserveWaitVisibility(sess, history, tool, surface.PublishesMidTurnText(surfaceID), gc)
 		guard.ObserveTaskWhilePendingUserInput(sess, implState, tool, gc)
 		guard.ObserveCoordinatorWorkerBranchPath(sess, tool, args, gc)
 		guard.ObserveProgressMissingBeforeDispatch(sess, currentProgress, tool, reviewLoopActive, gc)

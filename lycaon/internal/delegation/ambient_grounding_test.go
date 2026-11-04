@@ -184,3 +184,19 @@ func TestAmbientLedgerSatisfiedFailedJobPass(t *testing.T) {
 		t.Fatal("failed job with no complete work should satisfy ledger")
 	}
 }
+
+// D9: progress speech is not the turn's answer, so an exempt note must not read
+// as a failed audit and trip the ambient breaker.
+func TestLastAssistantAuditSkipsAgentNotes(t *testing.T) {
+	answer := &api.CitationGrounding{Traced: true}
+	got := lastAssistantAudit([]api.Message{
+		{Role: api.MessageRoleAssistant, Grounding: answer},
+		{Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Grounding: &api.CitationGrounding{EvidenceOptional: true}},
+	})
+	if got != answer {
+		t.Fatalf("audit = %+v", got)
+	}
+	if got := lastAssistantAudit([]api.Message{{Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Grounding: &api.CitationGrounding{}}}); got != nil {
+		t.Fatalf("a note alone produced audit %+v", got)
+	}
+}

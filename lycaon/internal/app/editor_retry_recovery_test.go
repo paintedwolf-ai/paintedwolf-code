@@ -51,10 +51,10 @@ func TestDocumentReadResolvesIdenticalRejectedEdit(t *testing.T) {
 			Invocation: &api.InvocationReceipt{ID: "read-receipt", Tool: "read", ToolCallID: "read-call", Status: api.InvocationStatusCompleted, Invoked: true}}}
 	projected := transcript.Project([]api.Message{message})
 	modelResult := projected[len(projected)-1]
-	if !strings.Contains(modelResult.Content, "⟦D:tool:read_metadata⟧") || !strings.Contains(modelResult.Content, "⟦D⟧base") || strings.Contains(modelResult.Content, "     1: base") {
+	if !strings.Contains(modelResult.Content, "Data from tool (read_metadata):") || !strings.Contains(modelResult.Content, "base") || strings.Contains(modelResult.Content, "     1: base") {
 		t.Fatalf("native read did not deliver exact source with detached metadata: %s", modelResult.Content)
 	}
-	if !strings.Contains(modelResult.Content, `"invoked":true`) || !strings.Contains(modelResult.Content, "⟦D:host:tool_feedback⟧") {
+	if !strings.Contains(modelResult.Content, `"invoked":true`) || !strings.Contains(modelResult.Content, "Data from host (tool_feedback):") {
 		t.Fatal("native read source and invocation facts must survive together")
 	}
 	for _, part := range modelResult.ContentParts {

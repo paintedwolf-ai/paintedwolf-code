@@ -38,6 +38,7 @@ var anchorAudience = map[string]audienceClass{
 	oar.AnchorCoordinatorPreInvoke:     audienceCoordinator,
 	oar.AnchorCoordinatorPostTurn:      audienceAnyCaller,
 	oar.AnchorCoordinatorCloseoutCheck: audienceCoordinator,
+	oar.AnchorCoordinatorMidTurnNote:   audienceCoordinator,
 	oar.AnchorWorkerFinalize:           audienceWorker,
 	oar.AnchorWorkerReportCheck:        audienceWorker,
 }

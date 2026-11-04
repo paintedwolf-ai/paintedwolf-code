@@ -30,7 +30,7 @@ func (stubState) ForSession(context.Context, *api.Session) surface.ImplementSess
 
 type stubSurface struct{}
 
-func (stubSurface) PromptTurnSurfaceID(string) string { return "" }
+func (stubSurface) PromptTurnSurfaceID(string) string { return "implement_routing" }
 
 type stubFeedback struct{}
 
@@ -68,7 +68,7 @@ func TestBeforeToolObservesWaitVisibility(t *testing.T) {
 		ToolCalls: []api.ToolCall{{ID: "wait-1", Name: "wait"}},
 	}}
 
-	ctx := tools.WithRecoveryTools(t.Context(), []string{"wait", "surface_note"})
+	ctx := tools.WithRecoveryTools(t.Context(), []string{"wait"})
 	_, _, err = svc.BeforeTool(ctx, sess, history, "", "wait", map[string]any{"timeout_ms": 60000})
 	refusal, rejected := guidance.RefusalFromError(err)
 	if !rejected || refusal.Code() != guard.WaitHiddenTextCode {

@@ -23,6 +23,8 @@ host: paintedwolf
 # Retired: paintedwolf.habit_redirect_match selected command-to-tool redirects.
 # Successors: paintedwolf.native_operation and paintedwolf.native_command identify
 # the reached native operation directly; command programs do not redirect to tools.
+# Retired: paintedwolf.surface_note_offered gated a tool that direct publication replaces.
+# Successor: paintedwolf.unpublished_tool_text_pending.
 # Retired fact names must never be reused.
 # Retired: paintedwolf.high_risk_tool combined policy categories (OAR-FACT-7).
 # Successor: compose paintedwolf.tool_is_state, tool_is_delegation,
@@ -47,6 +49,7 @@ anchors:
     - session.pre_invoke
     - coordinator.post_turn
     - coordinator.closeout_check
+    - coordinator.mid_turn_note
     - worker.finalize
     - worker.report_check
     - content.input
@@ -409,7 +412,11 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_turn_has_agent_note
    type: bool
- - name: paintedwolf.surface_note_offered
+ - name: paintedwolf.unpublished_tool_text_pending
+   type: bool
+ - name: paintedwolf.mid_turn_citations_required
+   type: bool
+ - name: paintedwolf.mid_turn_citation_attempted
    type: bool
  - name: paintedwolf.surface_may_finish
    type: bool

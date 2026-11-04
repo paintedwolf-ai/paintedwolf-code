@@ -60,3 +60,30 @@ func TestAllCoversEveryMarkerConstant(t *testing.T) {
 		t.Errorf("All() holds %d markers; update this test when the set changes", len(declared))
 	}
 }
+
+// AC-MID-13: markers go and sentences stay, including sentences that read like
+// the framing the host once wrote.
+func TestStripParrotedTransportMarkers(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, in, want string }{
+		{"no marker unchanged", "  Plain\ntext\r\n", "  Plain\ntext\r\n"},
+		{"model header", "⟦D:model:internal_step_note⟧\n⟦D⟧Checking the parser.", "Checking the parser."},
+		{"host header", "⟦D:host:internal_step_note⟧\nChecking.", "Checking."},
+		{"model typo close", "⟦D:model:internal_step_note⟦\nChecking.", "Checking."},
+		{"host typo close", "⟦D:host:internal_step_note⟦\nChecking.", "Checking."},
+		{"marked header", "⟦D⟧⟦D:model:internal_step_note⟧\nChecking.", "Checking."},
+		{"header alone is empty", "⟦D:model:internal_step_note⟧\n⟦D⟧\n", ""},
+		{"line prefixes without a header", "⟦D⟧one\n⟦D⟧⟦D⟧two", "one\ntwo"},
+		{"header mid text", "First.\n⟦D:model:internal_step_note⟧\nSecond.", "First.\nSecond."},
+		{"sentence without markers stays", "Internal working note, not shown to the user.", "Internal working note, not shown to the user."},
+		{"sentence after a header stays", "⟦D:model:internal_step_note⟧\nInternal working note, not shown to the user.", "Internal working note, not shown to the user."},
+		{"other labels are not parroted framing", "⟦D:tool:read⟧ is the old form.", "⟦D:tool:read⟧ is the old form."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := StripParrotedTransportMarkers(tc.in); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

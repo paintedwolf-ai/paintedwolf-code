@@ -43,6 +43,7 @@ func hostFinishOARPipeline() *oar.GuardPipeline {
 		}
 		p := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
 		p.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
+		p.EnableAnchor(oar.AnchorCoordinatorMidTurnNote)
 		p.EnableAnchor(oar.AnchorCoordinatorPreInvoke)
 		p.EnableAnchor(oar.AnchorToolPreInvoke)
 		hostFinishPipeline = p

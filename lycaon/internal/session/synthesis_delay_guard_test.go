@@ -45,6 +45,7 @@ func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session) {
 	pipeline := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 	pipeline.EnableAnchor(oar.AnchorCoordinatorPreInvoke)
+	pipeline.EnableAnchor(oar.AnchorCoordinatorMidTurnNote)
 	pipeline.EnableAnchor(oar.AnchorWorkerReportCheck)
 	mgr.SetOARPipeline(pipeline, oar.NewRenderer(rejectFmt, synthesisDelayNudge{f: rejectFmt}))
 	return mgr, sess

@@ -24,26 +24,31 @@ type InvocationFacts struct {
 type SessionFacts struct {
 	ToolTurnHasText      bool
 	ToolTurnHasAgentNote bool
-	SurfaceNoteOffered   bool
-	LastAssistant        string
-	TurnTools            []string
-	ProjectID            string
-	SessionID            string
-	SessionPosture       string
-	Surface              string
-	Profile              string
-	Phase                string
-	WorkerLeg            bool
-	SurfaceMayFinish     bool
-	IsHostCycleTurn      bool
-	CloseoutSurface      bool
-	PendingUserInput     bool
-	StubValid            bool
-	PermissionProfile    string
-	Principal            string
-	PrincipalRoles       []string
-	PostureUnresolved    bool
-	RecentToolNames      []string
+	// UnpublishedToolTextPending holds a carrier's text with no later note this intent.
+	UnpublishedToolTextPending bool
+	// MidTurnCitationsRequired holds once this intent has citable observations.
+	MidTurnCitationsRequired bool
+	// MidTurnCitationAttempted holds when the latest unpublished text tried to cite.
+	MidTurnCitationAttempted bool
+	LastAssistant            string
+	TurnTools                []string
+	ProjectID                string
+	SessionID                string
+	SessionPosture           string
+	Surface                  string
+	Profile                  string
+	Phase                    string
+	WorkerLeg                bool
+	SurfaceMayFinish         bool
+	IsHostCycleTurn          bool
+	CloseoutSurface          bool
+	PendingUserInput         bool
+	StubValid                bool
+	PermissionProfile        string
+	Principal                string
+	PrincipalRoles           []string
+	PostureUnresolved        bool
+	RecentToolNames          []string
 }
 
 type ProgressFacts struct {

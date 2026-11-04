@@ -253,10 +253,11 @@ func groundingFlagged(state grounding.UngroundedCounter, cfg GroundingConfig) bo
 }
 
 // lastAssistantAudit returns the citation-grounding audit on the most recent assistant
-// message, or nil when the last prose turn had nothing to ground.
+// message, or nil when the last prose turn had nothing to ground. A mid-turn note
+// is progress speech, not the turn's answer, so it is not audited here.
 func lastAssistantAudit(msgs []api.Message) *api.CitationGrounding {
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == api.MessageRoleAssistant {
+		if msgs[i].Role == api.MessageRoleAssistant && !api.IsAgentNoteMessage(msgs[i]) {
 			return msgs[i].Grounding
 		}
 	}

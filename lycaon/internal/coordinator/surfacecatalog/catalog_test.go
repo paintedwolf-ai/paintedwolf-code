@@ -130,3 +130,30 @@ func contains(names []string, want string) bool {
 	}
 	return false
 }
+
+// AC-MID-19: publication reaches exactly the surfaces that held surface_note.
+func TestPublishingSurfaces(t *testing.T) {
+	catalog, err := Load()
+	testutil.FailErr(t, "load", err)
+	want := map[string]bool{}
+	for _, id := range []string{
+		"implement_routing", "implement_dispatch", "orchestrate_plan", "recon_reconcile", "implement_overlay_promote",
+		"implement_investigate", "implement_park", "workflow_compose", "plan_stub", "plan_research", "plan_approve",
+		"plan_review", "survey_execute", "review_adjudicate", "decision_adjudicate", "await_user", "await_host",
+		"plan_execute", "observe_investigate", "observe_plan", NoFolderAllowlistID,
+	} {
+		want[id] = true
+	}
+	for _, id := range catalog.SurfaceIDs() {
+		row, err := catalog.Surface(id)
+		testutil.FailErr(t, id, err)
+		if row.PublishesMidTurnText != want[id] {
+			t.Errorf("%s publishes = %v, want %v", id, row.PublishesMidTurnText, want[id])
+		}
+	}
+	for _, id := range []string{"implement_synthesis", "observe_synthesis"} {
+		if row, err := catalog.Surface(id); err != nil || row.PublishesMidTurnText {
+			t.Errorf("%s must keep tool-step text private: %+v, %v", id, row, err)
+		}
+	}
+}

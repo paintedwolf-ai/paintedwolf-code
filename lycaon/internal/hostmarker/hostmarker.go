@@ -1,7 +1,10 @@
 // Package hostmarker defines host-written transcript markers shared with the client.
 package hostmarker
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 const (
 	EvidenceHandlePattern = `(?:[a-zA-Z0-9_-]+:)*[a-z_]+#[1-9][0-9]*`
@@ -65,4 +68,36 @@ func SplitEvidenceHandleTag(content string) (prefix, body string) {
 		return "", content
 	}
 	return content[:match[1]], content[match[1]:]
+}
+
+// Parroted transport markers. Projection no longer writes them, but models that
+// read older transcripts still copy them.
+const parrotedDataLine = "⟦D⟧"
+
+var parrotedDataHeaders = map[string]struct{}{
+	"⟦D:host:internal_step_note⟧":  {},
+	"⟦D:host:internal_step_note⟦":  {},
+	"⟦D:model:internal_step_note⟧": {},
+	"⟦D:model:internal_step_note⟦": {},
+}
+
+// StripParrotedTransportMarkers removes exact parroted header lines and leading
+// data-line markers. It matches markers only, never sentences, and returns text
+// holding no marker unchanged.
+func StripParrotedTransportMarkers(text string) string {
+	if !strings.Contains(text, "⟦D") {
+		return text
+	}
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		for strings.HasPrefix(strings.TrimLeft(line, " \t"), parrotedDataLine) {
+			line = strings.TrimPrefix(strings.TrimLeft(line, " \t"), parrotedDataLine)
+		}
+		if _, header := parrotedDataHeaders[strings.TrimSpace(line)]; header {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }

@@ -1,0 +1,31 @@
+oar: '1.0'
+id: MID_TURN_NOTE_MARKDOWN_EMBED
+kind: invariant
+anchor: coordinator.mid_turn_note
+requires:
+  facts:
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "mid_turn_note_markdown_embed"
+effect: warn
+copy:
+  what: '[HOST: MESSAGE WITHHELD FROM USER] The update used {{ paintedwolf.offender_count }} visual artifact id(s) as an image source: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  cause: 'A bare artifact id in Markdown image syntax is not resolved and renders as a broken image.'
+  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
+  fix: 'Present an observed image with [artifact:<uuid>] instead. Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
+  instead: 'Branch on Code MID_TURN_NOTE_MARKDOWN_EMBED; use the artifact directive'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mid_turn_note
+x-paintedwolf-message: A mid-turn image embedded a bare artifact id and the text was withheld.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: 'coordinator'
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: '11111111-1111-4111-8111-111111111111'
+    expect_contains:
+      - 'Code: MID_TURN_NOTE_MARKDOWN_EMBED'
+      - '[artifact:<uuid>]'

@@ -46,6 +46,11 @@ max_worker_grounding_retries: 3
 max_grounding_rejects_per_turn: 8
 max_grounding_rejects_per_cycle: 4
 
+# Refused waits one unpublished update may cost before the host reports worker
+# state itself, or permits a silent wait. Stays below the doom-loop bound on
+# identical rejected calls, or that guard would refuse the wait this permits.
+max_wait_visibility_repairs: 1
+
 # Repairs a run report may make to its document fields; separate from citation
 # friction, since a document repair adds conclusions rather than references.
 max_report_document_retries: 3
