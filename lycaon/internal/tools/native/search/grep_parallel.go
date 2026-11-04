@@ -21,6 +21,7 @@ func grepWorkerCount() int { return min(max(runtime.GOMAXPROCS(0), 1), grepWorke
 type grepFileJob struct {
 	entry         entry
 	names, walked bool
+	pruneChecked  bool
 	events        chan grepFileEvent
 	result        grepFileResult
 }
@@ -83,11 +84,11 @@ func newGrepFiles(r *grepRun, workers int) (*grepFiles, error) {
 	return p, nil
 }
 
-func (p *grepFiles) submit(e entry, names, walked bool) error {
+func (p *grepFiles) submit(e entry, names, walked, pruneChecked bool) error {
 	if err := p.ctx.Err(); err != nil {
 		return err
 	}
-	job := &grepFileJob{entry: e, names: names, walked: walked, events: make(chan grepFileEvent, grepEventWindow)}
+	job := &grepFileJob{entry: e, names: names, walked: walked, pruneChecked: pruneChecked, events: make(chan grepFileEvent, grepEventWindow)}
 	select {
 	case <-p.ctx.Done():
 		return p.ctx.Err()
@@ -258,7 +259,12 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 	if local.json != nil {
 		local.json = &rgJSON{started: local.json.started}
 	}
-	err := local.searchFileLive(job.entry, job.names, job.walked)
+	var err error
+	if job.pruneChecked {
+		err = local.searchUnpruned(job.entry, job.names, job.walked)
+	} else {
+		err = local.searchFileLive(job.entry, job.names, job.walked)
+	}
 	if flushErr := inv.out.flush(); err == nil {
 		err = flushErr
 	}
