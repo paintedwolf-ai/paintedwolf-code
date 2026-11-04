@@ -1,13 +1,15 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { manualHarnessTools } from "./manual-harness-tools.ts";
 import {
   activateProject,
   apiConfig,
+  apiJson,
+  apiPostPrompt,
   apiSeedSessionTranscript,
   bootstrapChatSession,
   expectShellReady,
   liveChatStage,
   openSessionRow,
-  sendChatPrompt,
   transcriptMessages,
   webE2e,
 } from "./helpers.ts";
@@ -130,26 +132,15 @@ function manualCompletions(request: APIRequestContext, sessionId: string) {
   };
   return {
     waitForNextRequest: nextRequest,
-    // The handle the host stamped on the session's first settled tool result.
-    async firstHandle() {
-      let handle = "";
-      await expect.poll(async () => {
-        const response = await request.get(`${apiUrl}/v1/sessions/${sessionId}/messages`, { headers });
-        expect(response.ok(), await response.text()).toBeTruthy();
-        const body = (await response.json()) as { messages: Array<{ tool_result?: { content: string } }> };
-        const content = body.messages.find((message) => message.tool_result)?.tool_result?.content ?? "";
-        handle = content.match(/^\[([a-z_-]+#\d+)\]/)?.[1] ?? "";
-        return handle;
-      }, { timeout: 30_000 }).not.toBe("");
-      return handle;
-    },
     async respond(content: string, calls: Array<{ name: string; args: Record<string, unknown> }> = []) {
       const id = await nextRequest();
+      const toolCalls = calls.map((call) => ({ id: crypto.randomUUID(), ...call }));
       const reply = await request.post(`${apiUrl}/harness/llm/respond`, {
         headers,
-        data: { id, content, tool_calls: calls.map((call) => ({ id: crypto.randomUUID(), ...call })) },
+        data: { id, content, tool_calls: toolCalls },
       });
       expect(reply.ok(), await reply.text()).toBeTruthy();
+      return toolCalls.map((call) => call.id);
     },
   };
 }
@@ -220,36 +211,47 @@ webE2e.describe("agent mid-turn note", () => {
     "assistant text beside a tool call publishes without a tool, exempt then cited",
     async ({ page, request }) => {
       await bootstrapChatSession(page, request);
-      await sendChatPrompt(page, "Where is auth?");
       const stream = liveChatStage(page).getByTestId("chat-stream");
       await expect.poll(async () => (await stream.getAttribute("data-session-id")) ?? "", { timeout: 30_000 }).not.toBe("");
       const sessionId = (await stream.getAttribute("data-session-id"))!;
-      const llm = manualCompletions(request, sessionId);
-      const notes = page.locator('[data-testid="transcript-article-assistant"][data-kind="agent_note"]');
+      await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
+      try {
+        const prompt = await apiPostPrompt(request, sessionId, { text: "Where is auth?" });
+        expect(prompt.ok(), await prompt.text()).toBe(true);
+        const driver = manualHarnessTools(request, sessionId);
+        const llm = manualCompletions(request, sessionId);
+        await driver.loadTools("read");
+        const notes = stream.locator('[data-testid="transcript-article-assistant"][data-kind="agent_note"]');
+        const read = { name: "read", args: { path: "README.md" } };
 
-      // Before any observation: published, and not presented as a checked source.
-      await llm.respond("I'll look at the auth path.", [{ name: "list_dir", args: { path: "." } }]);
-      await expect(notes.filter({ hasText: "I'll look at the auth path." })).toHaveCount(1, { timeout: 30_000 });
-      await expect(notes.first().getByTestId("citation-evidence-chicklet")).toHaveCount(0);
+        // Before any observation: published, and not presented as a checked source.
+        const [firstRead] = await llm.respond("I'll look at the auth path.", [read]);
+        await expect(notes.filter({ hasText: "I'll look at the auth path." })).toHaveCount(1, { timeout: 30_000 });
+        await expect(notes.first().getByTestId("citation-evidence-chicklet")).toHaveCount(0);
+        const handle = (await driver.completed(firstRead!)).match(/\[([a-z_-]+#\d+)\]/)?.[1];
+        expect(handle).toBeTruthy();
 
-      const handle = await llm.firstHandle();
+        // After an observation: uncited text stays out of the transcript.
+        await llm.respond("This uncited claim stays private.", [read]);
+        await llm.waitForNextRequest();
+        await expect(stream.getByText("This uncited claim stays private.")).toHaveCount(0);
+        await expect(notes).toHaveCount(1);
 
-      // After an observation: uncited text stays out of the transcript.
-      await llm.respond("This uncited claim stays private.", [{ name: "list_dir", args: { path: "." } }]);
-      await llm.waitForNextRequest();
-      await expect(stream.getByText("This uncited claim stays private.")).toHaveCount(0);
-      await expect(notes).toHaveCount(1);
+        // A valid citation publishes, with its evidence and no protocol syntax left.
+        await llm.respond(`The readme is recorded [${handle}:1-2].`, [read]);
+        const cited = notes.filter({ hasText: "The readme is recorded" });
+        await expect(cited).toHaveCount(1, { timeout: 30_000 });
+        await expect(cited).not.toContainText(`[${handle}`);
+        await expect(cited.getByTestId("citation-evidence-chicklet")).toBeVisible();
+        const opened = cited.locator('.den-source-path-link[data-den-source-end-line="2"]');
+        await expect(opened).toHaveAttribute("data-den-source-line", "1");
 
-      // A valid citation publishes, with its evidence and no protocol syntax left.
-      await llm.respond(`The listing is recorded [${handle}].`, [{ name: "list_dir", args: { path: "." } }]);
-      const cited = notes.filter({ hasText: "The listing is recorded" });
-      await expect(cited).toHaveCount(1, { timeout: 30_000 });
-      await expect(cited).not.toContainText(`[${handle}]`);
-      await expect(cited.getByTestId("citation-evidence-chicklet")).toBeVisible();
-
-      await llm.respond(`Auth is covered by the listing [${handle}].`);
-      await expect(stream.getByText("Auth is covered by the listing")).toBeVisible({ timeout: 30_000 });
-      await expect(stream.getByTestId("agent-note-badge")).toHaveCount(2);
+        await llm.respond(`Auth is described in the readme [${handle}:1-2].`);
+        await expect(stream.getByText("Auth is described in the readme")).toBeVisible({ timeout: 30_000 });
+        await expect(stream.getByTestId("agent-note-badge")).toHaveCount(2);
+      } finally {
+        await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "Done." });
+      }
     },
   );
 
