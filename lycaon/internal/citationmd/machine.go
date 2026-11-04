@@ -143,6 +143,7 @@ func (m *nodeMachine) finish() {
 		} else {
 			m.sink.released(m.scanner.buf)
 		}
+	case machineText:
 	}
 	m.state = machineText
 }

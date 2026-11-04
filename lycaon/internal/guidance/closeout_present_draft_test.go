@@ -124,6 +124,6 @@ func TestPresentedPathLinksNavigate(t *testing.T) {
 		})
 	}
 	if strings.Contains(citationmd.FileLink("a b.go", 1, 0), "%20") {
-		t.Fatal("a space must stay raw so that Den's citation index can match the path")
+		t.Fatal("a space must stay raw so that the frontend's citation index can match the path")
 	}
 }

@@ -297,6 +297,7 @@ func resolveCloseoutFindingCitations(
 			addOffender(&notObserved, seenNotObserved, outcome.offender)
 		case closeoutCitationUnverifiable:
 			addOffender(&unverifiable, seenUnverifiable, outcome.offender)
+		case closeoutCitationGrounded, closeoutCitationEmpty:
 		}
 	}
 	return resolved, notObserved, unverifiable, surveyAdvisories

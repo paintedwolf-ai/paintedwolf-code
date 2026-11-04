@@ -56,14 +56,13 @@ func ParseCloseoutDraft(markdown string, opts citationmd.Options) CloseoutDraft 
 	var urls, artifacts []string
 	for _, occurrence := range parsed.Occurrences {
 		item := DraftOccurrence{Occurrence: occurrence, Owner: DraftFieldSynthesis}
-		switch occurrence.Kind {
-		case citationmd.KindCitation, citationmd.KindWorkspaceLink, citationmd.KindWebLink:
-			item.RepairID = "c" + strconv.Itoa(occurrence.Index+1)
-		}
+		repairID := "c" + strconv.Itoa(occurrence.Index+1)
 		switch occurrence.Kind {
 		case citationmd.KindCitation, citationmd.KindWorkspaceLink:
+			item.RepairID = repairID
 			cited = append(cited, citedEvidenceFrom(*occurrence.Citation))
 		case citationmd.KindWebLink:
+			item.RepairID = repairID
 			urls = append(urls, occurrence.Link.Destination)
 		case citationmd.KindArtifact:
 			artifacts = append(artifacts, occurrence.Artifact)
@@ -71,6 +70,7 @@ func ParseCloseoutDraft(markdown string, opts citationmd.Options) CloseoutDraft 
 			if draft.Verification == nil {
 				draft.Verification = occurrence.Verify
 			}
+		case citationmd.KindRepair:
 		}
 		draft.Occurrences = append(draft.Occurrences, item)
 	}

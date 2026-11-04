@@ -99,6 +99,7 @@ func ResolveDraftCitations(
 					break
 				}
 			}
+		case citationmd.KindVerify, citationmd.KindRepair:
 		}
 		out.Occurrences = append(out.Occurrences, result)
 	}

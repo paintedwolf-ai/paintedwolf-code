@@ -30,6 +30,7 @@ func PresentCloseoutMarkdown(draft CloseoutDraft, resolved DraftCitationResoluti
 				return citationmd.Rendition{Keep: true}
 			}
 			return citationmd.Rendition{Text: citationmd.PlainLabel(*o.Link)}
+		case citationmd.KindArtifact, citationmd.KindVerify, citationmd.KindRepair:
 		}
 		return citationmd.Rendition{}
 	})

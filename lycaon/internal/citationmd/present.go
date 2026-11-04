@@ -86,7 +86,7 @@ func projectOccurrence(o Occurrence) Rendition {
 	return Rendition{}
 }
 
-// FileLink formats a workspace reference as a Markdown link Den can navigate:
+// FileLink formats a workspace reference as a navigable Markdown link:
 // label `path:start-end`, destination `path#Lstart-Lend`.
 func FileLink(path string, line, endLine int) string {
 	label, fragment := path, ""
@@ -108,7 +108,7 @@ var labelEscaper = strings.NewReplacer(
 func escapeLabel(label string) string { return labelEscaper.Replace(label) }
 
 // destinationEscaper keeps a path one URL path. Spaces stay raw inside the
-// angle form, so the destination still equals the path Den matches citations by.
+// angle form, so the destination still equals the path citations match by.
 var destinationEscaper = strings.NewReplacer(`%`, `%25`, `#`, `%23`, `?`, `%3F`, `<`, `%3C`, `>`, `%3E`, `\`, `%5C`)
 
 func fileDestination(path, fragment string) string {

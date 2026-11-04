@@ -65,7 +65,7 @@ func (r extentRecorder) CloseBlock(parent ast.Node, block text.Reader, pc parser
 	}
 }
 
-// markdownParser is the dialect Den renders, CommonMark plus GFM, less the
+// markdownParser is the dialect the frontend renders, CommonMark plus GFM, less the
 // emphasis and strikethrough parsers: they cannot change a literal zone or a link
 // boundary, and their delimiter matching is quadratic in a block's delimiters.
 var markdownParser = sync.OnceValue(func() parser.Parser {
@@ -236,8 +236,8 @@ func containerDepthExceeded(source string) bool {
 	return false
 }
 
-// containerMarkerWidth measures whitespace or one container marker at the start
-// of rest; whitespace alone counts no deeper only because a marker must follow.
+// containerMarkerWidth measures one container marker and the whitespace before
+// it at the start of rest, or zero when none starts there.
 func containerMarkerWidth(rest string) int {
 	at := 0
 	for at < len(rest) && isSpaceByte(rest[at]) {

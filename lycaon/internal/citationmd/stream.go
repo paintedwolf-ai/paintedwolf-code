@@ -116,7 +116,7 @@ func (p *Projector) decideHead(complete bool) {
 	default:
 		if !decision.continuing {
 			p.boundary()
-			p.inline.defEligible = true
+			p.inline.brackets.defEligible = true
 		}
 		p.phase = phaseInline
 		p.playInlineLine(held, decision.prefix)
