@@ -1,22 +1,14 @@
-import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
 
-SCRIPT = Path(__file__).resolve().parents[2] / "test-run-lease.py"
-
-
-def load_lease_module():
-    spec = importlib.util.spec_from_file_location("test_run_lease", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+from verification_lifecycle import run_lease
 
 
 class TestRunPruneExecution(unittest.TestCase):
     def setUp(self):
-        self.lease = load_lease_module()
+        self.lease = run_lease
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)

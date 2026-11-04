@@ -13,9 +13,11 @@ from verification_health import ownership, process_snapshot
 
 if os.name != "nt":
     import fcntl
+    from verification_lifecycle import run_lease
 
 DRAIN_SECONDS = 0.1
 SIGNAL_SECONDS = 2
+BLOCKED_COLLECTION_INTERVAL = 40
 
 
 def retained(entry):
@@ -110,6 +112,10 @@ class TerminalSettlement:
             cap.entry["terminal_settlement"].setdefault("reclaimed", []).extend(records)
             cap.write()
 
+    def killed(self):
+        records = self.capability.entry["terminal_settlement"].get("reclaimed", [])
+        return frozenset((record["pid"], record["birth"]) for record in records if record["signal"] == "SIGKILL")
+
     def blocked(self, error, on_blocked):
         self.tainted = True
         cap = self.capability
@@ -122,12 +128,16 @@ class TerminalSettlement:
             on_blocked()
         # Keep the original supervisor, admission guard and source descriptors alive.
         # A public cancellation can stop it; a holder's own exit can also restore custody.
+        attempts = 0
         while True:
             try:
                 if self.probe():
                     return
             except (OSError, ValueError, subprocess.SubprocessError):
                 pass
+            attempts += 1
+            if attempts % BLOCKED_COLLECTION_INTERVAL == 0:
+                run_lease.collect_runs(self.killed())
             time.sleep(0.25)
 
     def finish(self, on_blocked=None):
@@ -146,10 +156,16 @@ class TerminalSettlement:
                     if self.wait_release(SIGNAL_SECONDS):
                         break
                 else:
-                    raise OSError("Terminal capability remained held after bounded settlement")
+                    # A killed holder may still wait on a mount of its own run, which only ending
+                    # that connection releases.
+                    run_lease.collect_runs(self.killed())
+                    if not self.wait_release(SIGNAL_SECONDS):
+                        raise OSError("Terminal capability remained held after bounded settlement")
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             self.blocked(error, on_blocked)
         with self.queue.locked():
             cap.entry["terminal_settlement"]["state"] = "settled"
             cap.write()
+        # A killed digest shell never ran its own cleanup, so this is the run's last teardown.
+        run_lease.collect_runs(self.killed())
         return self.tainted
