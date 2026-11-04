@@ -672,8 +672,8 @@ anchors:
         other_effects: { type: "int", required: true }
         other_may_include_working_set: { type: "bool", required: false }
         truncated: { type: "bool", required: true }
-        own_truncated: { type: "bool", required: true }
-        source_history_offered: { type: "bool", required: true }
+        own_truncated: { type: "bool", required: false }
+        source_history_offered: { type: "bool", required: false }
 
   - id: inject.synthesis_evidence
     title: Synthesis evidence inject
