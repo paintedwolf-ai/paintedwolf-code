@@ -28,13 +28,10 @@ type commandWindow struct {
 // branch commands write an overlay the promote records, so they open none.
 // A failure never blocks the command; it runs unobserved.
 func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, commandLine string) commandWindow {
+	if !commandWindowDue(tctx) {
+		return commandWindow{}
+	}
 	opener := tctx.Source.Commands
-	if opener == nil || tctx.Identity.ProjectID == "" || len(tctx.Source.Roots) == 0 {
-		return commandWindow{}
-	}
-	if tctx.Source.SourceWorkspaceKind != "" && tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
-		return commandWindow{}
-	}
 	roots := make([]sourceledger.RootSpec, 0, len(tctx.Source.Roots))
 	for _, root := range tctx.Source.Roots {
 		branch, err := tctx.SourceBranch(root.ID)
@@ -53,6 +50,14 @@ func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, co
 		return commandWindow{unobserved: true}
 	}
 	return commandWindow{open: open}
+}
+
+// commandWindowDue reports whether commands in this context are observed at all.
+func commandWindowDue(tctx tools.ToolContext) bool {
+	if tctx.Source.Commands == nil || tctx.Identity.ProjectID == "" || len(tctx.Source.Roots) == 0 {
+		return false
+	}
+	return tctx.Source.SourceWorkspaceKind == "" || tctx.Source.SourceWorkspaceKind == api.SourceWorkspaceKindProject
 }
 
 // closeNow ends the window once the process has exited, detached from the
