@@ -74,12 +74,10 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 
 	adp := fuselinux.New(fuselinux.Config{})
 	testutil.FailErr(t, "kill engine", engine.Process.Kill())
-	waitFor(t, "zombie leader", func() bool { return processState(engine.Process.Pid) == "Z" })
+	procDir := filepath.Join("/proc", strconv.Itoa(engine.Process.Pid))
+	waitFor(t, "the killed engine to be dying", func() bool { return fuselinux.ThreadGroupDyingForTest(procDir) })
 	if mounted, err := adapter.MountBoundaryPresent(mountPath); err != nil || !mounted {
 		t.Fatalf("a wedged mount must read as present without hanging: mounted=%t err=%v", mounted, err)
-	}
-	if !recorded[0].Server.Ended() && !fuselinux.ThreadGroupDyingForTest(filepath.Join("/proc", strconv.Itoa(engine.Process.Pid))) {
-		t.Fatal("wedged zombie was not proven dead")
 	}
 	settled, err := adp.SettleRecordedConnection(t.Context(), recorded[0])
 	if err != nil || settled.Disposition != adapter.ConnectionDetached || !settled.ConnectionAborted {
@@ -141,18 +139,6 @@ func waitingRequests(dev string) int {
 	return n
 }
 
-func processState(pid int) string {
-	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
-	if err != nil {
-		return ""
-	}
-	fields := strings.Fields(string(raw)[strings.LastIndexByte(string(raw), ')')+1:])
-	if len(fields) == 0 {
-		return ""
-	}
-	return fields[0]
-}
-
 func waitFor(t *testing.T, what string, done func() bool) {
 	t.Helper()
 	for range 6000 {
@@ -173,10 +159,12 @@ func TestThreadGroupDyingRequiresEveryThreadUnderSIGKILL(t *testing.T) {
 		tasks  map[string][2]string
 		want   bool
 	}{
-		{"running leader", "R", map[string][2]string{"1": {stat("R"), status("0000000000000100")}}, false},
-		{"zombie, stuck thread under SIGKILL", "Z", map[string][2]string{"1": {stat("Z"), status("0")}, "2": {stat("D"), status("0000000000000100")}}, true},
+		{"running, nothing pending", "R", map[string][2]string{"1": {stat("R"), status("0")}}, false},
+		{"zombie leader, stuck thread under SIGKILL", "Z", map[string][2]string{"1": {stat("Z"), status("0")}, "2": {stat("D"), status("0000000000000100")}}, true},
+		{"stuck leader under SIGKILL", "D", map[string][2]string{"1": {stat("D"), status("0000000000000100")}, "2": {stat("D"), status("0000000000000100")}}, true},
 		{"leader exited, another thread still running", "Z", map[string][2]string{"1": {stat("Z"), status("0")}, "2": {stat("S"), status("0")}}, false},
 		{"unreadable pending mask", "Z", map[string][2]string{"1": {stat("Z"), status("0")}, "2": {stat("D"), ""}}, false},
+		{"no threads readable", "Z", nil, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

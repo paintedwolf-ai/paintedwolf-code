@@ -178,8 +178,8 @@ func findRecordedMount(rec adapter.RecordedConnection) (kernelMountEntry, record
 }
 
 // servingProcessEnded proves the recorded server cannot run again. Beyond a process that is
-// gone, a thread group whose leader has exited and whose every remaining thread has SIGKILL
-// pending is dying: it is held only by a thread waiting uninterruptibly on its own mount.
+// gone, a thread group whose every live thread has SIGKILL pending is dying: it is held only by
+// threads waiting uninterruptibly on its own mount, and any of those may be the leader.
 func servingProcessEnded(server adapter.ProcessIdentity) bool {
 	if server.Ended() {
 		return true
@@ -188,11 +188,8 @@ func servingProcessEnded(server adapter.ProcessIdentity) bool {
 }
 
 func threadGroupDying(procDir string) bool {
-	if procState(filepath.Join(procDir, "stat")) != "Z" {
-		return false
-	}
 	tasks, err := os.ReadDir(filepath.Join(procDir, "task"))
-	if err != nil {
+	if err != nil || len(tasks) == 0 {
 		return false
 	}
 	for _, task := range tasks {
