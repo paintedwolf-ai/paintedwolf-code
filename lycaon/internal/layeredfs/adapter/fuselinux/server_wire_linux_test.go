@@ -382,7 +382,7 @@ func TestInitGrantsOnlyPinnedCapabilitiesAndRefusesOldKernels(t *testing.T) {
 	}
 }
 
-func TestFsyncAcknowledgesOnlyEstablishedDurability(t *testing.T) {
+func TestFsyncSurfacesBackingFailuresAndDirectorySyncWritesNoJournal(t *testing.T) {
 	w := newWireServer(t, ServerConfig{})
 	fsync := func(fh uint64) wireReply { return w.call(fuseOpFsync, fuseRootID, append(u64(fh), make([]byte, 8)...)) }
 	injected := error(syscall.EIO)
@@ -395,11 +395,11 @@ func TestFsyncAcknowledgesOnlyEstablishedDurability(t *testing.T) {
 	w.wantErrno("clean fsync", fsync(rw), 0)
 	w.syncErr.Store(&injected)
 	w.wantErrno("failed backing sync", fsync(rw), syscall.EIO)
-	w.wantErrno("failed journal sync", w.call(fuseOpFsyncdir, fuseRootID, make([]byte, 16)), syscall.EIO)
+	// The journal reaches storage at the barrier, so a directory sync has nothing to fail on.
+	w.wantErrno("fsyncdir writes no journal", w.call(fuseOpFsyncdir, fuseRootID, make([]byte, 16)), 0)
 	w.syncErr.Store(nil)
-	w.wantErrno("clean fsyncdir", w.call(fuseOpFsyncdir, fuseRootID, make([]byte, 16)), 0)
 
-	// A read-only descriptor still covers the file: its private content must really be synced.
+	// A read-only descriptor still covers the file: its private content settles the same way.
 	ro := w.open(node, syscall.O_RDONLY)
 	w.syncErr.Store(&injected)
 	w.wantErrno("failed read-only descriptor sync", fsync(ro), syscall.EIO)
