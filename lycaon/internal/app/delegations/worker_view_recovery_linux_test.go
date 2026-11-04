@@ -118,6 +118,9 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	if err := holder.Process.Signal(unix.Signal(0)); err != nil {
 		t.Fatalf("holder inside the mount was affected: %v", err)
 	}
+	if resumed, ok := next.Queue.Get(task.ID); !ok || resumed.Status.IsTerminal() {
+		t.Fatalf("worker did not resume from its checkpoint: %+v", resumed)
+	}
 	if got := f.readBranch(task.WorkspaceRoot, "app.txt"); got != "checkpoint-A\n" {
 		t.Fatalf("rebuilt branch shows %q", got)
 	}
@@ -161,9 +164,9 @@ func runRealEngine(t *testing.T) {
 	adp := fuselinux.New(fuselinux.Config{})
 	view, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
 		ViewID: task, RuntimeDir: os.Getenv("HELPER_RUNTIME"), BackingDir: os.Getenv("HELPER_BACKING"),
-		TargetRootDirs: map[string]string{"primary": root},
+		TargetRootDirs: map[string]string{fixtureRootID: root},
 		QuiesceHook:    fuselinux.NoopQuiesceHook, FlushClientHook: fuselinux.NoWritableMappingsFlushHook,
-		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: os.Getenv("HELPER_PROJECT"), IsPrimary: true}},
+		Grants: []adapter.RootGrant{{RootID: fixtureRootID, Label: fixtureRootID, SourcePath: os.Getenv("HELPER_PROJECT"), IsPrimary: true}},
 	})
 	testutil.FailErr(t, "helper prepare", err)
 	testutil.FailErr(t, "helper journal", coordinator.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
@@ -172,7 +175,7 @@ func runRealEngine(t *testing.T) {
 	testutil.FailErr(t, "helper write", os.WriteFile(filepath.Join(root, "app.txt"), []byte("checkpoint-A\n"), 0o644))
 	publisher, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		Core: view.Core, Store: store, WorkerID: task, TaskID: task, ProjectID: os.Getenv("HELPER_KEY"), SourceGeneration: "1",
-		SelectedRoots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: os.Getenv("HELPER_PROJECT"), IsPrimary: true}},
+		SelectedRoots: []layeredfs.RootSpec{{ID: fixtureRootID, Label: fixtureRootID, TrunkPath: os.Getenv("HELPER_PROJECT"), IsPrimary: true}},
 		Callbacks:     adp.NewBarrierProvider(task),
 	})
 	testutil.FailErr(t, "helper publisher", err)
