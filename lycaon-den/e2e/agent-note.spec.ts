@@ -137,9 +137,9 @@ function manualCompletions(request: APIRequestContext, sessionId: string) {
       const response = await request.get(`${apiUrl}/v1/sessions/${sessionId}/messages`, { headers });
       expect(response.ok(), await response.text()).toBeTruthy();
       const { messages } = (await response.json()) as {
-        messages: Array<{ tool_result?: { tool_call_id?: string; evidence_handle?: string } }>;
+        messages: Array<{ evidence_handles?: string[]; tool_result?: { tool_call_id?: string } }>;
       };
-      const handle = messages.find((row) => row.tool_result?.tool_call_id === callId)?.tool_result?.evidence_handle;
+      const handle = messages.find((row) => row.tool_result?.tool_call_id === callId)?.evidence_handles?.[0];
       expect(handle).toBeTruthy();
       return handle!;
     },
