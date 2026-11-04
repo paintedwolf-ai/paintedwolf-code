@@ -98,7 +98,7 @@ func ResumeStoreUpgrade(path string) (err error) {
 	if err != nil {
 		return err
 	}
-	if identity == record.OriginalIdentity {
+	if fspath.SameEntryAcrossRestart(record.OriginalIdentity, identity) {
 		// A journal-unaware older build may have written since the interruption.
 		// Its current database remains authoritative until the atomic exchange.
 		return discardRebuild(path, record)
@@ -118,7 +118,7 @@ func finishRebuildPublication(path string, record rebuildJournal, afterMove func
 	if err != nil {
 		return err
 	}
-	if identity == record.OriginalIdentity {
+	if fspath.SameEntryAcrossRestart(record.OriginalIdentity, identity) {
 		if _, err := os.Lstat(filepath.Join(work, "original.db")); !os.IsNotExist(err) { // #nosec G703
 			if err != nil {
 				return err
@@ -134,7 +134,7 @@ func finishRebuildPublication(path string, record rebuildJournal, afterMove func
 		if err := fseffect.ExchangeGuarded(root, record.Database, filepath.Join(record.Directory, "replacement.db"), record.OriginalIdentity, record.ReplacementIdentity); err != nil {
 			return err
 		}
-	} else if identity != record.ReplacementIdentity {
+	} else if !fspath.SameEntryAcrossRestart(record.ReplacementIdentity, identity) {
 		return fmt.Errorf("store upgrade destination identity changed")
 	}
 	if afterMove != nil {
@@ -169,7 +169,7 @@ func requireSealedRebuild(path string) error {
 func resumeRebuildMove(root, from, to, identity string) error {
 	destination := filepath.Join(root, to)
 	if got, err := fspath.EntryIdentity(destination); err == nil {
-		if got != identity {
+		if !fspath.SameEntryAcrossRestart(identity, got) {
 			return fmt.Errorf("store upgrade destination identity changed: %s", to)
 		}
 		return nil
@@ -184,7 +184,7 @@ func requireRebuildIdentity(path, identity string) error {
 	if err != nil {
 		return err
 	}
-	if got != identity {
+	if !fspath.SameEntryAcrossRestart(identity, got) {
 		return fmt.Errorf("store upgrade file identity changed")
 	}
 	return nil

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -78,5 +79,29 @@ func TestRestoreRefusesUnknownReceiptVersion(t *testing.T) {
 	}
 	if body, err := os.ReadFile(path); err != nil || string(body) != "preserved" {
 		t.Fatalf("recorded item changed: %q %v", body, err)
+	}
+}
+
+func TestRestoreIgnoresOnlyTheDeviceInItsReceipt(t *testing.T) {
+	dir := t.TempDir()
+	entry := filepath.Join(dir, "entry")
+	if err := os.WriteFile(entry, []byte("kept"), 0o600); err != nil {
+		t.Fatal("seed entry: ", err)
+	}
+	identity, err := fspath.EntryIdentity(entry)
+	if err != nil {
+		t.Fatal("identify entry: ", err)
+	}
+	receipt := Receipt{FormatVersion: 1, Platform: runtime.GOOS, Path: entry, Identity: "9:1:1:1"}
+	destination := fseffect.Location{Root: dir, Rel: "restored"}
+	if err := Restore(t.Context(), receipt, destination); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("restore of another entry = %v", err)
+	}
+	receipt.Identity = "9" + identity
+	if err := Restore(t.Context(), receipt, destination); err != nil {
+		t.Fatalf("restore after a device change: %v", err)
+	}
+	if raw, err := os.ReadFile(filepath.Join(dir, "restored")); err != nil || string(raw) != "kept" {
+		t.Fatalf("restored = %q, %v", raw, err)
 	}
 }
