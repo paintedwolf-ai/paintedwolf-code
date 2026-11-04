@@ -2,6 +2,7 @@ package closeoutassembly
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
 	"strings"

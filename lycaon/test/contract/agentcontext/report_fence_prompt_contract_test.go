@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"strings"
 	"testing"
 
@@ -30,27 +31,18 @@ func TestCloseoutPromptsShowTheReportFenceTheHostReads(t *testing.T) {
 		contractcheck.FailErr(t, "render "+name, err)
 		rendered[name] = out
 	}
-	kickVars := map[string]any{}
-	contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(kickVars))
-	kick, err := engine.RenderKick(ctx, "coordinator-closeout", kickVars)
-	contractcheck.FailErr(t, "render forced closeout", err)
-	rendered["forced closeout"] = kick
-
 	for name, out := range rendered {
 		fences := jsonFences(out)
 		if len(fences) == 0 {
 			t.Fatalf("%s shows no json report fence:\n%s", name, out)
 		}
 		for _, fence := range fences {
-			read, ok := guidance.ReadCloseoutReport("The answer.\n\n"+fence, "")
-			if !ok || read.Report.Synthesis != "The answer." {
+			read := guidance.ReadCloseoutReport("The answer.\n\n"+fence, guidance.RetainedCloseout{}, true, citationmd.Options{})
+			if read.Draft.Document == nil || read.Draft.Synthesis != "The answer." {
 				t.Fatalf("%s shows a fence the host does not read as a report:\n%s", name, fence)
 			}
 			if len(read.Unread) > 0 {
 				t.Fatalf("%s shows report members the host does not read: %+v", name, read.Unread)
-			}
-			if len(read.Report.CitedEvidence) == 0 {
-				t.Fatalf("%s shows a fence without a citation:\n%s", name, fence)
 			}
 		}
 	}

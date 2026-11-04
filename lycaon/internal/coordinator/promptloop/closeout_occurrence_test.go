@@ -68,8 +68,8 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 				},
 			})
 			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true, turnTools: []string{"command"}}
-			report := guidance.CoordinatorCompletionReport{Synthesis: tc.body, CitedEvidence: []guidance.CoordinatorCitedEvidence{{Evidence: tc.evidence}}}
-			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "", tc.surface, st, history, history[2], guidance.CloseoutRead{Report: report})
+			read := markdownRead(tc.body+" ["+tc.evidence+"]", false)
+			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "", tc.surface, st, history, history[2], read)
 			testutil.FailErr(t, "check report", err)
 			if calls != 1 {
 				t.Fatalf("report generated %d policy occurrences", calls)

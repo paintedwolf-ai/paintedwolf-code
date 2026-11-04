@@ -30,7 +30,7 @@ func TestCitationRepairDirectives(t *testing.T) {
 		check                  func(t *testing.T, draft CloseoutDraft)
 	}{
 		{
-			name: "AC-CLO-06 a handle repair changes the occurrence and metadata, never the narrative",
+			name:  "AC-CLO-06 a handle repair changes the occurrence and metadata, never the narrative",
 			draft: "The timeout moved [read#9:42] to the caller.", raw: "[cite: c1 => read#5:42]",
 			want: "The timeout moved [read#5:42] to the caller.",
 			check: func(t *testing.T, draft CloseoutDraft) {
@@ -40,27 +40,27 @@ func TestCitationRepairDirectives(t *testing.T) {
 			},
 		},
 		{
-			name: "AC-CLO-07 a repeated handle repairs only the targeted occurrence",
+			name:  "AC-CLO-07 a repeated handle repairs only the targeted occurrence",
 			draft: "One [read#9:1], two [read#9:2], three [read#9:3].", raw: "[cite: c2 => read#5:20]",
 			want: "One [read#9:1], two [read#5:20], three [read#9:3].",
 		},
 		{
-			name: "AC-CLO-07 group members are separate occurrences",
+			name:  "AC-CLO-07 group members are separate occurrences",
 			draft: "See [read#9:1, grep#2:3].", raw: "[cite: c2 => read#5:20-22]",
 			want: "See [read#9:1, read#5:20-22].",
 		},
 		{
-			name: "AC-CLO-07 several directives apply together",
+			name:  "AC-CLO-07 several directives apply together",
 			draft: "One [read#9:1], two [read#9:2].", raw: "[cite: c2 => read#5:2]\n[cite: c1 => read#5:1]",
 			want: "One [read#5:1], two [read#5:2].",
 		},
 		{
-			name: "a bare path value stays a citation though unobserved",
+			name:  "a bare path value stays a citation though unobserved",
 			draft: "One [read#9:1].", raw: "[cite: c1 => internal/a.go:4]",
 			want: "One [internal/a.go:4].",
 		},
 		{
-			name: "AC-CLO-08 a URL repair keeps the label",
+			name:  "AC-CLO-08 a URL repair keeps the label",
 			draft: "Per [the RFC](https://example.test/old), done.", raw: "[cite: c1 => <" + url + ">]",
 			want: "Per [the RFC](" + url + "), done.",
 			check: func(t *testing.T, draft CloseoutDraft) {
@@ -70,17 +70,17 @@ func TestCitationRepairDirectives(t *testing.T) {
 			},
 		},
 		{
-			name: "AC-CLO-08 an autolink repair",
+			name:  "AC-CLO-08 an autolink repair",
 			draft: "Per <https://example.test/old>, done.", raw: "[cite: c1 => <" + url + ">]",
 			want: "Per <" + url + ">, done.",
 		},
 		{
-			name: "a workspace link keeps its label",
+			name:  "a workspace link keeps its label",
 			draft: "See [auth](internal/auth.go#L4).", raw: "[cite: c1 => internal/auth.go:7-9]",
 			want: "See [auth](internal/auth.go#L7-L9).",
 		},
 		{
-			name: "a directive repairs a verification in its ordinary syntax",
+			name:  "a directive repairs a verification in its ordinary syntax",
 			draft: "Done [read#1:1].\n[verify: inspection - Looked]", raw: "[verify: targeted - Ran the package tests]",
 			want: "Done [read#1:1].\n\n[verify: targeted - Ran the package tests]",
 			check: func(t *testing.T, draft CloseoutDraft) {
@@ -90,18 +90,18 @@ func TestCitationRepairDirectives(t *testing.T) {
 			},
 		},
 		{
-			name: "AC-CLO-10 a full corrected Markdown changing only citations is accepted",
+			name:  "AC-CLO-10 a full corrected Markdown changing only citations is accepted",
 			draft: "One [read#9:1], and [the RFC](https://example.test/old).",
-			raw: "One [read#5:1], and [the RFC](" + url + ").",
-			want: "One [read#5:1], and [the RFC](" + url + ").",
+			raw:   "One [read#5:1], and [the RFC](" + url + ").",
+			want:  "One [read#5:1], and [the RFC](" + url + ").",
 		},
 		{
-			name: "AC-CLO-10 a full corrected Markdown may drop an unsupported citation",
+			name:  "AC-CLO-10 a full corrected Markdown may drop an unsupported citation",
 			draft: "One [read#9:1], two [read#5:2].", raw: "One, two [read#5:2].",
 			want: "One, two [read#5:2].",
 		},
 		{
-			name: "a full correction keeps a directive it left out",
+			name:  "a full correction keeps a directive it left out",
 			draft: "One [read#9:1].\n[verify: blocked - No network]", raw: "One [read#5:1].",
 			want: "One [read#5:1].\n\n[verify: blocked - No network]",
 		},

@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,7 +35,7 @@ func sourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, []api.Mes
 func TestSourceEvidenceCloseoutAllowsRoutineWorkWithoutAssessment(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
 	reject, blocked := mgr.Coordinator.Guards.SourceEvidence(
-		context.Background(), sess, history, "implement_investigate", true,
+		context.Background(), sess, history, nil, "implement_investigate", true,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("reject=%v blocked=%v", reject, blocked)
@@ -46,7 +47,7 @@ func TestSourceEvidenceCloseoutAcceptsCurrentPass(t *testing.T) {
 	mgr.SetWorkflowDomains(workflowDomainFixture(verifyWorkflowStub{required: true}))
 	recordVerify(t, mgr, sess, "go test ./...", 0)
 	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(
-		context.Background(), sess, history, "implement_investigate", true,
+		context.Background(), sess, history, nil, "implement_investigate", true,
 	); blocked {
 		t.Fatal("current passing verify should release closeout")
 	}
@@ -57,7 +58,7 @@ func TestSourceEvidenceCloseoutAcceptsCurrentCommand(t *testing.T) {
 	mgr.SetWorkflowDomains(workflowDomainFixture(verifyWorkflowStub{required: true}))
 	recordCommand(t, mgr, sess, "./ntp_check.py --json", 0)
 	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(
-		context.Background(), sess, history, "implement_investigate", true,
+		context.Background(), sess, history, nil, "implement_investigate", true,
 	); blocked {
 		t.Fatal("current passing command should release undeclared closeout")
 	}
@@ -70,7 +71,7 @@ func TestSourceEvidenceCloseoutAllowsExplicitUnverifiedAfterBoundedAttempts(t *t
 		recordVerify(t, mgr, sess, "go test ./...", 1)
 	}
 	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(
-		context.Background(), sess, history, "implement_investigate", true,
+		context.Background(), sess, history, nil, "implement_investigate", true,
 	); blocked {
 		t.Fatal("bounded failed attempts should permit a partial, unverified closeout")
 	}
@@ -137,7 +138,7 @@ func TestWorkerSourceEvidenceCloseoutDoesNotGateOnValidation(t *testing.T) {
 					})
 				}
 				reject, blocked := mgr.Coordinator.Guards.SourceEvidence(
-					workercontext.WithJob(t.Context(), task.ID), child, history, "implement_investigate", true,
+					workercontext.WithJob(t.Context(), task.ID), child, history, nil, "implement_investigate", true,
 				)
 				if blocked || reject != nil {
 					t.Fatalf("worker validation blocked closeout: reject=%v blocked=%v", reject, blocked)
@@ -150,13 +151,13 @@ func TestWorkerSourceEvidenceCloseoutDoesNotGateOnValidation(t *testing.T) {
 func TestWorkerDecisionPauseAllowsHandoff(t *testing.T) {
 	mgr, child, task, history := workerSourceEvidenceCloseoutHarness(t)
 	ctx := workercontext.WithJob(t.Context(), task.ID)
-	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(ctx, child, history, "", true); blocked {
+	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(ctx, child, history, nil, "", true); blocked {
 		t.Fatal("routine worker closeout must not require validation")
 	}
 	decisions := sessiondecisions.NewMemory()
 	mgr.SetDecisionStore(decisions)
 	testutil.FailErr(t, "record worker decision", decisions.Put(ctx, api.WorkerDecisionRequest{ChildSessionID: child.ID, WorkerID: task.ID, Question: "Choose the contract", Options: []string{"A", "B"}}))
-	reject, blocked := mgr.Coordinator.Guards.BeforeFinish(ctx, child, history, "", "Waiting for a decision", "", true, []string{"request_decision"}, true)
+	reject, blocked := mgr.Coordinator.Guards.BeforeFinish(ctx, child, history, "", "Waiting for a decision", guidance.CloseoutDraft{}, "", true, []string{"request_decision"}, true)
 	if blocked || reject != nil {
 		t.Fatalf("accepted decision forced worker closeout: blocked=%v reject=%v", blocked, reject)
 	}

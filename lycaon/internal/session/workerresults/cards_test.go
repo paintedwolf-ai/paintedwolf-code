@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -88,11 +89,11 @@ func TestTerminalWorkerPublicationRetiresPinnedCloseoutBeforeWake(t *testing.T) 
 				testutil.FailErr(t, "create other", err)
 				recovery := closeouts.New(messages)
 				for _, id := range []string{parent.ID, other.ID} {
-					recovery.NoteCloseoutGroundingReject(t.Context(), id, guidance.InvestHandleNotObservedCode, "old", "stale body", nil)
+					recovery.NoteCloseoutGroundingReject(t.Context(), id, guidance.InvestHandleNotObservedCode, "old", guidance.ParseCloseoutDraft("stale body", citationmd.Options{}), nil)
 				}
 				before := recovery.RecordGroundingFriction(t.Context(), parent.ID)
 				writer := checkedTerminalWriter{memoryTranscript: memoryTranscript{messages}, before: func() {
-					if state := recovery.CloseoutStallState(t.Context(), parent.ID); state.Active || state.Drafted != "" || state.Attempt != 1 {
+					if state := recovery.CloseoutStallState(t.Context(), parent.ID); state.Active || state.Draft.Synthesis != "" || state.Attempt != 1 {
 						t.Fatalf("publication retained old conclusion or reset budgets: %+v", state)
 					}
 				}}
@@ -114,7 +115,7 @@ func TestTerminalWorkerPublicationRetiresPinnedCloseoutBeforeWake(t *testing.T) 
 				if got := recovery.RecordGroundingFriction(t.Context(), parent.ID); got.Remaining != before.Remaining-1 {
 					t.Fatalf("publication reset friction: before=%+v after=%+v", before, got)
 				}
-				if state := recovery.CloseoutStallState(t.Context(), other.ID); !state.Active || state.Drafted != "stale body" {
+				if state := recovery.CloseoutStallState(t.Context(), other.ID); !state.Active || state.Draft.Synthesis != guidance.ParseCloseoutDraft("stale body", citationmd.Options{}) {
 					t.Fatalf("unrelated root changed: %+v", state)
 				}
 				// No parent wake or worker-result acknowledgement is needed for retirement.

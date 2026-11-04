@@ -12,67 +12,35 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestObserveCloseoutEnvelope(t *testing.T) {
+// D1: a Markdown closeout has an answer; only a draft with nothing to read fires.
+func TestObserveCloseoutHasAnswer(t *testing.T) {
 	t.Parallel()
 
 	rejectFmt := coordinatorRejectFmt(t)
 	sess := &api.Session{Posture: api.SessionPostureBuild}
-
-	t.Run("plain prose rejected on typed closeout surface", func(t *testing.T) {
-		t.Parallel()
-		reject, blocked := guard.FormatHostNoToolTurnReject(
-			sess, hostLoopHistory(
-				nil),
-			"Plain prose only.", nil,
-			spawn.SurfaceImplementSynthesis, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
-
-		if !blocked {
-			t.Fatal("expected plain prose reject")
-		}
-		if !strings.Contains(reject, guard.CoordinatorCloseoutEnvelopeOnlyCode) {
-			t.Fatalf("reject = %q", reject)
-		}
-	})
-
-	t.Run("envelope-only json accepted", func(t *testing.T) {
-		t.Parallel()
-		content := `{"synthesis":"Report body.","cited_evidence":[{"path":"a.go","line":1,"excerpt":"x"}]}`
-		reject, blocked := guard.FormatHostNoToolTurnReject(
-			sess, hostLoopHistory(
-				nil),
-			content, nil,
-			toolcontract.SurfaceImplementInvestigate, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
-
-		if blocked {
-			t.Fatalf("expected envelope json to pass guard, reject=%q", reject)
-		}
-	})
-
-	t.Run("hybrid prose rejected", func(t *testing.T) {
-		t.Parallel()
-		content := "Here is my report.\n```json\n{\"synthesis\":\"Report body.\",\"cited_evidence\":[]}\n```"
-		reject, blocked := guard.FormatHostNoToolTurnReject(
-			sess, hostLoopHistory(
-				nil),
-			content, nil,
-			toolcontract.SurfaceImplementInvestigate, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
-
-		if !blocked {
-			t.Fatal("expected hybrid prose reject")
-		}
-		if !strings.Contains(reject, guard.CoordinatorCloseoutEnvelopeOnlyCode) {
-			t.Fatalf("reject = %q", reject)
-		}
-	})
-
-	t.Run("routing surface not required", func(t *testing.T) {
-		t.Parallel()
-		if reject, blocked := guard.FormatHostNoToolTurnReject(
-			sess, hostLoopHistory(
-				nil),
-			"Plain prose only.", nil,
-			"implement_routing", true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{}); blocked {
-			t.Fatalf("routing surface should not require closeout json: %q", reject)
-		}
-	})
+	for _, tc := range []struct {
+		name, surfaceID, content string
+		blocked                  bool
+	}{
+		{"prose on the synthesis surface", spawn.SurfaceImplementSynthesis, "Plain prose only.", false},
+		{"cited prose on the investigate surface", toolcontract.SurfaceImplementInvestigate, "Done [read#1:2].", false},
+		{"AC-COMPAT-09 D15 a closeout may open with a fence", toolcontract.SurfaceImplementInvestigate, "```\nexample\n```\n\nDone.", false},
+		{"AC-COMPAT-09 D15 a closeout may open with a brace", toolcontract.SurfaceImplementInvestigate, "{x} is the set.", false},
+		{"directives alone", spawn.SurfaceImplementSynthesis, "[verify: targeted - Ran it]", true},
+		{"citations alone", toolcontract.SurfaceImplementInvestigate, "[read#1:2]", true},
+		{"routing surface is not a closeout", "implement_routing", "[verify: targeted - Ran it]", false},
+		{"routing prose", "implement_routing", "Plain prose only.", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			reject, blocked := guard.FormatHostNoToolTurnReject(sess, hostLoopHistory(nil), tc.content, nil,
+				tc.surfaceID, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
+			if blocked != tc.blocked {
+				t.Fatalf("blocked=%v want %v, reject=%q", blocked, tc.blocked, reject)
+			}
+			if tc.blocked && !strings.Contains(reject, guard.CoordinatorCloseoutNoAnswerCode) {
+				t.Fatalf("reject = %q", reject)
+			}
+		})
+	}
 }

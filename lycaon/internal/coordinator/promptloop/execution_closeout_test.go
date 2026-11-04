@@ -91,7 +91,7 @@ func TestForcedCloseoutRepairPreservesPersistedIterationIdentity(t *testing.T) {
 	deps.Context.Tools = registry
 	deps.Context.PromptTurnSurface = func(string) string { return "implement_investigate" }
 	deps.Projection.SettleModelOutput = messages.SettleModelOutput
-	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		if !gateOpen {
 			return nil, false
 		}

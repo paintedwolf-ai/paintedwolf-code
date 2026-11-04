@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"errors"
 	"reflect"
 	"testing"
@@ -24,7 +25,7 @@ func TestPromptExecutionAppliesCloseoutBoundaryBeforeModel(t *testing.T) {
 			mgr.Coordinator.Model.LLM = failingTurnClient{failure: stopped}
 			sess, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create closeout session", err)
-			mgr.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sess.ID, "citation", "offender", "draft", nil)
+			mgr.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sess.ID, "citation", "offender", guidance.ParseCloseoutDraft("draft", citationmd.Options{}), nil)
 			want := guidance.RetainedCloseout{}
 			if host {
 				want = guidance.RetainedCloseout{Attempt: 1}

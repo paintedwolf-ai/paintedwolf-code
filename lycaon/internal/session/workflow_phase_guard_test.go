@@ -3,6 +3,8 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/citationmd"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"strings"
 	"testing"
 
@@ -22,6 +24,10 @@ func (v phaseGuardWorkflowView) ActivePhaseGuardState(context.Context, string) w
 	return v.state
 }
 
+func phaseGuardDraft(markdown string) guidance.CloseoutDraft {
+	return guidance.ParseCloseoutDraft(markdown, citationmd.Options{})
+}
+
 func TestCloseoutBlocksCompletionReportBeforeReportPhase(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(phaseGuardWorkflowView{state: workflowfacts.WorkflowPhaseGuardState{
@@ -30,7 +36,7 @@ func TestCloseoutBlocksCompletionReportBeforeReportPhase(t *testing.T) {
 	}}))
 
 	reject, blocked := mgr.Coordinator.Guards.BeforeReportPhase(
-		context.Background(), sess, `{"synthesis":"done"}`, "implement_synthesis", true,
+		context.Background(), sess, phaseGuardDraft("Done."), "implement_synthesis", true,
 	)
 	if !blocked {
 		t.Fatal("expected completion report to be blocked before report phase")
@@ -47,14 +53,25 @@ func TestCloseoutPhaseGuardAllowsInterimProseAndReportPhase(t *testing.T) {
 		ReportCloseoutPending: true,
 	}}))
 	if _, blocked := mgr.Coordinator.Guards.BeforeReportPhase(
-		context.Background(), sess, "Still collecting scans.", "implement_synthesis", true,
+		context.Background(), sess, guidance.CloseoutDraft{}, "implement_synthesis", true,
 	); blocked {
-		t.Fatal("interim prose must not be treated as a completion report")
+		t.Fatal("a draft with no answer is no completion report")
+	}
+	// D3: the honest blocked report is the working escape.
+	if _, blocked := mgr.Coordinator.Guards.BeforeReportPhase(
+		context.Background(), sess, phaseGuardDraft("Done.\n[verify: blocked - The scanner is unavailable]"), "implement_synthesis", true,
+	); blocked {
+		t.Fatal("a blocked verification must pass")
+	}
+	if _, blocked := mgr.Coordinator.Guards.BeforeReportPhase(
+		context.Background(), sess, phaseGuardDraft("Done.\n[verify: targeted - Ran it]"), "implement_synthesis", true,
+	); !blocked {
+		t.Fatal("only blocked is the escape")
 	}
 
 	mgr.SetWorkflowDomains(workflowDomainFixture(phaseGuardWorkflowView{state: workflowfacts.WorkflowPhaseGuardState{Phase: "report"}}))
 	if _, blocked := mgr.Coordinator.Guards.BeforeReportPhase(
-		context.Background(), sess, `{"synthesis":"done"}`, "implement_synthesis", true,
+		context.Background(), sess, phaseGuardDraft("Done."), "implement_synthesis", true,
 	); blocked {
 		t.Fatal("report phase must accept the completion report")
 	}

@@ -65,7 +65,7 @@ func TestCloseoutRetryBudgetStatesTheBudgetThatApplies(t *testing.T) {
 }
 
 func TestCloseoutRetryBudgetDocumentRepairCarriesTheFence(t *testing.T) {
-	budget := closeoutRetryBudget{attempt: 1, limit: 3, document: `{"findings":[]}`}
+	budget := closeoutRetryBudget{attempt: 1, limit: 3, documentKick: true, document: `{"findings":[]}`}
 	data := budget.hintData(map[string]any{"offender_count": 2}, []jsonshape.Issue{{Name: "headline_note"}})
 	if data["retained_document"] != `{"findings":[]}` || data["offender_count"] != 2 {
 		t.Fatalf("hint data = %v", data)
@@ -90,7 +90,7 @@ func TestCloseoutRetryBudget_WorkflowConfiguredLimit(t *testing.T) {
 			},
 		},
 	}
-	budget := loop.Closeout.closeoutRetryBudget(t.Context(), "sess-1", stDefault, guidance.ReportFenceUnreadableCode, "{}")
+	budget := loop.Closeout.closeoutRetryBudget(t.Context(), "sess-1", stDefault, guidance.ReportFenceUnreadableCode, guidance.CloseoutDraft{})
 	if budget.limit != 3 {
 		t.Fatalf("expected default limit 3, got %d", budget.limit)
 	}
@@ -103,7 +103,7 @@ func TestCloseoutRetryBudget_WorkflowConfiguredLimit(t *testing.T) {
 			},
 		},
 	}
-	budget5 := loop.Closeout.closeoutRetryBudget(t.Context(), "sess-1", stConfigured, guidance.ReportFenceUnreadableCode, "{}")
+	budget5 := loop.Closeout.closeoutRetryBudget(t.Context(), "sess-1", stConfigured, guidance.ReportFenceUnreadableCode, guidance.CloseoutDraft{})
 	if budget5.limit != 5 {
 		t.Fatalf("expected configured limit 5, got %d", budget5.limit)
 	}

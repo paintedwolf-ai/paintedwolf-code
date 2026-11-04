@@ -48,11 +48,11 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 				}
 				return &oar.Decision{Code: code, Data: gc.RejectData[code]}, nil
 			},
-			AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, _ string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+			AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, _ guidance.CloseoutDraft, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 				assembled = true
 				return guidance.CoordinatorCompletionReport{Synthesis: "assembled"}, nil
 			},
-			NoteCloseoutGroundingReject: func(_ context.Context, _, code, _ string, _ string, _ []jsonshape.Issue) (int, string) {
+			NoteCloseoutGroundingReject: func(_ context.Context, _, code, _ string, _ guidance.CloseoutDraft, _ []jsonshape.Issue) (int, string) {
 				return 1, ""
 			},
 		},
@@ -70,10 +70,7 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
 		"s1", "", "implement_synthesis", st, history,
 		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here"},
-		guidance.CloseoutRead{Report: guidance.CoordinatorCompletionReport{
-			Synthesis:     "no citations here",
-			CitedEvidence: []guidance.CoordinatorCitedEvidence{{Evidence: "missing#1"}},
-		}},
+		markdownRead("no citations here [missing#1]", false),
 	)
 	testutil.FailErr(t, "handleAcceptedCloseoutReport", err)
 	if assembled {
