@@ -202,9 +202,10 @@ func (d *destinationScanner) step(b byte, first bool) destinationResult {
 	case destAfter:
 		return d.after(b)
 	case destTitle:
-		if b == '\\' {
+		switch b {
+		case '\\':
 			d.escaped = true
-		} else if b == d.closer {
+		case d.closer:
 			d.stage = destEnd
 		}
 	case destEnd:
