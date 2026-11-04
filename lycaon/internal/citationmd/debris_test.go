@@ -26,7 +26,7 @@ func TestRemovedNodesLeaveNoSeparatorsOrEmptyBrackets(t *testing.T) {
 		{"empty brackets in the source stay when no node touches them", "f() and g(,) [task#1]", "f() and g(,)"},
 		{"code beside a removed node stays", "`(,` [task#1] `)`", "`(,` `)`"},
 		{"an escaped opener stays", `a \( [task#1])`, `a \()`},
-		{"a line boundary stops the trim", "(see\n[task#1])", "(see)"},
+		{"a line boundary stops the trim", "(see\n[task#1])", "(see\n)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

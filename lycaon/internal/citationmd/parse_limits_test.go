@@ -265,7 +265,7 @@ func TestProjectFixtures(t *testing.T) {
 		{"reference", "[r]: https://example.test/r\n\n[read#1][r] [read#2][none]", "[r]: https://example.test/r\n\n[read#1][r] [none]"},
 		{"late definition", "Use [read#1] here.\n\n[read#1]: https://example.test/a\n", "Use [read#1] here.\n\n[read#1]: https://example.test/a"},
 		{"table", "| a | b |\n|---|---|\n| [read#1] | `[read#2]` |\n", "| a | b |\n|---|---|\n| | `[read#2]` |"},
-		{"spacing", "a  [read#1]  b\n([read#1]) x\n  [read#1]  \n\n\n\n  text", "a  b\n() x\n\n  text"},
+		{"spacing", "a  [read#1]  b\n([read#1]) x\n  [read#1]  \n\n\n\n  text", "a  b\nx\n\n  text"},
 		{"blank line after a dropped line", "a\n\n[read#1]\n\n[read#2]\n\nb", "a\n\nb"},
 		{"literal after a removal on its line", "[read#1] `x`\ny", "`x`\ny"},
 	}
