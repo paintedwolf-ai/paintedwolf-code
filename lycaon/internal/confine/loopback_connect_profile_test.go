@@ -81,8 +81,8 @@ func TestBrowserConfinementKeepsANarrowedRequest(t *testing.T) {
 	}
 }
 
-func TestSeatbeltComposedLocalNetworkGrantRunsServerAndClient(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryComposedLocalNetworkGrantRunsServerAndClient(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python := requirePython(t)
 	c := confine.Confinement{
 		Roots: []string{t.TempDir()}, Network: confine.NetworkDeny,

@@ -12,8 +12,8 @@ import (
 )
 
 // Privileged host effects remain outside the applied boundary.
-func TestSeatbeltHostCapabilityBoundary(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryHostCapability(t *testing.T) {
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 	c := confine.Confinement{Roots: []string{proj}}
 

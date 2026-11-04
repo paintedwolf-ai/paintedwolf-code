@@ -9,8 +9,8 @@ import (
 )
 
 // The direct-IP boundary permits local listeners.
-func TestSeatbeltDirectIPAllowsLocalListener(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryDirectIPAllowsLocalListener(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python := requirePython(t)
 	c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDirectIP}
 
@@ -31,8 +31,8 @@ except OSError as e:
 }
 
 // The local bind rule covers wildcard addresses.
-func TestSeatbeltBindAddressIsNotBounded(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryBindAddressIsNotBounded(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python := requirePython(t)
 	c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDirectIP}
 
@@ -53,8 +53,8 @@ except OSError as e:
 }
 
 // Terminal allocation requires a writable slave device.
-func TestSeatbeltAllowsPTYAllocation(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryAllowsPTYAllocation(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python := requirePython(t)
 	c := confine.Confinement{Roots: []string{t.TempDir()}}
 

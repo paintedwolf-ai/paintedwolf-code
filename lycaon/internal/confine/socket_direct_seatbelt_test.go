@@ -16,8 +16,8 @@ import (
 )
 
 // Local socket grants use exact literals.
-func TestSeatbeltSocketGrantMatrix(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundarySocketGrantMatrix(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := shortTempDir(t)
 	aPath := filepath.Join(dir, "a.sock")
 	bPath := filepath.Join(dir, "b.sock")
@@ -110,8 +110,8 @@ func TestSeatbeltSocketGrantMatrix(t *testing.T) {
 }
 
 // Remote IP access remains separate from local socket grants.
-func TestSeatbeltDirectIPSeparationMatrix(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryDirectIPSeparationMatrix(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := shortTempDir(t)
 	aPath := filepath.Join(dir, "a.sock")
 	bPath := filepath.Join(dir, "b.sock")
@@ -178,8 +178,8 @@ func TestSeatbeltDirectIPSeparationMatrix(t *testing.T) {
 	}
 }
 
-func TestSeatbeltFailClosedStartupMatrix(t *testing.T) {
-	requireSeatbelt(t)
+func TestBoundaryFailClosedStartupMatrix(t *testing.T) {
+	requireLiveBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
@@ -269,8 +269,8 @@ func nonLoopbackProbe(t *testing.T) (url string, cleanup func()) {
 }
 
 // System resolution is available only with direct IP access.
-func TestSeatbeltSystemResolverIsDirectIPOnly(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundarySystemResolverIsDirectIPOnly(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := shortTempDir(t)
 	proj := filepath.Join(dir, "proj")
 	testutil.FailErr(t, "mkdir", os.Mkdir(proj, 0o755))
@@ -299,8 +299,8 @@ func TestSeatbeltSystemResolverIsDirectIPOnly(t *testing.T) {
 }
 
 // Declared transports narrow direct IP by protocol and port.
-func TestSeatbeltDirectIPNarrowing(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryDirectIPNarrowing(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := shortTempDir(t)
 	proj := filepath.Join(dir, "proj")
 	testutil.FailErr(t, "mkdir", os.Mkdir(proj, 0o755))
@@ -397,7 +397,7 @@ func TestDirectIPPermitsNarrowOnly(t *testing.T) {
 
 // Direct-IP declarations flow through profile construction and execution.
 func TestDirectIPNarrowingEndToEnd(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")

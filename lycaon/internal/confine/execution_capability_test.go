@@ -60,7 +60,7 @@ func TestHostExecutionSelectsExplicitUnconfinedCommand(t *testing.T) {
 }
 
 func TestProcessControlSignalsOwnedOutsideProcess(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	child := exec.CommandContext(t.Context(), "/bin/sleep", "60")
 	testutil.FailErr(t, "start owned process", child.Start())
 	defer func() { _ = child.Process.Kill(); _ = child.Wait() }()

@@ -54,7 +54,7 @@ func findRefusal(refusals confine.SandboxRefusals, operation, target string) (co
 }
 
 func TestKernelRefusalOfAWriteReachesItsAction(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	requireRefusalWatch(t)
 	outside, err := filepath.EvalSymlinks(outsideTemporaryWriteRoots(t))
 	testutil.FailErr(t, "resolve outside dir", err)
@@ -74,7 +74,7 @@ func TestKernelRefusalOfAWriteReachesItsAction(t *testing.T) {
 }
 
 func TestKernelRefusalOfAUnixListenerNeedsHostExecution(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	requireRefusalWatch(t)
 	if _, err := exec.LookPath("nc"); err != nil {
 		t.Skip("nc is required to open a unix-socket listener")
@@ -94,7 +94,7 @@ func TestKernelRefusalOfAUnixListenerNeedsHostExecution(t *testing.T) {
 }
 
 func TestOrdinaryToolchainsStartWithoutRefusals(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	requireRefusalWatch(t)
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve project", err)

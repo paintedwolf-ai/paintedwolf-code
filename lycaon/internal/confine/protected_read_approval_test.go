@@ -9,8 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestSeatbeltProtectedReadApprovalScope(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryProtectedReadApprovalScope(t *testing.T) {
+	self := requireLiveBoundary(t)
 	parent := t.TempDir()
 	configDir := filepath.Join(parent, "control")
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)

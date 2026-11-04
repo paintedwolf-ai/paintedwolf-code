@@ -19,7 +19,7 @@ import (
 // environment the boundary hands the process, the descendant marker it carries,
 // and the broker resolving that marker back to the action.
 func TestConfinedCommandReachesTheBrokerByLineage(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	if _, err := exec.LookPath("curl"); err != nil {
 		t.Skip("curl is required to drive a confined process through the broker")
 	}

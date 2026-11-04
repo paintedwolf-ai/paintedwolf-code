@@ -16,7 +16,7 @@ import (
 )
 
 func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	for _, mutation := range []string{"unlink-alias", "rename-alias", "rename-private-directory", "rename-alias-root", "rename-config-root", "rename-ancestor"} {
 		t.Run(mutation, func(t *testing.T) {
 			broad := shortTempDir(t)
