@@ -91,10 +91,10 @@ func (l *toolBatch) auditCarrier(ctx context.Context, sess *api.Session, session
 	if strings.TrimSpace(text) == "" {
 		return guidance.MidTurnNoteAudit{Outcome: guidance.MidTurnSilent}
 	}
-	ev, legsCite, err := midTurnEvidence(ctx, l.Closeout.Deps.EvidenceLedger, sessionID, history)
+	ev, legsCite, err := guidance.MidTurnEvidence(ctx, l.Closeout.Deps.EvidenceLedger, sessionID, history)
 	if err != nil {
 		slog.WarnContext(ctx, "mid-turn note evidence unavailable; text stays unpublished", "session_id", sessionID, "error", err)
-		return guidance.MidTurnNoteAudit{Outcome: guidance.MidTurnSilent}
+		return guidance.MidTurnNoteAudit{Outcome: guidance.MidTurnWithhold, Code: guidance.MidTurnNoteEvidenceUnreadable}
 	}
 	return guidance.AuditMidTurnNote(guidance.MidTurnNoteInput{
 		Text:              text,
@@ -105,23 +105,6 @@ func (l *toolBatch) auditCarrier(ctx context.Context, sess *api.Session, session
 		CitationsRequired: (legsCite || guidance.IntentWindowHasCitableObservations(history)) && guidance.CloseoutLedgerHasCitableEvidence(ev),
 		RecentHandles:     guidance.IntentWindowHandles(history, midTurnHandleSample),
 	})
-}
-
-// midTurnEvidence unions the session and worker-leg ledgers, and reports whether
-// a leg dispatched since the current intent has observations.
-func midTurnEvidence(ctx context.Context, reader guidance.CloseoutEvidenceReader, sessionID string, history []api.Message) (guidance.CloseoutEvidence, bool, error) {
-	if reader == nil {
-		return guidance.CloseoutEvidence{}, false, errors.New("evidence ledger not configured")
-	}
-	ev, err := guidance.UnionCloseoutEvidence(ctx, reader, sessionID, history)
-	if err != nil {
-		return guidance.CloseoutEvidence{}, false, err
-	}
-	legs, err := guidance.CurrentIntentLegEvidence(ctx, reader, sessionID, history)
-	if err != nil {
-		return guidance.CloseoutEvidence{}, false, err
-	}
-	return ev, guidance.CloseoutLedgerHasCitableEvidence(legs), nil
 }
 
 // commitMidTurnNote persists through the storage-safe path. A duplicate means an

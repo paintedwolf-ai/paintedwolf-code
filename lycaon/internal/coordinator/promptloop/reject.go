@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
@@ -171,6 +173,7 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 	if code == "TOOL_NOT_OFFERED" {
 		loadable := toolCtx.Turn.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
 		data["tool_loadable"] = loadable
+		data["tool_retired_to_content"] = toolRetiredToPublishedText(sess, tc.Name, toolCtx.Turn.TurnSurfaceID)
 		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
 		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
 		if loadable {
@@ -189,7 +192,7 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		}
 	}
 	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
-	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true {
+	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true && data["tool_retired_to_content"] == false {
 		tr = toolrejection.CompleteFailureMetadata(tr, tc.Name, "")
 		l.addToolDiscovery(sess.ID, toolCtx, data)
 	}
@@ -205,6 +208,13 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		return refusal
 	}
 	return l.toolReject(code, tr.Data).WithCause(tr)
+}
+
+// toolRetiredToPublishedText reports a call to a tool whose job is now text, where
+// that text can actually reach the user. Elsewhere the ordinary refusal is the truth.
+func toolRetiredToPublishedText(sess *api.Session, tool, surfaceID string) bool {
+	_, retired := toolcontract.RetiredToContent(tool)
+	return retired && sess != nil && !sess.IsWorkerChild() && surface.PublishesMidTurnText(surfaceID)
 }
 
 // toolReject renders a refusal with a structured code.

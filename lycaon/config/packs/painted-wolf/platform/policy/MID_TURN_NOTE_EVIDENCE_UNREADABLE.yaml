@@ -1,0 +1,25 @@
+oar: '1.0'
+id: MID_TURN_NOTE_EVIDENCE_UNREADABLE
+kind: invariant
+anchor: coordinator.mid_turn_note
+requires:
+  facts:
+    - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "mid_turn_note_evidence_unreadable"
+effect: warn
+copy:
+  what: '[HOST: MESSAGE WITHHELD FROM USER] The host could not read the evidence for this request, so your text alongside the last tool calls was not checked.'
+  cause: 'This is a host read failure. Nothing in your text is at fault.'
+  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
+  fix: 'Carry on with the work. Publish a brief update later, or include the relevant explanation in your final reply.'
+  instead: 'Branch on Code MID_TURN_NOTE_EVIDENCE_UNREADABLE; do not rewrite citations to clear it'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mid_turn_note
+x-paintedwolf-message: Evidence could not be read and the text was withheld.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+    expect_contains:
+      - 'Code: MID_TURN_NOTE_EVIDENCE_UNREADABLE'
+      - could not read the evidence

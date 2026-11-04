@@ -48,6 +48,9 @@ func (m *Service) BeforeTool(
 	}
 	if reject, skip, err := m.ToolPolicy.Block(ctx, oar.AnchorCoordinatorPreInvoke, sess, tool, args, func(gc *oar.GuardContext) error {
 		guard.ObserveWaitVisibility(sess, history, tool, surface.PublishesMidTurnText(surfaceID), gc)
+		if gc.Session.UnpublishedToolTextPending {
+			gc.Session.MidTurnEvidenceUnreadable = m.midTurnEvidenceUnreadable(ctx, sess.ID, history)
+		}
 		guard.ObserveTaskWhilePendingUserInput(sess, implState, tool, gc)
 		guard.ObserveCoordinatorWorkerBranchPath(sess, tool, args, gc)
 		guard.ObserveProgressMissingBeforeDispatch(sess, currentProgress, tool, reviewLoopActive, gc)
@@ -129,4 +132,14 @@ func (m *Service) BeforeFinish(
 	return m.OpenProgress(
 		ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed,
 	)
+}
+
+// midTurnEvidenceUnreadable repeats publication's read, so wait feedback can tell a
+// host failure from a citation defect. A host with no ledger wired has no such failure.
+func (m *Service) midTurnEvidenceUnreadable(ctx context.Context, sessionID string, history []api.Message) bool {
+	if m.Verification == nil || m.Verification.Evidence == nil {
+		return false
+	}
+	_, _, err := guidance.MidTurnEvidence(ctx, m.Verification.Evidence, sessionID, history)
+	return err != nil
 }

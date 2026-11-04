@@ -531,6 +531,9 @@ func TestUnreadableLedgerNeverPublishesAsExempt(t *testing.T) {
 			if !guard.DeriveWaitVisibility(out).Unpublished {
 				t.Fatal("unpublished text must be owed")
 			}
+			if len(h.notices) != 1 || h.notices[0] != guidance.MidTurnObservation(guidance.MidTurnNoteEvidenceUnreadable) {
+				t.Fatalf("a host read failure must say so: %v", h.notices)
+			}
 		})
 	}
 }

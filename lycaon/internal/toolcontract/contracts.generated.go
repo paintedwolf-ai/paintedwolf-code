@@ -366,3 +366,8 @@ var compiledMultiRoot = map[string]MultiRootCapability{
 	"workflow_user_feedback":         MultiRootNone,
 	"write":                          MultiRootPathConsume,
 }
+
+// Retired tools whose successor is content rather than a call.
+var compiledRetiredToContent = map[string]string{
+	"surface_note": "paintedwolf.markdown_note",
+}

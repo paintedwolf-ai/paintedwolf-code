@@ -26,6 +26,9 @@ type SessionFacts struct {
 	ToolTurnHasAgentNote bool
 	// UnpublishedToolTextPending holds a carrier's text with no later note this intent.
 	UnpublishedToolTextPending bool
+	// MidTurnEvidenceUnreadable means the host failed to read evidence, so pending
+	// text was never judged and no citation of its is at fault.
+	MidTurnEvidenceUnreadable bool
 	// MidTurnCitationsRequired holds once this intent has citable observations.
 	MidTurnCitationsRequired bool
 	// MidTurnCitationAttempted holds when the latest unpublished text tried to cite.

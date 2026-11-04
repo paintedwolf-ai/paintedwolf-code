@@ -214,3 +214,53 @@ func TestMarkdownRunRepairsByOccurrence(t *testing.T) {
 		t.Fatalf("topology_report_delivered unmet by %+v", message)
 	}
 }
+
+// A JSON-only response states nothing the host can accept: no report is delivered
+// and no grounding claims otherwise.
+func TestMarkdownRunNeverAcceptsBareJSON(t *testing.T) {
+	for _, tc := range []struct{ name, content string }{
+		{"report envelope", `{"synthesis":"All done.","cited_evidence":[{"evidence":"read#1"}]}`},
+		{"retired tool call", `{"name":"surface_note","arguments":{"summary":"All done."}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newMarkdownRun(t, &modelcall.Completion{Content: tc.content})
+			_, message := r.run(t, citedHistory())
+			if message.Kind == api.MessageKindCompletionReport || message.Grounding != nil || reportTopology(t, message) {
+				t.Fatalf("bare JSON accepted: %+v", message)
+			}
+		})
+	}
+}
+
+type recordedReplay struct {
+	promptloopStreamStub
+	content string
+	tokens  []string
+}
+
+func (r *recordedReplay) CacheReplay(_, content string, tokens []string) {
+	r.content, r.tokens = content, tokens
+}
+
+type promptloopStreamStub struct{}
+
+func (promptloopStreamStub) CacheLive(string, string, string, []string, int) {}
+func (promptloopStreamStub) Project(context.Context, string, api.Message) error {
+	return nil
+}
+func (promptloopStreamStub) Finish(context.Context, string) {}
+
+// Replay reads the row, which holds what the user was shown. A coordinator's raw
+// nodes never sit in the replay cache for a reconnect to pick up.
+func TestReplayCacheHoldsNoRawCitationNodes(t *testing.T) {
+	r := newMarkdownRun(t, &modelcall.Completion{Content: "The cause is here [read#1:2]."})
+	replay := &recordedReplay{}
+	r.deps.Projection.Streams = replay
+	_, message := r.run(t, citedHistory())
+	if replay.content != "" || len(replay.tokens) != 0 {
+		t.Fatalf("replay cache = %q %v", replay.content, replay.tokens)
+	}
+	if strings.Contains(message.Content, "[read#1") {
+		t.Fatalf("accepted row = %q", message.Content)
+	}
+}

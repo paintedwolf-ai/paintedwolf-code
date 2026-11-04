@@ -66,6 +66,9 @@ func TestAuditMidTurnNote(t *testing.T) {
 		{name: "an unregistered kind is prose, not an invalid citation", text: "Linked to [pr#123] [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "[pr#123]", traced: true},
 		{name: "an unregistered kind alone is uncited, not invalid", text: "Linked to [pr#123].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteUngroundedCode},
 		{name: "prose brackets are not attempts", text: "Use [and/or] as needed [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "[and/or]", traced: true},
+		{name: "bare retired tool JSON is not an update", text: `{"name":"surface_note","arguments":{"summary":"Done."}}`, ev: empty, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteSyntaxCode},
+		{name: "bare report JSON is not an update", text: `{"synthesis":"Done."}`, ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteSyntaxCode},
+		{name: "fenced JSON is literal text", text: "```json\n{\"a\":1}\n```", ev: empty, want: guidance.MidTurnPublish, contains: "{\"a\":1}", traced: true, optional: true},
 		{name: "unobserved URL before evidence", text: "See [RFC](https://example.test/spec).", ev: empty, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteURLOnlyCode, friction: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

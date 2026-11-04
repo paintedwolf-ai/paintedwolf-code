@@ -92,6 +92,8 @@ type Config struct {
 	SecretReferenceArgs map[string][]string `yaml:"secret_reference_args"`
 	// BoundedInProcess names tools whose execution runs synchronously in-process.
 	BoundedInProcess []string `yaml:"bounded_in_process"`
+	// RetiredToContentContract maps a retired tool to the content contract replacing it.
+	RetiredToContentContract map[string]string `yaml:"retired_to_content_contract"`
 	// HostProducedTools lists rule-plane tools without model schemas.
 	HostProducedTools []string `yaml:"host_produced_tools"`
 	// RuntimeRegisteredPrefixes identify tools registered after boot.

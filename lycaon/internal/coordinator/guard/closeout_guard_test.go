@@ -28,6 +28,11 @@ func TestObserveCloseoutHasAnswer(t *testing.T) {
 		{"AC-COMPAT-09 D15 a closeout may open with a brace", toolcontract.SurfaceImplementInvestigate, "{x} is the set.", false},
 		{"directives alone", spawn.SurfaceImplementSynthesis, "[verify: targeted - Ran it]", true},
 		{"citations alone", toolcontract.SurfaceImplementInvestigate, "[read#1:2]", true},
+		{"AC-COMPAT-09 bare report JSON has no answer", spawn.SurfaceImplementSynthesis, `{"synthesis":"Done.","cited_evidence":[{"evidence":"read#1"}]}`, true},
+		{"AC-COMPAT-09 bare retired tool call has no answer", toolcontract.SurfaceImplementInvestigate, `{"name":"surface_note","arguments":{"summary":"Done."}}`, true},
+		{"a bare JSON array has no answer", toolcontract.SurfaceImplementInvestigate, `[{"finding":"a"}]`, true},
+		{"fenced JSON stays a literal answer", toolcontract.SurfaceImplementInvestigate, "```json\n{\"a\":1}\n```", false},
+		{"JSON beside prose is prose", toolcontract.SurfaceImplementInvestigate, `Here it is: {"a":1}`, false},
 		{"routing surface is not a closeout", "implement_routing", "[verify: targeted - Ran it]", false},
 		{"routing prose", "implement_routing", "Plain prose only.", false},
 	} {

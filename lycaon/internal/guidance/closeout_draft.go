@@ -1,6 +1,7 @@
 package guidance
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -49,8 +50,18 @@ type CloseoutDraft struct {
 	Parsed        citationmd.Document
 }
 
-// HasAnswer reports whether the draft states anything once protocol nodes go.
-func (d CloseoutDraft) HasAnswer() bool { return citationmd.Narrative(d.Parsed) != "" }
+// HasAnswer reports whether the draft states anything once protocol nodes go. A
+// response that is only a JSON value states nothing the user can read as an answer.
+func (d CloseoutDraft) HasAnswer() bool {
+	return citationmd.Narrative(d.Parsed) != "" && !IsBareJSONResponse(d.Parsed.Source)
+}
+
+// IsBareJSONResponse reports a response that is one JSON object or array and
+// nothing else. JSON meant for the reader goes in a fence, which stays literal.
+func IsBareJSONResponse(text string) bool {
+	text = strings.TrimSpace(text)
+	return text != "" && (text[0] == '{' || text[0] == '[') && json.Valid([]byte(text))
+}
 
 // CitationCount counts model-supplied source references, document ones included.
 func (d CloseoutDraft) CitationCount() int {

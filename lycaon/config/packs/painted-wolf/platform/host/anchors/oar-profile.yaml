@@ -418,6 +418,8 @@ host_facts:
    type: bool
  - name: paintedwolf.mid_turn_citation_attempted
    type: bool
+ - name: paintedwolf.mid_turn_evidence_unreadable
+   type: bool
  - name: paintedwolf.surface_may_finish
    type: bool
  - name: paintedwolf.is_host_cycle_turn
@@ -855,6 +857,8 @@ host_facts:
  - name: paintedwolf.task_loadable
    type: bool
  - name: paintedwolf.tool_loadable
+   type: bool
+ - name: paintedwolf.tool_retired_to_content
    type: bool
  - name: paintedwolf.native_replacement_tools
    type: list<string>

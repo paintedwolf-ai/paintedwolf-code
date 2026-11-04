@@ -2,6 +2,7 @@ package guidance
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/citationmd"
@@ -18,7 +19,11 @@ const (
 	MidTurnNoteSyntaxCode         = "MID_TURN_NOTE_INVALID_SYNTAX"
 	MidTurnNoteEmbedCode          = "MID_TURN_NOTE_MARKDOWN_EMBED"
 	MidTurnNoteWaitFallbackCode   = "MID_TURN_NOTE_WAIT_FALLBACK"
+	MidTurnNoteEvidenceUnreadable = "MID_TURN_NOTE_EVIDENCE_UNREADABLE"
 )
+
+// bareJSONOffender names a withheld JSON-only response in place of a node.
+const bareJSONOffender = "the whole response is JSON"
 
 // midTurnNoteFrictionCodes spend the shared grounding budget: a reference that
 // names something unobserved. Uncited text is ordinary narration on a tool step,
@@ -75,6 +80,9 @@ type MidTurnNoteAudit struct {
 func AuditMidTurnNote(in MidTurnNoteInput) MidTurnNoteAudit {
 	draft := ParseCloseoutDraft(in.Text, DraftParseOptions(in.Roots, in.Evidence.Ledger))
 	audit := MidTurnNoteAudit{Attempted: midTurnCitationCount(draft.Parsed) > 0 || len(draft.Issues) > 0}
+	if IsBareJSONResponse(in.Text) {
+		return audit.withhold(MidTurnNoteSyntaxCode, OffenderHintData([]string{bareJSONOffender}))
+	}
 	if offenders := midTurnSyntaxOffenders(draft); len(offenders) > 0 {
 		return audit.withhold(MidTurnNoteSyntaxCode, OffenderHintData(offenders))
 	}
@@ -211,6 +219,24 @@ func IntentWindowHandles(history []api.Message, limit int) []string {
 
 func intentWindow(history []api.Message) []api.Message {
 	return history[api.UserIntentBoundary(history):]
+}
+
+// MidTurnEvidence unions the session and worker-leg ledgers, and reports whether a
+// leg dispatched since the current intent has observations. An error is not an
+// empty ledger: nothing can be decided about citations.
+func MidTurnEvidence(ctx context.Context, reader CloseoutEvidenceReader, sessionID string, history []api.Message) (CloseoutEvidence, bool, error) {
+	if reader == nil {
+		return CloseoutEvidence{}, false, errors.New("evidence ledger not configured")
+	}
+	ev, err := UnionCloseoutEvidence(ctx, reader, sessionID, history)
+	if err != nil {
+		return CloseoutEvidence{}, false, err
+	}
+	legs, err := CurrentIntentLegEvidence(ctx, reader, sessionID, history)
+	if err != nil {
+		return CloseoutEvidence{}, false, err
+	}
+	return ev, CloseoutLedgerHasCitableEvidence(legs), nil
 }
 
 // CurrentIntentLegEvidence is the evidence of worker legs dispatched since the

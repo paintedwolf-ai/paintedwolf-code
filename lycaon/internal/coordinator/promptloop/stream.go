@@ -134,7 +134,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 	}
 	clearStream()
 	promptAssistant, err := l.Projection.settleAssistantStreamTurn(
-		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, iterIndex,
+		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, iterIndex, sess != nil && !sess.IsWorkerChild(),
 	)
 	if err != nil {
 		return api.Message{}, nil, nil, withdrawFailedDraft(err)
@@ -155,6 +155,7 @@ func (l *turnProjection) settleAssistantStreamTurn(
 	tokens []string,
 	outputID string,
 	iterIndex int,
+	coordinatorSpeaks bool,
 ) (api.Message, error) {
 	assistantMsg.Content = completion.Content
 	assistantMsg.SourceContext = sourceref.Mentioned(completion.SourceContext, completion.Content)
@@ -210,7 +211,13 @@ func (l *turnProjection) settleAssistantStreamTurn(
 		if transientAssistant != nil || len(wireAssistant.ToolCalls) > 0 {
 			cacheTokens = nil
 		}
-		l.Deps.Streams.CacheReplay(assistantMsg.ID, messageview.TranscriptMessage(wireAssistant).Content, cacheTokens)
+		content := messageview.TranscriptMessage(wireAssistant).Content
+		// A coordinator's text is unchecked until accepted, and presentation then
+		// rewrites it: replay reads the row instead of these bytes.
+		if coordinatorSpeaks {
+			content, cacheTokens = "", nil
+		}
+		l.Deps.Streams.CacheReplay(assistantMsg.ID, content, cacheTokens)
 	}
 	promptAssistant := transientMessageFromStored(storedAssistant, transientAssistant)
 	if transientAssistant != nil && st != nil {

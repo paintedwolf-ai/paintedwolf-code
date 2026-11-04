@@ -71,6 +71,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"unpublished_tool_text_pending":   gc.Session.UnpublishedToolTextPending,
 		"mid_turn_citations_required":     gc.Session.MidTurnCitationsRequired,
 		"mid_turn_citation_attempted":     gc.Session.MidTurnCitationAttempted,
+		"mid_turn_evidence_unreadable":    gc.Session.MidTurnEvidenceUnreadable,
 		"last_assistant":                  gc.Session.LastAssistant,
 		"turn_tools":                      strList(gc.Session.TurnTools),
 		"session_posture":                 gc.Session.SessionPosture,

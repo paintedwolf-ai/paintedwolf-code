@@ -2,15 +2,19 @@ package turnguards
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
+	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -73,5 +77,31 @@ func TestBeforeToolObservesWaitVisibility(t *testing.T) {
 	refusal, rejected := guidance.RefusalFromError(err)
 	if !rejected || refusal.Code() != guard.WaitHiddenTextCode {
 		t.Fatalf("expected %s refusal, got %v", guard.WaitHiddenTextCode, err)
+	}
+}
+
+type unreadableLedger struct{ err error }
+
+func (unreadableLedger) Get(context.Context, string) (*api.Session, error) { return nil, nil }
+func (s unreadableLedger) LoadLedger(context.Context, string) (evidence.Ledger, error) {
+	return evidence.Ledger{}, s.err
+}
+
+func TestMidTurnEvidenceUnreadable(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		svc  *Service
+		want bool
+	}{
+		{name: "no ledger wired", svc: &Service{}},
+		{name: "no evidence service", svc: &Service{Verification: &sessionverification.Service{}}},
+		{name: "readable", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{})}}},
+		{name: "read fails", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{err: errors.New("offline")})}}, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.svc.midTurnEvidenceUnreadable(t.Context(), "coord-1", nil); got != tc.want {
+				t.Fatalf("unreadable = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

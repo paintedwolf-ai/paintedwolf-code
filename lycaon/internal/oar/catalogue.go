@@ -68,6 +68,7 @@ var factDecls = []factDecl{
 	{"unpublished_tool_text_pending", oarcore.TypeBool, FactTierHost, ""},
 	{"mid_turn_citations_required", oarcore.TypeBool, FactTierHost, ""},
 	{"mid_turn_citation_attempted", oarcore.TypeBool, FactTierHost, ""},
+	{"mid_turn_evidence_unreadable", oarcore.TypeBool, FactTierHost, ""},
 	{"last_assistant", oarcore.TypeString, FactTierHost, ""},
 	{"turn_tools", oarcore.TypeListString, FactTierHost, ""},
 	{"session_posture", oarcore.TypeString, FactTierStandard, ProfileSession},
