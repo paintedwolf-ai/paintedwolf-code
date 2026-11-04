@@ -183,7 +183,7 @@ func TestModelOutputsKeepScreenedModelTextAndMessagesHoldPresentation(t *testing
 	if len(r.outputs) != 1 || r.outputs[0] != screened {
 		t.Fatalf("model_outputs.content = %q, want the screened model text", r.outputs)
 	}
-	const presented = "The key [REDACTED VALUE] lives here [a.go:2](a.go#L2).\n```\n[read#1:3]\n```"
+	const presented = "The key [REDACTED VALUE] lives here [a.go:2](a.go#L2).\n\n```\n[read#1:3]\n```"
 	if message.Content != presented {
 		t.Fatalf("messages.content = %q, want %q", message.Content, presented)
 	}
