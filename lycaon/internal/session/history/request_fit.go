@@ -45,7 +45,7 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 			m.noteFitCut(key, sess.ID, projection.history, rows)
 		}
 	}
-	projected, err := m.applyFitCut(ctx, sess, key, view, projected, cfg)
+	projected, omission, err := m.applyFitCut(ctx, sess, key, view, projected, cfg)
 	if err != nil {
 		return req, err
 	}
@@ -113,7 +113,7 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 			capacity = 1
 		}
 		shrinkTools := capacity <= 1 || hasOversizedToolBody(projection.history)
-		rows, err := m.fitRequestHistory(ctx, sess, projection.history, view, record, cfg, capacity, shrinkTools)
+		rows, err := m.fitRequestHistory(ctx, sess, projection.history, omission, record, cfg, capacity, shrinkTools)
 		if err != nil {
 			return req, err
 		}
@@ -176,45 +176,56 @@ func (m *Service) requestCutoffKey(ctx context.Context, sess *api.Session, cfg c
 	return m.cutoffKey(ctx, sess, cfg, generation)
 }
 
+// requestOmission is what later fitting needs to name an interval unchanged:
+// the coverage it starts after and any row a held cut already removed.
+type requestOmission struct {
+	view         *store.CompactionView
+	firstDropped int64
+}
+
 // applyFitCut replays a held fit cutoff, so requests after the one that chose it
 // render the same rows and notice without refitting.
-func (m *Service) applyFitCut(ctx context.Context, sess *api.Session, key cutoffKey, view *store.CompactionView, rows []api.Message, cfg compaction.CompactionConfig) ([]api.Message, error) {
+func (m *Service) applyFitCut(ctx context.Context, sess *api.Session, key cutoffKey, view *store.CompactionView, rows []api.Message, cfg compaction.CompactionConfig) ([]api.Message, requestOmission, error) {
+	omission := requestOmission{view: view}
 	if m == nil || sess == nil || len(rows) == 0 {
-		return rows, nil
+		return rows, omission, nil
 	}
 	held, bodies := m.heldFit(key, sess.ID, rows)
 	if bodies > 0 {
 		rows = projectToolBodiesThrough(ctx, rows, bodies)
 	}
 	if held == 0 {
-		return rows, nil
+		return rows, omission, nil
 	}
 	pinned := promptassembly.MarkContextPins(sess, rows, min(8192, max(0, cfg.HardCeilingTokens/5)))
 	kept := pinned[:0:0]
-	firstDropped := int64(0)
 	for _, row := range pinned {
 		switch {
 		case row.ID == historyCoverageNoticeID:
 		case row.Ord > 0 && row.Ord < held && !row.ContextPinned:
-			if firstDropped == 0 {
-				firstDropped = row.Ord
+			if omission.firstDropped == 0 {
+				omission.firstDropped = row.Ord
 			}
 		default:
 			kept = append(kept, row)
 		}
 	}
-	return m.withOmissionNotice(ctx, sess, kept, view, firstDropped, true)
+	out, err := m.withOmissionNotice(ctx, sess, kept, omission, omission.firstDropped, true)
+	return out, omission, err
 }
 
 // withOmissionNotice names the interval between coverage and the first retained
 // row, derived the same way whether this request cut the rows or an earlier one did.
-func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kept []api.Message, view *store.CompactionView, firstDropped int64, prior bool) ([]api.Message, error) {
+func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kept []api.Message, omission requestOmission, firstDropped int64, prior bool) ([]api.Message, error) {
+	if omission.firstDropped > 0 && (firstDropped == 0 || omission.firstDropped < firstDropped) {
+		firstDropped = omission.firstDropped
+	}
 	if firstDropped == 0 && !prior {
 		return kept, nil
 	}
 	covered := int64(0)
-	if view != nil {
-		covered = view.CoveredThroughOrd
+	if omission.view != nil {
+		covered = omission.view.CoveredThroughOrd
 	}
 	at := slices.IndexFunc(kept, func(row api.Message) bool {
 		return row.Ord > 0 && !row.ContextPinned && (row.Ord > covered || firstDropped > 0)
@@ -237,13 +248,13 @@ func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kep
 	if err != nil {
 		return nil, err
 	}
-	if view == nil {
+	if omission.view == nil {
 		at = 0
 	}
 	return slices.Insert(slices.Clone(kept), at, *notice), nil
 }
 
-func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, view *store.CompactionView, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
+func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, omission requestOmission, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
 	rows := make([]api.Message, 0, len(history))
 	prior := false
 	for _, row := range history {
@@ -330,7 +341,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 		fitted = kept
 		firstDropped, _ = omittedOrdinals(rows, fitted)
 	}
-	return m.withOmissionNotice(ctx, sess, compaction.ContextMessagesToAPI(fitted, rows), view, firstDropped, prior)
+	return m.withOmissionNotice(ctx, sess, compaction.ContextMessagesToAPI(fitted, rows), omission, firstDropped, prior)
 }
 
 // fitWithOmissionNotice refits with the notice pinned; its cost can widen the

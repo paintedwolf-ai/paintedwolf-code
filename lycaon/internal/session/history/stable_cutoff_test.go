@@ -339,7 +339,7 @@ func TestTighterFitFeedsLaterProjectionAC_KV_04(t *testing.T) {
 	body := strings.Repeat("recorded observation ", 12)
 	seedTurn(t, mem, sess.ID, 40, body)
 	// A frame far above the cold-start estimate makes the final fit the tight bound.
-	frame := strings.Repeat("Standing instructions. ", 3000)
+	frame := strings.Repeat("Standing instructions. ", 6000)
 	budgets := fixedBudgets{window: cfg.ModelContextWindow}
 	var previous []api.Message
 	var starts []int64
@@ -382,6 +382,9 @@ func TestTighterFitFeedsLaterProjectionAC_KV_04(t *testing.T) {
 			t.Fatalf("start %d is off the anchor grid", starts[i])
 		}
 	}
+	if facts := svc.cutoffs.takeFacts(sess.ID); facts.FitOrd != starts[len(starts)-1] {
+		t.Fatalf("final start %d did not come from the fit: %+v", starts[len(starts)-1], facts)
+	}
 	if held := svc.cutoffs.heldWorkingSet(sess.ID); held < starts[len(starts)-1] {
 		t.Fatalf("working set %d stayed below the fit cut %d", held, starts[len(starts)-1])
 	}
@@ -413,17 +416,7 @@ func TestSecondCollapseSignatureHoldsBehindAViewAC_KV_07(t *testing.T) {
 			} else {
 				moved++
 				if fitted.Debug.HistoryCut.Change == "" {
-					dump := func(rows []api.Message) string {
-						var b strings.Builder
-						for _, row := range rows[max(0, common-3):min(len(rows), common+3)] {
-							fmt.Fprintf(&b, "[%s ord=%d pin=%v %d] ", row.ID, row.Ord, row.ContextPinned, len(row.Content))
-						}
-						if at := indexOfID(rows, historyCoverageNoticeID); at >= 0 {
-							b.WriteString(rows[at].Content[:min(90, len(rows[at].Content))])
-						}
-						return b.String()
-					}
-					t.Fatalf("step %d: first difference at %s (%d) with no cutoff change\nprev %s\nnext %s", step, previous[common].ID, common, dump(previous), dump(fitted.Messages))
+					t.Fatalf("step %d: first difference at %s with no cutoff change", step, previous[common].ID)
 				}
 			}
 		}
