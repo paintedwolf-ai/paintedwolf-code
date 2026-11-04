@@ -85,7 +85,7 @@ func TestWindowOpensAtProductionBudget(t *testing.T) {
 	for _, c := range []struct {
 		files  int
 		budget time.Duration
-	}{{1000, 0}, {5000, 100 * time.Millisecond}} {
+	}{{1000, 0}, {5000, 0}, {5000, 100 * time.Millisecond}} {
 		files := c.files
 		t.Run(fmt.Sprintf("files-%d-budget-%v", files, c.budget), func(t *testing.T) {
 			sqlDB := testdbfixture.Open(t, "store.db")
@@ -122,6 +122,7 @@ func TestWindowOpensAtProductionBudget(t *testing.T) {
 				state, _ := store.Inventory.InventoryState(ctx, "p1", "", 0)
 				t.Logf("MEASURE files=%d open=%d elapsed_ms=%d err=%v phase=%s", files, open, elapsed.Milliseconds(), err, state.Phase)
 				if err != nil {
+					time.Sleep(time.Second)
 					continue
 				}
 				closeStart := time.Now()
