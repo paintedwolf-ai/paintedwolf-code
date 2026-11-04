@@ -8096,6 +8096,8 @@ export interface components {
         };
         CitationGrounding: {
             traced: boolean;
+            /** @description Speech the host published without citations because the current intent had no citable observations. Distinct from a failed audit, whose traced is also false. */
+            evidence_optional?: boolean;
             host_assembled?: boolean;
             hint_code?: string;
             retry_count?: number;

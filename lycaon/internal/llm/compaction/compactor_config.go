@@ -54,6 +54,7 @@ type CompactionConfig struct {
 	MaxGroundingRejectsPerTurn       int    `yaml:"max_grounding_rejects_per_turn"`
 	MaxGroundingRejectsPerCycle      int    `yaml:"max_grounding_rejects_per_cycle"`
 	MaxReportDocumentRetries         int    `yaml:"max_report_document_retries"`
+	MaxWaitVisibilityRepairs         int    `yaml:"max_wait_visibility_repairs"`
 }
 
 // WindowSource values for CompactionConfig.WindowSource.

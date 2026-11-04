@@ -1151,7 +1151,9 @@ type ChoiceTransitionUi struct {
 
 // CitationGrounding
 type CitationGrounding struct {
-	Traced                bool                              `json:"traced"`
+	Traced bool `json:"traced"`
+	// Speech the host published without citations because the current intent had no citable observations. Distinct from a failed audit, whose traced is also false.
+	EvidenceOptional      bool                              `json:"evidence_optional,omitempty"`
 	HostAssembled         bool                              `json:"host_assembled,omitempty"`
 	HintCode              string                            `json:"hint_code,omitempty"`
 	RetryCount            int                               `json:"retry_count,omitempty"`

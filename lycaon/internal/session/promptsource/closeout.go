@@ -47,6 +47,9 @@ func (m *Closeout) Build() promptloop.CloseoutDeps {
 		EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 			return m.Policy.CloseoutBlock(ctx, sess, gc)
 		},
+		EvaluateMidTurnNote: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error {
+			return m.Policy.MidTurnNoteFeedback(ctx, sess, gc)
+		},
 	}
 	deps.TurnCloseoutNudge = m.Nudges.Closeout
 	deps.IterationRunwayNudge = m.Nudges.IterationRunway

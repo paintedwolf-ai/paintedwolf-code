@@ -21018,6 +21018,7 @@ components:
       x-go-generate: true
       x-go-field-order:
         - traced
+        - evidence_optional
         - host_assembled
         - hint_code
         - retry_count
@@ -21043,6 +21044,9 @@ components:
       properties:
         traced:
           type: boolean
+        evidence_optional:
+          type: boolean
+          description: Speech the host published without citations because the current intent had no citable observations. Distinct from a failed audit, whose traced is also false.
         host_assembled:
           type: boolean
         hint_code:

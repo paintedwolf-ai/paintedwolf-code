@@ -13,6 +13,9 @@ const (
 	ShapePageGeometry    = "page_geometry"    // quantitative layout/style probe (measure_page); text only
 )
 
+// KindTask is an accepted worker dispatch.
+const KindTask = "task"
+
 // SurfaceSnapshotSurface* identify observed surface variants.
 const (
 	SurfaceDOM  = "dom"

@@ -89,6 +89,7 @@ type CloseoutDeps struct {
 	HintConfig                          *guidance.HintConfig
 	EvaluateContentAnchor               func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (reject *guidance.Refusal, blocked bool, content string, transformed bool)
 	EvaluateCloseoutBlock               func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error)
+	EvaluateMidTurnNote                 func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error
 	TurnCloseoutNudge                   TurnCloseoutNudge
 	IterationRunwayNudge                IterationRunwayNudge
 	BeforeFinishNoToolTurn              func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, lastAssistant, surfaceID string, workersIdle bool, turnTools []string, invokeAllowed bool) (reject *guidance.Refusal, block bool)

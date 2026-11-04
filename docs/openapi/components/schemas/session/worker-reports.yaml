@@ -92,7 +92,7 @@ components:
           description: Structured worker completion block.
     CitationGrounding:
       x-go-generate: true
-      x-go-field-order: ["traced", "host_assembled", "hint_code", "retry_count", "observed_path_count", "observed_paths_sample", "observed_url_count", "observed_urls_sample", "checks", "findings", "cited_urls", "prose_leak_count", "prose_leaks_sample", "prose_advisory_count", "prose_advisories_sample", "cited_evidence", "evidence_records", "evidence_record_count", "verification"]
+      x-go-field-order: ["traced", "evidence_optional", "host_assembled", "hint_code", "retry_count", "observed_path_count", "observed_paths_sample", "observed_url_count", "observed_urls_sample", "checks", "findings", "cited_urls", "prose_leak_count", "prose_leaks_sample", "prose_advisory_count", "prose_advisories_sample", "cited_evidence", "evidence_records", "evidence_record_count", "verification"]
       type: object
       additionalProperties: false
       required:
@@ -100,6 +100,9 @@ components:
       properties:
         traced:
           type: boolean
+        evidence_optional:
+          type: boolean
+          description: Speech the host published without citations because the current intent had no citable observations. Distinct from a failed audit, whose traced is also false.
         host_assembled:
           type: boolean
         hint_code:
