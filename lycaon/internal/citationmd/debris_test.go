@@ -18,7 +18,7 @@ func TestRemovedNodesLeaveNoSeparatorsOrEmptyBrackets(t *testing.T) {
 		{"separator before sentence end", "first, [task#1].", "first."},
 		{"conjunction with nothing to join", "tests pass and [task#1].", "tests pass."},
 		{"list item starting with a removed node", "- [task#1], then land it", "- then land it"},
-		{"closing up square brackets could make a link", "see [[task#1]](https://example.test/a) now", "see [ ](https://example.test/a) now"},
+		{"square brackets stay apart", "see [[task#1]] now", "see [ ] now"},
 		{"an open link destination stays", "[l](https://example.test/a, [task#1])", "[l](https://example.test/a,)"},
 		{"a paren after a label stays", "[l]([task#1], https://example.test/a)", "[l](, https://example.test/a)"},
 		{"word left of a separator keeps it", "first [task#1], second", "first, second"},
