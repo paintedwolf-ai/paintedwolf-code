@@ -63,7 +63,11 @@ func writeFolderFile(path string, raw []byte) error {
 // a read-only or foreign volume root simply fails. A folder found here with this
 // installation's marker was the same one before its volume moved mount points.
 func reserve(ctx context.Context, stateRoot, path, volumeRoot string, kind Kind) (folder Folder, created bool, err error) {
-	if existing, readErr := readMarker(path); readErr == nil {
+	existing, readErr := readMarker(path)
+	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
+		return Folder{}, false, fmt.Errorf("placement marker is unreadable: %w: %w", fs.ErrPermission, readErr)
+	}
+	if readErr == nil {
 		if existing.StateKey != enginepaths.ProjectKey(stateRoot) {
 			return Folder{}, false, fmt.Errorf("placement folder belongs to another installation: %w", fs.ErrPermission)
 		}

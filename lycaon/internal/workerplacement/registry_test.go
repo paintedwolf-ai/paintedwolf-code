@@ -150,6 +150,22 @@ func TestAnotherInstallationsFolderIsNotAdopted(t *testing.T) {
 	}
 }
 
+func TestAFolderWithAnUnreadableMarkerIsNotTakenOver(t *testing.T) {
+	state := t.TempDir()
+	path := filepath.Join(t.TempDir(), enginepaths.WorkerPlacementDirName(os.Getuid(), state))
+	testutil.FailErr(t, "mkdir", os.Mkdir(path, 0o700))
+	marker := filepath.Join(path, markerFileName)
+	testutil.FailErr(t, "write marker", os.WriteFile(marker, []byte(`{"format_version":99}`), 0o600))
+	if _, _, err := reserve(context.Background(), state, path, filepath.Dir(path), KindVolumeRoot); !unwritable(err) {
+		t.Fatalf("reserve err = %v", err)
+	}
+	raw, err := os.ReadFile(marker)
+	testutil.FailErr(t, "read marker", err)
+	if string(raw) != `{"format_version":99}` {
+		t.Fatalf("marker changed: %s", raw)
+	}
+}
+
 func TestAssertOutsideRoots(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "root")
