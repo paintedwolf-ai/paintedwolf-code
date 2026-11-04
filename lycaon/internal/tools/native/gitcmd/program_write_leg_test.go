@@ -174,7 +174,7 @@ func TestACOP01ParkedProgramWarnsForReadsBeforeThePark(t *testing.T) {
 			if f.warned() != tc.want {
 				t.Fatalf("warned = %v, want %v", f.warned(), tc.want)
 			}
-			park := testutil.AwaitValue(t, "the program parks", parking.parked)
+			park := testutil.Receive(t, "the program parks", parking.parked)
 			park.Interrupt(t.Context())
 		})
 	}
