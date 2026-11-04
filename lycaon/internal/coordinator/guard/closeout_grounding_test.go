@@ -217,7 +217,7 @@ func TestFormatCloseoutGroundingReject_rendersFullCitationKick(t *testing.T) {
 			"offender_count":          1,
 			"observed_handles_sample": "leg-a:list#1, leg-b:read#2",
 			"observed_paths_sample":   "src/coropa, src/coropa/main.go",
-			"retained_citations":      `{"cited_evidence":[{"evidence":"command#37"}]}`,
+			"repair_targets":          []map[string]any{{"id": "c2", "token": "missing.go:1", "defect": "not_observed", "link": false}},
 			"repair_observations":     `[{"evidence":"git_receipt#1","tool":"git_commit"}]`,
 		}},
 		draft,
@@ -225,15 +225,16 @@ func TestFormatCloseoutGroundingReject_rendersFullCitationKick(t *testing.T) {
 	testutil.FailErr(t, "guard.FormatCloseoutGroundingReject failed", err)
 	for _, want := range []string{
 		"[host:coordinator-citation-grounding]",
-		"emit only the citations fence",
+		"valid citations stay",
+		"[cite: c1 => read#5:42]",
+		"- c2: `missing.go:1` (not_observed)",
 		"Repair citations using existing observations.",
 		"Attempt 1/3",
 		draft,
-		"Pinned body:",
+		"Retained answer:",
 		"missing.go:1",
 		"leg-a:list#1",
 		"src/coropa/main.go",
-		`{"cited_evidence":[{"evidence":"command#37"}]}`,
 		`[{"evidence":"git_receipt#1","tool":"git_commit"}]`,
 		"Code: INVEST_HANDLE_NOT_OBSERVED",
 	} {
