@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // M7: an empty ledger means nothing was observed, so a caller must have failed on a
