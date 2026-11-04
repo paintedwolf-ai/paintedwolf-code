@@ -113,6 +113,38 @@ func TestLoadBundledModelContextWindows(t *testing.T) {
 	}
 }
 
+func TestPromptSizingLimitsFollowTheCappedBudget(t *testing.T) {
+	policy := ModelPolicy{Coordinator: ModelRef{ProviderID: "fixture", Model: "unlisted-model"}}
+	for _, tc := range []struct {
+		name                  string
+		window, maxLive       int
+		toolBytes, loops, sum int
+		explicit              bool
+	}{
+		{name: "large window keeps the capped sizes and its own loop allowance", window: 1_048_572, toolBytes: 524288, loops: 1023, sum: 16384},
+		{name: "fallback sized window", window: 262144, toolBytes: 524288, loops: 256, sum: 16384},
+		{name: "small window lowers every limit", window: 32768, toolBytes: 65536, loops: 32, sum: 2048},
+		{name: "a raised cap raises the sizes", window: 1_048_572, maxLive: 393216, toolBytes: 1048576, loops: 1023, sum: 32768},
+		{name: "explicit window stays uncapped", window: 1_048_572, explicit: true, toolBytes: 2097144, loops: 1023, sum: 65535},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := compaction.DefaultCompactionConfig()
+			if tc.maxLive > 0 {
+				cfg.MaxLiveBudgetTokens = tc.maxLive
+			}
+			if tc.explicit {
+				cfg.WindowSource = compaction.WindowSourceExplicit
+				cfg.ModelContextWindow = tc.window
+			}
+			out, limits, err := ApplyLiveBudget(cfg, policy, stubContextLength{n: tc.window}, testWindows(t))
+			testutil.FailErr(t, "ApplyLiveBudget", err)
+			if limits.MaxToolResultBytes != tc.toolBytes || limits.MaxCoordinatorLoopCycles != tc.loops || limits.MaxWorkerSummaryChars != tc.sum || out.MaxWorkerSummaryChars != tc.sum {
+				t.Fatalf("limits %+v summary %d", limits, out.MaxWorkerSummaryChars)
+			}
+		})
+	}
+}
+
 func TestLiveBudgetIsCappedAbsolutely(t *testing.T) {
 	policy := ModelPolicy{Coordinator: ModelRef{ProviderID: "fixture", Model: "unlisted-model"}}
 	for _, tc := range []struct {
