@@ -28,9 +28,9 @@ func (c *countingOutput) Write(p []byte) (int, error) {
 	return c.Buffer.Write(p)
 }
 
-func (h *harness) grepInput(input io.Reader, stdout, stderr io.Writer, argv ...string) error {
+func (h *harness) grepInput(input io.ReadCloser, stdout, stderr io.Writer, argv ...string) error {
 	h.t.Helper()
-	streams := commandprogram.Streams{Input: io.NopCloser(input), Output: stdout, Error: stderr}
+	streams := commandprogram.Streams{Input: input, Output: stdout, Error: stderr}
 	_, err := h.owners.Invoke(h.t.Context(), h.tc, mustPaths(h.t, h), h.dispatch, requestFor(h, argv...), streams)
 	return err
 }
@@ -60,6 +60,7 @@ func TestPipeOutputGroupsRecordsInBoundedWrites(t *testing.T) {
 type readyInput struct{ io.Reader }
 
 func (readyInput) InputReady() bool { return true }
+func (readyInput) Close() error     { return nil }
 
 // A consumer of a live stream must see each result before the next input can
 // arrive: this source returns its second record only after the first is out.
@@ -85,6 +86,8 @@ type awaitedInput struct {
 	seen   string
 }
 
+func (a *awaitedInput) Close() error { return nil }
+
 func (a *awaitedInput) Read(p []byte) (int, error) {
 	if a.reads == 1 {
 		a.seen = a.stdout.String()
@@ -102,7 +105,7 @@ func (a *awaitedInput) Read(p []byte) (int, error) {
 func TestPipeOutputPrecedesLaterDiagnostics(t *testing.T) {
 	h := newHarness(t, grepTree)
 	var shared bytes.Buffer
-	if err := h.grepInput(strings.NewReader(""), &shared, &shared, "grep", "-h", "alpha", "a.txt", "missing.txt"); err != nil {
+	if err := h.grepInput(io.NopCloser(strings.NewReader("")), &shared, &shared, "grep", "-h", "alpha", "a.txt", "missing.txt"); err != nil {
 		t.Fatal(err)
 	}
 	found, diagnostic := strings.Index(shared.String(), "alpha"), strings.Index(shared.String(), "missing.txt")
@@ -115,7 +118,7 @@ func TestPipeOutputFailureIsReportedAtFinalDelivery(t *testing.T) {
 	h := newHarness(t, grepTree)
 	closed := errors.New("consumer closed")
 	stdout := countingOutput{failed: closed}
-	err := h.grepInput(strings.NewReader(""), &stdout, io.Discard, "grep", "alpha", "a.txt")
+	err := h.grepInput(io.NopCloser(strings.NewReader("")), &stdout, io.Discard, "grep", "alpha", "a.txt")
 	if !errors.Is(err, closed) {
 		t.Fatalf("got %v, want the sink failure", err)
 	}

@@ -58,7 +58,7 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 	}
 	inv.out = newOutput(ctx, streams.Output, p.owners.streamBytes())
 	inv.out.beforeWrite = inv.flushPins
-	inv.input = drainingInput{ReadCloser: inv.input, out: inv.out}
+	inv.input = drainingInput{input: inv.input, out: inv.out}
 	return inv
 }
 
@@ -462,15 +462,15 @@ func (o *output) WriteString(s string) (int, error) {
 // drainingInput delivers held output before a read that would wait, so a
 // consumer of a live stream sees each result before the next input arrives.
 type drainingInput struct {
-	io.ReadCloser
-	out *output
+	input io.Reader
+	out   *output
 }
 
 func (i drainingInput) Read(p []byte) (int, error) {
-	if ready, ok := i.ReadCloser.(interface{ InputReady() bool }); !ok || !ready.InputReady() {
+	if ready, ok := i.input.(interface{ InputReady() bool }); !ok || !ready.InputReady() {
 		if err := i.out.drain(); err != nil {
 			return 0, err
 		}
 	}
-	return i.ReadCloser.Read(p)
+	return i.input.Read(p)
 }
