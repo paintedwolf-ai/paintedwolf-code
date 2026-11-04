@@ -156,7 +156,7 @@ function manualCompletions(request: APIRequestContext, sessionId: string) {
 
 webE2e.describe("agent mid-turn note", () => {
   webE2e(
-    "note appears once after its tool card with badge and grounding chicklet",
+    "note appears once above its tool card with badge and grounding chicklet",
     async ({ page, request }, testInfo) => {
       const { project, sessionId } = await openMockedNoteChat(page, request);
 
@@ -200,7 +200,7 @@ webE2e.describe("agent mid-turn note", () => {
           '[data-testid="transcript-article-assistant"][data-kind="agent_note"]',
         );
         if (!tool || !note) return -1;
-        return tool.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING
+        return tool.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_PRECEDING
           ? 1
           : 0;
       });
