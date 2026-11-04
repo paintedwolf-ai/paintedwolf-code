@@ -234,13 +234,14 @@ func (p *grepFiles) worker() {
 type grepWorkerFrame struct {
 	inv   invocation
 	local grepRun
+	pins  []toolcontract.ExecutionRevision
 }
 
 func (p *grepFiles) search(job *grepFileJob, walker *walker, frame *grepWorkerFrame) {
 	defer close(job.events)
 	frame.inv = p.invocation
 	inv := &frame.inv
-	inv.ctx, inv.pins, inv.flushedPins, inv.releases = p.ctx, nil, 0, nil
+	inv.ctx, inv.pins, inv.flushedPins, inv.releases = p.ctx, frame.pins[:0], 0, nil
 	inv.status = 0
 	writer := &grepFileWriter{sink: &grepEventSink{ctx: p.ctx, events: job.events, buffers: p.buffers}}
 	defer writer.close()
@@ -287,6 +288,7 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker, frame *grepWorkerFr
 	for _, release := range inv.releases {
 		release()
 	}
+	frame.pins = inv.pins
 	job.result = grepFileResult{err: err, selected: local.selected, status: inv.status, stats: local.index.stats}
 	if local.json != nil {
 		job.result.json = local.json.total
