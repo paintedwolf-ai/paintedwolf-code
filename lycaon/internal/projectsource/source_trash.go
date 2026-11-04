@@ -95,10 +95,10 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 	if err != nil {
 		return err
 	}
-	if plan.DeleteStarted && identity != plan.DeleteIdentity {
+	if plan.DeleteStarted && !fspath.SameEntryAcrossRestart(plan.DeleteIdentity, identity) {
 		return ErrSourceMutationDiverged
 	}
-	if !plan.DeleteStarted && plan.Unrecoverable && plan.EntryIdentity != "" && identity != plan.EntryIdentity {
+	if !plan.DeleteStarted && plan.Unrecoverable && plan.EntryIdentity != "" && !fspath.SameEntryAcrossRestart(plan.EntryIdentity, identity) {
 		return ErrSourceMutationDiverged
 	}
 	resolved, _, err := resolveLifecyclePath(plan.RootPath, plan.Path)
@@ -140,7 +140,7 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 	}
 	disposeErr := s.disposeSourceEntry(ctx, plan, identity)
 	current, statErr := fspath.EntryIdentity(plan.AbsPath)
-	if os.IsNotExist(statErr) || (statErr == nil && current != identity) {
+	if os.IsNotExist(statErr) || (statErr == nil && !fspath.SameEntryAcrossRestart(identity, current)) {
 		// A concurrent replacement belongs to its writer.
 		return nil
 	}
@@ -222,7 +222,7 @@ func (s *SourceEffects) applyNativeTrash(ctx context.Context, row *sourceMutatio
 	identity, err := fspath.EntryIdentity(plan.AbsPath)
 	if os.IsNotExist(err) && plan.DeleteStarted {
 		if !nativeTrashReceiptRecorded(plan) && plan.Disposal == sourceDisposalDiscard {
-			if held, statErr := fspath.EntryIdentity(recoveryPath); statErr == nil && held == plan.DeleteIdentity {
+			if held, statErr := fspath.EntryIdentity(recoveryPath); statErr == nil && fspath.SameEntryAcrossRestart(plan.DeleteIdentity, held) {
 				plan.NativeTrash.Receipt = desktoptrash.Receipt{
 					FormatVersion: 1,
 					Platform:      runtime.GOOS,
@@ -245,7 +245,7 @@ func (s *SourceEffects) applyNativeTrash(ctx context.Context, row *sourceMutatio
 		}
 		return err
 	}
-	if identity != plan.EntryIdentity {
+	if !fspath.SameEntryAcrossRestart(plan.EntryIdentity, identity) {
 		return ErrSourceMutationDiverged
 	}
 	resolved, _, err := resolveLifecyclePath(plan.RootPath, plan.Path)
@@ -312,13 +312,13 @@ func (s *SourceEffects) applyNativeTrash(ctx context.Context, row *sourceMutatio
 	if plan.Disposal == sourceDisposalDiscard {
 		current, currentErr := fspath.EntryIdentity(plan.AbsPath)
 		published, publishedErr := fspath.EntryIdentity(recoveryPath)
-		if publishedErr == nil && published == identity && (os.IsNotExist(currentErr) || (currentErr == nil && current != identity)) {
+		if publishedErr == nil && fspath.SameEntryAcrossRestart(identity, published) && (os.IsNotExist(currentErr) || (currentErr == nil && !fspath.SameEntryAcrossRestart(identity, current))) {
 			if moveErr != nil {
 				return &sourceeffect.AppliedError{OperationID: row.ID, Cause: moveErr}
 			}
 			return nil
 		}
-		if currentErr == nil && current == identity && os.IsNotExist(publishedErr) && !errors.Is(moveErr, fseffect.ErrPostcondition) && !os.IsExist(moveErr) {
+		if currentErr == nil && fspath.SameEntryAcrossRestart(identity, current) && os.IsNotExist(publishedErr) && !errors.Is(moveErr, fseffect.ErrPostcondition) && !os.IsExist(moveErr) {
 			plan.NativeTrash, plan.EntryRecoveryKey, plan.RecoveryID = nil, "", ""
 			_ = s.Journal.update(context.WithoutCancel(ctx), row)
 			if ctx.Err() != nil {
@@ -329,7 +329,7 @@ func (s *SourceEffects) applyNativeTrash(ctx context.Context, row *sourceMutatio
 		return errors.Join(ErrSourceMutationDiverged, moveErr, currentErr, publishedErr)
 	}
 	current, statErr := fspath.EntryIdentity(plan.AbsPath)
-	if os.IsNotExist(statErr) || (statErr == nil && current != identity) {
+	if os.IsNotExist(statErr) || (statErr == nil && !fspath.SameEntryAcrossRestart(identity, current)) {
 		return nil
 	}
 	if moveErr == nil {
@@ -365,7 +365,7 @@ func (s *SourceEffects) restoreNativeTrash(ctx context.Context, row *sourceMutat
 	if err != nil && plan.Disposal == sourceDisposalDiscard {
 		current, currentErr := fspath.EntryIdentity(plan.NativeTrash.Receipt.Path)
 		published, publishedErr := fspath.EntryIdentity(plan.AbsPath)
-		if publishedErr == nil && published == plan.DestinationIdentity && (os.IsNotExist(currentErr) || (currentErr == nil && current != plan.DestinationIdentity)) {
+		if publishedErr == nil && fspath.SameEntryAcrossRestart(plan.DestinationIdentity, published) && (os.IsNotExist(currentErr) || (currentErr == nil && !fspath.SameEntryAcrossRestart(plan.DestinationIdentity, current))) {
 			return &sourceeffect.AppliedError{OperationID: row.ID, Cause: err}
 		}
 		if errors.Is(err, fseffect.ErrPostcondition) || os.IsExist(err) {

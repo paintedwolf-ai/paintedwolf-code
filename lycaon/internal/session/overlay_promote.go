@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
@@ -247,4 +248,35 @@ func ResolveWorkerSummaryStatus(ctx context.Context, status api.WorkerSummarySta
 		return status
 	}
 	return api.WorkerSummaryStatusOpen
+}
+
+// QualifyCheckpointPath formats a checkpoint path as a qualified promote path across multi-root scopes.
+func QualifyCheckpointPath(qpath layeredfs.QualifiedPath, roots []projectroot.RootRef) string {
+	rel := filepath.ToSlash(filepath.Clean(strings.TrimSpace(qpath.Rel)))
+	if rel == "" || rel == "." {
+		return ""
+	}
+	if len(roots) > 1 {
+		if primary, err := projectroot.PrimaryRoot(roots); err == nil {
+			for _, r := range roots {
+				if r.ID == qpath.RootID || ((qpath.RootID == "primary" || qpath.RootID == "root-0" || qpath.RootID == "") && r.IsPrimary) {
+					return projectroot.Qualify(primary, r, filepath.Join(r.Path, filepath.FromSlash(rel)))
+				}
+			}
+		}
+	}
+	return rel
+}
+
+func checkpointManifestChangedPaths(manifest checkpoint.Manifest, roots []projectroot.RootRef) []string {
+	changed := make([]string, 0, len(manifest.Entries))
+	for _, e := range manifest.Entries {
+		if rel := QualifyCheckpointPath(e.Path, roots); rel != "" {
+			changed = append(changed, rel)
+		}
+	}
+	if len(roots) > 0 {
+		return FilterOverlayPromoteCandidatePathsForRoots(roots, changed)
+	}
+	return promotionstate.FilterOverlayPromoteCandidatePaths(changed)
 }

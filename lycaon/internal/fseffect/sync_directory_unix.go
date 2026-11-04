@@ -7,15 +7,11 @@ import (
 	"os"
 
 	"github.com/lycaon/lycaon/internal/fssync"
-	"golang.org/x/sys/unix"
 )
 
 // fsyncFD flushes a held descriptor under the process durability policy.
 func fsyncFD(fd int) error {
-	if fssync.Relaxed() {
-		return nil
-	}
-	return unix.Fsync(fd)
+	return fssync.FD(fd)
 }
 
 // SyncDirectory flushes a staged directory after its children have been written.

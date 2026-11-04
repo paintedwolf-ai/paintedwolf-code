@@ -183,7 +183,10 @@ func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID stri
 	}
 	seen := make(map[string]bool, len(mergePaths))
 	for _, ch := range cpPreview.PlannedChanges {
-		rel := filepath.ToSlash(filepath.Clean(ch.Path.Rel))
+		rel := session.QualifyCheckpointPath(ch.Path, roots)
+		if rel == "" {
+			continue
+		}
 		if len(wanted) > 0 {
 			if _, match := wanted[rel]; !match {
 				continue
@@ -200,7 +203,10 @@ func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID stri
 		}
 	}
 	for _, conf := range cpPreview.Conflicts {
-		rel := filepath.ToSlash(filepath.Clean(conf.Path.Rel))
+		rel := session.QualifyCheckpointPath(conf.Path, roots)
+		if rel == "" {
+			continue
+		}
 		if len(wanted) > 0 {
 			if _, match := wanted[rel]; !match {
 				continue

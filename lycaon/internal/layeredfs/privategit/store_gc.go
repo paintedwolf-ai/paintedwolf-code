@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fssync"
 )
 
 // HasObject reports whether oid (40-character hex SHA-1) exists in the retained store
@@ -200,7 +202,7 @@ func copyFileAtomicReadOnly(src, dst string) (int64, error) {
 		return 0, err
 	}
 	n, copyErr := io.Copy(out, in)
-	syncErr := out.Sync()
+	syncErr := fssync.File(out)
 	closeErr := out.Close()
 	if copyErr != nil || syncErr != nil || closeErr != nil {
 		_ = os.Remove(tmp)

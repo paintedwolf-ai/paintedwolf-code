@@ -84,10 +84,7 @@ func renameBackingFile(dirFD int, oldName, newName string) error {
 }
 
 func syncFD(fd int) error {
-	if fssync.Relaxed() {
-		return nil
-	}
-	err := unix.Fsync(fd)
+	err := fssync.FD(fd)
 	if errors.Is(err, unix.EINVAL) || errors.Is(err, unix.ENOTSUP) {
 		return nil
 	}

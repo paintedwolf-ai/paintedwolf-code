@@ -21,7 +21,8 @@ func mainRevision6Store(t *testing.T, path string) *sql.DB {
 	if got := fmt.Sprintf("%x", sha256.Sum256(schema)); got != "893484b7f4ac643ffe6e4e612b4954c7c68f4642197a952cfb05c0013c4ee790" {
 		t.Fatalf("main schema fixture changed: %s", got)
 	}
-	source, err := sql.Open("sqlite", path)
+	// A fixture proves no durability. Flushing each statement dominated this package on drives with real flush latency.
+	source, err := sql.Open("sqlite", fileDSN(path, "_pragma=synchronous(off)"))
 	testutil.FailErr(t, "open main source fixture", err)
 	_, err = source.ExecContext(t.Context(), string(schema))
 	testutil.FailErr(t, "install exact main schema", err)

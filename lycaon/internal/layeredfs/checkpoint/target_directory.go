@@ -48,10 +48,13 @@ func (tree *promotionTargets) makeTargetDirectory(root *os.Root, path layeredfs.
 		}
 		defer func() { _ = file.Close() }()
 		// Existing directories retain unmodified attributes and children.
-		if err := file.Chmod(mode); err != nil {
-			return err
+		if info.Mode().Perm()&0o200 == 0 && len(attrs) > 0 {
+			_ = file.Chmod(info.Mode().Perm() | 0o200)
 		}
 		if err := applyFileXattrs(file, attrs); err != nil {
+			return err
+		}
+		if err := file.Chmod(mode); err != nil {
 			return err
 		}
 		if tree.recordPostimage != nil {
@@ -63,12 +66,22 @@ func (tree *promotionTargets) makeTargetDirectory(root *os.Root, path layeredfs.
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	return createStagedTargetDirectory(root, path, mode, attrs, tree.recordPostimage)
+}
+
+func createStagedTargetDirectory(
+	root *os.Root,
+	path layeredfs.QualifiedPath,
+	mode os.FileMode,
+	attrs map[string][]byte,
+	recordPostimage func(layeredfs.QualifiedPath, *os.File) error,
+) error {
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return err
 	}
 	temp := filepath.Join(filepath.Dir(path.Rel), ".checkpoint-"+hex.EncodeToString(nonce[:]))
-	if err := root.Mkdir(temp, mode); err != nil {
+	if err := root.Mkdir(temp, mode|0o700); err != nil {
 		return err
 	}
 	file, err := root.Open(temp)
@@ -88,17 +101,17 @@ func (tree *promotionTargets) makeTargetDirectory(root *os.Root, path layeredfs.
 			}
 		}
 	}()
-	if err := file.Chmod(mode); err != nil {
+	if err := applyFileXattrs(file, attrs); err != nil {
 		return err
 	}
-	if err := applyFileXattrs(file, attrs); err != nil {
+	if err := file.Chmod(mode); err != nil {
 		return err
 	}
 	if err := syncFile(file); err != nil {
 		return err
 	}
-	if tree.recordPostimage != nil {
-		if err := tree.recordPostimage(path, file); err != nil {
+	if recordPostimage != nil {
+		if err := recordPostimage(path, file); err != nil {
 			return err
 		}
 	}
@@ -118,4 +131,12 @@ func (tree *promotionTargets) makeTargetDirectory(root *os.Root, path layeredfs.
 	}
 	defer func() { _ = parent.Close() }()
 	return syncFile(parent)
+}
+
+// promotionTargets owns descriptor-confined reads, staged writes and namespace effects.
+// Publication hooks are installed and read only under Promoter.applyMu.
+type promotionTargets struct {
+	store           *Store
+	roots           map[string]string
+	recordPostimage func(layeredfs.QualifiedPath, *os.File) error
 }

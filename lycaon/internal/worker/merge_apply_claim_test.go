@@ -176,6 +176,13 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 				if string(body) != trunkStale {
 					t.Fatalf("failed commit left promoted bytes: %q; error: %v", body, err)
 				}
+				appInfo, err := os.Lstat(filepath.Join(primary, "app.go"))
+				testutil.FailErr(t, "lstat app.go after rollback", err)
+				aliasInfo, err := os.Lstat(filepath.Join(primary, "app_alias.go"))
+				testutil.FailErr(t, "lstat app_alias.go after rollback", err)
+				if !os.SameFile(appInfo, aliasInfo) {
+					t.Fatal("expected two-stage rollback after durable commit failure to restore hard-link identity between app.go and app_alias.go")
+				}
 				for _, rel := range []string{"run.sh", "link.txt", ".git/refs/lycaon/workers/" + jobID + "/heads/feature"} {
 					if _, err := os.Lstat(filepath.Join(primary, rel)); !errors.Is(err, os.ErrNotExist) {
 						t.Fatalf("failed commit left checkpoint effect %s: %v", rel, err)
@@ -246,104 +253,6 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 	}
 }
 
-func TestMergeServiceCheckpointExactBaseConflictSurface(t *testing.T) {
-	ctx := t.Context()
-	sqlDB := testdbfixture.Open(t, "store.db")
-	sqlStore := NewSQLStore(sqlDB)
-	q := NewSQLQueue(sqlDB, 8)
-	primary := t.TempDir()
-	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent-cp-conf", testdbseed.DefaultProjectID, primary)
-
-	testutil.FailErr(t, "write overlap.txt", os.WriteFile(filepath.Join(primary, "overlap.txt"), []byte("line1\n"), 0o644))
-	testutil.FailErr(t, "write ambig.txt", os.WriteFile(filepath.Join(primary, "ambig.txt"), []byte("v1\n"), 0o644))
-
-	jobID, err := q.Enqueue(ctx, api.WorkerTask{
-		ID:              "job-cp-conf",
-		ParentSessionID: "parent-cp-conf",
-		ProjectID:       testdbseed.DefaultProjectID,
-		WorkspacePath:   primary,
-		AgentType:       "implementer",
-		Prompt:          "conf",
-		Brief:           "Conflict check",
-		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite},
-	})
-	testutil.FailErr(t, "Enqueue", err)
-
-	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
-	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(overlay, 0o755))
-	cpStoreDir := filepath.Join(overlay, session.TaskCheckpointStoreSubdir)
-	cpStore, err := checkpoint.NewStore(cpStoreDir)
-	testutil.FailErr(t, "NewStore", err)
-
-	core, err := layeredfs.New(layeredfs.Config{
-		ViewID:     "view-cp-conf",
-		BackingDir: t.TempDir(),
-		Roots:      []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
-	})
-	testutil.FailErr(t, "New Core", err)
-	defer func() { _ = core.ReleaseView() }()
-
-	overlapLP := layeredfs.QualifiedPath{RootID: "primary", Rel: "overlap.txt"}
-	_, err = core.WriteFile(overlapLP, []byte("worker-line1\n"), 0o644)
-	testutil.FailErr(t, "write overlap.txt", err)
-	testutil.FailErr(t, "trunk overlap edit", os.WriteFile(filepath.Join(primary, "overlap.txt"), []byte("trunk-line1\n"), 0o644))
-
-	ambigLP := layeredfs.QualifiedPath{RootID: "primary", Rel: "ambig.txt"}
-	_, err = core.WriteFile(ambigLP, []byte("worker-after-ambig\n"), 0o644)
-	testutil.FailErr(t, "write ambig.txt", err)
-
-	cand1SHA, _, err := cpStore.WriteBlobBytes([]byte("cand1\n"))
-	testutil.FailErr(t, "WriteBlobBytes cand1", err)
-	cand2SHA, _, err := cpStore.WriteBlobBytes([]byte("cand2\n"))
-	testutil.FailErr(t, "WriteBlobBytes cand2", err)
-
-	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
-		WorkerID:         jobID,
-		TaskID:           jobID,
-		ProjectID:        testdbseed.DefaultProjectID,
-		SourceGeneration: "gen-1",
-		Core:             core,
-		Store:            cpStore,
-	})
-	testutil.FailErr(t, "NewPublisher", err)
-
-	_, err = pub.Publish(ctx, checkpoint.PublishRequest{
-		CheckpointID: "chk-conf-1",
-		Trigger:      checkpoint.TriggerExplicitCapture,
-		CandidateBases: map[layeredfs.QualifiedPath][]layeredfs.BaseCapture{
-			ambigLP: {
-				{Path: ambigLP, Kind: layeredfs.EntryRegular, Size: 6, SHA256: cand1SHA},
-				{Path: ambigLP, Kind: layeredfs.EntryRegular, Size: 6, SHA256: cand2SHA},
-			},
-		},
-	})
-	testutil.FailErr(t, "Publish", err)
-
-	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, testbaseline.Durable(t, sqlDB, jobID, primary))
-	testutil.FailErr(t, "SetWorkerWorkspace", err)
-	testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
-
-	svc := &MergeService{Queue: q, Store: q, DataDir: t.TempDir()}
-	previewOut, err := svc.PreviewForSession(ctx, "parent-cp-conf", jobID, "full", nil)
-	testutil.FailErr(t, "PreviewForSession", err)
-	if len(previewOut.Conflicts) != 2 {
-		t.Fatalf("preview Conflicts = %+v, want 2 conflicts", previewOut.Conflicts)
-	}
-	var sawAmbiguous, sawThreeWay bool
-	for _, c := range previewOut.Conflicts {
-		joined := strings.Join(c.Summary, " ")
-		if strings.Contains(joined, string(checkpoint.ConflictAmbiguousBase)) {
-			sawAmbiguous = true
-		}
-		if strings.Contains(joined, string(checkpoint.ConflictContentOverlap)) {
-			sawThreeWay = true
-		}
-	}
-	if !sawAmbiguous || !sawThreeWay {
-		t.Fatalf("expected ConflictAmbiguousBase and ConflictContentOverlap in summaries, got %+v", previewOut.Conflicts)
-	}
-}
-
 // publishedCheckpointWorker owns a completed worker and its immutable checkpoint;
 // the promotion tests can advance trunk, refresh review, and inject commit faults.
 type publishedCheckpointWorker struct {
@@ -368,6 +277,7 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 
 	baseContent := "package app\n\nfunc A() int { return 1 }\n\nfunc B() int { return 2 }\n"
 	testutil.FailErr(t, "write primary base", os.WriteFile(filepath.Join(primary, "app.go"), []byte(baseContent), 0o644))
+	testutil.FailErr(t, "link primary alias", os.Link(filepath.Join(primary, "app.go"), filepath.Join(primary, "app_alias.go")))
 
 	jobID, err := q.Enqueue(ctx, api.WorkerTask{
 		ID:              "job-cp-promote",

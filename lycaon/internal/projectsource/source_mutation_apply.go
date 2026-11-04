@@ -212,7 +212,7 @@ func requireSourceIdentity(path, want string) error {
 	if err != nil {
 		return err
 	}
-	if want == "" || got != want {
+	if !fspath.SameEntryAcrossRestart(want, got) {
 		return ErrSourceMutationDiverged
 	}
 	return nil
