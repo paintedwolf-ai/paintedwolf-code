@@ -4,7 +4,6 @@ package fuselinux
 
 import (
 	"encoding/binary"
-	"errors"
 	"syscall"
 	"time"
 
@@ -210,15 +209,6 @@ func (s *Server) opSetattr(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.EINVAL)
 	}
 	valid := binary.LittleEndian.Uint32(body[0:4])
-	rel, ok := s.nodes.resolveNodeRel(nodeID)
-	if !ok {
-		// Core mutates attributes by path only, and a replaced or unlinked object has no path.
-		// Its old name may now belong to another file, so the request must not reach it.
-		if valid&fattrFH != 0 {
-			return nil, -int32(syscall.ESTALE)
-		}
-		return nil, -int32(syscall.ENOENT)
-	}
 	req := layeredfs.SetAttrRequest{NoFollow: true}
 	if valid&fattrUID != 0 {
 		uid := binary.LittleEndian.Uint32(body[76:80])
@@ -251,12 +241,38 @@ func (s *Server) opSetattr(nodeID uint64, body []byte) ([]byte, int32) {
 		}
 		req.MTime = &mtime
 	}
-	qp := s.qpath(rel)
-	attr, err := s.core.SetAttr(qp, req)
+	var attr layeredfs.EntryAttr
+	var err error
+	if rel, ok := s.nodes.resolveNodeRel(nodeID); ok {
+		attr, err = s.core.SetAttr(s.qpath(rel), req)
+	} else {
+		attr, err = s.setAttrDetached(nodeID, valid, binary.LittleEndian.Uint64(body[8:16]), req)
+	}
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
 	return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
+}
+
+// setAttrDetached serves a replaced or unlinked object. Its old name may now belong to another
+// file, so it is reached by Core identity and never by path. An object still in a lower layer has
+// no private identity to change: only the kernel's descriptor references it.
+func (s *Server) setAttrDetached(nodeID uint64, valid uint32, fh uint64, req layeredfs.SetAttrRequest) (layeredfs.EntryAttr, error) {
+	id, gen, ok := s.nodes.privateIdentity(nodeID)
+	if !ok && valid&fattrFH != 0 {
+		if h, held := s.nodes.lookupOpenHandleForNode(fh, nodeID); held && h.hid != 0 {
+			if attr, err := s.core.StatHandle(h.hid); err == nil && attr.Layer == layeredfs.LayerPrivate {
+				id, gen, ok = attr.NodeID, attr.Generation, true
+			}
+		}
+	}
+	if ok {
+		return s.core.SetAttrNode(id, gen, req)
+	}
+	if valid&fattrFH != 0 {
+		return layeredfs.EntryAttr{}, syscall.ESTALE
+	}
+	return layeredfs.EntryAttr{}, syscall.ENOENT
 }
 
 func (s *Server) opReadlink(nodeID uint64) ([]byte, int32) {
@@ -271,9 +287,8 @@ func (s *Server) opReadlink(nodeID uint64) ([]byte, int32) {
 	return []byte(target), 0
 }
 
-// opFsync acknowledges only what backing storage established. Linux fsync on any descriptor
-// covers the file, but Core has nothing to sync for a read-only handle, so the private backing
-// file is synced directly in that case.
+// opFsync acknowledges only what backing storage established. fsync on any descriptor covers the
+// file, so a read-only descriptor syncs the same private content a writable one would.
 func (s *Server) opFsync(body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
@@ -283,31 +298,6 @@ func (s *Server) opFsync(body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.EBADF)
 	}
 	if err := s.core.SyncHandle(h.hid); err != nil {
-		return nil, mapFUSEErrno(err)
-	}
-	if h.writable {
-		return nil, 0
-	}
-	attr, err := s.core.StatHandle(h.hid)
-	if errors.Is(err, layeredfs.ErrStaleHandle) {
-		return nil, 0 // SyncHandle validated the handle: it reads a lower layer with no private data.
-	}
-	if err != nil {
-		return nil, mapFUSEErrno(err)
-	}
-	if attr.Layer != layeredfs.LayerPrivate || attr.NodeID == 0 {
-		return nil, 0
-	}
-	backing, err := s.core.OpenBackingReader(attr.NodeID, attr.Generation)
-	if err != nil {
-		return nil, mapFUSEErrno(err)
-	}
-	defer func() { _ = backing.Close() }()
-	file, ok := backing.(interface{ Sync() error })
-	if !ok {
-		return nil, -int32(syscall.EIO)
-	}
-	if err := s.syncBacking(file); err != nil {
 		return nil, mapFUSEErrno(err)
 	}
 	return nil, 0

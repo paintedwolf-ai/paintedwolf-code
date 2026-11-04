@@ -42,40 +42,43 @@ func onRemove(s *Server, cs *connState, call rpcCallHeader) []byte {
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
 }
 
+// executeRemove keeps a removed object reachable for a held handle when it can do so cheaply: a
+// private object through its backing file, an untouched one through a read descriptor. Nothing is
+// copied up just to be deleted, and the held set is bounded, so rm -rf costs no per-file state.
 func executeRemove(s *Server, viewCore *layeredfs.Core, dirRec *handleRecord, childQPath layeredfs.QualifiedPath) error {
 	childRec, hasHandle := s.handles.LookupByPath(dirRec.viewID, childQPath)
 	var openFD layeredfs.HandleID
 	var childMeta layeredfs.EntryAttr
 	if hasHandle {
 		meta, err := viewCore.Lstat(childQPath)
-		if err == nil && meta.Mode.IsRegular() {
-			_, _, _ = s.stability.Commit(viewCore, s.handles, nil, childRec, meta, 0, 0)
-			if meta.Nlink <= 1 && len(childRec.paths) <= 1 {
-				if fd, _, openErr := viewCore.Open(childQPath, layeredfs.OpenReadWrite, 0); openErr == nil {
-					openFD, childMeta = fd, meta
-				} else if fd, _, openErr := viewCore.Open(childQPath, layeredfs.OpenReadOnly, 0); openErr == nil {
-					openFD, childMeta = fd, meta
+		if err == nil && meta.Mode.IsRegular() && meta.Nlink <= 1 && len(childRec.paths) <= 1 {
+			flags := layeredfs.OpenReadOnly
+			if meta.Layer == layeredfs.LayerPrivate {
+				flags = layeredfs.OpenReadWrite
+			}
+			if fd, opened, openErr := viewCore.Open(childQPath, flags, 0); openErr == nil {
+				if opened.StableID() == childRec.key.nodeID {
+					openFD, childMeta = fd, opened
+				} else {
+					_ = viewCore.CloseHandle(fd)
 				}
 			}
 		}
 	}
-
 	if err := viewCore.Unlink(childQPath, false); err != nil {
 		if openFD != 0 {
 			_ = viewCore.CloseHandle(openFD)
 		}
-		return err
+		if _, _, presented := s.stability.sidecars.synth(viewCore, childQPath); !presented {
+			return err
+		}
+		s.stability.sidecars.clearPresented(viewCore, childQPath)
 	}
 	if openFD != 0 {
-		s.handles.MarkUnlinked(dirRec.viewID, childQPath, openFD, childMeta)
-	} else {
-		s.handles.InvalidatePath(viewCore, dirRec.viewID, childQPath)
-		if hasHandle {
-			if updated, ok := lookupRecordByKey(s.handles, childRec.key); ok {
-				s.stability.UpdateRecPath(updated.key, updated.qpath)
-			}
-		}
+		closeCoreHandles(viewCore, s.handles.MarkUnlinked(dirRec.viewID, childQPath, openFD, childMeta))
+		return nil
 	}
+	s.handles.InvalidatePath(viewCore, dirRec.viewID, childQPath)
 	return nil
 }
 
@@ -150,11 +153,6 @@ func onRename(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeRenameError(call.XID, MapErrorToNFSStatus(err), &preFrom, &preFrom, &preTo, &preTo, exp)
 	}
-	if srcRec, ok := s.handles.LookupByPath(fromDirRec.viewID, fromQPath); ok {
-		if srcMeta, statErr := statRecord(s, srcRec); statErr == nil {
-			_, _, _ = s.stability.Commit(exp.core, s.handles, nil, srcRec, srcMeta, 0, 0)
-		}
-	}
 	err = exp.core.Rename(fromQPath, toQPath)
 	postFrom, _ := statRecord(s, fromDirRec)
 	postTo, _ := statRecord(s, toDirRec)
@@ -162,10 +160,12 @@ func onRename(s *Server, cs *connState, call rpcCallHeader) []byte {
 		return encodeRenameError(call.XID, MapErrorToNFSStatus(err), &preFrom, &postFrom, &preTo, &postTo, exp)
 	}
 	s.handles.UpdateOnRename(exp.core, fromDirRec.viewID, fromQPath, toQPath)
-	if movedRec, ok := s.handles.LookupByPath(fromDirRec.viewID, toQPath); ok {
-		s.stability.UpdateRecPath(movedRec.key, toQPath)
+	if isClientPlaceholderName(toName) {
+		exp.core.MarkTransientName(toQPath)
+		s.stability.sidecars.notePlaceholder(exp.core, sidecarPathOf(fromQPath), toQPath)
+		s.stability.absorbAtName(exp.core, s.handles, toDirRec.viewID, fromQPath)
 	}
-	syncAppleDoubleForPath(exp.core, toQPath)
+	s.stability.absorbAtName(exp.core, s.handles, toDirRec.viewID, toQPath)
 	s.dirs.InvalidateDir(fromDirRec.key)
 	if toDirRec.key != fromDirRec.key {
 		s.dirs.InvalidateDir(toDirRec.key)
@@ -175,6 +175,24 @@ func onRename(s *Server, cs *connState, call rpcCallHeader) []byte {
 	writeWccData(&body, &preFrom, &postFrom, exp.cap.AllowedUID, exp.cap.AllowedGID)
 	writeWccData(&body, &preTo, &postTo, exp.cap.AllowedUID, exp.cap.AllowedGID)
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+// isClientPlaceholderName matches the name the macOS NFS client gives an open file it was asked to
+// delete (".nfs.%08x.%04x" in xnu's nfs_sillyrename). The client removes it at last close. It is a
+// protocol artifact of this adapter's client, so it must not reach a checkpoint.
+func isClientPlaceholderName(name string) bool {
+	const prefix = ".nfs."
+	if len(name) != len(prefix)+8+1+4 || !strings.HasPrefix(name, prefix) || name[len(prefix)+8] != '.' {
+		return false
+	}
+	for i := len(prefix); i < len(name); i++ {
+		c := name[i]
+		isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+		if !isHex && i != len(prefix)+8 {
+			return false
+		}
+	}
+	return true
 }
 
 func encodeRenameError(
@@ -228,16 +246,13 @@ func onLink(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeLinkError(call.XID, MapErrorToNFSStatus(err), &preTarget, &preDir, &preDir, exp)
 	}
-	_, _, _ = s.stability.Commit(exp.core, s.handles, nil, targetRec, preTarget, 0, 0)
 	postTarget, err := exp.core.Link(targetRec.qpath, linkQPath)
 	postDir, _ := statRecord(s, dirRec)
 	if err != nil {
 		return encodeLinkError(call.XID, MapErrorToNFSStatus(err), &preTarget, &preDir, &postDir, exp)
 	}
-	postTarget.NodeID = targetRec.key.nodeID
-	ensureMeta := postTarget
-	ensureMeta.Generation = layeredfs.Generation(targetRec.generation)
-	_ = s.handles.Ensure(dirRec.viewID, linkQPath, ensureMeta, false, targetRec.ownerCreatedRO)
+	_ = s.handles.Ensure(dirRec.viewID, linkQPath, postTarget, dirRec.key.nodeID, false)
+	postTarget = wireMeta(s, dirRec.key.viewHash, postTarget)
 	s.dirs.InvalidateDir(dirRec.key)
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
@@ -274,7 +289,7 @@ func (t *handleTable) UpdateOnRename(core *layeredfs.Core, viewID ViewID, from, 
 	srcRec := t.byPath[fromPK]
 	var toClose layeredfs.HandleID
 	if dstRec, ok := t.byPath[toPK]; ok && dstRec != srcRec {
-		toClose = dropRecordPathLocked(t, dstRec, toPK, to)
+		toClose = t.dropRecordPathLocked(dstRec, toPK, to)
 	}
 	prefix := from.Rel + "/"
 	for pk, rec := range t.byPath {

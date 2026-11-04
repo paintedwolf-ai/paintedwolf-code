@@ -72,3 +72,8 @@ func (p *osLowerProvider) ReadDir(_ string) ([]LowerDirEntry, error) {
 func (p *osLowerProvider) ListXattr(_ string) (map[string][]byte, error) {
 	return nil, ErrUnsupportedOperation
 }
+
+// BackingCapacity reports the storage private writes consume.
+func (c *Core) BackingCapacity() (BackingCapacity, error) {
+	return BackingCapacity{}, ErrUnsupportedOperation
+}

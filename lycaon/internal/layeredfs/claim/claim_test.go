@@ -194,7 +194,9 @@ func TestRealNFSDarwinMountedClaimZeroLowerDirReads(t *testing.T) {
 	}
 	testutil.FailErr(t, "write r2", os.WriteFile(filepath.Join(root2, "doc.md"), []byte("doc\n"), 0o644))
 
-	nfsAdp := nfsdarwin.New(nfsdarwin.Config{})
+	nfsAdp := nfsdarwin.New(nfsdarwin.Config{
+		ConfinementCheckFn: func(context.Context, adapter.ProbeConfig) error { return nil },
+	})
 	sel := adapter.NewSelector("darwin", nil, nfsAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
 	coord := NewCoordinator(sel)
 	ret := newTestRetentionRegistrar()

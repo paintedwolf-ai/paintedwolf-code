@@ -334,15 +334,18 @@ func TestPartialWriteFailureUpdatesAccountingAndJournal(t *testing.T) {
 	}
 
 	roQP := QualifiedPath{RootID: "primary", Rel: "loose_ro"}
-	roHID, roAttr, err := core.CreateFile(roQP, 0o444, true)
+	roHID, _, err := core.CreateFile(roQP, 0o444, true)
 	testutil.FailErr(t, "CreateFile loose_ro", err)
-	testutil.FailErr(t, "CloseHandle loose_ro", core.CloseHandle(roHID))
-
-	nNode, updatedAttr, nwErr := core.WriteViaNodeHandle(roAttr.NodeID, roAttr.Generation, []byte("12345678"), 0)
-	if !errors.Is(nwErr, syscall.ENOSPC) || nNode != 4 || updatedAttr.Size != 4 {
-		t.Fatalf("expected (4, size=4, ENOSPC) from partial WriteViaNodeHandle, got (n=%d, size=%d, err=%v)",
-			nNode, updatedAttr.Size, nwErr)
+	nNode, nwErr := core.WriteHandle(roHID, []byte("12345678"), 0)
+	if !errors.Is(nwErr, syscall.ENOSPC) || nNode != 4 {
+		t.Fatalf("expected (4, ENOSPC) from partial WriteHandle, got (n=%d, err=%v)", nNode, nwErr)
 	}
+	updatedAttr, sErr := core.StatHandle(roHID)
+	testutil.FailErr(t, "StatHandle loose_ro", sErr)
+	if updatedAttr.Size != 4 {
+		t.Fatalf("expected size 4 after partial write, got %d", updatedAttr.Size)
+	}
+	testutil.FailErr(t, "CloseHandle loose_ro", core.CloseHandle(roHID))
 	snap, err := core.SnapshotJournal()
 	testutil.FailErr(t, "SnapshotJournal", err)
 	if len(snap.Changes) != 2 {

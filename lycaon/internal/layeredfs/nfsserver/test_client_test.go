@@ -17,11 +17,11 @@ import (
 )
 
 type testEnv struct {
-	Core                            *layeredfs.Core
-	Server                          *nfsserver.Server
-	BaseDir, ProjDir, WorkDir       string
-	StateDir                        string
-	UID, GID                        uint32
+	Core                      *layeredfs.Core
+	Server                    *nfsserver.Server
+	BaseDir, ProjDir, WorkDir string
+	StateDir                  string
+	UID, GID                  uint32
 }
 
 func newTestEnv(t *testing.T, fault *nfsserver.FaultInjector) *testEnv {

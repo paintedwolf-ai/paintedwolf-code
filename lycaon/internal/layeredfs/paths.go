@@ -170,6 +170,7 @@ func nodeToAttrLocked(n *privateNode) EntryAttr {
 	}
 	return EntryAttr{
 		NodeID:     n.id,
+		OriginID:   n.origin,
 		Generation: n.gen,
 		Layer:      LayerPrivate,
 		Kind:       n.kind,

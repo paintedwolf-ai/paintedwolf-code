@@ -128,6 +128,9 @@ func openReadOnlyTarget(c *Core, targetPath QualifiedPath, flags OpenFlags) (Han
 	if flags&OpenDirectory != 0 && res.attr.Kind != EntryDirectory {
 		return 0, EntryAttr{}, syscall.ENOTDIR
 	}
+	if res.attr.Kind.IsSpecial() {
+		return 0, EntryAttr{}, ErrUnsupportedOperation
+	}
 	if res.attr.Kind == EntryDirectory {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -261,6 +264,9 @@ func openMutableTarget(c *Core, targetPath QualifiedPath, flags OpenFlags, mode 
 	}
 	defer node.flags.ioMu.Unlock()
 	defer c.mu.Unlock()
+	if node.kind.IsSpecial() {
+		return 0, EntryAttr{}, ErrUnsupportedOperation
+	}
 	wf, err := openBackingFileRW(int(c.backing.workDirFile.Fd()), node.flags.backingName, node.flags.backingPath)
 	if err != nil {
 		return 0, EntryAttr{}, err

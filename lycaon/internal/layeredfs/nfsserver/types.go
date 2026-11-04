@@ -26,7 +26,7 @@ const (
 	DefaultIdleTimeout              = 30 * time.Second
 
 	// HandleSize is the fixed wire length of an authenticated Lycaon NFSv3 file handle.
-	HandleSize = 56
+	HandleSize = 64
 
 	// RPC and program version constants (RFC 1813 / RFC 5531).
 	rpcVersion2       = 2

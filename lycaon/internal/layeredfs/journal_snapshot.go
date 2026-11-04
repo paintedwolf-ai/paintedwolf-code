@@ -92,6 +92,9 @@ func isPathLogicallyChangedFastLocked(c *Core, qp QualifiedPath) bool {
 	if nid, ok := c.state.pathIndex[qp]; ok {
 		node := c.state.nodesByID[nid]
 		if node != nil && !node.flags.unlinked {
+			if isContentlessPathLocked(c, qp, node) {
+				return base.Kind != EntryAbsent
+			}
 			if !node.flags.physicalCopyUp || base.Kind == EntryAbsent || base.Kind != node.kind {
 				return true
 			}

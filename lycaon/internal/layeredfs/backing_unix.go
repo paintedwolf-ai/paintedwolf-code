@@ -299,3 +299,21 @@ func statToLowerEntry(st unix.Stat_t) LowerEntry {
 		Nlink:     uint32(st.Nlink),
 	}
 }
+
+// BackingCapacity reports the storage private writes consume.
+func (c *Core) BackingCapacity() (BackingCapacity, error) {
+	var out BackingCapacity
+	err := c.backing.withWorkDirFD(func(dirFD int) error {
+		var st unix.Statfs_t
+		if err := unix.Fstatfs(dirFD, &st); err != nil {
+			return err
+		}
+		size := statfsBlockSize(&st)
+		out = BackingCapacity{
+			TotalBytes: uint64(st.Blocks) * size, FreeBytes: uint64(st.Bfree) * size, AvailableBytes: uint64(st.Bavail) * size,
+			TotalFiles: uint64(st.Files), FreeFiles: uint64(st.Ffree),
+		}
+		return nil
+	})
+	return out, err
+}

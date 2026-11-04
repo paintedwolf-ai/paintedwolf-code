@@ -42,15 +42,7 @@ func TestScenarioSuiteAllOperations(t *testing.T) {
 	core, trunk, _ := newSingleRootTestCore(t)
 
 	// Seed trunk fixtures.
-	testutil.FailErr(t, "write trunk base.txt", os.WriteFile(filepath.Join(trunk, "base.txt"), []byte("initial-trunk-content\n"), 0o644))
-	testutil.FailErr(t, "write trunk trunc.txt", os.WriteFile(filepath.Join(trunk, "trunc.txt"), []byte("0123456789abcdef"), 0o644))
-	testutil.FailErr(t, "write trunk sed.txt", os.WriteFile(filepath.Join(trunk, "sed.txt"), []byte("hello world\n"), 0o644))
-	testutil.FailErr(t, "write trunk replace_me", os.WriteFile(filepath.Join(trunk, "replace_me"), []byte("i am a file"), 0o644))
-	testutil.FailErr(t, "mkdir trunk dir_src", os.MkdirAll(filepath.Join(trunk, "dir_src", "nested"), 0o755))
-	testutil.FailErr(t, "write trunk dir_src/nested/item.txt", os.WriteFile(filepath.Join(trunk, "dir_src", "nested", "item.txt"), []byte("nested-item"), 0o644))
-	testutil.FailErr(t, "write trunk open_unlink.txt", os.WriteFile(filepath.Join(trunk, "open_unlink.txt"), []byte("survive-unlink"), 0o644))
-	testutil.FailErr(t, "write trunk hard_target.txt", os.WriteFile(filepath.Join(trunk, "hard_target.txt"), []byte("shared-bytes"), 0o644))
-	testutil.FailErr(t, "write trunk readonly_touch.txt", os.WriteFile(filepath.Join(trunk, "readonly_touch.txt"), []byte("unchanged"), 0o644))
+	seedScenarioTrunk(t, trunk)
 
 	qp := func(rel string) QualifiedPath {
 		return QualifiedPath{RootID: "primary", Rel: rel}
@@ -192,72 +184,9 @@ func TestScenarioSuiteAllOperations(t *testing.T) {
 		t.Fatalf("expected mode 0755 and mtime %v, got mode=%o mtime=%v", fixedTime, attrAfterMeta.Mode.Perm(), attrAfterMeta.ModTime)
 	}
 
-	// 10. Xattrs and legitimate ._* AppleDouble files
-	testutil.FailErr(t, "setxattr user.test", core.SetXattr(qp("base.txt"), "user.test", []byte("xattr-val"), false))
-	xval, err := core.GetXattr(qp("base.txt"), "user.test", false)
-	testutil.FailErr(t, "getxattr user.test", err)
-	if string(xval) != "xattr-val" {
-		t.Fatalf("unexpected xattr value: %q", string(xval))
-	}
-	xnames, err := core.ListXattr(qp("base.txt"), false)
-	testutil.FailErr(t, "listxattr base.txt", err)
-	foundUserTest := false
-	for _, xn := range xnames {
-		if xn == "user.test" {
-			foundUserTest = true
-		}
-	}
-	if !foundUserTest {
-		t.Fatalf("expected user.test in xattr names, got %v", xnames)
-	}
-	appleDouble := []byte{0x00, 0x05, 0x16, 0x07, 0x00, 0x02, 0x00, 0x00, 'm', 'a', 'c', 'o', 's'}
-	_, err = core.WriteFile(qp("._base.txt"), appleDouble, 0o644)
-	testutil.FailErr(t, "write ._base.txt AppleDouble file", err)
-	gotAppleDouble, err := core.ReadFile(qp("._base.txt"))
-	testutil.FailErr(t, "read ._base.txt", err)
-	if !bytes.Equal(gotAppleDouble, appleDouble) {
-		t.Fatalf("AppleDouble content was corrupted or dropped: %x", gotAppleDouble)
-	}
-
-	// 11. Physical copy-up vs logical change: open-for-write without changing bytes or metadata
-	roHandle, _, err := core.Open(qp("readonly_touch.txt"), OpenReadWrite, 0)
-	testutil.FailErr(t, "open readonly_touch.txt O_RDWR", err)
-	testutil.FailErr(t, "close readonly_touch.txt without writing", core.CloseHandle(roHandle))
-
-	allChanges, err := core.EnumerateChanges(false)
-	testutil.FailErr(t, "EnumerateChanges(false)", err)
-	logicalChanges, err := core.EnumerateChanges(true)
-	testutil.FailErr(t, "EnumerateChanges(true)", err)
-
-	foundPhysicalTouch := false
-	for _, ce := range allChanges {
-		if ce.Path == qp("readonly_touch.txt") {
-			foundPhysicalTouch = true
-			if !ce.PhysicalCopyUp || ce.LogicalChange || ce.ContentChanged || ce.MetadataChanged {
-				t.Fatalf("expected readonly_touch.txt to be physical copy-up only, got %+v", ce)
-			}
-		}
-	}
-	if !foundPhysicalTouch {
-		t.Fatal("expected readonly_touch.txt in EnumerateChanges(false)")
-	}
-	for _, ce := range logicalChanges {
-		if ce.Path == qp("readonly_touch.txt") {
-			t.Fatalf("readonly_touch.txt must not appear in logical changes: %+v", ce)
-		}
-	}
-
-	// 12. Journal snapshot persistence and reload
-	snap, err := core.SnapshotJournal()
-	testutil.FailErr(t, "SnapshotJournal", err)
-	if snap.FormatVersion != FormatVersion || len(snap.Operations) == 0 {
-		t.Fatalf("unexpected journal snapshot: %+v", snap)
-	}
-	loaded, err := core.LoadPersistedJournal()
-	testutil.FailErr(t, "LoadPersistedJournal", err)
-	if loaded.FormatVersion != FormatVersion || len(loaded.Operations) != len(snap.Operations) {
-		t.Fatalf("persisted journal mismatch: got %d ops, want %d", len(loaded.Operations), len(snap.Operations))
-	}
+	scenarioXattrsAndAppleDouble(t, core, qp)
+	scenarioCopyUpWithoutChangeIsNotLogical(t, core, qp)
+	scenarioJournalSnapshotReloads(t, core)
 }
 
 func TestMultiRootAndParentLayerResolution(t *testing.T) {
@@ -387,16 +316,12 @@ func TestHandleLifecycleAndGitInterception(t *testing.T) {
 		t.Fatalf("expected distinct NodeID and Generation on recreated file, got attr1=%+v attr2=%+v", attr1, attr2)
 	}
 
-	// Owner-created read-only loose Git object write via (NodeID, Generation) (#1660).
-	roHID, roAttr, err := core.CreateFile(qp("loose_obj"), 0o444, true)
+	// A descriptor opened to create a read-only file keeps its write access (#1660).
+	roHID, _, err := core.CreateFile(qp("loose_obj"), 0o444, true)
 	testutil.FailErr(t, "create 0444 loose_obj", err)
+	_, err = core.WriteHandle(roHID, []byte("git-blob-bytes"), 0)
+	testutil.FailErr(t, "write to the creating descriptor of a 0444 file", err)
 	testutil.FailErr(t, "close loose_obj handle", core.CloseHandle(roHID))
-	_, _, err = core.WriteViaNodeHandle(roAttr.NodeID, roAttr.Generation, []byte("git-blob-bytes"), 0)
-	testutil.FailErr(t, "WriteViaNodeHandle on owner-created 0444 file", err)
-	// Stale generation on WriteViaNodeHandle must be refused.
-	if _, _, err := core.WriteViaNodeHandle(roAttr.NodeID, roAttr.Generation+99, []byte("bad"), 0); !errors.Is(err, ErrStaleHandle) {
-		t.Fatalf("expected ErrStaleHandle for mismatched generation, got %v", err)
-	}
 
 	// Release view: held handle must be refused immediately.
 	testutil.FailErr(t, "ReleaseView", core.ReleaseView())
@@ -407,4 +332,93 @@ func TestHandleLifecycleAndGitInterception(t *testing.T) {
 	if MapErrno(ErrStaleHandle) != syscall.ESTALE {
 		t.Fatalf("expected ESTALE for ErrStaleHandle")
 	}
+}
+
+func scenarioXattrsAndAppleDouble(t *testing.T, core *Core, qp func(string) QualifiedPath) {
+	t.Helper()
+	// 10. Xattrs and legitimate ._* AppleDouble files
+	testutil.FailErr(t, "setxattr user.test", core.SetXattr(qp("base.txt"), "user.test", []byte("xattr-val"), false))
+	xval, err := core.GetXattr(qp("base.txt"), "user.test", false)
+	testutil.FailErr(t, "getxattr user.test", err)
+	if string(xval) != "xattr-val" {
+		t.Fatalf("unexpected xattr value: %q", string(xval))
+	}
+	xnames, err := core.ListXattr(qp("base.txt"), false)
+	testutil.FailErr(t, "listxattr base.txt", err)
+	foundUserTest := false
+	for _, xn := range xnames {
+		if xn == "user.test" {
+			foundUserTest = true
+		}
+	}
+	if !foundUserTest {
+		t.Fatalf("expected user.test in xattr names, got %v", xnames)
+	}
+	appleDouble := []byte{0x00, 0x05, 0x16, 0x07, 0x00, 0x02, 0x00, 0x00, 'm', 'a', 'c', 'o', 's'}
+	_, err = core.WriteFile(qp("._base.txt"), appleDouble, 0o644)
+	testutil.FailErr(t, "write ._base.txt AppleDouble file", err)
+	gotAppleDouble, err := core.ReadFile(qp("._base.txt"))
+	testutil.FailErr(t, "read ._base.txt", err)
+	if !bytes.Equal(gotAppleDouble, appleDouble) {
+		t.Fatalf("AppleDouble content was corrupted or dropped: %x", gotAppleDouble)
+	}
+}
+
+func scenarioCopyUpWithoutChangeIsNotLogical(t *testing.T, core *Core, qp func(string) QualifiedPath) {
+	t.Helper()
+	// 11. Physical copy-up vs logical change: open-for-write without changing bytes or metadata
+	roHandle, _, err := core.Open(qp("readonly_touch.txt"), OpenReadWrite, 0)
+	testutil.FailErr(t, "open readonly_touch.txt O_RDWR", err)
+	testutil.FailErr(t, "close readonly_touch.txt without writing", core.CloseHandle(roHandle))
+
+	allChanges, err := core.EnumerateChanges(false)
+	testutil.FailErr(t, "EnumerateChanges(false)", err)
+	logicalChanges, err := core.EnumerateChanges(true)
+	testutil.FailErr(t, "EnumerateChanges(true)", err)
+
+	foundPhysicalTouch := false
+	for _, ce := range allChanges {
+		if ce.Path == qp("readonly_touch.txt") {
+			foundPhysicalTouch = true
+			if !ce.PhysicalCopyUp || ce.LogicalChange || ce.ContentChanged || ce.MetadataChanged {
+				t.Fatalf("expected readonly_touch.txt to be physical copy-up only, got %+v", ce)
+			}
+		}
+	}
+	if !foundPhysicalTouch {
+		t.Fatal("expected readonly_touch.txt in EnumerateChanges(false)")
+	}
+	for _, ce := range logicalChanges {
+		if ce.Path == qp("readonly_touch.txt") {
+			t.Fatalf("readonly_touch.txt must not appear in logical changes: %+v", ce)
+		}
+	}
+}
+
+func scenarioJournalSnapshotReloads(t *testing.T, core *Core) {
+	t.Helper()
+	// 12. Journal snapshot persistence and reload
+	snap, err := core.SnapshotJournal()
+	testutil.FailErr(t, "SnapshotJournal", err)
+	if snap.FormatVersion != FormatVersion || len(snap.Operations) == 0 {
+		t.Fatalf("unexpected journal snapshot: %+v", snap)
+	}
+	loaded, err := core.LoadPersistedJournal()
+	testutil.FailErr(t, "LoadPersistedJournal", err)
+	if loaded.FormatVersion != FormatVersion || len(loaded.Operations) != len(snap.Operations) {
+		t.Fatalf("persisted journal mismatch: got %d ops, want %d", len(loaded.Operations), len(snap.Operations))
+	}
+}
+
+func seedScenarioTrunk(t *testing.T, trunk string) {
+	t.Helper()
+	testutil.FailErr(t, "write trunk base.txt", os.WriteFile(filepath.Join(trunk, "base.txt"), []byte("initial-trunk-content\n"), 0o644))
+	testutil.FailErr(t, "write trunk trunc.txt", os.WriteFile(filepath.Join(trunk, "trunc.txt"), []byte("0123456789abcdef"), 0o644))
+	testutil.FailErr(t, "write trunk sed.txt", os.WriteFile(filepath.Join(trunk, "sed.txt"), []byte("hello world\n"), 0o644))
+	testutil.FailErr(t, "write trunk replace_me", os.WriteFile(filepath.Join(trunk, "replace_me"), []byte("i am a file"), 0o644))
+	testutil.FailErr(t, "mkdir trunk dir_src", os.MkdirAll(filepath.Join(trunk, "dir_src", "nested"), 0o755))
+	testutil.FailErr(t, "write trunk dir_src/nested/item.txt", os.WriteFile(filepath.Join(trunk, "dir_src", "nested", "item.txt"), []byte("nested-item"), 0o644))
+	testutil.FailErr(t, "write trunk open_unlink.txt", os.WriteFile(filepath.Join(trunk, "open_unlink.txt"), []byte("survive-unlink"), 0o644))
+	testutil.FailErr(t, "write trunk hard_target.txt", os.WriteFile(filepath.Join(trunk, "hard_target.txt"), []byte("shared-bytes"), 0o644))
+	testutil.FailErr(t, "write trunk readonly_touch.txt", os.WriteFile(filepath.Join(trunk, "readonly_touch.txt"), []byte("unchanged"), 0o644))
 }

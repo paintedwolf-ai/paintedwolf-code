@@ -39,28 +39,7 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 		t.Fatalf("MOUNT failed: st=%v len=%d", st, len(rootFH))
 	}
 
-	// NFS NULL, GETATTR, ACCESS, FSSTAT, FSINFO, PATHCONF.
-	if code, _ := cli.call(100003, 3, uint32(nfs.NFSProcedureNull), nil); code != nfs.ResponseCodeSuccess {
-		t.Fatalf("NFS NULL code: %v", code)
-	}
-	if nst, attr := cli.getAttr(rootFH); nst != nfs.NFSStatusOk || attr.Type != nfs.FileTypeDirectory {
-		t.Fatalf("GETATTR root: st=%v type=%v", nst, attr.Type)
-	}
-	var accArgs bytes.Buffer
-	putBytes(&accArgs, rootFH)
-	putU32(&accArgs, 0x3f)
-	_, r := cli.call(100003, 3, uint32(nfs.NFSProcedureAccess), accArgs.Bytes())
-	if nst := nfs.NFSStatus(getU32(t, r)); nst != nfs.NFSStatusOk {
-		t.Fatalf("ACCESS: %v", nst)
-	}
-	for _, proc := range []nfs.NFSProcedure{nfs.NFSProcedureFSStat, nfs.NFSProcedureFSInfo, nfs.NFSProcedurePathConf} {
-		var b bytes.Buffer
-		putBytes(&b, rootFH)
-		_, pr := cli.call(100003, 3, uint32(proc), b.Bytes())
-		if nst := nfs.NFSStatus(getU32(t, pr)); nst != nfs.NFSStatusOk {
-			t.Fatalf("proc %v failed: %v", proc, nst)
-		}
-	}
+	checkRootAttributeProcedures(t, cli, rootFH)
 
 	// LOOKUP existing & ENOENT.
 	if nst, _, _ := cli.lookup(rootFH, "missing.txt"); nst != nfs.NFSStatusNoEnt {
@@ -79,19 +58,7 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 		t.Fatalf("expected EISDIR, got %v", nst)
 	}
 
-	// CREATE (Unchecked, Guarded, Exclusive + idempotent retry) & EEXIST.
-	verf := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
-	nst, exclFH1 := cli.create(rootFH, "excl.txt", 0o644, 2, verf)
-	if nst != nfs.NFSStatusOk {
-		t.Fatalf("CREATE exclusive: %v", nst)
-	}
-	nst, exclFH2 := cli.create(rootFH, "excl.txt", 0o644, 2, verf)
-	if nst != nfs.NFSStatusOk || !bytes.Equal(exclFH1, exclFH2) {
-		t.Fatalf("CREATE exclusive retry failed: st=%v", nst)
-	}
-	if nst, _ := cli.create(rootFH, "excl.txt", 0o644, 1, verf); nst != nfs.NFSStatusExist {
-		t.Fatalf("expected EEXIST on guarded create, got %v", nst)
-	}
+	checkExclusiveCreateRetry(t, cli, rootFH)
 
 	// MKDIR, RMDIR, ENOTEMPTY.
 	var mkdirArgs bytes.Buffer
@@ -114,36 +81,15 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 		t.Fatalf("expected ENOTEMPTY, got %v", nst)
 	}
 
-	// SYMLINK, READLINK, and ELOOP via Core symlink loop mapping.
-	var symArgs bytes.Buffer
-	putBytes(&symArgs, rootFH)
-	putStr(&symArgs, "link-readme")
-	encodeSattrMode(&symArgs, true, 0o777)
-	putStr(&symArgs, "README.md")
-	_, sr := cli.call(100003, 3, uint32(nfs.NFSProcedureSymlink), symArgs.Bytes())
-	if nst := nfs.NFSStatus(getU32(t, sr)); nst != nfs.NFSStatusOk {
-		t.Fatalf("SYMLINK: %v", nst)
-	}
-	_ = getU32(t, sr)
-	symFH := getBytes(t, sr)
-	var rlArgs bytes.Buffer
-	putBytes(&rlArgs, symFH)
-	_, rlr := cli.call(100003, 3, uint32(nfs.NFSProcedureReadlink), rlArgs.Bytes())
-	if nst := nfs.NFSStatus(getU32(t, rlr)); nst != nfs.NFSStatusOk {
-		t.Fatalf("READLINK: %v", nst)
-	}
-	_ = getPostOpAttr(t, rlr)
-	if gotTarget := string(getBytes(t, rlr)); gotTarget != "README.md" {
-		t.Fatalf("READLINK target=%q", gotTarget)
-	}
+	checkSymlinkAndReadlink(t, cli, rootFH)
 
-	// MKNOD returns NFSStatusNotSupp; LINK creates hard link sharing NodeID and handle.
+	// MKNOD with its attributes missing is malformed; LINK creates hard link sharing NodeID and handle.
 	var mknodArgs bytes.Buffer
 	putBytes(&mknodArgs, rootFH)
 	putStr(&mknodArgs, "fifo")
 	putU32(&mknodArgs, 6)
 	_, mkr := cli.call(100003, 3, uint32(nfs.NFSProcedureMkNod), mknodArgs.Bytes())
-	if nst := nfs.NFSStatus(getU32(t, mkr)); nst != nfs.NFSStatusNotSupp {
+	if nst := nfs.NFSStatus(getU32(t, mkr)); nst != nfs.NFSStatusInval {
 		t.Fatalf("MKNOD status=%v", nst)
 	}
 	var linkArgs bytes.Buffer
@@ -184,7 +130,7 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 	}
 	injectENOSPC = false
 
-	// EPERM vs EACCES: SETATTR with foreign UID -> EPERM; WRITE to read-only existing file -> EACCES.
+	// SETATTR with foreign UID -> EPERM. WRITE follows the handle, not the current mode.
 	var setUIDArgs bytes.Buffer
 	putBytes(&setUIDArgs, readmeFH)
 	for _, v := range []uint32{0, 1, env.UID + 999, 0, 0, 0, 0, 0} {
@@ -195,8 +141,8 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 		t.Fatalf("expected EPERM(NFSStatusPerm), got %v", nst)
 	}
 	_, _ = env.Core.Chmod(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "README.md"}, 0o444)
-	if nst, _, _, _ := cli.write(readmeFH, 0, []byte("denied"), nfsserver.FileSync); nst != nfs.NFSStatusAccess {
-		t.Fatalf("expected EACCES(NFSStatusAccess), got %v", nst)
+	if nst, _, _, _ := cli.write(readmeFH, 0, []byte("kept"), nfsserver.FileSync); nst != nfs.NFSStatusOk {
+		t.Fatalf("expected WRITE through a held handle to succeed after chmod, got %v", nst)
 	}
 	if nfsserver.MapErrorToNFSStatus(syscall.ELOOP) != nfsserver.NFSStatusLoop {
 		t.Fatal("expected ELOOP to map to NFSStatusLoop")
@@ -296,5 +242,74 @@ func TestGitLooseObject0444AndPOSIXMetadataPreservation(t *testing.T) {
 	if nst != nfs.NFSStatusOk || gotAttr.FileMode != 0o644 || gotAttr.Filesize != 4 ||
 		gotAttr.Mtime.Seconds != uint32(wantTime.Unix()) {
 		t.Fatalf("preserved metadata mismatch: %+v", gotAttr)
+	}
+}
+
+func checkRootAttributeProcedures(t *testing.T, cli *rpcClient, rootFH []byte) {
+	t.Helper()
+	// NFS NULL, GETATTR, ACCESS, FSSTAT, FSINFO, PATHCONF.
+	if code, _ := cli.call(100003, 3, uint32(nfs.NFSProcedureNull), nil); code != nfs.ResponseCodeSuccess {
+		t.Fatalf("NFS NULL code: %v", code)
+	}
+	if nst, attr := cli.getAttr(rootFH); nst != nfs.NFSStatusOk || attr.Type != nfs.FileTypeDirectory {
+		t.Fatalf("GETATTR root: st=%v type=%v", nst, attr.Type)
+	}
+	var accArgs bytes.Buffer
+	putBytes(&accArgs, rootFH)
+	putU32(&accArgs, 0x3f)
+	_, r := cli.call(100003, 3, uint32(nfs.NFSProcedureAccess), accArgs.Bytes())
+	if nst := nfs.NFSStatus(getU32(t, r)); nst != nfs.NFSStatusOk {
+		t.Fatalf("ACCESS: %v", nst)
+	}
+	for _, proc := range []nfs.NFSProcedure{nfs.NFSProcedureFSStat, nfs.NFSProcedureFSInfo, nfs.NFSProcedurePathConf} {
+		var b bytes.Buffer
+		putBytes(&b, rootFH)
+		_, pr := cli.call(100003, 3, uint32(proc), b.Bytes())
+		if nst := nfs.NFSStatus(getU32(t, pr)); nst != nfs.NFSStatusOk {
+			t.Fatalf("proc %v failed: %v", proc, nst)
+		}
+	}
+}
+
+func checkExclusiveCreateRetry(t *testing.T, cli *rpcClient, rootFH []byte) {
+	t.Helper()
+	// CREATE (Unchecked, Guarded, Exclusive + idempotent retry) & EEXIST.
+	verf := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
+	nst, exclFH1 := cli.create(rootFH, "excl.txt", 0o644, 2, verf)
+	if nst != nfs.NFSStatusOk {
+		t.Fatalf("CREATE exclusive: %v", nst)
+	}
+	nst, exclFH2 := cli.create(rootFH, "excl.txt", 0o644, 2, verf)
+	if nst != nfs.NFSStatusOk || !bytes.Equal(exclFH1, exclFH2) {
+		t.Fatalf("CREATE exclusive retry failed: st=%v", nst)
+	}
+	if nst, _ := cli.create(rootFH, "excl.txt", 0o644, 1, verf); nst != nfs.NFSStatusExist {
+		t.Fatalf("expected EEXIST on guarded create, got %v", nst)
+	}
+}
+
+func checkSymlinkAndReadlink(t *testing.T, cli *rpcClient, rootFH []byte) {
+	t.Helper()
+	// SYMLINK, READLINK, and ELOOP via Core symlink loop mapping.
+	var symArgs bytes.Buffer
+	putBytes(&symArgs, rootFH)
+	putStr(&symArgs, "link-readme")
+	encodeSattrMode(&symArgs, true, 0o777)
+	putStr(&symArgs, "README.md")
+	_, sr := cli.call(100003, 3, uint32(nfs.NFSProcedureSymlink), symArgs.Bytes())
+	if nst := nfs.NFSStatus(getU32(t, sr)); nst != nfs.NFSStatusOk {
+		t.Fatalf("SYMLINK: %v", nst)
+	}
+	_ = getU32(t, sr)
+	symFH := getBytes(t, sr)
+	var rlArgs bytes.Buffer
+	putBytes(&rlArgs, symFH)
+	_, rlr := cli.call(100003, 3, uint32(nfs.NFSProcedureReadlink), rlArgs.Bytes())
+	if nst := nfs.NFSStatus(getU32(t, rlr)); nst != nfs.NFSStatusOk {
+		t.Fatalf("READLINK: %v", nst)
+	}
+	_ = getPostOpAttr(t, rlr)
+	if gotTarget := string(getBytes(t, rlr)); gotTarget != "README.md" {
+		t.Fatalf("READLINK target=%q", gotTarget)
 	}
 }

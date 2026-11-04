@@ -152,6 +152,12 @@ func (c *Coordinator) RecoverWorkerRuntime(ctx context.Context, workerID string)
 	}
 	report.ViewID, report.CheckpointID = j.ViewID, j.LastPublishedCheckpointID
 	report.HadRuntime = len(idents) > 0
+	if report.HadRuntime {
+		if err := noteUnreleasedRuntime(c, &j); err != nil {
+			report.Disposition, report.Reason, report.Err = RuntimeUnresolved, ReasonSalvageFailed, err
+			return report
+		}
+	}
 	backing := j.BackingDir
 	for _, ident := range idents {
 		if ident.ViewID == j.ViewID && ident.BackingDir != "" {

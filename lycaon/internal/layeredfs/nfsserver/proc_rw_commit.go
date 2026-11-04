@@ -22,19 +22,29 @@ func statRecord(s *Server, rec *handleRecord) (layeredfs.EntryAttr, error) {
 		}
 		return s.stability.EffectiveMeta(rec.key, rec.unlinked.meta), nil
 	}
+	defer s.stability.sidecars.settled(rec.qpath)()
 	meta, err := viewCore.Lstat(rec.qpath)
 	if err != nil {
-		if adMeta, _, ok := synthAppleDoubleAttr(viewCore, rec.qpath); ok {
-			meta = adMeta
-		} else {
+		adMeta, _, ok := s.stability.sidecars.synth(viewCore, rec.qpath)
+		if !ok {
 			return layeredfs.EntryAttr{}, err
 		}
+		meta = adMeta
 	}
-	if rec.generation > 1 && uint64(meta.Generation) != rec.generation {
+	// The handle names an object, not a path: another object now at the name is not this one.
+	if meta.StableID() != rec.key.nodeID {
 		return layeredfs.EntryAttr{}, ErrStaleHandle
 	}
-	meta.NodeID = rec.key.nodeID
-	return s.stability.EffectiveMeta(rec.key, meta), nil
+	return wireMeta(s, rec.key.viewHash, meta), nil
+}
+
+// wireMeta presents attributes as the client should see them: the stable identity as fileid, and
+// sizes including UNSTABLE bytes acknowledged but not yet flushed.
+func wireMeta(s *Server, viewHash uint64, meta layeredfs.EntryAttr) layeredfs.EntryAttr {
+	id := meta.StableID()
+	meta = s.stability.EffectiveMeta(handleKey{viewHash: viewHash, nodeID: id}, meta)
+	meta.NodeID = id
+	return meta
 }
 
 func onRead(s *Server, cs *connState, call rpcCallHeader) []byte {
@@ -69,7 +79,7 @@ func onRead(s *Server, cs *connState, call rpcCallHeader) []byte {
 		return encodePostOpError(call.XID, nfs.NFSStatusInval, &meta, exp)
 	}
 
-	baseData, baseSize, err := readBaseFile(exp.core, rec, offset, int(count))
+	baseData, baseSize, err := readBaseFile(exp.core, s.stability.sidecars, rec, offset, int(count))
 	if err != nil {
 		return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &meta, exp)
 	}
@@ -84,7 +94,7 @@ func onRead(s *Server, cs *connState, call rpcCallHeader) []byte {
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
 }
 
-func readBaseFile(viewCore *layeredfs.Core, rec *handleRecord, offset uint64, count int) ([]byte, int64, error) {
+func readBaseFile(viewCore *layeredfs.Core, sidecars *sidecarTable, rec *handleRecord, offset uint64, count int) ([]byte, int64, error) {
 	if rec.unlinked != nil {
 		if rec.unlinked.fd == 0 {
 			return nil, 0, ErrStaleHandle
@@ -100,9 +110,10 @@ func readBaseFile(viewCore *layeredfs.Core, rec *handleRecord, offset uint64, co
 		}
 		return buf[:n], meta.Size, nil
 	}
+	defer sidecars.settled(rec.qpath)()
 	fd, meta, err := viewCore.Open(rec.qpath, layeredfs.OpenReadOnly, 0)
 	if err != nil {
-		if adMeta, payload, ok := synthAppleDoubleAttr(viewCore, rec.qpath); ok {
+		if adMeta, payload, ok := sidecars.synth(viewCore, rec.qpath); ok {
 			if offset >= uint64(len(payload)) {
 				return nil, adMeta.Size, nil
 			}
@@ -110,6 +121,10 @@ func readBaseFile(viewCore *layeredfs.Core, rec *handleRecord, offset uint64, co
 			return payload[offset:end], adMeta.Size, nil
 		}
 		return nil, 0, err
+	}
+	if meta.StableID() != rec.key.nodeID {
+		_ = viewCore.CloseHandle(fd)
+		return nil, 0, ErrStaleHandle
 	}
 	buf := make([]byte, max(count, 0))
 	n, rErr := viewCore.ReadHandle(fd, buf, int64(offset))
@@ -122,22 +137,38 @@ func readBaseFile(viewCore *layeredfs.Core, rec *handleRecord, offset uint64, co
 
 func onWrite(s *Server, cs *connState, call rpcCallHeader) []byte {
 	rawFH, err := readFileHandle(call.Body)
-	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
+	}
 	offset, err := readUint64(call.Body)
-	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
+	}
 	count, err := readUint32(call.Body)
-	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
+	}
 	stableRaw, err := readUint32(call.Body)
-	if err != nil || stableRaw > uint32(FileSync) { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
+	if err != nil || stableRaw > uint32(FileSync) {
+		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
+	}
 	data, err := readOpaqueBounded(call.Body, s.cfg.MaxRequestBytes)
-	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval) }
-	if uint32(len(data)) > count { data = data[:count] }
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, nfs.NFSStatusInval)
+	}
+	if uint32(len(data)) > count {
+		data = data[:count]
+	}
 	stability := WriteStability(stableRaw)
 
 	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
-	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, MapErrorToNFSStatus(err)) }
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, MapErrorToNFSStatus(err))
+	}
 	preMeta, err := statRecord(s, rec)
-	if err != nil { return encodeNFSError(call.XID, nfs.NFSProcedureWrite, MapErrorToNFSStatus(err)) }
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureWrite, MapErrorToNFSStatus(err))
+	}
 	if exp.cap.ReadOnly {
 		return encodeWccError(call.XID, nfs.NFSStatusROFS, &preMeta, &preMeta, exp)
 	}
@@ -147,11 +178,13 @@ func onWrite(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if preMeta.Mode&os.ModeSymlink != 0 {
 		return encodeWccError(call.XID, nfs.NFSStatusInval, &preMeta, &preMeta, exp)
 	}
-	if rec.unlinked == nil && preMeta.Mode&0o200 == 0 && !rec.ownerCreatedRO {
-		return encodeWccError(call.XID, nfs.NFSStatusAccess, &preMeta, &preMeta, exp)
+	if err := s.stability.sidecars.materialize(exp.core, rec.qpath); err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, &preMeta, exp)
 	}
-	if rec.unlinked == nil {
-		if err := checkWritablePath(exp.core, rec.qpath); err != nil {
+	// Permission to write was decided when the client opened the file, and a descriptor keeps it
+	// through a later chmod, so WRITE follows export authorization and never the current mode.
+	if rec.unlinked == nil && preMeta.Layer != layeredfs.LayerPrivate {
+		if err := ensureWritableCopy(exp.core, rec); err != nil {
 			return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, &preMeta, exp)
 		}
 	}
@@ -179,7 +212,6 @@ func onWrite(s *Server, cs *connState, call rpcCallHeader) []byte {
 		curMeta, _ := statRecord(s, rec)
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, &curMeta, exp)
 	}
-	s.RecordDirtyCandidate(rec.viewID, rec.qpath)
 
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
@@ -190,18 +222,16 @@ func onWrite(s *Server, cs *connState, call rpcCallHeader) []byte {
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
 }
 
-func checkWritablePath(viewCore *layeredfs.Core, qpath layeredfs.QualifiedPath) error {
-	meta, err := viewCore.Lstat(qpath)
+// ensureWritableCopy copies an untouched object up before its first WRITE is acknowledged, so a
+// copy-up failure reaches the client instead of being discovered at COMMIT.
+func ensureWritableCopy(viewCore *layeredfs.Core, rec *handleRecord) error {
+	fd, meta, err := viewCore.Open(rec.qpath, layeredfs.OpenReadWrite, 0)
 	if err != nil {
 		return err
 	}
-	if meta.Mode&0o200 != 0 {
-		fd, _, err := viewCore.Open(qpath, layeredfs.OpenReadWrite, 0)
-		if err != nil {
-			return err
-		}
-		_ = viewCore.CloseHandle(fd)
-		return nil
+	_ = viewCore.CloseHandle(fd)
+	if meta.StableID() != rec.key.nodeID {
+		return ErrStaleHandle
 	}
 	return nil
 }
@@ -238,7 +268,6 @@ func onCommit(s *Server, cs *connState, call rpcCallHeader) []byte {
 		curMeta, _ := statRecord(s, rec)
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, &curMeta, exp)
 	}
-	s.RecordDirtyCandidate(rec.viewID, rec.qpath)
 
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))

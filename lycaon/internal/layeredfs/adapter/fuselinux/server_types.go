@@ -34,14 +34,15 @@ type NegotiatedProtocol struct {
 }
 
 type fuseNode struct {
-	fuseID     uint64
-	generation uint64
-	corePrivID layeredfs.NodeID
-	ino        uint64
-	nlookup    uint64
-	openCount  int
-	paths      map[string]struct{}
-	unlinked   bool
+	fuseID      uint64
+	generation  uint64
+	corePrivID  layeredfs.NodeID
+	corePrivGen layeredfs.Generation
+	ino         uint64
+	nlookup     uint64
+	openCount   int
+	paths       map[string]struct{}
+	unlinked    bool
 }
 
 func (n *fuseNode) primaryRel() (string, bool) {
@@ -152,7 +153,6 @@ type Server struct {
 	negotiated      atomic.Pointer[NegotiatedProtocol]
 	pollProbeActive atomic.Bool
 	pollRequests    atomic.Int64
-	syncBacking     func(interface{ Sync() error }) error
 
 	nodes *nodeTable
 
@@ -182,7 +182,6 @@ func newServerInstance(cfg ServerConfig, core *layeredfs.Core, fd int, stopPipe 
 		nodes:         newNodeTable(),
 		locks:         newLockTable(maxWaiters),
 		stopCh:        make(chan struct{}),
-		syncBacking:   func(f interface{ Sync() error }) error { return f.Sync() },
 		ordinaryQueue: make(chan queuedRequest, 2*maxReq),
 		workerCount:   maxReq,
 		controlSem:    make(chan struct{}, 32),

@@ -1,11 +1,9 @@
 package layeredfs
 
 import (
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -70,6 +68,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		}
 		c.state.nodesByID[nid] = node
 		c.state.pathIndex[qpath] = nid
+		recordOriginLocked(c, node, originNodeID(qpath, base))
 		c.counters.physicalCopyUps.Add(1)
 		return node, nil
 	}
@@ -108,7 +107,6 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		flags: nodeFlags{
 			contentChanged: true,
 			namespaceAdded: true,
-			ownerCreatedRO: cleanMode&0o200 == 0,
 			backingName:    workName,
 			backingPath:    workPath,
 		},
@@ -127,140 +125,6 @@ func joinRel(parentRel, name string) string {
 		return name
 	}
 	return filepath.ToSlash(parentRel + "/" + name)
-}
-
-// WriteViaNodeHandle supports protocol-level writes (like NFSv3 WRITE on an owner-created 0444 file)
-// identified by (NodeID, Generation) without requiring a stateful open handle.
-func (c *Core) WriteViaNodeHandle(nodeID NodeID, gen Generation, data []byte, offset int64) (int, EntryAttr, error) {
-	return writeViaNodeHandle(c, nodeID, gen, data, offset)
-}
-
-func writeViaNodeHandle(c *Core, nodeID NodeID, gen Generation, data []byte, offset int64) (int, EntryAttr, error) {
-	if err := c.barrier.enterMutation(); err != nil {
-		return 0, EntryAttr{}, err
-	}
-	defer c.barrier.leaveMutation()
-
-	c.mu.RLock()
-	if c.state.released {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, ErrViewReleased
-	}
-	node, ok := c.state.nodesByID[nodeID]
-	if !ok || node == nil || node.gen != gen || node.flags.unlinked {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, ErrStaleHandle
-	}
-	c.mu.RUnlock()
-
-	node.flags.ioMu.Lock()
-	defer node.flags.ioMu.Unlock()
-
-	c.mu.RLock()
-	if c.state.released {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, ErrViewReleased
-	}
-	if node.gen != gen || node.flags.unlinked {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, ErrStaleHandle
-	}
-	if node.kind != EntryRegular {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, syscall.EISDIR
-	}
-	if node.mode&0o200 == 0 && !node.flags.ownerCreatedRO {
-		c.mu.RUnlock()
-		return 0, EntryAttr{}, syscall.EACCES
-	}
-	backingName, backingPath := node.flags.backingName, node.flags.backingPath
-	var anyPath QualifiedPath
-	for qp := range node.paths {
-		anyPath = qp
-		break
-	}
-	c.mu.RUnlock()
-
-	wf, err := openBackingFileRW(int(c.backing.workDirFile.Fd()), backingName, backingPath)
-	if err != nil {
-		return 0, EntryAttr{}, err
-	}
-	n, wErr := writeBackingAt(c, anyPath, wf, data, offset)
-	_ = wf.Close()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if n > 0 {
-		if offset+int64(n) > node.size {
-			node.size = offset + int64(n)
-		}
-		now := time.Now()
-		node.mtime = now
-		node.ctime = now
-		node.flags.contentChanged = true
-		for qp := range node.paths {
-			anyPath = qp
-			break
-		}
-		recordJournalLocked(c, JournalOpWrite, anyPath, nil, node, int64(n))
-	}
-	attr := nodeToAttrLocked(node)
-	return n, attr, wErr
-}
-
-// SyncViaNodeHandle flushes dirty data for a private node identified by (NodeID, Generation) to stable storage.
-func (c *Core) SyncViaNodeHandle(nodeID NodeID, gen Generation) error {
-	return syncViaNodeHandle(c, nodeID, gen)
-}
-
-func syncViaNodeHandle(c *Core, nodeID NodeID, gen Generation) error {
-	if err := c.barrier.enterOp(); err != nil {
-		return err
-	}
-	defer c.barrier.leaveOp()
-
-	c.mu.RLock()
-	if c.state.released {
-		c.mu.RUnlock()
-		return ErrViewReleased
-	}
-	node, ok := c.state.nodesByID[nodeID]
-	if !ok || node == nil || node.gen != gen || node.flags.unlinked {
-		c.mu.RUnlock()
-		return ErrStaleHandle
-	}
-	c.mu.RUnlock()
-
-	node.flags.ioMu.Lock()
-	defer node.flags.ioMu.Unlock()
-
-	c.mu.RLock()
-	if c.state.released {
-		c.mu.RUnlock()
-		return ErrViewReleased
-	}
-	if node.gen != gen || node.flags.unlinked {
-		c.mu.RUnlock()
-		return ErrStaleHandle
-	}
-	if node.kind != EntryRegular {
-		c.mu.RUnlock()
-		return syscall.EISDIR
-	}
-	if node.mode&0o200 == 0 && !node.flags.ownerCreatedRO {
-		c.mu.RUnlock()
-		return syscall.EACCES
-	}
-	backingName, backingPath := node.flags.backingName, node.flags.backingPath
-	c.mu.RUnlock()
-
-	wf, err := openBackingFileRW(int(c.backing.workDirFile.Fd()), backingName, backingPath)
-	if err != nil {
-		return err
-	}
-	syncErr := errors.Join(runJournalSyncHook(c, "node_sync"), syncFD(int(wf.Fd())))
-	closeErr := wf.Close()
-	return errors.Join(syncErr, closeErr)
 }
 
 // OpenBackingReader opens a read-only stream to a private node's backing content by NodeID and Generation.

@@ -7,6 +7,24 @@ import (
 	nfs "github.com/willscott/go-nfs"
 )
 
+const (
+	fsf3Link        = 0x0001
+	fsf3Symlink     = 0x0002
+	fsf3Homogeneous = 0x0008
+	fsf3CanSetTime  = 0x0010
+	pathconfLinkMax = 32767
+)
+
+func entryFileID(core *layeredfs.Core, dirMeta layeredfs.EntryAttr, ent dirSnapshotEntry) layeredfs.NodeID {
+	if ent.StableID != 0 {
+		return ent.StableID
+	}
+	if meta, err := core.Lstat(ent.QPath); err == nil {
+		return meta.StableID()
+	}
+	return dirMeta.NodeID
+}
+
 func onReaddir(s *Server, cs *connState, call rpcCallHeader) []byte {
 	dirFH, err := readFileHandle(call.Body)
 	if err != nil {
@@ -45,7 +63,7 @@ func onReaddir(s *Server, cs *connState, call rpcCallHeader) []byte {
 		count = maxDirCookieBytes
 	}
 
-	entries, activeVerf, err := s.dirs.ReadSnapshot(exp.core, dirRec, dirMeta, cookie, clientVerf)
+	entries, activeVerf, err := s.dirs.ReadSnapshot(exp.core, dirRec, cookie, clientVerf)
 	if err != nil {
 		return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
 	}
@@ -60,7 +78,7 @@ func onReaddir(s *Server, cs *connState, call rpcCallHeader) []byte {
 	for _, ent := range entries {
 		var entBuf bytes.Buffer
 		writeUint32(&entBuf, 1)
-		writeUint64(&entBuf, uint64(ent.Meta.NodeID))
+		writeUint64(&entBuf, uint64(entryFileID(exp.core, dirMeta, ent)))
 		writeString(&entBuf, ent.Name)
 		writeUint64(&entBuf, ent.Cookie)
 		if body.Len()+entBuf.Len()+8 > int(count) {
@@ -120,7 +138,7 @@ func onReaddirPlus(s *Server, cs *connState, call rpcCallHeader) []byte {
 		maxCount = maxDirCookieBytes
 	}
 
-	entries, activeVerf, err := s.dirs.ReadSnapshot(exp.core, dirRec, dirMeta, cookie, clientVerf)
+	entries, activeVerf, err := s.dirs.ReadSnapshot(exp.core, dirRec, cookie, clientVerf)
 	if err != nil {
 		return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
 	}
@@ -134,20 +152,23 @@ func onReaddirPlus(s *Server, cs *connState, call rpcCallHeader) []byte {
 	written := 0
 	var usedDirBytes uint32
 	for _, ent := range entries {
-		fh := s.handles.Ensure(dirRec.viewID, ent.QPath, ent.Meta, cleanRel(ent.QPath.Rel) == ".", false)
-		meta := ent.Meta
-		if rec, ok := s.handles.LookupByPath(dirRec.viewID, ent.QPath); ok {
-			meta = s.stability.EffectiveMeta(rec.key, meta)
-		}
-
 		var entBuf bytes.Buffer
 		writeUint32(&entBuf, 1)
-		writeUint64(&entBuf, uint64(meta.NodeID))
+		writeUint64(&entBuf, uint64(entryFileID(exp.core, dirMeta, ent)))
 		writeString(&entBuf, ent.Name)
 		writeUint64(&entBuf, ent.Cookie)
 		dirStep := uint32(entBuf.Len())
-		writePostOpAttr(&entBuf, &meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
-		writePostOpFH3(&entBuf, fh[:])
+		// Attributes come from the object as it is now. An entry that has since gone still takes its
+		// place in the listing, without attributes or a handle, as RFC 1813 permits.
+		if meta, statErr := exp.core.Lstat(ent.QPath); statErr == nil {
+			fh := s.handles.Ensure(dirRec.viewID, ent.QPath, meta, dirRec.key.nodeID, cleanRel(ent.QPath.Rel) == ".")
+			meta = wireMeta(s, dirRec.key.viewHash, meta)
+			writePostOpAttr(&entBuf, &meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+			writePostOpFH3(&entBuf, fh[:])
+		} else {
+			writePostOpAttr(&entBuf, nil, exp.cap.AllowedUID, exp.cap.AllowedGID)
+			writePostOpFH3(&entBuf, nil)
+		}
 
 		if body.Len()+entBuf.Len()+8 > int(maxCount) || usedDirBytes+dirStep > dirCount {
 			if written == 0 {
@@ -179,16 +200,14 @@ func onFSStat(s *Server, cs *connState, call rpcCallHeader) []byte {
 		return encodeNFSError(call.XID, nfs.NFSProcedureFSStat, MapErrorToNFSStatus(err))
 	}
 
-	const (
-		totalBytes uint64 = 64 << 30
-		freeBytes  uint64 = 32 << 30
-		totalFiles uint64 = 1 << 20
-		freeFiles  uint64 = 1 << 19
-	)
+	capacity, err := exp.core.BackingCapacity()
+	if err != nil {
+		return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &meta, exp)
+	}
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
 	writePostOpAttr(&body, &meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
-	for _, v := range []uint64{totalBytes, freeBytes, freeBytes, totalFiles, freeFiles, freeFiles} {
+	for _, v := range []uint64{capacity.TotalBytes, capacity.FreeBytes, capacity.AvailableBytes, capacity.TotalFiles, capacity.FreeFiles, capacity.FreeFiles} {
 		writeUint64(&body, v)
 	}
 	writeUint32(&body, 0)
@@ -219,7 +238,7 @@ func onFSInfo(s *Server, cs *connState, call rpcCallHeader) []byte {
 	writeUint64(&body, 1<<40)
 	writeUint32(&body, 0)
 	writeUint32(&body, 1)
-	writeUint32(&body, 0x0002|0x0008|0x0010)
+	writeUint32(&body, fsf3Link|fsf3Symlink|fsf3Homogeneous|fsf3CanSetTime)
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
 }
 
@@ -240,7 +259,7 @@ func onPathConf(s *Server, cs *connState, call rpcCallHeader) []byte {
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
 	writePostOpAttr(&body, &meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
-	writeUint32(&body, 1)
+	writeUint32(&body, pathconfLinkMax)
 	writeUint32(&body, nfs.MNTNameLen)
 	writeBool(&body, true)
 	writeBool(&body, true)
@@ -276,18 +295,28 @@ func flushPendingKey(
 	defer releaseNodeFlush(e, hk)
 	e.mu.Lock()
 	st, ok := e.pending[hk]
-	var rec handleRecord
+	var wire [HandleSize]byte
 	if ok {
-		rec = st.rec
+		wire = st.rec.wire
 	}
 	chunks, flushedSeq, _ := snapshotFlushLocked(e, hk)
 	e.mu.Unlock()
-	var err error
-	if len(chunks) > 0 {
-		_, err = flushChunksToCore(core, handles, fault, &rec, chunks, true)
+	if len(chunks) == 0 {
+		return nil
 	}
+	// The bytes belong to the object, wherever it now lives. If it was replaced or removed they have
+	// nowhere to go, and they must never reach whatever now holds its old name.
+	rec, err := handles.Resolve(wire[:], 0)
+	if err != nil {
+		e.DiscardKey(hk)
+		return nil
+	}
+	_, err = flushChunksToCore(core, handles, e.sidecars, fault, rec, chunks)
 	e.mu.Lock()
 	_ = finishFlushLocked(e, hk, flushedSeq, err)
 	e.mu.Unlock()
+	if err == nil {
+		e.absorbFlushed(core, rec)
+	}
 	return err
 }

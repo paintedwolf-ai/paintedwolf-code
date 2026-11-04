@@ -67,15 +67,15 @@ func TestSeparateMountAndDataConnectionsAndReconnect(t *testing.T) {
 		t.Fatalf("reconnectCli READ after disconnect: st=%v data=%q", nst, got)
 	}
 
-	// 5. Unmount from a separate TCP connection revokes the mount for existing data connections.
+	// 5. UMNT is advisory: another connection cannot revoke a live mount with it.
 	umntCli := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
 	var umntArgs bytes.Buffer
 	putStr(&umntArgs, capCfg.ExportPath)
 	if code, _ := umntCli.call(100005, 3, uint32(nfs.MountProcUmnt), umntArgs.Bytes()); code != nfs.ResponseCodeSuccess {
 		t.Fatalf("umntCli UMNT: %v", code)
 	}
-	if nst, _ := reconnectCli.getAttr(fileFH); nst != nfs.NFSStatusAccess {
-		t.Fatalf("expected NFSStatusAccess after UMNT on separate connection, got %v", nst)
+	if nst, _ := reconnectCli.getAttr(fileFH); nst != nfs.NFSStatusOk {
+		t.Fatalf("expected the mount to survive UMNT from a separate connection, got %v", nst)
 	}
 }
 
@@ -290,7 +290,7 @@ func TestUnstableWriteCompactionAndBoundedPendingBytes(t *testing.T) {
 		if st, _ := cli.commit(fh, 0, 300); st != nfs.NFSStatusOk {
 			t.Fatalf("COMMIT f-%d.bin: %v", i, st)
 		}
-		if st, got, _ := cli.read(fh, 0, 400); st != nfs.NFSStatusOk || !bytes.Equal(got, bytes.Repeat([]byte{byte('0'+i)}, 300)) {
+		if st, got, _ := cli.read(fh, 0, 400); st != nfs.NFSStatusOk || !bytes.Equal(got, bytes.Repeat([]byte{byte('0' + i)}, 300)) {
 			t.Fatalf("READ f-%d.bin mismatch: st=%v len=%d", i, st, len(got))
 		}
 	}

@@ -10,9 +10,12 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
+
+const acceptRetryDelay = 50 * time.Millisecond
 
 type exportEntry struct {
 	cap      ExportCapability
@@ -43,6 +46,7 @@ type Server struct {
 	gate      *serverBarrierGate
 	workSem   chan struct{}
 	queue     chan func()
+	stopped   chan struct{}
 	state     serverState
 }
 
@@ -69,15 +73,17 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 	}
 	s := &Server{
 		core: core, cfg: cfg, listener: ln,
-		handles: newHandleTable(secret, cfg.MaxHandles), dirs: newDirCache(secret, DefaultMaxDirListings),
+		dirs:      newDirCache(secret, DefaultMaxDirListings),
 		stability: newStabilityEngine(cfg), gate: newServerBarrierGate(),
 		workSem: make(chan struct{}, DefaultMaxConcurrentRPCs), queue: make(chan func(), DefaultMaxQueuedRPCs),
+		stopped: make(chan struct{}),
 		state: serverState{
 			cores: map[ViewID]*layeredfs.Core{core.ViewID(): core}, readOnly: make(map[ViewID]bool),
 			exportsByID: make(map[string]*exportEntry), exportsByVH: make(map[uint64][]*exportEntry),
 			conns: make(map[net.Conn]struct{}),
 		},
 	}
+	s.handles = newHandleTable(secret, cfg.MaxHandles, s.stability.sidecars, func(viewID ViewID) *layeredfs.Core { return coreForView(s, viewID) })
 	s.state.wg.Add(2)
 	go runDispatchLoop(s)
 	go runAcceptLoop(s)
@@ -159,7 +165,7 @@ func (s *Server) RegisterExportWithUID(
 		ExportPath: exportPath, AllowedUID: allowedUID, AllowedGID: allowedGID, ReadOnly: ro,
 	}
 	s.handles.RegisterView(viewID)
-	s.handles.Ensure(viewID, rootQPath, meta, true, false)
+	s.handles.Ensure(viewID, rootQPath, meta, 0, true)
 	vHash := computeViewHash(viewID)
 	entry := &exportEntry{cap: capCfg, core: viewCore, viewHash: vHash}
 	s.state.mu.Lock()
@@ -181,6 +187,7 @@ func (s *Server) ReleaseExport(viewID ViewID) {
 	s.state.mu.Unlock()
 	s.gate.releaseView(vHash, entries)
 	s.stability.ReleaseView(viewID)
+	s.stability.sidecars.releaseCore(viewCore)
 	s.dirs.ReleaseView(viewID)
 	s.handles.ReleaseView(viewCore, viewID)
 }
@@ -195,6 +202,9 @@ func (s *Server) FlushForCheckpoint(ctx context.Context, viewID ViewID) error {
 	_, err := viewCore.SnapshotJournal()
 	return err
 }
+
+// IsAlive reports whether the server is still accepting and serving requests.
+func (s *Server) IsAlive() bool { return !s.state.closed.Load() }
 
 // ResetUnstableState discards uncommitted UNSTABLE write buffers and rotates the 8-byte
 // write verifier to simulate a server restart between UNSTABLE writes and COMMIT.
@@ -243,7 +253,7 @@ func (s *Server) Close() error {
 		_ = c.Close()
 	}
 	s.state.mu.Unlock()
-	close(s.queue)
+	close(s.stopped)
 	s.state.wg.Wait()
 	for _, v := range views {
 		s.handles.ReleaseView(coreForView(s, v), v)
@@ -254,13 +264,22 @@ func (s *Server) Close() error {
 
 func runDispatchLoop(s *Server) {
 	defer s.state.wg.Done()
-	for fn := range s.queue {
-		s.workSem <- struct{}{}
-		s.state.wg.Add(1)
-		go func(task func()) {
-			defer func() { <-s.workSem; s.state.wg.Done() }()
-			task()
-		}(fn)
+	for {
+		select {
+		case <-s.stopped:
+			return
+		case fn := <-s.queue:
+			select {
+			case <-s.stopped:
+				return
+			case s.workSem <- struct{}{}:
+			}
+			s.state.wg.Add(1)
+			go func(task func()) {
+				defer func() { <-s.workSem; s.state.wg.Done() }()
+				task()
+			}(fn)
+		}
 	}
 }
 
@@ -271,6 +290,12 @@ func runAcceptLoop(s *Server) {
 		if err != nil {
 			if s.state.closed.Load() {
 				return
+			}
+			// Descriptor exhaustion makes Accept fail immediately and repeatedly.
+			select {
+			case <-s.stopped:
+				return
+			case <-time.After(acceptRetryDelay):
 			}
 			continue
 		}

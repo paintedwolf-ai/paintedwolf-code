@@ -219,4 +219,3 @@ func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t 
 		testutil.FailErr(t, "ReconcileSelectedSandboxRoots", err)
 	}
 }
-

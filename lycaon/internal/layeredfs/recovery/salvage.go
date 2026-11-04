@@ -8,8 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
@@ -29,12 +31,40 @@ func preserveInterruptedWorkingStorage(
 	unknownScope bool,
 	diag string,
 ) (*InterruptedWorkingRecord, error) {
+	if phase == "" {
+		phase = PhaseActiveMutation
+	}
+	return preserveInQuarantine(c, InterruptedWorkingRecord{
+		WorkerID: workerID, ViewID: viewID, BaseCheckpointID: baseCheckpointID, InterruptedPhase: phase, Diagnostic: diag,
+	}, func(staging string) (salvagedWork, error) {
+		paths, inferredOp, inferredUnknown, copiedBytes, err := salvageBackingDir(backingDir, staging, knownPaths, op, unknownScope)
+		return salvagedWork{paths: paths, op: inferredOp, unknownScope: inferredUnknown, bytes: copiedBytes}, err
+	})
+}
+
+// salvagedWork is what filling a quarantine reports for its record and inventory entry.
+type salvagedWork struct {
+	paths        []layeredfs.QualifiedPath
+	op           string
+	unknownScope bool
+	bytes        int64
+}
+
+// preserveInQuarantine fills the view's quarantine in staging, promotes it and writes its record.
+func preserveInQuarantine(c *Coordinator, rec InterruptedWorkingRecord, fill func(staging string) (salvagedWork, error)) (*InterruptedWorkingRecord, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	preserved, err := preserveInQuarantineLocked(c, rec, fill)
+	if errors.Is(err, syscall.ENOSPC) && c.ReleaseSpaceReserve() {
+		return preserveInQuarantineLocked(c, rec, fill)
+	}
+	return preserved, err
+}
 
+func preserveInQuarantineLocked(c *Coordinator, rec InterruptedWorkingRecord, fill func(staging string) (salvagedWork, error)) (*InterruptedWorkingRecord, error) {
 	// One record per view makes a retried salvage find its finished work. The record lands
 	// last, so a partial quarantine is never reported as preserved.
-	id := fmt.Sprintf("intr-%s-%s", workerID, viewID)
+	id := fmt.Sprintf("intr-%s-%s", rec.WorkerID, rec.ViewID)
 	if existing, ok, err := loadInterruptedRecordLocked(c, id); err != nil || ok {
 		return existing, err
 	}
@@ -43,10 +73,17 @@ func preserveInterruptedWorkingStorage(
 	if err := os.RemoveAll(staging); err != nil {
 		return nil, err
 	}
-	paths, inferredOp, inferredUnknown, copiedBytes, err := salvageBackingDir(backingDir, staging, knownPaths, op, unknownScope)
+	if err := os.MkdirAll(staging, 0o700); err != nil {
+		return nil, err
+	}
+	work, err := fill(staging)
 	if err != nil {
 		_ = os.RemoveAll(staging)
-		return nil, fmt.Errorf("recovery: salvage working storage of %s: %w", viewID, err)
+		return nil, fmt.Errorf("recovery: salvage working storage of %s: %w", rec.ViewID, err)
+	}
+	if err := syncStagedTree(staging); err != nil {
+		_ = os.RemoveAll(staging)
+		return nil, err
 	}
 	if err := os.RemoveAll(quarantineDir); err != nil {
 		return nil, err
@@ -55,39 +92,47 @@ func preserveInterruptedWorkingStorage(
 		_ = os.RemoveAll(staging)
 		return nil, err
 	}
-	if phase == "" {
-		phase = PhaseActiveMutation
-	}
-	rec := InterruptedWorkingRecord{
-		FormatVersion:    FormatVersion,
-		ID:               id,
-		WorkerID:         workerID,
-		ViewID:           viewID,
-		BaseCheckpointID: baseCheckpointID,
-		QuarantineDir:    quarantineDir,
-		InterruptedPhase: phase,
-		InterruptedOp:    inferredOp,
-		AffectedPaths:    paths,
-		UnknownScope:     inferredUnknown,
-		Diagnostic:       diag,
-		CreatedAt:        time.Now().UTC(),
+	rec.FormatVersion, rec.ID, rec.QuarantineDir, rec.CreatedAt = FormatVersion, id, quarantineDir, time.Now().UTC()
+	rec.InterruptedOp, rec.AffectedPaths, rec.UnknownScope = work.op, work.paths, work.unknownScope
+	if err := upsertInventoryLocked(c, InventoryEntry{
+		ID:           "inv-interrupted-" + id,
+		Bucket:       BucketInterruptedWorkingData,
+		WorkerID:     rec.WorkerID,
+		ViewID:       rec.ViewID,
+		CheckpointID: rec.BaseCheckpointID,
+		Path:         quarantineDir,
+		Bytes:        work.bytes,
+		PinnedBy:     []string{rec.WorkerID},
+	}); err != nil {
+		return nil, err
 	}
 	if err := writeAtomicJSON(c, c.interruptedDir, id+".json", rec); err != nil {
 		return nil, err
 	}
-	if err := upsertInventoryLocked(c, InventoryEntry{
-		ID:           "inv-interrupted-" + id,
-		Bucket:       BucketInterruptedWorkingData,
-		WorkerID:     workerID,
-		ViewID:       viewID,
-		CheckpointID: baseCheckpointID,
-		Path:         quarantineDir,
-		Bytes:        copiedBytes,
-		PinnedBy:     []string{workerID},
-	}); err != nil {
-		return nil, err
-	}
 	return &rec, nil
+}
+
+// syncStagedTree flushes every staged directory, so what the record will name survives the
+// source being deleted. A staged file is flushed by its copy or is the worker's own inode.
+func syncStagedTree(staging string) error {
+	root, err := os.OpenRoot(staging)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return filepath.WalkDir(staging, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil || !entry.IsDir() {
+			return walkErr
+		}
+		rel, err := filepath.Rel(staging, path)
+		if err != nil {
+			return err
+		}
+		return fseffect.SyncDirectory(root, rel)
+	})
 }
 
 func salvageBackingDir(

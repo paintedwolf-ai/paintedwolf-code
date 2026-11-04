@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/filelock"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
 
 // branchLastUsedFile lives in the .meta sibling so the stamp outlives the tree.

@@ -244,6 +244,10 @@ func nodeMetaToFileAttr(meta *layeredfs.EntryAttr, uid, gid uint32) *nfs.FileAtt
 		ft = nfs.FileTypeDirectory
 	case meta.Kind == layeredfs.EntrySymlink || meta.Mode&os.ModeSymlink != 0:
 		ft = nfs.FileTypeLink
+	case meta.Kind == layeredfs.EntryFIFO:
+		ft = nfs.FileTypeFIFO
+	case meta.Kind == layeredfs.EntrySocket:
+		ft = nfs.FileTypeSocket
 	}
 	nlink := meta.Nlink
 	if nlink == 0 {

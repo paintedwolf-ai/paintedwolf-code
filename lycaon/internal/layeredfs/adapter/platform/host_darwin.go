@@ -12,5 +12,7 @@ func newHostSelector(Config) *adapter.Selector {
 }
 
 // ConnectionRecoveries names the adapters able to settle connections left by an earlier engine
-// process. This host has none, so a mounted view settles only once its mount is gone.
-func ConnectionRecoveries() map[adapter.AdapterID]adapter.ConnectionRecovery { return nil }
+// process. A mounted adapter absent here settles only once its mount is gone.
+func ConnectionRecoveries() map[adapter.AdapterID]adapter.ConnectionRecovery {
+	return map[adapter.AdapterID]adapter.ConnectionRecovery{adapter.AdapterNFSDarwin: nfsdarwin.New(nfsdarwin.Config{})}
+}

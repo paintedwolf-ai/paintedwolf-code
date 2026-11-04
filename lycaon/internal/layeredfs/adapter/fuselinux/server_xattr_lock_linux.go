@@ -213,6 +213,10 @@ func toPOSIXMode(m fs.FileMode) uint32 {
 		return syscall.S_IFDIR | perm
 	case m&fs.ModeSymlink != 0:
 		return syscall.S_IFLNK | 0o777
+	case m&fs.ModeNamedPipe != 0:
+		return syscall.S_IFIFO | perm
+	case m&fs.ModeSocket != 0:
+		return syscall.S_IFSOCK | perm
 	default:
 		return syscall.S_IFREG | perm
 	}

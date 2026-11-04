@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 
@@ -242,7 +244,7 @@ func TestAppleDoubleCreatePartialWriteReadRenameAndXattrRoundTrip(t *testing.T) 
 	copy(finderInfo[:], []byte("TEXTttxt"))
 	adBytes := nfsserver.EncodeAppleDoubleXattrs(finderInfo, map[string][]byte{
 		"user.com.apple.metadata:kMDItemWhereFroms": []byte("https://example.com"),
-		"user.custom.tag":                           []byte("important"),
+		"user.custom.tag": []byte("important"),
 	})
 
 	nst, adFH := cli.create(rootFH, "._doc.txt", 0o644, 0, [8]byte{})
@@ -270,27 +272,128 @@ func TestAppleDoubleCreatePartialWriteReadRenameAndXattrRoundTrip(t *testing.T) 
 		t.Fatalf("GetXattr on doc.txt: val=%q err=%v", val, err)
 	}
 
-	for _, pair := range [][2]string{{"doc.txt", "moved.txt"}, {"._doc.txt", "._moved.txt"}} {
-		var ra bytes.Buffer
-		putBytes(&ra, rootFH)
-		putStr(&ra, pair[0])
-		putBytes(&ra, rootFH)
-		putStr(&ra, pair[1])
-		_, rr := cli.call(100003, 3, uint32(nfs.NFSProcedureRename), ra.Bytes())
-		if nst := nfs.NFSStatus(getU32(t, rr)); nst != nfs.NFSStatusOk {
-			t.Fatalf("RENAME %s -> %s: %v", pair[0], pair[1], nst)
-		}
+	// The file decoded completely and its attributes landed, so it is held as those attributes: gone
+	// from the change set while the client's handle keeps reading the same bytes.
+	assertNoLogicalChange(t, env.Core, "._doc.txt")
+	if nst, again, _ := cli.read(adFH, 0, uint32(len(adBytes)+64)); nst != nfs.NFSStatusOk || !bytes.Equal(again, adBytes) {
+		t.Fatalf("READ through the held handle: st=%v len=%d", nst, len(again))
 	}
-	changes, err := env.Core.EnumerateChanges(true)
+
+	var ra bytes.Buffer
+	putBytes(&ra, rootFH)
+	putStr(&ra, "doc.txt")
+	putBytes(&ra, rootFH)
+	putStr(&ra, "moved.txt")
+	_, rr := cli.call(100003, 3, uint32(nfs.NFSProcedureRename), ra.Bytes())
+	if nst := nfs.NFSStatus(getU32(t, rr)); nst != nfs.NFSStatusOk {
+		t.Fatalf("RENAME doc.txt: %v", nst)
+	}
+	// The kernel finds no ._doc.txt once the target moved, and ._moved.txt presents the attributes.
+	if nst, _, _ := cli.lookup(rootFH, "._doc.txt"); nst != nfs.NFSStatusNoEnt {
+		t.Fatalf("LOOKUP ._doc.txt after the target moved: %v", nst)
+	}
+	nst, movedFH, _ := cli.lookup(rootFH, "._moved.txt")
+	if nst != nfs.NFSStatusOk {
+		t.Fatalf("LOOKUP ._moved.txt: %v", nst)
+	}
+	if nst, moved, _ := cli.read(movedFH, 0, uint32(len(adBytes)+64)); nst != nfs.NFSStatusOk || !bytes.Equal(moved, adBytes) {
+		t.Fatalf("READ ._moved.txt: st=%v len=%d", nst, len(moved))
+	}
+	assertNoLogicalChange(t, env.Core, "._moved.txt")
+}
+
+func assertNoLogicalChange(t *testing.T, core *layeredfs.Core, rel string) {
+	t.Helper()
+	changes, err := core.EnumerateChanges(true)
 	if err != nil {
 		t.Fatalf("EnumerateChanges: %v", err)
 	}
-	seenMoved, seenAD := false, false
 	for _, ch := range changes {
-		seenMoved = seenMoved || ch.Path.Rel == "moved.txt"
-		seenAD = seenAD || ch.Path.Rel == "._moved.txt"
+		if ch.Path.Rel == rel {
+			t.Fatalf("%s is in the change set: %+v", rel, ch)
+		}
 	}
-	if !seenMoved || !seenAD {
-		t.Fatalf("expected moved.txt and ._moved.txt in EnumerateChanges, got %+v", changes)
+}
+
+// TestOnlyACompleteSidecarWithATargetLeavesTheView holds the rule at the protocol: the name and magic
+// bytes never decide, and every other shape stays an ordinary private file, byte for byte.
+func TestOnlyACompleteSidecarWithATargetLeavesTheView(t *testing.T) {
+	env := newTestEnv(t, nil)
+	capCfg := env.createViewAndExport(t, "view-sidecar-rule", true)
+	cli := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
+	_, rootFH := cli.mount(capCfg.ExportPath)
+	_, targetFH := cli.create(rootFH, "target", 0o644, 0, [8]byte{})
+	_, _, _, _ = cli.write(targetFH, 0, []byte("body"), nfsserver.FileSync)
+	valid := nfsserver.EncodeAppleDoubleXattrs([32]byte{}, map[string][]byte{"user.a": []byte("one")})
+
+	tamperedValue := bytes.Clone(valid)
+	tamperedValue[0x6c] = 0x7f // a reserved word no reader of the format would ignore
+	wrongCount := bytes.Clone(valid)
+	binary.BigEndian.PutUint16(wrongCount[118:], 200)
+	for name, content := range map[string][]byte{
+		"plain text": []byte("not a sidecar at all"),
+		"magic only": bytes.Clone(valid[:8]),
+		"truncated":  bytes.Clone(valid[:150]),
+		"stray byte": tamperedValue,
+		"bad table":  wrongCount,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, fh := cli.create(rootFH, "._target", 0o644, 0, [8]byte{})
+			if st, _, _, _ := cli.write(fh, 0, content, nfsserver.FileSync); st != nfs.NFSStatusOk {
+				t.Fatalf("WRITE: %v", st)
+			}
+			got, err := env.Core.ReadFile(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "._target"})
+			if err != nil || !bytes.Equal(got, content) {
+				t.Fatalf("content changed: %q err=%v", got, err)
+			}
+			attr, err := env.Core.Lstat(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "target"})
+			if err != nil || len(attr.Xattrs) != 0 {
+				t.Fatalf("target gained attributes: %v err=%v", attr.Xattrs, err)
+			}
+			if err := env.Core.Unlink(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "._target"}, false); err != nil {
+				t.Fatalf("clean up: %v", err)
+			}
+		})
+	}
+
+	// A complete file with no target waits as a file, and is taken once the target arrives.
+	_, earlyFH := cli.create(rootFH, "._later", 0o644, 0, [8]byte{})
+	_, _, _, _ = cli.write(earlyFH, 0, valid, nfsserver.FileSync)
+	if got, err := env.Core.ReadFile(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "._later"}); err != nil || !bytes.Equal(got, valid) {
+		t.Fatalf("no target: %q err=%v", got, err)
+	}
+	_, _ = cli.create(rootFH, "later", 0o644, 0, [8]byte{})
+	assertNoLogicalChange(t, env.Core, "._later")
+	if attr, err := env.Core.Lstat(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "later"}); err != nil || string(attr.Xattrs["user.a"]) != "one" {
+		t.Fatalf("attributes after the target arrived: %v err=%v", attr.Xattrs, err)
+	}
+
+	// Renaming data onto a sidecar name is the same decision as writing it there.
+	_, plainFH := cli.create(rootFH, "payload", 0o644, 0, [8]byte{})
+	_, _, _, _ = cli.write(plainFH, 0, []byte("data"), nfsserver.FileSync)
+	var ra bytes.Buffer
+	putBytes(&ra, rootFH)
+	putStr(&ra, "payload")
+	putBytes(&ra, rootFH)
+	putStr(&ra, "._target")
+	_, rr := cli.call(100003, 3, uint32(nfs.NFSProcedureRename), ra.Bytes())
+	if st := nfs.NFSStatus(getU32(t, rr)); st != nfs.NFSStatusOk {
+		t.Fatalf("RENAME: %v", st)
+	}
+	if got, err := env.Core.ReadFile(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "._target"}); err != nil || string(got) != "data" {
+		t.Fatalf("renamed data: %q err=%v", got, err)
+	}
+
+	// A sidecar the trunk itself holds is not the view's to remove.
+	trunkSidecar := nfsserver.EncodeAppleDoubleXattrs([32]byte{}, map[string][]byte{"user.t": []byte("t")})
+	if err := os.WriteFile(filepath.Join(env.ProjDir, "._README.md"), trunkSidecar, 0o644); err != nil {
+		t.Fatalf("seed trunk sidecar: %v", err)
+	}
+	_, trunkFH, _ := cli.lookup(rootFH, "._README.md")
+	if st, _, _, _ := cli.write(trunkFH, 0, trunkSidecar, nfsserver.FileSync); st != nfs.NFSStatusOk {
+		t.Fatalf("WRITE trunk sidecar: %v", st)
+	}
+	if _, err := env.Core.ReadFile(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "._README.md"}); err != nil {
+		t.Fatalf("a sidecar from the trunk left the view: %v", err)
 	}
 }

@@ -165,11 +165,13 @@ func (p *osLowerProvider) ReadDir(rel string) ([]LowerDirEntry, error) {
 	defer func() { _ = parent.Close() }()
 	var dirFile *os.File
 	if name == "." {
-		dupFD, dErr := unix.Dup(int(parent.Fd()))
-		if dErr != nil {
-			return nil, dErr
+		// A fresh open, never a dup: a dup shares the root descriptor's read offset, so only the
+		// first listing of the root would see any entries.
+		fd, oErr := unix.Openat(int(parent.Fd()), ".", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+		if oErr != nil {
+			return nil, oErr
 		}
-		dirFile = os.NewFile(uintptr(dupFD), ".")
+		dirFile = os.NewFile(uintptr(fd), ".")
 	} else {
 		fd, oErr := unix.Openat(int(parent.Fd()), name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		if oErr != nil {

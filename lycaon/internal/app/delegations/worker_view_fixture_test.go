@@ -70,6 +70,7 @@ type engineFixture struct {
 	t         *testing.T
 	database  *db.Store
 	stateRoot string
+	dataRoot  string
 	project   string
 	script    *connectionScript
 	writeHook func(dir, name string, raw []byte) error
@@ -79,7 +80,11 @@ type engineFixture struct {
 
 func newEngineFixture(t *testing.T) *engineFixture {
 	t.Helper()
-	database := testdbfixture.Open(t, "store.db")
+	return newEngineFixtureOn(t, testdbfixture.Open(t, "store.db"))
+}
+
+func newEngineFixtureOn(t *testing.T, database *db.Store) *engineFixture {
+	t.Helper()
 	project := t.TempDir()
 	testutil.FailErr(t, "seed app", os.WriteFile(filepath.Join(project, "app.txt"), []byte("trunk\n"), 0o644))
 	testutil.FailErr(t, "seed keep", os.WriteFile(filepath.Join(project, "keep.txt"), []byte("keep\n"), 0o644))
@@ -87,6 +92,7 @@ func newEngineFixture(t *testing.T) *engineFixture {
 	f := &engineFixture{
 		t: t, database: database, project: project,
 		stateRoot: testbaseline.DataDir(t, database),
+		dataRoot:  testbaseline.DataDir(t, database),
 		script:    &connectionScript{disposition: adapter.ConnectionAbsent},
 	}
 	f.boot()
@@ -96,7 +102,7 @@ func newEngineFixture(t *testing.T) *engineFixture {
 func (f *engineFixture) boot() *Runtime {
 	f.t.Helper()
 	engine := New(f.database, nil, worker.WorkersConfig{})
-	engine.BranchRoot = enginepaths.WorkerBranchesRootUnder(f.stateRoot)
+	engine.BranchRoot = enginepaths.WorkerBranchesRootUnder(f.dataRoot)
 	engine.SeedRoot = enginepaths.WorkerSeedsRootUnder(f.stateRoot)
 	root := enginepaths.WorkerRecoveryRootUnder(f.stateRoot)
 	store, err := checkpoint.NewStore(filepath.Join(root, "checkpoints"))
@@ -112,7 +118,7 @@ func (f *engineFixture) boot() *Runtime {
 	engine.Recovery = coordinator
 	engine.Workspace = workspace.NewManager(engine.BranchRoot, engine.SeedRoot).WithRecovery(coordinator)
 	engine.Queue.SetWorkerWorkspaceManager(engine.Workspace)
-	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.stateRoot, "source-content")).Baselines)
+	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content")).Baselines)
 	f.engine = engine
 	return engine
 }
@@ -121,8 +127,10 @@ func (f *engineFixture) boot() *Runtime {
 func mountedSelector() *adapter.Selector {
 	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
 		AdapterID: adapter.AdapterFUSELinux, TargetOS: runtime.GOOS,
-		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) { return adapter.ReasonNone, "", nil },
-		MountViewFn:  func(context.Context, string, []adapter.PreparedRoot) error { return nil },
+		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
+		},
+		MountViewFn: func(context.Context, string, []adapter.PreparedRoot) error { return nil },
 	})
 	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
 	selector.Confinement = fixtureConfinement{}

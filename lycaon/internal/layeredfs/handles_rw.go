@@ -186,13 +186,19 @@ func (c *Core) SyncHandle(hid HandleID) error {
 
 func syncHandleAdmitted(c *Core, hid HandleID) error {
 	c.mu.Lock()
-	h, _, err := validateHandleLocked(c, hid, false)
+	h, node, err := validateHandleLocked(c, hid, false)
 	if err != nil {
 		c.mu.Unlock()
 		return err
 	}
 	h.refs++
 	f := h.file
+	if f == nil && node != nil {
+		// fsync on any descriptor covers the file, including one opened read-only.
+		if ro, ok := h.roReader.(*osFileReadHandle); ok {
+			f = ro.file
+		}
+	}
 	c.mu.Unlock()
 	defer func() { _ = releaseHandleRef(c, h) }()
 
@@ -243,6 +249,7 @@ func releaseHandleRef(c *Core, h *openHandle) error {
 		if c.backing.workDirFile != nil {
 			workDirFD = int(c.backing.workDirFile.Fd())
 		}
+		reclaimNodeLocked(c, node)
 	}
 	c.mu.Unlock()
 
@@ -274,7 +281,7 @@ func validateHandleLocked(c *Core, hid HandleID, requireWrite bool) (*openHandle
 		if node.gen != h.gen {
 			return nil, nil, ErrStaleHandle
 		}
-		if requireWrite && !h.flags.hasWriteIntent() && !node.flags.ownerCreatedRO {
+		if requireWrite && !h.flags.hasWriteIntent() {
 			return nil, nil, syscall.EBADF
 		}
 		return h, node, nil

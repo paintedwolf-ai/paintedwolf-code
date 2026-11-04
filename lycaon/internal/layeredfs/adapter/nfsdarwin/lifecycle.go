@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -165,11 +166,12 @@ func (a *Adapter) FlushClientData(ctx context.Context, viewID string) error {
 	if err := st.flushHook(ctx, viewID); err != nil {
 		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
 	}
+	st.resetFlushStats()
 	for rootID, m := range st.mounts {
 		if err := verifyMountAndServerForBarrier(st, viewID, rootID, m, "flush_client"); err != nil {
 			return err
 		}
-		if err := a.syncMountedRootFiles(ctx, st, viewID, rootID, m); err != nil {
+		if err := a.syncMountedRootFiles(ctx, st, rootID, m); err != nil {
 			return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "flush_client", ReasonCode: classifyBarrierReason(err), Diagnostic: err.Error(), Cause: err}
 		}
 		if err := m.server.FlushForCheckpoint(ctx, viewID); err != nil {
@@ -218,8 +220,9 @@ func (a *Adapter) CheckpointBarrier(ctx context.Context, viewID string) (adapter
 			gateReleases[i]()
 		}
 	}
+	st.resetFlushStats()
 	for rootID, m := range st.mounts {
-		if err := a.syncMountedRootFiles(ctx, st, viewID, rootID, m); err != nil {
+		if err := a.syncMountedRootFiles(ctx, st, rootID, m); err != nil {
 			releaseGates()
 			return receipt, nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "checkpoint_barrier", ReasonCode: classifyBarrierReason(err), Diagnostic: err.Error(), Cause: err}
 		}
@@ -284,6 +287,9 @@ func (a *Adapter) Release(ctx context.Context, viewID string) (adapter.ReleaseRe
 		return adapter.ReleaseReceipt{ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin, Settled: false, ReasonCode: adapter.ReasonViewNotFound},
 			&adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "release", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
 	}
+	st.releaseMu.Lock()
+	defer st.releaseMu.Unlock()
+	var flushDiagnostics []string
 	for rootID, m := range st.mounts {
 		if st.privateGitMgr != nil {
 			st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
@@ -297,6 +303,11 @@ func (a *Adapter) Release(ctx context.Context, viewID string) (adapter.ReleaseRe
 		}
 		if !m.serverClosed.Load() {
 			if m.server != nil {
+				// Bytes the client was told are held exist only here once the mount is gone. A failure
+				// is reported rather than blocking release: retrying cannot make the disk accept them.
+				if fErr := m.server.FlushForCheckpoint(context.WithoutCancel(ctx), viewID); fErr != nil {
+					flushDiagnostics = append(flushDiagnostics, fmt.Sprintf("root %s lost unstable writes: %v", rootID, fErr))
+				}
 				m.server.ReleaseExport(viewID)
 				_ = m.server.Close()
 			}
@@ -323,5 +334,6 @@ func (a *Adapter) Release(ctx context.Context, viewID string) (adapter.ReleaseRe
 	return adapter.ReleaseReceipt{
 		ViewID: viewID, AdapterID: adapter.AdapterNFSDarwin, Settled: true,
 		ReasonCode: adapter.ReasonNone, CleanedPaths: []string{st.view.RuntimeViewDir},
+		Diagnostic: strings.Join(flushDiagnostics, "; "),
 	}, nil
 }
