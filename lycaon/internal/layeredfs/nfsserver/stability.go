@@ -38,6 +38,7 @@ type stabilityEngine struct {
 	limits   stabilityLimits
 	pending  map[handleKey]*unstableFileState
 	flushing map[handleKey]chan struct{}
+	sidecars *sidecarTable
 }
 
 func newStabilityEngine(cfg Config) *stabilityEngine {
@@ -49,6 +50,7 @@ func newStabilityEngine(cfg Config) *stabilityEngine {
 		},
 		pending:  make(map[handleKey]*unstableFileState),
 		flushing: make(map[handleKey]chan struct{}),
+		sidecars: newSidecarTable(),
 	}
 	rotateVerifierLocked(e)
 	return e
@@ -221,13 +223,16 @@ func (e *stabilityEngine) WriteStable(
 	chunks, flushedSeq, _ := snapshotFlushLocked(e, rec.key)
 	e.mu.Unlock()
 	chunks = append(chunks, unstableChunk{offset: offset, data: data})
-	meta, err := flushChunksToCore(core, handles, fault, rec, chunks)
+	meta, err := flushChunksToCore(core, handles, e.sidecars, fault, rec, chunks)
 	e.mu.Lock()
 	verf := finishFlushLocked(e, rec.key, flushedSeq, err)
 	if err == nil {
 		meta = effectiveMetaLocked(e, rec.key, meta)
 	}
 	e.mu.Unlock()
+	if err == nil {
+		e.absorbFlushed(core, rec)
+	}
 	return meta, verf, err
 }
 
@@ -253,7 +258,7 @@ func (e *stabilityEngine) Commit(
 		}
 		return baseMeta, verf, nil
 	}
-	meta, err := flushChunksToCore(core, handles, fault, rec, chunks)
+	meta, err := flushChunksToCore(core, handles, e.sidecars, fault, rec, chunks)
 	e.mu.Lock()
 	verf = finishFlushLocked(e, rec.key, flushedSeq, err)
 	if err == nil {
@@ -262,6 +267,9 @@ func (e *stabilityEngine) Commit(
 		meta = baseMeta
 	}
 	e.mu.Unlock()
+	if err == nil {
+		e.absorbFlushed(core, rec)
+	}
 	return meta, verf, err
 }
 

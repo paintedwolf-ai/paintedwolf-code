@@ -14,10 +14,10 @@ import (
 // MountHandshakeObservation records the observed RPC AUTH_UNIX credentials from MOUNTPROC3_MNT
 // separately from the worker data-operation authorization (AllowedUID, AllowedGID) enforced on NFSPROC3_* RPCs.
 type MountHandshakeObservation struct {
-	ExportPath, ViewID, Root            string
-	ObservedUID, ObservedGID            uint32
-	AllowedUID, AllowedGID              uint32
-	Mounted                             bool
+	ExportPath, ViewID, Root string
+	ObservedUID, ObservedGID uint32
+	AllowedUID, AllowedGID   uint32
+	Mounted                  bool
 }
 
 type serverBarrierGate struct {
@@ -39,46 +39,70 @@ func newServerBarrierGate() *serverBarrierGate {
 }
 
 func (g *serverBarrierGate) releaseView(vHash uint64, entries []*exportEntry) {
-	if g == nil { return }
+	if g == nil {
+		return
+	}
 	g.mu.Lock()
-	delete(g.gatedVH, vHash); delete(g.inFlightByVH, vHash)
-	for _, e := range entries { delete(g.handshakes, e.cap.ExportPath) }
-	g.cond.Broadcast(); g.mu.Unlock()
+	delete(g.gatedVH, vHash)
+	delete(g.inFlightByVH, vHash)
+	for _, e := range entries {
+		delete(g.handshakes, e.cap.ExportPath)
+	}
+	g.cond.Broadcast()
+	g.mu.Unlock()
 }
 
 func (g *serverBarrierGate) closeAll() {
-	if g == nil { return }
+	if g == nil {
+		return
+	}
 	g.mu.Lock()
-	clear(g.gatedVH); clear(g.inFlightByVH); clear(g.handshakes)
-	g.cond.Broadcast(); g.mu.Unlock()
+	clear(g.gatedVH)
+	clear(g.inFlightByVH)
+	clear(g.handshakes)
+	g.cond.Broadcast()
+	g.mu.Unlock()
 }
 
 // GateStateForTest returns the counts of gated views, in-flight views, and mount handshakes on s.
 func (s *Server) GateStateForTest() (gatedViews, inFlightViews, handshakes int) {
-	if s == nil || s.gate == nil { return 0, 0, 0 }
-	s.gate.mu.Lock(); defer s.gate.mu.Unlock()
+	if s == nil || s.gate == nil {
+		return 0, 0, 0
+	}
+	s.gate.mu.Lock()
+	defer s.gate.mu.Unlock()
 	return len(s.gate.gatedVH), len(s.gate.inFlightByVH), len(s.gate.handshakes)
 }
 
 // BeginBarrierDrain gates new mutating NFSv3 RPCs for viewID on s, waits for in-flight mutating
 // RPCs on viewID to finish (with context cancellation wakeups), and flushes all staged UNSTABLE writes.
 func (s *Server) BeginBarrierDrain(ctx context.Context, viewID ViewID) (func(), error) {
-	if err := ctx.Err(); err != nil { return nil, err }
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	vHash, g := computeViewHash(viewID), s.gate
 	g.mu.Lock()
-	if g.gatedVH[vHash] { g.mu.Unlock(); return nil, layeredfs.ErrBarrierActive }
+	if g.gatedVH[vHash] {
+		g.mu.Unlock()
+		return nil, layeredfs.ErrBarrierActive
+	}
 	g.gatedVH[vHash] = true
 	if g.inFlightByVH[vHash] > 0 {
 		doneWait := make(chan struct{})
 		go func() {
 			select {
-			case <-ctx.Done(): g.mu.Lock(); g.cond.Broadcast(); g.mu.Unlock()
+			case <-ctx.Done():
+				g.mu.Lock()
+				g.cond.Broadcast()
+				g.mu.Unlock()
 			case <-doneWait:
 			}
 		}()
 		for g.inFlightByVH[vHash] > 0 {
 			if err := ctx.Err(); err != nil {
-				delete(g.gatedVH, vHash); g.mu.Unlock(); close(doneWait)
+				delete(g.gatedVH, vHash)
+				g.mu.Unlock()
+				close(doneWait)
 				return nil, err
 			}
 			g.cond.Wait()
@@ -87,7 +111,10 @@ func (s *Server) BeginBarrierDrain(ctx context.Context, viewID ViewID) (func(), 
 	}
 	g.mu.Unlock()
 	release := func() { g.mu.Lock(); delete(g.gatedVH, vHash); g.mu.Unlock() }
-	if err := s.FlushForCheckpoint(ctx, viewID); err != nil { release(); return nil, err }
+	if err := s.FlushForCheckpoint(ctx, viewID); err != nil {
+		release()
+		return nil, err
+	}
 	var once sync.Once
 	return func() { once.Do(release) }, nil
 }
@@ -105,15 +132,20 @@ func (s *Server) LastMountHandshake(exportPath string) (MountHandshakeObservatio
 
 func dispatchMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	switch nfs.MountProcedure(call.Proc) {
-	case nfs.MountProcNull: return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil)
-	case nfs.MountProcMount: return onMount(s, cs, call)
-	case nfs.MountProcUmnt: return onUmnt(s, cs, call)
-	case nfs.MountProcUmntAll: return onUmntAll(s, cs, call)
+	case nfs.MountProcNull:
+		return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil)
+	case nfs.MountProcMount:
+		return onMount(s, cs, call)
+	case nfs.MountProcUmnt:
+		return onUmnt(s, cs, call)
+	case nfs.MountProcUmntAll:
+		return onUmntAll(s, cs, call)
 	case nfs.MountProcDump, nfs.MountProcExport:
 		var out bytes.Buffer
 		writeUint32(&out, 0)
 		return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, out.Bytes())
-	default: return encodeAcceptedReply(call.XID, nfs.ResponseCodeProcUnavailable, nil)
+	default:
+		return encodeAcceptedReply(call.XID, nfs.ResponseCodeProcUnavailable, nil)
 	}
 }
 
@@ -122,7 +154,9 @@ func allowMountCred(capCfg ExportCapability, cred authCred) bool {
 }
 
 func recordHandshake(s *Server, dirPath string, capCfg ExportCapability, cred authCred, mounted bool) {
-	if s == nil || s.gate == nil { return }
+	if s == nil || s.gate == nil {
+		return
+	}
 	s.gate.mu.Lock()
 	s.gate.handshakes[dirPath] = MountHandshakeObservation{
 		ExportPath: dirPath, ViewID: capCfg.ViewID, Root: capCfg.Root,
@@ -133,14 +167,17 @@ func recordHandshake(s *Server, dirPath string, capCfg ExportCapability, cred au
 
 func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	dirPath, err := readStringBounded(call.Body, nfs.MntPathLen)
-	if err != nil { return encodeMountStatus(call.XID, nfs.MountStatusErrInval) }
+	if err != nil {
+		return encodeMountStatus(call.XID, nfs.MountStatusErrInval)
+	}
 	dirPath = "/" + strings.Trim(dirPath, "/")
 	s.state.mu.Lock()
 	entry, ok := s.state.exportsByID[dirPath]
 	// The export path is public once mounted, since the mount table shows it to every process. The
 	// capability therefore admits exactly one mount, and the secret that survives is the root handle.
 	if !ok || entry.mounted || !allowMountCred(entry.cap, call.Cred) || !cs.bindView(entry.viewHash) {
-		cs.denyMount(); s.state.mu.Unlock()
+		cs.denyMount()
+		s.state.mu.Unlock()
 		return encodeMountStatus(call.XID, nfs.MountStatusErrAcces)
 	}
 	entry.mounted = true
@@ -149,23 +186,30 @@ func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	recordHandshake(s, dirPath, capCfg, call.Cred, true)
 	rootQPath := layeredfs.QualifiedPath{RootID: capCfg.Root, Rel: "."}
 	meta, err := viewCore.Lstat(rootQPath)
-	if err != nil { return encodeMountStatus(call.XID, nfs.MountStatusErrNoEnt) }
+	if err != nil {
+		return encodeMountStatus(call.XID, nfs.MountStatusErrNoEnt)
+	}
 	fh := s.handles.Ensure(capCfg.ViewID, rootQPath, meta, 0, true)
 	var body bytes.Buffer
-	writeUint32(&body, uint32(nfs.MountStatusOk)); writeOpaque(&body, fh[:])
-	writeUint32(&body, 1); writeUint32(&body, uint32(nfs.AuthFlavorUnix))
+	writeUint32(&body, uint32(nfs.MountStatusOk))
+	writeOpaque(&body, fh[:])
+	writeUint32(&body, 1)
+	writeUint32(&body, uint32(nfs.AuthFlavorUnix))
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
 }
 
 func onUmnt(s *Server, cs *connState, call rpcCallHeader) []byte {
 	dirPath, err := readStringBounded(call.Body, nfs.MntPathLen)
-	if err != nil { return encodeAcceptedReply(call.XID, nfs.ResponseCodeGarbageArgs, nil) }
+	if err != nil {
+		return encodeAcceptedReply(call.XID, nfs.ResponseCodeGarbageArgs, nil)
+	}
 	dirPath = "/" + strings.Trim(dirPath, "/")
 	s.state.mu.Lock()
 	// UMNT is advisory (RFC 1813 5.0): anyone who read the mount table could send it, so it records
 	// the observation and never revokes a live view. ReleaseExport is the revocation.
 	if entry, ok := s.state.exportsByID[dirPath]; ok && allowMountCred(entry.cap, call.Cred) {
-		cs.clearView(entry.viewHash); recordHandshake(s, dirPath, entry.cap, call.Cred, false)
+		cs.clearView(entry.viewHash)
+		recordHandshake(s, dirPath, entry.cap, call.Cred, false)
 	}
 	s.state.mu.Unlock()
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil)
@@ -205,11 +249,15 @@ func isMutatingNFSProc(proc nfs.NFSProcedure) bool {
 }
 
 func peekCallViewHash(s *Server, cs *connState, call rpcCallHeader) uint64 {
-	if vh := cs.getBoundView(); vh != 0 { return vh }
+	if vh := cs.getBoundView(); vh != 0 {
+		return vh
+	}
 	if call.Body != nil {
 		dup := *call.Body
 		if rawFH, err := readFileHandle(&dup); err == nil {
-			if rec, rErr := s.handles.Resolve(rawFH, 0); rErr == nil { return rec.key.viewHash }
+			if rec, rErr := s.handles.Resolve(rawFH, 0); rErr == nil {
+				return rec.key.viewHash
+			}
 		}
 	}
 	return 0
@@ -217,17 +265,30 @@ func peekCallViewHash(s *Server, cs *connState, call rpcCallHeader) uint64 {
 
 func dispatchNFS(s *Server, cs *connState, call rpcCallHeader) []byte {
 	proc := nfs.NFSProcedure(call.Proc)
-	if proc == nfs.NFSProcedureNull { return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil) }
+	if proc == nfs.NFSProcedureNull {
+		return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil)
+	}
 	fn, ok := nfsHandlers[proc]
-	if !ok { return encodeAcceptedReply(call.XID, nfs.ResponseCodeProcUnavailable, nil) }
+	if !ok {
+		return encodeAcceptedReply(call.XID, nfs.ResponseCodeProcUnavailable, nil)
+	}
 	if isMutatingNFSProc(proc) {
 		vh, g := peekCallViewHash(s, cs, call), s.gate
 		g.mu.Lock()
-		if g.gatedVH[vh] { g.mu.Unlock(); return encodeNFSError(call.XID, proc, nfs.NFSStatusJukebox) }
-		g.inFlightByVH[vh]++; g.mu.Unlock()
+		if g.gatedVH[vh] {
+			g.mu.Unlock()
+			return encodeNFSError(call.XID, proc, nfs.NFSStatusJukebox)
+		}
+		g.inFlightByVH[vh]++
+		g.mu.Unlock()
 		defer func() {
 			g.mu.Lock()
-			if g.inFlightByVH[vh] <= 1 { delete(g.inFlightByVH, vh); g.cond.Broadcast() } else { g.inFlightByVH[vh]-- }
+			if g.inFlightByVH[vh] <= 1 {
+				delete(g.inFlightByVH, vh)
+				g.cond.Broadcast()
+			} else {
+				g.inFlightByVH[vh]--
+			}
 			g.mu.Unlock()
 		}()
 	}
@@ -236,7 +297,8 @@ func dispatchNFS(s *Server, cs *connState, call rpcCallHeader) []byte {
 
 func encodeNFSError(xid uint32, proc nfs.NFSProcedure, status nfs.NFSStatus) []byte {
 	var body bytes.Buffer
-	writeUint32(&body, uint32(status)); writeErrorFormattingTail(&body, proc)
+	writeUint32(&body, uint32(status))
+	writeErrorFormattingTail(&body, proc)
 	return encodeAcceptedReply(xid, nfs.ResponseCodeSuccess, body.Bytes())
 }
 
@@ -248,20 +310,26 @@ func writeErrorFormattingTail(w *bytes.Buffer, proc nfs.NFSProcedure) {
 	case nfs.NFSProcedureSetAttr, nfs.NFSProcedureWrite, nfs.NFSProcedureCreate, nfs.NFSProcedureMkDir,
 		nfs.NFSProcedureSymlink, nfs.NFSProcedureMkNod, nfs.NFSProcedureRemove, nfs.NFSProcedureRmDir, nfs.NFSProcedureCommit:
 		writeUint64(w, 0)
-	case nfs.NFSProcedureLink: writeUint32(w, 0); writeUint64(w, 0)
-	case nfs.NFSProcedureRename: writeUint64(w, 0); writeUint64(w, 0)
+	case nfs.NFSProcedureLink:
+		writeUint32(w, 0)
+		writeUint64(w, 0)
+	case nfs.NFSProcedureRename:
+		writeUint64(w, 0)
+		writeUint64(w, 0)
 	}
 }
 
 func encodePostOpError(xid uint32, st nfs.NFSStatus, meta *layeredfs.EntryAttr, exp *exportEntry) []byte {
 	var body bytes.Buffer
-	writeUint32(&body, uint32(st)); writePostOpAttr(&body, meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeUint32(&body, uint32(st))
+	writePostOpAttr(&body, meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
 	return encodeAcceptedReply(xid, nfs.ResponseCodeSuccess, body.Bytes())
 }
 
 func encodeWccError(xid uint32, st nfs.NFSStatus, pre, post *layeredfs.EntryAttr, exp *exportEntry) []byte {
 	var body bytes.Buffer
-	writeUint32(&body, uint32(st)); writeWccData(&body, pre, post, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeUint32(&body, uint32(st))
+	writeWccData(&body, pre, post, exp.cap.AllowedUID, exp.cap.AllowedGID)
 	return encodeAcceptedReply(xid, nfs.ResponseCodeSuccess, body.Bytes())
 }
 
@@ -269,34 +337,48 @@ func joinChildPath(parent layeredfs.QualifiedPath, name string) (layeredfs.Quali
 	if name == "" || name == "." || name == ".." || strings.Contains(name, "/") || strings.ContainsRune(name, 0) {
 		return layeredfs.QualifiedPath{}, syscall.EINVAL
 	}
-	if len(name) > nfs.MNTNameLen { return layeredfs.QualifiedPath{}, syscall.ENAMETOOLONG }
-	if cleanRel(parent.Rel) != "." { name = parent.Rel + "/" + name }
+	if len(name) > nfs.MNTNameLen {
+		return layeredfs.QualifiedPath{}, syscall.ENAMETOOLONG
+	}
+	if cleanRel(parent.Rel) != "." {
+		name = parent.Rel + "/" + name
+	}
 	return layeredfs.QualifiedPath{RootID: parent.RootID, Rel: name}, nil
 }
 
 // PendingUnstableStats returns buffered unstable bytes and chunk count for viewID and total bytes on s.
 func PendingUnstableStats(s *Server, viewID ViewID) (viewBytes, viewChunks, totalBytes int) {
-	s.stability.mu.Lock(); defer s.stability.mu.Unlock()
+	s.stability.mu.Lock()
+	defer s.stability.mu.Unlock()
 	return pendingStatsLocked(s.stability, computeViewHash(viewID))
 }
 
 func compactAndInsertChunk(chunks []unstableChunk, added unstableChunk, flushingSeq uint64) []unstableChunk {
-	if len(added.data) == 0 { return chunks }
+	if len(added.data) == 0 {
+		return chunks
+	}
 	newStart, newEnd, next, inserted := added.offset, added.offset+uint64(len(added.data)), make([]unstableChunk, 0, len(chunks)+2), false
 	for _, ch := range chunks {
 		chStart, chEnd := ch.offset, ch.offset+uint64(len(ch.data))
-		if chEnd <= newStart { next = append(next, ch); continue }
+		if chEnd <= newStart {
+			next = append(next, ch)
+			continue
+		}
 		if chStart < newEnd && chStart < newStart {
 			next = append(next, unstableChunk{seq: ch.seq, offset: chStart, data: append([]byte(nil), ch.data[:newStart-chStart]...)})
 		}
-		if !inserted { next, inserted = append(next, added), true }
+		if !inserted {
+			next, inserted = append(next, added), true
+		}
 		if chStart >= newEnd {
 			next = append(next, ch)
 		} else if chEnd > newEnd {
 			next = append(next, unstableChunk{seq: ch.seq, offset: newEnd, data: append([]byte(nil), ch.data[newEnd-chStart:]...)})
 		}
 	}
-	if !inserted { next = append(next, added) }
+	if !inserted {
+		next = append(next, added)
+	}
 	return coalesceAdjacentChunks(next, flushingSeq)
 }
 

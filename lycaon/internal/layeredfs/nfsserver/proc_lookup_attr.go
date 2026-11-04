@@ -15,7 +15,7 @@ func onGetAttr(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureGetAttr, nfs.NFSStatusInval)
 	}
-	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	rec, exp, err := resolveForAttributes(s, cs, call.Cred, rawFH)
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureGetAttr, MapErrorToNFSStatus(err))
 	}
@@ -99,7 +99,8 @@ func applySattr3(s *Server, rec *handleRecord, exp *exportEntry, preMeta layered
 	if err := s.stability.FlushKey(exp.core, s.handles, s.cfg.FaultInjector, rec.key); err != nil {
 		return err
 	}
-	if err := materializeSidecar(exp.core, rec.qpath); err != nil {
+	defer s.stability.holdSidecarFlush(rec)()
+	if err := s.stability.sidecars.materialize(exp.core, rec.qpath); err != nil {
 		return err
 	}
 	req := layeredfs.SetAttrRequest{NoFollow: true}
@@ -131,8 +132,11 @@ func applySattr3(s *Server, rec *handleRecord, exp *exportEntry, preMeta layered
 		_, err := exp.core.SetAttrNode(rec.unlinked.meta.NodeID, rec.unlinked.meta.Generation, req)
 		return err
 	}
-	_, err := exp.core.SetAttr(rec.qpath, req)
-	return err
+	if _, err := exp.core.SetAttr(rec.qpath, req); err != nil {
+		return err
+	}
+	s.stability.absorbFlushed(exp.core, rec)
+	return nil
 }
 
 func onLookup(s *Server, cs *connState, call rpcCallHeader) []byte {
@@ -167,9 +171,10 @@ func onLookup(s *Server, cs *connState, call rpcCallHeader) []byte {
 			return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
 		}
 	}
+	defer s.stability.sidecars.settled(childQPath)()
 	childMeta, err := exp.core.Lstat(childQPath)
 	if err != nil {
-		if adMeta, _, ok := synthAppleDoubleAttr(exp.core, childQPath); ok {
+		if adMeta, _, ok := s.stability.sidecars.synth(exp.core, childQPath); ok {
 			childMeta = adMeta
 		} else {
 			return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)

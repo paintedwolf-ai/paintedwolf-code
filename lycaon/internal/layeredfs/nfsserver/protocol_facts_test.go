@@ -300,6 +300,7 @@ func TestAppleDoubleMatchesTheKernelLayout(t *testing.T) {
 	copy(real[0xa3:], "user.alpha\x00")
 	copy(real[0xb0:], []byte{1, 2, 0, 0x43, 0xfd, 0xd6, 0x92, 0xd4, 0x2c, 0x41, 0x87})
 	copy(real[0xbb:], "bravo")
+	kernelBlankFork(real[0xee2:])
 	_, attrs, ok := nfsserver.DecodeAppleDoubleXattrs(real)
 	if !ok || string(attrs["user.alpha"]) != "bravo" || len(attrs["com.apple.provenance"]) != 11 || len(attrs) != 2 {
 		t.Fatalf("kernel layout decoded as %v ok=%v", attrs, ok)
@@ -324,4 +325,30 @@ func TestAppleDoubleMatchesTheKernelLayout(t *testing.T) {
 	for cut := 0; cut < 200; cut += 7 {
 		_, _, _ = nfsserver.DecodeAppleDoubleXattrs(encoded[:cut])
 	}
+
+	// A fork with content is an attribute, and a table no field accounts for is not this layout.
+	forked := bytes.Clone(real)
+	forked[len(forked)-1] ^= 0xff
+	if _, got, ok := nfsserver.DecodeAppleDoubleXattrs(forked); !ok || len(got["com.apple.ResourceFork"]) != 286 {
+		t.Fatalf("fork with content: %d bytes ok=%v", len(got["com.apple.ResourceFork"]), ok)
+	}
+	reserved := bytes.Clone(real)
+	reserved[0x6c] = 1
+	if _, _, ok := nfsserver.DecodeAppleDoubleXattrs(reserved); ok {
+		t.Fatal("a set reserved word decoded as complete")
+	}
+	stray := bytes.Clone(real)
+	stray[0x200] = 1
+	if _, _, ok := nfsserver.DecodeAppleDoubleXattrs(stray); ok {
+		t.Fatal("bytes outside every field decoded as complete")
+	}
+}
+
+// kernelBlankFork writes the 286-byte placeholder fork observed in kernel-written ._ files.
+func kernelBlankFork(fork []byte) {
+	for _, at := range []int{0, 256} {
+		copy(fork[at:], []byte{0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0x1e})
+	}
+	copy(fork[16:], "This resource fork intentionally left blank   ")
+	copy(fork[280:], []byte{0, 0x1c, 0, 0x1e, 0xff, 0xff})
 }

@@ -27,6 +27,16 @@ type BaseCapture struct {
 	CapturedAt  time.Time         `json:"captured_at"`
 }
 
+// AddedInView reports that nothing existed at qpath below the view when this view first touched it,
+// so removing the path deletes only what the view itself made.
+func (c *Core) AddedInView(qpath QualifiedPath) bool {
+	qpath.Rel = cleanRelPath(qpath.Rel)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	base, captured := c.state.basesByPath[qpath]
+	return captured && base.Kind == EntryAbsent
+}
+
 // RegisterSeedBase records a pre-captured base for materialized views (#1658)
 // without re-reading the live trunk.
 func (c *Core) RegisterSeedBase(base BaseCapture) error {

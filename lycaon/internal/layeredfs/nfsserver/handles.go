@@ -62,9 +62,10 @@ type handleTable struct {
 	lru         *list.List
 	unlinked    *list.List
 	coreFor     func(ViewID) *layeredfs.Core
+	sidecars    *sidecarTable
 }
 
-func newHandleTable(secret [32]byte, maxHandles int, coreFor func(ViewID) *layeredfs.Core) *handleTable {
+func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, coreFor func(ViewID) *layeredfs.Core) *handleTable {
 	if maxHandles <= 0 {
 		maxHandles = DefaultMaxHandles
 	}
@@ -76,6 +77,7 @@ func newHandleTable(secret [32]byte, maxHandles int, coreFor func(ViewID) *layer
 		lru:         list.New(),
 		unlinked:    list.New(),
 		coreFor:     coreFor,
+		sidecars:    sidecars,
 	}
 }
 
@@ -270,19 +272,25 @@ func (t *handleTable) locate(
 	if qpath, meta, ok := core.ResolveIdentity(hdr.nodeID); ok {
 		return qpath, meta, nil
 	}
-	if !hasParent {
-		return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
+	if hasParent {
+		name, found, err := core.FindChildByIdentity(parentPath, hdr.nodeID)
+		if err == nil && found {
+			return locatedChild(core, parentPath, name, hdr.nodeID)
+		}
 	}
-	name, found, err := core.FindChildByIdentity(parentPath, hdr.nodeID)
-	if err != nil || !found {
-		return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
+	if qpath, meta, ok := t.sidecars.locate(core, hdr.nodeID, parentPath, hasParent); ok {
+		return qpath, meta, nil
 	}
+	return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
+}
+
+func locatedChild(core *layeredfs.Core, parentPath layeredfs.QualifiedPath, name string, id layeredfs.NodeID) (layeredfs.QualifiedPath, layeredfs.EntryAttr, error) {
 	qpath, err := joinChildPath(parentPath, name)
 	if err != nil {
 		return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
 	}
 	meta, err := core.Lstat(qpath)
-	if err != nil || meta.StableID() != hdr.nodeID {
+	if err != nil || meta.StableID() != id {
 		return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
 	}
 	return qpath, meta, nil

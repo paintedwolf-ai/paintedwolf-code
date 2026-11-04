@@ -311,9 +311,12 @@ func flushPendingKey(
 		e.DiscardKey(hk)
 		return nil
 	}
-	_, err = flushChunksToCore(core, handles, fault, rec, chunks)
+	_, err = flushChunksToCore(core, handles, e.sidecars, fault, rec, chunks)
 	e.mu.Lock()
 	_ = finishFlushLocked(e, hk, flushedSeq, err)
 	e.mu.Unlock()
+	if err == nil {
+		e.absorbFlushed(core, rec)
+	}
 	return err
 }

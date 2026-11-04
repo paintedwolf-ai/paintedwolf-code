@@ -279,6 +279,25 @@ func encodeRPCMismatchReply(xid, low, high uint32) []byte {
 }
 
 func resolveAndAuthHandle(s *Server, cs *connState, cred authCred, raw []byte) (*handleRecord, *exportEntry, error) {
+	return resolveHandleFor(s, cs, cred, raw, func(e *exportEntry) bool {
+		return e.cap.AllowedUID == cred.UID && e.cap.AllowedGID == cred.GID
+	})
+}
+
+// resolveForAttributes also answers the kernel client's own GETATTR, which it issues with a root
+// credential on behalf of no process, for example while growing a ._ file. Refusing it fails the
+// operation in progress. Only a connection already serving this view with the export's identity gets
+// this, and only attributes: that is the mount's own connection, and a new one is refused as before.
+func resolveForAttributes(s *Server, cs *connState, cred authCred, raw []byte) (*handleRecord, *exportEntry, error) {
+	return resolveHandleFor(s, cs, cred, raw, func(e *exportEntry) bool {
+		if e.cap.AllowedUID == cred.UID && e.cap.AllowedGID == cred.GID {
+			return true
+		}
+		return cred.UID == 0 && cs.getBoundView() == e.viewHash
+	})
+}
+
+func resolveHandleFor(s *Server, cs *connState, cred authCred, raw []byte, admits func(*exportEntry) bool) (*handleRecord, *exportEntry, error) {
 	if cred.Flavor != nfs.AuthFlavorUnix || cs.isMountDenied() {
 		return nil, nil, ErrUnauthorizedRPC
 	}
@@ -289,7 +308,7 @@ func resolveAndAuthHandle(s *Server, cs *connState, cred authCred, raw []byte) (
 	s.state.mu.RLock()
 	defer s.state.mu.RUnlock()
 	for _, e := range s.state.exportsByVH[rec.key.viewHash] {
-		if !e.mounted || e.cap.AllowedUID != cred.UID || e.cap.AllowedGID != cred.GID {
+		if !e.mounted || !admits(e) {
 			continue
 		}
 		if !cs.bindView(rec.key.viewHash) {

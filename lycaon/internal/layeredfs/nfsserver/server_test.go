@@ -81,6 +81,20 @@ func TestMountHandshakeAllowsRootUserlandWithValidCapabilityWhileNFSRequiresAllo
 		t.Fatalf("expected README.md content from authorized UID/GID READ, got st=%v data=%q", readSt, string(data))
 	}
 
+	// The kernel asks for attributes with a root credential on the mount's own connection, and gets
+	// nothing else that way.
+	userNFS.uid, userNFS.gid = 0, 0
+	if st, _ := userNFS.getAttr(readmeFH); st != nfs.NFSStatusOk {
+		t.Fatalf("kernel GETATTR on the mount's connection: %v", st)
+	}
+	if st, _, _ := userNFS.read(readmeFH, 0, 64); st != nfs.NFSStatusAccess {
+		t.Fatalf("READ with a root credential: %v", st)
+	}
+	if st, _, _ := userNFS.lookup(rootFH, "README.md"); st != nfs.NFSStatusAccess {
+		t.Fatalf("LOOKUP with a root credential: %v", st)
+	}
+	userNFS.uid, userNFS.gid = allowedUID, allowedGID
+
 	// 6. A root UMNT with the capability is recorded but advisory; only ReleaseExport revokes.
 	rootUmnt := dialRPC(t, env.Server.Addr(), 0, 0)
 	rootUmnt.umount(capCfg.ExportPath)

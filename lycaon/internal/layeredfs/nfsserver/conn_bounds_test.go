@@ -290,7 +290,7 @@ func TestUnstableWriteCompactionAndBoundedPendingBytes(t *testing.T) {
 		if st, _ := cli.commit(fh, 0, 300); st != nfs.NFSStatusOk {
 			t.Fatalf("COMMIT f-%d.bin: %v", i, st)
 		}
-		if st, got, _ := cli.read(fh, 0, 400); st != nfs.NFSStatusOk || !bytes.Equal(got, bytes.Repeat([]byte{byte('0'+i)}, 300)) {
+		if st, got, _ := cli.read(fh, 0, 400); st != nfs.NFSStatusOk || !bytes.Equal(got, bytes.Repeat([]byte{byte('0' + i)}, 300)) {
 			t.Fatalf("READ f-%d.bin mismatch: st=%v len=%d", i, st, len(got))
 		}
 	}

@@ -69,11 +69,11 @@ func executeRemove(s *Server, viewCore *layeredfs.Core, dirRec *handleRecord, ch
 		if openFD != 0 {
 			_ = viewCore.CloseHandle(openFD)
 		}
-		if _, _, synthesized := synthAppleDoubleAttr(viewCore, childQPath); !synthesized {
+		if _, _, presented := s.stability.sidecars.synth(viewCore, childQPath); !presented {
 			return err
 		}
+		s.stability.sidecars.clearPresented(viewCore, childQPath)
 	}
-	removeSidecarXattrs(viewCore, childQPath)
 	if openFD != 0 {
 		closeCoreHandles(viewCore, s.handles.MarkUnlinked(dirRec.viewID, childQPath, openFD, childMeta))
 		return nil
@@ -162,8 +162,10 @@ func onRename(s *Server, cs *connState, call rpcCallHeader) []byte {
 	s.handles.UpdateOnRename(exp.core, fromDirRec.viewID, fromQPath, toQPath)
 	if isClientPlaceholderName(toName) {
 		exp.core.MarkTransientName(toQPath)
+		s.stability.sidecars.notePlaceholder(exp.core, sidecarPathOf(fromQPath), toQPath)
+		s.stability.absorbAtName(exp.core, s.handles, toDirRec.viewID, fromQPath)
 	}
-	syncAppleDoubleForPath(exp.core, toQPath)
+	s.stability.absorbAtName(exp.core, s.handles, toDirRec.viewID, toQPath)
 	s.dirs.InvalidateDir(fromDirRec.key)
 	if toDirRec.key != fromDirRec.key {
 		s.dirs.InvalidateDir(toDirRec.key)

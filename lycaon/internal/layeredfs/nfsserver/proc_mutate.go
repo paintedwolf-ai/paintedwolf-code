@@ -131,7 +131,7 @@ func executeCreate(
 			_, _ = viewCore.Chtimes(childQPath, at, mt, true)
 		}
 	}
-	syncAppleDoubleForPath(viewCore, childQPath)
+	s.stability.absorbAtName(viewCore, s.handles, dirRec.viewID, childQPath)
 	meta, err := viewCore.Lstat(childQPath)
 	if err != nil {
 		return zeroFH, layeredfs.EntryAttr{}, err

@@ -83,7 +83,7 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 			conns: make(map[net.Conn]struct{}),
 		},
 	}
-	s.handles = newHandleTable(secret, cfg.MaxHandles, func(viewID ViewID) *layeredfs.Core { return coreForView(s, viewID) })
+	s.handles = newHandleTable(secret, cfg.MaxHandles, s.stability.sidecars, func(viewID ViewID) *layeredfs.Core { return coreForView(s, viewID) })
 	s.state.wg.Add(2)
 	go runDispatchLoop(s)
 	go runAcceptLoop(s)
@@ -187,6 +187,7 @@ func (s *Server) ReleaseExport(viewID ViewID) {
 	s.state.mu.Unlock()
 	s.gate.releaseView(vHash, entries)
 	s.stability.ReleaseView(viewID)
+	s.stability.sidecars.releaseCore(viewCore)
 	s.dirs.ReleaseView(viewID)
 	s.handles.ReleaseView(viewCore, viewID)
 }
