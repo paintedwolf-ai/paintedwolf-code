@@ -3,22 +3,35 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // finalTurnGaveNoAnswer reports a final turn the model spent on a call the host will
-// not run, or on nothing at all. Earlier in a turn an empty reply stays a provider
-// failure, which the run reports and the user can retry.
-func finalTurnGaveNoAnswer(err error, st *promptLoopTurnState) bool {
+// not run or on nothing at all, or one the provider refused, as an API that needs tool
+// definitions beside tool history does. Earlier in a turn these stay provider failures,
+// which the run reports and the user can retry.
+func finalTurnGaveNoAnswer(ctx context.Context, err error, st *promptLoopTurnState) bool {
 	var toolOnly *ProseTurnToolCallError
+	if errors.As(err, &toolOnly) {
+		return true
+	}
+	if st == nil || !st.proseFinish {
+		return false
+	}
+	if _, refused := providerretry.AsProviderRequestRejected(err); refused {
+		slog.WarnContext(ctx, "provider refused the final turn", "error", err)
+		return true
+	}
 	var empty *failure.ProviderEmptyCompletionError
-	return errors.As(err, &toolOnly) || (st != nil && st.proseFinish && errors.As(err, &empty))
+	return errors.As(err, &empty)
 }
 
 func (l *turnCloseout) canCloseWithoutAnswer(sess *api.Session) bool {

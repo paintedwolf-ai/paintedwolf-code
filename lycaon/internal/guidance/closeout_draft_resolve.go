@@ -170,6 +170,13 @@ func classifyDraftCoordinate(roots evidence.CitationRoots, finding WorkerFinding
 // classifyDraftFinding binds a bare path to an eligible observed record, preferring
 // content over survey. A Markdown path citation names a file and needs no line.
 func classifyDraftFinding(roots evidence.CitationRoots, finding WorkerFindingInput, ev evidence.Ledger) closeoutFindingOutcome {
+	if finding.Evidence == "" && finding.Path != "" {
+		resolved, candidates := resolveWrittenPath(roots, ev, finding.Path)
+		if len(candidates) > 0 {
+			return closeoutFindingOutcome{class: closeoutCitationUnverifiable, offender: formatFindingOffender(finding)}
+		}
+		finding.Path = resolved
+	}
 	if finding.Line > 0 {
 		return classifyDraftCoordinate(roots, finding, ev)
 	}

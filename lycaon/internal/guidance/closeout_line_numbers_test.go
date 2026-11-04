@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // The shapes command output leaves in the ledger: `cat -n` makes one numbered record
@@ -336,5 +337,90 @@ func TestHostClosingStatesStateAndClaimsNothing(t *testing.T) {
 	}
 	if none := HostClosingMarkdown("x", evidence.InitLedger(), ""); !strings.Contains(none, "No file was read") || strings.Contains(none, "Checklist") {
 		t.Fatalf("empty closing = %q", none)
+	}
+}
+
+// A basename was the most common live miss. It binds only to a single active record.
+func TestUniqueFinalSegmentsBindAndTwoNeverDo(t *testing.T) {
+	t.Parallel()
+	const full = "cmd/gateway/main.go"
+	numbered := evidence.AssembleLedger(catNumbered(1, full, 24, 25, 26, 30))
+	plain := evidence.AssembleLedger([]evidence.Record{catPlain("read#1", full, 31)})
+	two := evidence.AssembleLedger(append(catNumbered(1, full, 30), catNumbered(2, "tools/main.go", 30)...))
+	stale := catNumbered(2, "old/main.go", 30)
+	stale[0].SupersededBy = "edit#1"
+	oneActive := evidence.AssembleLedger(append(catNumbered(1, full, 30), stale...))
+	for _, tc := range []struct {
+		name, source, present string
+		ev                    evidence.Ledger
+		want                  CitationOutcome
+	}{
+		{"live forced-2 shape", "[main.go:30]", "[" + full + ":30](" + full + "#L30)", numbered, CitationGrounded},
+		{"a range across records", "[main.go:24-26]", "[" + full + ":24-26](" + full + "#L24-L26)", numbered, CitationGrounded},
+		{"more final segments", "[gateway/main.go:30]", "[" + full + ":30](" + full + "#L30)", numbered, CitationGrounded},
+		{"a bare basename", "[main.go]", "[" + full + "](" + full + ")", plain, CitationGrounded},
+		{"inline code", "`main.go:30`", "[" + full + ":30](" + full + "#L30)", numbered, CitationGrounded},
+		{"a superseded record is no candidate", "[main.go:30]", "[" + full + ":30](" + full + "#L30)", oneActive, CitationGrounded},
+		{"the coordinate rule still applies", "[main.go:30]", "", plain, CitationUnverifiable},
+		{"a gap is still refused", "[main.go:26-30]", "", numbered, CitationUnverifiable},
+		{"AC two candidates never bind", "[main.go:30]", "", two, CitationUnverifiable},
+		{"two candidates, no line", "[main.go]", "", two, CitationUnverifiable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ev := CloseoutEvidence{Ledger: tc.ev}
+			draft, resolved := repairDraft(t, tc.source, ev)
+			if len(resolved.Occurrences) != 1 || resolved.Occurrences[0].Outcome != tc.want {
+				t.Fatalf("resolved = %+v, want %s", resolved, tc.want)
+			}
+			if got := PresentCloseoutMarkdown(draft, resolved); got != tc.present {
+				t.Fatalf("presented %q, want %q", got, tc.present)
+			}
+		})
+	}
+	// Ambiguity keeps the span code, and the repair names every candidate.
+	ev := CloseoutEvidence{Ledger: two}
+	code, resolved := repairDraft(t, "`main.go:30`", ev)
+	if code.CitationCount() != 0 || PresentCloseoutMarkdown(code, resolved) != "`main.go:30`" {
+		t.Fatalf("ambiguous code span = %+v", code.Occurrences)
+	}
+	draft, rejected := repairDraft(t, "[main.go:30]", ev)
+	targets := CloseoutRepairHintData(evidence.CitationRoots{}, draft, rejected, ev, nil)["repair_targets"].([]map[string]any)
+	if len(targets) != 1 || targets[0]["candidates"] != "`"+full+":30`, `tools/main.go:30`" {
+		t.Fatalf("targets = %+v", targets)
+	}
+	// A bare word is prose, even when a path ends in it.
+	listed := evidence.AssembleLedger(catNumbered(1, "internal/client", 1))
+	if prose, _ := repairDraft(t, "The [client] holds.", CloseoutEvidence{Ledger: listed}); prose.CitationCount() != 0 {
+		t.Fatalf("a bare word bound: %+v", prose.Occurrences)
+	}
+}
+
+// The live forced-4 read was `sed -n '1,40p' file | cat -n`, which left no record: sed
+// maps no source and cat on a pipe has no pin. The exemption read the ledger correctly.
+func TestCitableEvidenceIsWhatTheLedgerHolds(t *testing.T) {
+	t.Parallel()
+	const ref = "output:program:p1:stdout"
+	program := &api.CommandProgramReceipt{Outputs: []api.CommandProgramOutputWindow{{Stream: "stdout", Ref: ref}}}
+	row := []api.Message{{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{CommandProgram: program}}}
+	delivered := catPlain("read#1", "a.go", 2)
+	delivered.SourceDelivery.DeliveryID = ref + ":0:10"
+	for _, tc := range []struct {
+		name string
+		ev   evidence.Ledger
+		want bool
+	}{
+		{"sed through a pipe, echo or git status: no delivered source", evidence.InitLedger(), false},
+		{"a window that delivered source", evidence.AssembleLedger([]evidence.Record{delivered}), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := CloseoutLedgerHasCitableEvidence(CloseoutEvidence{Ledger: tc.ev}); got != tc.want {
+				t.Fatalf("ledger citable = %t", got)
+			}
+			if got := IntentWindowHasCitableObservations(row, tc.ev); got != tc.want {
+				t.Fatalf("window citable = %t", got)
+			}
+		})
 	}
 }

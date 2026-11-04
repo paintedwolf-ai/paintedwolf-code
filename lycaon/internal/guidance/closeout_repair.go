@@ -73,10 +73,21 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 // otherwise the bare handle of its newest record. A coordinate on a worker's record may
 // have no other repair, since nothing lets the coordinator re-read for that worker.
 func citationRepairOffer(roots evidence.CitationRoots, ev evidence.Ledger, citation citationmd.Citation) map[string]any {
+	if citation.Line <= 0 && citation.Path == "" {
+		return nil
+	}
+	path, candidates := resolveWrittenPath(roots, ev, citation.Path)
+	if len(candidates) > 0 {
+		spelled := make([]string, 0, len(candidates))
+		for _, candidate := range candidates {
+			spelled = append(spelled, "`"+citationmd.Citation{Path: candidate, Line: citation.Line, EndLine: citation.EndLine}.Token()+"`")
+		}
+		return map[string]any{"candidates": strings.Join(spelled, ", ")}
+	}
 	if citation.Line <= 0 {
 		return nil
 	}
-	path := evidence.LedgerPathKey(roots, citation.Path, ev.ByPath)
+	path = evidence.LedgerPathKey(roots, path, ev.ByPath)
 	cited, known := evidence.ResolveHandle(ev, citation.Handle)
 	if path == "" && known {
 		path = cited.Path

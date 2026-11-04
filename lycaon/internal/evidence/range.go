@@ -140,3 +140,27 @@ func CoordinateSupport(rec Record, path string, start, end int) CoordinateFact {
 	}
 	return CoordinateUnsupported
 }
+
+// PathsEndingIn lists the active ledger paths whose final segments are exactly token,
+// such as `main.go` or `gateway/main.go`. A token with neither a dot nor a slash is
+// prose: a bare word never names a path this way.
+func PathsEndingIn(ev Ledger, token string) []string {
+	token = NormalizeLedgerPath(token)
+	if token == "" || strings.HasPrefix(token, "@") || !strings.ContainsAny(token, "./") || strings.Trim(token, "./") == "" {
+		return nil
+	}
+	var out []string
+	for path, handles := range ev.ByPath {
+		if path != token && !strings.HasSuffix(path, "/"+token) {
+			continue
+		}
+		for _, handle := range handles {
+			if rec, ok := ResolveHandle(ev, handle); ok && rec.SupersededBy == "" && !rec.IsGate() {
+				out = append(out, path)
+				break
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}

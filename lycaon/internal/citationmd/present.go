@@ -55,6 +55,8 @@ func planParts(doc Document, decide func(Occurrence) Rendition) []partPlan {
 			switch {
 			case p.broken:
 				plans[i].text = PlainLabel(*p.link)
+			case p.count == 0 && linkGoesNowhere(p.link.Destination):
+				plans[i].text = PlainLabel(*p.link)
 			case p.count == 0:
 				plans[i].keep = true
 			default:

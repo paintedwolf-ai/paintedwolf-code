@@ -2,6 +2,7 @@ package promptloop_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -416,4 +418,66 @@ func TestWorkerCoordinateRepairsToTheOfferedBareHandle(t *testing.T) {
 	if message.Grounding == nil || message.Grounding.HostAssembled || !strings.Contains(result.LastAssistantContent, "main.go") {
 		t.Fatalf("repair did not land: %q grounding=%+v", result.LastAssistantContent, message.Grounding)
 	}
+}
+
+// refusingFinalTurnClient answers until a request forbids tools, then refuses it, as an
+// API that needs definitions beside tool history would.
+type refusingFinalTurnClient struct {
+	sequentialLLMClient
+	refusal error
+}
+
+func (c *refusingFinalTurnClient) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	if req.ToolUse == modelcall.ToolUseForbidden {
+		return nil, c.refusal
+	}
+	return c.sequentialLLMClient.Stream(ctx, req)
+}
+
+func TestProviderRefusalOfTheFinalTurnStillEndsWithSomething(t *testing.T) {
+	refusal := &providerretry.ProviderRequestRejectedError{ProviderID: "fixture", Status: 400}
+	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Is it safe?"}}
+	for _, tc := range []struct {
+		name        string
+		completions []*modelcall.Completion
+		limit       int
+		want        string
+	}{
+		{"nothing retained", nil, 1, "ended without a final answer"},
+		{"a retained draft", []*modelcall.Completion{{Content: "The limiter races [read#99:2]."}}, 2, "The limiter races"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newMarkdownRun(t)
+			r.withAssembler()
+			r.deps.Model.LLM = &refusingFinalTurnClient{sequentialLLMClient: sequentialLLMClient{completions: tc.completions}, refusal: refusal}
+			r.deps.Context.Limits = loopTestLimits(tc.limit)
+			result, message := r.run(t, history)
+			if !strings.Contains(result.LastAssistantContent, tc.want) || message.Grounding == nil || !message.Grounding.HostAssembled {
+				t.Fatalf("delivered %q grounding=%+v", result.LastAssistantContent, message.Grounding)
+			}
+		})
+	}
+	t.Run("an earlier turn stays a retryable failure", func(t *testing.T) {
+		r := newMarkdownRun(t)
+		r.withAssembler()
+		r.deps.Model.LLM = failingStream{refusal}
+		r.deps.Context.Limits = loopTestLimits(5)
+		_, err := promptloop.NewPromptLoopForTest(r.deps).Run(t.Context(), promptloop.PromptRunInput{
+			SessionID: r.session.ID, Session: r.session, History: history, ProfileID: "coordinator",
+			ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: r.session.ID}},
+		})
+		if !errors.Is(err, refusal) {
+			t.Fatalf("err = %v, want the provider's refusal", err)
+		}
+	})
+}
+
+type failingStream struct{ err error }
+
+func (f failingStream) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
+	return nil, f.err
+}
+
+func (f failingStream) Stream(context.Context, modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	return nil, f.err
 }

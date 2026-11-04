@@ -110,5 +110,17 @@ func RejectedLabel(link Link) string {
 	return PlainLabel(link)
 }
 
+// linkGoesNowhere reports a scheme the frontend cannot follow. Web and source links
+// are occurrences. file: opens a project path and mailto: the mail client; any other
+// scheme reaches only a browser that cannot open it, so the label is all it has.
+func linkGoesNowhere(destination string) bool {
+	scheme := anyScheme.FindString(destination)
+	switch strings.ToLower(scheme) {
+	case "", "file:", "mailto:", "http:", "https:", "source:":
+		return false
+	}
+	return true
+}
+
 // ZoneText is a zone's source text.
 func (d Document) ZoneText(z Zone) string { return d.Source[z.Span.Start:z.Span.End] }
