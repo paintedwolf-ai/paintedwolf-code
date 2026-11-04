@@ -275,3 +275,8 @@ linters:
           - noctx
           - errchkjson
           - nilerr
+
+issues:
+  # Report every finding so one repair does not reveal a hidden next batch.
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -2,6 +2,7 @@
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 from urllib.parse import urlencode
@@ -59,7 +60,7 @@ def receipt_state(raw, run, targets):
     # Pull request receipts name the synthetic merge commit, not the API's head_sha.
     target_stages = {target: [stage['name'] for stage in expand([target])] for target in targets}
     stages = {name: target for target, names in target_stages.items() for name in names}
-    failed, passed, contract_failures = [], [], []
+    failed, passed, contract_failures, failed_packages = [], [], [], []
     for failure in failures:
         if failure.get('status') != 'failed':
             continue
@@ -72,6 +73,14 @@ def receipt_state(raw, run, targets):
             if rel not in contract_failures:
                 contract_failures.append(rel)
             continue
+        if stage in {'test:short', 'coverage:changes'} and isinstance(subject, str):
+            prefix = 'github.com/lycaon/lycaon/'
+            relative = subject.removeprefix(prefix)
+            if (subject.startswith(prefix)
+                    and re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_][A-Za-z0-9_.-]*)*', relative)):
+                package = './' + relative
+                if package not in failed_packages:
+                    failed_packages.append(package)
         target = stages.get(stage)
         if target is None:
             return None
@@ -107,6 +116,7 @@ def receipt_state(raw, run, targets):
         'native_failed': native_failed,
         'native_passed': native_passed,
         'contract_failures': contract_failures,
+        'failed_packages': failed_packages,
     }
 
 
@@ -147,6 +157,7 @@ def previous_plan(event, run_id, targets):
                 merged['passed_targets'] = state['passed_targets']
                 merged['native_failed'] = state['native_failed']
                 merged['native_passed'] = state['native_passed']
+                merged['failed_packages'] = state.get('failed_packages', [])
             if merged['failed_targets'] or merged['native_failed']:
                 break
         return merged or {}
