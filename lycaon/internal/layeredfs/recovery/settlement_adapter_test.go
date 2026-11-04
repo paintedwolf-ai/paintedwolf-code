@@ -197,13 +197,13 @@ func TestSameBootSurvivingWriterSettlementAndScopedReconciliation(t *testing.T) 
 			LastPublishedCheckpointID: "cp-w1",
 		})
 		_ = coord.RecordMountIdentity(recovery.MountIdentityRecord{
-			ViewID:         w.viewID,
-			WorkerID:       w.workerID,
-			AdapterID:      fx.mountedAdp.ID(),
-			MountPaths:     []string{"/tmp/shared-prefix/" + w.viewID},
-			RuntimeViewDir: view1.RuntimeViewDir,
-			BackingDir:     view1.BackingDir,
-			BootID:         "boot-same",
+			ViewID:            w.viewID,
+			WorkerID:          w.workerID,
+			AdapterID:         fx.mountedAdp.ID(),
+			MountPaths:        []string{"/tmp/shared-prefix/" + w.viewID},
+			RuntimeViewDir:    view1.RuntimeViewDir,
+			BackingDir:        view1.BackingDir,
+			BootID:            "boot-same",
 			RecordedProcesses: w.pids,
 		})
 	}

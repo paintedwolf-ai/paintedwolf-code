@@ -111,24 +111,24 @@ type LandingReceipt struct {
 
 // WorkerLifecycleJournal persists durable state across preparation, publication, promotion, and release.
 type WorkerLifecycleJournal struct {
-	FormatVersion             int                          `json:"format_version"`
-	WorkerID                  string                       `json:"worker_id"`
-	ViewID                    string                       `json:"view_id"`
-	TaskID                    string                       `json:"task_id"`
-	ProjectID                 string                       `json:"project_id"`
-	AdapterID                 adapter.AdapterID            `json:"adapter_id"`
-	BootID                    string                       `json:"boot_id"`
-	ParentCheckpointIDs       []string                     `json:"parent_checkpoint_ids,omitempty"`
-	LastPublishedCheckpointID string                       `json:"last_published_checkpoint_id,omitempty"`
-	BackingDir                string                       `json:"backing_dir,omitempty"`
-	ActivePhase               TransitionPhase              `json:"active_phase,omitempty"`
-	ActiveOperation           string                       `json:"active_operation,omitempty"`
-	ActivePaths               []layeredfs.QualifiedPath    `json:"active_paths,omitempty"`
-	ActiveUnknownScope        bool                         `json:"active_unknown_scope,omitempty"`
-	GitRetentionClaims        []string                     `json:"git_retention_claims,omitempty"`
+	FormatVersion             int                            `json:"format_version"`
+	WorkerID                  string                         `json:"worker_id"`
+	ViewID                    string                         `json:"view_id"`
+	TaskID                    string                         `json:"task_id"`
+	ProjectID                 string                         `json:"project_id"`
+	AdapterID                 adapter.AdapterID              `json:"adapter_id"`
+	BootID                    string                         `json:"boot_id"`
+	ParentCheckpointIDs       []string                       `json:"parent_checkpoint_ids,omitempty"`
+	LastPublishedCheckpointID string                         `json:"last_published_checkpoint_id,omitempty"`
+	BackingDir                string                         `json:"backing_dir,omitempty"`
+	ActivePhase               TransitionPhase                `json:"active_phase,omitempty"`
+	ActiveOperation           string                         `json:"active_operation,omitempty"`
+	ActivePaths               []layeredfs.QualifiedPath      `json:"active_paths,omitempty"`
+	ActiveUnknownScope        bool                           `json:"active_unknown_scope,omitempty"`
+	GitRetentionClaims        []string                       `json:"git_retention_claims,omitempty"`
 	SourceObservations        []checkpoint.SourceObservation `json:"source_observations,omitempty"`
-	Transitions               []LifecycleTransitionRecord  `json:"transitions,omitempty"`
-	UpdatedAt                 time.Time                    `json:"updated_at"`
+	Transitions               []LifecycleTransitionRecord    `json:"transitions,omitempty"`
+	UpdatedAt                 time.Time                      `json:"updated_at"`
 }
 
 // InventoryBucket classifies local storage entries by durability and retention role.

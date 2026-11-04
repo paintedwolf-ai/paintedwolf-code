@@ -121,8 +121,10 @@ func (f *engineFixture) boot() *Runtime {
 func mountedSelector() *adapter.Selector {
 	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
 		AdapterID: adapter.AdapterFUSELinux, TargetOS: runtime.GOOS,
-		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) { return adapter.ReasonNone, "", nil },
-		MountViewFn:  func(context.Context, string, []adapter.PreparedRoot) error { return nil },
+		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
+		},
+		MountViewFn: func(context.Context, string, []adapter.PreparedRoot) error { return nil },
 	})
 	return adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
 }

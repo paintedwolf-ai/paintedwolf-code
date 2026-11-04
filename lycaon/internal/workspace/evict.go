@@ -101,6 +101,7 @@ func (m *Manager) RebuildWorkerWorkspace(ctx context.Context, branchRoot string,
 	TouchBranchUse(binding.Root)
 	return layout, nil
 }
+
 type seedEvictionCandidate struct {
 	key, path string
 	lastUsed  time.Time

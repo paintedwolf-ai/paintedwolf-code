@@ -354,4 +354,3 @@ func TestSelectWorkspaceAdapterAndPrepareMaterializedSeedView(t *testing.T) {
 		t.Fatalf("expected Manager.CreateWorkerWorkspace to enforce workspace_preparation_limit, got %v", mgrErr)
 	}
 }
-
