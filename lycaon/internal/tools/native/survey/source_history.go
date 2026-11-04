@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -22,6 +24,9 @@ import (
 // SourceHistoryTool reads recorded file changes and line authorship.
 type SourceHistoryTool struct {
 	Boundary *sandbox.Boundary
+
+	// settleExpiry replaces the overview's settle budget in tests.
+	settleExpiry func() <-chan time.Time
 }
 
 const (
@@ -85,6 +90,14 @@ type sourceHistoryResponse struct {
 	Count             int                     `json:"count,omitempty"`
 	Note              string                  `json:"note,omitempty"`
 
+	// overview and the session-baseline diff
+	Since *sourceHistorySince `json:"since,omitempty"`
+
+	// overview
+	Branch      string                      `json:"branch,omitempty"`
+	Files       []sourceHistoryOverviewFile `json:"files,omitempty"`
+	OpenWindows []sourceHistoryOpenWindow   `json:"open_windows,omitempty"`
+
 	// version / diff modes
 	VersionID     string `json:"version_id,omitempty"`
 	BaseVersionID string `json:"base_version_id,omitempty"`
@@ -100,9 +113,13 @@ type sourceHistoryResponse struct {
 }
 
 func (t *SourceHistoryTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	mode := "effects"
-	if raw, has := args["mode"].(string); has && strings.TrimSpace(raw) != "" {
-		mode = strings.TrimSpace(raw)
+	mode, _ := args["mode"].(string)
+	mode = strings.TrimSpace(mode)
+	if mode == "" {
+		if path, _ := args["path"].(string); strings.TrimSpace(path) == "" {
+			return t.runOverview(ctx, tctx)
+		}
+		mode = "effects"
 	}
 	switch mode {
 	case "effects":
@@ -281,10 +298,7 @@ func (t *SourceHistoryTool) runMine(
 			return "", fmt.Errorf("source history mine: %w", err)
 		}
 		for _, rel := range authored {
-			display := rel
-			if !root.IsPrimary && root.Label != "" {
-				display = "@" + root.Label + "/" + rel
-			}
+			display := projectroot.DisplayPath(tctx.Source.Roots, root.ID, rel)
 			if _, dup := seen[display]; dup {
 				continue
 			}
@@ -437,123 +451,6 @@ func (t *SourceHistoryTool) runVersion(
 		next := endLine + 1
 		resp.NextOffset = &next
 	}
-	return marshalSourceHistory(display, resp)
-}
-
-func (t *SourceHistoryTool) runDiff(
-	ctx context.Context,
-	args map[string]any,
-	tctx tools.ToolContext,
-) (string, error) {
-	display, branch, rootID, rel, err := t.resolveHistoryPath(ctx, args, tctx)
-	if err != nil {
-		return "", err
-	}
-	versionID, _ := args["version_id"].(string)
-	versionID = strings.TrimSpace(versionID)
-	if versionID == "" {
-		return "", &toolrejection.ToolReject{
-			Code: "SOURCE_VERSION_REQUIRED",
-			Data: map[string]any{
-				"mode":   "diff",
-				"detail": "version_id is required for diff mode",
-			},
-		}
-	}
-	ledger, err := historyLedger(tctx)
-	if err != nil {
-		return "", err
-	}
-
-	baseVersionID, _ := args["base_version_id"].(string)
-	baseVersionID = strings.TrimSpace(baseVersionID)
-
-	var comp sourceledger.Comparison
-	if baseVersionID == "current" || baseVersionID == "head" {
-		head, err := ledger.Files.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
-		if err != nil {
-			return "", &toolrejection.ToolReject{
-				Code: "SOURCE_VERSION_NOT_FOUND",
-				Data: map[string]any{
-					"version_id": baseVersionID,
-					"detail":     fmt.Sprintf("cannot resolve %s head for %s: %v", baseVersionID, display, err),
-				},
-			}
-		}
-		baseVersionID = head.VersionID
-	}
-
-	if baseVersionID != "" {
-		comp, err = ledger.Comparison.CompareVersionPair(ctx, tctx.Identity.ProjectID, baseVersionID, versionID)
-	} else {
-		comp, err = ledger.Comparison.CompareVersions(ctx, tctx.Identity.ProjectID, versionID)
-	}
-
-	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		return "", &toolrejection.ToolReject{
-			Code: "SOURCE_VERSION_NOT_FOUND",
-			Data: map[string]any{
-				"version_id": versionID,
-				"detail":     "one of the requested versions was not found in this project",
-			},
-		}
-	}
-	if err != nil {
-		return "", fmt.Errorf("compare source versions: %w", err)
-	}
-
-	if (comp.After.Path != "" && comp.After.Path != rel) || (comp.Before.Path != "" && comp.Before.Path != rel) {
-		expectedPath := comp.After.Path
-		if expectedPath == "" {
-			expectedPath = comp.Before.Path
-		}
-		return "", &toolrejection.ToolReject{
-			Code: "SOURCE_VERSION_PATH_MISMATCH",
-			Data: map[string]any{
-				"version_id":    versionID,
-				"path":          display,
-				"expected_path": expectedPath,
-				"detail":        fmt.Sprintf("version belongs to %s, not %s", expectedPath, display),
-			},
-		}
-	}
-
-	if comp.After.Availability == sourceledger.ContentUnavailable {
-		return "", &toolrejection.ToolReject{
-			Code: "SOURCE_VERSION_UNAVAILABLE",
-			Data: map[string]any{
-				"version_id": versionID,
-				"detail":     fmt.Sprintf("exact content for version %s is unavailable", versionID),
-			},
-		}
-	}
-	if comp.Before.Availability == sourceledger.ContentUnavailable {
-		return "", &toolrejection.ToolReject{
-			Code: "SOURCE_VERSION_UNAVAILABLE",
-			Data: map[string]any{
-				"version_id": comp.Before.VersionID,
-				"detail":     fmt.Sprintf("exact content for base version %s is unavailable", comp.Before.VersionID),
-			},
-		}
-	}
-
-	resp := sourceHistoryResponse{
-		Mode:          "diff",
-		Path:          display,
-		Recorded:      true,
-		VersionID:     versionID,
-		BaseVersionID: comp.Before.VersionID,
-	}
-
-	oldText := comp.Before.Content
-	newText := comp.After.Content
-	fromLabel := fmt.Sprintf("%s (absent)", display)
-	if comp.Before.VersionID != "" {
-		fromLabel = fmt.Sprintf("%s (%s)", display, comp.Before.VersionID)
-	}
-	toLabel := fmt.Sprintf("%s (%s)", display, versionID)
-
-	resp.Diff = sourceview.UnifiedDiff(fromLabel, toLabel, sourceview.SplitLines(oldText), sourceview.SplitLines(newText), 3)
 	return marshalSourceHistory(display, resp)
 }
 

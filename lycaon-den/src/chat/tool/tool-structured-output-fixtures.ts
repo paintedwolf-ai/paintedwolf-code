@@ -652,6 +652,31 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
 };
 
 /** Wire-compacted tool payloads — mirrors Go chunk compactor residue shapes. */
+/** The other shapes `source_history` returns: the no-argument overview and the session-baseline diff. */
+export const SOURCE_HISTORY_MODE_FIXTURES: Record<string, string> = {
+  overview: JSON.stringify({
+    mode: "overview",
+    recorded: true,
+    since: { ordinal: 4 },
+    files: [
+      { path: "main.go", op: "write", actor: "you", at: "2026-08-26 14:02 UTC", effects: 2, version_id: "v-2", window_id: "w-1", settled: true },
+      { path: "@docs/guide.md", op: "write", actor: "user", at: "2026-08-26 13:50 UTC", effects: 1, version_id: "v-5" },
+    ],
+    open_windows: [{ id: "w-2", running: true }],
+    count: 2,
+    note: "commands in open_windows have not settled, so this list is a floor until they do",
+  }),
+  diff: JSON.stringify({
+    mode: "diff",
+    path: "main.go",
+    recorded: true,
+    since: { ordinal: 4 },
+    base_version_id: "v-1",
+    version_id: "v-2",
+    diff: "--- main.go (v-1, session baseline)\n+++ main.go (v-2)\n@@ -1 +1 @@\n-old\n+new\n",
+  }),
+};
+
 export const TOOL_COMPACTION_FIXTURES: Record<string, string> = {
   find_spill_list: `[compacted tool_result — list page]\n[find#1]\n${JSON.stringify({
     results: [

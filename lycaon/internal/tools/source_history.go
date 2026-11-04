@@ -12,6 +12,13 @@ type SourceHistory struct {
 	Comparison SourceComparison
 	Git        SourceGitHistory
 	Authorship sourceledger.AuthorshipReader
+	// Windows is optional; without it the overview states no window facts.
+	Windows SourceWindowReader
+}
+
+// SourceWindowReader lists a session's command windows that have not settled.
+type SourceWindowReader interface {
+	OpenSessionWindows(projectID, sessionID string) []sourceledger.SessionWindow
 }
 
 type SourceFileHistory interface {
@@ -25,6 +32,8 @@ type SourceFileHistory interface {
 	ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error)
 	ResolveDeletedPath(context.Context, string, sourcebranch.ID, string, string) (sourceledger.DeletedPath, error)
 	EffectsBetween(context.Context, string, int64, int64, int) ([]sourceledger.Effect, error)
+	EffectsBetweenOnBranch(context.Context, string, map[string]sourcebranch.ID, int64, int64, int) ([]sourceledger.Effect, error)
+	OldestFileEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, int64) (sourceledger.FileEffectBounds, bool, error)
 }
 
 type SourceComparison interface {

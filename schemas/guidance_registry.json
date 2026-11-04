@@ -2734,7 +2734,7 @@
       "branch_instruction": "Branch on Code; query metadata instead of content",
       "category": "recoverable",
       "emit": "guard:source_history",
-      "summary": "Content for source version is unavailable — {{ paintedwolf.detail }}."
+      "summary": "Content for source version is unavailable{% if paintedwolf.side %} on the {{ paintedwolf.side }} side ({{ paintedwolf.state }}){% endif %} — {{ paintedwolf.detail }}."
     },
     "SPEC_POSTURE_BREAKING_REQUIRED": {
       "branch_instruction": "Capture breaking policy in Phase 0",

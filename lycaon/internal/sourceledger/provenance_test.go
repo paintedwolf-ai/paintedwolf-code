@@ -141,6 +141,87 @@ func TestEffectsBetweenBoundsAreExclusiveInclusive(t *testing.T) {
 	}
 }
 
+func TestEffectsBetweenOnBranchIsStrictPerRootAndBounded(t *testing.T) {
+	store, ctx := openLedger(t)
+	worktree := sourcebranch.ForWorktree("w1")
+	record := func(op, path string, branch sourcebranch.ID) {
+		mustRecord(t, store, ctx, RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: path}, ProjectID: "p1", BranchID: branch,
+			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser, OperationID: op, After: []byte(op + "\n"),
+		})
+	}
+	record("op-1", "trunk.txt", sourcebranch.Trunk)
+	record("op-2", "worker.txt", "job-1")
+	record("op-3", "trunk.txt", sourcebranch.Trunk)
+	record("op-4", "worktree.txt", worktree)
+	record("op-5", "trunk.txt", sourcebranch.Trunk)
+
+	read := func(branch sourcebranch.ID, after, through int64) []Effect {
+		t.Helper()
+		effects, err := store.History.EffectsBetweenOnBranch(ctx, "p1", map[string]sourcebranch.ID{"r1": branch}, after, through, 10)
+		testutil.FailErr(t, "list branch effects", err)
+		return effects
+	}
+	trunk := read(sourcebranch.Trunk, 0, 0)
+	if len(trunk) != 3 || trunk[0].OperationID != "op-5" || trunk[2].OperationID != "op-1" {
+		t.Fatalf("trunk effects = %+v, want the three trunk operations newest first", trunk)
+	}
+	if got := read("job-1", 0, 0); len(got) != 1 || got[0].OperationID != "op-2" {
+		t.Fatalf("worker effects = %+v", got)
+	}
+	if got := read(worktree, 0, 0); len(got) != 1 || got[0].OperationID != "op-4" {
+		t.Fatalf("worktree effects = %+v", got)
+	}
+	// The lower bound excludes, the upper bound includes.
+	if got := read(sourcebranch.Trunk, trunk[2].Ordinal, trunk[1].Ordinal); len(got) != 1 || got[0].OperationID != "op-3" {
+		t.Fatalf("bounded effects = %+v, want only the middle trunk effect", got)
+	}
+	if got, err := store.History.EffectsBetweenOnBranch(ctx, "p1", nil, 0, 0, 0); err != nil || got != nil {
+		t.Fatalf("no roots = (%v, %v), want nothing", got, err)
+	}
+	unattached, err := store.History.EffectsBetweenOnBranch(ctx, "p1", map[string]sourcebranch.ID{"elsewhere": sourcebranch.Trunk}, 0, 0, 0)
+	testutil.FailErr(t, "list unattached root", err)
+	if len(unattached) != 0 {
+		t.Fatalf("unattached root effects = %+v", unattached)
+	}
+	var none *History
+	if _, err := none.EffectsBetweenOnBranch(ctx, "p1", nil, 0, 0, 1); err == nil {
+		t.Fatal("a missing ledger answered")
+	}
+}
+
+func TestOldestFileEffectAfterOnBranchIgnoresOtherBranches(t *testing.T) {
+	store, ctx := openLedger(t)
+	record := func(op, content string, branch sourcebranch.ID) {
+		mustRecord(t, store, ctx, RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"}, ProjectID: "p1", BranchID: branch,
+			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser, OperationID: op, After: []byte(content),
+		})
+	}
+	record("op-1", "base\n", sourcebranch.Trunk)
+	fileID, baseVersion := mustResolve(t, store, ctx, "a.txt")
+	before, err := store.History.EffectsBetween(ctx, "p1", 0, 0, 1)
+	testutil.FailErr(t, "read the newest effect", err)
+	floor := before[0].Ordinal
+	record("op-2", "worker\n", "job-1")
+	record("op-3", "first trunk\n", sourcebranch.Trunk)
+	_, firstTrunk := mustResolve(t, store, ctx, "a.txt")
+	record("op-4", "second trunk\n", sourcebranch.Trunk)
+
+	bounds, found, err := store.History.OldestFileEffectAfterOnBranch(ctx, "p1", sourcebranch.Trunk, fileID, floor)
+	testutil.FailErr(t, "resolve oldest trunk effect", err)
+	if !found || bounds.BeforeVersionID != baseVersion || bounds.AfterVersionID != firstTrunk {
+		t.Fatalf("bounds = %+v (found %v), want %s to %s", bounds, found, baseVersion, firstTrunk)
+	}
+	if _, found, err := store.History.OldestFileEffectAfterOnBranch(ctx, "p1", "job-2", fileID, floor); err != nil || found {
+		t.Fatalf("other branch = (%v, %v), want none", found, err)
+	}
+	var none *History
+	if _, _, err := none.OldestFileEffectAfterOnBranch(ctx, "p1", sourcebranch.Trunk, fileID, 0); err == nil {
+		t.Fatal("a missing ledger answered")
+	}
+}
+
 func TestQueryFileEffectsPagesNewestFirst(t *testing.T) {
 	store, ctx := openLedger(t)
 	for _, op := range []string{"op-1", "op-2", "op-3"} {

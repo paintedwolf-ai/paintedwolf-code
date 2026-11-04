@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
 func (s *History) SessionActivityFloor(ctx context.Context, projectID, sessionID string) (int64, bool, error) {
@@ -48,6 +49,88 @@ func (s *History) EffectsBetween(
 		BeforeOrdinal: beforeOrdinal, PageLimit: int64(limit),
 	})
 	return effectsFromAfterOrdinal(rows), err
+}
+
+// EffectsBetweenOnBranch pages newest effects in (afterOrdinal, throughOrdinal]
+// where each root admits only the branch given for it. Unlisted roots contribute
+// nothing; a zero upper bound is open.
+func (s *History) EffectsBetweenOnBranch(
+	ctx context.Context,
+	projectID string,
+	rootBranches map[string]sourcebranch.ID,
+	afterOrdinal, throughOrdinal int64,
+	limit int,
+) ([]Effect, error) {
+	if s == nil {
+		return nil, fmt.Errorf("ledger not configured")
+	}
+	if len(rootBranches) == 0 {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	roots, err := encodeRootBranches(rootBranches)
+	if err != nil {
+		return nil, err
+	}
+	beforeOrdinal := int64(0)
+	if throughOrdinal > 0 {
+		beforeOrdinal = throughOrdinal + 1
+	}
+	rows, err := s.queries.ListSourceEffectsAfterOrdinalOnBranch(ctx, db.ListSourceEffectsAfterOrdinalOnBranchParams{
+		ProjectID: projectID, RootBranches: roots, Ordinal: afterOrdinal,
+		BeforeOrdinal: beforeOrdinal, PageLimit: int64(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Effect, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, effectFromFields(effectFieldsOf(
+			r.EffectID, r.ProjectID, r.OperationID, r.FileID, r.BeforeVersionID,
+			r.AfterVersionID, r.RootID, r.Path, r.FromRootID, r.FromPath, r.Op,
+			r.EntryKind, r.Ordinal, r.CreatedTs, r.BranchID,
+			r.Origin, r.Cause, r.ActorLabel, r.SessionID, r.JobID, r.Turn,
+			r.ToolCallID, r.ToolName, r.BatchID, r.CaptureQuality, r.GitTransitionID, r.CommandWindowID)))
+	}
+	if err := s.walk.hydrateEffectAuthors(ctx, projectID, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// OldestFileEffectAfterOnBranch returns the version bounds of the branch's first
+// effect on the file past afterOrdinal; found=false means none was recorded.
+func (s *History) OldestFileEffectAfterOnBranch(
+	ctx context.Context,
+	projectID string,
+	branch sourcebranch.ID,
+	fileID string,
+	afterOrdinal int64,
+) (FileEffectBounds, bool, error) {
+	if s == nil {
+		return FileEffectBounds{}, false, fmt.Errorf("ledger not configured")
+	}
+	row, err := s.queries.OldestSourceEffectForFileAfterOrdinalOnBranch(ctx, db.OldestSourceEffectForFileAfterOrdinalOnBranchParams{
+		ProjectID: projectID, FileID: fileID, BranchID: branch.String(), Ordinal: afterOrdinal,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return FileEffectBounds{}, false, nil
+	}
+	if err != nil {
+		return FileEffectBounds{}, false, err
+	}
+	return FileEffectBounds{
+		BeforeVersionID: row.BeforeVersionID, AfterVersionID: row.AfterVersionID, Ordinal: row.Ordinal,
+	}, true, nil
+}
+
+// FileEffectBounds is the version movement of one effect. BeforeVersionID is
+// empty when the file did not exist before it.
+type FileEffectBounds struct {
+	BeforeVersionID, AfterVersionID string
+	Ordinal                         int64
 }
 
 // FileEffectsResult is one newest-first page of a file's recorded effects.

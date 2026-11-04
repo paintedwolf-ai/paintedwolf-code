@@ -162,6 +162,7 @@ var titleFallbacks = map[string]string{
 	"scan_compare":          "Baseline → current scan",
 	"scan_query":            "Scan findings",
 	"scan_summary":          "Scan results",
+	"source_history":        "Session changes",
 	"terminal_close":        "Terminal session",
 	"terminal_read":         "Terminal session",
 	"terminal_send":         "Terminal session",

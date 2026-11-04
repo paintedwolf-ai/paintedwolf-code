@@ -1,21 +1,21 @@
 tags: [edit, history]
-description: "Query the source ledger for file effects (mode=effects), current line authorship (mode=lines), this session's paths (mode=mine), historical version content (mode=version), or version diffs (mode=diff). Includes uncommitted state. Actors: you / agent / user / external / mixed / unknown. Missing history is reported explicitly."
+description: "No arguments: what changed on your branch this session, every actor; waits briefly for your finished commands to settle. path alone: that file's record. path with mode=diff and no version_id: the file's change since the session began. Query the source ledger for file effects (mode=effects), current line authorship (mode=lines), this session's paths (mode=mine), historical version content (mode=version), or version diffs (mode=diff). Includes uncommitted state. Actors: you / agent / user / external / mixed / unknown. Missing history is reported explicitly."
 schema:
   type: object
   properties:
     mode:
       type: string
       enum: [effects, lines, mine, version, diff]
-      description: effects (default) lists a file's recorded changes newest first; lines attributes the current lines; mine lists paths this session authored; version reads historical content; diff compares versions
+      description: effects (default with a path) lists a file's recorded changes newest first; lines attributes the current lines; mine lists paths this session authored; version reads historical content; diff compares versions. Omit mode and path for the overview
     path:
       type: string
-      description: Repo-relative file path (required for effects, lines, version, and diff; ignored for mine)
+      description: Repo-relative file path (required except for mine and the no-argument overview)
     version_id:
       type: string
-      description: version or diff mode — retained source version ID from an effect row or read receipt
+      description: version mode (required) or diff mode (optional; omitted compares head with the session baseline) — retained source version ID from an effect row or read receipt
     base_version_id:
       type: string
-      description: diff mode — earlier source version ID to diff against (defaults to the version's parent version; can be "current" or "head" to compare against the working file)
+      description: diff mode, requires version_id — earlier source version ID to diff against (defaults to the version's parent version; can be "current" or "head" to compare against the working file)
     offset:
       type: integer
       description: version mode — 1-based line offset to start reading from (default 1)

@@ -1153,6 +1153,8 @@ host_facts:
    type: string
  - name: paintedwolf.shell_metacharacters
    type: bool
+ - name: paintedwolf.side
+   type: string
  - name: paintedwolf.size
    type: string
  - name: paintedwolf.failure_source_unchanged
@@ -1164,6 +1166,8 @@ host_facts:
  - name: paintedwolf.spill_path
    type: string
  - name: paintedwolf.start_line
+   type: string
+ - name: paintedwolf.state
    type: string
  - name: paintedwolf.status
    type: string

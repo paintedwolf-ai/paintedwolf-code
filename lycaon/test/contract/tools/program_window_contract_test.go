@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -9,7 +10,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
@@ -84,4 +88,60 @@ git bisect reset`, tc)
 			t.Fatalf("nested command did not run: %v (%+v)", err, out)
 		}
 	}
+}
+
+// A program's window has settled by the time the overview reads, so its effects
+// list under the session's identity with their window.
+func TestSourceHistoryOverviewACCW02ProgramEffectsListSettled(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	f := toolfixture.NewProgramFixture(t)
+	ledger := f.Seed.AttachLedger(t)
+	dir := f.Seed.Dir
+	gittest.Init(t, dir)
+	contractcheck.FailErr(t, "write tracked file", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
+	gittest.CommitAll(t, dir, "Start")
+
+	tc := gitProgramContext(dir)
+	tc.Identity.Agent = ""
+	tc.Identity.ProjectID, tc.Identity.SessionID = testdbseed.DefaultProjectID, f.Seed.Session
+	tc.Source.Commands = ledger.Commands
+	tc.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk, Windows: ledger.Commands}
+	_, err := ledger.Checkpoints.CreateStructuralCheckpoint(t.Context(), sourceledger.StructuralCheckpointInput{
+		ProjectID: tc.Identity.ProjectID, Kind: sourceledger.CheckpointTurn, Label: "Turn start", SessionID: tc.Identity.SessionID, Turn: 1,
+	})
+	contractcheck.FailErr(t, "create turn checkpoint", err)
+
+	out, err := f.Invoke(t, `/bin/sh -c 'echo made > gen.txt'`, tc)
+	contractcheck.FailErr(t, "invoke generator", err)
+	if out.Status != 0 || out.SourceWindow == nil {
+		t.Fatalf("generator outcome = %+v", out)
+	}
+	tool := &survey.SourceHistoryTool{Boundary: f.Seed.Boundary}
+	raw, err := tool.Run(t.Context(), map[string]any{}, tc)
+	contractcheck.FailErr(t, "source_history()", err)
+	var overview struct {
+		Files []struct {
+			Path     string `json:"path"`
+			Actor    string `json:"actor"`
+			WindowID string `json:"window_id"`
+			Settled  *bool  `json:"settled"`
+		} `json:"files"`
+		OpenWindows []struct {
+			ID string `json:"id"`
+		} `json:"open_windows"`
+	}
+	contractcheck.FailErr(t, "decode overview", json.Unmarshal([]byte(raw), &overview))
+	if len(overview.OpenWindows) != 0 {
+		t.Fatalf("open windows = %+v, want the program settled", overview.OpenWindows)
+	}
+	for _, file := range overview.Files {
+		if file.Path == "gen.txt" {
+			if file.WindowID != out.SourceWindow.ID || file.Settled == nil || !*file.Settled || file.Actor != "you" {
+				t.Fatalf("generated row = %+v, want the session's settled window %s", file, out.SourceWindow.ID)
+			}
+			return
+		}
+	}
+	t.Fatalf("overview rows = %+v, want gen.txt", overview.Files)
 }

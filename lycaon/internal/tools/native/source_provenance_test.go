@@ -374,6 +374,12 @@ func (f *fakeSourceLedger) TurnCheckpoint(context.Context, string, string, int) 
 func (f *fakeSourceLedger) EffectsBetween(context.Context, string, int64, int64, int) ([]sourceledger.Effect, error) {
 	return nil, nil
 }
+func (f *fakeSourceLedger) EffectsBetweenOnBranch(context.Context, string, map[string]sourcebranch.ID, int64, int64, int) ([]sourceledger.Effect, error) {
+	return nil, nil
+}
+func (f *fakeSourceLedger) OldestFileEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, int64) (sourceledger.FileEffectBounds, bool, error) {
+	return sourceledger.FileEffectBounds{}, false, nil
+}
 func (f *fakeSourceLedger) GitTransitionsBetween(context.Context, string, int64, int64, int) ([]sourceledger.GitTransition, error) {
 	return nil, nil
 }

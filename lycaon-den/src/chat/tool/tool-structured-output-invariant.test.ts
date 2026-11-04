@@ -22,6 +22,7 @@ import { TOOL_CARD_KINDS } from "./tool-presentation.generated.ts";
 import {
   GIT_UNAVAILABLE_OUTPUT_FIXTURE,
   TOOL_GUIDANCE_OUTPUT_FIXTURE,
+  SOURCE_HISTORY_MODE_FIXTURES,
   TOOL_STRUCTURED_OUTPUT_FIXTURES,
 } from "./tool-structured-output-fixtures.ts";
 import { peelEvidenceHandleTag } from "./tool-output-handle.ts";
@@ -135,6 +136,13 @@ describe("tool structured output invariant", () => {
         TOOL_STRUCTURED_OUTPUT_FIXTURES[tool],
         `missing fixture: ${tool}`,
       ).toBeDefined();
+    }
+  });
+
+  it("presents source_history overview and session diff results", () => {
+    for (const [mode, output] of Object.entries(SOURCE_HISTORY_MODE_FIXTURES)) {
+      const view = buildStructuredToolPresentation(part("source_history", output));
+      expect(violatesStructuredToolPresentation(view, output), mode).toBeNull();
     }
   });
 

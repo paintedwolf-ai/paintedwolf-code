@@ -192,7 +192,7 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 	}
 	for _, fileID := range order {
 		group := groups[fileID]
-		display := displaySourcePath(in.Roots, group.newest.RootID, group.newest.Path)
+		display := projectroot.DisplayPath(in.Roots, group.newest.RootID, group.newest.Path)
 		if (!in.Touched[group.newest.Path] && !in.Touched[display]) || len(brief.Files) >= sourceChangeBriefFileCap {
 			brief.OtherFiles++
 			brief.OtherEffects += group.effects
@@ -233,7 +233,7 @@ func (m *Service) sessionTouchedPaths(
 		for _, path := range authored {
 			if path = strings.TrimSpace(path); path != "" {
 				touched[path] = true
-				touched[displaySourcePath(roots, root.ID, path)] = true
+				touched[projectroot.DisplayPath(roots, root.ID, path)] = true
 			}
 		}
 	}
@@ -263,20 +263,4 @@ func shortCommit(commit string) string {
 		return commit[:8]
 	}
 	return commit
-}
-
-// displaySourcePath renders a ledger (root, relative path) pair in the
-// canonical display spelling: bare off the primary root, @label-qualified off
-// any other, and unqualified when the root is unknown.
-func displaySourcePath(roots []projectroot.RootRef, rootID, rel string) string {
-	for _, root := range roots {
-		if root.ID != rootID {
-			continue
-		}
-		if root.IsPrimary || root.Label == "" {
-			return rel
-		}
-		return "@" + root.Label + "/" + rel
-	}
-	return rel
 }

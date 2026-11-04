@@ -2297,6 +2297,121 @@ func (q *Queries) ListSourceEffectsAfterOrdinal(ctx context.Context, arg ListSou
 	return items, nil
 }
 
+const listSourceEffectsAfterOrdinalOnBranch = `-- name: ListSourceEffectsAfterOrdinalOnBranch :many
+WITH scoped_roots AS (
+ SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id FROM json_each(CAST(sqlc.arg(root_branches) AS TEXT)) r
+)
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = ?1 AND e.ordinal > ?2
+  AND e.walk_visible = 1
+  AND (CAST(?3 AS INTEGER) = 0 OR e.ordinal < CAST(?3 AS INTEGER))
+  AND EXISTS (SELECT 1 FROM scoped_roots r WHERE r.root_id = e.root_id AND r.branch_id = o.branch_id)
+ORDER BY e.ordinal DESC LIMIT ?4
+`
+
+type ListSourceEffectsAfterOrdinalOnBranchParams struct {
+	ProjectID     string `json:"project_id"`
+	Ordinal       int64  `json:"ordinal"`
+	BeforeOrdinal int64  `json:"before_ordinal"`
+	PageLimit     int64  `json:"page_limit"`
+}
+
+type ListSourceEffectsAfterOrdinalOnBranchRow struct {
+	EffectID        string `json:"effect_id"`
+	ProjectID       string `json:"project_id"`
+	OperationID     string `json:"operation_id"`
+	FileID          string `json:"file_id"`
+	BeforeVersionID string `json:"before_version_id"`
+	AfterVersionID  string `json:"after_version_id"`
+	RootID          string `json:"root_id"`
+	Path            string `json:"path"`
+	FromRootID      string `json:"from_root_id"`
+	FromPath        string `json:"from_path"`
+	Op              string `json:"op"`
+	EntryKind       string `json:"entry_kind"`
+	Ordinal         int64  `json:"ordinal"`
+	CreatedTs       string `json:"created_ts"`
+	BranchID        string `json:"branch_id"`
+	Origin          string `json:"origin"`
+	Cause           string `json:"cause"`
+	ActorLabel      string `json:"actor_label"`
+	SessionID       string `json:"session_id"`
+	JobID           string `json:"job_id"`
+	Turn            int64  `json:"turn"`
+	ToolCallID      string `json:"tool_call_id"`
+	ToolName        string `json:"tool_name"`
+	BatchID         string `json:"batch_id"`
+	CaptureQuality  string `json:"capture_quality"`
+	GitTransitionID string `json:"git_transition_id"`
+	CommandWindowID string `json:"command_window_id"`
+}
+
+// Each attached root admits only the branch given for it, trunk included, so
+// other branches neither fill nor truncate the page.
+func (q *Queries) ListSourceEffectsAfterOrdinalOnBranch(ctx context.Context, arg ListSourceEffectsAfterOrdinalOnBranchParams) ([]ListSourceEffectsAfterOrdinalOnBranchRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceEffectsAfterOrdinalOnBranch,
+		arg.ProjectID,
+		arg.Ordinal,
+		arg.BeforeOrdinal,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceEffectsAfterOrdinalOnBranchRow
+	for rows.Next() {
+		var i ListSourceEffectsAfterOrdinalOnBranchRow
+		if err := rows.Scan(
+			&i.EffectID,
+			&i.ProjectID,
+			&i.OperationID,
+			&i.FileID,
+			&i.BeforeVersionID,
+			&i.AfterVersionID,
+			&i.RootID,
+			&i.Path,
+			&i.FromRootID,
+			&i.FromPath,
+			&i.Op,
+			&i.EntryKind,
+			&i.Ordinal,
+			&i.CreatedTs,
+			&i.BranchID,
+			&i.Origin,
+			&i.Cause,
+			&i.ActorLabel,
+			&i.SessionID,
+			&i.JobID,
+			&i.Turn,
+			&i.ToolCallID,
+			&i.ToolName,
+			&i.BatchID,
+			&i.CaptureQuality,
+			&i.GitTransitionID,
+			&i.CommandWindowID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSourceEffectsForFilePage = `-- name: ListSourceEffectsForFilePage :many
 SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(e.before_version_id, '') AS before_version_id,
@@ -4048,6 +4163,46 @@ type OldestSourceEffectForFileAfterOrdinalRow struct {
 func (q *Queries) OldestSourceEffectForFileAfterOrdinal(ctx context.Context, arg OldestSourceEffectForFileAfterOrdinalParams) (OldestSourceEffectForFileAfterOrdinalRow, error) {
 	row := q.db.QueryRowContext(ctx, oldestSourceEffectForFileAfterOrdinal, arg.ProjectID, arg.FileID, arg.Ordinal)
 	var i OldestSourceEffectForFileAfterOrdinalRow
+	err := row.Scan(
+		&i.ID,
+		&i.BeforeVersionID,
+		&i.AfterVersionID,
+		&i.Ordinal,
+	)
+	return i, err
+}
+
+const oldestSourceEffectForFileAfterOrdinalOnBranch = `-- name: OldestSourceEffectForFileAfterOrdinalOnBranch :one
+SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.ordinal
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = ?1 AND e.file_id = ?2
+  AND o.branch_id = ?3 AND e.ordinal > ?4 AND e.walk_visible = 1
+ORDER BY e.ordinal ASC LIMIT 1
+`
+
+type OldestSourceEffectForFileAfterOrdinalOnBranchParams struct {
+	ProjectID string `json:"project_id"`
+	FileID    string `json:"file_id"`
+	BranchID  string `json:"branch_id"`
+	Ordinal   int64  `json:"ordinal"`
+}
+
+type OldestSourceEffectForFileAfterOrdinalOnBranchRow struct {
+	ID              string `json:"id"`
+	BeforeVersionID string `json:"before_version_id"`
+	AfterVersionID  string `json:"after_version_id"`
+	Ordinal         int64  `json:"ordinal"`
+}
+
+func (q *Queries) OldestSourceEffectForFileAfterOrdinalOnBranch(ctx context.Context, arg OldestSourceEffectForFileAfterOrdinalOnBranchParams) (OldestSourceEffectForFileAfterOrdinalOnBranchRow, error) {
+	row := q.db.QueryRowContext(ctx, oldestSourceEffectForFileAfterOrdinalOnBranch,
+		arg.ProjectID,
+		arg.FileID,
+		arg.BranchID,
+		arg.Ordinal,
+	)
+	var i OldestSourceEffectForFileAfterOrdinalOnBranchRow
 	err := row.Scan(
 		&i.ID,
 		&i.BeforeVersionID,
