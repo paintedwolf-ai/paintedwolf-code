@@ -58,7 +58,9 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 	}
 	inv.out = newOutput(ctx, streams.Output, p.owners.streamBytes())
 	inv.out.beforeWrite = inv.flushPins
-	inv.input = drainingInput{input: inv.input, out: inv.out}
+	if !commandprogram.IsNullInput(inv.input) {
+		inv.input = drainingInput{input: inv.input, out: inv.out}
+	}
 	return inv
 }
 
