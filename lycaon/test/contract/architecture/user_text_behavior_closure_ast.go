@@ -291,8 +291,6 @@ var coordinatorPongoBooleanGateRE = regexp.MustCompile(`\{%\s*(?:if|elif)\s+(?:n
 var bannedCoordinatorGateNameRE = regexp.MustCompile(`(?i)(greenfield|dispatch[_-]?hint|user[_-]?intent|(^|[_-])nl([_-]|$)|build[_-]?intent|chat[_-]?approv)`)
 
 var registeredCoordinatorBooleanGates = map[string]bool{
-	"repair_targets":                               true,
-	"document_citation_targets":                    true,
 	"document_issues":                              true,
 	"agent_skills":                                 true,
 	"rating_questions":                             true,
