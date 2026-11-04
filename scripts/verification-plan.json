@@ -1182,8 +1182,7 @@
       ],
       "suite": "all",
       "setup": "shell",
-      "runtime_engines": false,
-      "priority": "compile"
+      "runtime_engines": false
     },
     "webkit": {
       "targets": [

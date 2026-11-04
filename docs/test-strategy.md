@@ -946,13 +946,9 @@ Partial receipts from a cancelled run cannot
 mix short measured times with large timeout fallbacks. Shards share their lane's
 longest estimate because package balancing changes which packages each shard runs.
 The catalog orders lanes by explicit priority: `reject` for limits and lint,
-`critical` for both behavior shards, and `normal` for remaining work. Native
-verification is a `compile` candidate: the planner moves it to the earliest
-position after rejection and critical lanes that does not increase the predicted
-whole-matrix duration at the profile's runner cap. The baseline orders remaining
-work longest first. Both behavior shards start beside rejection checks. Compilation promotion preserves that start and never removes a lane or
-changes its verification recipe. Timing estimates are advisory; the model is not
-a guarantee of hosted runtime.
+`critical` for both behavior shards, and `normal` for remaining work, longest
+first. Timing estimates are advisory; the model is not a guarantee of hosted runtime.
+
 Lanes and shards are planned from measured durations. Each lane of main's
 nightly records setup plus execution time beside its receipts in `ci/timings.json`;
 a sharded lane also records its packages' durations. A job-start marker precedes
@@ -1244,7 +1240,7 @@ not something feature CI performs.
 
 ### Merge-group early checks and throughput
 
-The first four integration slots run limits, lint, and the two Go behavior shards.
+The first integration slots run limits, lint, and the two Go behavior shards.
 On the exact merge-group source, lint completes comment and failure-message checks
 before analysis. Each Go shard runs repository contracts with the full integration
 recipe before its remaining affected packages. The two phases are disjoint and
