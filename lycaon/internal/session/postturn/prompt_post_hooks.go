@@ -33,6 +33,7 @@ func (m *Service) After(ctx context.Context, sessionID, profileID string, turnTo
 	if isWorker {
 		return nil
 	}
+	defer m.commitFeedback(ctx, sessionID)
 	if m.WorkflowExit(ctx, sessionID, profileID, turnTools) {
 		return nil
 	}
@@ -50,16 +51,19 @@ func (m *Service) After(ctx context.Context, sessionID, profileID string, turnTo
 			return err
 		}
 	}
-	// Feedback on the turn that just ended commits with that turn, so it reads as
-	// history and not as a condition on the next user message. A failed take stays
-	// staged and arrives with the next turn.
+	return nil
+}
+
+// commitFeedback commits feedback on the turn that just ended with that turn, on
+// every way out of the hooks, so it reads as history and not as a condition on the
+// next user message. A failed take stays staged and arrives with the next turn.
+func (m *Service) commitFeedback(ctx context.Context, sessionID string) {
 	if m.guidance == nil {
-		return nil
+		return
 	}
 	if _, err := m.guidance.TakePolicy(ctx, sessionID); err != nil {
 		slog.WarnContext(ctx, "post-turn feedback not committed", "session_id", sessionID, "err", err)
 	}
-	return nil
 }
 
 // ProgressMissing nudges the coordinator to author a progress checklist via
