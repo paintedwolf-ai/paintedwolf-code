@@ -65,13 +65,14 @@ func BenchmarkRecordBatchPromoteScale(b *testing.B) {
 // Measures what a program's first external launch waits for: the pass and the
 // start retention a window open runs. Committed files need no retention.
 func BenchmarkOpenCommandWindow(b *testing.B) {
-	for _, files := range []int{2000, 10000} {
-		for _, committed := range []bool{true, false} {
-			for _, watched := range []bool{true, false} {
-				b.Run(fmt.Sprintf("files-%d/committed-%t/watched-%t", files, committed, watched), func(b *testing.B) {
-					benchmarkOpenCommandWindow(b, files, committed, watched)
-				})
-			}
+	for _, tree := range []struct {
+		files     int
+		committed bool
+	}{{2000, true}, {10000, true}, {200, false}} {
+		for _, watched := range []bool{true, false} {
+			b.Run(fmt.Sprintf("files-%d/committed-%t/watched-%t", tree.files, tree.committed, watched), func(b *testing.B) {
+				benchmarkOpenCommandWindow(b, tree.files, tree.committed, watched)
+			})
 		}
 	}
 }
