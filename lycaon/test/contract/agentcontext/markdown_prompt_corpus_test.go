@@ -39,6 +39,9 @@ type renderedOutput struct {
 	text     string
 	// standing outputs reach the model on every turn rather than in feedback.
 	standing bool
+	// workflowVersioned guidance is a workflow's phase copy, which changes only with
+	// that workflow's version.
+	workflowVersioned bool
 }
 
 // typedCitationTools take citation fields as arguments, and those stay.
@@ -51,6 +54,8 @@ func namesTypedCitationTool(text string) bool {
 var pongoNodeRE = regexp.MustCompile(`(?s)\{#.*?#\}|\{\{.*?\}\}|\{%-?\s*(.*?)\s*-?%\}`)
 
 var pongoQuotedRE = regexp.MustCompile(`"([^"]*)"`)
+
+var workflowRenderRE = regexp.MustCompile(`(?m)^\s*render:\s*(\S+)`)
 
 // flattenBranches keeps the text of every side of every conditional, with includes
 // inlined, so a fallback no fixture reaches is still read. Only the audience split
@@ -165,8 +170,18 @@ func templateBranchOutputs(t *testing.T) []renderedOutput {
 		}
 	}
 	root := contractcheck.RepoRoot(t)
+	workflowRenders := map[string]bool{}
+	manifests, err := filepath.Glob(filepath.Join(root, packRoot, "*", "workflows", "*", "workflow.yaml"))
+	contractcheck.FailErr(t, "find workflows", err)
+	for _, manifest := range manifests {
+		raw, readErr := os.ReadFile(manifest)
+		contractcheck.FailErr(t, "read "+manifest, readErr)
+		for _, render := range workflowRenderRE.FindAllStringSubmatch(string(raw), -1) {
+			workflowRenders[render[1]] = true
+		}
+	}
 	var out []renderedOutput
-	err := filepath.WalkDir(filepath.Join(root, packRoot), func(path string, d os.DirEntry, err error) error {
+	err = filepath.WalkDir(filepath.Join(root, packRoot), func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") || strings.Contains(path, string(filepath.Separator)+"archive"+string(filepath.Separator)) {
 			return err
 		}
@@ -187,6 +202,8 @@ func templateBranchOutputs(t *testing.T) []renderedOutput {
 			audience: audience,
 			text:     flattenBranches(t, string(raw), audience == audienceCoordinator),
 			standing: templateIsStanding(path),
+
+			workflowVersioned: workflowRenders[strings.TrimSuffix(filepath.Base(path), ".md")],
 		})
 		return nil
 	})

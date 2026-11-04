@@ -48,7 +48,7 @@ func TestRenderInvestigateSurfaceRoutesSummarizeFirst(t *testing.T) {
 		t.Fatalf("Render coordinator-surface-investigate: %v", err)
 	}
 	for _, want := range []string{
-		"summarize(", "find . -maxdepth 2 -type d", "summarize#N",
+		"summarize(", "find . -maxdepth 2 -type d", "source windows or anchors by handle",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("investigate surface missing floor survey route %q:\n%s", want, rendered)

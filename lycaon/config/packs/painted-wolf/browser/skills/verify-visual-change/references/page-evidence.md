@@ -62,8 +62,8 @@ For a screen recording or an attached video, read the attachment's overview shee
 
 | Claim | Capture mode | Cite |
 |---|---|---|
-| Static page, no drive script | default `capture: "screenshot"` | The single `page#` handle |
-| Ordering, post-async settlement, multi-step flow | `capture: "filmstrip"` with `actions` | Per-frame `page#` (`frames[].evidence_handle` / `frame_index`) for "after step K" |
+| Static page, no drive script | default `capture: "screenshot"` | The single page handle |
+| Ordering, post-async settlement, multi-step flow | `capture: "filmstrip"` with `actions` | Per-frame page handles (`frames[].evidence_handle` / `frame_index`) for "after step K" |
 | Motion, flicker, late content, layout shift | `capture: "timeline"`, or `page_act` with `record` | The timeline summary's times and values |
 
 N action steps produce N+1 settled frames (navigate idle + after each action). Do not cite only the final after-shot for a sequence claim.
