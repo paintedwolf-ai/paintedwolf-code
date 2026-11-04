@@ -452,3 +452,24 @@ func TestSourceHistoryACOV21DirectoryMoveOnAWorkerBranch(t *testing.T) {
 		t.Fatalf("source = %+v, want recorded and absent", source)
 	}
 }
+
+// The baseline at a move's source decides the base, so what a program did before
+// the move stays visible.
+func TestSourceHistoryACDF21MoveKeepsWhatAProgramDidBeforeIt(t *testing.T) {
+	_, results := runWorkerScript(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		generatorCall("generate"),
+		commandCall("move edited", `mv main.go moved.go`),
+		commandCall("move generated", `mv gen.txt moved.txt`),
+		historyCall("edited", map[string]any{"path": "moved.go", "mode": "diff"}),
+		historyCall("generated", map[string]any{"path": "moved.txt", "mode": "diff"}),
+	)
+	edited := decodeWorkerHistory(t, results, "edited")
+	if !edited.Recorded || edited.Unrecorded || !strings.Contains(edited.Diff, "+ // generated") {
+		t.Fatalf("edited = %+v, want the program's edit against the baseline", edited)
+	}
+	generated := decodeWorkerHistory(t, results, "generated")
+	if !generated.Recorded || generated.Unrecorded || !strings.Contains(generated.Diff, "(absent)") || !strings.Contains(generated.Diff, "+ generated") {
+		t.Fatalf("generated = %+v, want the file shown as created", generated)
+	}
+}

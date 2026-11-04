@@ -490,11 +490,46 @@ func TestSourceHistoryDiffACDF21FileMoveDiffsFromTheLedgersPredecessor(t *testin
 			h := newHistoryHarness(t)
 			h.record(effectSeed{path: "old.go", content: "body\n", session: "s0", op: api.SourceChangeOpCreate})
 			h.recordOnWorker(effectSeed{path: "new.go", fromPath: "old.go", content: "body\n", op: api.SourceChangeOpRename})
-			result := runTreeDiff(t, h, &fakeTree{path: created(c.live)}, "new.go")
+			tree := &fakeTree{path: created(c.live), source: map[string]workspacebaseline.PathComparison{
+				"old.go": {Kind: workspacebaseline.ChangeDeleted, Before: "body\n", HasBefore: true, HasAfter: true},
+			}}
+			result := runTreeDiff(t, h, tree, "new.go")
 			removed, kept := diffChanges(result.Diff)
 			if !result.Recorded || result.Unrecorded || result.BaseVersionID == "" || result.Note != c.note ||
 				fmt.Sprint(removed) != fmt.Sprint(c.removed) || fmt.Sprint(kept) != fmt.Sprint(c.kept) {
 				t.Fatalf("result = %+v, want recorded from its predecessor, removed %q, added %q, note %q", result, c.removed, c.kept, c.note)
+			}
+		})
+	}
+}
+
+// The ledger captured these bytes at the move, after the program ran. The baseline
+// at the source still holds what the leg began with.
+func TestSourceHistoryDiffACDF21BaselineAtTheSourceOutranksTheLedger(t *testing.T) {
+	for _, c := range []struct {
+		name          string
+		source        workspacebaseline.PathComparison
+		removed, kept []string
+		note          string
+	}{
+		{
+			name:    "program edit then move",
+			source:  workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeDeleted, Before: "original\n", HasBefore: true, HasAfter: true},
+			removed: []string{"original"}, kept: []string{"body"},
+		},
+		{name: "generated file moved", source: workspacebaseline.PathComparison{Absent: true}, kept: []string{"body"}},
+		{name: "source the baseline holds no text for", source: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeDeleted, HasAfter: true}, note: treeDiffMovedNote},
+		{name: "source reads as matching its baseline", source: workspacebaseline.PathComparison{}, note: treeDiffMovedNote},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newHistoryHarness(t)
+			h.record(effectSeed{path: "old.go", content: "body\n", session: "s0", op: api.SourceChangeOpCreate})
+			h.recordOnWorker(effectSeed{path: "new.go", fromPath: "old.go", content: "body\n", op: api.SourceChangeOpRename})
+			tree := &fakeTree{path: created("body\n"), source: map[string]workspacebaseline.PathComparison{"old.go": c.source}}
+			result := runTreeDiff(t, h, tree, "new.go")
+			removed, kept := diffChanges(result.Diff)
+			if !result.Recorded || result.Unrecorded || result.Note != c.note || fmt.Sprint(removed) != fmt.Sprint(c.removed) || fmt.Sprint(kept) != fmt.Sprint(c.kept) {
+				t.Fatalf("result = %+v, want removed %q, added %q, note %q", result, c.removed, c.kept, c.note)
 			}
 		})
 	}
@@ -567,7 +602,9 @@ func TestSourceHistoryACDF19MovedCredentialFileOnAWriteLeg(t *testing.T) {
 	h.record(effectSeed{path: ".env", content: "TOKEN=old\n", session: "s0", op: api.SourceChangeOpCreate})
 	h.recordOnWorker(effectSeed{path: "settings.txt", fromPath: ".env", content: "TOKEN=old\n", op: api.SourceChangeOpRename})
 	h.writeFile("settings.txt", "TOKEN=new\n")
-	worker := h.workerWith(&fakeTree{path: created("TOKEN=new\n")})
+	worker := h.workerWith(&fakeTree{path: created("TOKEN=new\n"), source: map[string]workspacebaseline.PathComparison{
+		".env": {Kind: workspacebaseline.ChangeDeleted, Before: "TOKEN=old\n", HasBefore: true, HasAfter: true},
+	}})
 	recorder := &deliveredRecorder{}
 	worker.Effects.CredentialFiles = recorder
 	_, err := h.tool.Run(t.Context(), map[string]any{"path": "settings.txt", "mode": "diff"}, worker)

@@ -167,7 +167,7 @@ describe("tool structured output invariant", () => {
         part("source_history", SOURCE_HISTORY_MODE_FIXTURES.diff_unrecorded_write_leg ?? ""),
       ).sections,
     );
-    expect(unrecordedDiff).toContain("unrecorded");
+    expect(unrecordedDiff).toMatch(/unrecorded/i);
     expect(unrecordedDiff).toContain("(live)");
   });
 
