@@ -1059,15 +1059,13 @@ complete check tier. A release requires successful manual **Qualification** for 
 source on main; daily nightly and merge admission do not grant publication.
 
 Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
-analysis-tool caches immediately after compiler preparation. Optional lint
-diagnostics run afterward and publish their own result separately. WebKitGTK
+analysis-tool caches after compiler preparation. Lint diagnostics publish their
+own result separately. WebKitGTK
 images also publish before diagnostics, so diagnostic cleanup cannot block
 their reuse. A failed or cancelled preparation cannot publish these caches;
 only trusted main writes them.
-The Go cache captures completed build preparation before lint adds test-variant
-compilation and vet facts; lint lanes may need to compute those entries themselves.
-Lint diagnostics remain a separate cache. A long diagnostic run cannot delay the
-prepared build inputs.
+The Go cache includes every test variant, compiled by analysis in the source slot
+lanes verify in, because compile actions depend on the package directory.
 
 #### Determinism and capacity
 
@@ -1400,16 +1398,20 @@ Every run reports each applicable family as an exact hit or miss. An all-hit pus
 skips preparation, compilation, publication, and lint diagnostics. Native package
 archives are a preparation accelerator: signed-index resolution and its actual
 lookup run only when preparation is needed, and report their result separately.
-Scheduled and manual maintenance refresh optional Linux lint diagnostics.
+On Linux the Go key follows Go source, so a push that changes Go refreshes the
+compile cache and lint diagnostics, and consumers restore the newest generation by
+prefix. Go validates each entry by content, so an older generation only costs
+recompilation of what changed. macOS keys follow the module graph, so its scarce
+runners warm rarely.
 
-GitHub manages cache generations with its native least-recently-used eviction
-and unused-entry retention within the plan's allowance. Saves follow successful
-preparation and an exact miss. Consumers remain read-only and validate current
-inputs or rebuild on a miss; cache presence never grants a verification pass.
+Publishing a compiler or diagnostics family deletes its older generations, which
+keeps frequent Go refreshes from evicting rarely used families within the plan's
+allowance. Saves follow successful preparation and an exact miss. Consumers remain
+read-only and validate current inputs or rebuild on a miss; cache presence never
+grants a verification pass.
 
-The publisher trims its ephemeral Go build cache to 1 GiB. Go modules and Rust
-registry sources are fetched during online preparation before offline checks.
-Compiler payloads retain dependencies rather than duplicate package downloads;
+Go modules and Rust registry sources are fetched during online preparation before offline checks.
+Rust compiler payloads retain dependencies rather than duplicate package downloads;
 Cargo's package-scoped cleanup removes local workspace outputs after warming.
 Decision-engine intermediates retain their paired MLX kernels. Cargo validates
 the selected source, deployment floor, compiler configuration, and path mappings.
