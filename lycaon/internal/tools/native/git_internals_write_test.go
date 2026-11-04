@@ -115,4 +115,3 @@ func TestWriteAndEditDenyNestedSubmoduleAndGitMetadataWhileReadAllowsInspection(
 		t.Fatalf("expected .git/HEAD content in read output, got: %s", out)
 	}
 }
-
