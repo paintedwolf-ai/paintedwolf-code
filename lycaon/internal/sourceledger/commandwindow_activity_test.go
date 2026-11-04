@@ -3,6 +3,8 @@ package sourceledger
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -130,22 +132,89 @@ func TestHoldsCountConcurrentProcesses(t *testing.T) {
 	}
 }
 
-// A new process during the grace keeps the window active with no re-anchor.
+// A new process during the grace ends that grace, so the window stays active once
+// the grace's settle period has passed, and only the new process's end idles it.
 func TestHoldDuringTheGraceKeepsTheWindowActive(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
+	idled := idleObserver(store)
 	endSettle := holdSettlePeriods(store)
 	window, first := programWindow(t, store, ctx, root)
 	first()
 	second, err := window.Hold(ctx)
 	testutil.FailErr(t, "hold during the grace", err)
-	writeRootFile(t, root, "during.txt", "live\n")
-	deliverWrites(ctx, root, "during.txt")
-	forceTestPass(t, store, ctx, root)
-	if effect := newestEffects(t, store, ctx)["during.txt"]; effect.CommandWindowID != window.ID {
-		t.Fatalf("drift after a hold during the grace = %+v, want the window", effect)
+	endSettle()
+	for _, path := range []string{"during.txt", "still-during.txt"} {
+		writeRootFile(t, root, path, "live\n")
+		deliverWrites(ctx, root, path)
+		forceTestPass(t, store, ctx, root)
+		if effect := newestEffects(t, store, ctx)[path]; effect.CommandWindowID != window.ID {
+			t.Fatalf("drift after a hold during the grace = %+v, want the window", effect)
+		}
+	}
+	if len(idled) != 0 {
+		t.Fatal("the ended grace idled a window with a live process")
 	}
 	second()
-	endSettle()
+	testutil.Receive(t, "the window goes idle", idled)
+	closeAndSettle(t, ctx, window)
+}
+
+// A pass nobody could claim moves every window's start, so a deletion recorded as
+// an outside change is not claimed again by the session left active afterwards.
+func TestUnclaimedPassMovesStartsPastADeletion(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	writeRootFile(t, root, "old.txt", "stale\n")
+	first := openSessionWindow(t, store, ctx, root, "a")
+	second := openSessionWindow(t, store, ctx, root, "b")
+	testutil.FailErr(t, "remove old.txt", os.Remove(filepath.Join(root, "old.txt")))
+	deliverWrites(ctx, root, "old.txt")
+	forceTestPass(t, store, ctx, root)
+	wantOutsideEffect(t, newestEffects(t, store, ctx), "old.txt")
+
+	closeAndSettle(t, ctx, second)
+	writeRootFile(t, root, "later.txt", "later\n")
+	deliverWrites(ctx, root, "later.txt")
+	closeAndSettle(t, ctx, first)
+	effects := newestEffects(t, store, ctx)
+	wantOutsideEffect(t, effects, "old.txt")
+	if effects["later.txt"].CommandWindowID != first.ID {
+		t.Fatalf("later file = %+v, want the remaining session's window", effects["later.txt"])
+	}
+}
+
+func windowPins(t *testing.T, store *Store, ctx context.Context, id string) map[string]bool {
+	t.Helper()
+	rows, err := store.sqlDB.QueryContext(ctx, `SELECT sha256 FROM source_command_window_objects WHERE window_id = ?`, id)
+	testutil.FailErr(t, "read pins", err)
+	defer func() { _ = rows.Close() }()
+	out := map[string]bool{}
+	for rows.Next() {
+		var sha string
+		testutil.FailErr(t, "scan pin", rows.Scan(&sha))
+		out[sha] = true
+	}
+	testutil.FailErr(t, "read pin rows", rows.Err())
+	return out
+}
+
+// After a re-anchor the window admits against the new start, so that start's
+// before-images are what it must keep.
+func TestReanchorRetainsTheNewStart(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	idled := idleObserver(store)
+	window, first := programWindow(t, store, ctx, root)
+	first()
+	testutil.Receive(t, "the window goes idle", idled)
+
+	writeRootFile(t, root, "gap.txt", "gap\n")
+	deliverWrites(ctx, root, "gap.txt")
+	second, err := window.Hold(ctx)
+	testutil.FailErr(t, "hold after the gap", err)
+	if pins := windowPins(t, store, ctx, window.ID); !pins[sourceblob.ContentSHA([]byte("gap\n"))] {
+		t.Fatalf("pins after the re-anchor = %v, want the gap's file", pins)
+	}
+	second()
+	testutil.Receive(t, "the window goes idle again", idled)
 	closeAndSettle(t, ctx, window)
 }
 
@@ -196,7 +265,7 @@ func TestHoldAbandonedDuringReanchorLeavesTheWindowIdle(t *testing.T) {
 		t.Fatalf("abandoned hold = %v", err)
 	}
 	close(gate.release)
-	testutil.AwaitCondition(t, "the anchor finished", func() bool {
+	testutil.WaitFor(t, func() bool {
 		store.Commands.windowsMu.Lock()
 		defer store.Commands.windowsMu.Unlock()
 		return window.window.anchoring == nil
@@ -245,6 +314,34 @@ var errPassFailed = errors.New("final pass failed")
 
 func (failingInventory) EnsureInventory(context.Context, InventoryRequest) error {
 	return errPassFailed
+}
+
+// A failed window may still have drift to its name, so a peer does not claim what
+// it might have been.
+func TestIncompleteWindowLeavesThePeersDriftToNobody(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	store, ctx, root := openLedgerOnDisk(t)
+	writeRootFile(t, root, "seed.txt", "seed\n")
+	idled := idleObserver(store)
+	window, release := programWindow(t, store, ctx, root)
+	peer := openSessionWindow(t, store, ctx, root, "peer")
+	real := store.Commands.inventory
+	store.Commands.inventory = failingInventory{real}
+	release()
+	testutil.Receive(t, "the grace ends", idled)
+	store.Commands.inventory = real
+	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 1 || !listed[0].Incomplete {
+		t.Fatalf("open windows = %+v, want it incomplete", listed)
+	}
+	if claimant := store.Commands.attributionWindow("p1", onDiskRoots(root)); claimant != nil {
+		t.Fatalf("window %s claims with an incomplete peer in doubt", claimant.id)
+	}
+	writeRootFile(t, root, "Cargo.lock", "lock\n")
+	forceTestPass(t, store, ctx, root)
+	wantOutsideEffect(t, newestEffects(t, store, ctx), "Cargo.lock")
+	closeAndSettle(t, ctx, window)
+	closeAndSettle(t, ctx, peer)
 }
 
 func TestFailedSettlementReportsUnsettledAndListsAsIncomplete(t *testing.T) {
@@ -479,10 +576,42 @@ func TestFinalPassLongerThanTheBudgetServesTheNextOpen(t *testing.T) {
 	testutil.FailErr(t, "close second", second.Close(ctx))
 }
 
+// Reuse lasts for the pass's own length when that is beyond the floor.
+func TestSlowPassIsReusedForItsOwnLength(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	store, ctx, root := openLedgerOnDisk(t)
+	clock := manualLedgerClock(store)
+	first := openTestWindow(t, store, ctx, root, "make")
+	released := make(chan struct{})
+	close(released)
+	took := 2 * slowPassReuseFloor
+	gate := &gatedInventory{commandsInventoryPort: store.Commands.inventory, release: released, during: func() { clock.advance(took) }}
+	store.Commands.inventory = gate
+	testutil.FailErr(t, "close first", first.Close(ctx))
+	gate.during = nil
+
+	clock.advance(slowPassReuseFloor + time.Second)
+	before := gate.passes.Load()
+	reused := openTestWindow(t, store, ctx, root, "within the pass's length")
+	if passes := gate.passes.Load(); passes != before {
+		t.Fatalf("passes = %d, want the open past the floor to reuse the pass (%d)", passes, before)
+	}
+	testutil.FailErr(t, "close reusing window", reused.Close(ctx))
+
+	clock.advance(took)
+	before = gate.passes.Load()
+	late := openTestWindow(t, store, ctx, root, "past the pass's length")
+	if passes := gate.passes.Load(); passes != before+1 {
+		t.Fatalf("passes = %d, want a new one after %d", passes, before)
+	}
+	testutil.FailErr(t, "close late window", late.Close(ctx))
+}
+
 // Retention running out costs a file's before-image and not its attribution: a
 // rewrite of an unretained file reports no captured content and cannot restore,
-// a retained one diffs exactly, and what one open stored carries to the next.
-func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
+// and a retained one diffs exactly.
+func TestPartialRetentionLosesOnlyTheBeforeImage(t *testing.T) {
 	ledger := openDiskLedger(t)
 	store, ctx, root := ledger.store, context.Background(), ledger.root
 	// What this bounds is retention's file limit, so a loaded host must not run
@@ -492,28 +621,9 @@ func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
 	for path, content := range contents {
 		writeRootFile(t, root, path, content)
 	}
-	pinned := func(id string) map[string]bool {
-		rows, err := ledger.sqlDB.QueryContext(ctx, `SELECT sha256 FROM source_command_window_objects WHERE window_id = ?`, id)
-		testutil.FailErr(t, "read pins", err)
-		defer func() { _ = rows.Close() }()
-		out := map[string]bool{}
-		for rows.Next() {
-			var sha string
-			testutil.FailErr(t, "scan pin", rows.Scan(&sha))
-			out[sha] = true
-		}
-		testutil.FailErr(t, "read pin rows", rows.Err())
-		return out
-	}
-	stored := func() int {
-		var count int
-		testutil.FailErr(t, "count objects", ledger.sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_blob_objects`).Scan(&count))
-		return count
-	}
-
 	store.Commands.retention.files = 1
 	partial := openTestWindow(t, store, ctx, root, "make")
-	pins := pinned(partial.ID)
+	pins := windowPins(t, store, ctx, partial.ID)
 	if len(pins) != 1 {
 		t.Fatalf("pins with room for one = %d", len(pins))
 	}
@@ -521,7 +631,6 @@ func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
 	if !pins[sourceblob.ContentSHA([]byte(contents[retained]))] {
 		retained, unretained = unretained, retained
 	}
-	storedAfterPartial := stored()
 
 	for path := range contents {
 		writeRootFile(t, root, path, "after\n")
@@ -543,22 +652,29 @@ func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
 	if effects[unretained].CommandWindowID != partial.ID || lost.Before.Availability != ContentNotCaptured || lost.Before.Content != "" {
 		t.Fatalf("unretained comparison = %+v, effect = %+v", lost, effects[unretained])
 	}
-	if lost.Before.VersionID != "" {
-		if _, err := store.History.ReadRestorableVersion(ctx, "p1", lost.Before.VersionID); !errors.Is(err, ErrVersionUnavailable) {
-			t.Fatalf("restore of an unretained before-image = %v, want ErrVersionUnavailable", err)
-		}
+	if _, err := store.History.ReadRestorableVersion(ctx, "p1", lost.Before.VersionID); !errors.Is(err, ErrVersionUnavailable) {
+		t.Fatalf("restore of an unretained before-image = %v, want ErrVersionUnavailable", err)
 	}
+}
 
-	// The next open stores only what the first did not, and finds the rest in place.
-	writeRootFile(t, root, "c.txt", "before c\n")
-	deliverWrites(ctx, root, "c.txt")
-	store.Commands.retention.files = windowRetainFiles
+// What an earlier open stored is pinned without reading the file again, so later
+// opens resume instead of paying for it twice and a file gone since still counts.
+func TestRetentionPinsStoredObjectsWithoutRereadingThem(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	store, ctx, root := openLedgerOnDisk(t)
+	writeRootFile(t, root, "a.txt", "before a\n")
+	writeRootFile(t, root, "b.txt", "before b\n")
+	repochange.MarkCoverageCompleteForTest(root)
+	t.Cleanup(func() { repochange.CloseRoot(root) })
+	forceTestPass(t, store, ctx, root)
+	closeAndSettle(t, ctx, openTestWindow(t, store, ctx, root, "make"))
+
+	// With no event delivered the next open starts from the same inventory.
+	testutil.FailErr(t, "remove a.txt", os.Remove(filepath.Join(root, "a.txt")))
 	resumed := openTestWindow(t, store, ctx, root, "make again")
-	if pins := pinned(resumed.ID); len(pins) == 0 || !pins[sourceblob.ContentSHA([]byte("before c\n"))] {
-		t.Fatalf("resumed pins = %v", pins)
-	}
-	if got := stored(); got <= storedAfterPartial {
-		t.Fatalf("stored objects = %d after resuming from %d", got, storedAfterPartial)
+	if pins := windowPins(t, store, ctx, resumed.ID); !pins[sourceblob.ContentSHA([]byte("before a\n"))] || !pins[sourceblob.ContentSHA([]byte("before b\n"))] {
+		t.Fatalf("resumed pins = %v, want both stored objects", pins)
 	}
 	closeAndSettle(t, ctx, resumed)
 }
@@ -591,14 +707,21 @@ func TestFailedWindowRecoveryReportsAndRetriesBeforeAnyWindowOpens(t *testing.T)
 
 	fresh := New(ledger.sqlDB, ledger.contentDir)
 	fresh.Commands.SetWindowSettleForTest(0)
-	canceled, cancel := context.WithCancel(ctx)
-	cancel()
-	if err := fresh.Commands.RecoverInterruptedWindows(canceled); !errors.Is(err, context.Canceled) {
-		t.Fatalf("recovery under a canceled context = %v", err)
+	_, err := ledger.sqlDB.ExecContext(ctx, `CREATE TRIGGER refuse_recovery BEFORE UPDATE ON source_command_windows BEGIN SELECT RAISE(ABORT, 'recovery refused'); END`)
+	testutil.FailErr(t, "create trigger", err)
+	if err := fresh.Commands.RecoverInterruptedWindows(ctx); err == nil {
+		t.Fatal("recovery reported success with its write refused")
 	}
-	if window, err := fresh.Commands.OpenCommandWindow(canceled, CommandWindowInput{ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s2", ToolName: "command"}); err == nil {
+	if window, err := fresh.Commands.OpenCommandWindow(ctx, CommandWindowInput{ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s2", ToolName: "command"}); err == nil {
 		t.Fatalf("window %s opened with recovery still owed", window.ID)
 	}
+	var fromTheOpen int
+	testutil.FailErr(t, "count rows", ledger.sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_command_windows WHERE session_id = 's2'`).Scan(&fromTheOpen))
+	if fromTheOpen != 0 {
+		t.Fatalf("rows from the refused open = %d", fromTheOpen)
+	}
+	_, err = ledger.sqlDB.ExecContext(ctx, `DROP TRIGGER refuse_recovery`)
+	testutil.FailErr(t, "drop trigger", err)
 	row, err := fresh.queries.GetSourceCommandWindow(ctx, orphan.ID)
 	testutil.FailErr(t, "read orphan window", err)
 	if row.State != string(api.SourceCommandWindowRunning) {
