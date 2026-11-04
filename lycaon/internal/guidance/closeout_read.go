@@ -47,7 +47,7 @@ func ReadCloseoutReport(raw string, retained RetainedCloseout, expectsRunReport 
 		}
 	}
 	next := ParseCloseoutDraft(narrative, opts)
-	if retained.Active {
+	if retained.Active && retained.Draft.HasAnswer() {
 		read := applyRetainedRepair(next, document, retained, opts)
 		read.Unread = unread
 		return read

@@ -10,7 +10,9 @@ import (
 // have; an artifact that cannot be presented is an unobserved reference.
 func EvaluateDraftCitations(draft CloseoutDraft, resolved DraftCitationResolution) CloseoutGroundingEval {
 	owners := make(map[int]string, len(draft.Occurrences))
+	tokens := make(map[int]string, len(draft.Occurrences))
 	for _, occurrence := range draft.Occurrences {
+		tokens[occurrence.Index] = occurrence.Token
 		if occurrence.Owner != DraftFieldSynthesis {
 			owners[occurrence.Index] = occurrence.Owner + ": "
 		}
@@ -29,7 +31,7 @@ func EvaluateDraftCitations(draft CloseoutDraft, resolved DraftCitationResolutio
 		offender := owners[outcome.OccurrenceIndex] + outcome.Offender
 		switch {
 		case outcome.Outcome == CitationSurvey:
-			add(&survey, owners[outcome.OccurrenceIndex]+outcome.Resolution.Path)
+			add(&survey, owners[outcome.OccurrenceIndex]+tokens[outcome.OccurrenceIndex])
 		case outcome.Outcome == CitationGrounded:
 			bound = append(bound, outcome.Resolution)
 		case outcome.Outcome == ArtifactNotPresentable:
@@ -55,10 +57,10 @@ func EvaluateDraftCitations(draft CloseoutDraft, resolved DraftCitationResolutio
 	case len(urls) > 0:
 		return CloseoutGroundingEval{Code: urlCode, Offenders: urls, UnobservedURLs: append([]string(nil), urls...)}
 	}
-	tokens := BindAdvisoryTokens(bound)
+	boundTokens := BindAdvisoryTokens(bound)
 	return CloseoutGroundingEval{
-		BindAdvisoryTokens:   tokens,
-		BindAdvisoryCount:    len(tokens),
+		BindAdvisoryTokens:   boundTokens,
+		BindAdvisoryCount:    len(boundTokens),
 		SurveyAdvisoryTokens: survey,
 		SurveyAdvisoryCount:  len(survey),
 	}

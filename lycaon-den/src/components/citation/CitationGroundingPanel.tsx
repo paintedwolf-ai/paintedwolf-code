@@ -448,7 +448,7 @@ export function CitationGroundingPanel(props: Props) {
       <Show when={view().proseLeakCount}>
         {(count) => (
           <p class="den-citation-grounding-context">
-            {count()} citation{count() === 1 ? "" : "s"} duplicated in narrative
+            {count()} citation{count() === 1 ? "" : "s"} also named in the narrative
             <Show when={view().proseLeaksSample.length > 0}>
               {": "}
               {view().proseLeaksSample.join(", ")}
