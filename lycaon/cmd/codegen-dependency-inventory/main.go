@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,18 +22,42 @@ const (
 )
 
 func main() {
-	repo := flag.String("repo", "..", "repository root")
-	check := flag.Bool("check", false, "fail when the policy no longer matches the manifests or .github/dependabot.yml is stale")
-	refresh := flag.Bool("refresh-upstream", false, "query package registries and rewrite the upstream snapshot")
-	flag.Parse()
+	os.Exit(runCLI(os.Args[1:], os.Stderr))
+}
+
+func runCLI(args []string, stderr io.Writer) int {
+	flags := flag.NewFlagSet("codegen-dependency-inventory", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	repo := flags.String("repo", "..", "repository root")
+	check := flags.Bool("check", false, "fail when the policy no longer matches the manifests or .github/dependabot.yml is stale")
+	refresh := flags.Bool("refresh-upstream", false, "query package registries and rewrite the upstream snapshot")
+	nixBun := flags.Bool("nix-bun", false, "regenerate the Nix Bun expression with the pinned converter (requires Nix)")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
 	if *check && *refresh {
-		fmt.Fprintln(os.Stderr, "codegen-dependency-inventory: --check and --refresh-upstream are exclusive")
-		os.Exit(2)
+		fmt.Fprintln(stderr, "codegen-dependency-inventory: --check and --refresh-upstream are exclusive")
+		return 2
+	}
+	if *nixBun {
+		if *check || *refresh {
+			fmt.Fprintln(stderr, "codegen-dependency-inventory: --nix-bun cannot combine with --check or --refresh-upstream")
+			return 2
+		}
+		if err := generateNixBun(context.Background(), *repo, runBunCommand); err != nil {
+			fmt.Fprintln(stderr, "codegen-dependency-inventory:", err)
+			return 1
+		}
+		return 0
 	}
 	if err := run(*repo, *check, *refresh); err != nil {
-		fmt.Fprintln(os.Stderr, "codegen-dependency-inventory:", err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, "codegen-dependency-inventory:", err)
+		return 1
 	}
+	return 0
 }
 
 func run(repo string, check, refresh bool) error {

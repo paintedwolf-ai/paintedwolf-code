@@ -38,3 +38,18 @@ func hydrateProviderModels(p modelcall.Provider, effective []modelinfo.Entry) mo
 	}
 	return p
 }
+
+// publishedContextLength reads the window hydration installed in a provider.
+func publishedContextLength(p modelcall.Provider, model string) int {
+	if lp, ok := p.(*loggingProvider); ok {
+		p = lp.inner
+	}
+	catalog, ok := p.(interface {
+		ModelEntry(string) (modelinfo.Entry, bool)
+	})
+	if !ok {
+		return 0
+	}
+	entry, _ := catalog.ModelEntry(model)
+	return entry.ContextLength
+}

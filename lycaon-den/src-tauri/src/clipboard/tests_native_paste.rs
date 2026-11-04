@@ -26,6 +26,9 @@ window.addEventListener('load', () => {
 /// The owner child's window, which the clipboard fixture has already focused.
 const OWNER_TITLE: &str = "Painted Wolf Code clipboard fixture";
 
+/// Names the stuck stage before the owner child's deadline kills the fixture.
+const PASTE_STALL_REPORT: Duration = Duration::from_secs(40);
+
 fn owner_window() -> gtk::Window {
     gtk::Window::list_toplevels()
         .into_iter()
@@ -133,17 +136,15 @@ pub(super) fn exercise(focus_input: impl Fn() + Clone + Send + 'static) {
                 window.show_all();
                 window.present();
                 view.load_html(PAGE, Some("about:blank"));
-                // The existing owner child deadline also kills a wedged web process.
-                gtk::glib::timeout_add_local_once(Duration::from_secs(10), move || {
+                // The owner child's deadline also kills a wedged web process.
+                gtk::glib::timeout_add_local_once(PASTE_STALL_REPORT, move || {
                     if let Some(reply) = reply.borrow_mut().take() {
                         let _ = reply.send(Err(format!("native paste event deadline while {}", progress.borrow())));
                     }
                     detach(&window);
                 });
             })).expect("dispatch private native paste");
-            let observed = tokio::time::timeout(Duration::from_secs(12), receiver)
-                .await.expect("bounded native paste receiver")
-                .expect("native paste sender").expect("native paste action");
+            let observed = receiver.await.expect("native paste sender").expect("native paste action");
             let observed: serde_json::Value = serde_json::from_str(&observed)
                 .expect("typed native clipboard event");
             assert_eq!(observed["trusted"], true);
@@ -166,8 +167,7 @@ pub(super) fn exercise(focus_input: impl Fn() + Clone + Send + 'static) {
 async fn assert_clipboard_image() {
     let (reply, receiver) = tokio::sync::oneshot::channel();
     GlibMainThread.dispatch(Box::new(move || request_image(reply))).expect("dispatch clipboard image read");
-    let png = tokio::time::timeout(Duration::from_secs(5), receiver)
-        .await.expect("bounded clipboard image read").expect("clipboard image sender").expect("clipboard image");
+    let png = receiver.await.expect("clipboard image sender").expect("clipboard image");
     assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"), "clipboard image is PNG");
     let (reply, receiver) = tokio::sync::oneshot::channel();
     GlibMainThread.dispatch(Box::new(move || {

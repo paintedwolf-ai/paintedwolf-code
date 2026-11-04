@@ -10,9 +10,9 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 )
 
-// ContextLength returns the usable context window for provider/model from
-// already-known ModelEntry data only (catalog YAML + discovery cache). It does
-// not perform live HTTP discovery.
+// ContextLength returns the usable context window for provider/model: the row
+// the provider's published catalog holds, which RequestBudget reads too, under
+// any configured limit. It reads published state only, so it makes no HTTP call.
 func (r *Registry) ContextLength(provider, model string) int {
 	if r == nil {
 		return 0
@@ -30,10 +30,14 @@ func (r *Registry) ContextLength(provider, model string) int {
 	if !ok {
 		return 0
 	}
+	window := publishedContextLength(snapshot.providers[provider], model)
 	for _, m := range entry.Models {
-		if modelinfo.EquivalentID(entry.Kind, m.ID, model) && m.ContextLength > 0 {
-			return m.ContextLength
+		if modelinfo.EquivalentID(entry.Kind, m.ID, model) && m.ContextLength > 0 && (window <= 0 || m.ContextLength < window) {
+			window = m.ContextLength
 		}
+	}
+	if window > 0 {
+		return window
 	}
 	profile := providerprofile.Default()
 	if p := snapshot.providers[provider]; p != nil {
