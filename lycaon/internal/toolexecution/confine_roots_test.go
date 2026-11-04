@@ -54,6 +54,25 @@ func TestConfineRootsWorkerBranchIsExclusive(t *testing.T) {
 
 // A read-scoped worker stays on the project tree but no worker's branch is its
 // to read; an ordinary session excludes nothing.
+// Several roots each own a directory in the branch, and each carries policy the
+// floor and the native write review must recognize.
+func TestConfineRootsNameEveryRootInAMultiRootBranch(t *testing.T) {
+	tctx := rootsCtx("/proj/a", "/proj/b")
+	tctx.Source.WorkerBranchRoot = "/branches/job1"
+	got := tools.ConfineRootsForAction(tctx)
+	if len(got) != 3 || got[0] != "/branches/job1" {
+		t.Fatalf("roots = %v, want the branch and one directory per root", got)
+	}
+	for _, root := range got[1:] {
+		if _, ok := confine.AgentPolicyPath(root+"/.paintedwolf/approvals.yaml", got...); !ok {
+			t.Errorf("%s: project approvals not classified as agent policy", root)
+		}
+		if _, ok := confine.AgentPolicyPath(root+"/.agents/skills/x/SKILL.md", got...); !ok {
+			t.Errorf("%s: project skill not classified as agent policy", root)
+		}
+	}
+}
+
 func TestReadWorkerConfineDeniesWorkerBranches(t *testing.T) {
 	tctx := rootsCtx("/proj/a")
 	if got := tools.ActionConfineInputsForContext(tctx, nil).ReadDenyPaths; len(got) != 0 {

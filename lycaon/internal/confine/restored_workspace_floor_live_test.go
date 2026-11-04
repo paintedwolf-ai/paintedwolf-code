@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -31,6 +32,18 @@ func restoredWorkspaces() []restoredWorkspace {
 		{"worker branch", underState(enginepaths.WorkerBranchesRootUnder)},
 		{"session worktree", underState(enginepaths.SessionWorktreesRootUnder)},
 		{"draft", underState(enginepaths.DraftsRootUnder)},
+		{"worker branch with several roots", func(control string) (string, confine.Confinement) {
+			workspace := filepath.Join(enginepaths.WorkerBranchesRootUnder(control), "key", "job")
+			c := workspaceConfinement(workspace)
+			for _, id := range []string{"first", "second"} {
+				dir, err := projectroot.BranchDirForID(id)
+				if err != nil {
+					panic(err)
+				}
+				c.Roots = append(c.Roots, filepath.Join(workspace, dir))
+			}
+			return workspace, c
+		}},
 	}
 }
 
