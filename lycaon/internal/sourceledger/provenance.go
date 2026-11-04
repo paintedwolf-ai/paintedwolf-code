@@ -148,9 +148,12 @@ func (s *History) OldestPathEffectAfterOnBranch(
 	if err != nil {
 		return FileEffectBounds{}, false, err
 	}
-	return FileEffectBounds{
-		BeforeVersionID: row.BeforeVersionID, AfterVersionID: row.AfterVersionID, Ordinal: row.Ordinal,
-	}, true, nil
+	before := row.BeforeVersionID
+	if row.FromPath != "" && (row.FromRootID != rootID || row.FromPath != path) {
+		// A move into the location says nothing about what it held before.
+		before = ""
+	}
+	return FileEffectBounds{BeforeVersionID: before, AfterVersionID: row.AfterVersionID, Ordinal: row.Ordinal}, true, nil
 }
 
 // FileEffectBounds is the version movement of one effect. BeforeVersionID is

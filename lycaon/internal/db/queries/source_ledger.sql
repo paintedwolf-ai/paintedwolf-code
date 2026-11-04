@@ -482,13 +482,10 @@ WHERE e.project_id = sqlc.arg(project_id) AND e.file_id = sqlc.arg(file_id)
 ORDER BY e.ordinal ASC LIMIT 1;
 
 -- The first thing this branch recorded at a location past the ordinal, whichever
--- file held it. A move into the location says nothing about what it held before,
--- so that effect reads as having no predecessor.
+-- file held it, including a move away from it.
 -- name: OldestSourceEffectAtPathAfterOrdinalOnBranch :one
-SELECT e.id,
-       CAST(CASE WHEN e.from_path != '' AND NOT (e.from_root_id = sqlc.arg(root_id) AND e.from_path = sqlc.arg(path))
-            THEN '' ELSE COALESCE(e.before_version_id, '') END AS TEXT) AS before_version_id,
-       e.after_version_id, e.ordinal
+SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.ordinal, e.from_root_id, e.from_path
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = sqlc.arg(project_id) AND o.branch_id = sqlc.arg(branch_id)
   AND e.ordinal > sqlc.arg(ordinal) AND e.walk_visible = 1
