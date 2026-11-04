@@ -115,6 +115,25 @@ func citationRepairOffer(roots evidence.CitationRoots, ev evidence.Ledger, citat
 	return map[string]any{"use": newest, "worker_output": strings.Contains(newest, ":")}
 }
 
+// FindingCitation is a bracket citation for a worker's finding that resolves in the
+// union of legs: the coordinate when the record stands behind it, with the excerpt only
+// when that is what stands behind it, and otherwise the path.
+func FindingCitation(roots evidence.CitationRoots, ev evidence.Ledger, path string, line int, excerpt string) string {
+	path, candidates := resolveWrittenPath(roots, ev, path)
+	if path == "" || len(candidates) > 0 {
+		return ""
+	}
+	for _, finding := range []WorkerFindingInput{{Path: path, Line: line}, {Path: path, Line: line, Excerpt: excerpt}, {Path: path}} {
+		if (finding.Line <= 0 && line > 0 && finding.Excerpt != "") || (finding.Line > 0 && line <= 0) {
+			continue
+		}
+		if classifyDraftFinding(roots, finding, ev).class == closeoutCitationGrounded {
+			return "[" + citationmd.Citation{Path: finding.Path, Line: finding.Line, Excerpt: finding.Excerpt}.Token() + "]"
+		}
+	}
+	return ""
+}
+
 // CitationRepairRefusalData reports a refused repair. Offenders name the target for
 // the model; the key uses only values and reasons, so a changing ID is no new
 // offender.

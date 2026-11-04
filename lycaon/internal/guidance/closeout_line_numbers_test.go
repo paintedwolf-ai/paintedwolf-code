@@ -424,3 +424,43 @@ func TestCitableEvidenceIsWhatTheLedgerHolds(t *testing.T) {
 		})
 	}
 }
+
+// Live, a coordinator saw a worker's `evidence` as read#5 or output:program:... with no
+// form it could cite, and wrote [task#1:path:13]. The host now writes one that resolves.
+func TestFindingCitationResolvesInTheUnionOfLegs(t *testing.T) {
+	t.Parallel()
+	const path = "cmd/gateway/main.go"
+	numbered := evidence.NamespaceLedger(evidence.AssembleLedger(catNumbered(1, path, 13, 14)), "leg-a")
+	plain := evidence.NamespaceLedger(evidence.AssembleLedger([]evidence.Record{catPlain("read#1", path, 31)}), "leg-a")
+	for _, tc := range []struct {
+		name    string
+		ev      evidence.Ledger
+		path    string
+		line    int
+		excerpt string
+		want    string
+	}{
+		{"a numbered line", numbered, path, 14, "", "[" + path + ":14]"},
+		{"a basename", numbered, "main.go", 14, "", "[" + path + ":14]"},
+		{"past the end of what was read falls back to the path", numbered, path, 77, "", `["` + path + `"]`},
+		{"unnumbered output, no excerpt", plain, path, 14, "", `["` + path + `"]`},
+		{"unnumbered output with a matching excerpt", plain, path, 14, "line 14 of the file", "[" + path + `:14 "line 14 of the file"]`},
+		{"no line", plain, path, 0, "", `["` + path + `"]`},
+		{"unobserved", plain, "other.go", 3, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := FindingCitation(evidence.CitationRoots{}, tc.ev, tc.path, tc.line, tc.excerpt)
+			if got != tc.want {
+				t.Fatalf("cite = %q, want %q", got, tc.want)
+			}
+			if got == "" {
+				return
+			}
+			draft, resolved := repairDraft(t, got, CloseoutEvidence{Ledger: tc.ev})
+			if len(resolved.Occurrences) != 1 || resolved.Occurrences[0].Outcome != CitationGrounded || len(draft.Issues) != 0 {
+				t.Fatalf("%s does not resolve: %+v", got, resolved)
+			}
+		})
+	}
+}
