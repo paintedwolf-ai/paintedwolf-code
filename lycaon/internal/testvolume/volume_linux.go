@@ -60,11 +60,12 @@ func runInNamespace(t *testing.T) {
 	}
 	name, _, _ := strings.Cut(t.Name(), "/")
 	args := []string{"--user", "--map-root-user", "--mount", os.Args[0], "-test.run", "^" + name + "$", "-test.v", "-test.count=1"}
-	env := append(os.Environ(), namespaceChildEnv+"=1")
-	// go test never merges its own directory, so a coverage run names another.
+	// A test binary writes counters only when asked for a profile. go test never
+	// merges its own directory, so a coverage run names another.
 	if dir := os.Getenv("PW_GO_CHILD_COVERDIR"); dir != "" {
-		env = append(env, "GOCOVERDIR="+dir)
+		args = append(args, "-test.gocoverdir="+dir, "-test.coverprofile="+filepath.Join(t.TempDir(), "namespace.out"))
 	}
+	env := append(os.Environ(), namespaceChildEnv+"=1")
 	output, code, err := lexec.Run(t.Context(), unsharePath, args, lexec.ExecOpts{
 		Launch:  lexec.HostLaunch("test volume namespace"),
 		Env:     env,
