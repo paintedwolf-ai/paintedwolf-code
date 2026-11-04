@@ -398,6 +398,59 @@ print('fixture '+name, flush=True)'''))
         self.await_condition(lambda: not self.queue.status()["runs"] and not self.queue.status()["operations"])
         self.assertFalse(self.release.exists())
 
+    def test_a_declared_recipe_finishes_its_packages_before_answering(self):
+        self.catalog["go"]["test:digest"]["report_all_failures"] = True
+        self.save_catalog()
+        self.hold.touch()
+        first = self.start("test:digest", "--", "./bad", "./good", env={**self.env, "FIXTURE_EARLY": "1"})
+        self.queued(1)
+        self.queue.resume()
+        self.await_condition(lambda: self.calls.exists() and any((self.artifacts / "verification").glob("*/stage-*-events.jsonl")))
+        self.assertIsNone(first.poll())
+        self.assertEqual(self.receipts(), [])
+        self.release.touch()
+        self.collect(first, 1)
+        failed = self.receipts()[0]
+        self.assertEqual(failed["status"], "failed")
+        results = failed["evidence"][0]["results"]
+        self.assertEqual(results["fixture/bad"]["tests"], ["TestBad"])
+        self.assertEqual(results["fixture/good"]["status"], "passed")
+
+    def test_a_declared_recipe_keeps_a_known_failure_when_its_stage_is_unverified(self):
+        self.catalog["go"]["test:digest"]["report_all_failures"] = True
+        self.save_catalog()
+        first = self.start("test:digest", "--", "./good", "./bad",
+                           env={**self.env, "FIXTURE_EARLY": "1", "FIXTURE_MISSING": "1"})
+        self.queued(1)
+        self.queue.resume()
+        self.collect(first, 1)
+        failed = self.receipts()[0]
+        self.assertEqual((failed["status"], failed["exit_code"]), ("failed", 1))
+
+    def test_keep_going_runs_every_stage_and_reports_every_failure(self):
+        (self.repo / "task").write_text((self.repo / "task").read_text().replace(
+            "name == os.environ.get('FIXTURE_FAIL')", "name in os.environ.get('FIXTURE_FAIL', '').split(',')"))
+        self.git("add", ".")
+        self.git("-c", "user.name=Verification fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "Fail list")
+        first = self.start("check-fast", env={**self.env, "FIXTURE_FAIL": "build,unit", "PW_TEST_KEEP_GOING": "1"})
+        self.queued(1)
+        self.queue.resume()
+        self.collect(first, 1)
+        self.assertEqual(sorted(r["name"] for r in self.records()), ["build", "lint", "unit"])
+        failed = self.receipts()[0]
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(failed["unverified_stages"], [])
+        statuses = {e["stage"]: e["results"]["task"]["status"] for e in failed["evidence"]}
+        self.assertEqual(statuses, {"build": "failed", "lint": "passed", "unit": "failed"})
+
+    def test_without_keep_going_a_failed_stage_ends_the_gate(self):
+        first = self.start("check-fast", env={**self.env, "FIXTURE_FAIL": "build"})
+        self.queued(1)
+        self.queue.resume()
+        self.collect(first, 1)
+        self.assertEqual(self.receipts()[0]["status"], "failed")
+        self.assertTrue(self.receipts()[0]["unverified_stages"])
+
     def test_declared_invocation_overlaps_shared_work_and_undeclared_one_waits(self):
         self.parallel_profiles()
         self.catalog["resources"]["test:invoke"] = {"locks": ["frontend"], "workers": 1}

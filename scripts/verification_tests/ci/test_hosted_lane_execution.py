@@ -104,7 +104,7 @@ class HostedExecutionTests(unittest.TestCase):
             ci.run_lane("nix")
             self.assertEqual(run.call_args.args[0], ["./task", "nix:check"])
 
-    def test_admission_contracts_fail_closed_before_static_checks(self):
+    def test_admission_contracts_run_first_and_keep_their_verdict(self):
         scope = dict(base="b" * 40, head="a" * 40, paths=[".github/workflows/ci.yml"], full=True)
         for preflight_code in (0, 1, 2, -15):
             with self.subTest(code=preflight_code), tempfile.TemporaryDirectory() as directory, \
@@ -114,8 +114,8 @@ class HostedExecutionTests(unittest.TestCase):
                 self.assertEqual(ci.run_lane("ready"), preflight_code)
                 self.assertEqual(run.call_args_list[0].args[0],
                                  ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
-                self.assertEqual(run.call_count, 3 if preflight_code == 0 else 1)
-                if preflight_code == 0:
+                self.assertEqual(run.call_count, 1 if preflight_code < 0 else 3)
+                if preflight_code >= 0:
                     self.assertEqual(run.call_args_list[1].args[0],
                                      ['./task', 'test:confine:linux', '--', 'supervisor'])
                 record = json.loads((Path(directory) / "ci/run.json").read_text())
@@ -322,6 +322,48 @@ class HostedExecutionTests(unittest.TestCase):
                 patch.object(ci.subprocess, 'call', return_value=0) as command:
             ci.run_lane('limits')
         self.assertEqual(command.call_args.kwargs['env']['PW_CHANGE_BASE'], 'b' * 40)
+
+    def test_ready_without_history_runs_every_phase_after_a_failure(self):
+        scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
+        native = ['./task', 'decide:test', '--', '--compile-only']
+        for verdicts, expected in (([1, 2, 0], 1), ([2, 1, 0], 1), ([0, 2, 0], 2), ([0, 0, 0], 0)):
+            with self.subTest(verdicts=verdicts), tempfile.TemporaryDirectory() as directory, \
+                    patch('ci_policy.impact.change', return_value=scope), \
+                    patch('ci_policy.native_admission.commands', return_value=[native]), \
+                    patch('ci_policy.ready_scope.commands', side_effect=lambda phases, _: (phases, None)), \
+                    patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=''), \
+                    patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                    patch.object(ci.subprocess, 'call', side_effect=verdicts) as run:
+                self.assertEqual(ci.run_lane('ready'), expected)
+                self.assertEqual(run.call_count, 3)
+                self.assertEqual(run.call_args.kwargs['env']['PW_TEST_KEEP_GOING'], '1')
+                record = json.loads((Path(directory) / 'ci/run.json').read_text())
+                self.assertEqual(record['preflight']['exit_code'], verdicts[0])
+                self.assertEqual([phase['exit_code'] for phase in record['phases']], verdicts[1:])
+                self.assertEqual(record['status'], {0: 'passed', 1: 'failed', 2: 'unverified'}[expected])
+
+    def test_ready_stops_when_a_phase_is_interrupted(self):
+        scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
+        native = ['./task', 'decide:test', '--', '--compile-only']
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('ci_policy.impact.change', return_value=scope), \
+                patch('ci_policy.native_admission.commands', return_value=[native]), \
+                patch('ci_policy.ready_scope.commands', side_effect=lambda phases, _: (phases, None)), \
+                patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=''), \
+                patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                patch.object(ci.subprocess, 'call', side_effect=[0, -15, 0]) as run:
+            self.assertEqual(ci.run_lane('ready'), -15)
+        self.assertEqual(run.call_count, 2)
+
+    def test_lanes_other_than_ready_stop_at_their_first_failure(self):
+        scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('ci_policy.impact.change', return_value=scope), \
+                patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                patch.object(ci.subprocess, 'call', return_value=1) as run:
+            self.assertEqual(ci.run_lane('limits'), 1)
+        self.assertEqual(run.call_count, 1)
+        self.assertNotIn('PW_TEST_KEEP_GOING', run.call_args.kwargs['env'])
 
     def test_rotated_preflight_stops_after_first_wave_failure_and_records_phases(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)

@@ -104,7 +104,8 @@
       "packages": [
         "./..."
       ],
-      "exclude": "/test/(contract|integration|security|smoke|wiring)(/|$)"
+      "exclude": "/test/(contract|integration|security|smoke|wiring)(/|$)",
+      "report_all_failures": true
     },
     "test:wiring": {
       "options": [],
@@ -169,7 +170,8 @@
       ],
       "packages": [
         "./test/contract/..."
-      ]
+      ],
+      "report_all_failures": true
     },
     "test:security": {
       "options": [

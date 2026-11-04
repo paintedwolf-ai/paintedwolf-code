@@ -574,6 +574,7 @@ def main():
         env = execution_environment({**os.environ, "PW_TEST_WORKERS": str(worker_budget(os.environ))})
         plan = request(task_request[2], env)
         if plan is not None and os.name != "nt":
+            plan["keep_going"] = os.environ.get("PW_TEST_KEEP_GOING") == "1"
             return subscribe(queue, Lease, lock_file, *task_request, plan, env)
         arguments = task_request[2]
         cli = arguments[arguments.index("--") + 1:] if "--" in arguments else []
