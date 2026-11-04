@@ -24,7 +24,9 @@ host: paintedwolf
 # Successors: paintedwolf.native_operation and paintedwolf.native_command identify
 # the reached native operation directly; command programs do not redirect to tools.
 # Retired: paintedwolf.surface_note_offered gated a tool that direct publication replaces.
-# Successor: paintedwolf.unpublished_tool_text_pending.
+# Successor: the paintedwolf.markdown_note content contract.
+# Retired: paintedwolf.has_completion_report meant the closeout parsed as JSON.
+# Successor: paintedwolf.closeout_has_answer.
 # Retired fact names must never be reused.
 # Retired: paintedwolf.high_risk_tool combined policy categories (OAR-FACT-7).
 # Successor: compose paintedwolf.tool_is_state, tool_is_delegation,
