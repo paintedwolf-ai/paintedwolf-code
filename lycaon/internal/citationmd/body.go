@@ -326,19 +326,3 @@ func validBarePath(path string) bool {
 	}
 	return path != ""
 }
-
-// isStructuralBracket reports Markdown's own bracket uses: task boxes, numeric
-// indices and footnote markers. The scanner rejects `[ ` and `[^` by their first
-// byte, so only these bodies arrive complete.
-func isStructuralBracket(body string) bool {
-	return body == "x" || body == "X" || isAllDigits(body)
-}
-
-func isAllDigits(text string) bool {
-	for _, c := range text {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return text != ""
-}
