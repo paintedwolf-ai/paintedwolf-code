@@ -246,7 +246,7 @@ func TestDeterministicFitLeavesItsReservePastAnOversizedRecentWindow(t *testing.
 	budget := EstimateMessagesTokens(rows) - 10*perRow
 	reserve := 40 * perRow
 	cfg := fitCfg()
-	cfg.KeepRecentMessages = len(rows)
+	cfg.KeepRecentMessages, cfg.ModelContextWindow = len(rows), 1<<20
 	out := DeterministicFitWithReserve(cfg, rows, budget, reserve)
 	if got := EstimateMessagesTokens(out); got > budget-reserve/2 {
 		t.Fatalf("fit left %d tokens free of the %d reserve", budget-got, reserve)
