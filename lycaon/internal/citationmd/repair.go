@@ -70,6 +70,9 @@ func RetargetLink(doc Document, o Occurrence, destination string) string {
 // RetargetWorkspaceLink is a workspace link's source pointing at a new path and
 // coordinates, its label kept.
 func RetargetWorkspaceLink(doc Document, o Occurrence, c Citation) string {
+	if _, ok := coordinateLabel(*o.Link); ok {
+		return "[" + c.Token() + "]"
+	}
 	fragment := ""
 	if c.Line > 0 {
 		fragment = "#L" + strconv.Itoa(c.Line)
@@ -83,8 +86,40 @@ func RetargetWorkspaceLink(doc Document, o Occurrence, c Citation) string {
 // LabelWithCitation is a workspace link's label as text, followed by a citation: a
 // handle names no destination for the link to keep.
 func LabelWithCitation(doc Document, o Occurrence, c Citation) string {
+	if _, ok := coordinateLabel(*o.Link); ok {
+		return "[" + c.Token() + "]"
+	}
 	span := o.Link.LabelSpan
 	return doc.Source[span.Start:span.End] + " [" + c.Token() + "]"
+}
+
+// coordinateLabel returns the path of a label that is only a coordinate, as in
+// `[a.go:9](a.go#L9)`. Such a label repeats the reference rather than saying anything,
+// so it must not outlive the coordinate as text the reader takes for a checked line.
+func coordinateLabel(link Link) (string, bool) {
+	path, start, _, ok := splitCoordinate(strings.Trim(link.Label, "`"))
+	return path, ok && start != "" && validBarePath(path)
+}
+
+// RejectedLabel is what a link the evidence did not support presents: its label, with
+// a coordinate nothing verified taken off.
+func RejectedLabel(link Link) string {
+	if path, ok := coordinateLabel(link); ok {
+		return PlainLabel(Link{Form: link.Form, Label: path})
+	}
+	return PlainLabel(link)
+}
+
+// linkGoesNowhere reports a scheme the frontend cannot follow. Web and source links
+// are occurrences, file: opens a project path, and mailto: and tel: open their
+// applications. A click on any other scheme does nothing, so the label is all it has.
+func linkGoesNowhere(destination string) bool {
+	scheme := anyScheme.FindString(destination)
+	switch strings.ToLower(scheme) {
+	case "", "file:", "mailto:", "tel:", "http:", "https:", "source:":
+		return false
+	}
+	return true
 }
 
 // ZoneText is a zone's source text.

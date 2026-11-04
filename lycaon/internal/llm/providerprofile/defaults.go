@@ -39,7 +39,8 @@ func OpenAI() Profile {
 		Discovery:        DiscoveryConfigured,
 		DiscoveryProfile: discovery.OpenAIProfile(),
 		// Chat-completions tool messages take text parts only.
-		ToolResultImages: ToolResultImagesUserTurn,
+		ToolResultImages:         ToolResultImagesUserTurn,
+		OmitToolsWhenNotCallable: true,
 	}
 }
 
@@ -100,6 +101,8 @@ func Openrouter() Profile {
 	profile.Thinking = modelinfo.ThinkStyleReasoningObject
 	profile.ThinkingStyles = nil
 	profile.RequireProviderParameters = true
+	// A route may reach an API that requires definitions beside tool history.
+	profile.OmitToolsWhenNotCallable = false
 	return profile
 }
 

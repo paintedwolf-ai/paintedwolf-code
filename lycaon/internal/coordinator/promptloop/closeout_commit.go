@@ -25,6 +25,8 @@ type closeoutRetryState struct {
 	documentAttempt int
 	prevKey         string
 	codes           []string
+	// noFurtherTurn marks the response being settled as the run's last.
+	noFurtherTurn bool
 }
 
 type closeoutCommitOutcome struct {
@@ -165,7 +167,7 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	if l.Deps.NoteCloseoutGroundingReject != nil {
 		l.Deps.NoteCloseoutGroundingReject(ctx, sessionID, code, key, draft, unread)
 	}
-	exhausted := !retryEligible || stuck || budget.exhausted() || st.noFurtherTurn
+	exhausted := !retryEligible || stuck || budget.exhausted() || st.closeoutRetry.noFurtherTurn
 	renderDecision := *decision
 	renderDecision.Data = budget.hintData(hintData, unread)
 	renderDecision.Data = maps.Clone(renderDecision.Data)

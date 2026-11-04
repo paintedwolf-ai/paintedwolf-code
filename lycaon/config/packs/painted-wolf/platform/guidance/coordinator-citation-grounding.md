@@ -4,7 +4,7 @@ Your answer is retained, and its valid citations stay as they are. Repair only w
 
 Rejected: {{ offenders_sample }}
 {% if repair_targets %}Citations to replace:
-{% for target in repair_targets %}- {{ target.id }}: `{{ target.token }}` ({{ target.defect }}){% if target.web_link %}, a web link: give an observed URL{% endif %}{% if target.unnumbered %}, from output with no line numbers: re-read with them, or cite the path with no line{% endif %}
+{% for target in repair_targets %}- {{ target.id }}: `{{ target.token }}` ({{ target.defect }}){% if target.web_link %}, a web link: give an observed URL{% endif %}{% if target.candidates %}; more than one observed path ends this way, so name one: {{ target.candidates }}{% endif %}{% if target.use %}; sendable: `[cite: {{ target.id }} => {{ target.use }}]`{% endif %}{% if target.worker_output %}, because that worker's output showed no numbers for these lines and you cannot re-read for it{% elif target.unnumbered %}, from output with no line numbers: re-read with them, quote the line as `[path:line "text"]`, or cite the path with no line{% endif %}
 {% endfor %}{% endif %}
 Send one directive per citation and nothing else, such as `[cite: c1 => read#5:42]`, `[cite: c1 => path/to/file]`, or `[cite: c2 => <https://example.test/observed-page>]` for a web link. A link keeps its label. Or return the same answer with only its citations corrected.
 {% if document_citation_targets %}Report fence citations to replace:

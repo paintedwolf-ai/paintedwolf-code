@@ -38,3 +38,20 @@ func TestRemovedNodesLeaveNoSeparatorsOrEmptyBrackets(t *testing.T) {
 		})
 	}
 }
+
+// A scheme the frontend cannot follow leaves its label. Live: `output:program:...`.
+func TestLinksNowherePresentTheirLabel(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ source, want string }{
+		{"Listed by [the output](output:program:3ae4:stdout) above.", "Listed by the output above."},
+		{"Run [this](javascript:alert(1)).", "Run this."},
+		{"Mail [me](mailto:a@example.test).", "Mail [me](mailto:a@example.test)."},
+		{"Call [us](tel:+15550100).", "Call [us](tel:+15550100)."},
+		{"Jump to [the end](#end).", "Jump to [the end](#end)."},
+		{"See [it](file:///tmp/a.go).", "See [it](file:///tmp/a.go)."},
+	} {
+		if got := Project(Parse(tc.source, Options{})); got != tc.want {
+			t.Errorf("Project(%q) = %q, want %q", tc.source, got, tc.want)
+		}
+	}
+}

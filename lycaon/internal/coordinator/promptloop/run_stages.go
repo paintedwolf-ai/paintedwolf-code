@@ -68,8 +68,6 @@ type promptLoopTurnState struct {
 	proseFinishDelivered bool
 	spendSoftStopGranted bool
 	closeoutRetry        closeoutRetryState
-	// noFurtherTurn marks the response being settled as the run's last.
-	noFurtherTurn bool
 	// deferredUserNudges flush when the draft slot closes.
 	deferredUserNudges []api.Message
 	turnsRanThisRun    int
@@ -267,8 +265,8 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		lastTurn := !sess.IsWorkerChild() && step+1 >= maxIter
 		if blocked {
 			// With no further turn the refusal cannot be answered; the answer still can be.
-			if lastTurn && read.Draft.HasAnswer() {
-				return l.Closeout.applyAssembledFinalTurn(ctx, sess, sessionID, userPrompt, surfaceID, st, read.Draft, refusal)
+			if lastTurn {
+				return l.Closeout.applyAssembledFinalTurn(ctx, sess, sessionID, userPrompt, surfaceID, st, read.Draft, assistantMsg.Content, refusal)
 			}
 			if refusal != nil && st.noteBlockedBatch(refusal.Code(), "") {
 				out.breakLoop = true
@@ -279,7 +277,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			return out, nil
 		}
 		if read.Draft.HasAnswer() {
-			st.noFurtherTurn = lastTurn
+			st.closeoutRetry.noFurtherTurn = lastTurn
 			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, read)
 		}
 	} else {
@@ -401,13 +399,7 @@ func (l *turnCloseout) applyAcceptedCloseoutReport(
 			out.exit = loopExitCompleted
 			return out, nil
 		}
-		st.turnEndedGuidanceReject = true
-		if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
-			return out, err
-		}
-		out.breakLoop = true
-		out.exit = loopExitCompleted
-		return out, nil
+		return l.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st)
 	}
 	if !commitOut.committed {
 		st.turnEndedGuidanceReject = true
@@ -428,36 +420,6 @@ func (l *turnCloseout) applyAcceptedCloseoutReport(
 	st.proseFinishDelivered = true
 	out.breakLoop = true
 	out.exit = loopExitCompleted
-	return out, nil
-}
-
-// applyAssembledFinalTurn ends a final turn whose answer a finish guard refused. The
-// host stores the answer it has and says the host assembled it.
-func (l *turnCloseout) applyAssembledFinalTurn(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
-	st *promptLoopTurnState,
-	draft guidance.CloseoutDraft,
-	refusal *guidance.Refusal,
-) (promptLoopAssistantTurnResult, error) {
-	var out promptLoopAssistantTurnResult
-	forcedBy := st.closeoutRetry.codes
-	if code := refusal.Code(); code != "" {
-		forcedBy = append(append([]string(nil), forcedBy...), code)
-	}
-	emitted, err := l.emitAssembledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, draft, forcedBy, st, st.history)
-	if err != nil {
-		return out, err
-	}
-	out.breakLoop, out.exit = true, loopExitCompleted
-	if !emitted.committed {
-		st.turnEndedGuidanceReject = true
-		return out, l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID)
-	}
-	st.history = emitted.history
-	st.lastAssistantContent = emitted.assistantMsg.Content
-	st.proseFinishDelivered = true
 	return out, nil
 }
 
@@ -553,6 +515,11 @@ func (l *PromptLoop) finalizePromptLoopRun(
 	}
 	if err := l.Inbox.takePolicyFeedback(ctx, sessionID, st); err != nil {
 		return nil, err
+	}
+	if st.lastAssistantID == "" && !st.turnEndedGuidanceReject && loopExit != loopExitSecretWithheld && l.Closeout.canCloseWithoutAnswer(sess) {
+		if _, err := l.Closeout.endWithClosing(ctx, sess, sessionID, userPrompt, l.Context.promptTurnSurface(sessionID), st); err != nil {
+			return nil, err
+		}
 	}
 	if st.lastAssistantID == "" {
 		if !st.turnEndedGuidanceReject && loopExit != loopExitSecretWithheld {

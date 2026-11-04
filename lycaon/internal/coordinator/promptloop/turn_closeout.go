@@ -279,6 +279,13 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 	iterIndex := closeoutState.turnsRanThisRun
 	assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, iterIndex, maxIter, in.HostTurn)
 	if err != nil {
+		if finalTurnGaveNoAnswer(ctx, err, closeoutState) && l.canCloseWithoutAnswer(sess) {
+			closeoutState.history = history
+			if _, cerr := l.endWithClosing(ctx, sess, sessionID, userPrompt, l.Context.promptTurnSurface(sessionID), closeoutState); cerr != nil {
+				return history, "", "", cerr
+			}
+			return closeoutState.history, closeoutState.lastAssistantID, closeoutState.lastAssistantContent, nil
+		}
 		return history, "", "", err
 	}
 	closeoutState.turnsRanThisRun++
@@ -431,13 +438,14 @@ func (l *turnCloseout) returnAssembledEarlyCloseout(
 	if emitOut.committed {
 		return emitOut.history, emitOut.assistantMsg.ID, emitOut.assistantMsg.Content, nil
 	}
-	if st != nil {
-		st.turnEndedGuidanceReject = true
-		if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
-			return emitOut.history, "", "", err
-		}
+	if st == nil {
+		return history, "", "", nil
 	}
-	return emitOut.history, "", "", nil
+	st.history = history
+	if _, err := l.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st); err != nil {
+		return history, "", "", err
+	}
+	return st.history, st.lastAssistantID, st.lastAssistantContent, nil
 }
 
 // turnNudges keeps the host's in-turn guidance: nudges, spend and budget runways, and repeat-call fuses.

@@ -18,6 +18,7 @@ func (b *documentBuilder) addCodeCitation(zone Zone) bool {
 		return false
 	}
 	citation := &Citation{Path: path}
+	b.canonicalize(citation)
 	if setLines(citation, start, end) != "" || !b.opts.CodeCitation(*citation) {
 		return false
 	}

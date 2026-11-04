@@ -172,6 +172,12 @@ func citedEvidenceFrom(c citationmd.Citation) CoordinatorCitedEvidence {
 func DraftParseOptions(roots evidence.CitationRoots, ev evidence.Ledger) citationmd.Options {
 	return citationmd.Options{
 		KnownPath: KnownLedgerPath(roots, ev), KnownHandleKind: KnownEvidenceKind(ev), SourceRoot: sourceRootPrefix(roots),
+		CanonicalPath: func(path string) string {
+			if resolved, candidates := resolveWrittenPath(roots, ev, path); len(candidates) == 0 {
+				return resolved
+			}
+			return path
+		},
 		CodeCitation: func(c citationmd.Citation) bool {
 			finding := WorkerFindingInput{Path: c.Path, Line: c.Line, EndLine: c.EndLine}
 			return classifyDraftFinding(roots, finding, ev).class == closeoutCitationGrounded
@@ -218,10 +224,25 @@ func KnownEvidenceKind(ev evidence.Ledger) func(string) bool {
 }
 
 // KnownLedgerPath is the structured lookup that makes a bare bracket with no
-// coordinate a path citation: it holds only for an observed ledger path key.
+// coordinate a path citation: it holds for an observed ledger path key, or for final
+// path segments that match one.
 func KnownLedgerPath(roots evidence.CitationRoots, ev evidence.Ledger) func(string) bool {
 	return func(name string) bool {
 		key := evidence.LedgerPathKey(roots, name, ev.ByPath)
-		return key != "" && len(ev.ByPath[key]) > 0
+		return (key != "" && len(ev.ByPath[key]) > 0) || len(evidence.PathsEndingIn(ev, name)) > 0
 	}
+}
+
+// resolveWrittenPath spells a written path as the ledger does. An exact path stays,
+// and final segments matching one active record bind to it. Two or more matches bind
+// to nothing: the candidates come back, and the path as written.
+func resolveWrittenPath(roots evidence.CitationRoots, ev evidence.Ledger, path string) (string, []string) {
+	if key := evidence.LedgerPathKey(roots, path, ev.ByPath); key != "" && len(ev.ByPath[key]) > 0 {
+		return path, nil
+	}
+	matches := evidence.PathsEndingIn(ev, path)
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	return path, matches
 }

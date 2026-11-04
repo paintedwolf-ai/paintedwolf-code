@@ -174,6 +174,9 @@ func TestDraftWebLinks(t *testing.T) {
 		if got.Outcome != guidance.CitationNotObserved || got.Code != guidance.SynthURLNotObservedCode || got.Offender != "https://example.test/other" {
 			t.Fatalf("%s = %+v", source, got)
 		}
+		if ev.URLSeen("https://example.test/other") {
+			t.Fatalf("%s: resolving an unobserved link made it observed", source)
+		}
 	}
 	investigate := guidance.ResolveDraftCitations(evidence.CitationRoots{}, "implement_investigate",
 		guidance.ParseCloseoutDraft("<https://example.test/other> [read#9]", citationmd.Options{}), guidance.CloseoutEvidence{Ledger: ev}, nil)

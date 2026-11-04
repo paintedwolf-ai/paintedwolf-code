@@ -44,11 +44,17 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 		}
 		switch {
 		case occurrence.RepairID != "":
-			targets = append(targets, map[string]any{
+			target := map[string]any{
 				"id": occurrence.RepairID, "token": occurrence.Token,
 				"defect": string(outcome.Outcome), "web_link": occurrence.Kind == citationmd.KindWebLink,
 				"unnumbered": outcome.Resolution.UnnumberedOutput,
-			})
+			}
+			if occurrence.Citation != nil {
+				for key, value := range citationRepairOffer(roots, ev.Ledger, *occurrence.Citation) {
+					target[key] = value
+				}
+			}
+			targets = append(targets, target)
 		case occurrence.Owner != DraftFieldSynthesis:
 			document = append(document, occurrence.Owner+": "+occurrence.Token)
 		}
@@ -60,6 +66,72 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 		data["repair_observations"] = string(raw)
 	}
 	return data
+}
+
+// citationRepairOffer names a replacement the model can actually send for a refused
+// coordinate: the path form when the path's numbered records cover the lines, and
+// otherwise the bare handle of its newest record. A coordinate on a worker's record may
+// have no other repair, since nothing lets the coordinator re-read for that worker.
+func citationRepairOffer(roots evidence.CitationRoots, ev evidence.Ledger, citation citationmd.Citation) map[string]any {
+	if citation.Line <= 0 && citation.Path == "" {
+		return nil
+	}
+	path, candidates := resolveWrittenPath(roots, ev, citation.Path)
+	if len(candidates) > 0 {
+		spelled := make([]string, 0, len(candidates))
+		for _, candidate := range candidates {
+			spelled = append(spelled, "`"+citationmd.Citation{Path: candidate, Line: citation.Line, EndLine: citation.EndLine}.Token()+"`")
+		}
+		return map[string]any{"candidates": strings.Join(spelled, ", ")}
+	}
+	if citation.Line <= 0 {
+		return nil
+	}
+	path = evidence.LedgerPathKey(roots, path, ev.ByPath)
+	cited, known := evidence.ResolveHandle(ev, citation.Handle)
+	if path == "" && known {
+		path = cited.Path
+	}
+	end := max(citation.EndLine, citation.Line)
+	var active []evidence.Record
+	newest := ""
+	handles := ev.ByPath[path]
+	for i := len(handles) - 1; i >= 0; i-- {
+		rec, ok := evidence.ResolveHandle(ev, handles[i])
+		if !ok || rec.SupersededBy != "" || rec.IsGate() {
+			continue
+		}
+		active = append(active, rec)
+		if newest == "" && !rec.Survey {
+			newest = handles[i]
+		}
+	}
+	if evidence.UnionObserved(active, path, citation.Line, end) {
+		return map[string]any{"use": citationmd.Citation{Path: path, Line: citation.Line, EndLine: citation.EndLine}.Token()}
+	}
+	if newest == "" {
+		return nil
+	}
+	return map[string]any{"use": newest, "worker_output": strings.Contains(newest, ":")}
+}
+
+// FindingCitation is a bracket citation for a worker's finding that resolves in the
+// union of legs: the coordinate when the record stands behind it, with the excerpt only
+// when that is what stands behind it, and otherwise the path.
+func FindingCitation(roots evidence.CitationRoots, ev evidence.Ledger, path string, line int, excerpt string) string {
+	path, candidates := resolveWrittenPath(roots, ev, path)
+	if path == "" || len(candidates) > 0 {
+		return ""
+	}
+	for _, finding := range []WorkerFindingInput{{Path: path, Line: line}, {Path: path, Line: line, Excerpt: excerpt}, {Path: path}} {
+		if (finding.Line <= 0 && line > 0 && finding.Excerpt != "") || (finding.Line > 0 && line <= 0) {
+			continue
+		}
+		if classifyDraftFinding(roots, finding, ev).class == closeoutCitationGrounded {
+			return "[" + citationmd.Citation{Path: finding.Path, Line: finding.Line, Excerpt: finding.Excerpt}.Token() + "]"
+		}
+	}
+	return ""
 }
 
 // CitationRepairRefusalData reports a refused repair. Offenders name the target for

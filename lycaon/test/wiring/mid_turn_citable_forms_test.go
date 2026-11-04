@@ -71,7 +71,7 @@ func TestMidTurnRequirementFollowsWhatTheModelCanCite(t *testing.T) {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
 	var observed string
 	script := &citableScriptLLM{steps: []citableStep{
-		{command: "cat notes.txt"},
+		{command: "cat -n notes.txt"},
 		{text: func(modelcall.CompletionRequest) string { return "Uncited after a file was delivered." }, command: "echo one"},
 		{text: func(req modelcall.CompletionRequest) string {
 			for _, msg := range req.Messages {

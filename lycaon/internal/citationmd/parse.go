@@ -182,6 +182,10 @@ func (b *documentBuilder) closed(token []byte, node parsedNode, start int) {
 	}
 	first := len(b.doc.Occurrences)
 	for _, member := range node.members {
+		b.canonicalize(member.citation)
+		if member.repair != nil {
+			b.canonicalize(member.repair.Citation)
+		}
 		occurrence := member.occurrence()
 		occurrence.Index, occurrence.Span, occurrence.Node = len(b.doc.Occurrences), span, span
 		if member.end > member.start {
@@ -196,6 +200,12 @@ func (b *documentBuilder) closed(token []byte, node parsedNode, start int) {
 		b.addIssue(Issue{Code: IssueMalformedCitation, Kind: KindCitation, Span: member, Token: boundedToken(b.doc.Source[member.Start:member.End])})
 	}
 	b.doc.parts = append(b.doc.parts, part{kind: partNode, span: span, first: first, count: len(node.members)})
+}
+
+func (b *documentBuilder) canonicalize(c *Citation) {
+	if c != nil && c.Path != "" && b.opts.CanonicalPath != nil {
+		c.Path = b.opts.CanonicalPath(c.Path)
+	}
 }
 
 // addIssue records a defect up to the budget; past it, the count is what reports.

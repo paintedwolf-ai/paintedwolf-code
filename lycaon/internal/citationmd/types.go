@@ -37,6 +37,9 @@ type Options struct {
 	// carry, such as `@label/`. Nil means one root. An unknown id leaves the
 	// source URL as the path, which no observation matches.
 	SourceRoot func(rootID string) (prefix string, ok bool)
+	// CanonicalPath spells a citation's written path as the evidence does. Nil keeps
+	// it as written.
+	CanonicalPath func(string) string
 	// CodeCitation reports whether the evidence supports a citation written as a
 	// standalone code span. Nil, or false, leaves the span literal code.
 	CodeCitation func(Citation) bool

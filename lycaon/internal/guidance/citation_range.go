@@ -33,6 +33,9 @@ func applyCitationRange(roots evidence.CitationRoots, finding WorkerFindingInput
 		}
 		start, end := finding.Line+shift, finding.EndLine+shift
 		support := evidence.CoordinateSupport(rec, res.Path, start, end)
+		if support == evidence.CoordinateUnsupported && evidence.ExcerptVerifiesRange(rec, res.Path, excerpt, start, end) {
+			support = evidence.CoordinateObserved
+		}
 		if support == evidence.CoordinateUnsupported {
 			refused.UnnumberedOutput = refused.UnnumberedOutput || (!rec.ShowedLineNumbers() && evidence.RangeObserved(rec, res.Path, start, end))
 			continue
