@@ -37,6 +37,21 @@ class CompletionWakeTests(unittest.TestCase):
                     with self.subTest(case=case['id']):
                         validate(step['args'])
 
+    def test_closeout_cites_findings_inline_with_no_report_fence(self):
+        finding = {'path': 'report.py', 'line': 1, 'excerpt': 'def select(records, limit=3):'}
+        cases = [
+            ({}, 'Done.'),
+            ({'verification': True}, 'Done. [verify: project - The supplied project checks passed.]'),
+            ({'closeout_method': 'blocked'}, 'Done. [verify: blocked - Declared by the intended trajectory.]'),
+            ({'cited_findings': [finding]},
+             'Done. [report.py:1 "def select(records, limit=3):"] [verify: inspection - The worker survey changed nothing; its finding is cited.]'),
+            ({'cited_findings': [{'path': 'my report.py', 'line': 2}], 'closeout_method': 'targeted'},
+             'Done. ["my report.py":2] [verify: targeted - Declared by the intended trajectory.]'),
+        ]
+        for operation, expected in cases:
+            with self.subTest(operation=operation):
+                self.assertEqual(smoke_workers.closeout(operation, 'Done.', [finding]), expected)
+
     def test_only_new_expected_host_notifications_allow_another_closeout(self):
         allowed = {('host_kick', 'process.finished'), ('host_loop_wake', 'loop.wake')}
         with sqlite3.connect(':memory:') as db:
