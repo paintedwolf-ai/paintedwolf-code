@@ -56,6 +56,8 @@ type Store struct {
 	// pins keep manifests and chunks in use safe from the sweep.
 	pins        *pinSet
 	sweepMu     sync.Mutex
+	sweepCursor sweepCursor
+	sweepLimits sweepLimits
 	rootStorage map[string]*rootStorageGate
 
 	// scopes decides what each root's capture observes.

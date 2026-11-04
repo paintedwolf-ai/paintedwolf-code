@@ -70,13 +70,3 @@ func (s *Store) auditCompleted() {
 	s.audit.mu.Unlock()
 	s.signalMaintenance()
 }
-
-func pendingAuditResourceWork(ctx context.Context, database Handle, cfg RetentionConfig) (RetentionReport, error) {
-	var report RetentionReport
-	if cfg.IncrementalVacuumMinFreelistPages > 0 {
-		vacuumed, err := runIncrementalVacuum(ctx, database, cfg.IncrementalVacuumMinFreelistPages)
-		report.IncrementalVacuumed = vacuumed
-		return report, err
-	}
-	return report, nil
-}
