@@ -189,12 +189,14 @@ func unlinkPathAdmitted(c *Core, qpath QualifiedPath, removeDir bool) error {
 				removedNode.ctime = time.Now()
 				if len(removedNode.paths) == 0 {
 					removedNode.flags.unlinked = true
-					if removedNode.flags.backingName != "" && !hasOpenHandlesForNodeLocked(c, removedNode.id) {
+					if !hasOpenHandlesForNodeLocked(c, removedNode.id) {
 						orphanBacking = removedNode.flags.backingName
+						reclaimNodeLocked(c, removedNode)
 					}
 				}
 			}
 		}
+		delete(c.state.transient, targetPath)
 		c.state.deletedPaths[targetPath] = deletedState{
 			ReplacedKind: res.attr.Kind,
 			Timestamp:    time.Now(),
@@ -256,15 +258,20 @@ func bumpParentDirGenLocked(c *Core, qpath QualifiedPath) {
 		parentRel = qpath.Rel[:slash]
 	}
 	parentPath := QualifiedPath{RootID: qpath.RootID, Rel: parentRel}
-	if nid, ok := c.state.pathIndex[parentPath]; ok {
-		if pnode := c.state.nodesByID[nid]; pnode != nil {
-			pnode.mtime = time.Now()
-			pnode.ctime = pnode.mtime
-		}
-		for cookie, state := range c.state.dirCookies {
-			if state.nodeID == nid {
-				delete(c.state.dirCookies, cookie)
-			}
+	nid, ok := c.state.pathIndex[parentPath]
+	if !ok {
+		// A directory still in a lower layer has no private node, yet a change inside a directory
+		// must advance its mtime for build tools and client caches to notice.
+		c.state.lowerDirMod[parentPath] = time.Now()
+		return
+	}
+	if pnode := c.state.nodesByID[nid]; pnode != nil {
+		pnode.mtime = time.Now()
+		pnode.ctime = pnode.mtime
+	}
+	for cookie, state := range c.state.dirCookies {
+		if state.nodeID == nid {
+			delete(c.state.dirCookies, cookie)
 		}
 	}
 }

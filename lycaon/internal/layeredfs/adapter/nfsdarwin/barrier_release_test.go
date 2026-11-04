@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/nfsdarwin"
@@ -41,11 +42,10 @@ func TestCheckpointBarrierDrainsPendingUnstableWritesAndExcludesNewMutations(t *
 	t.Cleanup(func() { _, _ = adp.Release(t.Context(), viewID) })
 
 	srv := adp.ServerForView(viewID)
-	facts, ok := adp.MountFactsForView(viewID)
-	if !ok || srv == nil { t.Fatalf("missing server or facts for view %s", viewID) }
+	if srv == nil { t.Fatalf("missing server for view %s", viewID) }
 
 	uid, gid := uint32(os.Getuid()), uint32(os.Getgid())
-	rpcConn, rootFH := mountTestNFSConn(t, srv.Addr().String(), facts.ExportPath, uid, gid)
+	rpcConn, rootFH := mountTestNFSConn(t, srv.Addr().String(), extraTestExport(t, srv, viewID), uid, gid)
 	defer func() { _ = rpcConn.Close() }()
 	fileFH := lookupTestNFSFile(t, rpcConn, rootFH, "pending.txt", uid, gid)
 
@@ -128,10 +128,10 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 	defer func() { _ = syscall.Munmap(mappedSlice) }()
 
 	wantMapped := []byte("mutated-by-mmap!\n")
-	copy(mappedSlice, wantMapped)
+	copyToMapping(mappedSlice, wantMapped)
 	if err := adp.SetBarrierHooks(viewID, nfsdarwin.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := nfsdarwin.SyncMappedRegion(mappedSlice); err != nil { return err }
-		return mf.Sync()
+		if err := msyncForTest(mappedSlice); err != nil { return err }
+		return fssync.Always(mf)
 	}); err != nil { t.Fatalf("SetBarrierHooks with mmap sync: %v", err) }
 
 	cpStore, err := checkpoint.NewStore(cpStoreDir)
@@ -234,6 +234,16 @@ func readCheckpointEntryBlob(t *testing.T, cpStore *checkpoint.Store, checkpoint
 	}
 	t.Fatalf("entry %s not found in manifest %s (entries=%+v)", relPath, checkpointID, m.Entries)
 	return nil
+}
+
+// extraTestExport issues a second capability: the kernel client already spent the view's own.
+func extraTestExport(t *testing.T, srv *nfsserver.Server, viewID string) string {
+	t.Helper()
+	capCfg, err := srv.RegisterExport(viewID, "primary", "")
+	if err != nil {
+		t.Fatalf("RegisterExport: %v", err)
+	}
+	return capCfg.ExportPath
 }
 
 func mountTestNFSConn(t *testing.T, addr, exportPath string, uid, gid uint32) (net.Conn, []byte) {

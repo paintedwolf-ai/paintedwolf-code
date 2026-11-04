@@ -290,18 +290,16 @@ func TestReleaseDrainsInFlightWriteAccountingAndPreservesRecoveryState(t *testin
 		testutil.FailErr(t, "New Core", err)
 
 		qp := QualifiedPath{RootID: "primary", Rel: "ro_node.txt"}
-		hid, roAttr, err := core.CreateFile(qp, 0o444, true)
+		hid, _, err := core.CreateFile(qp, 0o444, true)
 		testutil.FailErr(t, "CreateFile ro_node.txt", err)
-		testutil.FailErr(t, "CloseHandle ro_node.txt", core.CloseHandle(hid))
 
 		payload := []byte("0123456789ABCDEF")
 		var n int
-		var attrAfter EntryAttr
 		var wErr error
 		writeDone := make(chan struct{})
 		go func() {
 			defer close(writeDone)
-			n, attrAfter, wErr = core.WriteViaNodeHandle(roAttr.NodeID, roAttr.Generation, payload, 0)
+			n, wErr = core.WriteHandle(hid, payload, 0)
 		}()
 
 		<-bytesWrittenCh
@@ -315,9 +313,8 @@ func TestReleaseDrainsInFlightWriteAccountingAndPreservesRecoveryState(t *testin
 		close(allowCommitCh)
 		<-writeDone
 
-		if !errors.Is(wErr, syscall.ENOSPC) || n != 8 || attrAfter.Size != 8 {
-			t.Fatalf("expected (8, size=8, ENOSPC) from in-flight WriteViaNodeHandle, got (n=%d, size=%d, err=%v)",
-				n, attrAfter.Size, wErr)
+		if !errors.Is(wErr, syscall.ENOSPC) || n != 8 {
+			t.Fatalf("expected (8, ENOSPC) from in-flight WriteHandle, got (n=%d, err=%v)", n, wErr)
 		}
 		testutil.FailErr(t, "ReleaseView", <-releaseDone)
 

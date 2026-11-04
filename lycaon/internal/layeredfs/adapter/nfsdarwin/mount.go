@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -19,7 +18,7 @@ import (
 // FormatMountOptions returns the explicit macOS /sbin/mount_nfs options for port.
 func FormatMountOptions(port int) string {
 	return fmt.Sprintf(
-		"vers=3,tcp,port=%d,mountport=%d,nolocks,locallocks,nodev,nosuid,nobrowse,%s,retrans=%d,timeo=%d,soft,rsize=%d,wsize=%d",
+		"vers=3,tcp,port=%d,mountport=%d,locallocks,nodev,nosuid,nobrowse,%s,retrans=%d,timeo=%d,soft,rsize=%d,wsize=%d",
 		port, port, DefaultCachePolicy, DefaultRetrans, DefaultTimeo, DefaultRSize, DefaultWSize,
 	)
 }
@@ -41,12 +40,21 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 		return nil, err
 	}
 
-	a.mu.RLock()
+	a.mu.Lock()
 	_, exists := a.views[req.ViewID]
-	a.mu.RUnlock()
-	if exists {
+	_, inProgress := a.preparing[req.ViewID]
+	if !exists && !inProgress {
+		a.preparing[req.ViewID] = struct{}{}
+	}
+	a.mu.Unlock()
+	if exists || inProgress {
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonMountDenied, Diagnostic: "duplicate view " + req.ViewID}
 	}
+	defer func() {
+		a.mu.Lock()
+		delete(a.preparing, req.ViewID)
+		a.mu.Unlock()
+	}()
 
 	absBacking, err := filepath.Abs(req.BackingDir)
 	if err != nil {
@@ -94,7 +102,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 			}
 		}
 		_ = core.ReleaseView()
-		_ = os.RemoveAll(runtimeViewDir)
+		_ = a.removeRuntimeDir(runtimeViewDir)
 	}
 
 	for _, g := range narrowed {
@@ -178,6 +186,7 @@ func (a *Adapter) mountSingleRoot(
 		ListenAddr:    "127.0.0.1:0",
 		ExpectedUID:   uid,
 		ExpectedGID:   gid,
+		MaxHandles:    a.cfg.MaxHandles,
 		FaultInjector: a.cfg.FaultInjector,
 	})
 	if err != nil {
@@ -201,8 +210,7 @@ func (a *Adapter) mountSingleRoot(
 
 	mCtx, cancel := context.WithTimeout(ctx, a.cfg.MountTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(mCtx, a.cfg.MountNFSBin, "-o", mountOpts, exportSource, mountDir)
-	out, mErr := cmd.CombinedOutput()
+	out, mErr := runBoundedHelper(mCtx, a.cfg.MountNFSBin, "-o", mountOpts, exportSource, mountDir)
 	if mErr != nil {
 		srv.ReleaseExport(viewID)
 		_ = srv.Close()
@@ -221,7 +229,9 @@ func (a *Adapter) mountSingleRoot(
 
 	mountedDev, dErr := statDeviceID(mountDir)
 	if dErr != nil || mountedDev == 0 || mountedDev == parentDev {
-		_ = exec.CommandContext(context.Background(), a.cfg.UmountBin, "-f", mountDir).Run()
+		fCtx, fCancel := context.WithTimeout(context.Background(), unmountWaitBound)
+		_, _ = runBoundedHelper(fCtx, a.cfg.UmountBin, "-f", mountDir)
+		fCancel()
 		srv.ReleaseExport(viewID)
 		_ = srv.Close()
 		return nil, &adapter.AdapterError{

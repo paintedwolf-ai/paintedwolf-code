@@ -81,10 +81,10 @@ func TestMountHandshakeAllowsRootUserlandWithValidCapabilityWhileNFSRequiresAllo
 		t.Fatalf("expected README.md content from authorized UID/GID READ, got st=%v data=%q", readSt, string(data))
 	}
 
-	// 6. Setuid-root userland umount helper (UID=0, GID=0) with valid capability token unmounts the export.
+	// 6. A root UMNT with the capability is recorded but advisory; only ReleaseExport revokes.
 	rootUmnt := dialRPC(t, env.Server.Addr(), 0, 0)
 	rootUmnt.umount(capCfg.ExportPath)
-	if afterSt, _ := userNFS.getAttr(rootFH); afterSt != nfs.NFSStatusAccess {
-		t.Fatalf("expected NFSStatusAccess after UID=0,GID=0 UMNT, got %v", afterSt)
+	if afterSt, _ := userNFS.getAttr(rootFH); afterSt != nfs.NFSStatusOk {
+		t.Fatalf("expected the mount to survive UMNT, got %v", afterSt)
 	}
 }

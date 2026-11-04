@@ -41,6 +41,10 @@ const (
 	DefaultTimeo = 10
 	// DefaultCachePolicy is the explicit zero-attribute/negative-name cache option set.
 	DefaultCachePolicy = "actimeo=0,acregmin=0,acregmax=0,acdirmin=0,acdirmax=0,nonegnamecache"
+
+	// unmountWaitBound limits how long one unmount attempt may hold Release. A helper stuck in the
+	// kernel cannot be killed, so the wait has to end on its own.
+	unmountWaitBound = 5 * time.Second
 )
 
 // Config configures the macOS NFSv3 loopback adapter.
@@ -50,9 +54,13 @@ type Config struct {
 	UmountBin     string
 	DiskutilBin   string
 	MountTimeout  time.Duration
+	MaxHandles    int
 	FaultInjector *nfsserver.FaultInjector
 	ClientSyncFn  func(path string) error
 	RemoveAllFn   func(path string) error
+	// ConfinementCheckFn proves direct backing writes are denied in the worker's context. Without
+	// it Probe reports confinement unavailable rather than claiming a denial nothing established.
+	ConfinementCheckFn func(ctx context.Context, probeCfg adapter.ProbeConfig) error
 }
 
 // MountFacts records the concrete mount options, ports, and export identity for a mounted root.
@@ -94,16 +102,18 @@ type viewState struct {
 	lastDirsSynced  atomic.Int64
 	accessCount     atomic.Int64
 	releasing       atomic.Bool
+	releaseMu       sync.Mutex
 	coreReleased    atomic.Bool
 	runtimeCleaned  atomic.Bool
 }
 
 // Adapter implements adapter.Adapter for macOS built-in NFSv3 loopback worker mounts.
 type Adapter struct {
-	cfg   Config
-	facts adapter.AdapterFacts
-	mu    sync.RWMutex
-	views map[string]*viewState
+	cfg       Config
+	facts     adapter.AdapterFacts
+	mu        sync.RWMutex
+	views     map[string]*viewState
+	preparing map[string]struct{}
 }
 
 // New constructs a macOS NFSv3 loopback adapter.
@@ -130,19 +140,25 @@ func New(cfg Config) *Adapter {
 			PreparationKind:           adapter.PreparationMounted,
 			UntouchedSourceVisibility: adapter.VisibilityLive,
 			CacheRevalidation: adapter.CacheRevalidation{
-				Mode:                 DefaultCachePolicy + ",rsize=65536,wsize=65536,retrans=2,timeo=10,soft",
+				Mode:                 fmt.Sprintf("%s,rsize=%d,wsize=%d,retrans=%d,timeo=%d,soft", DefaultCachePolicy, DefaultRSize, DefaultWSize, DefaultRetrans, DefaultTimeo),
 				ExplicitInvalidation: false,
 				AttributeTTL:         0,
 			},
 			MetadataCapabilities: adapter.MetadataCapabilities{
 				SupportsSymlinks: true, SupportsHardLinks: true, SupportsXattrs: true,
-				SupportsChmod: true, SupportsTimestamps: true, SupportsPOSIXLocks: false, SupportsFlock: true,
+				SupportsChmod: true, SupportsTimestamps: true, SupportsPOSIXLocks: true, SupportsFlock: true,
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
 		},
-		views: make(map[string]*viewState),
+		views:     make(map[string]*viewState),
+		preparing: make(map[string]struct{}),
 	}
+}
+
+func (st *viewState) resetFlushStats() {
+	st.lastFilesSynced.Store(0)
+	st.lastDirsSynced.Store(0)
 }
 
 // NoopQuiesceHook is a QuiesceHook for callers that have already stopped worker writers on the host.
@@ -150,9 +166,6 @@ func NoopQuiesceHook(_ context.Context, _ string) error { return nil }
 
 // NoWritableMappingsFlushHook is a FlushClientHook for callers that hold no writable client mmap regions.
 func NoWritableMappingsFlushHook(_ context.Context, _ string) error { return nil }
-
-// SyncMappedRegion flushes a writable client mmap slice to the kernel using MS_SYNC.
-func SyncMappedRegion(mapped []byte) error { return msyncMappedRegion(mapped) }
 
 // ID returns the canonical adapter identifier (adapter.AdapterNFSDarwin).
 func (a *Adapter) ID() adapter.AdapterID { return adapter.AdapterNFSDarwin }
@@ -251,6 +264,21 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		res.Diagnostic = fmt.Sprintf("nfsdarwin requires darwin host, got %s", a.cfg.HostOS)
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic}
 	}
+	if strings.EqualFold(strings.TrimSpace(probeCfg.ConfinementContext), string(adapter.ReasonConfinementUnavailable)) {
+		res.ReasonCode = adapter.ReasonConfinementUnavailable
+		res.Diagnostic = "required mount confinement context is unavailable"
+		return res, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic}
+	}
+	if a.cfg.ConfinementCheckFn == nil {
+		res.ReasonCode = adapter.ReasonConfinementUnavailable
+		res.Diagnostic = "no confinement check is configured, so direct backing denial cannot be established"
+		return res, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic}
+	}
+	if cErr := a.cfg.ConfinementCheckFn(ctx, probeCfg); cErr != nil {
+		res.ReasonCode, res.Diagnostic = adapter.ReasonConfinementUnavailable, cErr.Error()
+		return res, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
+	}
+	res.BackingDenialVerified = true
 	if info, err := os.Stat(a.cfg.MountNFSBin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
 		res.ReasonCode = adapter.ReasonHelperMissing
 		res.Diagnostic = fmt.Sprintf("mount_nfs binary unavailable at %s: %v", a.cfg.MountNFSBin, err)
@@ -311,7 +339,6 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		res.ReasonCode, res.Diagnostic = adapter.ReasonBackingConfinementFailed, "trunk file mutated during probe"
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic}
 	}
-	res.BackingDenialVerified = true
 
 	if _, rErr := a.Release(ctx, probeViewID); rErr != nil {
 		res.ReasonCode, res.Diagnostic = adapter.ReasonCleanupFailed, rErr.Error()

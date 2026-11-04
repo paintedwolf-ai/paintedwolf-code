@@ -3,6 +3,7 @@
 package nfsdarwin
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -29,3 +30,11 @@ func canonicalPath(p string) string {
 	}
 	return filepath.Clean(p)
 }
+
+func syncVolume(_ string) error { return nil }
+
+func mountsWithin(_ string) ([]string, error) { return nil, nil }
+
+func deadViewMounts(_ string, _ uint32) ([]string, error) { return nil, nil }
+
+func flushMappedPages(_ *os.File, _ int64) error { return nil }

@@ -401,15 +401,10 @@ func TestFsyncAcknowledgesOnlyEstablishedDurability(t *testing.T) {
 
 	// A read-only descriptor still covers the file: its private content must really be synced.
 	ro := w.open(node, syscall.O_RDONLY)
-	var synced atomic.Int32
-	w.srv.syncBacking = func(interface{ Sync() error }) error {
-		synced.Add(1)
-		return syscall.ENOSPC
-	}
-	w.wantErrno("failed read-only descriptor sync", fsync(ro), syscall.ENOSPC)
-	if synced.Load() != 1 {
-		t.Fatalf("read-only fsync reached backing %d times", synced.Load())
-	}
+	w.syncErr.Store(&injected)
+	w.wantErrno("failed read-only descriptor sync", fsync(ro), syscall.EIO)
+	w.syncErr.Store(nil)
+	w.wantErrno("clean read-only descriptor sync", fsync(ro), 0)
 }
 
 func TestDescriptorOperationsNeverReachAReplacementAtTheSamePath(t *testing.T) {
@@ -432,7 +427,12 @@ func TestDescriptorOperationsNeverReachAReplacementAtTheSamePath(t *testing.T) {
 	truncate := make([]byte, 88)
 	binary.LittleEndian.PutUint32(truncate[0:4], fattrSize|fattrFH)
 	binary.LittleEndian.PutUint64(truncate[8:16], oldFH)
-	w.wantErrno("ftruncate of replaced object", w.call(fuseOpSetattr, oldNode, truncate), syscall.ESTALE)
+	binary.LittleEndian.PutUint64(truncate[16:24], 3)
+	w.wantErrno("ftruncate of replaced object", w.call(fuseOpSetattr, oldNode, truncate), 0)
+	r = w.call(fuseOpGetattr, oldNode, getattr)
+	if size := binary.LittleEndian.Uint64(r.payload[24:32]); size != 3 {
+		t.Fatalf("replaced object reports size %d after its own ftruncate", size)
+	}
 
 	got, err := w.core.ReadFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "old"})
 	if err != nil || string(got) != "new" {

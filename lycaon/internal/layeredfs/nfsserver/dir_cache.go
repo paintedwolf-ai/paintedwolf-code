@@ -11,11 +11,13 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
+const defaultMaxDirSnapshotEntries = 1 << 20
+
 type dirSnapshotEntry struct {
-	Name   string
-	Cookie uint64
-	QPath  layeredfs.QualifiedPath
-	Meta   layeredfs.EntryAttr
+	Name     string
+	Cookie   uint64
+	QPath    layeredfs.QualifiedPath
+	StableID layeredfs.NodeID
 }
 
 type dirCacheKey struct {
@@ -25,16 +27,20 @@ type dirCacheKey struct {
 
 type dirSnapshot struct {
 	key     dirCacheKey
-	verf    [8]byte
 	entries []dirSnapshotEntry
 	lruElem *list.Element
 }
 
+// dirCache keeps one name list per listing pass, so a client paging with cookies sees each entry
+// once. A cookie of zero always starts a fresh pass: a listing never repeats an old view of the
+// directory. Attributes are read when a page is built, never stored here.
 type dirCache struct {
 	mu          sync.Mutex
 	secret      [32]byte
 	maxListings int
-	listGens    map[handleKey]uint64
+	maxEntries  int
+	entries     int
+	seq         uint64
 	byKey       map[dirCacheKey]*dirSnapshot
 	lru         *list.List
 }
@@ -46,145 +52,94 @@ func newDirCache(secret [32]byte, maxListings int) *dirCache {
 	return &dirCache{
 		secret:      secret,
 		maxListings: maxListings,
-		listGens:    make(map[handleKey]uint64),
+		maxEntries:  defaultMaxDirSnapshotEntries,
 		byKey:       make(map[dirCacheKey]*dirSnapshot),
 		lru:         list.New(),
 	}
 }
 
-func (c *dirCache) currentListGenLocked(hk handleKey) uint64 {
-	gen := c.listGens[hk]
-	if gen == 0 {
-		gen = 1
-		c.listGens[hk] = gen
-	}
-	return gen
-}
-
-func (c *dirCache) computeVerifierLocked(hk handleKey, nodeGen uint64) [8]byte {
-	listGen := c.currentListGenLocked(hk)
-	var buf [32]byte
+func (c *dirCache) nextVerifierLocked(hk handleKey) [8]byte {
+	c.seq++
+	var buf [24]byte
 	binary.BigEndian.PutUint64(buf[0:8], hk.viewHash)
 	binary.BigEndian.PutUint64(buf[8:16], uint64(hk.nodeID))
-	binary.BigEndian.PutUint64(buf[16:24], nodeGen)
-	binary.BigEndian.PutUint64(buf[24:32], listGen)
-
+	binary.BigEndian.PutUint64(buf[16:24], c.seq)
 	mac := hmac.New(sha256.New, c.secret[:])
 	_, _ = mac.Write(buf[:])
-	sum := mac.Sum(nil)
 	var verf [8]byte
-	copy(verf[:], sum[:8])
+	copy(verf[:], mac.Sum(nil)[:8])
 	if verf == ([8]byte{}) {
 		verf[7] = 1
 	}
 	return verf
 }
 
-// InvalidateDir bumps the listing generation for a directory and purges cached snapshots.
+func (c *dirCache) removeLocked(snap *dirSnapshot) {
+	if snap.lruElem != nil {
+		c.lru.Remove(snap.lruElem)
+		snap.lruElem = nil
+	}
+	c.entries -= len(snap.entries)
+	delete(c.byKey, snap.key)
+}
+
+// InvalidateDir ends every listing pass of a directory the server just mutated. A client holding an
+// old cookie gets BAD_COOKIE and restarts rather than missing an entry.
 func (c *dirCache) InvalidateDir(hk handleKey) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.listGens[hk] = c.currentListGenLocked(hk) + 1
 	for k, snap := range c.byKey {
-		if k.hk != hk {
-			continue
+		if k.hk == hk {
+			c.removeLocked(snap)
 		}
-		if snap.lruElem != nil {
-			c.lru.Remove(snap.lruElem)
-			snap.lruElem = nil
-		}
-		delete(c.byKey, k)
 	}
 }
 
-// ReleaseView purges all directory listing generations and snapshots for a view.
+// ReleaseView purges all listing passes of a view.
 func (c *dirCache) ReleaseView(viewID ViewID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	vHash := computeViewHash(viewID)
-	for hk := range c.listGens {
-		if hk.viewHash == vHash {
-			delete(c.listGens, hk)
-		}
-	}
 	for k, snap := range c.byKey {
-		if k.hk.viewHash != vHash {
-			continue
+		if k.hk.viewHash == vHash {
+			c.removeLocked(snap)
 		}
-		if snap.lruElem != nil {
-			c.lru.Remove(snap.lruElem)
-			snap.lruElem = nil
-		}
-		delete(c.byKey, k)
 	}
 }
 
-// ReadSnapshot validates the client's cookie and cookieverf, returning the remaining
-// directory entries and the active 8-byte cookie verifier.
+// ReadSnapshot returns the entries after cookie and the verifier of their listing pass.
 func (c *dirCache) ReadSnapshot(
-	core *layeredfs.Core, dirRec *handleRecord, dirMeta layeredfs.EntryAttr, cookie uint64, clientVerf [8]byte,
+	core *layeredfs.Core, dirRec *handleRecord, cookie uint64, clientVerf [8]byte,
 ) ([]dirSnapshotEntry, [8]byte, error) {
-	c.mu.Lock()
-	expectedVerf := c.computeVerifierLocked(dirRec.key, uint64(dirMeta.Generation))
 	var zeroVerf [8]byte
-	if (cookie != 0 || clientVerf != zeroVerf) && clientVerf != expectedVerf {
-		c.mu.Unlock()
-		return nil, zeroVerf, ErrBadCookie
-	}
-	ck := dirCacheKey{hk: dirRec.key, verf: expectedVerf}
-	if snap, ok := c.byKey[ck]; ok {
-		if snap.lruElem != nil {
-			c.lru.MoveToFront(snap.lruElem)
-		}
-		entries := snap.entries
-		c.mu.Unlock()
-		if cookie > uint64(len(entries)) {
+	if cookie != 0 {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		snap, ok := c.byKey[dirCacheKey{hk: dirRec.key, verf: clientVerf}]
+		if !ok || cookie > uint64(len(snap.entries)) {
 			return nil, zeroVerf, ErrBadCookie
 		}
-		return entries[cookie:], expectedVerf, nil
+		c.lru.MoveToFront(snap.lruElem)
+		return snap.entries[cookie:], clientVerf, nil
 	}
-	c.mu.Unlock()
-
-	built, err := buildDirEntries(core, dirRec, dirMeta)
+	built, err := buildDirEntries(core, dirRec)
 	if err != nil {
 		return nil, zeroVerf, err
 	}
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	currentVerf := c.computeVerifierLocked(dirRec.key, uint64(dirMeta.Generation))
-	if (cookie != 0 || clientVerf != zeroVerf) && clientVerf != currentVerf {
-		return nil, zeroVerf, ErrBadCookie
-	}
-	if cookie > uint64(len(built)) {
-		return nil, zeroVerf, ErrBadCookie
-	}
-	ck = dirCacheKey{hk: dirRec.key, verf: currentVerf}
-	if existing, ok := c.byKey[ck]; ok {
-		if existing.lruElem != nil {
-			c.lru.MoveToFront(existing.lruElem)
-		}
-		return existing.entries[cookie:], currentVerf, nil
-	}
-	for len(c.byKey) >= c.maxListings && c.lru.Len() > 0 {
-		back := c.lru.Back()
-		if back == nil {
-			break
-		}
-		evicted := back.Value.(*dirSnapshot)
-		c.lru.Remove(back)
-		evicted.lruElem = nil
-		delete(c.byKey, evicted.key)
-	}
-	snap := &dirSnapshot{key: ck, verf: currentVerf, entries: built}
+	verf := c.nextVerifierLocked(dirRec.key)
+	snap := &dirSnapshot{key: dirCacheKey{hk: dirRec.key, verf: verf}, entries: built}
 	snap.lruElem = c.lru.PushFront(snap)
-	c.byKey[ck] = snap
-	return built[cookie:], currentVerf, nil
+	c.byKey[snap.key] = snap
+	c.entries += len(built)
+	for c.lru.Len() > 1 && (len(c.byKey) > c.maxListings || c.entries > c.maxEntries) {
+		c.removeLocked(c.lru.Back().Value.(*dirSnapshot))
+	}
+	return built, verf, nil
 }
 
-func buildDirEntries(
-	core *layeredfs.Core, dirRec *handleRecord, dirMeta layeredfs.EntryAttr,
-) ([]dirSnapshotEntry, error) {
+func buildDirEntries(core *layeredfs.Core, dirRec *handleRecord) ([]dirSnapshotEntry, error) {
 	rawEntries, err := core.ReadDir(dirRec.qpath)
 	if err != nil {
 		return nil, err
@@ -193,30 +148,21 @@ func buildDirEntries(
 	if cleanRel(dirRec.qpath.Rel) != "." {
 		parentQPath = layeredfs.QualifiedPath{RootID: dirRec.qpath.RootID, Rel: cleanRel(path.Dir(dirRec.qpath.Rel))}
 	}
-	parentMeta, err := core.Lstat(parentQPath)
-	if err != nil {
-		parentMeta = dirMeta
-	}
 	out := make([]dirSnapshotEntry, 0, len(rawEntries)+2)
 	out = append(out,
-		dirSnapshotEntry{Name: ".", Cookie: 1, QPath: dirRec.qpath, Meta: dirMeta},
-		dirSnapshotEntry{Name: "..", Cookie: 2, QPath: parentQPath, Meta: parentMeta},
+		dirSnapshotEntry{Name: ".", Cookie: 1, QPath: dirRec.qpath, StableID: dirRec.key.nodeID},
+		dirSnapshotEntry{Name: "..", Cookie: 2, QPath: parentQPath},
 	)
 	for i, ent := range rawEntries {
 		childRel := ent.Name
 		if cleanRel(dirRec.qpath.Rel) != "." {
 			childRel = dirRec.qpath.Rel + "/" + ent.Name
 		}
-		childQPath := layeredfs.QualifiedPath{RootID: dirRec.qpath.RootID, Rel: childRel}
-		childMeta, err := core.Lstat(childQPath)
-		if err != nil {
-			childMeta = layeredfs.EntryAttr{
-				NodeID: ent.NodeID, Generation: ent.Generation, Layer: ent.Layer,
-				Kind: ent.Kind, Mode: ent.Mode, Size: ent.Size,
-				ModTime: ent.ModTime, ATime: ent.ModTime, CTime: ent.ModTime,
-			}
-		}
-		out = append(out, dirSnapshotEntry{Name: ent.Name, Cookie: uint64(i + 3), QPath: childQPath, Meta: childMeta})
+		out = append(out, dirSnapshotEntry{
+			Name: ent.Name, Cookie: uint64(i + 3),
+			QPath:    layeredfs.QualifiedPath{RootID: dirRec.qpath.RootID, Rel: childRel},
+			StableID: ent.StableID(),
+		})
 	}
 	return out, nil
 }
@@ -230,61 +176,4 @@ func lookupRecordByKey(t *handleTable, hk handleKey) (*handleRecord, bool) {
 	}
 	clone := *rec
 	return &clone, true
-}
-
-func (t *handleTable) MarkUnlinked(viewID ViewID, qpath layeredfs.QualifiedPath, openFD layeredfs.HandleID, meta layeredfs.EntryAttr) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	pk := makePathKey(viewID, qpath)
-	if rec, ok := t.byPath[pk]; ok {
-		delete(t.byPath, pk)
-		delete(rec.paths, pk)
-		rec.unlinked = &unlinkedFile{fd: openFD, meta: meta}
-	}
-}
-
-func (t *handleTable) UpdateUnlinkedMeta(hk handleKey, meta layeredfs.EntryAttr) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if rec, ok := t.byKey[hk]; ok && rec.unlinked != nil {
-		rec.unlinked.meta = meta
-	}
-}
-
-func dropRecordPathLocked(t *handleTable, rec *handleRecord, pk pathKey, qpath layeredfs.QualifiedPath) layeredfs.HandleID {
-	delete(t.byPath, pk)
-	delete(rec.paths, pk)
-	if len(rec.paths) > 0 {
-		if rec.qpath == qpath {
-			for _, remQP := range rec.paths {
-				rec.qpath = remQP
-				break
-			}
-		}
-		return 0
-	}
-	delete(t.byKey, rec.key)
-	if rec.lruElem != nil {
-		t.lru.Remove(rec.lruElem)
-		rec.lruElem = nil
-	}
-	if rec.unlinked != nil {
-		fd := rec.unlinked.fd
-		rec.unlinked.fd = 0
-		return fd
-	}
-	return 0
-}
-
-func (t *handleTable) InvalidatePath(core *layeredfs.Core, viewID ViewID, qpath layeredfs.QualifiedPath) {
-	t.mu.Lock()
-	pk := makePathKey(viewID, qpath)
-	var toClose layeredfs.HandleID
-	if rec, ok := t.byPath[pk]; ok {
-		toClose = dropRecordPathLocked(t, rec, pk, qpath)
-	}
-	t.mu.Unlock()
-	if core != nil && toClose != 0 {
-		_ = core.CloseHandle(toClose)
-	}
 }

@@ -387,16 +387,12 @@ func TestHandleLifecycleAndGitInterception(t *testing.T) {
 		t.Fatalf("expected distinct NodeID and Generation on recreated file, got attr1=%+v attr2=%+v", attr1, attr2)
 	}
 
-	// Owner-created read-only loose Git object write via (NodeID, Generation) (#1660).
-	roHID, roAttr, err := core.CreateFile(qp("loose_obj"), 0o444, true)
+	// A descriptor opened to create a read-only file keeps its write access (#1660).
+	roHID, _, err := core.CreateFile(qp("loose_obj"), 0o444, true)
 	testutil.FailErr(t, "create 0444 loose_obj", err)
+	_, err = core.WriteHandle(roHID, []byte("git-blob-bytes"), 0)
+	testutil.FailErr(t, "write to the creating descriptor of a 0444 file", err)
 	testutil.FailErr(t, "close loose_obj handle", core.CloseHandle(roHID))
-	_, _, err = core.WriteViaNodeHandle(roAttr.NodeID, roAttr.Generation, []byte("git-blob-bytes"), 0)
-	testutil.FailErr(t, "WriteViaNodeHandle on owner-created 0444 file", err)
-	// Stale generation on WriteViaNodeHandle must be refused.
-	if _, _, err := core.WriteViaNodeHandle(roAttr.NodeID, roAttr.Generation+99, []byte("bad"), 0); !errors.Is(err, ErrStaleHandle) {
-		t.Fatalf("expected ErrStaleHandle for mismatched generation, got %v", err)
-	}
 
 	// Release view: held handle must be refused immediately.
 	testutil.FailErr(t, "ReleaseView", core.ReleaseView())

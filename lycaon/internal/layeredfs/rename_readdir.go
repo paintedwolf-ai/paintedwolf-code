@@ -143,13 +143,16 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 				existingNode.ctime = time.Now()
 				if len(existingNode.paths) == 0 {
 					existingNode.flags.unlinked = true
-					if existingNode.flags.backingName != "" && !hasOpenHandlesForNodeLocked(c, existingNode.id) {
+					if !hasOpenHandlesForNodeLocked(c, existingNode.id) {
 						orphanBacking = existingNode.flags.backingName
+						reclaimNodeLocked(c, existingNode)
 					}
 				}
 			}
 		}
 
+		delete(c.state.transient, srcPath)
+		delete(c.state.transient, dstPath)
 		delete(c.state.pathIndex, srcPath)
 		delete(srcNode.paths, srcPath)
 		c.state.deletedPaths[srcPath] = deletedState{
@@ -242,6 +245,7 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 		nid := c.state.pathIndex[oldQP]
 		node := c.state.nodesByID[nid]
 		delete(c.state.pathIndex, oldQP)
+		delete(c.state.transient, oldQP)
 		c.state.deletedPaths[oldQP] = deletedState{
 			ReplacedKind: node.kind,
 			Timestamp:    now,
@@ -260,6 +264,9 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 				existingNode.ctime = now
 				if len(existingNode.paths) == 0 {
 					existingNode.flags.unlinked = true
+					if !hasOpenHandlesForNodeLocked(c, existingNode.id) {
+						reclaimNodeLocked(c, existingNode)
+					}
 				}
 			}
 		}

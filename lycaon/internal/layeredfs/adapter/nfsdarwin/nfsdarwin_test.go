@@ -26,12 +26,18 @@ func TestProbeAndPrepareNFSDarwin(t *testing.T) {
 		t.Fatalf("expected unsupported platform on linux HostOS, got res=%+v err=%v", res, err)
 	}
 
-	missingBin := nfsdarwin.New(nfsdarwin.Config{MountNFSBin: "/nonexistent/sbin/mount_nfs"})
+	unconfined := nfsdarwin.New(nfsdarwin.Config{})
+	if res, err := unconfined.Probe(t.Context(), adapter.ProbeConfig{}); err == nil || res.Supported || res.BackingDenialVerified || res.ReasonCode != adapter.ReasonConfinementUnavailable {
+		t.Fatalf("expected confinement_unavailable with no confinement check, got res=%+v err=%v", res, err)
+	}
+
+	confined := func(context.Context, adapter.ProbeConfig) error { return nil }
+	missingBin := nfsdarwin.New(nfsdarwin.Config{MountNFSBin: "/nonexistent/sbin/mount_nfs", ConfinementCheckFn: confined})
 	if res, err := missingBin.Probe(t.Context(), adapter.ProbeConfig{}); err == nil || res.Supported || res.ReasonCode != adapter.ReasonHelperMissing {
 		t.Fatalf("expected helper_missing for bad MountNFSBin, got res=%+v err=%v", res, err)
 	}
 
-	adp := nfsdarwin.New(nfsdarwin.Config{})
+	adp := nfsdarwin.New(nfsdarwin.Config{ConfinementCheckFn: confined})
 	if adp.ID() != adapter.AdapterNFSDarwin || adp.Name() != adapter.AdapterNFSDarwin {
 		t.Fatalf("expected adapter ID %q, got ID=%q Name=%q", adapter.AdapterNFSDarwin, adp.ID(), adp.Name())
 	}
@@ -75,7 +81,7 @@ func TestProbeAndPrepareNFSDarwin(t *testing.T) {
 	if facts.RSize != 65536 || facts.WSize != 65536 || facts.ServerPort <= 0 || facts.MountPort != facts.ServerPort {
 		t.Fatalf("unexpected MountFacts: %+v", facts)
 	}
-	for _, wantOpt := range []string{"vers=3", "tcp", "nolocks", "locallocks", "nodev", "nosuid", "nobrowse", "actimeo=0", "nonegnamecache", "retrans=2", "timeo=10", "soft", "rsize=65536,wsize=65536"} {
+	for _, wantOpt := range []string{"vers=3", "tcp", "locallocks", "locallocks", "nodev", "nosuid", "nobrowse", "actimeo=0", "nonegnamecache", "retrans=2", "timeo=10", "soft", "rsize=65536,wsize=65536"} {
 		if !strings.Contains(facts.MountOptions, wantOpt) {
 			t.Fatalf("missing option %q in MountOptions %q", wantOpt, facts.MountOptions)
 		}

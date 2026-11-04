@@ -98,14 +98,6 @@ func (e *stabilityEngine) DiscardKey(hk handleKey) {
 	e.mu.Unlock()
 }
 
-func (e *stabilityEngine) UpdateRecPath(hk handleKey, qpath layeredfs.QualifiedPath) {
-	e.mu.Lock()
-	if st, ok := e.pending[hk]; ok {
-		st.rec.qpath = qpath
-	}
-	e.mu.Unlock()
-}
-
 func effectiveMetaLocked(e *stabilityEngine, hk handleKey, base layeredfs.EntryAttr) layeredfs.EntryAttr {
 	st, ok := e.pending[hk]
 	if !ok || len(st.chunks) == 0 {
@@ -229,7 +221,7 @@ func (e *stabilityEngine) WriteStable(
 	chunks, flushedSeq, _ := snapshotFlushLocked(e, rec.key)
 	e.mu.Unlock()
 	chunks = append(chunks, unstableChunk{offset: offset, data: data})
-	meta, err := flushChunksToCore(core, handles, fault, rec, chunks, stability == FileSync)
+	meta, err := flushChunksToCore(core, handles, fault, rec, chunks)
 	e.mu.Lock()
 	verf := finishFlushLocked(e, rec.key, flushedSeq, err)
 	if err == nil {
@@ -261,7 +253,7 @@ func (e *stabilityEngine) Commit(
 		}
 		return baseMeta, verf, nil
 	}
-	meta, err := flushChunksToCore(core, handles, fault, rec, chunks, true)
+	meta, err := flushChunksToCore(core, handles, fault, rec, chunks)
 	e.mu.Lock()
 	verf = finishFlushLocked(e, rec.key, flushedSeq, err)
 	if err == nil {
@@ -271,6 +263,11 @@ func (e *stabilityEngine) Commit(
 	}
 	e.mu.Unlock()
 	return meta, verf, err
+}
+
+// FlushKey settles any acknowledged UNSTABLE bytes for one object.
+func (e *stabilityEngine) FlushKey(core *layeredfs.Core, handles *handleTable, fault *FaultInjector, hk handleKey) error {
+	return flushPendingKey(e, core, handles, fault, hk)
 }
 
 func (e *stabilityEngine) FlushView(

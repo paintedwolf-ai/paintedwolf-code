@@ -60,6 +60,11 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 			return nil, err
 		}
 		for _, le := range lowerList {
+			// Lower FIFOs, sockets and devices have no identity in the view: Lstat reports them
+			// absent, as a materialized seed omits them, so listing them would name a ghost.
+			if le.Kind == EntryAbsent {
+				continue
+			}
 			childPath := QualifiedPath{RootID: dirPath.RootID, Rel: joinRel(dirPath.Rel, le.Name)}
 			merged[le.Name] = DirEntry{
 				Name:       le.Name,
@@ -121,6 +126,7 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 		merged[name] = DirEntry{
 			Name:       name,
 			NodeID:     node.id,
+			OriginID:   node.origin,
 			Generation: node.gen,
 			Kind:       node.kind,
 			Mode:       node.mode,

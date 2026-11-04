@@ -45,7 +45,13 @@ const (
 	EntryRegular   EntryKind = "regular"
 	EntryDirectory EntryKind = "directory"
 	EntrySymlink   EntryKind = "symlink"
+	EntryFIFO      EntryKind = "fifo"
+	EntrySocket    EntryKind = "socket"
 )
+
+// IsSpecial reports a rendezvous node. Its state lives in the kernel, so it exists in a live view
+// but has no content: checkpoints and promotion treat its path as absent.
+func (k EntryKind) IsSpecial() bool { return k == EntryFIFO || k == EntrySocket }
 
 type QualifiedPath struct {
 	RootID string `json:"root_id"`
@@ -183,6 +189,7 @@ type Config struct {
 // EntryAttr carries unified attributes returned by Stat/Lstat/GetAttr.
 type EntryAttr struct {
 	NodeID     NodeID
+	OriginID   NodeID
 	Generation Generation
 	Layer      LayerSource
 	Kind       EntryKind
@@ -199,12 +206,35 @@ type EntryAttr struct {
 type DirEntry struct {
 	Name       string
 	NodeID     NodeID
+	OriginID   NodeID
 	Generation Generation
 	Kind       EntryKind
 	Mode       fs.FileMode
 	Size       int64
 	ModTime    time.Time
 	Layer      LayerSource
+}
+
+// StableID is the identity a protocol handle or inode number should carry: a copied-up node keeps
+// the identity of the lower object it came from.
+func (a EntryAttr) StableID() NodeID {
+	if a.OriginID != 0 {
+		return a.OriginID
+	}
+	return a.NodeID
+}
+
+// StableID is the identity of a listed entry, matching EntryAttr.StableID for the same object.
+func (e DirEntry) StableID() NodeID {
+	if e.OriginID != 0 {
+		return e.OriginID
+	}
+	return e.NodeID
+}
+
+// BackingCapacity is the capacity of the filesystem holding private working storage.
+type BackingCapacity struct {
+	TotalBytes, FreeBytes, AvailableBytes, TotalFiles, FreeFiles uint64
 }
 
 type Stats struct {

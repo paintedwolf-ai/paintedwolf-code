@@ -137,13 +137,13 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 		t.Fatalf("READLINK target=%q", gotTarget)
 	}
 
-	// MKNOD returns NFSStatusNotSupp; LINK creates hard link sharing NodeID and handle.
+	// MKNOD with its attributes missing is malformed; LINK creates hard link sharing NodeID and handle.
 	var mknodArgs bytes.Buffer
 	putBytes(&mknodArgs, rootFH)
 	putStr(&mknodArgs, "fifo")
 	putU32(&mknodArgs, 6)
 	_, mkr := cli.call(100003, 3, uint32(nfs.NFSProcedureMkNod), mknodArgs.Bytes())
-	if nst := nfs.NFSStatus(getU32(t, mkr)); nst != nfs.NFSStatusNotSupp {
+	if nst := nfs.NFSStatus(getU32(t, mkr)); nst != nfs.NFSStatusInval {
 		t.Fatalf("MKNOD status=%v", nst)
 	}
 	var linkArgs bytes.Buffer
@@ -184,7 +184,7 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 	}
 	injectENOSPC = false
 
-	// EPERM vs EACCES: SETATTR with foreign UID -> EPERM; WRITE to read-only existing file -> EACCES.
+	// SETATTR with foreign UID -> EPERM. WRITE follows the handle, not the current mode.
 	var setUIDArgs bytes.Buffer
 	putBytes(&setUIDArgs, readmeFH)
 	for _, v := range []uint32{0, 1, env.UID + 999, 0, 0, 0, 0, 0} {
@@ -195,8 +195,8 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 		t.Fatalf("expected EPERM(NFSStatusPerm), got %v", nst)
 	}
 	_, _ = env.Core.Chmod(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "README.md"}, 0o444)
-	if nst, _, _, _ := cli.write(readmeFH, 0, []byte("denied"), nfsserver.FileSync); nst != nfs.NFSStatusAccess {
-		t.Fatalf("expected EACCES(NFSStatusAccess), got %v", nst)
+	if nst, _, _, _ := cli.write(readmeFH, 0, []byte("kept"), nfsserver.FileSync); nst != nfs.NFSStatusOk {
+		t.Fatalf("expected WRITE through a held handle to succeed after chmod, got %v", nst)
 	}
 	if nfsserver.MapErrorToNFSStatus(syscall.ELOOP) != nfsserver.NFSStatusLoop {
 		t.Fatal("expected ELOOP to map to NFSStatusLoop")

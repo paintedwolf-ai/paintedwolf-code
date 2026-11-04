@@ -60,32 +60,34 @@ type rpcCallHeader struct {
 	Body                                    *bytes.Reader
 }
 
+// serveConn reads requests and answers each as it finishes, out of order as RPC over TCP allows.
+// The kernel client multiplexes a whole mount over one connection, so waiting for one reply before
+// reading the next would let one slow COMMIT time out every other operation on the mount.
 func serveConn(s *Server, conn net.Conn) {
 	var writeMu sync.Mutex
 	cs := &connState{}
+	reply := func(body []byte) {
+		if len(body) == 0 {
+			return
+		}
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(s.cfg.IdleTimeout))
+		if err := writeRPCFrame(conn, body); err != nil {
+			_ = conn.Close()
+		}
+	}
 	for {
 		payload, err := readRPCMessage(conn, s.cfg.MaxRequestBytes, s.cfg.IdleTimeout, s.cfg.ReadHeaderTimeout)
 		if err != nil || s.state.closed.Load() {
 			return
 		}
-		done := make(chan []byte, 1)
 		select {
-		case s.queue <- func() { done <- handleRPCPayload(s, cs, payload) }:
+		case <-s.stopped:
+			return
+		case s.queue <- func() { reply(handleRPCPayload(s, cs, payload)) }:
 		default:
-			if reply := handleOverloadedPayload(payload); len(reply) > 0 {
-				writeMu.Lock()
-				_ = writeRPCFrame(conn, reply)
-				writeMu.Unlock()
-			}
-			continue
-		}
-		if reply := <-done; len(reply) > 0 {
-			writeMu.Lock()
-			err = writeRPCFrame(conn, reply)
-			writeMu.Unlock()
-			if err != nil {
-				return
-			}
+			reply(handleOverloadedPayload(payload))
 		}
 	}
 }
@@ -284,8 +286,8 @@ func resolveAndAuthHandle(s *Server, cs *connState, cred authCred, raw []byte) (
 	if err != nil {
 		return nil, nil, err
 	}
-	s.state.mu.Lock()
-	defer s.state.mu.Unlock()
+	s.state.mu.RLock()
+	defer s.state.mu.RUnlock()
 	for _, e := range s.state.exportsByVH[rec.key.viewHash] {
 		if !e.mounted || e.cap.AllowedUID != cred.UID || e.cap.AllowedGID != cred.GID {
 			continue

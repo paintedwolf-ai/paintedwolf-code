@@ -67,15 +67,15 @@ func TestSeparateMountAndDataConnectionsAndReconnect(t *testing.T) {
 		t.Fatalf("reconnectCli READ after disconnect: st=%v data=%q", nst, got)
 	}
 
-	// 5. Unmount from a separate TCP connection revokes the mount for existing data connections.
+	// 5. UMNT is advisory: another connection cannot revoke a live mount with it.
 	umntCli := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
 	var umntArgs bytes.Buffer
 	putStr(&umntArgs, capCfg.ExportPath)
 	if code, _ := umntCli.call(100005, 3, uint32(nfs.MountProcUmnt), umntArgs.Bytes()); code != nfs.ResponseCodeSuccess {
 		t.Fatalf("umntCli UMNT: %v", code)
 	}
-	if nst, _ := reconnectCli.getAttr(fileFH); nst != nfs.NFSStatusAccess {
-		t.Fatalf("expected NFSStatusAccess after UMNT on separate connection, got %v", nst)
+	if nst, _ := reconnectCli.getAttr(fileFH); nst != nfs.NFSStatusOk {
+		t.Fatalf("expected the mount to survive UMNT from a separate connection, got %v", nst)
 	}
 }
 

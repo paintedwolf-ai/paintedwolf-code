@@ -330,10 +330,9 @@ func testDirRenameSubtreeChildAddedAndReplacedDstUnlinked(t *testing.T) {
 		}
 	}
 	c.mu.RLock()
-	replacedNode := c.state.nodesByID[dstStBefore.NodeID]
-	unlinked := replacedNode.flags.unlinked && len(replacedNode.paths) == 0
+	_, retained := c.state.nodesByID[dstStBefore.NodeID]
 	c.mu.RUnlock()
-	if !unlinked {
-		t.Fatalf("expected replaced dstDir2 node %d to be marked unlinked with 0 paths", dstStBefore.NodeID)
+	if retained {
+		t.Fatalf("expected replaced dstDir2 node %d to be reclaimed", dstStBefore.NodeID)
 	}
 }

@@ -25,7 +25,6 @@ type serverBarrierGate struct {
 	cond         *sync.Cond
 	inFlightByVH map[uint64]int
 	gatedVH      map[uint64]bool
-	dirtyByVH    map[uint64]map[layeredfs.QualifiedPath]struct{}
 	handshakes   map[string]MountHandshakeObservation
 }
 
@@ -33,7 +32,6 @@ func newServerBarrierGate() *serverBarrierGate {
 	g := &serverBarrierGate{
 		inFlightByVH: make(map[uint64]int),
 		gatedVH:      make(map[uint64]bool),
-		dirtyByVH:    make(map[uint64]map[layeredfs.QualifiedPath]struct{}),
 		handshakes:   make(map[string]MountHandshakeObservation),
 	}
 	g.cond = sync.NewCond(&g.mu)
@@ -43,7 +41,7 @@ func newServerBarrierGate() *serverBarrierGate {
 func (g *serverBarrierGate) releaseView(vHash uint64, entries []*exportEntry) {
 	if g == nil { return }
 	g.mu.Lock()
-	delete(g.gatedVH, vHash); delete(g.inFlightByVH, vHash); delete(g.dirtyByVH, vHash)
+	delete(g.gatedVH, vHash); delete(g.inFlightByVH, vHash)
 	for _, e := range entries { delete(g.handshakes, e.cap.ExportPath) }
 	g.cond.Broadcast(); g.mu.Unlock()
 }
@@ -51,38 +49,15 @@ func (g *serverBarrierGate) releaseView(vHash uint64, entries []*exportEntry) {
 func (g *serverBarrierGate) closeAll() {
 	if g == nil { return }
 	g.mu.Lock()
-	clear(g.gatedVH); clear(g.inFlightByVH); clear(g.dirtyByVH); clear(g.handshakes)
+	clear(g.gatedVH); clear(g.inFlightByVH); clear(g.handshakes)
 	g.cond.Broadcast(); g.mu.Unlock()
 }
 
-// RecordDirtyCandidate records a file or directory path touched by write-capable client activity on viewID.
-func (s *Server) RecordDirtyCandidate(viewID ViewID, qpath layeredfs.QualifiedPath) {
-	if s == nil || s.gate == nil || viewID == "" { return }
-	vHash := computeViewHash(viewID)
-	s.gate.mu.Lock()
-	if s.gate.dirtyByVH[vHash] == nil { s.gate.dirtyByVH[vHash] = make(map[layeredfs.QualifiedPath]struct{}) }
-	s.gate.dirtyByVH[vHash][qpath] = struct{}{}
-	s.gate.mu.Unlock()
-}
-
-// DirtyCandidatePaths returns the relative paths recorded as write-capable candidates for (viewID, rootID).
-func (s *Server) DirtyCandidatePaths(viewID ViewID, rootID RootID) []string {
-	if s == nil || s.gate == nil { return nil }
-	vHash := computeViewHash(viewID)
-	s.gate.mu.Lock()
-	var out []string
-	for qp := range s.gate.dirtyByVH[vHash] {
-		if qp.RootID == rootID { out = append(out, qp.Rel) }
-	}
-	s.gate.mu.Unlock()
-	return out
-}
-
-// GateStateForTest returns the counts of gated views, in-flight views, dirty candidate views, and mount handshakes on s.
-func (s *Server) GateStateForTest() (gatedViews, inFlightViews, dirtyViews, handshakes int) {
-	if s == nil || s.gate == nil { return 0, 0, 0, 0 }
+// GateStateForTest returns the counts of gated views, in-flight views, and mount handshakes on s.
+func (s *Server) GateStateForTest() (gatedViews, inFlightViews, handshakes int) {
+	if s == nil || s.gate == nil { return 0, 0, 0 }
 	s.gate.mu.Lock(); defer s.gate.mu.Unlock()
-	return len(s.gate.gatedVH), len(s.gate.inFlightByVH), len(s.gate.dirtyByVH), len(s.gate.handshakes)
+	return len(s.gate.gatedVH), len(s.gate.inFlightByVH), len(s.gate.handshakes)
 }
 
 // BeginBarrierDrain gates new mutating NFSv3 RPCs for viewID on s, waits for in-flight mutating
@@ -162,7 +137,9 @@ func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	dirPath = "/" + strings.Trim(dirPath, "/")
 	s.state.mu.Lock()
 	entry, ok := s.state.exportsByID[dirPath]
-	if !ok || !allowMountCred(entry.cap, call.Cred) || !cs.bindView(entry.viewHash) {
+	// The export path is public once mounted, since the mount table shows it to every process. The
+	// capability therefore admits exactly one mount, and the secret that survives is the root handle.
+	if !ok || entry.mounted || !allowMountCred(entry.cap, call.Cred) || !cs.bindView(entry.viewHash) {
 		cs.denyMount(); s.state.mu.Unlock()
 		return encodeMountStatus(call.XID, nfs.MountStatusErrAcces)
 	}
@@ -173,7 +150,7 @@ func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	rootQPath := layeredfs.QualifiedPath{RootID: capCfg.Root, Rel: "."}
 	meta, err := viewCore.Lstat(rootQPath)
 	if err != nil { return encodeMountStatus(call.XID, nfs.MountStatusErrNoEnt) }
-	fh := s.handles.Ensure(capCfg.ViewID, rootQPath, meta, true, false)
+	fh := s.handles.Ensure(capCfg.ViewID, rootQPath, meta, 0, true)
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.MountStatusOk)); writeOpaque(&body, fh[:])
 	writeUint32(&body, 1); writeUint32(&body, uint32(nfs.AuthFlavorUnix))
@@ -185,8 +162,10 @@ func onUmnt(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil { return encodeAcceptedReply(call.XID, nfs.ResponseCodeGarbageArgs, nil) }
 	dirPath = "/" + strings.Trim(dirPath, "/")
 	s.state.mu.Lock()
+	// UMNT is advisory (RFC 1813 5.0): anyone who read the mount table could send it, so it records
+	// the observation and never revokes a live view. ReleaseExport is the revocation.
 	if entry, ok := s.state.exportsByID[dirPath]; ok && allowMountCred(entry.cap, call.Cred) {
-		entry.mounted = false; cs.clearView(entry.viewHash); recordHandshake(s, dirPath, entry.cap, call.Cred, false)
+		cs.clearView(entry.viewHash); recordHandshake(s, dirPath, entry.cap, call.Cred, false)
 	}
 	s.state.mu.Unlock()
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil)
@@ -194,18 +173,7 @@ func onUmnt(s *Server, cs *connState, call rpcCallHeader) []byte {
 
 func onUmntAll(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if call.Cred.Flavor == nfs.AuthFlavorUnix {
-		vHash := cs.getBoundView()
-		s.state.mu.Lock()
-		for vh, entries := range s.state.exportsByVH {
-			if vHash == 0 || vh == vHash {
-				for _, entry := range entries {
-					if allowMountCred(entry.cap, call.Cred) {
-						entry.mounted = false
-					}
-				}
-			}
-		}
-		s.state.mu.Unlock(); cs.clearView(vHash)
+		cs.clearView(cs.getBoundView())
 	}
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, nil)
 }

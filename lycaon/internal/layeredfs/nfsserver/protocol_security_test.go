@@ -305,7 +305,7 @@ func TestOwnerCreatedReadOnlyWriteSyncAndFaultPropagation(t *testing.T) {
 		},
 		FaultHooks: &layeredfs.FaultHooks{
 			JournalSyncHook: func(phase string) error {
-				if phase == "node_sync" {
+				if phase == "handle_sync" {
 					nodeSyncCalls.Add(1)
 					if failNodeSync.Load() {
 						return syscall.EIO
@@ -332,7 +332,7 @@ func TestOwnerCreatedReadOnlyWriteSyncAndFaultPropagation(t *testing.T) {
 		t.Fatalf("CREATE git-obj-0444.idx: %v", nst)
 	}
 
-	// 1. DATA_SYNC write on owner-created 0444 file must invoke SyncViaNodeHandle ("node_sync").
+	// 1. DATA_SYNC write on owner-created 0444 file must invoke the backing sync ("handle_sync").
 	if st, _, comm, _ := cli.write(roFH, 0, []byte("pack-header-"), nfsserver.DataSync); st != nfs.NFSStatusOk || comm != nfsserver.DataSync {
 		t.Fatalf("DATA_SYNC write: st=%v comm=%v", st, comm)
 	}
@@ -340,10 +340,10 @@ func TestOwnerCreatedReadOnlyWriteSyncAndFaultPropagation(t *testing.T) {
 		t.Fatalf("expected 1 node_sync call after DATA_SYNC write, got %d", got)
 	}
 
-	// 2. Injected SyncViaNodeHandle failure on FILE_SYNC write must reject stability acknowledgment.
+	// 2. Injected the backing sync failure on FILE_SYNC write must reject stability acknowledgment.
 	failNodeSync.Store(true)
 	if st, _, _, _ := cli.write(roFH, 12, []byte("pack-body"), nfsserver.FileSync); st != nfs.NFSStatusIO {
-		t.Fatalf("expected NFSStatusIO when SyncViaNodeHandle fails on FILE_SYNC, got %v", st)
+		t.Fatalf("expected NFSStatusIO when the backing sync fails on FILE_SYNC, got %v", st)
 	}
 	failNodeSync.Store(false)
 	if st, _, comm, _ := cli.write(roFH, 12, []byte("pack-body"), nfsserver.FileSync); st != nfs.NFSStatusOk || comm != nfsserver.FileSync {
@@ -356,16 +356,16 @@ func TestOwnerCreatedReadOnlyWriteSyncAndFaultPropagation(t *testing.T) {
 		t.Fatalf("expected 0444 mode preserved, got st=%v mode=%#o", st, attr.FileMode&0o777)
 	}
 
-	// 3. UNSTABLE write + COMMIT must invoke SyncViaNodeHandle and retain pending chunks if sync fails.
+	// 3. UNSTABLE write + COMMIT must invoke the backing sync and retain pending chunks if sync fails.
 	if st, _, _, _ := cli.write(roFH, 21, []byte("-trailer"), nfsserver.Unstable); st != nfs.NFSStatusOk {
 		t.Fatalf("UNSTABLE write: %v", st)
 	}
 	failNodeSync.Store(true)
 	if st, _ := cli.commit(roFH, 0, 29); st != nfs.NFSStatusIO {
-		t.Fatalf("expected NFSStatusIO when SyncViaNodeHandle fails on COMMIT, got %v", st)
+		t.Fatalf("expected NFSStatusIO when the backing sync fails on COMMIT, got %v", st)
 	}
 	if vb, vc, _ := nfsserver.PendingUnstableStats(env.Server, "view-ro-sync"); vb != 8 || vc != 1 {
-		t.Fatalf("expected pending chunk retained after SyncViaNodeHandle failure, got vb=%d vc=%d", vb, vc)
+		t.Fatalf("expected pending chunk retained after the backing sync failure, got vb=%d vc=%d", vb, vc)
 	}
 	failNodeSync.Store(false)
 	failOnSync.Store(true)
@@ -381,6 +381,9 @@ func TestOwnerCreatedReadOnlyWriteSyncAndFaultPropagation(t *testing.T) {
 	}
 	if st, data, _ := cli.read(roFH, 0, 64); st != nfs.NFSStatusOk || string(data) != "pack-header-pack-body-trailer" {
 		t.Fatalf("READ after COMMIT: st=%v data=%q", st, data)
+	}
+	if err := env.Server.FlushForCheckpoint(t.Context(), "view-ro-sync"); err != nil {
+		t.Fatalf("FlushForCheckpoint: %v", err)
 	}
 	snap, err := viewCore.LoadPersistedJournal()
 	if err != nil || len(snap.Changes) == 0 {

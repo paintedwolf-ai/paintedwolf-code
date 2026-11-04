@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/nfsdarwin"
@@ -104,13 +105,13 @@ func runBoundedFlushPublishPass(t *testing.T, tmp, trunkDir, label string) (file
 	}
 	defer func() { _ = syscall.Munmap(mappedSlice) }()
 	wantMapped := []byte("mmap-bound-" + label[:5] + "\n")
-	copy(mappedSlice, wantMapped)
+	copyToMapping(mappedSlice, wantMapped)
 
 	if err := adp.SetBarrierHooks(viewID, nfsdarwin.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := nfsdarwin.SyncMappedRegion(mappedSlice); err != nil {
+		if err := msyncForTest(mappedSlice); err != nil {
 			return err
 		}
-		return mf.Sync()
+		return fssync.Always(mf)
 	}); err != nil {
 		t.Fatalf("SetBarrierHooks: %v", err)
 	}
@@ -169,13 +170,12 @@ func TestBarrierDrainCancellationAndPerViewIsolationAndGateRetention(t *testing.
 	t.Cleanup(func() { _, _ = adp.Release(t.Context(), viewA) })
 
 	srv := adp.ServerForView(viewA)
-	factsA, _ := adp.MountFactsForView(viewA)
 	uid, gid := uint32(os.Getuid()), uint32(os.Getgid())
 
 	verifySharedServerPerViewIsolation(t, tmp, trunkDir, adp, srv, viewA, uid, gid, writeEntered, releaseHeldWrite)
 
 	releaseHeldWrite = make(chan struct{})
-	connA, rootFHA := mountTestNFSConn(t, srv.Addr().String(), factsA.ExportPath, uid, gid)
+	connA, rootFHA := mountTestNFSConn(t, srv.Addr().String(), extraTestExport(t, srv, viewA), uid, gid)
 	defer func() { _ = connA.Close() }()
 	fileFHA := lookupTestNFSFile(t, connA, rootFHA, "shared.txt", uid, gid)
 
@@ -199,7 +199,7 @@ func TestBarrierDrainCancellationAndPerViewIsolationAndGateRetention(t *testing.
 	if st := <-writeDoneA; st != nfs.NFSStatusOk {
 		t.Fatalf("expected held write on viewA to complete after cancel, got %v", st)
 	}
-	if gated, inFlight, _, _ := srv.GateStateForTest(); gated != 0 || inFlight != 0 {
+	if gated, inFlight, _ := srv.GateStateForTest(); gated != 0 || inFlight != 0 {
 		t.Fatalf("expected 0 gated/inFlight views after canceled barrier + write completion, got gated=%d inFlight=%d", gated, inFlight)
 	}
 
@@ -211,8 +211,8 @@ func TestBarrierDrainCancellationAndPerViewIsolationAndGateRetention(t *testing.
 	if _, err := adp.Release(t.Context(), viewA); err != nil {
 		t.Fatalf("Release viewA: %v", err)
 	}
-	if gated, inFlight, dirty, handshakes := srv.GateStateForTest(); gated != 0 || inFlight != 0 || dirty != 0 || handshakes != 0 {
-		t.Fatalf("expected 0 retained gate state after server close, got (%d, %d, %d, %d)", gated, inFlight, dirty, handshakes)
+	if gated, inFlight, handshakes := srv.GateStateForTest(); gated != 0 || inFlight != 0 || handshakes != 0 {
+		t.Fatalf("expected 0 retained gate state after server close, got (%d, %d, %d)", gated, inFlight, handshakes)
 	}
 }
 

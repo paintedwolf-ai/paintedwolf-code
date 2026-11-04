@@ -21,6 +21,7 @@ const (
 	JournalOpMkdir       JournalOpKind = "mkdir"
 	JournalOpHardLink    JournalOpKind = "hard_link"
 	JournalOpSymlink     JournalOpKind = "symlink"
+	JournalOpMknod       JournalOpKind = "mknod"
 	JournalOpSetAttr     JournalOpKind = "setattr"
 	JournalOpSetXattr    JournalOpKind = "setxattr"
 	JournalOpRemoveXattr JournalOpKind = "removexattr"
@@ -156,6 +157,19 @@ func buildChangeEntryLocked(c *Core, qp QualifiedPath, logicalOnly bool) (Change
 	if nid, ok := c.state.pathIndex[qp]; ok {
 		node := c.state.nodesByID[nid]
 		if node != nil && !node.flags.unlinked {
+			if isContentlessPathLocked(c, qp, node) {
+				if logicalOnly && base.Kind == EntryAbsent {
+					return ChangeEntry{}, false, nil
+				}
+				return ChangeEntry{
+					Path:              qp,
+					Kind:              EntryAbsent,
+					LogicalChange:     base.Kind != EntryAbsent,
+					Deleted:           true,
+					DirectoryReplaced: base.Kind == EntryDirectory,
+					Base:              cloneBaseCapture(base),
+				}, true, nil
+			}
 			isLogical, contentChanged, metaChanged, sha, err := evaluateNodeLogicalChangeLocked(c, qp, node, base)
 			if err != nil {
 				return ChangeEntry{}, false, err
@@ -168,7 +182,9 @@ func buildChangeEntryLocked(c *Core, qp QualifiedPath, logicalOnly bool) (Change
 			if len(node.paths) > 1 {
 				hlGroup = fmt.Sprintf("node-%d-gen-%d", node.id, node.gen)
 				for p := range node.paths {
-					hlPaths = append(hlPaths, p)
+					if _, hidden := c.state.transient[p]; !hidden {
+						hlPaths = append(hlPaths, p)
+					}
 				}
 				sort.Slice(hlPaths, func(i, j int) bool {
 					if hlPaths[i].RootID != hlPaths[j].RootID {

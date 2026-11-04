@@ -40,7 +40,14 @@ func (s *Server) opMknod(nodeID uint64, body []byte) ([]byte, int32) {
 	}
 	rawMode := binary.LittleEndian.Uint32(body[0:4])
 	fileType := rawMode & syscall.S_IFMT
-	if fileType != 0 && fileType != syscall.S_IFREG {
+	var specialBit fs.FileMode
+	switch fileType {
+	case 0, syscall.S_IFREG:
+	case syscall.S_IFIFO:
+		specialBit = fs.ModeNamedPipe
+	case syscall.S_IFSOCK:
+		specialBit = fs.ModeSocket
+	default:
 		return nil, -int32(syscall.EPERM)
 	}
 	name := cstr(body[16:])
@@ -49,6 +56,14 @@ func (s *Server) opMknod(nodeID uint64, body []byte) ([]byte, int32) {
 	}
 	childRel := joinRel(parentRel, name)
 	qp := s.qpath(childRel)
+	if specialBit != 0 {
+		attr, err := s.core.Mknod(qp, specialBit|fromPOSIXMode(rawMode).Perm())
+		if err != nil {
+			return nil, mapFUSEErrno(err)
+		}
+		fn := s.nodes.acquireNode(childRel, attr)
+		return encodeEntryOut(s, fn.fuseID, fn.ino, attr), 0
+	}
 	hid, attr, err := s.core.Open(qp, layeredfs.OpenCreate|layeredfs.OpenTruncate|layeredfs.OpenReadWrite, fromPOSIXMode(rawMode))
 	if err != nil {
 		return nil, mapFUSEErrno(err)
@@ -188,6 +203,10 @@ func direntType(m fs.FileMode) uint32 {
 		return syscall.DT_DIR
 	case m&fs.ModeSymlink != 0:
 		return syscall.DT_LNK
+	case m&fs.ModeNamedPipe != 0:
+		return syscall.DT_FIFO
+	case m&fs.ModeSocket != 0:
+		return syscall.DT_SOCK
 	default:
 		return syscall.DT_REG
 	}
