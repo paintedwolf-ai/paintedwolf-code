@@ -37,4 +37,5 @@ x-paintedwolf-scenarios:
     profile: plan_write_only
     source_history_offered: false
   expect_contains:
+  - 'Rejected:'
   - 'Code: GIT_NO_REPOSITORY_ON_WRITE_LEG'
