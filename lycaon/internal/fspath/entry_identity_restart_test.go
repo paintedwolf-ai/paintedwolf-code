@@ -57,3 +57,16 @@ func heldIdentity(t *testing.T, file *os.File) string {
 	}
 	return identity
 }
+
+func TestSameEntryAcrossRestartAcceptsARecordFromBeforeFileHandles(t *testing.T) {
+	const handle = "2049:77:h1:00ff"
+	if !SameEntryAcrossRestart("2049:77", handle) || !SameEntryAcrossRestart("99:77", handle) {
+		t.Fatal("a released device and inode record was refused")
+	}
+	if SameEntryAcrossRestart("2049:78", handle) || SameEntryAcrossRestart("2049:7", handle) {
+		t.Fatal("another inode matched")
+	}
+	if SameEntryAcrossRestart("2049:77:h1:00aa", handle) {
+		t.Fatal("a recorded generation must still compare")
+	}
+}
