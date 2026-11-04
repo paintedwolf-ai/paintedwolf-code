@@ -159,6 +159,8 @@ func TestMidTurnTextHasSpeech(t *testing.T) {
 		"[verify: targeted - ran it]": false,
 		"Working on it.":              true,
 		"`[read#3]`":                  true,
+		"[task#1]":                    false,
+		"[pr#123]":                    true,
 	} {
 		if got := guidance.MidTurnTextHasSpeech(text); got != want {
 			t.Errorf("%q: got %v", text, got)

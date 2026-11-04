@@ -125,6 +125,7 @@ const publishingSurface = "implement_routing"
 type midTurnLedgerStub struct {
 	records []evidence.Record
 	err     error
+	legsErr error
 }
 
 func (s *midTurnLedgerStub) LoadLedger(context.Context, string) (evidence.Ledger, error) {
@@ -135,6 +136,9 @@ func (s *midTurnLedgerStub) LoadLedger(context.Context, string) (evidence.Ledger
 }
 
 func (s *midTurnLedgerStub) WorkerLegs(context.Context, string, time.Time) ([]guidance.EvidenceLeg, error) {
+	if s.legsErr != nil {
+		return nil, s.legsErr
+	}
 	return nil, nil
 }
 
@@ -514,16 +518,30 @@ func TestNoteStorageOutcomes(t *testing.T) {
 	})
 }
 
-// Evidence that cannot be read is not an empty ledger: it must not exempt text.
+// M7: evidence that cannot be read is not an empty ledger. Reading it as empty
+// would publish uncited text as pre-evidence speech.
 func TestUnreadableLedgerNeverPublishesAsExempt(t *testing.T) {
-	h := newMidTurnHarness(t, publishingSurface)
-	h.ledger.err = errors.New("ledger offline")
-	out, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "Starting.", "recall")
-	if _, ok := noteFor(out, "c1"); ok || strings.Join(h.order, ",") != "recall" {
-		t.Fatalf("published=%v order=%v", ok, h.order)
-	}
-	if !guard.DeriveWaitVisibility(out).Unpublished {
-		t.Fatal("unpublished text must be owed")
+	for _, tc := range []struct {
+		name         string
+		ledger, legs error
+	}{
+		{"session ledger", errors.New("ledger offline"), nil},
+		{"worker legs", nil, errors.New("legs offline")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newMidTurnHarness(t, publishingSurface)
+			h.ledger.err, h.ledger.legsErr = tc.ledger, tc.legs
+			out, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "Starting.", "recall")
+			if _, ok := noteFor(out, "c1"); ok || strings.Join(h.order, ",") != "recall" {
+				t.Fatalf("published=%v order=%v", ok, h.order)
+			}
+			if h.friction != 0 {
+				t.Fatalf("a host read failure charged the model: %d", h.friction)
+			}
+			if !guard.DeriveWaitVisibility(out).Unpublished {
+				t.Fatal("unpublished text must be owed")
+			}
+		})
 	}
 }
 
