@@ -189,20 +189,9 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 	if len(tail) == 0 || tail[0].Ord <= 1 || tail[0].Ord > view.Continuation.ThroughOrd {
 		return nil, false
 	}
-	record := messageview.CloneContinuation(view.Continuation)
+	record := restoredCoverage(view.Continuation, tail[0].Ord)
 	record.Window = cfg.ModelContextWindow
 	record.Receiver = sess.Model
-	record.ThroughOrd = tail[0].Ord - 1
-	if record.SummaryThroughOrd > record.ThroughOrd {
-		record.SummaryThroughOrd = record.ThroughOrd
-	}
-	filtered := make([]messageview.ContinuationSource, 0, len(record.Sources))
-	for _, src := range record.Sources {
-		if src.Ord <= 0 || src.Ord < tail[0].Ord {
-			filtered = append(filtered, src)
-		}
-	}
-	record.Sources = filtered
 	recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 	continuationText, err := compaction.RenderContinuation(ctx, record, recall, 0)
 	if err != nil {
@@ -226,6 +215,26 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 	}
 	out = append(out, tail...)
 	return out, true
+}
+
+// restoredCoverage narrows a record to rows before the restored tail. Prose that
+// reaches into the tail cannot be clipped, so only recovery references remain.
+func restoredCoverage(prior *messageview.Continuation, tailStart int64) *messageview.Continuation {
+	record := messageview.CloneContinuation(prior)
+	record.ThroughOrd = tailStart - 1
+	if record.SummaryThroughOrd > record.ThroughOrd {
+		record.SummaryThroughOrd = 0
+		record.Summary = messageview.ContinuationSummary{}
+		record.Reason = "references_only"
+	}
+	filtered := make([]messageview.ContinuationSource, 0, len(record.Sources))
+	for _, src := range record.Sources {
+		if src.Ord <= 0 || src.Ord < tailStart {
+			filtered = append(filtered, src)
+		}
+	}
+	record.Sources = filtered
+	return record
 }
 
 func estimateSingleMessageTokens(msg api.Message) int {
