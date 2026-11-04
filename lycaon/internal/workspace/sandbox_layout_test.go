@@ -30,7 +30,7 @@ func TestCreateWorkerWorkspaceFromSourcesMultiRoot(t *testing.T) {
 		{ID: "s", Label: "b", Path: secondary, IsPrimary: false},
 	}
 	mgr := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds"))
-	binding, layout, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "p", "job-mr")
+	binding, layout, err := mgr.CreateWorkerBranch(context.Background(), roots, "p", "job-mr")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	primaryDir, err := projectroot.BranchDirForID(layout.Roots[0].ID)
 	testutil.FailErr(t, "primary branch dir", err)
@@ -77,7 +77,7 @@ func TestConcurrentClaimsReuseOneCompleteBranch(t *testing.T) {
 	for range 2 {
 		go func() {
 			start.Wait()
-			binding, _, err := mgr.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "p", "same-job")
+			binding, _, err := mgr.CreateWorkerBranch(t.Context(), roots, "p", "same-job")
 			results <- result{binding: binding, err: err}
 		}()
 	}
@@ -105,7 +105,7 @@ func TestCreateWorkerWorkspaceFromSourcesSingleRootFlat(t *testing.T) {
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "only.txt"), []byte("x"), 0o644))
 	roots := []projectroot.RootRef{{ID: "p", Label: "root", Path: dir, IsPrimary: true}}
 	mgr := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds"))
-	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "p", "job-1")
+	binding, _, err := mgr.CreateWorkerBranch(context.Background(), roots, "p", "job-1")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	if _, err := os.Stat(filepath.Join(binding.Root, "only.txt")); err != nil {
 		t.Fatalf("flat snapshot missing file: %v", err)

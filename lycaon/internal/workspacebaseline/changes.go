@@ -1,6 +1,7 @@
 package workspacebaseline
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -155,4 +156,50 @@ func CanonicalPath(roots []projectroot.RootRef, path string) (string, error) {
 		return "", fmt.Errorf("invalid baseline path")
 	}
 	return filepath.Join(chosen.Path, filepath.FromSlash(path)), nil
+}
+
+// OverlayChange is one path a sealed overlay records, against its baseline.
+type OverlayChange struct {
+	RootID     string
+	Rel        string
+	Final      File
+	Base       File
+	BaseExists bool
+	// Body reads pinned content by digest.
+	Body func(sha string) ([]byte, error)
+}
+
+// EachOverlayChange visits a sealed overlay's paths with their baseline state. It reads only the
+// immutable manifests and their pinned content, never a working tree.
+func EachOverlayChange(ctx context.Context, baselinePath, overlayPath string, roots []projectroot.RootRef, visit func(OverlayChange) error) error {
+	blobs := ContentStore(baselinePath)
+	baseline, err := Open(ctx, baselinePath, blobs)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = baseline.Close() }()
+	overlay, err := Open(ctx, overlayPath, blobs)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = overlay.Close() }()
+	body := func(sha string) ([]byte, error) {
+		var content bytes.Buffer
+		err := blobs.CopySHA(ctx, sha, &content)
+		return content.Bytes(), err
+	}
+	return overlay.Each(ctx, func(path string, final File) error {
+		root, rel, err := manifestRoot(roots, path)
+		if err != nil {
+			return err
+		}
+		base, exists, err := baseline.Lookup(ctx, path)
+		if err != nil {
+			return err
+		}
+		if final.Opaque && final.LinkTarget == "" {
+			return fmt.Errorf("overlay body for %s was not captured", path)
+		}
+		return visit(OverlayChange{RootID: root.ID, Rel: rel, Final: final, Base: base, BaseExists: exists, Body: body})
+	})
 }

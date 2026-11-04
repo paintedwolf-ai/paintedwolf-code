@@ -23,8 +23,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 
 			primary, overlay := t.TempDir(), t.TempDir()
-			store, err := checkpoint.NewStore(filepath.Join(overlay, session.TaskCheckpointStoreSubdir))
-			testutil.FailErr(t, "open checkpoint store", err)
+			store, bindCheckpoint := recoveryStoreFor(t, overlay)
 			core, err := layeredfs.New(layeredfs.Config{
 				ViewID: "view-bound-preview", BackingDir: t.TempDir(),
 				Roots: []layeredfs.RootSpec{{ID: "primary", TrunkPath: primary, IsPrimary: true}},
@@ -41,6 +40,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 			testutil.FailErr(t, "write reviewed result", err)
 			_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "cp-reviewed", Trigger: checkpoint.TriggerWorkerCompletion})
 			testutil.FailErr(t, "publish reviewed checkpoint", err)
+			bindCheckpoint("cp-reviewed")
 			task := &api.WorkerTask{ID: "job-bound-preview", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay}
 			_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, nil)
 			testutil.FailErr(t, "prepare reviewed checkpoint", err)
@@ -70,7 +70,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 			if !ok || selected.CheckpointID != preview.CheckpointID {
 				t.Fatalf("checkpoint changed after preview: selected=%q reviewed=%q", selected.CheckpointID, preview.CheckpointID)
 			}
-			testutil.FailErr(t, "commit reviewed checkpoint", session.CommitTaskCheckpointJournal(t.Context(), task, nil))
+			testutil.FailErr(t, "commit reviewed checkpoint", commitTaskCheckpoint(t, task, nil))
 			body, err := os.ReadFile(filepath.Join(primary, "result.txt"))
 			testutil.FailErr(t, "read promoted result", err)
 			if string(body) != "reviewed\n" {

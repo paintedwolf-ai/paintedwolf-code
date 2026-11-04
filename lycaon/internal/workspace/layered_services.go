@@ -151,6 +151,7 @@ func bindViewConsumer(
 	publisher, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		Core: prepared.Core, Store: store, WorkerID: cv.Identity.WorkerID, TaskID: cv.Identity.WorkerID,
 		ProjectID: cv.Identity.ProjectID, SourceGeneration: fmt.Sprint(cv.Identity.SourceGeneration), SelectedRoots: roots,
+		ParentCheckpoints: cv.Metadata.Checkpoints.ParentCheckpointIDs,
 		Callbacks: checkpoint.BarrierCallbacks{
 			AcquireAdapterBarrier: func(ctx context.Context) (layeredfs.BarrierToken, func() error, error) {
 				receipt, release, err := cv.Adapter.CheckpointBarrier(ctx, prepared.ViewID)
@@ -280,7 +281,7 @@ func recordBranchCheckpoint(branchRoot string, store *checkpoint.Store, checkpoi
 }
 
 func publishWithPrivateGit(ctx context.Context, view *branchLayeredView, checkpointID string) (checkpoint.PublishResult, error) {
-	git, err := privateGitSnapshot(ctx, view.services.privateGit, view.viewID, checkpointID)
+	git, err := privateGitSnapshot(ctx, view.services.privateGit, view.viewID, checkpointID, view.services.recovery.CheckpointStore().RootDir())
 	if err != nil {
 		return checkpoint.PublishResult{}, err
 	}
@@ -302,14 +303,18 @@ func BranchCheckpoint(branchRoot string) (storeDir, checkpointID string, ok bool
 	return meta.CheckpointStoreDir, meta.LastPublishedCheckpointID, true
 }
 
-// privateGitSnapshot captures Git state for the checkpoint only once the repository was initialized:
-// a view whose worker never touched Git has none, and capturing must not initialize it.
-func privateGitSnapshot(ctx context.Context, mgr *privategit.Manager, viewID, checkpointID string) (checkpoint.PrivateGitSnapshot, error) {
+// privateGitSnapshot captures each root's private refs and exports the objects those refs add, beside
+// the checkpoint, where promotion imports them from. It captures only once a repository was
+// initialized: a view whose worker never touched Git has none, and capturing must not initialize it.
+func privateGitSnapshot(ctx context.Context, mgr *privategit.Manager, viewID, checkpointID, storeDir string) (checkpoint.PrivateGitSnapshot, error) {
 	snapshot := checkpoint.PrivateGitSnapshot{}
 	metrics, initialized := mgr.RepoMetrics(viewID, ".")
 	if initialized && metrics.State == privategit.StateReady {
 		state, err := mgr.CaptureCheckpointGitState(ctx, viewID, checkpointID)
 		if err != nil {
+			return checkpoint.PrivateGitSnapshot{}, err
+		}
+		if err := mgr.ExportCheckpointObjects(ctx, viewID, state, checkpoint.CheckpointGitObjectsDir(storeDir, checkpointID, "")); err != nil {
 			return checkpoint.PrivateGitSnapshot{}, err
 		}
 		snapshot.HeadRef, snapshot.Refs, snapshot.RetainedObjects = state.HeadSymbolic, state.Refs, state.Artifact.ReachableOIDs
@@ -322,6 +327,14 @@ func privateGitSnapshot(ctx context.Context, mgr *privategit.Manager, viewID, ch
 		if err != nil {
 			return checkpoint.PrivateGitSnapshot{}, err
 		}
+		rootID := strings.TrimPrefix(secondary, viewID+"-")
+		if err := mgr.ExportCheckpointObjects(ctx, secondary, state, checkpoint.CheckpointGitObjectsDir(storeDir, checkpointID, rootID)); err != nil {
+			return checkpoint.PrivateGitSnapshot{}, err
+		}
+		if snapshot.Roots == nil {
+			snapshot.Roots = map[string]checkpoint.RootGitRefs{}
+		}
+		snapshot.Roots[rootID] = checkpoint.RootGitRefs{HeadRef: state.HeadSymbolic, Refs: state.Refs}
 		snapshot.RetainedObjects = append(snapshot.RetainedObjects, state.Artifact.ReachableOIDs...)
 	}
 	return snapshot, nil

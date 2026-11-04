@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -52,7 +53,10 @@ var workerWorkspaceLog = observability.LazyComponent("worker_workspace")
 
 // WorkerWorkspaceManager provisions isolated sandbox copies for write workers.
 type WorkerWorkspaceManager interface {
-	CreateWorkerWorkspaceFromSources(ctx context.Context, roots, sourceRoots []projectroot.RootRef, activeRootID, jobID string) (*workspace.Binding, workspace.SandboxLayout, error)
+	CreateWorkerBranch(ctx context.Context, roots []projectroot.RootRef, activeRootID, jobID string) (*workspace.Binding, workspace.SandboxLayout, error)
+	CreateStackedWorkerBranch(ctx context.Context, roots []projectroot.RootRef, activeRootID, jobID, parentCheckpointID string) (*workspace.Binding, workspace.SandboxLayout, error)
+	PublishSealedOverlayCheckpoint(ctx context.Context, sealed workspace.SealedOverlay) (string, error)
+	CheckpointCoordinator() (*recovery.Coordinator, error)
 	RebuildWorkerWorkspace(ctx context.Context, branchRoot string, restore func(ctx context.Context, layout workspace.SandboxLayout, branchRoot string) error) (workspace.SandboxLayout, error)
 	DestroyWorkerWorkspace(binding *workspace.Binding) error
 }
@@ -115,12 +119,7 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 	if len(roots) == 0 {
 		return ErrWorkerBranchClaimFailed
 	}
-	baseLease, err := holdSQLBaseOverlay(q, ctx, task)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
-	}
-	defer baseLease.Release()
-	sources, err := workspaceSourceRoots(task, roots, q)
+	parentCheckpoint, err := stackedParentCheckpoint(ctx, task, roots, q, ws)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
@@ -129,7 +128,7 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 		ctx = workspace.WithWorkspaceSelection(ctx, adapter.WorkspaceSelection{}, task.Scope.Paths...)
 	}
 	ctx = workspace.WithWorkspaceProject(ctx, task.ProjectID)
-	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(ctx, roots, sources, activeID, task.ID)
+	binding, layout, err := createTaskBranch(ctx, ws, roots, activeID, task.ID, parentCheckpoint)
 	if err != nil {
 		readiness := claim.StateFailedPreparation
 		if errors.Is(err, claim.ErrSettlementUnresolved) {
@@ -302,22 +301,11 @@ func (q *SQLQueue) EnsureWorkerBranch(ctx context.Context, jobID string) (*api.W
 	return task, lease, nil
 }
 
-// holdSQLBaseOverlay keeps a stacked worker's base branch on disk while the new
-// branch clones from it. A worker without a base holds nothing.
-func holdSQLBaseOverlay(q *SQLQueue, ctx context.Context, task *api.WorkerTask) (*BranchLease, error) {
-	baseID := strings.TrimSpace(task.EffectiveScope().BaseOverlayID)
-	if baseID == "" {
-		return nil, nil
+func createTaskBranch(ctx context.Context, ws WorkerWorkspaceManager, roots []projectroot.RootRef, activeID, jobID, parentCheckpoint string) (*workspace.Binding, workspace.SandboxLayout, error) {
+	if parentCheckpoint == "" {
+		return ws.CreateWorkerBranch(ctx, roots, activeID, jobID)
 	}
-	base, ok := q.Get(baseID) //nolint:contextcheck // bounded Get
-	if !ok || base == nil || base.MergeStatus == api.WorkerMergeStatusMerged || strings.TrimSpace(base.WorkspaceRoot) == "" {
-		return nil, nil
-	}
-	_, lease, err := q.EnsureWorkerBranch(ctx, baseID)
-	if err != nil {
-		return nil, fmt.Errorf("base overlay %q: %w", baseID, err)
-	}
-	return lease, nil
+	return ws.CreateStackedWorkerBranch(ctx, roots, activeID, jobID, parentCheckpoint)
 }
 
 // ListBranchJobs reports every job that still names a branch tree.

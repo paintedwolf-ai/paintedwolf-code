@@ -17,10 +17,12 @@ import (
 )
 
 // StackedPromotionRequest specifies parameters for resolving and promoting a stacked child checkpoint.
+// Transaction is the promotion it joins; the caller commits it at its own commit fact.
 type StackedPromotionRequest struct {
 	ChildCheckpointID string
 	TargetRoots       map[string]string
 	Promoter          *checkpoint.Promoter
+	Transaction       *checkpoint.Transaction
 	Resolutions       map[layeredfs.QualifiedPath]checkpoint.ConflictResolution
 	ImportGitRefs     bool
 	TransactionID     string
@@ -97,43 +99,40 @@ func resolveStackedPromotionPlan(ctx context.Context, c *Coordinator, req Stacke
 	}, nil
 }
 
-// PromoteStackedCheckpoint resolves the stacked promotion plan, applies file and ref changes
-// transactionally, and records explicit landing receipts for the child and any folded ancestors.
+// PromoteStackedCheckpoint resolves the stacked promotion plan and applies its file and ref changes
+// through the one promotion transaction, with landing receipts for the child and any folded ancestors
+// as records of that transaction. A failure restores the original target and leaves no receipt.
 func (c *Coordinator) PromoteStackedCheckpoint(ctx context.Context, req StackedPromotionRequest) (*checkpoint.PromotionJournalRecord, error) {
-	return promoteStackedCheckpoint(ctx, c, req)
-}
-
-func promoteStackedCheckpoint(ctx context.Context, c *Coordinator, req StackedPromotionRequest) (*checkpoint.PromotionJournalRecord, error) {
+	if req.Transaction == nil {
+		return nil, fmt.Errorf("recovery: a stacked promotion joins a transaction")
+	}
 	if err := injectFault(c, PhaseFilePromotion, "promote_start"); err != nil {
-		return nil, err
+		return nil, errors.Join(err, req.Transaction.Rollback(context.WithoutCancel(ctx)))
 	}
 	plan, err := c.ResolveStackedPromotionPlan(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, req.Transaction.Rollback(context.WithoutCancel(ctx)))
 	}
 	workerID := plan.EffectiveManifest.WorkerID
 	if err := recordPromotionTransition(c, workerID, StateBegin, req.ChildCheckpointID, "promote_stacked"); err != nil {
-		return nil, err
+		return nil, errors.Join(err, req.Transaction.Rollback(context.WithoutCancel(ctx)))
 	}
-
-	// The claim is durable before any target changes, and only success releases it, so a failed
+	// The claim is durable before any target changes, and only settlement releases it, so a failed
 	// promotion's whole chain stays available for repair.
-	claimID := "claim-promote-" + req.ChildCheckpointID
 	if err := c.AcquireClaim(RetentionClaim{
-		ClaimID:       claimID,
+		ClaimID:       stackedPromotionClaim(req.ChildCheckpointID),
 		Kind:          ClaimPromotion,
 		HolderID:      req.ChildCheckpointID,
 		WorkerID:      workerID,
 		CheckpointIDs: plan.ResolvedChain,
 	}); err != nil {
-		return nil, err
+		return nil, errors.Join(err, req.Transaction.Rollback(context.WithoutCancel(ctx)))
 	}
-
 	txID := req.TransactionID
 	if txID == "" {
 		txID = "tx-" + req.ChildCheckpointID
 	}
-	rec, err := req.Promoter.Apply(ctx, checkpoint.ApplyRequest{
+	rec, err := req.Transaction.ApplyCheckpoint(ctx, req.Promoter, checkpoint.ApplyRequest{
 		TransactionID: txID,
 		Preview:       plan.Preview,
 		ImportGitRefs: req.ImportGitRefs,
@@ -150,15 +149,32 @@ func promoteStackedCheckpoint(ctx context.Context, c *Coordinator, req StackedPr
 	if err != nil {
 		return nil, errors.Join(err, recordPromotionTransition(c, workerID, StateFailed, req.ChildCheckpointID, "promote_stacked"))
 	}
+	if err := c.recordStackedLandings(req, plan, rec); err != nil {
+		return nil, errors.Join(err, req.Transaction.Rollback(context.WithoutCancel(ctx)), recordPromotionTransition(c, workerID, StateFailed, req.ChildCheckpointID, "promote_stacked"))
+	}
+	return rec, nil
+}
 
+func (c *Coordinator) recordStackedLandings(req StackedPromotionRequest, plan *StackedPromotionPlan, rec *checkpoint.PromotionJournalRecord) error {
+	landed := append(append([]string(nil), plan.UnlandedAncestors...), req.ChildCheckpointID)
+	paths := make([]string, 0, len(landed))
+	for _, id := range landed {
+		path, err := filepath.Abs(filepath.Join(c.landingsDir, id+".json"))
+		if err != nil {
+			return err
+		}
+		paths = append(paths, path)
+	}
+	if err := req.Transaction.JoinRecords(paths...); err != nil {
+		return err
+	}
 	promotedDigests := buildPromotedTargetDigests(plan.EffectiveManifest, req.TargetRoots)
-	for _, landedCP := range append(append([]string(nil), plan.UnlandedAncestors...), req.ChildCheckpointID) {
-		// A missing receipt could apply this result twice, so failure keeps the claim and reports.
+	for _, landedCP := range landed {
 		if err := c.RecordCheckpointLanded(LandingReceipt{
 			FormatVersion:     FormatVersion,
 			CheckpointID:      landedCP,
 			TransactionID:     rec.TransactionID,
-			WorkerID:          workerID,
+			WorkerID:          plan.EffectiveManifest.WorkerID,
 			TaskID:            plan.EffectiveManifest.TaskID,
 			ProjectID:         plan.EffectiveManifest.ProjectID,
 			ParentCheckpoints: plan.EffectiveManifest.ParentCheckpoints,
@@ -166,13 +182,26 @@ func promoteStackedCheckpoint(ctx context.Context, c *Coordinator, req StackedPr
 			ImportedRefs:      rec.ImportedRefs,
 			LandedAt:          time.Now().UTC(),
 		}); err != nil {
-			return rec, err
+			return err
 		}
 	}
-	if err := c.ReleaseClaim(claimID); err != nil {
-		return rec, err
+	return nil
+}
+
+// SettleStackedPromotion closes a stacked promotion once its commit fact is durable.
+func (c *Coordinator) SettleStackedPromotion(childCheckpointID string) error {
+	m, err := c.cfg.CheckpointStore.LoadManifest(childCheckpointID)
+	if err != nil {
+		return err
 	}
-	return rec, recordPromotionTransition(c, workerID, StateCommitted, req.ChildCheckpointID, "promote_stacked")
+	if err := c.ReleaseClaim(stackedPromotionClaim(childCheckpointID)); err != nil {
+		return err
+	}
+	return recordPromotionTransition(c, m.WorkerID, StateCommitted, childCheckpointID, "promote_stacked")
+}
+
+func stackedPromotionClaim(childCheckpointID string) string {
+	return "claim-promote-" + childCheckpointID
 }
 
 // recordPromotionTransition journals a promotion of a worker that has a journal; a checkpoint can

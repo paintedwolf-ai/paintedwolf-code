@@ -55,7 +55,7 @@ func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 		return nil
 	})
 	roots := singleRoot(t)
-	binding, _, err := manager.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "primary", "job-custody")
+	binding, _, err := manager.CreateWorkerBranch(t.Context(), roots, "primary", "job-custody")
 	testutil.FailErr(t, "create workspace", err)
 
 	err = manager.DestroyWorkerWorkspace(binding)
@@ -88,14 +88,14 @@ func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 func TestRebuildRefusesABranchHoldingALiveView(t *testing.T) {
 	manager := fixtureMountedManager(t, nil)
 	roots := singleRoot(t)
-	binding, _, err := manager.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "primary", "job-live")
+	binding, _, err := manager.CreateWorkerBranch(t.Context(), roots, "primary", "job-live")
 	testutil.FailErr(t, "create workspace", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(binding) })
 
 	// The same source and job name the same branch; a label change alone defeats the layout match.
 	relabeled := append([]projectroot.RootRef(nil), roots...)
 	relabeled[0].Label = "renamed"
-	_, _, err = manager.CreateWorkerWorkspaceFromSources(t.Context(), relabeled, relabeled, "primary", "job-live")
+	_, _, err = manager.CreateWorkerBranch(t.Context(), relabeled, "primary", "job-live")
 	if !errors.Is(err, workspace.ErrBranchInUse) {
 		t.Fatalf("rebuild over a live view = %v, want ErrBranchInUse", err)
 	}
@@ -120,7 +120,7 @@ func TestMaterializedRootsAreManagedGitViewsForThePrimaryWorker(t *testing.T) {
 	testutil.FailErr(t, "open private Git", err)
 	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	manager := workspace.NewManager(branches, t.TempDir()).WithPrivateGit(privateGit)
-	binding, _, err := manager.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "p", "job-roots")
+	binding, _, err := manager.CreateWorkerBranch(t.Context(), roots, "p", "job-roots")
 	testutil.FailErr(t, "create workspace", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(binding) })
 

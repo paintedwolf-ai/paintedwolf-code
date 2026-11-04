@@ -26,7 +26,7 @@ func plantTrees(t *testing.T, branchRoot, project string, trees []fixtureTree) m
 	paths := map[string]string{}
 	for _, tree := range trees {
 		testutil.FailErr(t, "seed project", os.WriteFile(filepath.Join(project, "payload.bin"), make([]byte, tree.bytes), 0o644))
-		binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "primary", tree.jobID)
+		binding, _, err := mgr.CreateWorkerBranch(context.Background(), roots, "primary", tree.jobID)
 		testutil.FailErr(t, "create "+tree.jobID, err)
 		workspace.TouchBranchUse(binding.Root)
 		stamp := filepath.Join(enginepaths.MetaDirForBranchRoot(binding.Root), "LAST_USED")

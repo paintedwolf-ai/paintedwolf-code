@@ -2,12 +2,14 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/idset"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
@@ -161,13 +163,10 @@ func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID stri
 	if err != nil || !ok {
 		return PromoteAssessment{}, ok, err
 	}
-	cpPreview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{
-		CheckpointID: manifest.CheckpointID, ExpectedWorkerID: manifest.WorkerID, ExpectedProjectID: task.ProjectID,
-	})
+	cpPreview, err := taskCheckpointPreview(ctx, svc, task, roots, manifest, promoter)
 	if err != nil {
 		return PromoteAssessment{}, true, err
 	}
-	session.MaybeBindTaskCheckpointPreview(task.ID, cpPreview)
 
 	wanted := make(map[string]struct{}, len(mergePaths))
 	for _, p := range mergePaths {
@@ -250,7 +249,52 @@ func convertCheckpointConflict(store *checkpoint.Store, prim promotePrimarySnaps
 	}
 }
 
-func commitCheckpointPromotionJournal(ctx context.Context, s *MergeService, task *api.WorkerTask) error {
+// taskCheckpointPreview previews what promoting a task's checkpoint would do. A stacked checkpoint
+// is previewed as its composed chain: its own bases are its parent's content, not the target's.
+func taskCheckpointPreview(ctx context.Context, svc *MergeService, task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest, promoter *checkpoint.Promoter) (*checkpoint.PromotionPreview, error) {
+	if len(manifest.ParentCheckpoints) > 0 {
+		plan, _, err := svc.stackedPromotionPlan(ctx, task, roots, manifest, promoter)
+		if err != nil {
+			return nil, err
+		}
+		return plan.Preview, nil
+	}
+	preview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{
+		CheckpointID: manifest.CheckpointID, ExpectedWorkerID: manifest.WorkerID, ExpectedProjectID: task.ProjectID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	session.MaybeBindTaskCheckpointPreview(task.ID, preview)
+	return preview, nil
+}
+
+func (s *MergeService) stackedPromotionRequest(task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest, promoter *checkpoint.Promoter) (*recovery.Coordinator, recovery.StackedPromotionRequest, error) {
+	if s == nil || s.Workspace == nil {
+		return nil, recovery.StackedPromotionRequest{}, fmt.Errorf("stacked promotion requires the recovery coordinator")
+	}
+	coordinator, err := s.Workspace.CheckpointCoordinator()
+	if err != nil {
+		return nil, recovery.StackedPromotionRequest{}, err
+	}
+	targetRoots, err := session.TargetRootsForTaskCheckpoint(task, roots, manifest)
+	if err != nil {
+		return nil, recovery.StackedPromotionRequest{}, err
+	}
+	return coordinator, recovery.StackedPromotionRequest{ChildCheckpointID: manifest.CheckpointID, TargetRoots: targetRoots, Promoter: promoter, ImportGitRefs: true}, nil
+}
+
+func (s *MergeService) stackedPromotionPlan(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest, promoter *checkpoint.Promoter) (*recovery.StackedPromotionPlan, *recovery.Coordinator, error) {
+	coordinator, request, err := s.stackedPromotionRequest(task, roots, manifest, promoter)
+	if err != nil {
+		return nil, nil, err
+	}
+	plan, err := coordinator.ResolveStackedPromotionPlan(ctx, request)
+	return plan, coordinator, err
+}
+
+// applyTaskCheckpoint joins a task's checkpoint effects to its promotion transaction, stacked or not.
+func applyTaskCheckpoint(ctx context.Context, s *MergeService, tx *promoteTransaction, task *api.WorkerTask) error {
 	if task == nil {
 		return nil
 	}
@@ -258,5 +302,21 @@ func commitCheckpointPromotionJournal(ctx context.Context, s *MergeService, task
 	if s != nil {
 		roots = s.taskRootRefs(ctx, task)
 	}
-	return session.CommitTaskCheckpointJournal(ctx, task, roots)
+	_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots)
+	if err != nil {
+		return errors.Join(err, tx.txn.Rollback(context.WithoutCancel(ctx)))
+	}
+	if !ok || len(manifest.ParentCheckpoints) == 0 {
+		return session.ApplyTaskCheckpoint(ctx, tx.txn, task, roots)
+	}
+	coordinator, request, err := s.stackedPromotionRequest(task, roots, manifest, promoter)
+	if err != nil {
+		return errors.Join(err, tx.txn.Rollback(context.WithoutCancel(ctx)))
+	}
+	request.Transaction = tx.txn
+	if _, err := coordinator.PromoteStackedCheckpoint(ctx, request); err != nil {
+		return err
+	}
+	tx.afterCommit = func() error { return coordinator.SettleStackedPromotion(manifest.CheckpointID) }
+	return nil
 }

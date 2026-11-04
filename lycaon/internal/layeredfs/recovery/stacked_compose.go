@@ -26,6 +26,8 @@ func composeEffectiveStackedManifest(
 	effectiveByPath := make(map[layeredfs.QualifiedPath]checkpoint.ManifestEntry)
 	gitObjects := make(map[string]bool)
 	mergedRefs := make(map[string]string)
+	mergedRoots := make(map[string]checkpoint.RootGitRefs)
+	var objectCheckpoints []string
 
 	for _, m := range oldestToNewest {
 		if landedSet[m.CheckpointID] {
@@ -42,6 +44,16 @@ func composeEffectiveStackedManifest(
 		for ref, oid := range m.PrivateGit.Refs {
 			mergedRefs[ref] = oid
 		}
+		for rootID, root := range m.PrivateGit.Roots {
+			merged := mergedRoots[rootID]
+			if merged.Refs == nil {
+				merged.Refs = make(map[string]string, len(root.Refs))
+			}
+			maps.Copy(merged.Refs, root.Refs)
+			merged.HeadRef = root.HeadRef
+			mergedRoots[rootID] = merged
+		}
+		objectCheckpoints = append(objectCheckpoints, m.CheckpointID)
 		for _, e := range m.Entries {
 			mergeEntryIntoStackedMap(e, landedFinalByPath, effectiveByPath)
 		}
@@ -77,9 +89,11 @@ func composeEffectiveStackedManifest(
 	out.CheckpointID = effID
 	out.Entries = entries
 	out.PrivateGit = checkpoint.PrivateGitSnapshot{
-		HeadRef:         child.PrivateGit.HeadRef,
-		Refs:            mergedRefs,
-		RetainedObjects: retainedOIDs,
+		HeadRef:           child.PrivateGit.HeadRef,
+		Refs:              mergedRefs,
+		RetainedObjects:   retainedOIDs,
+		Roots:             mergedRoots,
+		ObjectCheckpoints: objectCheckpoints,
 	}
 	return out
 }

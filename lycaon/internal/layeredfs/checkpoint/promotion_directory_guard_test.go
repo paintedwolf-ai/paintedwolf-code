@@ -45,7 +45,7 @@ func TestDirectoryDeletionRefusesUnreviewedTrunkChildren(t *testing.T) {
 					if len(preview.Conflicts) != 0 {
 						t.Fatalf("reviewed directory deletion conflicts=%+v", preview.Conflicts)
 					}
-					_, err := promoter.Apply(t.Context(), ApplyRequest{Preview: preview})
+					_, err := promoteAndCommit(t, promoter, ApplyRequest{Preview: preview})
 					testutil.FailErr(t, "apply reviewed deletion", err)
 					if _, err := os.Lstat(filepath.Join(primary, "directory")); !errors.Is(err, os.ErrNotExist) {
 						t.Fatalf("deleted directory=%v", err)
@@ -58,7 +58,7 @@ func TestDirectoryDeletionRefusesUnreviewedTrunkChildren(t *testing.T) {
 					}
 				} else {
 					testutil.FailErr(t, "new trunk child", os.WriteFile(foreign, []byte("external\n"), 0600))
-					if _, err := promoter.Apply(t.Context(), ApplyRequest{Preview: preview}); !errors.Is(err, ErrStalePreviewTargetChanged) {
+					if _, err := promoteAndCommit(t, promoter, ApplyRequest{Preview: preview}); !errors.Is(err, ErrStalePreviewTargetChanged) {
 						t.Fatalf("directory drift apply=%v", err)
 					}
 				}

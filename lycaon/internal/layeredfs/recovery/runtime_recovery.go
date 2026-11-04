@@ -219,7 +219,7 @@ func (r WorkerRuntimeReport) refuse(err error) WorkerRuntimeReport {
 func (c *Coordinator) ReleaseWorkerResult(workerID string) error {
 	j, err := c.LoadWorkerJournal(workerID)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return c.releaseStackedClaims(workerID)
 	}
 	if err != nil {
 		return err
@@ -237,7 +237,7 @@ func (c *Coordinator) ReleaseWorkerResult(workerID string) error {
 	}
 	var errs []error
 	for _, claim := range claims {
-		if claim.WorkerID == workerID && (claim.Kind == ClaimCheckpoint || claim.Kind == ClaimActiveView) {
+		if claim.WorkerID == workerID && (claim.Kind == ClaimCheckpoint || claim.Kind == ClaimActiveView || claim.Kind == ClaimStackedChild) {
 			errs = append(errs, c.ReleaseClaim(claim.ClaimID))
 		}
 	}
@@ -245,6 +245,21 @@ func (c *Coordinator) ReleaseWorkerResult(workerID string) error {
 		errs = append(errs, os.RemoveAll(j.BackingDir))
 	}
 	errs = append(errs, c.removeWorkerJournal(workerID))
+	return errors.Join(errs...)
+}
+
+// releaseStackedClaims drops what a materialized stacked child held on its parents.
+func (c *Coordinator) releaseStackedClaims(workerID string) error {
+	claims, err := c.ListClaims()
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, claim := range claims {
+		if claim.WorkerID == workerID && claim.Kind == ClaimStackedChild {
+			errs = append(errs, c.ReleaseClaim(claim.ClaimID))
+		}
+	}
 	return errors.Join(errs...)
 }
 

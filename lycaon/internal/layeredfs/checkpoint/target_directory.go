@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
@@ -81,6 +82,7 @@ func createStagedTargetDirectory(
 		return err
 	}
 	temp := filepath.Join(filepath.Dir(path.Rel), ".checkpoint-"+hex.EncodeToString(nonce[:]))
+	defer fseffect.HoldStagingBeside(filepath.Join(root.Name(), filepath.Dir(path.Rel)), filepath.Base(temp))()
 	if err := root.Mkdir(temp, mode|0o700); err != nil {
 		return err
 	}

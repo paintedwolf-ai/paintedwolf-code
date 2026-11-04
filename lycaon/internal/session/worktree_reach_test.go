@@ -332,7 +332,7 @@ func TestWorktreeReach_workerInheritance(t *testing.T) {
 	}
 
 	ws := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds"))
-	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(t.Context(), tctx.Source.Roots, tctx.Source.Roots, tctx.Source.ActiveRootID, "job-reach")
+	binding, layout, err := ws.CreateWorkerBranch(t.Context(), tctx.Source.Roots, tctx.Source.ActiveRootID, "job-reach")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	if !sameReachPath(layout.Roots[0].Path, f.wtPath) {
 		t.Fatalf("overlay source = %q want worktree", layout.Roots[0].Path)

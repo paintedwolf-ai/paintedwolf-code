@@ -1,7 +1,9 @@
 package worker
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -9,12 +11,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 var errPromoteCrash = errors.New("simulated crash")
+
+// crashDuring stops fn where its seam panicked, so nothing after that point runs, as in a process death.
+func crashDuring(t *testing.T, fn func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != errPromoteCrash {
+			t.Fatalf("expected a simulated crash, got %v", r)
+		}
+	}()
+	fn()
+}
 
 // promoteCrashFixture exercises every plan shape: edit with an out-of-root alias
 // and a held descriptor, delete, and create.
@@ -67,38 +80,53 @@ func newPromoteCrashFixtureIn(t *testing.T, dataDir string) *promoteCrashFixture
 	testutil.FailErr(t, "stat held descriptor", err)
 	f.originB, err = os.Stat(f.removed)
 	testutil.FailErr(t, "stat removed", err)
-	retained := promoteTransactionRetainedDir(f.txPath())
+	retained := filepath.Join(f.txDir(), "retained")
 	testutil.FailErr(t, "mkdir stale slots", os.MkdirAll(retained, 0o700))
 	testutil.FailErr(t, "seed stale slot", os.WriteFile(filepath.Join(retained, "slot-stale"), []byte("stale"), 0o600))
 	return f
 }
 
-func (f *promoteCrashFixture) txPath() string { return promoteTransactionPath(f.dataDir, f.task.ID) }
+func (f *promoteCrashFixture) txDir() string { return promoteTransactionDir(f.dataDir, f.task.ID) }
 
-func (f *promoteCrashFixture) slot(path string) string {
-	return filepath.Join(promoteTransactionRetainedDir(f.txPath()), promoteRetainedSlot(path))
+func (f *promoteCrashFixture) journalPath() string {
+	return filepath.Join(f.txDir(), "transaction.json")
 }
 
-// run stops at the crashAt'th step and abandons the transaction; a negative
-// crashAt runs to completion. observe sees the durable state at each step.
-func (f *promoteCrashFixture) run(t *testing.T, crashAt int, observe func(promoteStep, string)) error {
+// slot names a target's retained original. Targets are recorded in path order.
+func (f *promoteCrashFixture) slot(path string) string {
+	index := map[string]int{"created.txt": 0, "edited.sh": 1, "removed.txt": 2}[path]
+	return filepath.Join(f.txDir(), "retained", fmt.Sprintf("slot-%06d", index))
+}
+
+// run stops at the crashAt'th step without running anything after it; a negative crashAt runs to
+// completion. observe sees the durable state at each step.
+func (f *promoteCrashFixture) run(t *testing.T, crashAt int, observe func(checkpoint.TransactionStep, string)) error {
 	t.Helper()
 	n := 0
-	effects := promoteTransactionEffects{reached: func(step promoteStep, path string) error {
+	effects := promoteTransactionEffects{Reached: func(step checkpoint.TransactionStep, path string) error {
 		if observe != nil {
 			observe(step, path)
 		}
 		if n == crashAt {
-			return errPromoteCrash
+			panic(errPromoteCrash)
 		}
 		n++
 		return nil
 	}}
-	tx, err := beginPromoteTransactionWith(f.dataDir, f.task.ID, f.plans, effects)
-	if err != nil {
-		return err
+	var applyErr error
+	apply := func() {
+		var tx *promoteTransaction
+		tx, applyErr = beginPromoteTransactionWith(f.dataDir, f.task.ID, f.plans, effects)
+		if applyErr == nil {
+			applyErr = tx.apply(t.Context(), f.promote, f.task)
+		}
 	}
-	return tx.apply(t.Context(), f.promote, f.task)
+	if crashAt < 0 {
+		apply()
+		return applyErr
+	}
+	crashDuring(t, apply)
+	return nil
 }
 
 func (f *promoteCrashFixture) assertOriginals(t *testing.T) {
@@ -144,17 +172,18 @@ func (f *promoteCrashFixture) primarySnapshot(t *testing.T) map[string]string {
 
 func (f *promoteCrashFixture) assertSettlesAndRetries(t *testing.T) {
 	t.Helper()
-	for range 2 {
-		found, err := recoverPromoteTransaction(f.dataDir, f.task.ID, f.promote, f.task)
-		testutil.FailErr(t, "recover", err)
-		if !found {
-			t.Fatal("journal not found")
-		}
-		f.assertOriginals(t)
+	found, err := recoverPromoteTransaction(t.Context(), f.dataDir, f.task.ID, f.promote, f.task)
+	testutil.FailErr(t, "recover", err)
+	if !found {
+		t.Fatal("journal not found")
 	}
-	testutil.FailErr(t, "remove journal", removePromoteTransaction(f.txPath()))
-	if _, err := os.Lstat(promoteTransactionRetainedDir(f.txPath())); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("retained originals survived settlement: %v", err)
+	f.assertOriginals(t)
+	if found, err := recoverPromoteTransaction(t.Context(), f.dataDir, f.task.ID, f.promote, f.task); err != nil || found {
+		t.Fatalf("second recovery found=%v err=%v", found, err)
+	}
+	f.assertOriginals(t)
+	if _, err := os.Lstat(f.txDir()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("transaction record survived settlement: %v", err)
 	}
 	if err := f.run(t, -1, nil); err != nil {
 		t.Fatalf("retry after settlement: %v", err)
@@ -164,46 +193,48 @@ func (f *promoteCrashFixture) assertSettlesAndRetries(t *testing.T) {
 	}
 }
 
+func (f *promoteCrashFixture) readJournalDocument(t *testing.T) map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(f.journalPath())
+	testutil.FailErr(t, "read journal", err)
+	var document map[string]any
+	testutil.FailErr(t, "decode journal", json.Unmarshal(raw, &document))
+	return document
+}
+
+func (f *promoteCrashFixture) writeJournalDocument(t *testing.T, document map[string]any) {
+	t.Helper()
+	raw, err := json.Marshal(document)
+	testutil.FailErr(t, "encode journal", err)
+	testutil.FailErr(t, "write journal", os.WriteFile(f.journalPath(), raw, 0o600))
+}
+
 func TestPromoteTransactionCrashPointContract(t *testing.T) {
 	type point struct {
-		step promoteStep
+		step checkpoint.TransactionStep
 		path string
 	}
 	var points []point
 	discovery := newPromoteCrashFixture(t)
-	if err := discovery.run(t, -1, func(step promoteStep, path string) {
-		points = append(points, point{step, path})
-		journal, found, err := readPromoteTransaction(discovery.txPath())
-		testutil.FailErr(t, "read journal at step", err)
-		if !found || journal.Version != promoteTransactionVersion {
-			t.Fatalf("%s: journal found=%v version=%d", step, found, journal.Version)
-		}
+	if err := discovery.run(t, -1, func(step checkpoint.TransactionStep, path string) {
+		_, rel, _ := strings.Cut(path, ":")
+		points = append(points, point{step, rel})
+		phase := discovery.readJournalDocument(t)["phase"]
 		// The write-ahead invariant: a primary changes only under a durable applying record.
-		mutated := step == promoteStepPrimaryMutated
-		if mutated != (journal.Phase == promotePhaseApplying) && step != promoteStepApplyingDurable {
-			t.Fatalf("%s %s: phase %q", step, path, journal.Phase)
+		if started := step == checkpoint.StepApplying || step == checkpoint.StepTargetMutated; started != (phase == "applying") {
+			t.Fatalf("%s %s: phase %v", step, path, phase)
 		}
-		if step != promoteStepPrimaryMutated {
+		if step != checkpoint.StepTargetMutated {
 			discovery.assertOriginals(t)
-		}
-		if step == promoteStepApplyingDurable {
-			if journal.Phase != promotePhaseApplying {
-				t.Fatalf("applying step read phase %q", journal.Phase)
-			}
-			for _, mutation := range journal.Mutations {
-				if mutation.OriginalExists {
-					testutil.FailErr(t, "validate retained at applying", validateRetainedPromoteOriginal(discovery.txPath(), mutation))
-				}
-			}
 		}
 	}); err != nil {
 		t.Fatalf("clean run: %v", err)
 	}
 	wantPoints := []point{
-		{promoteStepPreparedDurable, ""}, {promoteStepStaleCleared, ""},
-		{promoteStepOriginalRetained, "edited.sh"}, {promoteStepOriginalRetained, "removed.txt"},
-		{promoteStepApplyingDurable, ""},
-		{promoteStepPrimaryMutated, "edited.sh"}, {promoteStepPrimaryMutated, "removed.txt"}, {promoteStepPrimaryMutated, "created.txt"},
+		{checkpoint.StepPrepared, ""},
+		{checkpoint.StepOriginalRetained, "edited.sh"}, {checkpoint.StepOriginalRetained, "removed.txt"},
+		{checkpoint.StepApplying, ""},
+		{checkpoint.StepTargetMutated, "edited.sh"}, {checkpoint.StepTargetMutated, "removed.txt"}, {checkpoint.StepTargetMutated, "created.txt"},
 	}
 	if !slices.Equal(points, wantPoints) {
 		t.Fatalf("crash points = %v, want %v", points, wantPoints)
@@ -213,11 +244,11 @@ func TestPromoteTransactionCrashPointContract(t *testing.T) {
 
 	for i, at := range points {
 		name := string(at.step) + "/" + strings.TrimSuffix(at.path, filepath.Ext(at.path))
-		started := at.step == promoteStepApplyingDurable || at.step == promoteStepPrimaryMutated
+		started := at.step == checkpoint.StepApplying || at.step == checkpoint.StepTargetMutated
 		crash := func(t *testing.T) *promoteCrashFixture {
 			t.Helper()
 			f := newPromoteCrashFixture(t)
-			if err := f.run(t, i, nil); !errors.Is(err, errPromoteCrash) {
+			if err := f.run(t, i, nil); err != nil {
 				t.Fatalf("crash at %s: %v", name, err)
 			}
 			return f
@@ -226,14 +257,7 @@ func TestPromoteTransactionCrashPointContract(t *testing.T) {
 		if !started {
 			t.Run(name+"/slots-lost", func(t *testing.T) {
 				f := crash(t)
-				testutil.FailErr(t, "lose slots", os.RemoveAll(promoteTransactionRetainedDir(f.txPath())))
-				f.assertSettlesAndRetries(t)
-			})
-			t.Run(name+"/slot-foreign", func(t *testing.T) {
-				f := crash(t)
-				testutil.FailErr(t, "mkdir slots", os.MkdirAll(promoteTransactionRetainedDir(f.txPath()), 0o700))
-				testutil.FailErr(t, "clear slot", os.RemoveAll(f.slot("edited.sh")))
-				testutil.FailErr(t, "foreign slot", os.WriteFile(f.slot("edited.sh"), []byte("old-edit\n"), 0o750))
+				testutil.FailErr(t, "lose slots", os.RemoveAll(filepath.Join(f.txDir(), "retained")))
 				f.assertSettlesAndRetries(t)
 			})
 			continue
@@ -242,8 +266,8 @@ func TestPromoteTransactionCrashPointContract(t *testing.T) {
 			f := crash(t)
 			before := f.primarySnapshot(t)
 			testutil.FailErr(t, "remove slot", os.Remove(f.slot("edited.sh")))
-			if _, err := recoverPromoteTransaction(f.dataDir, f.task.ID, f.promote, f.task); err == nil || !strings.Contains(err.Error(), "missing retained original") {
-				t.Fatalf("recover = %v, want missing retained original", err)
+			if _, err := recoverPromoteTransaction(t.Context(), f.dataDir, f.task.ID, f.promote, f.task); err == nil {
+				t.Fatal("recovered without the retained original")
 			}
 			if !maps.Equal(before, f.primarySnapshot(t)) {
 				t.Fatal("refused recovery mutated a primary")
@@ -255,41 +279,25 @@ func TestPromoteTransactionCrashPointContract(t *testing.T) {
 			testutil.FailErr(t, "remove slot", os.Remove(f.slot("removed.txt")))
 			testutil.FailErr(t, "replace slot", os.WriteFile(f.slot("removed.txt"), []byte("old-removed\n"), 0o640))
 			testutil.FailErr(t, "chmod replaced slot", os.Chmod(f.slot("removed.txt"), 0o640))
-			if _, err := recoverPromoteTransaction(f.dataDir, f.task.ID, f.promote, f.task); err == nil || !strings.Contains(err.Error(), "diverged") {
-				t.Fatalf("recover = %v, want diverged", err)
+			if _, err := recoverPromoteTransaction(t.Context(), f.dataDir, f.task.ID, f.promote, f.task); err == nil {
+				t.Fatal("recovered from a replaced retained original")
 			}
 			if !maps.Equal(before, f.primarySnapshot(t)) {
 				t.Fatal("refused recovery mutated a primary")
 			}
 		})
-		if at.step == promoteStepPrimaryMutated {
-			// Rollback itself may crash: restore in rollback order, then recover afresh.
+		if at.step == checkpoint.StepTargetMutated {
+			// Rollback itself may crash: restore one target as rollback would, then recover afresh.
 			t.Run(name+"/recovery-crash", func(t *testing.T) {
 				f := crash(t)
-				journal, _, err := readPromoteTransaction(f.txPath())
-				testutil.FailErr(t, "read journal", err)
-				last := journal.Mutations[0]
-				verify := func(fseffect.Target) error { return nil }
-				if err := restorePromoteOriginalMutation(f.txPath(), f.promote, f.task, last, verify); err != nil {
-					t.Fatalf("partial rollback: %v", err)
-				}
+				testutil.FailErr(t, "clear edited", os.Remove(f.edited))
+				testutil.FailErr(t, "relink edited", os.Link(f.slot("edited.sh"), f.edited))
+				document := f.readJournalDocument(t)
+				document["rolling_back"] = true
+				f.writeJournalDocument(t, document)
 				f.assertSettlesAndRetries(t)
 			})
-			continue
 		}
-		// A rename not yet covered by its directory sync may be lost; the mutation that
-		// would depend on it cannot have run because Replace had not returned.
-		t.Run(name+"/phase-lost", func(t *testing.T) {
-			f := crash(t)
-			journal, _, err := readPromoteTransaction(f.txPath())
-			testutil.FailErr(t, "read journal", err)
-			journal.Phase = promotePhasePrepared
-			for i := range journal.Mutations {
-				journal.Mutations[i].OriginalRetention, journal.Mutations[i].OriginalIdentity = "", ""
-			}
-			testutil.FailErr(t, "lose phase", writePromoteTransaction(f.txPath(), journal))
-			f.assertSettlesAndRetries(t)
-		})
 	}
 }
 
@@ -298,24 +306,28 @@ func TestPromoteTransactionCloseLeavesNoApplyingJournalWithoutSlots(t *testing.T
 		t.Skip("root ignores the directory permission this fault relies on")
 	}
 	f := newPromoteCrashFixture(t)
-	if err := f.run(t, -1, nil); err != nil {
-		t.Fatalf("apply: %v", err)
-	}
-	retained := promoteTransactionRetainedDir(f.txPath())
+	tx, err := beginPromoteTransaction(f.dataDir, f.task.ID, f.plans)
+	testutil.FailErr(t, "begin", err)
+	testutil.FailErr(t, "apply", tx.apply(t.Context(), f.promote, f.task))
+	retained := filepath.Join(f.txDir(), "retained")
 	testutil.FailErr(t, "protect slots", os.Chmod(retained, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(retained, 0o700) })
-	if err := removePromoteTransaction(f.txPath()); err == nil {
+	if err := tx.close(); err == nil {
 		t.Fatal("expected slot removal failure to be reported")
 	}
-	if _, err := os.Lstat(f.txPath()); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Lstat(f.journalPath()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("applying journal outlived a partial close: %v", err)
 	}
 	testutil.FailErr(t, "unprotect slots", os.Chmod(retained, 0o700))
-	found, err := recoverPromoteTransaction(f.dataDir, f.task.ID, f.promote, f.task)
+	found, err := recoverPromoteTransaction(t.Context(), f.dataDir, f.task.ID, f.promote, f.task)
 	if err != nil || found {
 		t.Fatalf("recover after partial close = %v, %v", found, err)
 	}
+	// Inert slots carry no authority, so the next transaction starts clean.
+	next, err := beginPromoteTransaction(f.dataDir, f.task.ID, nil)
+	testutil.FailErr(t, "begin over inert slots", err)
 	if _, err := os.Lstat(retained); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("inert slots survived recovery: %v", err)
+		t.Fatalf("inert slots survived: %v", err)
 	}
+	testutil.FailErr(t, "close next", next.close())
 }

@@ -102,7 +102,7 @@ func TestWorkerBranchEditRecordsAgainstWorkerBranch(t *testing.T) {
 			}
 			const jobID = "job-worker-edit"
 			manager := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds"))
-			binding, _, err := manager.CreateWorkerWorkspaceFromSources(ctx, roots, roots, "primary", jobID)
+			binding, _, err := manager.CreateWorkerBranch(ctx, roots, "primary", jobID)
 			testutil.FailErr(t, "create worker branch", err)
 			branch, err := newBranchWorkspace(binding.Root)
 			testutil.FailErr(t, "new branch workspace", err)

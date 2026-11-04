@@ -1,15 +1,18 @@
 package session_test
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
@@ -21,8 +24,7 @@ func TestOverlayChangedPathsAndDivergenceFromPublishedCheckpoint(t *testing.T) {
 	primary, overlay := t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "write primary", os.WriteFile(filepath.Join(primary, "checkpointed.go"), []byte("package p\n// v1\n"), 0o644))
 	testutil.FailErr(t, "write deleted", os.WriteFile(filepath.Join(primary, "deleted.go"), []byte("package p\n// del\n"), 0o644))
-	store, err := checkpoint.NewStore(filepath.Join(overlay, session.TaskCheckpointStoreSubdir))
-	testutil.FailErr(t, "NewStore", err)
+	store, bindCheckpoint := recoveryStoreFor(t, overlay)
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID: "view-session-cp", BackingDir: t.TempDir(),
 		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
@@ -40,6 +42,7 @@ func TestOverlayChangedPathsAndDivergenceFromPublishedCheckpoint(t *testing.T) {
 	testutil.FailErr(t, "NewPublisher", err)
 	_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "chk-session-1", Trigger: checkpoint.TriggerWorkerCompletion})
 	testutil.FailErr(t, "Publish", err)
+	bindCheckpoint("chk-session-1")
 	testutil.FailErr(t, "write uncheckpointed", os.WriteFile(filepath.Join(overlay, "uncheckpointed.go"), []byte("package p\n// dirty\n"), 0o644))
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
@@ -66,16 +69,20 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 	testutil.FailErr(t, "write .git file", os.WriteFile(filepath.Join(primary, ".git"), []byte("gitdir: ../worktree-git\n"), 0o644))
 	testutil.FailErr(t, "write commondir", os.WriteFile(filepath.Join(worktreeGit, "commondir"), []byte("../common-git\n"), 0o644))
 
-	storeDir := filepath.Join(baseDir, "overlay", session.TaskCheckpointStoreSubdir)
-	store, err := checkpoint.NewStore(storeDir)
+	storeDir := filepath.Join(enginepaths.WorkerRecoveryRootUnder(baseDir), "checkpoints")
+	_, err := checkpoint.NewStore(storeDir)
 	testutil.FailErr(t, "NewStore", err)
 
 	danglingOID := "1111111111111111111111111111111111111111"
-	unauthImporter := session.DefaultCheckpointRefImporter(store, checkpoint.Manifest{CheckpointID: "chk-1", WorkerID: "w-1"}, map[string]string{"primary": primary})
+	unauthImporter := func(ctx context.Context, _, worker string, git checkpoint.PrivateGitSnapshot) (map[string]string, error) {
+		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, storeDir, "chk-1", worker, git, map[string]string{"primary": primary})
+	}
 	if _, err := unauthImporter(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": danglingOID}}); !errors.Is(err, checkpoint.ErrUnauthorizedGitDir) {
 		t.Fatalf("expected ErrUnauthorizedGitDir for external worktree gitdir without grant, got %v", err)
 	}
-	importer := session.DefaultCheckpointRefImporter(store, checkpoint.Manifest{CheckpointID: "chk-1", WorkerID: "w-1"}, map[string]string{"primary": primary}, worktreeGit, commonGit)
+	importer := func(ctx context.Context, _, worker string, git checkpoint.PrivateGitSnapshot) (map[string]string, error) {
+		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, storeDir, "chk-1", worker, git, map[string]string{"primary": primary}, worktreeGit, commonGit)
+	}
 	if _, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": danglingOID}}); err == nil {
 		t.Fatal("expected error for dangling object OID, got nil")
 	}
@@ -113,8 +120,7 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 	testutil.FailErr(t, "seed removed.txt", os.WriteFile(removedPath, []byte("old\n"), 0o644))
 
 	overlay := t.TempDir()
-	store, err := checkpoint.NewStore(filepath.Join(overlay, session.TaskCheckpointStoreSubdir))
-	testutil.FailErr(t, "NewStore", err)
+	store, bindCheckpoint := recoveryStoreFor(t, overlay)
 
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID: "view-retry", BackingDir: t.TempDir(),
@@ -136,6 +142,7 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 	testutil.FailErr(t, "NewPublisher", err)
 	pubRes, err := pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "chk-retry-1", Trigger: checkpoint.TriggerWorkerCompletion})
 	testutil.FailErr(t, "Publish", err)
+	bindCheckpoint("chk-retry-1")
 
 	task := &api.WorkerTask{ID: "job-retry", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay}
 	badManifest := pubRes.Manifest
@@ -145,14 +152,14 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 		t.Fatalf("TargetRootsForTaskCheckpoint unmapped root err = %v, want ErrInvalidRoot", err)
 	}
 
-	testutil.FailErr(t, "CommitTaskCheckpointJournal", session.CommitTaskCheckpointJournal(t.Context(), task, nil))
+	testutil.FailErr(t, "commit task checkpoint", commitTaskCheckpoint(t, task, nil))
 	if _, err := os.Stat(removedPath); !os.IsNotExist(err) {
 		t.Fatalf("expected removed.txt to be deleted, stat err = %v", err)
 	}
 
 	// Recreate file at old deletion path after promotion completes; retry must NOT re-delete it.
 	testutil.FailErr(t, "recreate removed.txt", os.WriteFile(removedPath, []byte("recreated post-promote\n"), 0o644))
-	testutil.FailErr(t, "retry CommitTaskCheckpointJournal", session.CommitTaskCheckpointJournal(t.Context(), task, nil))
+	testutil.FailErr(t, "retry task checkpoint", commitTaskCheckpoint(t, task, nil))
 	if gotBytes, err := os.ReadFile(removedPath); err != nil || !strings.Contains(string(gotBytes), "recreated post-promote") {
 		t.Fatalf("post-promotion recreated file was clobbered or unreadable: %q (%v)", string(gotBytes), err)
 	}
@@ -161,8 +168,7 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 func TestMultiRootCheckpointQualificationAndWorkspaceSync(t *testing.T) {
 	primary, secondary, overlay := t.TempDir(), t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "seed secondary", os.WriteFile(filepath.Join(secondary, "mod.txt"), []byte("v1\n"), 0o644))
-	store, err := checkpoint.NewStore(filepath.Join(overlay, session.TaskCheckpointStoreSubdir))
-	testutil.FailErr(t, "NewStore", err)
+	store, bindCheckpoint := recoveryStoreFor(t, overlay)
 
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID:     "view-multiroot-cp",
@@ -185,6 +191,7 @@ func TestMultiRootCheckpointQualificationAndWorkspaceSync(t *testing.T) {
 	testutil.FailErr(t, "NewPublisher", err)
 	_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "chk-multi-1", Trigger: checkpoint.TriggerWorkerCompletion})
 	testutil.FailErr(t, "Publish", err)
+	bindCheckpoint("chk-multi-1")
 
 	roots := []projectroot.RootRef{
 		{ID: "primary", Label: "primary", Path: primary, IsPrimary: true},
@@ -211,8 +218,7 @@ func TestMultiRootCheckpointQualificationAndWorkspaceSync(t *testing.T) {
 
 func publishCheckpointForSync(t *testing.T, overlay string, roots []layeredfs.RootSpec, mutate func(*layeredfs.Core)) {
 	t.Helper()
-	store, err := checkpoint.NewStore(filepath.Join(overlay, session.TaskCheckpointStoreSubdir))
-	testutil.FailErr(t, "NewStore", err)
+	store, bindCheckpoint := recoveryStoreFor(t, overlay)
 	core, err := layeredfs.New(layeredfs.Config{ViewID: "view-sync", BackingDir: t.TempDir(), Roots: roots})
 	testutil.FailErr(t, "New Core", err)
 	t.Cleanup(func() { _ = core.ReleaseView() })
@@ -221,6 +227,7 @@ func publishCheckpointForSync(t *testing.T, overlay string, roots []layeredfs.Ro
 	testutil.FailErr(t, "NewPublisher", err)
 	_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "chk-sync", Trigger: checkpoint.TriggerWorkerCompletion})
 	testutil.FailErr(t, "Publish", err)
+	bindCheckpoint("chk-sync")
 }
 
 func TestSyncTaskCheckpointBindsEntriesToTheBranchLayout(t *testing.T) {
@@ -287,4 +294,29 @@ func TestSyncTaskCheckpointBindsEntriesToTheBranchLayout(t *testing.T) {
 			t.Fatalf("sync = %v, want ErrInvalidRoot", err)
 		}
 	})
+}
+
+// recoveryStoreFor opens a store at the recovery location and returns a function naming a published
+// checkpoint as a branch's result, as completion does.
+func recoveryStoreFor(t *testing.T, branch string) (*checkpoint.Store, func(checkpointID string)) {
+	t.Helper()
+	store, err := checkpoint.NewStore(filepath.Join(enginepaths.WorkerRecoveryRootUnder(t.TempDir()), "checkpoints"))
+	testutil.FailErr(t, "open recovery checkpoint store", err)
+	return store, func(checkpointID string) {
+		t.Helper()
+		meta := workspace.JobMeta{Roots: []workspace.JobMetaRoot{{ID: "primary", Path: branch, IsPrimary: true}}}
+		meta.LastPublishedCheckpointID, meta.CheckpointStoreDir = checkpointID, store.RootDir()
+		testutil.FailErr(t, "record branch checkpoint", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(filepath.Clean(branch)), meta))
+	}
+}
+
+// commitTaskCheckpoint runs a task's checkpoint promotion through a complete transaction.
+func commitTaskCheckpoint(t *testing.T, task *api.WorkerTask, roots []projectroot.RootRef) error {
+	t.Helper()
+	txn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: filepath.Join(t.TempDir(), "tx"), ID: "promotion"})
+	testutil.FailErr(t, "begin transaction", err)
+	if err := session.ApplyTaskCheckpoint(t.Context(), txn, task, roots); err != nil {
+		return err
+	}
+	return txn.Commit()
 }

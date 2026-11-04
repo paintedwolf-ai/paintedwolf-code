@@ -2,6 +2,7 @@ package recovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,54 +14,55 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 )
 
-// StackedViewRequest specifies parameters for preparing a stacked child worker view
-// over an immutable parent checkpoint chain and live trunk roots.
+// StackedParents is the immutable checkpoint chain a stacked child starts from, newest first.
+type StackedParents struct {
+	CheckpointIDs []string
+	Manifests     []checkpoint.Manifest
+	Layers        []layeredfs.ParentLayer
+}
+
+// StackedViewRequest specifies a stacked child worker view. Prepare builds the view over the parents,
+// through whichever claim path the worker's adapter takes, and Release undoes it if a later step fails.
 type StackedViewRequest struct {
 	ChildWorkerID      string
 	ChildViewID        string
 	TaskID             string
 	ProjectID          string
 	ParentCheckpointID string
-	Adapter            adapter.Adapter
-	PrepareReq         adapter.PrepareRequest
+	AdapterID          adapter.AdapterID
+	Prepare            func(context.Context, StackedParents) (*adapter.PreparedView, error)
+	Release            func(context.Context, *adapter.PreparedView) error
 }
 
 // StackedWorkerSession holds the prepared child worker view and its pinned parent chain claims.
 type StackedWorkerSession struct {
-	ChildWorkerID       string
-	ChildViewID         string
-	ParentCheckpointIDs []string
-	ParentManifests     []checkpoint.Manifest
-	ParentLayers        []layeredfs.ParentLayer
-	PreparedView        *adapter.PreparedView
-	RetentionClaimID    string
-	GitLeaseID          string
+	ChildWorkerID    string
+	ChildViewID      string
+	Parents          StackedParents
+	PreparedView     *adapter.PreparedView
+	RetentionClaimID string
+	GitLeaseID       string
 }
 
 // PrepareStackedWorkerView verifies the parent checkpoint chain is reconstructible, pins retention
-// claims and private Git object leases for the stacked child, opens the immutable parent checkpoint
-// chain as read-only ParentLayers over live trunk, and prepares the child worker view.
+// claims and private Git object leases for the stacked child, opens the immutable chain as read-only
+// layers over live trunk, and prepares the child worker view.
 func (c *Coordinator) PrepareStackedWorkerView(ctx context.Context, req StackedViewRequest) (*StackedWorkerSession, error) {
-	return prepareStackedWorkerView(ctx, c, req)
-}
-
-func prepareStackedWorkerView(ctx context.Context, c *Coordinator, req StackedViewRequest) (*StackedWorkerSession, error) {
-	if strings.TrimSpace(req.ChildWorkerID) == "" || strings.TrimSpace(req.ParentCheckpointID) == "" || req.Adapter == nil {
-		return nil, fmt.Errorf("recovery: ChildWorkerID, ParentCheckpointID, and Adapter are required")
+	if strings.TrimSpace(req.ChildWorkerID) == "" || strings.TrimSpace(req.ParentCheckpointID) == "" || req.Prepare == nil {
+		return nil, fmt.Errorf("recovery: ChildWorkerID, ParentCheckpointID, and Prepare are required")
 	}
 	if err := injectFault(c, PhasePreparation, "stacked_prepare_start"); err != nil {
 		return nil, err
 	}
-
-	parentLayers, parentManifests, err := c.OpenCheckpointChainLayers(ctx, []string{req.ParentCheckpointID})
+	layers, manifests, err := c.OpenCheckpointChainLayers(ctx, []string{req.ParentCheckpointID})
 	if err != nil {
 		return nil, err
 	}
-	var parentIDs []string
+	parents := StackedParents{Manifests: manifests, Layers: layers}
 	blobSet := make(map[string]bool)
 	gitObjSet := make(map[string]bool)
-	for _, m := range parentManifests {
-		parentIDs = append(parentIDs, m.CheckpointID)
+	for _, m := range manifests {
+		parents.CheckpointIDs = append(parents.CheckpointIDs, m.CheckpointID)
 		collectManifestBlobs(m, blobSet)
 		for _, oid := range m.PrivateGit.RetainedObjects {
 			if oid != "" {
@@ -68,7 +70,6 @@ func prepareStackedWorkerView(ctx context.Context, c *Coordinator, req StackedVi
 			}
 		}
 	}
-
 	var blobs, gitObjs []string
 	for b := range blobSet {
 		blobs = append(blobs, b)
@@ -76,7 +77,6 @@ func prepareStackedWorkerView(ctx context.Context, c *Coordinator, req StackedVi
 	for g := range gitObjSet {
 		gitObjs = append(gitObjs, g)
 	}
-
 	var gitLeaseID string
 	if c.cfg.GitStore != nil && len(gitObjs) > 0 {
 		lid, lErr := c.cfg.GitStore.RetainForStackedChild(req.ChildWorkerID, req.ParentCheckpointID, gitObjs)
@@ -85,148 +85,113 @@ func prepareStackedWorkerView(ctx context.Context, c *Coordinator, req StackedVi
 		}
 		gitLeaseID = lid
 	}
-
 	claimID := fmt.Sprintf("claim-stacked-%s-%s", req.ChildWorkerID, req.ParentCheckpointID)
 	if err := c.AcquireClaim(RetentionClaim{
-		ClaimID:       claimID,
-		Kind:          ClaimStackedChild,
-		HolderID:      req.ChildWorkerID,
-		WorkerID:      req.ChildWorkerID,
-		ViewID:        req.ChildViewID,
-		CheckpointIDs: parentIDs,
-		Blobs:         blobs,
-		GitObjects:    gitObjs,
-		GitLeaseID:    gitLeaseID,
+		ClaimID: claimID, Kind: ClaimStackedChild, HolderID: req.ChildWorkerID, WorkerID: req.ChildWorkerID, ViewID: req.ChildViewID,
+		CheckpointIDs: parents.CheckpointIDs, Blobs: blobs, GitObjects: gitObjs, GitLeaseID: gitLeaseID,
 	}); err != nil {
 		return nil, err
 	}
-
-	prepReq := req.PrepareReq
-	if req.ChildViewID != "" {
-		prepReq.ViewID = req.ChildViewID
-	}
-	if prepReq.ViewID == "" {
-		prepReq.ViewID = fmt.Sprintf("view-stacked-%s-%d", req.ChildWorkerID, c.seq.Add(1))
-	}
-	prepReq.ParentLayers = parentLayers
-	if c.cfg.GitManager != nil && prepReq.GitInterceptor == nil {
-		prepReq.GitInterceptor = c.cfg.GitManager
-	}
-
-	view, err := req.Adapter.Prepare(ctx, prepReq)
+	view, err := req.Prepare(ctx, parents)
 	if err != nil {
-		_ = c.ReleaseClaim(claimID)
-		return nil, err
+		return nil, errors.Join(err, c.ReleaseClaim(claimID))
 	}
-	if binder, ok := req.Adapter.(PrivateGitBinder); ok && c.cfg.GitManager != nil {
-		if bErr := binder.BindPrivateGit(view.ViewID, req.ChildWorkerID, c.cfg.GitManager); bErr != nil {
-			_, _ = req.Adapter.Release(ctx, view.ViewID)
-			_ = c.ReleaseClaim(claimID)
-			return nil, bErr
+	abort := func(cause error) (*StackedWorkerSession, error) {
+		var released error
+		if req.Release != nil {
+			released = req.Release(ctx, view)
+		}
+		return nil, errors.Join(cause, released, c.ReleaseClaim(claimID))
+	}
+	if len(manifests) > 0 {
+		if err := applyPrivateGitSnapshotToView(ctx, c, view, req.ChildWorkerID, manifests[0].PrivateGit); err != nil {
+			return abort(err)
 		}
 	}
-
-	if view.Facts.PreparationKind == adapter.PreparationMaterialized {
-		if err := overlayParentChainOnMaterializedRoots(c, view, parentManifests); err != nil {
-			_, _ = req.Adapter.Release(ctx, view.ViewID)
-			_ = c.ReleaseClaim(claimID)
-			return nil, err
+	// A materialized child has no view to rebuild; its claim alone keeps the chain retained.
+	if view.Facts.PreparationKind == adapter.PreparationMounted {
+		if err := c.recordStackedWorker(req, parents, view); err != nil {
+			return abort(err)
 		}
 	}
-
-	if len(parentManifests) > 0 {
-		newestParent := parentManifests[0]
-		if err := applyPrivateGitSnapshotToView(ctx, c, view, req.ChildWorkerID, newestParent.PrivateGit); err != nil {
-			_, _ = req.Adapter.Release(ctx, view.ViewID)
-			_ = c.ReleaseClaim(claimID)
-			return nil, err
-		}
-	}
-
-	projectID := req.ProjectID
-	if projectID == "" && len(parentManifests) > 0 {
-		projectID = parentManifests[0].ProjectID
-	}
-	taskID := req.TaskID
-	if taskID == "" && len(parentManifests) > 0 {
-		taskID = parentManifests[0].TaskID
-	}
-	if err := c.SaveWorkerJournal(WorkerLifecycleJournal{
-		FormatVersion:       FormatVersion,
-		WorkerID:            req.ChildWorkerID,
-		ViewID:              view.ViewID,
-		TaskID:              taskID,
-		ProjectID:           projectID,
-		AdapterID:           req.Adapter.ID(),
-		BootID:              c.cfg.CurrentBootID,
-		ParentCheckpointIDs: parentIDs,
-		UpdatedAt:           time.Now().UTC(),
-	}); err != nil {
-		_, _ = req.Adapter.Release(ctx, view.ViewID)
-		_ = c.ReleaseClaim(claimID)
-		return nil, err
-	}
-
-	if err := recordPreparedViewIdentity(c, req.ChildWorkerID, req.Adapter, view); err != nil {
-		_, _ = req.Adapter.Release(ctx, view.ViewID)
-		_ = c.ReleaseClaim(claimID)
-		return nil, err
-	}
-
 	return &StackedWorkerSession{
-		ChildWorkerID:       req.ChildWorkerID,
-		ChildViewID:         view.ViewID,
-		ParentCheckpointIDs: parentIDs,
-		ParentManifests:     parentManifests,
-		ParentLayers:        parentLayers,
-		PreparedView:        view,
-		RetentionClaimID:    claimID,
-		GitLeaseID:          gitLeaseID,
+		ChildWorkerID: req.ChildWorkerID, ChildViewID: view.ViewID, Parents: parents, PreparedView: view,
+		RetentionClaimID: claimID, GitLeaseID: gitLeaseID,
 	}, nil
 }
 
-func overlayParentChainOnMaterializedRoots(
-	c *Coordinator,
-	view *adapter.PreparedView,
-	newestToOldest []checkpoint.Manifest,
-) error {
+// recordStackedWorker keeps what a claim already recorded for this worker and adds its parent chain,
+// which garbage collection and rebuild both read.
+func (c *Coordinator) recordStackedWorker(req StackedViewRequest, parents StackedParents, view *adapter.PreparedView) error {
+	journal, err := c.LoadWorkerJournal(req.ChildWorkerID)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	journal.FormatVersion, journal.WorkerID, journal.ViewID = FormatVersion, req.ChildWorkerID, view.ViewID
+	journal.AdapterID, journal.BootID, journal.UpdatedAt = req.AdapterID, c.cfg.CurrentBootID, time.Now().UTC()
+	journal.ParentCheckpointIDs = parents.CheckpointIDs
+	journal.ProjectID, journal.TaskID = req.ProjectID, req.TaskID
+	if len(parents.Manifests) > 0 {
+		if journal.ProjectID == "" {
+			journal.ProjectID = parents.Manifests[0].ProjectID
+		}
+		if journal.TaskID == "" {
+			journal.TaskID = parents.Manifests[0].TaskID
+		}
+	}
+	return c.SaveWorkerJournal(journal)
+}
+
+// OverlayParentChainOnMaterializedView writes a parent chain into a materialized view's own tree,
+// oldest first, reading only immutable checkpoint content.
+func (c *Coordinator) OverlayParentChainOnMaterializedView(view *adapter.PreparedView, newestToOldest []checkpoint.Manifest) error {
 	for i := len(newestToOldest) - 1; i >= 0; i-- {
-		m := newestToOldest[i]
-		for _, e := range m.Entries {
+		for _, e := range newestToOldest[i].Entries {
 			matPath := materializedPathForRoot(view, e.Path)
 			if matPath == "" {
 				continue
 			}
-			if e.Deleted || e.Kind == layeredfs.EntryAbsent {
-				_ = os.RemoveAll(matPath)
-				continue
-			}
-			if e.DirectoryReplaced {
-				_ = os.RemoveAll(matPath)
-			}
-			_ = os.MkdirAll(filepath.Dir(matPath), 0o755)
-			switch e.Kind {
-			case layeredfs.EntryDirectory:
-				_ = os.MkdirAll(matPath, e.Final.Mode.Perm()|0o700)
-			case layeredfs.EntrySymlink:
-				_ = os.RemoveAll(matPath)
-				if err := os.Symlink(e.Final.LinkTarget, matPath); err != nil {
-					return err
-				}
-			case layeredfs.EntryRegular:
-				raw, err := c.cfg.CheckpointStore.ReadBlob(e.Final.SHA256)
-				if err != nil {
-					return err
-				}
-				mode := e.Final.Mode.Perm()
-				if mode == 0 {
-					mode = 0o644
-				}
-				if err := os.WriteFile(matPath, raw, mode); err != nil {
-					return err
-				}
+			if err := c.overlayParentEntry(matPath, e); err != nil {
+				return fmt.Errorf("overlay parent entry %s: %w", e.Path.Rel, err)
 			}
 		}
+	}
+	return nil
+}
+
+func (c *Coordinator) overlayParentEntry(matPath string, e checkpoint.ManifestEntry) error {
+	if e.Deleted || e.Kind == layeredfs.EntryAbsent {
+		return os.RemoveAll(matPath)
+	}
+	if e.DirectoryReplaced {
+		if err := os.RemoveAll(matPath); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(matPath), 0o755); err != nil {
+		return err
+	}
+	switch e.Kind {
+	case layeredfs.EntryDirectory:
+		return os.MkdirAll(matPath, e.Final.Mode.Perm()|0o700)
+	case layeredfs.EntrySymlink:
+		if err := os.RemoveAll(matPath); err != nil {
+			return err
+		}
+		return os.Symlink(e.Final.LinkTarget, matPath)
+	case layeredfs.EntryRegular:
+		raw, err := c.cfg.CheckpointStore.ReadBlob(e.Final.SHA256)
+		if err != nil {
+			return err
+		}
+		mode := e.Final.Mode.Perm()
+		if mode == 0 {
+			mode = 0o644
+		}
+		if err := os.RemoveAll(matPath); err != nil {
+			return err
+		}
+		return os.WriteFile(matPath, raw, mode)
 	}
 	return nil
 }

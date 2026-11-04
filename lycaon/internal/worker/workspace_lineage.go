@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -13,54 +14,58 @@ type overlayTaskLookup interface {
 	Get(jobID string) (*api.WorkerTask, bool)
 }
 
-func workspaceSourceRoots(task *api.WorkerTask, canonical []projectroot.RootRef, overlays overlayTaskLookup) ([]projectroot.RootRef, error) {
+// sealedOverlayPublisher states a finished materialized parent's overlay as a checkpoint.
+type sealedOverlayPublisher interface {
+	PublishSealedOverlayCheckpoint(ctx context.Context, sealed workspace.SealedOverlay) (string, error)
+}
+
+// stackedParentCheckpoint names the immutable checkpoint a stacked worker starts from. A worker whose
+// base already landed, or that has no base, starts from the live project. A parent still producing
+// its result has nothing immutable to stack on: its working tree is never a source.
+func stackedParentCheckpoint(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, overlays overlayTaskLookup, publisher sealedOverlayPublisher) (string, error) {
 	if task == nil {
-		return nil, fmt.Errorf("worker task required")
+		return "", fmt.Errorf("worker task required")
 	}
 	baseID := strings.TrimSpace(task.EffectiveScope().BaseOverlayID)
 	if baseID == "" {
-		return append([]projectroot.RootRef(nil), canonical...), nil
+		return "", nil
 	}
 	if overlays == nil {
-		return nil, fmt.Errorf("base overlay %q is unavailable", baseID)
+		return "", fmt.Errorf("base overlay %q is unavailable", baseID)
 	}
 	base, ok := overlays.Get(baseID)
 	if !ok || base == nil {
-		return nil, fmt.Errorf("base overlay %q is unavailable", baseID)
+		return "", fmt.Errorf("base overlay %q is unavailable", baseID)
 	}
 	if base.ID == task.ID || base.ProjectID != task.ProjectID || base.ParentSessionID != task.ParentSessionID {
-		return nil, fmt.Errorf("base overlay %q does not belong to this worker lineage", baseID)
+		return "", fmt.Errorf("base overlay %q does not belong to this worker lineage", baseID)
 	}
 	switch base.MergeStatus {
 	case api.WorkerMergeStatusMerged:
-		return append([]projectroot.RootRef(nil), canonical...), nil
+		return "", nil
 	case api.WorkerMergeStatusRejected, api.WorkerMergeStatusOrphaned, api.WorkerMergeStatusAborted:
-		return nil, fmt.Errorf("base overlay %q is %s", baseID, base.MergeStatus)
+		return "", fmt.Errorf("base overlay %q is %s", baseID, base.MergeStatus)
 	case api.WorkerMergeStatusPending, api.WorkerMergeStatusApplying, api.WorkerMergeStatusRebasing:
 	}
-	if !base.EffectiveScope().IsWrite() || strings.TrimSpace(base.WorkspaceRoot) == "" {
-		return nil, fmt.Errorf("base overlay %q has no complete branch", baseID)
+	if !base.EffectiveScope().IsWrite() {
+		return "", fmt.Errorf("base overlay %q has no complete branch", baseID)
 	}
-	sources, err := workspace.BranchRootRefs(base.WorkspaceRoot)
-	if err != nil {
-		return nil, fmt.Errorf("base overlay %q: %w", baseID, err)
-	}
-	if len(sources) != len(canonical) {
-		return nil, fmt.Errorf("base overlay %q root set changed", baseID)
-	}
-	byID := make(map[string]projectroot.RootRef, len(sources))
-	for _, source := range sources {
-		byID[source.ID] = source
-	}
-	ordered := make([]projectroot.RootRef, 0, len(canonical))
-	for _, root := range canonical {
-		source, found := byID[root.ID]
-		if !found {
-			return nil, fmt.Errorf("base overlay %q root identity changed", baseID)
+	if overlay := strings.TrimSpace(base.WorkspaceOverlayPath); overlay != "" {
+		if publisher == nil {
+			return "", fmt.Errorf("base overlay %q has no checkpoint store", baseID)
 		}
-		source.Label = root.Label
-		source.IsPrimary = root.IsPrimary
-		ordered = append(ordered, source)
+		// The parent's result is its delta over its own parent, so that link joins the chain.
+		grandparent, err := stackedParentCheckpoint(ctx, base, roots, overlays, publisher)
+		if err != nil {
+			return "", err
+		}
+		return publisher.PublishSealedOverlayCheckpoint(ctx, workspace.SealedOverlay{
+			JobID: base.ID, ProjectID: base.ProjectID, BaselinePath: base.WorkspaceBaselinePath, OverlayPath: overlay, Roots: roots,
+			ParentCheckpointID: grandparent,
+		})
 	}
-	return ordered, nil
+	if _, checkpointID, published := workspace.BranchCheckpoint(base.WorkspaceRoot); published {
+		return checkpointID, nil
+	}
+	return "", fmt.Errorf("base overlay %q has no published result to stack on", baseID)
 }

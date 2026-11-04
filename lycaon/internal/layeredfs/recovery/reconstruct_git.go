@@ -68,16 +68,10 @@ func restorePrivateGitToView(
 	view *adapter.PreparedView,
 	m checkpoint.Manifest,
 ) error {
-	if c.cfg.GitManager == nil {
-		return nil
-	}
-	pg := m.PrivateGit
-	if pg.HeadRef == "" && len(pg.Refs) == 0 {
-		return nil
-	}
-	return applyPrivateGitSnapshotToView(ctx, c, view, m.WorkerID, pg)
+	return applyPrivateGitSnapshotToView(ctx, c, view, m.WorkerID, m.PrivateGit)
 }
 
+// applyPrivateGitSnapshotToView restores each root's refs into that root's own private repository.
 func applyPrivateGitSnapshotToView(
 	ctx context.Context,
 	c *Coordinator,
@@ -88,29 +82,50 @@ func applyPrivateGitSnapshotToView(
 	if c.cfg.GitManager == nil || view == nil {
 		return nil
 	}
-	if len(pg.Refs) == 0 && pg.HeadRef == "" {
-		return nil
-	}
 	var primaryTrunk string
+	secondaries := map[string]string{}
 	for _, r := range view.Roots {
 		if r.RootID == view.PrimaryRootID || primaryTrunk == "" {
 			primaryTrunk = r.SourcePath
 		}
+		if r.RootID != view.PrimaryRootID {
+			secondaries[r.RootID] = r.SourcePath
+		}
 	}
-	if primaryTrunk != "" && workerID != "" {
-		if _, finish, managed, err := privategit.PrepareViewGitOperation(ctx, primaryTrunk, workerID); err == nil && managed && finish != nil {
+	if err := restoreRootGitRefs(ctx, c, view.ViewID, primaryTrunk, workerID, pg.HeadRef, pg.Refs); err != nil {
+		return err
+	}
+	for rootID, root := range pg.Roots {
+		trunk, known := secondaries[rootID]
+		if !known {
+			continue
+		}
+		viewID := privategit.SecondaryViewID(view.ViewID, rootID)
+		if err := restoreRootGitRefs(ctx, c, viewID, trunk, viewID, root.HeadRef, root.Refs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func restoreRootGitRefs(ctx context.Context, c *Coordinator, viewID, trunk, workerID, headRef string, refs map[string]string) error {
+	if len(refs) == 0 && headRef == "" {
+		return nil
+	}
+	if trunk != "" && workerID != "" {
+		if _, finish, managed, err := privategit.PrepareViewGitOperation(ctx, trunk, workerID); err == nil && managed && finish != nil {
 			_ = finish()
 		}
 	}
 
-	gitExec := privategit.NewGitExecutor(c.cfg.GitManager, view.ViewID, privategit.RemotePolicy{})
-	refNames := make([]string, 0, len(pg.Refs))
-	for ref := range pg.Refs {
+	gitExec := privategit.NewGitExecutor(c.cfg.GitManager, viewID, privategit.RemotePolicy{})
+	refNames := make([]string, 0, len(refs))
+	for ref := range refs {
 		refNames = append(refNames, ref)
 	}
 	sort.Strings(refNames)
 	for _, ref := range refNames {
-		oid := pg.Refs[ref]
+		oid := refs[ref]
 		if oid == "" {
 			continue
 		}
@@ -118,15 +133,15 @@ func applyPrivateGitSnapshotToView(
 			return err
 		}
 	}
-	headOID := pg.Refs[pg.HeadRef]
+	headOID := refs[headRef]
 	if headOID == "" {
-		headOID = pg.Refs["HEAD"]
+		headOID = refs["HEAD"]
 	}
-	if pg.HeadRef != "" {
+	if headRef != "" {
 		if headOID != "" {
-			_, _ = gitExec.Run(ctx, ".", "update-ref", pg.HeadRef, headOID)
+			_, _ = gitExec.Run(ctx, ".", "update-ref", headRef, headOID)
 		}
-		_, _ = gitExec.Run(ctx, ".", "symbolic-ref", "HEAD", pg.HeadRef)
+		_, _ = gitExec.Run(ctx, ".", "symbolic-ref", "HEAD", headRef)
 	} else if headOID != "" {
 		_, _ = gitExec.Run(ctx, ".", "update-ref", "--no-deref", "HEAD", headOID)
 	}

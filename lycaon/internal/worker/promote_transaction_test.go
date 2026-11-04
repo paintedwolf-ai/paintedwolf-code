@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -73,7 +72,7 @@ func TestPromoteTransactionRecoversCommittedTargets(t *testing.T) {
 	promote := PromoteRootsForTask(task, nil)
 	testutil.FailErr(t, "apply transaction", tx.apply(t.Context(), promote, task))
 
-	found, err := recoverPromoteTransaction(dataDir, task.ID, promote, task)
+	found, err := recoverPromoteTransaction(t.Context(), dataDir, task.ID, promote, task)
 	testutil.FailErr(t, "recover transaction", err)
 	if !found {
 		t.Fatal("transaction journal not found")
@@ -98,24 +97,24 @@ func TestPromoteTransactionRecoversCommittedTargets(t *testing.T) {
 	tx2, err := beginPromoteTransaction(dataDir, task.ID, plans)
 	testutil.FailErr(t, "begin tx2", err)
 	testutil.FailErr(t, "apply tx2", tx2.apply(t.Context(), promote, task))
-	txPath := promoteTransactionPath(dataDir, task.ID)
-	validJournal, err := os.ReadFile(txPath)
+	journal := filepath.Join(promoteTransactionDir(dataDir, task.ID), "transaction.json")
+	validJournal, err := os.ReadFile(journal)
 	testutil.FailErr(t, "read valid journal", err)
-	testutil.FailErr(t, "write unknown field journal", os.WriteFile(txPath, []byte(`{"version":1,"job_id":"job-recover","unknown":true}`), 0o600))
-	if _, err := recoverPromoteTransaction(dataDir, task.ID, promote, task); err == nil {
+	testutil.FailErr(t, "write unknown field journal", os.WriteFile(journal, []byte(`{"version":1,"id":"x","phase":"applying","unknown":true}`), 0o600))
+	if _, err := recoverPromoteTransaction(t.Context(), dataDir, task.ID, promote, task); err == nil {
 		t.Fatal("expected unknown JSON field in promote journal to be rejected")
 	}
-	testutil.FailErr(t, "restore valid journal", os.WriteFile(txPath, validJournal, 0o600))
+	testutil.FailErr(t, "restore valid journal", os.WriteFile(journal, validJournal, 0o600))
 
-	slotPath := filepath.Join(promoteTransactionRetainedDir(txPath), promoteRetainedSlot("script.sh"))
+	slotPath := filepath.Join(promoteTransactionDir(dataDir, task.ID), "retained", "slot-000000")
 	testutil.FailErr(t, "remove retained slot", os.Remove(slotPath))
 	testutil.FailErr(t, "replace retained slot with fresh inode", os.WriteFile(slotPath, []byte("old\n"), 0o755))
-	if _, err := recoverPromoteTransaction(dataDir, task.ID, promote, task); err == nil || !strings.Contains(err.Error(), "diverged") {
-		t.Fatalf("expected replaced retained slot to fail with diverged error, got %v", err)
+	if _, err := recoverPromoteTransaction(t.Context(), dataDir, task.ID, promote, task); err == nil {
+		t.Fatal("expected replaced retained slot to refuse recovery")
 	}
 	testutil.FailErr(t, "delete retained slot", os.Remove(slotPath))
-	if _, err := recoverPromoteTransaction(dataDir, task.ID, promote, task); err == nil || !strings.Contains(err.Error(), "missing retained original") {
-		t.Fatalf("expected missing retained slot to fail with missing error, got %v", err)
+	if _, err := recoverPromoteTransaction(t.Context(), dataDir, task.ID, promote, task); err == nil {
+		t.Fatal("expected missing retained slot to refuse recovery")
 	}
 }
 
@@ -146,32 +145,29 @@ func TestPromoteTransactionRecoversUnstartedAndPartialRetentionPreparation(t *te
 	promote := PromoteRootsForTask(task, nil)
 
 	// Crash immediately after begin, before apply creates any retained original.
-	tx1, err := beginPromoteTransaction(dataDir, task.ID, plans)
+	_, err = beginPromoteTransaction(dataDir, task.ID, plans)
 	testutil.FailErr(t, "begin tx1", err)
-	found, err := recoverPromoteTransaction(dataDir, task.ID, promote, task)
+	found, err := recoverPromoteTransaction(t.Context(), dataDir, task.ID, promote, task)
 	testutil.FailErr(t, "recover unstarted tx1", err)
 	if !found {
 		t.Fatal("expected unstarted tx1 journal to be found")
 	}
-	testutil.FailErr(t, "close recovered tx1", tx1.close())
 
 	// Crash with one of two originals retained, before any primary mutation.
-	tx2, err := beginPromoteTransaction(dataDir, task.ID, plans)
+	tx2, err := beginPromoteTransactionWith(dataDir, task.ID, plans, promoteTransactionEffects{Reached: func(step checkpoint.TransactionStep, _ string) error {
+		if step == checkpoint.StepOriginalRetained {
+			panic(errPromoteCrash)
+		}
+		return nil
+	}})
 	testutil.FailErr(t, "begin tx2", err)
-	_, err = retainPromoteOriginals(tx2.path, promote, task, plans[:1], promoteTransactionEffects{})
-	testutil.FailErr(t, "partial retain a.sh", err)
-	slotA := filepath.Join(promoteTransactionRetainedDir(tx2.path), promoteRetainedSlot("a.sh"))
-	if _, err := os.Stat(slotA); err != nil {
-		t.Fatalf("expected partial retained slot for a.sh: %v", err)
-	}
-
-	found, err = recoverPromoteTransaction(dataDir, task.ID, promote, task)
+	crashDuring(t, func() { _ = tx2.apply(t.Context(), promote, task) })
+	found, err = recoverPromoteTransaction(t.Context(), dataDir, task.ID, promote, task)
 	testutil.FailErr(t, "recover partially retained tx2", err)
 	if !found {
 		t.Fatal("expected partially retained tx2 journal to be found")
 	}
-	testutil.FailErr(t, "close recovered tx2", tx2.close())
-	if _, err := os.Stat(promoteTransactionRetainedDir(tx2.path)); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(promoteTransactionDir(dataDir, task.ID)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected partial retained dir removed with the journal, stat err = %v", err)
 	}
 
@@ -201,9 +197,8 @@ func TestPromoteTransactionRefusesToOverwriteDivergentPrimary(t *testing.T) {
 	testutil.FailErr(t, "apply transaction", tx.apply(t.Context(), promote, task))
 	testutil.FailErr(t, "external edit", os.WriteFile(primary, []byte("external\n"), 0o644))
 
-	_, err = recoverPromoteTransaction(dataDir, task.ID, promote, task)
-	if err == nil || !strings.Contains(err.Error(), "diverged") {
-		t.Fatalf("recover error = %v, want divergence", err)
+	if _, err = recoverPromoteTransaction(t.Context(), dataDir, task.ID, promote, task); err == nil {
+		t.Fatal("recovery accepted a divergent primary")
 	}
 	raw, readErr := os.ReadFile(primary)
 	testutil.FailErr(t, "read divergent primary", readErr)
@@ -228,10 +223,11 @@ func TestPromoteTransactionValidatesWholeReadSetBeforeFirstWrite(t *testing.T) {
 	testutil.FailErr(t, "begin transaction", err)
 	testutil.FailErr(t, "concurrent edit", os.WriteFile(filepath.Join(root, "b.txt"), []byte("external\n"), 0o644))
 
-	err = tx.apply(t.Context(), PromoteRootsForTask(task, nil), task)
-	var unstarted *promoteTransactionUnstartedError
-	if !errors.As(err, &unstarted) {
-		t.Fatalf("apply error = %v, want unstarted conflict", err)
+	if err := tx.apply(t.Context(), PromoteRootsForTask(task, nil), task); err == nil {
+		t.Fatal("apply accepted a stale read set")
+	}
+	if _, err := os.Lstat(promoteTransactionDir(dataDir, task.ID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unstarted failure left a record: %v", err)
 	}
 	a, readErr := os.ReadFile(filepath.Join(root, "a.txt"))
 	testutil.FailErr(t, "read untouched first path", readErr)
@@ -265,9 +261,7 @@ func TestMergeServiceCheckpointExactBaseConflictSurface(t *testing.T) {
 
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
 	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(overlay, 0o755))
-	cpStoreDir := filepath.Join(overlay, session.TaskCheckpointStoreSubdir)
-	cpStore, err := checkpoint.NewStore(cpStoreDir)
-	testutil.FailErr(t, "NewStore", err)
+	cpStore := openRecoveryCheckpointStore(t)
 
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID:     "view-cp-conf",
@@ -312,6 +306,7 @@ func TestMergeServiceCheckpointExactBaseConflictSurface(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "Publish", err)
+	bindRecoveryCheckpoint(t, overlay, cpStore, "chk-conf-1")
 
 	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, testbaseline.Durable(t, sqlDB, jobID, primary))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)

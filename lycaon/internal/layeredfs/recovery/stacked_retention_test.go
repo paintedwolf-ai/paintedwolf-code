@@ -10,7 +10,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 )
 
@@ -71,8 +73,8 @@ func TestStackedWorkerParentContinuationEvictionAndBothPromotionOrders(t *testin
 		TaskID:             "task-stack",
 		ProjectID:          "proj-stack",
 		ParentCheckpointID: "cp-parent-A",
-		Adapter:            fx.mountedAdp,
-		PrepareReq:         fx.prepareRequest("view-child"),
+		AdapterID:          fx.mountedAdp.ID(),
+		Prepare:            prepareStackedOver(fx.mountedAdp, fx.prepareRequest("view-child"), "worker-child", fx.gitMgr),
 	})
 	if err != nil {
 		t.Fatalf("PrepareStackedWorkerView: %v", err)
@@ -115,10 +117,10 @@ func TestStackedWorkerParentContinuationEvictionAndBothPromotionOrders(t *testin
 		ProjectID:         "proj-stack",
 		SourceGeneration:  "gen-1",
 		SelectedRoots:     []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: fx.trunkDir, IsPrimary: true}},
-		ParentCheckpoints: stackedSess.ParentCheckpointIDs,
+		ParentCheckpoints: stackedSess.Parents.CheckpointIDs,
 		Callbacks: checkpoint.BarrierCallbacks{
 			CommitRetention: func(cCtx context.Context, cpID string, blobs, gitObjs []string) error {
-				return fx.coord.CommitCheckpointRetention(cCtx, "worker-child", cpID, blobs, gitObjs, stackedSess.ParentCheckpointIDs)
+				return fx.coord.CommitCheckpointRetention(cCtx, "worker-child", cpID, blobs, gitObjs, stackedSess.Parents.CheckpointIDs)
 			},
 		},
 	})
@@ -160,7 +162,7 @@ func verifyStackedPromotionOrders(t *testing.T, fx *recoveryFixture) {
 	if !slices.Equal(planDirect.UnlandedAncestors, []string{"cp-parent-A"}) || len(planDirect.LandedAncestors) != 0 {
 		t.Fatalf("expected cp-parent-A unlanded in direct order, got landed=%v unlanded=%v", planDirect.LandedAncestors, planDirect.UnlandedAncestors)
 	}
-	if _, err := fx.coord.PromoteStackedCheckpoint(ctx, recovery.StackedPromotionRequest{
+	if err := promoteStackedAndCommit(t, fx.coord, recovery.StackedPromotionRequest{
 		ChildCheckpointID: "cp-child-C",
 		TargetRoots:       map[string]string{"primary": trunkDirect},
 		Promoter:          promoterDirect,
@@ -184,7 +186,14 @@ func verifyStackedPromotionOrders(t *testing.T, fx *recoveryFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := promoterSeq.Apply(ctx, checkpoint.ApplyRequest{TransactionID: "tx-cp-parent-A", Preview: prevParent}); err != nil {
+	parentTxn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: filepath.Join(t.TempDir(), "tx"), ID: "parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parentTxn.ApplyCheckpoint(ctx, promoterSeq, checkpoint.ApplyRequest{TransactionID: "tx-cp-parent-A", Preview: prevParent}); err != nil {
+		t.Fatal(err)
+	}
+	if err := parentTxn.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	_ = fx.coord.RecordCheckpointLanded(recovery.LandingReceipt{
@@ -205,7 +214,7 @@ func verifyStackedPromotionOrders(t *testing.T, fx *recoveryFixture) {
 	if !slices.Equal(planSeq.LandedAncestors, []string{"cp-parent-A"}) {
 		t.Fatalf("expected cp-parent-A recognized as landed, got landed=%v unlanded=%v", planSeq.LandedAncestors, planSeq.UnlandedAncestors)
 	}
-	if _, err := fx.coord.PromoteStackedCheckpoint(ctx, recovery.StackedPromotionRequest{
+	if err := promoteStackedAndCommit(t, fx.coord, recovery.StackedPromotionRequest{
 		ChildCheckpointID: "cp-child-C",
 		TargetRoots:       map[string]string{"primary": trunkSeq},
 		Promoter:          promoterSeq,
@@ -341,4 +350,38 @@ func copyDirForTest(t *testing.T, src, dst string) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// prepareStackedOver prepares a child directly on an adapter, as a claim does for a real worker.
+func prepareStackedOver(adp adapter.Adapter, req adapter.PrepareRequest, workerID string, git *privategit.Manager) func(context.Context, recovery.StackedParents) (*adapter.PreparedView, error) {
+	return func(ctx context.Context, parents recovery.StackedParents) (*adapter.PreparedView, error) {
+		req.ParentLayers, req.GitInterceptor = parents.Layers, git
+		view, err := adp.Prepare(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if binder, ok := adp.(recovery.PrivateGitBinder); ok {
+			if err := binder.BindPrivateGit(view.ViewID, workerID, git); err != nil {
+				return nil, err
+			}
+		}
+		return view, nil
+	}
+}
+
+// promoteStackedAndCommit runs a stacked promotion through a complete transaction.
+func promoteStackedAndCommit(t *testing.T, coord *recovery.Coordinator, req recovery.StackedPromotionRequest) error {
+	t.Helper()
+	txn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: filepath.Join(t.TempDir(), "tx"), ID: "stacked"})
+	if err != nil {
+		return err
+	}
+	req.Transaction = txn
+	if _, err := coord.PromoteStackedCheckpoint(t.Context(), req); err != nil {
+		return err
+	}
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+	return coord.SettleStackedPromotion(req.ChildCheckpointID)
 }

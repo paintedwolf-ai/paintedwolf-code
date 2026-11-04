@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
@@ -121,7 +122,7 @@ func acquireWorkspaceProvisionLock(ctx context.Context, branchRoot string) (func
 	}
 }
 
-func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, choice WorkspaceStrategySelection) (*adapter.PreparedView, *claim.ClaimedView, error) {
+func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, choice WorkspaceStrategySelection, parents recovery.StackedParents) (*adapter.PreparedView, *claim.ClaimedView, error) {
 	services, err := m.layered()
 	if err != nil {
 		return nil, nil, err
@@ -174,9 +175,11 @@ func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Bindi
 			MetadataPath:   filepath.Join(metaDir, "view-metadata.json"),
 			TargetRootDirs: targetDirs,
 		},
-		Grants:         grants,
-		FocusPathHints: hints,
-		Limits:         claim.ClaimLimits{MaxEntries: maxEntries, MaxBytes: maxBytes},
+		Grants:              grants,
+		FocusPathHints:      hints,
+		ParentLayers:        parents.Layers,
+		ParentCheckpointIDs: parents.CheckpointIDs,
+		Limits:              claim.ClaimLimits{MaxEntries: maxEntries, MaxBytes: maxBytes},
 		Hooks: claim.ClaimHooks{
 			Retention:         services.retention,
 			VerifyConfinement: m.selector.VerifyViewConfinement,

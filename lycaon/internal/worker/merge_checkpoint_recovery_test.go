@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/session"
@@ -13,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,8 +30,7 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 	t.Cleanup(func() { session.ClearTaskCheckpointPreview(id) })
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", id)
 	baseline := testbaseline.Durable(t, sqlDB, id, primary)
-	cpStore, err := checkpoint.NewStore(filepath.Join(filepath.Dir(baseline), session.TaskCheckpointStoreSubdir))
-	testutil.FailErr(t, "checkpoint store", err)
+	cpStore := openRecoveryCheckpointStore(t)
 	core, err := layeredfs.New(layeredfs.Config{ViewID: "refs-only", BackingDir: t.TempDir(), Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}}})
 	testutil.FailErr(t, "worker view", err)
 	defer func() { _ = core.ReleaseView() }()
@@ -40,6 +41,7 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 	testutil.FailErr(t, "publisher", err)
 	_, err = publisher.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "refs-only", Trigger: checkpoint.TriggerWorkerCompletion, PrivateGit: checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feature": oid}}})
 	testutil.FailErr(t, "publish refs checkpoint", err)
+	bindRecoveryCheckpoint(t, overlay, cpStore, "refs-only")
 	_, err = store.SetWorkerWorkspace(ctx, id, overlay, baseline)
 	testutil.FailErr(t, "bind worker", err)
 	testutil.FailErr(t, "pending worker", queue.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
@@ -64,4 +66,19 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 	if result.Status != api.WorkerMergeStatusMerged {
 		t.Fatalf("refs-only retry status=%s", result.Status)
 	}
+}
+
+// bindRecoveryCheckpoint names a published checkpoint as a branch's result, as completion does.
+func bindRecoveryCheckpoint(t *testing.T, branch string, store *checkpoint.Store, checkpointID string) {
+	t.Helper()
+	meta := workspace.JobMeta{Roots: []workspace.JobMetaRoot{{ID: "primary", Path: branch, IsPrimary: true}}}
+	meta.LastPublishedCheckpointID, meta.CheckpointStoreDir = checkpointID, store.RootDir()
+	testutil.FailErr(t, "record branch checkpoint", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(filepath.Clean(branch)), meta))
+}
+
+func openRecoveryCheckpointStore(t *testing.T) *checkpoint.Store {
+	t.Helper()
+	store, err := checkpoint.NewStore(filepath.Join(enginepaths.WorkerRecoveryRootUnder(t.TempDir()), "checkpoints"))
+	testutil.FailErr(t, "open recovery checkpoint store", err)
+	return store
 }

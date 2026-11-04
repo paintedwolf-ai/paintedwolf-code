@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"time"
 
@@ -197,6 +199,14 @@ func clonePrivateGit(in PrivateGitSnapshot) PrivateGitSnapshot {
 			out.Refs[k] = v
 		}
 	}
+	if len(in.Roots) > 0 {
+		out.Roots = make(map[string]RootGitRefs, len(in.Roots))
+		for id, root := range in.Roots {
+			root.Refs = maps.Clone(root.Refs)
+			out.Roots[id] = root
+		}
+	}
+	out.ObjectCheckpoints = slices.Clone(in.ObjectCheckpoints)
 	if len(in.RetainedObjects) > 0 {
 		out.RetainedObjects = append([]string(nil), in.RetainedObjects...)
 	}

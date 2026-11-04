@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -63,13 +65,15 @@ func ensureMinimalGitDirLayout(gitDir, commonGitDir string) error {
 	return nil
 }
 
-func copyCandidateGitObjects(storeDir, checkpointID, targetObjectsDir string) error {
+func copyCandidateGitObjects(storeDir, checkpointID, rootID string, objectCheckpoints []string, targetObjectsDir string) error {
 	if storeDir = strings.TrimSpace(storeDir); storeDir == "" {
 		return nil
 	}
 	candidates := []string{filepath.Join(storeDir, "objects")}
-	if checkpointID != "" {
-		candidates = append([]string{filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects")}, candidates...)
+	for _, id := range append([]string{checkpointID}, objectCheckpoints...) {
+		if id != "" {
+			candidates = append([]string{CheckpointGitObjectsDir(storeDir, id, rootID)}, candidates...)
+		}
 	}
 	for _, srcObjects := range candidates {
 		st, err := os.Lstat(srcObjects)
@@ -222,15 +226,28 @@ func isHexOID(s string) bool {
 }
 func isAllZeroOID(s string) bool { return strings.Trim(s, "0") == "" }
 
+// CheckpointGitObjectsDir is where a checkpoint keeps the objects its refs add for one root; an empty
+// root ID is the primary root.
+func CheckpointGitObjectsDir(storeDir, checkpointID, rootID string) string {
+	if rootID == "" {
+		return filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects")
+	}
+	return filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects-roots", rootID)
+}
+
 func selectPrimaryRootDir(targetRoots map[string]string) string {
+	return strings.TrimSpace(targetRoots[selectPrimaryRootID(targetRoots)])
+}
+
+func selectPrimaryRootID(targetRoots map[string]string) string {
 	for _, k := range []string{"primary", "root-0", ""} {
-		if d := strings.TrimSpace(targetRoots[k]); d != "" {
-			return d
+		if strings.TrimSpace(targetRoots[k]) != "" {
+			return k
 		}
 	}
-	for _, d := range targetRoots {
-		if d = strings.TrimSpace(d); d != "" {
-			return d
+	for _, id := range slices.Sorted(maps.Keys(targetRoots)) {
+		if strings.TrimSpace(targetRoots[id]) != "" {
+			return id
 		}
 	}
 	return ""

@@ -58,16 +58,11 @@ func (q *InMemoryQueue) ClaimWorkerBranch(ctx context.Context, jobID string) (*a
 	if len(roots) == 0 {
 		return nil, ErrWorkerBranchClaimFailed
 	}
-	baseLease, err := holdBaseOverlay(ctx, q, &task)
+	parentCheckpoint, err := stackedParentCheckpoint(ctx, &task, roots, q, ws)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
-	defer baseLease.Release()
-	sources, err := workspaceSourceRoots(&task, roots, q)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
-	}
-	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(ctx, roots, sources, strings.TrimSpace(task.WorkspaceRootID), task.ID)
+	binding, layout, err := createTaskBranch(ctx, ws, roots, strings.TrimSpace(task.WorkspaceRootID), task.ID, parentCheckpoint)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
@@ -143,22 +138,6 @@ func (q *InMemoryQueue) EnsureWorkerBranch(ctx context.Context, jobID string) (*
 		return nil, nil, err
 	}
 	return task, lease, nil
-}
-
-func holdBaseOverlay(ctx context.Context, q *InMemoryQueue, task *api.WorkerTask) (*BranchLease, error) {
-	baseID := strings.TrimSpace(task.EffectiveScope().BaseOverlayID)
-	if baseID == "" {
-		return nil, nil
-	}
-	base, ok := q.Get(baseID)
-	if !ok || base == nil || base.MergeStatus == api.WorkerMergeStatusMerged || strings.TrimSpace(base.WorkspaceRoot) == "" {
-		return nil, nil
-	}
-	_, lease, err := q.EnsureWorkerBranch(ctx, baseID)
-	if err != nil {
-		return nil, fmt.Errorf("base overlay %q: %w", baseID, err)
-	}
-	return lease, nil
 }
 
 // destroyWorkspaceRoot removes an isolated sandbox copy after a terminal
