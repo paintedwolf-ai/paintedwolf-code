@@ -149,7 +149,7 @@ type midTurnHarness struct {
 }
 
 // newMidTurnHarness runs real publication and the real wait observation. Its
-// wait refusal stands in for OAR, which TestWaitHiddenTextPolicy covers.
+// wait refusal stands in for OAR, which TestBeforeWaitReadsSurfaceAndDurableNotes covers.
 func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 	t.Helper()
 	h := &midTurnHarness{ledger: &midTurnLedgerStub{}, sess: &api.Session{ID: "coordinator", Posture: api.SessionPostureBuild}}
