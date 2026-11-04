@@ -202,7 +202,7 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"grep", "-r", "--include-dir=sub", "--include-dir=*deep", "alpha", "sub"}, kinds: []string{"bsd"}, sorted: true},
 	{argv: []string{"grep", "-u", "-U", "alpha", "input"}, kinds: []string{"bsd"}},
 	{argv: []string{"grep", "-H", "--label=piped", "alpha", "-"}, kinds: []string{"gnu", "bsd"}},
-	{argv: []string{"find", "tree/s", "-depth"}, kinds: []string{"bsd-find", "gnu-find"}},
+	{argv: []string{"find", "tree/s", "-depth"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},
 	{argv: []string{"find", "tree", "-depth", "2"}, kinds: []string{"bsd-find"}, sorted: true},
 	{argv: []string{"find", "-x", "tree/s"}, kinds: []string{"bsd-find"}, sorted: true},
 	{argv: []string{"find", "tree", "-name", "a.go", "-or", "-name", "c.go"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},
