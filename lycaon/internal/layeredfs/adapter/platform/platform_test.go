@@ -20,6 +20,7 @@ import (
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/workspace"
 )
 
 func TestMain(m *testing.M) {
@@ -279,5 +280,27 @@ func TestEverySelectedRootHasItsOwnPrivateRepository(t *testing.T) {
 	testutil.FailErr(t, "release view", mgr.ReleaseView(view.ViewID))
 	if ids := mgr.SecondaryViews(view.ViewID); len(ids) != 0 {
 		t.Fatalf("release left secondary views: %v", ids)
+	}
+}
+
+// A manager with no record of the view must still read the kernel's fact: recursive removal through a
+// live mount would delete the worker's result.
+func TestDestroyRefusesARootStillMountedWhateverItsRecordsSay(t *testing.T) {
+	trunk, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve trunk", err)
+	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
+	testutil.FailErr(t, "privategit.NewManager", err)
+	t.Cleanup(func() { _ = mgr.Store().Close() })
+	view, _ := mountedHostView(t, trunk, mgr)
+	result := filepath.Join(view.PrimaryWorkPath, "result.txt")
+	testutil.FailErr(t, "write result", os.WriteFile(result, []byte("result\n"), 0o644))
+
+	stranger := workspace.NewManager(t.TempDir(), t.TempDir())
+	err = stranger.DestroyWorkerWorkspace(&workspace.Binding{ID: view.ViewID, Root: view.PrimaryWorkPath})
+	if !errors.Is(err, workspace.ErrBranchMounted) {
+		t.Fatalf("destroy through a live mount = %v, want ErrBranchMounted", err)
+	}
+	if raw, err := os.ReadFile(result); err != nil || string(raw) != "result\n" {
+		t.Fatalf("refused destroy touched the view: %q err=%v", raw, err)
 	}
 }

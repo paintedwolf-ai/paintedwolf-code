@@ -309,15 +309,6 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 		t.Fatalf("completion published no checkpoint of the three changes: published=%v entries=%v", published, captured)
 	}
 
-	// A manager with no record of the view must still read the kernel's fact and refuse the tree.
-	stranger := workspace.NewManager(fixture.branches, t.TempDir())
-	if err := stranger.DestroyWorkerWorkspace(binding); !errors.Is(err, workspace.ErrBranchMounted) {
-		t.Fatalf("destroy through a live mount = %v, want ErrBranchMounted", err)
-	}
-	if raw, err := os.ReadFile(filepath.Join(root, "added.go")); err != nil || string(raw) != "package added\n" {
-		t.Fatalf("refused destroy touched the view: %q err=%v", raw, err)
-	}
-
 	testutil.FailErr(t, "destroy branch", fixture.manager.DestroyWorkerWorkspace(binding))
 	destroyed = true
 	if _, ok := consumer.LookupBranchEngine(root); ok {
