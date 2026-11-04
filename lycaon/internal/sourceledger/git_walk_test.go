@@ -179,7 +179,7 @@ func TestCommandWindowRetainsGitOnlyHistoryAfterSettlementAndRecovery(t *testing
 	window := openTestWindow(t, store, ctx, root, "git reset --soft HEAD^")
 	reader.states[root] = gitstate.State{Repo: gitstate.RepoPresent, HeadCommit: "after"}
 	// No file changed and no watcher pass ran: settlement must observe HEAD.
-	err := store.Commands.settleCommandWindow(ctx, window.window, time.Now(), false)
+	err := store.Commands.settleCommandWindow(ctx, window.window, time.Now())
 	testutil.FailErr(t, "settle command ref movement", err)
 	testutil.FailErr(t, "recover interrupted windows", store.Commands.RecoverInterruptedWindows(ctx))
 	page, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 10, 0, CommitLens{})

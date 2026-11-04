@@ -68,7 +68,6 @@ type openCommandWindow struct {
 	turn       int
 	toolCallID string
 	toolName   string
-	startEpoch string
 	// startSnapshotID anchors subsequent changes. It moves when the window
 	// re-anchors and when a pass settles drift the window did not claim.
 	startSnapshotID string
@@ -95,8 +94,7 @@ type openCommandWindow struct {
 	anchorErr error
 	// quiet is non-nil during a settle grace, and closes when a hold or the
 	// close ends that grace early.
-	quiet         chan struct{}
-	passesAtQuiet uint64
+	quiet chan struct{}
 	// incomplete means a final pass failed. The window claims nothing, and the
 	// next completed pass records the same drift as outside changes.
 	incomplete bool
@@ -162,7 +160,7 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 	if err := s.RecoverInterruptedWindows(ctx); err != nil {
 		return nil, err
 	}
-	snapshotID, epoch, err := s.anchorStart(ctx, in.ProjectID, in.Roots)
+	snapshotID, err := s.anchorStart(ctx, in.ProjectID, in.Roots)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +168,6 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 		id: newID(), projectID: in.ProjectID,
 		roots: append([]RootSpec(nil), in.Roots...), sessionID: strings.TrimSpace(in.SessionID),
 		turn: in.Turn, toolCallID: strings.TrimSpace(in.ToolCallID), toolName: in.ToolName,
-		startEpoch:      epoch,
 		startSnapshotID: snapshotID,
 		settled:         make(chan struct{}),
 		active:          true,
@@ -191,21 +188,21 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 // anchorStart reconciles the tree so drift from before this point is not
 // attributed, and names the inventory that results; incomplete coverage cannot
 // prove the tree unchanged, so it pays a pass.
-func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []RootSpec) (snapshotID, epoch string, err error) {
+func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []RootSpec) (string, error) {
 	req, err := s.windowInventoryRequest(ctx, projectID, roots)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	req.Force = !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(roots))
 	req.Wait = true
 	if err := s.awaitStartInventory(ctx, req); err != nil {
-		return "", "", err
+		return "", err
 	}
 	state, err := s.inventory.InventoryState(ctx, projectID, inventoryBranch(req.Roots), req.RootsGeneration)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	return state.SnapshotID, sourcesnapshot.ChangeToken(snapshotRoots(roots)), nil
+	return state.SnapshotID, nil
 }
 
 func (s *Commands) insertWindow(ctx context.Context, w *openCommandWindow, commandLine string) error {
@@ -488,7 +485,6 @@ func (s *Commands) closeCommandWindow(ctx context.Context, w *openCommandWindow)
 	s.windowsMu.Lock()
 	w.closing = true
 	endGrace(w)
-	w.passesAtQuiet = s.inventoryPasses[w.projectID]
 	idle := !w.active
 	anchoring := w.anchoring
 	s.windowsMu.Unlock()
@@ -498,61 +494,50 @@ func (s *Commands) closeCommandWindow(ctx context.Context, w *openCommandWindow)
 		case <-ctx.Done():
 		}
 	}
-	// An idle window owes no pass: it has claimed nothing since its grace ended.
 	if !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(w.roots)) {
-		return s.settleCommandWindow(ctx, w, ended, !idle)
+		return s.settleCommandWindow(ctx, w, ended)
 	}
 	background := context.WithoutCancel(ctx)
 	go func() {
 		if !idle {
-			s.awaitWindowPass(background, w, nil)
+			s.awaitSettlePeriod(background, nil)
 		}
-		if err := s.settleCommandWindow(background, w, ended, false); err != nil {
+		if err := s.settleCommandWindow(background, w, ended); err != nil {
 			slog.WarnContext(background, "command window settle", "window_id", w.id, "err", err)
 		}
 	}()
 	return nil
 }
 
-// awaitWindowPass returns once an inventory pass has completed since the
-// window went quiet, the settle period elapsed, or stop closed.
-func (s *Commands) awaitWindowPass(ctx context.Context, w *openCommandWindow, stop <-chan struct{}) {
-	deadline := time.NewTimer(s.windowSettle)
-	defer deadline.Stop()
-	for {
-		s.windowsMu.Lock()
-		passed := s.inventoryPasses[w.projectID] > w.passesAtQuiet
-		wake := s.passWake
-		s.windowsMu.Unlock()
-		if passed {
-			return
-		}
-		select {
-		case <-wake:
-		case <-deadline.C:
-			return
-		case <-stop:
-			return
-		case <-ctx.Done():
-			return
-		}
+// awaitSettlePeriod returns once trailing watcher events have had time to arrive,
+// or stop closed.
+func (s *Commands) awaitSettlePeriod(ctx context.Context, stop <-chan struct{}) {
+	s.windowsMu.Lock()
+	elapsed := s.windowSettle()
+	s.windowsMu.Unlock()
+	select {
+	case <-elapsed:
+	case <-stop:
+	case <-ctx.Done():
 	}
 }
 
-// settleWindowObservations runs the last pass when one is still owed and
-// observes Git. Pending observers commit their references before the caller
-// collects the window, so it holds the returned release through that.
-func (s *Commands) settleWindowObservations(ctx context.Context, w *openCommandWindow, force bool) (release func(), passErr, lockErr error) {
-	roots := snapshotRoots(w.roots)
+// settleWindowObservations lands what a window that may still claim has not yet
+// recorded, then observes Git. An idle window owes no pass. On trusted coverage
+// the request joins any pass in flight, reruns if the change token has moved since
+// that pass read it, and does nothing if it has not; a failed pass owes a forced
+// one. Pending observers commit their references before the caller collects the
+// window, so it holds the returned release through that.
+func (s *Commands) settleWindowObservations(ctx context.Context, w *openCommandWindow) (release func(), passErr, lockErr error) {
 	s.windowsMu.Lock()
-	owed := force || w.incomplete || (w.active && s.inventoryPasses[w.projectID] <= w.passesAtQuiet && sourcesnapshot.ChangeToken(roots) != w.startEpoch)
+	owed, incomplete := w.active || w.incomplete, w.incomplete
 	s.windowsMu.Unlock()
 	if owed {
 		req, err := s.windowInventoryRequest(ctx, w.projectID, w.roots)
 		if err != nil {
 			passErr = err
 		} else {
-			req.Force, req.Wait = true, true
+			req.Force, req.Wait = incomplete || !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(w.roots)), true
 			started := s.now()
 			passErr = s.inventory.EnsureInventory(ctx, req)
 			if passErr == nil && s.now().Sub(started) > s.observationBudget {
@@ -574,9 +559,9 @@ func (s *Commands) settleWindowObservations(ctx context.Context, w *openCommandW
 // settleCommandWindow runs the last pass when one is still owed, stops
 // attributing, and makes the row final. A failure anywhere leaves the window
 // listed as incomplete until the next completed pass.
-func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow, ended time.Time, force bool) error {
+func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow, ended time.Time) error {
 	defer close(w.settled)
-	release, passErr, lockErr := s.settleWindowObservations(ctx, w, force)
+	release, passErr, lockErr := s.settleWindowObservations(ctx, w)
 	if release != nil {
 		defer release()
 	}
@@ -621,14 +606,10 @@ func (s *Commands) forgetWindow(w *openCommandWindow) {
 	}
 }
 
-// notePassCompleted counts the pass, wakes windows waiting on one, and clears
-// windows left incomplete on this branch: the pass recorded their drift as
-// outside changes, so nothing further is owed.
+// notePassCompleted clears windows left incomplete on this branch: the pass
+// recorded their drift as outside changes, so nothing further is owed.
 func (s *Commands) notePassCompleted(ctx context.Context, projectID string, roots []RootSpec) {
 	s.windowsMu.Lock()
-	s.inventoryPasses[projectID]++
-	close(s.passWake)
-	s.passWake = make(chan struct{})
 	var owed []*openCommandWindow
 	for _, window := range append([]*openCommandWindow(nil), s.openWindows[projectID]...) {
 		if !window.incomplete || inventoryBranch(window.roots) != inventoryBranch(roots) {
@@ -794,10 +775,19 @@ func (s *Commands) commandWindowsFor(ctx context.Context, ids []string) (map[str
 	return out, nil
 }
 
-// SetWindowSettleForTest replaces the settle period, so a test decides whether
-// a closed window on trusted coverage settles on a pass rather than on time.
+// SetWindowSettleForTest replaces the settle period.
 func (s *Commands) SetWindowSettleForTest(period time.Duration) {
-	s.windowSettle = period
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	s.windowSettle = func() <-chan time.Time { return time.After(period) }
+}
+
+// SetWindowSettleGateForTest makes every settle period last until gate delivers
+// or closes, so a test decides when a window's grace or close moves on.
+func (s *Commands) SetWindowSettleGateForTest(gate <-chan time.Time) {
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	s.windowSettle = func() <-chan time.Time { return gate }
 }
 
 // SetWindowIdledForTest observes each window whose settle grace has ended.
@@ -809,14 +799,12 @@ func (s *Commands) SetWindowIdledForTest(observe func(id string)) {
 
 // Commands attributes source observations to host command windows.
 type Commands struct {
-	inventoryPasses   map[string]uint64
 	now               func() time.Time
 	objects           *sourceblob.Store
 	observationBudget time.Duration
 	openWindows       map[string][]*openCommandWindow
 	// overduePasses counts passes still running after an open stopped waiting.
 	overduePasses map[string]int
-	passWake      chan struct{}
 	queries       *db.Queries
 	recordMu      *sync.Mutex
 	// retainBudget is the share of an open spent keeping before-images.
@@ -829,10 +817,11 @@ type Commands struct {
 	sqlDB            db.Handle
 	windowRecoveryMu sync.Mutex
 	windowsRecovered bool
-	windowSettle     time.Duration
-	windowsMu        sync.Mutex
-	git              commandsGitPort
-	inventory        commandsInventoryPort
+	// windowSettle starts one settle period. Guarded by windowsMu.
+	windowSettle func() <-chan time.Time
+	windowsMu    sync.Mutex
+	git          commandsGitPort
+	inventory    commandsInventoryPort
 	// windowIdled, when set, observes each window whose grace ended.
 	windowIdled func(id string)
 }

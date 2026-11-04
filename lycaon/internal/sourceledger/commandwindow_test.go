@@ -45,7 +45,7 @@ func openDiskLedger(t *testing.T) diskLedger {
 	store := New(sqlDB, contentDir)
 	// These tests deliver the command's writes themselves, so a closed window
 	// that still owes a pass runs it at once instead of waiting out the settle period.
-	store.Commands.windowSettle = 0
+	store.Commands.SetWindowSettleForTest(0)
 	return diskLedger{store: store, sqlDB: sqlDB, contentDir: contentDir, root: root}
 }
 
@@ -186,16 +186,14 @@ func TestWindowOnTrustedCoverageSettlesAfterClose(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	repochange.MarkCoverageCompleteForTest(root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
-	store.Commands.SetWindowSettleForTest(time.Hour)
+	endSettle := holdSettlePeriods(store)
 	window := openTestWindow(t, store, ctx, root, "make")
 	testutil.FailErr(t, "close command window", window.Close(ctx))
+	forceTestPass(t, store, ctx, root)
 	if window.IsSettled() {
-		t.Fatal("window settled with its pass still owed")
+		t.Fatal("window settled before its settle period ended")
 	}
-	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
-	testutil.FailErr(t, "inventory request", err)
-	req.Force, req.Wait = true, true
-	testutil.FailErr(t, "pass after close", store.Inventory.EnsureInventory(ctx, req))
+	endSettle()
 	testutil.AwaitClosed(t, "window settles", window.Settled())
 	if !window.IsSettled() {
 		t.Fatal("settled channel closed but IsSettled is false")
@@ -206,7 +204,7 @@ func TestOpenSessionWindowsListsOnlyThatSessionsUnsettledWindows(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	repochange.MarkCoverageCompleteForTest(root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
-	store.Commands.SetWindowSettleForTest(time.Hour)
+	endSettle := holdSettlePeriods(store)
 	mine := openTestWindow(t, store, ctx, root, "make")
 	other, err := store.Commands.OpenCommandWindow(ctx, CommandWindowInput{
 		ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s2", ToolName: "command",
@@ -221,10 +219,7 @@ func TestOpenSessionWindowsListsOnlyThatSessionsUnsettledWindows(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != mine.ID || !listed[0].Closing {
 		t.Fatalf("closing window = %+v", listed)
 	}
-	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
-	testutil.FailErr(t, "inventory request", err)
-	req.Force, req.Wait = true, true
-	testutil.FailErr(t, "pass after close", store.Inventory.EnsureInventory(ctx, req))
+	endSettle()
 	testutil.AwaitClosed(t, "listed window settles", listed[0].Settled)
 	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 0 {
 		t.Fatalf("settled window still listed: %+v", listed)
@@ -305,8 +300,7 @@ func TestWindowStillAttributesUntilItSettles(t *testing.T) {
 	window := openTestWindow(t, store, ctx, root, "go generate ./...")
 	writeRootFile(t, root, "gen/types.go", "package gen\n")
 	deliverWrites(ctx, root, "gen/types.go")
-	// The window keeps settling until the watcher's pass lands.
-	store.Commands.windowSettle = time.Hour
+	endSettle := holdSettlePeriods(store)
 	testutil.FailErr(t, "close command window", window.Close(ctx))
 
 	// The watcher's pass for the command's last writes lands after the
@@ -315,6 +309,7 @@ func TestWindowStillAttributesUntilItSettles(t *testing.T) {
 	testutil.FailErr(t, "inventory request", err)
 	req.Force, req.Wait = true, true
 	testutil.FailErr(t, "late watcher pass", store.Inventory.EnsureInventory(ctx, req))
+	endSettle()
 	testutil.AwaitClosed(t, "command window settles", window.Settled())
 	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query turn walk", err)
@@ -329,7 +324,7 @@ func TestRunningWindowOutranksASettlingOne(t *testing.T) {
 	writeRootFile(t, root, "main.go", "package main\n")
 	first := openTestWindow(t, store, ctx, root, "make first")
 	// The first window is still settling when the second one's pass lands.
-	store.Commands.windowSettle = time.Hour
+	endSettle := holdSettlePeriods(store)
 	testutil.FailErr(t, "close first", first.Close(ctx))
 	second := openTestWindow(t, store, ctx, root, "make second")
 	writeRootFile(t, root, "second.out", "2\n")
@@ -338,8 +333,8 @@ func TestRunningWindowOutranksASettlingOne(t *testing.T) {
 	testutil.FailErr(t, "inventory request", err)
 	req.Force, req.Wait = true, true
 	testutil.FailErr(t, "pass while the first window settles", store.Inventory.EnsureInventory(ctx, req))
+	endSettle()
 	testutil.AwaitClosed(t, "first window settles", first.Settled())
-	store.Commands.windowSettle = 0
 	closeAndSettle(t, ctx, second)
 	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
@@ -407,7 +402,7 @@ func TestInterruptedWindowsSettleWhenAFreshProcessOpensOne(t *testing.T) {
 
 	// A new process holds no memory of either window.
 	fresh := New(ledger.sqlDB, ledger.contentDir)
-	fresh.Commands.windowSettle = 0
+	fresh.Commands.SetWindowSettleForTest(0)
 	next, err := fresh.Commands.OpenCommandWindow(ctx, CommandWindowInput{
 		ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s2", Turn: 1,
 		ToolName: "command", CommandLine: "cargo build",

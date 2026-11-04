@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 )
 
 // windowQuietPassBudget bounds the pass that ends a settle grace.
@@ -84,7 +82,7 @@ func (s *Commands) holdWindow(ctx context.Context, w *openCommandWindow) (func()
 func (s *Commands) reanchorWindow(ctx context.Context, w *openCommandWindow, done chan struct{}) {
 	budget, cancel := context.WithTimeout(ctx, s.observationBudget)
 	defer cancel()
-	snapshotID, epoch, err := s.anchorStart(budget, w.projectID, w.roots)
+	snapshotID, err := s.anchorStart(budget, w.projectID, w.roots)
 	if err == nil {
 		w.moveStart(snapshotID)
 		if retainErr := s.retainWindowStart(budget, w); retainErr != nil {
@@ -95,7 +93,6 @@ func (s *Commands) reanchorWindow(ctx context.Context, w *openCommandWindow, don
 	defer s.windowsMu.Unlock()
 	w.anchoring, w.anchorErr = nil, err
 	if err == nil {
-		w.startEpoch = epoch
 		w.active = w.waiters > 0 && !w.closing
 	}
 	close(done)
@@ -111,7 +108,6 @@ func (s *Commands) releaseHold(ctx context.Context, w *openCommandWindow) {
 	}
 	quiet := make(chan struct{})
 	w.quiet = quiet
-	w.passesAtQuiet = s.inventoryPasses[w.projectID]
 	go s.quiesceWindow(context.WithoutCancel(ctx), w, quiet)
 }
 
@@ -127,18 +123,7 @@ func endGrace(w *openCommandWindow) {
 // changes, run the pass that lands them while the window may still claim them,
 // and only then stop claiming. A new hold or the close takes over at any point.
 func (s *Commands) quiesceWindow(ctx context.Context, w *openCommandWindow, quiet chan struct{}) {
-	trusted := sourcesnapshot.ChangeTokenTrusted(snapshotRoots(w.roots))
-	if trusted {
-		s.awaitWindowPass(ctx, w, quiet)
-	} else {
-		timer := time.NewTimer(s.windowSettle)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-		case <-quiet:
-		case <-ctx.Done():
-		}
-	}
+	s.awaitSettlePeriod(ctx, quiet)
 	select {
 	case <-quiet:
 		return
@@ -146,7 +131,7 @@ func (s *Commands) quiesceWindow(ctx context.Context, w *openCommandWindow, quie
 	}
 	budget, cancel := context.WithTimeout(ctx, windowQuietPassBudget)
 	defer cancel()
-	release, passErr, lockErr := s.settleWindowObservations(budget, w, !trusted)
+	release, passErr, lockErr := s.settleWindowObservations(budget, w)
 	if release != nil {
 		defer release()
 	}

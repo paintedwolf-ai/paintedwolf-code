@@ -13,6 +13,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// holdSettlePeriods keeps every settle period running until the returned func ends them.
+func holdSettlePeriods(store *Store) func() {
+	gate := make(chan time.Time)
+	store.Commands.SetWindowSettleGateForTest(gate)
+	return sync.OnceFunc(func() { close(gate) })
+}
+
 // beforePassCompletes runs before inside a pass, after it has captured the tree.
 type beforePassCompletes struct {
 	inventoryCommandsPort
@@ -32,13 +39,17 @@ func TestPassInFlightAtCloseDoesNotLoseTrailingOutput(t *testing.T) {
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window := openTestWindow(t, store, ctx, root, "./gen.sh")
-	store.Commands.windowSettle = time.Hour
+	endSettle := holdSettlePeriods(store)
 	store.Inventory.commands = beforePassCompletes{store.Inventory.commands, sync.OnceFunc(func() {
 		writeRootFile(t, root, "gen.txt", "generated\n")
 		deliverWrites(ctx, root, "gen.txt")
 		testutil.FailErr(t, "close during the pass", window.Close(ctx))
 	})}
 	forceTestPass(t, store, ctx, root)
+	if window.IsSettled() {
+		t.Fatal("a pass that predates the output ended the wait")
+	}
+	endSettle()
 	testutil.AwaitClosed(t, "the window settles", window.Settled())
 	if !window.IsSettled() {
 		t.Fatal("window did not settle")
@@ -55,7 +66,7 @@ func TestPassOnAnotherBranchDoesNotEndTheWindowsWait(t *testing.T) {
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window := openTestWindow(t, store, ctx, root, "./gen.sh")
-	store.Commands.windowSettle = time.Hour
+	endSettle := holdSettlePeriods(store)
 
 	writeRootFile(t, root, "gen.txt", "generated\n")
 	deliverWrites(ctx, root, "gen.txt")
@@ -65,7 +76,10 @@ func TestPassOnAnotherBranchDoesNotEndTheWindowsWait(t *testing.T) {
 	testutil.FailErr(t, "pass on another branch", store.Inventory.EnsureInventory(ctx, InventoryRequest{
 		ProjectID: "p1", Roots: []RootSpec{{ID: "r1", BranchID: sourcebranch.ID("worktree:other"), Path: other}}, Force: true, Wait: true,
 	}))
-
+	if window.IsSettled() {
+		t.Fatal("a pass on another branch ended the wait")
+	}
+	endSettle()
 	testutil.AwaitClosed(t, "the window settles", window.Settled())
 	if effect := newestEffects(t, store, ctx)["gen.txt"]; effect.CommandWindowID != window.ID {
 		t.Fatalf("output = %+v, want the window", effect)

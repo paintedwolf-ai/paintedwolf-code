@@ -104,7 +104,7 @@ func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool
 		b.Fatalf("insert root: %v", err)
 	}
 	store := New(sqlDB, b.TempDir())
-	store.Commands.windowSettle = 0
+	store.Commands.SetWindowSettleForTest(0)
 	store.Commands.observationBudget = time.Minute
 	if watched {
 		repochange.MarkCoverageCompleteForTest(root)
