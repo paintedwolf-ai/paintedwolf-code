@@ -712,31 +712,20 @@ func (d *ProgramDispatcher) settleWith(ctx context.Context, child programChild, 
 	return d.run.recorder.SettleChild(context.WithoutCancel(ctx), child.id, settlement)
 }
 
-var compiledCatalogDefinitions sync.Map
-
 // catalogDefinition compiles one definition per catalog command without a
 // registered tool, attributed to the command's declared owner.
 func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecification) (toolcontract.OperationDefinition, error) {
+	return catalogOperationDefinition(spec, d.run.catalog.Language.Limits)
+}
+
+// compiledCatalogDefinitions holds each command's definition for the process:
+// every caller passes a specification and limits from the one compiled catalog.
+var compiledCatalogDefinitions sync.Map
+
+func catalogOperationDefinition(spec toolcontract.CommandSpecification, limits []toolcontract.ResourceLimit) (toolcontract.OperationDefinition, error) {
 	if cached, ok := compiledCatalogDefinitions.Load(spec.Name); ok {
 		return cached.(toolcontract.OperationDefinition), nil
 	}
-	d.shared.mu.Lock()
-	defer d.shared.mu.Unlock()
-	if definition, ok := d.shared.definitions[spec.Name]; ok {
-		return definition, nil
-	}
-	definition, err := catalogOperationDefinition(spec, d.run.catalog.Language.Limits)
-	if err != nil {
-		return toolcontract.OperationDefinition{}, err
-	}
-	if d.shared.definitions == nil {
-		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
-	}
-	d.shared.definitions[spec.Name] = definition
-	return definition, nil
-}
-
-func catalogOperationDefinition(spec toolcontract.CommandSpecification, limits []toolcontract.ResourceLimit) (toolcontract.OperationDefinition, error) {
 	contract, ok := toolcontract.Lookup("command")
 	if !ok {
 		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
@@ -761,6 +750,7 @@ func catalogOperationDefinition(spec toolcontract.CommandSpecification, limits [
 	if err != nil {
 		return toolcontract.OperationDefinition{}, err
 	}
+	compiledCatalogDefinitions.Store(spec.Name, definition)
 	return definition, nil
 }
 
