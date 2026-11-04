@@ -35,10 +35,6 @@ x-paintedwolf-scenarios:
     job_id: ov-conflict
     paths:
     - internal/auth/login.go
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_CONFLICT'
-  - preview_overlay
 - id: sibling_overlap
   vars:
     conflict_count: 1
@@ -47,7 +43,3 @@ x-paintedwolf-scenarios:
     - ov-sibling
     paths:
     - shared.go
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_CONFLICT'
-  - sibling

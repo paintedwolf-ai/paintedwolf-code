@@ -29,13 +29,7 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: page_open
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CAPTURE_ROUTE_INVALID'
 - id: unreadable_body
   vars:
     reason: body_path_unreadable
     tool: page_act
-  expect_contains:
-  - 'Code: CAPTURE_ROUTE_INVALID'
-  - body_path

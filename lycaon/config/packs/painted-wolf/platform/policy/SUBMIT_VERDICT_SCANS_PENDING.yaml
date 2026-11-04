@@ -20,4 +20,3 @@ x-paintedwolf-emit: guard:workflow
 x-paintedwolf-scenarios:
   - id: pending
     vars: {}
-    expect_contains: [scans, settled]

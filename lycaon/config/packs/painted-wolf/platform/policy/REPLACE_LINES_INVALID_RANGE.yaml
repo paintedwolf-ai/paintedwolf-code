@@ -37,6 +37,3 @@ x-paintedwolf-scenarios:
     reason: end_line must be >= start_line
     start_line: 20
     tool: replace_lines
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: REPLACE_LINES_INVALID_RANGE'

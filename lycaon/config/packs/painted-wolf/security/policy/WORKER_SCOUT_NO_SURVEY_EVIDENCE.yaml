@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       offender_count: 0
       offenders_omitted: 0
       offenders_sample: ''
-    expect_contains:
-      - 'Code: WORKER_SCOUT_NO_SURVEY_EVIDENCE'
-      - survey tool

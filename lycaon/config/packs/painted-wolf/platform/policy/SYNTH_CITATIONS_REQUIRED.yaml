@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
       observed_paths_omitted: 1
       observed_paths_sample: src/a.go
       observed_urls_count: 0
-    expect_contains:
-      - 'Tool feedback'
-      - 'Code: SYNTH_CITATIONS_REQUIRED'

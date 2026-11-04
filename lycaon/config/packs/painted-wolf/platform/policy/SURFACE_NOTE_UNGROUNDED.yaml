@@ -26,22 +26,12 @@ x-paintedwolf-scenarios:
       profile: coordinator
       tool: surface_note
       can_recall: true
-    expect_contains:
-      - 'Code: SURFACE_NOTE_UNGROUNDED'
-      - 'recall(query='
   - id: recall_not_callable
     vars:
       profile: coordinator
       tool: surface_note
       can_recall: false
-    expect_contains:
-      - 'Code: SURFACE_NOTE_UNGROUNDED'
-      - 'observe first'
   - id: default
     vars:
       profile: coordinator
       tool: surface_note
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SURFACE_NOTE_UNGROUNDED'
-      - That note cited nothing

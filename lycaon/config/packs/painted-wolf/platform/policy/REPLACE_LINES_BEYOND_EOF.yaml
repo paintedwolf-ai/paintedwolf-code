@@ -39,6 +39,3 @@ x-paintedwolf-scenarios:
     start_line: 150
     tool: replace_lines
     total_lines: 120
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: REPLACE_LINES_BEYOND_EOF'

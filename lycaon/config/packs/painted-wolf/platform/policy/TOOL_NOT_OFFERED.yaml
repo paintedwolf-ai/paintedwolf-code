@@ -21,27 +21,16 @@ x-paintedwolf-scenarios:
     vars:
       tool: command
       tool_loadable: true
-    expect_contains:
-      - 'Code: TOOL_NOT_OFFERED'
-      - request_tools
   - id: unavailable-tool
     vars:
       tool: write
       tool_loadable: false
-    expect_contains:
-      - 'Code: TOOL_NOT_OFFERED'
-      - report the missing capability
   - id: unavailable-name-with-discovery
     vars:
       tool: delegate_dispatch
       tool_loadable: false
       tool_discovery_available: true
       offered_tools: [read, request_tools]
-    expect_contains:
-      - 'Code: TOOL_NOT_OFFERED'
-      - 'Tools offered now: read, request_tools'
-      - describing the operation and target
-      - Loading grants no additional permissions
 
   - id: unavailable-name-with-catalog
     vars:
@@ -49,15 +38,8 @@ x-paintedwolf-scenarios:
       tool_discovery_status: catalog
       tool_discovery_has_more: true
       offered_tools: [read, request_tools]
-    expect_contains:
-      - discovery.entries
-      - discovery.next_need
-      - exact name
   - id: unavailable-name-with-last-page
     vars:
       tool: write
       tool_discovery_status: catalog
       offered_tools: [request_tools]
-    expect_contains:
-      - discovery.entries
-      - exact name

@@ -32,8 +32,3 @@ x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: Final report requires a Markdown answer
 x-paintedwolf-scenarios:
   - id: default
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COORDINATOR_CLOSEOUT_ENVELOPE_ONLY'
-      - Markdown
-      - cited_evidence

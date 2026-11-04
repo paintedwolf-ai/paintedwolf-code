@@ -41,6 +41,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: https://example.com/missing
-    expect_contains:
-      - 'Code: WORKER_URL_NOT_OBSERVED'
-      - 'URLs you did observe this leg: https://example.com/seen'

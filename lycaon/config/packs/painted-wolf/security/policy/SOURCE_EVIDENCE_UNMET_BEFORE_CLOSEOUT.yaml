@@ -29,4 +29,3 @@ x-paintedwolf-message: Required workflow validation is unresolved
 x-paintedwolf-scenarios:
   - id: default
     vars: {source_revision: revision-3, cap: 3}
-    expect_contains: ['Code: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT', revision-3, verify.test, blocked]

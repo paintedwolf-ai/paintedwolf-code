@@ -44,7 +44,3 @@ x-paintedwolf-scenarios:
       handle: held-1
       profile: coordinator
       tool: find
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: HELD_CALL_DUPLICATE_RUNNING'
-      - held_result

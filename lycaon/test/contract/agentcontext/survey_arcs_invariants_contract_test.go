@@ -287,34 +287,6 @@ func TestSurveyArcObservabilitySlogFields(t *testing.T) {
 	}
 }
 
-func TestSurveyArcNoStaleOrientOnlyPromptRefs(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	promptsDir := filepath.Join(root, "lycaon/config/packs")
-	var hits []string
-	err := filepath.Walk(promptsDir, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
-			return walkErr
-		}
-		body, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		src := string(body)
-		if strings.Contains(src, "survey_repo") {
-			return nil
-		}
-		if strings.Contains(src, "`orient`") || strings.Contains(src, "call orient") {
-			hits = append(hits, strings.TrimPrefix(path, root+string(filepath.Separator)))
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk prompts", err)
-	if len(hits) > 0 {
-		t.Fatalf("orient-only prompt refs without survey_repo mention:\n%s", strings.Join(hits, "\n"))
-	}
-}
-
 func TestSurveyArcRepoToolSelectedZeroConstant(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)

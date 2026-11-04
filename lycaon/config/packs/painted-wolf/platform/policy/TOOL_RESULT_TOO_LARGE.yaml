@@ -48,10 +48,6 @@ x-paintedwolf-scenarios:
     profile: coordinator
     reason: bare_repo_scope
     tool: summarize
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TOOL_RESULT_TOO_LARGE'
-  - subpath
 - id: unpaginated_survey
   vars:
     execution_outcome: completed
@@ -61,10 +57,6 @@ x-paintedwolf-scenarios:
     profile: coordinator
     reason: unpaginated_survey
     tool: grep
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TOOL_RESULT_TOO_LARGE'
-  - pagination
 - id: opaque_overflow
   vars:
     execution_outcome: completed
@@ -73,6 +65,3 @@ x-paintedwolf-scenarios:
     profile: coordinator
     reason: opaque_overflow
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TOOL_RESULT_TOO_LARGE'

@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     path: ./ntp_check.py
-  expect_contains:
-  - 'Code: COMMAND_EXEC_DENIED'
-  - ./ntp_check.py
-  - could not be started

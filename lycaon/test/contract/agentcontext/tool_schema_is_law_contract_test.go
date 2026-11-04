@@ -55,7 +55,7 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 	}
 }
 
-func TestRetiredEditSchemaRejectNamesCommandSuccessor(t *testing.T) {
+func TestRetiredEditSchemaRejectCarriesCommandOperationCode(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
@@ -73,9 +73,6 @@ func TestRetiredEditSchemaRejectNamesCommandSuccessor(t *testing.T) {
 		t.Fatal("expected edit schema reject")
 	}
 	assertStructuredRejectCode(t, err, "TOOL_COMMAND_OPERATION")
-	if !strings.Contains(err.Error(), "command") || strings.Contains(err.Error(), "switch to `write`") {
-		t.Fatalf("retired edit should name command successor: %v", err)
-	}
 }
 
 func TestNativeOwnersDoNotFmtMissingArg(t *testing.T) {

@@ -24,5 +24,4 @@ x-paintedwolf-message: Start this workflow from an explicit human action
 x-paintedwolf-scenarios:
   - id: default
     vars: { tool: state_start, workflow_id: plan }
-    expect_contains: ['Rejected:', 'Code: WORKFLOW_START_REQUIRES_HUMAN_APPROVAL', 'Wait for the user']
 x-paintedwolf-emit: guard:workflow

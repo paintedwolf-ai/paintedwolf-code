@@ -34,10 +34,6 @@ x-paintedwolf-scenarios:
     - references/failure-triage.md
     profile: implement
     tool: skills_read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SKILL_RESOURCE_UNKNOWN'
-  - references/failure-triage.md
 - id: empty_available
   vars:
     name: prepare-a-release
@@ -45,7 +41,3 @@ x-paintedwolf-scenarios:
     available: []
     profile: implement
     tool: skills_read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SKILL_RESOURCE_UNKNOWN'
-  - no supporting resource

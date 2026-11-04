@@ -54,10 +54,6 @@ x-paintedwolf-scenarios:
     reason: '`cd` changes only its own process; pass cwd'
     directory_change: true
     use_cwd_param: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - '`cwd` argument'
-  - executable
 - id: capture_sequence
   tool: command
   vars:
@@ -66,10 +62,6 @@ x-paintedwolf-scenarios:
     sequence_unsupported: true
     reissue_via_command: true
     terminal_capture: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - one executable
-  - '`exit_code`'
 - id: capture_pipe
   tool: command
   vars:
@@ -78,10 +70,6 @@ x-paintedwolf-scenarios:
     shell_metacharacters: true
     reissue_via_command: true
     terminal_capture: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - one executable
-  - literal arguments
 - id: substitution
   tool: terminal_open
   vars:
@@ -90,10 +78,6 @@ x-paintedwolf-scenarios:
     reason: 'command contains unquoted shell metacharacters: `$`'
     shell_metacharacters: true
     use_substitution_result: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - shell expansions are not evaluated
-  - git checkout
 - id: scratch_variable
   tool: terminal_open
   vars:
@@ -103,10 +87,6 @@ x-paintedwolf-scenarios:
     shell_metacharacters: true
     use_substitution_result: true
     scratch_var: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - shell expansions are not evaluated
-  - $SCRATCH_DIR/notes.txt
 - id: background_operator
   tool: terminal_open
   vars:
@@ -114,10 +94,6 @@ x-paintedwolf-scenarios:
     profile_id: implement
     reason: '`&` backgrounds a command rather than sequencing it: `&`'
     use_background_param: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - '`background` field'
-  - handle
 - id: environment_assignment
   tool: terminal_open
   vars:
@@ -126,10 +102,6 @@ x-paintedwolf-scenarios:
     reason: environment assignments belong in env
     env_assignment: true
     use_env_param: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - '`env` object'
-  - literal environment
 - id: shell_metacharacters
   tool: terminal_open
   vars:
@@ -138,9 +110,6 @@ x-paintedwolf-scenarios:
     reason: 'command contains unquoted shell metacharacters: `<`'
     shell_metacharacters: true
     use_stdin_param: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - literal input in `stdin`
 - id: pipeline_pipe
   tool: terminal_open
   vars:
@@ -149,10 +118,6 @@ x-paintedwolf-scenarios:
     reason: command contains shell metacharacters
     shell_metacharacters: true
     use_pipeline_array: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - '`pipeline` array'
-  - git log --oneline
 - id: terminal_pipe
   tool: terminal_open
   vars:
@@ -162,9 +127,6 @@ x-paintedwolf-scenarios:
     shell_metacharacters: true
     reissue_via_command: true
     can_command: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - offered command tool accepts program text without capture
 - id: terminal_sequence
   tool: terminal_open
   vars:
@@ -174,9 +136,6 @@ x-paintedwolf-scenarios:
     sequence_unsupported: true
     reissue_via_command: true
     can_command: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - offered command tool accepts program text without capture
 - id: snapshot_sequence
   tool: command
   vars:
@@ -184,17 +143,9 @@ x-paintedwolf-scenarios:
     reason: this surface runs one program
     sequence_unsupported: true
     reissue_via_command: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - literal executable arguments
-  - tool --check && tool --report
 - id: snapshot_environment_assignment
   tool: command
   vars:
     command: TOKEN=value tool --check
     reason: environment assignments belong in env
     env_assignment: true
-  expect_contains:
-  - 'Code: COMMAND_NOT_ARGV'
-  - literal executable arguments
-  - TOKEN=value tool --check

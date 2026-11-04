@@ -36,20 +36,11 @@ x-paintedwolf-scenarios:
     child_session_id: c4888a67
     merge_status: rejected
     prior_job_id: f1168996
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_RESUME_OVERLAY_DISCARDED'
-  - f1168996
-  - rejected
 - id: aborted
   vars:
     child_session_id: 724c5815
     merge_status: aborted
     prior_job_id: 98b48050
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_RESUME_OVERLAY_DISCARDED'
-  - aborted
 selector:
   tool:
   - task

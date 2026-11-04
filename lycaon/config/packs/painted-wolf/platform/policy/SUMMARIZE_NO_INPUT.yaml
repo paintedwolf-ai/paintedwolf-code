@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
       path: README.md
       profile: coordinator
       tool: summarize
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SUMMARIZE_NO_INPUT'

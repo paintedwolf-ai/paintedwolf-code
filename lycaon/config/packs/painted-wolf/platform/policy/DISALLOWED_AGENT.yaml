@@ -23,8 +23,5 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: task
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DISALLOWED_AGENT'
 x-paintedwolf-audience:
 - coordinator

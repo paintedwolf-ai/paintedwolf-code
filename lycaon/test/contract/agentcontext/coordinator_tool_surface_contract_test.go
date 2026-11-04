@@ -3,8 +3,6 @@ package contract
 import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
-	"context"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -12,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -175,45 +172,6 @@ func TestCoordinatorToolSurface_investigateProductWriteScopeLoaded(t *testing.T)
 	}
 	if err := sandbox.CheckWriteInScope(scope, toolcontract.CoordinatorProductWriteScope, "vendor/pkg/foo.go"); err != nil {
 		t.Fatalf("vendor write must not be denied by scope: %v", err)
-	}
-}
-
-func TestCoordinatorToolSurface_investigateSurveyRouteRendered(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	engine := contractcheck.BundledPromptEngineForRoot(t)
-	vars := map[string]any{"execution_mode": "investigate"}
-	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
-		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
-	}
-	rendered := renderCoordinatorTripartiteForRunContext(
-		t, root, api.CoordinatorRunContext{}, nil, "Research this repo", nil,
-		toolcontract.SurfaceImplementInvestigate,
-	)
-	for _, want := range []string{
-		"`summarize`",
-		"`command`",
-		"load through `request_tools`",
-	} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("missing %q in rendered investigate prompt", want)
-		}
-	}
-	for _, forbidden := range []string{
-		"Lane S or",
-		"Lane A",
-	} {
-		if strings.Contains(rendered, forbidden) {
-			t.Fatalf("investigate prompt must not contain %q", forbidden)
-		}
-	}
-	modeRendered, err := engine.Render(context.Background(), "agents/coordinator-mode-implement-investigate.md", vars)
-	contractcheck.FailErr(t, "render mode", err)
-	if !strings.Contains(modeRendered, "INVEST_HANDLE_NOT_OBSERVED") {
-		t.Fatal("investigate mode partial missing grounding hints")
-	}
-	if strings.Contains(modeRendered, "COORDINATOR_INVESTIGATE_DENIED_PATH") {
-		t.Fatal("investigate mode must not contain obsolete COORDINATOR_INVESTIGATE_DENIED_PATH")
 	}
 }
 

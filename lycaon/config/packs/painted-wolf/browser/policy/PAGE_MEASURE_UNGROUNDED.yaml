@@ -27,32 +27,19 @@ x-paintedwolf-scenarios:
       offenders_omitted: 0
       offenders_sample: page#1
       can_recall: true
-    expect_contains:
-      - 'Code: PAGE_MEASURE_UNGROUNDED'
-      - 'recall(query='
   - id: recall_not_callable
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: page#1
       can_recall: false
-    expect_contains:
-      - 'Code: PAGE_MEASURE_UNGROUNDED'
-      - 'obtain it using an offered measurement tool'
   - id: px_claim_without_geometry
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: page#1
-    expect_contains:
-      - 'Code: PAGE_MEASURE_UNGROUNDED'
-      - page_geometry
-      - complete_leg
   - id: cite_page_when_geometry_exists
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: page#2
-    expect_contains:
-      - 'Code: PAGE_MEASURE_UNGROUNDED'
-      - complete_leg

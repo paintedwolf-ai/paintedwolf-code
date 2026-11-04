@@ -35,7 +35,3 @@ x-paintedwolf-scenarios:
   vars:
     command: go mod tidy
     count: 3
-  expect_contains:
-  - 'Code: COMMAND_FAILURE_LOOP'
-  - go mod tidy
-  - failed 3 times

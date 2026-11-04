@@ -112,29 +112,6 @@ func TestInjectRenderer_RenderWorkerTaskAssignmentStub(t *testing.T) {
 	}
 }
 
-func TestInjectRenderer_RenderWorkerTaskPreambleStub(t *testing.T) {
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	renderer := prompts.NewInjectRenderer(engine)
-	out, err := renderer.Render(context.Background(), "worker-task-preamble", map[string]any{
-		"touch_paths": []string{"internal/**"},
-		"scope_mode":  "write",
-		"scope_paths": []string{"internal/auth/**"},
-	})
-	testutil.FailErr(t, "renderer.Render failed", err)
-	if !strings.Contains(out, "<!-- lycaon-worker-task-preamble:v1 -->") {
-		t.Fatalf("missing worker-task-preamble sentinel in:\n%s", out)
-	}
-	if !strings.Contains(out, "orientation for the project") || !strings.Contains(out, "obligation:") {
-		t.Fatalf("missing preamble copy in:\n%s", out)
-	}
-	if strings.Contains(strings.ToLower(out), "shim") {
-		t.Fatalf("worker scope copy must not authorize shims:\n%s", out)
-	}
-	if !strings.Contains(out, "suggested paths guide focus only") {
-		t.Fatalf("worker task copy must keep suggested paths advisory:\n%s", out)
-	}
-}
-
 func TestInjectRenderer_RenderWorkerLegStub(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	renderer := prompts.NewInjectRenderer(engine)

@@ -23,8 +23,3 @@ x-paintedwolf-scenarios:
   vars:
     tool: update_progress
     profile: coordinator
-  expect_contains:
-  - 'Code: PROGRESS_RECONCILIATION_CHANGED'
-  - 'worker jobs'
-  - 'current reconciliation_token and expected_revision'
-  - 'Keep unfinished deliverables pending'

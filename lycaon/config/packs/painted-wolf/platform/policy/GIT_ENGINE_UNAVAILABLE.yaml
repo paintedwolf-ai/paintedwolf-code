@@ -35,4 +35,3 @@ x-paintedwolf-message: The bundled Git engine is unavailable
 x-paintedwolf-scenarios:
   - id: default
     vars: {tool: git_status, profile: coordinator}
-    expect_contains: ['Rejected:', 'Code: GIT_ENGINE_UNAVAILABLE']

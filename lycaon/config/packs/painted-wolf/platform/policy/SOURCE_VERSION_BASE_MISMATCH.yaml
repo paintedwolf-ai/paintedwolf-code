@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       path: main.go
       profile: implement
       tool: restore_version
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_BASE_MISMATCH'

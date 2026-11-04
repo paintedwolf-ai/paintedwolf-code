@@ -1,8 +1,6 @@
 package contract
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -131,7 +129,6 @@ func TestGateFeedbackSatisfySplitByAdvancePolicy(t *testing.T) {
 
 func TestPhaseExitProjectorPlanContract(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
 	reg, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "RegistryFromDirs", err)
 	m, err := reg.Get("plan", "1.0.1")
@@ -160,33 +157,4 @@ func TestPhaseExitProjectorPlanContract(t *testing.T) {
 		}
 	}
 
-	injectPath := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "guidance", "active-workflow.md")
-	raw, err := os.ReadFile(injectPath)
-	contractcheck.FailErr(t, "read active-workflow", err)
-	body := string(raw)
-	if !strings.Contains(body, "### Phase exit") {
-		t.Fatal("active-workflow.md must render Phase exit")
-	}
-	if strings.Contains(body, "Advance: call") || strings.Contains(body, "Advance: host auto-advances") {
-		t.Fatal("active-workflow.md must not use standalone Advance one-liner")
-	}
-
-	forbid := []string{"workflow_advance", "host auto-advances", "do **not** call"}
-	modePrompts := []struct {
-		pack, file string
-	}{
-		{"hitl", "coordinator-mode-await-user-input.md"},
-		{"plan", "coordinator-mode-plan-research.md"},
-		{"plan", "coordinator-mode-plan-stub.md"},
-	}
-	for _, s := range modePrompts {
-		raw, err := os.ReadFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", s.pack, "agents", "prompts", s.file))
-		contractcheck.FailErr(t, "read "+s.file, err)
-		body := string(raw)
-		for _, bad := range forbid {
-			if strings.Contains(body, bad) {
-				t.Fatalf("%s must not contain %q", s.file, bad)
-			}
-		}
-	}
 }

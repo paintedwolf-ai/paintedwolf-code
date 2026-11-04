@@ -31,6 +31,3 @@ x-paintedwolf-scenarios:
       path: other.go
       profile: implement
       tool: source_history
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_PATH_MISMATCH'

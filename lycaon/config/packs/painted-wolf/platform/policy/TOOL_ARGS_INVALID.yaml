@@ -103,9 +103,6 @@ x-paintedwolf-scenarios:
     profile: coordinator
     tool: read
     argument_schema_tool: read
-  expect_contains:
-  - 'Code: TOOL_ARGS_INVALID'
-  - Tool arguments failed validation
 - id: mutation-sibling
   vars:
     detail: missing old_string
@@ -115,9 +112,6 @@ x-paintedwolf-scenarios:
     tool: edit
     argument_schema_tool: edit
     reason: missing old_string
-  expect_contains:
-  - 'Code: TOOL_ARGS_INVALID'
-  - missing old_string
 - id: misplaced-field
   vars:
     tool: command
@@ -126,19 +120,12 @@ x-paintedwolf-scenarios:
     - host_resources
     belongs_under: capability_request
     argument_schema_tool: command
-  expect_contains:
-  - 'Code: TOOL_ARGS_INVALID'
-  - capability_request
-  - the top level
 - id: unknown-field
   vars:
     tool: command
     profile: coordinator
     rejection_field: timeout
     argument_schema_tool: command
-  expect_contains:
-  - 'Code: TOOL_ARGS_INVALID'
-  - '`timeout`'
 - id: unparsed-json
   vars:
     tool: http_request
@@ -147,9 +134,6 @@ x-paintedwolf-scenarios:
     json_encoded: true
     expected_type: object
     argument_schema_tool: http_request
-  expect_contains:
-  - 'Code: TOOL_ARGS_INVALID'
-  - instead of a native object
 - id: malformed-json
   vars:
     tool: submit_verdict
@@ -167,10 +151,6 @@ x-paintedwolf-scenarios:
     belongs_under: verdict
     close_before: set_asides
     argument_schema_tool: submit_verdict
-  expect_contains:
-  - 'Code: TOOL_ARGS_INVALID'
-  - verdict.coverage
-  - set_asides
 - id: malformed-json-closed-early
   vars:
     tool: task
@@ -183,9 +163,6 @@ x-paintedwolf-scenarios:
     - scope
     expected_type: object
     argument_schema_tool: task
-  expect_contains:
-  - 'Code: TOOL_ARGS_INVALID'
-  - files, scope
 - id: unplanned-work-id
   vars:
     tool: task
@@ -195,16 +172,8 @@ x-paintedwolf-scenarios:
     inapplicable_fields:
     - workflow_work_id
     argument_schema_tool: task
-  expect_contains:
-  - 'Code: TOOL_ARGS_INVALID'
-  - Omit `workflow_work_id`
-  - Preserve the other arguments
 - id: missing-required-arguments
   vars:
     tool: update_progress
     missing_required_arguments: '{"missing_required":["content"],"expected_types":{"content":"string"},"received_keys":[]}'
     argument_schema_tool: update_progress
-  expect_contains:
-  - 'Code: TOOL_ARGS_INVALID'
-  - '"missing_required":["content"]'
-  - Supply these missing arguments

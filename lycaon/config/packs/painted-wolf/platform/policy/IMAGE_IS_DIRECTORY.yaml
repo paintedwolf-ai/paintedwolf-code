@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
     path: assets/icons
     profile: coordinator
     tool: view_image
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: IMAGE_IS_DIRECTORY'

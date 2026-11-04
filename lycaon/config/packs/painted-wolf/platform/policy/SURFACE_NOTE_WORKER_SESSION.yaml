@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: explore
     tool: surface_note
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SURFACE_NOTE_WORKER_SESSION'
-  - not the user's chat

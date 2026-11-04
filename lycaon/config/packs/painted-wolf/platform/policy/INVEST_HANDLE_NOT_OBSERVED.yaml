@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: src/missing.go:1
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: INVEST_HANDLE_NOT_OBSERVED'

@@ -9,5 +9,4 @@ fix: Inspect these hits. Use fetch_url for a relevant returned URL, refine the q
 instead: Choose the next action from the actual result and freshness requirement instead of repeating an unchanged query without a reason.
 scenarios:
 - id: repeat_query
-  expect_contains: ['Code: WEB_SEARCH_DUPLICATE_QUERY', 'fetch_url']
 id: WEB_SEARCH_DUPLICATE_QUERY

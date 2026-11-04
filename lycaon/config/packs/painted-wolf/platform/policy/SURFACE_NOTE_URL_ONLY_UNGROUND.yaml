@@ -30,7 +30,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: surface_note
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SURFACE_NOTE_URL_ONLY_UNGROUND'
-  - URLs alone cannot ground

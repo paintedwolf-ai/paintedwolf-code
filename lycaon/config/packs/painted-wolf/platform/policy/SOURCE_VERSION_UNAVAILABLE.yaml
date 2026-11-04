@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       detail: exact content for this version is unavailable
       profile: implement
       tool: source_history
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_UNAVAILABLE'

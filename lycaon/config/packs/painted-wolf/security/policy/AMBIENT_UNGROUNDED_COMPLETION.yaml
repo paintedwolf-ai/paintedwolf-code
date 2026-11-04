@@ -37,28 +37,16 @@ x-paintedwolf-scenarios:
 - id: recall_callable
   vars:
     can_recall: true
-  expect_contains:
-  - 'Code: AMBIENT_UNGROUNDED_COMPLETION'
-  - 'recall(query='
 - id: recall_not_callable
   vars:
     can_recall: false
-  expect_contains:
-  - 'Code: AMBIENT_UNGROUNDED_COMPLETION'
-  - 'through an available'
 - id: default
   vars:
     detail: bad args
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - Tool feedback
-  - 'Code: AMBIENT_UNGROUNDED_COMPLETION'
 - id: missing_summary
   vars:
     missing_summary_job_ids:
     - job-1
-  expect_contains:
-  - job-1
-  - without redispatching

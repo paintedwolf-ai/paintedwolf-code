@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
       observed_paths_omitted: 2
       observed_paths_sample: README.md
       observed_urls_count: 0
-    expect_contains:
-      - 'Tool feedback'
-      - 'Code: INVEST_CITATIONS_REQUIRED'

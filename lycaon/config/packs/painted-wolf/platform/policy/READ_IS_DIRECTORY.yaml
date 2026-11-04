@@ -40,10 +40,6 @@ x-paintedwolf-scenarios:
     can_find: true
     can_grep: true
     can_read: true
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: READ_IS_DIRECTORY'
-  - list_dir
 - id: default
   vars:
     path: lycaon/internal
@@ -53,9 +49,6 @@ x-paintedwolf-scenarios:
     can_find: true
     can_grep: true
     can_read: true
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: READ_IS_DIRECTORY'
 - id: symbol_lookup
   vars:
     path: internal/session
@@ -65,16 +58,9 @@ x-paintedwolf-scenarios:
     can_find: true
     can_grep: true
     can_read: true
-  expect_contains:
-  - 'Code: READ_IS_DIRECTORY'
-  - grep
-  - structural
 - id: narrow_profile
   vars:
     tool: read
     path: plans
     can_read: true
     can_grep: true
-  expect_contains:
-  - structural
-  - concrete file

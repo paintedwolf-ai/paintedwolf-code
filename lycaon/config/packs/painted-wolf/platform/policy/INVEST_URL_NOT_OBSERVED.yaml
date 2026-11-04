@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: https://example.com
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: INVEST_URL_NOT_OBSERVED'

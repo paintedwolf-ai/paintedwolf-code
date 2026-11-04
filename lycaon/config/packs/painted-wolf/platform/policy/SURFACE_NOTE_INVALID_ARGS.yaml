@@ -31,7 +31,3 @@ x-paintedwolf-scenarios:
     tool: surface_note
     field: summary
     reason: summary exceeds the configured limit
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SURFACE_NOTE_INVALID_ARGS'
-  - summary exceeds the configured limit

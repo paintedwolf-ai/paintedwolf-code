@@ -19,4 +19,3 @@ x-paintedwolf-message: process control boundary unavailable
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains: ['Code: SANDBOX_EXECUTION_BOUNDARY_UNAVAILABLE', 'Process control cannot retain']

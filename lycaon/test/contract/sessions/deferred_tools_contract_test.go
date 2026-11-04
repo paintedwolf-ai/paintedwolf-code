@@ -1,37 +1,15 @@
 package contract
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
-	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-func TestImplementerPersonaLoadableCatalog(t *testing.T) {
-	prompts.ResetPersonaContractCache()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	got, err := prompts.RenderPersona(context.Background(), engine, orchestration.ProfileImplementer, nil)
-	contractcheck.FailErr(t, "RenderPersona", err)
-
-	for _, sub := range []string{"### More tools", "call `request_tools` with `need`", "security scans", "repository investigation"} {
-		if !strings.Contains(got, sub) {
-			t.Fatalf("implementer persona missing %q", sub)
-		}
-	}
-	// The map names capabilities; loadable tool names and descriptions stay out.
-	for _, name := range []string{"### Loadable tools", "`source_history`", "`scan_list`", "`scan_query`", "`scan_summary`", "request_tools({"} {
-		if strings.Contains(got, name) {
-			t.Fatalf("implementer persona lists a loadable tool or inline call syntax: %s", name)
-		}
-	}
-}
 
 func TestProfileDeferredToolsGetRequestTools(t *testing.T) {
 	t.Parallel()

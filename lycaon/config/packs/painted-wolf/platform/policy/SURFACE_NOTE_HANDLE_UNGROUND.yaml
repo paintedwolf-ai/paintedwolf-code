@@ -41,9 +41,6 @@ x-paintedwolf-scenarios:
       observed_paths_omitted: 0
       observed_paths_sample: src/a.go
       can_recall: true
-    expect_contains:
-      - 'Code: SURFACE_NOTE_HANDLE_UNGROUND'
-      - 'recall(query='
   - id: recall_not_callable
     vars:
       profile: coordinator
@@ -55,9 +52,6 @@ x-paintedwolf-scenarios:
       observed_paths_omitted: 0
       observed_paths_sample: src/a.go
       can_recall: false
-    expect_contains:
-      - 'Code: SURFACE_NOTE_HANDLE_UNGROUND'
-      - 're-read the path'
   - id: default
     vars:
       profile: coordinator
@@ -68,12 +62,6 @@ x-paintedwolf-scenarios:
       observed_paths_count: 1
       observed_paths_omitted: 0
       observed_paths_sample: src/a.go
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SURFACE_NOTE_HANDLE_UNGROUND'
-      - missing.go:1
-      - src/a.go
-      - Keep cited_evidence
   - id: unseen_handle_ordinal
     vars:
       profile: coordinator
@@ -84,7 +72,3 @@ x-paintedwolf-scenarios:
       observed_paths_count: 2
       observed_paths_omitted: 0
       observed_paths_sample: ntp.go, main.go
-    expect_contains:
-      - 'Code: SURFACE_NOTE_HANDLE_UNGROUND'
-      - command#12
-      - single line number

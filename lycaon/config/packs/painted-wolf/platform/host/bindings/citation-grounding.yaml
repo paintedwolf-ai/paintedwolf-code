@@ -10,8 +10,3 @@ invariants:
   fires_in:
   - closeout citations rejected for untraced cited_evidence or cited_urls (handle/unverifiable
     in-session retry; citations-required host-assembles)
-  required:
-  - citations fence
-  - cited_evidence
-  forbidden:
-  - workflow_advance

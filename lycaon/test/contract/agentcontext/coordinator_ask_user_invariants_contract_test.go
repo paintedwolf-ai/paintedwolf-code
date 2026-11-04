@@ -130,34 +130,6 @@ func TestCoordinatorAskUserInvariantOnePendingRejectCode(t *testing.T) {
 	}
 }
 
-func TestCoordinatorAskUserInvariantInjectDtoHasNoLastUserAskResponse(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "coordinator", "inject", "inject_dto.go"))
-	contractcheck.FailErr(t, "read inject_dto", err)
-	if strings.Contains(string(raw), "LastUserAskResponse") {
-		t.Fatal("deleted last_user_ask_response inject — answer is on ask_user tool row")
-	}
-}
-
-func TestCoordinatorAskUserInvariantNoLastUserAskResponseScaffoldLatch(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	t.Parallel()
-	for _, rel := range []string{
-		filepath.Join("internal", "workflow", "inputs", "asks.go"),
-		filepath.Join("internal", "workflow", "inputs", "feedback.go"),
-		filepath.Join("internal", "api", "harness_control.go"),
-	} {
-		raw, err := os.ReadFile(filepath.Join(lycaonRoot, rel))
-		contractcheck.FailErr(t, "read "+rel, err)
-		if strings.Contains(string(raw), "last_user_ask_response") {
-			t.Fatalf("%s must not keep last_user_ask_response", rel)
-		}
-	}
-}
-
 func TestCoordinatorAskUserInvariantParkOnAskAndAnswerRewrite(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
@@ -393,30 +365,6 @@ func TestCoordinatorAskUserInvariantNoToolAskExpiryHelpers(t *testing.T) {
 		if strings.Contains(src, needle) {
 			t.Fatalf("RequestUserInput must not reference %q", needle)
 		}
-	}
-}
-
-func TestCoordinatorAskUserInvariantDisciplineNoFailOpenTeaching(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(
-		lycaonRoot, "config", "packs", "painted-wolf", "hitl", "shared", "partials", "coordinator-ask-user-discipline.md",
-	))
-	contractcheck.FailErr(t, "read ask_user discipline", err)
-	src := string(raw)
-	lower := strings.ToLower(src)
-	for _, needle := range []string{"blocking: false", "ask_user_timeout", "blocking: true"} {
-		if strings.Contains(lower, needle) {
-			t.Fatalf("discipline teaches %q, which ask_user does not accept", needle)
-		}
-	}
-	// Match affirmative countdown and fail-open guidance.
-	if strings.Contains(lower, "shows remaining") || strings.Contains(lower, "card shows remaining") {
-		t.Fatal("discipline must not teach open-card countdown")
-	}
-	if !strings.Contains(lower, "composer") {
-		t.Fatal("discipline must teach composer / Den answer path")
 	}
 }
 

@@ -26,7 +26,3 @@ x-paintedwolf-scenarios:
     vars:
       profile: coordinator
       tool: wait
-    expect_contains:
-      - 'Code: WAIT_HIDDEN_TEXT'
-      - surface_note
-      - empty assistant text

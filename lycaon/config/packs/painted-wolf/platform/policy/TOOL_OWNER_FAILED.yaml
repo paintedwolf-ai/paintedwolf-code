@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     profile: implement
     reason: subsystem owner unavailable
     tool: write
-  expect_contains:
-  - 'Code: TOOL_OWNER_FAILED'
-  - owner

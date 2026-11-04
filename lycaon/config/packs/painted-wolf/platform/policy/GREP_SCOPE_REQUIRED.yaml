@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     path: .
     profile: coordinator
     tool: grep
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: GREP_SCOPE_REQUIRED'

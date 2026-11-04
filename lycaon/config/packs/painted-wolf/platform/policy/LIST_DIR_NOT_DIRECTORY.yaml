@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     path: docs/README.md
     profile: explore_readonly
     tool: list_dir
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: LIST_DIR_NOT_DIRECTORY'

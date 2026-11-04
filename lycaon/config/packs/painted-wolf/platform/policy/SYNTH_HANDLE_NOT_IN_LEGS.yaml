@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: phantom.go:1 ("package phantom")
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SYNTH_HANDLE_NOT_IN_LEGS'

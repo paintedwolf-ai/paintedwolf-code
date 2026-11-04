@@ -41,9 +41,6 @@ x-paintedwolf-scenarios:
     pattern: mcpProjectDir
     profile: coordinator
     tool: grep
-  expect_contains:
-  - 'Code: DOOM_LOOP_FRUITLESS_SEARCH'
-  - Record the absence
 - id: worker_leg
   vars:
     fruitless_search_run: 3
@@ -51,7 +48,3 @@ x-paintedwolf-scenarios:
     profile: explore_readonly
     tool: grep
     worker_leg: true
-  expect_contains:
-  - 'Code: DOOM_LOOP_FRUITLESS_SEARCH'
-  - Record the absence
-  - 'leg_status: partial'

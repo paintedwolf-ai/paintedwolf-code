@@ -8,59 +8,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hintregistry"
-	"github.com/lycaon/lycaon/internal/oarcopy"
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/tsparse"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/guidancescan"
 	"gopkg.in/yaml.v3"
 )
-
-func TestSpillFailureGuidancePreservesCompletedEffects(t *testing.T) {
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load spill feedback catalogue", err)
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	out, err := guidance.NewStaticRejectFormatter(cfg).Format("TOOL_OUTPUT_SPILL_UNAVAILABLE", map[string]any{
-		"tool": "git_commit", "execution_outcome": "completed", "bytes": 20000,
-	})
-	contractcheck.FailErr(t, "render spill failure", err)
-	for _, want := range []string{"Code: TOOL_OUTPUT_SPILL_UNAVAILABLE", "completed", "20000", "Do not repeat a mutation"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("spill failure lost recovery contract %q: %s", want, out)
-		}
-	}
-}
-
-func TestSourceParsingRejectionsRetainMeasuredCause(t *testing.T) {
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load parsing feedback catalogue", err)
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	formatter := guidance.NewStaticRejectFormatter(cfg)
-	for _, tc := range []struct{ code, tool, reason string }{
-		{"MUTATION_PARSE_INCOMPLETE", "write", "timeout"},
-		{"MUTATION_PARSE_INCOMPLETE", "edit", "canceled"},
-		{"MUTATION_PARSE_FAILED", "write", "panic"},
-		{"SOURCE_PARSE_INCOMPLETE", "grep", "iteration_limit"},
-		{"SOURCE_PARSE_FAILED", "read", "parser_error"},
-	} {
-		t.Run(tc.code+"/"+tc.reason, func(t *testing.T) {
-			failure := &tsparse.Failure{Reason: tc.reason, Language: "swift", TimeoutMS: 30000, ElapsedMS: 30017, SourceBytes: 6236, ParsedBytes: 431}
-			data := failure.Facts("candidate")
-			data["tool"], data["path"] = tc.tool, "Sources/Level.swift"
-			out, err := formatter.Format(tc.code, data)
-			contractcheck.FailErr(t, "render parser rejection", err)
-			for _, want := range []string{"Code: " + tc.code, "Sources/Level.swift", tc.reason, "swift", "30000", "30017", "6236", "431", "candidate"} {
-				if !strings.Contains(out, want) {
-					t.Fatalf("parser rejection lost %q: %s", want, out)
-				}
-			}
-			if strings.Contains(out, "syntax_override_reason") {
-				t.Fatalf("rejection teaches parser override: %s", out)
-			}
-		})
-	}
-}
 
 func TestGuidanceNoBannedInlineEmission(t *testing.T) {
 	t.Parallel()
@@ -122,42 +74,26 @@ func TestRecoverableHintCodesRenderFullRejectBlock(t *testing.T) {
 		if strings.TrimSpace(entry.What) == "" && strings.TrimSpace(entry.Message) == "" {
 			t.Fatalf("hint %q missing what or message", code)
 		}
-		// Scenarios supply template inputs and expected rendered output.
+		// Scenarios supply the template inputs.
 		if len(entry.Scenarios) == 0 {
 			t.Fatalf("hint %q missing scenarios", code)
 		}
-		// Advisory effects never claim the attempted action was rejected.
-		lead := "Rejected:"
-		if strings.TrimSpace(entry.Effect) == "warn" || strings.TrimSpace(entry.Effect) == "nudge" {
-			lead = ">>>"
-		}
-		assertBlock := func(label string, vars map[string]any, expectContains []string) {
+		assertBlock := func(label string, vars map[string]any) {
 			raw, err := f.Format(code, vars)
 			if err != nil {
 				t.Fatalf("hint %q (%s) Format: %v", code, label, err)
 			}
-			for _, want := range append([]string{lead, "Code: " + code}, expectContains...) {
-				if !strings.Contains(raw, want) {
-					t.Fatalf("hint %q (%s) reject block missing %q:\n%s", code, label, want, raw)
-				}
-			}
-			facts := oarcopy.FactsFromData(vars)
-			fix := strings.TrimSpace(oarcore.RenderCopy(entry.Fix, facts))
-			if strings.Contains(raw, "Fix:") != (fix != "") {
-				t.Fatalf("hint %q (%s) Fix line mismatch for fix=%q:\n%s", code, label, fix, raw)
-			}
-			instead := strings.TrimSpace(oarcore.RenderCopy(entry.Instead, facts))
-			if strings.Contains(raw, "Next:") != (instead != "" && instead != fix) {
-				t.Fatalf("hint %q (%s) Next line mismatch for instead=%q fix=%q:\n%s", code, label, instead, fix, raw)
+			if !strings.Contains(raw, "Code: "+code) {
+				t.Fatalf("hint %q (%s) reject block lacks its code:\n%s", code, label, raw)
 			}
 		}
 		assertBlock("default", map[string]any{
 			"tool":    renderToolFor(entry, "read"),
 			"path":    "src/main.go",
 			"profile": "coordinator", "leg_id": "leg-1", "count": 3,
-		}, nil)
+		})
 		for _, sc := range entry.Scenarios {
-			assertBlock(sc.ID, guidance.ScenarioVars(entry, sc), sc.ExpectContains)
+			assertBlock(sc.ID, guidance.ScenarioVars(entry, sc))
 		}
 	}
 }

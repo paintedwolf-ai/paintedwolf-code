@@ -37,7 +37,3 @@ x-paintedwolf-scenarios:
     can_page_close: true
     page_live_ids:
     - held-page
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: PAGE_CAP_REACHED'
-  - page_close

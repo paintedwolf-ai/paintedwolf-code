@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: task
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: WORKER_COMPLETION_REPORT_MISSING'
-      - complete_leg

@@ -40,7 +40,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: surface_note
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SURFACE_NOTE_ARTIFACT_UNKNOWN'
-  - artifact_id

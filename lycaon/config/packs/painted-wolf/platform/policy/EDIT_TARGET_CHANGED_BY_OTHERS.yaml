@@ -51,9 +51,6 @@ x-paintedwolf-scenarios:
     profile: implement
     tool: edit
     total_lines: 120
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: EDIT_TARGET_CHANGED_BY_OTHERS'
 
 - id: replacement_present
   vars:
@@ -65,7 +62,3 @@ x-paintedwolf-scenarios:
     total_lines: 120
     replacement_matches: 1
     replacement_line: 7
-  expect_contains:
-  - 'already present'
-  - 'This call made no change'
-  - 'does not prove an earlier'

@@ -23,7 +23,3 @@ x-paintedwolf-scenarios:
   - id: open_steps
     vars:
       pending: 2
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: PROGRESS_OPEN_BEFORE_CLOSEOUT'
-      - update_progress

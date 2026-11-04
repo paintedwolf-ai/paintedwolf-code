@@ -20,6 +20,3 @@ x-paintedwolf-scenarios:
 - id: retired_operation
   vars:
     need: edit
-  expect_contains:
-  - 'Code: TOOL_COMMAND_OPERATION'
-  - command

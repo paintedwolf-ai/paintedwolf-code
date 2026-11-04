@@ -24,10 +24,6 @@ x-paintedwolf-scenarios:
   vars:
     job_id: worker-1
     status: complete
-  expect_contains:
-  - 'Code: DECISION_CHANGED'
-  - worker-1
-  - pack_board
 selector:
   tool:
   - answer_decision

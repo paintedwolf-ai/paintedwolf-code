@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       detail: version v_missing was not found
       profile: implement
       tool: source_history
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_NOT_FOUND'

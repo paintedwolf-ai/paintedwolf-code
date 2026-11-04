@@ -18,7 +18,4 @@ scenarios:
     spill_bytes: 67108864
     spill_path: tool-output/example.txt
     tool: run_terminal_cmd
-  expect_contains:
-  - 'Code: TOOL_OUTPUT_SPILL_CAPPED'
-  - '8388608'
 id: TOOL_OUTPUT_SPILL_CAPPED

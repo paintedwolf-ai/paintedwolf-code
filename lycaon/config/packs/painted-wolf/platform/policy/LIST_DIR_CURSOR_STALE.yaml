@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: list_dir
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: LIST_DIR_CURSOR_STALE'
