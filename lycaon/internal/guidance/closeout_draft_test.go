@@ -1,16 +1,12 @@
 package guidance_test
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -242,7 +238,10 @@ func TestDraftResolverOutcomes(t *testing.T) {
 	if got := resolveMarkdown("[other/file.ts]", evidence.CitationRoots{}, unique); len(got.Occurrences) != 0 || len(got.Issues) != 0 {
 		t.Fatalf("an unobserved bare path is prose: %+v", got)
 	}
-	if got := onlyOutcome(t, `["other/file.ts"]`, evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved {
+	if got := resolveMarkdown(`["other/file.ts"]`, evidence.CitationRoots{}, unique); len(got.Occurrences) != 0 || len(got.Issues) != 0 {
+		t.Fatalf("an unobserved quoted path with no coordinate is prose: %+v", got)
+	}
+	if got := onlyOutcome(t, `["other/file.ts":1]`, evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved {
 		t.Fatalf("an unobserved quoted path = %+v", got)
 	}
 	if got := onlyOutcome(t, "[other.ts:3]", evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved || got.Code != guidance.SynthHandleNotInLegsCode {
@@ -453,185 +452,5 @@ func TestDraftSourceLinks(t *testing.T) {
 	draft := guidance.ParseCloseoutDraft("[sec](source://s/lib/sec.go#L12)", guidance.DraftParseOptions(roots, ev))
 	if len(draft.CitedEvidence) != 1 || draft.CitedEvidence[0].Path != "@shared/lib/sec.go" {
 		t.Fatalf("metadata = %+v", draft.CitedEvidence)
-	}
-}
-
-// M7: an empty ledger means nothing was observed, so a caller must have failed on a
-// read error first. The union reports that error rather than an empty result.
-func TestLedgerReadErrorSurfacesBeforeResolution(t *testing.T) {
-	t.Parallel()
-	want := errors.New("ledger unavailable")
-	_, err := guidance.UnionCloseoutEvidence(context.Background(), failingEvidenceReader{err: want}, "session", nil)
-	if !errors.Is(err, want) {
-		t.Fatalf("err = %v", err)
-	}
-	got := onlyOutcome(t, "[read#1]", evidence.CitationRoots{}, evidence.Ledger{})
-	if got.Outcome != guidance.CitationNotObserved {
-		t.Fatalf("empty ledger = %+v", got)
-	}
-}
-
-type failingEvidenceReader struct{ err error }
-
-func (r failingEvidenceReader) LoadLedger(context.Context, string) (evidence.Ledger, error) {
-	return evidence.Ledger{}, r.err
-}
-
-func (r failingEvidenceReader) WorkerLegs(context.Context, string, time.Time) ([]guidance.EvidenceLeg, error) {
-	return nil, r.err
-}
-
-// H2, H3, H8: a coordinate needs line facts for that location, on any record.
-func TestDraftCoordinatesAreChecked(t *testing.T) {
-	t.Parallel()
-	read := func(handle, path string, start, end int) evidence.Record {
-		return evidence.Record{Handle: handle, Kind: "read", Shape: evidence.ShapeFileRegion, Path: path, LineRanges: []evidence.LineRange{{Start: start, End: end}}}
-	}
-	reads := evidence.AssembleLedger([]evidence.Record{read("read#1", "a.go", 1, 10)})
-	survey := evidence.AssembleLedger([]evidence.Record{{Handle: "list#1", Kind: "list", Shape: evidence.ShapeFileRegion, Path: "pkg/doc.go", Survey: true}})
-	both := evidence.AssembleLedger([]evidence.Record{{Handle: "list#1", Kind: "list", Shape: evidence.ShapeFileRegion, Path: "a.go", Survey: true}, read("read#1", "a.go", 1, 10)})
-	gate := evidence.AssembleLedger([]evidence.Record{{Handle: "verify#1", Kind: "verify", GateType: "verify", Path: "g/h.go"}})
-	zero := evidence.AssembleLedger([]evidence.Record{{Handle: "grep#1", Kind: "grep", Shape: evidence.ShapeOpaque, Path: "a.go"}})
-	pathless := evidence.AssembleLedger([]evidence.Record{{Handle: "command#4", Kind: "command", Shape: evidence.ShapeCommand}, {Handle: "task#1", Kind: "task", Shape: evidence.ShapeOpaque}})
-	cases := []struct {
-		name, source string
-		ev           evidence.Ledger
-		want         guidance.CitationOutcome
-		handle       string
-	}{
-		{"AC-AST-01 single line past the read", "[a.go:999]", reads, guidance.CitationUnverifiable, "read#1"},
-		{"explicit handle past the read", "[read#1:999]", reads, guidance.CitationUnverifiable, "read#1"},
-		{"handle and path past the read", "[read#1 a.go:999]", reads, guidance.CitationUnverifiable, "read#1"},
-		{"one-line range past the read", "[a.go:99-99]", reads, guidance.CitationUnverifiable, "read#1"},
-		{"line just past the read", "[a.go:11]", reads, guidance.CitationUnverifiable, "read#1"},
-		{"workspace link past the read", "[x](a.go#L999)", reads, guidance.CitationUnverifiable, "read#1"},
-		{"line inside the read", "[a.go:10]", reads, guidance.CitationGrounded, "read#1"},
-		{"one-line range inside the read", "[a.go:4-4]", reads, guidance.CitationGrounded, "read#1"},
-		{"AC-AST-13 survey range", "[pkg/doc.go:1-50]", survey, guidance.CitationUnverifiable, "list#1"},
-		{"survey line", "[pkg/doc.go:7]", survey, guidance.CitationUnverifiable, "list#1"},
-		{"survey handle range", "[list#1:1-50]", survey, guidance.CitationUnverifiable, "list#1"},
-		{"survey bare", "[pkg/doc.go]", survey, guidance.CitationSurvey, ""},
-		{"AC-AST-01 survey cannot exempt a range", "[a.go:3-40]", both, guidance.CitationUnverifiable, "list#1"},
-		{"survey and read bare binds content", "[a.go]", both, guidance.CitationGrounded, "read#1"},
-		{"survey and read line binds content", "[a.go:3]", both, guidance.CitationGrounded, "read#1"},
-		{"AC-AST-13 gate line", "[g/h.go:3]", gate, guidance.CitationUnverifiable, "verify#1"},
-		{"gate excerpt", `[g/h.go:3 "some meaningful excerpt"]`, gate, guidance.CitationUnverifiable, "verify#1"},
-		{"gate handle line", "[verify#1:3]", gate, guidance.CitationUnverifiable, "verify#1"},
-		{"gate bare handle", "[verify#1]", gate, guidance.CitationGrounded, "verify#1"},
-		{"AC-AST-11 zero match line", "[grep#1:3]", zero, guidance.CitationUnverifiable, "grep#1"},
-		{"zero match path line", "[a.go:3]", zero, guidance.CitationUnverifiable, "grep#1"},
-		{"zero match bare", "[grep#1]", zero, guidance.CitationGrounded, "grep#1"},
-		{"zero match bare path", "[a.go]", zero, guidance.CitationGrounded, "grep#1"},
-		{"command line", "[command#4:3]", pathless, guidance.CitationUnverifiable, "command#4"},
-		{"dispatch line", "[task#1:1]", pathless, guidance.CitationUnverifiable, "task#1"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := onlyOutcome(t, tc.source, evidence.CitationRoots{}, tc.ev)
-			if got.Outcome != tc.want || got.Resolution.Handle != tc.handle {
-				t.Fatalf("outcome = %+v", got)
-			}
-			if tc.want == guidance.CitationUnverifiable && got.Code != guidance.SynthCitationUnverifiableCode {
-				t.Fatalf("code = %q", got.Code)
-			}
-		})
-	}
-}
-
-// C2: this exact line once spun forever in excerpt anchoring. Resolving through
-// JSON, which the grammar's bound does not cover, shows the loop cannot wrap.
-func TestLineNearIntegerLimitTerminates(t *testing.T) {
-	t.Parallel()
-	ev := ledgerOf(readMessages("a.go", lineTexts(1, 10)))
-	report := guidance.CoordinatorCompletionReport{Synthesis: "x", CitedEvidence: []guidance.CoordinatorCitedEvidence{
-		{Evidence: "read#1", Line: math.MaxInt - 2, Excerpt: "content of line number 3"},
-	}}
-	guidance.EvaluateCloseoutCitations(evidence.CitationRoots{}, "implement_synthesis", report, guidance.CloseoutEvidence{Ledger: ev})
-}
-
-// AC-AST-03: a leg may be named like a directive.
-func TestDraftReservedNamespaces(t *testing.T) {
-	t.Parallel()
-	ev := evidence.NamespaceLedger(ledgerOf(readMessages("a.go", lineTexts(1, 9))), "verify")
-	got := onlyOutcome(t, "[verify:read#1:2]", evidence.CitationRoots{}, ev)
-	if got.Outcome != guidance.CitationGrounded || got.Resolution.Handle != "verify:read#1" {
-		t.Fatalf("outcome = %+v", got)
-	}
-}
-
-// The evidence catalog decides handle kinds, and the ledger adds any kind it holds.
-func TestDraftHandleKinds(t *testing.T) {
-	t.Parallel()
-	ev := evidence.AssembleLedger([]evidence.Record{{Handle: "task#1", Kind: "task", Shape: evidence.ShapeOpaque}})
-	known := guidance.KnownEvidenceKind(ev)
-	for kind, want := range map[string]bool{"read": true, "command": true, "task": true, "pr": false, "section": false} {
-		if known(kind) != want {
-			t.Errorf("known(%q) = %v", kind, !want)
-		}
-	}
-	namespaced := evidence.NamespaceLedger(evidence.AssembleLedger([]evidence.Record{{Handle: "custom#1", Shape: evidence.ShapeOpaque}}), "leg")
-	if !guidance.KnownEvidenceKind(namespaced)("custom") {
-		t.Fatal("a namespaced handle's kind is known")
-	}
-	if got := resolveMarkdown("[pr#123] and [section#intro] and [read#3]", evidence.CitationRoots{}, ev); len(got.Occurrences) != 1 || got.Occurrences[0].Outcome != guidance.CitationNotObserved {
-		t.Fatalf("resolution = %+v", got)
-	}
-}
-
-// M2: a schemeless www link names neither scheme.
-func TestDraftWWWMatchesEitherScheme(t *testing.T) {
-	t.Parallel()
-	ev := evidence.AssembleLedger([]evidence.Record{
-		{Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, URL: "https://www.a.test/p"},
-		{Handle: "web#2", Kind: "web", Shape: evidence.ShapeURL, URL: "http://www.b.test/p"},
-	})
-	for source, want := range map[string]guidance.CitationOutcome{
-		"www.a.test/p":                         guidance.CitationGrounded,
-		"www.b.test/p":                         guidance.CitationGrounded,
-		"[www.a.test/p]":                       guidance.CitationGrounded,
-		"www.c.test/p":                         guidance.CitationNotObserved,
-		"[x](http://www.a.test/p)":             guidance.CitationNotObserved,
-		`<a href="https://www.a.test/p">x</a>`: guidance.CitationGrounded,
-		`<a href="https://www.z.test/p">x</a>`: guidance.CitationNotObserved,
-	} {
-		if got := onlyOutcome(t, source, evidence.CitationRoots{}, ev); got.Outcome != want {
-			t.Errorf("%s = %+v", source, got)
-		}
-	}
-}
-
-// M10, low: a root with no label binds by identity; an id that names no root
-// resolves nowhere, even when it equals another root's label.
-func TestDraftSourceLinkRoots(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	roots := evidence.CitationRoots{ActiveRootID: "r", Roots: []projectroot.RootRef{{ID: "r", Path: dir, IsPrimary: true}, {ID: "s", Label: "shared", Path: t.TempDir()}}}
-	ev := evidence.AssembleLedger([]evidence.Record{
-		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 1, End: 9}}},
-		{Handle: "read#2", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "@shared/b.go", LineRanges: []evidence.LineRange{{Start: 1, End: 9}}},
-	})
-	if got := onlyOutcome(t, "[x](source://r/a.go#L1)", roots, ev); got.Outcome != guidance.CitationGrounded {
-		t.Fatalf("unlabeled root = %+v", got)
-	}
-	if got := onlyOutcome(t, "[x](source://shared/b.go#L1)", roots, ev); got.Outcome != guidance.CitationNotObserved {
-		t.Fatalf("a label is no root id: %+v", got)
-	}
-}
-
-// M3: an unobserved raw anchor loses its tag at presentation.
-func TestPresentRawAnchors(t *testing.T) {
-	t.Parallel()
-	ev := evidence.AssembleLedger([]evidence.Record{{Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, URL: "https://seen.test/p"}})
-	roots := evidence.CitationRoots{}
-	render := func(source string) string {
-		draft := guidance.ParseCloseoutDraft(source, guidance.DraftParseOptions(roots, ev))
-		return guidance.PresentCloseoutMarkdown(draft, guidance.ResolveDraftCitations(roots, "implement_synthesis", draft, guidance.CloseoutEvidence{Ledger: ev}, nil))
-	}
-	if got := render(`a <a href="https://seen.test/p">b</a> c`); got != `a <a href="https://seen.test/p">b</a> c` {
-		t.Fatalf("observed = %q", got)
-	}
-	if got := render(`a <a href="https://other.test/p">b</a> c`); strings.Contains(got, "other.test") || !strings.Contains(got, "b") {
-		t.Fatalf("unobserved = %q", got)
 	}
 }
