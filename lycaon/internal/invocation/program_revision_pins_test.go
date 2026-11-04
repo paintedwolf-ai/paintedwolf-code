@@ -163,9 +163,10 @@ func TestProgramReceiptsPinAWalkAtTheVisitLimit(t *testing.T) {
 		p.Path = fmt.Sprintf("tree/%06d.txt", i)
 		return p
 	}
-	for i := 0; i < maximum; i += 16 {
-		batch := make([]toolcontract.ExecutionRevision, 0, 16)
-		for j := i; j < min(i+16, maximum); j++ {
+	const batchSize = 256
+	for i := 0; i < maximum; i += batchSize {
+		batch := make([]toolcontract.ExecutionRevision, 0, batchSize)
+		for j := i; j < min(i+batchSize, maximum); j++ {
 			batch = append(batch, pin(j))
 		}
 		if err := f.recorder.RecordRevisionPins(t.Context(), execution, i, batch); err != nil {

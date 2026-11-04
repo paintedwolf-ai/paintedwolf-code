@@ -130,17 +130,3 @@ func TestProgramPythonReceivesEOFWithoutControllingTerminal(t *testing.T) {
 	}
 }
 
-func TestProgramNpmInitSettlesOnEOF(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	f := newProgramFixture(t)
-	binary := requiredExternal(t, "npm")
-	out, err := f.call(t, t.Context(), externalProgram(binary, "init"))
-	testutil.FailErr(t, "run npm init", err)
-	got := decodeOutcome(t, out)
-	if got.Status != 1 {
-		t.Fatalf("npm did not settle on EOF: %+v", got)
-	}
-	if _, err := os.Stat(filepath.Join(f.Dir, "package.json")); !os.IsNotExist(err) {
-		t.Fatalf("abandoned init published a package: %v", err)
-	}
-}

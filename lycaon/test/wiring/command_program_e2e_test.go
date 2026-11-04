@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
-	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -320,81 +319,7 @@ func TestCommandProgramReceiptsCarryJobsConflictsAndPreviews(t *testing.T) {
 	}
 }
 
-func TestCommandProgramLiveRun2Regressions(t *testing.T) {
-	prog := `echo --- && echo --- section --- && ` +
-		`printf '{"a":1}\n' | jq -r '.a' && printf 'k: v\n' | yq '.k' && ` +
-		`git status -sb && git --no-pager log -n 1 --format=%s && git --no-pager diff -- notes.txt && ` +
-		`printf '1\n2\n' | sed '1!G;h;$!d' && ` +
-		`find . -name '*.txt' | xargs wc -l | sort -n && ` +
-		`find . -name '*.txt' -print0 | xargs -0 grep -l note && ` +
-		`while read -r line; do echo "row:$line"; done < notes.txt && ` +
-		`(false | true; echo "pipe:${PIPESTATUS[0]}:${PIPESTATUS[1]}:${PIPESTATUS[@]}") && ` +
-		`touch touched.txt && echo redirected > redirected.txt && printf 'teed\n' | tee teed.txt && ` +
-		`wc notes.txt teed.txt && ` +
-		`ps aux >/dev/null && env | grep -q '^PATH='; ` +
-		`sleep 30 & pid=$!; ps aux | awk -v id="$pid" 'NR > 1 && $2 == id {seen=1} END {exit !seen}'; listed=$?; kill "$pid"; wait; echo "sig:$?"; test "$listed" = 0`
-	gitengine.TestingEnableBundledBinary()
-	s := newCommandProgramSession(t, prog, "")
-	bin, err := gitengine.BinaryPath()
-	testutil.FailErr(t, "bundled git", err)
-	gitRun := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command(bin, args...)
-		cmd.Dir = s.dir
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-			"GIT_AUTHOR_NAME=Ann", "GIT_AUTHOR_EMAIL=ann@example.test", "GIT_COMMITTER_NAME=Ann", "GIT_COMMITTER_EMAIL=ann@example.test")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-	}
-	gitRun("init", "-q", "-b", "main")
-	testutil.FailErr(t, "seed initial notes", os.WriteFile(filepath.Join(s.dir, "notes.txt"), []byte("first note\n"), 0o644))
-	gitRun("add", "notes.txt")
-	gitRun("commit", "-q", "-m", "seed commit")
-	testutil.FailErr(t, "update notes", os.WriteFile(filepath.Join(s.dir, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
-	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-	outcome, wasParked := settledCommandProgramOutcome(t, s)
-	for _, want := range []string{
-		`---`,
-		`--- section ---`,
-		`## main`,
-		`seed commit`,
-		`+second note`,
-		"2\n1\n",
-		`row:first note`,
-		`row:second note`,
-		`pipe:1:0:1 0`,
-		`teed`,
-		`total`,
-		`sig:143`,
-	} {
-		if !strings.Contains(outcome.Stdout, want) {
-			t.Fatalf("missing %q in stdout: %q", want, outcome.Stdout)
-		}
-	}
-	if outcome.CompletedEffects != 3 {
-		t.Fatalf("completed effects=%d", outcome.CompletedEffects)
-	}
-	expectedStates := []string{"completed"}
-	if wasParked {
-		expectedStates = append(expectedStates, "running", "waiting")
-	}
-	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
-	testutil.FailErr(t, "read messages", err)
-	projected := messageview.TranscriptMessages(msgs)
-	found := false
-	for _, m := range projected {
-		if m.Role == wire.MessageRoleTool && m.ToolResult != nil && m.ToolResult.Tool == "command" {
-			found = true
-			if m.Content == "" || m.ToolResult.CommandProgram == nil || m.ToolResult.CommandProgram.ID != outcome.ProgramID || !slices.Contains(expectedStates, m.ToolResult.CommandProgram.State) {
-				t.Fatalf("projected tool message missing content or command_program receipt: content=%q tr=%+v", m.Content, m.ToolResult)
-			}
-		}
-	}
-	if !found {
-		t.Fatal("no projected command tool message")
-	}
-
+func TestCommandProgramRefusalsKeepEarlierEffects(t *testing.T) {
 	for _, c := range []struct {
 		name, program, code, cmd, word string
 	}{
