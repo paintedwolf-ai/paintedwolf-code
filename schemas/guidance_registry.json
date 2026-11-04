@@ -2707,19 +2707,19 @@
       "summary": "Deleting {{ paintedwolf.path }} without recovery needs approval."
     },
     "SOURCE_VERSION_BASE_MISMATCH": {
-      "branch_instruction": "Branch on Code; re-read current version from source_history",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Branch on Code; re-read current version from source_history {% else %}Branch on Code{% endif %}",
       "category": "recoverable",
       "emit": "guard:restore_version",
       "summary": "Base version mismatch for {{ paintedwolf.path }} — {{ paintedwolf.detail }}."
     },
     "SOURCE_VERSION_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; verify version_id from effects",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Branch on Code; verify version_id from effects {% else %}Branch on Code{% endif %}",
       "category": "recoverable",
       "emit": "guard:source_history",
       "summary": "Source version not found — {{ paintedwolf.detail }}."
     },
     "SOURCE_VERSION_NO_PREDECESSOR": {
-      "branch_instruction": "Branch on Code; verify history via source_history",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Branch on Code; verify history via source_history {% else %}Branch on Code{% endif %}",
       "category": "recoverable",
       "emit": "guard:restore_version",
       "summary": "No predecessor version for {{ paintedwolf.path }} — {{ paintedwolf.detail }}."
