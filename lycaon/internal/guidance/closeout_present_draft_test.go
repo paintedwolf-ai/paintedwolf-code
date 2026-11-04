@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/navigationref"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -89,7 +88,7 @@ func TestPresentationAgreesWithStream(t *testing.T) {
 // The rewritten form navigates through the host's own reference parser.
 func TestPresentedPathLinksNavigate(t *testing.T) {
 	t.Parallel()
-	p := &project.Project{ID: "p", Roots: []projectroot.Root{
+	p := &project.Project{ID: "p", Roots: []project.Root{
 		{ID: "main", Label: "main", Path: "/work/main", IsPrimary: true},
 		{ID: "lib", Label: "shared", Path: "/work/shared"},
 	}}
