@@ -88,6 +88,9 @@ func (t *RestoreVersionTool) Run(ctx context.Context, args map[string]any, tctx 
 		ctx, ledger, tctx.Identity.ProjectID, branch, rootID, rel, path, versionID, baseVersionID,
 	)
 	if err != nil {
+		if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "SOURCE_VERSION_NO_PREDECESSOR" {
+			reject.Data["source_history_offered"] = tools.OffersSourceHistory(ctx, t.Boundary, tctx)
+		}
 		return "", err
 	}
 
@@ -150,9 +153,8 @@ func resolveRestorableVersion(
 			return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_NO_PREDECESSOR",
 				Data: map[string]any{
-					"path":                   path,
-					"detail":                 fmt.Sprintf("file %s has only one recorded version (%s)", path, head.VersionID),
-					"source_history_offered": tools.OffersSourceHistory(ctx, t.Boundary, tctx),
+					"path":   path,
+					"detail": fmt.Sprintf("file %s has only one recorded version (%s)", path, head.VersionID),
 				},
 			}
 		}
