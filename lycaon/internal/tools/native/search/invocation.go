@@ -58,6 +58,7 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 	}
 	inv.out = newOutput(ctx, streams.Output, p.owners.streamBytes())
 	inv.out.beforeWrite = inv.flushPins
+	inv.input = drainingInput{ReadCloser: inv.input, out: inv.out}
 	return inv
 }
 
@@ -92,6 +93,7 @@ func (inv *invocation) warn(quiet bool, format string, args ...any) {
 	if quiet {
 		return
 	}
+	_ = inv.out.drain()
 	_, _ = fmt.Fprintf(inv.stderr, "%s: "+format+"\n", append([]any{inv.word()}, args...)...)
 }
 
@@ -318,7 +320,14 @@ type output struct {
 	mappings         commandprogram.SourceMappingRecorder
 	pending          *toolcontract.StreamSourceMapping
 	maximum, written int64
+	buffered         bool
+	buffer           []byte
+	failure          error
 }
+
+// outputBufferBytes bounds the output held for a sink without source mappings.
+// One pipe rendezvous per record would otherwise cost a writer and reader wakeup.
+const outputBufferBytes = 64 << 10
 
 func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
 	if w == nil {
@@ -326,6 +335,7 @@ func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
 	}
 	o := &output{ctx: ctx, w: w, maximum: maximum}
 	o.mappings, _ = w.(commandprogram.SourceMappingRecorder)
+	o.buffered = o.mappings == nil
 	return o
 }
 
@@ -370,7 +380,46 @@ func (o *output) Write(p []byte) (int, error) {
 			return 0, err
 		}
 	}
-	return nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", o.maximum, &o.written, p)
+	if !o.buffered || len(p) >= outputBufferBytes {
+		if err := o.drain(); err != nil {
+			return 0, err
+		}
+		return nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", o.maximum, &o.written, p)
+	}
+	if err := o.admit(int64(len(p))); err != nil {
+		return 0, err
+	}
+	o.buffer = append(o.buffer, p...)
+	o.written += int64(len(p))
+	return len(p), nil
+}
+
+// admit makes room for size buffered bytes, refusing them past the stream limit.
+func (o *output) admit(size int64) error {
+	if o.failure != nil {
+		return o.failure
+	}
+	if err := o.ctx.Err(); err != nil {
+		return err
+	}
+	if o.maximum > 0 && size > o.maximum-o.written {
+		return tools.CommandLimitExceeded("stream_throughput_bytes", o.maximum, o.written+size)
+	}
+	if int64(len(o.buffer))+size > outputBufferBytes {
+		return o.drain()
+	}
+	return nil
+}
+
+// drain delivers buffered bytes. Their limit was charged when they were written.
+func (o *output) drain() error {
+	if o.failure != nil || len(o.buffer) == 0 {
+		return o.failure
+	}
+	var sent int64
+	_, o.failure = nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", 0, &sent, o.buffer)
+	o.buffer = o.buffer[:0]
+	return o.failure
 }
 
 func (o *output) text(parts ...string) error {
@@ -390,4 +439,38 @@ func (o *output) text(parts ...string) error {
 		}
 	}
 	return nil
+}
+
+// WriteString keeps a buffered record's prefix and terminator from allocating.
+func (o *output) WriteString(s string) (int, error) {
+	if !o.buffered || len(s) >= outputBufferBytes {
+		return o.Write([]byte(s))
+	}
+	if len(s) > 0 && o.beforeWrite != nil {
+		if err := o.beforeWrite(); err != nil {
+			return 0, err
+		}
+	}
+	if err := o.admit(int64(len(s))); err != nil {
+		return 0, err
+	}
+	o.buffer = append(o.buffer, s...)
+	o.written += int64(len(s))
+	return len(s), nil
+}
+
+// drainingInput delivers held output before a read that would wait, so a
+// consumer of a live stream sees each result before the next input arrives.
+type drainingInput struct {
+	io.ReadCloser
+	out *output
+}
+
+func (i drainingInput) Read(p []byte) (int, error) {
+	if ready, ok := i.ReadCloser.(interface{ InputReady() bool }); !ok || !ready.InputReady() {
+		if err := i.out.drain(); err != nil {
+			return 0, err
+		}
+	}
+	return i.ReadCloser.Read(p)
 }
