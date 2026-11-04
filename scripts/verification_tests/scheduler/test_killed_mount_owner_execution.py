@@ -97,8 +97,8 @@ class KilledMountOwnerTests(unittest.TestCase):
 
     def settle_fixture(self, report, stop):
         """A failed test still ends what it started, by its exact identity."""
-        stop.parent.mkdir(parents=True, exist_ok=True)
-        stop.touch()
+        if stop.parent.exists():
+            stop.touch()
         if report["mount"] in run_lease.mount_points() and sys.platform == "linux":
             for connection in run_lease.fuse_connections(report["mount"]):
                 if not alive(report["pid"]) or run_lease.thread_group_dying(report["pid"]):
