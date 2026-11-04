@@ -70,14 +70,14 @@ const (
 )
 
 // CoordinateSupport decides a coordinate against one record. A mutation that reports
-// its lines is held to them.
+// its lines is held to them. A deletion leaves no line to cite.
 func CoordinateSupport(rec Record, path string, start, end int) CoordinateFact {
 	if RangeObserved(rec, path, start, end) {
 		return CoordinateObserved
 	}
 	claim := effectiveClaimPath(rec, path)
 	if start > 0 && end >= start && claim != "" && pathObservedInRecord(rec, claim) &&
-		ActiveBinding().IsMutationKind(rec.Kind) && len(rec.LineRanges) == 0 && len(rec.Body) == 0 {
+		ActiveBinding().IsMutationKind(rec.Kind) && rec.Kind != "delete" && len(rec.LineRanges) == 0 && len(rec.Body) == 0 {
 		return CoordinateOnMutatedPath
 	}
 	return CoordinateUnsupported

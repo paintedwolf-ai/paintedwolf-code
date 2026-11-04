@@ -180,6 +180,12 @@ func TestDraftCoordinatesAfterMutation(t *testing.T) {
 	retired := evidence.Record{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", SupersededBy: "edit#1", LineRanges: []evidence.LineRange{{Start: 1, End: 100}}}
 	edited := evidence.AssembleLedger([]evidence.Record{retired, {Handle: "edit#1", Kind: "edit", Shape: evidence.ShapeFileRegion, Path: "a.go"}})
 	written := evidence.AssembleLedger([]evidence.Record{{Handle: "write#1", Kind: "write", Shape: evidence.ShapeFileRegion, Path: "n.go"}})
+	observed := evidence.AssembleLedger([]evidence.Record{
+		{Handle: "edit#1", Kind: "edit", Shape: evidence.ShapeFileRegion, Path: "a.go"},
+		{Handle: "read#2", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 1, End: 10}}},
+		{Handle: "write#3", Kind: "write", Shape: evidence.ShapeFileRegion, Path: "a.go"},
+	})
+	deleted := evidence.AssembleLedger([]evidence.Record{{Handle: "delete#1", Kind: "delete", Shape: evidence.ShapeFileRegion, Path: "gone.go"}})
 	reported := evidence.AssembleLedger([]evidence.Record{{Handle: "edit#1", Kind: "edit", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 40, End: 45}}}})
 	cases := []struct {
 		name, source string
@@ -193,6 +199,9 @@ func TestDraftCoordinatesAfterMutation(t *testing.T) {
 		{"link after an edit", "[x](a.go#L42)", edited, guidance.CitationGrounded, "edit#1", evidence.VerdictTraced},
 		{"explicit edit line", "[edit#1:42]", edited, guidance.CitationGrounded, "edit#1", evidence.VerdictTraced},
 		{"line after a write", "[n.go:1]", written, guidance.CitationGrounded, "write#1", evidence.VerdictTraced},
+		{"the observing record outranks the mutation", "[a.go:2]", observed, guidance.CitationGrounded, "read#2", ""},
+		{"past the read, the mutation still supports it", "[a.go:999]", observed, guidance.CitationGrounded, "write#3", evidence.VerdictTraced},
+		{"a deleted file has no line", "[gone.go:42]", deleted, guidance.CitationUnverifiable, "delete#1", ""},
 		{"retired read keeps its outcome", "[read#1:42]", edited, guidance.CitationGrounded, "read#1", ""},
 		{"retired read past its lines", "[read#1:200]", edited, guidance.CitationUnverifiable, "read#1", ""},
 		{"reported lines inside", "[a.go:41]", reported, guidance.CitationGrounded, "edit#1", ""},
@@ -222,7 +231,7 @@ func TestPresentWWWKeepsObservedScheme(t *testing.T) {
 		"see www.a.test/p now":   "see <https://www.a.test/p> now",
 		"[www.a.test/p]":         "[<https://www.a.test/p>]",
 		"[see www.a.test/p]":     "[see <https://www.a.test/p>]",
-		"see www.other.test now": "see www&#46;other.test now",
+		"see www.other.test now": `see www\.other.test now`,
 	} {
 		draft := guidance.ParseCloseoutDraft(source, guidance.DraftParseOptions(roots, ev))
 		resolved := guidance.ResolveDraftCitations(roots, "implement_synthesis", draft, guidance.CloseoutEvidence{Ledger: ev}, nil)

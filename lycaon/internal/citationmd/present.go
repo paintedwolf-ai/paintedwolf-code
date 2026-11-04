@@ -59,7 +59,7 @@ func planParts(doc Document, decide func(Occurrence) Rendition) []partPlan {
 				kept[p.link.Destination] = kept[p.link.Destination] || rendition.Keep
 			}
 			plans[i].removed = !plans[i].keep && plans[i].text == ""
-		case partLiteral, partRawHTML:
+		case partLiteral, partRawHTML, partHTMLBlock:
 		}
 	}
 	// A definition renders nothing and can make a later `[label]` live, so a web
@@ -129,6 +129,8 @@ func renderCounted(doc Document, decide func(Occurrence) Rendition) (string, int
 			out.protect([]byte(doc.Source[p.span.Start:p.span.End]))
 		case p.kind == partRawHTML:
 			out.literal([]byte(doc.Source[p.span.Start:p.span.End]))
+		case p.kind == partHTMLBlock:
+			out.htmlBlock([]byte(doc.Source[p.span.Start:p.span.End]))
 		case plans[i].keep:
 			writeKeptLink(&out, doc, p)
 		case p.kind == partNode:
@@ -142,7 +144,7 @@ func renderCounted(doc Document, decide func(Occurrence) Rendition) (string, int
 	}
 	out.text([]byte(doc.Source[at:doc.Body.End]))
 	out.close()
-	return neutralizeAnchors(out.out, out.protected), walk.work
+	return neutralizeAnchors(out.out, out.protected, out.htmlBlocks), walk.work
 }
 
 // moved notes the source just passed, for the line it ended on.
@@ -173,7 +175,7 @@ func writeKeptLink(out *shaper, doc Document, p part) {
 		return
 	}
 	opening := doc.Source[p.span.Start:label.Start]
-	out.literal([]byte(opening + labelAutolink.ReplaceAllString(doc.Source[label.Start:label.End], "&lt;$1")))
+	out.literal([]byte(opening + labelAutolink.ReplaceAllString(doc.Source[label.Start:label.End], `\<$1`)))
 	out.protect([]byte(doc.Source[label.End:p.span.End]))
 }
 
@@ -192,6 +194,9 @@ var (
 	// emptiedLinePrefix is what is left of a line that only held markup around a
 	// removed node.
 	emptiedLinePrefix = regexp.MustCompile(`^[ \t>]*(?:(?:[-+*=_#~` + "`" + `]+|[0-9]{1,9}[.)])[ \t]*)*$`)
+	// wouldBeThematicBreak is the rest of a line that, joined to markup before it,
+	// could read as a thematic break. The escape keeps `**[r]**` literal.
+	wouldBeThematicBreak = regexp.MustCompile(`^[-*_][-*_ \t\r\n]*$`)
 	// blockStarter is text that would open a block at the start of a line, or make
 	// the line a definition.
 	blockStarter = regexp.MustCompile(`^[ \t]*(?:[-+*][ \t\r\n]|[-_*=]{2,}[ \t\r\n]*$|[-=*_+]\r?\n?$|#{1,6}(?:[ \t\r\n]|$)|>|` + "```" + `|~~~|[0-9]{1,9}[.)](?:[ \t\r\n]|$)|<[!?]|</?[a-zA-Z][a-zA-Z0-9-]*(?:[ \t\r\n/>]|$)|\[[^\]\n]*\]:)`)
@@ -226,7 +231,10 @@ func (w *renderWalk) removeNode(p part, runEnd int) {
 	case blank && out.onlyTextOnLine() && w.prefixEmptied():
 		out.retractLine()
 	case out.pendingSpace():
-		out.remove(closesSentence(right, rest))
+		out.remove(closesSentence(right, rest) || closesEmphasis(rest))
+	case wouldBeThematicBreak.MatchString(rest) && w.prefixEmptied():
+		out.remove(false)
+		out.escapeNext = true
 	case isSpaceOrNewline(right) || (closesSentence(right, rest) && joinsAfter(out.lastByte())):
 		out.remove(false)
 	default:
@@ -267,6 +275,16 @@ func closesSentence(right byte, rest string) bool {
 		return false
 	}
 	return len(rest) < 2 || isSpaceOrNewline(rest[1]) || strings.IndexByte(`.,;:!?)'"`, rest[1]) >= 0
+}
+
+// closesEmphasis reports a delimiter run ending there, as in `**x [r]**`, which the
+// space before it would stop from closing.
+func closesEmphasis(rest string) bool {
+	end := 0
+	for end < len(rest) && strings.IndexByte("*_~", rest[end]) >= 0 {
+		end++
+	}
+	return end > 0 && (end == len(rest) || isSpaceOrNewline(rest[end]) || strings.IndexByte(`.,;:!?)'"`, rest[end]) >= 0)
 }
 
 // joinsAfter rejects a left neighbour that could read a following colon or bracket as

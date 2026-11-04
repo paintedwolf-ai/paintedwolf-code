@@ -20,6 +20,8 @@ func applyCitationRange(roots evidence.CitationRoots, finding WorkerFindingInput
 	refused := res
 	refused.Line, refused.LineCorrectedFrom, refused.Verdict = finding.Line, 0, evidence.VerdictUnverifiable
 	excerpt := strings.TrimSpace(finding.Excerpt)
+	// A record that observed the lines outranks one that only changed the path.
+	var fallback *evidence.Resolution
 	for _, handle := range rangeCandidates(finding, ev, res) {
 		rec, ok := evidence.ResolveHandle(ev, handle)
 		if !ok || rec.IsGate() {
@@ -34,14 +36,21 @@ func applyCitationRange(roots evidence.CitationRoots, finding WorkerFindingInput
 		if support == evidence.CoordinateUnsupported {
 			continue
 		}
-		if support == evidence.CoordinateOnMutatedPath {
-			res.Verdict = evidence.VerdictTraced
-		}
-		res.Handle, res.Line, res.EndLine, res.LineCorrectedFrom = handle, start, end, 0
+		bound := res
+		bound.Handle, bound.Line, bound.EndLine, bound.LineCorrectedFrom = handle, start, end, 0
 		if shift != 0 {
-			res.LineCorrectedFrom = finding.Line
+			bound.LineCorrectedFrom = finding.Line
 		}
-		return res
+		if support == evidence.CoordinateObserved {
+			return bound
+		}
+		if fallback == nil {
+			bound.Verdict = evidence.VerdictTraced
+			fallback = &bound
+		}
+	}
+	if fallback != nil {
+		return *fallback
 	}
 	return refused
 }

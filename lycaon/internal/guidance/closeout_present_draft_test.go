@@ -51,7 +51,7 @@ func TestPresentCloseoutMarkdown(t *testing.T) {
 		{"artifact goes", "See it. [artifact: 11111111-1111-1111-1111-111111111111]", "See it."},
 		{"observed link stays", "Per [spec](https://example.test/seen).", "Per [spec](https://example.test/seen)."},
 		{"unobserved link keeps its label", "Per [spec](https://example.test/other).", "Per spec."},
-		{"unobserved autolink cannot relink", "Per <https://example.test/other>.", "Per https&#58;//example.test/other."},
+		{"unobserved autolink cannot relink", "Per <https://example.test/other>.", `Per https\://example.test/other.`},
 		{"workspace link stays", "Per [auth](internal/a.go#L4).", "Per [auth](internal/a.go#L4)."},
 		{"unobserved workspace link keeps its label", "Per [auth](internal/z.go#L4).", "Per auth."},
 		{"AC-AST-07 unresolved reference goes", "Claim [read#99:2] stands.", "Claim stands."},

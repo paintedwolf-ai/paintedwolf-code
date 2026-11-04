@@ -1,7 +1,5 @@
 package citationmd
 
-import "strconv"
-
 // shaper writes presented bytes and owns the whitespace a removed node leaves.
 // Text whitespace waits in pending until a visible byte decides whether it
 // survives.
@@ -16,8 +14,10 @@ type shaper struct {
 	// literalEnd is the end of the last literal bytes, which nothing may retract.
 	lineOut    int
 	literalEnd int
-	// protected spans of out are code or host-written links.
-	protected []Span
+	// protected spans of out are code or host-written links; htmlBlocks are HTML
+	// blocks, where Markdown escapes mean nothing.
+	protected  []Span
+	htmlBlocks []Span
 	emitted   bool
 	visible   bool
 	removed   bool
@@ -49,12 +49,6 @@ func (s *shaper) text(data []byte) {
 
 func (s *shaper) visibleByte(b byte) {
 	s.prepareVisible()
-	if b >= '0' && b <= '9' && s.escapeNext {
-		s.escapeNext = false
-		s.out = append(s.out, "&#"+strconv.Itoa(int(b))+";"...)
-		s.emitted, s.visible, s.dropped, s.skipSpace = true, true, false, false
-		return
-	}
 	s.out = append(s.out, escapeFor(b, &s.escapeNext)...)
 	s.out = append(s.out, b)
 	s.emitted, s.visible, s.dropped, s.skipSpace = true, true, false, false
@@ -69,17 +63,14 @@ func (s *shaper) prepareVisible() {
 	s.flush()
 }
 
-// escapeFor returns the escape a byte needs, if one is due. Backslash escapes
-// punctuation; a digit opening an ordered marker takes an entity.
+// escapeFor returns the escape a byte needs, if one is due. An ordered marker's
+// digits pass, and the escape lands on the punctuation after them.
 func escapeFor(b byte, due *bool) string {
-	if !*due {
+	if !*due || (b >= '0' && b <= '9') {
 		return ""
 	}
 	*due = false
-	if b >= '0' && b <= '9' {
-		return "&#" + strconv.Itoa(int(b)) + ";"
-	}
-	return "\\"
+	return `\`
 }
 
 // endLine keeps a line that only held removed nodes as one blank line, so that the
@@ -144,6 +135,18 @@ func (s *shaper) protect(data []byte) {
 	start := len(s.out)
 	s.literal(data)
 	s.protected = append(s.protected, Span{start, len(s.out)})
+}
+
+// htmlBlock writes an HTML block verbatim and notes where it sits.
+func (s *shaper) htmlBlock(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+	s.prepareVisible()
+	s.out = append(s.out, escapeFor(data[0], &s.escapeNext)...)
+	start := len(s.out)
+	s.literal(data)
+	s.htmlBlocks = append(s.htmlBlocks, Span{start, len(s.out)})
 }
 
 // remove records a removed node. trimLeading also takes the horizontal space that

@@ -184,7 +184,11 @@ func TestIssueBudget(t *testing.T) {
 func TestRenderCreatesNoStructure(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, source, want string }{
-		{"emphasis", "**[read#9]**", "** **"},
+		{"emphasis alone is no thematic break", "**[read#9]**", "**\\**"},
+		{"thematic marks either side", "--[read#9]--", "--\\--"},
+		{"emphasis still closes", "**x [read#9]**", "**x**"},
+		{"emphasis closing before punctuation", "**x [read#9]**.", "**x**."},
+		{"emphasis opening stays apart", "a [read#9]**b**", "a **b**"},
 		{"glued word", "foo[task#1]bar", "foo bar"},
 		{"split URL", "h[read#9]ttps://unobs.test/j", "h ttps://unobs.test/j"},
 		{"split www", "www[read#9].unobs.test/k", "www .unobs.test/k"},
@@ -217,7 +221,7 @@ func TestRenderCreatesNoStructure(t *testing.T) {
 		{"marker after", "[read#9] - x", "\\- x"},
 		{"heading after", "[read#9] # x", "\\# x"},
 		{"fence after", "[read#9] ``` x", "\\``` x"},
-		{"ordered marker after", "[read#9] 1. x", "&#49;. x"},
+		{"ordered marker after", "[read#9] 1. x", "1\\. x"},
 		{"html after", "[read#9]<div>", "\\<div>"},
 		{"words stay apart", "a [read#9]b", "a b"},
 		{"before punctuation", "a [read#9].", "a."},
@@ -269,14 +273,14 @@ func TestBracketedBareLinkPresentation(t *testing.T) {
 	if got := PlainLabel(Link{Label: "see [read#3] now"}); got != "see now" {
 		t.Fatalf("label = %q", got)
 	}
-	if got := PlainLabel(Link{Label: "a https://x.test/p and WWW.y.test"}); got != "a https&#58;//x.test/p and WWW&#46;y.test" {
+	if got := PlainLabel(Link{Label: "a https://x.test/p and WWW.y.test"}); got != `a https\://x.test/p and WWW\.y.test` {
 		t.Fatalf("label = %q", got)
 	}
 	bare := Link{Form: LinkAutolink, Label: "https://x.test/u[t](https://x.test/t)"}
-	if got := PlainLabel(bare); got != `https&#58;//x.test/u\[t\]\(https&#58;//x.test/t\)` {
+	if got := PlainLabel(bare); got != `https\://x.test/u\[t\]\(https\://x.test/t\)` {
 		t.Fatalf("bare label = %q", got)
 	}
-	if got := Project(Parse("[<https://x.test/c> y](z)", Options{})); got != "[&lt;https://x.test/c> y](z)" {
+	if got := Project(Parse("[<https://x.test/c> y](z)", Options{})); got != `[\<https://x.test/c> y](z)` {
 		t.Fatalf("autolink in a label = %q", got)
 	}
 }
@@ -327,13 +331,13 @@ func TestBackpedalURL(t *testing.T) {
 func TestRawAnchorsAreEscaped(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, source, want string }{
-		{"plain", `a <a href="https://x.test">b</a> c`, `a &lt;a href="https&#58;//x&#46;test"&gt;b&lt;/a&gt; c`},
-		{"quoted bracket", `<a title=">" href="https://x.test">b</a>`, `&lt;a title="&gt;" href="https&#58;//x&#46;test"&gt;b&lt;/a&gt;`},
-		{"entity scheme", `x <a href="https&#58;//x.test">b</a>`, `x &lt;a href="https&#58;//x&#46;test"&gt;b&lt;/a&gt;`},
-		{"slash attribute in a block", `<div><a/href="https://x.test">b</a></div>`, `<div>&lt;a/href="https&#58;//x&#46;test"&gt;b&lt;/a&gt;</div>`},
-		{"upper case", `x <A HREF="https://x.test">b</A>`, `x &lt;A HREF="https&#58;//x&#46;test"&gt;b&lt;/A&gt;`},
-		{"area", `<area href="https://x.test">`, `&lt;area href="https&#58;//x&#46;test"&gt;`},
-		{"multi-line", "x <a\nhref=\"https://x.test\">b</a>", "x &lt;a\nhref=\"https&#58;//x&#46;test\"&gt;b&lt;/a&gt;"},
+		{"plain", `a <a href="https://x.test">b</a> c`, `a \<a href="https\://x\.test"\>b\</a\> c`},
+		{"quoted bracket", `x <a title=">" href="https://x.test">b</a>`, `x \<a title="\>" href="https\://x\.test"\>b\</a\>`},
+		{"entity scheme", `x <a href="https&#58;//x.test">b</a>`, `x \<a href="https&#58;//x\.test"\>b\</a\>`},
+		{"upper case", `x <A HREF="https://x.test">b</A>`, `x \<A HREF="https\://x\.test"\>b\</A\>`},
+		{"multi-line", "x <a\nhref=\"https://x.test\">b</a>", "x \\<a\nhref=\"https\\://x\\.test\"\\>b\\</a\\>"},
+		{"HTML block takes entities", `<div><a/href="https://x.test">b</a></div>`, `<div>&lt;a/href="https&#58;//x&#46;test"&gt;b&lt;/a&gt;</div>`},
+		{"area alone is a block", `<area href="https://x.test">`, `&lt;area href="https&#58;//x&#46;test"&gt;`},
 		{"other tags stay", `x <abbr title="y">z</abbr> <a-b>`, `x <abbr title="y">z</abbr> <a-b>`},
 		{"prose comparison", `a <b and c>d`, `a <b and c>d`},
 		{"code span stays", "`<a href=\"https://x.test\">`", "`<a href=\"https://x.test\">`"},
@@ -357,7 +361,7 @@ func TestRawAnchorsAreEscaped(t *testing.T) {
 	if got := Project(Parse(`["a/b c.go":1]`, Options{})); got != "[a/b c.go:1](<a/b c.go#L1>)" {
 		t.Fatalf("host-written link = %q", got)
 	}
-	if got := Project(Parse("[<a href=\"https://x.test\">y</a>](<a/c d.go#L1>)", Options{})); !strings.Contains(got, "&lt;a href") || !strings.Contains(got, "(<a/c d.go#L1>)") {
+	if got := Project(Parse("[<a href=\"https://x.test\">y</a>](<a/c d.go#L1>)", Options{})); !strings.Contains(got, `\<a href`) || !strings.Contains(got, "(<a/c d.go#L1>)") {
 		t.Fatalf("label and destination = %q", got)
 	}
 }

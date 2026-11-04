@@ -201,6 +201,7 @@ type partKind int
 const (
 	partLiteral partKind = iota
 	partRawHTML
+	partHTMLBlock
 	partLink
 	partNode
 	partDamaged

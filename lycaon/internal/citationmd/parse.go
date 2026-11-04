@@ -241,10 +241,14 @@ func (b *documentBuilder) addZone(zone Zone, link *Link) {
 // literalPartKind separates code, which stays byte for byte, from raw HTML, which
 // the display still has to neutralize.
 func literalPartKind(kind ZoneKind) partKind {
-	if kind == ZoneRawHTML || kind == ZoneHTMLBlock {
+	switch kind {
+	case ZoneRawHTML:
 		return partRawHTML
+	case ZoneHTMLBlock:
+		return partHTMLBlock
+	default:
+		return partLiteral
 	}
-	return partLiteral
 }
 
 // linkOccurrence interprets a link's destination once. Its label never yields

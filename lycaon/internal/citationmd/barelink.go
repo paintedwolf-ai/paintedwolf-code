@@ -121,20 +121,23 @@ var (
 	wwwText    = regexp.MustCompile(`(?i)www\.`)
 )
 
-// neutralizeURLs keeps a URL's text visible with nothing the frontend can link.
+// neutralizeURLs keeps a URL's text visible with nothing the frontend can link. It
+// uses backslash escapes because the frontend re-escapes a text run that holds a
+// cited path, which would show an entity as written.
 func neutralizeURLs(text string) string {
-	text = strings.ReplaceAll(text, "://", "&#58;//")
-	return wwwText.ReplaceAllStringFunc(text, func(match string) string { return match[:3] + "&#46;" })
+	text = strings.ReplaceAll(text, "://", `\://`)
+	return wwwText.ReplaceAllStringFunc(text, func(match string) string { return match[:3] + `\.` })
 }
 
 // neutralizeAnchors escapes raw HTML anchor tags, in every case and attribute form,
 // so that only Markdown link forms can render live. Raw anchors are not a citation
 // form; their text stays and claims nothing. protected spans of out are code or
-// host-written links and stay byte for byte.
-func neutralizeAnchors(out []byte, protected []Span) string {
+// host-written links and stay byte for byte. Inside an HTML block, where Markdown
+// escapes mean nothing, htmlBlocks spans take entities instead.
+func neutralizeAnchors(out []byte, protected, htmlBlocks []Span) string {
 	var b strings.Builder
 	text := string(out)
-	at, next := 0, 0
+	at, next, block := 0, 0, 0
 	for i := 0; i < len(text); {
 		for next < len(protected) && protected[next].End <= i {
 			next++
@@ -158,7 +161,14 @@ func neutralizeAnchors(out []byte, protected []Span) string {
 		}
 		end := tagEnd(text, i)
 		b.WriteString(text[at:i])
-		b.WriteString(escapeTag(text[i:end]))
+		for block < len(htmlBlocks) && htmlBlocks[block].End <= i {
+			block++
+		}
+		if block < len(htmlBlocks) && htmlBlocks[block].Start <= i {
+			b.WriteString(htmlTagEscaper.Replace(text[i:end]))
+		} else {
+			b.WriteString(markdownTagEscaper.Replace(text[i:end]))
+		}
 		at, i = end, end
 	}
 	if at == 0 {
@@ -192,9 +202,10 @@ func tagEnd(text string, at int) int {
 	return limit
 }
 
-var tagEscaper = strings.NewReplacer("<", "&lt;", ">", "&gt;", ":", "&#58;", ".", "&#46;")
-
-func escapeTag(tag string) string { return tagEscaper.Replace(tag) }
+var (
+	markdownTagEscaper = strings.NewReplacer("<", `\<`, ">", `\>`, ":", `\:`, ".", `\.`)
+	htmlTagEscaper     = strings.NewReplacer("<", "&lt;", ">", "&gt;", ":", "&#58;", ".", "&#46;")
+)
 
 // escapedDocument shows a whole source as one code block, which creates no links.
 func escapedDocument(source string) string {
