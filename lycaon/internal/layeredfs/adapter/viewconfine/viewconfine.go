@@ -13,11 +13,13 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/denialprobe"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
@@ -38,16 +40,23 @@ type Enforcer struct {
 // New returns an Enforcer with nothing yet proven.
 func New() *Enforcer { return &Enforcer{} }
 
-// Boundary is what the processes of view must not reach.
+// Boundary is what the processes of a mounted view must not reach: its storage, its sources and
+// every other worker's branch beside it. Only its own roots stay open.
 func Boundary(view *adapter.PreparedView) confine.ViewBoundary {
-	if view == nil {
+	if view == nil || view.Facts.PreparationKind != adapter.PreparationMounted {
 		return confine.ViewBoundary{}
 	}
-	var denied []string
+	boundary := confine.ViewBoundary{DeniedLoopbackPorts: slices.Clone(view.ListenerPorts), DeniedPaths: slices.Clone(view.SourcePaths)}
 	if view.BackingDir != "" {
-		denied = append(denied, view.BackingDir)
+		boundary.DeniedPaths = append(boundary.DeniedPaths, view.BackingDir)
 	}
-	return confine.ViewBoundary{DeniedPaths: append(denied, view.SourcePaths...), DeniedLoopbackPorts: append([]uint16(nil), view.ListenerPorts...)}
+	if base := enginepaths.WorkerBranchesRootOf(view.PrimaryWorkPath); base != "" {
+		boundary.DeniedPaths = append(boundary.DeniedPaths, base)
+		for _, root := range view.Roots {
+			boundary.ReopenedPaths = append(boundary.ReopenedPaths, root.WorkspacePath)
+		}
+	}
+	return boundary
 }
 
 // Available proves, in a private scratch directory, that a confined process reaches a write root

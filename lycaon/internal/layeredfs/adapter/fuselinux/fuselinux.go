@@ -54,11 +54,11 @@ type Config struct {
 	ConfinementCheckFn    func(ctx context.Context, probeCfg adapter.ProbeConfig) error
 	// ConfinementVerifyFn proves direct backing denial against Probe's real mounted view.
 	ConfinementVerifyFn func(ctx context.Context, view *adapter.PreparedView) error
-	MountHookForTest      func(viewID, rootID, mountDir string) error
-	ClientSyncFn          func(path string) error
-	RemoveAllFn           func(path string) error
-	OnMutationHook        func(opcode uint32, rel string)
-	OnLockWait            func(unique, start, end uint64, waiting bool)
+	MountHookForTest    func(viewID, rootID, mountDir string) error
+	ClientSyncFn        func(path string) error
+	RemoveAllFn         func(path string) error
+	OnMutationHook      func(opcode uint32, rel string)
+	OnLockWait          func(unique, start, end uint64, waiting bool)
 }
 
 // MountFacts records the concrete mount options, kernel mountinfo identity, and negotiated protocol capabilities.

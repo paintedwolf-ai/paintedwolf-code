@@ -131,18 +131,18 @@ func SecretReadAllowBackRoots() []string {
 func agentWorkspaceRootsUnderControlPlane() []string {
 	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {
-		return nil
+		return placementWorkspaceRoots()
 	}
-	return enginepaths.AgentWorkspaceRootsUnder(dir)
+	return append(enginepaths.AgentWorkspaceRootsUnder(dir), placementWorkspaceRoots()...)
 }
 
 // controlPlaneReadDenyRoots returns the host-managed configuration tree.
 func controlPlaneReadDenyRoots() []string {
 	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {
-		return nil
+		return placementFolders()
 	}
-	return []string{dir}
+	return append([]string{dir}, placementFolders()...)
 }
 
 // resolveEach canonicalizes missing paths through their existing ancestor.

@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"net"
 	"os"
@@ -196,14 +195,62 @@ func TestOrdinaryWorkerClaimFallsBackWithTheConfinementReason(t *testing.T) {
 	testutil.FailErr(t, "destroy branch", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 }
 
-// Runs on a real kernel mount through the production selector, its real enforcer and real services.
+// The materialized path is the default selector's: a worker reads its pristine base and never writes
+// it, while its own tree stays writable.
+func TestMaterializedWorkerIsDeniedWritesToItsPristineTree(t *testing.T) {
+	confine.TestingSetAutoConfine(t)
+	if !confine.Available() {
+		t.Skip("this host applies no confinement")
+	}
+	fixture := newLayeredWorkerFixture(t, nil)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
+	task := fixture.claim(t)
+	root := task.WorkspaceRoot
+	binding := &workspace.Binding{ID: task.ID, Root: root}
+	t.Cleanup(func() { _ = fixture.manager.DestroyWorkerWorkspace(binding) })
+	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
+	if !ok || snap.Adapter.PreparationKind != adapter.PreparationMaterialized {
+		t.Fatalf("the default selector chose: ok=%v %+v", ok, snap.Adapter)
+	}
+	pristine := enginepaths.PristineTreeForBranchRoot(root)
+	testutil.FailErr(t, "mkdir pristine", os.MkdirAll(pristine, 0o700))
+	base := filepath.Join(pristine, "main.go")
+	testutil.FailErr(t, "write base", os.WriteFile(base, []byte("package main\n"), 0o600))
+
+	tctx := tools.ToolContext{}
+	tctx.Source.WorkerBranchRoot = root
+	tctx.Source.WorkerSourceRoots = []string{fixture.source}
+	tctx.Source.WorkerViewBoundary = workspace.BranchViewBoundary(root)
+	box, ok := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tctx, nil)))
+	if !ok {
+		t.Fatal("a worker command got no boundary")
+	}
+	results, err := viewconfine.Launch(t.Context(), box, root, []denialprobe.Step{
+		{Kind: denialprobe.ReadFile, Path: base},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(root, "worker-probe")},
+		{Kind: denialprobe.OverwriteFile, Path: base},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(pristine, "worker-probe")},
+	})
+	testutil.FailErr(t, "launch worker probe", err)
+	for i, result := range results {
+		if i < 2 && !result.Succeeded() {
+			t.Fatalf("a worker could not %s %s: errno %d", result.Kind, result.Path, result.Errno)
+		}
+		if i >= 2 && !result.Denied() {
+			t.Fatalf("a worker was not refused %s %s: errno %d", result.Kind, result.Path, result.Errno)
+		}
+	}
+}
+
+// Runs on a real kernel mount through the host's selector, its production enforcer and real services.
 // Only a host with no way to mount skips; a host that mounts but does not enforce fails here.
 func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	if !confine.Available() {
 		t.Skip("this host applies no confinement")
 	}
-	fixture := newLayeredWorkerFixture(t, workspace.DefaultWorkspaceSelector())
+	fixture := newLayeredWorkerFixture(t, workspace.EnforcedWorkspaceSelector())
 	// Worker storage sits under the engine's state root, as it does in production.
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
 	task := fixture.claim(t)
@@ -335,12 +382,19 @@ func assertWorkerProcessIsDenied(t *testing.T, root, source string, view *adapte
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(root, "worker-probe")},
 		{Kind: denialprobe.Connect, Port: uint16(listener.Addr().(*net.TCPAddr).Port)}, //nolint:gosec // a listener's own port.
 	}
+	other := filepath.Join(filepath.Dir(root), "another-worker")
+	testutil.FailErr(t, "mkdir another worker", os.MkdirAll(other, 0o700))
+	otherFile := filepath.Join(other, "file")
+	testutil.FailErr(t, "write another worker", os.WriteFile(otherFile, []byte("x"), 0o600))
+	defer func() { _ = os.RemoveAll(other) }()
 	backingEntry := viewconfine.FirstEntry(view.BackingDir)
 	if backingEntry == "" {
 		t.Fatal("a claimed view's backing store is empty, so nothing shows it is hidden")
 	}
 	denied := []denialprobe.Step{
 		{Kind: denialprobe.Stat, Path: backingEntry},
+		{Kind: denialprobe.ReadFile, Path: otherFile},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(other, "worker-probe")},
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(view.BackingDir, "worker-probe")},
 		{Kind: denialprobe.ReadFile, Path: filepath.Join(source, "main.go")},
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(source, "worker-probe")},

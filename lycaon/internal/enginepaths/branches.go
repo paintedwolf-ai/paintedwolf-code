@@ -85,6 +85,22 @@ func NormalizeRepoRel(path string) string {
 	return strings.TrimPrefix(path, "/")
 }
 
+// PristineTreeForBranchRoot is a materialized workspace's exact base. It sits beside the working tree
+// rather than in it, and a worker reads it and never writes it.
+func PristineTreeForBranchRoot(branchTreeRoot string) string {
+	return filepath.Join(MetaDirForBranchRoot(branchTreeRoot), "pristine")
+}
+
+// WorkerBranchesRootOf returns the worker-branch base holding path, wherever its state root or
+// placement folder is, or "" for a path outside every base.
+func WorkerBranchesRootOf(path string) string {
+	before, _, ok := strings.Cut(filepath.ToSlash(strings.TrimSpace(path)), WorkerBranchPathSegment)
+	if !ok {
+		return ""
+	}
+	return filepath.FromSlash(before + "/" + WorkerBranchesDirName)
+}
+
 // IsWorkerBranchPath reports a path under an engine worker-branch copy.
 func IsWorkerBranchPath(path string) bool {
 	p := filepath.ToSlash(strings.TrimSpace(path))

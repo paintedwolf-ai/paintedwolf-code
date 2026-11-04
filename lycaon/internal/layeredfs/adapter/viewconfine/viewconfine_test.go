@@ -90,3 +90,39 @@ func TestLaunchRefusesAProcessThatAnswersTooFewSteps(t *testing.T) {
 		t.Fatal("a launch that could not enter its directory reported results")
 	}
 }
+
+// A real boundary, with a real placement folder standing where a volume root's engine folder would.
+func TestPlacedBranchIsUsableAndItsFolderIsClosed(t *testing.T) {
+	requireConfinement(t)
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve", err)
+	state := filepath.Join(base, "state")
+	testutil.FailErr(t, "mkdir state", os.Mkdir(state, 0o700))
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	placement := filepath.Join(base, "volume", ".paintedwolf")
+	branch := filepath.Join(enginepaths.WorkerBranchesRootUnder(placement), "project", "job")
+	testutil.FailErr(t, "mkdir branch", os.MkdirAll(branch, 0o700))
+	registry := filepath.Join(placement, "registry")
+	testutil.FailErr(t, "write registry", os.WriteFile(registry, []byte("x"), 0o600))
+	confine.SetPlacementFolders(func() []string { return []string{placement} })
+	t.Cleanup(func() { confine.SetPlacementFolders(nil) })
+
+	box, ok := confine.DefaultConfinement(confine.Request{Roots: []string{branch}, ReadRoots: []string{branch}, Egress: confine.EgressDeny})
+	if !ok {
+		t.Fatal("a placed branch got no boundary")
+	}
+	results, err := viewconfine.Launch(t.Context(), box, branch, []denialprobe.Step{
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(branch, "worker-file")},
+		{Kind: denialprobe.ReadFile, Path: registry},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(placement, "worker-file")},
+	})
+	testutil.FailErr(t, "Launch", err)
+	if !results[0].Succeeded() {
+		t.Fatalf("a worker could not write its placed branch: errno %d", results[0].Errno)
+	}
+	for _, result := range results[1:] {
+		if !result.Denied() {
+			t.Fatalf("%s %s was not refused: errno %d", result.Kind, result.Path, result.Errno)
+		}
+	}
+}

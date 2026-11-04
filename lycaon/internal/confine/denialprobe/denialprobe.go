@@ -24,9 +24,11 @@ const (
 	Stat       Kind = "stat"
 	ReadFile   Kind = "read_file"
 	CreateFile Kind = "create_file"
-	Connect    Kind = "connect"
-	Unmount    Kind = "unmount"
-	Mount      Kind = "mount"
+	// OverwriteFile opens an existing file for writing and changes nothing in it.
+	OverwriteFile Kind = "overwrite_file"
+	Connect       Kind = "connect"
+	Unmount       Kind = "unmount"
+	Mount         Kind = "mount"
 )
 
 // Step is one attempted operation.
@@ -105,6 +107,12 @@ func attempt(step Step) error {
 		return err
 	case CreateFile:
 		return createAndRemove(step.Path)
+	case OverwriteFile:
+		file, err := os.OpenFile(step.Path, os.O_WRONLY, 0)
+		if err != nil {
+			return err
+		}
+		return file.Close()
 	case Connect:
 		conn, err := net.Dial("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(int(step.Port))))
 		if err != nil {

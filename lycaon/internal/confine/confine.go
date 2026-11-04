@@ -490,12 +490,13 @@ func denySpecRule(specs []HardDenyWriteSpec, layers ...FloorLayer) fsRule {
 
 // workspaceAllowBacks re-allows validated control-plane workspaces.
 func workspaceAllowBacks(c Confinement) []string {
-	dir, err := configdir.Root()
-	if err != nil || strings.TrimSpace(dir) == "" {
-		return nil
+	var controls []string
+	if dir, err := configdir.Root(); err == nil && strings.TrimSpace(dir) != "" {
+		controls = append(controls, fspath.CanonicalPath(dir))
 	}
-	control := fspath.CanonicalPath(dir)
-	sep := string(filepath.Separator)
+	for _, folder := range placementFolders() {
+		controls = append(controls, fspath.CanonicalPath(folder))
+	}
 	var backs []string
 	candidates := append(append([]string(nil), c.Roots...), c.GrantedWriteRoots...)
 	if c.SessionScratchRoot != "" {
@@ -505,12 +506,20 @@ func workspaceAllowBacks(c Confinement) []string {
 		if r = strings.TrimSpace(r); r == "" {
 			continue
 		}
-		if p := fspath.CanonicalPath(r); strings.HasPrefix(p, control+sep) {
-			backs = append(backs, p)
+		p := fspath.CanonicalPath(r)
+		for _, control := range controls {
+			if pathUnderTree(p, control) {
+				backs = append(backs, p)
+				break
+			}
 		}
 	}
 	sort.Strings(backs)
 	return backs
+}
+
+func pathUnderTree(path, tree string) bool {
+	return strings.HasPrefix(path, tree+string(filepath.Separator))
 }
 
 // protectedGrantRule emits approved protected-path write exceptions.
