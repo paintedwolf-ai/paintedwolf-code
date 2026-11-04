@@ -147,13 +147,13 @@ type overviewResult struct {
 		Op         string `json:"op"`
 		Unrecorded bool   `json:"unrecorded"`
 		Actor      string `json:"actor"`
-		At        string `json:"at"`
-		Effects   int    `json:"effects"`
-		VersionID string `json:"version_id"`
-		Branch    string `json:"branch"`
-		WindowID  string `json:"window_id"`
-		Settled   *bool  `json:"settled"`
-		During    bool   `json:"during_your_command"`
+		At         string `json:"at"`
+		Effects    int    `json:"effects"`
+		VersionID  string `json:"version_id"`
+		Branch     string `json:"branch"`
+		WindowID   string `json:"window_id"`
+		Settled    *bool  `json:"settled"`
+		During     bool   `json:"during_your_command"`
 	} `json:"files"`
 	OpenWindows []struct {
 		ID      string `json:"id"`
