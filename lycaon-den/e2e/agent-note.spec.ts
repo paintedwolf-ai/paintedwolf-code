@@ -243,7 +243,7 @@ webE2e.describe("agent mid-turn note", () => {
         await expect(cited).not.toContainText("[README.md");
         await expect(cited.getByTestId("citation-evidence-chicklet")).toBeVisible();
         const opened = cited.locator('.den-source-path-link[data-den-source-end-line="2"]');
-        await expect(opened).toHaveAttribute("data-den-source-line", "1");
+        await expect(opened.first()).toHaveAttribute("data-den-source-line", "1");
 
         await llm.respond("Auth is described in the readme [README.md:1-2].");
         await expect(stream.getByText("Auth is described in the readme")).toBeVisible({ timeout: 30_000 });
