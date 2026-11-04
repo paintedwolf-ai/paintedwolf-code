@@ -1,6 +1,7 @@
 package citationmd
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
 	"unicode"
@@ -33,6 +34,9 @@ const (
 	holdKindCount
 )
 
+// maxLabelBytes is CommonMark's bound on a link label.
+const maxLabelBytes = 999
+
 // pendingNode is a closed node awaiting the byte that settles it.
 type pendingNode struct {
 	token      []byte
@@ -55,6 +59,8 @@ type inlineState struct {
 	afterClose  bool
 	textEscaped bool
 	defEligible bool
+	// label is the text since the last `[`, kept to a definition's label bound.
+	label []byte
 	codeLen     int
 	codeRun     int
 	codeHolding bool
@@ -94,9 +100,12 @@ func (s *inlineState) trackBrackets(text []byte) {
 			s.textEscaped = true
 		case b == '[':
 			s.openBracket++
+			s.label = s.label[:0]
 		case b == ']' && s.openBracket > 0:
 			s.openBracket--
 			s.afterClose = true
+		case len(s.label) < maxLabelBytes:
+			s.label = append(s.label, b)
 		}
 	}
 }
@@ -167,8 +176,9 @@ func (p *Projector) textByte(b byte) bool {
 			p.beginHold(modeDefinition, b)
 			return true
 		}
+		s.defEligible = false
 	}
-	if b != ' ' && b != '\t' && b != '[' {
+	if s.openBracket == 0 && b != ' ' && b != '\t' && b != '[' {
 		s.defEligible = false
 	}
 	if m.escaped {
@@ -457,11 +467,14 @@ func (p *Projector) referenceByte(b byte) bool {
 	return false
 }
 
-var definitionTail = regexp.MustCompile(`^:[ \t]*(?:<[^<>\n]*>|[^\s<]\S*)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$`)
+var definitionTail = regexp.MustCompile(`^:\s*(?:<[^<>\n]*>|[^\s<]\S*)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$`)
 
+// definitionByte holds a possible definition to its line's end. A destination
+// may wait on the next line, so a colon with nothing after it holds on.
 func (p *Projector) definitionByte(b byte) bool {
 	s := &p.inline
-	if b != '\n' && len(s.held) < MaxInlineProtocolNodeBytes {
+	full := len(s.held) >= MaxInlineProtocolNodeBytes
+	if !full && (b != '\n' || len(bytes.TrimSpace(s.held[1:])) == 0) {
 		s.held = append(s.held, b)
 		return true
 	}
@@ -469,9 +482,11 @@ func (p *Projector) definitionByte(b byte) bool {
 		p.failNodeHold(holdDestination)
 		return false
 	}
+	label := s.label
 	if s.pending != nil {
-		p.defs[normalizeLabel(string(s.pending.token[1:len(s.pending.token)-1]))] = true
+		label = s.pending.token[1 : len(s.pending.token)-1]
 	}
+	p.defs[normalizeLabel(string(label))] = true
 	p.blocks.paragraph = false
 	saved := p.at
 	p.at--

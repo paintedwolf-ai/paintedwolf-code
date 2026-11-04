@@ -213,7 +213,7 @@ func TestProjectorNeverLeaksDirectives(t *testing.T) {
 	if got := visible.String(); got != "Before. after" {
 		t.Fatalf("visible = %q", got)
 	}
-	if len(projector.Issues()) != 2 {
+	if len(projector.Issues()) != 1 || projector.Issues()[0].Code != IssueMalformedArtifact {
 		t.Fatalf("issues = %+v", projector.Issues())
 	}
 }
@@ -222,7 +222,7 @@ func TestProjectorNeverLeaksDirectives(t *testing.T) {
 func TestProjectorReleasesProsePromptly(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, source, want string }{
-		{"AC-AST-16 leg prefix", "[leg-of-lamb is", "[leg-of-lamb"},
+		{"AC-AST-16 leg prefix", "[leg-of-lamb is", "[leg-of-lamb is"},
 		{"AC-AST-16 unclosed bracket", "[see the", "[see the"},
 		{"non path byte", "[a!b", "[a!b"},
 		{"unknown name at close", "[sic] x", "[sic] x"},
