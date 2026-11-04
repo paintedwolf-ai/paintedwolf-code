@@ -221,9 +221,8 @@ webE2e.describe("agent mid-turn note", () => {
         expect(prompt.ok(), await prompt.text()).toBe(true);
         const driver = manualHarnessTools(request, sessionId);
         const llm = manualCompletions(request, sessionId);
-        await driver.loadTools("read");
         const notes = stream.locator('[data-testid="transcript-article-assistant"][data-kind="agent_note"]');
-        const read = { name: "read", args: { path: "README.md" } };
+        const read = { name: "command", args: { command: "cat README.md" } };
 
         // Before any observation: published, and not presented as a checked source.
         const [firstRead] = await llm.respond("I'll look at the auth path.", [read]);
@@ -239,15 +238,15 @@ webE2e.describe("agent mid-turn note", () => {
         await expect(notes).toHaveCount(1);
 
         // A valid citation publishes, with its evidence and no protocol syntax left.
-        await llm.respond(`The readme is recorded [${handle}:1-2].`, [read]);
+        await llm.respond(`The readme is recorded [README.md:1-2].`, [read]);
         const cited = notes.filter({ hasText: "The readme is recorded" });
         await expect(cited).toHaveCount(1, { timeout: 30_000 });
-        await expect(cited).not.toContainText(`[${handle}`);
+        await expect(cited).not.toContainText("[README.md");
         await expect(cited.getByTestId("citation-evidence-chicklet")).toBeVisible();
         const opened = cited.locator('.den-source-path-link[data-den-source-end-line="2"]');
         await expect(opened).toHaveAttribute("data-den-source-line", "1");
 
-        await llm.respond(`Auth is described in the readme [${handle}:1-2].`);
+        await llm.respond(`Auth is described in the readme [${handle}].`);
         await expect(stream.getByText("Auth is described in the readme")).toBeVisible({ timeout: 30_000 });
         await expect(stream.getByTestId("agent-note-badge")).toHaveCount(2);
       } finally {

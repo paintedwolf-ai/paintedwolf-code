@@ -19,7 +19,10 @@ type Harness = {
   llm: {
     manual(): Promise<unknown>;
     pending(waitMs?: number): Promise<{ pending?: boolean }>;
-    respond(reply: { text?: string }): Promise<unknown>;
+    respond(reply: {
+      text?: string;
+      toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
+    }): Promise<unknown>;
   };
   waitForTestid(testid: string, timeoutMs?: number): Promise<{ ok: boolean }>;
   waitForIdle(timeoutMs?: number): Promise<{ ok: boolean }>;
