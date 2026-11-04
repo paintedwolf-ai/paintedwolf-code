@@ -3,14 +3,12 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
@@ -304,7 +302,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	selector := platform.NewSelector(platform.Config{Confinement: kernelMountCheck{}})
 	manager := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds")).WithPrivateGit(privateGit).WithSelector(selector)
-	binding, _, err := manager.CreateWorkerBranch(t.Context(), roots, "p", "job-roots")
+	binding, _, err := manager.CreateWorkerBranch(workspace.WithWorkspaceProject(t.Context(), testdbseed.DefaultProjectID), roots, "p", "job-roots")
 	testutil.FailErr(t, "create branch", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(binding) })
 	if binding.Selection.Facts.PreparationKind != adapter.PreparationMounted {
@@ -320,14 +318,14 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	}
 	testutil.FailErr(t, "finish prepare", finish())
 	testutil.FailErr(t, "write in secondary", os.WriteFile(filepath.Join(worktree, "added.txt"), []byte("added\n"), 0o644))
-	testutil.FailErr(t, "add", exitOK(gitexec.Run(t.Context(), worktree, []string{"add", "added.txt"}, gitexec.Opts{})))
-	commitArgs := []string{"-c", "user.name=Worker", "-c", "user.email=worker@example.invalid", "commit", "-m", "worker commit"}
-	testutil.FailErr(t, "commit", exitOK(gitexec.Run(t.Context(), worktree, commitArgs, gitexec.Opts{})))
-	out, code, err := gitexec.Run(t.Context(), worktree, []string{"rev-parse", "HEAD"}, gitexec.Opts{})
-	if err != nil || code != 0 {
-		t.Fatalf("rev-parse: code=%d err=%v", code, err)
-	}
-	commit := string(out[:40])
+	gitExec := privategit.NewGitExecutor(privateGit, privategit.SecondaryViewID(binding.ID, "s"), privategit.RemotePolicy{})
+	_, err = gitExec.Run(t.Context(), ".", "add", "added.txt")
+	testutil.FailErr(t, "add", err)
+	_, err = gitExec.Commit(t.Context(), "worker commit")
+	testutil.FailErr(t, "commit", err)
+	out, err := gitExec.Run(t.Context(), ".", "rev-parse", "HEAD")
+	testutil.FailErr(t, "rev-parse", err)
+	commit := strings.TrimSpace(out)
 	gitDir := filepath.Join(roots[1].Path, ".git")
 	if _, statErr := os.Stat(filepath.Join(gitDir, "objects", commit[:2], commit[2:])); !errors.Is(statErr, fs.ErrNotExist) {
 		t.Fatalf("private commit reached the source repository early: %v", statErr)
@@ -366,14 +364,4 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	if refs := gittest.Run(t, roots[1].Path, "for-each-ref", "refs/lycaon"); refs != "" {
 		t.Fatalf("rollback left refs in the secondary root: %q", refs)
 	}
-}
-
-func exitOK(out []byte, code int, err error) error {
-	if err != nil {
-		return err
-	}
-	if code != 0 {
-		return fmt.Errorf("exit %d: %s", code, out)
-	}
-	return nil
 }

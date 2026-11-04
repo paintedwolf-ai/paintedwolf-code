@@ -23,7 +23,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 
 			primary, overlay := t.TempDir(), t.TempDir()
-			store, bindCheckpoint := recoveryStoreFor(t, overlay)
+			store, bindCheckpoint := recoveryStoreFor(t, overlay, primary)
 			core, err := layeredfs.New(layeredfs.Config{
 				ViewID: "view-bound-preview", BackingDir: t.TempDir(),
 				Roots: []layeredfs.RootSpec{{ID: "primary", TrunkPath: primary, IsPrimary: true}},

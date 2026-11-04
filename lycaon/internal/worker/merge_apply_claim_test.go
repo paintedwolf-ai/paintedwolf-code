@@ -139,7 +139,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 					PrivateGit: checkpoint.PrivateGitSnapshot{HeadRef: "refs/heads/feature", Refs: map[string]string{"refs/heads/feature": featureOID}},
 				})
 				testutil.FailErr(t, "publish checkpoint after reviewed preview", err)
-				bindRecoveryCheckpoint(t, fixture.overlay, fixture.store, "chk-promote-later")
+				bindRecoveryCheckpoint(t, fixture.overlay, primary, fixture.store, "chk-promote-later")
 			}
 			if publishLater {
 				_, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
@@ -345,7 +345,7 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 	})
 	testutil.FailErr(t, "Publish", err)
 	manifest := pubRes.Manifest
-	bindRecoveryCheckpoint(t, overlay, cpStore, manifest.CheckpointID)
+	bindRecoveryCheckpoint(t, overlay, primary, cpStore, manifest.CheckpointID)
 
 	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, baselinePath)
 	testutil.FailErr(t, "SetWorkerWorkspace", err)

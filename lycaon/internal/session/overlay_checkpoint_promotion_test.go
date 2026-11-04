@@ -24,7 +24,7 @@ func TestOverlayChangedPathsAndDivergenceFromPublishedCheckpoint(t *testing.T) {
 	primary, overlay := t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "write primary", os.WriteFile(filepath.Join(primary, "checkpointed.go"), []byte("package p\n// v1\n"), 0o644))
 	testutil.FailErr(t, "write deleted", os.WriteFile(filepath.Join(primary, "deleted.go"), []byte("package p\n// del\n"), 0o644))
-	store, bindCheckpoint := recoveryStoreFor(t, overlay)
+	store, bindCheckpoint := recoveryStoreFor(t, overlay, primary)
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID: "view-session-cp", BackingDir: t.TempDir(),
 		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
@@ -120,7 +120,7 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 	testutil.FailErr(t, "seed removed.txt", os.WriteFile(removedPath, []byte("old\n"), 0o644))
 
 	overlay := t.TempDir()
-	store, bindCheckpoint := recoveryStoreFor(t, overlay)
+	store, bindCheckpoint := recoveryStoreFor(t, overlay, primary)
 
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID: "view-retry", BackingDir: t.TempDir(),
@@ -168,7 +168,7 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 func TestMultiRootCheckpointQualificationAndWorkspaceSync(t *testing.T) {
 	primary, secondary, overlay := t.TempDir(), t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "seed secondary", os.WriteFile(filepath.Join(secondary, "mod.txt"), []byte("v1\n"), 0o644))
-	store, bindCheckpoint := recoveryStoreFor(t, overlay)
+	store, bindCheckpoint := recoveryStoreFor(t, overlay, primary)
 
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID:     "view-multiroot-cp",
@@ -218,7 +218,7 @@ func TestMultiRootCheckpointQualificationAndWorkspaceSync(t *testing.T) {
 
 func publishCheckpointForSync(t *testing.T, overlay string, roots []layeredfs.RootSpec, mutate func(*layeredfs.Core)) {
 	t.Helper()
-	store, bindCheckpoint := recoveryStoreFor(t, overlay)
+	store, bindCheckpoint := recoveryStoreFor(t, overlay, roots[0].TrunkPath)
 	core, err := layeredfs.New(layeredfs.Config{ViewID: "view-sync", BackingDir: t.TempDir(), Roots: roots})
 	testutil.FailErr(t, "New Core", err)
 	t.Cleanup(func() { _ = core.ReleaseView() })
@@ -298,13 +298,13 @@ func TestSyncTaskCheckpointBindsEntriesToTheBranchLayout(t *testing.T) {
 
 // recoveryStoreFor opens a store at the recovery location and returns a function naming a published
 // checkpoint as a branch's result, as completion does.
-func recoveryStoreFor(t *testing.T, branch string) (*checkpoint.Store, func(checkpointID string)) {
+func recoveryStoreFor(t *testing.T, branch, source string) (*checkpoint.Store, func(checkpointID string)) {
 	t.Helper()
 	store, err := checkpoint.NewStore(filepath.Join(enginepaths.WorkerRecoveryRootUnder(t.TempDir()), "checkpoints"))
 	testutil.FailErr(t, "open recovery checkpoint store", err)
 	return store, func(checkpointID string) {
 		t.Helper()
-		meta := workspace.JobMeta{Roots: []workspace.JobMetaRoot{{ID: "primary", Path: branch, IsPrimary: true}}}
+		meta := workspace.JobMeta{Roots: []workspace.JobMetaRoot{{ID: "primary", Path: source, IsPrimary: true}}, SnapshotComplete: true}
 		meta.LastPublishedCheckpointID, meta.CheckpointStoreDir = checkpointID, store.RootDir()
 		testutil.FailErr(t, "record branch checkpoint", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(filepath.Clean(branch)), meta))
 	}

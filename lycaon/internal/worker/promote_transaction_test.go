@@ -306,7 +306,7 @@ func TestMergeServiceCheckpointExactBaseConflictSurface(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "Publish", err)
-	bindRecoveryCheckpoint(t, overlay, cpStore, "chk-conf-1")
+	bindRecoveryCheckpoint(t, overlay, primary, cpStore, "chk-conf-1")
 
 	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, testbaseline.Durable(t, sqlDB, jobID, primary))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)

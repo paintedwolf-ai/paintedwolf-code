@@ -60,6 +60,7 @@ type Transaction struct {
 	index         map[layeredfs.QualifiedPath]int
 	origins       map[string]layeredfs.QualifiedPath
 	slots         map[string]string
+	locations     map[string]string
 	keepOriginals bool
 	closed        bool
 }
@@ -159,7 +160,7 @@ func newTransaction(cfg TransactionConfig, journal transactionJournal) *Transact
 	return &Transaction{
 		cfg: cfg, dir: cfg.Dir, journal: journal, index: index,
 		targets: &promotionTargets{roots: roots},
-		origins: map[string]layeredfs.QualifiedPath{}, slots: map[string]string{},
+		origins: map[string]layeredfs.QualifiedPath{}, slots: map[string]string{}, locations: map[string]string{},
 	}
 }
 
@@ -444,21 +445,19 @@ func mergeRoots(current, added map[string]string) map[string]string {
 	return out
 }
 
-// canonicalChanges names each target by one root ID, whatever alias a caller used, so a file reached
-// under two IDs has one before-image.
+// canonicalChanges names each target by the first root ID this transaction saw for its location,
+// whatever alias a later stage uses, so a file reached under two IDs has one before-image.
 func (txn *Transaction) canonicalChanges(changes []PlannedChange) []PlannedChange {
 	canonical := map[string]string{}
-	byLocation := map[string]string{}
 	for _, id := range slices.Sorted(maps.Keys(txn.targets.roots)) {
 		location := txn.targets.roots[id]
 		if resolved, err := filepath.EvalSymlinks(location); err == nil {
 			location = resolved
 		}
-		if first, seen := byLocation[location]; seen {
-			canonical[id] = first
-			continue
+		if _, seen := txn.locations[location]; !seen {
+			txn.locations[location] = id
 		}
-		byLocation[location], canonical[id] = id, id
+		canonical[id] = txn.locations[location]
 	}
 	out := slices.Clone(changes)
 	for i := range out {

@@ -41,7 +41,7 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 	testutil.FailErr(t, "publisher", err)
 	_, err = publisher.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "refs-only", Trigger: checkpoint.TriggerWorkerCompletion, PrivateGit: checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feature": oid}}})
 	testutil.FailErr(t, "publish refs checkpoint", err)
-	bindRecoveryCheckpoint(t, overlay, cpStore, "refs-only")
+	bindRecoveryCheckpoint(t, overlay, primary, cpStore, "refs-only")
 	_, err = store.SetWorkerWorkspace(ctx, id, overlay, baseline)
 	testutil.FailErr(t, "bind worker", err)
 	testutil.FailErr(t, "pending worker", queue.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
@@ -69,9 +69,9 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 }
 
 // bindRecoveryCheckpoint names a published checkpoint as a branch's result, as completion does.
-func bindRecoveryCheckpoint(t *testing.T, branch string, store *checkpoint.Store, checkpointID string) {
+func bindRecoveryCheckpoint(t *testing.T, branch, source string, store *checkpoint.Store, checkpointID string) {
 	t.Helper()
-	meta := workspace.JobMeta{Roots: []workspace.JobMetaRoot{{ID: "primary", Path: branch, IsPrimary: true}}}
+	meta := workspace.JobMeta{Roots: []workspace.JobMetaRoot{{ID: "primary", Path: source, IsPrimary: true}}, SnapshotComplete: true}
 	meta.LastPublishedCheckpointID, meta.CheckpointStoreDir = checkpointID, store.RootDir()
 	testutil.FailErr(t, "record branch checkpoint", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(filepath.Clean(branch)), meta))
 }

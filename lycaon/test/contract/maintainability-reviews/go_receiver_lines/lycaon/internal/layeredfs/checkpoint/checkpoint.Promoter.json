@@ -4,13 +4,13 @@
   "kind": "runtime_service",
   "workstream": "immutable-worker-checkpoints",
   "disposition": "retain",
-  "reason": "Retain the 538-line immutable checkpoint promotion owner for exact-base preview evaluation, target revalidation, and resumable roll-forward journal state. Descriptor-confined target I/O lives on promotionTargets and host undo/ref recovery lives on HostPromotion; keeping evaluation, revalidation, and journal state on Promoter preserves manifest and transaction identity. Growth to 545 lines records one small durable progress marker per applied path, which makes journal writes linear in the promotion; the Apply transaction boundary is unchanged.",
+  "reason": "Retain the immutable checkpoint promotion owner for exact-base preview evaluation and target revalidation. Target I/O lives on promotionTargets and every effect lives on Transaction; keeping evaluation and revalidation on Promoter preserves manifest and preview identity.",
   "reviewed_commit": "993e0d03c92f08f921f1367754e04fb2fc779e19",
   "ceiling": 545,
   "boundaries": {
-    "lycaon/internal/layeredfs/checkpoint/promotion_test.go": "15b3f49a90d062f63ff21f95208d2eb408caf442a2defc0a98f9baaa140bcaf2",
+    "lycaon/internal/layeredfs/checkpoint/promotion_test.go": "fdbc41dd5be0317de59474eb274b9d559df71eef9f00a3a14467af56eff4812f",
     "lycaon/internal/layeredfs/checkpoint/git_import_test.go": "a6040bfacebbe2cdf55f32faeb1798b74c0a15b49458aa307a252478325d15ab",
-    "lycaon/internal/layeredfs/checkpoint/promoter_apply_scaling_test.go": "d29e55a2485d2d6a78dbb55f6e318d42c75c2df03df82942069e54a8e4b9a479"
+    "lycaon/internal/layeredfs/checkpoint/promoter_apply_scaling_test.go": "0b0c49f49caf56e337587ede62df93a2e3f7116868f59de26e0c701a15e3c2a7"
   },
   "reviewed_shape": "291ee652c5d78f25eb582dd08b1e05a77dfd718f26a91087c427bfee0a74c594"
 }
