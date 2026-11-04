@@ -14,7 +14,7 @@ copy:
   cause: The coordinator produced a closing report before the host state machine reached the manifest's report phase.
   why: Accepting the report here would finish the conversation while leaving the workflow active in an earlier phase.
   fix: Complete the active phase using its structured gate action or wait for its host-managed work to settle. Deliver the completion report only after the workflow enters its report phase.
-  instead: Complete phase `{{ paintedwolf.phase }}` before claiming completion. If no justified recovery remains, an honest blocked report carrying `[verify: blocked - reason]` can end the turn without passing or advancing the workflow gate.
+  instead: 'Complete phase `{{ paintedwolf.phase }}` before claiming completion. If no justified recovery remains, an honest blocked report carrying `[verify: blocked - reason]` can end the turn without passing or advancing the workflow gate.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: Close out blocked — the workflow has not reached its report phase

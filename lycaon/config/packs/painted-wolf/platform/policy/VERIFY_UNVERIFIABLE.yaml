@@ -27,7 +27,7 @@ copy:
     treat as passed. It is not an owner failure.
   fix: >-
     Use the structured refusal to identify the boundary. A remote-package destination denial cannot be widened in that invocation: acquire the package first, then run its installed local executable under a separately reviewed request. For other boundary denials, verify and command accept capability_request for the access actually needed. Listening and loopback connecting are separate authorities. Preserve the completed receipt, retry only after a relevant change, and wait for any live handle. Never substitute an easier check and report it as the selected project check.
-  instead: Report `[verify: blocked - reason]` if no justified recovery remains; this receipt is not a pass.
+  instead: 'Report `[verify: blocked - reason]` if no justified recovery remains; this receipt is not a pass.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:verify
 x-paintedwolf-message: verify reached no verdict because confinement stopped the run
