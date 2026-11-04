@@ -56,13 +56,13 @@ func (s *Commands) holdWindow(ctx context.Context, w *openCommandWindow) (func()
 			return nil, anchor.err
 		}
 		s.windowsMu.Lock()
-		// The anchor's own waiters activate the window, so with none left it stays idle.
-		w.active = !w.closing
 	}
 	defer s.windowsMu.Unlock()
 	if w.closing {
 		return nil, ErrWindowClosed
 	}
+	// Only a woken waiter activates after an anchor, so with none left it stays idle.
+	w.active = true
 	w.holds++
 	endGrace(w)
 	var once sync.Once
@@ -78,7 +78,7 @@ func (s *Commands) reanchorWindow(ctx context.Context, w *openCommandWindow, anc
 	snapshotID, err := s.anchorStart(budget, w.projectID, w.roots, false)
 	if err == nil {
 		w.moveStart(snapshotID)
-		if retainErr := s.retainWindowStart(budget, w); retainErr != nil {
+		if retainErr := s.retention.Retain(budget, w.id, snapshotID); retainErr != nil {
 			slog.WarnContext(ctx, "command window start retention", "window_id", w.id, "err", retainErr)
 		}
 	}

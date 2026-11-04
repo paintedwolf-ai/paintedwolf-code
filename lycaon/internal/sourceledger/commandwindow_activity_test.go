@@ -482,7 +482,7 @@ func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
 	store, ctx, root := ledger.store, context.Background(), ledger.root
 	// What this bounds is retention's file limit, so a loaded host must not run
 	// out of time first.
-	store.Commands.observationBudget, store.Commands.retainBudget = time.Hour, time.Hour
+	store.Commands.observationBudget, store.Commands.retention.budget = time.Hour, time.Hour
 	contents := map[string]string{"a.txt": "before a\n", "b.txt": "before b\n"}
 	for path, content := range contents {
 		writeRootFile(t, root, path, content)
@@ -506,7 +506,7 @@ func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
 		return count
 	}
 
-	store.Commands.retainFiles = 1
+	store.Commands.retention.files = 1
 	partial := openTestWindow(t, store, ctx, root, "make")
 	pins := pinned(partial.ID)
 	if len(pins) != 1 {
@@ -547,7 +547,7 @@ func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
 	// The next open stores only what the first did not, and finds the rest in place.
 	writeRootFile(t, root, "c.txt", "before c\n")
 	deliverWrites(ctx, root, "c.txt")
-	store.Commands.retainFiles = windowRetainFiles
+	store.Commands.retention.files = windowRetainFiles
 	resumed := openTestWindow(t, store, ctx, root, "make again")
 	if pins := pinned(resumed.ID); len(pins) == 0 || !pins[sourceblob.ContentSHA([]byte("before c\n"))] {
 		t.Fatalf("resumed pins = %v", pins)
@@ -562,7 +562,7 @@ func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
 func TestRetentionOutOfTimeKeepsTheWindow(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "kept.txt", "kept\n")
-	store.Commands.retainBudget = 0
+	store.Commands.retention.budget = 0
 	starved := openTestWindow(t, store, ctx, root, "make")
 	writeRootFile(t, root, "gen.txt", "generated\n")
 	deliverWrites(ctx, root, "gen.txt")
