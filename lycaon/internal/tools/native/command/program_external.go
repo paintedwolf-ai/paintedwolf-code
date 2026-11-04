@@ -26,6 +26,8 @@ type ExternalStages struct {
 	Dir             string
 	ExtraWriteRoots []string
 	BaseEnvironment []string
+	// window observes the source changes of the program this launch belongs to.
+	window *programWindow
 }
 
 var _ commandprogram.ExternalLauncher = ExternalStages{}
@@ -77,6 +79,10 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
 		return externalLaunchFailure(err, refusedResult("COMMAND_EXEC_DENIED")), err
+	}
+	// Open before the process starts, so earlier drift is not attributed to it.
+	if err := l.window.ensure(ctx); err != nil {
+		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
 	}
 	launchArgv, cleanupProcSubst, err := materializeExternalArgv(tctx.Host.SessionScratchDir, fields)
 	if err != nil {

@@ -255,6 +255,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
+	outcome.SourceWindow = run.window.fact()
 	if settledNow {
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
 	}

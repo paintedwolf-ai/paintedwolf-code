@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -63,6 +64,14 @@ func (w commandWindow) closeNow(ctx context.Context) {
 	if err := w.open.Close(closeCtx); err != nil {
 		slog.WarnContext(ctx, "command window close", "window_id", w.open.ID, "err", err)
 	}
+}
+
+// fact states the window on a command result; nil when none opened.
+func (w commandWindow) fact() *hostcmd.SourceWindow {
+	if w.open == nil {
+		return nil
+	}
+	return &hostcmd.SourceWindow{ID: w.open.ID, Settled: w.open.IsSettled()}
 }
 
 // closeOnExit ends the window when a promoted or background process exits.

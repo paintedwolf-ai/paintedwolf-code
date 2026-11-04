@@ -65,6 +65,8 @@ type verifyResult struct {
 	Truncated         bool   `json:"truncated,omitempty"`
 	OriginalTailBytes int    `json:"original_tail_bytes,omitempty"`
 	WireSpillPath     string `json:"wire_spill_path,omitempty"`
+	// SourceWindow is present when a window observed the check.
+	SourceWindow *hostcmd.SourceWindow `json:"source_window,omitempty"`
 	confine.Report
 }
 
@@ -143,6 +145,7 @@ func (t *VerifyTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 		OriginalTailBytes:  res.OriginalTailBytes,
 		WireSpillPath:      res.WireSpillPath,
 		Report:             res.Report,
+		SourceWindow:       res.SourceWindow,
 	}
 	if reason == unverifiableReasonDeadline {
 		vr.DeadlineSeconds = int(command.CommandTimeout(args, VerifyToolName) / time.Second)

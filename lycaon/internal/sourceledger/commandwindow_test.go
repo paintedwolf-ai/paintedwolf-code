@@ -172,6 +172,8 @@ func TestCommandWindowAdmitsWhatTheCommandChanged(t *testing.T) {
 }
 
 func TestWindowIsSettledFollowsSettlement(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
 	store, ctx, root := openLedgerOnDisk(t)
 	window := openTestWindow(t, store, ctx, root, "make")
 	if window.IsSettled() {
