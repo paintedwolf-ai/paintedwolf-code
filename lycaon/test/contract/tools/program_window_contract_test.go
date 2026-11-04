@@ -1,4 +1,4 @@
-package tools_test
+package contract
 
 import (
 	"context"
