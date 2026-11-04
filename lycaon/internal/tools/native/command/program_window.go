@@ -27,10 +27,6 @@ type programWindow struct {
 	window commandWindow
 
 	mu sync.Mutex
-	// waiting counts launches on their way to a hold; the opener's hold keeps
-	// the window active for them, so it goes once they have theirs.
-	waiting int
-	opened  bool
 	// missed means a launch ran without the window watching it.
 	missed bool
 }
@@ -53,20 +49,14 @@ func (w *programWindow) enter(ctx context.Context) (func(), error) {
 	if w == nil || !w.due {
 		return func() {}, nil
 	}
-	w.mu.Lock()
-	w.waiting++
-	w.mu.Unlock()
-	defer w.leave(ctx)
 	w.once.Do(func() {
 		openCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 		w.cancel = cancel
 		go func() {
 			defer close(w.ready)
 			w.window = w.open(openCtx)
-			w.mu.Lock()
-			w.opened = true
-			w.mu.Unlock()
-			w.releaseOpenerIfUnwaited(ctx)
+			// Launches take their holds during the grace this starts.
+			w.window.open.ReleaseOpener(ctx)
 		}()
 	})
 	waitCtx, stop := w.boundedWait(ctx)
@@ -109,22 +99,6 @@ func (w *programWindow) unobserved(ctx context.Context) (func(), error) {
 	defer w.mu.Unlock()
 	w.missed = true
 	return func() {}, nil
-}
-
-func (w *programWindow) leave(ctx context.Context) {
-	w.mu.Lock()
-	w.waiting--
-	w.mu.Unlock()
-	w.releaseOpenerIfUnwaited(ctx)
-}
-
-func (w *programWindow) releaseOpenerIfUnwaited(ctx context.Context) {
-	w.mu.Lock()
-	unwaited := w.opened && w.waiting == 0
-	w.mu.Unlock()
-	if unwaited {
-		w.window.open.ReleaseOpener(ctx)
-	}
 }
 
 // settle ends the window when evaluation has ended. An open still in flight has

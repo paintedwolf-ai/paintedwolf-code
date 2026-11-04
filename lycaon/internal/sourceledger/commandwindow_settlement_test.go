@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,9 +29,9 @@ type beforePassCompletes struct {
 	before func()
 }
 
-func (p beforePassCompletes) notePassCompleted(ctx context.Context, projectID string, roots []RootSpec) {
+func (p beforePassCompletes) notePassCompleted(projectID string, roots []RootSpec) {
 	p.before()
-	p.inventoryCommandsPort.notePassCompleted(ctx, projectID, roots)
+	p.inventoryCommandsPort.notePassCompleted(projectID, roots)
 }
 
 // A pass that captured before the last write says nothing about it, so the close
@@ -166,25 +167,59 @@ func TestReanchorDoesNotReuseASlowPassOverTheGap(t *testing.T) {
 	closeAndSettle(t, ctx, window)
 }
 
-// An event still on its way when a window opens belongs to before the window.
-func TestOpenWaitsForAWatcherEventStillInFlight(t *testing.T) {
+// arrivalsAtPass notes how many events had arrived when the first pass was asked for.
+type arrivalsAtPass struct {
+	commandsInventoryPort
+	arrivals *atomic.Int64
+	seen     chan int64
+}
+
+func (a arrivalsAtPass) EnsureInventory(ctx context.Context, req InventoryRequest) error {
+	select {
+	case a.seen <- a.arrivals.Load():
+	default:
+	}
+	return a.commandsInventoryPort.EnsureInventory(ctx, req)
+}
+
+// Events still arriving when a window opens belong to before the window, so its
+// start waits for them. A save reaches the change token only once its event has
+// come off the platform stream, so an open that did not wait would claim it.
+func TestOpenWaitsForWatcherEventsStillArriving(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
 	store, ctx, root := openLedgerOnDisk(t)
 	repochange.MarkCoverageCompleteForTest(root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
-	// The first pass binds the watcher, which moves the token; after the second
-	// the open has no pass of its own to wait through.
 	forceTestPass(t, store, ctx, root)
-	forceTestPass(t, store, ctx, root)
+	testutil.FailErr(t, "recover windows", store.Commands.RecoverInterruptedWindows(ctx))
 
-	writeRootFile(t, root, "notes.md", "a person's save\n")
-	repochange.NotifyWorktreeDebounced(ctx, root, []string{"notes.md"}, repochange.SourceWatcher)
+	var arrivals atomic.Int64
+	stop, stopped := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(stopped)
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(5 * time.Millisecond):
+				repochange.NotifyWorktreeDebounced(ctx, root, []string{"notes.md"}, repochange.SourceWatcher)
+				arrivals.Add(1)
+			}
+		}
+	}()
+	testutil.WaitFor(t, func() bool { return arrivals.Load() > 0 })
+	recorder := arrivalsAtPass{store.Commands.inventory, &arrivals, make(chan int64, 1)}
+	store.Commands.inventory = recorder
+	before := arrivals.Load()
 	window := openTestWindow(t, store, ctx, root, "make")
-	repochange.WaitQuiet(ctx, root, 150*time.Millisecond, 750*time.Millisecond)
-	closeAndSettle(t, ctx, window)
-	if authored := sessionAuthored(t, store, ctx, "s1"); len(authored) != 0 {
-		t.Fatalf("authored = %v, want the save before the window left out", authored)
+	close(stop)
+	testutil.AwaitClosed(t, "events stop", stopped)
+	if arrived := testutil.Receive(t, "the open's pass", recorder.seen) - before; arrived < 3 {
+		t.Fatalf("events during the open's wait = %d, want it to outlast several", arrived)
 	}
+	closeAndSettle(t, ctx, window)
 }
 
 // deadlineRecorder reports whether a settling pass runs under a deadline.
