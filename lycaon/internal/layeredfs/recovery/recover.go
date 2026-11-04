@@ -70,6 +70,17 @@ func recoverWorkerView(ctx context.Context, c *Coordinator, req RecoverRequest) 
 	if prevViewID == "" {
 		prevViewID = j.ViewID
 	}
+	if prevViewID != "" {
+		_, unreleased, err := c.LoadMountIdentity(req.WorkerID, prevViewID)
+		if err != nil {
+			return nil, err
+		}
+		if unreleased {
+			if err := noteUnreleasedRuntime(c, &j); err != nil {
+				return nil, err
+			}
+		}
+	}
 	procReceipt, mountReceipt, prevBacking, err := settleOwnedRuntimeForRecovery(ctx, c, req.WorkerID, prevViewID, req.PreviousBackingDir)
 	if err != nil {
 		return nil, err

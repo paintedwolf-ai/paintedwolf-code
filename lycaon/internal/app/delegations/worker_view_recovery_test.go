@@ -86,13 +86,22 @@ func TestRestartAfterCrashInEveryPhaseExposesOnlyCompleteCheckpoints(t *testing.
 				t.Fatal("interrupted bytes were not preserved")
 			}
 
-			// A second restart finds nothing further to do and duplicates nothing.
+			// The killed view keeps its one record. The rebuilt view was not released either, so
+			// it reports unknown scope, and holds no second copy of what the checkpoint has.
 			engine = f.boot()
 			testutil.FailErr(t, "repeat startup recovery", engine.RecoverWorkerViews(t.Context()))
 			again, err := engine.Recovery.ListInterruptedRecords(task.ID)
 			testutil.FailErr(t, "interrupted records", err)
-			if len(again) != 1 {
+			if len(again) != 2 || again[0].ViewID == again[1].ViewID {
 				t.Fatalf("retry duplicated salvage: %+v", again)
+			}
+			for _, record := range again {
+				if record.ID == records[0].ID {
+					continue
+				}
+				if !record.UnknownScope || quarantineHolds(t, record.QuarantineDir, "checkpoint-A\n") {
+					t.Fatalf("rebuilt view record: %+v", record)
+				}
 			}
 		})
 	}
@@ -380,7 +389,8 @@ func TestRetentionEvictsVerifiedCheckpointAndLeaseRebuildsIt(t *testing.T) {
 
 	// A settled worker that has not resumed: an active one holds its rebuilt view and is retained.
 	engine := f.boot()
-	if settled := engine.Recovery.RecoverWorkerRuntime(t.Context(), task.ID); !settled.Deletable() || settled.Interrupted != nil {
+	settled := engine.Recovery.RecoverWorkerRuntime(t.Context(), task.ID)
+	if !settled.Deletable() || settled.Interrupted == nil || !settled.Interrupted.UnknownScope {
 		t.Fatalf("settlement: %+v", settled)
 	}
 	report := sweepSealed(t, engine, task.ID)

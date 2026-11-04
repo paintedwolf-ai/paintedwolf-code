@@ -46,6 +46,18 @@ func settleOwnedRuntimeForRecovery(
 	return procRec, mountRec, backingDir, err
 }
 
+// noteUnreleasedRuntime records that a view's namespace history is incomplete, before settling
+// erases the evidence. Core persists namespace records only at a barrier and at release, so any
+// made since the last barrier of a view that was never released may be lost. A retry after a
+// crash during settlement still reads this.
+func noteUnreleasedRuntime(c *Coordinator, j *WorkerLifecycleJournal) error {
+	if j.ActiveUnknownScope {
+		return nil
+	}
+	j.ActiveUnknownScope = true
+	return c.SaveWorkerJournal(*j)
+}
+
 func salvageIfInterruptedOrUnsealed(
 	c *Coordinator,
 	j *WorkerLifecycleJournal,
@@ -53,7 +65,7 @@ func salvageIfInterruptedOrUnsealed(
 	manifest checkpoint.Manifest,
 ) (*InterruptedWorkingRecord, error) {
 	hasUnsealed := hasUnsealedMutationsBeyondCheckpoint(prevBacking, manifest)
-	if j.ActivePhase == "" && !hasUnsealed {
+	if j.ActivePhase == "" && !hasUnsealed && !j.ActiveUnknownScope {
 		if existing, _ := c.ListInterruptedRecords(j.WorkerID); len(existing) > 0 {
 			last := existing[len(existing)-1]
 			if prevViewID == "" || last.ViewID == prevViewID {
@@ -67,10 +79,15 @@ func salvageIfInterruptedOrUnsealed(
 	if phase == "" {
 		phase = PhaseActiveMutation
 	}
+	salvageFrom, diagnostic := prevBacking, "interrupted or unsealed state salvaged before recovery"
+	if j.ActivePhase == "" && !hasUnsealed {
+		// Every byte is already in the checkpoint; only the namespace history is unknown.
+		salvageFrom, diagnostic = "", "view was not released; namespace changes since its last barrier are unknown"
+	}
 	rec, err := c.PreserveInterruptedWorkingStorage(
-		j.WorkerID, prevViewID, manifest.CheckpointID, prevBacking,
+		j.WorkerID, prevViewID, manifest.CheckpointID, salvageFrom,
 		phase, j.ActiveOperation, j.ActivePaths, j.ActiveUnknownScope,
-		"interrupted or unsealed state salvaged before recovery",
+		diagnostic,
 	)
 	if err != nil {
 		return nil, err
