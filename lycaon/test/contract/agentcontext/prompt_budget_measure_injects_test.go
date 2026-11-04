@@ -106,7 +106,8 @@ func measureCoordinatorInjectBlock(
 		}
 		return inject.RenderCommandJobsBlock(ctx, renderer, "sess-inject-test", jobs, nil, now, surface)
 	case "source_changes":
-		brief := inject.SourceChangeBrief{Truncated: true, OtherFiles: 240, OtherEffects: 999}
+		// OwnTruncated selects the longer of the two overflow lines.
+		brief := inject.SourceChangeBrief{OwnTruncated: true, OtherFiles: 240, OtherEffects: 999}
 		for i := 0; i < 20; i++ {
 			brief.Files = append(brief.Files, inject.SourceChangeFile{
 				Path:    fmt.Sprintf("@secondary/src/components/project/%02d/ReviewDiffViewLongName.tsx", i),

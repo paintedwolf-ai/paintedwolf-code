@@ -3,12 +3,14 @@ package gitcmd_test
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -122,11 +124,12 @@ func TestACOP01WriteLegAbsoluteDirectoryOutsideTheLeg(t *testing.T) {
 	})
 	t.Run("granted is Git's answer and the warning", func(t *testing.T) {
 		f := newGitProgramFixture(t, true)
-		dir := t.TempDir()
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		testutil.FailErr(t, "canonical directory", err)
 		configure := f.Configure
 		f.Configure = func(toolCtx *tools.ToolContext) {
 			configure(toolCtx)
-			toolCtx.Files.ReadRoots = append(toolCtx.Files.ReadRoots, dir)
+			toolCtx.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: dir}}
 		}
 		outcome := runGitProgram(t, f, "git -C '"+dir+"' status")
 		if outcome.Refusal != nil || outcome.Status != 128 || !f.warned() {
