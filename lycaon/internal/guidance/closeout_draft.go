@@ -3,6 +3,7 @@ package guidance
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -155,7 +156,7 @@ func citedEvidenceFrom(c citationmd.Citation) CoordinatorCitedEvidence {
 
 // DraftParseOptions are the parse facts a live ledger and its roots supply.
 func DraftParseOptions(roots evidence.CitationRoots, ev evidence.Ledger) citationmd.Options {
-	return citationmd.Options{KnownPath: KnownLedgerPath(roots, ev), SourceRoot: sourceRootPrefix(roots)}
+	return citationmd.Options{KnownPath: KnownLedgerPath(roots, ev), KnownHandleKind: KnownEvidenceKind(ev), SourceRoot: sourceRootPrefix(roots)}
 }
 
 // sourceRootPrefix maps a source link's root id to the ledger's path spelling.
@@ -166,12 +167,32 @@ func sourceRootPrefix(roots evidence.CitationRoots) func(string) (string, bool) 
 		}
 		for _, root := range roots.Roots {
 			// A label on the primary root too: a bare path may land on any root,
-			// and this link names one.
+			// and this link names one. A root with no label has bare ledger keys.
 			if root.ID == rootID {
+				if root.Label == "" {
+					return "", true
+				}
 				return "@" + root.Label + "/", true
 			}
 		}
 		return "", false
+	}
+}
+
+// KnownEvidenceKind holds for a kind the catalog registers or a record in the
+// ledger carries.
+func KnownEvidenceKind(ev evidence.Ledger) func(string) bool {
+	binding := evidence.ActiveBinding()
+	return func(kind string) bool {
+		if binding.KindShape(kind) != "" {
+			return true
+		}
+		for handle, rec := range ev.Handles {
+			if rec.Kind == kind || strings.HasSuffix(strings.SplitN(handle, "#", 2)[0], ":"+kind) || strings.SplitN(handle, "#", 2)[0] == kind {
+				return true
+			}
+		}
+		return false
 	}
 }
 

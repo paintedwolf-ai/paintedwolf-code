@@ -70,6 +70,8 @@ func (r DraftCitationResolution) Rejected() []OccurrenceResolution {
 
 // ResolveDraftCitations validates every occurrence of a draft, not its
 // deduplicated metadata. presentable lists the artifacts this turn may present.
+// ev must be loaded evidence: a caller fails on a ledger read error before calling,
+// because an empty ledger here means nothing was observed.
 func ResolveDraftCitations(
 	roots evidence.CitationRoots,
 	surfaceID string,
@@ -87,7 +89,7 @@ func ResolveDraftCitations(
 			result = resolveDraftCitation(roots, occurrence, ev.Ledger, handleCode, unverifiableCode)
 		case citationmd.KindWebLink:
 			result.Outcome = CitationGrounded
-			if url := occurrence.Link.Destination; !ev.URLSeen(url) {
+			if url := occurrence.Link.Destination; !webLinkObserved(*occurrence.Link, ev.Ledger) {
 				result.Outcome, result.Code, result.Offender = CitationNotObserved, urlCode, url
 			}
 		case citationmd.KindArtifact:
@@ -106,21 +108,23 @@ func ResolveDraftCitations(
 	return out
 }
 
+// webLinkObserved matches a schemeless `www.` link at either scheme, since it names
+// neither.
+func webLinkObserved(link citationmd.Link, ev evidence.Ledger) bool {
+	if ev.URLSeen(link.Destination) {
+		return true
+	}
+	if rest, ok := strings.CutPrefix(link.Destination, "http://"); ok && strings.HasPrefix(strings.ToLower(link.Label), "www.") {
+		return ev.URLSeen("https://" + rest)
+	}
+	return false
+}
+
 func resolveDraftCitation(roots evidence.CitationRoots, occurrence DraftOccurrence, ev evidence.Ledger, handleCode, unverifiableCode string) OccurrenceResolution {
 	c := occurrence.Citation
 	finding := WorkerFindingInput{Evidence: c.Handle, Path: c.Path, Line: c.Line, EndLine: c.EndLine, Excerpt: c.Excerpt}
 	result := OccurrenceResolution{OccurrenceIndex: occurrence.Index, Kind: occurrence.Kind}
 	outcome := classifyDraftFinding(roots, finding, ev)
-	if singleLineNeedsCoverage(finding, outcome, ev) {
-		// The taught form has no excerpt, so nothing else checks its line.
-		ranged := finding
-		ranged.EndLine = finding.Line
-		outcome = classifyDraftFinding(roots, ranged, ev)
-		outcome.resolution.EndLine = 0
-		if outcome.class == closeoutCitationUnverifiable {
-			outcome.offender = FormatResolutionOffender(outcome.resolution, finding)
-		}
-	}
 	result.Resolution, result.Offender = outcome.resolution, outcome.offender
 	switch outcome.class {
 	case closeoutCitationSurvey:
@@ -137,33 +141,41 @@ func resolveDraftCitation(roots evidence.CitationRoots, occurrence DraftOccurren
 	return result
 }
 
-// singleLineNeedsCoverage reports a grounded file citation whose line alone claims
-// the observation covers it. Records without file regions have no lines to check.
-func singleLineNeedsCoverage(finding WorkerFindingInput, outcome closeoutFindingOutcome, ev evidence.Ledger) bool {
-	if finding.Line <= 0 || finding.EndLine > 0 || finding.Excerpt != "" || outcome.class != closeoutCitationGrounded {
-		return false
+// classifyDraftCoordinate validates a coordinate against what the record observed.
+// One line is a one-line range, so dropping the end line cannot skip the check. A
+// record with no line facts for the location supports no coordinate.
+func classifyDraftCoordinate(roots evidence.CitationRoots, finding WorkerFindingInput, ev evidence.Ledger) closeoutFindingOutcome {
+	single := finding.EndLine == 0
+	if single {
+		finding.EndLine = finding.Line
 	}
-	rec, ok := evidence.ResolveHandle(ev, outcome.resolution.Handle)
-	return ok && evidence.RecordShape(rec) == evidence.ShapeFileRegion
+	outcome := classifyCloseoutFinding(roots, finding, ev)
+	if single && outcome.resolution.EndLine == outcome.resolution.Line {
+		outcome.resolution.EndLine = 0
+	}
+	return outcome
 }
 
-// classifyDraftFinding binds a bare path to an eligible observed record. A
-// Markdown path citation names a file and needs no line to be supported.
+// classifyDraftFinding binds a bare path to an eligible observed record, preferring
+// content over survey. A Markdown path citation names a file and needs no line.
 func classifyDraftFinding(roots evidence.CitationRoots, finding WorkerFindingInput, ev evidence.Ledger) closeoutFindingOutcome {
-	if finding.Evidence != "" || finding.Path == "" || finding.Line > 0 || finding.Excerpt != "" {
+	if finding.Line > 0 {
+		return classifyDraftCoordinate(roots, finding, ev)
+	}
+	if finding.Evidence != "" || finding.Path == "" || finding.Excerpt != "" {
 		return classifyCloseoutFinding(roots, finding, ev)
 	}
 	key := evidence.LedgerPathKey(roots, finding.Path, ev.ByPath)
-	if citationResolvesToSurveyRecord(roots, finding, ev) {
-		return closeoutFindingOutcome{class: closeoutCitationSurvey, offender: finding.Path, resolved: true,
-			resolution: evidence.Resolution{Path: key, Verdict: evidence.VerdictTraced}}
-	}
 	handles := ev.ByPath[key]
 	for i := len(handles) - 1; i >= 0; i-- {
-		if rec, ok := evidence.ResolveHandle(ev, handles[i]); ok && rec.SupersededBy == "" && !rec.IsGate() {
+		if rec, ok := evidence.ResolveHandle(ev, handles[i]); ok && rec.SupersededBy == "" && !rec.IsGate() && !rec.Survey {
 			return closeoutFindingOutcome{class: closeoutCitationGrounded, resolved: true,
 				resolution: evidence.Resolution{Handle: handles[i], Path: key, Verdict: evidence.VerdictTraced}}
 		}
+	}
+	if citationResolvesToSurveyRecord(roots, finding, ev) {
+		return closeoutFindingOutcome{class: closeoutCitationSurvey, offender: finding.Path, resolved: true,
+			resolution: evidence.Resolution{Path: key, Verdict: evidence.VerdictTraced}}
 	}
 	class := closeoutCitationNotObserved
 	if len(handles) > 0 {

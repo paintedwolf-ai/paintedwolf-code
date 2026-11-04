@@ -33,7 +33,7 @@ var parseLogKey = parser.NewContextKey()
 
 // extentRecorder wraps an inline parser to capture where its node ended. A link
 // attempt rescans the rest of its line, so attempts are charged against
-// maxLinkWork and refused once it is spent; the parse is then discarded.
+// maxStructureWork and refused once it is spent; the parse is then discarded.
 type extentRecorder struct {
 	parser.InlineParser
 }
@@ -42,7 +42,7 @@ func (r extentRecorder) Parse(parent ast.Node, block text.Reader, pc parser.Cont
 	log, _ := pc.Get(parseLogKey).(*parseLog)
 	line, entry := block.PeekLine()
 	if len(line) > 1 && line[0] == ']' && line[1] == '(' {
-		if log.linkWork += len(line); log.linkWork > maxLinkWork {
+		if log.linkWork += len(line); log.linkWork > maxStructureWork {
 			return nil
 		}
 	}
@@ -68,8 +68,9 @@ func (r extentRecorder) CloseBlock(parent ast.Node, block text.Reader, pc parser
 }
 
 // markdownParser is the dialect the frontend renders, CommonMark plus GFM, less the
-// emphasis and strikethrough parsers: they cannot change a literal zone or a link
-// boundary, and their delimiter matching is quadratic in a block's delimiters.
+// emphasis and strikethrough parsers, which cannot change a literal zone or a link
+// boundary and whose delimiter matching is quadratic in a block's delimiters, and
+// less linkify: bare URLs follow the frontend's own rule, in barelink.go.
 var markdownParser = sync.OnceValue(func() parser.Parser {
 	configured := parser.NewParser(
 		parser.WithBlockParsers(parser.DefaultBlockParsers()...),
@@ -79,7 +80,6 @@ var markdownParser = sync.OnceValue(func() parser.Parser {
 			util.Prioritized(extentRecorder{parser.NewLinkParser()}, 200),
 			util.Prioritized(extentRecorder{parser.NewAutoLinkParser()}, 300),
 			util.Prioritized(extentRecorder{parser.NewRawHTMLParser()}, 400),
-			util.Prioritized(extentRecorder{extension.NewLinkifyParser()}, 999),
 		),
 	)
 	md := goldmark.New(goldmark.WithParser(configured))
@@ -99,9 +99,10 @@ type structure struct {
 	body      Span
 }
 
-// LiteralZones returns the source's literal zones from one structural parse.
+// LiteralZones returns the source's literal zones, under Parse's budgets. Past a
+// budget they are the coarse zones of a source that was not structurally parsed.
 func LiteralZones(source string) []Zone {
-	return documentStructure(source).zones
+	return Parse(source, Options{}).Zones
 }
 
 // documentStructure parses source and, once, the body of a whole-response
@@ -133,17 +134,17 @@ func (s *structure) shift(body Span) {
 // TextRanges returns the complement of LiteralZones: the only ranges in which
 // custom nodes may begin.
 func TextRanges(source string) []Span {
-	shape := documentStructure(source)
+	doc := Parse(source, Options{})
 	var out []Span
-	at := shape.body.Start
-	for _, zone := range shape.zones {
+	at := doc.Body.Start
+	for _, zone := range doc.Zones {
 		if zone.Span.Start > at {
 			out = append(out, Span{at, zone.Span.Start})
 		}
 		at = max(at, zone.Span.End)
 	}
-	if at < shape.body.End {
-		out = append(out, Span{at, shape.body.End})
+	if at < doc.Body.End {
+		out = append(out, Span{at, doc.Body.End})
 	}
 	return out
 }
@@ -154,7 +155,7 @@ func parseStructure(source string) structure {
 	pc := parser.NewContext()
 	pc.Set(parseLogKey, log)
 	doc := markdownParser().Parse(text.NewReader(data), parser.WithContext(pc))
-	out := structure{links: map[int]*Link{}, exhausted: log.linkWork > maxLinkWork, body: Span{0, len(data)}, wrapper: wrapperBody(doc, data)}
+	out := structure{links: map[int]*Link{}, exhausted: log.linkWork > maxStructureWork, body: Span{0, len(data)}, wrapper: wrapperBody(doc, data)}
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -238,12 +239,7 @@ func (s *structure) addLink(node *ast.Link, data []byte, log *parseLog) {
 		form = LinkReference
 	}
 	label := Span{extent.start + 1, extent.labelEnd}
-	s.links[extent.start] = &Link{
-		Form:        form,
-		Label:       string(data[label.Start:label.End]),
-		LabelSpan:   label,
-		Destination: cleanDestination(node.Destination),
-	}
+	s.links[extent.start] = &Link{Form: form, Label: string(data[label.Start:label.End]), LabelSpan: label, Destination: cleanDestination(node.Destination)}
 }
 
 func (s *structure) addAutolink(node *ast.AutoLink, data []byte, log *parseLog) {
@@ -251,73 +247,12 @@ func (s *structure) addAutolink(node *ast.AutoLink, data []byte, log *parseLog) 
 	if !ok {
 		return
 	}
-	label := node.Label(data)
-	span := Span{extent.end - len(label), extent.end}
-	if extent.start < len(data) && data[extent.start] == '<' {
-		span = Span{extent.start, extent.end}
-	}
+	span := Span{extent.start, extent.end}
 	s.zones = append(s.zones, Zone{Kind: ZoneAutolink, Span: span})
 	if node.AutoLinkType == ast.AutoLinkURL {
-		labelSpan := span
-		if span.End-span.Start > len(label) {
-			labelSpan = Span{span.Start + 1, span.End - 1}
-		}
-		s.links[span.Start] = &Link{Form: LinkAutolink, Label: string(label), LabelSpan: labelSpan, Destination: string(node.URL(data))}
+		s.links[span.Start] = &Link{Form: LinkAutolink, Label: string(node.Label(data)), LabelSpan: Span{span.Start + 1, span.End - 1}, Destination: string(node.URL(data))}
 	}
 }
-
-// containerDepthExceeded reports a line nested past maxContainerDepth, whose
-// cost in the block parser is quadratic in its depth.
-func containerDepthExceeded(source string) bool {
-	for at := 0; at < len(source); at++ {
-		depth := 0
-		for at < len(source) && source[at] != '\n' {
-			width := containerMarkerWidth(source[at:])
-			if width == 0 {
-				break
-			}
-			at += width
-			if depth++; depth > maxContainerDepth {
-				return true
-			}
-		}
-		for at < len(source) && source[at] != '\n' {
-			at++
-		}
-	}
-	return false
-}
-
-// containerMarkerWidth measures one container marker and the whitespace before
-// it at the start of rest, or zero when none starts there.
-func containerMarkerWidth(rest string) int {
-	at := 0
-	for at < len(rest) && isSpaceByte(rest[at]) {
-		at++
-	}
-	if at == len(rest) {
-		return 0
-	}
-	switch c := rest[at]; {
-	case c == '>':
-		return at + 1
-	case c == '-' || c == '+' || c == '*':
-		if at+1 < len(rest) && isSpaceByte(rest[at+1]) {
-			return at + 2
-		}
-	case c >= '0' && c <= '9':
-		digits := at
-		for digits < len(rest) && rest[digits] >= '0' && rest[digits] <= '9' && digits-at < 9 {
-			digits++
-		}
-		if digits+1 < len(rest) && (rest[digits] == '.' || rest[digits] == ')') && isSpaceByte(rest[digits+1]) {
-			return digits + 2
-		}
-	}
-	return 0
-}
-
-func isSpaceByte(b byte) bool { return b == ' ' || b == '\t' }
 
 func cleanDestination(raw []byte) string {
 	return string(util.ResolveNumericReferences(util.ResolveEntityNames(util.UnescapePunctuations(raw))))
@@ -332,45 +267,100 @@ func linesSpan(node ast.Node, data []byte) Span {
 	return Span{lineStart(data, lines.At(0).Start), lines.At(lines.Len() - 1).Stop}
 }
 
-// fenceSpan covers the opening fence through the closing fence when there is
-// one. A fence inside a container has no closer once the container ends; the
-// following line then opens its own zone, and overlapping zones merge.
+// fenceSpan covers the opening fence through its closing line when there is one.
 func fenceSpan(node *ast.FencedCodeBlock, data []byte) Span {
 	opener := max(node.Pos(), 0)
 	start := lineStart(data, opener)
-	end := lineEnd(data, opener)
-	fence := fenceByte(data[opener:end])
+	end := lineEndBytes(data, opener)
+	fence, run := fenceOpening(data[opener:end])
 	if lines := node.Lines(); lines.Len() > 0 {
 		end = lines.At(lines.Len() - 1).Stop
 	}
 	if end < len(data) {
-		if closer := lineEnd(data, end); isFenceCloser(data[end:closer], fence) {
-			end = closer
+		next := lineEndBytes(data, end)
+		if isFenceCloser(data[end:next], fence, run, containerOf(node)) {
+			end = next
 		}
 	}
 	return Span{start, end}
 }
 
-func fenceByte(line []byte) byte {
-	for _, c := range line {
-		if c == '`' || c == '~' {
-			return c
-		}
+func fenceOpening(line []byte) (byte, int) {
+	at := 0
+	for at < len(line) && line[at] != '`' && line[at] != '~' {
+		at++
 	}
-	return '`'
+	if at == len(line) {
+		return '`', 3
+	}
+	end := at
+	for end < len(line) && line[end] == line[at] {
+		end++
+	}
+	return line[at], end - at
 }
 
-func isFenceCloser(line []byte, fence byte) bool {
-	for _, c := range line {
-		switch c {
-		case ' ', '\t', '>':
-		case fence:
-			return true
-		default:
-			return false
+// containerPrefix is one enclosing block a continuation line must re-enter.
+type containerPrefix struct {
+	quote  bool
+	indent int
+}
+
+func containerOf(node ast.Node) []containerPrefix {
+	var out []containerPrefix
+	for parent := node.Parent(); parent != nil; parent = parent.Parent() {
+		switch block := parent.(type) {
+		case *ast.Blockquote:
+			out = append([]containerPrefix{{quote: true}}, out...)
+		case *ast.ListItem:
+			out = append([]containerPrefix{{indent: block.Offset}}, out...)
 		}
 	}
-	return false
+	return out
+}
+
+// isFenceCloser applies CommonMark's closing rule inside the fence's containers:
+// the same character, a run at least as long as the opener, up to three spaces of
+// indent, and nothing else on the line. A line that leaves a container closes the
+// fence without being its closer.
+func isFenceCloser(line []byte, fence byte, run int, containers []containerPrefix) bool {
+	at := 0
+	for _, container := range containers {
+		if container.quote {
+			skip := 0
+			for skip < 3 && at+skip < len(line) && line[at+skip] == ' ' {
+				skip++
+			}
+			if at+skip >= len(line) || line[at+skip] != '>' {
+				return false
+			}
+			at += skip + 1
+			if at < len(line) && isSpaceByte(line[at]) {
+				at++
+			}
+			continue
+		}
+		for skip := 0; skip < container.indent; skip++ {
+			if at >= len(line) || !isSpaceByte(line[at]) {
+				return false
+			}
+			at++
+		}
+	}
+	indent := 0
+	for at < len(line) && line[at] == ' ' && indent < 4 {
+		at++
+		indent++
+	}
+	if indent > 3 {
+		return false
+	}
+	length := 0
+	for at < len(line) && line[at] == fence {
+		at++
+		length++
+	}
+	return length >= run && isBlankLine(string(line[at:]))
 }
 
 func lineStart(data []byte, at int) int {
@@ -380,13 +370,20 @@ func lineStart(data []byte, at int) int {
 	return at
 }
 
-// lineEnd returns the offset just past the line's newline.
-func lineEnd(data []byte, at int) int {
-	for at < len(data) && data[at] != '\n' {
-		at++
+func lineEndBytes(data []byte, at int) int {
+	if next := bytes.IndexByte(data[at:], '\n'); next >= 0 {
+		return at + next + 1
 	}
-	if at < len(data) {
-		at++
+	return len(data)
+}
+
+// lineEnd returns the offset just past the newline of the line holding at.
+func lineEnd(text string, at int) int {
+	if at >= len(text) {
+		return len(text)
 	}
-	return at
+	if next := strings.IndexByte(text[at:], '\n'); next >= 0 {
+		return at + next + 1
+	}
+	return len(text)
 }

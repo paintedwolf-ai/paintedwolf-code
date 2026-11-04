@@ -34,16 +34,18 @@ func (m parsedMember) occurrence() Occurrence {
 }
 
 // parsedNode is a closed node's meaning. prose means the bracket turned out to
-// be ordinary Markdown; issue means it is a damaged node.
+// be ordinary Markdown; issue means it is a damaged node. defects are spans of
+// members that are no citation inside a group that is one.
 type parsedNode struct {
 	members []parsedMember
+	defects []Span
 	issue   IssueCode
 	kind    NodeKind
 	prose   bool
 }
 
 // parseNode interprets a complete bracketed node under the scanner's mode.
-func parseNode(token string, mode bodyMode, confirmed bool, opts Options) parsedNode {
+func parseNode(token string, mode bodyMode, attempt, indexed bool, opts Options) parsedNode {
 	body := token[1 : len(token)-1]
 	switch mode {
 	case modeVerify:
@@ -52,40 +54,60 @@ func parseNode(token string, mode bodyMode, confirmed bool, opts Options) parsed
 		return parseArtifact(body)
 	case modeRepair:
 		return parseRepair(body)
-	default:
-		return parseCitationGroup(body, confirmed, opts)
+	case modeLexeme, modeCitation:
 	}
+	return parseCitationGroup(body, attempt, indexed, opts)
 }
 
-func parseCitationGroup(body string, confirmed bool, opts Options) parsedNode {
+// parseCitationGroup decides a group as a group. With any attempt among its
+// members, the others are defects; with none, the bracket is prose.
+func parseCitationGroup(body string, attempt, indexed bool, opts Options) parsedNode {
 	node := parsedNode{kind: KindCitation}
-	r := memberReader{body: body}
+	r := memberReader{body: body, gate: &memberGate{opts: opts, indexed: indexed}}
 	for {
 		start := r.skipSpace()
-		citation, code := r.member(&opts)
-		if code == "" {
-			node.members = append(node.members, parsedMember{kind: KindCitation, start: start + 1, end: r.at + 1, citation: citation})
-			r.skipSpace()
-			if r.done() {
-				return node
-			}
-			if r.body[r.at] == ',' {
-				r.at++
-				continue
-			}
-			code = IssueMalformedCitation
+		citation, code := r.member()
+		end := start + len(strings.TrimRight(body[start:r.at], " \t\r"))
+		switch {
+		case code != "" && (attempt || code == IssueInvalidRange):
+			return parsedNode{issue: code, kind: KindCitation}
+		case code != "":
+			return parsedNode{prose: true, kind: KindCitation}
+		case citation != nil:
+			node.members = append(node.members, parsedMember{kind: KindCitation, start: start + 1, end: end + 1, citation: citation})
+		default:
+			node.defects = append(node.defects, Span{start + 1, end + 1})
 		}
-		if !confirmed && code != IssueInvalidRange {
+		r.skipSpace()
+		if r.done() {
+			break
+		}
+		if body[r.at] != ',' {
+			if attempt {
+				return parsedNode{issue: IssueMalformedCitation, kind: KindCitation}
+			}
 			return parsedNode{prose: true, kind: KindCitation}
 		}
-		return parsedNode{issue: code, kind: KindCitation}
+		r.at++
 	}
+	if len(node.members) == 0 {
+		return parsedNode{prose: true, kind: KindCitation}
+	}
+	return node
+}
+
+// memberGate decides whether an ordinary path member is a citation attempt. A nil
+// gate means the context already makes every path explicit.
+type memberGate struct {
+	opts    Options
+	indexed bool
 }
 
 // memberReader walks a citation body outside and across quoted strings.
 type memberReader struct {
 	body string
 	at   int
+	gate *memberGate
 }
 
 func (r *memberReader) done() bool { return r.at >= len(r.body) }
@@ -138,13 +160,17 @@ func (r *memberReader) quoted() (string, bool) {
 func (r *memberReader) atQuote() bool { return !r.done() && r.body[r.at] == '"' }
 
 // member parses `handle[:lines] [path[:lines]] ["excerpt"]` or
-// `path[:lines] ["excerpt"]`. opts gates a bare path; nil means it is explicit.
-func (r *memberReader) member(opts *Options) (*Citation, IssueCode) {
+// `path[:lines] ["excerpt"]`. A well-formed member that is no attempt yields nil
+// with no code.
+func (r *memberReader) member() (*Citation, IssueCode) {
 	c := &Citation{}
 	if !r.atQuote() {
 		saved := r.at
 		lexeme := r.lexeme()
 		if match := handleWithCoordinate.FindStringSubmatch(lexeme); match != nil {
+			if r.gate != nil && !r.gate.opts.knownKind(terminalKind(match[1])) {
+				return nil, ""
+			}
 			c.Handle = match[1]
 			if code := setLines(c, match[2], match[3]); code != "" {
 				return nil, code
@@ -152,14 +178,27 @@ func (r *memberReader) member(opts *Options) (*Citation, IssueCode) {
 			return r.afterHandle(c)
 		}
 		if strings.Contains(lexeme, "#") {
+			if r.gate != nil && !malformedCoordinate.MatchString(lexeme) && !r.gate.opts.knownKind(terminalKind(lexeme[:strings.IndexByte(lexeme, '#')])) {
+				return nil, ""
+			}
 			return nil, IssueMalformedCitation
 		}
 		r.at = saved
 	}
-	if code := r.pathRef(c, opts); code != "" {
+	attempt, code := r.pathRef(c, r.gate)
+	if code != "" {
 		return nil, code
 	}
-	return r.excerpt(c)
+	citation, code := r.excerpt(c)
+	if !attempt {
+		return nil, code
+	}
+	return citation, code
+}
+
+func terminalKind(handle string) string {
+	kind, _, _ := strings.Cut(handle, "#")
+	return kind[strings.LastIndexByte(kind, ':')+1:]
 }
 
 func (r *memberReader) afterHandle(c *Citation) (*Citation, IssueCode) {
@@ -178,45 +217,49 @@ func (r *memberReader) afterHandle(c *Citation) (*Citation, IssueCode) {
 		}
 		r.at = saved
 	}
-	if code := r.pathRef(c, nil); code != "" {
+	if _, code := r.pathRef(c, nil); code != "" {
 		return nil, code
 	}
 	return r.excerpt(c)
 }
 
-// pathRef reads a quoted or bare path with an optional coordinate. Nil opts means
-// the context already makes the path explicit, so it needs no ledger match.
-func (r *memberReader) pathRef(c *Citation, opts *Options) IssueCode {
+// pathRef reads a quoted or bare path with an optional coordinate and reports
+// whether it is a citation attempt. A quoted path needs a coordinate or a ledger
+// match, like any other; strings in prose are common.
+func (r *memberReader) pathRef(c *Citation, gate *memberGate) (attempt bool, code IssueCode) {
 	var path, start, end string
 	if r.atQuote() {
 		text, ok := r.quoted()
 		if !ok || text == "" {
-			return IssueMalformedCitation
+			return false, IssueMalformedCitation
 		}
 		path = text
 		if !r.done() && r.body[r.at] == ':' {
 			tail := r.lexeme()
 			match := coordinateTail.FindStringSubmatch(tail)
 			if len(match) == 0 || match[0] != tail {
-				return IssueMalformedCitation
+				return false, IssueMalformedCitation
 			}
 			start, end = match[1], match[2]
 		}
+		attempt = gate == nil || (!gate.indexed && (start != "" || gate.opts.known(path)))
 	} else {
+		lexeme := r.lexeme()
 		var ok bool
-		path, start, end, ok = splitCoordinate(r.lexeme())
+		path, start, end, ok = splitCoordinate(lexeme)
 		if !ok || !validBarePath(path) {
-			return IssueMalformedCitation
+			return false, IssueMalformedCitation
 		}
-		if opts != nil && !isCitationAttempt(path, start, *opts) {
-			return IssueMalformedCitation
-		}
+		attempt = gate == nil || isCitationAttempt(path, start, gate.indexed, gate.opts)
+	}
+	if !attempt {
+		return false, ""
 	}
 	c.Path = path
 	if start != "" && c.Line != 0 {
-		return IssueMalformedCitation
+		return false, IssueMalformedCitation
 	}
-	return setLines(c, start, end)
+	return true, setLines(c, start, end)
 }
 
 func (r *memberReader) excerpt(c *Citation) (*Citation, IssueCode) {
@@ -237,7 +280,7 @@ func setLines(c *Citation, start, end string) IssueCode {
 		return ""
 	}
 	line, err := strconv.Atoi(start)
-	if err != nil || line <= 0 {
+	if err != nil || line <= 0 || line > MaxLineNumber {
 		return IssueInvalidRange
 	}
 	c.Line = line
@@ -245,7 +288,7 @@ func setLines(c *Citation, start, end string) IssueCode {
 		return ""
 	}
 	last, err := strconv.Atoi(end)
-	if err != nil || last < line {
+	if err != nil || last < line || last > MaxLineNumber {
 		return IssueInvalidRange
 	}
 	if last > line {

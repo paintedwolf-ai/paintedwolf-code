@@ -203,3 +203,23 @@ func TestCitationRepairUnknownReferenceOffersBoundedCurrentChoices(t *testing.T)
 		}
 	}
 }
+
+// Decision 006: a coordinate needs line facts, so the choices say which records have
+// them, and the bare handle stays usable on the rest.
+func TestCitationRepairChoicesShowUsableCoordinates(t *testing.T) {
+	ledger := evidence.AssembleLedger([]evidence.Record{
+		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, SourceTool: "read", Path: "a.go", LineRanges: []evidence.LineRange{{Start: 1, End: 5}, {Start: 9, End: 9}}},
+		{Handle: "command#1", Kind: "command", Shape: evidence.ShapeCommand, SourceTool: "command"},
+	})
+	choices := citationRepairObservations(evidence.CitationRoots{}, ledger, []CoordinatorCitedEvidence{{Evidence: "missing#1"}})
+	lines := map[string]string{}
+	for _, choice := range choices {
+		lines[choice.Evidence] = choice.Lines
+	}
+	if lines["read#1"] != "1-5,9-9" {
+		t.Fatalf("read#1 lines = %q", lines["read#1"])
+	}
+	if got, ok := lines["command#1"]; !ok || got != "" {
+		t.Fatalf("command#1 = %q present=%v, want a choice with no coordinate", got, ok)
+	}
+}

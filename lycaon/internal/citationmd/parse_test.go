@@ -60,20 +60,22 @@ func TestParseCitationForms(t *testing.T) {
 		{"observed bare path", "[internal/a.go]", knownNames("internal/a.go"), []Citation{{Path: "internal/a.go"}}},
 		{"AC-AST-16 single segment attempt", "[a.go:42]", Options{}, []Citation{{Path: "a.go", Line: 42}}},
 		{"AC-AST-16 multi-segment attempt", "[x/y.go:42]", Options{}, []Citation{{Path: "x/y.go", Line: 42}}},
-		{"attempt with a range", "[LICENSE:3-4]", Options{}, []Citation{{Path: "LICENSE", Line: 3, EndLine: 4}}},
+		{"known name with a range", "[LICENSE:3-4]", knownNames("LICENSE"), []Citation{{Path: "LICENSE", Line: 3, EndLine: 4}}},
 		{"attempt with an excerpt", `[a.go:3 "some text"]`, Options{}, []Citation{{Path: "a.go", Line: 3, Excerpt: "some text"}}},
 		{"AC-AST-03 known extensionless", "[Dockerfile]", knownNames("Dockerfile"), []Citation{{Path: "Dockerfile"}}},
 		{"AC-AST-05 observed LICENSE", "[LICENSE]", knownNames("LICENSE"), []Citation{{Path: "LICENSE"}}},
 		{"known with coordinate", "[LICENSE:3]", knownNames("LICENSE"), []Citation{{Path: "LICENSE", Line: 3}}},
 		{"known with excerpt", `[LICENSE "MIT License"]`, knownNames("LICENSE"), []Citation{{Path: "LICENSE", Excerpt: "MIT License"}}},
 		{"AC-AST-03 quoted space", `["docs/design notes.md":12]`, Options{}, []Citation{{Path: "docs/design notes.md", Line: 12}}},
-		{"quoted path without coordinate", `["docs/design notes.md"]`, Options{}, []Citation{{Path: "docs/design notes.md"}}},
+		{"quoted path without coordinate", `["docs/design notes.md"]`, knownNames("docs/design notes.md"), []Citation{{Path: "docs/design notes.md"}}},
 		{"quoted path excerpt", `["a b.md":1 "some text"]`, Options{}, []Citation{{Path: "a b.md", Line: 1, Excerpt: "some text"}}},
 		{"path excerpt", `[a/b.go:1 "some text"]`, Options{}, []Citation{{Path: "a/b.go", Line: 1, Excerpt: "some text"}}},
 		{"AC-AST-03 unicode path", "[docs/設計.md:7]", Options{}, []Citation{{Path: "docs/設計.md", Line: 7}}},
 		{"AC-AST-03 quoted unicode", `["docs/設計 ノート.md":7]`, Options{}, []Citation{{Path: "docs/設計 ノート.md", Line: 7}}},
 		{"group", "[read#3:42, leg-a:grep#2:18]", Options{}, []Citation{{Handle: "read#3", Line: 42}, {Handle: "leg-a:grep#2", Line: 18}}},
 		{"group of paths", "[a/b.go:1, c/d.go:2]", Options{}, []Citation{{Path: "a/b.go", Line: 1}, {Path: "c/d.go", Line: 2}}},
+		{"quoted with a coordinate", `["a b":3]`, Options{}, []Citation{{Path: "a b", Line: 3}}},
+		{"known quoted", `["a b"]`, knownNames("a b"), []Citation{{Path: "a b"}}},
 		{"group after path", "[a/b.go, read#1]", knownNames("a/b.go"), []Citation{{Path: "a/b.go"}, {Handle: "read#1"}}},
 		{"group tolerates space before comma", "[a/b.go , c/d.go]", knownNames("a/b.go", "c/d.go"), []Citation{{Path: "a/b.go"}, {Path: "c/d.go"}}},
 		{"AC-AST-08 comma and semicolon", `[read#1:2 "a, b; c", read#2]`, Options{}, []Citation{{Handle: "read#1", Line: 2, Excerpt: "a, b; c"}, {Handle: "read#2"}}},
@@ -85,8 +87,7 @@ func TestParseCitationForms(t *testing.T) {
 		{"workspace link", "[auth.go](internal/auth.go#L42)", Options{}, []Citation{{Path: "internal/auth.go", Line: 42}}},
 		{"workspace link range", "[auth.go](internal/auth.go#L42-L58)", Options{}, []Citation{{Path: "internal/auth.go", Line: 42, EndLine: 58}}},
 		{"workspace link spaces", "[n](<docs/a b.md#L3>)", Options{}, []Citation{{Path: "docs/a b.md", Line: 3}}},
-		{"workspace link percent", "[n](docs/a%20b.md)", Options{}, []Citation{{Path: "docs/a b.md"}}},
-		{"workspace link backward range keeps no coordinate", "[n](a/b.go#L9-L2)", Options{}, []Citation{{Path: "a/b.go#L9-L2"}}},
+		{"known workspace link percent", "[n](docs/a%20b.md)", knownNames("docs/a b.md"), []Citation{{Path: "docs/a b.md"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -152,6 +153,7 @@ func TestParseLeavesProseAlone(t *testing.T) {
 		{"bare hash", "[#12]"},
 		{"AC-AST-16 leg prefix prose", "[leg-of-lamb is tasty]"},
 		{"AC-AST-16 unclosed prose", "An [open bracket\nthen more."},
+		{"group of inert members", `[1, 2, 3]`},
 		{"empty", "[]"},
 		{"reserved word alone", "[verify]"},
 		{"case-different reserved", "[Verify: targeted - x]"},
@@ -216,8 +218,12 @@ func TestParseLiteralZonesStayLiteral(t *testing.T) {
 			if !found {
 				t.Fatalf("zones = %+v, want a %s", doc.Zones, tc.kind)
 			}
-			if got := Project(doc); !strings.Contains(got, "read#1") {
-				t.Fatalf("presentation dropped the literal: %q", got)
+			if got := Project(doc); got != strings.TrimRight(tc.source, " \t\r\n") && got != tc.source {
+				t.Fatalf("presentation changed the source: %q", got)
+			}
+			zone := doc.Zones[0]
+			if !strings.Contains(tc.source[zone.Span.Start:zone.Span.End], "read#1") {
+				t.Fatalf("zone %+v does not hold the literal", zone)
 			}
 		})
 	}
@@ -282,6 +288,12 @@ func TestParseWebLinks(t *testing.T) {
 		{"named", "[RFC 9110](https://example.test/spec)", "https://example.test/spec", "RFC 9110"},
 		{"autolink", "<https://example.test/spec>", "https://example.test/spec", "https://example.test/spec"},
 		{"bare url", "see https://example.test/spec now", "https://example.test/spec", "https://example.test/spec"},
+		{"AC-AST-07 bracketed bare url", "[https://example.test/spec]", "https://example.test/spec", "https://example.test/spec"},
+		{"bracketed url and words", "[https://example.test/spec b]", "https://example.test/spec", "https://example.test/spec"},
+		{"bracketed www", "[www.example.test/spec]", "http://www.example.test/spec", "www.example.test/spec"},
+		{"url inside parens and brackets", "([http://example.test/spec])", "http://example.test/spec", "http://example.test/spec"},
+		{"localhost", "http://localhost:8080/x", "http://localhost:8080/x", "http://localhost:8080/x"},
+		{"mid word", "foo:https://example.test/x", "https://example.test/x", "https://example.test/x"},
 		{"www", "see www.example.test/spec now", "http://www.example.test/spec", "www.example.test/spec"},
 		{"entity", "[a](https://example.test/?a=1&amp;b=2)", "https://example.test/?a=1&b=2", "a"},
 		{"upper scheme", "[a](HTTPS://example.test)", "HTTPS://example.test", "a"},

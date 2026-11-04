@@ -22,7 +22,7 @@ func applyCitationRange(roots evidence.CitationRoots, finding WorkerFindingInput
 	excerpt := strings.TrimSpace(finding.Excerpt)
 	for _, handle := range rangeCandidates(finding, ev, res) {
 		rec, ok := evidence.ResolveHandle(ev, handle)
-		if !ok {
+		if !ok || rec.IsGate() {
 			continue
 		}
 		shift, ok := rangeExcerptShift(rec, res, finding, excerpt, handle)
@@ -98,7 +98,10 @@ func formatRangeOffender(path, handle string, line, endLine int, excerpt string)
 	if subject == "" {
 		subject = strings.TrimSpace(handle)
 	}
-	token := fmt.Sprintf("%s:%d-%d", subject, line, endLine)
+	token := fmt.Sprintf("%s:%d", subject, line)
+	if endLine > line {
+		token = fmt.Sprintf("%s-%d", token, endLine)
+	}
 	if excerpt = strings.TrimSpace(excerpt); excerpt != "" {
 		token += fmt.Sprintf(" (%q)", excerpt)
 	}

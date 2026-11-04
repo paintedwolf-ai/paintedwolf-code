@@ -16,6 +16,8 @@ type citationRepairObservation struct {
 	Tool         string `json:"tool,omitempty"`
 	Path         string `json:"path,omitempty"`
 	SupersededBy string `json:"superseded_by,omitempty"`
+	// Lines are the observed ranges. A choice without them takes no coordinate.
+	Lines string `json:"lines,omitempty"`
 }
 
 // citationRepairKeyField carries a repair refusal's normalized offender key.
@@ -99,7 +101,11 @@ func citationRepairObservations(roots evidence.CitationRoots, ev evidence.Ledger
 			return
 		}
 		seen[rec.Handle] = true
-		out = append(out, citationRepairObservation{Evidence: rec.Handle, Tool: rec.SourceTool, Path: rec.Path, SupersededBy: rec.SupersededBy})
+		choice := citationRepairObservation{Evidence: rec.Handle, Tool: rec.SourceTool, Path: rec.Path, SupersededBy: rec.SupersededBy}
+		if !rec.Survey && !rec.IsGate() {
+			choice.Lines = observedLineRanges(rec)
+		}
+		out = append(out, choice)
 	}
 	handles := evidence.HandlesSorted(ev)
 	for _, citation := range rejected {
@@ -130,6 +136,14 @@ func citationRepairObservations(roots evidence.CitationRoots, ev evidence.Ledger
 		}
 	}
 	return out
+}
+
+func observedLineRanges(rec evidence.Record) string {
+	ranges := make([]string, 0, len(rec.LineRanges))
+	for _, r := range rec.LineRanges {
+		ranges = append(ranges, fmt.Sprintf("%d-%d", r.Start, r.End))
+	}
+	return strings.Join(ranges, ",")
 }
 
 // citedHandleRangeLimit bounds the citations a refusal describes.
