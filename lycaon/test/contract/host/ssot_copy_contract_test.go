@@ -27,10 +27,6 @@ var laneSSurveyCopyRelPaths = []string{
 	"lycaon/config/packs/painted-wolf/platform/policy",
 }
 
-var surveyArchetypeRelPaths = []string{
-	"lycaon/config/packs/painted-wolf/platform/shared/archetypes/explore_readonly.md",
-}
-
 func TestCompactionWorkerSummaryBudgetMatchesLimitsDefault(t *testing.T) {
 	t.Parallel()
 	cfg := compaction.DefaultCompactionConfig()

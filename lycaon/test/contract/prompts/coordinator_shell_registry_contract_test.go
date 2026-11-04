@@ -22,12 +22,6 @@ var coordinatorFamilyShellTopics = map[string][]string{
 	},
 }
 
-// Pacing guidance paths are relative to the platform pack's shared/ directory.
-var coordinatorFamilyPacingBatchDispatch = map[string]string{
-	"units/investigate-pacing.md":                     "partials/coordinator-batch-dispatch.md",
-	"partials/coordinator-mode-orchestrate-pacing.md": "partials/coordinator-batch-dispatch.md",
-}
-
 func TestCoordinatorFamilyShellRegistry(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)

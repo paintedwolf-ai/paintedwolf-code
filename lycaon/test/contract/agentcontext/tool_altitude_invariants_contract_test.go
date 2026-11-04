@@ -280,15 +280,6 @@ func sortedKeys(m map[string]bool) []string {
 	return out
 }
 
-func altitudeContainsString(ss []string, want string) bool {
-	for _, s := range ss {
-		if s == want {
-			return true
-		}
-	}
-	return false
-}
-
 // Evidence rows carry observed handles or typed gate outcomes. A manifest
 // persistence Record is a separate domain even when it shares the type name.
 func runtimeEvidenceRecord(typ *ast.TypeSpec) bool {
