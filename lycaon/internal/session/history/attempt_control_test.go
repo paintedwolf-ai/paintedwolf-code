@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -471,4 +472,131 @@ func TestAttemptSourceFollowsStoreSemantics(t *testing.T) {
 	if current() {
 		t.Fatal("an edit left the attempted source current")
 	}
+}
+
+// faultStore fails one named read so admission and settlement show their fallback.
+type faultStore struct {
+	Store
+	failGet, failPage, failCurrent, failWindow, failPut bool
+}
+
+var errAttemptStore = errors.New("store unavailable")
+
+func (s *faultStore) Get(ctx context.Context, id string) (*api.Session, error) {
+	if s.failGet {
+		return nil, errAttemptStore
+	}
+	return s.Store.Get(ctx, id)
+}
+
+func (s *faultStore) GetTranscriptPage(ctx context.Context, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error) {
+	if s.failPage {
+		return api.SessionTranscriptPage{}, errAttemptStore
+	}
+	return s.Store.GetTranscriptPage(ctx, id, q)
+}
+
+func (s *faultStore) CompactionViewCurrent(ctx context.Context, id string, ord int64, msg string, seq int64) (bool, error) {
+	if s.failCurrent {
+		return false, errAttemptStore
+	}
+	return s.Store.CompactionViewCurrent(ctx, id, ord, msg, seq)
+}
+
+func (s *faultStore) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
+	if s.failWindow && window.After {
+		return nil, errAttemptStore
+	}
+	return s.Store.ReadMessageWindow(ctx, id, window)
+}
+
+func (s *faultStore) PutCompactionAttempt(ctx context.Context, id string, attempt messageview.CompactionAttempt) error {
+	if s.failPut {
+		return errAttemptStore
+	}
+	return s.Store.PutCompactionAttempt(ctx, id, attempt)
+}
+
+func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
+	cases := []struct {
+		name  string
+		fault func(*faultStore)
+	}{
+		{"session read", func(s *faultStore) { s.failGet = true }},
+		{"source capture", func(s *faultStore) { s.failPage = true }},
+		{"source validation", func(s *faultStore) { s.failCurrent = true }},
+		{"appended rows", func(s *faultStore) { s.failWindow = true }},
+	}
+	for _, tc := range cases {
+		t.Run("admission admits the pass after a failed "+tc.name, func(t *testing.T) {
+			f := newAttemptFixture(t, answerUnproductive)
+			f.seedRejectablePage(t)
+			f.schedule(t)
+			sc := f.svc.Compactor.(*compaction.SimpleCompactor)
+			faults := &faultStore{Store: f.mem}
+			tc.fault(faults)
+			f.svc.store = faults
+			if _, admitted := f.svc.attemptControl().admit(t.Context(), f.sess.ID, sc); !admitted {
+				t.Fatal("a store fault suppressed work")
+			}
+		})
+	}
+
+	t.Run("settlement records nothing it cannot fence", func(t *testing.T) {
+		for _, fault := range []func(*faultStore){
+			func(s *faultStore) { s.failGet = true },
+			func(s *faultStore) { s.failCurrent = true },
+		} {
+			f := newAttemptFixture(t, answerUnproductive)
+			f.seedRejectablePage(t)
+			sc := f.svc.Compactor.(*compaction.SimpleCompactor)
+			sess, err := f.mem.Get(t.Context(), f.sess.ID)
+			testutil.FailErr(t, "read session", err)
+			pass, err := f.svc.attemptControl().capture(t.Context(), sess, sc)
+			testutil.FailErr(t, "capture", err)
+			faults := &faultStore{Store: f.mem}
+			fault(faults)
+			f.svc.store = faults
+			f.svc.attemptControl().settle(t.Context(), sc, f.sess.ID, pass, attemptResult{outcome: attemptNoReduction})
+			if _, found := f.svc.Runner.attempts.records.Load(f.sess.ID); found {
+				t.Fatal("unfenced outcome was recorded")
+			}
+		}
+	})
+
+	t.Run("a pass without identity keeps only its memo", func(t *testing.T) {
+		f := newAttemptFixture(t, answerUnproductive)
+		sc := f.svc.Compactor.(*compaction.SimpleCompactor)
+		memo := &messageview.CompactionAttempt{Revision: "exact", Reason: "insufficient_savings"}
+		f.svc.attemptControl().settle(t.Context(), sc, f.sess.ID, attemptPass{}, attemptResult{outcome: attemptNoReduction, memo: memo})
+		got, found, err := f.mem.GetCompactionAttempt(t.Context(), f.sess.ID)
+		testutil.FailErr(t, "read memo", err)
+		if _, recorded := f.svc.Runner.attempts.records.Load(f.sess.ID); !found || got != *memo || recorded {
+			t.Fatalf("memo=%+v found=%v recorded=%v", got, found, recorded)
+		}
+		f.svc.store = &faultStore{Store: f.mem, failPut: true}
+		f.svc.attemptControl().saveMemo(t.Context(), f.sess.ID, memo)
+	})
+
+	t.Run("a retry firing for a removed session schedules nothing", func(t *testing.T) {
+		f := newAttemptFixture(t, answerUnproductive)
+		f.svc.store = &faultStore{Store: f.mem, failGet: true}
+		f.svc.attemptControl().fire(f.sess.ID)
+		f.svc.Runner.Stop()
+		f.svc.attemptControl().fire(f.sess.ID)
+		if f.provider.count() != 0 {
+			t.Fatalf("calls = %d", f.provider.count())
+		}
+	})
+
+	t.Run("an explicit request without identity still runs", func(t *testing.T) {
+		f := newAttemptFixture(t, answerUnproductive)
+		sc := f.svc.Compactor.(*compaction.SimpleCompactor)
+		sess, err := f.mem.Get(t.Context(), f.sess.ID)
+		testutil.FailErr(t, "read session", err)
+		f.svc.store = &faultStore{Store: f.mem, failPage: true}
+		if pass := f.svc.attemptControl().explicit(t.Context(), sess, sc); !pass.explicit || pass.key != "" {
+			t.Fatalf("pass = %+v", pass)
+		}
+	})
 }
