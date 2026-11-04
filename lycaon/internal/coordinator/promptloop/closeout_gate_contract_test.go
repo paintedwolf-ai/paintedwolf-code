@@ -202,6 +202,11 @@ func TestMarkdownCloseoutRulesFireOnTheirTriggers(t *testing.T) {
 				if st.closeoutRetry.documentAttempt != 1 || st.closeoutRetry.attempt != 0 || c.friction != 0 {
 					t.Fatalf("a document refusal spent the citation budget: %+v friction=%d", st.closeoutRetry, c.friction)
 				}
+			} else if guidance.PresentationObservation(tc.code) != "" {
+				// Nothing was cited wrongly, so it spends the citation limit alone.
+				if st.closeoutRetry.attempt != 1 || st.closeoutRetry.documentAttempt != 0 || c.friction != 0 {
+					t.Fatalf("a presentation refusal spent %+v friction=%d", st.closeoutRetry, c.friction)
+				}
 			} else if st.closeoutRetry.attempt != 1 || st.closeoutRetry.documentAttempt != 0 || c.friction != 1 {
 				t.Fatalf("a citation refusal spent %+v friction=%d", st.closeoutRetry, c.friction)
 			}
