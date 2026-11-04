@@ -2,16 +2,14 @@ package session
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
