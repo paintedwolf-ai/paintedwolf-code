@@ -35,6 +35,11 @@ func isWindowsAbsPath(path string) bool {
 	return path[1] == ':'
 }
 
+func osDefaultWriteRoots() []string {
+	standard := append([]string{"/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", os.TempDir()}, standardCacheDataRoots()...)
+	return append(standard, darwinUserRoots()...)
+}
+
 // WriteRootsForBoundary is the write profile for one confinement: attached
 // roots, session scratch, OS caches, durable grants, and per-action granted overlays.
 func WriteRootsForBoundary(projectID string, projectRoots, granted []string, sessionScratchRoot string) ([]string, error) {
@@ -65,9 +70,7 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 	if sessionScratchRoot != "" {
 		add(sessionScratchRoot)
 	}
-	standard := append([]string{"/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", os.TempDir()}, standardCacheDataRoots()...)
-	standard = append(standard, darwinUserRoots()...)
-	for _, root := range standard {
+	for _, root := range osDefaultWriteRoots() {
 		if !defaultRootContainsStateFolder(fspath.CanonicalPath(root)) {
 			add(root)
 		}

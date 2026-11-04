@@ -42,6 +42,18 @@ func defaultRootContainsStateFolder(path string) bool {
 	return PathAtOrUnder(fspath.CanonicalPath(dir), path)
 }
 
+func defaultRootAbovePlacementOnly(path string) bool {
+	if defaultRootContainsStateFolder(path) {
+		return false
+	}
+	for _, root := range osDefaultWriteRoots() {
+		if fspath.CanonicalPath(root) == path {
+			return true
+		}
+	}
+	return false
+}
+
 // writeRootContainsStateTree prevents an ancestor rename from moving host state.
 func writeRootContainsStateTree(path string) bool {
 	for _, state := range resolveEach(controlPlaneReadDenyRoots()) {

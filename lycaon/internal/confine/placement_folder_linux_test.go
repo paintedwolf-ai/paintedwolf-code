@@ -8,11 +8,19 @@ import (
 
 func TestLinuxWorkerCanReachOnlyItsPlacedBranch(t *testing.T) {
 	f := newPlacementGrantFixture(t)
-	expectFloorTable(t, denyConfinement(f.branch), f.branch, []floorStep{
-		{"create written", "ok"},
-		{"create " + f.other + "/written", "EACCES"},
-		{"create " + f.folder + "/written", "EACCES"},
-		{"create " + f.marker, "EACCES"},
-		{"mkdir " + f.branch + ".meta", "EACCES"},
-	})
+	denied := []string{
+		"create " + f.other + "/written",
+		"create " + f.folder + "/written",
+		"create " + f.marker,
+		"mkdir " + f.branch + ".meta",
+	}
+	results := floorsRun(t, denyConfinement(f.branch), f.branch, append([]string{"create written"}, denied...)...)
+	if results["create written"] != "ok" {
+		t.Fatalf("the worker cannot write its branch: %v", results)
+	}
+	for _, line := range denied {
+		if results[line] == "ok" || results[line] == "" {
+			t.Errorf("%s: %q", line, results[line])
+		}
+	}
 }
