@@ -326,10 +326,10 @@ func TestDraftResolverOutcomes(t *testing.T) {
 	if got := onlyOutcome(t, "[other/file.ts]", evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved {
 		t.Fatalf("unobserved bare path = %+v", got)
 	}
-	superseded := ledgerOf(readMessages("a.go", lineTexts(1, 5)), readMessages("a.go", lineTexts(1, 9)))
-	if rec, _ := evidence.ResolveHandle(superseded, "read#1"); rec.SupersededBy == "" {
-		t.Fatalf("fixture does not supersede: %+v", rec)
-	}
+	superseded := evidence.AssembleLedger([]evidence.Record{
+		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", SupersededBy: "read#2", LineRanges: []evidence.LineRange{{Start: 1, End: 5}}},
+		{Handle: "read#2", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 1, End: 9}}},
+	})
 	exact := onlyOutcome(t, "[read#1:1-5]", evidence.CitationRoots{}, superseded)
 	if exact.Outcome != guidance.CitationGrounded || exact.Resolution.Handle != "read#1" {
 		t.Fatalf("an explicit superseded handle keeps its identity: %+v", exact)
@@ -342,12 +342,12 @@ func TestDraftResolverOutcomes(t *testing.T) {
 	if bare.Resolution.Handle != "read#2" {
 		t.Fatalf("a bare path binds the active record: %+v", bare)
 	}
-	retired := evidence.AssembleLedger([]evidence.Record{{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "old.go", SupersededBy: "edit#1"}})
-	if got := onlyOutcome(t, "[old/../old.go]", evidence.CitationRoots{}, retired); got.Outcome != guidance.CitationNotObserved {
-		t.Fatalf("traversal = %+v", got)
+	gateOnly := evidence.AssembleLedger([]evidence.Record{{Handle: "verify#1", Kind: "verify", GateType: "verify", Path: "g/h.go"}})
+	if got := onlyOutcome(t, "[g/h.go]", evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationUnverifiable || got.Code != guidance.SynthCitationUnverifiableCode {
+		t.Fatalf("a gate record is no content observation: %+v", got)
 	}
-	if got := onlyOutcome(t, "[./old.go]", evidence.CitationRoots{}, retired); got.Outcome != guidance.CitationUnverifiable {
-		t.Fatalf("only a superseded record = %+v", got)
+	if got := onlyOutcome(t, "[g/../../h.go]", evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationNotObserved {
+		t.Fatalf("traversal = %+v", got)
 	}
 	survey := evidence.AssembleLedger([]evidence.Record{{Handle: "list#1", Kind: "list", Shape: evidence.ShapeFileRegion, Path: "pkg/doc.go", Survey: true}})
 	if got := onlyOutcome(t, "[pkg/doc.go]", evidence.CitationRoots{}, survey); got.Outcome != guidance.CitationSurvey || got.Rejected() {
