@@ -95,7 +95,7 @@ func TestDeliveredLinesKnowWhetherTheirOwnNumberWasPrinted(t *testing.T) {
 		{name: "cat", argv: []string{"cat", "fixture.go"}, path: "fixture.go", source: deliveredSource, plain: []int{1}},
 		{name: "cat -n", argv: []string{"cat", "-n", "fixture.go"}, path: "fixture.go", source: deliveredSource, numbered: []int{1, 2, 3, 4, 5}},
 		{name: "nl -ba", argv: []string{"nl", "-ba", "fixture.go"}, path: "fixture.go", source: deliveredSource, numbered: []int{1, 2, 3, 4, 5}},
-		{name: "cat -b numbers past a blank line differ", argv: []string{"cat", "-b", "fixture.go"}, path: "fixture.go", source: deliveredSource, numbered: []int{1}, plain: []int{2, 3, 4, 5}},
+		{name: "cat -b joins a blank line to the numbered one and then differs", argv: []string{"cat", "-b", "fixture.go"}, path: "fixture.go", source: deliveredSource, plain: []int{1, 3, 5}},
 		{name: "nl numbers past a blank line differ", argv: []string{"nl", "fixture.go"}, path: "fixture.go", source: deliveredSource, numbered: []int{1}, plain: []int{2, 3, 4, 5}},
 		{name: "cat -n second file continues the count", argv: []string{"cat", "-n", "other.go", "fixture.go"}, path: "fixture.go", source: deliveredSource, plain: []int{1, 2, 3, 4, 5}},
 	} {
