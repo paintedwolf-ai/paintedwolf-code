@@ -82,7 +82,7 @@ func (s *Commands) holdWindow(ctx context.Context, w *openCommandWindow) (func()
 func (s *Commands) reanchorWindow(ctx context.Context, w *openCommandWindow, done chan struct{}) {
 	budget, cancel := context.WithTimeout(ctx, s.observationBudget)
 	defer cancel()
-	snapshotID, err := s.anchorStart(budget, w.projectID, w.roots)
+	snapshotID, err := s.anchorStart(budget, w.projectID, w.roots, false)
 	if err == nil {
 		w.moveStart(snapshotID)
 		if retainErr := s.retainWindowStart(budget, w); retainErr != nil {

@@ -160,7 +160,7 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 	if err := s.RecoverInterruptedWindows(ctx); err != nil {
 		return nil, err
 	}
-	snapshotID, err := s.anchorStart(ctx, in.ProjectID, in.Roots)
+	snapshotID, err := s.anchorStart(ctx, in.ProjectID, in.Roots, true)
 	if err != nil {
 		return nil, err
 	}
@@ -187,15 +187,17 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 
 // anchorStart reconciles the tree so drift from before this point is not
 // attributed, and names the inventory that results; incomplete coverage cannot
-// prove the tree unchanged, so it pays a pass.
-func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []RootSpec) (string, error) {
+// prove the tree unchanged, so it pays a pass. reuseSlow lets a first open take a
+// slow pass that just finished; a re-anchor may not, because that pass predates
+// the gap the re-anchor exists to leave out.
+func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []RootSpec, reuseSlow bool) (string, error) {
 	req, err := s.windowInventoryRequest(ctx, projectID, roots)
 	if err != nil {
 		return "", err
 	}
 	req.Force = !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(roots))
 	req.Wait = true
-	if err := s.awaitStartInventory(ctx, req); err != nil {
+	if err := s.awaitStartInventory(ctx, req, reuseSlow); err != nil {
 		return "", err
 	}
 	state, err := s.inventory.InventoryState(ctx, projectID, inventoryBranch(req.Roots), req.RootsGeneration)
@@ -258,9 +260,10 @@ func (s *Commands) noteSlowPass(req InventoryRequest, started time.Time) {
 // awaitStartInventory waits for the window's start inventory within ctx. The pass
 // is detached, so one that outlasts the budget finishes and a later open finds it
 // done; thrown away, a pass longer than the budget would never converge. Forcing
-// another after it would not converge either, so an open reuses a slow pass that
-// just finished: drift since then may reach the window, bounded by one pass.
-func (s *Commands) awaitStartInventory(ctx context.Context, req InventoryRequest) error {
+// another after it would not converge either, so a first open reuses a slow pass
+// that just finished: drift since then may reach the window, bounded by the longer
+// of the pass and slowPassReuseFloor.
+func (s *Commands) awaitStartInventory(ctx context.Context, req InventoryRequest, reuseSlow bool) error {
 	key := req.scopeKey()
 	s.windowsMu.Lock()
 	overdue := s.overduePasses[key] > 0
@@ -270,7 +273,7 @@ func (s *Commands) awaitStartInventory(ctx context.Context, req InventoryRequest
 		return ErrWindowStartPending
 	}
 	started := s.now()
-	if req.Force && finishedSlow && slow.generation == req.RootsGeneration &&
+	if reuseSlow && req.Force && finishedSlow && slow.generation == req.RootsGeneration &&
 		started.Sub(slow.finished) <= max(slow.took, slowPassReuseFloor) {
 		return nil
 	}
