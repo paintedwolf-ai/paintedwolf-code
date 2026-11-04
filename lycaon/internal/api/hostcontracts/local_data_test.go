@@ -174,4 +174,3 @@ func TestLocalDataEmptyBuckets400(t *testing.T) {
 		t.Fatalf("status=%d want 400 body=%s", w.Code, w.Body.String())
 	}
 }
-

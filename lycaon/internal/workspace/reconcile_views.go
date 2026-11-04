@@ -226,6 +226,9 @@ func (m *Manager) SettleBranchRuntime(ctx context.Context, jobID, root string) e
 	if m.recovery == nil {
 		return nil
 	}
+	if isMaterializedBranch(root) {
+		return m.settleMaterializedRuntime(ctx, root)
+	}
 	view, recorded, err := recordedViewForBranch(m.branchRoot, jobID, root)
 	if err != nil {
 		return &recovery.RuntimeBlockedError{Report: recovery.WorkerRuntimeReport{

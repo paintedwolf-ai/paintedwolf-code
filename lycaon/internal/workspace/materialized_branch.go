@@ -192,6 +192,28 @@ func settleMaterializedBranchView(ctx context.Context, view *branchLayeredView) 
 	return view.services.recovery.ForgetReleasedView(view.workerID, view.viewID)
 }
 
+// settleMaterializedRuntime settles a materialized branch before its data may go. It writes nothing
+// durable, because a cancel must finish on a full volume and no mount or writer record exists.
+func (m *Manager) settleMaterializedRuntime(ctx context.Context, branchRoot string) error {
+	clean := filepath.Clean(branchRoot)
+	branchClaimsMu.RLock()
+	rec := branchClaimStates[clean]
+	branchClaimsMu.RUnlock()
+	if rec.layered != nil && rec.layered.engine == nil {
+		if err := settleMaterializedBranchView(ctx, rec.layered); err != nil {
+			return err
+		}
+	}
+	m.forgetBranchViews(clean)
+	releaseBranchClaimState(clean)
+	return nil
+}
+
+func isMaterializedBranch(branchRoot string) bool {
+	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot))
+	return err == nil && meta.PreparationKind == adapter.PreparationMaterialized
+}
+
 // settleEvictedMaterializedView drops the live view of a tree retention just reclaimed.
 func (m *Manager) settleEvictedMaterializedView(ctx context.Context, branchRoot string) error {
 	clean := filepath.Clean(branchRoot)
@@ -528,7 +550,8 @@ func materializedChangedWorkingFiles(ctx context.Context, branchRoot string) ([]
 	if !ok {
 		return nil, fmt.Errorf("branch %s has no materialized view", branchRoot)
 	}
-	changed, _, err := adapter.NewEagerCopyAdapter(adapter.ReasonNone).ChangedPaths(ctx, view.ViewID)
+	reader := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
+	changed, _, err := reader.ChangedPaths(ctx, view.ViewID)
 	if err != nil {
 		return nil, err
 	}
@@ -542,6 +565,13 @@ func materializedChangedWorkingFiles(ctx context.Context, branchRoot string) ([]
 		present, err := entryInBranchTree(workspaces[qp.RootID], abs)
 		if err != nil {
 			return nil, err
+		}
+		// A directory has no bytes to keep; its changed children are entries themselves.
+		if info, err := os.Lstat(abs); present && err == nil && info.IsDir() {
+			continue
+		}
+		if !present && reader.IsDirectoryBase(view.ViewID, qp) {
+			continue
 		}
 		file := recovery.ChangedWorkingFile{Path: qp}
 		if present {

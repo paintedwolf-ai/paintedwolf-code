@@ -295,10 +295,16 @@ func TestCancelDuringPreparationRetainsThePartialTree(t *testing.T) {
 	testutil.FailErr(t, "cancel", f.engine.Queue.Cancel(t.Context(), task.ID, nil))
 
 	record := onlyRecord(t, f.engine, task.ID)
-	if raw, err := os.ReadFile(filepath.Join(record.QuarantineDir, "tree", "closed", "inner.txt")); err != nil || string(raw) != "inside a closed directory\n" {
+	// Releasing the view opens its directories, so the changes can usually still be named. Either way
+	// nothing the closed directory held is lost.
+	kept := filepath.Join(record.QuarantineDir, "changed", fixtureRootID)
+	if record.UnknownScope {
+		kept = filepath.Join(record.QuarantineDir, "tree")
+	}
+	if raw, err := os.ReadFile(filepath.Join(kept, "closed", "inner.txt")); err != nil || string(raw) != "inside a closed directory\n" {
 		t.Fatalf("retained %q err=%v", raw, err)
 	}
-	if target, err := os.Readlink(filepath.Join(record.QuarantineDir, "tree", "link")); err != nil || target != "app.txt" {
+	if target, err := os.Readlink(filepath.Join(kept, "link")); err != nil || target != "app.txt" {
 		t.Fatalf("retained link %q err=%v", target, err)
 	}
 }

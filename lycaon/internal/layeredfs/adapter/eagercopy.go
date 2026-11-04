@@ -322,6 +322,18 @@ func (a *EagerCopyAdapter) ChangedPaths(ctx context.Context, viewID string) ([]l
 	return paths, st.capture.stats, err
 }
 
+// IsDirectoryBase reports that the view's manifest names path as a directory.
+func (a *EagerCopyAdapter) IsDirectoryBase(viewID string, path layeredfs.QualifiedPath) bool {
+	st, ok := a.lookupViewState(viewID)
+	if !ok {
+		return false
+	}
+	st.syncMu.Lock()
+	defer st.syncMu.Unlock()
+	rec, ok := st.capture.manifest[path]
+	return ok && rec.Kind == layeredfs.EntryDirectory
+}
+
 // LastCaptureStats reports what the view's most recent capture or change listing did.
 func (a *EagerCopyAdapter) LastCaptureStats(viewID string) (CaptureStats, bool) {
 	st, ok := a.lookupViewState(viewID)

@@ -467,7 +467,7 @@ func syncRegularEntry(
 		cur.Mode.Perm() != base.Mode.Perm() ||
 		!xattrsEqual(cur.Xattrs, base.Xattrs)
 
-	diskSHA, size, err := meter.hashFile(ctx, fullPath)
+	diskSHA, _, err := meter.hashFile(ctx, fullPath)
 	if err != nil {
 		return err
 	}
@@ -477,7 +477,7 @@ func syncRegularEntry(
 			return err
 		}
 		// A background writer may have moved on since the hash; Core records what it was handed.
-		diskSHA, size = sha256Hex(raw), int64(len(raw))
+		diskSHA = sha256Hex(raw)
 		if _, err := core.WriteFile(qp, raw, info.Mode().Perm()); err != nil {
 			return err
 		}
@@ -488,7 +488,7 @@ func syncRegularEntry(
 				Mode: info.Mode().Perm(),
 			}
 		}
-		cur.Size, cur.SHA256 = size, diskSHA
+		cur.Size, cur.SHA256 = int64(len(raw)), diskSHA
 		synced[qp] = cur
 	}
 
