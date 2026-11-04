@@ -9,9 +9,14 @@ import (
 // verifySeparators lists the method/reason separators, longest first.
 var verifySeparators = []string{"--", "-", "—", "–", ":"}
 
+var reasonUnescaper = strings.NewReplacer(`\[`, `[`, `\]`, `]`)
+
 func parseVerify(body string) parsedNode {
 	bad := parsedNode{issue: IssueInvalidVerification, kind: KindVerify}
-	rest := strings.TrimLeft(strings.TrimPrefix(body, "verify:"), " \t")
+	if !strings.HasPrefix(body, "verify:") {
+		return bad
+	}
+	rest := strings.TrimLeft(body[len("verify:"):], " \t")
 	methodEnd := 0
 	for methodEnd < len(rest) && rest[methodEnd] >= 'a' && rest[methodEnd] <= 'z' {
 		methodEnd++
@@ -26,7 +31,7 @@ func parseVerify(body string) parsedNode {
 			break
 		}
 	}
-	assessment := verification.Assessment{Method: method, Reason: strings.TrimSpace(rest)}
+	assessment := verification.Assessment{Method: method, Reason: reasonUnescaper.Replace(strings.TrimSpace(rest))}
 	if !found || !assessment.Valid() {
 		return bad
 	}
@@ -35,6 +40,9 @@ func parseVerify(body string) parsedNode {
 
 func parseArtifact(body string) parsedNode {
 	node := parsedNode{kind: KindArtifact}
+	if !strings.HasPrefix(body, "artifact:") {
+		return parsedNode{issue: IssueMalformedArtifact, kind: KindArtifact}
+	}
 	offset := 1 + len("artifact:")
 	for _, raw := range strings.Split(body[len("artifact:"):], ",") {
 		id := strings.TrimSpace(raw)
@@ -53,7 +61,7 @@ func parseRepair(body string) parsedNode {
 	target, value, ok := strings.Cut(strings.TrimPrefix(body, "cite:"), "=>")
 	target = strings.TrimSpace(target)
 	value = strings.TrimSpace(value)
-	if !ok || !repairTarget.MatchString(target) || value == "" {
+	if !ok || !strings.HasPrefix(body, "cite:") || !repairTarget.MatchString(target) || value == "" {
 		return bad
 	}
 	repair := &Repair{Target: target}
@@ -64,7 +72,7 @@ func parseRepair(body string) parsedNode {
 		}
 	} else {
 		r := memberReader{body: value}
-		citation, code := r.member(nil)
+		citation, code := r.member()
 		if code != "" || !r.done() {
 			return bad
 		}

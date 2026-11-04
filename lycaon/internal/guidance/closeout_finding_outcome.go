@@ -58,7 +58,8 @@ func classifyCloseoutFinding(roots evidence.CitationRoots, finding WorkerFinding
 	switch {
 	case res.Verdict.Grounded():
 		outcome.class = closeoutCitationGrounded
-	case citationResolvesToSurveyRecord(roots, finding, ev):
+	case finding.EndLine == 0 && citationResolvesToSurveyRecord(roots, finding, ev):
+		// Survey means existence: it cannot excuse a coordinate that was refused.
 		outcome.class = closeoutCitationSurvey
 	case citationWasObserved(roots, finding, ev), finding.EndLine > 0 && len(ev.ByPath[res.Path]) > 0:
 		// A loose citation may name no path, yet its range failed on a record.

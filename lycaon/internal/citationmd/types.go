@@ -3,7 +3,13 @@
 // knows syntax only. Evidence resolution belongs to its callers.
 package citationmd
 
-import "github.com/lycaon/lycaon/internal/verification"
+import (
+	"regexp"
+
+	"github.com/lycaon/lycaon/internal/verification"
+)
+
+var handleKind = regexp.MustCompile(`^[a-z_]+$`)
 
 const (
 	// MaxInlineProtocolNodeBytes bounds one custom node, delimiters included.
@@ -12,14 +18,10 @@ const (
 	MaxSourceBytes = 2 << 20
 	// MaxOccurrences bounds the occurrences one document may record.
 	MaxOccurrences = 1024
+	// MaxLineNumber is the largest line a coordinate may name.
+	MaxLineNumber = 1_000_000_000
 	// maxIssueTokenBytes bounds the source text an issue carries.
 	maxIssueTokenBytes = 256
-	// maxLinkWork bounds the bytes link attempts may rescan in one parse. It
-	// stops only a source built to be quadratic: thousands of attempts on one
-	// very long line.
-	maxLinkWork = 1 << 28
-	// maxContainerDepth bounds nested block containers on one line.
-	maxContainerDepth = 64
 )
 
 // Options configures one parse or projection.
@@ -27,9 +29,13 @@ type Options struct {
 	// KnownPath reports whether a bare path with no coordinate matches a path
 	// observed in the current window. Nil means none matches.
 	KnownPath func(name string) bool
+	// KnownHandleKind reports whether a handle's kind is registered, so that
+	// `[read#3]` is a citation and `[pr#123]` is prose. Nil accepts any kind the
+	// handle grammar allows.
+	KnownHandleKind func(kind string) bool
 	// SourceRoot maps a source:// root id to the prefix its workspace paths
-	// carry, such as `@label/`. Nil means one root. An unknown id keeps the id as
-	// a label, which no observation matches.
+	// carry, such as `@label/`. Nil means one root. An unknown id leaves the
+	// source URL as the path, which no observation matches.
 	SourceRoot func(rootID string) (prefix string, ok bool)
 	// MaxSourceBytes and MaxOccurrences override the declared budgets.
 	MaxSourceBytes int
@@ -37,6 +43,10 @@ type Options struct {
 }
 
 func (o Options) known(name string) bool { return o.KnownPath != nil && o.KnownPath(name) }
+
+func (o Options) knownKind(kind string) bool {
+	return handleKind.MatchString(kind) && (o.KnownHandleKind == nil || o.KnownHandleKind(kind))
+}
 
 func (o Options) sourceBudget() int {
 	if o.MaxSourceBytes > 0 {
@@ -87,10 +97,12 @@ const (
 	LinkInline    LinkForm = "inline"
 	LinkReference LinkForm = "reference"
 	LinkAutolink  LinkForm = "autolink"
+	LinkRawHTML   LinkForm = "raw_html"
 )
 
-// Link is a standard Markdown link. Destination is the resolved destination,
-// for a reference link the one its definition names.
+// Link is a standard Markdown link or another form that renders as one.
+// Destination is the resolved destination, for a reference link the one its
+// definition names.
 type Link struct {
 	Form        LinkForm
 	Label       string

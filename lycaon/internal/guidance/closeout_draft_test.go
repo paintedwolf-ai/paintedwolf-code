@@ -238,7 +238,10 @@ func TestDraftResolverOutcomes(t *testing.T) {
 	if got := resolveMarkdown("[other/file.ts]", evidence.CitationRoots{}, unique); len(got.Occurrences) != 0 || len(got.Issues) != 0 {
 		t.Fatalf("an unobserved bare path is prose: %+v", got)
 	}
-	if got := onlyOutcome(t, `["other/file.ts"]`, evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved {
+	if got := resolveMarkdown(`["other/file.ts"]`, evidence.CitationRoots{}, unique); len(got.Occurrences) != 0 || len(got.Issues) != 0 {
+		t.Fatalf("an unobserved quoted path with no coordinate is prose: %+v", got)
+	}
+	if got := onlyOutcome(t, `["other/file.ts":1]`, evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved {
 		t.Fatalf("an unobserved quoted path = %+v", got)
 	}
 	if got := onlyOutcome(t, "[other.ts:3]", evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved || got.Code != guidance.SynthHandleNotInLegsCode {
@@ -264,7 +267,7 @@ func TestDraftResolverOutcomes(t *testing.T) {
 	if got := onlyOutcome(t, "[g/h.go]", evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationUnverifiable || got.Code != guidance.SynthCitationUnverifiableCode {
 		t.Fatalf("a gate record is no content observation: %+v", got)
 	}
-	if got := onlyOutcome(t, `["g/../../h.go"]`, evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationNotObserved {
+	if got := onlyOutcome(t, `["g/../../h.go":1]`, evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationNotObserved {
 		t.Fatalf("traversal = %+v", got)
 	}
 	survey := evidence.AssembleLedger([]evidence.Record{{Handle: "list#1", Kind: "list", Shape: evidence.ShapeFileRegion, Path: "pkg/doc.go", Survey: true}})

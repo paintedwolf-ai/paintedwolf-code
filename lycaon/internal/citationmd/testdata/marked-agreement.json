@@ -1,0 +1,332 @@
+[
+  {
+    "name": "blockquote fence ended by paragraph",
+    "source": "> ```\n> code\n`a` see [read#9]\n",
+    "links": [],
+    "code": [
+      "code",
+      "a"
+    ]
+  },
+  {
+    "name": "blockquote tilde fence ended by paragraph",
+    "source": "> ~~~\n> code\n~/foo [read#9]\n",
+    "links": [],
+    "code": [
+      "code"
+    ]
+  },
+  {
+    "name": "blockquote fence then a new fence",
+    "source": "> ```\n> x\n```\n[read#9]\n",
+    "links": [],
+    "code": [
+      "x",
+      "[read#9]"
+    ]
+  },
+  {
+    "name": "list fence, line outside the item",
+    "source": "- ```\n  code\n`a` see [read#9]\n",
+    "links": [],
+    "code": [
+      "code\n`a` see [read#9]"
+    ],
+    "known_divergence": "goldmark ends the fence with the item, as CommonMark says; marked keeps the line as code. The citation is then validated, which is the safe direction"
+  },
+  {
+    "name": "blockquote fence closed inside",
+    "source": "> ```\n> [read#9]\n> ```\nafter [read#1]\n",
+    "links": [],
+    "code": [
+      "[read#9]"
+    ]
+  },
+  {
+    "name": "short closer does not close",
+    "source": "````\n```\n[read#9]\n````\nafter [read#1]\n",
+    "links": [],
+    "code": [
+      "```\n[read#9]"
+    ]
+  },
+  {
+    "name": "closer with trailing text does not close",
+    "source": "```\n``` x\n[read#9]\n```\nafter [read#1]\n",
+    "links": [],
+    "code": [
+      "``` x\n[read#9]"
+    ]
+  },
+  {
+    "name": "tilde is no closer for backticks",
+    "source": "```\n~~~\n[read#9]\n```\nafter\n",
+    "links": [],
+    "code": [
+      "~~~\n[read#9]"
+    ]
+  },
+  {
+    "name": "fence in a list",
+    "source": "- a\n\n  ```\n  [read#9]\n  ```\n",
+    "links": [],
+    "code": [
+      "[read#9]"
+    ]
+  },
+  {
+    "name": "indented code",
+    "source": "para\n\n    [read#9]\n",
+    "links": [],
+    "code": [
+      "[read#9]\n"
+    ]
+  },
+  {
+    "name": "indented code in a list",
+    "source": "- a\n\n      [read#9]\n",
+    "links": [],
+    "code": [
+      "[read#9]"
+    ]
+  },
+  {
+    "name": "inline code",
+    "source": "see `[read#9]` here\n",
+    "links": [],
+    "code": [
+      "[read#9]"
+    ]
+  },
+  {
+    "name": "double tick code",
+    "source": "``a ` [read#9]``\n",
+    "links": [],
+    "code": [
+      "a ` [read#9]"
+    ]
+  },
+  {
+    "name": "backtick in a fence info line",
+    "source": "``` a`b\n[read#9]\n```\n",
+    "links": [],
+    "code": [
+      ""
+    ],
+    "known_divergence": "goldmark follows CommonMark: not a fence, so the citation is validated"
+  },
+  {
+    "name": "inline link",
+    "source": "[a](https://x.test/p)\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "label like a handle",
+    "source": "[read#3](https://x.test/p)\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "nested label",
+    "source": "[see [read#3] now](https://x.test/p)\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "reference link",
+    "source": "[a][r]\n\n[r]: https://x.test/p\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "shortcut link",
+    "source": "[read#3]\n\n[read#3]: https://x.test/p\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "autolink",
+    "source": "<https://x.test/p>\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "bare url",
+    "source": "see https://x.test/p now\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "bare url mid word",
+    "source": "foo:https://x.test/p now\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "localhost",
+    "source": "http://localhost:8080/x is up\n",
+    "links": [
+      "http://localhost:8080/x"
+    ],
+    "code": []
+  },
+  {
+    "name": "www",
+    "source": "see www.x.test/p now\n",
+    "links": [
+      "http://www.x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "trailing sentence mark",
+    "source": "see https://x.test/p.\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "trailing marks",
+    "source": "see https://x.test/p?!,;:\n",
+    "links": [
+      "https://x.test/p"
+    ],
+    "code": []
+  },
+  {
+    "name": "balanced parens",
+    "source": "see https://x.test/a(b) now\n",
+    "links": [
+      "https://x.test/a(b)"
+    ],
+    "code": []
+  },
+  {
+    "name": "unbalanced paren in prose",
+    "source": "(see https://x.test/a)\n",
+    "links": [
+      "https://x.test/a"
+    ],
+    "code": []
+  },
+  {
+    "name": "unclosed paren",
+    "source": "see https://x.test/a(b now\n",
+    "links": [
+      "https://x.test/a"
+    ],
+    "code": []
+  },
+  {
+    "name": "trailing entity",
+    "source": "see https://x.test/a&amp; now\n",
+    "links": [
+      "https://x.test/a"
+    ],
+    "code": []
+  },
+  {
+    "name": "inner entity",
+    "source": "see https://x.test/a?b=1&c=2 now\n",
+    "links": [
+      "https://x.test/a?b=1&c=2"
+    ],
+    "code": []
+  },
+  {
+    "name": "bracket inside a url",
+    "source": "see https://x.test/a[read#1] now\n",
+    "links": [
+      "https://x.test/a[read#1]"
+    ],
+    "code": []
+  },
+  {
+    "name": "bracketed url",
+    "source": "[https://x.test/a]\n",
+    "links": [
+      "https://x.test/a]"
+    ],
+    "code": []
+  },
+  {
+    "name": "bracketed url with words",
+    "source": "[https://x.test/a b]\n",
+    "links": [
+      "https://x.test/a"
+    ],
+    "code": []
+  },
+  {
+    "name": "bracketed www",
+    "source": "[www.x.test/a]\n",
+    "links": [
+      "http://www.x.test/a]"
+    ],
+    "code": []
+  },
+  {
+    "name": "url in code",
+    "source": "`https://x.test/p`\n",
+    "links": [],
+    "code": [
+      "https://x.test/p"
+    ]
+  },
+  {
+    "name": "url in html comment",
+    "source": "<!-- https://x.test/p -->\n",
+    "links": [],
+    "code": []
+  },
+  {
+    "name": "escaped bracket",
+    "source": "\\[read#1]\n",
+    "links": [],
+    "code": []
+  },
+  {
+    "name": "table cell code",
+    "source": "| a |\n|---|\n| `[read#9]` |\n",
+    "links": [],
+    "code": [
+      "[read#9]"
+    ]
+  },
+  {
+    "name": "comment block",
+    "source": "<!-- [read#9] -->\n",
+    "links": [],
+    "code": []
+  },
+  {
+    "name": "html block",
+    "source": "<div>\n[read#9]\n</div>\n",
+    "links": [],
+    "code": []
+  },
+  {
+    "name": "ftp stays out of scope",
+    "source": "see ftp://x.test/p now\n",
+    "links": [],
+    "code": []
+  }
+]
