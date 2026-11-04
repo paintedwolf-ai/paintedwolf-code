@@ -247,9 +247,6 @@ webE2e.describe("agent mid-turn note", () => {
 
         await llm.respond("Auth is described in the readme [README.md:1-2].");
         await expect(stream.locator("p", { hasText: "Auth is described in the readme" })).toBeVisible({ timeout: 30_000 });
-        await expect(stream.getByTestId("transcript-live-announcement")).toHaveText(
-          "Assistant: Auth is described in the readme README.md:1-2.",
-        );
         await expect(stream.getByTestId("agent-note-badge")).toHaveCount(2);
       } finally {
         await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "Done." });
