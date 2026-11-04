@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/denialprobe"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,8 +35,10 @@ func TestAvailabilityIsProvenByARealDenialAndLeavesNothing(t *testing.T) {
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve", err)
 	t.Setenv("LYCAON_CONFIG_DIR", dir)
-	testutil.FailErr(t, "Available", viewconfine.New().Available(t.Context(), adapter.ProbeConfig{RuntimeDir: dir}))
-	entries, err := os.ReadDir(dir)
+	// The directory workspaces live in, the only place under the state root a worker may write.
+	runtimeDir := enginepaths.WorkerBranchesRootUnder(dir)
+	testutil.FailErr(t, "Available", viewconfine.New().Available(t.Context(), adapter.ProbeConfig{RuntimeDir: runtimeDir}))
+	entries, err := os.ReadDir(runtimeDir)
 	testutil.FailErr(t, "read scratch", err)
 	if len(entries) != 0 {
 		t.Fatalf("proof left %v", entries)

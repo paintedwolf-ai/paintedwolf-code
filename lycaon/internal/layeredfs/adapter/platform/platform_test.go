@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	lexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
@@ -67,9 +68,9 @@ func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve base", err)
 	// A worker's storage sits under the engine's state root, as it does in production.
-	state := filepath.Join(base, "state")
-	testutil.FailErr(t, "mkdir state", os.Mkdir(state, 0o700))
-	t.Setenv("LYCAON_CONFIG_DIR", state)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(base, "state"))
+	state := enginepaths.WorkerBranchesRootUnder(filepath.Join(base, "state"))
+	testutil.FailErr(t, "mkdir state", os.MkdirAll(state, 0o700))
 	trunk := filepath.Join(base, "trunk")
 	testutil.FailErr(t, "mkdir trunk", os.Mkdir(trunk, 0o755))
 	testutil.FailErr(t, "write trunk", os.WriteFile(filepath.Join(trunk, "file"), []byte("x\n"), 0o644))
