@@ -108,7 +108,6 @@ runs:
       uses: ./.github/actions/cache-go
       with:
         lookup-only: ${{ inputs.lookup-only }}
-        exact: ${{ inputs.save-caches }}
 
     - name: Restore analysis tools
       id: analysis

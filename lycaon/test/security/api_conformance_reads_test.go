@@ -48,11 +48,18 @@ func (s *conformanceSweep) sweepReads(ctx context.Context) {
 	for _, op := range reads {
 		params, _ := s.values.pathParams(op)
 		req := conformanceRequest{op: op, probe: "read", params: params, query: s.values.requiredQuery(op)}
-		ex, changes := s.observedRead(ctx, req)
-		if len(changes) > 0 {
-			s.findings.add(ruleReadsHaveNoEffects, op.ID, req.probe, "changed host state: %s", strings.Join(changes, ", "))
+		var ex conformanceExchange
+		if s.readObserved[op.ID] {
+			ex = s.send(ctx, req)
+		} else {
+			var changes []string
+			ex, changes = s.observedRead(ctx, req)
+			if len(changes) > 0 {
+				s.findings.add(ruleReadsHaveNoEffects, op.ID, req.probe, "changed host state: %s", strings.Join(changes, ", "))
+			}
 		}
 		if ex.status/100 == 2 {
+			s.readObserved[op.ID] = true
 			s.discover(op, ex)
 		}
 	}

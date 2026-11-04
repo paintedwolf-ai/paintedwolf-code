@@ -104,58 +104,6 @@ class HostedExecutionTests(unittest.TestCase):
             ci.run_lane("nix")
             self.assertEqual(run.call_args.args[0], ["./task", "nix:check"])
 
-    def test_admission_contracts_run_first_and_keep_their_verdict(self):
-        scope = dict(base="b" * 40, head="a" * 40, paths=[".github/workflows/ci.yml"], full=True)
-        for preflight_code in (0, 1, 2, -15):
-            with self.subTest(code=preflight_code), tempfile.TemporaryDirectory() as directory, \
-                    patch("ci_policy.impact.change", return_value=scope), \
-                    patch.object(ci, "artifact_root", return_value=Path(directory)), \
-                    patch.object(ci.subprocess, "call", side_effect=[preflight_code, 0, 0, 0]) as run:
-                self.assertEqual(ci.run_lane("ready"), preflight_code)
-                self.assertEqual(run.call_args_list[0].args[0],
-                                 ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
-                self.assertEqual(run.call_count, 1 if preflight_code < 0 else 4)
-                if preflight_code >= 0:
-                    self.assertEqual(run.call_args_list[1].args[0], ['./task', 'budgets', 'coverage:changes'])
-                    self.assertEqual(run.call_args_list[2].args[0],
-                                     ['./task', 'test:confine:linux', '--', 'supervisor'])
-                record = json.loads((Path(directory) / "ci/run.json").read_text())
-                self.assertEqual(record["preflight"]["exit_code"], preflight_code)
-                self.assertIn("finished_at", record["preflight"])
-                self.assertEqual(record["scope"], scope)
-
-    def test_native_changes_reach_checks_without_duplicate_native_compilation(self):
-        scope = dict(base='b' * 40, head='a' * 40, full=False,
-                     paths=['lycaon-den/src-tauri/crates/desktop-settings-observer/src/main.rs'])
-        with tempfile.TemporaryDirectory() as directory, \
-                patch('ci_policy.impact.change', return_value=scope), \
-                patch.object(ci, 'artifact_root', return_value=Path(directory)), \
-                patch.object(ci.subprocess, 'call', side_effect=[0, 0, 1]) as run:
-            self.assertEqual(ci.run_lane('ready'), 1)
-            early = hosted_plan.lanes()['ready']['early_targets']
-            remaining = [t for t in hosted_plan.lanes()['ready']['targets'] if t not in early]
-            self.assertEqual([c.args[0] for c in run.call_args_list[1:]], [['./task', *early], ['./task', *remaining]])
-            self.assertEqual(run.call_count, 3)
-            record = json.loads((Path(directory) / 'ci/run.json').read_text())
-            self.assertEqual(record['phases'][1]['exit_code'], 1)
-            self.assertEqual(record['scope']['head'], 'a' * 40)
-
-    def test_interrupted_admission_keeps_an_unfinished_record(self):
-        scope = dict(base="b" * 40, head="a" * 40, paths=[], full=False)
-        with tempfile.TemporaryDirectory() as directory, \
-                patch("ci_policy.impact.change", return_value=scope), \
-                patch.object(ci, "artifact_root", return_value=Path(directory)), \
-                patch.object(ci.subprocess, "call", side_effect=KeyboardInterrupt) as run:
-            with self.assertRaises(KeyboardInterrupt):
-                ci.run_lane("ready")
-            self.assertEqual(run.call_count, 1)
-            record = json.loads((Path(directory) / "ci/run.json").read_text())
-            self.assertEqual(record["status"], "running")
-            self.assertNotIn("exit_code", record)
-            self.assertEqual(record["preflight"]["command"],
-                             ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
-            self.assertNotIn("exit_code", record["preflight"])
-
     def test_lane_worker_cap_reaches_admission(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
@@ -326,37 +274,46 @@ class HostedExecutionTests(unittest.TestCase):
             ci.run_lane('limits')
         self.assertEqual(command.call_args.kwargs['env']['PW_CHANGE_BASE'], 'b' * 40)
 
-    def test_ready_without_history_runs_every_phase_after_a_failure(self):
+    def test_fast_lanes_run_every_phase_and_keep_the_worst_verdict(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
-        native = ['./task', 'decide:test', '--', '--compile-only']
-        for verdicts, expected in (([1, 2, 0], 1), ([2, 1, 0], 1), ([0, 2, 0], 2), ([0, 0, 0], 0)):
-            with self.subTest(verdicts=verdicts), tempfile.TemporaryDirectory() as directory, \
-                    patch('ci_policy.impact.change', return_value=scope), \
-                    patch('ci_policy.native_admission.commands', return_value=[native]), \
-                    patch('ci_policy.ready_scope.commands', side_effect=lambda phases, *_: (phases, None)), \
-                    patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=''), \
-                    patch.object(ci, 'artifact_root', return_value=Path(directory)), \
-                    patch.object(ci.subprocess, 'call', side_effect=verdicts) as run:
-                self.assertEqual(ci.run_lane('ready'), expected)
-                self.assertEqual(run.call_count, 3)
-                self.assertEqual(run.call_args.kwargs['env']['PW_TEST_KEEP_GOING'], '1')
-                record = json.loads((Path(directory) / 'ci/run.json').read_text())
-                self.assertEqual(record['preflight']['exit_code'], verdicts[0])
-                self.assertEqual([phase['exit_code'] for phase in record['phases']], verdicts[1:])
-                self.assertEqual(record['status'], {0: 'passed', 1: 'failed', 2: 'unverified'}[expected])
+        phases = [['./task', 'one'], ['./task', 'two'], ['./task', 'three']]
+        for name, target in (('ready', 'check_phases'), ('ready-tests', 'test_phases')):
+            value = phases if target == 'check_phases' else (phases, None)
+            for verdicts, expected in (([1, 2, 0], 1), ([2, 1, 0], 1), ([0, 2, 0], 2), ([0, 0, 0], 0)):
+                with self.subTest(name=name, verdicts=verdicts), tempfile.TemporaryDirectory() as directory, \
+                        patch('ci_policy.impact.change', return_value=scope), \
+                        patch(f'ci_policy.ready_scope.{target}', return_value=value), \
+                        patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                        patch.object(ci.subprocess, 'call', side_effect=verdicts) as run:
+                    self.assertEqual(ci.run_lane(name, '1/2' if name == 'ready-tests' else ''), expected)
+                    self.assertEqual(run.call_count, 3)
+                    self.assertEqual(run.call_args.kwargs['env']['PW_TEST_KEEP_GOING'], '1')
+                    record = json.loads((Path(directory) / 'ci/run.json').read_text())
+                    self.assertEqual([phase['exit_code'] for phase in record['phases']], verdicts)
+                    self.assertEqual(record['status'], {0: 'passed', 1: 'failed', 2: 'unverified'}[expected])
 
-    def test_ready_stops_when_a_phase_is_interrupted(self):
+    def test_fast_lane_stops_when_a_phase_is_interrupted(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
-        native = ['./task', 'decide:test', '--', '--compile-only']
         with tempfile.TemporaryDirectory() as directory, \
                 patch('ci_policy.impact.change', return_value=scope), \
-                patch('ci_policy.native_admission.commands', return_value=[native]), \
-                patch('ci_policy.ready_scope.commands', side_effect=lambda phases, *_: (phases, None)), \
-                patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=''), \
+                patch('ci_policy.ready_scope.check_phases', return_value=[['./task', 'one'], ['./task', 'two'], ['./task', 'three']]), \
                 patch.object(ci, 'artifact_root', return_value=Path(directory)), \
                 patch.object(ci.subprocess, 'call', side_effect=[0, -15, 0]) as run:
             self.assertEqual(ci.run_lane('ready'), -15)
         self.assertEqual(run.call_count, 2)
+
+    def test_interrupted_lane_keeps_an_unfinished_record(self):
+        scope = dict(base="b" * 40, head="a" * 40, paths=[], full=False)
+        with tempfile.TemporaryDirectory() as directory, \
+                patch("ci_policy.impact.change", return_value=scope), \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", side_effect=KeyboardInterrupt) as run:
+            with self.assertRaises(KeyboardInterrupt):
+                ci.run_lane("ready")
+            self.assertEqual(run.call_count, 1)
+            record = json.loads((Path(directory) / "ci/run.json").read_text())
+            self.assertEqual(record["status"], "running")
+            self.assertNotIn("exit_code", record)
 
     def test_lanes_other_than_ready_stop_at_their_first_failure(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
@@ -367,29 +324,3 @@ class HostedExecutionTests(unittest.TestCase):
             self.assertEqual(ci.run_lane('limits'), 1)
         self.assertEqual(run.call_count, 1)
         self.assertNotIn('PW_TEST_KEEP_GOING', run.call_args.kwargs['env'])
-
-    def test_rotated_preflight_stops_after_first_wave_failure_and_records_phases(self):
-        scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
-        history = json.dumps({'contract_failures': ['./test/contract/persistence']}, separators=(',', ':'))
-        for first_wave_code in (1, 0):
-            with self.subTest(first_wave_code=first_wave_code), tempfile.TemporaryDirectory() as directory, \
-                    patch('ci_policy.impact.change', return_value=scope), \
-                    patch('ci_policy.native_admission.commands', return_value=[]), \
-                    patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=history), \
-                    patch.object(ci, 'artifact_root', return_value=Path(directory)), \
-                    patch.object(ci.subprocess, 'call', side_effect=[first_wave_code, 0, 0, 0]) as run:
-                self.assertEqual(ci.run_lane('ready'), first_wave_code)
-                record = json.loads((Path(directory) / 'ci/run.json').read_text())
-                self.assertEqual(record['preflight']['exit_code'], first_wave_code)
-                self.assertEqual(len(record['preflight']['phases']), 1 if first_wave_code else 2)
-                self.assertEqual(record['preflight']['phases'][0]['command'][3], './test/contract/persistence')
-                self.assertEqual(run.call_count, 1 if first_wave_code else 4)
-        for malformed in ('{bad', '[]', '{"failed_targets": 123}'):
-            with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as directory, \
-                    patch('ci_policy.impact.change', return_value=scope), \
-                    patch('ci_policy.native_admission.commands', return_value=[]), \
-                    patch.dict('os.environ', GITHUB_ACTIONS='true', PW_CI_EARLY_TARGET=malformed), \
-                    patch.object(ci, 'artifact_root', return_value=Path(directory)), \
-                    patch.object(ci.subprocess, 'call', return_value=0) as run:
-                self.assertEqual(ci.run_lane('ready'), 0)
-                self.assertEqual(run.call_args_list[0].args[0], ['./task', *hosted_plan.lanes()['ready']['preflight']])

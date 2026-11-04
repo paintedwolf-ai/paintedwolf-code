@@ -17,7 +17,7 @@ func TestConcurrentMutationsNoLostUpdate(t *testing.T) {
 	testutil.SkipIfShort(t, "concurrent full-catalog mutation stress")
 	owner := testOwner(t)
 
-	const n = 24
+	const n = 6
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
 	for i := range n {

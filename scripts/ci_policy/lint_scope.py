@@ -21,8 +21,10 @@ def commands(mode, binary, timeout, arguments):
         raise ValueError('Go lint mode must be fast or full')
     lint = [binary, 'run', *(['--fast-only'] if mode == 'fast' else []),
             '--timeout', timeout, *flags, *packages]
-    return [['go', 'vet', *packages], lint,
-            *([['bash', str(ROOT / 'scripts/deadcode-check.sh')]] if mode == 'full' else [])]
+    # Full analysis includes govet over a wider build-tag set; fast-only analysis leaves it out.
+    if mode == 'fast':
+        return [['go', 'vet', *packages], lint]
+    return [lint, ['bash', str(ROOT / 'scripts/deadcode-check.sh')]]
 
 
 def main(arguments):

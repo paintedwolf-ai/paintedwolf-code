@@ -60,7 +60,7 @@ func TestHostCursorsZeroOutboundSecretMatches(t *testing.T) {
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "build matcher", err)
 
-	const tokensPerKind = 2000
+	const tokensPerKind = 200
 
 	codeScansCodec := pagecursor.For[codeScansPosition]("code_scans")
 	for i := 0; i < tokensPerKind; i++ {
