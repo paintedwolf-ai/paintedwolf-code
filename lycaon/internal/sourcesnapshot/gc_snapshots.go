@@ -10,16 +10,19 @@ func (s *snapshotCollector) sweepSnapshots(ctx context.Context, cutoff string) (
 	return s.sweepCascade(ctx, cascadeSweep{
 		page: func() ([]sweepCandidate, error) {
 			rows, err := s.queries.ListSourceSnapshotSweepCandidates(ctx, db.ListSourceSnapshotSweepCandidatesParams{
-				ChildLimit: sweepTxChildRows + 1, CreatedBefore: cutoff,
+				CreatedBefore: cutoff,
 				AfterCreated: s.cursor.afterCreated, AfterID: s.cursor.afterID, BatchLimit: snapshotSweepBatch,
 			})
 			candidates := make([]sweepCandidate, len(rows))
 			for i, row := range rows {
-				candidates[i] = sweepCandidate{id: row.ID, created: row.CreatedTs, referenced: row.Referenced != 0, childRows: row.ChildRows}
+				candidates[i] = sweepCandidate{id: row.ID, created: row.CreatedTs, referenced: row.Referenced != 0}
 			}
 			return candidates, err
 		},
 		advance: func(c sweepCandidate) { s.cursor.afterCreated, s.cursor.afterID = c.created, c.id },
+		children: func(c sweepCandidate) (int64, error) {
+			return s.queries.CountSourceSnapshotCascadeRows(ctx, db.CountSourceSnapshotCascadeRowsParams{ID: c.id, ChildLimit: sweepTxChildRows + 1})
+		},
 		pinned: func(_, _ func(string) bool) func(string) bool {
 			return func(string) bool { return false }
 		},
@@ -39,11 +42,12 @@ type sweepCandidate struct {
 // cascadeSweep is one level of the graph: a parent table whose deletion cascades
 // to child rows.
 type cascadeSweep struct {
-	page    func() ([]sweepCandidate, error)
-	advance func(sweepCandidate)
-	pinned  func(manifestPinned, chunkPinned func(string) bool) func(string) bool
-	remove  func(context.Context, *db.Queries, sweepCandidate) (int64, error)
-	deleted *int64
+	page     func() ([]sweepCandidate, error)
+	advance  func(sweepCandidate)
+	children func(sweepCandidate) (int64, error)
+	pinned   func(manifestPinned, chunkPinned func(string) bool) func(string) bool
+	remove   func(context.Context, *db.Queries, sweepCandidate) (int64, error)
+	deleted  *int64
 }
 
 // sweepCascade walks candidates until the level ends or the admission is spent.
@@ -58,7 +62,10 @@ func (s *snapshotCollector) sweepCascade(ctx context.Context, level cascadeSweep
 		if len(candidates) == 0 {
 			return true, nil
 		}
-		taken, eligible := s.takeCandidates(candidates)
+		taken, eligible, err := s.takeCandidates(level, candidates)
+		if err != nil {
+			return false, err
+		}
 		if err := s.removeCandidates(ctx, level, eligible); err != nil {
 			return false, err
 		}
@@ -69,27 +76,33 @@ func (s *snapshotCollector) sweepCascade(ctx context.Context, level cascadeSweep
 
 // takeCandidates selects the prefix one transaction can carry. A retained or
 // oversized candidate costs no transaction, so a retained page opens no writer.
-func (s *snapshotCollector) takeCandidates(candidates []sweepCandidate) (int, []sweepCandidate) {
+func (s *snapshotCollector) takeCandidates(level cascadeSweep, candidates []sweepCandidate) (int, []sweepCandidate, error) {
 	var eligible []sweepCandidate
 	rows, taken := int64(0), 0
+	defer func() { s.report.Examined += int64(taken) }()
 	for _, candidate := range candidates {
-		switch {
-		case candidate.referenced:
+		if candidate.referenced {
 			s.report.Retained++
-		case candidate.childRows > sweepTxChildRows:
+			taken++
+			continue
+		}
+		children, err := level.children(candidate)
+		if err != nil {
+			return taken, nil, err
+		}
+		candidate.childRows = children
+		switch {
+		case children > sweepTxChildRows:
 			s.report.OversizedDeferred++
+		case rows+children > sweepTxChildRows:
+			return taken, eligible, nil
 		default:
-			if rows+candidate.childRows > sweepTxChildRows {
-				s.report.Examined += int64(taken)
-				return taken, eligible
-			}
-			rows += candidate.childRows
+			rows += children
 			eligible = append(eligible, candidate)
 		}
 		taken++
 	}
-	s.report.Examined += int64(taken)
-	return taken, eligible
+	return taken, eligible, nil
 }
 
 func (s *snapshotCollector) removeCandidates(ctx context.Context, level cascadeSweep, eligible []sweepCandidate) error {

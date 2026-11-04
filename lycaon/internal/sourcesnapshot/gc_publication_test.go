@@ -66,17 +66,17 @@ func TestSweepCandidatePagesIncludeRetainedRows(t *testing.T) {
 	testutil.FailErr(t, "seed chunks", err)
 	_, err = s.db.ExecContext(ctx, `INSERT INTO source_manifest_layout (manifest_id,first_path,chunk_id) VALUES ('a','file','a')`)
 	testutil.FailErr(t, "retain chunk", err)
-	manifests, err := s.queries.ListSourceManifestSweepCandidates(ctx, db.ListSourceManifestSweepCandidatesParams{ChildLimit: 1, BatchLimit: 1})
+	manifests, err := s.queries.ListSourceManifestSweepCandidates(ctx, db.ListSourceManifestSweepCandidatesParams{BatchLimit: 1})
 	testutil.FailErr(t, "manifest candidate page", err)
 	if len(manifests) != 1 || manifests[0].ID != "a" {
 		t.Fatalf("candidate scan skipped retained row: %v", manifests)
 	}
-	chunks, err := s.queries.ListSourceChunkSweepCandidates(ctx, db.ListSourceChunkSweepCandidatesParams{ChildLimit: 1, BatchLimit: 1})
+	chunks, err := s.queries.ListSourceChunkSweepCandidates(ctx, db.ListSourceChunkSweepCandidatesParams{BatchLimit: 1})
 	testutil.FailErr(t, "chunk candidate page", err)
 	if len(chunks) != 1 || chunks[0].ID != "a" {
 		t.Fatalf("candidate scan skipped retained chunk: %v", chunks)
 	}
-	snapshots, err := s.queries.ListSourceSnapshotSweepCandidates(ctx, db.ListSourceSnapshotSweepCandidatesParams{ChildLimit: 1, CreatedBefore: now, BatchLimit: 1})
+	snapshots, err := s.queries.ListSourceSnapshotSweepCandidates(ctx, db.ListSourceSnapshotSweepCandidatesParams{CreatedBefore: now, BatchLimit: 1})
 	testutil.FailErr(t, "snapshot candidate page", err)
 	if len(snapshots) != 1 || snapshots[0].ID != "a" {
 		t.Fatalf("candidate scan skipped retained snapshot: %v", snapshots)

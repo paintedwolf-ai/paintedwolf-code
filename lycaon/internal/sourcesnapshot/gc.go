@@ -161,16 +161,19 @@ func (s *snapshotCollector) sweepManifests(ctx context.Context, _ string) (bool,
 	return s.sweepCascade(ctx, cascadeSweep{
 		page: func() ([]sweepCandidate, error) {
 			rows, err := s.queries.ListSourceManifestSweepCandidates(ctx, db.ListSourceManifestSweepCandidatesParams{
-				ChildLimit: sweepTxChildRows + 1, After: s.cursor.after, BatchLimit: manifestSweepBatch,
+				After: s.cursor.after, BatchLimit: manifestSweepBatch,
 			})
 			candidates := make([]sweepCandidate, len(rows))
 			for i, row := range rows {
-				candidates[i] = sweepCandidate{id: row.ID, referenced: row.Referenced != 0, childRows: row.ChildRows}
+				candidates[i] = sweepCandidate{id: row.ID, referenced: row.Referenced != 0}
 			}
 			return candidates, err
 		},
 		advance: func(c sweepCandidate) { s.cursor.after = c.id },
-		pinned:  func(manifestPinned, _ func(string) bool) func(string) bool { return manifestPinned },
+		children: func(c sweepCandidate) (int64, error) {
+			return s.queries.CountSourceManifestCascadeRows(ctx, db.CountSourceManifestCascadeRowsParams{ID: c.id, ChildLimit: sweepTxChildRows + 1})
+		},
+		pinned: func(manifestPinned, _ func(string) bool) func(string) bool { return manifestPinned },
 		remove: func(ctx context.Context, q *db.Queries, c sweepCandidate) (int64, error) {
 			return q.DeleteUnreferencedSourceManifest(ctx, c.id)
 		},
@@ -182,16 +185,19 @@ func (s *snapshotCollector) sweepChunks(ctx context.Context, _ string) (bool, er
 	return s.sweepCascade(ctx, cascadeSweep{
 		page: func() ([]sweepCandidate, error) {
 			rows, err := s.queries.ListSourceChunkSweepCandidates(ctx, db.ListSourceChunkSweepCandidatesParams{
-				ChildLimit: sweepTxChildRows + 1, After: s.cursor.after, BatchLimit: chunkSweepBatch,
+				After: s.cursor.after, BatchLimit: chunkSweepBatch,
 			})
 			candidates := make([]sweepCandidate, len(rows))
 			for i, row := range rows {
-				candidates[i] = sweepCandidate{id: row.ID, referenced: row.Referenced != 0, childRows: row.ChildRows}
+				candidates[i] = sweepCandidate{id: row.ID, referenced: row.Referenced != 0}
 			}
 			return candidates, err
 		},
 		advance: func(c sweepCandidate) { s.cursor.after = c.id },
-		pinned:  func(_, chunkPinned func(string) bool) func(string) bool { return chunkPinned },
+		children: func(c sweepCandidate) (int64, error) {
+			return s.queries.CountSourceChunkCascadeRows(ctx, db.CountSourceChunkCascadeRowsParams{ID: c.id, ChildLimit: sweepTxChildRows + 1})
+		},
+		pinned: func(_, chunkPinned func(string) bool) func(string) bool { return chunkPinned },
 		remove: func(ctx context.Context, q *db.Queries, c sweepCandidate) (int64, error) {
 			return q.DeleteUnreferencedSourceManifestChunk(ctx, c.id)
 		},
