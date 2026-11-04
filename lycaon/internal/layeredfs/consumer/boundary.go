@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // EngineConfig configures a consumer Engine for a worker view.
@@ -220,7 +221,7 @@ func IsInternalStoragePath(rel string) bool {
 	}
 	for _, seg := range strings.Split(cleaned, "/") {
 		switch seg {
-		case ".git", ".lycaon-work", ".paintedwolf", ".provision.lock":
+		case ".git", ".lycaon-work", settingsoverlay.DirName(), ".provision.lock":
 			return true
 		}
 	}
