@@ -221,6 +221,9 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 		return evaluatedResult(evaluated), err
 	})
 	e.park.settle()
+	// Attribution ends with evaluation: a detached job must not hold other
+	// sessions' attribution or claim a person's edits for its whole life.
+	run.window.settle(ctx)
 	settled := make(chan error, 1)
 	lifetime := &programLifetime{release: e.release}
 	defer lifetime.callerDone()

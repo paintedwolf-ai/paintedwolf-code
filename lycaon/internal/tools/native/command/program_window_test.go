@@ -138,24 +138,98 @@ func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	f.wantWindowEffect(t, "gen.txt", outcome.SourceWindow.ID)
 }
 
-// The job writes before and after the program's foreground ended.
-func TestProgramWindowACCW03BackgroundJobKeepsItOpenUntilTheProgramSettles(t *testing.T) {
+// A job the program waits on is part of evaluation, however long it runs.
+func TestProgramWindowACCW03JobTheProgramWaitsOnIsObserved(t *testing.T) {
 	f := newWindowFixture(t)
-	outcome := f.run(t, `external -- /bin/sh -c 'echo job > job.txt; until test -e release; do sleep 0.01; done; echo end > after.txt' &
-until [ -e job.txt ]; do sleep 0.01; done`)
-	if outcome.SourceWindow == nil || outcome.SourceWindow.Settled {
-		t.Fatalf("outcome = %+v, want the job's unsettled window", outcome)
-	}
+	f.Runtime.ParkThreshold = time.Hour
+	done := make(chan callResult, 1)
+	go func() {
+		content, err := f.Call(t, t.Context(), `external -- /bin/sh -c 'echo job > job.txt; until test -e release; do sleep 0.01; done; echo end > after.txt' &
+wait`)
+		done <- callResult{content, err}
+	}()
+	testutil.AwaitCondition(t, "the job started", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "job.txt"))
+		return err == nil
+	})
 	listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
-	if len(listed) != 1 || listed[0].ID != outcome.SourceWindow.ID || listed[0].Closing {
+	if len(listed) != 1 || listed[0].Closing {
 		t.Fatalf("open windows = %+v, want the job's running window", listed)
 	}
 	testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-	testutil.AwaitClosed(t, "window settles", listed[0].Settled)
+	result := testutil.AwaitValue(t, "program result", done)
+	testutil.FailErr(t, "run program", result.err)
+	outcome := decodeOutcome(t, result.content)
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != listed[0].ID || !outcome.SourceWindow.Settled {
+		t.Fatalf("outcome = %+v, want the job's settled window", outcome)
+	}
 	f.wantWindowEffect(t, "job.txt", outcome.SourceWindow.ID)
 	f.wantWindowEffect(t, "after.txt", outcome.SourceWindow.ID)
 	if opens := f.opener.opens.Load(); opens != 1 {
 		t.Fatalf("window opens = %d, want 1", opens)
+	}
+}
+
+// A detached job outliving evaluation is observed only until evaluation ends.
+func TestProgramWindowACCW03DetachedJobIsObservedUntilEvaluationEnds(t *testing.T) {
+	f := newWindowFixture(t)
+	outcome := f.run(t, `external -- /bin/sh -c 'echo job > job.txt; until test -e release; do sleep 0.01; done; echo end > job.txt; touch finished' &
+until [ -e job.txt ]; do sleep 0.01; done`)
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID == "" || !outcome.SourceWindow.Settled {
+		t.Fatalf("outcome = %+v, want a window settled with the running job", outcome)
+	}
+	f.wantWindowEffect(t, "job.txt", outcome.SourceWindow.ID)
+	if listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session); len(listed) != 0 {
+		t.Fatalf("open windows with only a detached job left = %+v", listed)
+	}
+	testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
+	testutil.AwaitCondition(t, "the job finished", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "finished"))
+		return err == nil
+	})
+	f.forcePass(t, "job.txt")
+	late, ok := f.newestEffect(t, "job.txt")
+	if !ok || late.CommandWindowID != "" || late.SessionID != "" || late.Origin != api.SourceChangeOriginExternal {
+		t.Fatalf("job's write after evaluation = %+v, want a plain outside change", late)
+	}
+	if opens := f.opener.opens.Load(); opens != 1 {
+		t.Fatalf("window opens = %d, want 1", opens)
+	}
+}
+
+// One session's dev server costs no other session its attribution, and claims
+// nobody's edits.
+func TestDetachedJobLeavesOtherSessionsAttributionAndOutsideEditsAlone(t *testing.T) {
+	f := newWindowFixture(t)
+	outcome := f.run(t, `external -- /bin/sh -c 'echo server > server.txt; until test -e release; do sleep 0.01; done; touch finished' &
+until [ -e server.txt ]; do sleep 0.01; done`)
+	if outcome.SourceWindow == nil || !outcome.SourceWindow.Settled {
+		t.Fatalf("outcome = %+v", outcome)
+	}
+	t.Cleanup(func() {
+		testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
+		testutil.AwaitCondition(t, "the job finished", func() bool {
+			_, err := os.Stat(filepath.Join(f.Dir, "finished"))
+			return err == nil
+		})
+	})
+
+	peer, err := f.ledger.Commands.OpenCommandWindow(t.Context(), sourceledger.CommandWindowInput{
+		ProjectID: testdbseed.DefaultProjectID, Roots: []sourceledger.RootSpec{{ID: "r1", Path: f.Dir}}, SessionID: "peer-session", ToolName: "command",
+	})
+	testutil.FailErr(t, "open the other session's window", err)
+	testutil.FailErr(t, "the other session's build", os.WriteFile(filepath.Join(f.Dir, "Cargo.lock"), []byte("lock\n"), 0o600))
+	testutil.FailErr(t, "close the other session's window", peer.Close(t.Context()))
+	lock, ok := f.newestEffect(t, "Cargo.lock")
+	if !ok || lock.CommandWindowID != peer.ID || lock.SessionID != "peer-session" {
+		t.Fatalf("other session's build output = %+v, want its window", lock)
+	}
+
+	testutil.FailErr(t, "outside edit", os.WriteFile(filepath.Join(f.Dir, "server.txt"), []byte("a person's edit\n"), 0o600))
+	f.forcePass(t, "server.txt")
+	edit, ok := f.newestEffect(t, "server.txt")
+	if !ok || edit.CommandWindowID != "" || edit.SessionID != "" || edit.Origin != api.SourceChangeOriginExternal {
+		t.Fatalf("outside edit = %+v, want it attributed to nobody", edit)
 	}
 }
 
@@ -478,33 +552,59 @@ func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 	}
 }
 
-// A job's first native statement releases the foreground, so the result can
-// return before the job's later launch finishes opening the window. The result
-// cannot state it yet; the job's changes are still attributed to it.
-func TestProgramWindowOpenInFlightAtTheResultStillObservesTheJob(t *testing.T) {
+// A job launching after evaluation ended runs, opens nothing, and leaves the
+// result it could not have been part of unchanged.
+func TestLaunchAfterEvaluationEndedRunsUnobservedAndOpensNothing(t *testing.T) {
 	f := newWindowFixture(t)
-	release := make(chan struct{})
-	f.opener.before = func(ctx context.Context) error {
-		select {
-		case <-release:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	outcome := f.run(t, `{ sleep 0.01; `+writeGen+`; } &`)
+	outcome := f.run(t, `{ until [ -e go ]; do sleep 0.01; done; `+writeGen+`; touch finished; } &`)
 	if outcome.SourceWindow != nil {
-		t.Fatalf("outcome = %+v, want no window before the open finished", outcome)
+		t.Fatalf("outcome = %+v, want no window with no launch by the result", outcome)
 	}
-	close(release)
-	testutil.AwaitCondition(t, "the job ran and its window settled", func() bool {
-		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
-		return err == nil && f.opener.opens.Load() == 1 && len(f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)) == 0
+	testutil.FailErr(t, "continue the job", os.WriteFile(filepath.Join(f.Dir, "go"), nil, 0o600))
+	testutil.AwaitCondition(t, "the job finished", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "finished"))
+		return err == nil
 	})
-	effect, ok := f.effects(t)["gen.txt"]
-	if !ok || effect.CommandWindowID == "" || effect.SessionID != f.Session {
-		t.Fatalf("job effect = %+v", effect)
+	if _, err := os.Stat(filepath.Join(f.Dir, "gen.txt")); err != nil {
+		t.Fatalf("the late launch did not run: %v", err)
 	}
+	if opens := f.opener.opens.Load(); opens != 0 {
+		t.Fatalf("window opens = %d, want none after evaluation ended", opens)
+	}
+	if rows := f.windowRows(t); rows != 0 {
+		t.Fatalf("window rows = %d, want 0", rows)
+	}
+}
+
+// A job the program waits on stays observed while the program is parked.
+func TestProgramWindowSpansAParkOverAJobItWaitsOn(t *testing.T) {
+	f := newWindowFixture(t)
+	parking := newRecordingParking()
+	f.Runtime.Parking, f.Runtime.ParkThreshold = parking, time.Nanosecond
+	raw, err := f.Call(t, t.Context(), `external -- /bin/sh -c 'echo a > gen.txt; until test -e release; do sleep 0.01; done; echo b > late.txt' &
+wait`)
+	testutil.FailErr(t, "park program", err)
+	if !strings.Contains(raw, `"state":"parked"`) {
+		t.Fatalf("parked result %s", raw)
+	}
+	parked := testutil.AwaitValue(t, "the program parks", parking.parked)
+	testutil.AwaitCondition(t, "the job started", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
+		return err == nil
+	})
+	listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
+	if len(listed) != 1 || listed[0].Closing {
+		t.Fatalf("open windows while parked = %+v", listed)
+	}
+	testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
+	settled := testutil.AwaitValue(t, "parked program settles", parked.settled)
+	testutil.FailErr(t, "settle parked program", settled.err)
+	outcome := decodeOutcome(t, settled.result)
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != listed[0].ID || !outcome.SourceWindow.Settled {
+		t.Fatalf("final outcome %s", settled.result)
+	}
+	f.wantWindowEffect(t, "gen.txt", listed[0].ID)
+	f.wantWindowEffect(t, "late.txt", listed[0].ID)
 }
 
 // A program that parks keeps its window across the park, and its final result
