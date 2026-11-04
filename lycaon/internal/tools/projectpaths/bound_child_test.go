@@ -45,3 +45,17 @@ func TestFilteredDirectorySelectionBatchesUnselectedNames(t *testing.T) {
 		t.Fatalf("names=%v membership batches=%d", names, admissions)
 	}
 }
+
+func TestChildScopeRelMatchesTheSpelledPath(t *testing.T) {
+	for _, tc := range []struct{ parent, abs, name, want string }{
+		{"", "/root/name", "name", "name"},
+		{".", "/root/name", "name", "name"},
+		{"a/b", "/root/a/b/name", "name", "a/b/name"},
+		{"a/b", "/other/name", "name", "a/b/name"},
+		{"ab", "ab/name", "name", "ab/name"},
+	} {
+		if got := childScopeRel(tc.parent, tc.abs, tc.name); got != tc.want {
+			t.Fatalf("%+v: got %q", tc, got)
+		}
+	}
+}
