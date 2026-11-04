@@ -12,7 +12,7 @@ from ci_policy import impact, evidence, resources, recovery
 class AdmissionTests(unittest.TestCase):
     def test_shared_unknown_deleted_inputs_expand_not_skip(self):
         for paths in [['docs/openapi/api.yaml'], ['lycaon/go.mod'], ['scripts/x.py'], ['new-area/data.bin'],
-                      ['lycaon/internal/a/testdata/fixture.json'], ['lycaon/config/prompt.md']]:
+                      ['lycaon/config/prompt.md']]:
             full, reasons = impact.broad_scope(paths)
             self.assertTrue(full)
             self.assertEqual(reasons, paths)
@@ -70,7 +70,7 @@ class AdmissionTests(unittest.TestCase):
         self.assertNotIn('frontend', {row['lane'] for row in ci.matrix('integration', scope=mixed)['include']})
         # Documentation that a build or contract parses still widens the gate.
         for path in ['CHANGELOG.md', 'docs/openapi/vocab/README.md', 'docs/openapi.yaml',
-                     'lycaon/config/README.md', 'lycaon/internal/governance/testdata/agentsmd/frontmatter/AGENTS.md']:
+                     'lycaon/config/README.md']:
             self.assertTrue(impact.broad_scope([path])[0], path)
 
     def test_confinement_changes_admit_the_other_architecture(self):
@@ -83,9 +83,11 @@ class AdmissionTests(unittest.TestCase):
                      'lycaon/internal/execution/supervisor_linux.go', 'lycaon-den/src/a.ts']:
             lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
             self.assertNotIn('confinement-arm64', lanes, path)
-        # The lane, its target, and confinement data outside Go source run every platform lane.
-        for path in ['scripts/test-confine-linux.sh', 'scripts/verification-plan.json',
-                     'lycaon/internal/confine/testdata/fixture.json']:
+        lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(
+            full=False, paths=['lycaon/internal/confine/testdata/fixture.json']))['include']}
+        self.assertIn('confinement-arm64', lanes)
+        # The lane and its target run every platform lane.
+        for path in ['scripts/test-confine-linux.sh', 'scripts/verification-plan.json']:
             self.assertTrue(impact.broad_scope([path])[0], path)
 
     def test_reverse_graph_reaches_test_importers_and_cycles(self):

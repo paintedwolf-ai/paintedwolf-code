@@ -913,16 +913,19 @@ Frontend execution deliberately stays broad because source-scanning tests and
 runtime discovery are not represented by static imports alone. Documentation prose,
 Markdown under `docs/` and the repository's policy and community files, adds
 nothing to that baseline; `CHANGELOG.md`, which Den embeds, and OpenAPI
-documentation are build inputs and widen the gate. Unknown paths,
-fixtures, dependencies, build inputs, generated contracts, and verification
-policy expand to the full `check` profile. A missing Git base fails planning;
-an unresolved Go graph runs the full Go recipe. Go source under `internal/`,
-`cmd/`, and `test/` uses the same resolved import graph, including test imports. Contract and smoke packages remain mandatory.
+documentation are build inputs and widen the gate. CI's own logic and tests under
+`scripts/ci_policy/` and `scripts/verification_tests/`, and workflows, add only the
+runner lane, because no product test reads them. The files that decide how every
+lane runs (`ci.yml`, `verification.yml`, lane planning and execution) still widen.
+Any file in a Go package's tree under `internal/`, `cmd/`, or `test/`, whether
+source, embedded data, or a test fixture, seeds the nearest package's reverse import
+closure, including test imports. Contract and smoke packages remain mandatory.
+Unknown paths, dependencies, build inputs, generated contracts, shipped
+configuration, verification policy, public package contracts, and nested modules
+such as the harness fixture projects expand to the full `check` profile. A missing
+Git base fails planning; an unresolved Go graph runs the full Go recipe.
 Changes to command or test source do not select unrelated native or frontend
-lanes; mixed changes union their obligations. Go outside the module's graph
-(nested modules such as the harness fixture projects, `testdata`, and
-directories Go ignores), other fixtures, public package contracts, and unknown
-paths still widen verification.
+lanes; mixed changes union their obligations.
 An empty shard never passes as an empty test run. Selection and source identities travel with each lane receipt.
 
 Native Rust source has explicit verification dependencies in
