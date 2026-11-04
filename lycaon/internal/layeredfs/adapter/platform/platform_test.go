@@ -179,11 +179,7 @@ func TestAdapterFIFOFactMatchesTheKernel(t *testing.T) {
 	t.Cleanup(func() { _ = mgr.Store().Close() })
 	view, chosen := mountedHostView(t, trunk, mgr)
 	fifo := filepath.Join(view.PrimaryWorkPath, "pipe")
-	if err := syscall.Mkfifo(fifo, 0o644); errors.Is(err, syscall.EIO) || errors.Is(err, syscall.EPERM) {
-		t.Skipf("Core has no special nodes in this tree: %v", err)
-	} else {
-		testutil.FailErr(t, "mkfifo", err)
-	}
+	testutil.FailErr(t, "mkfifo", syscall.Mkfifo(fifo, 0o644))
 	file, err := os.OpenFile(fifo, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err == nil {
 		_ = file.Close()
@@ -302,5 +298,36 @@ func TestDestroyRefusesARootStillMountedWhateverItsRecordsSay(t *testing.T) {
 	}
 	if raw, err := os.ReadFile(result); err != nil || string(raw) != "result\n" {
 		t.Fatalf("refused destroy touched the view: %q err=%v", raw, err)
+	}
+}
+
+// Bytes no sidecar layout decodes, so only a client's removal can take them away.
+var undecodableSidecar = []byte("worker data, not a sidecar\n")
+
+// A client that may remove an early sidecar is allowed to, and any other adapter must keep it. A sidecar
+// written after its target stays on every adapter.
+func TestSidecarSurvivalFollowsTheAdapterFact(t *testing.T) {
+	trunk, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve trunk", err)
+	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
+	testutil.FailErr(t, "privategit.NewManager", err)
+	t.Cleanup(func() { _ = mgr.Store().Close() })
+	view, chosen := mountedHostView(t, trunk, mgr)
+	root := view.PrimaryWorkPath
+
+	early := filepath.Join(root, "._early")
+	testutil.FailErr(t, "write early sidecar", os.WriteFile(early, undecodableSidecar, 0o644))
+	testutil.FailErr(t, "create target", os.WriteFile(filepath.Join(root, "early"), []byte("target\n"), 0o644))
+	if !chosen.Facts().MetadataCapabilities.ClientMayRemoveEarlySidecar {
+		if raw, err := os.ReadFile(early); err != nil || string(raw) != string(undecodableSidecar) {
+			t.Fatalf("early sidecar on an adapter that keeps it: %q err=%v", raw, err)
+		}
+	}
+
+	testutil.FailErr(t, "create later target", os.WriteFile(filepath.Join(root, "late"), []byte("target\n"), 0o644))
+	late := filepath.Join(root, "._late")
+	testutil.FailErr(t, "write late sidecar", os.WriteFile(late, undecodableSidecar, 0o644))
+	if raw, err := os.ReadFile(late); err != nil || string(raw) != string(undecodableSidecar) {
+		t.Fatalf("sidecar written after its target: %q err=%v", raw, err)
 	}
 }

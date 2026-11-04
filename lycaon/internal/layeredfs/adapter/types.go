@@ -94,6 +94,10 @@ type MetadataCapabilities struct {
 	// SupportsFIFOOpen reports that a FIFO in the view can be opened. mkfifo, listing and removal work
 	// on every adapter; the macOS NFS client alone refuses open(2) on a FIFO, whatever the server says.
 	SupportsFIFOOpen bool `json:"supports_fifo_open"`
+	// ClientMayRemoveEarlySidecar reports that a "._x" written before x exists may be removed by the
+	// kernel client when x arrives. The request is indistinguishable from a worker's own removal, so
+	// it is carried out. It may apply, not always does; a "._x" written after x stays on every adapter.
+	ClientMayRemoveEarlySidecar bool `json:"client_may_remove_early_sidecar"`
 }
 
 // AdapterFacts reports the typed capabilities and preparation properties of an adapter.
