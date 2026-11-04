@@ -10,12 +10,12 @@ func registerGitOperationTools(reg *tools.DefaultRegistry, deps buildDeps, bound
 	if deps.git == nil {
 		return nil
 	}
-	for _, kind := range []string{"checkout", "merge", "stash", "revert", "switch", "worktree", "submodule"} {
+	for _, kind := range []string{"checkout", "merge", "stash"} {
 		name := "git_" + kind
 		if !deps.nativeConfig.HasTool(name) {
 			continue
 		}
-		tool := &native.GitOperationTool{Git: deps.git, Boundary: boundary, Kind: kind}
+		tool := &native.GitOperationTool{Git: deps.git, PrivateGit: deps.privateGit, Boundary: boundary, Kind: kind}
 		if err := reg.Register(name, tool.Run); err != nil {
 			return err
 		}

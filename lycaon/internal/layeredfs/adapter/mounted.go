@@ -12,9 +12,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
-// MountedAdapterConfig configures a mounted workspace adapter (fuselinux or nfsdarwin) or test fixture.
+// MountedAdapterConfig configures MountedAdapter, a test fixture with no kernel mount.
 type MountedAdapterConfig struct {
 	AdapterID                  AdapterID
 	TargetOS                   string
@@ -30,14 +31,15 @@ type MountedAdapterConfig struct {
 }
 
 type mountedViewState struct {
-	view                        *PreparedView
-	denySourcePaths             []string
-	quiesceHook, flushHook      func(ctx context.Context, viewID string) error
-	accessCount                 atomic.Int64
-	mountCount                  int64
+	view                   *PreparedView
+	denySourcePaths        []string
+	quiesceHook, flushHook func(ctx context.Context, viewID string) error
+	accessCount            atomic.Int64
+	mountCount             int64
 }
 
-// MountedAdapter implements Adapter for mounted workspace backends (fuselinux and nfsdarwin).
+// MountedAdapter implements Adapter over plain directories so mounted claim and recovery logic can
+// run without a kernel mount. The real backends are the fuselinux and nfsdarwin packages.
 type MountedAdapter struct {
 	cfg   MountedAdapterConfig
 	facts AdapterFacts
@@ -45,17 +47,7 @@ type MountedAdapter struct {
 	views map[string]*mountedViewState
 }
 
-// NewFUSELinuxAdapter creates the Linux FUSE mounted workspace adapter.
-func NewFUSELinuxAdapter() *MountedAdapter {
-	return NewMountedAdapter(MountedAdapterConfig{AdapterID: AdapterFUSELinux, TargetOS: "linux"})
-}
-
-// NewNFSDarwinAdapter creates the macOS built-in NFSv3 loopback mounted workspace adapter.
-func NewNFSDarwinAdapter() *MountedAdapter {
-	return NewMountedAdapter(MountedAdapterConfig{AdapterID: AdapterNFSDarwin, TargetOS: "darwin"})
-}
-
-// NewMountedAdapter constructs a MountedAdapter from explicit configuration.
+// NewMountedAdapter constructs the fixture MountedAdapter from explicit configuration.
 func NewMountedAdapter(cfg MountedAdapterConfig) *MountedAdapter {
 	completeness := strings.TrimSpace(cfg.AttributionCompleteness)
 	if completeness == "" {
@@ -332,17 +324,53 @@ func (a *MountedAdapter) CheckpointBarrier(ctx context.Context, viewID string) (
 	return executeCheckpointBarrier(ctx, a.cfg.AdapterID, st.view.Core, st.quiesceHook, combineFlushHooks(a.cfg.FlushClientFn, st.flushHook))
 }
 
+// IsViewActive reports whether the fixture still holds viewID.
+func (a *MountedAdapter) IsViewActive(viewID string) bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	_, live := a.views[viewID]
+	return live
+}
+
+// BindPrivateGit binds the fixture's primary directory to mgr. Its mount identity names a fixture.
+func (a *MountedAdapter) BindPrivateGit(viewID, workerID string, mgr *privategit.Manager, authorizedGitDirs ...string) error {
+	if mgr == nil {
+		return errors.New("adapter: nil privategit.Manager")
+	}
+	a.mu.RLock()
+	st, ok := a.views[viewID]
+	a.mu.RUnlock()
+	if !ok {
+		return &AdapterError{AdapterID: a.cfg.AdapterID, Op: "bind_privategit", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
+	}
+	var primaryTrunk string
+	for _, r := range st.view.Roots {
+		if r.RootID == st.view.PrimaryRootID {
+			primaryTrunk = r.SourcePath
+		}
+	}
+	return mgr.MountedClaimWithBinding(privategit.MountedViewBinding{
+		ViewID: viewID, WorkerID: workerID, RootID: st.view.PrimaryRootID,
+		TrunkDir: primaryTrunk, MountPath: st.view.PrimaryWorkPath, AdapterID: string(a.cfg.AdapterID),
+		Core: st.view.Core, MountID: "fixture:" + viewID, Active: true,
+		IsActive: func() bool { return a.IsViewActive(viewID) },
+	}, authorizedGitDirs...)
+}
+
 // Release retires handles, settles the filesystem connection, and cleans up runtime directories.
 func (a *MountedAdapter) Release(ctx context.Context, viewID string) (ReleaseReceipt, error) {
-	a.mu.Lock()
+	a.mu.RLock()
 	st, ok := a.views[viewID]
-	if ok {
-		delete(a.views, viewID)
-	}
-	a.mu.Unlock()
+	a.mu.RUnlock()
 	if !ok {
 		return ReleaseReceipt{ViewID: viewID, AdapterID: a.cfg.AdapterID, Settled: false, ReasonCode: ReasonViewNotFound},
 			&AdapterError{AdapterID: a.cfg.AdapterID, Op: "release", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
-	return settleViewRelease(ctx, a.cfg.AdapterID, st.view, a.cfg.UnmountViewFn)
+	receipt, err := settleViewRelease(ctx, a.cfg.AdapterID, st.view, a.cfg.UnmountViewFn)
+	if err == nil && receipt.Settled {
+		a.mu.Lock()
+		delete(a.views, viewID)
+		a.mu.Unlock()
+	}
+	return receipt, err
 }

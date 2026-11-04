@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -24,6 +25,7 @@ import (
 type buildDeps struct {
 	boundary      *sandbox.Boundary
 	git           *git.Manager
+	privateGit    *privategit.Manager
 	statusCache   *statusCacheBinding
 	command       *hostcmd.Runner
 	nativeConfig  nativemanifest.Config
@@ -124,7 +126,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 		Survey:    &SurveyServices{summarizeTool: summarizeTool, fileAge: deps.fileAge, gitStatusCache: deps.statusCache},
 		Mutations: &MutationServices{writeTool: write, editTool: edit, replaceLinesTool: replaceLines, codeRewriteTool: codeRewrite, restoreVersionTool: restoreVersion, jqEditTool: jqEdit},
 		Commands: &CommandServices{commandTool: commandTool, verifyTool: verifyTool, commandOutputTool: commandOutputTool, commandStopTool: commandStopTool,
-			owners: programOwnerTools{boundary: boundary, summarize: summarizeTool, repo: surveyRepo, catalog: catalog, git: deps.git, registry: reg,
+			owners: programOwnerTools{boundary: boundary, summarize: summarizeTool, repo: surveyRepo, catalog: catalog, git: deps.git, privateGit: deps.privateGit, registry: reg,
 				operations: mutation.Operations{Write: write, Delete: deleteTool, Move: moveTool, Copy: copyTool, Mkdir: mkdirTool, Chmod: chmod,
 					Chown: chownTool, Times: &native.TimesTool{Boundary: boundary}, Extract: extractArchiveTool}}},
 		Skills: &SkillServices{skillsReadTool: skillsRead},

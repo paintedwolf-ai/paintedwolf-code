@@ -2,7 +2,9 @@ package claim
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +23,16 @@ type Coordinator struct {
 	mu              sync.RWMutex
 	views           map[string]*ClaimedView
 	failedSnapshots map[string]WorkspaceStateSnapshot
+	unsettled       map[string]*unsettledView
+}
+
+// unsettledView is a claimed or rolled-back view whose settlement failed and remains in custody.
+type unsettledView struct {
+	adapter          adapter.Adapter
+	privateGit       *privategit.Manager
+	metaPath         string
+	retentionClaimID string
+	holdClaimID      string
 }
 
 // NewCoordinator constructs a claim Coordinator backed by an adapter Selector.
@@ -32,6 +44,7 @@ func NewCoordinator(sel *adapter.Selector) *Coordinator {
 		selector:        sel,
 		views:           make(map[string]*ClaimedView),
 		failedSnapshots: make(map[string]WorkspaceStateSnapshot),
+		unsettled:       make(map[string]*unsettledView),
 	}
 }
 
@@ -55,7 +68,12 @@ func (c *Coordinator) ClaimWorkerView(
 		c.mu.RUnlock()
 		return existing, snap, nil
 	}
+	_, inCustody := c.unsettled[req.Identity.ViewID]
 	c.mu.RUnlock()
+	if inCustody {
+		snap, _ := c.StateSnapshot(req.Identity.ViewID)
+		return nil, snap, fmt.Errorf("%w: view %q", ErrSettlementUnresolved, req.Identity.ViewID)
+	}
 
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StageValidateSelection); err != nil {
 		snap := c.recordFailedClaim(req, adapter.AdapterEagerCopy, classifyClaimReason(err), err.Error(), 0, 0)
@@ -71,7 +89,16 @@ func (c *Coordinator) ClaimWorkerView(
 		snap := c.recordFailedClaim(req, probeRes.AdapterID, classifyClaimReason(err), err.Error(), 0, 0)
 		return nil, snap, err
 	}
+	return c.ClaimSelectedView(ctx, req, adp, probeRes)
+}
 
+// ClaimSelectedView claims a view on an adapter its caller already selected and probed.
+func (c *Coordinator) ClaimSelectedView(
+	ctx context.Context,
+	req ClaimRequest,
+	adp adapter.Adapter,
+	probeRes adapter.ProbeResult,
+) (*ClaimedView, WorkspaceStateSnapshot, error) {
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StagePrepareAdapter); err != nil {
 		snap := c.recordFailedClaim(req, adp.ID(), classifyClaimReason(err), err.Error(), 0, 0)
 		return nil, snap, err
@@ -87,63 +114,53 @@ func (c *Coordinator) ClaimWorkerView(
 
 	var retentionClaimID string
 	metaPath := resolveMetadataPath(req.Storage, prepared.RuntimeViewDir)
-	rollback := func() {
-		if retentionClaimID != "" && req.Hooks.Retention != nil {
-			_ = req.Hooks.Retention.ReleaseClaim(retentionClaimID)
+	fail := func(reason adapter.ReasonCode, cause error) (*ClaimedView, WorkspaceStateSnapshot, error) {
+		settleErr := c.settleView(ctx, req.Identity, &unsettledView{
+			adapter: adp, privateGit: req.Hooks.PrivateGit, metaPath: metaPath, retentionClaimID: retentionClaimID,
+		}, req.Hooks.Retention)
+		snap := c.recordFailedClaim(req, adp.ID(), reason, cause.Error(), 0, 0)
+		if settleErr == nil {
+			return nil, snap, cause
 		}
-		if req.Hooks.PrivateGit != nil {
-			_ = req.Hooks.PrivateGit.ReleaseView(req.Identity.ViewID)
-		}
-		_, _ = adp.Release(context.Background(), req.Identity.ViewID)
-		_ = os.Remove(metaPath)
+		snap = c.recordRecoveryRequired(req.Identity.ViewID, snap, settleErr)
+		return nil, snap, errors.Join(cause, settleErr)
 	}
 
 	if req.Hooks.PrivateGit != nil && adp.Facts().PreparationKind == adapter.PreparationMounted {
-		if bErr := bindMountedPrivateGitLazy(req, adp.ID(), prepared); bErr != nil {
-			rollback()
-			snap := c.recordFailedClaim(req, adp.ID(), adapter.ReasonMountDenied, bErr.Error(), 0, 0)
-			return nil, snap, bErr
+		if bErr := bindMountedPrivateGitLazy(req, adp); bErr != nil {
+			return fail(adapter.ReasonMountDenied, bErr)
 		}
 	}
 
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StageRegisterRetention); err != nil {
-		rollback()
-		snap := c.recordFailedClaim(req, adp.ID(), classifyClaimReason(err), err.Error(), 0, 0)
-		return nil, snap, err
+		return fail(classifyClaimReason(err), err)
 	}
 	if req.Hooks.Retention != nil {
 		cid, rErr := req.Hooks.Retention.RegisterClaim(ctx, req.Identity.WorkerID, req.Identity.ViewID, collectPreparedRootPaths(prepared.Roots))
 		if rErr != nil {
-			rollback()
-			wrapped := fmt.Errorf("%w: %v", ErrRetentionFailed, rErr)
-			snap := c.recordFailedClaim(req, adp.ID(), adapter.ReasonMountDenied, wrapped.Error(), 0, 0)
-			return nil, snap, wrapped
+			return fail(adapter.ReasonMountDenied, fmt.Errorf("%w: %v", ErrRetentionFailed, rErr))
 		}
 		retentionClaimID = cid
 	}
 
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StageVerifyConfinement); err != nil {
-		rollback()
-		snap := c.recordFailedClaim(req, adp.ID(), classifyClaimReason(err), err.Error(), 0, 0)
-		return nil, snap, err
+		return fail(classifyClaimReason(err), err)
 	}
 	if err := verifyPreparedConfinement(ctx, adp, prepared, req.Hooks.VerifyConfinement); err != nil {
-		rollback()
-		snap := c.recordFailedClaim(req, adp.ID(), adapter.ReasonBackingConfinementFailed, err.Error(), 0, 0)
-		return nil, snap, err
+		reason := adapter.ReasonBackingConfinementFailed
+		if classified := classifyClaimReason(err); classified == adapter.ReasonConfinementUnavailable {
+			reason = classified
+		}
+		return fail(reason, err)
 	}
 
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StagePersistMetadata); err != nil {
-		rollback()
-		snap := c.recordFailedClaim(req, adp.ID(), classifyClaimReason(err), err.Error(), 0, 0)
-		return nil, snap, err
+		return fail(classifyClaimReason(err), err)
 	}
 
 	meta := buildCommittedMetadataV2(req, adp, prepared, probeRes.ReasonCode)
 	if err := SaveViewMetadata(metaPath, meta); err != nil {
-		rollback()
-		snap := c.recordFailedClaim(req, adp.ID(), adapter.ReasonMountDenied, err.Error(), 0, 0)
-		return nil, snap, err
+		return fail(adapter.ReasonMountDenied, err)
 	}
 
 	readySnap := buildReadySnapshot(meta)
@@ -154,6 +171,8 @@ func (c *Coordinator) ClaimWorkerView(
 		Metadata:         meta,
 		RetentionClaimID: retentionClaimID,
 		State:            readySnap,
+		metaPath:         metaPath,
+		privateGit:       req.Hooks.PrivateGit,
 	}
 	c.selector.Registry.Register(prepared, adp)
 	c.mu.Lock()
@@ -163,50 +182,86 @@ func (c *Coordinator) ClaimWorkerView(
 	return claimed, readySnap, nil
 }
 
-func buildPrepareRequest(req ClaimRequest) adapter.PrepareRequest {
-	var gitInt adapter.PrepareRequest
-	if req.Hooks.PrivateGit != nil {
-		gitInt.GitInterceptor = req.Hooks.PrivateGit
+// settleView releases a view's adapter resources first and its records only after they settled.
+// A failed step keeps everything recorded so far and leaves the view in custody for a retry.
+func (c *Coordinator) settleView(ctx context.Context, identity ClaimIdentity, view *unsettledView, retention RetentionRegistrar) error {
+	settleCtx := context.WithoutCancel(ctx)
+	receipt, err := view.adapter.Release(settleCtx, identity.ViewID)
+	if err == nil && !receipt.Settled {
+		err = fmt.Errorf("adapter %s left view unsettled: %s", view.adapter.ID(), receipt.ReasonCode)
 	}
-	return adapter.PrepareRequest{
-		ViewID:         req.Identity.ViewID,
-		RuntimeDir:     req.Storage.RuntimeDir,
-		BackingDir:     req.Storage.BackingDir,
-		TargetRootDirs: req.Storage.TargetRootDirs,
-		Grants:         req.Grants,
-		Selection:      req.Selection,
-		TaskPathHints:  append([]string(nil), req.FocusPathHints...),
-		ParentLayers:   req.ParentLayers,
-		GitInterceptor: gitInt.GitInterceptor,
-		MaxEntries:     req.Limits.MaxEntries,
-		MaxBytes:       req.Limits.MaxBytes,
+	if err == nil && view.privateGit != nil {
+		err = view.privateGit.ReleaseView(identity.ViewID)
 	}
-}
-
-func bindMountedPrivateGitLazy(req ClaimRequest, adpID adapter.AdapterID, prepared *adapter.PreparedView) error {
-	var primaryTrunk string
-	for _, r := range prepared.Roots {
-		if r.RootID == prepared.PrimaryRootID {
-			primaryTrunk = r.SourcePath
-			break
+	if err == nil && retention != nil && view.retentionClaimID != "" {
+		if err = retention.ReleaseClaim(view.retentionClaimID); err == nil {
+			view.retentionClaimID = ""
 		}
 	}
-	if primaryTrunk == "" && len(prepared.Roots) > 0 {
-		primaryTrunk = prepared.Roots[0].SourcePath
+	if err == nil && view.holdClaimID != "" && retention != nil {
+		if err = retention.ReleaseClaim(view.holdClaimID); err == nil {
+			view.holdClaimID = ""
+		}
 	}
-	return req.Hooks.PrivateGit.MountedClaimWithBinding(privategit.MountedViewBinding{
-		ViewID:    req.Identity.ViewID,
-		WorkerID:  req.Identity.WorkerID,
-		RootID:    prepared.PrimaryRootID,
-		TrunkDir:  primaryTrunk,
-		MountPath: prepared.PrimaryWorkPath,
-		AdapterID: string(adpID),
-		Core:      prepared.Core,
-		MountID:   fmt.Sprintf("%s:%s:%s", adpID, req.Identity.ViewID, prepared.PrimaryRootID),
-		Active:    true,
-	})
+	if err == nil && view.metaPath != "" {
+		if rmErr := os.Remove(view.metaPath); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
+			err = rmErr
+		}
+	}
+	if err == nil {
+		c.mu.Lock()
+		delete(c.unsettled, identity.ViewID)
+		c.mu.Unlock()
+		c.selector.Registry.Unregister(identity.ViewID)
+		return nil
+	}
+	if retention != nil && view.holdClaimID == "" {
+		holdID, holdErr := retention.HoldUnresolved(settleCtx, identity.WorkerID, identity.ViewID)
+		if holdErr != nil {
+			err = errors.Join(err, holdErr)
+		} else {
+			view.holdClaimID = holdID
+		}
+	}
+	c.mu.Lock()
+	c.unsettled[identity.ViewID] = view
+	c.mu.Unlock()
+	return fmt.Errorf("%w: view %q: %w", ErrSettlementUnresolved, identity.ViewID, err)
 }
 
+func buildPrepareRequest(req ClaimRequest) adapter.PrepareRequest {
+	prepReq := adapter.PrepareRequest{
+		ViewID:          req.Identity.ViewID,
+		RuntimeDir:      req.Storage.RuntimeDir,
+		BackingDir:      req.Storage.BackingDir,
+		TargetRootDirs:  req.Storage.TargetRootDirs,
+		Grants:          req.Grants,
+		Selection:       req.Selection,
+		TaskPathHints:   append([]string(nil), req.FocusPathHints...),
+		ParentLayers:    req.ParentLayers,
+		ObservationSink: req.Hooks.Observations,
+		QuiesceHook:     req.Hooks.Quiesce,
+		FlushClientHook: req.Hooks.FlushClient,
+		MaxEntries:      req.Limits.MaxEntries,
+		MaxBytes:        req.Limits.MaxBytes,
+	}
+	if req.Hooks.PrivateGit != nil {
+		prepReq.GitInterceptor = req.Hooks.PrivateGit
+	}
+	return prepReq
+}
+
+func bindMountedPrivateGitLazy(req ClaimRequest, adp adapter.Adapter) error {
+	supervisor, ok := adp.(adapter.MountSupervisor)
+	if !ok {
+		return fmt.Errorf("adapter %s holds no mount supervision to bind private Git to", adp.ID())
+	}
+	return supervisor.BindPrivateGit(req.Identity.ViewID, req.Identity.WorkerID, req.Hooks.PrivateGit)
+}
+
+// verifyPreparedConfinement establishes that a view is usable under enforcement. The path checks
+// only catch a broken view; unequal paths prove nothing about what a worker's process can reach, so
+// a mounted view is never ready without its validator.
 func verifyPreparedConfinement(
 	ctx context.Context,
 	adp adapter.Adapter,
@@ -227,10 +282,17 @@ func verifyPreparedConfinement(
 	if filepath.Clean(spec.HiddenBackingDir) == filepath.Clean(spec.WorkDir) {
 		return fmt.Errorf("%w: backing dir aliases work_dir %q", ErrConfinementFailed, spec.WorkDir)
 	}
-	if validator != nil {
-		if err := validator(ctx, prepared); err != nil {
-			return fmt.Errorf("%w: %v", ErrConfinementFailed, err)
+	if validator == nil {
+		if adp.Facts().PreparationKind == adapter.PreparationMounted {
+			return fmt.Errorf("%w: %w", ErrConfinementFailed, &adapter.AdapterError{
+				AdapterID: adp.ID(), Op: "verify_confinement", ReasonCode: adapter.ReasonConfinementUnavailable,
+				Diagnostic: "no enforcement was supplied for a mounted view",
+			})
 		}
+		return nil
+	}
+	if err := validator(ctx, prepared); err != nil {
+		return fmt.Errorf("%w: %w", ErrConfinementFailed, err)
 	}
 	return nil
 }

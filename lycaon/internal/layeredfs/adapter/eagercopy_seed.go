@@ -146,6 +146,9 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir string) error {
 }
 
 func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath string, d fs.DirEntry) error {
+	if a.out.gitStore == nil && a.req.GitObjectStore != nil {
+		a.out.gitStore = a.req.GitObjectStore
+	}
 	if a.out.gitStore == nil && a.gitStores != nil {
 		store, err := a.gitStores.storeForPrepare(a.req.RuntimeDir, a.narrowed)
 		if err != nil {

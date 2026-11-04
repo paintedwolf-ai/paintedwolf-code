@@ -33,7 +33,6 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 		t.Skip("real FUSE mount requires linux")
 	}
 
-	allowUndetachedGitEntry(t)
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")
 	backingDir := filepath.Join(tmp, "backing")
@@ -47,19 +46,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	}
 
 	// 1. Seed canonical TrunkRoot Git repository.
-	gittest.Init(t, trunkDir)
-	gittest.Run(t, trunkDir, "checkout", "-b", "main")
-	if err := os.WriteFile(filepath.Join(trunkDir, "README.md"), []byte("initial readme\n"), 0o644); err != nil {
-		t.Fatalf("write trunk README.md: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {
-		t.Fatalf("mkdir trunk src: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(trunkDir, "src", "app.go"), []byte("package src\n"), 0o644); err != nil {
-		t.Fatalf("write trunk src/app.go: %v", err)
-	}
-	gittest.CommitAll(t, trunkDir, "initial trunk commit")
-	trunkInitialHead := strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", "HEAD"))
+	trunkInitialHead := seedWorkflowTrunk(t, trunkDir)
 	trunkBefore := snapshotTreeDigests(t, trunkDir)
 
 	// 2. Construct privategit.Manager and fuselinux.Adapter; prepare and mount the real fusermount3 view.
@@ -132,27 +119,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	}
 
 	gitExec := privategit.NewGitExecutor(gitMgr, viewID, privategit.RemotePolicy{})
-	statusOut, err := gitExec.Status(t.Context(), "--porcelain=v1")
-	if err != nil || !strings.Contains(statusOut, "README.md") || !strings.Contains(statusOut, "pkg/") {
-		t.Fatalf("unexpected git status over mounted view: err=%v\n%s", err, statusOut)
-	}
-	if _, err := gitExec.Run(t.Context(), ".", "add", "README.md", "pkg/feature.go"); err != nil {
-		t.Fatalf("git add over mounted view: %v", err)
-	}
-	if _, err := gitExec.Commit(t.Context(), "worker commit over real fuselinux mount"); err != nil {
-		t.Fatalf("git commit over mounted view: %v", err)
-	}
-	if _, err := gitExec.Run(t.Context(), ".", "branch", "worker/feature"); err != nil {
-		t.Fatalf("git branch over mounted view: %v", err)
-	}
-	workerHeadOID, err := gitExec.Run(t.Context(), ".", "rev-parse", "HEAD")
-	if err != nil {
-		t.Fatalf("git rev-parse HEAD in worker view: %v", err)
-	}
-	workerHeadOID = strings.TrimSpace(workerHeadOID)
-	if workerHeadOID == "" || workerHeadOID == trunkInitialHead {
-		t.Fatalf("expected new worker commit OID distinct from trunk (%s), got %q", trunkInitialHead, workerHeadOID)
-	}
+	workerHeadOID := commitThroughPrivateGit(t, gitExec, trunkInitialHead)
 
 	// Exercise unrestricted shell `git` subprocesses directly inside mountPath (with cwd = mountPath).
 	shellGitCmd := exec.CommandContext(t.Context(), "/bin/sh", "-c",
@@ -186,12 +153,95 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("CaptureCheckpointGitState: state=%+v err=%v", cpGitState, err)
 	}
 
+	cpStore := publishWorkflowCheckpoint(t, adp, prep.Core, cpStoreDir, trunkDir, viewID, workerID, checkpointID, cpGitState)
+
+	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
+	relReceipt, err := adp.Release(t.Context(), viewID)
+	if err != nil || !relReceipt.Settled {
+		t.Fatalf("Release failed: receipt=%+v err=%v", relReceipt, err)
+	}
+	if _, err := gitExec.Status(t.Context()); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
+		t.Fatalf("expected ErrMountedWorktreeUnavailable from Status after Release, got %v", err)
+	}
+
+	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
+	promoteWorkflowCheckpoint(t, gitMgr, cpStore, trunkDir, workerID, checkpointID, cpGitState)
+
+	promotedReadme, err := os.ReadFile(filepath.Join(trunkDir, "README.md"))
+	if err != nil || string(promotedReadme) != "updated by worker over fuse\n" {
+		t.Fatalf("expected promoted README.md in trunk, got %q err=%v", string(promotedReadme), err)
+	}
+	promotedFeature, err := os.ReadFile(filepath.Join(trunkDir, "pkg", "feature.go"))
+	if err != nil || string(promotedFeature) != "package pkg\n" {
+		t.Fatalf("expected promoted pkg/feature.go in trunk, got %q err=%v", string(promotedFeature), err)
+	}
+	importedMainRef, err := privategit.NamespacedRef(workerID, checkpointID, "refs/heads/main")
+	if err != nil {
+		t.Fatalf("NamespacedRef: %v", err)
+	}
+	resolvedImportedOID := strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", importedMainRef))
+	if resolvedImportedOID != workerHeadOID {
+		t.Fatalf("expected imported ref %s in trunk to resolve to %s, got %s", importedMainRef, workerHeadOID, resolvedImportedOID)
+	}
+}
+
+func commitThroughPrivateGit(t *testing.T, gitExec *privategit.GitExecutor, trunkInitialHead string) string {
+	t.Helper()
+	statusOut, err := gitExec.Status(t.Context(), "--porcelain=v1")
+	if err != nil || !strings.Contains(statusOut, "README.md") || !strings.Contains(statusOut, "pkg/") {
+		t.Fatalf("unexpected git status over mounted view: err=%v\n%s", err, statusOut)
+	}
+	if _, err := gitExec.Run(t.Context(), ".", "add", "README.md", "pkg/feature.go"); err != nil {
+		t.Fatalf("git add over mounted view: %v", err)
+	}
+	if _, err := gitExec.Commit(t.Context(), "worker commit over real fuselinux mount"); err != nil {
+		t.Fatalf("git commit over mounted view: %v", err)
+	}
+	if _, err := gitExec.Run(t.Context(), ".", "branch", "worker/feature"); err != nil {
+		t.Fatalf("git branch over mounted view: %v", err)
+	}
+	workerHeadOID, err := gitExec.Run(t.Context(), ".", "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("git rev-parse HEAD in worker view: %v", err)
+	}
+	workerHeadOID = strings.TrimSpace(workerHeadOID)
+	if workerHeadOID == "" || workerHeadOID == trunkInitialHead {
+		t.Fatalf("expected new worker commit OID distinct from trunk (%s), got %q", trunkInitialHead, workerHeadOID)
+	}
+	return workerHeadOID
+}
+
+func seedWorkflowTrunk(t *testing.T, trunkDir string) string {
+	t.Helper()
+	gittest.Init(t, trunkDir)
+	gittest.Run(t, trunkDir, "checkout", "-b", "main")
+	if err := os.WriteFile(filepath.Join(trunkDir, "README.md"), []byte("initial readme\n"), 0o644); err != nil {
+		t.Fatalf("write trunk README.md: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {
+		t.Fatalf("mkdir trunk src: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(trunkDir, "src", "app.go"), []byte("package src\n"), 0o644); err != nil {
+		t.Fatalf("write trunk src/app.go: %v", err)
+	}
+	gittest.CommitAll(t, trunkDir, "initial trunk commit")
+	return strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", "HEAD"))
+}
+
+func publishWorkflowCheckpoint(
+	t *testing.T,
+	adp *fuselinux.Adapter,
+	core *layeredfs.Core,
+	cpStoreDir, trunkDir, viewID, workerID, checkpointID string,
+	cpGitState *privategit.CheckpointGitState,
+) *checkpoint.Store {
+	t.Helper()
 	cpStore, err := checkpoint.NewStore(cpStoreDir)
 	if err != nil {
 		t.Fatalf("checkpoint.NewStore: %v", err)
 	}
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
-		Core:             prep.Core,
+		Core:             core,
 		Store:            cpStore,
 		WorkerID:         workerID,
 		TaskID:           "task-e2e",
@@ -219,17 +269,17 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	if err != nil || pubRes.Manifest.CheckpointID != checkpointID {
 		t.Fatalf("Publish checkpoint failed: %v", err)
 	}
+	return cpStore
+}
 
-	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
-	relReceipt, err := adp.Release(t.Context(), viewID)
-	if err != nil || !relReceipt.Settled {
-		t.Fatalf("Release failed: receipt=%+v err=%v", relReceipt, err)
-	}
-	if _, err := gitExec.Status(t.Context()); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
-		t.Fatalf("expected ErrMountedWorktreeUnavailable from Status after Release, got %v", err)
-	}
-
-	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
+func promoteWorkflowCheckpoint(
+	t *testing.T,
+	gitMgr *privategit.Manager,
+	cpStore *checkpoint.Store,
+	trunkDir, workerID, checkpointID string,
+	cpGitState *privategit.CheckpointGitState,
+) {
+	t.Helper()
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       cpStore,
 		TargetRoots: map[string]string{"primary": trunkDir},
@@ -256,23 +306,6 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	applyRes, err := promoter.Apply(t.Context(), checkpoint.ApplyRequest{Preview: preview, ImportGitRefs: true})
 	if err != nil || len(applyRes.ImportedRefs) == 0 {
 		t.Fatalf("promoter.Apply failed: res=%+v err=%v", applyRes, err)
-	}
-
-	promotedReadme, err := os.ReadFile(filepath.Join(trunkDir, "README.md"))
-	if err != nil || string(promotedReadme) != "updated by worker over fuse\n" {
-		t.Fatalf("expected promoted README.md in trunk, got %q err=%v", string(promotedReadme), err)
-	}
-	promotedFeature, err := os.ReadFile(filepath.Join(trunkDir, "pkg", "feature.go"))
-	if err != nil || string(promotedFeature) != "package pkg\n" {
-		t.Fatalf("expected promoted pkg/feature.go in trunk, got %q err=%v", string(promotedFeature), err)
-	}
-	importedMainRef, err := privategit.NamespacedRef(workerID, checkpointID, "refs/heads/main")
-	if err != nil {
-		t.Fatalf("NamespacedRef: %v", err)
-	}
-	resolvedImportedOID := strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", importedMainRef))
-	if resolvedImportedOID != workerHeadOID {
-		t.Fatalf("expected imported ref %s in trunk to resolve to %s, got %s", importedMainRef, workerHeadOID, resolvedImportedOID)
 	}
 }
 

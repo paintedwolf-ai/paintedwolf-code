@@ -244,7 +244,13 @@ func resolveAndValidateGitSpec(spec SeedGitRepoSpec) (string, string, []string, 
 		}
 		gitDir = canonicalGitPath(target)
 		if !isPathUnderAllowed(gitDir, allowed) {
-			return "", "", nil, unauthorizedGitError("external gitlink target is outside granted roots")
+			common, proofErr := privategit.ProveLinkedWorktree(spec.SourceGitPath, gitDir)
+			if proofErr != nil {
+				return "", "", nil, unauthorizedGitError("external gitlink target is outside granted roots")
+			}
+			// The worktree's shared repository is authorized by that linkage, and its
+			// alternates still answer to the same check as any other.
+			allowed = append(allowed, gitDir, common)
 		}
 	} else {
 		linfo, err := os.Lstat(spec.SourceGitPath)

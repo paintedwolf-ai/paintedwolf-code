@@ -103,3 +103,17 @@ func (s *Server) NodeIDForTest(rel string) (uint64, bool) {
 	}
 	return fn.fuseID, true
 }
+
+// DetachMountEntry rewrites a raw test command so nothing on a mount is touched before its execve.
+// The server runs inside the process, and between fork and exec Go's vfork child holds a scheduler
+// slot that a stop-the-world waits for. A chdir into the mount, or executing a program from it, needs
+// a server reply at that point, which a server that cannot be scheduled cannot give, so the process
+// hangs. Production has no raw start: internal/exec enters the directory from a helper after exec.
+func DetachMountEntry(cmd *exec.Cmd) {
+	dir := cmd.Dir
+	if dir == "" {
+		dir = "."
+	}
+	args := append([]string{"/bin/sh", "-c", `cd "$1" && shift && exec "$@"`, "sh", dir, cmd.Path}, cmd.Args[1:]...)
+	cmd.Path, cmd.Args, cmd.Dir = "/bin/sh", args, ""
+}

@@ -3,6 +3,7 @@ package claim
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -180,25 +181,62 @@ func (c *Coordinator) UpdateFocusPathHints(viewID string, focusHints []string) (
 	return cv.State, nil
 }
 
-// ReleaseWorkerView settles and releases the claimed view and its retention claim.
+// ReleaseWorkerView settles the claimed view and only then drops its retention claim and metadata.
+// A view that fails settlement stays in custody and reports recovery required; call again to retry.
 func (c *Coordinator) ReleaseWorkerView(ctx context.Context, viewID string, retention RetentionRegistrar) error {
 	c.mu.Lock()
-	cv, ok := c.views[viewID]
-	if ok {
-		delete(c.views, viewID)
-	}
+	cv, active := c.views[viewID]
+	pending, inCustody := c.unsettled[viewID]
+	retained := c.failedSnapshots[viewID]
 	c.mu.Unlock()
-	if !ok {
+	var identity ClaimIdentity
+	switch {
+	case inCustody:
+		identity = retained.Identity
+		if active {
+			identity = cv.Identity
+		}
+	case active:
+		identity = cv.Identity
+		pending = &unsettledView{adapter: cv.Adapter, privateGit: cv.privateGit, metaPath: cv.metaPath, retentionClaimID: cv.RetentionClaimID}
+	default:
 		return nil
 	}
-	if retention != nil && cv.RetentionClaimID != "" {
-		_ = retention.ReleaseClaim(cv.RetentionClaimID)
+	if pending.adapter == nil {
+		return fmt.Errorf("%w: view %q has no adapter to settle", ErrSettlementUnresolved, viewID)
 	}
-	if cv.Adapter != nil {
-		_, err := cv.Adapter.Release(ctx, viewID)
-		return err
+	err := c.settleView(ctx, identity, pending, retention)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err == nil {
+		delete(c.views, viewID)
+		delete(c.failedSnapshots, viewID)
+		return nil
 	}
-	return nil
+	if active {
+		cv.State.Readiness = StateRecoveryRequired
+		cv.State.Notice = FallbackNotice{Severity: SeverityError, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: err.Error()}
+		cv.State.SupportedActions = deriveSupportedActions(cv.State)
+	}
+	return err
+}
+
+// SettlementUnresolved reports whether viewID failed settlement and remains in custody.
+func (c *Coordinator) SettlementUnresolved(viewID string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	_, ok := c.unsettled[viewID]
+	return ok
+}
+
+func (c *Coordinator) recordRecoveryRequired(viewID string, snap WorkspaceStateSnapshot, cause error) WorkspaceStateSnapshot {
+	snap.Readiness = StateRecoveryRequired
+	snap.Notice = FallbackNotice{Severity: SeverityError, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: cause.Error()}
+	snap.SupportedActions = deriveSupportedActions(snap)
+	c.mu.Lock()
+	c.failedSnapshots[viewID] = snap
+	c.mu.Unlock()
+	return snap
 }
 
 // LoadOrUpgradeRetainedView loads a Format-v2 or Format-v1 metadata file and returns its
@@ -243,6 +281,9 @@ func collectPreparedRootPaths(roots []adapter.PreparedRoot) []string {
 	}
 	return out
 }
+
+// ClassifyFailureReason returns the typed reason a claim or preparation error carries.
+func ClassifyFailureReason(err error) adapter.ReasonCode { return classifyClaimReason(err) }
 
 func classifyClaimReason(err error) adapter.ReasonCode {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

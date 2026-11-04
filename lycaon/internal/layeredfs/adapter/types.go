@@ -42,28 +42,28 @@ const (
 type ReasonCode string
 
 const (
-	ReasonNone                       ReasonCode = ""
-	ReasonUnsupportedKernel          ReasonCode = "unsupported_kernel"
-	ReasonUnsupportedPlatform        ReasonCode = "unsupported_platform"
-	ReasonMountDenied                ReasonCode = "mount_denied"
-	ReasonFUSEDeviceUnavailable      ReasonCode = "fuse_device_unavailable"
-	ReasonFUSEHelperUnavailable      ReasonCode = "fuse_helper_unavailable"
-	ReasonFUSEMountDenied            ReasonCode = "fuse_mount_denied"
-	ReasonConfinementUnavailable     ReasonCode = "confinement_unavailable"
-	ReasonHelperMissing              ReasonCode = "helper_missing"
-	ReasonMountHelperUnavailable     ReasonCode = "mount_helper_unavailable"
-	ReasonBackingConfinementFailed   ReasonCode = "backing_confinement_failed"
-	ReasonTransientStartupFailure    ReasonCode = "transient_startup_failure"
-	ReasonProbeReadWriteFailed       ReasonCode = "probe_read_write_failed"
-	ReasonCleanupFailed              ReasonCode = "cleanup_failed"
-	ReasonBarrierFailed              ReasonCode = "barrier_failed"
-	ReasonPreparationLimit           ReasonCode = "workspace_preparation_limit"
-	ReasonWorkspacePreparationLimit  ReasonCode = "workspace_preparation_limit"
-	ReasonUnauthorizedRoot           ReasonCode = "unauthorized_root"
-	ReasonInvalidSelection           ReasonCode = "invalid_selection"
-	ReasonActiveViewMutated          ReasonCode = "active_view_mutated"
-	ReasonViewNotFound               ReasonCode = "view_not_found"
-	ReasonContextCanceled            ReasonCode = "context_canceled"
+	ReasonNone                      ReasonCode = ""
+	ReasonUnsupportedKernel         ReasonCode = "unsupported_kernel"
+	ReasonUnsupportedPlatform       ReasonCode = "unsupported_platform"
+	ReasonMountDenied               ReasonCode = "mount_denied"
+	ReasonFUSEDeviceUnavailable     ReasonCode = "fuse_device_unavailable"
+	ReasonFUSEHelperUnavailable     ReasonCode = "fuse_helper_unavailable"
+	ReasonFUSEMountDenied           ReasonCode = "fuse_mount_denied"
+	ReasonConfinementUnavailable    ReasonCode = "confinement_unavailable"
+	ReasonHelperMissing             ReasonCode = "helper_missing"
+	ReasonMountHelperUnavailable    ReasonCode = "mount_helper_unavailable"
+	ReasonBackingConfinementFailed  ReasonCode = "backing_confinement_failed"
+	ReasonTransientStartupFailure   ReasonCode = "transient_startup_failure"
+	ReasonProbeReadWriteFailed      ReasonCode = "probe_read_write_failed"
+	ReasonCleanupFailed             ReasonCode = "cleanup_failed"
+	ReasonBarrierFailed             ReasonCode = "barrier_failed"
+	ReasonPreparationLimit          ReasonCode = "workspace_preparation_limit"
+	ReasonWorkspacePreparationLimit ReasonCode = "workspace_preparation_limit"
+	ReasonUnauthorizedRoot          ReasonCode = "unauthorized_root"
+	ReasonInvalidSelection          ReasonCode = "invalid_selection"
+	ReasonActiveViewMutated         ReasonCode = "active_view_mutated"
+	ReasonViewNotFound              ReasonCode = "view_not_found"
+	ReasonContextCanceled           ReasonCode = "context_canceled"
 )
 
 // Default limits for materialized workspace fallback (#1658).
@@ -108,7 +108,7 @@ type AdapterFacts struct {
 
 // ProbeConfig configures a real confinement probe of an adapter.
 type ProbeConfig struct {
-	RuntimeDir string
+	RuntimeDir         string
 	ConfinementContext string
 }
 
@@ -206,6 +206,8 @@ type PrepareRequest struct {
 	ParentLayers    []layeredfs.ParentLayer
 	GitInterceptor  layeredfs.GitInterceptor
 	ObservationSink layeredfs.ObservationSink
+	// GitObjectStore retains materialized seed Git objects in the host's store instead of a per-root one.
+	GitObjectStore  *privategit.RetainedObjectStore
 	MaxEntries      int64
 	MaxBytes        int64
 	ProgressFn      func(FallbackProgress)
@@ -243,6 +245,8 @@ type PreparedView struct {
 }
 
 // CommandAccessSpec supplies mounted/materialized paths and confinement facts to the command launcher.
+// A process in a view starts through internal/exec with its Dir or program at these paths, whose
+// helper enters them after exec; nothing starts one with a raw working directory.
 type CommandAccessSpec struct {
 	ViewID           string            `json:"view_id"`
 	AdapterID        AdapterID         `json:"adapter_id"`
@@ -296,24 +300,31 @@ func (e *AdapterError) Unwrap() error { return e.Cause }
 
 // PreparationLimitError is returned when materialized seeding exceeds entry or byte limits.
 type PreparationLimitError struct {
-	ReasonCode               ReasonCode       `json:"reason_code"`
-	ViewID                   string           `json:"view_id"`
-	RootID                   string           `json:"root_id"`
-	SelectedRoots            []string         `json:"selected_roots"`
-	ObservedEntries          int64            `json:"observed_entries"`
-	ObservedBytes            int64            `json:"observed_bytes"`
-	MaxEntries               int64            `json:"max_entries"`
-	MaxBytes                 int64            `json:"max_bytes"`
-	EstimatedRejection       bool             `json:"estimated_rejection"`
-	CleanedIncompleteSeed    bool             `json:"cleaned_incomplete_seed"`
-	RetryWithSmallerSelection bool            `json:"retry_with_smaller_selection"`
-	SuggestedSubroots        []string         `json:"suggested_subroots,omitempty"`
-	Diagnostic               string           `json:"diagnostic"`
+	ReasonCode                ReasonCode `json:"reason_code"`
+	ViewID                    string     `json:"view_id"`
+	RootID                    string     `json:"root_id"`
+	SelectedRoots             []string   `json:"selected_roots"`
+	ObservedEntries           int64      `json:"observed_entries"`
+	ObservedBytes             int64      `json:"observed_bytes"`
+	MaxEntries                int64      `json:"max_entries"`
+	MaxBytes                  int64      `json:"max_bytes"`
+	EstimatedRejection        bool       `json:"estimated_rejection"`
+	CleanedIncompleteSeed     bool       `json:"cleaned_incomplete_seed"`
+	RetryWithSmallerSelection bool       `json:"retry_with_smaller_selection"`
+	SuggestedSubroots         []string   `json:"suggested_subroots,omitempty"`
+	Diagnostic                string     `json:"diagnostic"`
 }
 
 func (e *PreparationLimitError) Error() string {
 	return fmt.Sprintf("%s: root %s observed (%d entries, %d bytes) exceeds limit (%d entries, %d bytes): %s",
 		e.ReasonCode, e.RootID, e.ObservedEntries, e.ObservedBytes, e.MaxEntries, e.MaxBytes, e.Diagnostic)
+}
+
+// MountSupervisor is the live custody a mounted adapter holds over its views. Git bound through it
+// is revoked when the serving process dies or the view is released.
+type MountSupervisor interface {
+	IsViewActive(viewID string) bool
+	BindPrivateGit(viewID, workerID string, mgr *privategit.Manager, authorizedGitDirs ...string) error
 }
 
 // Adapter defines the platform-neutral workspace adapter contract (#1658).

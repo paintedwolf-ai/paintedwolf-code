@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
@@ -101,14 +102,10 @@ type WorkspaceStrategySelection struct {
 	Adapter   adapter.Adapter      `json:"-"`
 }
 
-// DefaultWorkspaceSelector returns the standard platform capability selector (fuselinux, nfsdarwin, eagercopy).
+// DefaultWorkspaceSelector returns this host's selector. No confinement enforcer exists yet, so its
+// mounted adapter reports confinement_unavailable and selection falls back to materialized views.
 func DefaultWorkspaceSelector() *adapter.Selector {
-	return adapter.NewSelector(
-		"",
-		adapter.NewFUSELinuxAdapter(),
-		adapter.NewNFSDarwinAdapter(),
-		adapter.NewEagerCopyAdapter(adapter.ReasonNone),
-	)
+	return platform.NewSelector(platform.Config{})
 }
 
 // StrategyForAdapterFacts derives the ProvisionStrategy from structured AdapterFacts without OS branching.

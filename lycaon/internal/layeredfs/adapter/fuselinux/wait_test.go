@@ -7,19 +7,6 @@ import (
 	"time"
 )
 
-// allowUndetachedGitEntry makes private Git safe for one test. privategit runs git with its working
-// directory on the mount, which is the hang DetachMountEntry prevents, and routing it there belongs
-// to production wiring. Until then the test must keep GC and the sole scheduler slot out of the way.
-func allowUndetachedGitEntry(t *testing.T) {
-	t.Helper()
-	gcPercent := debug.SetGCPercent(-1)
-	procs := runtime.GOMAXPROCS(max(4, runtime.GOMAXPROCS(0)))
-	t.Cleanup(func() {
-		runtime.GOMAXPROCS(procs)
-		debug.SetGCPercent(gcPercent)
-	})
-}
-
 // copyToMapping writes to a mapping of the mount from this process. A page fault cannot be
 // preempted and needs a server reply, so it needs another scheduler slot and no stop-the-world.
 // The engine never maps mount files; only these tests do.

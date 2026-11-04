@@ -141,14 +141,18 @@ func NewEngine(cfg EngineConfig) (*Engine, error) {
 		backingDir: backingDir, lowerPaths: lowerPaths, ckptStore: cfg.CheckpointStore,
 		tracker: tracker, index: cfg.Index,
 	}
-	if cfg.PreparedView != nil {
-		RegisterBranchEngine(cfg.PreparedView.PrimaryWorkPath, eng)
-		RegisterBranchEngine(cfg.PreparedView.RuntimeViewDir, eng)
-	}
-	for _, mnt := range mountedPaths {
-		RegisterBranchEngine(mnt, eng)
-	}
+	eng.registerViewPaths()
 	return eng, nil
+}
+
+func (e *Engine) registerViewPaths() {
+	if e.preparedView != nil {
+		RegisterBranchEngine(e.preparedView.PrimaryWorkPath, e)
+		RegisterBranchEngine(e.preparedView.RuntimeViewDir, e)
+	}
+	for _, mnt := range e.mountedPaths {
+		RegisterBranchEngine(mnt, e)
+	}
 }
 
 // Tracker returns the Engine's observation.Tracker.

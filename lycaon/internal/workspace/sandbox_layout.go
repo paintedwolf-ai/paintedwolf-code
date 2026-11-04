@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
@@ -203,7 +204,11 @@ func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
 
 func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef) error {
 	branchRoot := binding.Root
-	choice, err := SelectWorkspaceAdapter(ctx, adapter.ProbeConfig{RuntimeDir: filepath.Join(m.branchRoot, ".adapter")}, m.selector)
+	services, err := m.layered()
+	if err != nil {
+		return err
+	}
+	choice, err := SelectWorkspaceAdapter(ctx, adapter.ProbeConfig{RuntimeDir: filepath.Join(m.branchRoot, adapterStateDirName)}, m.selector)
 	if err != nil {
 		return classifyProvisionError(err)
 	}
@@ -212,7 +217,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 	_, hints, _ := workspaceSelectionFromContext(ctx)
 
 	if choice.Facts.PreparationKind == adapter.PreparationMounted {
-		view, cv, err := prepareMountedWorkspaceView(ctx, m, binding, sources, choice.Adapter)
+		view, cv, err := prepareMountedWorkspaceView(ctx, m, binding, sources, choice)
 		if err != nil {
 			return classifyProvisionError(err)
 		}
@@ -222,13 +227,16 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 	}
 
 	if len(sources) == 1 {
-		rtDir := filepath.Join(m.branchRoot, ".adapter", enginepaths.ProjectKey(sources[0].Path))
+		rtDir := filepath.Join(m.branchRoot, adapterStateDirName, enginepaths.ProjectKey(sources[0].Path))
 		view, err := provisionRoot(ctx, m, sources[0], branchRoot, rtDir, binding.ID, choice.Facts.FallbackReason)
 		if err != nil {
 			return err
 		}
 		binding.View = view
 		m.recordBranchViews(branchRoot, choice, view)
+		if err := adoptMaterializedGit(ctx, services, binding.ID, binding.ID, "", sources[0], view, branchRoot); err != nil {
+			return err
+		}
 		return markSnapshotCompleteWithClaim(branchRoot, choice, view, nil, hints)
 	}
 	var views []*adapter.PreparedView
@@ -237,18 +245,57 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 		if err != nil {
 			return err
 		}
-		rtDir := filepath.Join(m.branchRoot, ".adapter", enginepaths.ProjectKey(source.Path))
-		view, err := provisionRoot(ctx, m, source, filepath.Join(branchRoot, dir), rtDir, binding.ID+"-"+source.ID, choice.Facts.FallbackReason)
+		rtDir := filepath.Join(m.branchRoot, adapterStateDirName, enginepaths.ProjectKey(source.Path))
+		viewID := binding.ID + "-" + source.ID
+		view, err := provisionRoot(ctx, m, source, filepath.Join(branchRoot, dir), rtDir, viewID, choice.Facts.FallbackReason)
 		if err != nil {
 			return err
 		}
 		views = append(views, view)
+		m.recordBranchViews(branchRoot, choice, views...)
+		workerID, branchDir := viewID, ""
+		if source.IsPrimary {
+			workerID, branchDir = binding.ID, branchRoot
+		}
+		if err := adoptMaterializedGit(ctx, services, viewID, workerID, branchDir, source, view, filepath.Join(branchRoot, dir)); err != nil {
+			return err
+		}
 		if source.IsPrimary || binding.View == nil {
 			binding.View = view
 		}
 	}
-	m.recordBranchViews(branchRoot, choice, views...)
 	return markSnapshotCompleteWithClaim(branchRoot, choice, binding.View, nil, hints)
+}
+
+// adoptMaterializedGit hands the repositories a seed prepared to the private Git manager. Only the
+// primary root's view carries the worker's identity, which is what Git admission looks a view up by.
+func adoptMaterializedGit(
+	ctx context.Context,
+	services *layeredServices,
+	viewID, workerID, branchDir string,
+	source projectroot.RootRef,
+	view *adapter.PreparedView,
+	worktreeDir string,
+) error {
+	repos := make([]privategit.SeededRepo, 0, len(view.SeededGitRepos))
+	for key, seeded := range view.SeededGitRepos {
+		_, repoRel, _ := strings.Cut(key, ":")
+		repos = append(repos, privategit.SeededRepo{
+			RepoRel: repoRel, PrivateGitDir: seeded.PrivateMetaDir,
+			Metrics: privategit.InitMetrics{ObjectsReused: seeded.ObjectsReused, BytesImported: seeded.BytesImported, BytesReused: seeded.BytesReused},
+		})
+	}
+	err := services.privateGit.AdoptMaterializedView(ctx, privategit.MaterializedViewBinding{
+		ViewID: viewID, WorkerID: workerID, RootID: view.PrimaryRootID,
+		TrunkDir: source.Path, WorktreeDir: worktreeDir, Core: view.Core, Repos: repos,
+	})
+	if err != nil {
+		return err
+	}
+	if branchDir == "" {
+		return nil
+	}
+	return services.privateGit.BindViewBranch(viewID, branchDir)
 }
 
 // jobIDForBranch is the branch directory name: the worker job id.

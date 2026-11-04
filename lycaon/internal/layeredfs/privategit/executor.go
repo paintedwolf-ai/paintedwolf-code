@@ -56,35 +56,14 @@ func (e *GitExecutor) Commit(ctx context.Context, message string, args ...string
 	return e.Run(ctx, ".", cmdArgs...)
 }
 
-// Revert runs `git revert --no-edit <commit>` in the primary repository.
-func (e *GitExecutor) Revert(ctx context.Context, commit string, args ...string) (string, error) {
-	cmdArgs := append([]string{"revert", "--no-edit", commit}, args...)
-	return e.Run(ctx, ".", cmdArgs...)
-}
-
 // Checkout runs `git checkout` in the primary repository.
 func (e *GitExecutor) Checkout(ctx context.Context, args ...string) (string, error) {
 	return e.Run(ctx, ".", append([]string{"checkout"}, args...)...)
 }
 
-// Switch runs `git switch` in the primary repository.
-func (e *GitExecutor) Switch(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"switch"}, args...)...)
-}
-
 // Stash runs `git stash` in the primary repository.
 func (e *GitExecutor) Stash(ctx context.Context, args ...string) (string, error) {
 	return e.Run(ctx, ".", append([]string{"stash"}, args...)...)
-}
-
-// WorktreeList runs `git worktree list` in the primary repository.
-func (e *GitExecutor) WorktreeList(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"worktree", "list"}, args...)...)
-}
-
-// SubmoduleStatus runs `git submodule status` in the primary repository.
-func (e *GitExecutor) SubmoduleStatus(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"submodule", "status"}, args...)...)
 }
 
 // Fetch runs `git fetch <remote>` subject to RemotePolicy egress and approval controls.

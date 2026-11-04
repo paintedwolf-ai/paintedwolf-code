@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -15,12 +16,14 @@ import (
 	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
 type branchClaimRecord struct {
 	claimed *claim.ClaimedView
 	state   claim.WorkspaceStateSnapshot
+	layered *branchLayeredView
 }
 
 var (
@@ -28,9 +31,9 @@ var (
 	branchClaimStates = make(map[string]branchClaimRecord)
 )
 
-func recordBranchClaimState(branchRoot string, cv *claim.ClaimedView, snap claim.WorkspaceStateSnapshot) {
+func recordBranchClaimState(branchRoot string, cv *claim.ClaimedView, snap claim.WorkspaceStateSnapshot, layered *branchLayeredView) {
 	branchClaimsMu.Lock()
-	branchClaimStates[filepath.Clean(branchRoot)] = branchClaimRecord{claimed: cv, state: snap}
+	branchClaimStates[filepath.Clean(branchRoot)] = branchClaimRecord{claimed: cv, state: snap, layered: layered}
 	branchClaimsMu.Unlock()
 }
 
@@ -117,7 +120,11 @@ func acquireWorkspaceProvisionLock(ctx context.Context, branchRoot string) (func
 	}
 }
 
-func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, adp adapter.Adapter) (*adapter.PreparedView, *claim.ClaimedView, error) {
+func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, choice WorkspaceStrategySelection) (*adapter.PreparedView, *claim.ClaimedView, error) {
+	services, err := m.layered()
+	if err != nil {
+		return nil, nil, err
+	}
 	grants := make([]adapter.RootGrant, 0, len(sources))
 	targetDirs := make(map[string]string, len(sources))
 	primaryPath := sources[0].Path
@@ -144,32 +151,61 @@ func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Bindi
 			primaryPath = s.Path
 		}
 	}
+	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: binding.ID, Facts: observation.UnknownVisibilityFacts(string(choice.AdapterID))})
+	if err != nil {
+		return nil, nil, err
+	}
 	maxEntries, maxBytes := effectiveLimits(ctx, m)
 	_, hints, _ := workspaceSelectionFromContext(ctx)
 	projKey := enginepaths.ProjectKey(primaryPath)
-	coord := claim.NewCoordinator(adapter.NewSelector("", adp, nil, adp))
-	cv, snap, err := coord.ClaimWorkerView(ctx, claim.ClaimRequest{
+	projectID := workspaceProjectFromContext(ctx, projKey)
+	metaDir := enginepaths.MetaDirForBranchRoot(binding.Root)
+	cv, snap, err := services.coordinator.ClaimSelectedView(ctx, claim.ClaimRequest{
 		Identity: claim.ClaimIdentity{
 			WorkerID:         binding.ID,
-			ProjectID:        projKey,
+			ProjectID:        projectID,
 			ViewID:           binding.ID,
 			SourceGeneration: 1,
 		},
 		Storage: claim.ClaimStorage{
-			RuntimeDir:     filepath.Join(m.branchRoot, ".adapter", projKey),
+			RuntimeDir:     filepath.Join(m.branchRoot, adapterStateDirName, projKey),
+			BackingDir:     filepath.Join(metaDir, "backing"),
+			MetadataPath:   filepath.Join(metaDir, "view-metadata.json"),
 			TargetRootDirs: targetDirs,
 		},
 		Grants:         grants,
 		FocusPathHints: hints,
 		Limits:         claim.ClaimLimits{MaxEntries: maxEntries, MaxBytes: maxBytes},
-	})
+		Hooks: claim.ClaimHooks{
+			Retention:         services.retention,
+			VerifyConfinement: m.selector.VerifyViewConfinement,
+			PrivateGit:        services.privateGit,
+			Quiesce:           viewWritersHeldByBarrier,
+			FlushClient:       viewWritersHeldByBarrier,
+			Observations:      tracker,
+		},
+	}, choice.Adapter, choice.Probe)
 	if err != nil {
-		recordBranchClaimState(binding.Root, nil, snap)
+		recordBranchClaimState(binding.Root, nil, snap, nil)
 		return nil, nil, err
 	}
-	recordBranchClaimState(binding.Root, cv, snap)
+	if len(sources) > 1 {
+		if err := services.privateGit.BindViewBranch(binding.ID, binding.Root); err != nil {
+			return nil, nil, errors.Join(err, services.coordinator.ReleaseWorkerView(ctx, binding.ID, services.retention))
+		}
+	}
+	layered, err := bindViewConsumer(binding, cv, projectID, tracker, services)
+	if err != nil {
+		return nil, nil, errors.Join(err, services.coordinator.ReleaseWorkerView(ctx, binding.ID, services.retention))
+	}
+	recordBranchClaimState(binding.Root, cv, snap, layered)
 	return cv.Prepared, cv, nil
 }
+
+// viewWritersHeldByBarrier is the barrier's writer step for an engine-served view. The server holds
+// every mutation at the gate for the barrier's whole span, including from a worker's background
+// process, so there is nothing further to stop and no writable mapping the engine holds.
+func viewWritersHeldByBarrier(context.Context, string) error { return nil }
 
 func materializeRootWithAdapter(
 	ctx context.Context, m *Manager, source projectroot.RootRef,
@@ -190,12 +226,17 @@ func materializeRootWithAdapter(
 	if strings.TrimSpace(runtimeDir) == "" {
 		runtimeDir = filepath.Join(enginepaths.MetaDirForBranchRoot(branchRoot), "adapter")
 	}
+	services, err := m.layered()
+	if err != nil {
+		return nil, mirrorResult{}, err
+	}
+	gitStore := services.privateGit.Store()
 	var res mirrorResult
 	req := adapter.PrepareRequest{
 		ViewID: viewID, RuntimeDir: runtimeDir,
 		TargetRootDirs: map[string]string{rootID: branchRoot},
 		Grants:         []adapter.RootGrant{{RootID: rootID, Label: label, SourcePath: sourceRoot, IsPrimary: true}},
-		MaxEntries:     maxEntries, MaxBytes: maxBytes,
+		MaxEntries:     maxEntries, MaxBytes: maxBytes, GitObjectStore: gitStore,
 		ProgressFn: func(_ adapter.FallbackProgress) {
 			progress := base
 			progress.Files, progress.Bytes = res.Files, res.Bytes
@@ -236,12 +277,30 @@ func materializeRootWithAdapter(
 	return view, res, err
 }
 
+// refuseLiveBranchView stops a rebuild from recursing through a mount or discarding an unsettled view.
+func (m *Manager) refuseLiveBranchView(branchRoot, jobID string) error {
+	if _, live := LookupBranchClaimedView(branchRoot); live {
+		return ErrBranchInUse
+	}
+	services, err := m.layered()
+	if err != nil {
+		return err
+	}
+	if services.coordinator.SettlementUnresolved(jobID) {
+		return fmt.Errorf("%w: view %q", claim.ErrSettlementUnresolved, jobID)
+	}
+	return nil
+}
+
 func (m *Manager) createBranchSkeleton(
 	ctx context.Context,
 	branchRoot string,
 	layout SandboxLayout,
 	jobID string,
 ) (*Binding, error) {
+	if err := m.refuseLiveBranchView(branchRoot, jobID); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(branchRoot), 0o700); err != nil {
 		return nil, classifyProvisionError(err)
 	}

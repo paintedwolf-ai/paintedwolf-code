@@ -143,6 +143,24 @@ type MaterializedSeedResult struct {
 	RepoMetrics   map[string]InitMetrics
 }
 
+// SeededRepo names private metadata a materialized seed built for one repository in its worktree.
+type SeededRepo struct {
+	RepoRel       string
+	PrivateGitDir string
+	Metrics       InitMetrics
+}
+
+// MaterializedViewBinding hands a seeded materialized worktree to this manager.
+type MaterializedViewBinding struct {
+	ViewID      string
+	WorkerID    string
+	RootID      string
+	TrunkDir    string
+	WorktreeDir string
+	Core        *layeredfs.Core
+	Repos       []SeededRepo
+}
+
 // StashEntry captures one recoverable worker stash entry at checkpoint time.
 type StashEntry struct {
 	Ref     string `json:"ref"`

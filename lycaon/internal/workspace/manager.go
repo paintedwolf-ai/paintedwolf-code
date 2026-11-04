@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
 var sharedBranchViews sync.Map // map[string]branchViewState
@@ -108,6 +109,20 @@ func WithWorkspaceSelection(ctx context.Context, selection adapter.WorkspaceSele
 	})
 }
 
+type workspaceProjectKey struct{}
+
+// WithWorkspaceProject names the project a worker view belongs to.
+func WithWorkspaceProject(ctx context.Context, projectID string) context.Context {
+	return context.WithValue(ctx, workspaceProjectKey{}, strings.TrimSpace(projectID))
+}
+
+func workspaceProjectFromContext(ctx context.Context, fallback string) string {
+	if id, ok := ctx.Value(workspaceProjectKey{}).(string); ok && id != "" {
+		return id
+	}
+	return fallback
+}
+
 // WithWorkspaceLimits overrides the maximum entries and bytes permitted for a workspace preparation call (#1658).
 func WithWorkspaceLimits(ctx context.Context, maxEntries, maxBytes int64) context.Context {
 	return context.WithValue(ctx, workspaceLimitsKey{}, workspaceLimitsContext{
@@ -156,6 +171,11 @@ type Manager struct {
 	selector   *adapter.Selector
 	viewsMu    sync.Mutex
 	views      map[string]branchViewState
+	privateGit *privategit.Manager
+
+	layeredOnce sync.Once
+	services    *layeredServices
+	servicesErr error
 }
 
 // NewManager returns a workspace manager rooted at out-of-repo branch and seed bases.
@@ -201,6 +221,15 @@ func (m *Manager) lookupBranchViews(branchRoot string) (WorkspaceStrategySelecti
 	return st.selection, st.views[0], true
 }
 
+// forgetBranchViews drops the record of views a claim settlement already released.
+func (m *Manager) forgetBranchViews(branchRoot string) {
+	key := filepath.Clean(branchRoot)
+	m.viewsMu.Lock()
+	delete(m.views, key)
+	m.viewsMu.Unlock()
+	sharedBranchViews.Delete(key)
+}
+
 func (m *Manager) releaseBranchViews(branchRoot string) {
 	m.viewsMu.Lock()
 	key := filepath.Clean(branchRoot)
@@ -216,6 +245,9 @@ func (m *Manager) releaseBranchViews(branchRoot string) {
 	for _, v := range st.views {
 		if v != nil {
 			_, _ = st.selection.Adapter.Release(context.Background(), v.ViewID)
+			if m.services != nil {
+				_ = m.services.privateGit.ReleaseView(v.ViewID)
+			}
 		}
 	}
 }

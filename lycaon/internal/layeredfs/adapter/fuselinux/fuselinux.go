@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	lexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -158,22 +159,6 @@ func NoopQuiesceHook(_ context.Context, _ string) error { return nil }
 // NoWritableMappingsFlushHook is a FlushClientHook for callers that hold no writable client mmap regions.
 func NoWritableMappingsFlushHook(_ context.Context, _ string) error { return nil }
 
-// DetachMountEntry rewrites cmd so nothing on a mount is touched before its execve. The server
-// runs inside the engine, and between fork and exec Go's vfork child holds a scheduler slot that a
-// stop-the-world waits for, and that is the only slot under GOMAXPROCS=1. A chdir into the mount,
-// or executing a program from it, needs a server reply at that point, which a server that cannot
-// be scheduled cannot give: the whole engine hangs.
-// Every process the engine itself starts in a view must go through this. Entering the mount after
-// exec, from a helper outside it, leaves the parent free.
-func DetachMountEntry(cmd *exec.Cmd) {
-	dir := cmd.Dir
-	if dir == "" {
-		dir = "."
-	}
-	args := append([]string{"/bin/sh", "-c", `cd "$1" && shift && exec "$@"`, "sh", dir, cmd.Path}, cmd.Args[1:]...)
-	cmd.Path, cmd.Args, cmd.Dir = "/bin/sh", args, ""
-}
-
 // ID returns the canonical adapter identifier (adapter.AdapterFUSELinux).
 func (a *Adapter) ID() adapter.AdapterID { return adapter.AdapterFUSELinux }
 
@@ -271,11 +256,9 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, err.Error()
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
 	}
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "cat probe.txt")
-	cmd.Dir = prep.PrimaryWorkPath
-	DetachMountEntry(cmd)
-	if out, cErr := cmd.CombinedOutput(); cErr != nil || strings.TrimSpace(string(out)) != "coherent-probe" {
-		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: err=%v out=%q", cErr, string(out))
+	out, _, code, cErr := lexec.RunSeparate(ctx, "/bin/sh", []string{"-c", "cat probe.txt"}, lexec.ExecOpts{Launch: lexec.HostLaunch("workspace mount probe"), Dir: prep.PrimaryWorkPath})
+	if cErr != nil || code != 0 || strings.TrimSpace(string(out)) != "coherent-probe" {
+		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: err=%v exit=%d out=%q", cErr, code, string(out))
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
 	}
 	res.WriteExercised = true

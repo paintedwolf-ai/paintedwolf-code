@@ -216,6 +216,13 @@ func (r *ActiveViewRegistry) Register(view *PreparedView, adp Adapter) {
 	r.views[view.ViewID] = &activeViewEntry{view: view, adapter: adp}
 }
 
+// Unregister drops viewID once its view has settled.
+func (r *ActiveViewRegistry) Unregister(viewID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.views, viewID)
+}
+
 // AdapterForView returns the fixed adapter and view for viewID if registered.
 func (r *ActiveViewRegistry) AdapterForView(viewID string) (Adapter, *PreparedView, bool) {
 	r.mu.RLock()

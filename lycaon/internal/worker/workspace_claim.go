@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -127,12 +128,17 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 	if task.Scope != nil && len(task.Scope.Paths) > 0 {
 		ctx = workspace.WithWorkspaceSelection(ctx, adapter.WorkspaceSelection{}, task.Scope.Paths...)
 	}
+	ctx = workspace.WithWorkspaceProject(ctx, task.ProjectID)
 	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(ctx, roots, sources, activeID, task.ID)
 	if err != nil {
+		readiness := claim.StateFailedPreparation
+		if errors.Is(err, claim.ErrSettlementUnresolved) {
+			readiness = claim.StateRecoveryRequired
+		}
 		recordWorkerClaimState(task.ID, claim.WorkspaceStateSnapshot{
-			Identity: claim.ClaimIdentity{WorkerID: task.ID, ProjectID: task.ProjectID, ViewID: task.ID},
-			Readiness: claim.StateFailedPreparation,
-			Notice: claim.FallbackNotice{Severity: claim.SeverityError, ReasonCode: adapter.ReasonMountDenied, Diagnostic: err.Error()},
+			Identity:  claim.ClaimIdentity{WorkerID: task.ID, ProjectID: task.ProjectID, ViewID: task.ID},
+			Readiness: readiness,
+			Notice:    claim.FallbackNotice{Severity: claim.SeverityError, ReasonCode: claim.ClassifyFailureReason(err), Diagnostic: err.Error()},
 		})
 		return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
@@ -237,8 +243,11 @@ func (q *SQLQueue) destroyWorkerWorkspace(_ context.Context, task *api.WorkerTas
 	q.mu.Lock()
 	ws := q.workerWorkspace
 	q.mu.Unlock()
-	if ws != nil {
-		_ = ws.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot})
+	if ws == nil {
+		return
+	}
+	if err := ws.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}); err != nil {
+		workerWorkspaceLog.Warn("worker workspace left in custody", "job_id", task.ID, "error", err)
 	}
 }
 

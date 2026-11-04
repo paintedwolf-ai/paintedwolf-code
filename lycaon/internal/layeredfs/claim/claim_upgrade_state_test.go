@@ -264,7 +264,7 @@ func TestClaimInterruptedAtEachBoundaryLeavesNoReadyPartialWorkerOrLeakedRetenti
 		Identity: ClaimIdentity{WorkerID: "survivor", ProjectID: "p", ViewID: "view-survivor"},
 		Storage:  ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt")},
 		Grants:   grants,
-		Hooks:    ClaimHooks{Retention: ret},
+		Hooks:    ClaimHooks{Retention: ret, VerifyConfinement: passingConfinement},
 	})
 	testutil.FailErr(t, "survivor claim", err)
 	defer func() { _ = coord.ReleaseWorkerView(context.Background(), "view-survivor", ret) }()

@@ -125,7 +125,7 @@ func TestTwoWorkersReuseObjectsConcurrentInitFailedImportAndGC(t *testing.T) {
 	}
 
 	// Worker 1 and Worker 2 keep independent HEAD, refs, index, and private objects.
-	_, err = exec1.Switch(t.Context(), "-c", "only-in-w1")
+	_, err = exec1.Run(t.Context(), ".", "switch", "-c", "only-in-w1")
 	testutil.FailErr(t, "w1 switch -c only-in-w1", err)
 	_, err = core1.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "w1.txt"}, []byte("w1-only\n"), 0o644)
 	testutil.FailErr(t, "w1 write w1.txt", err)

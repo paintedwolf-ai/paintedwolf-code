@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
@@ -58,6 +60,63 @@ func ensureViewRepoInitialized(
 			}
 		}
 	}
+	return nil
+}
+
+// AdoptMaterializedView installs repositories a materialized seed already prepared as each worktree's
+// .git and manages the view. The seed's own lease keeps retaining their base objects until it settles.
+func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewBinding) error {
+	if b.ViewID == "" || b.TrunkDir == "" || b.WorktreeDir == "" {
+		return fmt.Errorf("privategit: ViewID, TrunkDir, and WorktreeDir are required")
+	}
+	absTrunk, err := filepath.Abs(b.TrunkDir)
+	if err != nil {
+		return err
+	}
+	absWorktree, err := filepath.Abs(b.WorktreeDir)
+	if err != nil {
+		return err
+	}
+	if b.RootID == "" {
+		b.RootID = "primary"
+	}
+	view := &managedView{
+		viewID: b.ViewID, workerID: b.WorkerID, rootID: b.RootID,
+		trunkDir: absTrunk, worktreeDir: absWorktree, materialized: true, core: b.Core,
+		accessOrigin: OriginFilesystem, repos: make(map[string]*initializedRepo, len(b.Repos)),
+	}
+	for _, seeded := range b.Repos {
+		repoRel := cleanSlashRel(seeded.RepoRel)
+		target := absWorktree
+		if repoRel != "." {
+			target = filepath.Join(absWorktree, filepath.FromSlash(repoRel))
+		}
+		finalGitDir := filepath.Join(target, ".git")
+		if err := os.Rename(seeded.PrivateGitDir, finalGitDir); err != nil {
+			return fmt.Errorf("privategit: install seeded repository %q: %w", repoRel, err)
+		}
+		if _, sErr := os.Stat(filepath.Join(finalGitDir, "index")); sErr == nil {
+			out, code, rErr := gitexec.Run(ctx, target, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+			if (rErr != nil && code != 1) || code >= 128 || code < 0 {
+				return fmt.Errorf("privategit: refresh seeded index (exit %d): %v: %s", code, rErr, strings.TrimSpace(string(out)))
+			}
+		}
+		_, initialRefs, err := collectCapturedRefAndIndexOIDs(ctx, finalGitDir)
+		if err != nil {
+			return err
+		}
+		var initialHead string
+		if out, code, hErr := gitexec.Run(ctx, target, []string{"rev-parse", "--verify", "HEAD"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); hErr == nil && code == 0 {
+			initialHead = strings.TrimSpace(string(out))
+		}
+		metrics := seeded.Metrics
+		metrics.State = StateReady
+		view.repos[repoRel] = &initializedRepo{
+			repoRel: repoRel, worktreeDir: target, privateGitDir: finalGitDir,
+			initialHeadOID: initialHead, initialRefs: initialRefs, metrics: metrics,
+		}
+	}
+	registerManagedView(m, view)
 	return nil
 }
 

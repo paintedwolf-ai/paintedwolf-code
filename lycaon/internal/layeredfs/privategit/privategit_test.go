@@ -121,7 +121,7 @@ func TestOperationSuiteMountedAndMaterialized(t *testing.T) {
 			testutil.FailErr(t, "git stash pop", err)
 
 			// 4. revert HEAD (reverts the worker commit and updates staged.txt in Core).
-			_, err = exec.Revert(t.Context(), "HEAD")
+			_, err = exec.Run(t.Context(), ".", "revert", "--no-edit", "HEAD")
 			testutil.FailErr(t, "git revert HEAD", err)
 			revertedBytes, err := core.ReadFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "staged.txt"})
 			testutil.FailErr(t, "read staged.txt after revert", err)
@@ -130,7 +130,7 @@ func TestOperationSuiteMountedAndMaterialized(t *testing.T) {
 			}
 
 			// 5. switch & checkout across branches.
-			_, err = exec.Switch(t.Context(), "-c", "worker-feature")
+			_, err = exec.Run(t.Context(), ".", "switch", "-c", "worker-feature")
 			testutil.FailErr(t, "git switch -c worker-feature", err)
 			_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "feature.txt"}, []byte("feature-work\n"), 0o644)
 			testutil.FailErr(t, "write feature.txt", err)
@@ -140,16 +140,16 @@ func TestOperationSuiteMountedAndMaterialized(t *testing.T) {
 			testutil.FailErr(t, "git commit feature.txt", err)
 			_, err = exec.Checkout(t.Context(), "main")
 			testutil.FailErr(t, "git checkout main", err)
-			_, err = exec.Switch(t.Context(), "worker-feature")
+			_, err = exec.Run(t.Context(), ".", "switch", "worker-feature")
 			testutil.FailErr(t, "git switch worker-feature", err)
 
 			// 6. worktree list & submodule status + submodule git operations.
-			wtList, err := exec.WorktreeList(t.Context())
+			wtList, err := exec.Run(t.Context(), ".", "worktree", "list")
 			testutil.FailErr(t, "git worktree list", err)
 			if strings.TrimSpace(wtList) == "" {
 				t.Fatal("expected non-empty worktree list")
 			}
-			subStatus, err := exec.SubmoduleStatus(t.Context())
+			subStatus, err := exec.Run(t.Context(), ".", "submodule", "status")
 			testutil.FailErr(t, "git submodule status", err)
 			if !strings.Contains(subStatus, "sub") {
 				t.Fatalf("expected sub in submodule status, got %q", subStatus)

@@ -71,7 +71,11 @@ func NewRetainedObjectStore(rootDir string) (*RetainedObjectStore, error) {
 		leases:     make(map[string]*leaseRecord),
 		packOIDs:   make(map[string]map[string]struct{}),
 	}
-	lockStoreReadOnlyBoundary(s)
+	// A store with nothing retained has nothing to protect, and read-only directories
+	// would stop its host directory from being removed.
+	if storeHoldsObjects(objectsDir) {
+		lockStoreReadOnlyBoundary(s)
+	}
 	return s, nil
 }
 
@@ -188,6 +192,26 @@ func (s *RetainedObjectStore) Close() error {
 	defer s.mu.Unlock()
 	unlockStoreWriteBoundary(s)
 	return nil
+}
+
+func storeHoldsObjects(objectsDir string) bool {
+	entries, err := os.ReadDir(objectsDir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		switch entry.Name() {
+		case "info":
+		case "pack":
+			packs, packErr := os.ReadDir(filepath.Join(objectsDir, "pack"))
+			if packErr != nil || len(packs) > 0 {
+				return true
+			}
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func unlockStoreWriteBoundary(s *RetainedObjectStore) {

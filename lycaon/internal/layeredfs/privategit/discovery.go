@@ -84,7 +84,7 @@ func resolveSourceRepoLayout(
 			isLinkedWT = true
 			wtName = filepath.Base(gitDir)
 		}
-		if !isAuthorizedGitDir(worktreeDir, dotGit, gitDir, commonDir, allowed) {
+		if !isAuthorizedGitDir(dotGit, gitDir, commonDir, allowed) {
 			return sourceRepoLayout{}, ErrUnauthorizedGitTarget
 		}
 	} else {
@@ -148,30 +148,57 @@ func resolveCommonDirFile(gitDir string) (string, bool, error) {
 	return canonicalCleanPath(val), true, nil
 }
 
-func isAuthorizedGitDir(worktreeDir, dotGit, gitDir, commonDir string, allowed []string) bool {
+func isAuthorizedGitDir(dotGit, gitDir, commonDir string, allowed []string) bool {
 	if isUnderAny(gitDir, allowed) && isUnderAny(commonDir, allowed) {
 		return true
 	}
-	// Verify bidirectional worktree back-pointer `<gitDir>/gitdir` -> `<worktreeDir>/.git`.
-	backRaw, err := os.ReadFile(filepath.Join(gitDir, "gitdir"))
+	proven, err := ProveLinkedWorktree(dotGit, gitDir)
+	return err == nil && proven == commonDir
+}
+
+// ProveLinkedWorktree returns the common Git directory of the linked worktree whose .git file is
+// dotGit and whose administrative directory is gitDir. A gitlink alone claims nothing: the proof is
+// Git's own storage layout pointing back. gitDir must record dotGit as its worktree, name a common
+// directory through its commondir file, and sit in that directory's worktrees/ folder.
+func ProveLinkedWorktree(dotGit, gitDir string) (string, error) {
+	gitDir = canonicalCleanPath(gitDir)
+	backRaw, err := readRegularGitFile(filepath.Join(gitDir, "gitdir"))
 	if err != nil {
-		return false
+		return "", err
 	}
-	backTarget := strings.TrimSpace(string(backRaw))
+	backTarget := strings.TrimSpace(backRaw)
 	if !filepath.IsAbs(backTarget) {
 		backTarget = filepath.Join(gitDir, backTarget)
 	}
-	if canonicalCleanPath(backTarget) != canonicalCleanPath(dotGit) {
-		return false
+	if backTarget == "" || canonicalCleanPath(backTarget) != canonicalCleanPath(dotGit) {
+		return "", ErrUnauthorizedGitTarget
 	}
-	// CommonDir must be a valid Git directory containing HEAD and config.
-	if _, err := os.Stat(filepath.Join(commonDir, "HEAD")); err != nil {
-		return false
+	commonDir, hasCommon, err := resolveCommonDirFile(gitDir)
+	if err != nil {
+		return "", err
 	}
-	if _, err := os.Stat(filepath.Join(commonDir, "config")); err != nil {
-		return false
+	if !hasCommon || filepath.Dir(gitDir) != filepath.Join(commonDir, "worktrees") {
+		return "", ErrUnauthorizedGitTarget
 	}
-	return filepath.Dir(filepath.Dir(commonDir)) == filepath.Dir(worktreeDir)
+	for _, required := range []string{"HEAD", "config", "objects"} {
+		info, err := os.Lstat(filepath.Join(commonDir, required))
+		if err != nil || info.Mode()&fs.ModeSymlink != 0 {
+			return "", ErrUnauthorizedGitTarget
+		}
+	}
+	return commonDir, nil
+}
+
+func readRegularGitFile(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", ErrUnauthorizedGitTarget
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func collectAuthorizedObjectDirs(commonDir, gitDir string, allowed, forbidden []string) ([]string, error) {

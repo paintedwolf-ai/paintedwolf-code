@@ -75,16 +75,22 @@ func (q *SQLQueue) completeAdmitted(ctx context.Context, claimed *api.WorkerTask
 	overlayPath := ""
 	// A missing baseline or budget-exceeded overlay leaves the overlay unsealed for review.
 	if mergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(task.WorkspaceOverlayPath) == "" && strings.TrimSpace(task.WorkspaceBaselinePath) != "" {
-		captured, err := q.captureOverlay(ctx, task)
+		published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
 		if err != nil {
-			if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {
-				workerWorkspaceLog.Warn("write overlay exceeds budget; leaving unsealed for review",
-					"job_id", task.ID, "error", err)
+			return false, fmt.Errorf("worker %s: publish checkpoint: %w", task.ID, err)
+		}
+		if !published {
+			captured, err := q.captureOverlay(ctx, task)
+			if err != nil {
+				if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {
+					workerWorkspaceLog.Warn("write overlay exceeds budget; leaving unsealed for review",
+						"job_id", task.ID, "error", err)
+				} else {
+					return false, err
+				}
 			} else {
-				return false, err
+				overlayPath = captured
 			}
-		} else {
-			overlayPath = captured
 		}
 	}
 	completion, err := q.store.CompleteJob(ctx, jobID, result, claimToken, mergeStatus, teardown, overlayPath)

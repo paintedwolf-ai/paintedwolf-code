@@ -133,6 +133,15 @@ func validateRelativeSubroot(sub string) (string, error) {
 	return cleaned, nil
 }
 
+// ConfinementEnforcer establishes that a mounted view is usable only through enforcement: the
+// worker's processes reach the mount, and are denied its backing and direct source storage.
+type ConfinementEnforcer interface {
+	// Available reports whether enforcement can be applied in the probed context.
+	Available(ctx context.Context, probeCfg ProbeConfig) error
+	// VerifyView proves enforcement against one prepared view before it is published ready.
+	VerifyView(ctx context.Context, view *PreparedView) error
+}
+
 // Selector chooses one workspace adapter from structured probe capabilities and manages fallback.
 type Selector struct {
 	TargetOS        string
@@ -140,6 +149,9 @@ type Selector struct {
 	DarwinAdapter   Adapter
 	FallbackAdapter Adapter
 	Registry        *ActiveViewRegistry
+	// RequireConfinement refuses a mounted adapter unless Confinement is present and available.
+	RequireConfinement bool
+	Confinement        ConfinementEnforcer
 }
 
 // NewSelector constructs a capability-based Selector with an ActiveViewRegistry.
@@ -170,6 +182,16 @@ func (s *Selector) Select(ctx context.Context, probeCfg ProbeConfig) (Adapter, P
 			ReasonCode: ReasonUnsupportedPlatform,
 			Diagnostic: fmt.Sprintf("no mounted adapter for OS %q; using %s", s.TargetOS, fb.ID()),
 		}, nil
+	}
+
+	if s.RequireConfinement {
+		if diag := s.confinementGap(ctx, probeCfg); diag != "" {
+			return s.withFallbackReason(ReasonConfinementUnavailable), ProbeResult{
+				AdapterID:  primary.ID(),
+				ReasonCode: ReasonConfinementUnavailable,
+				Diagnostic: diag,
+			}, nil
+		}
 	}
 
 	res, err := primary.Probe(ctx, probeCfg)
@@ -212,6 +234,24 @@ func (s *Selector) SelectAndPrepare(ctx context.Context, probeCfg ProbeConfig, r
 	}
 	s.Registry.Register(view, adp)
 	return adp, view, probeRes, nil
+}
+
+func (s *Selector) confinementGap(ctx context.Context, probeCfg ProbeConfig) string {
+	if s.Confinement == nil {
+		return "no confinement enforcement is available, so a mounted view cannot deny direct backing access"
+	}
+	if err := s.Confinement.Available(ctx, probeCfg); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// VerifyViewConfinement proves enforcement for view, refusing when none is configured.
+func (s *Selector) VerifyViewConfinement(ctx context.Context, view *PreparedView) error {
+	if s.Confinement == nil {
+		return &AdapterError{Op: "verify_confinement", ReasonCode: ReasonConfinementUnavailable, Diagnostic: "no confinement enforcement is configured"}
+	}
+	return s.Confinement.VerifyView(ctx, view)
 }
 
 func (s *Selector) primaryForOS() Adapter {

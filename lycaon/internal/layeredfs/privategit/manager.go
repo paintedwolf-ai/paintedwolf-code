@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -21,11 +22,13 @@ type ManagerConfig struct {
 }
 
 type managedView struct {
-	viewID            string
-	workerID          string
-	rootID            string
-	trunkDir          string
-	worktreeDir       string
+	viewID      string
+	workerID    string
+	rootID      string
+	trunkDir    string
+	worktreeDir string
+	// branchDir is the worker branch holding this root's worktree when the two differ.
+	branchDir         string
 	materialized      bool
 	kernelMounted     bool
 	core              *layeredfs.Core
@@ -116,6 +119,19 @@ func registerManagedView(m *Manager, view *managedView) {
 	}
 	m.mu.Unlock()
 	registerActiveView(m, view)
+}
+
+// BindViewBranch records the worker branch directory a multi-root view's primary worktree sits in,
+// which is where that worker's tools address the view from.
+func (m *Manager) BindViewBranch(viewID, branchDir string) error {
+	view, err := getManagedView(m, viewID)
+	if err != nil {
+		return err
+	}
+	view.mu.Lock()
+	view.branchDir = strings.TrimSpace(branchDir)
+	view.mu.Unlock()
+	return nil
 }
 
 // InterceptGitAccess implements layeredfs.GitInterceptor to initialize private Git

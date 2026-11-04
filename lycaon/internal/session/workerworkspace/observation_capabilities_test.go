@@ -202,8 +202,9 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 			return nil
 		},
 	})
-	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds")).
-		WithSelector(adapter.NewSelector("darwin", adapter.NewFUSELinuxAdapter(), mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone)))
+	selector := adapter.NewSelector("darwin", nil, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector.Confinement = fixtureConfinement{}
+	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds")).WithSelector(selector)
 
 	binding, layout, err := wsMgr.CreateWorkerWorkspaceFromSources(
 		ctx,
@@ -276,3 +277,9 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 		t.Fatalf("expected partial-attribution mount receipt to be invalidated when scope generation advances, got %+v", fresh)
 	}
 }
+
+// fixtureConfinement stands in for enforcement around the fixture MountedAdapter.
+type fixtureConfinement struct{}
+
+func (fixtureConfinement) Available(context.Context, adapter.ProbeConfig) error    { return nil }
+func (fixtureConfinement) VerifyView(context.Context, *adapter.PreparedView) error { return nil }

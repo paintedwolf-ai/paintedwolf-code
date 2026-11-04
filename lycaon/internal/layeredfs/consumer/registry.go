@@ -30,7 +30,30 @@ func UnregisterBranchEngine(branchRoot string) {
 	branchEngineRegistry.Delete(cleaned)
 }
 
-// LookupBranchEngine finds a registered consumer Engine matching branchRoot or a parent of branchRoot.
+// UnregisterEngine removes every association of eng, so nothing can reach a settled view.
+func UnregisterEngine(eng *Engine) {
+	if eng == nil {
+		return
+	}
+	branchEngineRegistry.Range(func(k, v any) bool {
+		if v.(*Engine) == eng {
+			branchEngineRegistry.Delete(k)
+		}
+		return true
+	})
+}
+
+// RestoreEngine re-registers eng for its view's paths and branchRoot after a settlement failed, so a
+// view that is still live stays reachable.
+func RestoreEngine(eng *Engine, branchRoot string) {
+	if eng == nil {
+		return
+	}
+	eng.registerViewPaths()
+	RegisterBranchEngine(branchRoot, eng)
+}
+
+// LookupBranchEngine finds the registered consumer Engine for branchRoot or a path below it.
 func LookupBranchEngine(branchRoot string) (*Engine, bool) {
 	cleaned := filepath.Clean(strings.TrimSpace(branchRoot))
 	if cleaned == "" || cleaned == "." {
@@ -41,8 +64,7 @@ func LookupBranchEngine(branchRoot string) (*Engine, bool) {
 	}
 	var matched *Engine
 	branchEngineRegistry.Range(func(k, v any) bool {
-		key := k.(string)
-		if hasPathPrefix(cleaned, key) || hasPathPrefix(key, cleaned) {
+		if hasPathPrefix(cleaned, k.(string)) {
 			matched = v.(*Engine)
 			return false
 		}

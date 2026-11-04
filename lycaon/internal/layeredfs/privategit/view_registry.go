@@ -65,7 +65,8 @@ func viewMatchesBoundary(view *managedView, cleanDir string) bool {
 	if cleanDir == "" {
 		return true
 	}
-	return canonicalCleanPath(view.worktreeDir) == cleanDir || canonicalCleanPath(view.trunkDir) == cleanDir
+	return canonicalCleanPath(view.worktreeDir) == cleanDir || canonicalCleanPath(view.trunkDir) == cleanDir ||
+		(view.branchDir != "" && canonicalCleanPath(view.branchDir) == cleanDir)
 }
 
 func lookupActiveView(rootOrBranchDir, workerID string) (*Manager, *managedView, bool, error) {
@@ -220,22 +221,6 @@ func prepareManagedViewOperation(
 		return errors.Join(syncErr, retainErr)
 	}
 	return view.worktreeDir, finish, true, nil
-}
-
-// LookupExecutor returns a GitExecutor bound to an active view matching rootOrBranchDir and workerID.
-func LookupExecutor(mgr *Manager, rootOrBranchDir, workerID string) (*GitExecutor, bool) {
-	if mgr != nil {
-		if matched, ok, err := lookupManagerView(mgr, rootOrBranchDir, workerID); err == nil && ok {
-			return NewGitExecutor(mgr, matched.viewID, RemotePolicy{}), true
-		} else if err != nil {
-			return nil, false
-		}
-	}
-	foundMgr, view, ok, err := lookupActiveView(rootOrBranchDir, workerID)
-	if err != nil || !ok {
-		return nil, false
-	}
-	return NewGitExecutor(foundMgr, view.viewID, RemotePolicy{}), true
 }
 
 // ViewPathExists reports whether relPath exists inside an active private-git worker view

@@ -57,6 +57,18 @@ func (r *testRetentionRegistrar) ReleaseClaim(claimID string) error {
 	return nil
 }
 
+func (r *testRetentionRegistrar) HoldUnresolved(_ context.Context, workerID, viewID string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seq++
+	id := fmt.Sprintf("hold-%s-%s-%d", workerID, viewID, r.seq)
+	r.active[id] = viewID
+	return id, nil
+}
+
+// passingConfinement stands in for enforcement. These tests exercise claim sequencing, not denial.
+func passingConfinement(context.Context, *adapter.PreparedView) error { return nil }
+
 func (r *testRetentionRegistrar) activeCountForView(viewID string) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -194,7 +206,7 @@ func TestRealNFSDarwinMountedClaimZeroLowerDirReads(t *testing.T) {
 			{RootID: "primary", Label: "primary", SourcePath: root1, IsPrimary: true},
 			{RootID: "docs", Label: "docs", SourcePath: root2},
 		},
-		Hooks: ClaimHooks{Retention: ret},
+		Hooks: ClaimHooks{Retention: ret, VerifyConfinement: passingConfinement},
 	})
 	testutil.FailErr(t, "ClaimWorkerView real nfsdarwin", err)
 	defer func() { _ = coord.ReleaseWorkerView(context.Background(), "v-nfs", ret) }()
@@ -223,7 +235,7 @@ func TestConcurrentWorkerClaimsIndependentIdentitiesMountsJournalsAndCancellatio
 		Identity: ClaimIdentity{WorkerID: "worker-0", ProjectID: "p", ViewID: "view-0", SourceGeneration: 1},
 		Storage:  ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt")},
 		Grants:   grants,
-		Hooks:    ClaimHooks{Retention: ret},
+		Hooks:    ClaimHooks{Retention: ret, VerifyConfinement: passingConfinement},
 	})
 	testutil.FailErr(t, "ClaimWorkerView worker-0", err)
 	defer func() { _ = coord.ReleaseWorkerView(context.Background(), "view-0", ret) }()
@@ -239,7 +251,7 @@ func TestConcurrentWorkerClaimsIndependentIdentitiesMountsJournalsAndCancellatio
 			Identity: ClaimIdentity{WorkerID: "worker-A", ProjectID: "p", ViewID: "view-A", SourceGeneration: 2},
 			Storage:  ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt")},
 			Grants:   grants,
-			Hooks:    ClaimHooks{Retention: ret},
+			Hooks:    ClaimHooks{Retention: ret, VerifyConfinement: passingConfinement},
 		})
 	}()
 	go func() {
@@ -267,7 +279,7 @@ func TestConcurrentWorkerClaimsIndependentIdentitiesMountsJournalsAndCancellatio
 			Identity: ClaimIdentity{WorkerID: "worker-C", ProjectID: "p", ViewID: "view-C", SourceGeneration: 2},
 			Storage:  ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt")},
 			Grants:   grants,
-			Hooks:    ClaimHooks{Retention: ret},
+			Hooks:    ClaimHooks{Retention: ret, VerifyConfinement: passingConfinement},
 		})
 	}()
 	wg.Wait()
@@ -289,5 +301,107 @@ func TestConcurrentWorkerClaimsIndependentIdentitiesMountsJournalsAndCancellatio
 	}
 	if cvA.Prepared.PrimaryWorkPath == cvC.Prepared.PrimaryWorkPath || cvA.Metadata.JournalPath == cvC.Metadata.JournalPath || cv0.RetentionClaimID == cvA.RetentionClaimID {
 		t.Fatalf("expected independent mounts, journals, and retention IDs across concurrent workers")
+	}
+}
+
+// A view that fails settlement stays in custody: metadata, retention and the adapter's state all
+// remain, a new claim is refused, and a retried settlement finishes the job.
+func TestFailedSettlementKeepsCustodyUntilARetrySettles(t *testing.T) {
+	tmp := t.TempDir()
+	source := filepath.Join(tmp, "source")
+	testutil.FailErr(t, "mkdir source", os.MkdirAll(source, 0o755))
+	unmountErr := errors.New("mount still busy")
+	failUnmount := true
+	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
+		TargetOS:  runtime.GOOS,
+		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
+		},
+		UnmountViewFn: func(context.Context, string, string) error {
+			if failUnmount {
+				return unmountErr
+			}
+			return nil
+		},
+	})
+	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	coord := NewCoordinator(selector)
+	retention := newTestRetentionRegistrar()
+	metaPath := filepath.Join(tmp, "view-meta.json")
+	request := func(hooks ClaimHooks) ClaimRequest {
+		hooks.Retention = retention
+		return ClaimRequest{
+			Identity: ClaimIdentity{WorkerID: "w", ProjectID: "p", ViewID: "v"},
+			Storage:  ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt"), MetadataPath: metaPath},
+			Grants:   []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: source, IsPrimary: true}},
+			Hooks:    hooks,
+		}
+	}
+
+	refusal := errors.New("enforcement refused the view")
+	_, snap, err := coord.ClaimWorkerView(t.Context(), request(ClaimHooks{
+		VerifyConfinement: func(context.Context, *adapter.PreparedView) error { return refusal },
+	}))
+	if !errors.Is(err, refusal) || !errors.Is(err, ErrSettlementUnresolved) {
+		t.Fatalf("rollback must surface both the cause and the unresolved settlement, got %v", err)
+	}
+	if snap.Readiness != StateRecoveryRequired || snap.Notice.ReasonCode != adapter.ReasonCleanupFailed {
+		t.Fatalf("snapshot must report recovery, got %+v", snap)
+	}
+	if !coord.SettlementUnresolved("v") || retention.activeCountForView("v") != 2 {
+		t.Fatalf("custody lost: unresolved=%v retention=%d", coord.SettlementUnresolved("v"), retention.activeCountForView("v"))
+	}
+	if _, _, err := coord.ClaimWorkerView(t.Context(), request(ClaimHooks{VerifyConfinement: passingConfinement})); !errors.Is(err, ErrSettlementUnresolved) {
+		t.Fatalf("a view in custody must refuse a new claim, got %v", err)
+	}
+
+	failUnmount = false
+	testutil.FailErr(t, "retry settlement", coord.ReleaseWorkerView(t.Context(), "v", retention))
+	if coord.SettlementUnresolved("v") || retention.activeCountForView("v") != 0 {
+		t.Fatalf("retried settlement left custody: unresolved=%v retention=%d", coord.SettlementUnresolved("v"), retention.activeCountForView("v"))
+	}
+
+	claimed, _, err := coord.ClaimWorkerView(t.Context(), request(ClaimHooks{VerifyConfinement: passingConfinement}))
+	testutil.FailErr(t, "claim after settlement", err)
+	failUnmount = true
+	if err := coord.ReleaseWorkerView(t.Context(), "v", retention); !errors.Is(err, ErrSettlementUnresolved) {
+		t.Fatalf("failed release must report unresolved settlement, got %v", err)
+	}
+	if _, statErr := os.Stat(metaPath); statErr != nil {
+		t.Fatalf("failed release deleted metadata: %v", statErr)
+	}
+	if snap, snapErr := coord.StateSnapshot("v"); snapErr != nil || snap.Readiness != StateRecoveryRequired {
+		t.Fatalf("failed release state = %+v err=%v", snap, snapErr)
+	}
+	if retention.activeCountForView("v") != 2 || claimed == nil {
+		t.Fatalf("failed release dropped retention: %d", retention.activeCountForView("v"))
+	}
+	failUnmount = false
+	testutil.FailErr(t, "retry release", coord.ReleaseWorkerView(t.Context(), "v", retention))
+	if _, statErr := os.Stat(metaPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("settled release kept metadata: %v", statErr)
+	}
+}
+
+func TestMountedClaimIsNeverReadyWithoutEnforcement(t *testing.T) {
+	tmp := t.TempDir()
+	source := filepath.Join(tmp, "source")
+	testutil.FailErr(t, "mkdir source", os.MkdirAll(source, 0o755))
+	coord := NewCoordinator(newMockMountedSelector(runtime.GOOS))
+	metaPath := filepath.Join(tmp, "meta.json")
+	cv, snap, err := coord.ClaimWorkerView(t.Context(), ClaimRequest{
+		Identity: ClaimIdentity{WorkerID: "w", ProjectID: "p", ViewID: "v"},
+		Storage:  ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt"), MetadataPath: metaPath},
+		Grants:   []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: source, IsPrimary: true}},
+	})
+	if cv != nil || !errors.Is(err, ErrConfinementFailed) {
+		t.Fatalf("claim without enforcement: cv=%v err=%v", cv, err)
+	}
+	if snap.Readiness == StateReady || snap.Notice.ReasonCode != adapter.ReasonConfinementUnavailable {
+		t.Fatalf("snapshot must carry the typed reason, got %+v", snap)
+	}
+	if _, statErr := os.Stat(metaPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("metadata committed without enforcement: %v", statErr)
 	}
 }

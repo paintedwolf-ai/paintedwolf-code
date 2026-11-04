@@ -258,14 +258,17 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 		t.Fatalf("expected CreateWorkerWorkspace to attach PreparedView and Adapter, got %+v", binding)
 	}
 	if binding.Selection.Strategy != workspace.ProvisionMaterializedEagerCopy ||
-		binding.Selection.Facts.FallbackReason != adapter.ReasonMountHelperUnavailable {
-		t.Fatalf("expected default selector fallback with ReasonMountHelperUnavailable, got %+v", binding.Selection)
+		binding.Selection.Facts.FallbackReason != adapter.ReasonConfinementUnavailable ||
+		binding.Selection.Probe.ReasonCode != adapter.ReasonConfinementUnavailable {
+		t.Fatalf("expected default selector fallback with ReasonConfinementUnavailable, got %+v", binding.Selection)
 	}
 	if _, ok := binding.View.SeededGitRepos["primary:."]; !ok {
 		t.Fatalf("expected private Git initialized in PreparedView.SeededGitRepos, got %+v", binding.View.SeededGitRepos)
 	}
-	if _, err := os.Lstat(filepath.Join(binding.Root, ".git")); !os.IsNotExist(err) {
-		t.Fatalf("expected .git excluded from workspace root, got %v", err)
+	alternates, err := os.ReadFile(filepath.Join(binding.Root, ".git", "objects", "info", "alternates"))
+	testutil.FailErr(t, "read private repository alternates", err)
+	if strings.Contains(string(alternates), primary) {
+		t.Fatalf("private repository borrows source objects: %s", alternates)
 	}
 	base, ok := binding.View.Core.CapturedBase(layeredfs.QualifiedPath{RootID: "primary", Rel: "main.go"})
 	if !ok || base.SHA256 == "" {
@@ -302,6 +305,7 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 		},
 	})
 	mountedSel := adapter.NewSelector("", mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	mountedSel.Confinement = fixtureConfinement{}
 	mBinding, err := mgr.WithSelector(mountedSel).CreateWorkerWorkspace(ctx, primary, "prod-mounted")
 	testutil.FailErr(t, "CreateWorkerWorkspace mounted", err)
 	if !mountedPrepared || mBinding.View == nil || mBinding.Selection.Facts.PreparationKind != adapter.PreparationMounted {
@@ -312,4 +316,3 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 		t.Fatalf("expected DestroyWorkerWorkspace to release mounted view")
 	}
 }
-

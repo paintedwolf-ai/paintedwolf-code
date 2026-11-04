@@ -136,6 +136,7 @@ func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Me
 		},
 	})
 	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	sel.Confinement = fixtureConfinement{}
 	mgr := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds")).WithSelector(sel)
 
 	binding, _, err := mgr.CreateWorkerWorkspaceSelected(
@@ -172,3 +173,10 @@ func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Me
 		t.Fatalf("unexpected BranchWorkspaceState: ok=%v snap=%+v receipt=%+v", ok, snap, receipt)
 	}
 }
+
+// fixtureConfinement stands in for enforcement around the fixture MountedAdapter. It proves nothing
+// about denial; these tests exercise claim sequencing, not confinement.
+type fixtureConfinement struct{}
+
+func (fixtureConfinement) Available(context.Context, adapter.ProbeConfig) error    { return nil }
+func (fixtureConfinement) VerifyView(context.Context, *adapter.PreparedView) error { return nil }

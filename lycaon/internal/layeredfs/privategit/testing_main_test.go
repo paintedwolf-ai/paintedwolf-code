@@ -222,7 +222,7 @@ func TestCrashRecoveryRefImportIdempotencyConflictAndDeletedRefSafety(t *testing
 
 	_, err := exec.Run(t.Context(), ".", "branch", "-D", "side-branch")
 	testutil.FailErr(t, "delete side-branch privately", err)
-	_, err = exec.Switch(t.Context(), "-c", "worker-br")
+	_, err = exec.Run(t.Context(), ".", "switch", "-c", "worker-br")
 	testutil.FailErr(t, "switch -c worker-br", err)
 	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "imported.txt"}, []byte("import-me\n"), 0o644)
 	testutil.FailErr(t, "write imported.txt", err)

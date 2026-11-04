@@ -3,7 +3,6 @@ package native
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,20 +31,6 @@ func (t *GitOperationTool) Run(ctx context.Context, args map[string]any, tc tool
 	}
 	req.IncludeUntracked, _ = args["include_untracked"].(bool)
 	req.ReinstateIndex, _ = args["reinstate_index"].(bool)
-	if isDirectPrivateGitKind(t.Kind) || t.PrivateGit != nil {
-		writeRoot := tools.HostWriteRoot(tc)
-		_, finish, managed, prepErr := privategit.PrepareManagerViewOperation(ctx, t.PrivateGit, writeRoot, tc.Identity.WorkerJobID)
-		if prepErr != nil {
-			return "", prepErr
-		}
-		defer func() { _ = finish() }()
-		if err := workerGitPrecondition(tc, managed, t.PrivateGit); err != nil {
-			return "", err
-		}
-		if isDirectPrivateGitKind(t.Kind) || managed {
-			return runPrivateGitExecutorOperation(ctx, t.PrivateGit, writeRoot, tc, t.Kind, req)
-		}
-	}
 	result, err := GitMutations{Git: t.Git, Boundary: t.Boundary, PrivateGit: t.PrivateGit}.Operate(ctx, tc, req)
 	if err != nil && !result.Attempted {
 		return "", err
@@ -88,7 +72,7 @@ func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git
 		return git.OperationResult{}, prepErr
 	}
 	defer func() { _ = finish() }()
-	if err := workerGitPrecondition(tc, managed, m.PrivateGit); err != nil {
+	if err := workerGitPrecondition(tc, managed); err != nil {
 		return git.OperationResult{}, err
 	}
 	root, err := projectpaths.ResolveGitStage(ctx, m.Boundary, tc, ".")
@@ -138,126 +122,13 @@ func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git
 	return result, err
 }
 
-// workerGitPrecondition refuses a worker that has neither a branch write root
-// nor a private Git view to operate on.
-func workerGitPrecondition(tc tools.ToolContext, managed bool, mgr *privategit.Manager) error {
-	if tc.Identity.WorkerJobID == "" || managed || strings.TrimSpace(tc.Source.WorkerBranchRoot) != "" || mgr != nil {
+// workerGitPrecondition admits a worker's Git only through its managed prepared view. A session has
+// no such constraint: its repository effects run in its own addressed root.
+func workerGitPrecondition(tc tools.ToolContext, managed bool) error {
+	if tc.Identity.WorkerJobID == "" || managed {
 		return nil
 	}
 	return &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
-}
-
-func isDirectPrivateGitKind(kind string) bool {
-	switch kind {
-	case "revert", "switch", "worktree", "submodule", "status", "diff", "log", "commit":
-		return true
-	}
-	return false
-}
-
-func runPrivateGitExecutorOperation(
-	ctx context.Context,
-	mgr *privategit.Manager,
-	writeRoot string,
-	tc tools.ToolContext,
-	kind string,
-	req git.OperationRequest,
-) (string, error) {
-	exec, ok := privategit.LookupExecutor(mgr, writeRoot, tc.Identity.WorkerJobID)
-	if !ok {
-		return "", fmt.Errorf("private git executor unavailable for kind %q", kind)
-	}
-	var out string
-	var err error
-	switch kind {
-	case "status":
-		out, err = exec.Status(ctx, "--short", "--branch")
-	case "diff":
-		out, err = exec.Diff(ctx, req.Paths...)
-	case "log":
-		ref := req.Ref
-		if ref == "" {
-			ref = "HEAD"
-		}
-		out, err = exec.Log(ctx, "--oneline", "-n", "10", ref)
-	case "commit":
-		if len(req.Paths) > 0 {
-			_, _ = exec.Run(ctx, ".", append([]string{"add", "--"}, req.Paths...)...)
-			out, err = exec.Commit(ctx, req.Message)
-		} else {
-			out, err = exec.Commit(ctx, req.Message, "-a")
-		}
-	case "revert":
-		ref := req.Ref
-		if ref == "" {
-			ref = "HEAD"
-		}
-		out, err = exec.Revert(ctx, ref)
-	case "switch":
-		var swArgs []string
-		if req.Create {
-			swArgs = append(swArgs, "-c")
-		}
-		if req.Branch != "" {
-			swArgs = append(swArgs, req.Branch)
-		}
-		if req.Ref != "" {
-			swArgs = append(swArgs, req.Ref)
-		}
-		out, err = exec.Switch(ctx, swArgs...)
-	case "checkout":
-		var coArgs []string
-		if req.Create {
-			coArgs = append(coArgs, "-b")
-		}
-		if req.Branch != "" {
-			coArgs = append(coArgs, req.Branch)
-		}
-		if req.Ref != "" {
-			coArgs = append(coArgs, req.Ref)
-		}
-		out, err = exec.Checkout(ctx, coArgs...)
-	case "stash":
-		switch req.Action {
-		case "apply", "drop", "pop":
-			ref := req.Ref
-			if ref == "" {
-				ref = "stash@{0}"
-			}
-			out, err = exec.Stash(ctx, req.Action, ref)
-		case "list":
-			out, err = exec.Stash(ctx, "list")
-		default:
-			stArgs := []string{"push"}
-			if req.IncludeUntracked {
-				stArgs = append(stArgs, "-u")
-			}
-			if req.Message != "" {
-				stArgs = append(stArgs, "-m", req.Message)
-			}
-			if len(req.Paths) > 0 {
-				stArgs = append(stArgs, "--")
-				stArgs = append(stArgs, req.Paths...)
-			}
-			out, err = exec.Stash(ctx, stArgs...)
-		}
-	case "worktree":
-		out, err = exec.WorktreeList(ctx)
-	case "submodule":
-		out, err = exec.SubmoduleStatus(ctx)
-	default:
-		out, err = exec.Run(ctx, ".", kind)
-	}
-	if err != nil {
-		return "", err
-	}
-	raw, mErr := surveyjson.Marshal(map[string]any{
-		"available": true,
-		"status":    "completed",
-		"kind":      kind,
-		"output":    strings.TrimSpace(out),
-	})
-	return string(raw), mErr
 }
 
 func gitString(args map[string]any, key string) string { value, _ := args[key].(string); return value }

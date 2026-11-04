@@ -105,6 +105,7 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 		},
 	})
 	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	sel.Confinement = fixtureConfinement{}
 	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), t.TempDir()).WithSelector(sel)
 
 	q := NewSQLQueue(sqlDB, 4)

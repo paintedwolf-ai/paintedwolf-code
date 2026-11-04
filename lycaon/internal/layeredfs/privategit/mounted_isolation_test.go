@@ -275,7 +275,7 @@ func TestTwoWorkersSharingTrunkIsolatedViewResolution(t *testing.T) {
 	if _, _, _, err := PrepareViewGitOperation(t.Context(), filepath.Join(fix.tmpDir, "unrelated"), "worker-view-alpha"); !errors.Is(err, ErrIdentityMismatch) {
 		t.Fatalf("expected ErrIdentityMismatch when workerID is paired with unrelated root, got %v", err)
 	}
-	if _, ok := LookupExecutor(mgr, wtAlpha, "worker-view-beta"); ok {
-		t.Fatalf("LookupExecutor must reject mismatched workerID and worktreeDir")
+	if _, _, _, err := PrepareManagerViewOperation(t.Context(), mgr, wtAlpha, "worker-view-beta"); !errors.Is(err, ErrIdentityMismatch) {
+		t.Fatalf("expected ErrIdentityMismatch for a manager view paired with another worker, got %v", err)
 	}
 }

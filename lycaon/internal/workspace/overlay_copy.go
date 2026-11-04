@@ -45,9 +45,9 @@ type mirrorOptions struct {
 }
 
 type mirrorResult struct {
-	Files, Directories, Symlinks, Bytes     int64
-	ClonedFiles, ClonedBytes, CopiedBytes   int64
-	SkippedPaths                            []string
+	Files, Directories, Symlinks, Bytes   int64
+	ClonedFiles, ClonedBytes, CopiedBytes int64
+	SkippedPaths                          []string
 }
 
 func validateCompleteMirror(result mirrorResult) error {
@@ -95,14 +95,45 @@ func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 		return nil
 	}
 	root := strings.TrimSpace(binding.Root)
+	mounted, err := m.settleMountedBranch(root, jobIDForBranch(root))
+	if err != nil {
+		return err
+	}
 	releaseBranchClaimState(root)
-	m.releaseBranchViews(root)
-	if binding.Adapter != nil && binding.View != nil {
-		_, _ = binding.Adapter.Release(context.Background(), binding.View.ViewID)
+	if mounted {
+		m.forgetBranchViews(root)
+	} else {
+		m.releaseBranchViews(root)
+		if binding.Adapter != nil && binding.View != nil {
+			_, _ = binding.Adapter.Release(context.Background(), binding.View.ViewID)
+		}
 	}
 	_ = os.RemoveAll(enginepaths.MetaDirForBranchRoot(root))
+	_ = os.RemoveAll(branchCheckpointStoreDir(root))
 	removeBranchLocks(root)
 	return os.RemoveAll(root)
+}
+
+// settleMountedBranch releases the branch's mounted view when it has one. On failure the caller must
+// keep the branch and its metadata: the view is still in custody, and the directory may still be a mount.
+func (m *Manager) settleMountedBranch(branchRoot, jobID string) (bool, error) {
+	branchClaimsMu.RLock()
+	rec, ok := branchClaimStates[filepath.Clean(branchRoot)]
+	branchClaimsMu.RUnlock()
+	if ok && rec.layered != nil {
+		return true, settleBranchLayeredView(context.Background(), branchRoot, rec.layered)
+	}
+	if strings.TrimSpace(m.branchRoot) == "" {
+		return false, nil
+	}
+	services, err := m.layered()
+	if err != nil {
+		return false, err
+	}
+	if !services.coordinator.SettlementUnresolved(jobID) {
+		return false, nil
+	}
+	return true, services.coordinator.ReleaseWorkerView(context.Background(), jobID, services.retention)
 }
 
 func markSnapshotCompleteWithClaim(branchRoot string, choice WorkspaceStrategySelection, view *adapter.PreparedView, cv *claim.ClaimedView, hints []string) error {
@@ -130,7 +161,7 @@ func markSnapshotCompleteWithClaim(branchRoot string, choice WorkspaceStrategySe
 	if cv != nil {
 		meta.JournalPath = cv.Metadata.JournalPath
 	} else {
-		recordBranchClaimState(branchRoot, nil, snapshotFromJobMeta(branchRoot, meta))
+		recordBranchClaimState(branchRoot, nil, snapshotFromJobMeta(branchRoot, meta), nil)
 	}
 	return WriteJobMeta(metaDir, meta)
 }
@@ -179,13 +210,13 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 	defer cancel()
 	jobs := make(chan overlayCopyJob, workers*2)
 	var (
-		wg                                               sync.WaitGroup
-		errOnce                                          sync.Once
-		firstErr                                         error
-		entries, walkBytes, files, bytes, clones         atomic.Int64
-		cloneB, copyB, dirs, links                       atomic.Int64
-		skipMu                                           sync.Mutex
-		skipped                                          []string
+		wg                                       sync.WaitGroup
+		errOnce                                  sync.Once
+		firstErr                                 error
+		entries, walkBytes, files, bytes, clones atomic.Int64
+		cloneB, copyB, dirs, links               atomic.Int64
+		skipMu                                   sync.Mutex
+		skipped                                  []string
 	)
 	fail := func(err error) { errOnce.Do(func() { firstErr = err; cancel() }) }
 	recordSkip := func(rel string) { skipMu.Lock(); skipped = append(skipped, rel); skipMu.Unlock() }

@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitengine"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -453,4 +454,36 @@ func TestStreamBoundRefuses(t *testing.T) {
 	h := newHarness(t)
 	h.owners.limitOverride = map[string]int64{"stream_bytes": 8}
 	h.exec("git", "log").refused(t, "stream bound", "COMMAND_LIMIT_EXCEEDED")
+}
+
+func refusedAsPrecondition(t *testing.T, result run) {
+	t.Helper()
+	reject := toolrejection.AsToolReject(result.err)
+	if reject == nil || reject.Code != "GIT_OPERATION_PRECONDITION" {
+		t.Fatalf("expected GIT_OPERATION_PRECONDITION, got stdout=%q err=%v", result.stdout, result.err)
+	}
+}
+
+func TestWriteLegWorkerGitFormsRequireTheirManagedView(t *testing.T) {
+	h := newHarness(t)
+	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
+	testutil.FailErr(t, "new private Git manager", err)
+	t.Cleanup(func() { _ = mgr.Store().Close() })
+	h.owners.PrivateGit = mgr
+	h.tc.Identity.WorkerJobID = "worker-1"
+	h.tc.Source.WorkerBranchRoot = h.root
+	h.tc.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
+
+	refusedAsPrecondition(t, h.exec("git", "status"))
+	refusedAsPrecondition(t, h.exec("git", "add", "new.txt"))
+
+	worktree := t.TempDir()
+	testutil.FailErr(t, "adopt view", mgr.AdoptMaterializedView(t.Context(), privategit.MaterializedViewBinding{
+		ViewID: "view-1", WorkerID: "worker-1", RootID: "primary", TrunkDir: h.root, WorktreeDir: worktree,
+	}))
+	t.Cleanup(func() { _ = mgr.ReleaseView("view-1") })
+	h.tc.Source.WorkerBranchRoot = worktree
+	if result := h.exec("git", "status"); result.err != nil && toolrejection.AsToolReject(result.err) != nil {
+		t.Fatalf("a managed view must not be refused: %v", result.err)
+	}
 }

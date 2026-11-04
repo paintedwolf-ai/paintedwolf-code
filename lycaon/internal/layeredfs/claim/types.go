@@ -30,6 +30,9 @@ var (
 	ErrRetentionFailed = errors.New("claim: workspace retention registration failed")
 	// ErrViewNotFound is returned when querying or updating state for an unknown viewID.
 	ErrViewNotFound = errors.New("claim: workspace view not found")
+	// ErrSettlementUnresolved is returned when a view could not be settled. Its metadata, retention
+	// and adapter state are kept, so the view stays in custody and the settlement can be retried.
+	ErrSettlementUnresolved = errors.New("claim: workspace view settlement unresolved")
 )
 
 // ReadinessState reports the lifecycle readiness of a worker workspace view.
@@ -108,6 +111,8 @@ const (
 type RetentionRegistrar interface {
 	RegisterClaim(ctx context.Context, workerID, viewID string, rootPaths []string) (claimID string, err error)
 	ReleaseClaim(claimID string) error
+	// HoldUnresolved durably records that viewID failed settlement, until ReleaseClaim of its result.
+	HoldUnresolved(ctx context.Context, workerID, viewID string) (claimID string, err error)
 }
 
 // ConfinementValidator verifies that a prepared mount or materialized tree is usable under confinement.
@@ -139,11 +144,15 @@ type ClaimLimits struct {
 	MaxBytes   int64 `json:"max_bytes"`
 }
 
-// ClaimHooks groups optional retention, confinement, private-git, and fault-injection hooks.
+// ClaimHooks groups the retention, confinement, private-git, barrier and fault-injection services.
 type ClaimHooks struct {
-	Retention         RetentionRegistrar
+	Retention RetentionRegistrar
+	// VerifyConfinement is required for a mounted view: nothing else establishes enforcement.
 	VerifyConfinement ConfinementValidator
 	PrivateGit        *privategit.Manager
+	Quiesce           func(ctx context.Context, viewID string) error
+	FlushClient       func(ctx context.Context, viewID string) error
+	Observations      layeredfs.ObservationSink
 	Fault             FaultHook
 }
 
@@ -168,4 +177,6 @@ type ClaimedView struct {
 	Metadata         ViewMetadataV2         `json:"metadata"`
 	RetentionClaimID string                 `json:"retention_claim_id,omitempty"`
 	State            WorkspaceStateSnapshot `json:"state"`
+	metaPath         string
+	privateGit       *privategit.Manager
 }

@@ -18,7 +18,7 @@ import (
 )
 
 // TaskCheckpointStoreSubdir is the conventional checkpoint store subdirectory for a worker task.
-const TaskCheckpointStoreSubdir = ".lycaon-checkpoint-store"
+const TaskCheckpointStoreSubdir = workspace.BranchCheckpointStoreSuffix
 
 // CheckpointStoreDirForTask resolves the durable checkpoint store directory for task if one exists.
 func CheckpointStoreDirForTask(task *api.WorkerTask) string {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
 func TestEagerCopyGitStoreReuseConfigSanitizationAndUnauthorizedGitlinks(t *testing.T) {
@@ -294,4 +295,80 @@ func TestWorkspaceSelectionNarrowsMaterializedRootsWhileTaskPathHintsDoNot(t *te
 	if !errors.As(unauthErr, &aErr) || aErr.ReasonCode != ReasonUnauthorizedRoot {
 		t.Fatalf("expected ReasonUnauthorizedRoot, got %v", unauthErr)
 	}
+}
+
+func TestLinkedWorktreeGitlinkIsAuthorizedOnlyByItsStructuralLinkage(t *testing.T) {
+	gitDirFor := func(t *testing.T) (repo, worktree, admin string) {
+		t.Helper()
+		base, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		repo, worktree = filepath.Join(base, "repo"), filepath.Join(base, "wt")
+		if err := os.MkdirAll(repo, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("hello\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		gittest.InitCommit(t, repo, "init")
+		gittest.Run(t, repo, "worktree", "add", "-b", "linked", worktree)
+		return repo, worktree, filepath.Join(repo, ".git", "worktrees", "wt")
+	}
+	prepare := func(t *testing.T, viewID, source string) error {
+		t.Helper()
+		view, err := NewEagerCopyAdapter(ReasonMountDenied).Prepare(t.Context(), PrepareRequest{
+			ViewID: viewID, RuntimeDir: t.TempDir(),
+			Grants: []RootGrant{{RootID: "wt", Label: "wt", SourcePath: source, IsPrimary: true}},
+		})
+		if err == nil && view == nil {
+			t.Fatal("Prepare returned neither view nor error")
+		}
+		return err
+	}
+	refused := func(t *testing.T, err error) {
+		t.Helper()
+		var adapterErr *AdapterError
+		if !errors.As(err, &adapterErr) || adapterErr.ReasonCode != ReasonUnauthorizedRoot {
+			t.Fatalf("want %s refusal, got %v", ReasonUnauthorizedRoot, err)
+		}
+	}
+
+	t.Run("a real linked worktree prepares", func(t *testing.T) {
+		_, worktree, _ := gitDirFor(t)
+		if err := prepare(t, "linked-worktree", worktree); err != nil {
+			t.Fatalf("linked worktree refused: %v", err)
+		}
+	})
+	t.Run("a back-reference to another worktree is refused", func(t *testing.T) {
+		_, worktree, admin := gitDirFor(t)
+		if err := os.WriteFile(filepath.Join(admin, "gitdir"), []byte(filepath.Join(t.TempDir(), ".git")+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		refused(t, prepare(t, "forged-back-reference", worktree))
+	})
+	t.Run("a gitlink borrowing another worktree's administrative directory is refused", func(t *testing.T) {
+		_, _, admin := gitDirFor(t)
+		impostor := t.TempDir()
+		if err := os.WriteFile(filepath.Join(impostor, ".git"), []byte("gitdir: "+admin+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		refused(t, prepare(t, "borrowed-administrative-dir", impostor))
+	})
+	t.Run("a common directory that does not hold the worktree is refused", func(t *testing.T) {
+		_, worktree, admin := gitDirFor(t)
+		elsewhere := t.TempDir()
+		gittest.Init(t, elsewhere)
+		if err := os.WriteFile(filepath.Join(admin, "commondir"), []byte(filepath.Join(elsewhere, ".git")+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		refused(t, prepare(t, "foreign-common-dir", worktree))
+	})
+	t.Run("an administrative directory without a common directory is refused", func(t *testing.T) {
+		_, worktree, admin := gitDirFor(t)
+		if err := os.Remove(filepath.Join(admin, "commondir")); err != nil {
+			t.Fatal(err)
+		}
+		refused(t, prepare(t, "no-common-dir", worktree))
+	})
 }

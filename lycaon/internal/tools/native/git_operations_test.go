@@ -177,31 +177,20 @@ func verifyWorkerWriteLegGitTools(t *testing.T, adapter string) {
 		return out
 	}
 
-	if out := runOp("status", map[string]any{}); !strings.Contains(out, "README.md") {
-		t.Fatalf("status missing modified file: %s", out)
-	}
-	if out := runOp("diff", map[string]any{}); !strings.Contains(out, "+hello worker") {
-		t.Fatalf("diff missing worker edit: %s", out)
-	}
 	runOp("checkout", map[string]any{"branch": "worker-feature", "create": true})
-	runOp("commit", map[string]any{"message": "worker commit"})
-	if out := runOp("log", map[string]any{"limit": 2}); !strings.Contains(out, "worker commit") {
-		t.Fatalf("log missing worker commit: %s", out)
+	if out := gittest.Run(t, wtDir, "branch", "--show-current"); strings.TrimSpace(out) != "worker-feature" {
+		t.Fatalf("checkout did not reach the view's repository: %q", out)
+	}
+	if out := gittest.Run(t, wtDir, "diff", "--", "README.md"); !strings.Contains(out, "+hello worker") {
+		t.Fatalf("view repository missing worker edit: %s", out)
 	}
 
-	runOp("revert", map[string]any{"ref": "HEAD"})
-	runOp("switch", map[string]any{"branch": "main"})
-	runOp("switch", map[string]any{"branch": "worker-feature"})
-
-	writeViewFile("README.md", "stashed edit\n")
 	runOp("stash", map[string]any{"action": "save", "message": "wip-stash", "paths": []any{"README.md"}})
-	if out := runOp("stash", map[string]any{"action": "list"}); !strings.Contains(out, "stash@{0}") {
+	if out := gittest.Run(t, wtDir, "stash", "list"); !strings.Contains(out, "wip-stash") {
 		t.Fatalf("stash list missing entry: %s", out)
 	}
 	runOp("stash", map[string]any{"action": "apply", "ref": "stash@{0}"})
 	runOp("stash", map[string]any{"action": "drop", "ref": "stash@{0}"})
-	runOp("worktree", map[string]any{})
-	runOp("submodule", map[string]any{})
 
 	verifyIntrospectionCommitAndRestoreTools(t, tc, gitMgr, boundary, writeViewFile)
 
@@ -259,12 +248,23 @@ func TestWorkerGitRejectsUnbranchedWriteLegAndBlocksNativeGitInternalsWrite(t *t
 	tc.Identity.WorkerJobID = "worker-unbranched"
 	tc.Source.WorkerBranchRoot = ""
 
-	opTool := GitOperationTool{Git: git.NewManager(), Boundary: nativefixture.Boundary(t), Kind: "checkout"}
-	_, err := opTool.Run(t.Context(), map[string]any{"branch": "main"}, tc)
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "GIT_OPERATION_PRECONDITION" {
-		t.Fatalf("expected GIT_OPERATION_PRECONDITION for unbranched worker, got %v", err)
+	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
+	testutil.FailErr(t, "new privategit manager", err)
+	t.Cleanup(func() { _ = mgr.Store().Close() })
+	refused := func(name string, tc tools.ToolContext) {
+		t.Helper()
+		opTool := GitOperationTool{Git: git.NewManager(), Boundary: nativefixture.Boundary(t), PrivateGit: mgr, Kind: "checkout"}
+		_, opErr := opTool.Run(t.Context(), map[string]any{"branch": "main"}, tc)
+		var reject *toolrejection.ToolReject
+		if !errors.As(opErr, &reject) || reject.Code != "GIT_OPERATION_PRECONDITION" {
+			t.Fatalf("%s: expected GIT_OPERATION_PRECONDITION, got %v", name, opErr)
+		}
 	}
+	refused("no branch root", tc)
+	branched := tc
+	branched.Source.WorkerBranchRoot = dir
+	branched.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
+	refused("a branch root and a manager but no prepared view", branched)
 
 	for _, rel := range []string{".git/HEAD", ".git/index", ".git/config", ".git/hooks/pre-commit", ".git/refs/heads/main"} {
 		if _, denied, err := tools.CheckNativeGitMetadataPath(rel, true); !denied || !errors.Is(err, privategit.ErrNativeToolGitMutationForbidden) {
