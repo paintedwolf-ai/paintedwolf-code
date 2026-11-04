@@ -17,18 +17,35 @@ type RetainedCloseout struct {
 	DocumentAttempt int
 	// PrevKey identifies the latest refusal's offenders, to notice a repeat.
 	PrevKey string
-	// Drafted is the retained report envelope: the first body with the latest
+	// Drafted is the retained report envelope: the pinned body with the latest
 	// citations, and the latest document fields once a document was refused.
 	Drafted string
 	// ForcedBy are the cycle's refusal codes, in first-seen order.
 	ForcedBy []string
+	// BodyRepair is set while the latest refusal asks for the body itself
+	// back, so the next draft's body replaces the pinned one.
+	BodyRepair bool
 	// Unread are the members of the latest refused draft the report did not take.
 	Unread []jsonshape.Issue
 }
 
-// RetainCloseoutDraft keeps the first report with the latest proposed
-// citations, and the latest document fields once a document was rejected.
-func RetainCloseoutDraft(previous, next string, documentRepair bool) string {
+// Repair says which parts of the retained report the next draft replaces.
+// Citations are always the draft's own.
+func (r RetainedCloseout) Repair() CloseoutRepair {
+	return CloseoutRepair{Document: RepairsReportDocument(r.ForcedBy), Body: r.BodyRepair}
+}
+
+// CloseoutRepair names the parts of a retained report a draft may replace.
+type CloseoutRepair struct {
+	// Document: the report's fields, once a document field was refused on the cycle.
+	Document bool
+	// Body: the answer itself, when the latest refusal was of how the body presents images.
+	Body bool
+}
+
+// RetainCloseoutDraft keeps the pinned report with the latest proposed
+// citations, replacing only the parts repair names.
+func RetainCloseoutDraft(previous, next string, repair CloseoutRepair) string {
 	if previous == "" {
 		return next
 	}
@@ -37,8 +54,8 @@ func RetainCloseoutDraft(previous, next string, documentRepair bool) string {
 		return previous
 	}
 	if original, ok := ParseCoordinatorCompletionReport(previous); ok {
-		updated = PinCloseoutReport(original, updated, documentRepair)
-	} else {
+		updated = PinCloseoutReport(original, updated, repair)
+	} else if !repair.Body {
 		updated.Synthesis = UsableCloseoutSynthesis(previous)
 	}
 	raw, err := MarshalCoordinatorCompletionReport(updated)
@@ -48,13 +65,14 @@ func RetainCloseoutDraft(previous, next string, documentRepair bool) string {
 	return raw
 }
 
-// PinCloseoutReport keeps the first report through citation repair, so a
-// retry that only fixes references cannot rewrite the conclusions. When a
-// document field was rejected, the retry's document fields are the repair.
-func PinCloseoutReport(original, repaired CoordinatorCompletionReport, documentRepair bool) CoordinatorCompletionReport {
+// PinCloseoutReport keeps the pinned report through repair, so a retry that
+// only fixes references cannot rewrite the conclusions. A document repair
+// takes the retry's document fields; a body repair takes its body and the
+// artifacts it presents.
+func PinCloseoutReport(original, repaired CoordinatorCompletionReport, repair CloseoutRepair) CoordinatorCompletionReport {
 	original.CitedEvidence = repaired.CitedEvidence
 	original.CitedURLs = repaired.CitedURLs
-	if documentRepair {
+	if repair.Document {
 		original.Headline = repaired.Headline
 		original.Summary = repaired.Summary
 		original.Findings = repaired.Findings
@@ -62,7 +80,25 @@ func PinCloseoutReport(original, repaired CoordinatorCompletionReport, documentR
 		original.Ask = repaired.Ask
 		original.SetAsides = repaired.SetAsides
 	}
+	if repair.Body {
+		original.Synthesis = repaired.Synthesis
+		original.ArtifactIDs = repaired.ArtifactIDs
+	}
 	return original
+}
+
+// PresentationObservation names each presentation code's reject observation,
+// the fact its closeout policy matches. A presentation refusal asks for the
+// body back, not a citations fence.
+func PresentationObservation(code string) string {
+	switch code {
+	case PresentMarkdownEmbedCode:
+		return "present_markdown_embed"
+	case PresentImageUnobservedCode:
+		return "present_image_unobserved"
+	default:
+		return ""
+	}
 }
 
 // AssembleRetainedCloseout preserves the report and its resolvable references
