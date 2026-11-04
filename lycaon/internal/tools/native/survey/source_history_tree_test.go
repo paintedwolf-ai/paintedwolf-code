@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
@@ -312,5 +314,30 @@ func TestSourceHistoryDiffACDF15CredentialFileRecordsItsDelivery(t *testing.T) {
 	recorder.err = errors.New("evidence store down")
 	if out, err := h.tool.Run(t.Context(), map[string]any{"path": ".env", "mode": "diff"}, worker); err == nil {
 		t.Fatalf("diff = %q, want it withheld when exposure cannot be recorded", out)
+	}
+}
+
+type failingPathLookup struct{ tools.SourceFileHistory }
+
+func (failingPathLookup) OldestPathEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, string, int64) (sourceledger.FileEffectBounds, bool, error) {
+	return sourceledger.FileEffectBounds{}, false, errors.New("ledger unavailable")
+}
+
+func TestSourceHistoryOverviewACOV19LedgerLookupFailureIsStated(t *testing.T) {
+	h := newHistoryHarness(t)
+	for i := range overviewEffectCap + 1 {
+		h.recordOnWorker(effectSeed{path: "busy.go", content: fmt.Sprintf("v%d\n", i)})
+	}
+	worker := h.workerWith(&fakeTree{changes: treeChanges("gen.txt", "created")})
+	worker.Source.History.Files = failingPathLookup{worker.Source.History.Files}
+	result := runOverviewCall(t, h.tool, worker)
+	if len(result.Files) != 1 || !strings.Contains(result.Note, overviewTreeUnknownNote) {
+		t.Fatalf("result = %+v, want the ledger row and the note", result)
+	}
+}
+
+func TestDisplayPathLocationNeedsAPrimaryRoot(t *testing.T) {
+	if _, _, err := displayPathLocation(nil, "gen.txt"); err == nil {
+		t.Fatal("a path resolved with no roots")
 	}
 }

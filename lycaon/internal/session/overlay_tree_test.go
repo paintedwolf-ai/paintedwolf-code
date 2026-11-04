@@ -45,6 +45,19 @@ func TestOverlayTreeReadsThePathsPromotionConsiders(t *testing.T) {
 	}
 }
 
+func TestOverlayTreeReportsAMissingBranch(t *testing.T) {
+	data := t.TempDir()
+	branch := filepath.Join(data, "branch")
+	testutil.FailErr(t, "mkdir", os.MkdirAll(branch, 0o755))
+	store := workspacebaseline.New(nil, sourceblob.New(filepath.Join(data, "source-content")), filepath.Join(data, "manifests"))
+	manifest, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(nil, branch))
+	testutil.FailErr(t, "capture", err)
+	tree := tools.SourceTree{BaselinePath: manifest, BranchRoot: filepath.Join(data, "reclaimed")}
+	if _, err := (OverlayTree{}).TreeChanges(t.Context(), tree); err == nil {
+		t.Fatal("comparing a reclaimed branch succeeded")
+	}
+}
+
 func TestOverlayTreeReportsAnUnusableBaseline(t *testing.T) {
 	tree := tools.SourceTree{BranchRoot: t.TempDir()}
 	if _, err := (OverlayTree{}).TreeChanges(t.Context(), tree); err == nil {
