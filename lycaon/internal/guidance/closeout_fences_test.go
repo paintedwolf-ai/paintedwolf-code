@@ -115,6 +115,17 @@ func TestReportFenceAdvertisesOnlyDocumentMembers(t *testing.T) {
 	}
 }
 
+// A fence alone answers nothing on a report phase, and is a literal answer elsewhere.
+func TestFenceOnlyDraftHasAnswerOnlyOutsideReportPhases(t *testing.T) {
+	const fence = "```json\n{\"headline\":\"H\"}\n```"
+	if readFresh(fence, true).Draft.HasAnswer() {
+		t.Fatal("a document with nothing above it has no answer")
+	}
+	if !readFresh(fence, false).Draft.HasAnswer() {
+		t.Fatal("outside a report phase the fence is literal Markdown")
+	}
+}
+
 func TestCloseoutPreservesInlineReportShapedExamples(t *testing.T) {
 	for _, payload := range []string{`{"findings":[]}`, `{"verification":{"method":"inspection","reason":"Example"}}`, `{"cited_evidence":[]}`} {
 		content := "Here is an example:\n\n```json\n" + payload + "\n```\n\nUse this shape in your document."

@@ -1,8 +1,8 @@
 package session
 
 import (
-	"github.com/lycaon/lycaon/internal/citationmd"
 	"errors"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"reflect"
 	"testing"
 
