@@ -132,6 +132,17 @@ function manualCompletions(request: APIRequestContext, sessionId: string) {
   };
   return {
     waitForNextRequest: nextRequest,
+    // The handle the host stamped on a settled result.
+    async evidenceHandle(callId: string) {
+      const response = await request.get(`${apiUrl}/v1/sessions/${sessionId}/messages`, { headers });
+      expect(response.ok(), await response.text()).toBeTruthy();
+      const { messages } = (await response.json()) as {
+        messages: Array<{ tool_result?: { tool_call_id?: string; evidence_handle?: string } }>;
+      };
+      const handle = messages.find((row) => row.tool_result?.tool_call_id === callId)?.tool_result?.evidence_handle;
+      expect(handle).toBeTruthy();
+      return handle!;
+    },
     async respond(content: string, calls: Array<{ name: string; args: Record<string, unknown> }> = []) {
       const { id, tools } = await nextRequest();
       for (const call of calls) expect(tools).toContain(call.name);
@@ -228,8 +239,8 @@ webE2e.describe("agent mid-turn note", () => {
         const [firstRead] = await llm.respond("I'll look at the auth path.", [read]);
         await expect(notes.filter({ hasText: "I'll look at the auth path." })).toHaveCount(1, { timeout: 30_000 });
         await expect(notes.first().getByTestId("citation-evidence-chicklet")).toHaveCount(0);
-        const handle = (await driver.completed(firstRead!)).match(/\[([a-z_-]+#\d+)\]/)?.[1];
-        expect(handle).toBeTruthy();
+        await driver.completed(firstRead!);
+        const handle = await llm.evidenceHandle(firstRead!);
 
         // After an observation: uncited text stays out of the transcript.
         await llm.respond("This uncited claim stays private.", [read]);
