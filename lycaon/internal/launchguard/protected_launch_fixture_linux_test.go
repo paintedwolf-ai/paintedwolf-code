@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 
@@ -327,17 +328,42 @@ func sudoFixture(t *testing.T, mode, dir string, extra ...string) error {
 
 func goBuild(t *testing.T, output, pkg string, ldflags string, options ...string) {
 	t.Helper()
-	args := []string{"build", "-trimpath", "-o", output}
-	args = append(args, options...)
+	if err := buildBinary(output, pkg, ldflags, options...); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func buildBinary(output, pkg string, ldflags string, options ...string) error {
+	args := append([]string{"build", "-o", output}, options...)
 	if ldflags != "" {
 		args = append(args, "-ldflags", ldflags)
 	}
 	cmd := exec.Command("go", append(args, pkg)...)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build %s: %v\n%s", pkg, err, out)
+		return fmt.Errorf("build %s: %w\n%s", pkg, err, out)
 	}
+	return nil
 }
+
+// sharedLaunchHelpers builds the fixture binaries that do not embed its location
+// once per process; only the bootstrap relinks for each fixture.
+var sharedLaunchHelpers = sync.OnceValues(func() (string, error) {
+	dir, err := os.MkdirTemp("", "pw-launch-helpers")
+	if err != nil {
+		return "", err
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		return "", err
+	}
+	if err := buildBinary(filepath.Join(dir, "pw-launch-entry"), "github.com/lycaon/lycaon/cmd/pw-launch-entry", ""); err != nil {
+		return "", err
+	}
+	if err := buildBinary(filepath.Join(dir, "painted-wolf-code"), "./testdata/protecteddesktop", ""); err != nil {
+		return "", err
+	}
+	return dir, buildMountTransitionImage(filepath.Join(dir, "pw-mount-intake-transition"))
+})
 
 // installLaunchFixture builds the real bootstrap and entry with the fixture
 // desktop and installs them as root.
@@ -366,9 +392,19 @@ func installLaunchFixture(t *testing.T, modes ...launchFixtureBuild) launchFixtu
 	}
 	binaries := []string{filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry"), filepath.Join(build, "painted-wolf-code"), filepath.Join(build, "pw-mount-intake-transition")}
 	goBuild(t, binaries[0], "github.com/lycaon/lycaon/cmd/pw-launch", layout, options...)
-	goBuild(t, binaries[1], "github.com/lycaon/lycaon/cmd/pw-launch-entry", entryFlags, options...)
-	goBuild(t, binaries[2], "./testdata/protecteddesktop", "")
-	buildMountTransition(t, binaries[3])
+	if measured {
+		goBuild(t, binaries[1], "github.com/lycaon/lycaon/cmd/pw-launch-entry", entryFlags, options...)
+		goBuild(t, binaries[2], "./testdata/protecteddesktop", "")
+		buildMountTransition(t, binaries[3])
+	} else {
+		helpers, err := sharedLaunchHelpers()
+		testutil.FailErr(t, "build shared launch helpers", err)
+		for _, binary := range binaries[1:] {
+			data, err := os.ReadFile(filepath.Join(helpers, filepath.Base(binary)))
+			testutil.FailErr(t, "read shared launch helper", err)
+			testutil.FailErr(t, "copy shared launch helper", os.WriteFile(binary, data, 0o755))
+		}
+	}
 	for _, binary := range binaries {
 		testutil.FailErr(t, "fixture binary readable", os.Chmod(binary, 0o755))
 	}
