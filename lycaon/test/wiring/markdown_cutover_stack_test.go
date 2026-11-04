@@ -243,11 +243,11 @@ func TestBareJSONIsNoAnswerOnTheRealStack(t *testing.T) {
 }
 
 // AC-MID-10, MC-INV-16: a turn that dies after its note and its tool leaves one
-// note and one effect. Recovery and the next prompt publish and replay nothing,
-// and the text the user received creates no debt.
-func TestNoteAndEffectSurviveAnInterruptedTurnOnce(t *testing.T) {
+// note and one tool result. Recovery and the next prompt publish and replay
+// nothing, and the text the user received creates no debt.
+func TestNoteAndToolResultSurviveAnInterruptedTurnOnce(t *testing.T) {
 	script := &stackScriptLLM{steps: []stackStep{
-		commandStep("Starting on the notes.", "echo ran >> effect.txt"),
+		commandStep("Starting on the notes.", "echo ran"),
 		{fail: errors.New("connection lost")},
 		{text: "The effect was recorded once."},
 	}}
@@ -263,12 +263,16 @@ func TestNoteAndEffectSurviveAnInterruptedTurnOnce(t *testing.T) {
 	if len(notes) != 1 || notes[0].Content != "Starting on the notes." || notes[0].ID != wire.MidTurnNoteID(carrierOf(t, msgs, "command")) {
 		t.Fatalf("notes = %+v", notes)
 	}
-	reloaded, err := h.Store.Get(t.Context(), sess.ID)
-	testutil.FailErr(t, "reload session", err)
-	effect, err := os.ReadFile(filepath.Join(reloaded.WorkspacePath, "effect.txt"))
-	testutil.FailErr(t, "read effect", err)
-	if string(effect) != "ran\n" {
-		t.Fatalf("the tool effect replayed: %q", effect)
+	// The program's receipt and its effect each happen once.
+	ran := toolResults(msgs, "command", wire.ToolResultOutcomeCompleted)
+	if len(ran) != 1 {
+		t.Fatalf("command results = %+v", ran)
+	}
+	if !strings.Contains(ran[0].Content, "ran") {
+		t.Fatalf("the command did not run: %q", ran[0].Content)
+	}
+	if script.calls != 3 {
+		t.Fatalf("model calls = %d, want the note and tool, the failure, and the continuation", script.calls)
 	}
 	if codeCount(msgs, "WAIT_HIDDEN_TEXT") != 0 {
 		t.Fatal("published text left debt")
