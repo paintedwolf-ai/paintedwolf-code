@@ -17,10 +17,10 @@ func TestReadCloseoutReportFencePlacement(t *testing.T) {
 		name, input, narrative string
 		reportPhase, document  bool
 	}{
-		{"report phase", "Done [read#2].\n\n" + fence, "Done .", true, true},
-		{"report phase in whole-response wrapper", "````markdown\nDone [read#2].\n\n" + fence + "\n````", "Done .", true, true},
-		{"tilde wrapper", "~~~md\nDone [read#2].\n\n" + fence + "\n~~~", "Done .", true, true},
-		{"AC-CLO-15 ordinary turn keeps the example", "Done [read#2].\n\n" + fence, "Done . " + strings.ReplaceAll(fence, "\n", " "), false, false},
+		{"report phase", "Done [read#2].\n\n" + fence, "Done.", true, true},
+		{"report phase in whole-response wrapper", "````markdown\nDone [read#2].\n\n" + fence + "\n````", "Done.", true, true},
+		{"tilde wrapper", "~~~md\nDone [read#2].\n\n" + fence + "\n~~~", "Done.", true, true},
+		{"AC-CLO-15 ordinary turn keeps the example", "Done [read#2].\n\n" + fence, "Done. " + strings.ReplaceAll(fence, "\n", " "), false, false},
 		{"earlier fence is an example", "Shape:\n\n" + fence + "\n\nUse it.", "Shape: " + strings.ReplaceAll(fence, "\n", " ") + " Use it.", true, false},
 		{"other info string", "Done.\n\n```js\n{\"headline\":\"Done\"}\n```", "Done. ```js {\"headline\":\"Done\"} ```", true, false},
 		{"unclosed fence stays literal", "Done.\n\n```json\n{\"headline\":\"Done\"}", "Done. ```json {\"headline\":\"Done\"}", true, false},
