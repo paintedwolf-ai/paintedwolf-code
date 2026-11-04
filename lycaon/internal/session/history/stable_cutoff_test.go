@@ -446,7 +446,7 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 	t.Run("cache loss is one explained reset then stable appends", func(t *testing.T) {
 		svc, mem, sess := setup(t)
 		first, _ := project(t, svc, sess)
-		svc.ForgetProjection(sess.ID)
+		svc.ForgetSessionState(sess.ID)
 		rebuilt, facts := project(t, svc, sess)
 		if facts.Change != cutoffRebuilt || rebuilt != first {
 			t.Fatalf("rebuilt start %d (first %d), change %q", rebuilt, first, facts.Change)

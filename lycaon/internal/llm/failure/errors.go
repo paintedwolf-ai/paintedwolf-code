@@ -246,6 +246,8 @@ type ProviderRateLimitedError struct {
 	// Attempts counts every request, including the first.
 	Attempts int
 	Detail   string
+	// RetryAfter is the longest wait the provider declared on its final response.
+	RetryAfter time.Duration
 }
 
 func (e *ProviderRateLimitedError) Error() string {
@@ -285,6 +287,8 @@ type ProviderOverloadedError struct {
 	// Attempts counts every request, including the first.
 	Attempts int
 	Detail   string
+	// RetryAfter is the longest wait the provider declared on its final response.
+	RetryAfter time.Duration
 }
 
 func (e *ProviderOverloadedError) Error() string {
@@ -324,6 +328,8 @@ type ProviderServerError struct {
 	// Attempts counts every request, including the first.
 	Attempts int
 	Detail   string
+	// RetryAfter is the longest wait the provider declared on its final response.
+	RetryAfter time.Duration
 }
 
 func (e *ProviderServerError) Error() string {
@@ -437,6 +443,20 @@ func AsProviderSilent(err error) (*ProviderSilentError, bool) {
 		return e, true
 	}
 	return nil, false
+}
+
+// DeclaredRetryAfter returns the wait a provider declared on its final response.
+func DeclaredRetryAfter(err error) time.Duration {
+	if e, ok := AsProviderRateLimited(err); ok {
+		return e.RetryAfter
+	}
+	if e, ok := AsProviderOverloaded(err); ok {
+		return e.RetryAfter
+	}
+	if e, ok := AsProviderServer(err); ok {
+		return e.RetryAfter
+	}
+	return 0
 }
 
 // Notice codes for provider failures the host surfaces to the user.

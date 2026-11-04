@@ -45,7 +45,7 @@ func TestSynthesisCanPublishWithoutAnAcceptedBaseline(t *testing.T) {
 	}
 	last := rows[len(rows)-1]
 	snapshot := store.CompactionView{CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq}
-	svc.scheduleProjectionSynthesis(t.Context(), sc, info, rows, prepared, baseline, snapshot)
+	svc.scheduleProjectionSynthesis(t.Context(), sc, info, rows, prepared, baseline, snapshot, attemptPass{})
 	testutil.FailErr(t, "wait for optional synthesis", svc.Runner.Synthesis.WaitContext(t.Context()))
 	view, ok, err := mem.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "read synthesized projection", err)

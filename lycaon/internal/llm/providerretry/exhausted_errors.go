@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -75,6 +76,18 @@ func ExhaustedHTTPError(providerID, model string, status, attempts int, formatte
 			}
 		}
 		return formatted
+	}
+}
+
+func declareRetryAfter(err error, wait time.Duration) {
+	if e, ok := failure.AsProviderRateLimited(err); ok {
+		e.RetryAfter = wait
+	}
+	if e, ok := failure.AsProviderOverloaded(err); ok {
+		e.RetryAfter = wait
+	}
+	if e, ok := failure.AsProviderServer(err); ok {
+		e.RetryAfter = wait
 	}
 }
 

@@ -11,7 +11,7 @@ type ContextForgetter interface{ Forget(context.Context, string) }
 type Capture interface{ Reset(string) }
 type Streams interface{ Finish(context.Context, string) }
 type Batch interface{ BeginTurn(string) }
-type History interface{ ForgetProjection(string) }
+type History interface{ ForgetSessionState(string) }
 
 // TurnState invalidates captures, ledgers, and derived facts from a released run.
 type TurnState struct {
@@ -55,7 +55,7 @@ func (s *TurnState) Forget(ctx context.Context, id string) {
 		s.Promotion.Forget(id)
 	}
 	if s.History != nil {
-		s.History.ForgetProjection(id)
+		s.History.ForgetSessionState(id)
 	}
 	if s.Gate != nil {
 		s.Gate.Forget(id)

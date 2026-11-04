@@ -22,7 +22,7 @@ type Batch interface {
 	BeginTurn(string)
 }
 type Closeouts interface{ Rewind(string, string) }
-type History interface{ ForgetProjection(string) }
+type History interface{ ForgetSessionState(string) }
 type Drafts interface {
 	Publish(context.Context, string, uint64)
 }
@@ -70,7 +70,7 @@ func (s *Service) ResetTurnLedgers(sessionID, rootID string) {
 	s.Closeouts.Rewind(sessionID, rootID)
 	for _, id := range []string{sessionID, rootID} {
 		s.ProgressClosure.Forget(id)
-		s.History.ForgetProjection(id)
+		s.History.ForgetSessionState(id)
 	}
 }
 

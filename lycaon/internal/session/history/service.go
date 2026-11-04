@@ -24,6 +24,7 @@ type Store interface {
 	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
 	GetCompactionView(context.Context, string) (*store.CompactionView, bool, error)
 	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)
+	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
 	PutCompactionView(context.Context, string, store.CompactionView) error
 }
 
@@ -51,8 +52,11 @@ func (m *Service) SetCompactor(compactor compaction.ContextCompactor) {
 }
 func (m *Service) SetDataDir(dir string) { m.dataDir = dir }
 
-// ForgetProjection drops rebuildable per-session projection state.
-func (m *Service) ForgetProjection(sessionID string) {
+// ForgetSessionState releases calibration, cutoff, and attempt records after a reset or eviction.
+func (m *Service) ForgetSessionState(sessionID string) {
 	m.calibration.Delete(sessionID)
 	m.cutoffs.sessions.Delete(sessionID)
+	if m.Runner != nil {
+		m.Runner.attempts.forget(sessionID)
+	}
 }
