@@ -963,6 +963,19 @@ leaves shared work running for other subscribers; canceling the last interested
 request stops that operation. `PW_TEST_WORKERS=2 ./task test:digest --
 ./internal/foo/...` requests a smaller CPU budget without bypassing admission.
 
+A request that does not pass ends its stdout with a `=== Failure digest ===` block,
+built from its receipt: request status and exit code, the failed or unverified
+targets with representative diagnostics, stages left unverified, how many targets
+did not fit, and the receipt and full-log paths. The block holds at most 40 lines
+and whichever is smallest of 4096 bytes, the 3072-byte stream tail of the smallest
+command output budget, and the space the process-finished kick leaves after the
+status line that may land after it. A passing request prints none. `./task --wait`
+keeps its JSON on stdout and repeats the job's block on stderr. Invocations outside
+a shared batch have no receipt, so their block carries status and exit code only.
+Patterns only choose which log lines to show; status comes from runner results.
+Stage logs and `batch.log` stay exact; the command's own output drops exact
+standalone `ld: warning: ignoring duplicate libraries: '-lobjc'` lines.
+
 For agents that need to release their initial command call, the wrapper accepts
 `./task --background <target> ...`. It returns JSON containing a job ID and the
 corresponding `./task --wait <job-id>` command. The detached job enters normal
