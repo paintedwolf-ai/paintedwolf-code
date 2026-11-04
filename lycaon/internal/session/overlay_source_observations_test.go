@@ -40,10 +40,8 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	mgr := session.NewHost(
 		mem,
 		session.Models{
-			Client:   llm.NewMockProvider(&llm.MockConfig{}),
-			Provider: nil,
-			Limits:   settings.DefaultSessionLimits(),
-			Cost:     nil,
+			Client: llm.NewMockProvider(&llm.MockConfig{}),
+			Limits: settings.DefaultSessionLimits(),
 		},
 		reg,
 	)
