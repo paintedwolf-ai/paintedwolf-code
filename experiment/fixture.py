@@ -9,7 +9,7 @@ COLUMNS = {
 }
 
 BANNER = """
-Totals:
+Totals:\x20\x20
 ========
 """
 
