@@ -42,6 +42,16 @@ describe("advanceTranscriptAnnouncement", () => {
     expect(result.announcement).toBe("Assistant: Done");
   });
 
+  it.each([
+    ["The limit is in [a.go:42-58](a.go#L42-L58).", "The limit is in a.go:42-58."],
+    ["See [my\\_file.go:1](<my_file v2.go#L1>).", "See my_file.go:1."],
+    ["Read [RFC 9110](https://example.test/spec) and [x].", "Read RFC 9110 and [x]."],
+  ])("speaks a link's label and not its destination: %s", (content, spoken) => {
+    const initial = step(undefined, []);
+    const result = step(initial.state, [assistant("a1", content, "complete")]);
+    expect(result.announcement).toBe(`Assistant: ${spoken}`);
+  });
+
   it("waits for a streaming assistant turn to complete", () => {
     const initial = step(undefined, []);
     const streaming = step(initial.state, [
