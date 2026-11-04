@@ -230,7 +230,8 @@ func policyOutputs(t *testing.T) []renderedOutput {
 			audience = audienceTypedTool
 		}
 		// The refusal of a typed tool's own call describes that call's arguments.
-		if rule, ok := rules.Get(code); ok && rule.Anchor == "tool.rejected" && namesTypedCitationTool(copyText) {
+		if rule, ok := rules.Get(code); ok && rule.Anchor == "tool.rejected" &&
+			(namesTypedCitationTool(copyText) || slices.Contains(rule.Requires.Facts, "paintedwolf.review_expected_call")) {
 			audience = audienceTypedTool
 		}
 		out = append(out, renderedOutput{name: "policy " + code, audience: audience, text: flattenBranches(t, copyText, audience == audienceCoordinator)})

@@ -260,8 +260,8 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 		// sharedOnly are sent to both repair kicks by one builder.
 		sharedOnly []string
 	}{
-		{kick: "coordinator-citation-grounding", content: "Done [read#9:1].", sharedOnly: []string{"pinned_body_chars"}},
-		{kick: "coordinator-report-document", content: documentContent, reportPhase: true, sharedOnly: []string{"drafted_synthesis", "can_recall"}},
+		{kick: "coordinator-citation-grounding", content: "Done [read#9:1].", sharedOnly: []string{"pinned_body_chars", "worker_leg"}},
+		{kick: "coordinator-report-document", content: documentContent, reportPhase: true, sharedOnly: []string{"drafted_synthesis", "can_recall", "worker_leg"}},
 	} {
 		t.Run(tc.kick, func(t *testing.T) {
 			c := newCloseoutContract(t)
