@@ -2,9 +2,12 @@ package sourceledger
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -244,6 +247,99 @@ func TestOpenSessionWindowsListsOnlyThatSessionsUnsettledWindows(t *testing.T) {
 		t.Fatalf("unconfigured ledger windows = %+v", listed)
 	}
 	testutil.FailErr(t, "close other window", other.Close(ctx))
+}
+
+// gatedInventory holds passes until the test releases them.
+type gatedInventory struct {
+	commandsInventoryPort
+	release  chan struct{}
+	passes   atomic.Int32
+	canceled atomic.Bool
+}
+
+func (g *gatedInventory) EnsureInventory(ctx context.Context, req InventoryRequest) error {
+	g.passes.Add(1)
+	<-g.release
+	g.canceled.Store(ctx.Err() != nil)
+	return g.commandsInventoryPort.EnsureInventory(ctx, req)
+}
+
+func (s *Commands) overduePassCount() int {
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	total := 0
+	for _, count := range s.overduePasses {
+		total += count
+	}
+	return total
+}
+
+// A pass longer than the budget finishes in the background; launches meanwhile
+// get no window without waiting, and the first open after it succeeds.
+func TestSlowStartInventoryConvergesWithoutChargingEveryLaunch(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	gate := &gatedInventory{commandsInventoryPort: store.Commands.inventory, release: make(chan struct{})}
+	store.Commands.inventory = gate
+	in := CommandWindowInput{ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s1", ToolName: "command"}
+
+	store.Commands.observationBudget = time.Millisecond
+	if window, err := store.Commands.OpenCommandWindow(ctx, in); window != nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("first open = %v, %v; want the budget to expire", window, err)
+	}
+	// With a pass overdue, an open that waited at all would never return here.
+	store.Commands.observationBudget = time.Hour
+	for range 3 {
+		if window, err := store.Commands.OpenCommandWindow(ctx, in); window != nil || !errors.Is(err, ErrWindowStartPending) {
+			t.Fatalf("open during the pass = %v, %v; want it refused at once", window, err)
+		}
+	}
+	if passes := gate.passes.Load(); passes != 1 {
+		t.Fatalf("passes started = %d, want the one still running", passes)
+	}
+
+	close(gate.release)
+	for store.Commands.overduePassCount() != 0 {
+		runtime.Gosched()
+	}
+	if gate.canceled.Load() {
+		t.Fatal("the open's expired budget canceled the pass")
+	}
+	window, err := store.Commands.OpenCommandWindow(ctx, in)
+	testutil.FailErr(t, "open after the pass", err)
+	closeAndSettle(t, ctx, window)
+}
+
+// Before-images left unretained cost the window nothing, and what one open
+// stored spares the next.
+func TestRetentionOutOfTimeKeepsTheWindowAndResumes(t *testing.T) {
+	ledger := openDiskLedger(t)
+	store, ctx, root := ledger.store, context.Background(), ledger.root
+	writeRootFile(t, root, "kept.txt", "kept\n")
+	store.Commands.retainBudget = 0
+	starved := openTestWindow(t, store, ctx, root, "make")
+	pins := func(id string) int {
+		var count int
+		testutil.FailErr(t, "count pins", ledger.sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_command_window_objects WHERE window_id = ?`, id).Scan(&count))
+		return count
+	}
+	if got := pins(starved.ID); got != 0 {
+		t.Fatalf("pins with no retention time = %d", got)
+	}
+	writeRootFile(t, root, "gen.txt", "generated\n")
+	deliverWrites(ctx, root, "gen.txt")
+	closeAndSettle(t, ctx, starved)
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 50, 0, CommitLens{})
+	testutil.FailErr(t, "query session walk", err)
+	if effect := effectsByPath(walk)["gen.txt"]; effect.CommandWindowID != starved.ID {
+		t.Fatalf("effect = %+v, want it attributed to the starved window", effect)
+	}
+
+	store.Commands.retainBudget = time.Minute
+	full := openTestWindow(t, store, ctx, root, "make")
+	if got := pins(full.ID); got == 0 {
+		t.Fatal("no before-image retained with time available")
+	}
+	closeAndSettle(t, ctx, full)
 }
 
 func TestCommandWindowThatObservedNothingLeavesNoRow(t *testing.T) {

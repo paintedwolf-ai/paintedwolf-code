@@ -43,6 +43,7 @@ type Store struct {
 	// blobs is the retained revision store, read when a consumer needs the
 	// bytes of a version the ledger captured.
 	blobs        *sourceblob.Store
+	gitObject    func(context.Context, Entry) ([]byte, error)
 	observations *sourceobservation.Store
 	broker       *backgroundwork.Broker
 	// onCapture reports files read from disk.
@@ -74,7 +75,7 @@ func New(sqlDB db.Handle, blobs *sourceblob.Store, observationPath string, broke
 		return nil
 	}
 	s := &Store{
-		db: sqlDB, queries: db.New(sqlDB), blobs: blobs, observations: sourceobservation.New(observationPath), broker: broker,
+		db: sqlDB, queries: db.New(sqlDB), blobs: blobs, gitObject: gitBlob, observations: sourceobservation.New(observationPath), broker: broker,
 		jobs:   make(map[string]*buildJob),
 		scopes: defaultScopes(), deltas: newDeltaTracker(), pins: newPinSet(),
 	}

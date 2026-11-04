@@ -68,7 +68,7 @@ func BenchmarkOpenCommandWindow(b *testing.B) {
 	for _, tree := range []struct {
 		files     int
 		committed bool
-	}{{2000, true}, {10000, true}, {200, false}} {
+	}{{2000, true}, {10000, true}, {5000, false}} {
 		for _, watched := range []bool{true, false} {
 			b.Run(fmt.Sprintf("files-%d/committed-%t/watched-%t", tree.files, tree.committed, watched), func(b *testing.B) {
 				benchmarkOpenCommandWindow(b, tree.files, tree.committed, watched)
