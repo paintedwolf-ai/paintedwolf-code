@@ -904,6 +904,16 @@ work still requires one of the documented adverse health flags below, or an
 explicit `--force` for known unwanted work. No process basename grants an
 exception or identifies a safe cleanup target.
 
+A test killed while one of its threads waits on its own FUSE mount cannot finish
+exiting: the waiter holds the server's device open, so the connection never ends
+and the run's lease stays held. Terminal settlement, `test:cancel` reclamation and
+the next run's collection settle this from kernel facts. When every holder of a
+run's `.lease` is proven dead, on Linux by a pending SIGKILL on each live thread and
+on macOS by a kill this process delivered to that exact process, they end that run's
+own connections, through the connection's abort file on Linux and a forced unmount
+on macOS. The holder then exits, and the ordinary lease path detaches and removes the
+run. A run with any live holder, and any mount outside the run, is untouched.
+
 Health observations appear in `test:status` and existing queue notices. On macOS
 and Linux, lost owner identity is `supervision_lost`; an OS-stopped owner is
 `supervisor_stopped`. Operations with ten minutes of continuously sampled unchanged
