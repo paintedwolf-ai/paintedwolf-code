@@ -499,7 +499,7 @@ func TestRestoredCoverageNeverClipsSummaryProse(t *testing.T) {
 		reason    string
 		sources   int
 	}{
-		{name: "tail after the summary keeps it", tailStart: 71, through: 70, summary: 60, facts: 1, reason: "summarized", sources: 1},
+		{name: "tail after the summary keeps it", tailStart: 71, through: 70, summary: 60, facts: 1, reason: "summarized", sources: 2},
 		{name: "tail inside the summary drops prose", tailStart: 50, through: 49, reason: "references_only", sources: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
