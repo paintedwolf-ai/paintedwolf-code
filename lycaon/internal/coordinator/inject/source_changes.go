@@ -11,6 +11,8 @@ import (
 // SourceChangeFile is one file another actor changed since the session's
 // previous turn, grouped from the ledger effects in that window.
 type SourceChangeFile struct {
+	// Handle cites this row. Briefs stored without one render no handle.
+	Handle string `json:"handle,omitempty"`
 	// Path is the canonical display path (@label-qualified off the primary root).
 	Path string `json:"path,omitempty"`
 	// Actor is the sourceledger.ActorClass spelling for the file's newest
@@ -29,6 +31,8 @@ type SourceChangeFile struct {
 // SourceGitLine is one observed git ref movement inside the turn window,
 // stated from the ledger's transition record.
 type SourceGitLine struct {
+	// Handle cites this row. Briefs stored without one render no handle.
+	Handle string `json:"handle,omitempty"`
 	// Root is the display label of the moved root; empty for the primary root.
 	Root string `json:"root,omitempty"`
 	// Kind is the SourceGitChangeKind wire spelling (checkout, commit, …).
@@ -80,17 +84,20 @@ func RenderSourceChangesBlock(
 	if renderer == nil || brief.Empty() {
 		return ""
 	}
+	citable := false
 	files := make([]map[string]any, 0, len(brief.Files))
 	for _, f := range brief.Files {
+		citable = citable || f.Handle != ""
 		files = append(files, map[string]any{
-			"path": f.Path, "actor": f.Actor, "detail": f.Detail,
+			"handle": f.Handle, "path": f.Path, "actor": f.Actor, "detail": f.Detail,
 			"op": f.Op, "at": f.At, "effects": f.Effects,
 		})
 	}
 	git := make([]map[string]any, 0, len(brief.Git))
 	for _, g := range brief.Git {
+		citable = citable || g.Handle != ""
 		git = append(git, map[string]any{
-			"root": g.Root, "kind": g.Kind, "from_ref": g.FromRef, "to_ref": g.ToRef,
+			"handle": g.Handle, "root": g.Root, "kind": g.Kind, "from_ref": g.FromRef, "to_ref": g.ToRef,
 			"from_commit": g.FromCommit, "to_commit": g.ToCommit,
 			"detail": g.Detail, "at": g.At,
 		})
@@ -100,6 +107,7 @@ func RenderSourceChangesBlock(
 		renderer, map[string]any{
 			"files": files, "git": git, "other_files": brief.OtherFiles,
 			"other_effects": brief.OtherEffects, "truncated": brief.Truncated,
+			"citable": citable,
 		},
 	)
 	if err != nil {

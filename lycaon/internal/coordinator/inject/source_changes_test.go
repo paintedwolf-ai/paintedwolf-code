@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 )
@@ -38,6 +39,34 @@ func TestRenderSourceChangesBlockParity(t *testing.T) {
 	}
 	if strings.Contains(got, "recording cap") {
 		t.Fatalf("untruncated brief mentions the cap:\n%s", got)
+	}
+}
+
+// AC-Q-01: what the brief prints is what the citation grammar reads back, row for
+// row, and a brief stored before rows had handles prints none.
+func TestRenderedBriefRowsParseAsTheirOwnCitations(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	brief := inject.SourceChangeBrief{
+		Git:   []inject.SourceGitLine{{Handle: "source_change#4", Kind: "commit", ToRef: "main", At: "14:01 UTC"}},
+		Files: []inject.SourceChangeFile{{Handle: "source_change#5", Path: "config.txt", Actor: "external", Op: "write", At: "14:02 UTC", Effects: 1}},
+	}
+	handles := func(block string) []string {
+		var out []string
+		for _, occurrence := range citationmd.Parse(block, citationmd.Options{}).Occurrences {
+			if occurrence.Kind == citationmd.KindCitation {
+				out = append(out, occurrence.Citation.Handle)
+			}
+		}
+		return out
+	}
+	cited := handles(inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief))
+	if len(cited) != 2 || cited[0] != "source_change#4" || cited[1] != "source_change#5" {
+		t.Fatalf("parsed handles = %v", cited)
+	}
+
+	brief.Git[0].Handle, brief.Files[0].Handle = "", ""
+	if stored := handles(inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief)); len(stored) != 0 {
+		t.Fatalf("a brief with no handles parsed citations: %v", stored)
 	}
 }
 

@@ -665,7 +665,8 @@ anchors:
       Ledger-recorded files other actors changed between the previous turn
       boundary and this one, actor-classified; working-set paths itemized,
       the rest counted. Observed git ref movements (checkout, commit, pull …)
-      lead the block so file rows read against their cause.
+      lead the block so file rows read against their cause. Each row carries a
+      source_change handle citing that the change was recorded.
     trigger_class: assembly_inject
     surface: coordinator
     planes: [inform]
@@ -676,6 +677,7 @@ anchors:
         other_files: { type: "int", required: true }
         other_effects: { type: "int", required: true }
         truncated: { type: "bool", required: true }
+        citable: { type: "bool", required: true }
 
   - id: inject.synthesis_evidence
     title: Synthesis evidence inject

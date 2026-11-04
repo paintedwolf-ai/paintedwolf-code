@@ -3,6 +3,7 @@ package postturn
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -48,6 +49,15 @@ func (m *Service) After(ctx context.Context, sessionID, profileID string, turnTo
 		if errors.Is(err, guidance.ErrGroundingEscalated) {
 			return err
 		}
+	}
+	// Feedback on the turn that just ended commits with that turn, so it reads as
+	// history and not as a condition on the next user message. A failed take stays
+	// staged and arrives with the next turn.
+	if m.guidance == nil {
+		return nil
+	}
+	if _, err := m.guidance.TakePolicy(ctx, sessionID); err != nil {
+		slog.WarnContext(ctx, "post-turn feedback not committed", "session_id", sessionID, "err", err)
 	}
 	return nil
 }

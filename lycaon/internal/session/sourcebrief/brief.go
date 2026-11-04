@@ -17,7 +17,7 @@ import (
 )
 
 type Store interface {
-	PutTurnSourceBrief(context.Context, string, string, string) error
+	PutTurnSourceBrief(context.Context, string, string, evidence.SourceChangeMint) error
 	TurnSourceBriefs(context.Context, string) (map[string]string, error)
 	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 	LoadLedger(context.Context, string) (evidence.Ledger, error)
@@ -64,11 +64,15 @@ func (m *Service) Record(ctx context.Context, sess *api.Session, openingMessageI
 	if brief.Empty() {
 		return
 	}
-	raw, err := json.Marshal(brief)
-	if err != nil {
-		return
+	mint := func(firstOrdinal int) (string, []evidence.Record, error) {
+		cited, records, err := citableBrief(brief, firstOrdinal)
+		if err != nil {
+			return "", nil, err
+		}
+		raw, err := json.Marshal(cited)
+		return string(raw), records, err
 	}
-	if err := m.store.PutTurnSourceBrief(ctx, sess.ID, openingMessageID, string(raw)); err != nil {
+	if err := m.store.PutTurnSourceBrief(ctx, sess.ID, openingMessageID, mint); err != nil {
 		slog.WarnContext(ctx, "source change brief not recorded", "session_id", sess.ID, "err", err)
 	}
 }
