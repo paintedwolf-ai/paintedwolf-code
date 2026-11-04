@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/limits"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -59,13 +61,10 @@ func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 	t.Helper()
 	h := &midTurnHarness{ledger: &midTurnLedgerStub{}, sess: &api.Session{ID: "coordinator", Posture: api.SessionPostureBuild}}
 	reg := tools.NewStubRegistry()
-	for _, name := range []string{"read", "edit"} {
-		toolName := name
-		testutil.FailErr(t, "register "+name, reg.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-			h.order = append(h.order, toolName)
-			return `{"ok":true}`, nil
-		}))
-	}
+	testutil.FailErr(t, "register recall", reg.Register("recall", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		h.order = append(h.order, "recall")
+		return `{"ok":true}`, nil
+	}))
 	testutil.FailErr(t, "register task", reg.Register("task", func(_ context.Context, _ map[string]any, ctx tools.ToolContext) (string, error) {
 		if h.refuseTask {
 			return "", guidance.NewRefusal("TOOL_ARGS_INVALID", "refused")
@@ -147,9 +146,22 @@ func (h *midTurnHarness) respond(t *testing.T, history []api.Message, surfaceID,
 	}
 	history = append(history, api.Message{ID: id, Role: api.MessageRoleAssistant, Content: text, ToolCalls: toolCalls})
 	out, _, _, _, _, parked, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, toolCalls,
-		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID, Agent: "coordinator"}}, history, "go", id, surfaceID, nil)
+		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID, Agent: "coordinator"}}, history, "go", id, surfaceID, midTurnState(t, surfaceID))
 	testutil.FailErr(t, "execute batch", err)
 	return out, parked
+}
+
+// midTurnState carries the tool plan a coordinator turn compiles for its surface.
+func midTurnState(t *testing.T, surfaceID string) *promptLoopTurnState {
+	t.Helper()
+	st := &promptLoopTurnState{}
+	if surfaceID == "" {
+		return st
+	}
+	plans, err := surface.CompileToolPlans(1)
+	testutil.FailErr(t, "compile tool plans", err)
+	st.turnToolPlan = plans[surfaceID]
+	return st
 }
 
 func midTurnUser() api.Message {
@@ -286,9 +298,9 @@ func TestPublicationPrecedesToolsAndToolsAlwaysRun(t *testing.T) {
 		notice   string
 		friction int
 	}{
-		{name: "AC-MID-03 cited update commits before the edit", text: "Found it in [read#3:42].", observed: true, note: true},
-		{name: "AC-MID-04 uncited withholds and the edit runs", text: "Still looking.", observed: true, notice: guidance.MidTurnNoteUngroundedCode, friction: 1},
-		{name: "AC-MID-05 invalid withholds and the edit runs", text: "See [read#9:1].", observed: true, notice: guidance.MidTurnNoteHandleUngroundCode, friction: 1},
+		{name: "AC-MID-03 cited update commits before the tool", text: "Found it in [read#3:42].", observed: true, note: true},
+		{name: "AC-MID-04 uncited withholds and the tool runs", text: "Still looking.", observed: true, notice: guidance.MidTurnNoteUngroundedCode, friction: 1},
+		{name: "AC-MID-05 invalid withholds and the tool runs", text: "See [read#9:1].", observed: true, notice: guidance.MidTurnNoteHandleUngroundCode, friction: 1},
 		{name: "AC-MID-13 parroted header is no text", text: "⟦D:model:internal_step_note⟧\n"},
 		{name: "AC-MID-13 empty step is ordinary", text: " \n"},
 	} {
@@ -299,10 +311,10 @@ func TestPublicationPrecedesToolsAndToolsAlwaysRun(t *testing.T) {
 			if tc.observed {
 				history = append(history, observed)
 			}
-			out, _ := h.respond(t, history, publishingSurface, "c1", tc.text, "edit")
-			want := []string{"edit"}
+			out, _ := h.respond(t, history, publishingSurface, "c1", tc.text, "recall")
+			want := []string{"recall"}
 			if tc.note {
-				want = []string{"note", "edit"}
+				want = []string{"note", "recall"}
 			}
 			if strings.Join(h.order, ",") != strings.Join(want, ",") {
 				t.Fatalf("order = %v, want %v", h.order, want)
@@ -326,22 +338,21 @@ func TestPublicationPrecedesToolsAndToolsAlwaysRun(t *testing.T) {
 // AC-MID-14, AC-MID-19: private text is neither published nor owed.
 func TestPrivateTextPublishesNothingAndOwesNothing(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		surface string
-		worker  bool
+		name, surface, tool string
+		worker              bool
 	}{
-		{"synthesis surface", "implement_synthesis", false},
-		{"root session on no surface", "", false},
-		{"worker on a publishing surface", publishingSurface, true},
+		{"synthesis surface", "implement_synthesis", "recall", false},
+		{"root session on no surface", "", "wait", false},
+		{"worker on a publishing surface", publishingSurface, "wait", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newMidTurnHarness(t, tc.surface)
 			if tc.worker {
 				h.sess.ParentSessionID = "parent"
 			}
-			out, parked := h.respond(t, []api.Message{midTurnUser()}, tc.surface, "c1", "Private thought.", "wait")
-			if !parked {
-				t.Fatal("private text must not refuse the wait")
+			out, _ := h.respond(t, []api.Message{midTurnUser()}, tc.surface, "c1", "Private thought.", tc.tool)
+			if strings.Join(h.order, ",") != tc.tool {
+				t.Fatalf("private text changed the batch: %v", h.order)
 			}
 			if _, ok := noteFor(out, "c1"); ok || len(h.notices) != 0 || h.friction != 0 {
 				t.Fatalf("published=%v notices=%v friction=%d", ok, h.notices, h.friction)
@@ -362,9 +373,9 @@ func TestNoteStorageOutcomes(t *testing.T) {
 			}
 			return nil
 		}
-		history := []api.Message{midTurnUser(), {ID: "c1", Role: api.MessageRoleAssistant, Content: "Starting.", ToolCalls: []api.ToolCall{{ID: "e", Name: "edit"}}}}
+		history := []api.Message{midTurnUser(), {ID: "c1", Role: api.MessageRoleAssistant, Content: "Starting.", ToolCalls: []api.ToolCall{{ID: "e", Name: "recall"}}}}
 		out, _, _, _, _, _, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, history[1].ToolCalls,
-			tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID}}, history, "go", "c1", publishingSurface, nil)
+			tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID}}, history, "go", "c1", publishingSurface, midTurnState(t, publishingSurface))
 		if !errors.Is(err, boom) || len(h.order) != 0 {
 			t.Fatalf("err=%v order=%v", err, h.order)
 		}
@@ -380,22 +391,22 @@ func TestNoteStorageOutcomes(t *testing.T) {
 			}
 			return nil
 		}
-		out, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "Starting.", "edit")
-		if _, ok := noteFor(out, "c1"); !ok || strings.Join(h.order, ",") != "edit" {
+		out, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "Starting.", "recall")
+		if _, ok := noteFor(out, "c1"); !ok || strings.Join(h.order, ",") != "recall" {
 			t.Fatalf("order=%v", h.order)
 		}
 	})
 	t.Run("a note already in history is not published twice", func(t *testing.T) {
 		h := newMidTurnHarness(t, publishingSurface)
 		existing := api.Message{ID: api.MidTurnNoteID("c1"), Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Content: "Starting."}
-		out, _ := h.respond(t, []api.Message{midTurnUser(), existing}, publishingSurface, "c1", "Starting.", "edit")
+		out, _ := h.respond(t, []api.Message{midTurnUser(), existing}, publishingSurface, "c1", "Starting.", "recall")
 		count := 0
 		for _, msg := range out {
 			if msg.ID == existing.ID {
 				count++
 			}
 		}
-		if count != 1 || strings.Join(h.order, ",") != "edit" {
+		if count != 1 || strings.Join(h.order, ",") != "recall" {
 			t.Fatalf("count=%d order=%v", count, h.order)
 		}
 	})
@@ -405,8 +416,8 @@ func TestNoteStorageOutcomes(t *testing.T) {
 func TestUnreadableLedgerNeverPublishesAsExempt(t *testing.T) {
 	h := newMidTurnHarness(t, publishingSurface)
 	h.ledger.err = errors.New("ledger offline")
-	out, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "Starting.", "edit")
-	if _, ok := noteFor(out, "c1"); ok || strings.Join(h.order, ",") != "edit" {
+	out, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "Starting.", "recall")
+	if _, ok := noteFor(out, "c1"); ok || strings.Join(h.order, ",") != "recall" {
 		t.Fatalf("published=%v order=%v", ok, h.order)
 	}
 	if !guard.DeriveWaitVisibility(out).Unpublished {
@@ -433,5 +444,56 @@ func TestExhaustedRepairWithoutFactsPermitsSilentWait(t *testing.T) {
 	}
 	if h.kick != "" {
 		t.Fatalf("rendered %q with no facts", h.kick)
+	}
+}
+
+// A note goes through the same storage screen as every row: what lands on disk
+// is the redacted revision, and the carrier's text is what was audited.
+func TestPublishedNoteUsesTheStorageSafeRevision(t *testing.T) {
+	h := newMidTurnHarness(t, publishingSurface)
+	h.loop.Projection.Deps.RedactMessageForStorage = func(_ context.Context, msg api.Message) (api.Message, bool) {
+		if !api.IsAgentNoteMessage(msg) {
+			return msg, false
+		}
+		msg.Content = strings.ReplaceAll(msg.Content, "s3cret", "[redacted]")
+		return msg, true
+	}
+	h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "The key is s3cret.", "recall")
+	for _, msg := range h.appended {
+		if api.IsAgentNoteMessage(msg) {
+			if msg.Content != "The key is [redacted]." {
+				t.Fatalf("stored note = %q", msg.Content)
+			}
+			return
+		}
+	}
+	t.Fatal("no note stored")
+}
+
+// A host progress note is labelled data for the model, not its own speech.
+func TestHostProgressNoteProjectsAsHostData(t *testing.T) {
+	h := newMidTurnHarness(t, publishingSurface)
+	history, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c0", "Dispatching.", "task")
+	history, _ = h.respond(t, history, publishingSurface, "c1", "Uncited.", "wait")
+	history, parked := h.respond(t, history, publishingSurface, "c2", "Still uncited.", "wait")
+	if !parked {
+		t.Fatal("wait must proceed after repair")
+	}
+	var host api.Message
+	for _, msg := range api.FilterPromptHistory(history) {
+		if api.IsAgentNoteMessage(msg) && msg.Origin == api.MessageOriginHost {
+			host = msg
+		}
+	}
+	if host.ID == "" {
+		t.Fatal("host note missing from model history")
+	}
+	projected := transcript.Project([]api.Message{host})
+	got := projected[len(projected)-1].Content
+	if !strings.HasPrefix(got, "Data from host:\n") || !strings.Contains(got, "explore: started") {
+		t.Fatalf("host note projection = %q", got)
+	}
+	if strings.Contains(host.Content, "Uncited") {
+		t.Fatal("the host must not repeat the model's unpublished text")
 	}
 }

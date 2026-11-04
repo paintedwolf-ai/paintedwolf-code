@@ -2,10 +2,13 @@ package session
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -42,5 +45,37 @@ func TestBeforeWaitReadsSurfaceAndDurableNotes(t *testing.T) {
 				t.Fatalf("wait should proceed: %v", err)
 			}
 		})
+	}
+}
+
+// AC-MID-04, AC-MID-12: a withheld reason reaches the next request as one durable
+// host row whose parts keep their provenance, and it blocks nothing.
+func TestWithheldTextBecomesOneStructuredNotice(t *testing.T) {
+	mgr, sess := newSynthesisDelayManager(t)
+	gc := oar.NewGuardContext()
+	gc.Session.SessionID = sess.ID
+	gc.Session.MidTurnCitationsRequired = true
+	gc.Rejection.RejectObservation = guidance.MidTurnObservation(guidance.MidTurnNoteUngroundedCode)
+	gc.PutRejectData(guidance.MidTurnNoteUngroundedCode, map[string]any{"observed_handles_sample": "task#1"})
+	testutil.FailErr(t, "evaluate", mgr.ToolPolicy.MidTurnNoteFeedback(context.Background(), sess, gc))
+	messages, err := mgr.Coordinator.Guidance.TakePolicy(context.Background(), sess.ID)
+	testutil.FailErr(t, "take notice", err)
+	if len(messages) != 1 || !api.IsInternalHostUserNudge(messages[0]) {
+		t.Fatalf("notice rows = %+v", messages)
+	}
+	notice := messages[0]
+	for _, want := range []string{"MESSAGE WITHHELD FROM USER", "has not received", "task#1", "Publish a brief update", "Code: " + guidance.MidTurnNoteUngroundedCode} {
+		if !strings.Contains(notice.Content, want) {
+			t.Fatalf("notice lacks %q: %s", want, notice.Content)
+		}
+	}
+	if strings.Contains(notice.Content, "Rejected:") {
+		t.Fatalf("a non-blocking notice must not read as a refusal: %s", notice.Content)
+	}
+	if notice.ContentParts[0].Authority != api.ContentAuthoritySystem || notice.ContentParts[0].Origin != api.MessageOriginHost {
+		t.Fatalf("host part lost its provenance: %+v", notice.ContentParts[0])
+	}
+	if again, err := mgr.Coordinator.Guidance.TakePolicy(context.Background(), sess.ID); err != nil || len(again) != 0 {
+		t.Fatalf("notice repeated: %+v, %v", again, err)
 	}
 }
