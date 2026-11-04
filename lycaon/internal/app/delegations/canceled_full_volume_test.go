@@ -90,6 +90,8 @@ func TestCancelFinishesOnAFullVolume(t *testing.T) {
 		if got := f.readBranch(task.WorkspaceRoot, "app.txt"); got != "unpromoted edit\n" {
 			t.Fatalf("tree lost work: %q", got)
 		}
+		// Closing the store writes too.
+		testutil.FailErr(t, "free the volume", os.RemoveAll(filepath.Join(task.WorkspaceRoot, "filled")))
 	})
 }
 
