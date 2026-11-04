@@ -120,7 +120,7 @@ func traversalAncestors(deny, allow []string) []string {
 
 // SecretReadAllowBackRoots returns readable workspace carve-outs.
 func SecretReadAllowBackRoots() []string {
-	if SecretReadDenyRoots() == nil {
+	if secretReadDenyDisabled() {
 		return nil
 	}
 	return resolveEach(agentWorkspaceRootsUnderControlPlane())
