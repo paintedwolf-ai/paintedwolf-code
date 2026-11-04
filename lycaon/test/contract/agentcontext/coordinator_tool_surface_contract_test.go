@@ -17,7 +17,7 @@ import (
 )
 
 var implementInvestigateSurfaceTools = []string{
-	"command", "summarize", "skills_read",
+	"command", "summarize", "source_history", "skills_read",
 	"update_progress", "ask_user", "surface_note", "request_tools",
 	"recall",
 }
