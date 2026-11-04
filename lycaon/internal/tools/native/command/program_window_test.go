@@ -164,6 +164,7 @@ func TestProgramWindowACCW04WorkerBranchOpensNone(t *testing.T) {
 	f.Configure = func(tc *tools.ToolContext) {
 		configure(tc)
 		tc.Source.SourceWorkspaceKind, tc.Identity.WorkerJobID = api.SourceWorkspaceKindWorker, "job-1"
+		tc.Source.WorkerBranchRoot, tc.Source.BranchWorkspace = f.Dir, validBranchWorkspace{}
 	}
 	outcome := f.run(t, writeGen)
 	if outcome.Status != 0 || outcome.SourceWindow != nil {
@@ -176,6 +177,12 @@ func TestProgramWindowACCW04WorkerBranchOpensNone(t *testing.T) {
 		t.Fatalf("worker window rows = %d, want 0", rows)
 	}
 }
+
+type validBranchWorkspace struct{}
+
+func (validBranchWorkspace) ValidateMeta(context.Context) error { return nil }
+
+func (validBranchWorkspace) EnsureParents(context.Context, string) error { return nil }
 
 func (f *windowFixture) windowRows(t *testing.T) int {
 	t.Helper()
@@ -229,6 +236,14 @@ func TestProgramWindowACCW09PipelineAndLoopShareOne(t *testing.T) {
 				t.Fatalf("window rows = %d, want 1", rows)
 			}
 		})
+	}
+}
+
+func TestProgramWindowIsNotOpenedForAProgramNotFound(t *testing.T) {
+	f := newWindowFixture(t)
+	outcome := f.run(t, `external -- /nonexistent/generator; echo after`)
+	if opens := f.opener.opens.Load(); opens != 0 || outcome.SourceWindow != nil {
+		t.Fatalf("window opens = %d, outcome = %+v", opens, outcome)
 	}
 }
 
