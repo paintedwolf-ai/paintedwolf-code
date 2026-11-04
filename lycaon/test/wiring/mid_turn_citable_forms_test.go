@@ -92,7 +92,6 @@ func TestMidTurnRequirementFollowsWhatTheModelCanCite(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
-	h.SeedProgress(t, t.Context(), sess.ID)
 
 	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "first request")
 	testutil.FailErr(t, "first prompt", err)

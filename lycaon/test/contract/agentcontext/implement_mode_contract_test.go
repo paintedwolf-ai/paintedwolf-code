@@ -98,8 +98,7 @@ func TestCoordinatorImplementTripartiteWithAmbientRun(t *testing.T) {
 		surface.HostLoopWakeSentinel, WorkerCompletionHistory(orchestration.ProfileImplementer), "",
 		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false))
 	for _, want := range []string{
-		"SYNTH_HANDLE_NOT_IN_LEGS",
-		"SYNTH_CITATION_UNVERIFIABLE",
+		"tool results in this chat",
 		"Read-only report",
 	} {
 		if !strings.Contains(renderedOrchestrate, want) {

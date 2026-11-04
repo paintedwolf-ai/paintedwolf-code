@@ -52,8 +52,8 @@ func TestBuildCompletionMessages_pinsSynthesisPromptAcrossGroundingRetry(t *test
 	if strings.Contains(sys, "INVEST_HANDLE_NOT_OBSERVED") {
 		t.Fatal("must not carry investigate citation codes on pinned synthesis surface")
 	}
-	if !strings.Contains(sys, "SYNTH_HANDLE_NOT_IN_LEGS") {
-		t.Fatal("synthesis prompt must document SYNTH_HANDLE_NOT_IN_LEGS")
+	if !strings.Contains(sys, "tool results in this chat") {
+		t.Fatal("synthesis prompt must carry its citation section")
 	}
 }
 
