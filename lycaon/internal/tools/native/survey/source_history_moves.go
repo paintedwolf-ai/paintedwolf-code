@@ -84,7 +84,7 @@ func movedBase(
 ) (beforeAt string, moved bool, err error) {
 	roots := tctx.Source.Roots
 	if comp := recorded.comp; comp != nil && comp.Before.VersionID != "" && (comp.Before.RootID != at.rootID || comp.Before.Path != at.rel) {
-		compared.Before, compared.HasBefore = comp.Before.Content, comp.Before.Availability == sourceledger.ContentAvailable
+		compared.Before, compared.HasBefore = comp.Before.Content, sideReadable(comp.Before)
 		return projectroot.DisplayPath(roots, comp.Before.RootID, comp.Before.Path), true, nil
 	}
 	source, moved, err := recordedMoveSource(ctx, tctx, ledger.Files, branch, at)
