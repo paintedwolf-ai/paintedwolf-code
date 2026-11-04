@@ -177,6 +177,8 @@ func TestOpenWaitsForAWatcherEventStillInFlight(t *testing.T) {
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	forceTestPass(t, store, ctx, root)
+	// Recovery's first writes must not outlast the event's delivery.
+	testutil.FailErr(t, "recover windows", store.Commands.RecoverInterruptedWindows(ctx))
 
 	writeRootFile(t, root, "notes.md", "a person's save\n")
 	repochange.NotifyWorktreeDebounced(ctx, root, []string{"notes.md"}, repochange.SourceWatcher)
