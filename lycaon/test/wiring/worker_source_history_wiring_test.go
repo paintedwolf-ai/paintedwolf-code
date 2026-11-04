@@ -199,7 +199,7 @@ func TestSourceHistoryACDF14WriteWorkerDiffStartsAtTheBranchPreimage(t *testing.
 			t.Fatalf("diff removed %q from the pre-image: %q", line, diff.Diff)
 		}
 	}
-	if len(added) != 1 || added[0] != "+// edited" {
+	if len(added) != 1 || added[0] != "+ // edited" {
 		t.Fatalf("added lines = %q in %q, want the worker's one line", added, diff.Diff)
 	}
 }
