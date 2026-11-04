@@ -267,7 +267,7 @@ func TestDraftResolverOutcomes(t *testing.T) {
 	if got := onlyOutcome(t, "[g/h.go]", evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationUnverifiable || got.Code != guidance.SynthCitationUnverifiableCode {
 		t.Fatalf("a gate record is no content observation: %+v", got)
 	}
-	if got := onlyOutcome(t, `["g/../../h.go"]`, evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationNotObserved {
+	if got := onlyOutcome(t, `["g/../../h.go":1]`, evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationNotObserved {
 		t.Fatalf("traversal = %+v", got)
 	}
 	survey := evidence.AssembleLedger([]evidence.Record{{Handle: "list#1", Kind: "list", Shape: evidence.ShapeFileRegion, Path: "pkg/doc.go", Survey: true}})
