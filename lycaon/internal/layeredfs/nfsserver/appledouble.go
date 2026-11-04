@@ -6,7 +6,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
@@ -31,196 +30,185 @@ func isAppleDoublePath(relPath string) (string, bool) {
 	return dir + "/" + targetName, true
 }
 
-// EncodeAppleDoubleXattrs encodes Finder info and extended attributes into an
-// AppleDouble v2 header (magic 0x00051607, version 0x00020000, entry 9 with ATTR table).
+// The layout below is the one the macOS kernel reads and writes for ._ files (xnu vfs_xattr.c):
+// a two-entry AppleDouble header, Finder info, then an ATTR table inside the Finder info entry.
+const (
+	appleDoubleResource   uint32 = 2
+	appleDoubleFinderOff         = 50
+	appleDoubleAttrHdrOff        = 84
+	appleDoubleEntriesOff        = 120
+	appleDoubleMinSize           = 4096
+	appleDoubleFiller            = "Mac OS X        "
+	finderInfoXattr              = "com.apple.FinderInfo"
+	resourceForkXattr            = "com.apple.ResourceFork"
+)
+
+// emptyResourceFork is the placeholder fork the kernel writes into a new ._ file. It is the file's
+// layout, not an attribute: the kernel does not report it through getxattr.
+var emptyResourceFork = func() []byte {
+	fork := make([]byte, 286)
+	for _, at := range []int{0, 256} {
+		copy(fork[at:], []byte{0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0x1e})
+	}
+	copy(fork[16:], "This resource fork intentionally left blank   ")
+	copy(fork[280:], []byte{0, 0x1c, 0, 0x1e, 0xff, 0xff})
+	return fork
+}()
+
+// EncodeAppleDoubleXattrs encodes Finder info and extended attributes as the kernel's ._ file format.
 func EncodeAppleDoubleXattrs(finderInfo [32]byte, xattrs map[string][]byte) []byte {
+	if fi, ok := xattrs[finderInfoXattr]; ok && len(fi) == 32 {
+		copy(finderInfo[:], fi)
+	}
 	names := make([]string, 0, len(xattrs))
 	for k := range xattrs {
-		names = append(names, k)
+		if k != finderInfoXattr && k != resourceForkXattr {
+			names = append(names, k)
+		}
 	}
 	sort.Strings(names)
 
-	var attrPayload bytes.Buffer
-	var hdr [12]byte
-	binary.BigEndian.PutUint32(hdr[0:4], appleDoubleAttrMag)
-	binary.BigEndian.PutUint32(hdr[4:8], uint32(len(names)))
-	_, _ = attrPayload.Write(hdr[:])
-
+	entriesLen := 0
+	for _, name := range names {
+		entriesLen += (11 + len(name) + 1 + 3) &^ 3
+	}
+	dataStart := appleDoubleEntriesOff + entriesLen
+	var data bytes.Buffer
+	var entries bytes.Buffer
 	for _, name := range names {
 		val := xattrs[name]
-		writeUint32(&attrPayload, uint32(len(name)))
-		_, _ = attrPayload.WriteString(name)
-		writeUint32(&attrPayload, uint32(len(val)))
-		_, _ = attrPayload.Write(val)
+		start := entries.Len()
+		writeUint32(&entries, uint32(dataStart+data.Len()))
+		writeUint32(&entries, uint32(len(val)))
+		_, _ = entries.Write([]byte{0, 0, byte(len(name) + 1)})
+		_, _ = entries.WriteString(name)
+		_ = entries.WriteByte(0)
+		for (entries.Len()-start)%4 != 0 {
+			_ = entries.WriteByte(0)
+		}
+		_, _ = data.Write(val)
 	}
-
-	entryDataLen := uint32(32 + attrPayload.Len())
-	const entryOffset = 26 + 12 // 26-byte AppleDouble header + 1x 12-byte entry descriptor.
+	end := max(dataStart+data.Len(), appleDoubleMinSize)
+	rsrc := xattrs[resourceForkXattr]
 
 	var out bytes.Buffer
+	out.Grow(end + len(rsrc))
 	writeUint32(&out, appleDoubleMagic)
 	writeUint32(&out, appleDoubleVersion)
-	var filler [16]byte
-	_, _ = out.Write(filler[:])
-	var numEntries [2]byte
-	binary.BigEndian.PutUint16(numEntries[:], 1)
-	_, _ = out.Write(numEntries[:])
-
-	writeUint32(&out, appleDoubleFinder)
-	writeUint32(&out, entryOffset)
-	writeUint32(&out, entryDataLen)
-
+	_, _ = out.WriteString(appleDoubleFiller)
+	_, _ = out.Write([]byte{0, 2})
+	for _, v := range []uint32{appleDoubleFinder, appleDoubleFinderOff, uint32(end - appleDoubleFinderOff), appleDoubleResource, uint32(end), uint32(len(rsrc))} {
+		writeUint32(&out, v)
+	}
 	_, _ = out.Write(finderInfo[:])
-	_, _ = out.Write(attrPayload.Bytes())
+	_, _ = out.Write([]byte{0, 0})
+	for _, v := range []uint32{appleDoubleAttrMag, 0, uint32(end), uint32(dataStart), uint32(data.Len()), 0, 0, 0} {
+		writeUint32(&out, v)
+	}
+	_, _ = out.Write([]byte{0, 0, byte(len(names) >> 8), byte(len(names))})
+	_, _ = out.Write(entries.Bytes())
+	_, _ = out.Write(data.Bytes())
+	out.Write(make([]byte, end-out.Len()))
+	_, _ = out.Write(rsrc)
 	return out.Bytes()
 }
 
-// DecodeAppleDoubleXattrs parses an AppleDouble v2 payload produced by macOS or EncodeAppleDoubleXattrs.
+// DecodeAppleDoubleXattrs parses a ._ file in the kernel's layout. It succeeds only if the header,
+// table and values are consistent and no field that should be empty holds anything, so a success means
+// the returned attributes are everything a reader of the format can get from the file. The area past
+// the header's data length is free space the kernel does not clear when an attribute shrinks. Non-zero
+// Finder info and a resource fork are reported under their attribute names, as the view stores them.
 func DecodeAppleDoubleXattrs(data []byte) ([32]byte, map[string][]byte, bool) {
 	var finderInfo [32]byte
-	if len(data) < 26 {
+	if len(data) < appleDoubleEntriesOff || binary.BigEndian.Uint32(data[0:4]) != appleDoubleMagic ||
+		binary.BigEndian.Uint32(data[4:8]) != appleDoubleVersion || string(data[8:24]) != appleDoubleFiller ||
+		binary.BigEndian.Uint16(data[24:26]) != 2 {
 		return finderInfo, nil, false
 	}
-	if binary.BigEndian.Uint32(data[0:4]) != appleDoubleMagic ||
-		binary.BigEndian.Uint32(data[4:8]) != appleDoubleVersion {
+	entry := func(i int) (id, off, length uint32) {
+		at := 26 + i*12
+		return binary.BigEndian.Uint32(data[at:]), binary.BigEndian.Uint32(data[at+4:]), binary.BigEndian.Uint32(data[at+8:])
+	}
+	finderID, finderOff, finderLen := entry(0)
+	rsrcID, rsrcOff, rsrcLen := entry(1)
+	attrsEnd := uint64(finderOff) + uint64(finderLen)
+	if finderID != appleDoubleFinder || finderOff != appleDoubleFinderOff || rsrcID != appleDoubleResource ||
+		attrsEnd != uint64(rsrcOff) || attrsEnd < appleDoubleEntriesOff ||
+		attrsEnd+uint64(rsrcLen) != uint64(len(data)) ||
+		binary.BigEndian.Uint32(data[appleDoubleAttrHdrOff:]) != appleDoubleAttrMag {
 		return finderInfo, nil, false
 	}
-	numEntries := int(binary.BigEndian.Uint16(data[24:26]))
-	if numEntries <= 0 || numEntries > 32 || len(data) < 26+numEntries*12 {
+	copy(finderInfo[:], data[appleDoubleFinderOff:])
+	dataStart := uint64(binary.BigEndian.Uint32(data[appleDoubleAttrHdrOff+12:]))
+	dataEnd := dataStart + uint64(binary.BigEndian.Uint32(data[appleDoubleAttrHdrOff+16:]))
+	if dataEnd > attrsEnd {
 		return finderInfo, nil, false
 	}
-	for i := 0; i < numEntries; i++ {
-		off := 26 + i*12
-		entryID := binary.BigEndian.Uint32(data[off : off+4])
-		entryOff := binary.BigEndian.Uint32(data[off+4 : off+8])
-		entryLen := binary.BigEndian.Uint32(data[off+8 : off+12])
-		if entryID != appleDoubleFinder {
-			continue
-		}
-		if uint64(entryOff)+uint64(entryLen) > uint64(len(data)) || entryLen < 32 {
-			return finderInfo, nil, false
-		}
-		section := data[entryOff : entryOff+entryLen]
-		copy(finderInfo[:], section[0:32])
-		out := make(map[string][]byte)
-		if len(section) == 32 {
-			return finderInfo, out, true
-		}
-		if parsed, ok := parseAppleDoubleAttrSection(section[32:]); ok {
-			return finderInfo, parsed, true
-		}
-		return finderInfo, out, true
+	out, entriesEnd, ok := parseAppleDoubleAttrs(data, dataStart, dataEnd)
+	if !ok {
+		return finderInfo, nil, false
 	}
-	return finderInfo, nil, false
+	if finderInfo != ([32]byte{}) {
+		out[finderInfoXattr] = append([]byte(nil), finderInfo[:]...)
+	}
+	if rsrcLen > 0 && !bytes.Equal(data[attrsEnd:], emptyResourceFork) {
+		out[resourceForkXattr] = append([]byte(nil), data[attrsEnd:]...)
+	}
+	if !allZero(data[entriesEnd:dataStart]) || !allZero(data[appleDoubleFinderOff+32:appleDoubleAttrHdrOff]) ||
+		!allZero(data[appleDoubleAttrHdrOff+20:appleDoubleEntriesOff-2]) {
+		return finderInfo, nil, false
+	}
+	return finderInfo, out, true
 }
 
-func parseAppleDoubleAttrSection(attrBytes []byte) (map[string][]byte, bool) {
-	if len(attrBytes) < 12 || binary.BigEndian.Uint32(attrBytes[0:4]) != appleDoubleAttrMag {
-		return nil, false
-	}
-	count := int(binary.BigEndian.Uint32(attrBytes[4:8]))
-	if count < 0 || count > 256 {
-		return nil, false
-	}
-	r := bytes.NewReader(attrBytes[12:])
+// parseAppleDoubleAttrs walks the attribute table, which ends at or before dataStart, and returns the
+// attributes and where the table ends. Every value lies inside the data area.
+func parseAppleDoubleAttrs(data []byte, dataStart, dataEnd uint64) (map[string][]byte, uint64, bool) {
+	count := int(binary.BigEndian.Uint16(data[appleDoubleEntriesOff-2:]))
 	out := make(map[string][]byte, count)
-	for i := 0; i < count; i++ {
-		nameLen, err := readUint32(r)
-		if err != nil || nameLen == 0 || nameLen > 255 || int(nameLen) > r.Len() {
-			return nil, false
+	cursor := uint64(appleDoubleEntriesOff)
+	for range count {
+		if cursor+11 > dataStart {
+			return nil, 0, false
 		}
-		nameBytes := make([]byte, nameLen)
-		if _, err := r.Read(nameBytes); err != nil {
-			return nil, false
+		valOff := uint64(binary.BigEndian.Uint32(data[cursor:]))
+		valLen := uint64(binary.BigEndian.Uint32(data[cursor+4:]))
+		flags := binary.BigEndian.Uint16(data[cursor+8:])
+		nameLen := uint64(data[cursor+10])
+		nameEnd := cursor + 11 + nameLen
+		if flags != 0 || nameLen < 2 || nameEnd > dataStart || data[nameEnd-1] != 0 {
+			return nil, 0, false
 		}
-		valLen, err := readUint32(r)
-		if err != nil || valLen > 64<<10 || int(valLen) > r.Len() {
-			return nil, false
+		name := string(data[cursor+11 : nameEnd-1])
+		_, duplicate := out[name]
+		if duplicate || strings.IndexByte(name, 0) >= 0 || name == finderInfoXattr || name == resourceForkXattr ||
+			valOff < dataStart || valOff+valLen > dataEnd {
+			return nil, 0, false
 		}
-		valBytes := make([]byte, valLen)
-		if _, err := r.Read(valBytes); err != nil {
-			return nil, false
-		}
-		out[string(nameBytes)] = valBytes
+		out[name] = append([]byte(nil), data[valOff:valOff+valLen]...)
+		cursor = (nameEnd + 3) &^ 3
 	}
-	return out, true
+	return out, cursor, cursor <= dataStart
 }
 
-func synthAppleDoubleAttr(core *layeredfs.Core, qpath layeredfs.QualifiedPath) (layeredfs.EntryAttr, []byte, bool) {
-	targetRel, ok := isAppleDoublePath(qpath.Rel)
-	if !ok {
-		return layeredfs.EntryAttr{}, nil, false
+func allZero(b []byte) bool {
+	for _, c := range b {
+		if c != 0 {
+			return false
+		}
 	}
-	targetMeta, err := core.Lstat(layeredfs.QualifiedPath{RootID: qpath.RootID, Rel: targetRel})
-	if err != nil || len(targetMeta.Xattrs) == 0 {
-		return layeredfs.EntryAttr{}, nil, false
-	}
-	payload := EncodeAppleDoubleXattrs([32]byte{}, targetMeta.Xattrs)
-	adNodeID := layeredfs.NodeID(uint64(targetMeta.NodeID) ^ 0xAD00000000000001)
-	if adNodeID == 0 {
-		adNodeID = 1
-	}
-	return layeredfs.EntryAttr{
-		NodeID: adNodeID, Generation: 1, Layer: targetMeta.Layer,
-		Kind: layeredfs.EntryRegular, Mode: 0o644, Size: int64(len(payload)),
-		ModTime: targetMeta.ModTime, ATime: targetMeta.ATime, CTime: targetMeta.CTime, Nlink: 1,
-	}, payload, true
-}
-
-func syncAppleDoubleForPath(core *layeredfs.Core, qpath layeredfs.QualifiedPath) {
-	if _, ok := isAppleDoublePath(qpath.Rel); ok {
-		syncAppleDoubleXattrsIfPresent(core, qpath)
-		return
-	}
-	dir, base := path.Dir(qpath.Rel), path.Base(qpath.Rel)
-	sidecarRel := "._" + base
-	if dir != "." && dir != "" {
-		sidecarRel = dir + "/._" + base
-	}
-	syncAppleDoubleXattrsIfPresent(core, layeredfs.QualifiedPath{RootID: qpath.RootID, Rel: sidecarRel})
-}
-
-func syncAppleDoubleXattrsIfPresent(core *layeredfs.Core, qpath layeredfs.QualifiedPath) {
-	targetRel, ok := isAppleDoublePath(qpath.Rel)
-	if !ok {
-		return
-	}
-	targetQPath := layeredfs.QualifiedPath{RootID: qpath.RootID, Rel: targetRel}
-	if _, err := core.Lstat(targetQPath); err != nil {
-		return
-	}
-	data, err := core.ReadFile(qpath)
-	if err != nil {
-		return
-	}
-	_, xattrs, ok := DecodeAppleDoubleXattrs(data)
-	if !ok {
-		return
-	}
-	for k, v := range xattrs {
-		_ = core.SetXattr(targetQPath, k, v, true)
-	}
+	return true
 }
 
 func flushChunksToCore(
-	core *layeredfs.Core, handles *handleTable, fault *FaultInjector,
-	rec *handleRecord, chunks []unstableChunk, snapshotJournal bool,
+	core *layeredfs.Core, handles *handleTable, sidecars *sidecarTable, fault *FaultInjector,
+	rec *handleRecord, chunks []unstableChunk,
 ) (layeredfs.EntryAttr, error) {
 	if rec.unlinked != nil {
 		if rec.unlinked.fd == 0 {
 			return layeredfs.EntryAttr{}, ErrStaleHandle
 		}
-		for _, ch := range chunks {
-			if _, err := core.WriteHandle(rec.unlinked.fd, ch.data, int64(ch.offset)); err != nil {
-				return layeredfs.EntryAttr{}, err
-			}
-		}
-		if fault != nil && fault.OnSync != nil {
-			if err := fault.OnSync(rec.viewID, rec.qpath); err != nil {
-				return layeredfs.EntryAttr{}, err
-			}
-		}
-		if err := core.SyncHandle(rec.unlinked.fd); err != nil {
+		if err := writeAndSyncChunks(core, fault, rec, rec.unlinked.fd, chunks); err != nil {
 			return layeredfs.EntryAttr{}, err
 		}
 		meta, err := core.StatHandle(rec.unlinked.fd)
@@ -229,63 +217,35 @@ func flushChunksToCore(
 		}
 		return meta, err
 	}
-
-	curMeta, err := core.Lstat(rec.qpath)
+	if err := sidecars.materialize(core, rec.qpath); err != nil {
+		return layeredfs.EntryAttr{}, err
+	}
+	fd, opened, err := core.Open(rec.qpath, layeredfs.OpenReadWrite, 0)
 	if err != nil {
 		return layeredfs.EntryAttr{}, err
 	}
-	if curMeta.Mode&0o200 == 0 && !rec.ownerCreatedRO {
-		return layeredfs.EntryAttr{}, syscall.EACCES
+	if opened.StableID() != rec.key.nodeID {
+		_ = core.CloseHandle(fd)
+		return layeredfs.EntryAttr{}, ErrStaleHandle
 	}
-	if curMeta.Mode&0o200 == 0 && rec.ownerCreatedRO {
-		for _, ch := range chunks {
-			if _, _, err := core.WriteViaNodeHandle(curMeta.NodeID, curMeta.Generation, ch.data, int64(ch.offset)); err != nil {
-				return layeredfs.EntryAttr{}, err
-			}
-		}
-		if fault != nil && fault.OnSync != nil {
-			if err := fault.OnSync(rec.viewID, rec.qpath); err != nil {
-				return layeredfs.EntryAttr{}, err
-			}
-		}
-		if err := core.SyncViaNodeHandle(curMeta.NodeID, curMeta.Generation); err != nil {
-			return layeredfs.EntryAttr{}, err
-		}
-		syncAppleDoubleForPath(core, rec.qpath)
-		if snapshotJournal {
-			if _, err := core.SnapshotJournal(); err != nil {
-				return layeredfs.EntryAttr{}, err
-			}
-		}
-		return core.Lstat(rec.qpath)
-	}
-
-	fd, _, err := core.Open(rec.qpath, layeredfs.OpenReadWrite, 0)
+	err = writeAndSyncChunks(core, fault, rec, fd, chunks)
+	_ = core.CloseHandle(fd)
 	if err != nil {
 		return layeredfs.EntryAttr{}, err
 	}
+	return core.Lstat(rec.qpath)
+}
+
+func writeAndSyncChunks(core *layeredfs.Core, fault *FaultInjector, rec *handleRecord, fd layeredfs.HandleID, chunks []unstableChunk) error {
 	for _, ch := range chunks {
 		if _, err := core.WriteHandle(fd, ch.data, int64(ch.offset)); err != nil {
-			_ = core.CloseHandle(fd)
-			return layeredfs.EntryAttr{}, err
+			return err
 		}
 	}
 	if fault != nil && fault.OnSync != nil {
 		if err := fault.OnSync(rec.viewID, rec.qpath); err != nil {
-			_ = core.CloseHandle(fd)
-			return layeredfs.EntryAttr{}, err
+			return err
 		}
 	}
-	if err := core.SyncHandle(fd); err != nil {
-		_ = core.CloseHandle(fd)
-		return layeredfs.EntryAttr{}, err
-	}
-	_ = core.CloseHandle(fd)
-	syncAppleDoubleForPath(core, rec.qpath)
-	if snapshotJournal {
-		if _, err := core.SnapshotJournal(); err != nil {
-			return layeredfs.EntryAttr{}, err
-		}
-	}
-	return core.Lstat(rec.qpath)
+	return core.SyncHandle(fd)
 }

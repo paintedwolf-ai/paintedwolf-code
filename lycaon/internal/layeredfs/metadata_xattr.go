@@ -77,40 +77,47 @@ func setAttrPath(c *Core, qpath QualifiedPath, req SetAttrRequest) (EntryAttr, e
 			c.mu.Unlock()
 			continue
 		}
-		changed := false
-		now := time.Now()
-		if req.Mode != nil {
-			if node.kind == EntrySymlink {
-				c.mu.Unlock()
-				return EntryAttr{}, syscall.EOPNOTSUPP
-			}
-			typeBits := node.mode & fs.ModeType
-			newPerm := req.Mode.Perm() | (*req.Mode & (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky))
-			newMode := typeBits | newPerm
-			if newMode != node.mode {
-				node.mode = newMode
-				changed = true
-			}
-		}
-		if req.ATime != nil {
-			node.atime = *req.ATime
-			changed = true
-		}
-		if req.MTime != nil {
-			if !node.mtime.Equal(*req.MTime) {
-				node.mtime = *req.MTime
-				changed = true
-			}
-		}
-		if changed {
-			node.ctime = now
-			node.flags.metadataChanged = !metadataMatchesInitialLocked(node)
-			recordJournalLocked(c, JournalOpSetAttr, res.qpath, nil, node, 0)
+		if err := applyAttrChangesLocked(c, node, res.qpath, req); err != nil {
+			c.mu.Unlock()
+			return EntryAttr{}, err
 		}
 		attr := nodeToAttrLocked(node)
 		c.mu.Unlock()
 		return attr, nil
 	}
+}
+
+func applyAttrChangesLocked(c *Core, node *privateNode, qpath QualifiedPath, req SetAttrRequest) error {
+	changed := false
+	now := time.Now()
+	if req.Mode != nil {
+		if node.kind == EntrySymlink {
+			return syscall.EOPNOTSUPP
+		}
+		typeBits := node.mode & fs.ModeType
+		newPerm := req.Mode.Perm() | (*req.Mode & (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky))
+		newMode := typeBits | newPerm
+		if newMode != node.mode {
+			node.mode = newMode
+			changed = true
+		}
+	}
+	if req.ATime != nil {
+		node.atime = *req.ATime
+		changed = true
+	}
+	if req.MTime != nil {
+		if !node.mtime.Equal(*req.MTime) {
+			node.mtime = *req.MTime
+			changed = true
+		}
+	}
+	if changed {
+		node.ctime = now
+		node.flags.metadataChanged = !metadataMatchesInitialLocked(node)
+		recordJournalLocked(c, JournalOpSetAttr, qpath, nil, node, 0)
+	}
+	return nil
 }
 
 // GetXattr retrieves an extended attribute from qpath.

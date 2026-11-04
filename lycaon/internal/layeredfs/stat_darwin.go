@@ -27,3 +27,5 @@ func readSymlinkXattrAt(parentFD int, name string, stBefore unix.Stat_t) (map[st
 	}
 	return listXattrFD(fd)
 }
+
+func statfsBlockSize(st *unix.Statfs_t) uint64 { return uint64(st.Bsize) }

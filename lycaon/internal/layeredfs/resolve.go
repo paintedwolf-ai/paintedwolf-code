@@ -302,10 +302,18 @@ func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, err
 	if xErr != nil {
 		return resolvedLayerEntry{}, xErr
 	}
+	attr := lowerEntryToAttr(qpath, le, xattrs)
+	if attr.Kind == EntryDirectory {
+		c.mu.RLock()
+		if modified, ok := c.state.lowerDirMod[qpath]; ok && modified.After(attr.ModTime) {
+			attr.ModTime, attr.CTime = modified, modified
+		}
+		c.mu.RUnlock()
+	}
 	return resolvedLayerEntry{
 		qpath:      qpath,
 		layer:      LayerTrunk,
-		attr:       lowerEntryToAttr(qpath, le, xattrs),
+		attr:       attr,
 		lowerEntry: &le,
 	}, nil
 }

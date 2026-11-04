@@ -64,7 +64,10 @@ type viewState struct {
 	nsGen        uint64
 	seq          idAllocator
 	nodesByID    map[NodeID]*privateNode
+	originIndex  map[NodeID]NodeID
 	pathIndex    map[QualifiedPath]NodeID
+	transient    map[QualifiedPath]struct{}
+	lowerDirMod  map[QualifiedPath]time.Time
 	deletedPaths map[QualifiedPath]deletedState
 	basesByPath  map[QualifiedPath]BaseCapture
 	handles      map[HandleID]*openHandle
@@ -79,7 +82,6 @@ type nodeFlags struct {
 	contentChanged  bool
 	metadataChanged bool
 	namespaceAdded  bool
-	ownerCreatedRO  bool
 	backingName     string
 	backingPath     string
 	linkTarget      string
@@ -96,6 +98,7 @@ type nodeInitialState struct {
 
 type privateNode struct {
 	id      NodeID
+	origin  NodeID
 	gen     Generation
 	kind    EntryKind
 	mode    fs.FileMode
@@ -158,7 +161,10 @@ func New(cfg Config) (*Core, error) {
 		counters: &statsCounters{},
 		state: &viewState{
 			nodesByID:    make(map[NodeID]*privateNode),
+			originIndex:  make(map[NodeID]NodeID),
 			pathIndex:    make(map[QualifiedPath]NodeID),
+			transient:    make(map[QualifiedPath]struct{}),
+			lowerDirMod:  make(map[QualifiedPath]time.Time),
 			deletedPaths: make(map[QualifiedPath]deletedState),
 			basesByPath:  make(map[QualifiedPath]BaseCapture),
 			handles:      make(map[HandleID]*openHandle),

@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
+	"syscall"
 
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
@@ -74,6 +73,9 @@ func classifyBarrierReason(err error) adapter.ReasonCode {
 	return adapter.ReasonBarrierFailed
 }
 
+// syncClientPath fsyncs one changed path to surface a write error the client recorded against it.
+// A file the worker made unreadable cannot be opened here; syncMountedRootFiles has already pushed
+// its dirty data by syncing the volume, so that is not a failed barrier.
 func (a *Adapter) syncClientPath(ctx context.Context, path string) (isFile, isDir bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, false, err
@@ -93,17 +95,27 @@ func (a *Adapter) syncClientPath(ctx context.Context, path string) (isFile, isDi
 		}
 		return false, false, err
 	}
-	if info.Mode()&(os.ModeSymlink|os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0 {
+	if !info.Mode().IsRegular() && !info.IsDir() {
 		return false, false, nil
 	}
-	f, err := os.Open(path)
+	// O_NONBLOCK so a file replaced by a FIFO after the Lstat cannot block the barrier in open.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) {
 			return false, false, nil
 		}
 		return false, false, err
 	}
-	syncErr := f.Sync()
+	opened, sErr := f.Stat()
+	if sErr != nil || (!opened.Mode().IsRegular() && !opened.IsDir()) {
+		_ = f.Close()
+		return false, false, sErr
+	}
+	var mapErr error
+	if opened.Mode().IsRegular() {
+		mapErr = flushMappedPages(f, opened.Size())
+	}
+	syncErr := errors.Join(mapErr, fssync.Always(f))
 	closeErr := f.Close()
 	if syncErr != nil {
 		return false, false, syncErr
@@ -126,25 +138,27 @@ func addCandidateWithAncestors(candidates map[string]struct{}, rel string) {
 	}
 }
 
-func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, viewID, rootID string, m *rootMount) error {
+func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootID string, m *rootMount) error {
+	// The volume sync reaches dirty buffers of files the server has never heard of; the per-path
+	// fsyncs that follow report write errors, which the volume sync does not return.
+	if err := syncVolume(m.mountPath); err != nil {
+		return fmt.Errorf("sync volume %s: %w", m.mountPath, err)
+	}
 	candidates := map[string]struct{}{".": {}}
 	if st.core != nil {
-		if changes, err := st.core.EnumerateChanges(false); err == nil {
-			for _, ce := range changes {
-				if ce.Path.RootID != rootID || ce.Kind == layeredfs.EntrySymlink {
-					continue
-				}
-				if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
-					addCandidateWithAncestors(candidates, filepath.Dir(filepath.FromSlash(ce.Path.Rel)))
-				} else {
-					addCandidateWithAncestors(candidates, ce.Path.Rel)
-				}
-			}
+		changes, err := st.core.EnumerateChanges(false)
+		if err != nil {
+			return err
 		}
-	}
-	if m.server != nil {
-		for _, rel := range m.server.DirtyCandidatePaths(viewID, rootID) {
-			addCandidateWithAncestors(candidates, rel)
+		for _, ce := range changes {
+			if ce.Path.RootID != rootID || ce.Kind == layeredfs.EntrySymlink {
+				continue
+			}
+			if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
+				addCandidateWithAncestors(candidates, filepath.Dir(filepath.FromSlash(ce.Path.Rel)))
+			} else {
+				addCandidateWithAncestors(candidates, ce.Path.Rel)
+			}
 		}
 	}
 	st.dirtyMu.Lock()
@@ -178,12 +192,21 @@ func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, viewI
 			dirsSynced++
 		}
 	}
-	st.lastFilesSynced.Store(filesSynced)
-	st.lastDirsSynced.Store(dirsSynced)
+	st.lastFilesSynced.Add(filesSynced)
+	st.lastDirsSynced.Add(dirsSynced)
 	return nil
 }
 
+// removeRuntimeDir refuses while anything is mounted below path: recursive removal would otherwise
+// delete another filesystem's contents through the mount.
 func (a *Adapter) removeRuntimeDir(path string) error {
+	remaining, err := mountsWithin(path)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("mounts remain below runtime dir: %s", strings.Join(remaining, ", "))
+	}
 	a.mu.RLock()
 	fn := a.cfg.RemoveAllFn
 	a.mu.RUnlock()
@@ -197,15 +220,10 @@ func checkServerAlive(m *rootMount) error {
 	if m == nil || m.server == nil {
 		return errors.New("nfsdarwin: nil server")
 	}
-	if m.serverDead.Load() {
-		return errors.New("nfsdarwin: loopback NFS server killed")
-	}
-	conn, err := net.DialTimeout("tcp", m.server.Addr().String(), 250*time.Millisecond)
-	if err != nil {
+	if m.serverDead.Load() || !m.server.IsAlive() {
 		m.serverDead.Store(true)
-		return fmt.Errorf("nfsdarwin: loopback NFS server unreachable at %s: %w", m.server.Addr(), err)
+		return errors.New("nfsdarwin: loopback NFS server stopped")
 	}
-	_ = conn.Close()
 	return nil
 }
 
@@ -215,44 +233,6 @@ func isMountOwnedAndActive(m *rootMount, _ bool) bool {
 	}
 	found, matchesSource := checkKernelMountTable(m.mountPath, m.facts.ExportSource)
 	return found && matchesSource
-}
-
-func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAlive bool) error {
-	if m == nil || m.mountPath == "" || !isMountOwnedAndActive(m, serverAlive) {
-		return nil
-	}
-	a.mu.RLock()
-	umountBin, diskutilBin := a.cfg.UmountBin, a.cfg.DiskutilBin
-	a.mu.RUnlock()
-	uCtx := ctx
-	if uCtx == nil || uCtx.Err() != nil {
-		uCtx = context.Background()
-	}
-	if serverAlive {
-		tCtx, cancel := context.WithTimeout(uCtx, 3*time.Second)
-		_ = exec.CommandContext(tCtx, umountBin, m.mountPath).Run()
-		cancel()
-		if !isMountOwnedAndActive(m, false) {
-			return nil
-		}
-	}
-	fCtx, fCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	out, fErr := exec.CommandContext(fCtx, umountBin, "-f", m.mountPath).CombinedOutput()
-	fCancel()
-	if !isMountOwnedAndActive(m, false) {
-		return nil
-	}
-	dCtx, dCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	dOut, dErr := exec.CommandContext(dCtx, diskutilBin, "unmount", "force", m.mountPath).CombinedOutput()
-	dCancel()
-	if !isMountOwnedAndActive(m, false) {
-		return nil
-	}
-	return &adapter.AdapterError{
-		AdapterID: adapter.AdapterNFSDarwin, Op: "release", ReasonCode: adapter.ReasonCleanupFailed,
-		Diagnostic: fmt.Sprintf("unmount %s failed: umount=%v (%s) diskutil=%v (%s)", m.mountPath, fErr, strings.TrimSpace(string(out)), dErr, strings.TrimSpace(string(dOut))),
-		Cause:      fErr,
-	}
 }
 
 func normalizeRootGrants(grants []adapter.RootGrant) ([]layeredfs.RootSpec, string, []string, error) {
@@ -283,22 +263,13 @@ func normalizeRootGrants(grants []adapter.RootGrant) ([]layeredfs.RootSpec, stri
 	return coreRoots, primaryRoot, denyPaths, nil
 }
 
-func prepareProbeBaseDir(runtimeRoot string) (string, func(), error) {
+func prepareProbeBaseDir(runtimeRoot string) (string, error) {
 	if strings.TrimSpace(runtimeRoot) != "" {
 		if err := os.MkdirAll(runtimeRoot, 0o700); err != nil {
-			return "", nil, err
+			return "", err
 		}
-		d, err := os.MkdirTemp(runtimeRoot, "nfsdarwin-probe-*")
-		if err != nil {
-			return "", nil, err
-		}
-		return d, func() { _ = os.RemoveAll(d) }, nil
 	}
-	d, err := os.MkdirTemp("", "nfsdarwin-probe-*")
-	if err != nil {
-		return "", nil, err
-	}
-	return d, func() { _ = os.RemoveAll(d) }, nil
+	return os.MkdirTemp(runtimeRoot, "nfsdarwin-probe-*")
 }
 
 func classifyProbeError(err error) adapter.ReasonCode {

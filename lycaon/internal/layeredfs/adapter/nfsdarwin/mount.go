@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -19,7 +18,7 @@ import (
 // FormatMountOptions returns the explicit macOS /sbin/mount_nfs options for port.
 func FormatMountOptions(port int) string {
 	return fmt.Sprintf(
-		"vers=3,tcp,port=%d,mountport=%d,nolocks,locallocks,nodev,nosuid,nobrowse,%s,retrans=%d,timeo=%d,soft,rsize=%d,wsize=%d",
+		"vers=3,tcp,port=%d,mountport=%d,locallocks,nodev,nosuid,nobrowse,%s,retrans=%d,timeo=%d,soft,rsize=%d,wsize=%d",
 		port, port, DefaultCachePolicy, DefaultRetrans, DefaultTimeo, DefaultRSize, DefaultWSize,
 	)
 }
@@ -41,12 +40,21 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 		return nil, err
 	}
 
-	a.mu.RLock()
+	a.mu.Lock()
 	_, exists := a.views[req.ViewID]
-	a.mu.RUnlock()
-	if exists {
+	_, inProgress := a.preparing[req.ViewID]
+	if !exists && !inProgress {
+		a.preparing[req.ViewID] = struct{}{}
+	}
+	a.mu.Unlock()
+	if exists || inProgress {
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonMountDenied, Diagnostic: "duplicate view " + req.ViewID}
 	}
+	defer func() {
+		a.mu.Lock()
+		delete(a.preparing, req.ViewID)
+		a.mu.Unlock()
+	}()
 
 	absBacking, err := filepath.Abs(req.BackingDir)
 	if err != nil {
@@ -94,7 +102,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 			}
 		}
 		_ = core.ReleaseView()
-		_ = os.RemoveAll(runtimeViewDir)
+		_ = a.removeRuntimeDir(runtimeViewDir)
 	}
 
 	for _, g := range narrowed {
@@ -102,7 +110,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 		if custom := strings.TrimSpace(req.TargetRootDirs[g.RootID]); custom != "" {
 			mountDir = filepath.Clean(custom)
 		}
-		rm, mErr := a.mountSingleRoot(ctx, req.ViewID, g, mountDir, core)
+		rm, mErr := a.mountSingleRoot(ctx, req.ViewID, runtimeViewDir, g, mountDir, core)
 		if mErr != nil {
 			rollback()
 			return nil, mErr
@@ -156,7 +164,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 
 func (a *Adapter) mountSingleRoot(
 	ctx context.Context,
-	viewID string,
+	viewID, runtimeViewDir string,
 	grant adapter.RootGrant,
 	mountDir string,
 	core *layeredfs.Core,
@@ -178,6 +186,7 @@ func (a *Adapter) mountSingleRoot(
 		ListenAddr:    "127.0.0.1:0",
 		ExpectedUID:   uid,
 		ExpectedGID:   gid,
+		MaxHandles:    a.cfg.MaxHandles,
 		FaultInjector: a.cfg.FaultInjector,
 	})
 	if err != nil {
@@ -199,10 +208,22 @@ func (a *Adapter) mountSingleRoot(
 	mountOpts := FormatMountOptions(port)
 	exportSource := "127.0.0.1:" + capCfg.ExportPath
 
+	// The identity lands before the mount exists, so a crash inside this function leaves a record to
+	// settle by; an orphan mount without one could never be attributed.
+	canonMount := canonicalPath(mountDir)
+	record, err := newConnectionRecord(viewID, grant.RootID, canonMount, exportSource)
+	if err == nil {
+		err = adapter.WriteRecordedConnection(runtimeViewDir, record)
+	}
+	if err != nil {
+		srv.ReleaseExport(viewID)
+		_ = srv.Close()
+		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
+	}
+
 	mCtx, cancel := context.WithTimeout(ctx, a.cfg.MountTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(mCtx, a.cfg.MountNFSBin, "-o", mountOpts, exportSource, mountDir)
-	out, mErr := cmd.CombinedOutput()
+	out, mErr := runBoundedHelper(mCtx, "nfs_mount", a.cfg.MountNFSBin, "-o", mountOpts, exportSource, mountDir)
 	if mErr != nil {
 		srv.ReleaseExport(viewID)
 		_ = srv.Close()
@@ -221,7 +242,9 @@ func (a *Adapter) mountSingleRoot(
 
 	mountedDev, dErr := statDeviceID(mountDir)
 	if dErr != nil || mountedDev == 0 || mountedDev == parentDev {
-		_ = exec.CommandContext(context.Background(), a.cfg.UmountBin, "-f", mountDir).Run()
+		fCtx, fCancel := context.WithTimeout(context.Background(), unmountWaitBound)
+		_, _ = runBoundedHelper(fCtx, "nfs_unmount", a.cfg.UmountBin, "-f", mountDir)
+		fCancel()
 		srv.ReleaseExport(viewID)
 		_ = srv.Close()
 		return nil, &adapter.AdapterError{
@@ -232,7 +255,6 @@ func (a *Adapter) mountSingleRoot(
 		}
 	}
 
-	canonMount := canonicalPath(mountDir)
 	obs, _ := srv.LastMountHandshake(capCfg.ExportPath)
 	facts := MountFacts{
 		ViewID:         viewID,
@@ -256,6 +278,15 @@ func (a *Adapter) mountSingleRoot(
 		HandshakeGID:   obs.ObservedGID,
 		AllowedDataUID: uid,
 		AllowedDataGID: gid,
+	}
+	record.MountID, record.ConnectionID, record.DevMajorMinor = facts.MountID, facts.ConnectionID, formatDevice(mountedDev)
+	if err := adapter.WriteRecordedConnection(runtimeViewDir, record); err != nil {
+		fCtx, fCancel := context.WithTimeout(context.Background(), unmountWaitBound)
+		_, _ = runBoundedHelper(fCtx, "nfs_unmount", a.cfg.UmountBin, "-f", mountDir)
+		fCancel()
+		srv.ReleaseExport(viewID)
+		_ = srv.Close()
+		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
 	return &rootMount{
 		grant:      grant,

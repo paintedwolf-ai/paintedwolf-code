@@ -131,9 +131,20 @@ func (t *nodeTable) adoptLocked(fn *fuseNode, attr layeredfs.EntryAttr) {
 	if _, taken := t.byCorePrivateID[attr.NodeID]; taken {
 		return
 	}
-	fn.corePrivID = attr.NodeID
+	fn.corePrivID, fn.corePrivGen = attr.NodeID, attr.Generation
 	t.byCorePrivateID[attr.NodeID] = fn
 	t.adoptedInos[attr.NodeID] = fn.ino
+}
+
+// privateIdentity returns the Core identity of a node that has one.
+func (t *nodeTable) privateIdentity(nodeID uint64) (layeredfs.NodeID, layeredfs.Generation, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	fn, ok := t.byFuseID[nodeID]
+	if !ok || fn.corePrivID == 0 {
+		return 0, 0, false
+	}
+	return fn.corePrivID, fn.corePrivGen, true
 }
 
 // acquireNode resolves the node for a reply that gives the kernel an entry, and counts that
@@ -180,7 +191,7 @@ func (t *nodeTable) resolveForRefLocked(clean string, attr layeredfs.EntryAttr) 
 	t.byFuseID[fn.fuseID] = fn
 	t.byRel[clean] = fn
 	if attr.Layer == layeredfs.LayerPrivate && attr.NodeID != 0 {
-		fn.corePrivID = attr.NodeID
+		fn.corePrivID, fn.corePrivGen = attr.NodeID, attr.Generation
 		t.byCorePrivateID[attr.NodeID] = fn
 	}
 	return fn

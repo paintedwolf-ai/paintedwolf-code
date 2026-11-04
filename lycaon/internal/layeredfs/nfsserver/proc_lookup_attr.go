@@ -15,7 +15,7 @@ func onGetAttr(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureGetAttr, nfs.NFSStatusInval)
 	}
-	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	rec, exp, err := resolveForAttributes(s, cs, call.Cred, rawFH)
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureGetAttr, MapErrorToNFSStatus(err))
 	}
@@ -73,7 +73,6 @@ func onSetAttr(s *Server, cs *connState, call rpcCallHeader) []byte {
 		postMeta, _ := statRecord(s, rec)
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, &postMeta, exp)
 	}
-	s.RecordDirtyCandidate(rec.viewID, rec.qpath)
 	postMeta, err := statRecord(s, rec)
 	if err != nil {
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preMeta, nil, exp)
@@ -88,28 +87,30 @@ func applySattr3(s *Server, rec *handleRecord, exp *exportEntry, preMeta layered
 	if exp.cap.ReadOnly {
 		return ErrReadOnlyExport
 	}
-	if rec.unlinked != nil {
-		return nil
-	}
 	if (attrs.HasUID && attrs.UID != exp.cap.AllowedUID && attrs.UID != 0xFFFFFFFF) ||
 		(attrs.HasGID && attrs.GID != exp.cap.AllowedGID && attrs.GID != 0xFFFFFFFF) {
 		return syscall.EPERM
 	}
-	if attrs.HasSize {
-		if preMeta.Mode.IsDir() {
-			return syscall.EISDIR
-		}
-		if err := truncateRecord(s, exp.core, rec, preMeta, attrs.Size); err != nil {
-			return err
-		}
+	if attrs.HasSize && preMeta.Mode.IsDir() {
+		return syscall.EISDIR
 	}
-	if attrs.HasMode {
-		if _, err := exp.core.Chmod(rec.qpath, attrs.Mode); err != nil {
-			return err
-		}
-		if attrs.Mode&0o200 != 0 {
-			s.handles.SetOwnerCreatedRO(rec.key, false)
-		}
+	// Acknowledged UNSTABLE bytes must land before the attributes they precede: a truncate clips
+	// them, a set mtime is not overwritten by their later arrival.
+	if err := s.stability.FlushKey(exp.core, s.handles, s.cfg.FaultInjector, rec.key); err != nil {
+		return err
+	}
+	defer s.stability.holdSidecarFlush(rec)()
+	if err := s.stability.sidecars.materialize(exp.core, rec.qpath); err != nil {
+		return err
+	}
+	req := layeredfs.SetAttrRequest{NoFollow: true}
+	if attrs.HasSize {
+		size := int64(attrs.Size)
+		req.Size = &size
+	}
+	// A symlink's mode grants nothing, and tar -p sets one on every link it extracts.
+	if attrs.HasMode && preMeta.Kind != layeredfs.EntrySymlink {
+		req.Mode = &attrs.Mode
 	}
 	if attrs.HasAtime || attrs.HasMtime {
 		atime, mtime := preMeta.ATime, preMeta.ModTime
@@ -119,16 +120,23 @@ func applySattr3(s *Server, rec *handleRecord, exp *exportEntry, preMeta layered
 		if attrs.HasMtime {
 			mtime = attrs.Mtime
 		}
-		_, err := exp.core.Chtimes(rec.qpath, atime, mtime, true)
+		req.ATime, req.MTime = &atime, &mtime
+	}
+	if req.Size == nil && req.Mode == nil && req.ATime == nil {
+		return nil
+	}
+	if rec.unlinked != nil {
+		if rec.unlinked.meta.Layer != layeredfs.LayerPrivate {
+			return ErrStaleHandle
+		}
+		_, err := exp.core.SetAttrNode(rec.unlinked.meta.NodeID, rec.unlinked.meta.Generation, req)
 		return err
 	}
+	if _, err := exp.core.SetAttr(rec.qpath, req); err != nil {
+		return err
+	}
+	s.stability.absorbFlushed(exp.core, rec)
 	return nil
-}
-
-func truncateRecord(s *Server, viewCore *layeredfs.Core, rec *handleRecord, _ layeredfs.EntryAttr, size uint64) error {
-	s.stability.DiscardKey(rec.key)
-	_, err := viewCore.Truncate(rec.qpath, int64(size))
-	return err
 }
 
 func onLookup(s *Server, cs *connState, call rpcCallHeader) []byte {
@@ -163,19 +171,17 @@ func onLookup(s *Server, cs *connState, call rpcCallHeader) []byte {
 			return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
 		}
 	}
+	defer s.stability.sidecars.settled(childQPath)()
 	childMeta, err := exp.core.Lstat(childQPath)
 	if err != nil {
-		if adMeta, _, ok := synthAppleDoubleAttr(exp.core, childQPath); ok {
+		if adMeta, _, ok := s.stability.sidecars.synth(exp.core, childQPath); ok {
 			childMeta = adMeta
 		} else {
 			return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
 		}
 	}
-	childFH := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, cleanRel(childQPath.Rel) == ".", false)
-	if childRec, _ := s.handles.LookupByPath(dirRec.viewID, childQPath); childRec != nil {
-		childMeta.NodeID = childRec.key.nodeID
-		childMeta = s.stability.EffectiveMeta(childRec.key, childMeta)
-	}
+	childFH := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, cleanRel(childQPath.Rel) == ".")
+	childMeta = wireMeta(s, dirRec.key.viewHash, childMeta)
 
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
@@ -207,16 +213,15 @@ func onAccess(s *Server, cs *connState, call rpcCallHeader) []byte {
 		granted |= 0x0001 // READ
 	}
 	if meta.Mode.IsDir() {
-		granted |= 0x0002 // LOOKUP
+		if meta.Mode&0o100 != 0 {
+			granted |= 0x0002 // LOOKUP
+		}
 		if meta.Mode&0o200 != 0 {
 			granted |= 0x0004 | 0x0008 | 0x0010
 		}
 	} else {
-		if meta.Mode&0o200 != 0 || rec.ownerCreatedRO {
+		if meta.Mode&0o200 != 0 {
 			granted |= 0x0004 | 0x0008
-			if reqMask&(0x0004|0x0008|0x0010) != 0 {
-				s.RecordDirtyCandidate(rec.viewID, rec.qpath)
-			}
 		}
 		if meta.Mode&0o100 != 0 {
 			granted |= 0x0020 // EXECUTE

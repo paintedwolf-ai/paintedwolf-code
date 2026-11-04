@@ -36,7 +36,7 @@ var doorExemptions = map[string]string{
 
 	// Staged views and content-addressed objects in private Git and adapter stores.
 	"lycaon/internal/workspace/overlay_survey.go":                "O_EXCL destination while materializing a fresh overlay tree",
-	"lycaon/internal/layeredfs/adapter/nfsdarwin/nfsdarwin.go":   "ephemeral mount coherence probe in a private temporary directory removed on return",
+	"lycaon/internal/layeredfs/adapter/nfsdarwin/nfsdarwin.go":   "capability probe confined to a private temporary view",
 	"lycaon/internal/layeredfs/privategit/executor_sync.go":      "private git worktree synchronization inside an isolated adapter view",
 	"lycaon/internal/layeredfs/privategit/init_capture.go":       "initializes private git metadata files inside a freshly created staging repository",
 	"lycaon/internal/layeredfs/privategit/init_repo.go":          "writes and atomically renames private git repository config during initialization",
