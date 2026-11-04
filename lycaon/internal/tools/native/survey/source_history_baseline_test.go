@@ -210,7 +210,8 @@ func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) 
 		t.Cleanup(func() { repochange.CloseRoot(root.Path) })
 	}
 	h.beginSession(historySession)
-	h.store.Commands.SetWindowSettleForTest(time.Hour)
+	endSettle := make(chan time.Time)
+	h.store.Commands.SetWindowSettleGateForTest(endSettle)
 	h.tctx.Source.History.Windows = h.store.Commands
 	window, err := h.store.Commands.OpenCommandWindow(t.Context(), sourceledger.CommandWindowInput{
 		ProjectID: historyProject, Roots: roots, SessionID: historySession, ToolName: "command",
@@ -242,11 +243,7 @@ func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) 
 	testutil.AwaitClosed(t, "the overview waits on the closing window", waiting)
 
 	repochange.Notify(t.Context(), repochange.Event{ProjectDir: h.dir, Kind: repochange.WorktreeChanged, Paths: []string{"gen.txt"}, Source: repochange.SourceWatcher})
-	var generation int
-	testutil.FailErr(t, "read roots generation", h.db.QueryRowContext(t.Context(), `SELECT roots_generation FROM projects WHERE id = ?`, historyProject).Scan(&generation))
-	testutil.FailErr(t, "pass after close", h.store.Inventory.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
-		ProjectID: historyProject, RootsGeneration: generation, Roots: roots, Force: true, Wait: true,
-	}))
+	close(endSettle)
 
 	result := testutil.AwaitValue(t, "the overview returns once settled", overview)
 	if len(result.OpenWindows) != 0 {
