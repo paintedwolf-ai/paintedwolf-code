@@ -47,7 +47,7 @@ func TestProjectModelMessagesKeepsAttachmentSubjectBindingAsInstruction(t *testi
 	if !strings.Contains(got, "fewer words") || !strings.Contains(got, bind) {
 		t.Fatalf("subject binding lost: %q", got)
 	}
-	if strings.Contains(got, bind) || strings.Contains(got, "⟦D:host") {
+	if strings.Contains(got, "Data from host") {
 		t.Fatalf("subject binding was data-marked: %q", got)
 	}
 	if !strings.Contains(got, "Data from attachment (CONTRIBUTING.md):") || !strings.Contains(got, "long body") {

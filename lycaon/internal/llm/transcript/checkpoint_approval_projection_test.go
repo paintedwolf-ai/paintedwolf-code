@@ -34,7 +34,7 @@ func TestApprovedCheckpointReachesModelAsData(t *testing.T) {
 	if !strings.Contains(projected.Content, parts[0].Content) {
 		t.Fatalf("approval receipt missing from data-marked wire: %q", projected.Content)
 	}
-	if !strings.Contains(projected.Content, CheckpointApprovalNotice()) || strings.Contains(projected.Content, CheckpointApprovalNotice()) {
+	if !strings.Contains(projected.Content, CheckpointApprovalNotice()) || strings.Contains(projected.Content, "Data from host (checkpoint_approval)") {
 		t.Fatal("approval continuation must be host guidance outside data marking")
 	}
 	if strings.Contains(projected.Content, decision.Guidance) || msg.ToolResult.CheckpointDecision.Guidance != decision.Guidance {
