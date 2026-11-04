@@ -24,6 +24,9 @@ type SourceChangeFile struct {
 	At string `json:"at,omitempty"`
 	// Effects counts the window's foreign effects on this file.
 	Effects int `json:"effects,omitempty"`
+	// WorkingSet marks a path the session read or wrote. Briefs stored without
+	// the field render through the unflagged branch.
+	WorkingSet bool `json:"working_set,omitempty"`
 }
 
 // SourceGitLine is one observed git ref movement inside the turn window,
@@ -50,13 +53,13 @@ type SourceGitLine struct {
 // no foreign change or no baseline exists — the builder never guesses. It is
 // stored on the turn it opened, so its JSON shape is durable.
 type SourceChangeBrief struct {
-	// Files itemizes foreign changes to paths in the session's working set.
+	// Files itemizes foreign changes up to the row cap, working set first.
 	Files []SourceChangeFile `json:"files,omitempty"`
 	// Git itemizes observed ref movements in the window, oldest first, so file
 	// changes below read against their cause.
 	Git []SourceGitLine `json:"git,omitempty"`
-	// OtherFiles / OtherEffects collapse foreign changes elsewhere in the
-	// project to a bounded count.
+	// OtherFiles / OtherEffects count the foreign changes that did not fit in
+	// Files.
 	OtherFiles   int `json:"other_files,omitempty"`
 	OtherEffects int `json:"other_effects,omitempty"`
 	// Truncated reports that the window overflowed the effect cap, so the
@@ -67,6 +70,13 @@ type SourceChangeBrief struct {
 // Empty reports whether the brief carries nothing worth injecting.
 func (b SourceChangeBrief) Empty() bool {
 	return len(b.Files) == 0 && len(b.Git) == 0 && b.OtherFiles == 0 && !b.Truncated
+}
+
+// OtherMayIncludeWorkingSet reports whether the counted files could be in the
+// working set. Rows list the working set first, so an unflagged last row means
+// every working-set file was itemized.
+func (b SourceChangeBrief) OtherMayIncludeWorkingSet() bool {
+	return b.OtherFiles > 0 && len(b.Files) > 0 && b.Files[len(b.Files)-1].WorkingSet
 }
 
 // RenderSourceChangesBlock renders guidance/source-changes.md via Binding stem.

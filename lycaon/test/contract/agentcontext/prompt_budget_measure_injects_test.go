@@ -115,6 +115,8 @@ func measureCoordinatorInjectBlock(
 				Op:      "rename",
 				At:      "14:02 UTC",
 				Effects: 12,
+				// A non-working-set last row selects the longer elsewhere sentence.
+				WorkingSet: i < 15,
 			})
 		}
 		for i := 0; i < 10; i++ {

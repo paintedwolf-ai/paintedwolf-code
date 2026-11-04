@@ -44,7 +44,7 @@ const (
 	// sourceChangeBriefEffectCap bounds the effects pulled for one window. An
 	// overflowing window renders as truncated, never as a complete count.
 	sourceChangeBriefEffectCap = 400
-	// sourceChangeBriefFileCap bounds the itemized working-set rows.
+	// sourceChangeBriefFileCap bounds the itemized rows across both classes.
 	sourceChangeBriefFileCap = 20
 	// sourceChangeBriefGitCap bounds itemized ref movements per window.
 	sourceChangeBriefGitCap = 10
@@ -156,8 +156,9 @@ type sourceChangeBriefInputs struct {
 	Touched     map[string]bool
 }
 
-// assembleSourceChangeBrief itemizes working-set files and counts other changes.
-// Observed ref movements precede their file effects.
+// assembleSourceChangeBrief itemizes changed files up to the row cap, working
+// set first, and counts the files that did not fit. Observed ref movements
+// precede their file effects.
 func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBrief {
 	brief := inject.SourceChangeBrief{Truncated: in.Truncated}
 	for i := len(in.Transitions) - 1; i >= 0; i-- {
@@ -190,23 +191,31 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 		}
 		group.effects++
 	}
-	for _, fileID := range order {
-		group := groups[fileID]
-		display := displaySourcePath(in.Roots, group.newest.RootID, group.newest.Path)
-		if (!in.Touched[group.newest.Path] && !in.Touched[display]) || len(brief.Files) >= sourceChangeBriefFileCap {
-			brief.OtherFiles++
-			brief.OtherEffects += group.effects
-			continue
+	itemize := func(workingSet bool) {
+		for _, fileID := range order {
+			group := groups[fileID]
+			display := displaySourcePath(in.Roots, group.newest.RootID, group.newest.Path)
+			if (in.Touched[group.newest.Path] || in.Touched[display]) != workingSet {
+				continue
+			}
+			if len(brief.Files) >= sourceChangeBriefFileCap {
+				brief.OtherFiles++
+				brief.OtherEffects += group.effects
+				continue
+			}
+			brief.Files = append(brief.Files, inject.SourceChangeFile{
+				Path:       display,
+				Actor:      string(group.newest.ActorClassFor(in.SessionID)),
+				Detail:     group.newest.ActorDisplay(in.SessionID),
+				Op:         string(group.newest.Op),
+				At:         group.newest.TS.UTC().Format("15:04") + " UTC",
+				Effects:    group.effects,
+				WorkingSet: workingSet,
+			})
 		}
-		brief.Files = append(brief.Files, inject.SourceChangeFile{
-			Path:    display,
-			Actor:   string(group.newest.ActorClassFor(in.SessionID)),
-			Detail:  group.newest.ActorDisplay(in.SessionID),
-			Op:      string(group.newest.Op),
-			At:      group.newest.TS.UTC().Format("15:04") + " UTC",
-			Effects: group.effects,
-		})
 	}
+	itemize(true)
+	itemize(false)
 	return brief
 }
 
