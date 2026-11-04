@@ -19,13 +19,10 @@ func TestCloseoutCitationsSubsetOfPrior_newLineAllows(t *testing.T) {
 			},
 		},
 	}
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "found bar too",
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{
-			{Path: "internal/foo.go", Line: 1},
-			{Path: "internal/foo.go", Line: 42},
-		},
-	}
+	report := &api.CitationGrounding{CitedEvidence: []api.CitationGroundingCitedEvidence{
+		{Path: "internal/foo.go", Line: 1},
+		{Path: "internal/foo.go", Line: 42},
+	}}
 	hit, _ := guidance.CloseoutCitationsSubsetOfPrior(history, report)
 	if hit {
 		t.Fatal("new line in an already-cited file must not count as no-new-evidence")
@@ -44,13 +41,7 @@ func TestCloseoutCitationsSubsetOfPrior_equalBlocks(t *testing.T) {
 			},
 		},
 	}
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "same again",
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{
-			{Path: "AGENTS.md"},
-			{Path: "docs/a.md"},
-		},
-	}
+	report := &api.CitationGrounding{CitedEvidence: []api.CitationGroundingCitedEvidence{{Path: "AGENTS.md"}, {Path: "docs/a.md"}}}
 	hit, offenders := guidance.CloseoutCitationsSubsetOfPrior(history, report)
 	if !hit {
 		t.Fatal("equal citation set must count as no-new-evidence")
@@ -72,13 +63,7 @@ func TestCloseoutCitationsSubsetOfPrior_newPathAllows(t *testing.T) {
 			},
 		},
 	}
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "delta",
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{
-			{Path: "AGENTS.md"},
-			{Path: "lycaon/AGENTS.md"},
-		},
-	}
+	report := &api.CitationGrounding{CitedEvidence: []api.CitationGroundingCitedEvidence{{Path: "AGENTS.md"}, {Path: "lycaon/AGENTS.md"}}}
 	hit, _ := guidance.CloseoutCitationsSubsetOfPrior(history, report)
 	if hit {
 		t.Fatal("new path must not count as subset")
@@ -89,9 +74,7 @@ func TestCloseoutCitationsSubsetOfPrior_noPriorAllows(t *testing.T) {
 	history := []api.Message{
 		{Role: api.MessageRoleUser, Content: "audit", Visibility: api.MessageVisibilityTranscript},
 	}
-	report := guidance.CoordinatorCompletionReport{
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{{Path: "AGENTS.md"}},
-	}
+	report := &api.CitationGrounding{CitedEvidence: []api.CitationGroundingCitedEvidence{{Path: "AGENTS.md"}}}
 	hit, _ := guidance.CloseoutCitationsSubsetOfPrior(history, report)
 	if hit {
 		t.Fatal("first closeout must not fire no-new-evidence")
@@ -111,12 +94,29 @@ func TestCloseoutCitationsSubsetOfPrior_ignoresAgentNote(t *testing.T) {
 			},
 		},
 	}
-	report := guidance.CoordinatorCompletionReport{
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{{Path: "AGENTS.md"}},
-	}
+	report := &api.CitationGrounding{CitedEvidence: []api.CitationGroundingCitedEvidence{{Path: "AGENTS.md"}}}
 	hit, _ := guidance.CloseoutCitationsSubsetOfPrior(history, report)
 	if hit {
 		t.Fatal("an agent note is not a prior closeout")
+	}
+}
+
+// citationToken includes EndLine: a wider range at one start is new evidence, and
+// the same range again is a repeat.
+func TestCloseoutCitationsSubsetOfPriorComparesRanges(t *testing.T) {
+	history := []api.Message{
+		{Role: api.MessageRoleUser, Content: "audit", Visibility: api.MessageVisibilityTranscript},
+		{Role: api.MessageRoleAssistant, Visibility: api.MessageVisibilityTranscript, Grounding: &api.CitationGrounding{
+			CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "read#1", Path: "a.go", Line: 3, EndLine: 5}},
+		}},
+	}
+	same := &api.CitationGrounding{CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "read#1", Path: "a.go", Line: 3, EndLine: 5}}}
+	if hit, _ := guidance.CloseoutCitationsSubsetOfPrior(history, same); !hit {
+		t.Fatal("the same range is a repeat")
+	}
+	wider := &api.CitationGrounding{CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "read#1", Path: "a.go", Line: 3, EndLine: 9}}}
+	if hit, _ := guidance.CloseoutCitationsSubsetOfPrior(history, wider); hit {
+		t.Fatal("a different range at the same start is new evidence")
 	}
 }
 

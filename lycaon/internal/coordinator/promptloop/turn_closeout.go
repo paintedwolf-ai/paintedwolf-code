@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/spawn"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"

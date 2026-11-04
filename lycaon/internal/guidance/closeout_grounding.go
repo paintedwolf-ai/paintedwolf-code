@@ -243,7 +243,17 @@ func coordinatorFindingFromCitedEvidence(item CoordinatorCitedEvidence) WorkerFi
 
 // ResolveCitedEvidenceForWire maps typed citations to host provenance.
 func ResolveCitedEvidenceForWire(roots evidence.CitationRoots, ev evidence.Ledger, cited []CoordinatorCitedEvidence) []api.CitationGroundingCitedEvidence {
-	resolved := ResolveFindingsForWire(roots, ev, coordinatorCitedEvidenceInputs(cited), nil)
+	inputs := coordinatorCitedEvidenceInputs(cited)
+	resolved := ResolveFindingsForWire(roots, ev, inputs, nil)
+	// A bare path cites a file and has no line to verify.
+	for _, input := range inputs {
+		if input.Evidence != "" || input.Path == "" || input.Line > 0 || input.Excerpt != "" {
+			continue
+		}
+		if outcome := classifyDraftFinding(roots, input, ev); outcome.class == closeoutCitationGrounded {
+			resolved = append(resolved, ResolvedFinding{Handle: outcome.resolution.Handle, Path: outcome.resolution.Path, Verdict: outcome.resolution.Verdict})
+		}
+	}
 	if len(resolved) == 0 {
 		return nil
 	}

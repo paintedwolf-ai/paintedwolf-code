@@ -36,7 +36,9 @@ func (c *Service) noteGroundingReject(rootID, code, offenderKey string, draft gu
 	if code = strings.TrimSpace(code); code != "" {
 		entry.ForcedBy = appendDistinctCode(entry.ForcedBy, code)
 	}
-	entry.Retain(draft)
+	if draft.Synthesis != "" {
+		entry.Retain(draft)
+	}
 	entry.Unread = slices.Clone(unread)
 	c.cycles.Store(rootID, cycle)
 	return entry.Attempt + entry.DocumentAttempt, prevKey
