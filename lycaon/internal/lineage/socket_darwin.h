@@ -75,7 +75,7 @@ static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
   if (info.psi.soi_family != AF_INET && info.psi.soi_family != AF_INET6) continue;
   struct pw_socket_row *row = &out[(*count)++];
   row->udp = udp;
-  row->uid = info.psi.soi_uid;
+  row->uid = info.psi.soi_stat.vst_uid;
   row->socket_handle = info.psi.soi_so;
   row->pcb_handle = info.psi.soi_pcb;
   row->generation = in->insi_gencnt;
