@@ -12,7 +12,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
-import { listenHarnessSocket } from "./harness-socket.ts";
+import { harnessSocketPath, listenHarnessSocket } from "./harness-socket.ts";
 import type { CheckpointListResponse } from "../src/api/types.ts";
 
 async function foregroundSession(page: Page): Promise<string> {
@@ -57,7 +57,7 @@ async function openWaitingTask(page: Page, projectId: string, sessionId: string)
   await expect.poll(() => foregroundSession(page), { timeout: 30_000 }).toBe(sessionId);
 }
 
-const socketPath = `/tmp/approval-recovery-fixture-${process.pid}.sock`;
+const socketPath = harnessSocketPath(`approval-recovery-fixture-${process.pid}.sock`);
 let closeSocket: () => Promise<void>;
 
 webE2e.beforeAll(async () => {

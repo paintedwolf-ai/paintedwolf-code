@@ -10,7 +10,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
-import { listenHarnessSocket } from "./harness-socket.ts";
+import { harnessSocketPath, listenHarnessSocket } from "./harness-socket.ts";
 
 webE2e.describe("checkpoint tool approval parity", () => {
   webE2e("fresh session has no tool approval card", async ({ page }) => {
@@ -84,7 +84,7 @@ webE2e.describe("checkpoint tool approval parity", () => {
       expect(sessionId).toBeTruthy();
 
       const socketPath =
-        `/tmp/a-very-long-local-development-environment-${process.pid}/docker.sock`;
+        harnessSocketPath(`a-very-long-local-development-environment-${process.pid}/docker.sock`);
       await listenHarnessSocket(socketPath);
       const inject = await request.post(
         `${apiUrl}/harness/checkpoints/tool_approval`,

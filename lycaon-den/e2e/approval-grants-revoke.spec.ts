@@ -9,9 +9,9 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
-import { listenHarnessSocket } from "./harness-socket.ts";
+import { harnessSocketPath, listenHarnessSocket } from "./harness-socket.ts";
 
-const SOCKET_PATH = `/tmp/painted-wolf-harness-approval-${process.pid}.sock`;
+const SOCKET_PATH = harnessSocketPath(`painted-wolf-harness-approval-${process.pid}.sock`);
 let closeSocket: () => Promise<void>;
 
 webE2e.beforeAll(async () => {
