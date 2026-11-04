@@ -218,7 +218,7 @@ func policyOutputs(t *testing.T) []renderedOutput {
 	t.Helper()
 	cfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hints", err)
-	loader, err := oar.NewLoader(filepath.Join(contractcheck.RepoRoot(t), "lycaon", "schemas"))
+	loader, err := oar.NewLoader(filepath.Join(contractcheck.RepoRoot(t), "schemas"))
 	contractcheck.FailErr(t, "create policy loader", err)
 	rules, err := loader.LoadEffectivePolicy()
 	contractcheck.FailErr(t, "load policy", err)

@@ -20,7 +20,7 @@ import (
 const (
 	publicationRule = "Text you write alongside tool calls is shown to the user when valid"
 	privateTextRule = "Text you write alongside tool calls on this step is private working context"
-	finalAnswerRule = "Write your final answer as Markdown, citing where each claim is made: `[read#3:42]`, `[read#3:42-58]`, `[path:line]`"
+	finalAnswerRule = "Write your final answer as Markdown, citing where each claim is made"
 	verifyRule      = "`[verify: targeted - reason]`"
 	artifactRule    = "`[artifact:<uuid>]`"
 	withheldNotice  = "[HOST: MESSAGE WITHHELD FROM USER]"
