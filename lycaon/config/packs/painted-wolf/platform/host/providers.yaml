@@ -46,21 +46,17 @@ model_thinking:
     controls: {state: supported, can_disable: true, budget: {min: 1024}}
   - match: ["claude"]
     style: budget_tokens
-  # These families' templates wrap reasoning in <think> tags. A serving stack
-  # that reports reasoning in its own field can still leave the open tag in
-  # the content, and one that reports none leaves the whole block there.
+  # Every model's content channel is read for <think> tags; a rule declares
+  # reasoning_markers only for a family whose template uses other tags.
   - match: ["deepseek-r1", "deepseek-reasoner"]
     style: none
     always_on: true
-    reasoning_markers: {open: "<think>", close: "</think>"}
   - match: ["qwen3-235b-a22b-thinking", "qwen3-30b-a3b-thinking", "qwq"]
     style: none
     always_on: true
-    reasoning_markers: {open: "<think>", close: "</think>"}
   - match: ["qwen3"]
     style: boolean_think
     controls: {state: supported, can_enable: true, can_disable: true}
-    reasoning_markers: {open: "<think>", close: "</think>"}
   # Native control declarations, not a universal effort ladder.
   # https://developers.openai.com/api/docs/models/gpt-6-astra
   - match: ["gpt-6-astra"]
