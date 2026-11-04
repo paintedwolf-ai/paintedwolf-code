@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// windowQuietPassBudget bounds the pass that ends a settle grace.
-const windowQuietPassBudget = 45 * time.Second
+// windowSettlePassBudget bounds the pass that ends a settle grace or a close.
+const windowSettlePassBudget = 45 * time.Second
 
 // Hold marks one external process of the window's program as live, so the window
 // may claim drift until the returned release and its settle grace. A window that
@@ -129,7 +129,7 @@ func (s *Commands) quiesceWindow(ctx context.Context, w *openCommandWindow, quie
 		return
 	default:
 	}
-	budget, cancel := context.WithTimeout(ctx, windowQuietPassBudget)
+	budget, cancel := context.WithTimeout(ctx, windowSettlePassBudget)
 	defer cancel()
 	release, passErr, lockErr := s.settleWindowObservations(budget, w)
 	if release != nil {

@@ -1,4 +1,4 @@
-package tools
+package tools_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestAwaitClosingWindows(t *testing.T) {
@@ -21,13 +22,13 @@ func TestAwaitClosingWindows(t *testing.T) {
 
 	for name, run := range map[string]func(){
 		"a running window is never waited on": func() {
-			AwaitClosingWindows(t.Context(), []sourceledger.SessionWindow{running, done}, time.Hour)
+			tools.AwaitClosingWindows(t.Context(), []sourceledger.SessionWindow{running, done}, time.Hour)
 		},
 		"a window that stays closing costs the budget": func() {
-			AwaitClosingWindows(t.Context(), []sourceledger.SessionWindow{closing}, 0)
+			tools.AwaitClosingWindows(t.Context(), []sourceledger.SessionWindow{closing}, 0)
 		},
 		"the caller's context ends the wait": func() {
-			AwaitClosingWindows(canceled, []sourceledger.SessionWindow{closing}, time.Hour)
+			tools.AwaitClosingWindows(canceled, []sourceledger.SessionWindow{closing}, time.Hour)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

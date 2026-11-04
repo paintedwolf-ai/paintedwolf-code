@@ -183,7 +183,8 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 		return nil, err
 	}
 	if err := s.retainWindowStart(ctx, window); err != nil {
-		return nil, err
+		// No window opens, so nothing else would end the row.
+		return nil, errors.Join(err, s.finishWindow(context.WithoutCancel(ctx), window.id, "", time.Now().UTC()))
 	}
 	s.windowsMu.Lock()
 	s.openWindows[in.ProjectID] = append(s.openWindows[in.ProjectID], window)
@@ -515,7 +516,10 @@ func (s *Commands) closeCommandWindow(ctx context.Context, w *openCommandWindow)
 		if !idle {
 			s.awaitSettlePeriod(background, nil)
 		}
-		if err := s.settleCommandWindow(background, w, ended); err != nil {
+		// A pass that hangs must not leave a closed window claiming drift forever.
+		settling, cancel := context.WithTimeout(background, windowSettlePassBudget)
+		defer cancel()
+		if err := s.settleCommandWindow(settling, w, ended); err != nil {
 			slog.WarnContext(background, "command window settle", "window_id", w.id, "err", err)
 		}
 	}()

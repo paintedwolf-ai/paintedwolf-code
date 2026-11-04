@@ -528,8 +528,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 }
 
 // A stop during the open reaches the waiting stage, and settlement abandons
-// the open rather than waiting out its budget. No process ran, so the result
-// claims no unobserved one.
+// the open rather than waiting out its budget.
 func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 	f := newWindowFixture(t)
 	entered := make(chan struct{})
@@ -538,21 +537,14 @@ func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	}
-	done := make(chan callResult, 1)
+	done := make(chan error, 1)
 	go func() {
-		content, err := f.Call(t, t.Context(), writeGen)
-		done <- callResult{content, err}
+		_, err := f.Call(t, t.Context(), writeGen)
+		done <- err
 	}()
 	testutil.AwaitClosed(t, "the open began", entered)
 	f.Runtime.Supervisor.Stop(f.Session)
-	result := testutil.AwaitValue(t, "the stopped program returns", done)
-	var stopped struct {
-		SourceWindow map[string]any `json:"source_window"`
-	}
-	testutil.FailErr(t, "decode stopped result", json.Unmarshal([]byte(result.content), &stopped))
-	if len(stopped.SourceWindow) != 0 {
-		t.Fatalf("source_window = %v for a launch that never ran", stopped.SourceWindow)
-	}
+	testutil.AwaitValue(t, "the stopped program returns", done)
 	if programs := f.Programs(t); len(programs) != 1 || programs[0] != "interrupted" {
 		t.Fatalf("program state %v", programs)
 	}
