@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -303,5 +304,53 @@ func assertFileBody(t *testing.T, path, want string) {
 	testutil.FailErr(t, "read "+path, err)
 	if string(raw) != want {
 		t.Fatalf("%s = %q, want %q", path, raw, want)
+	}
+}
+
+func TestSelectWorkspaceAdapterAndPrepareMaterializedSeedView(t *testing.T) {
+	ctx := context.Background()
+	primary := t.TempDir()
+	writePrimaryFile(t, primary, "src/app.go", strings.Repeat("a", 512))
+	mgr, _, seeds := newTestManager(t)
+	forceBridgeClone(t, seeds)
+
+	_, err := mgr.CreateWorkerWorkspace(ctx, primary, "seed-warmup")
+	testutil.FailErr(t, "CreateWorkerWorkspace seed warmup", err)
+
+	est := CachedSeedEstimate(seeds, primary)
+	if est == nil || est.EstimatedBytes != 512 || est.EstimatedEntries < 2 {
+		t.Fatalf("expected CachedSeedEstimate from bridge seed, got %+v", est)
+	}
+
+	deniedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
+		TargetOS:  "darwin",
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonMountDenied, "sandbox mount denied", os.ErrPermission
+		},
+	})
+	sel := adapter.NewSelector("darwin", nil, deniedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	choice, err := SelectWorkspaceAdapter(ctx, adapter.ProbeConfig{RuntimeDir: t.TempDir()}, sel)
+	testutil.FailErr(t, "SelectWorkspaceAdapter", err)
+	if choice.Strategy != ProvisionMaterializedEagerCopy || choice.Facts.FallbackReason != adapter.ReasonMountDenied ||
+		choice.Facts.UntouchedSourceVisibility != adapter.VisibilityFixed {
+		t.Fatalf("unexpected strategy selection: %+v", choice)
+	}
+
+	// CachedSeedEstimate must refuse preparation early when MaxBytes < EstimatedBytes.
+	_, limErr := PrepareMaterializedSeedView(ctx, seeds, adapter.PrepareRequest{
+		ViewID:     "seed-est-limit",
+		RuntimeDir: t.TempDir(),
+		MaxBytes:   128,
+		Grants:     []adapter.RootGrant{{RootID: "primary", SourcePath: primary, IsPrimary: true}},
+	}, choice.Facts.FallbackReason)
+	if limErr == nil || !strings.Contains(limErr.Error(), string(adapter.ReasonWorkspacePreparationLimit)) {
+		t.Fatalf("expected workspace_preparation_limit from cached seed estimate, got %v", limErr)
+	}
+
+	// Real Manager.provisionRoot / CreateWorkerWorkspace also enforces preparation limits via WithWorkspaceLimits.
+	limCtx := WithWorkspaceLimits(ctx, 100, 128)
+	if _, mgrErr := mgr.CreateWorkerWorkspace(limCtx, primary, "seed-est-limit-mgr"); mgrErr == nil || !strings.Contains(mgrErr.Error(), string(adapter.ReasonWorkspacePreparationLimit)) {
+		t.Fatalf("expected Manager.CreateWorkerWorkspace to enforce workspace_preparation_limit, got %v", mgrErr)
 	}
 }

@@ -26,7 +26,7 @@ func RestoreNativeTrash(source string, destination Location, expected string) er
 	if err != nil {
 		return err
 	}
-	if identity != expected {
+	if !fspath.SameEntryAcrossRestart(expected, identity) {
 		return ErrPostcondition
 	}
 	if err := renameNoReplace(unix.AT_FDCWD, source, parent.fd, parent.name); err != nil {

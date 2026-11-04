@@ -9,6 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -108,5 +112,87 @@ func TestListJobTreesReportsPresenceSizeAndLastUse(t *testing.T) {
 	}
 	if got := byJob["job-evicted"]; got.Present || got.AllocatedBytes != 0 || len(got.Roots) != 1 {
 		t.Fatalf("evicted = %+v", got)
+	}
+}
+
+func TestEvictVerifiedCheckpointBranchAndRebuildWithLocalDataInventory(t *testing.T) {
+	branches := t.TempDir()
+	seeds := t.TempDir()
+	mgr := workspace.NewManager(branches, seeds)
+	project, root := createBranch(t, mgr, "job-cp-evict")
+
+	cpStore, err := checkpoint.NewStore(t.TempDir())
+	testutil.FailErr(t, "checkpoint.NewStore", err)
+	coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
+		RootDir:         t.TempDir(),
+		CheckpointStore: cpStore,
+		MountReconciler: recovery.ConnectionReconciler{},
+	})
+	testutil.FailErr(t, "recovery.NewCoordinator", err)
+
+	adp := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
+	prepReq := adapter.PrepareRequest{
+		ViewID:     "view-cp-evict",
+		BackingDir: t.TempDir(),
+		RuntimeDir: t.TempDir(),
+		Grants:     []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: project, IsPrimary: true}},
+	}
+	view, err := adp.Prepare(t.Context(), prepReq)
+	testutil.FailErr(t, "adp.Prepare", err)
+	defer func() { _, _ = adp.Release(t.Context(), view.ViewID) }()
+
+	_, err = view.Core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "main.go"}, []byte("package main // cp1\n"), 0o644)
+	testutil.FailErr(t, "WriteFile", err)
+
+	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
+		Core:             view.Core,
+		Store:            cpStore,
+		WorkerID:         "job-cp-evict",
+		TaskID:           "t-1",
+		ProjectID:        "p-1",
+		SourceGeneration: "g-1",
+		SelectedRoots:    []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: project, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "NewPublisher", err)
+	_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "cp-1"})
+	testutil.FailErr(t, "Publish cp-1", err)
+	testutil.FailErr(t, "SaveWorkerJournal", coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
+		FormatVersion:             recovery.FormatVersion,
+		WorkerID:                  "job-cp-evict",
+		ViewID:                    view.ViewID,
+		TaskID:                    "t-1",
+		ProjectID:                 "p-1",
+		AdapterID:                 adp.ID(),
+		LastPublishedCheckpointID: "cp-1",
+	}))
+
+	// Unsealed mutation refuses EvictVerifiedCheckpointBranch.
+	_, err = view.Core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "main.go"}, []byte("package main // unsealed\n"), 0o644)
+	testutil.FailErr(t, "WriteFile unsealed", err)
+	if _, err := workspace.EvictVerifiedCheckpointBranch(t.Context(), root, coord, "job-cp-evict", view.ViewID, view.BackingDir); !errors.Is(err, recovery.ErrEvictUnsealedWorkRefused) {
+		t.Fatalf("expected ErrEvictUnsealedWorkRefused, got %v", err)
+	}
+
+	// Seal in cp-2, then EvictVerifiedCheckpointBranch and RebuildWorkerWorkspaceFromCheckpoint succeed.
+	_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "cp-2"})
+	testutil.FailErr(t, "Publish cp-2", err)
+	testutil.FailErr(t, "RecordTransition", coord.RecordTransition("job-cp-evict", view.ViewID, recovery.PhasePublication, recovery.StateCommitted, "cp-2", "publish", nil, false))
+
+	if _, err := workspace.EvictVerifiedCheckpointBranch(t.Context(), root, coord, "job-cp-evict", view.ViewID, view.BackingDir); err != nil {
+		testutil.FailErr(t, "EvictVerifiedCheckpointBranch", err)
+	}
+	recRes, _, err := mgr.RebuildWorkerWorkspaceFromCheckpoint(t.Context(), root, coord, recovery.RecoverRequest{
+		WorkerID:   "job-cp-evict",
+		NewViewID:  "view-cp-rebuilt",
+		Adapter:    adp,
+		PrepareReq: adapter.PrepareRequest{ViewID: "view-cp-rebuilt", BackingDir: t.TempDir(), RuntimeDir: t.TempDir(), Grants: prepReq.Grants},
+	})
+	testutil.FailErr(t, "RebuildWorkerWorkspaceFromCheckpoint", err)
+	defer func() { _, _ = adp.Release(t.Context(), recRes.ViewID) }()
+
+	inv, err := workspace.BuildLocalDataInventory(t.Context(), branches, seeds, coord)
+	testutil.FailErr(t, "BuildLocalDataInventory", err)
+	if len(inv.Entries) == 0 {
+		t.Fatal("expected inventory entries")
 	}
 }

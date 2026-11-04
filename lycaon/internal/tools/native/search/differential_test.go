@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -62,6 +63,11 @@ func references(t *testing.T) []reference {
 			if !bytes.Contains(version, []byte("GNU grep")) {
 				continue
 			}
+		case "rg":
+			// Only the pinned reference counts: an arbitrary release can have different JSON semantics.
+			if !bytes.HasPrefix(version, []byte("ripgrep 15.0.")) {
+				continue
+			}
 		case "bsd-find":
 			if gnu {
 				continue
@@ -106,6 +112,10 @@ type differentialCase struct {
 	sorted bool
 	// json compares JSON Lines with the measured elapsed fields hidden.
 	json bool
+	// mapped compares only where ripgrep maps a named file. A mapped binary record keeps its NUL and
+	// reports bytes searched to it; an unmapped one converts NUL and reports the whole file. ripgrep does
+	// not map on macOS even with --mmap. The native printer follows the mapped form.
+	mapped bool
 }
 
 func sortedLines(s string) string {
@@ -214,7 +224,7 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"rg", "--json", "-m", "1", "-A", "1", "alpha", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "-v", "alpha", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "-w", "alpha", "sub/c.txt"}, kinds: []string{"rg"}, json: true},
-	{argv: []string{"rg", "--json", "alpha", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "alpha", "bin.dat"}, kinds: []string{"rg"}, json: true, mapped: true},
 	{argv: []string{"rg", "--json", "zz", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
 	{argv: []string{"rg", "--hidden", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
@@ -261,6 +271,9 @@ func TestDifferentialAgainstInstalledReferences(t *testing.T) {
 	for _, c := range grepDifferential {
 		for _, ref := range refs {
 			if !slices.Contains(c.kinds, ref.kind) {
+				continue
+			}
+			if c.mapped && runtime.GOOS == "darwin" {
 				continue
 			}
 			if ref.kind == "rg" != (c.argv[0] == "rg") || strings.HasSuffix(ref.kind, "-find") != (c.argv[0] == "find") {

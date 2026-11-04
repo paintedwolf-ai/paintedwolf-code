@@ -130,6 +130,10 @@ func TestWriteWorkerEnrichmentBindsPersistedBranchRoots(t *testing.T) {
 	service.SetTasks(&enrichmentJobs{task: &api.WorkerTask{ID: "write-job", WorkspaceRoot: root, Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}})
 	out, err := service.Enrich(t.Context(), &api.Session{ID: "child", ParentSessionID: "parent"}, tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "write-job"}})
 	testutil.FailErr(t, "bind write branch invocation", err)
+	if out.Source.RecordViewProcess == nil {
+		t.Fatal("a write worker's launches record nothing")
+	}
+	testutil.FailErr(t, "a branch with no mounted view has nothing to record", out.Source.RecordViewProcess(os.Getpid()))
 	if out.Source.WorkerBranchRoot != root || out.Source.BranchWorkspace != branch || out.Source.SourceWorkspaceKind != api.SourceWorkspaceKindWorker || len(out.Source.Roots) != 1 || out.Source.Roots[0].ID != "root" || !reflect.DeepEqual(out.Source.WorkerSourceRoots, []string{root}) {
 		t.Fatalf("write branch context=%+v", out.Source)
 	}

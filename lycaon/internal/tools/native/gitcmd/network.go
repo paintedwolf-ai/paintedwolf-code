@@ -70,7 +70,7 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	} else if has(p.Argv, "--ff-only") {
 		req.Mode = "ff_only"
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, opErr := mut.Operate(ctx, tc, req)
 	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), opErr)
 }

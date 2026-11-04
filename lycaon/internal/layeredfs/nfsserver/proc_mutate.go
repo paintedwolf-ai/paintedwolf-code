@@ -1,0 +1,314 @@
+package nfsserver
+
+import (
+	"bytes"
+	"os"
+	"syscall"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	nfs "github.com/willscott/go-nfs"
+)
+
+// nfsStatusBadType is NFS3ERR_BADTYPE from RFC 1813.
+const nfsStatusBadType nfs.NFSStatus = 10007
+
+const (
+	createUnchecked = 0
+	createGuarded   = 1
+	createExclusive = 2
+)
+
+func onCreate(s *Server, cs *connState, call rpcCallHeader) []byte {
+	dirFH, name, err := readDirOpArg(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureCreate, nfs.NFSStatusInval)
+	}
+	how, err := readUint32(call.Body)
+	if err != nil || how > createExclusive {
+		return encodeNFSError(call.XID, nfs.NFSProcedureCreate, nfs.NFSStatusInval)
+	}
+	var (
+		attrs      sattr3
+		createVerf [8]byte
+	)
+	if how == createExclusive {
+		verfBytes, err := readFixedBytes(call.Body, 8)
+		if err != nil {
+			return encodeNFSError(call.XID, nfs.NFSProcedureCreate, nfs.NFSStatusInval)
+		}
+		copy(createVerf[:], verfBytes)
+	} else {
+		if attrs, err = readSattr3(call.Body, time.Now()); err != nil {
+			return encodeNFSError(call.XID, nfs.NFSProcedureCreate, nfs.NFSStatusInval)
+		}
+	}
+
+	dirRec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, dirFH)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureCreate, MapErrorToNFSStatus(err))
+	}
+	preDir, err := statRecord(s, dirRec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureCreate, MapErrorToNFSStatus(err))
+	}
+	if exp.cap.ReadOnly {
+		return encodeWccError(call.XID, nfs.NFSStatusROFS, &preDir, &preDir, exp)
+	}
+	if !preDir.Mode.IsDir() {
+		return encodeWccError(call.XID, nfs.NFSStatusNotDir, &preDir, &preDir, exp)
+	}
+	childQPath, err := joinChildPath(dirRec.qpath, name)
+	if err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &preDir, exp)
+	}
+
+	fh, fileMeta, err := executeCreate(s, exp.core, dirRec, childQPath, how, attrs, createVerf)
+	postDir, _ := statRecord(s, dirRec)
+	if err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
+	}
+	s.dirs.InvalidateDir(dirRec.key)
+
+	var body bytes.Buffer
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	writePostOpFH3(&body, fh[:])
+	writePostOpAttr(&body, &fileMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeWccData(&body, &preDir, &postDir, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func executeCreate(
+	s *Server, viewCore *layeredfs.Core, dirRec *handleRecord, childQPath layeredfs.QualifiedPath,
+	how uint32, attrs sattr3, createVerf [8]byte,
+) ([HandleSize]byte, layeredfs.EntryAttr, error) {
+	var zeroFH [HandleSize]byte
+	existingMeta, statErr := viewCore.Lstat(childQPath)
+	if statErr == nil {
+		if existingMeta.Mode.IsDir() {
+			return zeroFH, layeredfs.EntryAttr{}, syscall.EISDIR
+		}
+		if how == createGuarded {
+			return zeroFH, layeredfs.EntryAttr{}, os.ErrExist
+		}
+		if how == createExclusive {
+			if rec, ok := s.handles.LookupByPath(dirRec.viewID, childQPath); ok && rec.createVerf != nil && *rec.createVerf == createVerf {
+				return rec.wire, existingMeta, nil
+			}
+			return zeroFH, layeredfs.EntryAttr{}, os.ErrExist
+		}
+	}
+
+	perm := os.FileMode(0o644)
+	if how != createExclusive && attrs.HasMode {
+		perm = attrs.Mode & os.ModePerm
+	}
+	openFlags := layeredfs.OpenReadWrite | layeredfs.OpenCreate
+	if how == createGuarded || how == createExclusive {
+		openFlags |= layeredfs.OpenExclusive
+	} else if attrs.HasSize && attrs.Size == 0 {
+		openFlags |= layeredfs.OpenTruncate
+	}
+	fd, _, err := viewCore.Open(childQPath, openFlags, perm)
+	if err != nil {
+		return zeroFH, layeredfs.EntryAttr{}, err
+	}
+	_ = viewCore.CloseHandle(fd)
+
+	if how != createExclusive {
+		if statErr == nil && attrs.HasMode {
+			_, _ = viewCore.Chmod(childQPath, perm)
+		}
+		if attrs.HasAtime || attrs.HasMtime {
+			now := time.Now()
+			at, mt := now, now
+			if attrs.HasAtime {
+				at = attrs.Atime
+			}
+			if attrs.HasMtime {
+				mt = attrs.Mtime
+			}
+			_, _ = viewCore.Chtimes(childQPath, at, mt, true)
+		}
+	}
+	s.stability.absorbAtName(viewCore, s.handles, dirRec.viewID, childQPath)
+	meta, err := viewCore.Lstat(childQPath)
+	if err != nil {
+		return zeroFH, layeredfs.EntryAttr{}, err
+	}
+	fh := s.handles.Ensure(dirRec.viewID, childQPath, meta, dirRec.key.nodeID, false)
+	if how == createExclusive {
+		if rec, ok := s.handles.LookupByPath(dirRec.viewID, childQPath); ok {
+			s.handles.SetCreateVerifier(rec.key, createVerf)
+		}
+	}
+	return fh, meta, nil
+}
+
+func onMkdir(s *Server, cs *connState, call rpcCallHeader) []byte {
+	dirFH, name, err := readDirOpArg(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureMkDir, nfs.NFSStatusInval)
+	}
+	attrs, err := readSattr3(call.Body, time.Now())
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureMkDir, nfs.NFSStatusInval)
+	}
+	dirRec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, dirFH)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureMkDir, MapErrorToNFSStatus(err))
+	}
+	preDir, err := statRecord(s, dirRec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureMkDir, MapErrorToNFSStatus(err))
+	}
+	if exp.cap.ReadOnly {
+		return encodeWccError(call.XID, nfs.NFSStatusROFS, &preDir, &preDir, exp)
+	}
+	childQPath, err := joinChildPath(dirRec.qpath, name)
+	if err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &preDir, exp)
+	}
+	perm := os.FileMode(0o755)
+	if attrs.HasMode {
+		perm = attrs.Mode & os.ModePerm
+	}
+	if _, err := exp.core.Mkdir(childQPath, perm); err != nil {
+		postDir, _ := statRecord(s, dirRec)
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
+	}
+	if attrs.HasAtime || attrs.HasMtime {
+		now := time.Now()
+		at, mt := now, now
+		if attrs.HasAtime {
+			at = attrs.Atime
+		}
+		if attrs.HasMtime {
+			mt = attrs.Mtime
+		}
+		_, _ = exp.core.Chtimes(childQPath, at, mt, true)
+	}
+	s.dirs.InvalidateDir(dirRec.key)
+	childMeta, err := exp.core.Lstat(childQPath)
+	postDir, _ := statRecord(s, dirRec)
+	if err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
+	}
+	fh := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, false)
+
+	var body bytes.Buffer
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	writePostOpFH3(&body, fh[:])
+	writePostOpAttr(&body, &childMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeWccData(&body, &preDir, &postDir, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func onSymlink(s *Server, cs *connState, call rpcCallHeader) []byte {
+	dirFH, name, err := readDirOpArg(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSymlink, nfs.NFSStatusInval)
+	}
+	if _, err := readSattr3(call.Body, time.Now()); err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSymlink, nfs.NFSStatusInval)
+	}
+	target, err := readStringBounded(call.Body, nfs.MntPathLen)
+	if err != nil || target == "" {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSymlink, nfs.NFSStatusInval)
+	}
+	dirRec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, dirFH)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSymlink, MapErrorToNFSStatus(err))
+	}
+	preDir, err := statRecord(s, dirRec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureSymlink, MapErrorToNFSStatus(err))
+	}
+	if exp.cap.ReadOnly {
+		return encodeWccError(call.XID, nfs.NFSStatusROFS, &preDir, &preDir, exp)
+	}
+	childQPath, err := joinChildPath(dirRec.qpath, name)
+	if err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &preDir, exp)
+	}
+	if _, err := exp.core.Symlink(target, childQPath); err != nil {
+		postDir, _ := statRecord(s, dirRec)
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
+	}
+	s.dirs.InvalidateDir(dirRec.key)
+	childMeta, err := exp.core.Lstat(childQPath)
+	postDir, _ := statRecord(s, dirRec)
+	if err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
+	}
+	fh := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, false)
+
+	var body bytes.Buffer
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	writePostOpFH3(&body, fh[:])
+	writePostOpAttr(&body, &childMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeWccData(&body, &preDir, &postDir, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}
+
+func onMknod(s *Server, cs *connState, call rpcCallHeader) []byte {
+	dirFH, name, err := readDirOpArg(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureMkNod, nfs.NFSStatusInval)
+	}
+	fileType, err := readUint32(call.Body)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureMkNod, nfs.NFSStatusInval)
+	}
+	var attrs sattr3
+	nodeType := nfs.FileType(fileType)
+	switch nodeType {
+	case nfs.FileTypeFIFO, nfs.FileTypeSocket, nfs.FileTypeBlock, nfs.FileTypeCharacter:
+		if attrs, err = readSattr3(call.Body, time.Now()); err != nil {
+			return encodeNFSError(call.XID, nfs.NFSProcedureMkNod, nfs.NFSStatusInval)
+		}
+	}
+	dirRec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, dirFH)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureMkNod, MapErrorToNFSStatus(err))
+	}
+	preDir, err := statRecord(s, dirRec)
+	if err != nil {
+		return encodeNFSError(call.XID, nfs.NFSProcedureMkNod, MapErrorToNFSStatus(err))
+	}
+	if exp.cap.ReadOnly {
+		return encodeWccError(call.XID, nfs.NFSStatusROFS, &preDir, &preDir, exp)
+	}
+	var kindBit os.FileMode
+	switch nodeType {
+	case nfs.FileTypeFIFO:
+		kindBit = os.ModeNamedPipe
+	case nfs.FileTypeSocket:
+		kindBit = os.ModeSocket
+	case nfs.FileTypeBlock, nfs.FileTypeCharacter:
+		kindBit = os.ModeDevice
+	default:
+		return encodeWccError(call.XID, nfsStatusBadType, &preDir, &preDir, exp)
+	}
+	childQPath, err := joinChildPath(dirRec.qpath, name)
+	if err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &preDir, exp)
+	}
+	perm := os.FileMode(0o644)
+	if attrs.HasMode {
+		perm = attrs.Mode & os.ModePerm
+	}
+	childMeta, err := exp.core.Mknod(childQPath, kindBit|perm)
+	postDir, _ := statRecord(s, dirRec)
+	if err != nil {
+		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
+	}
+	s.dirs.InvalidateDir(dirRec.key)
+	fh := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, false)
+	var body bytes.Buffer
+	writeUint32(&body, uint32(nfs.NFSStatusOk))
+	writePostOpFH3(&body, fh[:])
+	writePostOpAttr(&body, &childMeta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	writeWccData(&body, &preDir, &postDir, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
+}

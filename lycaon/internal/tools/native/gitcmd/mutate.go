@@ -113,7 +113,7 @@ func runAdd(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, r
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	result, err := mut.Operate(ctx, tc, git.OperationRequest{Kind: "add", Mode: mode, Paths: paths})
 	if err == nil {
 		recordStaged(p.owners, tc.ChatSessionID(), repo.Root, append(append([]string{}, result.Paths...), paths...))
@@ -131,7 +131,7 @@ func runCommit(ctx context.Context, p Prepared, tc tools.ToolContext, dir string
 		}
 	}
 	msg := strings.Join(parts, "\n\n")
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	if !has(p.Argv, "--amend") && len(p.Argv.Operands()) == 0 && !has(p.Argv, "-a") {
 		if _, err := os.Stat(filepath.Join(repo.GitDir, "MERGE_HEAD")); err == nil {
 			res, opErr := mut.Operate(ctx, tc, git.OperationRequest{Kind: "merge", Action: "continue", Message: msg})
@@ -213,7 +213,7 @@ func runRestore(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 	if len(paths) == 0 {
 		return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	restored, err := mut.Restore(ctx, tc, git.GitRestoreOpts{Paths: paths, Source: source, Staged: staged, Worktree: worktree})
 	if err != nil {
 		return settleRestoreError(err, stderr)
@@ -260,7 +260,7 @@ func runCheckout(ctx context.Context, p Prepared, tc tools.ToolContext, dir stri
 	default:
 		return settleMutationError(operandInvalid(p.command.spec, before[1], "-- before PATH operands"), toolcontract.NoEffect)
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, req)
 	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), err)
 }
@@ -281,7 +281,7 @@ func runSwitch(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitre
 	default:
 		req = git.OperationRequest{Kind: "checkout", Branch: ops[0]}
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, req)
 	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), err)
 }
@@ -304,7 +304,7 @@ func runMerge(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrep
 	}
 	msg, _ := optionValue(p.Argv, "-m")
 	req := git.OperationRequest{Kind: "merge", Action: action, Mode: mode, NoCommit: has(p.Argv, "--no-commit"), Message: msg, Ref: firstOrEmpty(p.Argv.Operands().Values())}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, req)
 	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), err)
 }

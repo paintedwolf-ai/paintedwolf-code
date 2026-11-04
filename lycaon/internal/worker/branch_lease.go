@@ -33,6 +33,28 @@ func (l *BranchLease) Release() {
 	l.release = nil
 }
 
+// CheckpointBranchRebuilder reconstructs a tree from its worker's retained checkpoint, and
+// reports false when no checkpoint applies.
+type CheckpointBranchRebuilder interface {
+	RebuildRecoveredBranch(ctx context.Context, root, jobID string) (bool, error)
+}
+
+// BranchEvictor is the eviction path for every retention caller: a queue whose workspace manager
+// knows the recovery rules applies them, and anything else evicts on the sealed record.
+func BranchEvictor(queue WorkerQueue) func(ctx context.Context, branchRoot string) error {
+	if sql, ok := queue.(*SQLQueue); ok {
+		sql.mu.Lock()
+		ws := sql.workerWorkspace
+		sql.mu.Unlock()
+		if evictor, ok := ws.(interface {
+			EvictWorkerBranch(ctx context.Context, branchRoot string) error
+		}); ok {
+			return evictor.EvictWorkerBranch
+		}
+	}
+	return workspace.EvictJobTree
+}
+
 // WorkerBranches materializes a job's branch tree on demand. A tree that
 // retention reclaimed is rebuilt from the job's baseline and overlay records
 // before the lease is handed back, so callers never see an evicted branch.
@@ -56,6 +78,16 @@ func ensureWorkerBranch(ctx context.Context, task *api.WorkerTask, ws WorkerWork
 	if workspace.BranchTreePresent(root) {
 		workspace.TouchBranchUse(root)
 		return &BranchLease{Root: root, release: release}, nil
+	}
+	if rebuilder, ok := ws.(CheckpointBranchRebuilder); ok {
+		rebuilt, err := rebuilder.RebuildRecoveredBranch(ctx, root, task.ID)
+		if err != nil {
+			release()
+			return nil, fmt.Errorf("rebuild worker branch %s from checkpoint: %w", task.ID, err)
+		}
+		if rebuilt {
+			return &BranchLease{Root: root, release: release}, nil
+		}
 	}
 	if strings.TrimSpace(task.WorkspaceOverlayPath) == "" || ws == nil {
 		release()

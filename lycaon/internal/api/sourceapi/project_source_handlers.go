@@ -62,6 +62,16 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 		branch = p.BranchForRoot(rootID)
 	}
 	scope := sourceViewerWorkspace{id: workspaceID, kind: workspaceKind, branch: branch}
+	if layeredRes, handled, lErr := s.readLayeredWorkerProjectSource(r.Context(), w, branchRoot, r.URL.Query().Get("checkpoint_id"), p, req, scope); handled {
+		if lErr == nil && layeredRes != nil {
+			httpio.WriteJSON(w, http.StatusOK, *layeredRes)
+			return
+		}
+		if !errors.Is(lErr, projectsource.ErrSourceNotFound) || !includeDeleted {
+			s.writeSourceReadError(w, r, lErr)
+			return
+		}
+	}
 	observation, err := projectsource.ObserveProjectSource(p, req)
 	if errors.Is(err, projectsource.ErrSourceNotFound) && includeDeleted && (workerID == "" || branch.IsWorker()) {
 		var deleted *wire.ProjectSourceReadResponse

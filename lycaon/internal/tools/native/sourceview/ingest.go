@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
@@ -79,6 +80,16 @@ func ReadContentCapped(tool string, access Access, loc fseffect.Location, displa
 // ReadContentCappedFromRoot loads one bounded regular file using an already
 // held ReadRoot when provided, or opening loc.Root when root is nil.
 func ReadContentCappedFromRoot(tool string, access Access, root *fseffect.ReadRoot, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, error) {
+	body, _, err := readContentWithStatCappedFromRoot(tool, access, root, loc, displayPath, compressed, maxBytes)
+	return body, err
+}
+
+// ReadContentWithStatCapped binds content and identity to the same opened descriptor.
+func ReadContentWithStatCapped(tool string, access Access, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, FileStatFacts, error) {
+	return readContentWithStatCappedFromRoot(tool, access, nil, loc, displayPath, compressed, maxBytes)
+}
+
+func readContentWithStatCappedFromRoot(tool string, access Access, root *fseffect.ReadRoot, loc fseffect.Location, displayPath string, compressed bool, maxBytes int64) ([]byte, FileStatFacts, error) {
 	var (
 		f   *os.File
 		err error
@@ -89,43 +100,50 @@ func ReadContentCappedFromRoot(tool string, access Access, root *fseffect.ReadRo
 		f, err = fseffect.OpenRead(loc)
 	}
 	if err != nil {
-		return nil, err
+		return nil, FileStatFacts{}, err
 	}
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
-		return nil, err
+		return nil, FileStatFacts{}, err
 	}
 	if info.IsDir() {
-		return nil, DirectoryReject(displayPath)
+		return nil, FileStatFacts{}, DirectoryReject(displayPath)
 	}
+	stat := extractFileStatFacts(info)
 	if compressed {
-		return readCompressedContentCapped(tool, access, f, displayPath, maxBytes)
+		body, err := readCompressedContentCapped(tool, access, f, displayPath, maxBytes)
+		stat.Size = int64(len(body))
+		return body, stat, err
 	}
 	size := info.Size()
 	if size > maxBytes {
-		return nil, access.SizeReject(tool, displayPath, size, maxBytes)
+		return nil, stat, access.SizeReject(tool, displayPath, size, maxBytes)
 	}
 	if size >= 0 && size <= 64<<10 {
 		buf := make([]byte, size+1)
 		n, readErr := io.ReadFull(f, buf)
 		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
-			return buf[:n], nil
+			stat.Size = int64(n)
+			return buf[:n], stat, nil
 		}
 		if readErr != nil {
-			return nil, readErr
+			return nil, stat, readErr
 		}
 		rest, rerr := io.ReadAll(io.LimitReader(f, maxBytes+1-int64(n)))
 		buf = append(buf[:n], rest...)
 		if int64(len(buf)) > maxBytes {
-			return nil, access.SizeReject(tool, displayPath, int64(len(buf)), maxBytes)
+			return nil, stat, access.SizeReject(tool, displayPath, int64(len(buf)), maxBytes)
 		}
 		if rerr != nil {
-			return nil, rerr
+			return nil, stat, rerr
 		}
-		return buf, nil
+		stat.Size = int64(len(buf))
+		return buf, stat, nil
 	}
-	return readPlainContentCapped(tool, access, f, displayPath, maxBytes)
+	body, err := readPlainContentCapped(tool, access, f, displayPath, maxBytes)
+	stat.Size = int64(len(body))
+	return body, stat, err
 }
 
 func readPlainContentCapped(tool string, access Access, r io.Reader, path string, maxBytes int64) ([]byte, error) {
@@ -148,4 +166,22 @@ func readCompressedContentCapped(tool string, access Access, r io.Reader, path s
 		return nil, fmt.Errorf("decompress body: %w", err)
 	}
 	return body, nil
+}
+
+// FileStatFacts binds served content to its open descriptor.
+type FileStatFacts struct {
+	Size, ModTimeNS int64
+	Ino, Dev        uint64
+}
+
+func extractFileStatFacts(info os.FileInfo) FileStatFacts {
+	if info == nil {
+		return FileStatFacts{}
+	}
+	facts := FileStatFacts{Size: info.Size(), ModTimeNS: info.ModTime().UnixNano()}
+	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
+		facts.Ino = uint64(sys.Ino)
+		facts.Dev = uint64(sys.Dev)
+	}
+	return facts
 }

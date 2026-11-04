@@ -8,6 +8,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/filelock"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
@@ -30,7 +32,7 @@ func TestReconcileSandboxRootsRemovesUnregisteredProjects(t *testing.T) {
 		testutil.FailErr(t, "write seed", os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o644))
 	}
 
-	removed, err := workspace.ReconcileSandboxRoots(context.Background(), branchRoot, seedRoot, []string{live}, retainedJobIDs(nil))
+	removed, err := workspace.ReconcileSandboxRoots(context.Background(), branchRoot, seedRoot, []string{live}, nil, retainedJobIDs(nil))
 	testutil.FailErr(t, "ReconcileSandboxRoots", err)
 	if removed != 2 {
 		t.Fatalf("removed = %d, want the orphan branch tree and the orphan seed", removed)
@@ -50,7 +52,7 @@ func TestReconcileSandboxRootsRemovesUnregisteredProjects(t *testing.T) {
 
 func TestReconcileSandboxRootsToleratesMissingRoots(t *testing.T) {
 	removed, err := workspace.ReconcileSandboxRoots(context.Background(),
-		filepath.Join(t.TempDir(), "absent-branches"), filepath.Join(t.TempDir(), "absent-seeds"), nil, retainedJobIDs(nil))
+		filepath.Join(t.TempDir(), "absent-branches"), filepath.Join(t.TempDir(), "absent-seeds"), nil, nil, retainedJobIDs(nil))
 	testutil.FailErr(t, "ReconcileSandboxRoots", err)
 	if removed != 0 {
 		t.Fatalf("removed = %d, want 0", removed)
@@ -66,7 +68,7 @@ func TestReconcileSandboxRootsPreservesRetainedHistoryAfterProjectMoves(t *testi
 	testutil.FailErr(t, "write retained topology", os.WriteFile(metaPath, []byte("retained topology"), 0o600))
 	testutil.FailErr(t, "evict sealed tree", os.RemoveAll(sealed))
 	jobs := map[string]struct{}{"sealed": {}, "unsealed": {}}
-	_, err := workspace.ReconcileSandboxRoots(t.Context(), branchRoot, "", []string{currentProject}, retainedJobIDs(jobs))
+	_, err := workspace.ReconcileSandboxRoots(t.Context(), branchRoot, "", []string{currentProject}, nil, retainedJobIDs(jobs))
 	testutil.FailErr(t, "reconcile relocated project", err)
 	body, err := os.ReadFile(metaPath)
 	testutil.FailErr(t, "read retained topology", err)
@@ -81,7 +83,7 @@ func TestReconcileSandboxRootsPreservesRetainedHistoryAfterProjectMoves(t *testi
 			t.Fatalf("unretained worker path remains %s: %v", path, err)
 		}
 	}
-	_, err = workspace.ReconcileSandboxRoots(t.Context(), branchRoot, "", []string{currentProject}, retainedJobIDs(nil))
+	_, err = workspace.ReconcileSandboxRoots(t.Context(), branchRoot, "", []string{currentProject}, nil, retainedJobIDs(nil))
 	testutil.FailErr(t, "reconcile deleted history", err)
 	if _, err := os.Stat(filepath.Dir(sealed)); !os.IsNotExist(err) {
 		t.Fatalf("unreferenced branch bucket remains: %v", err)
@@ -96,7 +98,7 @@ func TestReconcileSandboxRootsLoadsOwnershipAfterEnumeratingCandidates(t *testin
 		publishedAfterEnumeration = seedSandbox(t, branches, prior, "published-later")
 		return map[string]struct{}{"provisioning": {}}, nil
 	}
-	_, err := workspace.ReconcileSandboxRoots(t.Context(), branches, "", nil, load)
+	_, err := workspace.ReconcileSandboxRoots(t.Context(), branches, "", nil, nil, load)
 	testutil.FailErr(t, "reconcile provisioning interleaving", err)
 	for _, path := range []string{job, publishedAfterEnumeration} {
 		if _, err := os.Stat(path); err != nil {
@@ -120,7 +122,7 @@ func TestReconcileSandboxRootsDefersHeldBranchLocks(t *testing.T) {
 			}
 			before, err := os.Stat(job + suffix)
 			testutil.FailErr(t, "stat held lock", err)
-			_, err = workspace.ReconcileSandboxRoots(t.Context(), branches, "", nil, retainedJobIDs(nil))
+			_, err = workspace.ReconcileSandboxRoots(t.Context(), branches, "", nil, nil, retainedJobIDs(nil))
 			testutil.FailErr(t, "defer held branch", err)
 			for _, path := range []string{job, meta} {
 				if _, err := os.Stat(path); err != nil {
@@ -133,11 +135,87 @@ func TestReconcileSandboxRootsDefersHeldBranchLocks(t *testing.T) {
 				t.Fatal("held coordination lock was replaced")
 			}
 			testutil.FailErr(t, "release branch coordination lock", filelock.Unlock(lock))
-			_, err = workspace.ReconcileSandboxRoots(t.Context(), branches, "", nil, retainedJobIDs(nil))
+			_, err = workspace.ReconcileSandboxRoots(t.Context(), branches, "", nil, nil, retainedJobIDs(nil))
 			testutil.FailErr(t, "reclaim released orphan", err)
 			if _, err := os.Stat(job); !os.IsNotExist(err) {
 				t.Fatalf("released orphan remains: %v", err)
 			}
 		})
+	}
+}
+
+func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t *testing.T) {
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	testutil.FailErr(t, "mkdir subroot", os.MkdirAll(filepath.Join(rootA, "services", "api"), 0o755))
+	testutil.FailErr(t, "mkdir sibling", os.MkdirAll(filepath.Join(rootA, "services", "billing"), 0o755))
+
+	attached := []projectroot.RootRef{
+		{ID: "primary", Label: "primary", Path: rootA, IsPrimary: true},
+		{ID: "docs", Label: "docs", Path: rootB},
+	}
+
+	// TaskPathHints alone do not narrow or expand selection when WorkspaceSelection is empty.
+	grantsAll, refsAll, err := workspace.ResolveDispatchWorkspaceSelection(
+		attached, adapter.WorkspaceSelection{}, []string{"primary/services/api/handler.go"},
+	)
+	testutil.FailErr(t, "ResolveDispatchWorkspaceSelection default", err)
+	if len(grantsAll) != 2 || len(refsAll) != 2 || refsAll[0].Path != filepath.Clean(rootA) {
+		t.Fatalf("expected default selection to include all attached roots unchanged, got %+v", refsAll)
+	}
+
+	// Explicit WorkspaceSelection narrows root and subroot while ignoring TaskPathHints to other roots.
+	grantsNarrow, refsNarrow, err := workspace.ResolveDispatchWorkspaceSelection(
+		attached,
+		adapter.WorkspaceSelection{
+			RootIDs:  []string{"primary"},
+			Subroots: map[string]string{"primary": "services/api"},
+		},
+		[]string{"docs/README.md", "primary/services/billing/invoice.go"},
+	)
+	testutil.FailErr(t, "ResolveDispatchWorkspaceSelection narrow", err)
+	wantSubPath := filepath.Join(filepath.Clean(rootA), "services", "api")
+	if len(grantsNarrow) != 1 || len(refsNarrow) != 1 || grantsNarrow[0].Subroot != "services/api" || refsNarrow[0].Path != wantSubPath {
+		t.Fatalf("unexpected narrowed roots: grants=%+v refs=%+v", grantsNarrow, refsNarrow)
+	}
+
+	// Unauthorized root selection must be rejected.
+	if _, _, err := workspace.ResolveDispatchWorkspaceSelection(
+		attached, adapter.WorkspaceSelection{RootIDs: []string{"ungranted"}}, nil,
+	); err == nil {
+		t.Fatal("expected unauthorized root selection to fail")
+	}
+
+	// Verify real Manager.CreateWorkerWorkspaceSelected and ReconcileSelectedSandboxRoots wire WorkspaceSelection.
+	testutil.FailErr(t, "write api handler", os.WriteFile(filepath.Join(rootA, "services", "api", "handler.go"), []byte("package api\n"), 0o644))
+	testutil.FailErr(t, "write billing invoice", os.WriteFile(filepath.Join(rootA, "services", "billing", "invoice.go"), []byte("package billing\n"), 0o644))
+	testutil.FailErr(t, "write docs readme", os.WriteFile(filepath.Join(rootB, "README.md"), []byte("# docs\n"), 0o644))
+
+	branches := t.TempDir()
+	seeds := t.TempDir()
+	mgr := workspace.NewManager(branches, seeds)
+	narrowSel := adapter.WorkspaceSelection{
+		RootIDs:  []string{"primary"},
+		Subroots: map[string]string{"primary": "services/api"},
+	}
+	binding, layout, err := mgr.CreateWorkerWorkspaceSelected(
+		t.Context(), attached, attached, narrowSel,
+		[]string{"docs/README.md", "primary/services/billing/invoice.go"},
+		"primary", "selected-job",
+	)
+	testutil.FailErr(t, "CreateWorkerWorkspaceSelected", err)
+	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+
+	if len(layout.Roots) != 1 || layout.Roots[0].ID != "primary" {
+		t.Fatalf("expected narrowed layout to contain only primary, got %+v", layout.Roots)
+	}
+	if _, err := os.Stat(filepath.Join(binding.Root, "handler.go")); err != nil {
+		t.Fatalf("expected narrowed subroot file handler.go in worker workspace: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(binding.Root, "invoice.go")); !os.IsNotExist(err) {
+		t.Fatalf("unselected sibling subroot file must not exist in narrowed workspace: %v", err)
+	}
+	if _, err := workspace.ReconcileSelectedSandboxRoots(t.Context(), branches, seeds, attached, narrowSel, nil, nil, retainedJobIDs(map[string]struct{}{"selected-job": {}})); err != nil {
+		testutil.FailErr(t, "ReconcileSelectedSandboxRoots", err)
 	}
 }

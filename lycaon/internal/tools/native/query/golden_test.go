@@ -103,7 +103,15 @@ func hostJqBinary() string {
 			return c
 		}
 	}
-	binary, _ := exec.LookPath("jq")
+	binary, err := exec.LookPath("jq")
+	if err != nil {
+		return ""
+	}
+	// Only 1.7 and 1.8 are a reference: jq 1.6 lacks options and formats numbers differently.
+	out, err := exec.Command(binary, "--version").Output()
+	if err != nil || (!strings.HasPrefix(string(out), "jq-1.7") && !strings.HasPrefix(string(out), "jq-1.8")) {
+		return ""
+	}
 	return binary
 }
 

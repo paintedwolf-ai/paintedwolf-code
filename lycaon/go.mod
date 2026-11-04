@@ -61,6 +61,7 @@ require (
 	github.com/tiktoken-go/tokenizer v0.10.0
 	github.com/tsawler/tabula v1.6.14
 	github.com/ulikunitz/xz v0.5.17
+	github.com/willscott/go-nfs v0.0.4
 	github.com/ysmood/gson v0.7.3
 	github.com/yuin/goldmark v1.8.6
 	github.com/zricethezav/gitleaks/v8 v8.30.1
@@ -240,6 +241,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/xattr v0.4.12 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
+	github.com/rasky/go-xdr v0.0.0-20170124162913-1a41d1a06c93 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
@@ -275,6 +277,7 @@ require (
 	github.com/tonistiigi/go-csvvalue v0.0.0-20240814133006-030d3b2625d0 // indirect
 	github.com/wasilibs/go-re2 v1.9.0 // indirect
 	github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52 // indirect
+	github.com/willscott/go-nfs-client v0.0.0-20240104095149-b44639837b00 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
@@ -335,3 +338,5 @@ replace github.com/zricethezav/gitleaks/v8 => ../third_party/gitleaks
 
 // Bounded typed ERE execution; provenance and patch in third_party/README.md.
 replace github.com/dlclark/regexp2/v2 => ../third_party/regexp2
+
+replace github.com/willscott/go-nfs => ../third_party/go-nfs

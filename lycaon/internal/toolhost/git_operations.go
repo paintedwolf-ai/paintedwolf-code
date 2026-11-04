@@ -15,7 +15,7 @@ func registerGitOperationTools(reg *tools.DefaultRegistry, deps buildDeps, bound
 		if !deps.nativeConfig.HasTool(name) {
 			continue
 		}
-		tool := &native.GitOperationTool{Git: deps.git, Boundary: boundary, Kind: kind}
+		tool := &native.GitOperationTool{Git: deps.git, PrivateGit: deps.privateGit, Boundary: boundary, Kind: kind}
 		if err := reg.Register(name, tool.Run); err != nil {
 			return err
 		}

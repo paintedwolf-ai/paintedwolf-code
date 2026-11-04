@@ -41,6 +41,29 @@ func HostDataDir(dataDir, projectID string) string {
 	return filepath.Join(base, HostProjectsDirName, projectID)
 }
 
+// HostDataDirs lists every per-project host data tree under the data dir.
+func HostDataDirs(dataDir string) ([]string, error) {
+	sample := HostDataDir(dataDir, "sample")
+	if sample == "" {
+		return nil, fmt.Errorf("host data dir unavailable")
+	}
+	parent := filepath.Dir(sample)
+	entries, err := os.ReadDir(parent)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	dirs := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			dirs = append(dirs, filepath.Join(parent, entry.Name()))
+		}
+	}
+	return dirs, nil
+}
+
 // EnsureHostDataDir creates HostDataDir at 0700 when missing.
 func EnsureHostDataDir(dataDir, projectID string) (string, error) {
 	dir := HostDataDir(dataDir, projectID)

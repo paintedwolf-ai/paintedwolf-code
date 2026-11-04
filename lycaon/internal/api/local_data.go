@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/branchretention"
 	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -55,7 +56,7 @@ func (s *LocalData) branchRetentionDeps() branchretention.Deps {
 			}
 			return out, nil
 		},
-		Evict: workspace.EvictJobTree,
+		Evict: worker.BranchEvictor(s.workers),
 	}
 }
 

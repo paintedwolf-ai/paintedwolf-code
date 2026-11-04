@@ -67,7 +67,7 @@ func (s *Sandboxes) reconcileProjectSandboxes(ctx context.Context, projectID, wo
 	if projectID == "" || workspacePath == "" {
 		return 0
 	}
-	removed, err := worker.ReconcileProjectSandboxes(ctx, s.WorkerBranchRoot, workspacePath, func(ctx context.Context) ([]wire.WorkerTask, error) {
+	removed, err := worker.ReconcileProjectSandboxes(ctx, s.WorkerBranchRoot, workspacePath, s.SettleWorker, func(ctx context.Context) ([]wire.WorkerTask, error) {
 		return s.Workers.ListByWorkspacePath(ctx, workspacePath)
 	})
 	if err != nil {

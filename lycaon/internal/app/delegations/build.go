@@ -56,7 +56,12 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Executor.SetPhaseTouchPaths(deps.Workflows.Manager.Ambient)
 	r.BranchRoot = enginepaths.WorkerBranchesRootUnder(deps.Storage.Directory)
 	r.SeedRoot = enginepaths.WorkerSeedsRootUnder(deps.Storage.Directory)
-	r.Workspace = workspace.NewManager(r.BranchRoot, r.SeedRoot)
+	coordinator, err := newWorkerRecovery(deps.Storage.Directory, deps.Execution.PrivateGit)
+	if err != nil {
+		return err
+	}
+	r.Recovery = coordinator
+	r.Workspace = workspace.NewManager(r.BranchRoot, r.SeedRoot).WithPrivateGit(deps.Execution.PrivateGit).WithRecovery(coordinator)
 	r.Queue.SetWorkerWorkspaceManager(r.Workspace)
 	r.Queue.SetBaselineStore(deps.Storage.SourceLedger.Baselines)
 	r.Queue.SetProjectStore(deps.Storage.Projects)

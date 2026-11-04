@@ -10,12 +10,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -47,8 +49,9 @@ var readForms = map[string]operandRule{
 
 // Owners holds the Git read, mutation and network frontends.
 type Owners struct {
-	Git      Backend
-	Boundary *sandbox.Boundary
+	Git        Backend
+	Boundary   *sandbox.Boundary
+	PrivateGit *privategit.Manager
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -203,6 +206,11 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if streams.Input != nil {
 		defer func() { _ = streams.Input.Close() }()
 	}
+	finish, err := p.enterWorkerView(ctx, tc)
+	if err != nil {
+		return settle(0, err, p.command.spec.Name)
+	}
+	defer func() { _ = finish() }()
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)
 	}
@@ -215,6 +223,28 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		err = ctx.Err()
 	}
 	return settle(status, err, p.command.spec.Name)
+}
+
+// enterWorkerView prepares a write-leg worker's private view before any form runs, so a read sees the
+// view's own repository, initialized on first use. A branch with no managed view has no repository a
+// worker may touch, and the form is refused rather than run against whatever Git would discover.
+func (p Prepared) enterWorkerView(ctx context.Context, tc tools.ToolContext) (func() error, error) {
+	noop := func() error { return nil }
+	if tc.Identity.WorkerJobID == "" || strings.TrimSpace(tc.Source.WorkerBranchRoot) == "" {
+		return noop, nil
+	}
+	_, finish, managed, err := privategit.PrepareManagerViewOperation(ctx, p.owners.PrivateGit, tools.HostWriteRoot(tc), tc.Identity.WorkerJobID)
+	if errors.Is(err, fs.ErrNotExist) {
+		// The view's sources hold no repository, which Git itself reports to the form.
+		return noop, nil
+	}
+	if err != nil {
+		return noop, err
+	}
+	if !managed {
+		return noop, &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
+	}
+	return finish, nil
 }
 
 // settle projects Git's exit onto the producer contract. Read commands have

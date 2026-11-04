@@ -7,10 +7,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+type workspaceReceiptBinder interface {
+	BindVerificationReceipt(jobID, childSessionID, workspacePath, branchRoot, checkID, checkpointID string, scopeRoots []string) (observation.VerificationBinding, bool)
+}
 
 // Verify uses the ordinary confined verifier and evidence recorder
 // while the deterministic runner owns the worker's claim.
@@ -43,6 +48,11 @@ func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.Worke
 		return nil, fmt.Errorf("worker verification did not produce a source-bound terminal receipt")
 	}
 	m.Verification.RecordSourceRunEvidence(ctx, child.ID, child, "verify", *run)
+	if run.Verdict == api.SourceVerdictPassed {
+		if binder, ok := m.Workspaces.(workspaceReceiptBinder); ok {
+			binder.BindVerificationReceipt(job.ID, child.ID, job.WorkspacePath, tctx.Source.WorkerBranchRoot, run.CheckID, run.SourceRevision, nil)
+		}
+	}
 	if err := m.verifyPreparedWorkerEvidence(ctx, child, job, run); err != nil {
 		return nil, err
 	}

@@ -2,11 +2,16 @@ package workspace_test
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -15,7 +20,7 @@ import (
 
 func TestCreateWorkerWorkspaceCapturesCompleteImmutableSnapshot(t *testing.T) {
 	primary := t.TempDir()
-	for _, rel := range []string{".git/HEAD", settingsoverlay.Rel("blueprints/x.md"), "main.go", "pkg/a.go"} {
+	for _, rel := range []string{settingsoverlay.Rel("blueprints/x.md"), "main.go", "pkg/a.go"} {
 		p := filepath.Join(primary, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			testutil.FailErr(t, "mkdir", err)
@@ -36,7 +41,7 @@ func TestCreateWorkerWorkspaceCapturesCompleteImmutableSnapshot(t *testing.T) {
 		t.Fatalf("claimed snapshot missing pkg/a.go: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(binding.Root, ".git")); !os.IsNotExist(err) {
-		t.Fatal("claimed snapshot must exclude repository metadata")
+		t.Fatal("a source with no repository has none in its snapshot")
 	}
 	meta, err := workspace.LoadJobMeta(enginepaths.MetaDirForBranchRoot(binding.Root))
 	testutil.FailErr(t, "LoadJobMeta", err)
@@ -45,6 +50,18 @@ func TestCreateWorkerWorkspaceCapturesCompleteImmutableSnapshot(t *testing.T) {
 	}
 	if len(meta.Roots) != 1 || meta.Roots[0].Path != filepath.Clean(primary) {
 		t.Fatalf("roots=%v", meta.Roots)
+	}
+}
+
+func TestCreateWorkerWorkspaceRefusesACorruptSourceRepository(t *testing.T) {
+	primary := t.TempDir()
+	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(primary, ".git"), 0o755))
+	testutil.FailErr(t, "write HEAD", os.WriteFile(filepath.Join(primary, ".git", "HEAD"), []byte("x"), 0o644))
+	testutil.FailErr(t, "write main.go", os.WriteFile(filepath.Join(primary, "main.go"), []byte("x"), 0o644))
+	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
+	_, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "corrupt")
+	if !errors.Is(err, privategit.ErrCorruptObjectStore) {
+		t.Fatalf("claim over a corrupt repository = %v, want a typed refusal", err)
 	}
 }
 
@@ -181,5 +198,135 @@ func TestWorkerSnapshotPrunesMetadataNotGitignore(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(binding.Root, ".git")); !os.IsNotExist(err) {
 		t.Fatal(".git must not be copied")
+	}
+}
+
+func TestMaterializeBoundedWorkspaceGitIsolationAndLimitEnforcement(t *testing.T) {
+	ctx := context.Background()
+	primary := t.TempDir()
+	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(primary, ".git", "objects", "ab"), 0o755))
+	testutil.FailErr(t, "mkdir submodule gitdir", os.MkdirAll(filepath.Join(primary, ".git", "modules", "sub"), 0o755))
+	testutil.FailErr(t, "write HEAD", os.WriteFile(filepath.Join(primary, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	testutil.FailErr(t, "write sub HEAD", os.WriteFile(filepath.Join(primary, ".git", "modules", "sub", "HEAD"), []byte("ref: refs/heads/sub\n"), 0o644))
+	testutil.FailErr(t, "mkdir sub", os.MkdirAll(filepath.Join(primary, "sub"), 0o755))
+	testutil.FailErr(t, "write gitlink", os.WriteFile(filepath.Join(primary, "sub", ".git"), []byte("gitdir: ../.git/modules/sub\n"), 0o644))
+	testutil.FailErr(t, "write code", os.WriteFile(filepath.Join(primary, "sub", "code.go"), []byte("package sub\n"), 0o644))
+
+	runtimeDir := t.TempDir()
+	grants := []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: primary, IsPrimary: true}}
+
+	view, err := workspace.MaterializeBoundedWorkspace(
+		ctx, "mat-view-ok", runtimeDir, grants, adapter.WorkspaceSelection{}, nil, 0, 0, adapter.ReasonMountDenied,
+	)
+	testutil.FailErr(t, "MaterializeBoundedWorkspace", err)
+	defer func() { _ = view.Core.ReleaseView() }()
+
+	if _, err := os.Lstat(filepath.Join(view.PrimaryWorkPath, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("raw .git directory must not exist in materialized workspace: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(view.PrimaryWorkPath, "sub", ".git")); !os.IsNotExist(err) {
+		t.Fatalf("raw gitlink file must not exist in materialized workspace: %v", err)
+	}
+	base, ok := view.Core.CapturedBase(layeredfs.QualifiedPath{RootID: "primary", Rel: "sub/code.go"})
+	if !ok || base.SHA256 == "" {
+		t.Fatalf("expected pre-captured seed base in Core, got ok=%v base=%+v", ok, base)
+	}
+
+	// Enforce actual entry limit and clean up incomplete seed without touching sibling view.
+	_, limErr := workspace.MaterializeBoundedWorkspace(
+		ctx, "mat-view-limit", runtimeDir, grants, adapter.WorkspaceSelection{}, nil, 2, 0, adapter.ReasonMountDenied,
+	)
+	var prepLim *adapter.PreparationLimitError
+	if !errors.As(limErr, &prepLim) || prepLim.ReasonCode != adapter.ReasonWorkspacePreparationLimit || !prepLim.CleanedIncompleteSeed {
+		t.Fatalf("expected PreparationLimitError with workspace_preparation_limit, got %v", limErr)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, "views", "mat-view-limit")); !os.IsNotExist(err) {
+		t.Fatalf("incomplete limited view was not cleaned up: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(view.PrimaryWorkPath, "sub", "code.go")); err != nil {
+		t.Fatalf("sibling materialized view was disrupted: %v", err)
+	}
+
+	// Verify real Manager.CreateWorkerWorkspace enforces entry/byte limits and cleans partial branch.
+	branchBase := t.TempDir()
+	mgr := workspace.NewManager(branchBase, t.TempDir()).WithPreparationLimits(1, 4)
+	if _, mgrErr := mgr.CreateWorkerWorkspace(ctx, primary, "mgr-limit-fail"); !errors.As(mgrErr, &prepLim) || prepLim.ReasonCode != adapter.ReasonWorkspacePreparationLimit || !prepLim.CleanedIncompleteSeed {
+		t.Fatalf("expected Manager.CreateWorkerWorkspace to fail with workspace_preparation_limit, got %v", mgrErr)
+	}
+}
+
+func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t *testing.T) {
+	ctx := context.Background()
+	primary := t.TempDir()
+	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(primary, ".git", "objects", "ab"), 0o755))
+	testutil.FailErr(t, "write HEAD", os.WriteFile(filepath.Join(primary, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	testutil.FailErr(t, "write loose obj", os.WriteFile(filepath.Join(primary, ".git", "objects", "ab", "0123456789abcdef0123456789abcdef012345"), []byte("git-blob"), 0o644))
+	testutil.FailErr(t, "write main.go", os.WriteFile(filepath.Join(primary, "main.go"), []byte("package main\n"), 0o644))
+
+	// 1. Default Manager.CreateWorkerWorkspace routes through SelectWorkspaceAdapter + PrepareMaterializedSeedView.
+	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
+	binding, err := mgr.CreateWorkerWorkspace(ctx, primary, "prod-entry")
+	testutil.FailErr(t, "CreateWorkerWorkspace", err)
+
+	if binding.View == nil || binding.Adapter == nil || binding.View.Core == nil {
+		t.Fatalf("expected CreateWorkerWorkspace to attach PreparedView and Adapter, got %+v", binding)
+	}
+	if binding.Selection.Strategy != workspace.ProvisionMaterializedEagerCopy ||
+		binding.Selection.Facts.FallbackReason != adapter.ReasonConfinementUnavailable ||
+		binding.Selection.Probe.ReasonCode != adapter.ReasonConfinementUnavailable {
+		t.Fatalf("expected default selector fallback with ReasonConfinementUnavailable, got %+v", binding.Selection)
+	}
+	if _, ok := binding.View.SeededGitRepos["primary:."]; !ok {
+		t.Fatalf("expected private Git initialized in PreparedView.SeededGitRepos, got %+v", binding.View.SeededGitRepos)
+	}
+	alternates, err := os.ReadFile(filepath.Join(binding.Root, ".git", "objects", "info", "alternates"))
+	testutil.FailErr(t, "read private repository alternates", err)
+	if strings.Contains(string(alternates), primary) {
+		t.Fatalf("private repository borrows source objects: %s", alternates)
+	}
+	base, ok := binding.View.Core.CapturedBase(layeredfs.QualifiedPath{RootID: "primary", Rel: "main.go"})
+	if !ok || base.SHA256 == "" {
+		t.Fatalf("expected pre-captured seed base in binding.View.Core, got ok=%v base=%+v", ok, base)
+	}
+
+	// Mutate main.go on disk in binding.Root and verify CheckpointBarrier syncs into binding.View.Core.
+	testutil.FailErr(t, "edit main.go", os.WriteFile(filepath.Join(binding.Root, "main.go"), []byte("package main\n// edited\n"), 0o644))
+	_, releaseBarrier, err := binding.Adapter.CheckpointBarrier(ctx, binding.View.ViewID)
+	testutil.FailErr(t, "CheckpointBarrier", err)
+	testutil.FailErr(t, "releaseBarrier", releaseBarrier())
+	changes, err := binding.View.Core.EnumerateChanges(true)
+	testutil.FailErr(t, "EnumerateChanges", err)
+	if len(changes) != 1 || changes[0].Path.Rel != "main.go" {
+		t.Fatalf("expected main.go synced into Core journal, got %+v", changes)
+	}
+	testutil.FailErr(t, "DestroyWorkerWorkspace", mgr.DestroyWorkerWorkspace(binding))
+
+	// 2. Manager.WithSelector(mountedSel) routes CreateWorkerWorkspace through MountedAdapter.Prepare & Release.
+	var mountedPrepared, mountedReleased bool
+	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
+		TargetOS:  "",
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
+		},
+		MountViewFn: func(ctx context.Context, viewID string, roots []adapter.PreparedRoot) error {
+			mountedPrepared = true
+			return nil
+		},
+		UnmountViewFn: func(ctx context.Context, viewID, runtimeDir string) error {
+			mountedReleased = true
+			return nil
+		},
+	})
+	mountedSel := adapter.NewSelector("", mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	mountedSel.Confinement = fixtureConfinement{}
+	mBinding, err := mgr.WithSelector(mountedSel).CreateWorkerWorkspace(ctx, primary, "prod-mounted")
+	testutil.FailErr(t, "CreateWorkerWorkspace mounted", err)
+	if !mountedPrepared || mBinding.View == nil || mBinding.Selection.Facts.PreparationKind != adapter.PreparationMounted {
+		t.Fatalf("expected mounted adapter Prepare via CreateWorkerWorkspace, got prepared=%v binding=%+v", mountedPrepared, mBinding)
+	}
+	testutil.FailErr(t, "DestroyWorkerWorkspace mounted", mgr.DestroyWorkerWorkspace(mBinding))
+	if !mountedReleased {
+		t.Fatalf("expected DestroyWorkerWorkspace to release mounted view")
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -413,7 +414,9 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 		{"-s", "-D", "-", "-o", "/dev/null", "-w", `%{http_code} %{size_download} %{url_effective}\n`, server.URL + "/a"},
 		{"-s", "-o", "/dev/null", "-w", facts, server.URL + "/hop/1"},
 		{"-s", "-L", "-o", "/dev/null", "-w", facts, server.URL + "/hop/2"},
-		{"-s", "-A", "probe/1", "-T", "upload.txt", "-w", facts, server.URL + "/echo"},
+		// How many header bytes an upload reports depends on whether this curl sends Expect, which
+		// older ones do for any body and whose interim response they count.
+		{"-s", "-A", "probe/1", "-T", "upload.txt", "-w", strings.ReplaceAll(facts, " %{size_header}", ""), server.URL + "/echo"},
 		{"-s", "-A", "probe/1", "-T", "upload.txt", "-X", "POST", server.URL + "/echo"},
 		{"-s", "--fail-with-body", "-w", facts, server.URL + "/fail"},
 		{"-s", "--fail", "-w", facts, server.URL + "/fail"},
@@ -432,6 +435,9 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 		{"-s", "-A", "probe/1", "--json", `{"x":1}`, server.URL + "/echo"},
 		{"-s", "-A", "probe/1", "-u", "user:pass", "-H", "X-Custom: val", server.URL + "/echo"},
 	} {
+		if slices.Contains(args, "--json") && !systemCurlHasJSON(t, system) {
+			continue
+		}
 		cmd := exec.Command(system, append([]string{"--noproxy", "*"}, args...)...)
 		cmd.Env = append(os.Environ(), "NO_PROXY=*", "no_proxy=*", "CURL_HOME=/nonexistent")
 		cmd.Dir = h.root
@@ -448,6 +454,14 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 			t.Fatalf("%v differs from system curl:\n got %q (%d)\nwant %q (%d) %v", args, r.stdout, r.result.Status, want, status, r.err)
 		}
 	}
+}
+
+// systemCurlHasJSON reports the reference has the option, which curl 7.82 added.
+func systemCurlHasJSON(t *testing.T, system string) bool {
+	t.Helper()
+	help, err := exec.Command(system, "--help", "all").Output()
+	testutil.FailErr(t, "system curl help", err)
+	return strings.Contains(string(help), "--json")
 }
 
 func TestCurlRefusesInvalidUsage(t *testing.T) {

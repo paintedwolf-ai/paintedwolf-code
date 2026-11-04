@@ -25,7 +25,7 @@ func runStash(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 			rest = before[1:]
 		}
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	quiet := has(p.Argv, "-q")
 	switch sub {
 	case "apply", "drop":
@@ -115,7 +115,7 @@ func runReset(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, git.OperationRequest{Kind: "reset", Mode: mode, Ref: ref, Paths: paths})
 	if err == nil {
 		if len(paths) > 0 {
@@ -136,7 +136,7 @@ func runClean(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, git.OperationRequest{Kind: "clean", Mode: mode, Paths: paths})
 	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), err)
 }
@@ -184,7 +184,7 @@ func runWorktree(ctx context.Context, p Prepared, dir string, repo gitrepo.Repo,
 func runSequence(ctx context.Context, p Prepared, tc tools.ToolContext, kind string, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
 	action := sequenceAction(p.Argv)
 	req := git.OperationRequest{Kind: kind, Action: action, NoCommit: has(p.Argv, "-n"), Refs: p.Argv.Operands().Values()}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, req)
 	return settleOperate(p, res, out, stderr, false, err)
 }
@@ -192,7 +192,7 @@ func runSequence(ctx context.Context, p Prepared, tc tools.ToolContext, kind str
 func runRebase(ctx context.Context, p Prepared, tc tools.ToolContext, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
 	action := sequenceAction(p.Argv)
 	req := git.OperationRequest{Kind: "rebase", Action: action, Ref: firstOrEmpty(p.Argv.Operands().Values())}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
+	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, req)
 	return settleOperate(p, res, out, stderr, false, err)
 }

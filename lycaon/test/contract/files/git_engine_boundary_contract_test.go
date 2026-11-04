@@ -262,8 +262,12 @@ func assertGitBoundaryPinFailsClosed(t *testing.T, root string) {
 func assertGitBoundaryWriteSinksWired(t *testing.T, root string) {
 	t.Helper()
 	resolveWrite := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/projectpaths/projectpaths.go")
-	if !strings.Contains(resolveWrite, "IsGitInternalsWritePath") {
-		t.Fatal("ResolveWrite must call IsGitInternalsWritePath")
+	if !strings.Contains(resolveWrite, "CheckNativeGitMetadataPath") {
+		t.Fatal("ResolveWrite must call CheckNativeGitMetadataPath")
+	}
+	metadata := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/gitinternals.go")
+	if !strings.Contains(metadata, "IsGitInternalsWritePath(relPath)") {
+		t.Fatal("CheckNativeGitMetadataPath must call IsGitInternalsWritePath")
 	}
 	extract := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/native/extract_archive.go")
 	if !strings.Contains(extract, "IsGitInternalsWritePath") {

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
@@ -38,8 +39,10 @@ type programOwnerTools struct {
 	operations mutation.Operations
 	catalog    *sourcecatalog.Catalog
 	// git is the Git owner; nil leaves git to its unsupported refusal.
-	git      *git.Manager
-	registry *tools.DefaultRegistry
+	git *git.Manager
+	// privateGit is the manager worker Git forms run their prepared views through.
+	privateGit *privategit.Manager
+	registry   *tools.DefaultRegistry
 	// spills wraps each program's textutil spill storage when set.
 	spills func(textutil.SpillStorage) textutil.SpillStorage
 }
@@ -241,6 +244,7 @@ func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.Native
 		return nil, err
 	}
 	owners.Boundary = t.boundary
+	owners.PrivateGit = t.privateGit
 	registered := func(tool string) bool {
 		if tool == "" || t.registry == nil {
 			return false

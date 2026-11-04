@@ -8,7 +8,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 )
+
+var sharedBranchViews sync.Map // map[string]branchViewState
 
 // ErrWorkspaceStorageExhausted identifies a branch or seed write that failed
 // because the central application-data volume cannot accept more data.
@@ -54,7 +61,21 @@ type PreparationProgress struct {
 	TotalBytes int64
 }
 
-type preparationReporterKey struct{}
+type (
+	preparationReporterKey struct{}
+	workspaceSelectionKey  struct{}
+	workspaceLimitsKey     struct{}
+)
+
+type workspaceSelectionContext struct {
+	selection     adapter.WorkspaceSelection
+	taskPathHints []string
+}
+
+type workspaceLimitsContext struct {
+	maxEntries int64
+	maxBytes   int64
+}
 
 const preparationReportInterval = 250 * time.Millisecond
 
@@ -80,6 +101,45 @@ func WithPreparationReporter(ctx context.Context, report func(PreparationProgres
 	return context.WithValue(ctx, preparationReporterKey{}, throttled)
 }
 
+// WithWorkspaceSelection attaches an explicit WorkspaceSelection and optional informational
+// task path hints to a workspace provisioning context (#1658).
+func WithWorkspaceSelection(ctx context.Context, selection adapter.WorkspaceSelection, taskPathHints ...string) context.Context {
+	return context.WithValue(ctx, workspaceSelectionKey{}, workspaceSelectionContext{
+		selection:     selection,
+		taskPathHints: append([]string(nil), taskPathHints...),
+	})
+}
+
+type workspaceProjectKey struct{}
+
+// WithWorkspaceProject names the project a worker view belongs to.
+func WithWorkspaceProject(ctx context.Context, projectID string) context.Context {
+	return context.WithValue(ctx, workspaceProjectKey{}, strings.TrimSpace(projectID))
+}
+
+func workspaceProjectFromContext(ctx context.Context, fallback string) string {
+	if id, ok := ctx.Value(workspaceProjectKey{}).(string); ok && id != "" {
+		return id
+	}
+	return fallback
+}
+
+// WithWorkspaceLimits overrides the maximum entries and bytes permitted for a workspace preparation call (#1658).
+func WithWorkspaceLimits(ctx context.Context, maxEntries, maxBytes int64) context.Context {
+	return context.WithValue(ctx, workspaceLimitsKey{}, workspaceLimitsContext{
+		maxEntries: maxEntries,
+		maxBytes:   maxBytes,
+	})
+}
+
+func workspaceSelectionFromContext(ctx context.Context) (adapter.WorkspaceSelection, []string, bool) {
+	val, ok := ctx.Value(workspaceSelectionKey{}).(workspaceSelectionContext)
+	if !ok {
+		return adapter.WorkspaceSelection{}, nil, false
+	}
+	return val.selection, val.taskPathHints, true
+}
+
 func reportPreparation(ctx context.Context, progress PreparationProgress) {
 	if report, ok := ctx.Value(preparationReporterKey{}).(func(PreparationProgress)); ok {
 		report(progress)
@@ -89,8 +149,18 @@ func reportPreparation(ctx context.Context, progress PreparationProgress) {
 // Binding is one isolated worker sandbox — a copy of the project tree living
 // outside the repo. There is no git interaction and no linked worktree.
 type Binding struct {
-	ID   string
-	Root string
+	ID        string
+	Root      string
+	Selection WorkspaceStrategySelection
+	View      *adapter.PreparedView
+	Adapter   adapter.Adapter
+}
+
+type branchViewState struct {
+	selection WorkspaceStrategySelection
+	views     []*adapter.PreparedView
+	// writers records processes for a mounted view, whose settlement names them.
+	writers *recovery.Coordinator
 }
 
 // Manager creates and destroys per-job worker sandboxes, retaining a central
@@ -99,6 +169,17 @@ type Manager struct {
 	branchRoot string
 	seedRoot   string
 	locks      seedLockSet
+	maxEntries int64
+	maxBytes   int64
+	selector   *adapter.Selector
+	recovery   *recovery.Coordinator
+	viewsMu    sync.Mutex
+	views      map[string]branchViewState
+	privateGit *privategit.Manager
+
+	layeredOnce sync.Once
+	services    *layeredServices
+	servicesErr error
 }
 
 // NewManager returns a workspace manager rooted at out-of-repo branch and seed bases.
@@ -107,7 +188,184 @@ func NewManager(branchRoot, seedRoot string) *Manager {
 		branchRoot: strings.TrimSpace(branchRoot),
 		seedRoot:   strings.TrimSpace(seedRoot),
 		locks:      newSeedLockSet(),
+		maxEntries: adapter.DefaultMaxEntries,
+		maxBytes:   adapter.DefaultMaxBytes,
+		views:      make(map[string]branchViewState),
 	}
+}
+
+// WithRecovery settles and rebuilds this manager's worker views through coord.
+func (m *Manager) WithRecovery(coord *recovery.Coordinator) *Manager {
+	m.recovery = coord
+	return m
+}
+
+// WithSelector configures an explicit workspace adapter Selector on the Manager (#1658).
+func (m *Manager) WithSelector(selector *adapter.Selector) *Manager {
+	m.selector = selector
+	return m
+}
+
+func (m *Manager) recordBranchViews(branchRoot string, sel WorkspaceStrategySelection, views ...*adapter.PreparedView) {
+	m.viewsMu.Lock()
+	defer m.viewsMu.Unlock()
+	if m.views == nil {
+		m.views = make(map[string]branchViewState)
+	}
+	clean := filepath.Clean(branchRoot)
+	st := branchViewState{
+		selection: sel,
+		views:     append([]*adapter.PreparedView(nil), views...),
+	}
+	if sel.Facts.PreparationKind == adapter.PreparationMounted {
+		st.writers = m.recovery
+		if st.writers == nil && m.services != nil {
+			st.writers = m.services.recovery
+		}
+	}
+	m.views[clean] = st
+	sharedBranchViews.Store(clean, st)
+}
+
+func (m *Manager) lookupBranchViews(branchRoot string) (WorkspaceStrategySelection, *adapter.PreparedView, bool) {
+	m.viewsMu.Lock()
+	defer m.viewsMu.Unlock()
+	st, ok := m.views[filepath.Clean(branchRoot)]
+	if !ok || len(st.views) == 0 {
+		return WorkspaceStrategySelection{}, nil, false
+	}
+	return st.selection, st.views[0], true
+}
+
+// forgetBranchViews drops the record of views a claim settlement already released.
+func (m *Manager) forgetBranchViews(branchRoot string) {
+	key := filepath.Clean(branchRoot)
+	m.viewsMu.Lock()
+	delete(m.views, key)
+	m.viewsMu.Unlock()
+	sharedBranchViews.Delete(key)
+}
+
+// releaseBranchViews releases the adapter views recorded for a branch and names the ones it settled.
+// A view that fails stays recorded with its data in custody, and the caller keeps the branch.
+func (m *Manager) releaseBranchViews(branchRoot string) (map[string]bool, error) {
+	key := filepath.Clean(branchRoot)
+	m.viewsMu.Lock()
+	st, ok := m.views[key]
+	m.viewsMu.Unlock()
+	settled := make(map[string]bool, len(st.views))
+	if !ok || st.selection.Adapter == nil {
+		return settled, nil
+	}
+	remaining := make([]*adapter.PreparedView, 0, len(st.views))
+	var errs []error
+	for _, v := range st.views {
+		if v == nil {
+			continue
+		}
+		if err := releaseAdapterView(st.selection.Adapter, v.ViewID); err != nil {
+			errs = append(errs, err)
+			remaining = append(remaining, v)
+			continue
+		}
+		settled[v.ViewID] = true
+		if m.services != nil {
+			if err := m.services.privateGit.ReleaseView(v.ViewID); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	m.viewsMu.Lock()
+	defer m.viewsMu.Unlock()
+	if len(remaining) > 0 {
+		st.views = remaining
+		m.views[key] = st
+		sharedBranchViews.Store(key, st)
+		return settled, errors.Join(errs...)
+	}
+	delete(m.views, key)
+	sharedBranchViews.Delete(key)
+	return settled, errors.Join(errs...)
+}
+
+// releaseAdapterView releases one view and requires proof it settled. A view the adapter no longer
+// holds has nothing left to release.
+func releaseAdapterView(adp adapter.Adapter, viewID string) error {
+	receipt, err := adp.Release(context.Background(), viewID)
+	var adapterErr *adapter.AdapterError
+	if errors.As(err, &adapterErr) && adapterErr.ReasonCode == adapter.ReasonViewNotFound {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !receipt.Settled {
+		return fmt.Errorf("adapter %s left view %s unsettled: %s", adp.ID(), viewID, receipt.ReasonCode)
+	}
+	return nil
+}
+
+// LookupBranchPreparedView returns the active PreparedView (when in-process) and its
+// durable AdapterFacts and ViewID for a prepared worker branch root (#1658/#1665).
+func LookupBranchPreparedView(branchRoot string) (*adapter.PreparedView, adapter.AdapterFacts, string, bool) {
+	clean, err := cleanBranchRoot(branchRoot)
+	if err != nil {
+		return nil, adapter.AdapterFacts{}, "", false
+	}
+	if raw, ok := sharedBranchViews.Load(clean); ok {
+		st := raw.(branchViewState)
+		if len(st.views) > 0 && st.views[0] != nil {
+			v := st.views[0]
+			facts := v.Facts
+			if facts.AdapterID == "" {
+				facts = st.selection.Facts
+			}
+			return v, facts, v.ViewID, true
+		}
+	}
+	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(clean))
+	if err != nil || !meta.SnapshotComplete || meta.AdapterFacts == nil || meta.AdapterFacts.AdapterID == "" {
+		return nil, adapter.AdapterFacts{}, "", false
+	}
+	viewID := strings.TrimSpace(meta.PreparedViewID)
+	if viewID == "" {
+		viewID = jobIDForBranch(clean)
+	}
+	return nil, *meta.AdapterFacts, viewID, true
+}
+
+// WithPreparationLimits configures bounded workspace preparation entry and byte limits on the Manager (#1658).
+func (m *Manager) WithPreparationLimits(maxEntries, maxBytes int64) *Manager {
+	if maxEntries > 0 {
+		m.maxEntries = maxEntries
+	}
+	if maxBytes > 0 {
+		m.maxBytes = maxBytes
+	}
+	return m
+}
+
+func effectiveLimits(ctx context.Context, m *Manager) (int64, int64) {
+	var maxEntries, maxBytes int64
+	if m != nil {
+		maxEntries = m.maxEntries
+		maxBytes = m.maxBytes
+	}
+	if maxEntries <= 0 {
+		maxEntries = adapter.DefaultMaxEntries
+	}
+	if maxBytes <= 0 {
+		maxBytes = adapter.DefaultMaxBytes
+	}
+	if override, ok := ctx.Value(workspaceLimitsKey{}).(workspaceLimitsContext); ok {
+		if override.maxEntries > 0 {
+			maxEntries = override.maxEntries
+		}
+		if override.maxBytes > 0 {
+			maxBytes = override.maxBytes
+		}
+	}
+	return maxEntries, maxBytes
 }
 
 func absDir(dir string) (string, error) {

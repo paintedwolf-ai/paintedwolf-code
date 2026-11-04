@@ -69,7 +69,7 @@ func WriteFrom(ctx context.Context, boundary *sandbox.Boundary, tctx tools.ToolC
 	var captured previewCapture
 	var reviewedBeforeSHA string
 	counted := &countingReader{r: io.TeeReader(body, &captured)}
-	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
+	res, err := fseffect.Replace(fseffect.ReplaceRequest{
 		Location: resolved.EffectLocation(),
 		ReviewStaged: func(target fseffect.Target, staged fseffect.Result) error {
 			before, beforeSHA, err := readTargetPreview(target)
@@ -108,10 +108,11 @@ func WriteFrom(ctx context.Context, boundary *sandbox.Boundary, tctx tools.ToolC
 		Source:  counted,
 		Mode:    0o600,
 		DirMode: 0o750,
-	}); err != nil {
+	})
+	if err != nil {
 		return Receipt{}, fmt.Errorf("write dest: %w", err)
 	}
-	afterWorkerWrite(ctx, tctx, rel)
+	afterWorkerWrite(ctx, tctx, resolved, rel, res.SHA256, res.Bytes)
 	return Receipt{Path: filepath.ToSlash(rel), Bytes: counted.n}, nil
 }
 
@@ -152,9 +153,19 @@ func beforeWorkerWrite(ctx context.Context, tctx tools.ToolContext, relPath stri
 	return tctx.Source.WorkerCoord.BeforeWorkerWrite(ctx, tctx, relPath)
 }
 
-func afterWorkerWrite(ctx context.Context, tctx tools.ToolContext, relPath string) {
+func afterWorkerWrite(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, relPath, sha256Hex string, size int64) {
 	if strings.TrimSpace(tctx.Identity.WorkerJobID) == "" || tctx.Source.WorkerCoord == nil || tctx.Turn.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
 		return
+	}
+	if coord, ok := tctx.Source.WorkerCoord.(tools.WorkerObservationCoordinator); ok && coord != nil {
+		rootID := resolved.Root.ID
+		if rootID == "" || rootID == "worker-branch" {
+			rootID = "primary"
+		}
+		coord.ObserveWorkerWrite(ctx, tctx, tools.WorkerFileObservationFacts{
+			RootID: rootID, RelPath: relPath, AbsPath: resolved.Abs,
+			SHA256: sha256Hex, Size: size, Layer: "private", Complete: sha256Hex != "",
+		})
 	}
 	tctx.Source.WorkerCoord.AfterWorkerWrite(ctx, tctx, relPath)
 }

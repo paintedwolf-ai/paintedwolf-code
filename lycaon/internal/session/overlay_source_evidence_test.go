@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
@@ -18,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,12 +27,23 @@ func overlaySourceFixture(t *testing.T) (primary, overlay string, scope api.Task
 	t.Helper()
 	primary = t.TempDir()
 	overlay = filepath.Join(primary, settingsoverlay.DirName(), "overlays", "job-source")
-	testutil.FailErr(t, "MkdirAll", os.MkdirAll(overlay, 0o755))
-	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(1)\n"), 0o644))
-	scope = api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}}
+	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(filepath.Join(overlay, "pkg"), 0o755))
+	testutil.FailErr(t, "MkdirAll primary pkg", os.MkdirAll(filepath.Join(primary, "pkg"), 0o755))
+	testutil.FailErr(t, "WriteFile primary game", os.WriteFile(filepath.Join(primary, "game.py"), []byte("print(0)\n"), 0o644))
+	testutil.FailErr(t, "WriteFile primary dep", os.WriteFile(filepath.Join(primary, "pkg", "dep.py"), []byte("dep = 1\n"), 0o644))
+	testutil.FailErr(t, "WriteFile primary dirty", os.WriteFile(filepath.Join(primary, "dirty_upper.py"), []byte("x = 1\n"), 0o644))
+	testutil.FailErr(t, "WriteFile overlay game", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(100)\n"), 0o644))
+	testutil.FailErr(t, "WriteFile overlay dep", os.WriteFile(filepath.Join(overlay, "pkg", "dep.py"), []byte("dep = 1\n"), 0o644))
+	testutil.FailErr(t, "WriteFile overlay dirty", os.WriteFile(filepath.Join(overlay, "dirty_upper.py"), []byte("x = 1\n"), 0o644))
+	meta := enginepaths.MetaDirForBranchRoot(overlay)
+	testutil.FailErr(t, "MkdirAll meta", os.MkdirAll(meta, 0o700))
+	testutil.FailErr(t, "WriteJobMeta", workspace.WriteJobMeta(meta, workspace.JobMeta{
+		SnapshotComplete: true,
+		Roots:            []workspace.JobMetaRoot{{ID: "primary", Path: primary, IsPrimary: true}},
+	}))
+	scope = api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py", "dirty_upper.py", "pkg/dep.py"}}
 	snap := testbaseline.Capture(t, primary)
-	raw := snap
-	return primary, overlay, scope, raw
+	return primary, overlay, scope, snap
 }
 
 func currentVerifyPassedMessage(root string) api.Message {
@@ -41,7 +54,7 @@ func currentVerifyPassedMessage(root string) api.Message {
 			Content:  `{"outcome":"passed"}`,
 			ToolArgs: map[string]any{"command": "selected-check"},
 			Invocation: &api.InvocationReceipt{
-				ID: "receipt-verify", Tool: "verify", Status: api.InvocationStatusCompleted,
+				ID: "receipt-verify", Tool: "verify", ToolCallID: "check-verify-1", Status: api.InvocationStatusCompleted,
 				Evidence:       api.InvocationEvidence{Kind: "result", Ref: "message-1"},
 				SourceRevision: revision, SourceRootDigest: digest,
 				SourceVerdict: api.SourceVerdictPassed,
@@ -54,6 +67,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	t.Cleanup(mgr.BeginEngineShutdown)
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -97,6 +111,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	t.Cleanup(mgr.BeginEngineShutdown)
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

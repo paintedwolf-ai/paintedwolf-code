@@ -2,11 +2,13 @@ package workspace_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
@@ -34,7 +36,7 @@ func TestReconcileStaleSandboxesRemovesOrphans(t *testing.T) {
 	keep := seedSandbox(t, sandboxRoot, primary, "keep-id")
 
 	retain := map[string]struct{}{"keep-id": {}}
-	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, primary, retainedJobIDs(retain))
+	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, primary, nil, retainedJobIDs(retain))
 	testutil.FailErr(t, "ReconcileStaleSandboxes", err)
 	if removed != 1 {
 		t.Fatalf("removed = %d want 1", removed)
@@ -54,7 +56,7 @@ func TestReconcileStaleSandboxesIgnoresConcurrentCreate(t *testing.T) {
 	created := ""
 
 	removed, err := workspace.ReconcileStaleSandboxes(
-		context.Background(), sandboxRoot, primary,
+		context.Background(), sandboxRoot, primary, nil,
 		func(context.Context) (map[string]struct{}, error) {
 			created = seedSandbox(t, sandboxRoot, primary, "new-id")
 			return nil, nil
@@ -79,7 +81,7 @@ func TestReconcileStaleSandboxesScopedPerProject(t *testing.T) {
 	other := seedSandbox(t, sandboxRoot, projB, "b-job")
 	seedSandbox(t, sandboxRoot, projA, "a-job")
 
-	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, projA, retainedJobIDs(nil))
+	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, projA, nil, retainedJobIDs(nil))
 	testutil.FailErr(t, "ReconcileStaleSandboxes", err)
 	if removed != 1 {
 		t.Fatalf("removed = %d want 1 (project A only)", removed)
@@ -108,7 +110,7 @@ func TestReconcileStaleSandboxesRemovesJobAndMetaTogether(t *testing.T) {
 	staleJob, staleMeta := seedSandboxPair(t, sandboxRoot, primary, "stale-id")
 	keepJob, keepMeta := seedSandboxPair(t, sandboxRoot, primary, "keep-id")
 
-	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, primary, retainedJobIDs(map[string]struct{}{"keep-id": {}}))
+	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, primary, nil, retainedJobIDs(map[string]struct{}{"keep-id": {}}))
 	testutil.FailErr(t, "ReconcileStaleSandboxes", err)
 	if removed != 1 {
 		t.Fatalf("removed = %d want 1", removed)
@@ -132,7 +134,7 @@ func TestReconcileStaleSandboxesDoesNotTreatMetaAsJob(t *testing.T) {
 	primary := t.TempDir()
 	job, meta := seedSandboxPair(t, sandboxRoot, primary, "81157094-653f-4496-b675-dcf887c2d4b4")
 
-	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, primary, retainedJobIDs(map[string]struct{}{
+	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, primary, nil, retainedJobIDs(map[string]struct{}{
 		"81157094-653f-4496-b675-dcf887c2d4b4": {},
 	}))
 	testutil.FailErr(t, "ReconcileStaleSandboxes", err)
@@ -159,12 +161,34 @@ func TestReconcileStaleSandboxesRemovesOrphanMeta(t *testing.T) {
 		testutil.FailErr(t, "remove job tree", err)
 	}
 
-	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, primary, retainedJobIDs(nil))
+	removed, err := workspace.ReconcileStaleSandboxes(context.Background(), sandboxRoot, primary, nil, retainedJobIDs(nil))
 	testutil.FailErr(t, "ReconcileStaleSandboxes", err)
 	if removed != 1 {
 		t.Fatalf("removed = %d want 1 orphan meta", removed)
 	}
 	if _, err := os.Stat(meta); !os.IsNotExist(err) {
 		t.Fatal("orphan meta should be removed")
+	}
+}
+
+func TestSandboxWithAMountBoundaryIsNeverRemoved(t *testing.T) {
+	if _, err := os.Stat("/dev"); err != nil {
+		t.Skip("no distinct filesystem to stand in for a mount")
+	}
+	if mounted, err := adapter.MountBoundaryPresent("/dev"); err != nil || !mounted {
+		t.Skipf("/dev is not a mount boundary here: mounted=%t err=%v", mounted, err)
+	}
+	if err := workspace.RefuseMountedBranch("/dev"); !errors.Is(err, workspace.ErrBranchMounted) {
+		t.Fatalf("mount boundary at the root: %v", err)
+	}
+	if err := workspace.RefuseMountedBranch("/"); !errors.Is(err, workspace.ErrBranchMounted) {
+		t.Fatalf("mount boundary beneath the root: %v", err)
+	}
+	plain := t.TempDir()
+	if err := workspace.RefuseMountedBranch(plain); err != nil {
+		t.Fatalf("plain tree: %v", err)
+	}
+	if err := workspace.RefuseMountedBranch(filepath.Join(plain, "absent")); err != nil {
+		t.Fatalf("absent tree: %v", err)
 	}
 }
