@@ -109,6 +109,12 @@ func TestCancelRetainsAMaterializedWorkersChangedBytesThenDeletesTheTree(t *test
 	if record.InterruptedPhase != recovery.PhaseRelease || record.InterruptedOp != "cancel" || record.UnknownScope {
 		t.Fatalf("record %+v", record)
 	}
+	unreadable, err := os.Lstat(filepath.Join(record.QuarantineDir, "changed", fixtureRootID, "unreadable.txt"))
+	testutil.FailErr(t, "stat unreadable", err)
+	if unreadable.Mode().Perm() != 0 {
+		t.Fatalf("mode not kept: %v", unreadable.Mode())
+	}
+	testutil.FailErr(t, "reopen unreadable", os.Chmod(filepath.Join(record.QuarantineDir, "changed", fixtureRootID, "unreadable.txt"), 0o600))
 	for rel, want := range map[string]string{
 		"app.txt": "unpromoted edit\n", "new/deep/file.txt": "unpromoted new file\n",
 		"unreadable.txt": "worker removed its read bit\n", "dir": "file over a directory\n",
@@ -237,19 +243,172 @@ func TestFailedRetentionKeepsTheTreeAndReportsUnresolvedThroughEveryCancelPath(t
 	}
 }
 
-func TestUnreadableBaselineKeepsTheTreeUntilRetentionCanRun(t *testing.T) {
+// A baseline that may never return, including a job canceled during preparation, must not stop
+// the cancel. Nothing can name the changes, so the whole tree is kept and says so.
+func TestCancelWithNoUsableBaselineRetainsTheWholeTreeWithUnknownScope(t *testing.T) {
+	for name, breakBaseline := range map[string]func(*testing.T, string){
+		"missing": func(t *testing.T, path string) {
+			testutil.FailErr(t, "remove baseline", os.Remove(path))
+		},
+		"unreadable": func(t *testing.T, path string) {
+			testutil.FailErr(t, "corrupt baseline", os.WriteFile(path, []byte("not a manifest"), 0o600))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newEngineFixture(t)
+			task := f.claimMaterializedWorker()
+			writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
+			breakBaseline(t, task.WorkspaceBaselinePath)
+			before, err := os.Lstat(filepath.Join(task.WorkspaceRoot, "keep.txt"))
+			testutil.FailErr(t, "stat keep", err)
+
+			testutil.FailErr(t, "cancel", f.engine.Queue.Cancel(t.Context(), task.ID, nil))
+
+			if got, _ := f.engine.Queue.Get(task.ID); got.Status != api.WorkerStatusCanceled {
+				t.Fatalf("cancel: %+v", got)
+			}
+			if _, err := os.Lstat(task.WorkspaceRoot); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("tree survives cancellation: %v", err)
+			}
+			record := onlyRecord(t, f.engine, task.ID)
+			if !record.UnknownScope || record.InterruptedOp != "cancel" || len(record.AffectedPaths) != 0 {
+				t.Fatalf("record %+v", record)
+			}
+			if raw, err := os.ReadFile(filepath.Join(record.QuarantineDir, "tree", "app.txt")); err != nil || string(raw) != "unpromoted edit\n" {
+				t.Fatalf("retained %q err=%v", raw, err)
+			}
+			kept, err := os.Lstat(filepath.Join(record.QuarantineDir, "tree", "keep.txt"))
+			testutil.FailErr(t, "stat retained keep", err)
+			if !os.SameFile(before, kept) {
+				t.Fatal("the whole tree is linked, not copied")
+			}
+		})
+	}
+}
+
+func TestCancelDuringPreparationRetainsThePartialTree(t *testing.T) {
+	f := newEngineFixture(t)
+	task := f.claimMaterializedWorker()
+	testutil.FailErr(t, "remove baseline", os.Remove(task.WorkspaceBaselinePath))
+	testutil.FailErr(t, "partial seed", os.Remove(filepath.Join(task.WorkspaceRoot, "keep.txt")))
+	testutil.FailErr(t, "closed dir", os.Mkdir(filepath.Join(task.WorkspaceRoot, "closed"), 0o755))
+	writeTreeFile(t, task.WorkspaceRoot, "closed/inner.txt", "inside a closed directory\n")
+	testutil.FailErr(t, "close dir", os.Chmod(filepath.Join(task.WorkspaceRoot, "closed"), 0))
+	testutil.FailErr(t, "link", os.Symlink("app.txt", filepath.Join(task.WorkspaceRoot, "link")))
+
+	testutil.FailErr(t, "cancel", f.engine.Queue.Cancel(t.Context(), task.ID, nil))
+
+	record := onlyRecord(t, f.engine, task.ID)
+	if raw, err := os.ReadFile(filepath.Join(record.QuarantineDir, "tree", "closed", "inner.txt")); err != nil || string(raw) != "inside a closed directory\n" {
+		t.Fatalf("retained %q err=%v", raw, err)
+	}
+	if target, err := os.Readlink(filepath.Join(record.QuarantineDir, "tree", "link")); err != nil || target != "app.txt" {
+		t.Fatalf("retained link %q err=%v", target, err)
+	}
+}
+
+// A canceled caller says nothing about the baseline: the worker stays unresolved for a retry.
+func TestAnExpiredCallerDoesNotRetainTheWholeTree(t *testing.T) {
 	f := newEngineFixture(t)
 	task := f.claimMaterializedWorker()
 	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
-	held := task.WorkspaceBaselinePath + ".held"
-	testutil.FailErr(t, "hide baseline", os.Rename(task.WorkspaceBaselinePath, held))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := f.engine.Workspace.RetainCanceledWork(ctx, task.ID, task.WorkspaceRoot, task.WorkspaceBaselinePath)
+	assertRetentionBlocked(t, f, task, err)
+}
+
+func TestWholeTreeRetentionFailureKeepsTheTree(t *testing.T) {
+	f := newEngineFixture(t)
+	f.faults = func(_ recovery.TransitionPhase, at string) error {
+		if at == "link_changed_file" {
+			return syscall.EIO
+		}
+		return nil
+	}
+	f.boot()
+	task := f.claimMaterializedWorker()
+	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
+	testutil.FailErr(t, "remove baseline", os.Remove(task.WorkspaceBaselinePath))
 
 	assertRetentionBlocked(t, f, task, f.engine.Queue.Cancel(t.Context(), task.ID, nil))
+}
 
-	testutil.FailErr(t, "restore baseline", os.Rename(held, task.WorkspaceBaselinePath))
-	testutil.FailErr(t, "retry", f.engine.Queue.FinishCanceled(t.Context(), task.ID, nil))
-	if got := retainedFile(t, onlyRecord(t, f.engine, task.ID), "app.txt"); got != "unpromoted edit\n" {
-		t.Fatalf("retained %q", got)
+// A tree with no coordinator to hold its work is never deleted silently.
+func TestCancelWithoutARecoveryCoordinatorStaysUnresolved(t *testing.T) {
+	f := newEngineFixture(t)
+	task := f.claimMaterializedWorker()
+	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
+	unrecorded := workspace.NewManager(f.engine.BranchRoot, f.engine.SeedRoot)
+	f.engine.Queue.SetWorkerWorkspaceManager(unrecorded)
+
+	err := f.engine.Queue.Cancel(t.Context(), task.ID, nil)
+	assertRetentionBlocked(t, f, task, err)
+}
+
+// Linking needs no file data, so a volume with no room for the bytes cannot stop a cancel.
+func TestCancelNeverCopiesWhenLinkingWorks(t *testing.T) {
+	f := newEngineFixture(t)
+	f.faults = func(_ recovery.TransitionPhase, at string) error {
+		if at == "copy_changed_file" {
+			return syscall.ENOSPC
+		}
+		return nil
+	}
+	f.boot()
+	task := f.claimMaterializedWorker()
+	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
+	testutil.FailErr(t, "chmod", os.Chmod(filepath.Join(task.WorkspaceRoot, "app.txt"), 0o751))
+	before, err := os.Lstat(filepath.Join(task.WorkspaceRoot, "app.txt"))
+	testutil.FailErr(t, "stat", err)
+
+	testutil.FailErr(t, "cancel", f.engine.Queue.Cancel(t.Context(), task.ID, nil))
+
+	record := onlyRecord(t, f.engine, task.ID)
+	kept, err := os.Lstat(filepath.Join(record.QuarantineDir, "changed", fixtureRootID, "app.txt"))
+	testutil.FailErr(t, "stat retained", err)
+	if !os.SameFile(before, kept) || kept.Mode().Perm() != 0o751 {
+		t.Fatalf("retained %v, source %v", kept.Mode(), before.Mode())
+	}
+}
+
+// Where a link cannot exist the bytes are copied with their mode, and a copy that does not fit
+// is an honest failure.
+func TestCancelCopiesWhenLinkingIsImpossible(t *testing.T) {
+	for name, cause := range map[string]error{"cross_device": syscall.EXDEV, "link_limit": syscall.EMLINK} {
+		t.Run(name, func(t *testing.T) {
+			f := newEngineFixture(t)
+			copyFails := true
+			f.faults = func(_ recovery.TransitionPhase, at string) error {
+				switch {
+				case at == "link_changed_file":
+					return cause
+				case at == "copy_changed_file" && copyFails:
+					return syscall.ENOSPC
+				}
+				return nil
+			}
+			f.boot()
+			task := f.claimMaterializedWorker()
+			writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
+			testutil.FailErr(t, "chmod", os.Chmod(filepath.Join(task.WorkspaceRoot, "app.txt"), 0o751))
+			before, err := os.Lstat(filepath.Join(task.WorkspaceRoot, "app.txt"))
+			testutil.FailErr(t, "stat", err)
+
+			assertRetentionBlocked(t, f, task, f.engine.Queue.Cancel(t.Context(), task.ID, nil))
+
+			copyFails = false
+			testutil.FailErr(t, "retry", f.engine.Queue.Cancel(t.Context(), task.ID, nil))
+			record := onlyRecord(t, f.engine, task.ID)
+			if got := retainedFile(t, record, "app.txt"); got != "unpromoted edit\n" {
+				t.Fatalf("retained %q", got)
+			}
+			kept, err := os.Lstat(filepath.Join(record.QuarantineDir, "changed", fixtureRootID, "app.txt"))
+			testutil.FailErr(t, "stat retained", err)
+			if os.SameFile(before, kept) || kept.Mode().Perm() != 0o751 {
+				t.Fatalf("a copy with its mode expected: %v", kept.Mode())
+			}
+		})
 	}
 }
 
@@ -259,11 +418,7 @@ func TestRetentionRetriesAcrossARestartWithoutDuplicating(t *testing.T) {
 	f := newEngineFixture(t)
 	task := f.claimMaterializedWorker()
 	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
-	retainer, ok := any(f.engine.Workspace).(worker.CanceledWorkRetainer)
-	if !ok {
-		t.Fatal("the production manager retains canceled work")
-	}
-	testutil.FailErr(t, "retain", retainer.RetainCanceledWork(context.WithoutCancel(t.Context()), task.ID, task.WorkspaceRoot, task.WorkspaceBaselinePath))
+	testutil.FailErr(t, "retain", f.engine.Workspace.RetainCanceledWork(t.Context(), task.ID, task.WorkspaceRoot, task.WorkspaceBaselinePath))
 
 	engine := f.boot()
 	testutil.FailErr(t, "cancel on the next engine", engine.Queue.Cancel(t.Context(), task.ID, nil))

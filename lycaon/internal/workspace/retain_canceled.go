@@ -17,13 +17,14 @@ import (
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 )
 
+var errNoRecoveryCoordinator = errors.New("no recovery coordinator to retain work in")
+
 // RetainCanceledWork keeps the bytes of a canceled materialized worker's changed paths before
 // its tree may be deleted. A mounted view is skipped: settlement already salvaged its delta.
-// Failure leaves the tree in place and reports the worker unresolved.
+// A tree whose changes cannot be listed is kept whole with unknown scope, because a baseline
+// that may never return must not stop the cancel. A failure to retain leaves the tree in place
+// and reports the worker unresolved.
 func (m *Manager) RetainCanceledWork(ctx context.Context, jobID, root, baselinePath string) error {
-	if m.recovery == nil {
-		return nil
-	}
 	if _, err := os.Lstat(root); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -46,11 +47,19 @@ func (m *Manager) RetainCanceledWork(ctx context.Context, jobID, root, baselineP
 		}
 		roots = layout.Roots
 	}
-	changed, err := changedWorkingFiles(ctx, root, baselinePath, roots)
-	if err != nil {
-		return unresolvedRetention(jobID, viewID, root, err)
+	if m.recovery == nil {
+		return unresolvedRetention(jobID, viewID, root, errNoRecoveryCoordinator)
 	}
-	if _, err := m.recovery.PreserveChangedWorkingFiles(jobID, viewID, "changed paths of a canceled worker", changed); err != nil {
+	changed, err := changedWorkingFiles(ctx, root, baselinePath, roots)
+	switch {
+	case err == nil:
+		_, err = m.recovery.PreserveChangedWorkingFiles(jobID, viewID, "changed paths of a canceled worker", changed)
+	case ctx.Err() != nil:
+		// The caller gave up; this says nothing about the baseline.
+	default:
+		_, err = m.recovery.PreserveWholeWorkingTree(jobID, viewID, fmt.Sprintf("changes of a canceled worker could not be listed: %v", err), root)
+	}
+	if err != nil {
 		return unresolvedRetention(jobID, viewID, root, err)
 	}
 	return nil

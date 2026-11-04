@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
@@ -64,10 +65,17 @@ func preserveInQuarantine(c *Coordinator, rec InterruptedWorkingRecord, fill fun
 	if err := os.RemoveAll(staging); err != nil {
 		return nil, err
 	}
+	if err := os.MkdirAll(staging, 0o700); err != nil {
+		return nil, err
+	}
 	work, err := fill(staging)
 	if err != nil {
 		_ = os.RemoveAll(staging)
 		return nil, fmt.Errorf("recovery: salvage working storage of %s: %w", rec.ViewID, err)
+	}
+	if err := syncStagedTree(staging); err != nil {
+		_ = os.RemoveAll(staging)
+		return nil, err
 	}
 	if err := os.RemoveAll(quarantineDir); err != nil {
 		return nil, err
@@ -94,6 +102,29 @@ func preserveInQuarantine(c *Coordinator, rec InterruptedWorkingRecord, fill fun
 		return nil, err
 	}
 	return &rec, nil
+}
+
+// syncStagedTree flushes every staged directory, so what the record will name survives the
+// source being deleted. A staged file is flushed by its copy or is the worker's own inode.
+func syncStagedTree(staging string) error {
+	root, err := os.OpenRoot(staging)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return filepath.WalkDir(staging, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil || !entry.IsDir() {
+			return walkErr
+		}
+		rel, err := filepath.Rel(staging, path)
+		if err != nil {
+			return err
+		}
+		return fseffect.SyncDirectory(root, rel)
+	})
 }
 
 func salvageBackingDir(

@@ -97,6 +97,8 @@ type CanceledWorkRetainer interface {
 	RetainCanceledWork(ctx context.Context, jobID, root, baselinePath string) error
 }
 
+var _ CanceledWorkRetainer = (*workspace.Manager)(nil)
+
 // settleCanceledRuntime runs on every cancellation path because each one finishes here. On
 // failure the job stays cancel-requested, so maintenance retries it and its data stays put.
 func (q *SQLQueue) settleCanceledRuntime(ctx context.Context, jobID string) error {
