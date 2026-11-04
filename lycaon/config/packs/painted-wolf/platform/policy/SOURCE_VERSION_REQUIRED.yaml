@@ -14,10 +14,10 @@ requires:
 when: paintedwolf.rejection_code == "SOURCE_VERSION_REQUIRED"
 effect: block
 copy:
-  what: source_history mode {{ paintedwolf.mode }} requires version_id.
-  cause: Historical inspection requires a specific version ID to resolve retained bytes.
+  what: source_history mode {{ paintedwolf.mode }} needs version_id here.
+  cause: Version mode, and base_version_id in diff mode, need a specific version ID to resolve retained bytes.
   why: Retained states in the source ledger are addressed by immutable version IDs.
-  fix: Pass version_id from an effect row or read receipt. In diff mode, omitting base_version_id as well compares head with the session baseline.
+  fix: Pass version_id from an effect row or read receipt. In diff mode, omitting base_version_id as well diffs from the session baseline.
   instead: Branch on Code; pass version_id
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:source_history

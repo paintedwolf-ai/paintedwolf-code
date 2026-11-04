@@ -144,13 +144,31 @@ describe("tool structured output invariant", () => {
       const view = buildStructuredToolPresentation(part("source_history", output));
       expect(violatesStructuredToolPresentation(view, output), mode).toBeNull();
     }
-    const overview = SOURCE_HISTORY_MODE_FIXTURES.overview ?? "";
-    const rendered = JSON.stringify(
-      buildStructuredToolPresentation(part("source_history", overview)).sections,
+    for (const mode of ["overview", "overview_write_leg"]) {
+      const overview = SOURCE_HISTORY_MODE_FIXTURES[mode] ?? "";
+      const rendered = JSON.stringify(
+        buildStructuredToolPresentation(part("source_history", overview)).sections,
+      );
+      const rows = (JSON.parse(overview) as { files: { path: string; op: string }[] }).files;
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(rendered).toContain(row.path);
+        expect(rendered).toContain(row.op);
+      }
+    }
+    const writeLeg = JSON.stringify(
+      buildStructuredToolPresentation(
+        part("source_history", SOURCE_HISTORY_MODE_FIXTURES.overview_write_leg ?? ""),
+      ).sections,
     );
-    const rows = (JSON.parse(overview) as { files: { path: string }[] }).files;
-    expect(rows.length).toBeGreaterThan(0);
-    for (const row of rows) expect(rendered).toContain(row.path);
+    expect(writeLeg).toContain("unrecorded");
+    const unrecordedDiff = JSON.stringify(
+      buildStructuredToolPresentation(
+        part("source_history", SOURCE_HISTORY_MODE_FIXTURES.diff_unrecorded_write_leg ?? ""),
+      ).sections,
+    );
+    expect(unrecordedDiff).toContain("unrecorded");
+    expect(unrecordedDiff).toContain("(live)");
   });
 
   it("formats agent guidance without raw disclosure", () => {
