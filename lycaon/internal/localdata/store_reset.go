@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/editoroutbox"
-	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 var (
@@ -68,7 +67,7 @@ func resetStoreDependents(base string) []error {
 	var errs []error
 	// Branches on other volumes are keyed by the same store identities. Folders on
 	// an absent volume stay recorded for a later purge.
-	if _, err := workerplacement.Purge(context.Background(), base); err != nil {
+	if err := purgeWorkerPlacements(context.Background(), base); err != nil {
 		errs = append(errs, fmt.Errorf("purge worker placements: %w", err))
 	}
 	for _, rel := range storeCoupledRelPaths {

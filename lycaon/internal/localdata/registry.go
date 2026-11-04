@@ -2,7 +2,9 @@ package localdata
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -220,6 +222,18 @@ func (r *Registry) Status(ctx context.Context, id string) (Status, error) {
 	return st, err
 }
 
+// purgeWorkerPlacements removes branches on other volumes. A registry this build
+// cannot read stays unchanged and must not stand in the way of clearing or
+// resetting everything else, which is often how a person recovers.
+func purgeWorkerPlacements(ctx context.Context, base string) error {
+	_, err := workerplacement.Purge(ctx, base)
+	if errors.Is(err, workerplacement.ErrUnknownRegistryFormat) {
+		slog.WarnContext(ctx, "left an unreadable worker placement registry in place", "err", err)
+		return nil
+	}
+	return err
+}
+
 func (r *Registry) workerBranchesWithoutEngine() (Status, error) {
 	st := Status{ID: BucketWorkerBranches}
 	p := enginepaths.WorkerBranchesRootUnder(r.baseDir)
@@ -230,6 +244,9 @@ func (r *Registry) workerBranchesWithoutEngine() (Status, error) {
 	}
 	st.Bytes = bytes
 	placed, err := workerplacement.PlacedBranches(r.baseDir)
+	if errors.Is(err, workerplacement.ErrUnknownRegistryFormat) {
+		return st, nil
+	}
 	if err != nil {
 		return st, err
 	}
@@ -305,7 +322,7 @@ func (r *Registry) ClearOne(ctx context.Context, id string) error {
 			return r.reclaimWorkerBranches(ctx)
 		}
 		// Without an engine to judge the trees, only an idle root is safe to clear.
-		if _, err := workerplacement.Purge(ctx, r.baseDir); err != nil {
+		if err := purgeWorkerPlacements(ctx, r.baseDir); err != nil {
 			return err
 		}
 		return clearDirContents(r.baseDir, enginepaths.WorkerBranchesRootUnder(r.baseDir))
