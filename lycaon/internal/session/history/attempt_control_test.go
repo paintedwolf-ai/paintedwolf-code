@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -83,10 +84,10 @@ func (c *virtualClock) pending() []time.Duration {
 	return out
 }
 
-const (
-	unchangedSummary = `{"facts":[%q],"completed":[],"pending":[],"reacquire":[],"constraints":[]}`
-	longFact         = "A long retained fact that keeps this page from shrinking at all."
-)
+func summaryAnswer(facts ...string) (string, error) {
+	raw, err := json.Marshal(map[string][]string{"facts": facts, "completed": {}, "pending": {}, "reacquire": {}, "constraints": {}})
+	return string(raw), err
+}
 
 // scriptedProvider answers each summarizer call from a script; the last entry repeats.
 type scriptedProvider struct {
@@ -120,11 +121,16 @@ func (p *scriptedProvider) count() int {
 	return p.calls
 }
 
+// answerUnproductive is valid output as long as the page it would replace.
 func answerUnproductive() (string, error) {
-	return fmt.Sprintf(unchangedSummary, strings.Repeat(longFact, 8)), nil
+	facts := make([]string, 8)
+	for i := range facts {
+		facts[i] = strings.Repeat("A retained fact. ", 9)
+	}
+	return summaryAnswer(facts...)
 }
 
-func answerShort() (string, error) { return fmt.Sprintf(unchangedSummary, "Short."), nil }
+func answerShort() (string, error) { return summaryAnswer("Short.") }
 
 func failWith(err error) func() (string, error) {
 	return func() (string, error) { return "", err }
@@ -581,14 +587,13 @@ func TestTransientFailureRetriesOnVirtualClockAC_COMP_04(t *testing.T) {
 	t.Run("fitting stays deterministic during backoff", func(t *testing.T) {
 		f := newAttemptFixture(t, failWith(overloaded(0)))
 		f.seedRejectablePage(t)
-		f.appendRows(t, 16)
-		for i := range 40 {
-			testutil.FailErr(t, "append exchange", f.mem.AppendMessages(t.Context(), f.sess.ID, turnExchange(i, strings.Repeat("recorded observation ", 150))...))
-		}
 		f.schedule(t)
 		calls := f.provider.count()
 		if len(f.clock.pending()) != 1 {
 			t.Fatalf("fixture is not in backoff: %v", f.clock.pending())
+		}
+		for i := range 40 {
+			testutil.FailErr(t, "append exchange", f.mem.AppendMessages(t.Context(), f.sess.ID, turnExchange(i, strings.Repeat("recorded observation ", 150))...))
 		}
 		sess, err := f.mem.Get(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read session", err)
