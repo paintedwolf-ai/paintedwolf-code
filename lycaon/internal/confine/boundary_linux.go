@@ -313,7 +313,9 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		pc.fs.ReadOnly = append(pc.fs.ReadOnly, p)
 	}
 	for p := range pc.hidden {
-		pc.fs.Hidden = append(pc.fs.Hidden, p)
+		if !pc.insidePlaceholder(p) {
+			pc.fs.Hidden = append(pc.fs.Hidden, p)
+		}
 	}
 	for p := range pc.restored {
 		if coveredBy(pc.hidden, p) || coveredBy(pc.readOnly, p) {
@@ -321,6 +323,22 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		}
 	}
 	return pc.fs, nil
+}
+
+// insidePlaceholder reports a hidden path already gone: its nearest covering rule is a placeholder,
+// which is empty, so the path has no entry to mount over.
+func (pc *planCompiler) insidePlaceholder(path string) bool {
+	nearest, hidden := "", false
+	consider := func(set map[string]bool, isHidden bool) {
+		for candidate := range set {
+			if candidate != path && PathAtOrUnder(path, candidate) && len(candidate) > len(nearest) {
+				nearest, hidden = candidate, isHidden
+			}
+		}
+	}
+	consider(pc.hidden, true)
+	consider(pc.restored, false)
+	return hidden
 }
 
 // readRule turns read denials into hidden placeholders and later read allows

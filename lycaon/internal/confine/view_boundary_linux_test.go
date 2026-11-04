@@ -36,3 +36,17 @@ func TestLinuxPlanHidesViewStorage(t *testing.T) {
 	}
 	t.Fatalf("storage is not hidden: %v", plan.Hidden)
 }
+
+// A denied tree inside a denied tree has nothing to cover, unless a restored path brought it back.
+func TestLinuxPlanMasksANestedDenialOnlyWhereItExists(t *testing.T) {
+	pc := &planCompiler{
+		readOnly: map[string]bool{},
+		hidden:   map[string]bool{"/state": true, "/state/branches": true, "/state/back/storage": true},
+		restored: map[string]bool{"/state/back": true},
+	}
+	for path, want := range map[string]bool{"/state": false, "/state/branches": true, "/state/back/storage": false} {
+		if got := pc.insidePlaceholder(path); got != want {
+			t.Fatalf("insidePlaceholder(%s) = %v", path, got)
+		}
+	}
+}
