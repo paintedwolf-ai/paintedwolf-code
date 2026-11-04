@@ -4,6 +4,7 @@ package fspath
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -16,6 +17,15 @@ func EntryIdentity(path string) (string, error) { return EntryIdentityAt(unix.AT
 func EntryIdentityAt(parent int, path string) (string, error) {
 	var stat unix.Stat_t
 	if err := unix.Fstatat(parent, path, &stat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Btim.Sec, stat.Btim.Nsec), nil
+}
+
+// FileIdentity is EntryIdentity for an entry already held open.
+func FileIdentity(file *os.File) (string, error) {
+	var stat unix.Stat_t
+	if err := unix.Fstat(int(file.Fd()), &stat); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Btim.Sec, stat.Btim.Nsec), nil

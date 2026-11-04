@@ -4,6 +4,7 @@ package fspath
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"golang.org/x/sys/windows"
@@ -59,4 +60,9 @@ func SameFilesystem(from, to string) (bool, error) {
 func identityWithoutDevice(identity string) string {
 	_, rest, _ := strings.Cut(identity, ":")
 	return rest
+}
+
+// FileIdentity is EntryIdentity for an entry already held open.
+func FileIdentity(file *os.File) (string, error) {
+	return EntryIdentityHandle(windows.Handle(file.Fd()))
 }

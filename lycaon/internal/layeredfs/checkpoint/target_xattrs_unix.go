@@ -5,7 +5,6 @@ package checkpoint
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"syscall"
 
@@ -18,18 +17,20 @@ func targetFileIdentity(file *os.File, info os.FileInfo) (string, error) {
 	return id, err
 }
 
+// targetFileIdentityAndLinks names the inode with its birth time or generation:
+// a device and inode number alone match a new file that reused a freed number.
 func targetFileIdentityAndLinks(file *os.File, info os.FileInfo) (string, uint64, error) {
+	id, err := fspath.FileIdentity(file)
+	if err != nil {
+		return "", 0, err
+	}
+	links := uint64(1)
 	if info != nil {
 		if st, ok := info.Sys().(*syscall.Stat_t); ok {
-			return fmt.Sprintf("%d:%d", uint64(st.Dev), uint64(st.Ino)), uint64(st.Nlink), nil
-		}
-		observed := fspath.ObserveFile(info)
-		if observed.Known {
-			return fmt.Sprintf("%d:%d", observed.Identity.Device, observed.Identity.Inode), 1, nil
+			links = uint64(st.Nlink)
 		}
 	}
-	id, err := fspath.EntryIdentity(file.Name())
-	return id, 1, err
+	return id, links, nil
 }
 
 // ApplyPathXattrs applies extended attributes to abs, ignoring ENOTSUP/EOPNOTSUPP.

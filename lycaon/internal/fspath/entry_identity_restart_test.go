@@ -33,10 +33,27 @@ func TestSameEntryAcrossRestartIgnoresOnlyTheDevice(t *testing.T) {
 	if SameEntryAcrossRestart("", firstID) || SameEntryAcrossRestart(firstID, "") {
 		t.Fatal("an empty identity matched")
 	}
+	held, err := os.Open(first)
+	if err != nil {
+		t.Fatal("open first: ", err)
+	}
+	defer func() { _ = held.Close() }()
+	if heldID := heldIdentity(t, held); heldID != firstID {
+		t.Fatalf("held identity %q differs from entry identity %q", heldID, firstID)
+	}
 	inode := strings.Split(firstID, ":")
 	for _, recorded := range []string{"1:" + inode[len(inode)-1], "2:" + inode[len(inode)-1]} {
 		if !SameEntryAcrossRestart(recorded, "7:"+inode[len(inode)-1]) {
 			t.Fatalf("two-field identity %q refused", recorded)
 		}
 	}
+}
+
+func heldIdentity(t *testing.T, file *os.File) string {
+	t.Helper()
+	identity, err := FileIdentity(file)
+	if err != nil {
+		t.Fatal("identify held file: ", err)
+	}
+	return identity
 }
