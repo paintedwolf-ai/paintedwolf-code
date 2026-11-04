@@ -2,5 +2,5 @@
 
 package fseffect
 
-// HardLink is unavailable here; callers fall back to copying.
-func HardLink(_, _ Location) error { return ErrUnsupported }
+// LinkIntoStaging is unavailable here; callers fall back to copying.
+func LinkIntoStaging(_, _ Location) error { return ErrUnsupported }

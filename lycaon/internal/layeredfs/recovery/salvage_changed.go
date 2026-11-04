@@ -123,7 +123,7 @@ func retainEntry(c *Coordinator, src, staging, rel string) (int64, error) {
 func retainRegularFile(c *Coordinator, src, staging, rel string, info fs.FileInfo) (int64, error) {
 	err := injectFault(c, PhaseRelease, "link_changed_file")
 	if err == nil {
-		err = fseffect.HardLink(fseffect.PathLocation(src), fseffect.Location{Root: staging, Rel: rel})
+		err = fseffect.LinkIntoStaging(fseffect.PathLocation(src), fseffect.Location{Root: staging, Rel: rel})
 	}
 	if err == nil {
 		return info.Size(), nil
@@ -146,10 +146,5 @@ func retainRegularFile(c *Coordinator, src, staging, rel string, info fs.FileInf
 }
 
 func linkImpossible(err error) bool {
-	for _, cause := range []error{syscall.EXDEV, syscall.EMLINK, syscall.ENOTSUP, syscall.EOPNOTSUPP, syscall.EPERM, fseffect.ErrUnsupported} {
-		if errors.Is(err, cause) {
-			return true
-		}
-	}
-	return false
+	return fseffect.HardLinkUnavailable(err) || errors.Is(err, syscall.EMLINK)
 }

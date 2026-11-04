@@ -9,10 +9,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// HardLink gives a regular file a second name through held parents. It never replaces an
-// entry or follows a symlink. Its caller flushes the destination directory, so linking many
-// files into one staged tree costs one flush per directory rather than one per file.
-func HardLink(from, to Location) error {
+// LinkIntoStaging gives a regular file a second name through held parents. It never replaces an
+// entry or follows a symlink. Unlike HardLink it flushes nothing: its caller flushes the staged
+// tree before publishing it, so linking many files costs one flush per directory.
+func LinkIntoStaging(from, to Location) error {
 	source, err := openParent(from, false, 0)
 	if err != nil {
 		return err
