@@ -20,24 +20,23 @@ const commandWindowCloseBudget = 45 * time.Second
 // every method a no-op.
 type commandWindow struct {
 	open *sourceledger.OpenCommandWindow
+	// unobserved means a window was due and could not open.
+	unobserved bool
 }
 
 // openCommandWindow opens the window for a primary-tree command. Worker
 // branch commands write an overlay the promote records, so they open none.
 // A failure never blocks the command; it runs unobserved.
 func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, commandLine string) commandWindow {
+	if !commandWindowDue(tctx) {
+		return commandWindow{}
+	}
 	opener := tctx.Source.Commands
-	if opener == nil || tctx.Identity.ProjectID == "" || len(tctx.Source.Roots) == 0 {
-		return commandWindow{}
-	}
-	if tctx.Source.SourceWorkspaceKind != "" && tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
-		return commandWindow{}
-	}
 	roots := make([]sourceledger.RootSpec, 0, len(tctx.Source.Roots))
 	for _, root := range tctx.Source.Roots {
 		branch, err := tctx.SourceBranch(root.ID)
 		if err != nil {
-			return commandWindow{}
+			return commandWindow{unobserved: true}
 		}
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, BranchID: branch, Path: root.Path})
 	}
@@ -48,9 +47,17 @@ func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, co
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "command window open", "tool", toolName, "session_id", tctx.Identity.SessionID, "err", err)
-		return commandWindow{}
+		return commandWindow{unobserved: true}
 	}
 	return commandWindow{open: open}
+}
+
+// commandWindowDue reports whether commands in this context are observed at all.
+func commandWindowDue(tctx tools.ToolContext) bool {
+	if tctx.Source.Commands == nil || tctx.Identity.ProjectID == "" || len(tctx.Source.Roots) == 0 {
+		return false
+	}
+	return tctx.Source.SourceWorkspaceKind == "" || tctx.Source.SourceWorkspaceKind == api.SourceWorkspaceKindProject
 }
 
 // closeNow ends the window once the process has exited, detached from the
@@ -66,9 +73,12 @@ func (w commandWindow) closeNow(ctx context.Context) {
 	}
 }
 
-// fact states the window on a command result; nil when none opened.
+// fact states the window on a command result; nil when none was due.
 func (w commandWindow) fact() *hostcmd.SourceWindow {
 	if w.open == nil {
+		if w.unobserved {
+			return &hostcmd.SourceWindow{Unobserved: true}
+		}
 		return nil
 	}
 	return &hostcmd.SourceWindow{ID: w.open.ID, Settled: w.open.IsSettled()}

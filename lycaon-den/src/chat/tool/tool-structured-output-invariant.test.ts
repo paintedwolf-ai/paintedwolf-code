@@ -144,6 +144,13 @@ describe("tool structured output invariant", () => {
       const view = buildStructuredToolPresentation(part("source_history", output));
       expect(violatesStructuredToolPresentation(view, output), mode).toBeNull();
     }
+    const overview = SOURCE_HISTORY_MODE_FIXTURES.overview;
+    const rendered = JSON.stringify(
+      buildStructuredToolPresentation(part("source_history", overview)).sections,
+    );
+    const rows = (JSON.parse(overview) as { files: { path: string }[] }).files;
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(rendered).toContain(row.path);
   });
 
   it("formats agent guidance without raw disclosure", () => {

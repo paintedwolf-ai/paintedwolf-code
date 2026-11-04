@@ -42,7 +42,7 @@ func TestShippedGoBinariesLinkNoRuntimeCodeGenerator(t *testing.T) {
 // staging builds some only for Linux.
 func stagedForOS(t *testing.T, root, goos string, staged []string) []string {
 	t.Helper()
-	listed := goList(t, root, goos, append([]string{"-e", "-f", "{{if .GoFiles}}{{.ImportPath}}{{end}}"}, staged...)...)
+	listed := goList(t, root, goos, append([]string{"-e", "-tags=paintedwolf_release", "-f", "{{if .GoFiles}}{{.ImportPath}}{{end}}"}, staged...)...)
 	return strings.Fields(listed)
 }
 

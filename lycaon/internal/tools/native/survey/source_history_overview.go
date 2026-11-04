@@ -2,6 +2,7 @@ package survey
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -17,7 +18,8 @@ const (
 	overviewEffectCap       = 400
 	overviewSettleBudget    = 3 * time.Second
 	overviewTruncatedNote   = "the window overflowed the effect cap, so this list is a floor; source_history(path) has one file's full record"
-	overviewOpenWindowsNote = "commands in open_windows have not settled, so this list is a floor until they do"
+	overviewOpenWindowsNote = "commands in open_windows have not settled, so this list may be incomplete"
+	overviewNoRowsNote      = "the ledger recorded nothing on your branch this session; a file it never tracked may still have changed"
 )
 
 // sourceHistoryOverviewFile is one file's newest change in the session window.
@@ -87,13 +89,19 @@ func (t *SourceHistoryTool) runOverview(ctx context.Context, tctx tools.ToolCont
 		effects = effects[:overviewEffectCap]
 		resp.Truncated = true
 	}
-	resp.Files = overviewFiles(effects, overviewRowFacts{
-		roots: tctx.Source.Roots, sessionID: tctx.Identity.SessionID,
+	resp.Files, err = overviewFiles(ctx, ledger.Files, effects, overviewRowFacts{
+		projectID: tctx.Identity.ProjectID, roots: tctx.Source.Roots, sessionID: tctx.Identity.SessionID,
 		statesWindows: ledger.Windows != nil, open: open, namesBranch: !sameBranch,
 	})
+	if err != nil {
+		return "", fmt.Errorf("source history overview path: %w", err)
+	}
 	resp.Count = len(resp.Files)
 	resp.OpenWindows = open
 	var notes []string
+	if len(resp.Files) == 0 {
+		notes = append(notes, overviewNoRowsNote)
+	}
 	if resp.Truncated {
 		notes = append(notes, overviewTruncatedNote)
 	}
@@ -179,6 +187,7 @@ func mergeOpenWindows(before, after []sourceledger.SessionWindow) []sourceHistor
 }
 
 type overviewRowFacts struct {
+	projectID     string
 	roots         []projectroot.RootRef
 	sessionID     string
 	statesWindows bool
@@ -188,7 +197,7 @@ type overviewRowFacts struct {
 
 // overviewFiles groups effects per file. Effects arrive newest first, so the
 // first effect per file is its newest and first-seen order is newest-file first.
-func overviewFiles(effects []sourceledger.Effect, facts overviewRowFacts) []sourceHistoryOverviewFile {
+func overviewFiles(ctx context.Context, files tools.SourceFileHistory, effects []sourceledger.Effect, facts overviewRowFacts) ([]sourceHistoryOverviewFile, error) {
 	open := make(map[string]bool, len(facts.open))
 	for _, window := range facts.open {
 		open[window.ID] = true
@@ -201,8 +210,12 @@ func overviewFiles(effects []sourceledger.Effect, facts overviewRowFacts) []sour
 			continue
 		}
 		rows[effect.FileID] = len(out)
+		rootID, path, err := overviewRowPath(ctx, files, facts.projectID, effect)
+		if err != nil {
+			return nil, err
+		}
 		row := sourceHistoryOverviewFile{
-			Path:      projectroot.DisplayPath(facts.roots, effect.RootID, effect.Path),
+			Path:      projectroot.DisplayPath(facts.roots, rootID, path),
 			Op:        string(effect.Op),
 			Actor:     string(effect.ActorClassFor(facts.sessionID)),
 			Detail:    effect.ActorDisplay(facts.sessionID),
@@ -221,5 +234,21 @@ func overviewFiles(effects []sourceledger.Effect, facts overviewRowFacts) []sour
 		}
 		out = append(out, row)
 	}
-	return out
+	return out, nil
+}
+
+// overviewRowPath names where the file is now, since a directory move rewrites no
+// descendant's effects. A deleted file is named where it last was.
+func overviewRowPath(ctx context.Context, files tools.SourceFileHistory, projectID string, effect sourceledger.Effect) (rootID, path string, err error) {
+	head, err := files.ResolveHeadByFile(ctx, projectID, effect.BranchID, effect.FileID)
+	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
+		return effect.RootID, effect.Path, nil
+	}
+	if err != nil {
+		return "", "", err
+	}
+	if head.State == "absent" {
+		return effect.RootID, effect.Path, nil
+	}
+	return head.RootID, head.Path, nil
 }

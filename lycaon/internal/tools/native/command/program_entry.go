@@ -232,7 +232,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}()
 
-	run := &programRun{catalog: catalog, commands: commands, envelope: launchEnvelope(args), tc: tc, memory: memory, source: source, parentReceipt: tc.Invocation.ID, window: newProgramWindow(tc, CanonicalCommandKey(tc, args))}
+	run := &programRun{catalog: catalog, commands: commands, envelope: launchEnvelope(args), tc: tc, memory: memory, source: source, parentReceipt: tc.Invocation.ID, window: newProgramWindow(tc, CanonicalCommandKey(tc, args), r.clock())}
 	paths, err := r.bindProgramFrame(ctx, run, args, snapshot.Plan.CatalogDigest)
 	if err != nil {
 		return "", err

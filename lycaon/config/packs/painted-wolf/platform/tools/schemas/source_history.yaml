@@ -1,5 +1,5 @@
 tags: [edit, history]
-description: "No arguments: what changed on your branch this session, every actor; waits briefly for your finished commands to settle. path alone: that file's record. path with mode=diff and no version_id: the file's change since the session began. Query the source ledger for file effects (mode=effects), current line authorship (mode=lines), this session's paths (mode=mine), historical version content (mode=version), or version diffs (mode=diff). Includes uncommitted state. Actors: you / agent / user / external / mixed / unknown. Missing history is reported explicitly."
+description: "No arguments: what the ledger recorded on your branch this session, from every actor; waits briefly for your finished commands to settle. path alone: that file's record. path with mode=diff and no version_id: the file's change since the session began. Query the source ledger for file effects (mode=effects), current line authorship (mode=lines), this session's paths (mode=mine), historical version content (mode=version), or version diffs (mode=diff). Includes uncommitted state. Actors: you / agent / user / external / mixed / unknown. Missing history is reported explicitly."
 schema:
   type: object
   properties:

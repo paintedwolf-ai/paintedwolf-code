@@ -213,6 +213,46 @@ func TestEffectsBetweenOnBranchIsStrictPerRootAndBounded(t *testing.T) {
 	}
 }
 
+// A move out of a path states what the path held; a move into one does not.
+func TestOldestPathEffectAfterOnBranchReadsTheLocation(t *testing.T) {
+	store, ctx := openLedger(t)
+	record := func(in RecordInput) {
+		t.Helper()
+		in.ProjectID, in.RootID, in.Origin = "p1", "r1", api.SourceChangeOriginUser
+		mustRecord(t, store, ctx, in)
+	}
+	record(RecordInput{RecordLocation: RecordLocation{Path: "held.go"}, Op: api.SourceChangeOpCreate, OperationID: "create-held", After: []byte("held\n")})
+	_, held := mustResolve(t, store, ctx, "held.go")
+	record(RecordInput{RecordLocation: RecordLocation{Path: "elsewhere.go"}, Op: api.SourceChangeOpCreate, OperationID: "create-elsewhere", After: []byte("visitor\n")})
+	newest, err := store.History.EffectsBetween(ctx, "p1", 0, 0, 1)
+	testutil.FailErr(t, "read the newest effect", err)
+	floor := newest[0].Ordinal
+
+	record(RecordInput{RecordLocation: RecordLocation{Path: "moved.go", FromPath: "held.go"}, Op: api.SourceChangeOpRename, OperationID: "move-out"})
+	record(RecordInput{RecordLocation: RecordLocation{Path: "fresh.go", FromPath: "elsewhere.go"}, Op: api.SourceChangeOpRename, OperationID: "move-in"})
+
+	bounds, found, err := store.History.OldestPathEffectAfterOnBranch(ctx, "p1", sourcebranch.Trunk, "r1", "held.go", floor)
+	testutil.FailErr(t, "moved-away path", err)
+	if !found || bounds.BeforeVersionID != held {
+		t.Fatalf("moved-away bounds = %+v found=%v, want before %s", bounds, found, held)
+	}
+	bounds, found, err = store.History.OldestPathEffectAfterOnBranch(ctx, "p1", sourcebranch.Trunk, "r1", "fresh.go", floor)
+	testutil.FailErr(t, "moved-into path", err)
+	if !found || bounds.BeforeVersionID != "" {
+		t.Fatalf("moved-into bounds = %+v found=%v, want no predecessor", bounds, found)
+	}
+	if _, found, err := store.History.OldestPathEffectAfterOnBranch(ctx, "p1", "job-2", "r1", "held.go", floor); err != nil || found {
+		t.Fatalf("other branch found=%v err=%v", found, err)
+	}
+	if _, found, err := store.History.OldestPathEffectAfterOnBranch(ctx, "p1", sourcebranch.Trunk, "r2", "held.go", floor); err != nil || found {
+		t.Fatalf("other root found=%v err=%v", found, err)
+	}
+	var none *History
+	if _, _, err := none.OldestPathEffectAfterOnBranch(ctx, "p1", sourcebranch.Trunk, "r1", "held.go", 0); err == nil {
+		t.Fatal("an unconfigured ledger answered")
+	}
+}
+
 func TestOldestFileEffectAfterOnBranchIgnoresOtherBranches(t *testing.T) {
 	store, ctx := openLedger(t)
 	record := func(op, content string, branch sourcebranch.ID) {

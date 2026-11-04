@@ -4144,6 +4144,56 @@ func (q *Queries) MarkSourceInventoryScanning(ctx context.Context, arg MarkSourc
 	return result.RowsAffected()
 }
 
+const oldestSourceEffectAtPathAfterOrdinalOnBranch = `-- name: OldestSourceEffectAtPathAfterOrdinalOnBranch :one
+SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.ordinal, e.from_root_id, e.from_path
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = ?1 AND o.branch_id = ?2
+  AND e.ordinal > ?3 AND e.walk_visible = 1
+  AND ((e.root_id = ?4 AND e.path = ?5)
+    OR (e.from_root_id = ?4 AND e.from_path = ?5))
+ORDER BY e.ordinal ASC LIMIT 1
+`
+
+type OldestSourceEffectAtPathAfterOrdinalOnBranchParams struct {
+	ProjectID string `json:"project_id"`
+	BranchID  string `json:"branch_id"`
+	Ordinal   int64  `json:"ordinal"`
+	RootID    string `json:"root_id"`
+	Path      string `json:"path"`
+}
+
+type OldestSourceEffectAtPathAfterOrdinalOnBranchRow struct {
+	ID              string `json:"id"`
+	BeforeVersionID string `json:"before_version_id"`
+	AfterVersionID  string `json:"after_version_id"`
+	Ordinal         int64  `json:"ordinal"`
+	FromRootID      string `json:"from_root_id"`
+	FromPath        string `json:"from_path"`
+}
+
+// The first thing this branch recorded at a location past the ordinal, whichever
+// file held it, including a move away from it.
+func (q *Queries) OldestSourceEffectAtPathAfterOrdinalOnBranch(ctx context.Context, arg OldestSourceEffectAtPathAfterOrdinalOnBranchParams) (OldestSourceEffectAtPathAfterOrdinalOnBranchRow, error) {
+	row := q.db.QueryRowContext(ctx, oldestSourceEffectAtPathAfterOrdinalOnBranch,
+		arg.ProjectID,
+		arg.BranchID,
+		arg.Ordinal,
+		arg.RootID,
+		arg.Path,
+	)
+	var i OldestSourceEffectAtPathAfterOrdinalOnBranchRow
+	err := row.Scan(
+		&i.ID,
+		&i.BeforeVersionID,
+		&i.AfterVersionID,
+		&i.Ordinal,
+		&i.FromRootID,
+		&i.FromPath,
+	)
+	return i, err
+}
+
 const oldestSourceEffectForFileAfterOrdinal = `-- name: OldestSourceEffectForFileAfterOrdinal :one
 SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
        e.after_version_id, e.ordinal

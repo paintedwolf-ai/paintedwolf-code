@@ -272,7 +272,7 @@ func (s *Inventory) runInventoryGeneration(ctx context.Context, req InventoryReq
 	if err != nil {
 		return err
 	}
-	s.commands.notePassCompleted(req.ProjectID)
+	s.commands.notePassCompleted(ctx, req.ProjectID, req.Roots)
 	slog.InfoContext(ctx, "source inventory ready",
 		"project_id", req.ProjectID, "duration_ms", time.Since(started).Milliseconds(),
 		"files", outcome.files, "recorded", outcome.recorded)
@@ -433,7 +433,8 @@ type observationRecorder interface {
 
 type inventoryCommandsPort interface {
 	attributionWindow(projectID string, roots []RootSpec) *openCommandWindow
-	notePassCompleted(projectID string)
+	notePassCompleted(ctx context.Context, projectID string, roots []RootSpec)
+	unclaimedWindows(projectID string, roots []RootSpec) []*openCommandWindow
 }
 
 type inventoryGitPort interface {

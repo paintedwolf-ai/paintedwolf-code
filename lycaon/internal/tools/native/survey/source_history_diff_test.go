@@ -318,23 +318,13 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 		testutil.FailErr(t, "diff deleted path", err)
 		return result
 	}
-	remove := func(h *historyHarness, path string, branch sourcebranch.ID) {
-		h.t.Helper()
-		h.nextOp++
-		testutil.FailErr(h.t, "record deletion", h.store.Record(h.t.Context(), sourceledger.RecordInput{
-			RecordLocation: sourceledger.RecordLocation{RootID: "r1", Path: path},
-			ProjectID:      historyProject, BranchID: branch, Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent,
-			SessionID: historySession, Turn: 1, OperationID: fmt.Sprintf("op-%d", h.nextOp),
-		}))
-	}
-
 	t.Run("baseline to absence", func(t *testing.T) {
 		h := newHistoryHarness(t)
 		h.record(effectSeed{path: "a.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 		baseline := h.head("a.go").VersionID
 		h.beginSession(historySession)
 		h.record(effectSeed{path: "a.go", content: "edited\n"})
-		remove(h, "a.go", sourcebranch.Trunk)
+		h.remove("a.go", sourcebranch.Trunk)
 
 		result := deletedDiff(t, h, "a.go")
 		removed, added := diffChanges(result.Diff)
@@ -349,7 +339,7 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 		h := newHistoryHarness(t)
 		h.beginSession(historySession)
 		h.record(effectSeed{path: "a.go", content: "brief\n", op: api.SourceChangeOpCreate})
-		remove(h, "a.go", sourcebranch.Trunk)
+		h.remove("a.go", sourcebranch.Trunk)
 		result := deletedDiff(t, h, "a.go")
 		if !result.Recorded || result.Diff != "" || result.BaseVersionID != "" || result.State != "absent" {
 			t.Fatalf("diff = %+v, want an empty diff between two absences", result)
@@ -358,25 +348,24 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 	t.Run("deleted before the session has no effect in the window", func(t *testing.T) {
 		h := newHistoryHarness(t)
 		h.record(effectSeed{path: "a.go", content: "old\n", session: "s0", op: api.SourceChangeOpCreate})
-		remove(h, "a.go", sourcebranch.Trunk)
+		h.remove("a.go", sourcebranch.Trunk)
 		h.beginSession(historySession)
 		result := deletedDiff(t, h, "a.go")
 		if !result.Recorded || result.Diff != "" || result.Note == "" || result.State != "absent" {
-			t.Fatalf("diff = %+v, want an empty diff with the no-effect note", result)
+			t.Fatalf("diff = %+v, want an empty diff with a note", result)
 		}
 	})
 	t.Run("the caller's branch decides", func(t *testing.T) {
 		h := newHistoryHarness(t)
 		h.record(effectSeed{path: "a.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 		h.beginSession(historySession)
-		h.record(effectSeed{path: "a.go", content: "worker\n", branch: "job-1", session: "child", job: "job-1"})
-		remove(h, "a.go", "job-1")
+		h.record(effectSeed{path: "a.go", content: "worker\n", before: "before\n", branch: "job-1", session: "child", job: "job-1"})
+		h.remove("a.go", "job-1")
 		h.writeFile("a.go", "before\n")
 		trunk := deletedDiff(t, h, "a.go")
 		if trunk.State != "" || trunk.Diff != "" || trunk.VersionID == "" || trunk.Note == "" {
 			t.Fatalf("trunk diff = %+v, want the live head untouched", trunk)
 		}
-		h.beginSession("child")
 		worker := h.tctx
 		worker.Identity.SessionID, worker.Identity.WorkerJobID = "child", "job-1"
 		worker.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
@@ -451,6 +440,10 @@ func TestSourceHistoryDiffReportsLedgerFailures(t *testing.T) {
 	if _, err := h.diff(map[string]any{"path": "a.go"}); !errors.Is(err, failure) {
 		t.Fatalf("baseline failure = %v", err)
 	}
+	withFiles(failingDiffFiles{SourceFileHistory: real, head: head, found: true, pathErr: failure}, h.store.Comparisons)
+	if _, err := h.diff(map[string]any{"path": "a.go"}); !errors.Is(err, failure) {
+		t.Fatalf("path baseline failure = %v", err)
+	}
 	withFiles(failingDiffFiles{SourceFileHistory: real, head: head, found: true}, fixedComparison{err: failure})
 	if _, err := h.diff(map[string]any{"path": "a.go"}); !errors.Is(err, failure) {
 		t.Fatalf("comparison failure = %v", err)
@@ -473,6 +466,7 @@ type failingDiffFiles struct {
 	head                                     sourceledger.BranchHead
 	found                                    bool
 	headErr, deletedErr, floorErr, oldestErr error
+	pathErr                                  error
 }
 
 func (f failingDiffFiles) ResolveHead(context.Context, string, sourcebranch.ID, string, string) (sourceledger.BranchHead, error) {
@@ -485,6 +479,10 @@ func (f failingDiffFiles) ResolveDeletedPath(context.Context, string, sourcebran
 
 func (f failingDiffFiles) SessionActivityFloor(context.Context, string, string) (int64, bool, error) {
 	return 1, true, f.floorErr
+}
+
+func (f failingDiffFiles) OldestPathEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, string, int64) (sourceledger.FileEffectBounds, bool, error) {
+	return sourceledger.FileEffectBounds{}, false, f.pathErr
 }
 
 func (f failingDiffFiles) OldestFileEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, int64) (sourceledger.FileEffectBounds, bool, error) {
