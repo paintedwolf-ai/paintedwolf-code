@@ -32,9 +32,9 @@ func TestProgramSyntaxFeedbackUsesTypedSpansWithoutGuessedRepairs(t *testing.T) 
 			}
 			wantFacts = append(wantFacts, "Earlier completed steps and their results remain recorded")
 		case "COMMAND_SYNTAX_UNSUPPORTED":
-			wantFacts = append(wantFacts, "Earlier commands that finished still count")
+			wantFacts = append(wantFacts, "No command operation ran or changed files", "The submitted source was refused before evaluation")
 		default:
-			wantFacts = append(wantFacts, "earlier parent effects")
+			wantFacts = append(wantFacts, "No command operation ran or changed files", "The submitted source was refused before evaluation")
 		}
 		for _, want := range wantFacts {
 			if !strings.Contains(strings.ToLower(out), strings.ToLower(want)) {

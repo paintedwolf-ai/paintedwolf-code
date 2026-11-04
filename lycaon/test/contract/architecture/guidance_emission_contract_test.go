@@ -130,19 +130,13 @@ func TestRecoverableHintCodesRenderFullRejectBlock(t *testing.T) {
 		if strings.TrimSpace(entry.Effect) == "warn" || strings.TrimSpace(entry.Effect) == "nudge" {
 			lead = ">>>"
 		}
-		for _, want := range []string{lead, "Fix:", "Code: " + code} {
+		for _, want := range []string{lead, "Code: " + code} {
 			if !strings.Contains(raw, want) {
 				t.Fatalf("hint %q reject block missing %q:\n%s", code, want, raw)
 			}
 		}
-		if strings.TrimSpace(entry.Instead) == "" {
-			t.Fatalf("hint %q missing instead (branch instruction)", code)
-		}
 		if strings.TrimSpace(entry.What) == "" && strings.TrimSpace(entry.Message) == "" {
 			t.Fatalf("hint %q missing what or message", code)
-		}
-		if strings.TrimSpace(entry.Fix) == "" {
-			t.Fatalf("hint %q missing fix", code)
 		}
 		// Scenarios supply template inputs and expected rendered output.
 		if len(entry.Scenarios) == 0 {

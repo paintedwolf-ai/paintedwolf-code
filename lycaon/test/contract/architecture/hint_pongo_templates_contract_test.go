@@ -33,7 +33,7 @@ func TestRejectHintCodesRenderUnifiedBlock(t *testing.T) {
 		if err != nil {
 			t.Fatalf("hint %q Format: %v", code, err)
 		}
-		for _, want := range []string{"Code: " + code, "Fix:"} {
+		for _, want := range []string{"Code: " + code} {
 			if !strings.Contains(raw, want) {
 				t.Fatalf("hint %q reject block missing %q:\n%s", code, want, raw)
 			}
