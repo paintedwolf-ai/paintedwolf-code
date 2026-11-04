@@ -137,7 +137,7 @@ func verify(ctx context.Context, view *adapter.PreparedView, boundary confine.Vi
 	}
 	allowed := len(steps)
 	for _, path := range boundary.DeniedPaths {
-		if entry := FirstEntry(path, boundary.ReopenedPaths...); entry != "" {
+		if entry := FirstEntry(path, slices.Concat(boundary.ReopenedPaths, boundary.ReopenedReadPaths)...); entry != "" {
 			steps = append(steps, denialprobe.Step{Kind: denialprobe.Stat, Path: entry})
 		}
 		steps = append(steps, denialprobe.Step{Kind: denialprobe.CreateFile, Path: filepath.Join(path, probeName)})

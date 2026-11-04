@@ -62,7 +62,9 @@ func retainedStoreDir(backing string) string { return filepath.Join(backing, "re
 
 // RetainedObjectsDir is where a manager's repositories borrow objects from, which a worker's own
 // git reads through its alternates.
-func RetainedObjectsDir(backing string) string { return filepath.Join(retainedStoreDir(backing), "objects") }
+func RetainedObjectsDir(backing string) string {
+	return filepath.Join(retainedStoreDir(backing), "objects")
+}
 
 func NewManager(cfg ManagerConfig) (*Manager, error) {
 	if cfg.BackingDir == "" {
