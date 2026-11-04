@@ -40,4 +40,9 @@ func mountSmallVolume(t *testing.T, path string) {
 	if err := unix.Mount("none", path, "tmpfs", 0, "size=16m"); err != nil {
 		t.Fatalf("mount small volume: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := unix.Unmount(path, unix.MNT_DETACH); err != nil {
+			t.Errorf("unmount small volume: %v", err)
+		}
+	})
 }
