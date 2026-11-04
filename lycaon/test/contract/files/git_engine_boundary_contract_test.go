@@ -13,11 +13,13 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/usernotice"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -262,10 +264,11 @@ func assertGitBoundaryWriteSinksWired(t *testing.T) {
 	t.Helper()
 	project := t.TempDir()
 	tctx := tools.ToolContext{
-		Identity: tools.InvocationIdentity{ProjectID: "project"},
+		Identity: tools.InvocationIdentity{ProjectID: "project", SessionID: "session", Agent: toolprofiles.DefaultToolProfileID},
 		Source: tools.InvocationSource{
-			Roots:        []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
-			ActiveRootID: "root",
+			Roots:               []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID:        "root",
+			SourceWorkspaceKind: api.SourceWorkspaceKindProject,
 		},
 	}
 	for path, class := range map[string]string{".git/config": "config", ".git/hooks/pre-commit": "hooks"} {

@@ -52,7 +52,7 @@ func TestNativeToolsReadRejectsDirectoryListing(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	contractcheck.FailErr(t, "mkdir", os.Mkdir(filepath.Join(root, "dir"), 0o755))
-	_, err := sourceview.ReadContentCapped("read", sourceview.Access{}, fseffect.Location{Root: root, Rel: "dir"}, "dir", false, 1024)
+	_, err := sourceview.ReadContentCapped("read", sourceview.AccessRead, fseffect.Location{Root: root, Rel: "dir"}, "dir", false, 1024)
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" {
 		t.Fatalf("reading a directory = %v, want READ_IS_DIRECTORY", err)
