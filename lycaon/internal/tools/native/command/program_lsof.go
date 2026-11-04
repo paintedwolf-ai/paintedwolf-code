@@ -24,7 +24,8 @@ type PortInventory interface {
 	PortHolders(context.Context, string, lineage.ListenerQuery) (hostprocess.PortHolderTable, error)
 }
 
-const lsofWithheldNote = "lsof: this host withholds some sockets from this view, so a port not listed here may still be held\n"
+// LsofWithheldNote tells the reader a missing row is not proof a port is free.
+const LsofWithheldNote = "lsof: this host withholds some sockets from this view, so a port not listed here may still be held\n"
 
 // maxJobAncestry bounds the parent walk from a listener to the job that started it.
 const maxJobAncestry = 64
@@ -90,7 +91,7 @@ func lsofBuiltin(spec toolcontract.CommandSpecification, sessionID string, jobs 
 			return ownerFailure(err), err
 		}
 		if !table.Complete {
-			uninspected += lsofWithheldNote
+			uninspected += LsofWithheldNote
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Error), uninspected); err != nil {
 			return ownerFailure(err), err
