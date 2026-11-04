@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
@@ -19,6 +21,27 @@ type SourceHistory struct {
 // SourceWindowReader lists a session's command windows that have not settled.
 type SourceWindowReader interface {
 	OpenSessionWindows(projectID, sessionID string) []sourceledger.SessionWindow
+}
+
+// WindowSettleBudget bounds how long a read of the session's work waits for its
+// closing windows; what is still settling after that is reported, not awaited.
+const WindowSettleBudget = 3 * time.Second
+
+// AwaitClosingWindows waits for windows whose process has ended, never for a
+// running one, until they settle or the budget passes.
+func AwaitClosingWindows(ctx context.Context, windows []sourceledger.SessionWindow, budget time.Duration) {
+	ctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	for _, window := range windows {
+		if !window.Closing {
+			continue
+		}
+		select {
+		case <-window.Settled:
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 type SourceFileHistory interface {

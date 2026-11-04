@@ -235,6 +235,44 @@ func TestBulkCommitWaitsForItsSessionsClosingWindow(t *testing.T) {
 	}
 }
 
+// What a window has not settled when the wait runs out is reported, not lost.
+func TestBulkCommitReportsWhatAWindowStillSettlingLeftOut(t *testing.T) {
+	f := programtest.New(t, programtest.Options{})
+	ledger := f.AttachLedger(t)
+	manager := git.NewManager()
+	ledger.Git.SetGitReader(walkGitReader{manager})
+	seedRepository(t, f.Dir)
+	repochange.MarkCoverageCompleteForTest(f.Dir)
+	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
+
+	first := make(chan time.Time)
+	ledger.Commands.SetWindowSettleGateForTest(first)
+	runTrustedGenerator(t, f, "first.txt")
+	settling := ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
+	close(first)
+	for _, window := range settling {
+		testutil.AwaitClosed(t, "the first window settles", window.Settled)
+	}
+
+	held := make(chan time.Time)
+	t.Cleanup(func() { close(held) })
+	ledger.Commands.SetWindowSettleGateForTest(held)
+	runTrustedGenerator(t, f, "gen.txt")
+	raw, err := commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Generate"}, commitContext(f, ledger, f.Session))
+	testutil.FailErr(t, "commit session work", err)
+	committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD"))
+	if !slices.Contains(committed, "first.txt") || slices.Contains(committed, "gen.txt") {
+		t.Fatalf("committed paths = %v, want first.txt without gen.txt", committed)
+	}
+	var receipt struct {
+		UncommittedPaths []string `json:"uncommitted_paths"`
+	}
+	testutil.FailErr(t, "decode receipt", json.Unmarshal([]byte(raw), &receipt))
+	if !slices.Contains(receipt.UncommittedPaths, "gen.txt") {
+		t.Fatalf("uncommitted paths = %v, want gen.txt", receipt.UncommittedPaths)
+	}
+}
+
 func seedRepository(t *testing.T, dir string) {
 	t.Helper()
 	gittest.Init(t, dir)
@@ -252,7 +290,7 @@ func commitContext(f *programtest.Fixture, ledger *sourceledger.Store, session s
 	tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = testdbseed.DefaultProjectID, session, "commit-call"
 	tc.Invocation.ToolName = "git_commit"
 	tc.Source.SourceLedger = ledger
-	tc.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}
+	tc.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk, Windows: ledger.Commands}
 	tc.Source.Commands, tc.Source.Observations, tc.Source.GitMutations = ledger.Commands, ledger.Inventory, ledger.Git
 	return tc
 }
