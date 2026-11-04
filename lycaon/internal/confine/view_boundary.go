@@ -17,8 +17,8 @@ type ViewBoundary struct {
 	// WriteDeniedPaths stay readable and are refused for writing, after everything above: a pristine
 	// tree is the exact base of a later merge.
 	WriteDeniedPaths []string
-	// DeniedLoopbackPorts are the live view listeners, refused after every loopback grant. Only a
-	// process is refused: the kernel's own client traffic is not subject to its profile.
+	// DeniedLoopbackPorts are the live view listeners. Only a process is refused: the kernel's own
+	// client traffic is not subject to its profile.
 	DeniedLoopbackPorts []uint16
 }
 
@@ -42,7 +42,17 @@ func addViewStorageFloor(rules *FilesystemRules, view ViewBoundary) {
 	rules.add(fsRule{op: opWrite, matches: subpathMatches(resolveEach(slices.Clone(view.WriteDeniedPaths)), FloorControlPlane)})
 }
 
-// writeViewListenerDenials follows every network allow, since the last matching rule decides.
+// withoutViewListeners keeps a narrowed loopback grant from ever naming a view's listener.
+func withoutViewListeners(ports []uint16, view ViewBoundary) []uint16 {
+	return slices.DeleteFunc(slices.Clone(ports), func(port uint16) bool {
+		return slices.Contains(view.DeniedLoopbackPorts, port)
+	})
+}
+
+// writeViewListenerDenials follows every network allow, since the last matching rule decides. Under a
+// loopback grant of every port (or direct IP) this does not hold: on macOS a port-level deny let
+// about half of connections through. Only the default deny refuses them reliably, and there the
+// server's per-view capability is what keeps a connected process out.
 func writeViewListenerDenials(b *strings.Builder, view ViewBoundary, deny string) {
 	for _, port := range view.DeniedLoopbackPorts {
 		b.WriteString("(deny network-outbound (remote ip " + sbplString("localhost:"+strconv.Itoa(int(port))) + ")" + deny + ")\n")

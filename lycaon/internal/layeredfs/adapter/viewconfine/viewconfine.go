@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -134,14 +133,6 @@ func verify(ctx context.Context, view *adapter.PreparedView, boundary confine.Vi
 	for _, root := range roots {
 		steps = append(steps, denialprobe.Step{Kind: denialprobe.Stat, Path: root})
 	}
-	if len(view.ListenerPorts) > 0 {
-		control, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			return unavailable(err)
-		}
-		defer func() { _ = control.Close() }()
-		steps = append(steps, denialprobe.Step{Kind: denialprobe.Connect, Port: uint16(control.Addr().(*net.TCPAddr).Port)}) //nolint:gosec // a listener's own port.
-	}
 	allowed := len(steps)
 	for _, path := range boundary.DeniedPaths {
 		if entry := FirstEntry(path, boundary.ReopenedPaths...); entry != "" {
@@ -194,12 +185,10 @@ const maxEntriesScanned = 64
 // probeName is what the probe tries to create, and removes when it can.
 const probeName = ".pw-confinement-probe"
 
-// workerBox is the boundary of a worker's command, reaching loopback as broadly as a grant can so
-// that a refused listener is the view's rule, not the absence of a grant.
+// workerBox is the boundary of a worker's command, which holds no loopback authority by default.
 func workerBox(roots []string, boundary confine.ViewBoundary) (*confine.Confinement, error) {
 	box, ok := confine.DefaultConfinement(confine.Request{
 		Roots: roots, ReadRoots: roots, Egress: confine.EgressDeny, View: boundary,
-		LoopbackConnect: len(boundary.DeniedLoopbackPorts) > 0,
 	})
 	if !ok || box == nil {
 		return nil, unavailable(errors.New("this host applies no confinement to a worker's commands"))

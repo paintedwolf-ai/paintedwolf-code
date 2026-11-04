@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"net"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -368,7 +367,6 @@ func workerCommandBox(t *testing.T, root, source string) *confine.Confinement {
 	tctx.Source.WorkerBranchRoot = root
 	tctx.Source.WorkerSourceRoots = []string{source}
 	tctx.Source.WorkerViewBoundary = workspace.BranchViewBoundary(root)
-	tctx.Local.LoopbackConnectGranted = true
 	box, ok := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tctx, nil)))
 	if !ok {
 		t.Fatal("a worker command got no boundary")
@@ -390,18 +388,13 @@ func assertWorkerShellGitWorks(t *testing.T, root, source, worktree string) {
 }
 
 // assertWorkerProcessIsDenied builds the boundary a worker's own command gets, through the path its
-// tool context takes, with the broadest loopback grant, and asks the kernel what it refuses.
+// tool context takes, and asks the kernel what it refuses.
 func assertWorkerProcessIsDenied(t *testing.T, root, source string, view *adapter.PreparedView) {
 	t.Helper()
 	box := workerCommandBox(t, root, source)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	testutil.FailErr(t, "control listener", err)
-	defer func() { _ = listener.Close() }()
-
 	allowed := []denialprobe.Step{
 		{Kind: denialprobe.ReadFile, Path: filepath.Join(root, "main.go")},
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(root, "worker-probe")},
-		{Kind: denialprobe.Connect, Port: uint16(listener.Addr().(*net.TCPAddr).Port)}, //nolint:gosec // a listener's own port.
 	}
 	other := filepath.Join(filepath.Dir(root), "another-worker")
 	testutil.FailErr(t, "mkdir another worker", os.MkdirAll(other, 0o700))

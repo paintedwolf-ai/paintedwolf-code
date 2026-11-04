@@ -70,6 +70,24 @@ func TestViewListenerDenialFollowsTheLoopbackGrant(t *testing.T) {
 	}
 }
 
+// A narrowed grant cannot name a listener, and losing its last port never widens it to every port.
+func TestNarrowedLoopbackGrantNeverNamesAListener(t *testing.T) {
+	render := func(ports ...uint16) string {
+		profile, err := confine.BuildSeatbeltProfile(confine.Confinement{
+			Roots: []string{t.TempDir()}, LoopbackConnect: true, LoopbackConnectPorts: ports,
+			View: confine.ViewBoundary{DeniedLoopbackPorts: []uint16{2049}},
+		})
+		testutil.FailErr(t, "profile", err)
+		return profile
+	}
+	if profile := render(2049, 8080); strings.Contains(profile, `(allow network-outbound (remote ip "localhost:2049"))`) || !strings.Contains(profile, `(allow network-outbound (remote ip "localhost:8080"))`) {
+		t.Fatalf("narrowed grant: %s", profile)
+	}
+	if profile := render(2049); strings.Contains(profile, `(allow network-outbound (remote ip "localhost:`) {
+		t.Fatalf("an emptied grant allows loopback: %s", profile)
+	}
+}
+
 func TestProfileDeniesMountingAndUnmounting(t *testing.T) {
 	profile, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{t.TempDir()}})
 	testutil.FailErr(t, "profile", err)
