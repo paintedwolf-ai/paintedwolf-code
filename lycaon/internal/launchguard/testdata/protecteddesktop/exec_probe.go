@@ -173,6 +173,15 @@ func (t *terminal) await(marker string) bool {
 	return false
 }
 
+func (t *terminal) awaitPrompt() {
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		if strings.HasSuffix(strings.TrimRight(t.text(), " "), ">>>") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func (t *terminal) text() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -193,16 +202,14 @@ func terminalProbe(ctx context.Context) (bool, string) {
 	if !output.await("ready-for-input") {
 		return false, "never ready: " + output.text()
 	}
+	// Ctrl-C sent before the interpreter returns to its prompt is lost in the gap
+	// where it leaves evaluation, so the marker alone does not mean it can be interrupted.
+	output.awaitPrompt()
 	send("\x03")
 	if !output.await("KeyboardInterrupt") {
 		return false, "no interrupt: " + output.text()
 	}
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
-		if strings.HasSuffix(strings.TrimRight(output.text(), " "), ">>>") {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	output.awaitPrompt()
 	send("print('interrupt' + '-survived')\n")
 	if !output.await("interrupt-survived") {
 		return false, "did not survive: " + output.text()
