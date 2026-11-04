@@ -6,6 +6,7 @@
 package fuselinux
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -118,7 +120,7 @@ func New(cfg Config) *Adapter {
 		cfg.HostOS = runtime.GOOS
 	}
 	if cfg.FusermountBin == "" {
-		if resolved, err := exec.LookPath("fusermount3"); err == nil && resolved != "" {
+		if resolved, err := execpkg.LookPath("fusermount3"); err == nil && resolved != "" {
 			cfg.FusermountBin = resolved
 		} else {
 			cfg.FusermountBin = DefaultFusermountBin
@@ -271,11 +273,18 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, err.Error()
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
 	}
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "cat probe.txt")
+	cmd, cleanupCmd, cErr := execpkg.PrepareCommand(ctx, "/bin/sh", []string{"-c", "cat probe.txt"}, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_probe")})
+	if cErr != nil {
+		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, cErr.Error()
+		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
+	}
+	defer cleanupCmd()
 	cmd.Dir = prep.PrimaryWorkPath
 	DetachMountEntry(cmd)
-	if out, cErr := cmd.CombinedOutput(); cErr != nil || strings.TrimSpace(string(out)) != "coherent-probe" {
-		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: err=%v out=%q", cErr, string(out))
+	var probeOut bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &probeOut, &probeOut
+	if cErr := execpkg.RunPrepared(ctx, cmd); cErr != nil || strings.TrimSpace(probeOut.String()) != "coherent-probe" {
+		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: err=%v out=%q", cErr, probeOut.String())
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
 	}
 	res.WriteExercised = true

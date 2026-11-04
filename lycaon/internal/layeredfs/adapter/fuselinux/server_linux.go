@@ -9,10 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"syscall"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"golang.org/x/sys/unix"
@@ -78,12 +78,17 @@ func receiveFUSEDevFD(ctx context.Context, fusermountBin, opts, mountPath string
 		}
 	}()
 
-	cmd := exec.CommandContext(ctx, fusermountBin, "-o", opts, "--", mountPath)
-	cmd.Env = append(os.Environ(), "_FUSE_COMMFD=3")
+	cmd, cleanup, err := execpkg.PrepareCommand(ctx, fusermountBin, []string{"-o", opts, "--", mountPath}, execpkg.ExecOpts{
+		Launch: execpkg.HostLaunch("fuse_mount"), AppendEnv: []string{"_FUSE_COMMFD=3"},
+	})
+	if err != nil {
+		return -1, fmt.Errorf("fuselinux: prepare %s: %w", fusermountBin, err)
+	}
+	defer cleanup()
 	cmd.ExtraFiles = []*os.File{childSockFile}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
+	if err := execpkg.StartPrepared(ctx, cmd); err != nil {
 		return -1, fmt.Errorf("fuselinux: start %s: %w", fusermountBin, err)
 	}
 	_ = childSockFile.Close()

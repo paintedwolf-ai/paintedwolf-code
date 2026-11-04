@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
@@ -273,9 +273,12 @@ func runFusermountUnmount(ctx context.Context, fusermountBin, mountPath string, 
 		args = append(args, "-z")
 	}
 	args = append(args, "--", mountPath)
-	out, err := exec.CommandContext(ctx, fusermountBin, args...).CombinedOutput()
+	out, exitCode, err := execpkg.Run(ctx, fusermountBin, args, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_unmount")})
 	if err != nil {
 		return fmt.Errorf("fusermount3 %v: %w (%s)", args, err, strings.TrimSpace(string(out)))
+	}
+	if exitCode != 0 {
+		return fmt.Errorf("fusermount3 %v: exit %d (%s)", args, exitCode, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
