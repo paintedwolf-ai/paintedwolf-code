@@ -78,12 +78,17 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 		t.Fatalf("helper engine not ready: %q err=%v", line, err)
 	}
 
-	holder := exec.Command("/bin/sh", "-c", "read _; exit 0")
+	holder := exec.Command("/bin/sh", "-c", "echo inside; read _; exit 0")
 	holder.Dir = task.WorkspaceRoot
 	fuselinux.DetachMountEntry(holder)
 	holderIn, err := holder.StdinPipe()
 	testutil.FailErr(t, "holder stdin", err)
+	holderOut, err := holder.StdoutPipe()
+	testutil.FailErr(t, "holder stdout", err)
 	testutil.FailErr(t, "start holder", holder.Start())
+	if line, err := bufio.NewReader(holderOut).ReadString('\n'); err != nil || line != "inside\n" {
+		t.Fatalf("holder never entered the mount: %q err=%v", line, err)
+	}
 	holderDone := make(chan error, 1)
 	go func() { holderDone <- holder.Wait() }()
 	t.Cleanup(func() { _ = holderIn.Close(); _ = holder.Process.Kill() })

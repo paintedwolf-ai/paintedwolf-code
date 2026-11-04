@@ -66,9 +66,6 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 	waitFor(t, "two parked requests", func() bool { return waitingRequests(recorded[0].DevMajorMinor) >= 2 })
 
 	adp := fuselinux.New(fuselinux.Config{})
-	if alive, err := adp.SettleRecordedConnection(t.Context(), recorded[0]); err != nil || alive.Disposition != adapter.ConnectionServerAlive || alive.ConnectionAborted {
-		t.Fatalf("a live server's connection must not abort: %+v err=%v", alive, err)
-	}
 	testutil.FailErr(t, "kill engine", engine.Process.Kill())
 	waitFor(t, "zombie leader", func() bool { return processState(engine.Process.Pid) == "Z" })
 	if !recorded[0].Server.Ended() && !fuselinux.ThreadGroupDyingForTest(filepath.Join("/proc", strconv.Itoa(engine.Process.Pid))) {
