@@ -60,7 +60,8 @@ func classifyCloseoutFinding(roots evidence.CitationRoots, finding WorkerFinding
 		outcome.class = closeoutCitationGrounded
 	case citationResolvesToSurveyRecord(roots, finding, ev):
 		outcome.class = closeoutCitationSurvey
-	case citationWasObserved(roots, finding, ev):
+	case citationWasObserved(roots, finding, ev), finding.EndLine > 0 && len(ev.ByPath[res.Path]) > 0:
+		// A loose citation may name no path, yet its range failed on a record.
 		outcome.class = closeoutCitationUnverifiable
 	default:
 		outcome.class = closeoutCitationNotObserved
