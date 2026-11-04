@@ -5,6 +5,7 @@ package fspath
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -50,4 +51,14 @@ func SameFilesystem(from, to string) (bool, error) {
 		return false, err
 	}
 	return a.Dev == b.Dev, nil
+}
+
+// identityWithoutDevice drops the leading major:minor of a birth-time identity,
+// or the single device field of the other two forms.
+func identityWithoutDevice(identity string) string {
+	fields := strings.Split(identity, ":")
+	if len(fields) == 5 {
+		return strings.Join(fields[2:], ":")
+	}
+	return strings.Join(fields[1:], ":")
 }

@@ -169,31 +169,31 @@ func (s mergeEngine) applyPromoteOverlayPlans(ctx context.Context, work promoteW
 		return api.WorkerMergeResult{}, errors.Join(err, revertPending())
 	}
 	if err := tx.apply(claimCtx, promote, work.task); err != nil {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
 	}
 	if err := commitCheckpointPromotionJournal(claimCtx, s.MergeService, work.task); err != nil {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
 	}
 	if len(plans) > 0 {
 		notifyMergeWorktreeChanged(ctx, work.task, work.roots)
 	}
 	facts, err := s.promotedSourceFacts(claimCtx, work.sessionID, in.ToolCallID, sourceworkspace.ID(work.task.ProjectID, work.roots), in.UserTurn, work.task, work.targets, applied, documents)
 	if err != nil {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
 	}
 	rebased, childStatuses, err := s.assessChildRebases(claimCtx, work.sessionID, work.overlayID)
 	if err != nil {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
 	}
 	out := api.WorkerMergeResult{JobID: work.overlayID, Mode: "merge", AgentType: work.task.AgentType, Paths: work.paths, Rebased: rebased}
 	finishIn := promoteFinishInput{sessionID: work.sessionID, task: work.task, jobID: work.overlayID, out: &out, resolved: applied, landed: promoteMutationPaths(plans), detail: in.Detail, claim: claim, facts: facts, childStatuses: childStatuses}
 	if err := s.finishPromoteState(claimCtx, finishIn); err != nil {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, promote, work.task, revertPending, err)
 	}
 	if out.Status != api.WorkerMergeStatusMerged {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(ctx, tx, promote, work.task, revertPending, fmt.Errorf("promote plan incomplete after apply"))
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, promote, work.task, revertPending, fmt.Errorf("promote plan incomplete after apply"))
 	}
-	s.closeCommittedPromoteTransaction(ctx, tx, work.overlayID)
+	closeCommittedPromoteTransaction(ctx, tx, work.overlayID)
 	if len(facts.files) > 0 {
 		out.OverlayPromotion = &api.OverlayPromotion{Files: facts.files}
 	}
@@ -284,15 +284,15 @@ func (s mergeEngine) finalizeEmptyPromote(ctx context.Context, sessionID string,
 	promote := PromoteRootsForTask(task, s.taskRootRefs(ctx, task))
 	revertPending := func() error { return s.releaseMergeClaim(ctx, claim) }
 	if err := commitCheckpointPromotionJournal(claimCtx, s.MergeService, task); err != nil {
-		return out, s.failPromoteTransaction(ctx, zeroTx, promote, task, revertPending, err)
+		return out, failPromoteTransaction(ctx, zeroTx, promote, task, revertPending, err)
 	}
 	if err := s.finishPromoteState(claimCtx, promoteFinishInput{
 		sessionID: sessionID, task: task, jobID: jobID, out: &out,
 		detail: detail, claim: claim, childStatuses: childStatuses,
 	}); err != nil {
-		return out, s.failPromoteTransaction(ctx, zeroTx, promote, task, revertPending, err)
+		return out, failPromoteTransaction(ctx, zeroTx, promote, task, revertPending, err)
 	}
-	s.closeCommittedPromoteTransaction(ctx, zeroTx, jobID)
+	closeCommittedPromoteTransaction(ctx, zeroTx, jobID)
 	s.recordPromoteOutput(sessionID, jobID, &out)
 	return out, nil
 }

@@ -25,6 +25,10 @@ const (
 	promotePhasePrepared = "prepared"
 	promotePhaseApplying = "applying"
 
+	promoteTransactionsDirName = "promote-transactions"
+	promoteJournalSuffix       = ".json"
+	promoteRetainedSuffix      = ".retained"
+
 	promoteRetentionInode   = "inode"
 	promoteRetentionContent = "content"
 )
@@ -85,7 +89,7 @@ func validatePromoteJournal(journal promoteTransactionJournal, jobID string) err
 
 func promoteTransactionPath(dataDir, jobID string) string {
 	digest := sha256.Sum256([]byte(jobID))
-	return filepath.Join(dataDir, "promote-transactions", hex.EncodeToString(digest[:])+".json")
+	return filepath.Join(dataDir, promoteTransactionsDirName, hex.EncodeToString(digest[:])+promoteJournalSuffix)
 }
 
 func writePromoteTransaction(path string, journal promoteTransactionJournal) error {

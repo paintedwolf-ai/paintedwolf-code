@@ -1,9 +1,11 @@
 package checkpoint
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -66,6 +68,93 @@ func TestHostPromotionWithoutHardLinkSupport(t *testing.T) {
 		testutil.FailErr(t, "read untouched", err)
 		if string(raw) != "original\n" {
 			t.Fatalf("refusal mutated target: %q", raw)
+		}
+	})
+}
+
+func TestHostRecoverySurvivesDeviceNumberChange(t *testing.T) {
+	rewrite := func(t *testing.T, identity string) string {
+		t.Helper()
+		device, rest, ok := strings.Cut(identity, ":")
+		if !ok {
+			t.Fatalf("identity %q has no device field", identity)
+		}
+		return "9" + device + ":" + rest
+	}
+	applied := func(t *testing.T) (string, *Store, PromoterConfig, os.FileInfo) {
+		t.Helper()
+		primary := t.TempDir()
+		path := filepath.Join(primary, "a.txt")
+		testutil.FailErr(t, "seed", os.WriteFile(path, []byte("original\n"), 0o640))
+		original, err := os.Stat(path)
+		testutil.FailErr(t, "stat original", err)
+		store, cfg := publishAndApplyHostCheckpoint(t, primary, "cp-device", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
+			_, err := core.WriteFile(qp("a.txt"), []byte("worker\n"), 0o640)
+			testutil.FailErr(t, "edit", err)
+		})
+		journal := filepath.Join(store.promotionsDir, "host-transaction.json")
+		raw, err := os.ReadFile(journal)
+		testutil.FailErr(t, "read journal", err)
+		var tx hostTransaction
+		testutil.FailErr(t, "decode journal", json.Unmarshal(raw, &tx))
+		for id, root := range tx.Roots {
+			root.Identity = rewrite(t, root.Identity)
+			tx.Roots[id] = root
+		}
+		for i := range tx.Targets {
+			if tx.Targets[i].Before.HardLinkGroup != "" {
+				tx.Targets[i].Before.HardLinkGroup = rewrite(t, tx.Targets[i].Before.HardLinkGroup)
+			}
+		}
+		raw, err = json.Marshal(tx)
+		testutil.FailErr(t, "encode journal", err)
+		testutil.FailErr(t, "write journal", os.WriteFile(journal, raw, 0o600))
+		return path, store, cfg, original
+	}
+	rollback := func(t *testing.T, cfg PromoterConfig) error {
+		t.Helper()
+		promoter, err := NewPromoter(cfg)
+		testutil.FailErr(t, "reopen", err)
+		return NewHostPromotion(promoter).Rollback(t.Context())
+	}
+	t.Run("valid recovery proceeds and restores the inode", func(t *testing.T) {
+		path, _, cfg, original := applied(t)
+		testutil.FailErr(t, "rollback", rollback(t, cfg))
+		restored, err := os.Stat(path)
+		testutil.FailErr(t, "stat restored", err)
+		if !os.SameFile(restored, original) {
+			t.Fatal("rollback lost the original inode")
+		}
+	})
+	t.Run("replaced slot refuses", func(t *testing.T) {
+		_, store, cfg, _ := applied(t)
+		slot := filepath.Join(store.promotionsDir, "host-retained", "slot-000000")
+		testutil.FailErr(t, "remove slot", os.Remove(slot))
+		testutil.FailErr(t, "replace slot", os.WriteFile(slot, []byte("original\n"), 0o640))
+		testutil.FailErr(t, "chmod slot", os.Chmod(slot, 0o640))
+		if err := rollback(t, cfg); err == nil {
+			t.Fatal("replaced slot accepted")
+		}
+	})
+	t.Run("replaced primary refuses", func(t *testing.T) {
+		path, _, cfg, _ := applied(t)
+		testutil.FailErr(t, "remove primary", os.Remove(path))
+		testutil.FailErr(t, "replace primary", os.WriteFile(path, []byte("external\n"), 0o640))
+		if err := rollback(t, cfg); err == nil {
+			t.Fatal("replaced primary accepted")
+		}
+		if raw, err := os.ReadFile(path); err != nil || string(raw) != "external\n" {
+			t.Fatalf("refusal overwrote primary: %q %v", raw, err)
+		}
+	})
+	t.Run("replaced root refuses", func(t *testing.T) {
+		path, _, cfg, _ := applied(t)
+		root := filepath.Dir(path)
+		testutil.FailErr(t, "move root", os.Rename(root, root+".moved"))
+		testutil.FailErr(t, "replace root", os.Mkdir(root, 0o700))
+		t.Cleanup(func() { _ = os.RemoveAll(root + ".moved") })
+		if err := rollback(t, cfg); err == nil {
+			t.Fatal("replaced root accepted")
 		}
 	})
 }

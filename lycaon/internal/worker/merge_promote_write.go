@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -153,80 +152,6 @@ func promoteRecoveryChoices(assessment PromoteAssessment) []map[string]any {
 		choices = append(choices, map[string]any{"path": item.Path, "action": item.Action, "needs_review": item.NeedsReview, "conflict_tier": item.ConflictTier})
 	}
 	return choices
-}
-
-// recoverInterruptedPromote rolls back an expired promotion.
-func (s mergeEngine) recoverInterruptedPromote(ctx context.Context, task *api.WorkerTask, jobID string) error {
-	reclaimed, err := s.reclaimOrphanedApply(ctx, task, jobID)
-	if err != nil {
-		return err
-	}
-	if !reclaimed {
-		return s.reject(OverlayPromoteNotPendingCode, map[string]any{
-			"job_id": jobID,
-			"reason": "another promote is applying this overlay",
-		})
-	}
-	return nil
-}
-
-// reclaimOrphanedApply restores one expired promotion.
-func (s mergeEngine) reclaimOrphanedApply(ctx context.Context, task *api.WorkerTask, jobID string) (bool, error) {
-	if s.Store == nil {
-		return false, fmt.Errorf("recover interrupted promote: merge store not configured")
-	}
-	token, ok, err := s.Store.ReclaimExpiredMergeApply(ctx, jobID)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-	roots := s.taskRootRefs(ctx, task)
-	promote := PromoteRootsForTask(task, roots)
-	if err := session.RollbackTaskCheckpointJournal(ctx, task, roots); err != nil {
-		return true, fmt.Errorf("recover checkpoint promotion: %w", err)
-	}
-	found, err := recoverPromoteTransaction(s.hostDataDirFor(task), jobID, promote, task)
-	if err != nil {
-		return true, fmt.Errorf("recover interrupted promote: %w", err)
-	}
-	cleanupCtx, cancel := promoteCleanupContext(ctx)
-	err = s.Store.ReleaseMergeApply(cleanupCtx, jobID, token)
-	cancel()
-	if err != nil {
-		return true, fmt.Errorf("recover interrupted promote status: %w", err)
-	}
-	if found {
-		if err := removePromoteTransaction(promoteTransactionPath(s.hostDataDirFor(task), jobID)); err != nil {
-			slog.WarnContext(ctx, "recovered promote journal cleanup deferred", "job_id", jobID, "err", err)
-		}
-	}
-	return true, nil
-}
-
-func (s mergeEngine) failPromoteTransaction(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
-	var unstarted *promoteTransactionUnstartedError
-	if errors.As(cause, &unstarted) {
-		return errors.Join(cause, tx.close(), revertPending())
-	}
-	cleanupCtx, cancel := promoteCleanupContext(ctx)
-	defer cancel()
-	if err := session.RollbackTaskCheckpointJournal(cleanupCtx, task, promote.Roots); err != nil {
-		return errors.Join(cause, err)
-	}
-	rollbackErr := tx.rollback(promote, task)
-	if rollbackErr != nil {
-		return errors.Join(cause, rollbackErr)
-	}
-	closeErr := tx.close()
-	return errors.Join(cause, closeErr, revertPending())
-}
-
-func (s mergeEngine) closeCommittedPromoteTransaction(ctx context.Context, tx *promoteTransaction, jobID string) {
-	if err := tx.close(); err != nil {
-		slog.WarnContext(ctx, "committed promote journal cleanup deferred", "job_id", jobID, "err", err)
-	}
 }
 
 type promoteFinishInput struct {

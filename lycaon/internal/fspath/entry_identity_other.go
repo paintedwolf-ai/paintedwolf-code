@@ -9,3 +9,5 @@ func EntryIdentity(string) (string, error) { return "", fmt.Errorf("filesystem i
 func SameFilesystem(string, string) (bool, error) {
 	return false, fmt.Errorf("filesystem identity unavailable")
 }
+
+func identityWithoutDevice(identity string) string { return identity }

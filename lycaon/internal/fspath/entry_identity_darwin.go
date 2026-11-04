@@ -4,6 +4,7 @@ package fspath
 
 import (
 	"fmt"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -29,4 +30,9 @@ func SameFilesystem(from, to string) (bool, error) {
 		return false, err
 	}
 	return a.Dev == b.Dev, nil
+}
+
+func identityWithoutDevice(identity string) string {
+	_, rest, _ := strings.Cut(identity, ":")
+	return rest
 }

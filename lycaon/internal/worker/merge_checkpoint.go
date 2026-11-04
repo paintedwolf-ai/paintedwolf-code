@@ -130,7 +130,7 @@ func promoteTransactionRetainedDir(txPath string) string {
 	if strings.TrimSpace(txPath) == "" {
 		return ""
 	}
-	return strings.TrimSuffix(txPath, ".json") + ".retained"
+	return strings.TrimSuffix(txPath, promoteJournalSuffix) + promoteRetainedSuffix
 }
 
 func promoteRetainedSlot(relPath string) string {
@@ -241,7 +241,7 @@ func validateRetainedPromoteOriginal(txPath string, mutation promoteJournalMutat
 		return fmt.Errorf("cannot recover promote transaction: %q original inode diverged", mutation.Path)
 	}
 	slotID, err := fspath.EntryIdentity(slotPath)
-	if err != nil || slotID != mutation.OriginalIdentity {
+	if err != nil || !fspath.SameEntryAcrossRestart(mutation.OriginalIdentity, slotID) {
 		return fmt.Errorf("cannot recover promote transaction: %q original inode diverged", mutation.Path)
 	}
 	return nil
@@ -251,12 +251,12 @@ func promoteInodeMatchesRetained(txPath, primaryAbs string, mutation promoteJour
 	if mutation.OriginalRetention != promoteRetentionInode {
 		return true
 	}
-	primaryID, err := fspath.EntryIdentity(primaryAbs)
-	if err != nil || primaryID != mutation.OriginalIdentity {
+	primary, err := os.Lstat(primaryAbs)
+	if err != nil {
 		return false
 	}
-	slotID, err := fspath.EntryIdentity(filepath.Join(promoteTransactionRetainedDir(txPath), promoteRetainedSlot(mutation.Path)))
-	return err == nil && slotID == primaryID
+	slot, err := os.Lstat(filepath.Join(promoteTransactionRetainedDir(txPath), promoteRetainedSlot(mutation.Path)))
+	return err == nil && os.SameFile(primary, slot)
 }
 
 func restorePromoteOriginalMutation(txPath string, promote PromoteRoots, task *api.WorkerTask, mutation promoteJournalMutation, verify func(fseffect.Target) error) error {

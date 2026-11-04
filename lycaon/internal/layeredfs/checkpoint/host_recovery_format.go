@@ -52,6 +52,11 @@ func (host *HostPromotion) hostRootIdentities() (map[string]hostRootIdentity, er
 	return roots, nil
 }
 
+// sameHostRoot tolerates a device number that a restart moved.
+func sameHostRoot(live, recorded hostRootIdentity) bool {
+	return live.Path == recorded.Path && fspath.SameEntryAcrossRestart(recorded.Identity, live.Identity)
+}
+
 func hostComponent(id string) bool {
 	return id != "" && id != "." && id != ".." && filepath.IsLocal(id) && filepath.Base(id) == id && !strings.ContainsAny(id, `/\`)
 }
@@ -64,7 +69,7 @@ func (host *HostPromotion) validateHostTransaction(tx hostTransaction) error {
 	if err != nil {
 		return err
 	}
-	if !maps.Equal(roots, tx.Roots) {
+	if !maps.EqualFunc(roots, tx.Roots, sameHostRoot) {
 		return fmt.Errorf("checkpoint: recovery target roots changed")
 	}
 	m, err := host.store.LoadManifest(tx.CheckpointID)
