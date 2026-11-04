@@ -13,7 +13,9 @@ import (
 // refusal repairs references and spends the session tree's shared grounding
 // friction as well as its own retry limit. A report-document refusal adds the
 // conclusions the document owes, so it has its own small limit and leaves the
-// friction budget alone.
+// friction budget alone. A presentation refusal asks for the body back and
+// spends the citation limit without the friction, since nothing was cited
+// wrongly.
 type closeoutRetryBudget struct {
 	kick    anchor.ID
 	attempt int
@@ -47,6 +49,9 @@ func (l *turnCloseout) closeoutRetryBudget(ctx context.Context, sessionID string
 	limit := l.maxCitationGroundingRetries()
 	if binding.CloseoutRetries > 0 {
 		limit = binding.CloseoutRetries
+	}
+	if guidance.PresentationObservation(code) != "" {
+		return closeoutRetryBudget{kick: anchor.CoordinatorPresentationRepair, attempt: st.closeoutRetry.attempt, limit: limit}
 	}
 	budget := closeoutRetryBudget{kick: anchor.CoordinatorCitationGrounding, attempt: st.closeoutRetry.attempt, limit: limit}
 	if l.Deps.RecordGroundingFriction != nil {
