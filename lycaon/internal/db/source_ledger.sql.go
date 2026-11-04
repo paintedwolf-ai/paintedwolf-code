@@ -4142,10 +4142,8 @@ func (q *Queries) MarkSourceInventoryScanning(ctx context.Context, arg MarkSourc
 }
 
 const oldestSourceEffectAtPathAfterOrdinalOnBranch = `-- name: OldestSourceEffectAtPathAfterOrdinalOnBranch :one
-SELECT e.id,
-       CAST(CASE WHEN e.from_path != '' AND NOT (e.from_root_id = sqlc.arg(root_id) AND e.from_path = sqlc.arg(path))
-            THEN '' ELSE COALESCE(e.before_version_id, '') END AS TEXT) AS before_version_id,
-       e.after_version_id, e.ordinal
+SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.ordinal, e.from_root_id, e.from_path
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = ?1 AND o.branch_id = ?2
   AND e.ordinal > ?3 AND e.walk_visible = 1
@@ -4167,11 +4165,12 @@ type OldestSourceEffectAtPathAfterOrdinalOnBranchRow struct {
 	BeforeVersionID string `json:"before_version_id"`
 	AfterVersionID  string `json:"after_version_id"`
 	Ordinal         int64  `json:"ordinal"`
+	FromRootID      string `json:"from_root_id"`
+	FromPath        string `json:"from_path"`
 }
 
 // The first thing this branch recorded at a location past the ordinal, whichever
-// file held it. A move into the location says nothing about what it held before,
-// so that effect reads as having no predecessor.
+// file held it, including a move away from it.
 func (q *Queries) OldestSourceEffectAtPathAfterOrdinalOnBranch(ctx context.Context, arg OldestSourceEffectAtPathAfterOrdinalOnBranchParams) (OldestSourceEffectAtPathAfterOrdinalOnBranchRow, error) {
 	row := q.db.QueryRowContext(ctx, oldestSourceEffectAtPathAfterOrdinalOnBranch,
 		arg.ProjectID,
@@ -4186,6 +4185,8 @@ func (q *Queries) OldestSourceEffectAtPathAfterOrdinalOnBranch(ctx context.Conte
 		&i.BeforeVersionID,
 		&i.AfterVersionID,
 		&i.Ordinal,
+		&i.FromRootID,
+		&i.FromPath,
 	)
 	return i, err
 }
