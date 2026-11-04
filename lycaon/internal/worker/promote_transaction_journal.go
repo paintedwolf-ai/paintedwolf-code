@@ -9,9 +9,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/fssync"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const (
@@ -160,4 +164,170 @@ func syncPromoteDirectory(path string) error {
 		return fmt.Errorf("sync promote transaction directory: %w", err)
 	}
 	return nil
+}
+
+func promoteTransactionRetainedDir(txPath string) string {
+	if strings.TrimSpace(txPath) == "" {
+		return ""
+	}
+	return strings.TrimSuffix(txPath, promoteJournalSuffix) + promoteRetainedSuffix
+}
+
+func promoteRetainedSlot(relPath string) string {
+	return "slot-" + contentSHA256([]byte(relPath))
+}
+
+type retainedPromoteOriginal struct {
+	retention string
+	identity  string
+}
+
+// retainPromoteOriginals links each original into host storage. Each link is
+// durable before the next, and none has any meaning until the applying phase names it.
+func retainPromoteOriginals(txPath string, promote PromoteRoots, task *api.WorkerTask, plans []promoteMutation, effects promoteTransactionEffects) (map[string]retainedPromoteOriginal, error) {
+	retainedDir := promoteTransactionRetainedDir(txPath)
+	retained := make(map[string]retainedPromoteOriginal, len(plans))
+	for _, plan := range plans {
+		if !plan.originalExists {
+			continue
+		}
+		original, err := retainPromoteOriginal(retainedDir, promote, task, plan, effects)
+		if err != nil {
+			return nil, err
+		}
+		retained[plan.path] = original
+		if err := effects.reach(promoteStepOriginalRetained, plan.path); err != nil {
+			return nil, err
+		}
+	}
+	return retained, nil
+}
+
+func retainPromoteOriginal(retainedDir string, promote PromoteRoots, task *api.WorkerTask, plan promoteMutation, effects promoteTransactionEffects) (retainedPromoteOriginal, error) {
+	primaryAbs, _, err := promote.fileAbs(task, plan.path)
+	if err != nil {
+		return retainedPromoteOriginal{}, err
+	}
+	primaryRoot, err := promote.primaryRoot(task, primaryAbs)
+	if err != nil {
+		return retainedPromoteOriginal{}, err
+	}
+	primaryRel, err := filepath.Rel(primaryRoot, primaryAbs)
+	if err != nil {
+		return retainedPromoteOriginal{}, err
+	}
+	slot := promoteRetainedSlot(plan.path)
+	err = effects.link(fseffect.HardLinkRequest{
+		Source:   fseffect.Location{Root: primaryRoot, Rel: primaryRel},
+		Location: fseffect.Location{Root: filepath.Dir(retainedDir), Rel: filepath.Join(filepath.Base(retainedDir), slot)},
+		DirMode:  0o700,
+		Replace:  true,
+	})
+	if fseffect.HardLinkUnavailable(err) {
+		return promoteOriginalWithoutInode(primaryAbs, plan, err)
+	}
+	if err != nil {
+		return retainedPromoteOriginal{}, err
+	}
+	slotPath := filepath.Join(retainedDir, slot)
+	content, exists, mode, err := readOptionalPromoteFile(slotPath)
+	if err != nil {
+		return retainedPromoteOriginal{}, err
+	}
+	if !promoteStateMatches(exists, mode, content, plan.originalExists, plan.originalMode, contentSHA256(plan.original)) {
+		return retainedPromoteOriginal{}, fmt.Errorf("primary changed while promoting %q", plan.path)
+	}
+	origID, err := fspath.EntryIdentity(primaryAbs)
+	if err != nil {
+		return retainedPromoteOriginal{}, err
+	}
+	slotID, err := fspath.EntryIdentity(slotPath)
+	if err != nil {
+		return retainedPromoteOriginal{}, err
+	}
+	if origID == "" || origID != slotID {
+		return retainedPromoteOriginal{}, fmt.Errorf("primary changed while promoting %q", plan.path)
+	}
+	return retainedPromoteOriginal{retention: promoteRetentionInode, identity: slotID}, nil
+}
+
+// promoteOriginalWithoutInode serves a project on another volume from host data.
+// The journal already holds the bytes; only aliases need the inode itself, so
+// those refuse before any mutation rather than sever the link on rollback.
+func promoteOriginalWithoutInode(primaryAbs string, plan promoteMutation, cause error) (retainedPromoteOriginal, error) {
+	links, err := checkpoint.TargetFileLinks(primaryAbs)
+	if err != nil {
+		return retainedPromoteOriginal{}, err
+	}
+	if links > 1 {
+		return retainedPromoteOriginal{}, fmt.Errorf("cannot retain hard-linked original %q: %w", plan.path, cause)
+	}
+	return retainedPromoteOriginal{retention: promoteRetentionContent}, nil
+}
+
+func validateRetainedPromoteOriginal(txPath string, mutation promoteJournalMutation) error {
+	if mutation.OriginalRetention != promoteRetentionInode {
+		return nil
+	}
+	slotPath := filepath.Join(promoteTransactionRetainedDir(txPath), promoteRetainedSlot(mutation.Path))
+	content, exists, mode, err := readOptionalPromoteFile(slotPath)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("cannot recover promote transaction: missing retained original for %q", mutation.Path)
+	}
+	if !promoteStateMatches(exists, mode, content, mutation.OriginalExists, os.FileMode(mutation.OriginalMode), contentSHA256(mutation.Original)) {
+		return fmt.Errorf("cannot recover promote transaction: %q original inode diverged", mutation.Path)
+	}
+	slotID, err := fspath.EntryIdentity(slotPath)
+	if err != nil || !fspath.SameEntryAcrossRestart(mutation.OriginalIdentity, slotID) {
+		return fmt.Errorf("cannot recover promote transaction: %q original inode diverged", mutation.Path)
+	}
+	return nil
+}
+
+func promoteInodeMatchesRetained(txPath, primaryAbs string, mutation promoteJournalMutation) bool {
+	if mutation.OriginalRetention != promoteRetentionInode {
+		return true
+	}
+	primary, err := os.Lstat(primaryAbs)
+	if err != nil {
+		return false
+	}
+	slot, err := os.Lstat(filepath.Join(promoteTransactionRetainedDir(txPath), promoteRetainedSlot(mutation.Path)))
+	return err == nil && os.SameFile(primary, slot)
+}
+
+func restorePromoteOriginalMutation(txPath string, promote PromoteRoots, task *api.WorkerTask, mutation promoteJournalMutation, verify func(fseffect.Target) error) error {
+	plan := promoteMutation{path: mutation.Path, original: mutation.Original, originalExists: mutation.OriginalExists, originalMode: os.FileMode(mutation.OriginalMode)}
+	if mutation.OriginalRetention != promoteRetentionInode {
+		return applyOriginalPromoteMutation(promote, task, plan, verify)
+	}
+	primaryAbs, _, err := promote.fileAbs(task, plan.path)
+	if err != nil {
+		return err
+	}
+	primaryRoot, err := promote.primaryRoot(task, primaryAbs)
+	if err != nil {
+		return err
+	}
+	primaryRel, err := filepath.Rel(primaryRoot, primaryAbs)
+	if err != nil {
+		return err
+	}
+	if err := fseffect.HardLink(fseffect.HardLinkRequest{
+		Source:       fseffect.Location{Root: promoteTransactionRetainedDir(txPath), Rel: promoteRetainedSlot(plan.path)},
+		Location:     fseffect.Location{Root: primaryRoot, Rel: primaryRel},
+		DirMode:      0o750,
+		Replace:      true,
+		BeforeCommit: verify,
+	}); err != nil {
+		return err
+	}
+	_, err = fseffect.UpdateMode(fseffect.ModeUpdateRequest{
+		Location: fseffect.Location{Root: primaryRoot, Rel: primaryRel},
+		Update:   func(os.FileMode) os.FileMode { return plan.originalMode.Perm() },
+	})
+	return err
 }
