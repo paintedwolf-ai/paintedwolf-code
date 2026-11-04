@@ -1,12 +1,12 @@
 package tools
 
 import (
-	"github.com/lycaon/lycaon/internal/sandbox"
-
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
 func UniqueRoots(in []string) []string {
