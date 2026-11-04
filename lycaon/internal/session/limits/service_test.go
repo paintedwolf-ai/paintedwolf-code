@@ -1,6 +1,10 @@
 package limits
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/modelfeed"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -118,4 +124,81 @@ agent_pool:
 	if got := mgr.Compaction(t.Context(), &api.Session{ProviderID: "fw", Model: "accounts/fireworks/models/kimi-k2p7-code"}); got.ModelContextWindow != 196608 {
 		t.Fatalf("session model compaction window = %d want 196608", got.ModelContextWindow)
 	}
+}
+
+type coordinatorPolicy struct{ ref llm.ModelRef }
+
+func (p coordinatorPolicy) GetForProjectRoots([]string) (llm.ModelPolicy, error) {
+	return llm.ModelPolicy{Coordinator: p.ref}, nil
+}
+
+// feedOnlyLimits wires a real registry whose discovery returns ids without lengths.
+func feedOnlyLimits(t *testing.T, model string, feedWindow int) (*Service, *api.Session, *api.Session) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": model}, {"id": "not-in-feed"}}})
+	}))
+	t.Cleanup(server.Close)
+	shipYAML := "providers:\n  - id: hosted\n    kind: openai\n    base_url: " + server.URL + "/v1\n    api_key_env: \"\"\n    models: []\n    http_retry:\n      max_retries: 1\n      max_wait_ms: 1000\n      backoff_ms: [1]\n      statuses: [429]\n      wait_headers: [Retry-After]\n"
+	configtest.Overlay(t, map[config.Rel]string{config.Providers: shipYAML})
+	localPath := filepath.Join(t.TempDir(), "providers.local.yaml")
+	testutil.FailErr(t, "write providers", os.WriteFile(localPath, []byte(shipYAML), 0o600))
+	catalog, err := llm.NewProviderCatalogAt(localPath)
+	testutil.FailErr(t, "catalog", err)
+	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+	testutil.FailErr(t, "set key", creds.Set("hosted", "test-key"))
+	reg, err := llm.NewRegistry(t.Context(), catalog, creds)
+	testutil.FailErr(t, "registry", err)
+	raw, err := json.Marshal(map[string]any{"openai": map[string]any{"id": "openai", "models": map[string]any{model: map[string]any{
+		"id": model, "tool_call": true, "modalities": map[string]any{"output": []string{"text"}}, "limit": map[string]int{"context": feedWindow},
+	}}}})
+	testutil.FailErr(t, "encode feed", err)
+	feed, err := modelfeed.New(modelfeed.Options{
+		CacheDir: filepath.Join(t.TempDir(), "modelfeed"),
+		GetBytes: func(context.Context, string) ([]byte, error) { return raw, nil },
+	})
+	testutil.FailErr(t, "feed", err)
+	_, err = feed.Refresh(t.Context())
+	testutil.FailErr(t, "refresh feed", err)
+	reg.SetModelFeed(t.Context(), feed)
+	mgr := New(settings.DefaultSessionLimits(), nil)
+	mgr.SetModelSources(coordinatorPolicy{llm.ModelRef{ProviderID: "hosted", Model: model}}, reg)
+	return mgr, &api.Session{ProviderID: "hosted", Model: model}, &api.Session{ProviderID: "hosted", Model: "not-in-feed"}
+}
+
+func TestFeedOnlyWindowBoundsLimits(t *testing.T) {
+	t.Run("a 32K window lowers every budget", func(t *testing.T) {
+		mgr, sess, unknown := feedOnlyLimits(t, "feed-small", 32768)
+		got, fallback := mgr.Compaction(t.Context(), sess), mgr.Compaction(t.Context(), unknown)
+		if fallback.ModelContextWindow != 196608 {
+			t.Fatalf("fallback live budget = %d", fallback.ModelContextWindow)
+		}
+		if got.ModelContextWindow != 24576 {
+			t.Fatalf("live budget = %d, want 24576", got.ModelContextWindow)
+		}
+		for _, budget := range []struct {
+			name           string
+			value, ceiling int
+		}{
+			{"live", got.ModelContextWindow, fallback.ModelContextWindow},
+			{"hard ceiling", got.HardCeilingTokens, fallback.HardCeilingTokens},
+			{"target", got.TargetTokens, fallback.TargetTokens},
+			{"trigger", got.CompactionTriggerTokens(), fallback.CompactionTriggerTokens()},
+		} {
+			if budget.value <= 0 || budget.value >= budget.ceiling {
+				t.Errorf("%s = %d, want below the fallback's %d", budget.name, budget.value, budget.ceiling)
+			}
+		}
+		cfg, derived := mgr.ResolveRoots(nil)
+		if cfg.ModelContextWindow != 24576 || derived.MaxToolResultBytes != 65536 || derived.MaxCoordinatorLoopCycles != 32 || derived.MaxWorkerSummaryChars != 2048 {
+			t.Fatalf("resolved live %d, derived %+v", cfg.ModelContextWindow, derived)
+		}
+	})
+	t.Run("a 1M window stays at the absolute cap", func(t *testing.T) {
+		mgr, sess, _ := feedOnlyLimits(t, "feed-large", 1_048_572)
+		got := mgr.Compaction(t.Context(), sess)
+		if got.ModelContextWindow != 196608 || got.HardCeilingTokens != 196608*85/100 {
+			t.Fatalf("live %d, hard %d", got.ModelContextWindow, got.HardCeilingTokens)
+		}
+	})
 }

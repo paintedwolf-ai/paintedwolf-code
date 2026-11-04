@@ -3,17 +3,13 @@
 package launchguard
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
@@ -112,25 +108,5 @@ func buildStreamGTKFixture(t *testing.T) (string, string) {
 
 func streamFixtureDisplay(t *testing.T) string {
 	t.Helper()
-	reader, writer, err := os.Pipe()
-	testutil.FailErr(t, "create owned display readiness", err)
-	defer func() { _ = reader.Close(); _ = writer.Close() }()
-	log, err := os.Create(filepath.Join(t.TempDir(), "xvfb.log"))
-	testutil.FailErr(t, "create display log", err)
-	t.Cleanup(func() { _ = log.Close() })
-	command := exec.Command("Xvfb", "-noreset", "-displayfd", "3", "-screen", "0", "800x600x24", "-nolisten", "tcp")
-	command.ExtraFiles = []*os.File{writer}
-	command.Stdout, command.Stderr = log, log
-	testutil.FailErr(t, "start owned display", command.Start())
-	t.Cleanup(func() { _ = command.Process.Kill(); _ = command.Wait() })
-	_ = writer.Close()
-	testutil.FailErr(t, "bound display readiness", reader.SetReadDeadline(time.Now().Add(30*time.Second)))
-	text, err := bufio.NewReader(reader).ReadString('\n')
-	if err != nil {
-		diagnostic, readErr := os.ReadFile(log.Name())
-		t.Fatalf("receive display number: %v; Xvfb diagnostics (%v): %s", err, readErr, diagnostic)
-	}
-	number, err := strconv.ParseUint(strings.TrimSpace(text), 10, 16)
-	testutil.FailErr(t, "decode display number", err)
-	return fmt.Sprintf(":%d", number)
+	return startFixtureXvfb(t)
 }

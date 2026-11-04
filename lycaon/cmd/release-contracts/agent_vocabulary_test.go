@@ -25,9 +25,9 @@ func TestAgentVocabularyRequiresStableSignaturesAndRetirementSuccessors(t *testi
 			if !tc.removed {
 				after["old"] = factSignature{Name: "old", Type: tc.newType}
 			}
-			retired := map[string][]string{}
+			retired := map[string]retirementSuccessors{}
 			if tc.retired {
-				retired["old"] = []string{"new"}
+				retired["old"] = retirementSuccessors{Names: []string{"new"}}
 			}
 			if tc.missing {
 				delete(after, "new")
@@ -40,10 +40,10 @@ func TestAgentVocabularyRequiresStableSignaturesAndRetirementSuccessors(t *testi
 			}
 		})
 	}
-	if err := checkVocabulary("rejection code", map[string]codeSignature{}, map[string]codeSignature{}, map[string][]string{"OLD": {}}); err == nil {
+	if err := checkVocabulary("rejection code", map[string]codeSignature{}, map[string]codeSignature{}, map[string]retirementSuccessors{"OLD": {}}); err == nil {
 		t.Fatal("retirement without successor passed")
 	}
-	if err := checkVocabulary("rejection code", map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "reject"}}, map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "kick"}}, map[string][]string{}); err == nil || !strings.Contains(err.Error(), "signature") {
+	if err := checkVocabulary("rejection code", map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "reject"}}, map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "kick"}}, map[string]retirementSuccessors{}); err == nil || !strings.Contains(err.Error(), "signature") {
 		t.Fatalf("changed rejection code meaning passed: %v", err)
 	}
 }
