@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -181,8 +182,7 @@ func createWorkerWorkspaceFromSources(
 		return nil, SandboxLayout{}, err
 	}
 	if err := snapshotSourceRoots(ctx, m, binding, sources.Roots); err != nil {
-		_ = m.DestroyWorkerWorkspace(binding)
-		return nil, SandboxLayout{}, err
+		return nil, SandboxLayout{}, errors.Join(err, m.DestroyWorkerWorkspace(binding))
 	}
 	return binding, layout, nil
 }

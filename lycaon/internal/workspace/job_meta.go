@@ -41,6 +41,7 @@ type JobMetaLineage struct {
 	JournalPath               string   `json:"journal_path,omitempty"`
 	ParentCheckpointIDs       []string `json:"parent_checkpoint_ids,omitempty"`
 	LastPublishedCheckpointID string   `json:"last_published_checkpoint_id,omitempty"`
+	CheckpointStoreDir        string   `json:"checkpoint_store_dir,omitempty"`
 	SelectedRootIDs           []string `json:"selected_root_ids,omitempty"`
 	FocusPathHints            []string `json:"focus_path_hints,omitempty"`
 }
@@ -59,7 +60,7 @@ func hasLayeredV2Fields(m JobMeta) bool {
 		m.FallbackReason != "" || m.CopiedEntries != 0 || m.CopiedBytes != 0 ||
 		m.PendingGitInit || m.ViewID != "" || m.PreparedViewID != "" ||
 		m.SourceGeneration != 0 || m.JournalPath != "" || len(m.ParentCheckpointIDs) > 0 ||
-		m.LastPublishedCheckpointID != "" || len(m.SelectedRootIDs) > 0 || len(m.FocusPathHints) > 0
+		m.LastPublishedCheckpointID != "" || m.CheckpointStoreDir != "" || len(m.SelectedRootIDs) > 0 || len(m.FocusPathHints) > 0
 }
 
 // JobMetaRoot identifies one project root in the branch tree.

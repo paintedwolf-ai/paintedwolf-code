@@ -43,7 +43,9 @@ type Coordinator struct {
 	landingsDir    string
 	inventoryPath  string
 	mu             sync.Mutex
-	seq            atomic.Uint64
+	// identityMu serializes read-modify-write of a mount identity, since commands start concurrently.
+	identityMu sync.Mutex
+	seq        atomic.Uint64
 }
 
 // NewCoordinator creates or opens a durable recovery Coordinator at cfg.RootDir.
@@ -73,6 +75,9 @@ func NewCoordinator(cfg CoordinatorConfig) (*Coordinator, error) {
 
 // RootDir returns the coordinator's persistent storage root.
 func (c *Coordinator) RootDir() string { return c.cfg.RootDir }
+
+// CheckpointStore returns the store this coordinator validates, retains and collects.
+func (c *Coordinator) CheckpointStore() *checkpoint.Store { return c.cfg.CheckpointStore }
 
 func injectFault(c *Coordinator, phase TransitionPhase, step string) error {
 	if c.cfg.FaultInjector != nil {

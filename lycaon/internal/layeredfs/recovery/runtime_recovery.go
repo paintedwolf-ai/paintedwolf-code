@@ -32,6 +32,8 @@ func (c *Coordinator) AdoptRecordedView(v RecordedView) error {
 	if strings.TrimSpace(v.WorkerID) == "" || strings.TrimSpace(v.ViewID) == "" {
 		return fmt.Errorf("%w: worker_id and view_id required", ErrCorruptRecoveryMetadata)
 	}
+	c.identityMu.Lock()
+	defer c.identityMu.Unlock()
 	j, err := c.LoadWorkerJournal(v.WorkerID)
 	switch {
 	case errors.Is(err, os.ErrNotExist):

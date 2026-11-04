@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -536,4 +537,58 @@ func startSleeper(t *testing.T) *exec.Cmd {
 	go func() { _ = cmd.Wait(); close(done) }()
 	t.Cleanup(func() { _ = stdin.Close(); _ = cmd.Process.Kill(); <-done })
 	return cmd
+}
+
+// Fixture evidence: the rebuild runs on the fixture mounted adapter, with no kernel mount.
+func TestRebuiltMountedViewPublishesAndSettlesLikeAClaimedOne(t *testing.T) {
+	f := newEngineFixture(t)
+	task := f.claimMountedWorker()
+	view := f.liveView(task.WorkspaceRoot)
+	mutate(t, view, "checkpoint-A\n")
+	f.publish(task, view, "cp-A")
+
+	engine := f.boot()
+	engine.Workspace.WithSelector(mountedSelector())
+	testutil.FailErr(t, "startup recovery", engine.RecoverWorkerViews(t.Context()))
+
+	root := task.WorkspaceRoot
+	if _, ok := consumer.LookupBranchEngine(root); !ok {
+		t.Fatal("rebuilt view has no consumer engine")
+	}
+	rebuilt := f.liveView(root)
+	if rebuilt.ViewID == view.ViewID {
+		t.Fatalf("view %s was not rebuilt", rebuilt.ViewID)
+	}
+	mutate(t, rebuilt, "after-rebuild\n")
+	handled, err := workspace.PublishBranchCheckpoint(t.Context(), root)
+	testutil.FailErr(t, "publish rebuilt view", err)
+	journal, err := engine.Recovery.LoadWorkerJournal(task.ID)
+	testutil.FailErr(t, "journal", err)
+	_, recorded, ok := workspace.BranchCheckpoint(root)
+	if !handled || !ok || journal.LastPublishedCheckpointID != recorded || recorded == "cp-A" {
+		t.Fatalf("handled=%v recorded=%q journal=%q", handled, recorded, journal.LastPublishedCheckpointID)
+	}
+
+	testutil.FailErr(t, "destroy", engine.Workspace.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: root}))
+	if _, ok := consumer.LookupBranchEngine(root); ok {
+		t.Fatal("settlement left the rebuilt view's engine registered")
+	}
+	if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("branch remains: %v", err)
+	}
+}
+
+func TestSettlingALiveViewWithdrawsItsEngine(t *testing.T) {
+	f := newEngineFixture(t)
+	task := f.claimMountedWorker()
+	if _, ok := consumer.LookupBranchEngine(task.WorkspaceRoot); !ok {
+		t.Fatal("claim registered no engine")
+	}
+	testutil.FailErr(t, "settle", f.engine.Workspace.SettleBranchRuntime(t.Context(), task.ID, task.WorkspaceRoot))
+	if _, ok := consumer.LookupBranchEngine(task.WorkspaceRoot); ok {
+		t.Fatal("settlement left the engine registered")
+	}
+	if _, live := workspace.LookupBranchClaimedView(task.WorkspaceRoot); live {
+		t.Fatal("settlement left the claim record")
+	}
 }

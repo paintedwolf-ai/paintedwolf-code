@@ -17,13 +17,16 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// TaskCheckpointStoreSubdir is the conventional checkpoint store subdirectory for a worker task.
-const TaskCheckpointStoreSubdir = workspace.BranchCheckpointStoreSuffix
+// TaskCheckpointStoreSubdir is the conventional checkpoint store subdirectory of an overlay capture.
+const TaskCheckpointStoreSubdir = ".lycaon-checkpoint-store"
 
 // CheckpointStoreDirForTask resolves the durable checkpoint store directory for task if one exists.
 func CheckpointStoreDirForTask(task *api.WorkerTask) string {
 	if task == nil {
 		return ""
+	}
+	if dir, _, ok := taskBranchCheckpoint(task); ok {
+		return dir
 	}
 	for _, raw := range []string{task.WorkspaceBaselinePath, task.WorkspaceOverlayPath} {
 		p := strings.TrimSpace(raw)
@@ -44,6 +47,15 @@ func CheckpointStoreDirForTask(task *api.WorkerTask) string {
 		}
 	}
 	return ""
+}
+
+// taskBranchCheckpoint names the checkpoint a task's mounted branch published. A sealed overlay is
+// newer: a view rebuilt as a materialized tree after that checkpoint captures its result there.
+func taskBranchCheckpoint(task *api.WorkerTask) (storeDir, checkpointID string, ok bool) {
+	if strings.TrimSpace(task.WorkspaceOverlayPath) != "" {
+		return "", "", false
+	}
+	return workspace.BranchCheckpoint(task.WorkspaceRoot)
 }
 
 func isCheckpointStoreDir(dir string) bool {
@@ -72,7 +84,11 @@ func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoin
 	if err != nil {
 		return nil, checkpoint.Manifest{}, true, err
 	}
+	// The store is shared across workers, so only the branch's own record can name its checkpoint.
 	checkpointID := boundTaskCheckpointID(task.ID)
+	if _, published, ok := taskBranchCheckpoint(task); ok && checkpointID == "" {
+		checkpointID = published
+	}
 	var manifest checkpoint.Manifest
 	if checkpointID == "" {
 		manifest, err = store.LoadLatestManifest()

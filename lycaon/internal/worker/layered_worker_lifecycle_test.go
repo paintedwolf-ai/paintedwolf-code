@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -16,9 +17,11 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -306,6 +309,15 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 		t.Fatalf("completion published no checkpoint of the three changes: published=%v entries=%v", published, captured)
 	}
 
+	// A manager with no record of the view must still read the kernel's fact and refuse the tree.
+	stranger := workspace.NewManager(fixture.branches, t.TempDir())
+	if err := stranger.DestroyWorkerWorkspace(binding); !errors.Is(err, workspace.ErrBranchMounted) {
+		t.Fatalf("destroy through a live mount = %v, want ErrBranchMounted", err)
+	}
+	if raw, err := os.ReadFile(filepath.Join(root, "added.go")); err != nil || string(raw) != "package added\n" {
+		t.Fatalf("refused destroy touched the view: %q err=%v", raw, err)
+	}
+
 	testutil.FailErr(t, "destroy branch", fixture.manager.DestroyWorkerWorkspace(binding))
 	destroyed = true
 	if _, ok := consumer.LookupBranchEngine(root); ok {
@@ -317,4 +329,178 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	if _, err := os.Stat(enginepaths.MetaDirForBranchRoot(root)); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("settlement left branch metadata: %v", err)
 	}
+}
+
+func openFixtureRecovery(t *testing.T, branches string) *recovery.Coordinator {
+	t.Helper()
+	root := filepath.Join(branches, ".adapter", "recovery")
+	store, err := checkpoint.NewStore(filepath.Join(root, "checkpoints"))
+	testutil.FailErr(t, "open checkpoint store", err)
+	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{RootDir: root, CheckpointStore: store})
+	testutil.FailErr(t, "open coordinator", err)
+	return coordinator
+}
+
+func fixtureMountedSelector() *adapter.Selector {
+	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+		AdapterID: adapter.AdapterFUSELinux,
+		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
+		},
+	})
+	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
+	return selector
+}
+
+func writeThroughClaimedView(t *testing.T, task *api.WorkerTask, rel, content string) {
+	t.Helper()
+	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
+	if !ok {
+		t.Fatalf("no claimed view for %s", task.ID)
+	}
+	path := layeredfs.QualifiedPath{RootID: view.Prepared.PrimaryRootID, Rel: rel}
+	_, err := view.Prepared.Core.WriteFile(path, []byte(content), 0o644)
+	testutil.FailErr(t, "write through view", err)
+}
+
+// Fixture evidence for the publication chain: no kernel mount. The store is shared by every worker,
+// so each must find only its own checkpoint, and destroying one must leave the other retained.
+func TestCompletionPublishesEachWorkerIntoTheRecoveryStoreAndDestroyDropsItsRetention(t *testing.T) {
+	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
+	first := fixture.claim(t)
+	second := fixture.claim(t)
+	writeThroughClaimedView(t, first, "first.go", "package first\n")
+	writeThroughClaimedView(t, second, "second.go", "package second\n")
+	for _, task := range []*api.WorkerTask{first, second} {
+		if won, err := fixture.queue.Complete(t.Context(), task, api.WorkerResult{Status: "complete"}); err != nil || !won {
+			t.Fatalf("Complete %s: won=%v err=%v", task.ID, won, err)
+		}
+	}
+
+	coordinator := openFixtureRecovery(t, fixture.branches)
+	for task, want := range map[*api.WorkerTask]string{first: "first.go", second: "second.go"} {
+		completed, ok := fixture.queue.Get(task.ID)
+		if !ok || completed.MergeStatus != api.WorkerMergeStatusPending {
+			t.Fatalf("worker %s is not pending review: %+v", task.ID, completed)
+		}
+		store, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+		testutil.FailErr(t, "open task checkpoint store", err)
+		if !published || store.RootDir() != coordinator.CheckpointStore().RootDir() {
+			t.Fatalf("worker %s published=%v store=%v", task.ID, published, store)
+		}
+		if manifest.WorkerID != task.ID || len(manifest.Entries) != 1 || manifest.Entries[0].Path.Rel != want {
+			t.Fatalf("worker %s found another worker's checkpoint: %+v", task.ID, manifest)
+		}
+		journal, err := coordinator.LoadWorkerJournal(task.ID)
+		testutil.FailErr(t, "load journal", err)
+		if journal.LastPublishedCheckpointID != manifest.CheckpointID || journal.ActivePhase != "" {
+			t.Fatalf("journal does not name the published checkpoint: %+v", journal)
+		}
+		if _, err := coordinator.VerifyCheckpointReconstructible(t.Context(), manifest.CheckpointID); err != nil {
+			t.Fatalf("published checkpoint is not reconstructible: %v", err)
+		}
+	}
+
+	testutil.FailErr(t, "destroy first", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: first.ID, Root: first.WorkspaceRoot}))
+	t.Cleanup(func() {
+		_ = fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: second.ID, Root: second.WorkspaceRoot})
+	})
+	if _, err := coordinator.LoadWorkerJournal(first.ID); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("destroy kept the journal: %v", err)
+	}
+	claims, err := coordinator.ListClaims()
+	testutil.FailErr(t, "list claims", err)
+	holders := map[string]bool{}
+	for _, held := range claims {
+		holders[held.WorkerID] = true
+	}
+	if holders[first.ID] || !holders[second.ID] {
+		t.Fatalf("retention after destroying the first worker: %v", holders)
+	}
+	if ids, err := coordinator.ListMountIdentities(first.ID); err != nil || len(ids) != 0 {
+		t.Fatalf("destroy kept the view identity: %v err=%v", ids, err)
+	}
+}
+
+// Fixture evidence: the view has no kernel mount, but the process and its settlement are real.
+func TestDestroySettlesARecordedWriterByItsIdentity(t *testing.T) {
+	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
+	task := fixture.claim(t)
+	writer := osexec.Command("/bin/sleep", "300")
+	testutil.FailErr(t, "start writer", writer.Start())
+	waited := make(chan error, 1)
+	go func() { waited <- writer.Wait() }()
+	t.Cleanup(func() { _ = writer.Process.Kill() })
+
+	testutil.FailErr(t, "record writer", workspace.BranchProcessRecorder(task.WorkspaceRoot)(writer.Process.Pid))
+	coordinator := openFixtureRecovery(t, fixture.branches)
+	identity, ok, err := coordinator.LoadMountIdentity(task.ID, task.ID)
+	testutil.FailErr(t, "load identity", err)
+	if !ok || len(identity.RecordedProcesses) != 1 || identity.RecordedProcesses[0].PID != writer.Process.Pid {
+		t.Fatalf("writer not recorded: ok=%v %+v", ok, identity)
+	}
+
+	testutil.FailErr(t, "destroy", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
+	<-waited
+	if _, ok, err := coordinator.LoadMountIdentity(task.ID, task.ID); err != nil || ok {
+		t.Fatalf("settled identity remains: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestRecordingARepeatedWriterDropsTheOnesThatEnded(t *testing.T) {
+	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
+	task := fixture.claim(t)
+	t.Cleanup(func() {
+		_ = fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot})
+	})
+	record := workspace.BranchProcessRecorder(task.WorkspaceRoot)
+	for range 3 {
+		ended := osexec.Command("/usr/bin/true")
+		testutil.FailErr(t, "start", ended.Start())
+		testutil.FailErr(t, "record", record(ended.Process.Pid))
+		testutil.FailErr(t, "wait", ended.Wait())
+	}
+	identity, _, err := openFixtureRecovery(t, fixture.branches).LoadMountIdentity(task.ID, task.ID)
+	testutil.FailErr(t, "load identity", err)
+	if len(identity.RecordedProcesses) > 1 {
+		t.Fatalf("ended writers accumulate: %+v", identity.RecordedProcesses)
+	}
+}
+
+func TestAWorkerRepositoryIsPrivateAndLeavesTheCheckpoint(t *testing.T) {
+	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
+	task := fixture.claim(t)
+	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
+	if !ok {
+		t.Fatal("no claimed view")
+	}
+	core, rootID := view.Prepared.Core, view.Prepared.PrimaryRootID
+	_, err := core.Mkdir(layeredfs.QualifiedPath{RootID: rootID, Rel: "nested"}, 0o755)
+	testutil.FailErr(t, "mkdir nested", err)
+	_, err = core.Mkdir(layeredfs.QualifiedPath{RootID: rootID, Rel: "nested/.git"}, 0o755)
+	testutil.FailErr(t, "mkdir nested .git", err)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: rootID, Rel: "nested/.git/HEAD"}, []byte("ref: refs/heads/main\n"), 0o644)
+	testutil.FailErr(t, "write nested HEAD", err)
+	writeThroughClaimedView(t, task, "nested/file.go", "package nested\n")
+	if won, err := fixture.queue.Complete(t.Context(), task, api.WorkerResult{Status: "complete"}); err != nil || !won {
+		t.Fatalf("Complete: won=%v err=%v", won, err)
+	}
+	completed, _ := fixture.queue.Get(task.ID)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	testutil.FailErr(t, "open checkpoint", err)
+	captured := map[string]bool{}
+	for _, entry := range manifest.Entries {
+		captured[entry.Path.Rel] = true
+		if layeredfs.IsGitMetadataPath(entry.Path.Rel) {
+			t.Fatalf("checkpoint carries Git metadata: %s", entry.Path.Rel)
+		}
+	}
+	if !published || !captured["nested/file.go"] {
+		t.Fatalf("published=%v entries=%v", published, captured)
+	}
+	if _, err := os.Stat(filepath.Join(fixture.source, "nested")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("nested repository reached the source: %v", err)
+	}
+	testutil.FailErr(t, "destroy", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 }

@@ -134,3 +134,53 @@ func TestMaterializedRootsAreManagedGitViewsForThePrimaryWorker(t *testing.T) {
 		t.Fatalf("primary view history = %q", out)
 	}
 }
+
+// refusingAdapter fails or leaves unsettled every release of a view a binding names.
+type refusingAdapter struct {
+	adapter.Adapter
+	receipt adapter.ReleaseReceipt
+	err     error
+}
+
+func (a refusingAdapter) ID() adapter.AdapterID { return adapter.AdapterEagerCopy }
+
+func (a refusingAdapter) Release(context.Context, string) (adapter.ReleaseReceipt, error) {
+	return a.receipt, a.err
+}
+
+func TestDestroyKeepsTheBranchWhenAViewDoesNotRelease(t *testing.T) {
+	for name, adp := range map[string]refusingAdapter{
+		"release error": {err: errors.New("still held")},
+		"unsettled":     {receipt: adapter.ReleaseReceipt{Settled: false, ReasonCode: adapter.ReasonCleanupFailed}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			branches := t.TempDir()
+			root := filepath.Join(branches, "project", "job-kept")
+			testutil.FailErr(t, "mkdir branch", os.MkdirAll(root, 0o750))
+			keep := filepath.Join(root, "result.txt")
+			testutil.FailErr(t, "write result", os.WriteFile(keep, []byte("result\n"), 0o644))
+			manager := workspace.NewManager(branches, t.TempDir())
+			binding := &workspace.Binding{ID: "job-kept", Root: root, Adapter: adp, View: &adapter.PreparedView{ViewID: "view-kept"}}
+
+			if err := manager.DestroyWorkerWorkspace(binding); err == nil {
+				t.Fatal("destroy ignored the failed release")
+			}
+			if _, err := os.Stat(keep); err != nil {
+				t.Fatalf("failed release deleted the branch: %v", err)
+			}
+		})
+	}
+}
+
+func TestDestroyTreatsAViewTheAdapterNoLongerHoldsAsReleased(t *testing.T) {
+	branches := t.TempDir()
+	root := filepath.Join(branches, "project", "job-gone")
+	testutil.FailErr(t, "mkdir branch", os.MkdirAll(root, 0o750))
+	binding := &workspace.Binding{ID: "job-gone", Root: root, Adapter: refusingAdapter{
+		err: &adapter.AdapterError{AdapterID: adapter.AdapterEagerCopy, Op: "release", ReasonCode: adapter.ReasonViewNotFound},
+	}, View: &adapter.PreparedView{ViewID: "view-gone"}}
+	testutil.FailErr(t, "destroy", workspace.NewManager(branches, t.TempDir()).DestroyWorkerWorkspace(binding))
+	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("branch remains: %v", err)
+	}
+}

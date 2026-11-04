@@ -78,6 +78,7 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 		tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
 		tctx.Source.Roots = layout.Roots
 		tctx.Source.WorkerBranchRoot = root
+		tctx.Source.RecordViewProcess = workspace.BranchProcessRecorder(root)
 		branchState, err := m.branchState(root)
 		if err != nil {
 			return tctx, err
@@ -195,6 +196,7 @@ func (m *Service) EnsureBranch(ctx context.Context, tctx tools.ToolContext) (too
 	}
 	tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
 	tctx.Source.WorkerBranchRoot = root
+	tctx.Source.RecordViewProcess = workspace.BranchProcessRecorder(root)
 	layout, err := workspace.LoadBranchLayout(root)
 	if err != nil {
 		return tctx, err

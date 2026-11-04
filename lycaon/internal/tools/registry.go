@@ -191,6 +191,8 @@ type InvocationSource struct {
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
+	// RecordViewProcess durably names a process started in the worker's view, so recovery can settle it.
+	RecordViewProcess func(pid int) error
 	// WorkerSourceRoots are primary roots captured into the private branch.
 	WorkerSourceRoots []string
 	// BranchWorkspace validates and prepares the branch.

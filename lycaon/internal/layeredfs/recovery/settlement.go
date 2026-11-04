@@ -171,8 +171,11 @@ func killRecordedProcess(process adapter.ProcessIdentity) error {
 }
 
 // RecordWorkerProcess adds a started writer's identity to its view's record before the process
-// can mutate, so a later engine can settle it.
+// can mutate, so a later engine can settle it. Writers that ended leave the record, which keeps it
+// to the view's live processes however many commands the worker runs.
 func (c *Coordinator) RecordWorkerProcess(workerID, viewID string, process adapter.ProcessIdentity) error {
+	c.identityMu.Lock()
+	defer c.identityMu.Unlock()
 	ident, ok, err := c.LoadMountIdentity(workerID, viewID)
 	if err != nil {
 		return err
@@ -180,6 +183,27 @@ func (c *Coordinator) RecordWorkerProcess(workerID, viewID string, process adapt
 	if !ok {
 		return fmt.Errorf("%w: no recorded view %s for worker %s", ErrCorruptRecoveryMetadata, viewID, workerID)
 	}
-	ident.RecordedProcesses = append(ident.RecordedProcesses, process)
+	live := ident.RecordedProcesses[:0]
+	for _, recorded := range ident.RecordedProcesses {
+		if !recorded.Ended() {
+			live = append(live, recorded)
+		}
+	}
+	ident.RecordedProcesses = append(live, process)
 	return c.RecordMountIdentity(ident)
+}
+
+// SettleRecordedWriters stops the recorded writers of a view this engine is about to release.
+func (c *Coordinator) SettleRecordedWriters(ctx context.Context, workerID, viewID string) error {
+	ident, ok, err := c.LoadMountIdentity(workerID, viewID)
+	if err != nil || !ok {
+		return err
+	}
+	_, err = settleRecordedProcesses(ctx, c, ident)
+	return err
+}
+
+// ForgetReleasedView drops the records of a view whose adapter already released it.
+func (c *Coordinator) ForgetReleasedView(workerID, viewID string) error {
+	return forgetSettledView(c, workerID, viewID)
 }

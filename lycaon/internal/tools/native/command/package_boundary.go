@@ -21,6 +21,7 @@ func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *con
 		launch = launch.WithExtraEnv(lycexec.ScratchDirEnv+"="+scratch, "TMPDIR="+scratch, "TMP="+scratch, "TEMP="+scratch)
 	}
 	launch.CurrentAuthority = tools.AgentLaunchAuthority(tctx, confinement, lease, commandEgressIdentity(tctx, subject, commandLine))
+	launch.RecordStart = tctx.Source.RecordViewProcess
 	if tctx.Files.PackageExecution != nil {
 		launch = launch.WithExtraEnv(packageExecutionCacheEnv()...)
 	}

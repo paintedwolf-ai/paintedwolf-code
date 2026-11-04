@@ -168,7 +168,9 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 			return ErrWorkerBranchClaimFailed
 		}
 		if filepath.Clean(stored.WorkspaceRoot) != filepath.Clean(binding.Root) {
-			_ = ws.DestroyWorkerWorkspace(binding)
+			if err := ws.DestroyWorkerWorkspace(binding); err != nil {
+				workerWorkspaceLog.Warn("losing worker workspace left in custody", "job_id", task.ID, "error", err)
+			}
 		}
 		task.WorkspaceRoot, task.WorkspaceBaselinePath = stored.WorkspaceRoot, stored.WorkspaceBaselinePath
 	} else {

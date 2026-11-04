@@ -2,10 +2,13 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
@@ -16,9 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 )
 
-// BranchCheckpointStoreSuffix names the sibling directory holding a branch's published checkpoints.
-const BranchCheckpointStoreSuffix = ".lycaon-checkpoint-store"
-
+const publishOperation = "publish_checkpoint"
 
 // layeredServices are the host services every view on this Manager's branch root shares.
 type layeredServices struct {
@@ -91,6 +92,7 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 		}
 		claims, err = recovery.NewCoordinator(recovery.CoordinatorConfig{
 			RootDir: recoveryDir, CheckpointStore: store, GitStore: gitManager.Store(), GitManager: gitManager,
+			ProcessCtrl: recovery.RecordedProcessController{},
 		})
 		if err != nil {
 			return nil, err
@@ -112,25 +114,22 @@ type branchLayeredView struct {
 	engine    *consumer.Engine
 	publisher *checkpoint.Publisher
 	services  *layeredServices
+	workerID  string
 	viewID    string
-}
-
-func branchCheckpointStoreDir(branchRoot string) string {
-	return filepath.Clean(branchRoot) + BranchCheckpointStoreSuffix
 }
 
 // bindViewConsumer creates the view's one consumer Engine and its checkpoint publisher. The Engine
 // registers itself for every path of the view, and its settlement unregisters all of them.
 func bindViewConsumer(
-	binding *Binding,
+	branchRoot string,
 	cv *claim.ClaimedView,
 	projectID string,
 	tracker *observation.Tracker,
 	services *layeredServices,
 ) (*branchLayeredView, error) {
 	prepared := cv.Prepared
-	store, err := checkpoint.NewStore(branchCheckpointStoreDir(binding.Root))
-	if err != nil {
+	store := services.recovery.CheckpointStore()
+	if err := adoptClaimedView(cv, projectID, services.recovery); err != nil {
 		return nil, err
 	}
 	roots := make([]layeredfs.RootSpec, 0, len(prepared.Roots))
@@ -148,7 +147,7 @@ func bindViewConsumer(
 	if err != nil {
 		return nil, err
 	}
-	consumer.RegisterBranchEngine(binding.Root, engine)
+	consumer.RegisterBranchEngine(branchRoot, engine)
 	publisher, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		Core: prepared.Core, Store: store, WorkerID: cv.Identity.WorkerID, TaskID: cv.Identity.WorkerID,
 		ProjectID: cv.Identity.ProjectID, SourceGeneration: fmt.Sprint(cv.Identity.SourceGeneration), SelectedRoots: roots,
@@ -160,25 +159,79 @@ func bindViewConsumer(
 				}
 				return receipt.Token, release, nil
 			},
+			CommitRetention: func(ctx context.Context, checkpointID string, blobs, gitObjects []string) error {
+				return services.recovery.CommitCheckpointRetention(ctx, cv.Identity.WorkerID, checkpointID, blobs, gitObjects, cv.Metadata.Checkpoints.ParentCheckpointIDs)
+			},
 		},
 	})
 	if err != nil {
 		consumer.UnregisterEngine(engine)
 		return nil, err
 	}
-	return &branchLayeredView{engine: engine, publisher: publisher, services: services, viewID: prepared.ViewID}, nil
+	return &branchLayeredView{engine: engine, publisher: publisher, services: services, workerID: cv.Identity.WorkerID, viewID: prepared.ViewID}, nil
+}
+
+// adoptClaimedView gives recovery the view's journal and identity before any process can enter it, so
+// writers have a record to join and a later engine settles this view like any other.
+func adoptClaimedView(cv *claim.ClaimedView, projectID string, coordinator *recovery.Coordinator) error {
+	prepared := cv.Prepared
+	connections, err := adapter.LoadRecordedConnections(prepared.RuntimeViewDir)
+	if err != nil {
+		return err
+	}
+	mountPaths := connectionMountPaths(connections)
+	if len(mountPaths) == 0 {
+		for _, root := range prepared.Roots {
+			mountPaths = append(mountPaths, root.WorkspacePath)
+		}
+	}
+	return coordinator.AdoptRecordedView(recovery.RecordedView{
+		WorkerID: cv.Identity.WorkerID, ViewID: prepared.ViewID, TaskID: cv.Identity.WorkerID, ProjectID: projectID,
+		AdapterID: cv.Adapter.ID(), Mounted: true, BackingDir: prepared.BackingDir, RuntimeViewDir: prepared.RuntimeViewDir,
+		MountPaths: mountPaths, Connections: connections,
+	})
 }
 
 // settleBranchLayeredView releases a mounted branch. Its Engine is withdrawn first so nothing new
 // starts on the view, and restored if settlement fails, because the view is then still live.
 func settleBranchLayeredView(ctx context.Context, branchRoot string, view *branchLayeredView) error {
 	consumer.UnregisterEngine(view.engine)
-	err := view.services.coordinator.ReleaseWorkerView(ctx, view.viewID, view.services.retention)
+	err := view.services.recovery.SettleRecordedWriters(ctx, view.workerID, view.viewID)
+	if err == nil {
+		err = view.services.coordinator.ReleaseWorkerView(ctx, view.viewID, view.services.retention)
+	}
+	if err == nil {
+		err = view.services.recovery.ForgetReleasedView(view.workerID, view.viewID)
+	}
 	if err != nil {
 		consumer.RestoreEngine(view.engine, branchRoot)
 		return err
 	}
 	return nil
+}
+
+// BranchProcessRecorder returns the launch hook naming each process started in branchRoot's mounted
+// view. The view is looked up at each start because recovery can rebuild it on another adapter.
+func BranchProcessRecorder(branchRoot string) func(pid int) error {
+	clean := filepath.Clean(branchRoot)
+	return func(pid int) error {
+		raw, ok := sharedBranchViews.Load(clean)
+		if !ok {
+			return nil
+		}
+		st := raw.(branchViewState)
+		if st.selection.Facts.PreparationKind != adapter.PreparationMounted || len(st.views) == 0 || st.views[0] == nil {
+			return nil
+		}
+		if st.writers == nil {
+			return fmt.Errorf("mounted view of %s has no recovery record for its writers", clean)
+		}
+		identity, err := adapter.CurrentProcessIdentity(pid)
+		if err != nil {
+			return err
+		}
+		return st.writers.RecordWorkerProcess(jobIDForBranch(clean), st.views[0].ViewID, identity)
+	}
 }
 
 // PublishBranchCheckpoint publishes the mounted branch's private changes under the adapter's barrier.
@@ -190,36 +243,86 @@ func PublishBranchCheckpoint(ctx context.Context, branchRoot string) (handled bo
 	if !ok || rec.layered == nil {
 		return false, nil
 	}
-	view := rec.layered
-	checkpointID := fmt.Sprintf("%s-completion", view.viewID)
+	return true, publishLayeredCheckpoint(ctx, branchRoot, rec.layered)
+}
+
+// publishLayeredCheckpoint journals the publication around the transaction: a crash between the two
+// leaves a begun phase that recovery treats as interrupted, and only a committed transition names
+// the checkpoint a worker can rebuild from. The branch metadata then points promotion at it.
+func publishLayeredCheckpoint(ctx context.Context, branchRoot string, view *branchLayeredView) error {
+	checkpointID := fmt.Sprintf("%s-%s", view.viewID, uuid.NewString()[:8])
+	coordinator := view.services.recovery
+	if err := coordinator.RecordTransition(view.workerID, view.viewID, recovery.PhasePublication, recovery.StateBegin, checkpointID, publishOperation, nil, false); err != nil {
+		return err
+	}
+	result, err := publishWithPrivateGit(ctx, view, checkpointID)
+	if err != nil {
+		_, stateErr := view.services.coordinator.RecordCheckpointFailure(view.viewID, checkpointID, adapter.ReasonBarrierFailed, err.Error())
+		return errors.Join(err, stateErr, coordinator.RecordTransition(view.workerID, view.viewID, recovery.PhasePublication, recovery.StateFailed, checkpointID, publishOperation, nil, false))
+	}
+	if err := coordinator.RecordTransition(view.workerID, view.viewID, recovery.PhasePublication, recovery.StateCommitted, checkpointID, publishOperation, nil, false); err != nil {
+		return err
+	}
+	if _, err := view.services.coordinator.RecordCheckpointPublished(view.viewID, result.Manifest.CheckpointID); err != nil {
+		return err
+	}
+	return recordBranchCheckpoint(branchRoot, coordinator.CheckpointStore(), result.Manifest.CheckpointID)
+}
+
+func recordBranchCheckpoint(branchRoot string, store *checkpoint.Store, checkpointID string) error {
+	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
+	meta, err := LoadJobMeta(metaDir)
+	if err != nil {
+		return err
+	}
+	meta.LastPublishedCheckpointID, meta.CheckpointStoreDir = checkpointID, store.RootDir()
+	return WriteJobMeta(metaDir, meta)
+}
+
+func publishWithPrivateGit(ctx context.Context, view *branchLayeredView, checkpointID string) (checkpoint.PublishResult, error) {
 	git, err := privateGitSnapshot(ctx, view.services.privateGit, view.viewID, checkpointID)
 	if err != nil {
-		return true, err
+		return checkpoint.PublishResult{}, err
 	}
-	result, err := view.publisher.Publish(ctx, checkpoint.PublishRequest{
+	return view.publisher.Publish(ctx, checkpoint.PublishRequest{
 		CheckpointID: checkpointID, Trigger: checkpoint.TriggerExplicitCapture, PrivateGit: git,
 	})
-	if err != nil {
-		_, _ = view.services.coordinator.RecordCheckpointFailure(view.viewID, checkpointID, adapter.ReasonBarrierFailed, err.Error())
-		return true, err
+}
+
+// BranchCheckpoint names the store and checkpoint a branch last published.
+func BranchCheckpoint(branchRoot string) (storeDir, checkpointID string, ok bool) {
+	clean := strings.TrimSpace(branchRoot)
+	if clean == "" {
+		return "", "", false
 	}
-	_, _ = view.services.coordinator.RecordCheckpointPublished(view.viewID, result.Manifest.CheckpointID)
-	return true, nil
+	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(filepath.Clean(clean)))
+	if err != nil || meta.CheckpointStoreDir == "" || meta.LastPublishedCheckpointID == "" {
+		return "", "", false
+	}
+	return meta.CheckpointStoreDir, meta.LastPublishedCheckpointID, true
 }
 
 // privateGitSnapshot captures Git state for the checkpoint only once the repository was initialized:
 // a view whose worker never touched Git has none, and capturing must not initialize it.
 func privateGitSnapshot(ctx context.Context, mgr *privategit.Manager, viewID, checkpointID string) (checkpoint.PrivateGitSnapshot, error) {
+	snapshot := checkpoint.PrivateGitSnapshot{}
 	metrics, initialized := mgr.RepoMetrics(viewID, ".")
-	if !initialized || metrics.State != privategit.StateReady {
-		return checkpoint.PrivateGitSnapshot{}, nil
+	if initialized && metrics.State == privategit.StateReady {
+		state, err := mgr.CaptureCheckpointGitState(ctx, viewID, checkpointID)
+		if err != nil {
+			return checkpoint.PrivateGitSnapshot{}, err
+		}
+		snapshot.HeadRef, snapshot.Refs, snapshot.RetainedObjects = state.HeadSymbolic, state.Refs, state.Artifact.ReachableOIDs
 	}
-	state, err := mgr.CaptureCheckpointGitState(ctx, viewID, checkpointID)
-	if err != nil {
-		return checkpoint.PrivateGitSnapshot{}, err
+	for _, secondary := range mgr.SecondaryViews(viewID) {
+		if metrics, initialized := mgr.RepoMetrics(secondary, "."); !initialized || metrics.State != privategit.StateReady {
+			continue
+		}
+		state, err := mgr.CaptureCheckpointGitState(ctx, secondary, checkpointID+"-"+secondary)
+		if err != nil {
+			return checkpoint.PrivateGitSnapshot{}, err
+		}
+		snapshot.RetainedObjects = append(snapshot.RetainedObjects, state.Artifact.ReachableOIDs...)
 	}
-	return checkpoint.PrivateGitSnapshot{
-		HeadRef: state.HeadSymbolic, Refs: state.Refs,
-		RetainedObjects: state.Artifact.ReachableOIDs,
-	}, nil
+	return snapshot, nil
 }

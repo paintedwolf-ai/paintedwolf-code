@@ -279,7 +279,7 @@ func (m *Manager) releaseLiveJournaledViews(ctx context.Context, jobID, root str
 	delete(m.views, key)
 	m.viewsMu.Unlock()
 	sharedBranchViews.Delete(key)
-	releaseBranchClaimState(key)
+	forgetSettledBranchClaim(key)
 	return nil
 }
 
@@ -319,6 +319,14 @@ func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string
 		m.recordBranchViews(root, choice, result.PreparedView)
 		if err := markSnapshotCompleteWithClaim(root, choice, result.PreparedView, nil, nil); err != nil {
 			return false, err
+		}
+		if err := recordBranchCheckpoint(root, m.recovery.CheckpointStore(), journal.LastPublishedCheckpointID); err != nil {
+			return false, err
+		}
+		if choice.Facts.PreparationKind == adapter.PreparationMounted {
+			if err := m.adoptRecoveredMountedView(ctx, root, jobID, journal.ProjectID, choice.Adapter, result.PreparedView); err != nil {
+				return false, err
+			}
 		}
 	}
 	return true, nil

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -19,7 +20,7 @@ import (
 
 func TestCreateWorkerWorkspaceCapturesCompleteImmutableSnapshot(t *testing.T) {
 	primary := t.TempDir()
-	for _, rel := range []string{".git/HEAD", settingsoverlay.Rel("blueprints/x.md"), "main.go", "pkg/a.go"} {
+	for _, rel := range []string{settingsoverlay.Rel("blueprints/x.md"), "main.go", "pkg/a.go"} {
 		p := filepath.Join(primary, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			testutil.FailErr(t, "mkdir", err)
@@ -40,7 +41,7 @@ func TestCreateWorkerWorkspaceCapturesCompleteImmutableSnapshot(t *testing.T) {
 		t.Fatalf("claimed snapshot missing pkg/a.go: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(binding.Root, ".git")); !os.IsNotExist(err) {
-		t.Fatal("claimed snapshot must exclude repository metadata")
+		t.Fatal("a source with no repository has none in its snapshot")
 	}
 	meta, err := workspace.LoadJobMeta(enginepaths.MetaDirForBranchRoot(binding.Root))
 	testutil.FailErr(t, "LoadJobMeta", err)
@@ -49,6 +50,18 @@ func TestCreateWorkerWorkspaceCapturesCompleteImmutableSnapshot(t *testing.T) {
 	}
 	if len(meta.Roots) != 1 || meta.Roots[0].Path != filepath.Clean(primary) {
 		t.Fatalf("roots=%v", meta.Roots)
+	}
+}
+
+func TestCreateWorkerWorkspaceRefusesACorruptSourceRepository(t *testing.T) {
+	primary := t.TempDir()
+	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(primary, ".git"), 0o755))
+	testutil.FailErr(t, "write HEAD", os.WriteFile(filepath.Join(primary, ".git", "HEAD"), []byte("x"), 0o644))
+	testutil.FailErr(t, "write main.go", os.WriteFile(filepath.Join(primary, "main.go"), []byte("x"), 0o644))
+	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
+	_, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "corrupt")
+	if !errors.Is(err, privategit.ErrCorruptObjectStore) {
+		t.Fatalf("claim over a corrupt repository = %v, want a typed refusal", err)
 	}
 }
 

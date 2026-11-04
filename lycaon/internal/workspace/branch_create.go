@@ -195,12 +195,38 @@ func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Bindi
 			return nil, nil, errors.Join(err, services.coordinator.ReleaseWorkerView(ctx, binding.ID, services.retention))
 		}
 	}
-	layered, err := bindViewConsumer(binding, cv, projectID, tracker, services)
+	layered, err := bindViewConsumer(binding.Root, cv, projectID, tracker, services)
 	if err != nil {
 		return nil, nil, errors.Join(err, services.coordinator.ReleaseWorkerView(ctx, binding.ID, services.retention))
 	}
 	recordBranchClaimState(binding.Root, cv, snap, layered)
 	return cv.Prepared, cv, nil
+}
+
+// adoptRecoveredMountedView gives a view recovery rebuilt the records a claim gives a new one: an
+// Engine for its consumers, a publisher for completion, and settlement through the coordinator.
+func (m *Manager) adoptRecoveredMountedView(ctx context.Context, branchRoot, jobID, projectID string, adp adapter.Adapter, view *adapter.PreparedView) error {
+	services, err := m.layered()
+	if err != nil {
+		return err
+	}
+	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: view.ViewID, Facts: observation.UnknownVisibilityFacts(string(adp.ID()))})
+	if err != nil {
+		return err
+	}
+	cv, err := services.coordinator.AdoptPreparedView(ctx, claim.ClaimRequest{
+		Identity: claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: view.ViewID, SourceGeneration: 1},
+		Hooks:    claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
+	}, adp, view)
+	if err != nil {
+		return err
+	}
+	layered, err := bindViewConsumer(branchRoot, cv, projectID, tracker, services)
+	if err != nil {
+		return errors.Join(err, services.coordinator.ReleaseWorkerView(ctx, view.ViewID, services.retention))
+	}
+	recordBranchClaimState(branchRoot, cv, cv.State, layered)
+	return nil
 }
 
 // viewWritersHeldByBarrier is the barrier's writer step for an engine-served view. The server holds
@@ -300,10 +326,20 @@ func (m *Manager) refuseLiveBranchView(branchRoot, jobID string) error {
 	if supervisor, ok := rec.claimed.Adapter.(adapter.MountSupervisor); ok && rec.layered.services == services && supervisor.IsViewActive(rec.layered.viewID) {
 		return ErrBranchInUse
 	}
-	consumer.UnregisterEngine(rec.layered.engine)
-	rec.layered.services.coordinator.ForgetSettledView(rec.layered.viewID)
-	releaseBranchClaimState(branchRoot)
+	forgetSettledBranchClaim(branchRoot)
 	return nil
+}
+
+// forgetSettledBranchClaim drops the live records of a view another path settled through its adapter.
+func forgetSettledBranchClaim(branchRoot string) {
+	branchClaimsMu.RLock()
+	rec := branchClaimStates[filepath.Clean(branchRoot)]
+	branchClaimsMu.RUnlock()
+	if rec.layered != nil {
+		consumer.UnregisterEngine(rec.layered.engine)
+		rec.layered.services.coordinator.ForgetSettledView(rec.layered.viewID)
+	}
+	releaseBranchClaimState(branchRoot)
 }
 
 func (m *Manager) createBranchSkeleton(

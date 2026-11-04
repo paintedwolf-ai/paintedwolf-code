@@ -182,7 +182,7 @@ func (f *engineFixture) publisher(task *api.WorkerTask, view *adapter.PreparedVi
 	f.t.Helper()
 	publisher, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		Core: view.Core, Store: checkpointStore(f), WorkerID: task.ID, TaskID: task.ID,
-		ProjectID: filepath.Base(filepath.Dir(task.WorkspaceRoot)), SourceGeneration: "1",
+		ProjectID: task.ProjectID, SourceGeneration: "1",
 		SelectedRoots: []layeredfs.RootSpec{{ID: fixtureRootID, Label: fixtureRootID, TrunkPath: f.project, IsPrimary: true}},
 		Callbacks: checkpoint.BarrierCallbacks{
 			CommitRetention: func(ctx context.Context, id string, blobs, git []string) error {
@@ -208,7 +208,7 @@ func journalFromBranch(f *engineFixture, task *api.WorkerTask) {
 		return
 	}
 	testutil.FailErr(f.t, "adopt view", f.engine.Recovery.AdoptRecordedView(recovery.RecordedView{
-		WorkerID: task.ID, ViewID: task.ID, TaskID: task.ID, ProjectID: filepath.Base(filepath.Dir(task.WorkspaceRoot)),
+		WorkerID: task.ID, ViewID: task.ID, TaskID: task.ID, ProjectID: task.ProjectID,
 		AdapterID: adapter.AdapterFUSELinux, Mounted: true, BackingDir: f.liveView(task.WorkspaceRoot).BackingDir,
 		RuntimeViewDir: f.liveView(task.WorkspaceRoot).RuntimeViewDir,
 	}))

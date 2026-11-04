@@ -159,6 +159,8 @@ type Binding struct {
 type branchViewState struct {
 	selection WorkspaceStrategySelection
 	views     []*adapter.PreparedView
+	// writers records processes for a mounted view, whose settlement names them.
+	writers *recovery.Coordinator
 }
 
 // Manager creates and destroys per-job worker sandboxes, retaining a central
@@ -215,6 +217,12 @@ func (m *Manager) recordBranchViews(branchRoot string, sel WorkspaceStrategySele
 		selection: sel,
 		views:     append([]*adapter.PreparedView(nil), views...),
 	}
+	if sel.Facts.PreparationKind == adapter.PreparationMounted {
+		st.writers = m.recovery
+		if st.writers == nil && m.services != nil {
+			st.writers = m.services.recovery
+		}
+	}
 	m.views[clean] = st
 	sharedBranchViews.Store(clean, st)
 }
@@ -238,26 +246,63 @@ func (m *Manager) forgetBranchViews(branchRoot string) {
 	sharedBranchViews.Delete(key)
 }
 
-func (m *Manager) releaseBranchViews(branchRoot string) {
-	m.viewsMu.Lock()
+// releaseBranchViews releases the adapter views recorded for a branch and names the ones it settled.
+// A view that fails stays recorded with its data in custody, and the caller keeps the branch.
+func (m *Manager) releaseBranchViews(branchRoot string) (map[string]bool, error) {
 	key := filepath.Clean(branchRoot)
+	m.viewsMu.Lock()
 	st, ok := m.views[key]
-	if ok {
-		delete(m.views, key)
-	}
 	m.viewsMu.Unlock()
-	sharedBranchViews.Delete(key)
+	settled := make(map[string]bool, len(st.views))
 	if !ok || st.selection.Adapter == nil {
-		return
+		return settled, nil
 	}
+	remaining := make([]*adapter.PreparedView, 0, len(st.views))
+	var errs []error
 	for _, v := range st.views {
-		if v != nil {
-			_, _ = st.selection.Adapter.Release(context.Background(), v.ViewID)
-			if m.services != nil {
-				_ = m.services.privateGit.ReleaseView(v.ViewID)
+		if v == nil {
+			continue
+		}
+		if err := releaseAdapterView(st.selection.Adapter, v.ViewID); err != nil {
+			errs = append(errs, err)
+			remaining = append(remaining, v)
+			continue
+		}
+		settled[v.ViewID] = true
+		if m.services != nil {
+			if err := m.services.privateGit.ReleaseView(v.ViewID); err != nil {
+				errs = append(errs, err)
 			}
 		}
 	}
+	m.viewsMu.Lock()
+	defer m.viewsMu.Unlock()
+	if len(remaining) > 0 {
+		st.views = remaining
+		m.views[key] = st
+		sharedBranchViews.Store(key, st)
+		return settled, errors.Join(errs...)
+	}
+	delete(m.views, key)
+	sharedBranchViews.Delete(key)
+	return settled, errors.Join(errs...)
+}
+
+// releaseAdapterView releases one view and requires proof it settled. A view the adapter no longer
+// holds has nothing left to release.
+func releaseAdapterView(adp adapter.Adapter, viewID string) error {
+	receipt, err := adp.Release(context.Background(), viewID)
+	var adapterErr *adapter.AdapterError
+	if errors.As(err, &adapterErr) && adapterErr.ReasonCode == adapter.ReasonViewNotFound {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !receipt.Settled {
+		return fmt.Errorf("adapter %s left view %s unsettled: %s", adp.ID(), viewID, receipt.ReasonCode)
+	}
+	return nil
 }
 
 // LookupBranchPreparedView returns the active PreparedView (when in-process) and its

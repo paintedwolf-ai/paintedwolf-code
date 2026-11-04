@@ -182,6 +182,29 @@ func (c *Coordinator) ClaimSelectedView(
 	return claimed, readySnap, nil
 }
 
+// AdoptPreparedView records a view recovery already prepared on adp, so it settles and publishes like
+// a claimed one. Recovery registered nothing with this coordinator; retention registers here.
+func (c *Coordinator) AdoptPreparedView(ctx context.Context, req ClaimRequest, adp adapter.Adapter, prepared *adapter.PreparedView) (*ClaimedView, error) {
+	var retentionClaimID string
+	if req.Hooks.Retention != nil {
+		cid, err := req.Hooks.Retention.RegisterClaim(ctx, req.Identity.WorkerID, req.Identity.ViewID, collectPreparedRootPaths(prepared.Roots))
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrRetentionFailed, err)
+		}
+		retentionClaimID = cid
+	}
+	meta := buildCommittedMetadataV2(req, adp, prepared, adapter.ReasonNone)
+	claimed := &ClaimedView{
+		Identity: req.Identity, Adapter: adp, Prepared: prepared, Metadata: meta,
+		RetentionClaimID: retentionClaimID, State: buildReadySnapshot(meta), privateGit: req.Hooks.PrivateGit,
+	}
+	c.selector.Registry.Register(prepared, adp)
+	c.mu.Lock()
+	c.views[req.Identity.ViewID] = claimed
+	c.mu.Unlock()
+	return claimed, nil
+}
+
 // settleView releases a view's adapter resources first and its records only after they settled.
 // A failed step keeps everything recorded so far and leaves the view in custody for a retry.
 func (c *Coordinator) settleView(ctx context.Context, identity ClaimIdentity, view *unsettledView, retention RetentionRegistrar) error {

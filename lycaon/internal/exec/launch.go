@@ -35,6 +35,9 @@ type LaunchPlan struct {
 	PathAuthority      confine.LaunchPaths
 	InputLimits        confine.LaunchVectorLimits
 	CurrentAuthority   func(context.Context) error
+	// RecordStart durably names each started process while the launch helper still holds it, before
+	// its target runs. A failure kills the process, so nothing runs unrecorded.
+	RecordStart func(pid int) error
 }
 
 func (p LaunchPlan) WithTrustedEnvironment(entries []string) LaunchPlan {

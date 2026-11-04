@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -89,29 +90,60 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 	return binding, err
 }
 
-// DestroyWorkerWorkspace removes a branch, releases its prepared adapter view, and deletes its metadata.
+// DestroyWorkerWorkspace releases a branch's views, proves no mount remains in it, drops its retention
+// and deletes it. Any failure keeps the branch and its metadata: the view is still in custody, and
+// recursive removal through a live mount would delete the worker's result.
 func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return nil
 	}
 	root := strings.TrimSpace(binding.Root)
-	mounted, err := m.settleMountedBranch(root, jobIDForBranch(root))
-	if err != nil {
+	jobID := jobIDForBranch(root)
+	if err := m.releaseBranchRuntime(binding, root, jobID); err != nil {
+		return err
+	}
+	if err := RefuseMountedBranch(root); err != nil {
+		return err
+	}
+	if err := m.releaseBranchRetention(jobID); err != nil {
 		return err
 	}
 	releaseBranchClaimState(root)
+	err := errors.Join(os.RemoveAll(enginepaths.MetaDirForBranchRoot(root)), os.RemoveAll(root))
+	removeBranchLocks(root)
+	return err
+}
+
+func (m *Manager) releaseBranchRuntime(binding *Binding, root, jobID string) error {
+	mounted, err := m.settleMountedBranch(root, jobID)
+	if err != nil {
+		return err
+	}
 	if mounted {
 		m.forgetBranchViews(root)
-	} else {
-		m.releaseBranchViews(root)
-		if binding.Adapter != nil && binding.View != nil {
-			_, _ = binding.Adapter.Release(context.Background(), binding.View.ViewID)
-		}
+		return nil
 	}
-	_ = os.RemoveAll(enginepaths.MetaDirForBranchRoot(root))
-	_ = os.RemoveAll(branchCheckpointStoreDir(root))
-	removeBranchLocks(root)
-	return os.RemoveAll(root)
+	settled, err := m.releaseBranchViews(root)
+	if err != nil {
+		return err
+	}
+	if binding.Adapter == nil || binding.View == nil || settled[binding.View.ViewID] {
+		return nil
+	}
+	return releaseAdapterView(binding.Adapter, binding.View.ViewID)
+}
+
+// releaseBranchRetention drops what recovery retained for a worker whose branch is going away, for a
+// result promoted or discarded. Collection removes only what nothing else still references.
+func (m *Manager) releaseBranchRetention(jobID string) error {
+	if strings.TrimSpace(m.branchRoot) == "" {
+		return nil
+	}
+	services, err := m.layered()
+	if err != nil {
+		return err
+	}
+	return services.recovery.ReleaseWorkerResult(jobID)
 }
 
 // settleMountedBranch releases the branch's mounted view when it has one. On failure the caller must
