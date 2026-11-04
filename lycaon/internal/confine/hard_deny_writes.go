@@ -78,6 +78,11 @@ func HardDenyWriteSpecs(c Confinement) ([]HardDenyWriteSpec, error) {
 			Layer: FloorControlPlane, Subpath: fspath.CanonicalPath(userDir),
 			ExceptSubpaths: exceptions,
 		})
+		for _, folder := range placementFolders(userDir) {
+			canonical := fspath.CanonicalPath(folder.Path)
+			out = append(out, HardDenyWriteSpec{Layer: FloorBaseline, Subpath: canonical})
+			out = append(out, HardDenyWriteSpec{Layer: FloorControlPlane, Subpath: canonical, ExceptSubpaths: exceptions})
+		}
 	}
 
 	out = append(out, agentPolicySpecs(c.Roots)...)

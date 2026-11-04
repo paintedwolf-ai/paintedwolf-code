@@ -68,7 +68,7 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 	standard := append([]string{"/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", os.TempDir()}, standardCacheDataRoots()...)
 	standard = append(standard, darwinUserRoots()...)
 	for _, root := range standard {
-		if !writeRootContainsStateTree(fspath.CanonicalPath(root)) {
+		if !defaultRootContainsStateFolder(fspath.CanonicalPath(root)) {
 			add(root)
 		}
 	}

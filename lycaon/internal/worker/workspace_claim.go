@@ -154,11 +154,13 @@ func (q *SQLQueue) withWorkspacePreparation(ctx context.Context, task *api.Worke
 		reportMu.Lock()
 		defer reportMu.Unlock()
 		preparation := &api.WorkspacePreparation{
-			Strategy:   api.WorkspaceProvisionStrategy(progress.Strategy),
-			Stage:      progress.Stage,
-			Files:      progress.Files,
-			Bytes:      progress.Bytes,
-			TotalBytes: progress.TotalBytes,
+			Strategy:          api.WorkspaceProvisionStrategy(progress.Strategy),
+			Stage:             progress.Stage,
+			Files:             progress.Files,
+			Bytes:             progress.Bytes,
+			TotalBytes:        progress.TotalBytes,
+			TotalEntries:      progress.TotalEntries,
+			NotClonableReason: api.WorkspaceNotClonableReason(progress.NotClonableReason),
 		}
 		now := time.Now()
 		emit := progress.Stage != lastStage || now.Sub(lastEmit) >= workspacePreparationEmitInterval

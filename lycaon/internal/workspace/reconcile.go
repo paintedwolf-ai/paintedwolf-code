@@ -19,7 +19,8 @@ func ReconcileStaleSandboxes(
 	branchRoot, primaryDir string,
 	loadRetainedJobIDs func(context.Context) (map[string]struct{}, error),
 ) (removed int, err error) {
-	listing, err := listSandboxEntries(branchRoot, primaryDir)
+	stateRoot := filepath.Dir(strings.TrimSpace(branchRoot))
+	listing, err := listAllSandboxEntries(stateRoot, branchRoot, primaryDir)
 	if err != nil {
 		return 0, err
 	}
@@ -42,10 +43,13 @@ func ReconcileStaleSandboxes(
 		if err := ctx.Err(); err != nil {
 			return removed, err
 		}
-		if _, keep := retainJobIDs[dir.jobID]; keep {
+		if _, keep := retainJobIDs[dir.jobID]; keep && !placedTreeSuperseded(stateRoot, dir.root) {
 			continue
 		}
 		if err := removeJobSandbox(dir.root); err != nil {
+			return removed, err
+		}
+		if err := forgetPlacedBranch(stateRoot, dir.root); err != nil {
 			return removed, err
 		}
 		removed++

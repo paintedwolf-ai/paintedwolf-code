@@ -400,6 +400,14 @@ components:
       - direct_cow
       - bridge_cow
       - direct_copy
+    WorkspaceNotClonableReason:
+      type: string
+      enum:
+      - roots_span_volumes
+      - volume_cannot_clone
+      - volume_root_inside_attached_root
+      - volume_root_unwritable
+      - volume_not_identified
     WorkspacePreparation:
       x-go-generate: true
       type: object
@@ -410,7 +418,7 @@ components:
           $ref: worker.yaml#/components/schemas/WorkspaceProvisionStrategy
         stage:
           type: string
-          enum: [probing, surveying_source, materializing_seed, snapshotting_branch]
+          enum: [probing, surveying_source, cost_declared, materializing_seed, snapshotting_branch]
         files:
           type: integer
           format: int64
@@ -424,6 +432,13 @@ components:
           format: int64
           minimum: 0
           description: Logical regular-file bytes when a source survey has completed
+        total_entries:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Files, directories and links when a source survey has completed
+        not_clonable_reason:
+          $ref: worker.yaml#/components/schemas/WorkspaceNotClonableReason
     WorkerBudgetRequest:
       x-go-generate: true
       type: object

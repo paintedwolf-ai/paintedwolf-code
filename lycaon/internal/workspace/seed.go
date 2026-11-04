@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 const (
@@ -82,42 +83,51 @@ func (set *seedLockSet) forKey(key string) *sync.RWMutex {
 	return lock
 }
 
-func (m *Manager) provisionRoot(ctx context.Context, sourceRoot, branchRoot string) error {
-	reportPreparation(ctx, PreparationProgress{Stage: "probing"})
-	strategy, err := m.chooseProvisionStrategy(ctx, sourceRoot, branchRoot)
+func (m *Manager) provisionRoot(ctx context.Context, sourceRoot, branchRoot string, decision workerplacement.Decision) (RootPreparation, error) {
+	reportPreparation(ctx, PreparationProgress{Stage: "probing", NotClonableReason: decision.Reason})
+	strategy, err := m.chooseProvisionStrategy(ctx, sourceRoot, branchRoot, decision.Clonable)
 	if err != nil {
-		return classifyProvisionError(err)
+		return RootPreparation{}, classifyProvisionError(err)
 	}
-	base := PreparationProgress{Strategy: strategy}
+	base := PreparationProgress{Strategy: strategy, NotClonableReason: decision.Reason}
+	admit := m.sourceAdmit(sourceRoot)
 	if strings.TrimSpace(m.seedRoot) != "" {
 		if err := m.evictExpiredSeeds(ctx, enginepaths.ProjectKey(sourceRoot)); err != nil {
 			slog.WarnContext(ctx, "evict expired worker caches", "err", err)
 		}
 	}
 	if strategy != ProvisionBridgeCoW {
+		cost := sourceCost{}
+		if strategy == ProvisionDirectCopy {
+			cost, err = declareCopyCost(ctx, sourceRoot, branchRoot, admit, base)
+			if err != nil {
+				return RootPreparation{}, classifyProvisionError(err)
+			}
+		}
 		base.Stage = "snapshotting_branch"
+		base.TotalBytes, base.TotalEntries = cost.bytes, cost.entries
 		reportPreparation(ctx, base)
 		result, mirrorErr := mirrorTree(ctx, sourceRoot, branchRoot, mirrorOptions{
-			phase: "worker_branch_" + string(strategy), tolerateChange: true, preparation: base,
+			phase: "worker_branch_" + string(strategy), tolerateChange: true, preparation: base, admit: admit,
 		})
 		if mirrorErr != nil {
-			return classifyProvisionError(fmt.Errorf("snapshot worker branch: %w", mirrorErr))
+			return RootPreparation{}, classifyProvisionError(fmt.Errorf("snapshot worker branch: %w", mirrorErr))
 		}
 		if err := validateCompleteMirror(result); err != nil {
-			return err
+			return RootPreparation{}, err
 		}
 		logProvisionResult(ctx, sourceRoot, strategy, false, result)
 		if err := RemoveSeed(ctx, m.seedRoot, sourceRoot); err != nil {
 			slog.WarnContext(ctx, "remove worker cache no longer useful", "source", sourceRoot, "err", err)
 		}
-		return nil
+		return rootPreparation(strategy, result, cost), nil
 	}
 
 	base.Stage = "surveying_source"
 	reportPreparation(ctx, base)
-	refreshed, err := m.refreshSeedLocked(ctx, sourceRoot, base)
+	refreshed, cost, err := m.refreshSeedLocked(ctx, sourceRoot, base)
 	if err != nil {
-		return classifyProvisionError(fmt.Errorf("refresh worker seed: %w", err))
+		return RootPreparation{}, classifyProvisionError(fmt.Errorf("refresh worker seed: %w", err))
 	}
 
 	key := enginepaths.ProjectKey(sourceRoot)
@@ -126,15 +136,16 @@ func (m *Manager) provisionRoot(ctx context.Context, sourceRoot, branchRoot stri
 	defer inProcess.RUnlock()
 	release, err := lockSeedAcrossProcesses(ctx, m.seedRoot, key, false)
 	if err != nil {
-		return err
+		return RootPreparation{}, err
 	}
 	defer release()
 	seedDir := enginepaths.ProjectSeedDir(m.seedRoot, sourceRoot)
 	_, seedTree, manifest := loadCurrentSeed(seedDir)
 	if seedTree == "" {
-		return fmt.Errorf("current worker seed is unavailable")
+		return RootPreparation{}, fmt.Errorf("current worker seed is unavailable")
 	}
 	base.Stage = "snapshotting_branch"
+	base.TotalEntries = cost.entries
 	if manifest.Entries != nil {
 		base.TotalBytes = regularBytes(manifest)
 	}
@@ -143,11 +154,20 @@ func (m *Manager) provisionRoot(ctx context.Context, sourceRoot, branchRoot stri
 		phase: "worker_branch_bridge_cow", preparation: base,
 	})
 	if err != nil {
-		return classifyProvisionError(fmt.Errorf("snapshot worker branch: %w", err))
+		return RootPreparation{}, classifyProvisionError(fmt.Errorf("snapshot worker branch: %w", err))
 	}
 	touchSeedLastUsed(seedDir)
 	logProvisionResult(ctx, sourceRoot, strategy, refreshed, result)
-	return nil
+	return rootPreparation(strategy, result, cost), nil
+}
+
+func rootPreparation(strategy ProvisionStrategy, result mirrorResult, cost sourceCost) RootPreparation {
+	return RootPreparation{
+		Strategy: strategy, Files: result.Files, Directories: result.Directories, Symlinks: result.Symlinks,
+		Bytes: result.Bytes, ClonedFiles: result.ClonedFiles, ClonedBytes: result.ClonedBytes,
+		CopiedBytes: result.CopiedBytes, UnreadableEntries: result.UnreadableEntries,
+		DeclaredEntries: cost.entries, DeclaredBytes: cost.bytes,
+	}
 }
 
 func logProvisionResult(ctx context.Context, sourceRoot string, strategy ProvisionStrategy, refreshed bool, result mirrorResult) {
@@ -163,14 +183,14 @@ func logProvisionResult(ctx context.Context, sourceRoot string, strategy Provisi
 	)
 }
 
-func (m *Manager) refreshSeedLocked(ctx context.Context, sourceRoot string, progress PreparationProgress) (bool, error) {
+func (m *Manager) refreshSeedLocked(ctx context.Context, sourceRoot string, progress PreparationProgress) (bool, sourceCost, error) {
 	key := enginepaths.ProjectKey(sourceRoot)
 	inProcess := m.locks.forKey(key)
 	inProcess.Lock()
 	defer inProcess.Unlock()
 	release, err := lockSeedAcrossProcesses(ctx, m.seedRoot, key, true)
 	if err != nil {
-		return false, err
+		return false, sourceCost{}, err
 	}
 	defer release()
 	return m.refreshSeed(ctx, sourceRoot, progress)
@@ -210,21 +230,26 @@ func lockSeedAcrossProcesses(ctx context.Context, seedRoot, key string, exclusiv
 	}
 }
 
-func (m *Manager) refreshSeed(ctx context.Context, sourceRoot string, progress PreparationProgress) (bool, error) {
+func (m *Manager) refreshSeed(ctx context.Context, sourceRoot string, progress PreparationProgress) (bool, sourceCost, error) {
 	cleanRoot, err := absDir(sourceRoot)
 	if err != nil {
-		return false, err
+		return false, sourceCost{}, err
 	}
 	sourceRoot = cleanRoot
 	seedDir := enginepaths.ProjectSeedDir(m.seedRoot, sourceRoot)
 	if err := os.MkdirAll(filepath.Join(seedDir, seedGenerations), 0o700); err != nil {
-		return false, err
+		return false, sourceCost{}, err
 	}
 
-	manifest, err := scanSeedSource(ctx, sourceRoot)
+	admit := m.sourceAdmit(sourceRoot)
+	manifest, err := scanSeedSource(ctx, sourceRoot, admit)
 	if err != nil {
-		return false, err
+		return false, sourceCost{}, err
 	}
+	cost := sourceCost{entries: int64(len(manifest.Entries)), bytes: regularBytes(manifest)}
+	progress.Stage = StageCostDeclared
+	progress.TotalBytes, progress.TotalEntries = cost.bytes, cost.entries
+	reportPreparation(ctx, progress)
 	currentGeneration, currentTree, currentManifest := loadCurrentSeed(seedDir)
 	progress.Stage = "materializing_seed"
 	progress.TotalBytes = regularBytes(manifest)
@@ -232,24 +257,25 @@ func (m *Manager) refreshSeed(ctx context.Context, sourceRoot string, progress P
 	if currentGeneration != "" && manifestsEqual(manifest, currentManifest) {
 		cleanupSeedGenerations(seedDir, currentGeneration)
 		touchSeedLastUsed(seedDir)
-		return false, nil
+		return false, cost, nil
 	}
 	required := changedRegularBytes(manifest, currentManifest)
 	if err := m.ensureSeedCapacity(ctx, required, enginepaths.ProjectKey(sourceRoot)); err != nil {
-		return false, err
+		return false, sourceCost{}, err
 	}
 
 	generation := uuid.NewString()
 	staging := filepath.Join(seedDir, seedGenerations, ".staging-"+generation)
 	final := filepath.Join(seedDir, seedGenerations, generation)
 	if err := os.RemoveAll(staging); err != nil {
-		return false, err
+		return false, sourceCost{}, err
 	}
 	stagingTree := filepath.Join(staging, "tree")
 	result, err := mirrorTree(ctx, sourceRoot, stagingTree, mirrorOptions{
 		phase:          "seed_refresh",
 		tolerateChange: true,
 		preparation:    progress,
+		admit:          admit,
 		fileSource: func(rel, sourcePath string) string {
 			if currentTree == "" || currentManifest.Entries == nil {
 				return sourcePath
@@ -265,23 +291,23 @@ func (m *Manager) refreshSeed(ctx context.Context, sourceRoot string, progress P
 	})
 	if err != nil {
 		_ = os.RemoveAll(staging)
-		return false, err
+		return false, sourceCost{}, err
 	}
 	if err := validateCompleteMirror(result); err != nil {
 		_ = os.RemoveAll(staging)
-		return false, err
+		return false, sourceCost{}, err
 	}
 	if err := writeSeedManifest(filepath.Join(staging, seedManifestFile), manifest); err != nil {
 		_ = os.RemoveAll(staging)
-		return false, err
+		return false, sourceCost{}, err
 	}
 	if err := os.Rename(staging, final); err != nil {
 		_ = os.RemoveAll(staging)
-		return false, err
+		return false, sourceCost{}, err
 	}
 	if err := publishCurrentGeneration(seedDir, generation); err != nil {
 		_ = os.RemoveAll(final)
-		return false, err
+		return false, sourceCost{}, err
 	}
 	cleanupSeedGenerations(seedDir, generation)
 	touchSeedLastUsed(seedDir)
@@ -295,15 +321,15 @@ func (m *Manager) refreshSeed(ctx context.Context, sourceRoot string, progress P
 		"copied_bytes", result.CopiedBytes,
 		"previous_generation", currentGeneration,
 	)
-	return true, nil
+	return true, cost, nil
 }
 
-func scanSeedSource(ctx context.Context, sourceRoot string) (seedManifest, error) {
+func scanSeedSource(ctx context.Context, sourceRoot string, admit sourceAdmit) (seedManifest, error) {
 	manifest := seedManifest{
 		Format: seedFormatVersion, SourceRoot: filepath.Clean(sourceRoot), Entries: make(map[string]seedEntry),
 	}
 	var files, bytes int64
-	err := sandbox.SurveyWalk(ctx, sourceRoot, sandbox.SurveyOptions{IncludeHidden: true},
+	err := sandbox.SurveyWalk(ctx, sourceRoot, sandbox.SurveyOptions{IncludeHidden: true, Admit: admit, OnReadError: skipUnreadable(nil)},
 		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
 			info, err := entry.DirEntry.Info()
 			if err != nil {

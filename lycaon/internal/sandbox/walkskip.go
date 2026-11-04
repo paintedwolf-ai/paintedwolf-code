@@ -3,6 +3,7 @@ package sandbox
 import (
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
@@ -25,7 +26,7 @@ func IsEngineOverlayBaseName(baseName string) bool {
 
 // ShouldSkipDirBaseName reports whether baseName is engine overlay or VCS metadata.
 func ShouldSkipDirBaseName(baseName string) bool {
-	return IsVCSDirBaseName(baseName) || IsEngineOverlayBaseName(baseName)
+	return IsVCSDirBaseName(baseName) || IsEngineOverlayBaseName(baseName) || enginepaths.IsWorkerPlacementDirName(baseName)
 }
 
 // ShouldSkipDir reports whether a directory lies under engine overlay or VCS metadata.

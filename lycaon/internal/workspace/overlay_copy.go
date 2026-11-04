@@ -45,6 +45,7 @@ type mirrorOptions struct {
 	tolerateChange bool
 	fileSource     func(rel, sourcePath string) string
 	preparation    PreparationProgress
+	admit          sourceAdmit
 }
 
 type mirrorResult struct {
@@ -56,6 +57,9 @@ type mirrorResult struct {
 	ClonedBytes  int64
 	CopiedBytes  int64
 	SkippedPaths []string
+	// UnreadableEntries could not be read as this user. The worker could not read
+	// them either, so they are absent from its tree rather than a failed claim.
+	UnreadableEntries int64
 }
 
 func validateCompleteMirror(result mirrorResult) error {
@@ -78,7 +82,8 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 	return binding, err
 }
 
-// DestroyWorkerWorkspace removes a branch and its metadata.
+// DestroyWorkerWorkspace removes a branch and its metadata. A branch on an absent
+// volume keeps its record, so it can be removed when the volume returns.
 func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	if binding == nil {
 		return nil
@@ -87,9 +92,15 @@ func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	if root == "" {
 		return nil
 	}
+	if err := branchVolumeAvailable(root); err != nil {
+		return err
+	}
 	_ = os.RemoveAll(enginepaths.MetaDirForBranchRoot(root))
 	removeBranchLocks(root)
-	return os.RemoveAll(root)
+	if err := os.RemoveAll(root); err != nil {
+		return err
+	}
+	return forgetPlacedBranch(m.stateRoot, root)
 }
 
 func (m *Manager) jobRoot(primaryDir, jobID string) string {
@@ -109,18 +120,19 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 	defer cancel()
 	jobs := make(chan overlayCopyJob, workers*2)
 	var (
-		wg       sync.WaitGroup
-		errOnce  sync.Once
-		firstErr error
-		files    atomic.Int64
-		bytes    atomic.Int64
-		clones   atomic.Int64
-		cloneB   atomic.Int64
-		copyB    atomic.Int64
-		dirs     atomic.Int64
-		links    atomic.Int64
-		skipMu   sync.Mutex
-		skipped  []string
+		wg         sync.WaitGroup
+		errOnce    sync.Once
+		firstErr   error
+		files      atomic.Int64
+		bytes      atomic.Int64
+		clones     atomic.Int64
+		cloneB     atomic.Int64
+		copyB      atomic.Int64
+		dirs       atomic.Int64
+		links      atomic.Int64
+		unreadable atomic.Int64
+		skipMu     sync.Mutex
+		skipped    []string
 	)
 	fail := func(err error) {
 		errOnce.Do(func() {
@@ -149,6 +161,10 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 						recordSkip(job.rel)
 						continue
 					}
+					if errors.Is(err, fs.ErrPermission) && sourceUnreadable(job.src) {
+						unreadable.Add(1)
+						continue
+					}
 					fail(fmt.Errorf("mirror %s: %w", job.rel, err))
 					return
 				}
@@ -174,7 +190,7 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 	progressDone := make(chan struct{})
 	go logMirrorProgress(ctx, progressDone, opts.phase, srcRoot, &files, &bytes)
 	var directoryQueue []directoryMetadata
-	walkErr := sandbox.SurveyWalk(ctx, srcRoot, sandbox.SurveyOptions{IncludeHidden: true},
+	walkErr := sandbox.SurveyWalk(ctx, srcRoot, sandbox.SurveyOptions{IncludeHidden: true, Admit: opts.admit, OnReadError: skipUnreadable(&unreadable)},
 		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
 			dst := filepath.Join(dstRoot, filepath.FromSlash(entry.Rel))
 			// Leave nodes already present on the destination.
@@ -235,13 +251,13 @@ func mirrorTree(ctx context.Context, srcRoot, dstRoot string, opts mirrorOptions
 	if walkErr != nil {
 		return mirrorResult{}, walkErr
 	}
-	if err := finalizeDirectoryMetadata(directoryQueue); err != nil {
+	if err := finalizeDirectoryMetadata(ctx, directoryQueue); err != nil {
 		return mirrorResult{}, err
 	}
 	result := mirrorResult{
 		Files: files.Load(), Directories: dirs.Load(), Symlinks: links.Load(), Bytes: bytes.Load(),
 		ClonedFiles: clones.Load(), ClonedBytes: cloneB.Load(), CopiedBytes: copyB.Load(),
-		SkippedPaths: append([]string(nil), skipped...),
+		SkippedPaths: append([]string(nil), skipped...), UnreadableEntries: unreadable.Load(),
 	}
 	if len(result.SkippedPaths) > 0 {
 		slog.WarnContext(ctx, "source entries changed during workspace mirror",
@@ -271,8 +287,11 @@ func logMirrorProgress(
 	}
 }
 
-func finalizeDirectoryMetadata(queue []directoryMetadata) error {
+func finalizeDirectoryMetadata(ctx context.Context, queue []directoryMetadata) error {
 	for i := len(queue) - 1; i >= 0; i-- {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		entry := queue[i]
 		if err := os.Chmod(entry.dst, entry.mode.Perm()); err != nil {
 			return err

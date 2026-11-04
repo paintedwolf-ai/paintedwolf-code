@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 type branchCapture struct {
@@ -77,9 +79,93 @@ func (s branchCapture) names() []string {
 	return roots
 }
 
+// placedRoots lists selected trees that live in a placement folder on this device.
+func (s branchCapture) placedRoots(dataDir string) (map[string]string, error) {
+	placed := map[string]string{}
+	for root := range s.roots {
+		physical, err := workerplacement.PhysicalFromLogical(dataDir, root)
+		if err != nil {
+			return nil, err
+		}
+		if physical != filepath.Join(dataDir, filepath.FromSlash(root)) {
+			placed[root] = physical
+		}
+	}
+	return placed, nil
+}
+
+// collectPlacedBranchTrees adds placed unsealed trees under their logical address,
+// where restore expects them. Their real layout record replaces the state-folder
+// one, which always says the tree is absent.
+func collectPlacedBranchTrees(ctx context.Context, dataDir string, files map[string]archiveSource, branches branchCapture, entryLimit int) error {
+	placed, err := branches.placedRoots(dataDir)
+	if err != nil {
+		return err
+	}
+	for root, physical := range placed {
+		err := filepath.WalkDir(physical, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			kind := fileKindRegular
+			if info.Mode()&os.ModeSymlink != 0 {
+				kind = fileKindSymlink
+			} else if !info.Mode().IsRegular() {
+				return fmt.Errorf("durable path is not a regular file: %s", path)
+			}
+			if len(files)+1 >= entryLimit {
+				return fmt.Errorf("archive contains too many entries")
+			}
+			rel, err := filepath.Rel(physical, path)
+			if err != nil {
+				return err
+			}
+			files[root+"/"+filepath.ToSlash(rel)] = archiveSource{path: path, kind: kind, mode: info.Mode().Perm()}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("%w: walk placed worker tree: %w", ErrCaptureIncomplete, err)
+		}
+		meta := enginepaths.MetaDirForBranchRoot(physical) + "/state.json"
+		info, err := os.Lstat(meta)
+		if err != nil {
+			return fmt.Errorf("%w: placed worker layout: %w", ErrCaptureIncomplete, err)
+		}
+		files[root+enginepaths.JobMetaDirSuffix+"/state.json"] = archiveSource{path: meta, kind: fileKindRegular, mode: info.Mode().Perm()}
+	}
+	return nil
+}
+
+// withoutPlaced drops trees outside the state folder. A store upgrade neither
+// changes nor needs them, so an absent volume must not stop one.
+func (s branchCapture) withoutPlaced(dataDir string) (branchCapture, error) {
+	placed, err := s.placedRoots(dataDir)
+	if err != nil {
+		return s, err
+	}
+	for root := range placed {
+		delete(s.roots, root)
+	}
+	return s, nil
+}
+
 func (s branchCapture) verifyPresent(dataDir string) error {
 	for root := range s.roots {
-		info, err := os.Lstat(filepath.Join(dataDir, filepath.FromSlash(root)))
+		physical, err := workerplacement.PhysicalFromLogical(dataDir, root)
+		if err != nil {
+			return err
+		}
+		info, err := os.Lstat(physical)
 		if err != nil {
 			return fmt.Errorf("%w: retained worker tree %s: %w", ErrCaptureIncomplete, root, err)
 		}
@@ -117,13 +203,19 @@ func restorableArchivePath(rel string, trees []string) bool {
 	return false
 }
 
-func validateRequiredBranchTrees(ctx context.Context, database db.DBTX, manifest Manifest) error {
+// validateRequiredBranchTrees accepts an unsealed tree absent from the manifest
+// only when this device's registry places it outside the state folder, as an
+// upgrade recovery point leaves it.
+func validateRequiredBranchTrees(ctx context.Context, database db.DBTX, manifest Manifest, configDir string) error {
 	required, err := unsealedBranchTrees(ctx, database)
 	if err != nil {
 		return err
 	}
 	for _, root := range manifest.RetainedBranchTrees {
 		delete(required.roots, root)
+	}
+	if required, err = required.withoutPlaced(configDir); err != nil {
+		return err
 	}
 	if len(required.roots) != 0 {
 		return &InvalidError{Detail: "archive omits an unsealed worker tree"}

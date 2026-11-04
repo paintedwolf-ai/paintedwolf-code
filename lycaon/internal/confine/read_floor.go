@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 // addControlPlaneReadFloor keeps directory read grants from exposing control
@@ -133,7 +134,21 @@ func agentWorkspaceRootsUnderControlPlane() []string {
 	if err != nil || strings.TrimSpace(dir) == "" {
 		return nil
 	}
-	return enginepaths.AgentWorkspaceRootsUnder(dir)
+	roots := enginepaths.AgentWorkspaceRootsUnder(dir)
+	for _, folder := range placementFolders(dir) {
+		roots = append(roots, folder.BranchesRoot())
+	}
+	return roots
+}
+
+// placementFolders are reachable worker branch folders on other volumes. A folder
+// on an absent volume has nothing to protect, and its path cannot be resolved.
+func placementFolders(stateRoot string) []workerplacement.Folder {
+	folders, err := workerplacement.AvailableFolders(stateRoot)
+	if err != nil {
+		return nil
+	}
+	return folders
 }
 
 // controlPlaneReadDenyRoots returns the host-managed configuration tree.
@@ -142,7 +157,11 @@ func controlPlaneReadDenyRoots() []string {
 	if err != nil || strings.TrimSpace(dir) == "" {
 		return nil
 	}
-	return []string{dir}
+	roots := []string{dir}
+	for _, folder := range placementFolders(dir) {
+		roots = append(roots, folder.Path)
+	}
+	return roots
 }
 
 // resolveEach canonicalizes missing paths through their existing ancestor.

@@ -50,6 +50,9 @@ func ensureWorkerBranch(ctx context.Context, task *api.WorkerTask, ws WorkerWork
 		return nil, fmt.Errorf("%w: %s has no branch", ErrWorkerBranchUnavailable, task.ID)
 	}
 	release, err := workspace.AcquireBranchUse(ctx, root)
+	if errors.Is(err, workspace.ErrBranchVolumeUnavailable) {
+		return nil, fmt.Errorf("%w: %s: %w", ErrWorkerBranchUnavailable, task.ID, err)
+	}
 	if err != nil {
 		return nil, err
 	}
