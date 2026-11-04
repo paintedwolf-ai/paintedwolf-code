@@ -31,71 +31,61 @@ func (o *OpenCommandWindow) ReleaseOpener(ctx context.Context) {
 	o.opener.Do(func() { o.store.releaseHold(ctx, o.window) })
 }
 
+// windowAnchor is one re-anchor run; err is set before done closes.
+type windowAnchor struct {
+	done chan struct{}
+	err  error
+}
+
 func (s *Commands) holdWindow(ctx context.Context, w *openCommandWindow) (func(), error) {
 	s.windowsMu.Lock()
-	w.waiters++
-	for {
-		if w.closing {
-			w.waiters--
-			s.windowsMu.Unlock()
-			return nil, ErrWindowClosed
-		}
-		if w.active {
-			w.waiters--
-			w.holds++
-			endGrace(w)
-			s.windowsMu.Unlock()
-			var once sync.Once
-			return func() { once.Do(func() { s.releaseHold(ctx, w) }) }, nil
-		}
-		anchoring := w.anchoring
-		if anchoring == nil {
-			anchoring = make(chan struct{})
-			w.anchoring, w.anchorErr = anchoring, nil
-			go s.reanchorWindow(context.WithoutCancel(ctx), w, anchoring)
+	if !w.closing && !w.active {
+		anchor := w.anchoring
+		if anchor == nil {
+			anchor = &windowAnchor{done: make(chan struct{})}
+			w.anchoring = anchor
+			go s.reanchorWindow(context.WithoutCancel(ctx), w, anchor)
 		}
 		s.windowsMu.Unlock()
 		select {
-		case <-anchoring:
+		case <-anchor.done:
 		case <-ctx.Done():
-			s.windowsMu.Lock()
-			w.waiters--
-			// Nobody is left for an anchor that already finished.
-			if w.active && w.holds == 0 && w.waiters == 0 && w.quiet == nil && !w.closing {
-				w.active = false
-			}
-			s.windowsMu.Unlock()
 			return nil, ctx.Err()
 		}
-		s.windowsMu.Lock()
-		if err := w.anchorErr; err != nil {
-			w.waiters--
-			s.windowsMu.Unlock()
-			return nil, err
+		if anchor.err != nil {
+			return nil, anchor.err
 		}
+		s.windowsMu.Lock()
 	}
+	defer s.windowsMu.Unlock()
+	if w.closing {
+		return nil, ErrWindowClosed
+	}
+	// Only a woken waiter activates after an anchor, so with none left it stays idle.
+	w.active = true
+	w.holds++
+	endGrace(w)
+	var once sync.Once
+	return func() { once.Do(func() { s.releaseHold(ctx, w) }) }, nil
 }
 
 // reanchorWindow moves an idle window's start to the present before it claims
 // again; anything earlier was the gap. It runs detached and bounded, so a launch
 // that stops waiting does not cost later launches their window.
-func (s *Commands) reanchorWindow(ctx context.Context, w *openCommandWindow, done chan struct{}) {
+func (s *Commands) reanchorWindow(ctx context.Context, w *openCommandWindow, anchor *windowAnchor) {
 	budget, cancel := context.WithTimeout(ctx, s.observationBudget)
 	defer cancel()
 	snapshotID, err := s.anchorStart(budget, w.projectID, w.roots, false)
 	if err == nil {
 		w.moveStart(snapshotID)
-		if retainErr := s.retainWindowStart(budget, w); retainErr != nil {
+		if retainErr := s.retention.Retain(budget, w.id, snapshotID); retainErr != nil {
 			slog.WarnContext(ctx, "command window start retention", "window_id", w.id, "err", retainErr)
 		}
 	}
 	s.windowsMu.Lock()
 	defer s.windowsMu.Unlock()
-	w.anchoring, w.anchorErr = nil, err
-	if err == nil {
-		w.active = w.waiters > 0 && !w.closing
-	}
-	close(done)
+	w.anchoring, anchor.err = nil, err
+	close(anchor.done)
 }
 
 // releaseHold starts the settle grace when the last live process has ended.

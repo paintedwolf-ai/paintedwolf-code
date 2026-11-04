@@ -170,7 +170,7 @@ func TestGitBisectRunHoldsTheWindowWhileItsCheckRuns(t *testing.T) {
 git bisect reset`, tc)
 		done <- err
 	}()
-	testutil.AwaitCondition(t, "the check started", func() bool {
+	testutil.WaitFor(t, func() bool {
 		_, err := os.Stat(filepath.Join(dir, "started"))
 		return err == nil
 	})
@@ -190,5 +190,5 @@ git bisect reset`, tc)
 		t.Fatalf("drift during the check not attributed: %+v", walk.Files)
 	}
 	contractcheck.FailErr(t, "release the check", os.WriteFile(filepath.Join(dir, "release"), nil, 0o644))
-	contractcheck.FailErr(t, "run bisect", testutil.AwaitValue(t, "bisect result", done))
+	contractcheck.FailErr(t, "run bisect", testutil.Receive(t, "bisect result", done))
 }
