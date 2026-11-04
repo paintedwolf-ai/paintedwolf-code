@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
+	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
@@ -277,10 +278,11 @@ func materializeRootWithAdapter(
 	return view, res, err
 }
 
-// refuseLiveBranchView stops a rebuild from recursing through a mount or discarding an unsettled view.
+// refuseLiveBranchView stops a rebuild from recursing through a mount or discarding an unsettled
+// view. A record whose view something else settled, such as recovery, no longer holds the branch.
 func (m *Manager) refuseLiveBranchView(branchRoot, jobID string) error {
-	if _, live := LookupBranchClaimedView(branchRoot); live {
-		return ErrBranchInUse
+	if err := RefuseMountedBranch(branchRoot); err != nil {
+		return err
 	}
 	services, err := m.layered()
 	if err != nil {
@@ -289,6 +291,18 @@ func (m *Manager) refuseLiveBranchView(branchRoot, jobID string) error {
 	if services.coordinator.SettlementUnresolved(jobID) {
 		return fmt.Errorf("%w: view %q", claim.ErrSettlementUnresolved, jobID)
 	}
+	branchClaimsMu.RLock()
+	rec := branchClaimStates[filepath.Clean(branchRoot)]
+	branchClaimsMu.RUnlock()
+	if rec.layered == nil {
+		return nil
+	}
+	if supervisor, ok := rec.claimed.Adapter.(adapter.MountSupervisor); ok && rec.layered.services == services && supervisor.IsViewActive(rec.layered.viewID) {
+		return ErrBranchInUse
+	}
+	consumer.UnregisterEngine(rec.layered.engine)
+	rec.layered.services.coordinator.ForgetSettledView(rec.layered.viewID)
+	releaseBranchClaimState(branchRoot)
 	return nil
 }
 

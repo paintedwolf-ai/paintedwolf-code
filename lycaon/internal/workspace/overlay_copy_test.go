@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"

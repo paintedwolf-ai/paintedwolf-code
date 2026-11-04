@@ -1,6 +1,7 @@
 package privategit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
@@ -143,11 +145,13 @@ func saveImportJournalRecord(journalPath string, rec ImportJournalRecord) error 
 	if err != nil {
 		return err
 	}
-	tmp := journalPath + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, journalPath)
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.PathLocation(journalPath),
+		Source:   bytes.NewReader(raw),
+		Mode:     0o600,
+		DirMode:  0o700,
+	})
+	return err
 }
 
 func verifyImportedTipsInTrunk(ctx context.Context, trunkDir string, planned map[string]string) error {

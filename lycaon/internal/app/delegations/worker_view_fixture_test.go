@@ -124,7 +124,9 @@ func mountedSelector() *adapter.Selector {
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) { return adapter.ReasonNone, "", nil },
 		MountViewFn:  func(context.Context, string, []adapter.PreparedRoot) error { return nil },
 	})
-	return adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector.Confinement = fixtureConfinement{}
+	return selector
 }
 
 // claimMountedWorker enters through the real queue and claim path and records the adapter's
@@ -241,3 +243,10 @@ func (f *engineFixture) claimDefaultWorker() *api.WorkerTask {
 	testutil.FailErr(f.t, "claim branch", err)
 	return claimed
 }
+
+// fixtureConfinement stands in for enforcement around the fixture adapter. These tests exercise
+// recovery ordering, not denial.
+type fixtureConfinement struct{}
+
+func (fixtureConfinement) Available(context.Context, adapter.ProbeConfig) error    { return nil }
+func (fixtureConfinement) VerifyView(context.Context, *adapter.PreparedView) error { return nil }

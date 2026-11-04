@@ -221,6 +221,15 @@ func (c *Coordinator) ReleaseWorkerView(ctx context.Context, viewID string, rete
 	return err
 }
 
+// ForgetSettledView drops the record of a view that another path settled through its adapter.
+func (c *Coordinator) ForgetSettledView(viewID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.views, viewID)
+	delete(c.failedSnapshots, viewID)
+	c.selector.Registry.Unregister(viewID)
+}
+
 // SettlementUnresolved reports whether viewID failed settlement and remains in custody.
 func (c *Coordinator) SettlementUnresolved(viewID string) bool {
 	c.mu.RLock()

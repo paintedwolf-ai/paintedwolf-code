@@ -78,9 +78,7 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 		t.Fatalf("helper engine not ready: %q err=%v", line, err)
 	}
 
-	holder := exec.Command("/bin/sh", "-c", "echo inside; read _; exit 0")
-	holder.Dir = task.WorkspaceRoot
-	fuselinux.DetachMountEntry(holder)
+	holder := exec.Command("/bin/sh", "-c", `cd "$1" && echo inside; read _; exit 0`, "sh", task.WorkspaceRoot)
 	holderIn, err := holder.StdinPipe()
 	testutil.FailErr(t, "holder stdin", err)
 	holderOut, err := holder.StdoutPipe()

@@ -19,18 +19,18 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/fileclone/probe.go":       "O_EXCL volume-capability probe in a private temporary directory; its fsynced input and clone are removed before return, never published as durable content",
 	"lycaon/internal/scan/installed/verify.go": "ephemeral installed-scanner fixtures in an owned temporary directory removed before return",
 	// Content-addressed stores determine the destination after streaming.
-	"lycaon/internal/sourceblob/store.go": "stream-then-name: the object's destination is its digest",
+	"lycaon/internal/sourceblob/store.go":                        "stream-then-name: the object's destination is its digest",
 	"lycaon/internal/layeredfs/checkpoint/git_import_objects.go": "stream-then-name: an imported Git object's destination is its digest",
 	"lycaon/internal/layeredfs/checkpoint/store.go":              "stream-then-name blobs and exclusive manifest publication, whose rename is the checkpoint's commit point",
 
 	// Directory transactions promote and roll back whole trees.
-	"lycaon/internal/detectionpack/import.go":          "directory promotion with rollback of the replaced pack tree",
-	"lycaon/internal/extpacks/meta_install.go":         "directory promotion with backup and rollback",
-	"lycaon/internal/extpacks/meta_transaction.go":     "recoverable directory promotion with backup and rollback",
-	"lycaon/internal/extpacks/package_transaction.go":  "directory promotion of a staged package tree",
-	"lycaon/internal/packagegeneration/materialize.go": "directory promotion of a verified package generation tree",
-	"lycaon/internal/project/promotion_engine.go":      "reservation-based promotion: renames are the transaction, not a write",
-	"lycaon/internal/workspace/seed.go":                "directory promotion of a fully materialized seed tree",
+	"lycaon/internal/detectionpack/import.go":            "directory promotion with rollback of the replaced pack tree",
+	"lycaon/internal/extpacks/meta_install.go":           "directory promotion with backup and rollback",
+	"lycaon/internal/extpacks/meta_transaction.go":       "recoverable directory promotion with backup and rollback",
+	"lycaon/internal/extpacks/package_transaction.go":    "directory promotion of a staged package tree",
+	"lycaon/internal/packagegeneration/materialize.go":   "directory promotion of a verified package generation tree",
+	"lycaon/internal/project/promotion_engine.go":        "reservation-based promotion: renames are the transaction, not a write",
+	"lycaon/internal/workspace/seed.go":                  "directory promotion of a fully materialized seed tree",
 	"lycaon/internal/layeredfs/adapter/eagercopy_git.go": "builds a private Git directory in staging and promotes it whole",
 	"lycaon/internal/layeredfs/recovery/inventory.go":    "directory promotion of a completely salvaged quarantine tree",
 
@@ -58,20 +58,32 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/promptattach/docext/worker.go":       "O_EXCL request file handed to a one-shot extraction worker",
 	"lycaon/internal/scan/drivers/bundled/opengrep_io.go": "O_EXCL report path inside a scan run directory removed on cleanup",
 	"lycaon/internal/sourcesnapshot/materialize_entry.go": "O_EXCL files in a private disposable scan tree; no replacement or durable publication",
-	"lycaon/internal/workspace/overlay_copy.go":           "O_EXCL destination while materializing a fresh overlay tree",
+	"lycaon/internal/workspace/overlay_survey.go":         "O_EXCL destination while materializing a fresh overlay tree",
 
 	// Probes write only inside a private temporary directory they remove before return.
 	"lycaon/internal/layeredfs/adapter/fuselinux/fuselinux.go": "capability probe confined to a private temporary view",
 	"lycaon/internal/layeredfs/adapter/lifecycle.go":           "capability probe confined to a private temporary view",
 
+	// A worker's private repository is its own: nothing reads it as durable state until initialization
+	// reports it ready, and a retained object's destination is its digest.
+	"lycaon/internal/layeredfs/privategit/executor_sync.go":     "restores a file into the view's private worktree stage, which Core holds authoritatively",
+	"lycaon/internal/layeredfs/privategit/init_capture.go":      "fills a private Git staging directory its caller promotes whole",
+	"lycaon/internal/layeredfs/privategit/init_repo.go":         "promotes a fully captured private Git staging directory whole",
+	"lycaon/internal/layeredfs/privategit/materialized_seed.go": "installs a seed's fully built private Git directory whole, before the view is published",
+	"lycaon/internal/layeredfs/privategit/lower_provider.go":    "opens a private Git metadata file for the view's own serving handle",
+	"lycaon/internal/layeredfs/privategit/store.go":             "first-open marker of a new object store; no prior content exists",
+	"lycaon/internal/layeredfs/privategit/store_gc.go":          "stream-then-name: a retained object's destination is its digest",
+	"lycaon/internal/layeredfs/privategit/store_import.go":      "stream-then-name: a retained object's destination is its digest",
+	"lycaon/internal/layeredfs/adapter/nfsdarwin/nfsdarwin.go":  "capability probe confined to a private temporary view",
+
 	// Worker branches are unpublished until snapshot completion names them complete.
 	"lycaon/internal/layeredfs/adapter/eagercopy_git_helpers.go": "fills a private Git staging directory its caller promotes whole",
-	"lycaon/internal/layeredfs/adapter/eagercopy_lower.go":        "seeds an unpublished worker branch; SnapshotComplete publishes the assembled tree",
-	"lycaon/internal/layeredfs/adapter/eagercopy_seed.go":         "O_EXCL file in an unpublished worker branch; SnapshotComplete publishes the assembled tree",
-	"lycaon/internal/layeredfs/recovery/reconstruct.go":           "reconstructs an unpublished branch under its provision lock; SnapshotComplete publishes it",
-	"lycaon/internal/layeredfs/recovery/stacked.go":               "reconstructs an unpublished branch under its provision lock; SnapshotComplete publishes it",
-	"lycaon/internal/session/overlay_promote_checkpoint.go":       "materializes a checkpoint into the worker's private branch; user roots take the host promotion transaction",
-	"lycaon/internal/workspace/evict.go":                          "O_EXCL manifest in an unpublished seed generation and an empty last-used marker whose content is never read",
+	"lycaon/internal/layeredfs/adapter/eagercopy_lower.go":       "seeds an unpublished worker branch; SnapshotComplete publishes the assembled tree",
+	"lycaon/internal/layeredfs/adapter/eagercopy_seed.go":        "O_EXCL file in an unpublished worker branch; SnapshotComplete publishes the assembled tree",
+	"lycaon/internal/layeredfs/recovery/reconstruct.go":          "reconstructs an unpublished branch under its provision lock; SnapshotComplete publishes it",
+	"lycaon/internal/layeredfs/recovery/stacked.go":              "reconstructs an unpublished branch under its provision lock; SnapshotComplete publishes it",
+	"lycaon/internal/session/overlay_promote_checkpoint.go":      "materializes a checkpoint into the worker's private branch; user roots take the host promotion transaction",
+	"lycaon/internal/workspace/evict.go":                         "O_EXCL manifest in an unpublished seed generation and an empty last-used marker whose content is never read",
 
 	// Copies into a staging tree the caller promotes or discards whole.
 	"lycaon/internal/backup/stage.go":                  "streams into an exclusive staging tree the caller promotes",

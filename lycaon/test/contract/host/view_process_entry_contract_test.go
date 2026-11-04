@@ -29,13 +29,12 @@ func TestWorkerViewProcessesEnterThroughTheLaunchHelper(t *testing.T) {
 	repo := contractcheck.RepoRoot(t)
 	var offenders []string
 	seen := map[string]bool{}
-	err := filepath.WalkDir(filepath.Join(repo, "lycaon"), func(path string, d fs.DirEntry, walkErr error) error {
+	visit := func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case "testdata", "third_party", "node_modules", "test":
+			if d.Name() == "testdata" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -64,8 +63,9 @@ func TestWorkerViewProcessesEnterThroughTheLaunchHelper(t *testing.T) {
 			return true
 		})
 		return nil
-	})
-	contractcheck.FailErr(t, "walk production sources", err)
+	}
+	// Other binaries serve no view, so a child of theirs parks nothing.
+	contractcheck.FailErr(t, "walk engine sources", filepath.WalkDir(filepath.Join(repo, "lycaon", "internal"), visit))
 	sort.Strings(offenders)
 	if len(offenders) > 0 {
 		t.Fatalf("processes must start through internal/exec with ExecOpts.Dir, not a raw working directory:\n%s", strings.Join(offenders, "\n"))
