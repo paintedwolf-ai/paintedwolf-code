@@ -669,7 +669,7 @@ anchors:
         git: { type: "object[]", required: true }
         other_files: { type: "int", required: true }
         other_effects: { type: "int", required: true }
-        other_may_include_working_set: { type: "bool", required: true }
+        other_may_include_working_set: { type: "bool", required: false }
         truncated: { type: "bool", required: true }
 
   - id: inject.synthesis_evidence
