@@ -210,14 +210,18 @@ func (t *SourceHistoryTool) workerSessionDiff(
 			out.Note = treeDiffPastRecordNote
 		}
 	}
-	out.Diff = comparisonDiff(sourceledger.Comparison{
-		Before: sourceledger.ComparisonSide{Content: compared.Before},
-		After:  sourceledger.ComparisonSide{Content: compared.After},
+	diff, tooLarge := comparisonDiff(sourceledger.Comparison{
+		Before: sourceledger.ComparisonSide{VersionID: out.BaseVersionID, Content: compared.Before},
+		After:  sourceledger.ComparisonSide{VersionID: out.VersionID, Content: compared.After},
 	},
 		treeDiffLabel(display, treeSideName("session baseline", out.BaseVersionID), compared.Kind == workspacebaseline.ChangeCreated),
 		treeDiffLabel(display, treeSideName("live", out.VersionID), compared.Kind == workspacebaseline.ChangeDeleted),
 	)
-	if out.Diff == "" {
+	out.Diff = diff
+	switch {
+	case tooLarge != "":
+		out.Note = joinNotes(out.Note, tooLarge)
+	case diff == "":
 		out.Note = treeDiffTouchedNote
 	}
 	return marshalSourceHistory(display, out)

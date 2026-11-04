@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -454,5 +455,91 @@ func TestSourceHistoryOverviewACOV19LedgerLookupFailureIsStated(t *testing.T) {
 func TestDisplayPathLocationNeedsAPrimaryRoot(t *testing.T) {
 	if _, _, err := displayPathLocation(nil, "gen.txt"); err == nil {
 		t.Fatal("a path resolved with no roots")
+	}
+}
+
+func manyLines(prefix string, count int) string {
+	var text strings.Builder
+	for i := range count {
+		fmt.Fprintf(&text, "%s line %06d of generated source text\n", prefix, i)
+	}
+	return text.String()
+}
+
+// allocatedBy reports what call allocated in total, which bounds its peak.
+func allocatedBy(call func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	call()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
+}
+
+// Unbounded, a rewrite of this size allocates gigabytes: the edit search is
+// quadratic in the edit depth.
+const largeDiffAllocationLimit = 2 * 4 * sourceHistoryDiffMaxCells
+
+func TestSourceHistoryDiffACDF18LargeRewriteAnswersWithANote(t *testing.T) {
+	const lines = 20_000
+	before, after := manyLines("old", lines), manyLines("new", lines)
+
+	t.Run("live file on a write leg", func(t *testing.T) {
+		h := newHistoryHarness(t)
+		tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: before, After: after, HasBefore: true, HasAfter: true}}
+		var result diffResult
+		if allocated := allocatedBy(func() { result = runTreeDiff(t, h, tree, "gen.txt") }); allocated > largeDiffAllocationLimit {
+			t.Fatalf("allocated %d bytes, limit %d", allocated, int64(largeDiffAllocationLimit))
+		}
+		if !result.Unrecorded || result.Diff != "" || result.Note != diffTooLargeNote(len(before), len(after), "", "") {
+			t.Fatalf("diff %d bytes, note %q, want no diff and the sizes", len(result.Diff), result.Note)
+		}
+	})
+	t.Run("default diff from the ledger", func(t *testing.T) {
+		h := newHistoryHarness(t)
+		h.beginSession(historySession)
+		h.record(effectSeed{path: "gen.txt", content: after, before: before})
+		var result diffResult
+		if allocated := allocatedBy(func() { result = h.sessionDiff("gen.txt") }); allocated > largeDiffAllocationLimit {
+			t.Fatalf("allocated %d bytes, limit %d", allocated, int64(largeDiffAllocationLimit))
+		}
+		if !result.Recorded || result.Diff != "" || result.BaseVersionID == "" || result.VersionID == "" ||
+			result.Note != diffTooLargeNote(len(before), len(after), result.BaseVersionID, result.VersionID) {
+			t.Fatalf("diff %d bytes, result note %q versions %q %q, want no diff and both sizes and versions", len(result.Diff), result.Note, result.BaseVersionID, result.VersionID)
+		}
+	})
+	t.Run("explicit version", func(t *testing.T) {
+		h := newHistoryHarness(t)
+		h.record(effectSeed{path: "gen.txt", content: after, before: before})
+		version := h.head("gen.txt").VersionID
+		var result diffResult
+		var err error
+		if allocated := allocatedBy(func() { result, err = h.diff(map[string]any{"path": "gen.txt", "version_id": version}) }); allocated > largeDiffAllocationLimit {
+			t.Fatalf("allocated %d bytes, limit %d", allocated, int64(largeDiffAllocationLimit))
+		}
+		testutil.FailErr(t, "explicit diff", err)
+		if result.Diff != "" || result.Note != diffTooLargeNote(len(before), len(after), result.BaseVersionID, version) {
+			t.Fatalf("diff %d bytes, note %q, want no diff and the note", len(result.Diff), result.Note)
+		}
+	})
+}
+
+// The ceiling admits a whole rewrite of an ordinary source file, and a file that
+// only grew costs no edit search however large it is.
+func TestSourceHistoryDiffACDF18CeilingAdmitsOrdinaryFiles(t *testing.T) {
+	for name, compared := range map[string]workspacebaseline.PathComparison{
+		"rewrite of 1,500 lines":    {Kind: workspacebaseline.ChangeModified, Before: manyLines("old", 1_500), After: manyLines("new", 1_500), HasBefore: true, HasAfter: true},
+		"new file of 50,000 lines":  {Kind: workspacebaseline.ChangeCreated, After: manyLines("new", 50_000), HasBefore: true, HasAfter: true},
+		"gone file of 50,000 lines": {Kind: workspacebaseline.ChangeDeleted, Before: manyLines("old", 50_000), HasBefore: true, HasAfter: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHistoryHarness(t)
+			var result diffResult
+			if allocated := allocatedBy(func() { result = runTreeDiff(t, h, &fakeTree{path: compared}, "gen.txt") }); allocated > largeDiffAllocationLimit {
+				t.Fatalf("allocated %d bytes, limit %d", allocated, int64(largeDiffAllocationLimit))
+			}
+			if result.Diff == "" || result.Note != "" {
+				t.Fatalf("diff %d bytes, note %q, want the diff", len(result.Diff), result.Note)
+			}
+		})
 	}
 }
