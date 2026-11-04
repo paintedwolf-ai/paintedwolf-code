@@ -62,7 +62,7 @@ def sample_resources(stop, interval=60):
         print(resource_line(), flush=True)
 
 
-HISTORY_KEYS = ("failed_targets", "passed_targets", "native_failed", "native_passed", "contract_failures")
+HISTORY_KEYS = ("failed_targets", "passed_targets", "native_failed", "native_passed", "contract_failures", "failed_packages")
 
 
 def parse_early_history(raw, targets):
@@ -174,7 +174,7 @@ def run_lane(name, shard="", merge_group=False):
             commands = ready_commands(targets, native_commands(scope), history)
             from ci_policy.ready_scope import commands as scoped_commands
             if code == 0 or complete:
-                commands, record['packages'] = scoped_commands(commands, scope)
+                commands, record['packages'] = scoped_commands(commands, scope, history, lane.get('early_targets', []))
         if code == 0 and merge_group:
             from ci_policy.merge_preflight import commands as ordered_commands
             commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
