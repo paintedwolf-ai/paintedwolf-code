@@ -100,9 +100,6 @@ type openCommandWindow struct {
 	// next completed pass records the same drift as outside changes.
 	incomplete bool
 	finalized  bool
-	// rowOwed means settlement could not end the row.
-	rowOwed bool
-	endedAt time.Time
 }
 
 // entryKey addresses one file across snapshot entries and branch heads.
@@ -476,7 +473,6 @@ func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow
 	}
 	s.windowsMu.Lock()
 	w.active = false
-	w.endedAt = ended
 	s.windowsMu.Unlock()
 	var finishErr error
 	if lockErr == nil {
@@ -488,9 +484,8 @@ func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow
 	s.windowsMu.Lock()
 	defer s.windowsMu.Unlock()
 	w.finalized = true
-	// Without its lock or its final write the row stays for in-flight observers
-	// and interrupted-window recovery.
-	w.rowOwed = lockErr != nil || finishErr != nil
+	// Without its lock or its final write the row stays for in-flight observers,
+	// and the next boot's recovery ends it.
 	err := errors.Join(passErr, lockErr, finishErr)
 	if err != nil {
 		w.incomplete = true
@@ -517,26 +512,16 @@ func (s *Commands) forgetWindow(w *openCommandWindow) {
 
 // notePassCompleted clears windows left incomplete on this branch: the pass
 // recorded their drift as outside changes, so nothing further is owed.
-func (s *Commands) notePassCompleted(ctx context.Context, projectID string, roots []RootSpec) {
+func (s *Commands) notePassCompleted(projectID string, roots []RootSpec) {
 	s.windowsMu.Lock()
-	var owed []*openCommandWindow
+	defer s.windowsMu.Unlock()
 	for _, window := range append([]*openCommandWindow(nil), s.openWindows[projectID]...) {
 		if !window.incomplete || inventoryBranch(window.roots) != inventoryBranch(roots) {
 			continue
 		}
 		window.incomplete = false
-		if !window.finalized {
-			continue
-		}
-		if window.rowOwed {
-			owed = append(owed, window)
-		}
-		s.forgetWindow(window)
-	}
-	s.windowsMu.Unlock()
-	for _, window := range owed {
-		if err := s.finishWindow(context.WithoutCancel(ctx), window.id, "", window.endedAt); err != nil {
-			slog.WarnContext(ctx, "command window finish after failed settlement", "window_id", window.id, "err", err)
+		if window.finalized {
+			s.forgetWindow(window)
 		}
 	}
 }

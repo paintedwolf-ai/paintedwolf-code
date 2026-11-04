@@ -291,10 +291,11 @@ func (failingLocks) lockObservations(context.Context, string, []RootSpec) (func(
 	return nil, errPassFailed
 }
 
-func TestFailedLockLeavesTheRowUntilTheNextCompletedPass(t *testing.T) {
+func TestFailedLockLeavesTheRowUntilTheNextBoot(t *testing.T) {
+	ledger := openDiskLedger(t)
+	store, ctx, root := ledger.store, context.Background(), ledger.root
 	repochange.DisableWatchersForTest()
 	t.Cleanup(repochange.ResetWatchersForTest)
-	store, ctx, root := openLedgerOnDisk(t)
 	window := openTestWindow(t, store, ctx, root, "make")
 	real := store.Commands.git
 	store.Commands.git = failingLocks{real}
@@ -311,8 +312,12 @@ func TestFailedLockLeavesTheRowUntilTheNextCompletedPass(t *testing.T) {
 		t.Fatalf("row after failed lock = %+v, want it still running", row)
 	}
 	forceTestPass(t, store, ctx, root)
+	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 0 {
+		t.Fatalf("a completed pass left it listed: %+v", listed)
+	}
+	testutil.FailErr(t, "boot recovery", New(ledger.sqlDB, ledger.contentDir).Commands.RecoverInterruptedWindows(ctx))
 	if _, err := store.queries.GetSourceCommandWindow(ctx, window.ID); err == nil {
-		t.Fatal("quiet window's row survived the pass that cleared it")
+		t.Fatal("quiet window's row survived the next boot's recovery")
 	}
 }
 

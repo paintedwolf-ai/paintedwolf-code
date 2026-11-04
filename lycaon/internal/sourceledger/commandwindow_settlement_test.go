@@ -28,9 +28,9 @@ type beforePassCompletes struct {
 	before func()
 }
 
-func (p beforePassCompletes) notePassCompleted(ctx context.Context, projectID string, roots []RootSpec) {
+func (p beforePassCompletes) notePassCompleted(projectID string, roots []RootSpec) {
 	p.before()
-	p.inventoryCommandsPort.notePassCompleted(ctx, projectID, roots)
+	p.inventoryCommandsPort.notePassCompleted(projectID, roots)
 }
 
 // A pass that captured before the last write says nothing about it, so the close
