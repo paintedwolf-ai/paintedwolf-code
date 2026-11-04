@@ -97,8 +97,8 @@ func newTestLiveTracker(t *testing.T, viewID string, core *layeredfs.Core, roots
 			SupportsInvalidation: true,
 			Completeness:         observation.CompletenessComplete,
 		},
-		Core:   core,
-		Roots:  roots,
+		Core:  core,
+		Roots: roots,
 	})
 	if err != nil {
 		t.Fatalf("NewTracker: %v", err)

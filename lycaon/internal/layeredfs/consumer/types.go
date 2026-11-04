@@ -187,17 +187,17 @@ type SurveyResult struct {
 
 // EvidenceReadResult holds file bytes and provenance returned by ReadEvidence or ReadCheckpointEntry.
 type EvidenceReadResult struct {
-	Path               layeredfs.QualifiedPath         `json:"path"`
-	Content            []byte                          `json:"content"`
-	SHA256             string                          `json:"sha256"`
-	Size               int64                           `json:"size"`
-	Mode               fs.FileMode                     `json:"mode"`
-	ModTime            time.Time                       `json:"mod_time"`
-	Layer              layeredfs.LayerSource           `json:"layer"`
-	Source             AccessSource                    `json:"source"`
-	StoredInCheckpoint bool                            `json:"stored_in_checkpoint"`
+	Path               layeredfs.QualifiedPath             `json:"path"`
+	Content            []byte                              `json:"content"`
+	SHA256             string                              `json:"sha256"`
+	Size               int64                               `json:"size"`
+	Mode               fs.FileMode                         `json:"mode"`
+	ModTime            time.Time                           `json:"mod_time"`
+	Layer              layeredfs.LayerSource               `json:"layer"`
+	Source             AccessSource                        `json:"source"`
+	StoredInCheckpoint bool                                `json:"stored_in_checkpoint"`
 	VisibilityMode     observation.UntouchedVisibilityMode `json:"visibility_mode"`
-	Observation        observation.SourceObservation   `json:"observation"`
+	Observation        observation.SourceObservation       `json:"observation"`
 }
 
 // SearchRequest configures a workspace content or path search.

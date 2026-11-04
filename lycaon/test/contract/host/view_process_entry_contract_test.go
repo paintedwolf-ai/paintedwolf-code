@@ -112,3 +112,55 @@ func commandLikeName(x ast.Expr) bool {
 	name := strings.ToLower(id.Name)
 	return name == "c" || strings.Contains(name, "cmd") || strings.Contains(name, "command") || strings.Contains(name, "proc") || name == "final"
 }
+
+// viewPathConsumers are the packages handed worker view paths. The server runs in this process, so a
+// flush or mapping there can stop the whole engine: darwin's File.Sync holds its scheduler slot across
+// a call the server must answer, and a page fault on a mapped view file does the same or kills the
+// process when the page-in fails. Their flushes go through internal/fssync and they map nothing.
+var viewPathConsumers = []string{
+	"lycaon/internal/workspace", "lycaon/internal/worker", "lycaon/internal/session", "lycaon/internal/tools",
+	"lycaon/internal/toolhost", "lycaon/internal/layeredfs/consumer", "lycaon/internal/api/sourceapi",
+}
+
+func TestViewPathConsumersFlushThroughFssyncAndMapNothing(t *testing.T) {
+	repo := contractcheck.RepoRoot(t)
+	var offenders []string
+	for _, pkg := range viewPathConsumers {
+		err := filepath.WalkDir(filepath.Join(repo, filepath.FromSlash(pkg)), func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(repo, path)
+			if err != nil {
+				return err
+			}
+			ast.Inspect(parsed, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				selector, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if name := selector.Sel.Name; (name == "Sync" && len(call.Args) == 0) || name == "Mmap" {
+					offenders = append(offenders, filepath.ToSlash(rel)+": "+name)
+				}
+				return true
+			})
+			return nil
+		})
+		contractcheck.FailErr(t, "walk "+pkg, err)
+	}
+	sort.Strings(offenders)
+	if len(offenders) > 0 {
+		t.Fatalf("view path consumers must flush through internal/fssync and never map:\n%s", strings.Join(offenders, "\n"))
+	}
+}
