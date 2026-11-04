@@ -31,7 +31,7 @@ func TestToolCheckUsesApplicationReplayIdentity(t *testing.T) {
 		call := api.ToolCall{ID: "first", Name: "read_status", Args: map[string]any{}}
 		if calls == 2 {
 			var receipt map[string]string
-			testutil.FailErr(t, "read tool receipt", json.Unmarshal([]byte(strings.TrimPrefix(strings.SplitN(req.Messages[len(req.Messages)-2].Content, "\n", 2)[1], "⟦D⟧")), &receipt))
+			testutil.FailErr(t, "read tool receipt", json.Unmarshal([]byte(strings.SplitN(req.Messages[len(req.Messages)-2].Content, "\n", 2)[1]), &receipt))
 			call = api.ToolCall{ID: "second", Name: "record_status", Args: map[string]any{"receipt": receipt["receipt"]}}
 			var reasoning *api.ModelReasoning
 			for _, message := range req.Messages {

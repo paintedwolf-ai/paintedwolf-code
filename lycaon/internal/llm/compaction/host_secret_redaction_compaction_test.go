@@ -72,7 +72,7 @@ func TestCompactionPromptKeepsModelHistoryFreeOfTransportLabels(t *testing.T) {
 	}}, 8192, 512)
 	testutil.FailErr(t, "build compaction prompt", err)
 	prompt := input.Text
-	if !strings.Contains(prompt, "I inspected the repository.") || strings.Contains(prompt, "⟦D:model⟧") {
+	if !strings.Contains(prompt, "I inspected the repository.") || strings.Contains(prompt, "Data from model") {
 		t.Fatalf("compaction prompt leaked model transport metadata: %q", prompt)
 	}
 }

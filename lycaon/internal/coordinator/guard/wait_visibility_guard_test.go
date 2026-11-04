@@ -42,8 +42,8 @@ func TestWaitVisibilityDerivesDebtFromDurableRows(t *testing.T) {
 		{name: "AC-MID-14 worker owes nothing", history: []api.Message{carrier("Status")}, publishes: true, worker: true, tool: "wait"},
 		{name: "ordinary call is not checked", history: []api.Message{carrier("Status")}, publishes: true, tool: "read"},
 		{name: "no history", publishes: true, tool: "wait"},
-		{name: "one refusal repeats", history: []api.Message{carrier("Status"), refused}, publishes: true, tool: "wait", blocked: true},
-		{name: "AC-MID-09 exhausted repair stops refusing", history: []api.Message{carrier("Status"), refused, carrier("Status"), refused}, publishes: true, tool: "wait"},
+		{name: "AC-MID-09 exhausted repair stops refusing", history: []api.Message{carrier("Status"), refused}, publishes: true, tool: "wait"},
+		{name: "AC-MID-09 new text does not restart repair", history: []api.Message{carrier("Status"), refused, carrier("Changed")}, publishes: true, tool: "wait"},
 		{name: "an unrelated refusal spends nothing", history: []api.Message{carrier("Status"), otherRefusal, otherRefusal}, publishes: true, tool: "wait", blocked: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -37,7 +37,7 @@ func TestToolFeedbackDeliversExactReplacementAsData(t *testing.T) {
 		t.Fatalf("replacement changed: %+v", call)
 	}
 	projected := projectOne(t, msg)
-	if !strings.Contains(projected.Content, "⟦D⟧"+parts[0].Content) || projectOne(t, projected).Content != projected.Content {
+	if !strings.Contains(projected.Content, parts[0].Content) || projectOne(t, projected).Content != projected.Content {
 		t.Fatal("feedback missing or duplicated on model projection")
 	}
 	msg.Role = api.MessageRoleAssistant
