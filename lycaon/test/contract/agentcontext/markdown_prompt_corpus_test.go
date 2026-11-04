@@ -154,7 +154,8 @@ func coordinatorSurfaceOutputs(t *testing.T) []renderedOutput {
 
 // templateBranchOutputs flattens every shipped template. An archive is sealed and
 // is checked by its own contract. A binding's selector names who reads a guidance
-// template; the prompts directory names its persona.
+// template; the prompts directory names its persona. Partials and archetypes are
+// read through what includes them, which is what gives them an audience.
 func templateBranchOutputs(t *testing.T) []renderedOutput {
 	t.Helper()
 	workerRenders := map[string]bool{}
@@ -168,6 +169,9 @@ func templateBranchOutputs(t *testing.T) []renderedOutput {
 	err := filepath.WalkDir(filepath.Join(root, packRoot), func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") || strings.Contains(path, string(filepath.Separator)+"archive"+string(filepath.Separator)) {
 			return err
+		}
+		if dir := filepath.Base(filepath.Dir(path)); dir == "partials" || dir == "archetypes" {
+			return nil
 		}
 		raw, readErr := os.ReadFile(path)
 		if readErr != nil {
@@ -192,18 +196,10 @@ func templateBranchOutputs(t *testing.T) []renderedOutput {
 
 func templateAudience(path string, workerRenders map[string]bool) promptAudience {
 	base := strings.TrimSuffix(filepath.Base(path), ".md")
-	dir := filepath.ToSlash(filepath.Dir(path))
-	switch {
-	case strings.HasSuffix(dir, "/agents/prompts"):
-		if strings.HasPrefix(base, "coordinator-") {
-			return audienceCoordinator
-		}
+	if strings.HasSuffix(filepath.ToSlash(filepath.Dir(path)), "/agents/prompts") && !strings.HasPrefix(base, "coordinator-") {
 		return audienceWorker
-	case strings.HasSuffix(dir, "/shared/archetypes"):
-		return audienceWorker
-	case strings.HasSuffix(dir, "/shared/partials") && strings.HasPrefix(base, "worker-"):
-		return audienceWorker
-	case workerRenders[base]:
+	}
+	if workerRenders[base] {
 		return audienceWorker
 	}
 	return audienceCoordinator
@@ -211,7 +207,7 @@ func templateAudience(path string, workerRenders map[string]bool) promptAudience
 
 func templateIsStanding(path string) bool {
 	dir := filepath.ToSlash(filepath.Dir(path))
-	return strings.HasSuffix(dir, "/agents/prompts") || strings.HasSuffix(dir, "/shared/partials") || strings.HasSuffix(dir, "/shared/units")
+	return strings.HasSuffix(dir, "/agents/prompts") || strings.HasSuffix(dir, "/shared/units")
 }
 
 func policyOutputs(t *testing.T) []renderedOutput {
@@ -229,10 +225,14 @@ func policyOutputs(t *testing.T) []renderedOutput {
 		if rule, ok := rules.Get(code); ok && strings.Contains(rule.When, `paintedwolf.profile == "worker"`) {
 			audience = audienceWorker
 		}
+		copyText := strings.Join([]string{entry.What, entry.Cause, entry.Why, entry.Fix, entry.Instead}, "\n")
 		if slices.ContainsFunc(entry.Tools, func(tool string) bool { return slices.Contains(typedCitationTools, tool) }) {
 			audience = audienceTypedTool
 		}
-		copyText := strings.Join([]string{entry.What, entry.Cause, entry.Why, entry.Fix, entry.Instead}, "\n")
+		// The refusal of a typed tool's own call describes that call's arguments.
+		if rule, ok := rules.Get(code); ok && rule.Anchor == "tool.rejected" && namesTypedCitationTool(copyText) {
+			audience = audienceTypedTool
+		}
 		out = append(out, renderedOutput{name: "policy " + code, audience: audience, text: flattenBranches(t, copyText, audience == audienceCoordinator)})
 		if guidance.CopyOnlyEmit(entry.Emit) {
 			continue

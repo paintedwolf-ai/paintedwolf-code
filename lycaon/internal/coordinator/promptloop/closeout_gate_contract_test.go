@@ -250,10 +250,10 @@ func kickVariables(t *testing.T, ref string) map[string]bool {
 
 // AC-COMPAT-08: a repair kick reads exactly what the real path sends it. A name the
 // builder never sends renders as a silent fallback, which is how a retired form or an
-// empty document reaches the model. Keys read by neither the kick nor the refusal's
-// own copy are dead weight, and the only ones allowed are the shared builder's.
+// empty document reaches the model. A key the kick does not read must belong to the
+// facts the refusal's policy copy reads, or to the builder both kicks share.
 func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
-	const documentContent = "Done [read#1:2].\n\n```json\n{\"headline\":\"H\",\"cited_evidence\":[]}\n```"
+	const documentContent = "Done [read#1:2].\n\n```json\n{\"headline\":\"H\",\"cited_evidence\":[{\"evidence\":\"read#1\"}]}\n```"
 	for _, tc := range []struct {
 		kick, content string
 		reportPhase   bool
@@ -283,8 +283,9 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 					t.Errorf("%s reads %q, which the real path does not send (sent %v)", tc.kick, name, slices.Sorted(maps.Keys(sent)))
 				}
 			}
+			policyFacts := guidance.GroundingHintData([]string{"offender"}, evidence.Ledger{})
 			for name := range sent {
-				if !reads[name] && !slices.Contains(tc.sharedOnly, name) {
+				if _, isPolicyFact := policyFacts[name]; !reads[name] && !isPolicyFact && !slices.Contains(tc.sharedOnly, name) {
 					t.Errorf("%s is sent %q and does not read it", tc.kick, name)
 				}
 			}
