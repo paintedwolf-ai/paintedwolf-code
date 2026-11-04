@@ -37,6 +37,9 @@ func TestParseIssues(t *testing.T) {
 		{"empty quoted path", `[""]`, IssueMalformedCitation, KindCitation},
 		{"bad quoted escape", `["a\qb"]`, IssueMalformedCitation, KindCitation},
 		{"unknown name in a confirmed group", "[read#1, sic]", IssueMalformedCitation, KindCitation},
+		{"unknown bare path after an attempt", "[a.go:1, sic]", IssueMalformedCitation, KindCitation},
+		{"unknown bare path after a space", "[a.go:1 , b/c.go]", IssueMalformedCitation, KindCitation},
+		{"zero line on a path", "[a.go:0]", IssueInvalidRange, KindCitation},
 		{"zero line", "[read#3:0]", IssueInvalidRange, KindCitation},
 		{"backward range", "[read#3:58-42]", IssueInvalidRange, KindCitation},
 		{"backward range on a path", "[a/b.go:58-42]", IssueInvalidRange, KindCitation},
@@ -119,11 +122,11 @@ func TestParseBudgets(t *testing.T) {
 	if got := Project(doc); strings.Contains(got, "read#") {
 		t.Fatalf("node past the budget reached display: %q", got)
 	}
-	huge := Parse(strings.Repeat("x", 11), Options{MaxSourceBytes: 10})
+	huge := Parse("prose [read#1] prose", Options{MaxSourceBytes: 10})
 	if got := issueCodes(huge); !reflect.DeepEqual(got, []IssueCode{IssueSourceBudget}) {
 		t.Fatalf("issues = %+v", huge.Issues)
 	}
-	if got := Project(huge); got != "" {
+	if got := Project(huge); got != "prose prose" {
 		t.Fatalf("over-budget source presented %q", got)
 	}
 	long := boundedToken(strings.Repeat("é", 400))
@@ -132,8 +135,8 @@ func TestParseBudgets(t *testing.T) {
 	}
 }
 
-// Sources built to make the block or link parser quadratic are refused, with a
-// structured issue, rather than parsed at that cost.
+// Sources built to make the block or link parser quadratic are not parsed at that
+// cost: they report a structured issue and keep a display with no protocol nodes.
 func TestParseStructureBudget(t *testing.T) {
 	t.Parallel()
 	nested := func(unit string, depth int) string { return strings.Repeat(unit, depth) + "x" }
@@ -152,10 +155,11 @@ func TestParseStructureBudget(t *testing.T) {
 	}
 	for _, source := range refused {
 		doc := Parse(source, Options{})
-		if got := issueCodes(doc); !reflect.DeepEqual(got, []IssueCode{IssueStructureBudget}) || len(doc.Occurrences) != 0 {
+		if got := issueCodes(doc); len(got) == 0 || got[0] != IssueStructureBudget {
 			t.Errorf("%.20q: issues = %+v", source, got)
 		}
-		if got := Project(doc); got != "" {
+		// The issue blocks acceptance; a fallback still has the prose to show.
+		if got := Project(doc); got == "" || strings.Contains(got, "read#") {
 			t.Errorf("%.20q: refused source presented %.20q", source, got)
 		}
 	}

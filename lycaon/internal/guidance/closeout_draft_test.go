@@ -70,7 +70,7 @@ func ledgerOf(exchanges ...[]api.Message) evidence.Ledger {
 }
 
 func resolveMarkdown(source string, roots evidence.CitationRoots, ev evidence.Ledger) guidance.DraftCitationResolution {
-	draft := guidance.ParseCloseoutDraft(source, citationmd.Options{KnownPath: guidance.KnownLedgerPath(roots, ev)})
+	draft := guidance.ParseCloseoutDraft(source, guidance.DraftParseOptions(roots, ev))
 	return guidance.ResolveDraftCitations(roots, "implement_synthesis", draft, guidance.CloseoutEvidence{Ledger: ev}, nil)
 }
 
@@ -235,8 +235,14 @@ func TestDraftResolverOutcomes(t *testing.T) {
 	if wrongPath.Outcome != guidance.CitationNotObserved || wrongPath.Code != guidance.SynthHandleNotInLegsCode {
 		t.Fatalf("unobserved path = %+v", wrongPath)
 	}
-	if got := onlyOutcome(t, "[other/file.ts]", evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved {
-		t.Fatalf("unobserved bare path = %+v", got)
+	if got := resolveMarkdown("[other/file.ts]", evidence.CitationRoots{}, unique); len(got.Occurrences) != 0 || len(got.Issues) != 0 {
+		t.Fatalf("an unobserved bare path is prose: %+v", got)
+	}
+	if got := onlyOutcome(t, `["other/file.ts"]`, evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved {
+		t.Fatalf("an unobserved quoted path = %+v", got)
+	}
+	if got := onlyOutcome(t, "[other.ts:3]", evidence.CitationRoots{}, unique); got.Outcome != guidance.CitationNotObserved || got.Code != guidance.SynthHandleNotInLegsCode {
+		t.Fatalf("a coordinate is always an attempt: %+v", got)
 	}
 	superseded := evidence.AssembleLedger([]evidence.Record{
 		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", SupersededBy: "read#2", LineRanges: []evidence.LineRange{{Start: 1, End: 5}}},
@@ -258,7 +264,7 @@ func TestDraftResolverOutcomes(t *testing.T) {
 	if got := onlyOutcome(t, "[g/h.go]", evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationUnverifiable || got.Code != guidance.SynthCitationUnverifiableCode {
 		t.Fatalf("a gate record is no content observation: %+v", got)
 	}
-	if got := onlyOutcome(t, "[g/../../h.go]", evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationNotObserved {
+	if got := onlyOutcome(t, `["g/../../h.go"]`, evidence.CitationRoots{}, gateOnly); got.Outcome != guidance.CitationNotObserved {
 		t.Fatalf("traversal = %+v", got)
 	}
 	survey := evidence.AssembleLedger([]evidence.Record{{Handle: "list#1", Kind: "list", Shape: evidence.ShapeFileRegion, Path: "pkg/doc.go", Survey: true}})
@@ -400,5 +406,46 @@ func TestCitedEvidenceEndLine(t *testing.T) {
 	}
 	if got := guidance.FormatResolutionOffender(evidence.Resolution{Handle: "read#1", Line: 2, EndLine: 9}, guidance.WorkerFindingInput{}); got != "read#1:2-9" {
 		t.Fatalf("handle offender = %q", got)
+	}
+}
+
+// AC-AST-20: a source link is a workspace citation spelled as the ledger spells
+// its root, with coordinates from the destination.
+func TestDraftSourceLinks(t *testing.T) {
+	t.Parallel()
+	roots := multiRootFixture(t)
+	ev := evidence.AssembleLedger([]evidence.Record{
+		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "@shared/lib/sec.go", LineRanges: []evidence.LineRange{{Start: 1, End: 20}}},
+	})
+	cases := []struct {
+		name, source string
+		want         guidance.CitationOutcome
+		path         string
+		line, end    int
+	}{
+		{"secondary root", "[sec](source://s/lib/sec.go#L12-L14)", guidance.CitationGrounded, "@shared/lib/sec.go", 12, 14},
+		{"range past the observation", "[sec](source://s/lib/sec.go#L12-L40)", guidance.CitationUnverifiable, "@shared/lib/sec.go", 12, 40},
+		{"wrong root", "[sec](source://p/lib/sec.go#L12)", guidance.CitationNotObserved, "", 12, 0},
+		{"unknown root", "[sec](source://nope/lib/sec.go#L12)", guidance.CitationNotObserved, "", 12, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := onlyOutcome(t, tc.source, roots, ev)
+			if got.Kind != citationmd.KindWorkspaceLink || got.Outcome != tc.want || got.Resolution.Line != tc.line {
+				t.Fatalf("outcome = %+v", got)
+			}
+			if tc.path != "" && (got.Resolution.Path != tc.path || got.Resolution.EndLine != tc.end) {
+				t.Fatalf("resolution = %+v", got.Resolution)
+			}
+		})
+	}
+	single := ledgerOf(readMessages("a.go", lineTexts(1, 5)))
+	if got := onlyOutcome(t, "[a](source://any/a.go#L2)", evidence.CitationRoots{}, single); got.Outcome != guidance.CitationGrounded {
+		t.Fatalf("single root = %+v", got)
+	}
+	draft := guidance.ParseCloseoutDraft("[sec](source://s/lib/sec.go#L12)", guidance.DraftParseOptions(roots, ev))
+	if len(draft.CitedEvidence) != 1 || draft.CitedEvidence[0].Path != "@shared/lib/sec.go" {
+		t.Fatalf("metadata = %+v", draft.CitedEvidence)
 	}
 }

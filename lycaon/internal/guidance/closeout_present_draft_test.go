@@ -27,7 +27,7 @@ func presentationLedger() evidence.Ledger {
 
 func present(source string, ev evidence.Ledger) string {
 	roots := evidence.CitationRoots{}
-	draft := guidance.ParseCloseoutDraft(source, citationmd.Options{KnownPath: guidance.KnownLedgerPath(roots, ev)})
+	draft := guidance.ParseCloseoutDraft(source, guidance.DraftParseOptions(roots, ev))
 	return guidance.PresentCloseoutMarkdown(draft, guidance.ResolveDraftCitations(roots, "implement_synthesis", draft, guidance.CloseoutEvidence{Ledger: ev}, nil))
 }
 
@@ -55,6 +55,8 @@ func TestPresentCloseoutMarkdown(t *testing.T) {
 		{"workspace link stays", "Per [auth](internal/a.go#L4).", "Per [auth](internal/a.go#L4)."},
 		{"unobserved workspace link keeps its label", "Per [auth](internal/z.go#L4).", "Per auth."},
 		{"AC-AST-07 unresolved reference goes", "Claim [read#99:2] stands.", "Claim stands."},
+		{"AC-AST-20 whole-response fence", "```markdown\nAt [read#3:4].\n\n```\n[read#1]\n```\n```", "```markdown\nAt [read#3:4].\n\n```\n[read#1]\n```\n```"},
+		{"AC-AST-20 fence is the document", "```md\nAt [read#3:4] and [task#1].\n```\n", "At [internal/a.go:4](internal/a.go#L4) and."},
 		{"unsupported range goes", "Claim [read#4:2-50] stands.", "Claim stands."},
 		{"damaged node goes", "Claim [read#x] stands [verify: nope].", "Claim stands."},
 		{"AC-AST-14 fence is byte for byte", "Syntax:\n\n" + fence + "\n\nEnd [task#1].", "Syntax:\n\n" + fence + "\n\nEnd."},
@@ -74,14 +76,13 @@ func TestPresentCloseoutMarkdown(t *testing.T) {
 	}
 }
 
-// With nothing for the ledger to add, acceptance equals the streamed projection.
-func TestPresentationAgreesWithStream(t *testing.T) {
+// With nothing for the ledger to add, acceptance equals the structural projection.
+func TestPresentationAgreesWithProjection(t *testing.T) {
 	t.Parallel()
 	source := "Intro [task#1].\n\n```\n[read#1]\n```\n\nSee [internal/a.go:7] and [spec](https://example.test/seen) and `x`.\n[verify: targeted - y] [command#4]\n"
-	projector := citationmd.NewProjector(citationmd.Options{})
-	stream := projector.Write(source) + projector.Close()
-	if accepted := present(source, presentationLedger()); accepted != stream {
-		t.Fatalf("accepted %q\nstream %q", accepted, stream)
+	projected := citationmd.Project(citationmd.Parse(source, citationmd.Options{}))
+	if accepted := present(source, presentationLedger()); accepted != projected {
+		t.Fatalf("accepted %q\nprojected %q", accepted, projected)
 	}
 }
 

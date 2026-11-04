@@ -127,7 +127,7 @@ func TestScannerWorkIsBoundedBySize(t *testing.T) {
 func TestParseWholeResponseFence(t *testing.T) {
 	t.Parallel()
 	body := "At [read#3:4] and [a](source://main/x.go#L2).\n\n```\n[read#1]\n```\n"
-	source := "\n```markdown\n" + body + "```\n\n"
+	source := "\n````markdown\n" + body + "````\n\n"
 	doc := Parse(source, Options{})
 	if len(doc.Issues) != 0 || len(doc.Occurrences) != 2 {
 		t.Fatalf("occurrences = %+v, issues = %+v", doc.Occurrences, doc.Issues)
@@ -247,7 +247,7 @@ func TestProjectFixtures(t *testing.T) {
 		{"indented", "para\n\n    [read#1]\n\n    [read#2]\n\nafter [read#3]", "para\n\n    [read#1]\n\n    [read#2]\n\nafter"},
 		{"lazy paragraph is not code", "para\n    [read#1]", "para"},
 		{"comment block", "<!--\n[read#1]\n\n[read#2]\n-->\n[read#3]", "<!--\n[read#1]\n\n[read#2]\n-->\n"},
-		{"html block", "<div>\n[read#1]\n\n[read#2]", "<div>\n[read#1]\n\n"},
+		{"html block", "<div>\n[read#1]\n\n[read#2]", "<div>\n[read#1]\n"},
 		{"unclosed comment is prose", "a <!-- [read#1] unclosed\n\n[read#2]", "a <!-- unclosed"},
 		{"not a tag", "a <b and [read#1] c > d", "a <b and c > d"},
 		{"code spans", "`[read#1]` and [read#2] and ``x ` [read#3]`` end", "`[read#1]` and and ``x ` [read#3]`` end"},
@@ -258,9 +258,9 @@ func TestProjectFixtures(t *testing.T) {
 		{"invalid destination", "[read#1](bad dest) tail", "(bad dest) tail"},
 		{"nested label", "[see [read#3] now](https://example.test/f) [read#2]", "[see [read#3] now](https://example.test/f)"},
 		{"reference", "[r]: https://example.test/r\n\n[read#1][r] [read#2][none]", "[r]: https://example.test/r\n\n[read#1][r][none]"},
-		{"late definition", "Use [read#1] here.\n\n[read#1]: https://example.test/a\n", "Use [read#1] here.\n\n[read#1]: https://example.test/a\n"},
-		{"table", "| a | b |\n|---|---|\n| [read#1] | `[read#2]` |\n", "| a | b |\n|---|---|\n | `[read#2]` |"},
-		{"spacing", "a  [read#1]  b\n([read#1]) x\n  [read#1]  \n\n\n\n  text", "a  b\n() x\n\n\n\n  text"},
+		{"late definition", "Use [read#1] here.\n\n[read#1]: https://example.test/a\n", "Use [read#1] here.\n\n[read#1]: https://example.test/a"},
+		{"table", "| a | b |\n|---|---|\n| [read#1] | `[read#2]` |\n", "| a | b |\n|---|---|\n| | `[read#2]` |"},
+		{"spacing", "a  [read#1]  b\n([read#1]) x\n  [read#1]  \n\n\n\n  text", "a  b\n() x\n  text"},
 		{"blank line after a dropped line", "a\n\n[read#1]\n\n[read#2]\n\nb", "a\n\nb"},
 		{"literal after a removal on its line", "[read#1] `x`\ny", "`x`\ny"},
 	}

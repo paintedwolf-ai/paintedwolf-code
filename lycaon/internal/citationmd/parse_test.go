@@ -57,7 +57,11 @@ func TestParseCitationForms(t *testing.T) {
 		{"path coordinate", "[internal/a.go:42]", Options{}, []Citation{{Path: "internal/a.go", Line: 42}}},
 		{"path range", "[internal/a.go:42-58]", Options{}, []Citation{{Path: "internal/a.go", Line: 42, EndLine: 58}}},
 		{"AC-AST-03 root label", "[@shared/lib/sec.go:12]", Options{}, []Citation{{Path: "@shared/lib/sec.go", Line: 12}}},
-		{"bare multi-segment path", "[internal/a.go]", Options{}, []Citation{{Path: "internal/a.go"}}},
+		{"observed bare path", "[internal/a.go]", knownNames("internal/a.go"), []Citation{{Path: "internal/a.go"}}},
+		{"AC-AST-16 single segment attempt", "[a.go:42]", Options{}, []Citation{{Path: "a.go", Line: 42}}},
+		{"AC-AST-16 multi-segment attempt", "[x/y.go:42]", Options{}, []Citation{{Path: "x/y.go", Line: 42}}},
+		{"attempt with a range", "[LICENSE:3-4]", Options{}, []Citation{{Path: "LICENSE", Line: 3, EndLine: 4}}},
+		{"attempt with an excerpt", `[a.go:3 "some text"]`, Options{}, []Citation{{Path: "a.go", Line: 3, Excerpt: "some text"}}},
 		{"AC-AST-03 known extensionless", "[Dockerfile]", knownNames("Dockerfile"), []Citation{{Path: "Dockerfile"}}},
 		{"AC-AST-05 observed LICENSE", "[LICENSE]", knownNames("LICENSE"), []Citation{{Path: "LICENSE"}}},
 		{"known with coordinate", "[LICENSE:3]", knownNames("LICENSE"), []Citation{{Path: "LICENSE", Line: 3}}},
@@ -70,8 +74,8 @@ func TestParseCitationForms(t *testing.T) {
 		{"AC-AST-03 quoted unicode", `["docs/設計 ノート.md":7]`, Options{}, []Citation{{Path: "docs/設計 ノート.md", Line: 7}}},
 		{"group", "[read#3:42, leg-a:grep#2:18]", Options{}, []Citation{{Handle: "read#3", Line: 42}, {Handle: "leg-a:grep#2", Line: 18}}},
 		{"group of paths", "[a/b.go:1, c/d.go:2]", Options{}, []Citation{{Path: "a/b.go", Line: 1}, {Path: "c/d.go", Line: 2}}},
-		{"group after path", "[a/b.go, read#1]", Options{}, []Citation{{Path: "a/b.go"}, {Handle: "read#1"}}},
-		{"group tolerates space before comma", "[a/b.go , c/d.go]", Options{}, []Citation{{Path: "a/b.go"}, {Path: "c/d.go"}}},
+		{"group after path", "[a/b.go, read#1]", knownNames("a/b.go"), []Citation{{Path: "a/b.go"}, {Handle: "read#1"}}},
+		{"group tolerates space before comma", "[a/b.go , c/d.go]", knownNames("a/b.go", "c/d.go"), []Citation{{Path: "a/b.go"}, {Path: "c/d.go"}}},
 		{"AC-AST-08 comma and semicolon", `[read#1:2 "a, b; c", read#2]`, Options{}, []Citation{{Handle: "read#1", Line: 2, Excerpt: "a, b; c"}, {Handle: "read#2"}}},
 		{"AC-AST-08 escaped quote", `[read#1:2 "say \"hi\" now"]`, Options{}, []Citation{{Handle: "read#1", Line: 2, Excerpt: `say "hi" now`}}},
 		{"AC-AST-08 brackets", `[read#1:2 "arr[0] = x]"]`, Options{}, []Citation{{Handle: "read#1", Line: 2, Excerpt: "arr[0] = x]"}}},
@@ -128,7 +132,16 @@ func TestParseLeavesProseAlone(t *testing.T) {
 		{"AC-AST-05 inline code handle", "`[read#1]`"},
 		{"AC-AST-05 sic", "He said [sic] once."},
 		{"AC-AST-05 draft", "A [draft] note."},
-		{"unknown name with coordinate", "[LICENSE:3]"},
+		{"AC-AST-16 and or", "[and/or]"},
+		{"AC-AST-16 ratio", "[1/2]"},
+		{"AC-AST-16 not applicable", "[n/a]"},
+		{"unobserved bare path", "[internal/a.go]"},
+		{"unobserved root path", "[@shared/a.go]"},
+		{"digits with a coordinate", "[3:16]"},
+		{"digit range", "[12:30-45]"},
+		{"clock time", "[12:30-13:00]"},
+		{"coordinate then prose", "[a.go:42 is wrong]"},
+		{"unclosed attempt", "[a.go:42\nnext"},
 		{"task box", "- [x] done\n- [X] done\n- [ ] open"},
 		{"numeric index", "See [1] and [23]."},
 		{"footnote", "See [^1]."},
@@ -166,7 +179,7 @@ func TestParseLiteralZonesStayLiteral(t *testing.T) {
 		kind         ZoneKind
 	}{
 		{"AC-AST-14 fence", "```\n[read#1] [verify: targeted - x]\n```", ZoneFence},
-		{"tilde fence", "~~~md\n[read#1]\n~~~", ZoneFence},
+		{"tilde fence", "~~~txt\n[read#1]\n~~~", ZoneFence},
 		{"long fence", "`````\n```\n[read#1]\n```\n`````", ZoneFence},
 		{"AC-AST-04 fence in list", "- item\n\n  ```\n  [read#1]\n  ```", ZoneFence},
 		{"AC-AST-04 fence in quote", "> ```\n> [read#1]\n> ```", ZoneFence},
@@ -289,7 +302,7 @@ func TestParseWebLinks(t *testing.T) {
 			}
 		})
 	}
-	for _, source := range []string{"[a](file:///tmp/a.go)", "[a](source://root/a.go)", "[a](mailto:x@example.test)", "[a](#top)", "<ftp://example.test/a>", "<x@example.test>", "[a]()"} {
+	for _, source := range []string{"[a](file:///tmp/a.go)", "[a](mailto:x@example.test)", "[a](#top)", "<ftp://example.test/a>", "<x@example.test>", "[a]()"} {
 		if doc := Parse(source, Options{}); len(doc.Occurrences) != 0 {
 			t.Fatalf("%q yielded %+v", source, doc.Occurrences)
 		}

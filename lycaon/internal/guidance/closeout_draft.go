@@ -47,8 +47,7 @@ type CloseoutDraft struct {
 	Parsed        citationmd.Document
 }
 
-// ParseCloseoutDraft parses Markdown into a typed draft. opts.KnownPath decides
-// single-segment names; see KnownLedgerPath.
+// ParseCloseoutDraft parses Markdown into a typed draft. See DraftParseOptions.
 func ParseCloseoutDraft(markdown string, opts citationmd.Options) CloseoutDraft {
 	parsed := citationmd.Parse(markdown, opts)
 	draft := CloseoutDraft{Synthesis: markdown, Issues: parsed.Issues, Parsed: parsed}
@@ -84,8 +83,32 @@ func citedEvidenceFrom(c citationmd.Citation) CoordinatorCitedEvidence {
 	return CoordinatorCitedEvidence{Evidence: c.Handle, Path: c.Path, Line: c.Line, EndLine: c.EndLine, Excerpt: c.Excerpt}
 }
 
-// KnownLedgerPath is the structured lookup that makes a single-segment bracket a
-// path citation: it holds only for a name with an observed ledger path key.
+// DraftParseOptions are the parse facts a live ledger and its roots supply.
+func DraftParseOptions(roots evidence.CitationRoots, ev evidence.Ledger) citationmd.Options {
+	return citationmd.Options{KnownPath: KnownLedgerPath(roots, ev), SourceRoot: sourceRootPrefix(roots)}
+}
+
+// sourceRootPrefix maps a source link's root id to the ledger's path spelling.
+func sourceRootPrefix(roots evidence.CitationRoots) func(string) (string, bool) {
+	return func(rootID string) (string, bool) {
+		if len(roots.Roots) == 0 {
+			return "", true
+		}
+		for _, root := range roots.Roots {
+			if root.ID != rootID {
+				continue
+			}
+			if root.IsPrimary {
+				return "", true
+			}
+			return "@" + root.Label + "/", true
+		}
+		return "", false
+	}
+}
+
+// KnownLedgerPath is the structured lookup that makes a bare bracket with no
+// coordinate a path citation: it holds only for an observed ledger path key.
 func KnownLedgerPath(roots evidence.CitationRoots, ev evidence.Ledger) func(string) bool {
 	return func(name string) bool {
 		key := evidence.LedgerPathKey(roots, name, ev.ByPath)
