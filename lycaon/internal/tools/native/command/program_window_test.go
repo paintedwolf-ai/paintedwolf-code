@@ -365,8 +365,9 @@ func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 	}
 }
 
-// A result that returns while a job's open is in flight cannot state the window
-// yet; the job's changes are still attributed to it.
+// A job's first native statement releases the foreground, so the result can
+// return before the job's later launch finishes opening the window. The result
+// cannot state it yet; the job's changes are still attributed to it.
 func TestProgramWindowOpenInFlightAtTheResultStillObservesTheJob(t *testing.T) {
 	f := newWindowFixture(t)
 	release := make(chan struct{})
@@ -378,7 +379,7 @@ func TestProgramWindowOpenInFlightAtTheResultStillObservesTheJob(t *testing.T) {
 			return ctx.Err()
 		}
 	}
-	outcome := f.run(t, writeGen+` &`)
+	outcome := f.run(t, `{ sleep 0.01; `+writeGen+`; } &`)
 	if outcome.SourceWindow != nil {
 		t.Fatalf("outcome = %+v, want no window before the open finished", outcome)
 	}
