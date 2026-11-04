@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -316,14 +317,18 @@ func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	if got.Status != 0 || len(lines) != 2 || lines[0] != lines[1] {
 		t.Fatalf("ulimit -n differs from the child's own: %+v", got)
 	}
-	raw, err = f.Call(t, t.Context(), "ulimit -n 256; "+probe)
+	// Below the inherited limit, which on some hosts is already the customary 256.
+	inherited, err := strconv.Atoi(lines[0])
+	testutil.FailErr(t, "parse the inherited limit", err)
+	lowered := strconv.Itoa(inherited / 2)
+	raw, err = f.Call(t, t.Context(), "ulimit -n "+lowered+"; "+probe)
 	testutil.FailErr(t, "lower the child limit", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout != "256\n" {
+	if got := decodeProgramOutcome(t, raw); got.Stdout != lowered+"\n" {
 		t.Fatalf("lowered limit outcome: %+v", got)
 	}
 	raw, err = f.Call(t, t.Context(), probe)
 	testutil.FailErr(t, "next call", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout == "256\n" {
+	if got := decodeProgramOutcome(t, raw); got.Stdout != lines[0]+"\n" {
 		t.Fatalf("the limit persisted into the next call: %+v", got)
 	}
 }
