@@ -43,26 +43,41 @@ type pendingNode struct {
 // replayed as ordinary input. Floors stop a replay from re-entering the same kind
 // of hold, which keeps total work linear in input size.
 type inlineState struct {
-	mode        inlineMode
-	held        []byte
-	holdStart   int
-	floors      [holdKindCount]int
-	pending     *pendingNode
-	openBracket int
+	mode      inlineMode
+	held      []byte
+	holdStart int
+	floors    [holdKindCount]int
+	pending   *pendingNode
+	brackets  bracketState
+	code      codeSpanState
+	raw       rawLiteralState
+	dest      destinationScanner
+	url       urlTracker
+}
+
+// bracketState follows ordinary brackets in released text.
+type bracketState struct {
+	open        int
 	afterClose  bool
-	textEscaped bool
+	escaped     bool
 	defEligible bool
-	// label is the text since the last `[`, kept to a definition's label bound.
-	label       []byte
-	codeLen     int
-	codeRun     int
-	codeHolding bool
-	rawCloser   string
-	rawTail     []byte
-	rawHolding  bool
 	labelDepth  int
-	dest        destinationScanner
-	url         urlTracker
+	// label is the text since the last `[`, kept to a definition's label bound.
+	label []byte
+}
+
+// codeSpanState tracks a backtick run that may open a code span.
+type codeSpanState struct {
+	length  int
+	run     int
+	holding bool
+}
+
+// rawLiteralState tracks a raw HTML form closed by a string.
+type rawLiteralState struct {
+	closer  string
+	tail    []byte
+	holding bool
 }
 
 func (s *inlineState) holding() bool {
