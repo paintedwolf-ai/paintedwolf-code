@@ -1,0 +1,369 @@
+package citationmd
+
+import (
+	"encoding/json"
+	"regexp"
+	"strconv"
+	"strings"
+	"unicode"
+
+	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/verification"
+)
+
+var (
+	handleWithCoordinate = regexp.MustCompile(`^(` + hostmarker.EvidenceHandlePattern + `)(?::([0-9]+)(?:-([0-9]+))?)?$`)
+	coordinateTail       = regexp.MustCompile(`:([0-9]+)(?:-([0-9]+))?$`)
+	artifactID           = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	repairTarget         = regexp.MustCompile(`^c[1-9][0-9]*$`)
+)
+
+// parsedMember is one typed member of a node, with its span inside the node.
+type parsedMember struct {
+	kind     NodeKind
+	start    int
+	end      int
+	citation *Citation
+	artifact string
+	verify   *verification.Assessment
+	repair   *Repair
+}
+
+func (m parsedMember) occurrence() Occurrence {
+	return Occurrence{Kind: m.kind, Citation: m.citation, Artifact: m.artifact, Verify: m.verify, Repair: m.repair}
+}
+
+// parsedNode is a closed node's meaning. prose means the bracket turned out to
+// be ordinary Markdown; issue means it is a damaged node.
+type parsedNode struct {
+	members []parsedMember
+	issue   IssueCode
+	kind    NodeKind
+	prose   bool
+}
+
+// parseNode interprets a complete bracketed node under the scanner's mode.
+func parseNode(token string, mode bodyMode, confirmed bool, opts Options) parsedNode {
+	body := token[1 : len(token)-1]
+	switch mode {
+	case modeVerify:
+		return parseVerify(body)
+	case modeArtifact:
+		return parseArtifact(body)
+	case modeRepair:
+		return parseRepair(body)
+	default:
+		return parseCitationGroup(body, confirmed, opts)
+	}
+}
+
+func parseCitationGroup(body string, confirmed bool, opts Options) parsedNode {
+	node := parsedNode{kind: KindCitation}
+	r := memberReader{body: body}
+	for {
+		start := r.skipSpace()
+		citation, code := r.member(opts.known)
+		if code == "" {
+			node.members = append(node.members, parsedMember{kind: KindCitation, start: start + 1, end: r.at + 1, citation: citation})
+			r.skipSpace()
+			if r.done() {
+				return node
+			}
+			if r.body[r.at] == ',' {
+				r.at++
+				continue
+			}
+			code = IssueMalformedCitation
+		}
+		if !confirmed && code != IssueInvalidRange {
+			return parsedNode{prose: true, kind: KindCitation}
+		}
+		return parsedNode{issue: code, kind: KindCitation}
+	}
+}
+
+// memberReader walks a citation body outside and across quoted strings.
+type memberReader struct {
+	body string
+	at   int
+}
+
+func (r *memberReader) done() bool { return r.at >= len(r.body) }
+
+func (r *memberReader) skipSpace() int {
+	for !r.done() && (r.body[r.at] == ' ' || r.body[r.at] == '\t') {
+		r.at++
+	}
+	return r.at
+}
+
+// lexeme reads an unquoted run up to whitespace or a separator.
+func (r *memberReader) lexeme() string {
+	start := r.at
+	for !r.done() && !strings.ContainsRune(" \t,", rune(r.body[r.at])) {
+		r.at++
+	}
+	return r.body[start:r.at]
+}
+
+// quoted reads a JSON string at the cursor. It also takes the Markdown escapes
+// `\\[` and `\\]`, which are not JSON escapes.
+func (r *memberReader) quoted() (string, bool) {
+	raw := []byte{'"'}
+	r.at++
+	for ; !r.done(); r.at++ {
+		c := r.body[r.at]
+		switch {
+		case c == '"':
+			r.at++
+			var out string
+			if err := json.Unmarshal(append(raw, c), &out); err != nil {
+				return "", false
+			}
+			return out, true
+		case c == '\\' && r.at+1 < len(r.body):
+			r.at++
+			if next := r.body[r.at]; next == '[' || next == ']' {
+				raw = append(raw, next)
+			} else {
+				raw = append(raw, c, next)
+			}
+		default:
+			raw = append(raw, c)
+		}
+	}
+	return "", false
+}
+
+func (r *memberReader) atQuote() bool { return !r.done() && r.body[r.at] == '"' }
+
+// member parses `handle[:lines] [path[:lines]] ["excerpt"]` or
+// `path[:lines] ["excerpt"]`. known gates a bare single-segment path.
+func (r *memberReader) member(known func(string) bool) (*Citation, IssueCode) {
+	c := &Citation{}
+	if !r.atQuote() {
+		saved := r.at
+		lexeme := r.lexeme()
+		if match := handleWithCoordinate.FindStringSubmatch(lexeme); match != nil {
+			c.Handle = match[1]
+			if code := setLines(c, match[2], match[3]); code != "" {
+				return nil, code
+			}
+			return r.afterHandle(c)
+		}
+		if strings.Contains(lexeme, "#") {
+			return nil, IssueMalformedCitation
+		}
+		r.at = saved
+	}
+	if code := r.pathRef(c, known); code != "" {
+		return nil, code
+	}
+	return r.excerpt(c)
+}
+
+func (r *memberReader) afterHandle(c *Citation) (*Citation, IssueCode) {
+	if r.skipSpace(); r.done() || r.body[r.at] == ',' {
+		return c, ""
+	}
+	if r.atQuote() {
+		saved := r.at
+		text, ok := r.quoted()
+		if !ok {
+			return nil, IssueMalformedCitation
+		}
+		if r.done() || r.body[r.at] != ':' {
+			c.Excerpt = text
+			return c, ""
+		}
+		r.at = saved
+	}
+	if code := r.pathRef(c, nil); code != "" {
+		return nil, code
+	}
+	return r.excerpt(c)
+}
+
+// pathRef reads a quoted or bare path with an optional coordinate. A nil known
+// means the path is explicit, so a single segment needs no ledger match.
+func (r *memberReader) pathRef(c *Citation, known func(string) bool) IssueCode {
+	var path, start, end string
+	if r.atQuote() {
+		text, ok := r.quoted()
+		if !ok || text == "" {
+			return IssueMalformedCitation
+		}
+		path = text
+		if !r.done() && r.body[r.at] == ':' {
+			tail := r.lexeme()
+			match := coordinateTail.FindStringSubmatch(tail)
+			if match == nil || match[0] != tail {
+				return IssueMalformedCitation
+			}
+			start, end = match[1], match[2]
+		}
+	} else {
+		var ok bool
+		path, start, end, ok = splitCoordinate(r.lexeme())
+		if !ok || !validBarePath(path) {
+			return IssueMalformedCitation
+		}
+		if known != nil && !isMultiSegment(path) && !known(path) {
+			return IssueMalformedCitation
+		}
+	}
+	c.Path = path
+	if start != "" && c.Line != 0 {
+		return IssueMalformedCitation
+	}
+	return setLines(c, start, end)
+}
+
+func (r *memberReader) excerpt(c *Citation) (*Citation, IssueCode) {
+	if r.skipSpace(); !r.atQuote() {
+		return c, ""
+	}
+	text, ok := r.quoted()
+	if !ok {
+		return nil, IssueMalformedCitation
+	}
+	c.Excerpt = text
+	return c, ""
+}
+
+// setLines applies a coordinate; bounds must be positive and ordered.
+func setLines(c *Citation, start, end string) IssueCode {
+	if start == "" {
+		return ""
+	}
+	line, err := strconv.Atoi(start)
+	if err != nil || line <= 0 {
+		return IssueInvalidRange
+	}
+	c.Line = line
+	if end == "" {
+		return ""
+	}
+	last, err := strconv.Atoi(end)
+	if err != nil || last < line {
+		return IssueInvalidRange
+	}
+	if last > line {
+		c.EndLine = last
+	}
+	return ""
+}
+
+// splitCoordinate separates a trailing `:line[-line]`. A colon elsewhere means
+// the lexeme is not a bare path.
+func splitCoordinate(lexeme string) (path, start, end string, ok bool) {
+	path = lexeme
+	if match := coordinateTail.FindStringSubmatchIndex(lexeme); match != nil {
+		path = lexeme[:match[0]]
+		start = lexeme[match[2]:match[3]]
+		if match[4] >= 0 {
+			end = lexeme[match[4]:match[5]]
+		}
+	}
+	return path, start, end, path != "" && !strings.Contains(path, ":")
+}
+
+func isMultiSegment(path string) bool { return strings.ContainsAny(path, "/@") }
+
+// validBarePath checks the workspace-path grammar by rune. It carries no
+// extension or vocabulary rule.
+func validBarePath(path string) bool {
+	for _, r := range path {
+		switch {
+		case r == unicode.ReplacementChar:
+			return false
+		case unicode.IsLetter(r), unicode.IsMark(r), unicode.IsDigit(r):
+		case r < 0x80 && strings.ContainsRune("-_.@+~%=/", r):
+		default:
+			return false
+		}
+	}
+	return path != ""
+}
+
+// isStructuralBracket reports Markdown's own bracket uses: task boxes, numeric
+// indices and footnote markers. The scanner rejects `[ ` and `[^` by their first
+// byte, so only these bodies arrive complete.
+func isStructuralBracket(body string) bool {
+	if body == "x" || body == "X" {
+		return true
+	}
+	for _, c := range body {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return body != ""
+}
+
+// verifySeparators lists the method/reason separators, longest first.
+var verifySeparators = []string{"--", "-", "—", "–", ":"}
+
+func parseVerify(body string) parsedNode {
+	bad := parsedNode{issue: IssueInvalidVerification, kind: KindVerify}
+	rest := strings.TrimLeft(strings.TrimPrefix(body, "verify:"), " \t")
+	methodEnd := 0
+	for methodEnd < len(rest) && rest[methodEnd] >= 'a' && rest[methodEnd] <= 'z' {
+		methodEnd++
+	}
+	method := rest[:methodEnd]
+	rest = strings.TrimLeft(rest[methodEnd:], " \t")
+	found := false
+	for _, sep := range verifySeparators {
+		if strings.HasPrefix(rest, sep) {
+			rest = rest[len(sep):]
+			found = true
+			break
+		}
+	}
+	assessment := verification.Assessment{Method: method, Reason: strings.TrimSpace(rest)}
+	if !found || !assessment.Valid() {
+		return bad
+	}
+	return parsedNode{kind: KindVerify, members: []parsedMember{{kind: KindVerify, verify: &assessment}}}
+}
+
+func parseArtifact(body string) parsedNode {
+	node := parsedNode{kind: KindArtifact}
+	offset := 1 + len("artifact:")
+	for _, raw := range strings.Split(body[len("artifact:"):], ",") {
+		id := strings.TrimSpace(raw)
+		if !artifactID.MatchString(id) {
+			return parsedNode{issue: IssueMalformedArtifact, kind: KindArtifact}
+		}
+		start := offset + strings.Index(raw, id)
+		node.members = append(node.members, parsedMember{kind: KindArtifact, start: start, end: start + len(id), artifact: id})
+		offset += len(raw) + 1
+	}
+	return node
+}
+
+func parseRepair(body string) parsedNode {
+	bad := parsedNode{issue: IssueMalformedRepair, kind: KindRepair}
+	target, value, ok := strings.Cut(strings.TrimPrefix(body, "cite:"), "=>")
+	target = strings.TrimSpace(target)
+	value = strings.TrimSpace(value)
+	if !ok || !repairTarget.MatchString(target) || value == "" {
+		return bad
+	}
+	repair := &Repair{Target: target}
+	if strings.HasPrefix(value, "<") && strings.HasSuffix(value, ">") {
+		repair.URL = value[1 : len(value)-1]
+		if !isWebDestination(repair.URL) {
+			return bad
+		}
+	} else {
+		r := memberReader{body: value}
+		citation, code := r.member(nil)
+		if code != "" || !r.done() {
+			return bad
+		}
+		repair.Citation = citation
+	}
+	return parsedNode{kind: KindRepair, members: []parsedMember{{kind: KindRepair, repair: repair}}}
+}
