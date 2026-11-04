@@ -6217,43 +6217,43 @@
    "source": "\u003e[verify: nope https://unobs.test/v]!"
   },
   {
-   "present": "( **",
+   "present": "(**",
    "source": "([read#9]**"
   },
   {
-   "present": "( *",
+   "present": "(*",
    "source": "([read#9]*"
   },
   {
-   "present": "( _",
+   "present": "(_",
    "source": "([read#9]_"
   },
   {
-   "present": "( `",
+   "present": "(`",
    "source": "([read#9]`"
   },
   {
-   "present": "( \u003c",
+   "present": "(\u003c",
    "source": "([read#9]\u003c"
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([read#9]\u003e"
   },
   {
-   "present": "( (",
+   "present": "((",
    "source": "([read#9]("
   },
   {
-   "present": "()",
+   "present": "",
    "source": "([read#9])"
   },
   {
-   "present": "( [",
+   "present": "([",
    "source": "([read#9]["
   },
   {
-   "present": "( ]",
+   "present": "(]",
    "source": "([read#9]]"
   },
   {
@@ -6269,19 +6269,19 @@
    "source": "([read#9]\n\n"
   },
   {
-   "present": "( -",
+   "present": "(-",
    "source": "([read#9]- "
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([read#9]\u003e "
   },
   {
-   "present": "( #",
+   "present": "(#",
    "source": "([read#9]# "
   },
   {
-   "present": "( x",
+   "present": "(x",
    "source": "([read#9]x"
   },
   {
@@ -6289,43 +6289,43 @@
    "source": "([read#9]!"
   },
   {
-   "present": "( **",
+   "present": "(**",
    "source": "([a.go:999]**"
   },
   {
-   "present": "( *",
+   "present": "(*",
    "source": "([a.go:999]*"
   },
   {
-   "present": "( _",
+   "present": "(_",
    "source": "([a.go:999]_"
   },
   {
-   "present": "( `",
+   "present": "(`",
    "source": "([a.go:999]`"
   },
   {
-   "present": "( \u003c",
+   "present": "(\u003c",
    "source": "([a.go:999]\u003c"
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([a.go:999]\u003e"
   },
   {
-   "present": "( (",
+   "present": "((",
    "source": "([a.go:999]("
   },
   {
-   "present": "()",
+   "present": "",
    "source": "([a.go:999])"
   },
   {
-   "present": "( [",
+   "present": "([",
    "source": "([a.go:999]["
   },
   {
-   "present": "( ]",
+   "present": "(]",
    "source": "([a.go:999]]"
   },
   {
@@ -6341,19 +6341,19 @@
    "source": "([a.go:999]\n\n"
   },
   {
-   "present": "( -",
+   "present": "(-",
    "source": "([a.go:999]- "
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([a.go:999]\u003e "
   },
   {
-   "present": "( #",
+   "present": "(#",
    "source": "([a.go:999]# "
   },
   {
-   "present": "( x",
+   "present": "(x",
    "source": "([a.go:999]x"
   },
   {
@@ -6361,43 +6361,43 @@
    "source": "([a.go:999]!"
   },
   {
-   "present": "( **",
+   "present": "(**",
    "source": "([task#1]**"
   },
   {
-   "present": "( *",
+   "present": "(*",
    "source": "([task#1]*"
   },
   {
-   "present": "( _",
+   "present": "(_",
    "source": "([task#1]_"
   },
   {
-   "present": "( `",
+   "present": "(`",
    "source": "([task#1]`"
   },
   {
-   "present": "( \u003c",
+   "present": "(\u003c",
    "source": "([task#1]\u003c"
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([task#1]\u003e"
   },
   {
-   "present": "( (",
+   "present": "((",
    "source": "([task#1]("
   },
   {
-   "present": "()",
+   "present": "",
    "source": "([task#1])"
   },
   {
-   "present": "( [",
+   "present": "([",
    "source": "([task#1]["
   },
   {
-   "present": "( ]",
+   "present": "(]",
    "source": "([task#1]]"
   },
   {
@@ -6413,19 +6413,19 @@
    "source": "([task#1]\n\n"
   },
   {
-   "present": "( -",
+   "present": "(-",
    "source": "([task#1]- "
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([task#1]\u003e "
   },
   {
-   "present": "( #",
+   "present": "(#",
    "source": "([task#1]# "
   },
   {
-   "present": "( x",
+   "present": "(x",
    "source": "([task#1]x"
   },
   {
@@ -6433,43 +6433,43 @@
    "source": "([task#1]!"
   },
   {
-   "present": "( **",
+   "present": "(**",
    "source": "([read#9 \"https://unobs.test/e\"]**"
   },
   {
-   "present": "( *",
+   "present": "(*",
    "source": "([read#9 \"https://unobs.test/e\"]*"
   },
   {
-   "present": "( _",
+   "present": "(_",
    "source": "([read#9 \"https://unobs.test/e\"]_"
   },
   {
-   "present": "( `",
+   "present": "(`",
    "source": "([read#9 \"https://unobs.test/e\"]`"
   },
   {
-   "present": "( \u003c",
+   "present": "(\u003c",
    "source": "([read#9 \"https://unobs.test/e\"]\u003c"
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([read#9 \"https://unobs.test/e\"]\u003e"
   },
   {
-   "present": "( (",
+   "present": "((",
    "source": "([read#9 \"https://unobs.test/e\"]("
   },
   {
-   "present": "()",
+   "present": "",
    "source": "([read#9 \"https://unobs.test/e\"])"
   },
   {
-   "present": "( [",
+   "present": "([",
    "source": "([read#9 \"https://unobs.test/e\"]["
   },
   {
-   "present": "( ]",
+   "present": "(]",
    "source": "([read#9 \"https://unobs.test/e\"]]"
   },
   {
@@ -6485,19 +6485,19 @@
    "source": "([read#9 \"https://unobs.test/e\"]\n\n"
   },
   {
-   "present": "( -",
+   "present": "(-",
    "source": "([read#9 \"https://unobs.test/e\"]- "
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([read#9 \"https://unobs.test/e\"]\u003e "
   },
   {
-   "present": "( #",
+   "present": "(#",
    "source": "([read#9 \"https://unobs.test/e\"]# "
   },
   {
-   "present": "( x",
+   "present": "(x",
    "source": "([read#9 \"https://unobs.test/e\"]x"
   },
   {
@@ -6505,43 +6505,43 @@
    "source": "([read#9 \"https://unobs.test/e\"]!"
   },
   {
-   "present": "( **",
+   "present": "(**",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]**"
   },
   {
-   "present": "( *",
+   "present": "(*",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]*"
   },
   {
-   "present": "( _",
+   "present": "(_",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]_"
   },
   {
-   "present": "( `",
+   "present": "(`",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]`"
   },
   {
-   "present": "( \u003c",
+   "present": "(\u003c",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]\u003c"
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]\u003e"
   },
   {
-   "present": "( (",
+   "present": "((",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]("
   },
   {
-   "present": "()",
+   "present": "",
    "source": "([read#9 \"[l](https://unobs.test/e)\"])"
   },
   {
-   "present": "( [",
+   "present": "([",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]["
   },
   {
-   "present": "( ]",
+   "present": "(]",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]]"
   },
   {
@@ -6557,19 +6557,19 @@
    "source": "([read#9 \"[l](https://unobs.test/e)\"]\n\n"
   },
   {
-   "present": "( -",
+   "present": "(-",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]- "
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]\u003e "
   },
   {
-   "present": "( #",
+   "present": "(#",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]# "
   },
   {
-   "present": "( x",
+   "present": "(x",
    "source": "([read#9 \"[l](https://unobs.test/e)\"]x"
   },
   {
@@ -6577,43 +6577,43 @@
    "source": "([read#9 \"[l](https://unobs.test/e)\"]!"
   },
   {
-   "present": "( **",
+   "present": "(**",
    "source": "([verify: targeted - see https://unobs.test/v]**"
   },
   {
-   "present": "( *",
+   "present": "(*",
    "source": "([verify: targeted - see https://unobs.test/v]*"
   },
   {
-   "present": "( _",
+   "present": "(_",
    "source": "([verify: targeted - see https://unobs.test/v]_"
   },
   {
-   "present": "( `",
+   "present": "(`",
    "source": "([verify: targeted - see https://unobs.test/v]`"
   },
   {
-   "present": "( \u003c",
+   "present": "(\u003c",
    "source": "([verify: targeted - see https://unobs.test/v]\u003c"
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([verify: targeted - see https://unobs.test/v]\u003e"
   },
   {
-   "present": "( (",
+   "present": "((",
    "source": "([verify: targeted - see https://unobs.test/v]("
   },
   {
-   "present": "()",
+   "present": "",
    "source": "([verify: targeted - see https://unobs.test/v])"
   },
   {
-   "present": "( [",
+   "present": "([",
    "source": "([verify: targeted - see https://unobs.test/v]["
   },
   {
-   "present": "( ]",
+   "present": "(]",
    "source": "([verify: targeted - see https://unobs.test/v]]"
   },
   {
@@ -6629,19 +6629,19 @@
    "source": "([verify: targeted - see https://unobs.test/v]\n\n"
   },
   {
-   "present": "( -",
+   "present": "(-",
    "source": "([verify: targeted - see https://unobs.test/v]- "
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([verify: targeted - see https://unobs.test/v]\u003e "
   },
   {
-   "present": "( #",
+   "present": "(#",
    "source": "([verify: targeted - see https://unobs.test/v]# "
   },
   {
-   "present": "( x",
+   "present": "(x",
    "source": "([verify: targeted - see https://unobs.test/v]x"
   },
   {
@@ -6649,43 +6649,43 @@
    "source": "([verify: targeted - see https://unobs.test/v]!"
   },
   {
-   "present": "( **",
+   "present": "(**",
    "source": "([verify: nope https://unobs.test/v]**"
   },
   {
-   "present": "( *",
+   "present": "(*",
    "source": "([verify: nope https://unobs.test/v]*"
   },
   {
-   "present": "( _",
+   "present": "(_",
    "source": "([verify: nope https://unobs.test/v]_"
   },
   {
-   "present": "( `",
+   "present": "(`",
    "source": "([verify: nope https://unobs.test/v]`"
   },
   {
-   "present": "( \u003c",
+   "present": "(\u003c",
    "source": "([verify: nope https://unobs.test/v]\u003c"
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([verify: nope https://unobs.test/v]\u003e"
   },
   {
-   "present": "( (",
+   "present": "((",
    "source": "([verify: nope https://unobs.test/v]("
   },
   {
-   "present": "()",
+   "present": "",
    "source": "([verify: nope https://unobs.test/v])"
   },
   {
-   "present": "( [",
+   "present": "([",
    "source": "([verify: nope https://unobs.test/v]["
   },
   {
-   "present": "( ]",
+   "present": "(]",
    "source": "([verify: nope https://unobs.test/v]]"
   },
   {
@@ -6701,19 +6701,19 @@
    "source": "([verify: nope https://unobs.test/v]\n\n"
   },
   {
-   "present": "( -",
+   "present": "(-",
    "source": "([verify: nope https://unobs.test/v]- "
   },
   {
-   "present": "( \u003e",
+   "present": "(\u003e",
    "source": "([verify: nope https://unobs.test/v]\u003e "
   },
   {
-   "present": "( #",
+   "present": "(#",
    "source": "([verify: nope https://unobs.test/v]# "
   },
   {
-   "present": "( x",
+   "present": "(x",
    "source": "([verify: nope https://unobs.test/v]x"
   },
   {
