@@ -133,7 +133,7 @@ func TestRevision5BackfillsSessionProgressIdentity(t *testing.T) {
 		INSERT INTO sessions(id,project_id,owner_person_id,posture,created_at,activity_at,updated_at) VALUES('sess-checklist','fixture-project',(SELECT id FROM people WHERE role='owner'),'build','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
 		INSERT INTO sessions(id,project_id,owner_person_id,posture,created_at,activity_at,updated_at) VALUES('sess-empty','fixture-project',(SELECT id FROM people WHERE role='owner'),'build','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
 		INSERT INTO session_progress(session_id,workflow_run_id,content,updated_at) VALUES('sess-checklist','run-1',char(35,32)||'Goal'||char(10,10)||'Ship'||char(10,10,35,35,32)||'Progress'||char(10)||'- [x] First'||char(10)||'- [ ] Second'||char(10)||'- [~] Third','2026-01-01T00:00:00Z');
-		INSERT INTO session_progress(session_id,workflow_run_id,content,updated_at) VALUES('sess-empty','run-1',char(35,32)||'Goal'||char(10,10)||'Empty'||char(10,10,35,35,32)||'Progress'||char(10),'2026-01-01T00:00:00Z'`)
+		INSERT INTO session_progress(session_id,workflow_run_id,content,updated_at) VALUES('sess-empty','run-1',char(35,32)||'Goal'||char(10,10)||'Empty'||char(10,10,35,35,32)||'Progress'||char(10),'2026-01-01T00:00:00Z');`)
 	testutil.FailErr(t, "seed released progress rows", err)
 	testutil.FailErr(t, "close source", source.Close())
 	testutil.FailErr(t, "upgrade released source", UpgradeStaged(t.Context(), path))
