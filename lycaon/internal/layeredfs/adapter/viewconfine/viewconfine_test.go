@@ -31,7 +31,9 @@ func TestAvailabilityIsRefusedWhereNoBoundaryApplies(t *testing.T) {
 
 func TestAvailabilityIsProvenByARealDenialAndLeavesNothing(t *testing.T) {
 	requireConfinement(t)
-	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve", err)
+	t.Setenv("LYCAON_CONFIG_DIR", dir)
 	testutil.FailErr(t, "Available", viewconfine.New().Available(t.Context(), adapter.ProbeConfig{RuntimeDir: dir}))
 	entries, err := os.ReadDir(dir)
 	testutil.FailErr(t, "read scratch", err)

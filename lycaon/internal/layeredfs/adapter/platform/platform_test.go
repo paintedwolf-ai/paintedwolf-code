@@ -66,11 +66,15 @@ func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
 	}
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve base", err)
+	// A worker's storage sits under the engine's state root, as it does in production.
+	state := filepath.Join(base, "state")
+	testutil.FailErr(t, "mkdir state", os.Mkdir(state, 0o700))
+	t.Setenv("LYCAON_CONFIG_DIR", state)
 	trunk := filepath.Join(base, "trunk")
 	testutil.FailErr(t, "mkdir trunk", os.Mkdir(trunk, 0o755))
 	testutil.FailErr(t, "write trunk", os.WriteFile(filepath.Join(trunk, "file"), []byte("x\n"), 0o644))
 	selector := platform.NewSelector(platform.Config{Confinement: viewconfine.New()})
-	chosen, probe, err := selector.Select(t.Context(), adapter.ProbeConfig{RuntimeDir: filepath.Join(base, "probe")})
+	chosen, probe, err := selector.Select(t.Context(), adapter.ProbeConfig{RuntimeDir: filepath.Join(state, "probe")})
 	testutil.FailErr(t, "Select", err)
 	if chosen.Facts().PreparationKind != adapter.PreparationMounted {
 		switch probe.ReasonCode {
@@ -83,7 +87,7 @@ func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
 		t.Fatalf("selected without a verified denial: %+v", probe)
 	}
 	view, err := chosen.Prepare(t.Context(), adapter.PrepareRequest{
-		ViewID: "view-enforced", BackingDir: filepath.Join(base, "backing"), RuntimeDir: filepath.Join(base, "runtime"),
+		ViewID: "view-enforced", BackingDir: filepath.Join(state, "backing"), RuntimeDir: filepath.Join(state, "runtime"),
 		QuiesceHook: func(context.Context, string) error { return nil }, FlushClientHook: func(context.Context, string) error { return nil },
 		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunk, IsPrimary: true}},
 	})

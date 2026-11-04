@@ -204,6 +204,8 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 		t.Skip("this host applies no confinement")
 	}
 	fixture := newLayeredWorkerFixture(t, workspace.DefaultWorkspaceSelector())
+	// Worker storage sits under the engine's state root, as it does in production.
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
 	task := fixture.claim(t)
 	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
 	if !ok {
