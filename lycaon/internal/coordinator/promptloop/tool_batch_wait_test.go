@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -148,6 +150,8 @@ type midTurnHarness struct {
 	sess     *api.Session
 	// refuseTask makes the dispatch fail its own validation.
 	refuseTask bool
+	// budget is the real grounding budget when a test needs its arithmetic.
+	budget *closeouts.Service
 }
 
 // newMidTurnHarness runs real publication and the real wait observation. Its
@@ -193,6 +197,9 @@ func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 			EvidenceLedger: h.ledger,
 			RecordGroundingFriction: func(context.Context, string) guidance.GroundingFriction {
 				h.friction++
+				if h.budget != nil {
+					return h.budget.RecordGroundingFriction(context.Background(), h.sess.ID)
+				}
 				return guidance.GroundingFriction{Remaining: 3}
 			},
 			EvaluateMidTurnNote: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) error {
@@ -394,7 +401,7 @@ func TestPublicationPrecedesToolsAndToolsAlwaysRun(t *testing.T) {
 		friction int
 	}{
 		{name: "AC-MID-03 cited update commits before the tool", text: "Found it in [read#3:42].", observed: true, note: true},
-		{name: "AC-MID-04 uncited withholds and the tool runs", text: "Still looking.", observed: true, notice: guidance.MidTurnNoteUngroundedCode, friction: 1},
+		{name: "AC-MID-04 uncited withholds and the tool runs", text: "Still looking.", observed: true, notice: guidance.MidTurnNoteUngroundedCode},
 		{name: "AC-MID-05 invalid withholds and the tool runs", text: "See [read#9:1].", observed: true, notice: guidance.MidTurnNoteHandleUngroundCode, friction: 1},
 		{name: "AC-MID-13 parroted header is no text", text: "⟦D:model:internal_step_note⟧\n"},
 		{name: "AC-MID-13 empty step is ordinary", text: " \n"},
@@ -590,5 +597,126 @@ func TestHostProgressNoteProjectsAsHostData(t *testing.T) {
 	}
 	if strings.Contains(host.Content, "Uncited") {
 		t.Fatal("the host must not repeat the model's unpublished text")
+	}
+}
+
+type rootSessionStub struct{}
+
+func (rootSessionStub) Get(_ context.Context, id string) (*api.Session, error) {
+	return &api.Session{ID: id}, nil
+}
+
+// AC-MID-15: narration costs closeout nothing; an invalid reference spends the
+// one pool closeouts draw on, with the closeout limits themselves unchanged.
+func TestMidTurnTextAgainstTheCloseoutRepairBudget(t *testing.T) {
+	observed := api.Message{ID: "t0", Role: api.MessageRoleTool, EvidenceHandles: []string{"read#3"}, ToolResult: &api.ToolResult{Tool: "read"}}
+	for _, tc := range []struct {
+		name, text string
+		steps      int
+		charged    int
+	}{
+		{"uncited narration across many tool steps", "Now checking the next file.", 3 * limits.DefaultGroundingRejectsPerCycle, 0},
+		{"invalid citations", "See [read#9:1].", 2, 2},
+		{"malformed syntax", "See [read#3:9-2].", 3, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newMidTurnHarness(t, publishingSurface)
+			h.budget = closeouts.New(rootSessionStub{})
+			h.ledger.records = []evidence.Record{{Handle: "read#3", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 1, End: 9}}}}
+			history := []api.Message{midTurnUser(), observed}
+			for step := range tc.steps {
+				history, _ = h.respond(t, history, publishingSurface, "c"+strconv.Itoa(step), tc.text, "recall")
+			}
+			if len(h.order) != tc.steps || len(h.notices) != tc.steps {
+				t.Fatalf("tools ran %d, notices %d, want %d of each", len(h.order), len(h.notices), tc.steps)
+			}
+			if h.friction != tc.charged {
+				t.Fatalf("charged %d, want %d", h.friction, tc.charged)
+			}
+			// The closeout's own first rejection sees whatever the note audit left.
+			got := h.budget.RecordGroundingFriction(context.Background(), h.sess.ID).Remaining
+			if want := limits.DefaultGroundingRejectsPerCycle - tc.charged - 1; got != want {
+				t.Fatalf("closeout budget remaining = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+func countNotices(h *midTurnHarness, code string) int {
+	n := 0
+	for _, notice := range h.notices {
+		if notice == guidance.MidTurnObservation(code) {
+			n++
+		}
+	}
+	return n
+}
+
+// The fallback notice belongs to a debt, not to each wait. It survives a restart
+// because it derives from durable rows.
+func TestWaitFallbackNoticeFiresOncePerDebt(t *testing.T) {
+	h := newMidTurnHarness(t, publishingSurface)
+	h.ledger.records = []evidence.Record{{Handle: "read#3", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 1, End: 9}}}}
+	history := []api.Message{midTurnUser(), {ID: "t0", Role: api.MessageRoleTool, EvidenceHandles: []string{"read#3"}, ToolResult: &api.ToolResult{Tool: "read"}}}
+	step := func(id, text string, wantParked bool, wantFallbacks int) {
+		t.Helper()
+		var parked bool
+		history, parked = h.respond(t, history, publishingSurface, id, text, "wait")
+		if parked != wantParked {
+			t.Fatalf("%s: parked = %v", id, parked)
+		}
+		if got := countNotices(h, guidance.MidTurnNoteWaitFallbackCode); got != wantFallbacks {
+			t.Fatalf("%s: fallback notices = %d, want %d: %v", id, got, wantFallbacks, h.notices)
+		}
+	}
+	step("c1", "Uncited.", false, 0)
+	step("c2", "", true, 1)
+	step("c3", "", true, 1)
+	step("c4", "", true, 1)
+	// A fresh process reads the same rows and stays quiet.
+	h = newMidTurnHarness(t, publishingSurface)
+	h.ledger.records = []evidence.Record{{Handle: "read#3", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 1, End: 9}}}}
+	step("c5", "", true, 0)
+	// Newer unpublished text is new debt.
+	step("c6", "New uncited text.", true, 1)
+	step("c7", "", true, 1)
+	// A note settles everything, and later silence owes nothing.
+	step("c8", "Published [read#3:2].", true, 1)
+	step("c9", "", true, 1)
+	if _, ok := noteFor(history, "c8"); !ok {
+		t.Fatal("cited update did not publish")
+	}
+}
+
+// A model that never cites must not produce a stream of host speech, even as
+// worker facts change and each host note clears the debt it answered.
+func TestHostProgressNoteAtMostOncePerIntent(t *testing.T) {
+	h := newMidTurnHarness(t, publishingSurface)
+	history, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c0", "Dispatching.", "task")
+	hostNotes := func() int {
+		n := 0
+		for _, msg := range history {
+			if api.IsAgentNoteMessage(msg) && msg.Origin == api.MessageOriginHost {
+				n++
+			}
+		}
+		return n
+	}
+	for cycle := range 6 {
+		history = append(history, api.Message{ID: "w" + strconv.Itoa(cycle), Role: api.MessageRoleUser, Visibility: api.MessageVisibilityInternal,
+			WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "w" + strconv.Itoa(cycle), AgentType: "explore", Status: "completed"}})
+		history, _ = h.respond(t, history, publishingSurface, "a"+strconv.Itoa(cycle), "Uncited, attempt "+strconv.Itoa(cycle), "wait")
+		history, _ = h.respond(t, history, publishingSurface, "b"+strconv.Itoa(cycle), "Uncited again "+strconv.Itoa(cycle), "wait")
+	}
+	if got := hostNotes(); got != 1 {
+		t.Fatalf("host notes in one intent = %d", got)
+	}
+	// A new request is a new conversation with the person.
+	history = append(history, api.Message{ID: "u2", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "again"})
+	history, _ = h.respond(t, history, publishingSurface, "d0", "Dispatching.", "task")
+	history, _ = h.respond(t, history, publishingSurface, "d1", "Uncited.", "wait")
+	history, _ = h.respond(t, history, publishingSurface, "d2", "Uncited.", "wait")
+	if got := hostNotes(); got != 2 {
+		t.Fatalf("host notes after a new intent = %d", got)
 	}
 }

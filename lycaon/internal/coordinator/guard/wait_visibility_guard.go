@@ -28,12 +28,18 @@ type WaitVisibility struct {
 	RefusedWaits int
 	// CitationAttempted describes the latest unpublished text.
 	CitationAttempted bool
+	// FallbackSettled means a wait already went ahead past this debt. Only newer
+	// unpublished text is new debt; an empty step does not reopen it.
+	FallbackSettled bool
 }
 
 // Exhausted reports that refusing another wait would only repeat the refusal.
 func (v WaitVisibility) Exhausted() bool {
 	return v.Unpublished && v.RefusedWaits >= limits.DefaultWaitVisibilityRepairs
 }
+
+// NeedsFallback reports exhausted debt the host has not yet settled for a wait.
+func (v WaitVisibility) NeedsFallback() bool { return v.Exhausted() && !v.FallbackSettled }
 
 // Pending reports debt the wait guard still enforces.
 func (v WaitVisibility) Pending() bool { return v.Unpublished && !v.Exhausted() }
@@ -54,18 +60,20 @@ func DeriveWaitVisibility(history []api.Message) WaitVisibility {
 			if guidance.MidTurnTextHasSpeech(text) {
 				out.Unpublished = true
 				out.CitationAttempted = guidance.MidTurnTextAttemptsCitation(text)
+				out.FallbackSettled = false
 			}
-		case msg.Role == api.MessageRoleTool && refusedForVisibility(msg):
-			out.RefusedWaits++
+		case msg.Role == api.MessageRoleTool && msg.ToolResult != nil && msg.ToolResult.Tool == waitToolName:
+			if refusedForVisibility(msg) {
+				out.RefusedWaits++
+			} else if out.Exhausted() {
+				out.FallbackSettled = true
+			}
 		}
 	}
 	return out
 }
 
 func refusedForVisibility(msg api.Message) bool {
-	if msg.ToolResult == nil || msg.ToolResult.Tool != waitToolName {
-		return false
-	}
 	for _, code := range msg.ToolResult.Codes {
 		if code == WaitHiddenTextCode {
 			return true

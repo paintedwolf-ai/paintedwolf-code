@@ -87,3 +87,26 @@ func TestToolTurnFactsKeepTheirMeanings(t *testing.T) {
 		t.Fatalf("session = %+v", gc.Session)
 	}
 }
+
+func TestFallbackSettlesPerDebt(t *testing.T) {
+	carrier := func(text string) api.Message {
+		return api.Message{Role: api.MessageRoleAssistant, Content: text, ToolCalls: []api.ToolCall{{ID: "w", Name: "wait"}}}
+	}
+	refused := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "wait", Codes: []string{WaitHiddenTextCode}}}
+	ran := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "wait"}}
+	for _, tc := range []struct {
+		name    string
+		history []api.Message
+		want    bool
+	}{
+		{"exhausted, not yet settled", []api.Message{carrier("Status"), refused, carrier("")}, true},
+		{"a wait went ahead", []api.Message{carrier("Status"), refused, carrier(""), ran, carrier("")}, false},
+		{"newer text is new debt", []api.Message{carrier("Status"), refused, carrier(""), ran, carrier("Changed")}, true},
+		{"a wait before refusal settles nothing", []api.Message{carrier("Status"), ran, refused, carrier("")}, true},
+		{"no debt", []api.Message{carrier("")}, false},
+	} {
+		if got := DeriveWaitVisibility(tc.history).NeedsFallback(); got != tc.want {
+			t.Errorf("%s: needs fallback = %v", tc.name, got)
+		}
+	}
+}

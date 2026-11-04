@@ -20,10 +20,11 @@ const (
 	MidTurnNoteWaitFallbackCode   = "MID_TURN_NOTE_WAIT_FALLBACK"
 )
 
-// midTurnNoteFrictionCodes spend the shared grounding budget. A malformed node
-// or an artifact error makes no claim about evidence, so neither charges.
+// midTurnNoteFrictionCodes spend the shared grounding budget: a reference that
+// names something unobserved. Uncited text is ordinary narration on a tool step,
+// and charging it would spend closeout repair before any closeout exists. A
+// malformed node or an artifact error makes no claim about evidence.
 var midTurnNoteFrictionCodes = map[string]bool{
-	MidTurnNoteUngroundedCode:     true,
 	MidTurnNoteHandleUngroundCode: true,
 	MidTurnNoteURLOnlyCode:        true,
 }

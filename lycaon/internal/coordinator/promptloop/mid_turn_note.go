@@ -58,7 +58,7 @@ func (l *toolBatch) publishMidTurnText(
 	if audit.Outcome == guidance.MidTurnWithhold && guidance.MidTurnNoteChargesFriction(audit.Code) && l.Closeout.Deps.RecordGroundingFriction != nil {
 		l.Closeout.Deps.RecordGroundingFriction(ctx, sessionID)
 	}
-	if slices.ContainsFunc(toolCalls, func(call api.ToolCall) bool { return call.Name == "wait" }) && guard.DeriveWaitVisibility(history).Exhausted() {
+	if slices.ContainsFunc(toolCalls, func(call api.ToolCall) bool { return call.Name == "wait" }) && guard.DeriveWaitVisibility(history).NeedsFallback() {
 		return l.settleExhaustedVisibility(ctx, sess, sessionID, history, carrierID, surfaceID, lastToolTS, st)
 	}
 	if audit.Outcome == guidance.MidTurnWithhold {
@@ -135,11 +135,16 @@ func (l *toolBatch) commitMidTurnNote(ctx context.Context, sessionID string, his
 	return foldStorageSafeMessages(history, []api.Message{stored}, []*api.Message{transient}, st), nil
 }
 
-// settleExhaustedVisibility ends visibility repair for a wait. The host reports
-// worker state when it has any; otherwise the wait goes ahead silently. Either
-// way the draft stays unpublished and the model is told.
+// settleExhaustedVisibility ends visibility repair for a wait, once per debt. The
+// host reports worker state at most once per intent, so a model that never cites
+// cannot turn repair into a stream of host speech; otherwise the wait goes ahead
+// silently. Either way the draft stays unpublished and the model is told.
 func (l *toolBatch) settleExhaustedVisibility(ctx context.Context, sess *api.Session, sessionID string, history []api.Message, carrierID, surfaceID string, lastToolTS *time.Time, st *promptLoopTurnState) ([]api.Message, error) {
-	if body := l.midTurnHostProgress(ctx, history); body != "" {
+	body := ""
+	if !hostProgressPublished(history) {
+		body = l.midTurnHostProgress(ctx, history)
+	}
+	if body != "" {
 		note := api.Message{
 			ID: hostProgressNoteID(carrierID), Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote,
 			Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
@@ -160,6 +165,21 @@ func (l *toolBatch) settleExhaustedVisibility(ctx context.Context, sess *api.Ses
 // this row: it holds the host's words, which no carrier repeats.
 func hostProgressNoteID(carrierID string) string {
 	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("agent-note-host:"+carrierID)).String()
+}
+
+// hostProgressPublished finds this intent's host note by its derived ID.
+func hostProgressPublished(history []api.Message) bool {
+	window := history[api.UserIntentBoundary(history):]
+	derived := make(map[string]struct{})
+	for _, msg := range window {
+		if msg.Role == api.MessageRoleAssistant && len(msg.ToolCalls) > 0 {
+			derived[hostProgressNoteID(msg.ID)] = struct{}{}
+		}
+	}
+	return slices.ContainsFunc(window, func(msg api.Message) bool {
+		_, ok := derived[msg.ID]
+		return ok
+	})
 }
 
 // midTurnHostProgress renders only structured dispatch and result facts.
