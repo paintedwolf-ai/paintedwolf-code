@@ -68,8 +68,6 @@ type promptLoopTurnState struct {
 	proseFinishDelivered bool
 	spendSoftStopGranted bool
 	closeoutRetry        closeoutRetryState
-	// noFurtherTurn marks the response being settled as the run's last.
-	noFurtherTurn bool
 	// deferredUserNudges flush when the draft slot closes.
 	deferredUserNudges []api.Message
 	turnsRanThisRun    int
@@ -279,7 +277,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			return out, nil
 		}
 		if read.Draft.HasAnswer() {
-			st.noFurtherTurn = lastTurn
+			st.closeoutRetry.noFurtherTurn = lastTurn
 			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, read)
 		}
 	} else {

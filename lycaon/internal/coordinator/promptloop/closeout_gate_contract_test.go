@@ -177,6 +177,8 @@ func TestMarkdownCloseoutRulesFireOnTheirTriggers(t *testing.T) {
 		{name: "repair with nothing to repair", code: guidance.CitationRepairInvalidCode, surface: "implement_synthesis", content: "Done [read#1:2].\n[cite: c1 => read#1:3]"},
 		{name: "malformed node", code: guidance.CitationSyntaxInvalidCode, surface: "implement_investigate", content: "Done [read#1:2\nmore [read#1:3]."},
 		{name: "invalid verification", code: guidance.CitationSyntaxInvalidCode, surface: "implement_synthesis", content: "Done [read#1:2].\n[verify: thoroughly - Looked]"},
+		{name: "unobserved where entry", code: guidance.SynthHandleNotInLegsCode, surface: "implement_synthesis", reportPhase: true,
+			content: "Done [read#1:2].\n\n```json\n{\"findings\":[{\"id\":\"f\",\"title\":\"T\",\"where\":[{\"path\":\"phantom.go\",\"line\":1}]}]}\n```"},
 		{name: "misplaced fence member", code: guidance.ReportFenceUnreadableCode, surface: "implement_synthesis", reportPhase: true, document: true,
 			content: "Done [read#1:2].\n\n```json\n{\"findings\":[{\"id\":\"f\",\"title\":\"T\",\"ask\":{\"do\":\"x\"}}]}\n```"},
 		{name: "document invalid", code: guidance.ReportDocumentInvalidCode, surface: "implement_synthesis", reportPhase: true, document: true, content: "Done [read#1:2].", issue: guidance.ReportDocumentInvalidCode},
@@ -648,5 +650,22 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 				t.Fatalf("rule fired %d times", count)
 			}
 		})
+	}
+}
+
+// AC-CLO-12: an accepted report's finding keeps the source its fence named.
+func TestCommittedFindingKeepsItsWhere(t *testing.T) {
+	c := newCloseoutContract(t)
+	content := "Done [read#1:2].\n\n```json\n{\"findings\":[{\"id\":\"f\",\"title\":\"T\",\"where\":[{\"path\":\"a.go\",\"line\":2}]}]}\n```"
+	out, _ := c.drive(t, "implement_synthesis", content, true, contractHistory(content))
+	if !out.committed || c.selected != nil {
+		t.Fatalf("outcome = %+v selected = %+v", out, c.selected)
+	}
+	meta := out.assistantMsg.CompletionReport
+	if meta == nil || len(meta.Findings) != 1 || len(meta.Findings[0].Where) != 1 {
+		t.Fatalf("report metadata = %+v", meta)
+	}
+	if where := meta.Findings[0].Where[0]; where.Path != "a.go" || where.Line != 2 {
+		t.Fatalf("where = %+v", where)
 	}
 }

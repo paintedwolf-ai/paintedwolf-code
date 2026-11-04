@@ -34,6 +34,9 @@ var retiredProtocol = []string{
 	"internal working note", "empty assistant text", `"synthesis"`,
 }
 
+// providerNames keep the one contract provider-neutral.
+var providerNames = regexp.MustCompile(`\b(?:OpenAI|Anthropic|Claude|Gemini|Fireworks|GLM|Bedrock|Ollama)\b`)
+
 // typedCitationFields stay only where a typed tool or a worker reads them. A word
 // boundary leaves proof_json.visual_artifact_ids alone.
 var typedCitationFields = regexp.MustCompile(`\b(cited_evidence|cited_urls|artifact_ids)\b|typed fields`)
@@ -51,10 +54,14 @@ func TestModelFacingOutputsTeachNoRetiredProtocol(t *testing.T) {
 		t.Fatalf("corpus has %d outputs, the walk is broken", len(outputs))
 	}
 	for _, output := range outputs {
+		lower := strings.ToLower(output.text)
 		for _, retired := range retiredProtocol {
-			if strings.Contains(output.text, retired) {
+			if strings.Contains(lower, strings.ToLower(retired)) {
 				t.Errorf("%s teaches retired %q", output.name, retired)
 			}
+		}
+		if name := providerNames.FindString(output.text); name != "" {
+			t.Errorf("AC-COMPAT-04: %s names a provider: %s", output.name, name)
 		}
 		if output.standing && strings.Contains(output.text, "[cite:") {
 			t.Errorf("%s teaches the repair form outside repair feedback", output.name)
