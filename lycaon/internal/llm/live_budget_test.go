@@ -112,3 +112,37 @@ func TestLoadBundledModelContextWindows(t *testing.T) {
 		t.Fatalf("kimi lookup = %d ok=%v", n, ok)
 	}
 }
+
+func TestLiveBudgetIsCappedAbsolutely(t *testing.T) {
+	policy := ModelPolicy{Coordinator: ModelRef{ProviderID: "fixture", Model: "unlisted-model"}}
+	for _, tc := range []struct {
+		name         string
+		maxLive      int
+		window, live int
+	}{
+		{name: "larger window never raises it", window: 1_048_572, live: 196608},
+		{name: "fallback sized window meets it", window: 262144, live: 196608},
+		{name: "smaller window lowers it", window: 32768, live: 24576},
+		{name: "project raises it deliberately", maxLive: 400000, window: 1_048_572, live: 400000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := compaction.DefaultCompactionConfig()
+			if tc.maxLive > 0 {
+				cfg.MaxLiveBudgetTokens = tc.maxLive
+			}
+			out, _, err := ApplyLiveBudget(cfg, policy, stubContextLength{n: tc.window}, testWindows(t))
+			testutil.FailErr(t, "ApplyLiveBudget", err)
+			if out.ModelContextWindow != tc.live || out.HardCeilingTokens != tc.live*85/100 {
+				t.Fatalf("live %d hard %d, want live %d", out.ModelContextWindow, out.HardCeilingTokens, tc.live)
+			}
+		})
+	}
+	cfg := compaction.DefaultCompactionConfig()
+	cfg.MaxLiveBudgetTokens = 0
+	if out, _, err := ApplyLiveBudget(cfg, policy, stubContextLength{n: 1_048_572}, testWindows(t)); err != nil || out.ModelContextWindow != compaction.DefaultMaxLiveBudgetTokens {
+		t.Fatalf("omitted cap: live %d err %v", out.ModelContextWindow, err)
+	}
+	if _, err := compaction.NormalizeConfig(compaction.CompactionConfig{ModelContextWindow: 1, MaxLiveBudgetTokens: -1}); err == nil {
+		t.Fatal("negative cap accepted")
+	}
+}

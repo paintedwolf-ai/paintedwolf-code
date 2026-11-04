@@ -7,8 +7,11 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+const historyCoverageNoticeID = "host-history-coverage"
 
 // Load uses a bounded tail when a projection cannot cover the live suffix.
 func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, error) {
@@ -38,36 +41,50 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 	} else if ok {
 		return restored, nil
 	}
-	bounds := m.canonicalTailBounds(cfg)
-	suffix, hasMore, err := m.readBoundedSuffix(ctx, sess.ID, view.CoveredThroughOrd, bounds)
+	return m.loadViewHistory(ctx, sess, view, cfg)
+}
+
+// loadViewHistory reads the canonical rows a valid view does not replace, plus
+// the canonical copies of its retained assistant rows for replay fields. Those
+// copies sit before the opener: the rows after it are the contiguous working tail.
+func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *store.CompactionView, cfg compaction.CompactionConfig) ([]api.Message, error) {
+	covered := view.CoveredThroughOrd
+	tail, truncated, err := m.readCanonicalTail(ctx, sess.ID, m.canonicalTailBounds(cfg), viewTailStop(covered, activeTurnAllocation(cfg)))
 	if err != nil {
 		return nil, err
 	}
-	if hasMore {
-		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
+	oldest := int64(0)
+	if len(tail) > 0 {
+		oldest = tail[0].Ord
 	}
-	active, err := m.loadActiveWorkingSet(ctx, sess, cfg, view.CoveredThroughOrd)
-	if err != nil {
-		return nil, err
+	if _, ok := api.LastUserIntentMessage(tail); !ok {
+		if tail, err = m.withCurrentRequest(ctx, sess, tail); err != nil {
+			return nil, err
+		}
 	}
-	activeOrd := int64(0)
-	if len(active) > 0 {
-		activeOrd = active[0].Ord
-		suffix = active
-	}
-	// Replay fields stay canonical rather than being duplicated in projections.
-	retained := make([]api.Message, 0, len(view.Messages)+len(suffix))
+	splice := planViewSplice(tail, view, cfg)
+	var out []api.Message
 	for _, row := range view.Messages {
-		if row.Ord <= 0 || row.Role != api.MessageRoleAssistant || row.CompactedChunk != nil || activeOrd > 0 && row.Ord >= activeOrd {
+		if row.Ord <= 0 || row.Role != api.MessageRoleAssistant || row.CompactedChunk != nil || row.Ord > splice.replacedThrough {
 			continue
 		}
 		canonical, err := m.store.GetMessage(ctx, sess.ID, row.ID)
 		if err != nil {
 			return nil, err
 		}
-		retained = append(retained, canonical)
+		out = append(out, canonical)
 	}
-	return append(retained, suffix...), nil
+	if truncated {
+		notice, err := m.tailOmissionNotice(ctx, sess, covered, oldest, tail)
+		if err != nil {
+			return nil, err
+		}
+		if notice != nil {
+			m.Schedule(ctx, sess)
+			out = append(out, *notice)
+		}
+	}
+	return append(out, tail...), nil
 }
 
 func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session) ([]api.Message, error) {
@@ -85,16 +102,37 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 		return nil, err
 	}
 	m.Schedule(ctx, sess)
+	notice, err := m.tailOmissionNotice(ctx, sess, 0, firstTailOrd, history)
+	if err != nil || notice == nil {
+		return history, err
+	}
+	return append([]api.Message{*notice}, history...), nil
+}
+
+// tailOmissionNotice names rows between coverage and the canonical tail that hard
+// limits left out. The opener is retained separately, so it does not count.
+func (m *Service) tailOmissionNotice(ctx context.Context, sess *api.Session, covered, oldest int64, tail []api.Message) (*api.Message, error) {
+	through := oldest - 1
+	if len(tail) > 0 && tail[0].Ord == through {
+		through--
+	}
+	if covered+1 > through {
+		return nil, nil
+	}
+	return m.omissionNotice(ctx, sess, historyCoverageNoticeID, covered+1, through)
+}
+
+// omissionNotice is reference-only: it establishes no summary coverage.
+func (m *Service) omissionNotice(ctx context.Context, sess *api.Session, id string, from, through int64) (*api.Message, error) {
 	text, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
-		"level": "references", "through_ord": firstTailOrd - 1, "reference_only": true,
+		"level": "references", "through_ord": through, "omitted_from_ord": from, "omitted_through_ord": through,
 		"recall_available": m.recallAvailable != nil && m.recallAvailable(ctx, sess),
 	})
 	if err != nil {
 		return nil, err
 	}
-	notice := api.Message{ID: "host-history-coverage", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost,
-		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, ContextPinned: true, Content: text}
-	return append([]api.Message{notice}, history...), nil
+	return &api.Message{ID: id, Role: api.MessageRoleSystem, Origin: api.MessageOriginHost,
+		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, ContextPinned: true, Content: text}, nil
 }
 
 // Fit assembles prompt history and schedules durable compaction.
@@ -153,11 +191,10 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 			viewByID[msg.ID] = msg
 		}
 	}
-	intent, _ := api.LastUserIntentMessage(history)
-	activeOrd := intent.Ord
-	out := make([]api.Message, 0, len(view.Messages)+8)
+	splice := planViewSplice(history, view, cfg)
+	var head, older, within []api.Message
 	for _, msg := range view.Messages {
-		if activeOrd > 0 && msg.Ord >= activeOrd {
+		if msg.Ord > splice.replacedThrough || splice.intentIdx >= 0 && msg.Ord == splice.intentOrd {
 			continue
 		}
 		if canonical, ok := byID[msg.ID]; ok {
@@ -169,18 +206,44 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 			msg.ContentParts = append([]api.MessageContentPart(nil), msg.ContentParts...)
 			msg.ContentParts[0].Content = continuationText
 		}
-		out = append(out, msg)
+		switch {
+		case msg.Ord <= 0:
+			head = append(head, msg)
+		case splice.intentIdx < 0 || msg.Ord < splice.intentOrd:
+			older = append(older, msg)
+		default:
+			within = append(within, msg)
+		}
 	}
-	for _, msg := range history {
-		if msg.Ord <= view.CoveredThroughOrd && (activeOrd <= 0 || msg.Ord < activeOrd) {
+	var beforeIntent, tail, notice []api.Message
+	for i, msg := range history {
+		if msg.ID == historyCoverageNoticeID {
+			notice = append(notice[:0], msg)
+			continue
+		}
+		if i == splice.intentIdx || msg.Ord <= splice.replacedThrough {
 			continue
 		}
 		if viewMsg, ok := viewByID[msg.ID]; ok && viewMsg.CompactedChunk != nil {
 			msg = api.RehydrateTranscriptProjectionFields(viewMsg, msg)
 		}
-		out = append(out, msg)
+		if splice.intentIdx >= 0 && msg.Ord < splice.intentOrd {
+			beforeIntent = append(beforeIntent, msg)
+		} else {
+			tail = append(tail, msg)
+		}
 	}
-	return out
+	out := make([]api.Message, 0, len(view.Messages)+len(history)+1)
+	if splice.openerFirst {
+		out = append(append(append(out, older...), beforeIntent...), history[splice.intentIdx])
+		out = append(out, head...)
+	} else {
+		out = append(append(append(out, head...), older...), beforeIntent...)
+		if splice.intentIdx >= 0 {
+			out = append(out, history[splice.intentIdx])
+		}
+	}
+	return append(append(append(out, within...), notice...), tail...)
 }
 
 // withCurrentRequest restores the active human opener when it predates the tail.

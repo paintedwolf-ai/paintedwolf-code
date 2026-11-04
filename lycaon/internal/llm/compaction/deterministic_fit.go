@@ -61,10 +61,19 @@ func assembleFit(head, body []ContextMessage, trimmed bool) []ContextMessage {
 	return append(out, body[lead:]...)
 }
 
-// splitCompactionCheckpointHead retains the checkpoint and its summary together.
+// splitCompactionCheckpointHead retains the checkpoint and its summary together,
+// with any pinned rows placed before them, such as an opener preceding intra-turn coverage.
 func splitCompactionCheckpointHead(messages []ContextMessage) (head, body []ContextMessage) {
-	if len(messages) >= 2 && messages[0].CompactionCheckpoint && messages[1].Role == string(api.MessageRoleAssistant) {
-		return append([]ContextMessage(nil), messages[0], messages[1]), messages[2:]
+	for i := range messages {
+		if messages[i].CompactionCheckpoint {
+			if i+1 < len(messages) && messages[i+1].Role == string(api.MessageRoleAssistant) {
+				return append([]ContextMessage(nil), messages[:i+2]...), messages[i+2:]
+			}
+			return nil, messages
+		}
+		if !messages[i].ContextPinned {
+			break
+		}
 	}
 	return nil, messages
 }

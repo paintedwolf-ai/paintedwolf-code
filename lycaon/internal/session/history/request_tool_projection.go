@@ -203,9 +203,9 @@ func isOversizedToolBody(row api.Message) bool {
 // trimNoticeTokenReserve reserves space for the synthetic trim notice inserted when older rows are dropped.
 const trimNoticeTokenReserve = 64
 
-// isCompactionCheckpointHead reports whether row i is part of the leading checkpoint-and-continuation pair.
+// isCompactionCheckpointHead reports whether row i is part of the checkpoint-and-continuation pair.
 func isCompactionCheckpointHead(rows []api.Message, i int) bool {
-	return rows[i].CompactionCheckpoint || i == 1 && rows[0].CompactionCheckpoint
+	return rows[i].CompactionCheckpoint || i > 0 && rows[i-1].CompactionCheckpoint
 }
 
 func retainedToolTailMessages(rows []api.Message, tokens int) int {

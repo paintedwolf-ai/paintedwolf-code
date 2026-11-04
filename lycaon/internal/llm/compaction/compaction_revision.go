@@ -36,6 +36,7 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 	}
 	info.Attempts, info.ChunkProjections = nil, nil
 	info.CompactionGeneration = 0
+	info.WorkingSetStartOrd = 0
 	return RevisionDigest(struct {
 		Version                                                        int
 		Messages                                                       []ContextMessage

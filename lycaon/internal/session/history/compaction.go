@@ -222,6 +222,7 @@ func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals 
 		Attempts:             m.store,
 		Model:                sess.Model,
 		ProviderID:           sess.ProviderID,
+		WorkingSetStartOrd:   activeWorkingSetStart(originals, activeTurnAllocation(m.compactionConfig(ctx, sess))),
 	}
 	info.ProviderID, info.Model = m.Model(ctx, sess)
 	if prior, ok, err := m.store.GetCompactionView(ctx, sess.ID); err == nil && ok {
@@ -269,13 +270,10 @@ func (m *Service) SessionContext(ctx context.Context, sessionID string) (api.Ses
 	}
 	_, report := m.Assemble(ctx, sess, history, "")
 	est := m.BudgetTokens(ctx, sess, report.TokensAfter)
+	cfg := m.compactionConfig(ctx, sess)
 	remaining := 0
 	if m.Compactor != nil {
-		remaining, _ = m.Compactor.BudgetRemaining(ctx, sessionID, est)
-	}
-	cfg := compaction.DefaultCompactionConfig()
-	if m.Compactor != nil {
-		cfg = m.Compactor.Config()
+		remaining = compaction.BudgetRemaining(cfg.TargetTokens, est)
 	}
 	return api.SessionContextResponse{
 		EstimatedTokens:      est,

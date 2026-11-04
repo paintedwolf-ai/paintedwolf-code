@@ -25,6 +25,7 @@ type CompactionConfig struct {
 	Enabled                          bool   `yaml:"enabled"`
 	ModelContextWindow               int    `yaml:"model_context_window"`
 	LiveBudgetPct                    int    `yaml:"live_budget_pct"`
+	MaxLiveBudgetTokens              int    `yaml:"max_live_budget_tokens"`
 	WindowSource                     string `yaml:"window_source"`
 	BudgetTriggerPct                 int    `yaml:"budget_trigger_pct"`
 	HardCeilingPct                   int    `yaml:"hard_ceiling_pct"`
@@ -64,6 +65,9 @@ const (
 
 // DefaultLiveBudgetPct is live_budget = true_window × pct / 100 when YAML omits or zeros the field.
 const DefaultLiveBudgetPct = 75
+
+// DefaultMaxLiveBudgetTokens caps the live budget when YAML omits or zeros the field.
+const DefaultMaxLiveBudgetTokens = 196608
 
 var (
 	bundledCompactionOnce sync.Once
@@ -130,6 +134,12 @@ func NormalizeConfig(cfg CompactionConfig) (CompactionConfig, error) {
 	}
 	if cfg.LiveBudgetPct <= 0 {
 		cfg.LiveBudgetPct = DefaultLiveBudgetPct
+	}
+	if cfg.MaxLiveBudgetTokens == 0 {
+		cfg.MaxLiveBudgetTokens = DefaultMaxLiveBudgetTokens
+	}
+	if cfg.MaxLiveBudgetTokens < 0 {
+		return CompactionConfig{}, fmt.Errorf("compaction config: max_live_budget_tokens must be positive")
 	}
 	switch src := strings.TrimSpace(cfg.WindowSource); src {
 	case "":

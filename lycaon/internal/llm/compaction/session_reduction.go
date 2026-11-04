@@ -11,7 +11,7 @@ import (
 // compactSession replaces a bounded oldest prefix and retains its unprocessed suffix.
 func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, messages []ContextMessage, target int) ([]ContextMessage, *messageview.Continuation, string, bool, error) {
 	retained := retainedCompactionMessages(messages, recentCompactionCount(c.cfg, messages, target))
-	removed := removedCompactionMessages(messages, retained)
+	removed := beforeWorkingSet(removedCompactionMessages(messages, retained), info.WorkingSetStartOrd)
 	if len(removed) == 0 {
 		return nil, nil, "protected_history", false, nil
 	}
@@ -70,6 +70,20 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 		reason = "target_reached"
 	}
 	return candidate, record, reason, false, nil
+}
+
+// beforeWorkingSet limits summary eligibility; published coverage never reaches the recent suffix.
+func beforeWorkingSet(rows []ContextMessage, startOrd int64) []ContextMessage {
+	if startOrd <= 0 {
+		return rows
+	}
+	out := make([]ContextMessage, 0, len(rows))
+	for _, row := range rows {
+		if row.Ord < startOrd {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 func oldestCompactionPrefix(rows []ContextMessage, limit int) []ContextMessage {

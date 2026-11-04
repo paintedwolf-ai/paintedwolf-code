@@ -26,65 +26,70 @@ func (m *Service) canonicalTailBounds(cfg compaction.CompactionConfig) tailWindo
 }
 
 func (m *Service) readBoundedCanonicalTail(ctx context.Context, sessionID string, bounds tailWindowBounds) ([]api.Message, error) {
+	tail, _, err := m.readCanonicalTail(ctx, sessionID, bounds, nil)
+	return tail, err
+}
+
+// readCanonicalTail reads backward through complete exchanges until stop or a
+// hard bound; truncated reports that a hard bound ended the read. The latest
+// exchange is admitted whole, and a bound never strands a result from its call.
+func (m *Service) readCanonicalTail(ctx context.Context, sessionID string, bounds tailWindowBounds, stop func(api.Message) bool) ([]api.Message, bool, error) {
 	if bounds.maxRows <= 0 {
 		bounds.maxRows = UncompactedLimit
 	}
 	var pages [][]api.Message
 	var beforeOrd int64
 	var rowsCount, usedTokens, usedBytes int
-	seenUserIntent := false
-	for rowsCount < bounds.maxRows {
-		pageLimit := min(UncompactedLimit, bounds.maxRows-rowsCount)
+	needExchange := true
+	stopped, truncated := false, false
+	for !stopped && !truncated {
 		page, err := m.store.ReadMessageWindow(ctx, sessionID, messageview.MessageWindow{
 			BeforeOrd: beforeOrd,
-			Limit:     pageLimit,
+			Limit:     UncompactedLimit,
 		})
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if len(page) == 0 {
 			break
 		}
 		admittedStart := len(page)
-		hitBudget := false
 		for i := len(page) - 1; i >= 0; i-- {
 			msgTokens := estimateSingleMessageTokens(page[i])
 			msgBytes := estimateSingleMessageBytes(page[i])
-			needActiveTurn := !seenUserIntent || (admittedStart < len(page) && page[admittedStart].Role == api.MessageRoleTool)
-			if rowsCount > 0 && !needActiveTurn && ((bounds.maxTokens > 0 && usedTokens+msgTokens > bounds.maxTokens) || (bounds.maxBytes > 0 && usedBytes+msgBytes > bounds.maxBytes)) {
-				hitBudget = true
-				break
+			halted := stop != nil && stop(page[i])
+			if !needExchange {
+				if halted {
+					stopped = true
+					break
+				}
+				if rowsCount >= bounds.maxRows || (bounds.maxTokens > 0 && usedTokens+msgTokens > bounds.maxTokens) || (bounds.maxBytes > 0 && usedBytes+msgBytes > bounds.maxBytes) {
+					truncated = true
+					break
+				}
 			}
 			admittedStart = i
-			if api.IsUserInstructionMessage(api.NormalizeMessageProvenance(page[i])) {
-				seenUserIntent = true
-			}
+			needExchange = page[i].Role == api.MessageRoleTool
 			rowsCount++
 			usedTokens += msgTokens
 			usedBytes += msgBytes
-			if rowsCount >= bounds.maxRows {
-				break
-			}
 		}
 		if admittedStart < len(page) {
 			pages = append(pages, page[admittedStart:])
 		}
-		if hitBudget || admittedStart > 0 || len(page) < pageLimit || page[0].Ord <= 1 {
+		if len(page) < UncompactedLimit || page[0].Ord <= 1 {
 			break
 		}
 		beforeOrd = page[0].Ord
-	}
-	if len(pages) == 0 {
-		return []api.Message{}, nil
 	}
 	out := make([]api.Message, 0, rowsCount)
 	for i := len(pages) - 1; i >= 0; i-- {
 		out = append(out, pages[i]...)
 	}
 	if len(out) > 0 && out[0].Ord > 1 {
-		out = alignCanonicalTailStart(out)
+		out = out[completeExchangeStart(out, 0):]
 	}
-	return out, nil
+	return out, truncated, nil
 }
 
 func (m *Service) readBoundedSuffix(ctx context.Context, sessionID string, afterOrd int64, bounds tailWindowBounds) ([]api.Message, bool, error) {
@@ -179,7 +184,7 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 	reserve := min(2048, max(256, cfg.TargetTokens/8))
 	budget := max(1, cfg.TargetTokens-reserve)
 	for len(tail) > 1 && compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(tail)) > budget {
-		tail = alignCanonicalTailStart(tail[1:])
+		tail = tail[completeExchangeStart(tail, 1):]
 	}
 	if len(tail) == 0 || tail[0].Ord <= 1 || tail[0].Ord > view.Continuation.ThroughOrd {
 		return nil, false
@@ -236,12 +241,4 @@ func estimateSingleMessageBytes(msg api.Message) int {
 		size += len(part.Content)
 	}
 	return max(1, size)
-}
-
-func alignCanonicalTailStart(messages []api.Message) []api.Message {
-	i := 0
-	for i < len(messages)-1 && messages[i].Role == api.MessageRoleTool {
-		i++
-	}
-	return messages[i:]
 }
