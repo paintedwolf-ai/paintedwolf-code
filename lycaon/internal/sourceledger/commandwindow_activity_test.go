@@ -480,6 +480,9 @@ func TestFinalPassLongerThanTheBudgetServesTheNextOpen(t *testing.T) {
 func TestPartialRetentionLosesOnlyTheBeforeImageAndResumes(t *testing.T) {
 	ledger := openDiskLedger(t)
 	store, ctx, root := ledger.store, context.Background(), ledger.root
+	// What this bounds is retention's file limit, so a loaded host must not run
+	// out of time first.
+	store.Commands.observationBudget, store.Commands.retainBudget = time.Hour, time.Hour
 	contents := map[string]string{"a.txt": "before a\n", "b.txt": "before b\n"}
 	for path, content := range contents {
 		writeRootFile(t, root, path, content)

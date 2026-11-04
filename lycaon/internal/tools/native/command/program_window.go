@@ -13,7 +13,8 @@ import (
 // programWindow is one program's observation window, opened by whichever
 // external launch reaches it first and shared by every later one, including
 // concurrent pipeline stages, nested commands and & jobs. It claims drift only
-// while one of those launches holds it.
+// while one of those launches holds it, and closes when evaluation ends; a job
+// launching after that runs unobserved.
 type programWindow struct {
 	// due is false where commands are not observed, so launches never wait.
 	due    bool
@@ -47,8 +48,7 @@ func newProgramWindow(tc tools.ToolContext, commandLine string, clock commandpro
 // error means the launch's own context ended. Observation never takes time the
 // program assigned to its command: a launch with a bound waits at most half of
 // what remains, then runs unobserved. The open outlives the launch that began it,
-// so a stage's bound does not cost later launches their window, and a job may
-// launch after the call's context ended.
+// so a stage's bound does not cost later launches their window.
 func (w *programWindow) enter(ctx context.Context) (func(), error) {
 	if w == nil || !w.due {
 		return func() {}, nil
@@ -77,7 +77,7 @@ func (w *programWindow) enter(ctx context.Context) (func(), error) {
 		return w.unobserved(ctx)
 	}
 	if w.window.open == nil {
-		return func() {}, nil
+		return w.unobserved(ctx)
 	}
 	release, err := w.window.open.Hold(waitCtx)
 	if err != nil {
@@ -127,8 +127,8 @@ func (w *programWindow) releaseOpenerIfUnwaited(ctx context.Context) {
 	}
 }
 
-// settle ends the window once the program and its jobs have ended. An open
-// still in flight has no launch left to serve, so it is abandoned.
+// settle ends the window when evaluation has ended. An open still in flight has
+// no launch left to serve, so it is abandoned.
 func (w *programWindow) settle(ctx context.Context) {
 	w.once.Do(func() { close(w.ready) })
 	if w.cancel != nil {
