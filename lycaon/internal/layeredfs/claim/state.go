@@ -39,18 +39,18 @@ type WorkspaceStateSnapshot struct {
 
 // DispatchWorkspaceReceipt is the wire-level receipt attached to worker dispatch and turn results.
 type DispatchWorkspaceReceipt struct {
-	WorkerID                 string             `json:"worker_id"`
-	ViewID                   string             `json:"view_id"`
-	AdapterID                adapter.AdapterID  `json:"adapter_id"`
-	Readiness                ReadinessState     `json:"readiness"`
-	Command                  CommandState       `json:"command"`
-	GitInit                  GitInitState       `json:"git_init"`
-	Checkpoint               CheckpointStatus   `json:"checkpoint"`
-	FallbackReason           adapter.ReasonCode `json:"fallback_reason,omitempty"`
-	CopiedEntries            int64              `json:"copied_entries"`
-	CopiedBytes              int64              `json:"copied_bytes"`
-	Notice                   FallbackNotice     `json:"notice"`
-	SupportedActions         []RecoveryAction   `json:"supported_actions,omitempty"`
+	WorkerID         string             `json:"worker_id"`
+	ViewID           string             `json:"view_id"`
+	AdapterID        adapter.AdapterID  `json:"adapter_id"`
+	Readiness        ReadinessState     `json:"readiness"`
+	Command          CommandState       `json:"command"`
+	GitInit          GitInitState       `json:"git_init"`
+	Checkpoint       CheckpointStatus   `json:"checkpoint"`
+	FallbackReason   adapter.ReasonCode `json:"fallback_reason,omitempty"`
+	CopiedEntries    int64              `json:"copied_entries"`
+	CopiedBytes      int64              `json:"copied_bytes"`
+	Notice           FallbackNotice     `json:"notice"`
+	SupportedActions []RecoveryAction   `json:"supported_actions,omitempty"`
 }
 
 // BuildReceipt projects a WorkspaceStateSnapshot into a DispatchWorkspaceReceipt without prose parsing.
