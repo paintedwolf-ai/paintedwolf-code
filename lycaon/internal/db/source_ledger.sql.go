@@ -2433,7 +2433,7 @@ WHERE e.project_id = ?1 AND e.ordinal > ?2
   AND e.walk_visible = 1
   AND e.ordinal <= ?3
   AND (o.branch_id = '' OR substr(o.branch_id, 1, 9) = 'worktree:')
-  AND NOT (o.origin = 'agent' AND o.session_id = sqlc.arg(viewer_session_id))
+  AND (o.origin != 'agent' OR o.session_id != ?4)
   AND (COALESCE(o.command_window_id, '') != '' AND o.session_id = ?4) = CAST(?5 AS INTEGER)
 ORDER BY e.ordinal DESC LIMIT ?6
 `

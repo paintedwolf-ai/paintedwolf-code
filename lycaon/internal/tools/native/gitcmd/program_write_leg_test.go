@@ -110,14 +110,29 @@ func TestACOP01WriteLegWarningStatesWhetherThePlanOffersSourceHistory(t *testing
 	}
 }
 
-// The warning's reasons must hold for any directory a read names, not only the
-// leg's own copy.
-func TestACOP01WriteLegWarningFiresForAnAbsoluteDirectoryOutsideTheLeg(t *testing.T) {
-	f := newGitProgramFixture(t, true)
-	outcome := runGitProgram(t, f, "git -C '"+t.TempDir()+"' status")
-	if outcome.Refusal != nil || outcome.Status != 128 || !f.warned() {
-		t.Fatalf("outcome = %+v warned %v, want Git's status 128 and the warning", outcome, f.warned())
-	}
+// A directory outside the attached folders and grants never reaches Git, so the
+// warning's reasons are only ever stated about one a read may name.
+func TestACOP01WriteLegAbsoluteDirectoryOutsideTheLeg(t *testing.T) {
+	t.Run("ungranted is refused without the warning", func(t *testing.T) {
+		f := newGitProgramFixture(t, true)
+		outcome := runGitProgram(t, f, "git -C '"+t.TempDir()+"' status")
+		if outcome.StopCode != "SURVEY_PATH_ESCAPE" || f.warned() {
+			t.Fatalf("outcome = %+v warned %v, want the path refusal and no warning", outcome, f.warned())
+		}
+	})
+	t.Run("granted is Git's answer and the warning", func(t *testing.T) {
+		f := newGitProgramFixture(t, true)
+		dir := t.TempDir()
+		configure := f.Configure
+		f.Configure = func(toolCtx *tools.ToolContext) {
+			configure(toolCtx)
+			toolCtx.Files.ReadRoots = append(toolCtx.Files.ReadRoots, dir)
+		}
+		outcome := runGitProgram(t, f, "git -C '"+dir+"' status")
+		if outcome.Refusal != nil || outcome.Status != 128 || !f.warned() {
+			t.Fatalf("outcome = %+v warned %v, want Git's status 128 and the warning", outcome, f.warned())
+		}
+	})
 }
 
 func TestACOP01ManyReadsInOneProgramStateOneWarning(t *testing.T) {
@@ -141,7 +156,7 @@ func TestACOP01ConcurrentReadsStateOneWarning(t *testing.T) {
 		t.Run(source, func(t *testing.T) {
 			f := newGitProgramFixture(t, true)
 			outcome := runGitProgram(t, f, source)
-			if outcome.Refusal != nil || outcome.Status != 0 {
+			if outcome.Refusal != nil || outcome.StopCode != "" {
 				t.Fatalf("outcome = %+v, want the program to finish", outcome)
 			}
 			count := 0
