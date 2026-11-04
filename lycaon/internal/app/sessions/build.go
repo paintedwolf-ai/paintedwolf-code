@@ -100,7 +100,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	if deps.RegisterRecovery != nil {
 		if err := deps.RegisterRecovery(bootrecovery.Entry{
 			Name: "source-command-windows", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
-			Run:  ledger.Commands.RecoverInterruptedWindows,
+			Run: ledger.Commands.RecoverInterruptedWindows,
 		}); err != nil {
 			return nil, err
 		}

@@ -334,14 +334,14 @@ func (s *Commands) retainWindowStart(ctx context.Context, w *openCommandWindow) 
 // retainStartObjects stores what it can and returns what it stored, including
 // when it stops early with an error.
 func (s *Commands) retainStartObjects(ctx context.Context, w *openCommandWindow) ([]string, error) {
-	entries, err := s.snapshots.HashedEntries(ctx, w.currentStart(), MaxRevisionContentBytes, windowRetainFiles+1)
+	entries, err := s.snapshots.HashedEntries(ctx, w.currentStart(), MaxRevisionContentBytes, s.retainFiles+1)
 	if err != nil {
 		return nil, err
 	}
-	if len(entries) > windowRetainFiles {
+	if len(entries) > s.retainFiles {
 		slog.InfoContext(ctx, "command window start retention bounded",
-			"window_id", w.id, "unretained", len(entries)-windowRetainFiles, "limit", windowRetainFiles)
-		entries = entries[:windowRetainFiles]
+			"window_id", w.id, "unretained", len(entries)-s.retainFiles, "limit", s.retainFiles)
+		entries = entries[:s.retainFiles]
 	}
 	var retained int64
 	pins := make([]string, 0, len(entries))
@@ -821,6 +821,8 @@ type Commands struct {
 	recordMu      *sync.Mutex
 	// retainBudget is the share of an open spent keeping before-images.
 	retainBudget time.Duration
+	// retainFiles bounds how many before-images one window keeps.
+	retainFiles int
 	// slowPasses remembers, per scope, the last pass that outlasted the budget.
 	slowPasses       map[string]slowPass
 	snapshots        *sourcesnapshot.Store

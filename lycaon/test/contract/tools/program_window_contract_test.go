@@ -9,6 +9,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
@@ -84,4 +86,53 @@ git bisect reset`, tc)
 			t.Fatalf("nested command did not run: %v (%+v)", err, out)
 		}
 	}
+}
+
+// A bisect check is one of the program's external processes, so the window is
+// active while it runs.
+func TestGitBisectRunHoldsTheWindowWhileItsCheckRuns(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	f := toolfixture.NewProgramFixture(t)
+	ledger := f.Seed.AttachLedger(t)
+	dir := f.Seed.Dir
+	gittest.Init(t, dir)
+	for _, content := range []string{"one\n", "two\n", "three\n"} {
+		contractcheck.FailErr(t, "write tracked file", os.WriteFile(filepath.Join(dir, "a.txt"), []byte(content), 0o644))
+		gittest.CommitAll(t, dir, "Change")
+	}
+	tc := gitProgramContext(dir)
+	tc.Identity.Agent = ""
+	tc.Source.Commands = ledger.Commands
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.Invoke(t, `git bisect start HEAD HEAD~2 && git bisect run /bin/sh -c 'touch started; until test -e release; do sleep 0.01; done; exit 0'
+git bisect reset`, tc)
+		done <- err
+	}()
+	testutil.AwaitCondition(t, "the check started", func() bool {
+		_, err := os.Stat(filepath.Join(dir, "started"))
+		return err == nil
+	})
+	contractcheck.FailErr(t, "drift during the check", os.WriteFile(filepath.Join(dir, "during.txt"), []byte("live"), 0o644))
+	contractcheck.FailErr(t, "pass during the check", ledger.Inventory.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
+		ProjectID: testdbseed.DefaultProjectID, Roots: []sourceledger.RootSpec{{ID: "r1", Path: dir}}, Force: true, Wait: true,
+	}))
+	listed := ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, tc.Identity.SessionID)
+	if len(listed) != 1 {
+		t.Fatalf("open windows = %+v", listed)
+	}
+	walk, err := ledger.Walk.QueryWalk(t.Context(), testdbseed.DefaultProjectID, sourceledger.Baseline{}, 200, 0, sourceledger.CommitLens{})
+	contractcheck.FailErr(t, "read walk", err)
+	attributed := false
+	for _, file := range walk.Files {
+		for _, effect := range file.Effects {
+			attributed = attributed || (effect.Path == "during.txt" && effect.CommandWindowID == listed[0].ID)
+		}
+	}
+	if !attributed {
+		t.Fatalf("drift during the check not attributed: %+v", walk.Files)
+	}
+	contractcheck.FailErr(t, "release the check", os.WriteFile(filepath.Join(dir, "release"), nil, 0o644))
+	contractcheck.FailErr(t, "run bisect", testutil.AwaitValue(t, "bisect result", done))
 }
