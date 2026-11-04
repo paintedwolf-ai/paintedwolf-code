@@ -26,7 +26,6 @@ type closeoutContract struct {
 	loop     *PromptLoop
 	selected *oar.Decision
 	fired    []string
-	nudges   []string
 	friction int
 	noted    []string
 	issues   []guidance.ReportDocumentIssue
@@ -100,14 +99,7 @@ func newCloseoutContract(t *testing.T) *closeoutContract {
 		},
 		Projection: ProjectionDeps{
 			AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
-			AppendMessages: func(_ context.Context, _ string, messages ...api.Message) error {
-				for _, message := range messages {
-					if message.Role == api.MessageRoleUser {
-						c.nudges = append(c.nudges, message.Content)
-					}
-				}
-				return nil
-			},
+			AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
 			UpdateMessage: func(_ context.Context, _, _ string, message api.Message) error {
 				c.saved = message
 				return nil
@@ -127,6 +119,18 @@ func contractHistory(content string) []api.Message {
 		{ID: "result", Role: api.MessageRoleTool, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{ToolCallID: "r1", Tool: "read", Outcome: api.ToolResultOutcomeCompleted}},
 		{ID: "slot", Role: api.MessageRoleAssistant, Content: content},
 	}
+}
+
+// refusalBody is the host nudge the model reads next.
+func refusalBody(t *testing.T, history []api.Message) string {
+	t.Helper()
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == api.MessageRoleUser {
+			return history[i].Content
+		}
+	}
+	t.Fatal("no refusal in history")
+	return ""
 }
 
 // drive is one tool-free response down the real closeout path.
@@ -193,15 +197,13 @@ func TestMarkdownCloseoutRulesFireOnTheirTriggers(t *testing.T) {
 			} else if st.closeoutRetry.attempt != 1 || st.closeoutRetry.documentAttempt != 0 || c.friction != 1 {
 				t.Fatalf("a citation refusal spent %+v friction=%d", st.closeoutRetry, c.friction)
 			}
-			if len(c.nudges) != 1 {
-				t.Fatalf("nudges = %q", c.nudges)
-			}
-			if !strings.Contains(c.nudges[0], "Code: "+tc.code) {
-				t.Fatalf("refusal lacks its code:\n%s", c.nudges[0])
+			body := refusalBody(t, out.history)
+			if !strings.Contains(body, "Code: "+tc.code) {
+				t.Fatalf("refusal lacks its code:\n%s", body)
 			}
 			for _, retired := range retiredCloseoutWords {
-				if strings.Contains(c.nudges[0], retired) {
-					t.Fatalf("refusal teaches retired %q:\n%s", retired, c.nudges[0])
+				if strings.Contains(body, retired) {
+					t.Fatalf("refusal teaches retired %q:\n%s", retired, body)
 				}
 			}
 		})
@@ -220,7 +222,7 @@ func TestRetiredFenceMembersSpendOnlyTheDocumentBudget(t *testing.T) {
 	if st.closeoutRetry.documentAttempt != 1 || st.closeoutRetry.attempt != 0 || c.friction != 0 {
 		t.Fatalf("budgets = %+v friction=%d", st.closeoutRetry, c.friction)
 	}
-	body := c.nudges[0]
+	body := refusalBody(t, out.history)
 	if !strings.Contains(body, "`cited_evidence`: written inline") || !strings.Contains(body, "`verification`: written inline") {
 		t.Fatalf("refusal does not name the members:\n%s", body)
 	}

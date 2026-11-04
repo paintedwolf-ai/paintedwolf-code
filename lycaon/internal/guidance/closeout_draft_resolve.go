@@ -111,6 +111,16 @@ func resolveDraftCitation(roots evidence.CitationRoots, occurrence DraftOccurren
 	finding := WorkerFindingInput{Evidence: c.Handle, Path: c.Path, Line: c.Line, EndLine: c.EndLine, Excerpt: c.Excerpt}
 	result := OccurrenceResolution{OccurrenceIndex: occurrence.Index, Kind: occurrence.Kind}
 	outcome := classifyDraftFinding(roots, finding, ev)
+	if singleLineNeedsCoverage(finding, outcome, ev) {
+		// The taught form has no excerpt, so nothing else checks its line.
+		ranged := finding
+		ranged.EndLine = finding.Line
+		outcome = classifyDraftFinding(roots, ranged, ev)
+		outcome.resolution.EndLine = 0
+		if outcome.class == closeoutCitationUnverifiable {
+			outcome.offender = FormatResolutionOffender(outcome.resolution, finding)
+		}
+	}
 	result.Resolution, result.Offender = outcome.resolution, outcome.offender
 	switch outcome.class {
 	case closeoutCitationSurvey:
@@ -125,6 +135,16 @@ func resolveDraftCitation(roots evidence.CitationRoots, occurrence DraftOccurren
 		result.Offender = ""
 	}
 	return result
+}
+
+// singleLineNeedsCoverage reports a grounded file citation whose line alone claims
+// the observation covers it. Records without file regions have no lines to check.
+func singleLineNeedsCoverage(finding WorkerFindingInput, outcome closeoutFindingOutcome, ev evidence.Ledger) bool {
+	if finding.Line <= 0 || finding.EndLine > 0 || finding.Excerpt != "" || outcome.class != closeoutCitationGrounded {
+		return false
+	}
+	rec, ok := evidence.ResolveHandle(ev, outcome.resolution.Handle)
+	return ok && evidence.RecordShape(rec) == evidence.ShapeFileRegion
 }
 
 // classifyDraftFinding binds a bare path to an eligible observed record. A
