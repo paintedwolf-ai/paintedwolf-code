@@ -858,7 +858,9 @@ clients that require manual installation.
 
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
-`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier runs two jobs
+`check` from [`ci.yml`](../.github/workflows/ci.yml). GitHub reads that check from
+the newest suite on the head, so the job deletes skipped CI runs a draft push left
+there; a failed deletion warns without failing `check`. The fast tier runs two jobs
 within its declared two-runner budget. `ready-lint` runs complete `lint:full`
 analysis while `ready` first runs the complete repository contract tree, then compiles
 the host and runs size budgets, changed Go statement coverage, affected short Go tests, comment checks,

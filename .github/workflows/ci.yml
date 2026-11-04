@@ -80,14 +80,29 @@ jobs:
     needs: [fast, integration, platform, platform-lanes]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Require this tier's verification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
           SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform,platform-lanes', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}
           DRAFT: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"
+      - name: Delete skipped runs that would hide this check
+        # GitHub reads a required check from the newest suite on the head; a
+        # skipped draft run registered after this run would block the merge queue.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/ci_verification.py delete-skipped-runs "$HEAD_SHA"
 
   dispatched-check:
     # A pull request's checks leave out dispatch runs; report the required
