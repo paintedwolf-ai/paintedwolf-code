@@ -45,8 +45,12 @@ func writeMarker(folder, id, stateRoot string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fseffect.Replace(fseffect.ReplaceRequest{
-		Location: fseffect.PathLocation(filepath.Join(folder, markerFileName)),
+	return writeFolderFile(filepath.Join(folder, markerFileName), raw)
+}
+
+func writeFolderFile(path string, raw []byte) error {
+	_, err := fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.PathLocation(path),
 		Source:   bytes.NewReader(raw),
 		Mode:     0o600,
 		DirMode:  0o700,

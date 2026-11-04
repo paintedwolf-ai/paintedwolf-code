@@ -48,6 +48,6 @@ const backupExcludeAttribute = "com.apple.metadata:com_apple_backup_excludeItem"
 func excludeFromBackupsAndIndexing(folder string) error {
 	return errors.Join(
 		unix.Setxattr(folder, backupExcludeAttribute, backupExcludeValue, 0),
-		os.WriteFile(filepath.Join(folder, ".metadata_never_index"), nil, 0o600),
+		writeFolderFile(filepath.Join(folder, ".metadata_never_index"), nil),
 	)
 }

@@ -3,19 +3,21 @@
 package testvolume
 
 import (
-	"bytes"
-	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
+
+	lexec "github.com/lycaon/lycaon/internal/exec"
 )
 
-const namespaceChildEnv = "PW_TESTVOLUME_NAMESPACE_CHILD"
+const (
+	namespaceChildEnv = "PW_TESTVOLUME_NAMESPACE_CHILD"
+	unsharePath       = "/usr/bin/unshare"
+)
 
 // New returns a real second volume. Mounting needs a private namespace, so a test
 // on Linux re-runs itself inside one. The second result is true in the parent once
@@ -53,27 +55,29 @@ func reflinkVolume(t *testing.T) *Volume {
 
 func runInNamespace(t *testing.T) {
 	t.Helper()
+	if _, err := os.Stat(unsharePath); err != nil {
+		t.Skipf("unshare unavailable: %v", err)
+	}
 	name, _, _ := strings.Cut(t.Name(), "/")
-	cmd := exec.Command(os.Args[0], "-test.run", "^"+name+"$", "-test.v", "-test.count=1")
-	cmd.Env = append(os.Environ(), namespaceChildEnv+"=1")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags:                 syscall.CLONE_NEWUSER | syscall.CLONE_NEWNS,
-		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}},
-		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}},
-		GidMappingsEnableSetgroups: false,
+	args := []string{"--user", "--map-root-user", "--mount", os.Args[0], "-test.run", "^" + name + "$", "-test.v", "-test.count=1"}
+	output, code, err := lexec.Run(t.Context(), unsharePath, args, lexec.ExecOpts{
+		Launch:  lexec.HostLaunch("test volume namespace"),
+		Env:     append(os.Environ(), namespaceChildEnv+"=1"),
+		Timeout: 5 * time.Minute,
+	})
+	text := string(output)
+	if err != nil {
+		t.Fatalf("private namespace run: %v\n%s", err, text)
 	}
-	var output bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &output, &output
-	err := cmd.Run()
-	var exit *exec.ExitError
-	switch {
-	case errors.As(err, &exit):
-		t.Fatalf("private namespace run failed: %v\n%s", err, output.String())
-	case err != nil:
-		t.Skipf("private mount namespaces are unavailable: %v", err)
+	// With no test output, unshare itself was refused: the host forbids namespaces.
+	if code != 0 && !strings.Contains(text, "=== RUN") {
+		t.Skipf("private mount namespaces are unavailable: %s", text)
 	}
-	t.Logf("private namespace run:\n%s", output.String())
-	if strings.Contains(output.String(), "--- SKIP: "+name) {
+	if code != 0 {
+		t.Fatalf("private namespace run failed:\n%s", text)
+	}
+	t.Logf("private namespace run:\n%s", text)
+	if strings.Contains(text, "--- SKIP: "+name) {
 		t.Skip("private namespace run skipped")
 	}
 }

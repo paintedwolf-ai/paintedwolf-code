@@ -64,7 +64,7 @@ const cacheDirTag = "Signature: 8a477f597d28d172789f06886806bc55\n# Painted Wolf
 // out of most desktop indexers by their default settings.
 func excludeFromBackupsAndIndexing(folder string) error {
 	return errors.Join(
-		os.WriteFile(filepath.Join(folder, "CACHEDIR.TAG"), []byte(cacheDirTag), 0o600),
-		os.WriteFile(filepath.Join(folder, ".trackerignore"), nil, 0o600),
+		writeFolderFile(filepath.Join(folder, "CACHEDIR.TAG"), []byte(cacheDirTag)),
+		writeFolderFile(filepath.Join(folder, ".trackerignore"), nil),
 	)
 }
