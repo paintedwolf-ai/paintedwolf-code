@@ -47,13 +47,12 @@ type SessionInfo struct {
 	MaxToolSpillBytes    int
 	Posture              api.SessionPosture
 	CompactionGeneration int
-	// WorkingSetStartOrd keeps this ordinal and later rows out of summary pages.
-	WorkingSetStartOrd  int64
-	Model               string
-	ProviderID          string
-	LatestUserRequestID string
-	CurrentRequest      *api.Message
-	Attempts            messageview.CompactionAttemptStore
+	WorkingSetStartOrd   int64 // first ordinal excluded from summary pages
+	Model                string
+	ProviderID           string
+	LatestUserRequestID  string
+	CurrentRequest       *api.Message
+	Attempts             messageview.CompactionAttemptStore
 	// RecallAvailable permits recall instructions in the continuation record.
 	RecallAvailable  bool
 	ChunkProjections messageview.ChunkProjectionStore

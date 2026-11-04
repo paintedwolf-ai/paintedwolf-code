@@ -411,14 +411,17 @@ func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 			}
 		}
 		feed.window = providerWindow
-		seedTurn(t, mem, sess.ID, 120, strings.Repeat("recorded observation ", 12))
+		seedTurn(t, mem, sess.ID, 120, strings.Repeat("recorded observation ", 200))
 		feed.window = 65536
 		_, err := svc.ForceCompact(t.Context(), sess.ID)
 		testutil.FailErr(t, "force compact", err)
 		view, ok, err := mem.GetCompactionView(t.Context(), sess.ID)
 		testutil.FailErr(t, "read view", err)
-		if ok && view.Continuation != nil && view.Continuation.Window != svc.compactionConfig(t.Context(), sess).ModelContextWindow {
-			t.Fatalf("view window %d differs from live config", view.Continuation.Window)
+		if !ok || view.Continuation == nil {
+			t.Fatal("fixture published no continuation")
+		}
+		if want := svc.compactionConfig(t.Context(), sess).ModelContextWindow; view.Continuation.Window != want || want != 49152 {
+			t.Fatalf("view window %d, live config %d", view.Continuation.Window, want)
 		}
 	})
 
