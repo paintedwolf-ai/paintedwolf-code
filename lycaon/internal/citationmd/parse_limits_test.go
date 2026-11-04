@@ -102,22 +102,20 @@ func TestNodeLimits(t *testing.T) {
 	}
 }
 
-// The scanner offers each byte at most twice whatever the shape: once to an open
-// node and once more when that node ends before it.
+// A released bracket rescans its contents, so a byte is offered a small constant
+// number of times whatever the shape.
 func TestScannerWorkIsBoundedBySize(t *testing.T) {
 	t.Parallel()
-	for _, unit := range []string{"[", "[[", "[a ", "[a/", "[read#1 \"", "[read#1] ", "\\[", "]", "[verify: x\n", "a/"} {
+	for _, unit := range []string{"[", "[[", "[a ", "[a/", "[a,", "[\" ", "[\"[", "[\"a\" ", "[read#1 \"", "[read#1] ", "\\[", "]", "[verify: x\n", "a/"} {
 		source := strings.Repeat(unit, (1<<16)/len(unit))
 		doc := Document{Source: source}
-		machine := newNodeMachine(Options{}, &documentBuilder{doc: &doc, budget: MaxOccurrences})
+		machine := newNodeMachine(source, Options{}, &documentBuilder{doc: &doc, budget: MaxOccurrences})
 		offers := 0
-		for i := 0; i < len(source); {
+		for machine.pos < len(source) {
 			offers++
-			if machine.feed(source[i]) {
-				i++
-			}
+			machine.feed(source[machine.pos])
 		}
-		if offers > 2*len(source) {
+		if offers > 4*len(source) {
 			t.Errorf("unit %q took %d offers for %d bytes", unit, offers, len(source))
 		}
 	}
