@@ -76,7 +76,7 @@ func TestLastForgottenBranchRemovesTheFolder(t *testing.T) {
 	testutil.FailErr(t, "record a", RecordBranch(ctx, state, folder.ID, "k", "a"))
 	testutil.FailErr(t, "record b", RecordBranch(ctx, state, folder.ID, "k", "b"))
 	testutil.FailErr(t, "forget a", ForgetBranch(ctx, state, "k", "a"))
-	if !Available(folder) {
+	if !Reachable(folder) {
 		t.Fatal("folder removed while a branch remains")
 	}
 	testutil.FailErr(t, "forget b", ForgetBranch(ctx, state, "k", "b"))

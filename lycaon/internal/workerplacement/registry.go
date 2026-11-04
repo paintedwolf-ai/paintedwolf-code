@@ -224,9 +224,9 @@ func Publish(registry Registry) {
 	enginepaths.PublishWorkerPlacementFolders(folders)
 }
 
-// Available reports whether a folder is reachable right now. The marker is on the
+// Reachable reports whether a folder is reachable right now. The marker is on the
 // folder's own volume, so a bare mount point left by an unmount does not count.
-func Available(folder Folder) bool {
+func Reachable(folder Folder) bool {
 	marker, err := readMarker(folder.Path)
 	return err == nil && marker.ID == folder.ID
 }
@@ -239,7 +239,7 @@ func AvailableFolders(stateRoot string) ([]Folder, error) {
 	}
 	var out []Folder
 	for _, folder := range registry.Folders {
-		if Available(folder) {
+		if Reachable(folder) {
 			out = append(out, folder)
 		}
 	}
@@ -337,7 +337,7 @@ func PlacedBranches(stateRoot string) ([]PlacedBranch, error) {
 		}
 		reachable, seen := available[id]
 		if !seen {
-			reachable = Available(folder)
+			reachable = Reachable(folder)
 			available[id] = reachable
 		}
 		out = append(out, PlacedBranch{

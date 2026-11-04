@@ -47,7 +47,7 @@ func listPlacements(stateRoot string, out io.Writer) error {
 	}
 	for _, folder := range registry.Folders {
 		state := "available"
-		if !workerplacement.Available(folder) {
+		if !workerplacement.Reachable(folder) {
 			state = "unavailable"
 		}
 		fmt.Fprintf(out, "%s\t%s\n", state, folder.Path)

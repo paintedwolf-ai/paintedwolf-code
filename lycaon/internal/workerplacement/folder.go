@@ -129,7 +129,7 @@ func removeMarkedFolder(folder Folder) error {
 	if !enginepaths.IsWorkerPlacementDirName(filepath.Base(folder.Path)) {
 		return fmt.Errorf("refusing to remove unrecognized placement folder")
 	}
-	if !Available(folder) {
+	if !Reachable(folder) {
 		return fmt.Errorf("refusing to remove unavailable placement folder")
 	}
 	return os.RemoveAll(folder.Path)
@@ -169,7 +169,7 @@ func ForgetBranch(ctx context.Context, stateRoot, projectKey, jobID string) erro
 				return nil
 			}
 		}
-		if folder, found := registry.folder(id); found && Available(folder) {
+		if folder, found := registry.folder(id); found && Reachable(folder) {
 			emptied = &folder
 		}
 		return nil
@@ -199,7 +199,7 @@ func Purge(ctx context.Context, stateRoot string) (PurgeReport, error) {
 		if err := ctx.Err(); err != nil {
 			return report, err
 		}
-		if !Available(folder) {
+		if !Reachable(folder) {
 			report.Unavailable = append(report.Unavailable, folder.Path)
 			continue
 		}
