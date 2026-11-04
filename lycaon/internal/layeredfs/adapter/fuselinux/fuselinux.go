@@ -6,7 +6,6 @@
 package fuselinux
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -273,18 +272,10 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, err.Error()
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
 	}
-	cmd, cleanupCmd, cErr := execpkg.PrepareCommand(ctx, "/bin/sh", []string{"-c", "cat probe.txt"}, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_probe")})
-	if cErr != nil {
-		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, cErr.Error()
-		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
-	}
-	defer cleanupCmd()
-	cmd.Dir = prep.PrimaryWorkPath
-	DetachMountEntry(cmd)
-	var probeOut bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &probeOut, &probeOut
-	if cErr := execpkg.RunPrepared(ctx, cmd); cErr != nil || strings.TrimSpace(probeOut.String()) != "coherent-probe" {
-		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: err=%v out=%q", cErr, probeOut.String())
+	// The shell enters the mount itself, after exec: see DetachMountEntry.
+	out, exitCode, cErr := execpkg.Run(ctx, "/bin/sh", []string{"-c", `cd "$1" && exec cat probe.txt`, "sh", prep.PrimaryWorkPath}, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_probe")})
+	if cErr != nil || exitCode != 0 || strings.TrimSpace(string(out)) != "coherent-probe" {
+		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: exit=%d err=%v out=%q", exitCode, cErr, string(out))
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
 	}
 	res.WriteExercised = true

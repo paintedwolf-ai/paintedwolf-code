@@ -78,17 +78,10 @@ func receiveFUSEDevFD(ctx context.Context, fusermountBin, opts, mountPath string
 		}
 	}()
 
-	cmd, cleanup, err := execpkg.PrepareCommand(ctx, fusermountBin, []string{"-o", opts, "--", mountPath}, execpkg.ExecOpts{
-		Launch: execpkg.HostLaunch("fuse_mount"), AppendEnv: []string{"_FUSE_COMMFD=3"},
-	})
-	if err != nil {
-		return -1, fmt.Errorf("fuselinux: prepare %s: %w", fusermountBin, err)
-	}
-	defer cleanup()
-	cmd.ExtraFiles = []*os.File{childSockFile}
 	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := execpkg.StartPrepared(ctx, cmd); err != nil {
+	wait, err := execpkg.StartDescriptorHelper(ctx, execpkg.HostLaunch("fuse_mount"), fusermountBin, []string{"-o", opts, "--", mountPath},
+		[]string{"_FUSE_COMMFD=3"}, childSockFile, &stderr)
+	if err != nil {
 		return -1, fmt.Errorf("fuselinux: start %s: %w", fusermountBin, err)
 	}
 	_ = childSockFile.Close()
@@ -97,7 +90,7 @@ func receiveFUSEDevFD(ctx context.Context, fusermountBin, opts, mountPath string
 	buf := make([]byte, 64)
 	oob := make([]byte, unix.CmsgSpace(4))
 	_, oobn, _, _, recvErr := unix.Recvmsg(parentSock, buf, oob, unix.MSG_CMSG_CLOEXEC)
-	waitErr := cmd.Wait()
+	waitErr := wait()
 	if recvErr != nil {
 		return -1, fmt.Errorf("fuselinux: recvmsg from %s: %w (wait=%v stderr=%s)", fusermountBin, recvErr, waitErr, strings.TrimSpace(stderr.String()))
 	}
