@@ -48,6 +48,7 @@ type statsCounters struct {
 	physicalCopyUps   atomic.Int64
 	capturedBaseBytes atomic.Int64
 	journalEntries    atomic.Int64
+	flushes           atomic.Int64
 }
 
 type idAllocator struct {

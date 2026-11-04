@@ -87,7 +87,6 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		return nil, err
 	}
 	_ = wf.Close()
-	_ = syncFD(workDirFD)
 
 	now := time.Now()
 	nid, gen := c.state.allocNodeID()

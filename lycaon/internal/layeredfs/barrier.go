@@ -46,7 +46,7 @@ func (c *Core) ReleaseView() error {
 	for _, e := range entries {
 		var sErr error
 		if e.h.file != nil {
-			sErr = errors.Join(runJournalSyncHook(c, "handle_sync"), syncFD(int(e.h.file.Fd())))
+			sErr = errors.Join(runJournalSyncHook(c, "handle_sync"), flushFD(c, int(e.h.file.Fd())))
 		}
 		if sErr != nil {
 			releaseErr = errors.Join(releaseErr, sErr)
@@ -60,17 +60,17 @@ func (c *Core) ReleaseView() error {
 	}
 
 	if c.backing.workDirFile != nil {
-		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "work_dir_sync"), syncFD(int(c.backing.workDirFile.Fd())))
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "work_dir_sync"), flushFD(c, int(c.backing.workDirFile.Fd())))
 	}
 	if c.backing.baseDirFile != nil {
-		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "base_dir_sync"), syncFD(int(c.backing.baseDirFile.Fd())))
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "base_dir_sync"), flushFD(c, int(c.backing.baseDirFile.Fd())))
 	}
 
 	if hasRecoveryState {
 		_, snapErr := snapshotJournal(c)
 		releaseErr = errors.Join(releaseErr, snapErr)
 	} else if c.backing.journalDirFile != nil {
-		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "journal_dir_sync"), syncFD(int(c.backing.journalDirFile.Fd())))
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "journal_dir_sync"), flushFD(c, int(c.backing.journalDirFile.Fd())))
 	}
 
 	if releaseErr != nil {
@@ -297,20 +297,20 @@ func flushBackingState(c *Core) error {
 
 	var flushErr error
 	for _, h := range held {
-		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "handle_sync"), syncFD(int(h.file.Fd())))
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "handle_sync"), flushFD(c, int(h.file.Fd())))
 		flushErr = errors.Join(flushErr, releaseHandleRef(c, h))
 	}
 	if flushErr != nil {
 		return flushErr
 	}
 	if workFile != nil {
-		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "work_dir_sync"), syncFD(int(workFile.Fd())))
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "work_dir_sync"), flushFD(c, int(workFile.Fd())))
 	}
 	if baseFile != nil {
-		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "base_dir_sync"), syncFD(int(baseFile.Fd())))
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "base_dir_sync"), flushFD(c, int(baseFile.Fd())))
 	}
 	if journalFile != nil {
-		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "journal_dir_sync"), syncFD(int(journalFile.Fd())))
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "journal_dir_sync"), flushFD(c, int(journalFile.Fd())))
 	}
 	return flushErr
 }

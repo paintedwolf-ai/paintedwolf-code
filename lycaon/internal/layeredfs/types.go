@@ -244,6 +244,7 @@ type Stats struct {
 	LogicalChanges    int64
 	CapturedBaseBytes int64
 	JournalEntries    int64
+	Flushes           int64
 }
 
 type OpenFlags int

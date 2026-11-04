@@ -226,10 +226,8 @@ func writeBaseStream(c *Core, r io.Reader) (string, string, string, int64, error
 	}
 	h := sha256.New()
 	n, copyErr := io.Copy(io.MultiWriter(f, h), r)
-	syncErr := syncFD(int(f.Fd()))
 	closeErr := f.Close()
-	dirSyncErr := syncFD(baseDirFD)
-	if err := errors.Join(copyErr, syncErr, closeErr, dirSyncErr); err != nil {
+	if err := errors.Join(copyErr, closeErr); err != nil {
 		_ = unlinkBackingFile(baseDirFD, baseName)
 		return "", "", "", 0, err
 	}
