@@ -19,4 +19,8 @@ func listeners(ListenerQuery) ([]Listener, error) { return nil, ErrUnsupported }
 
 func livePIDs() ([]int, error) { return nil, ErrUnsupported }
 
+func unreadableByThisUser(int, error) bool { return false }
+
+func unreadHoldersExcluded(netip.AddrPort, endpointHolders) bool { return false }
+
 const supported = false

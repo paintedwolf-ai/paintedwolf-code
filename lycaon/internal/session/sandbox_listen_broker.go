@@ -74,8 +74,9 @@ func (b *ListenCheckpointBroker) Await(ctx context.Context, in tools.LocalListen
 }
 
 // sessionOwnsPorts reports whether every requested port is exclusively served
-// by this session with complete holder observation across loopback families.
-// An unnarrowed, partially observed, or shared port is never owned.
+// by this session across loopback families, by holder observation or a kernel
+// exclusion that covers what cannot be read. An unnarrowed, unproven, or shared
+// port is never owned.
 func sessionOwnsPorts(ctx context.Context, provenance LoopbackProvenanceResolver, invokingSessionID, projectDir string, ports []uint16) bool {
 	observer, ok := provenance.(ExactSessionListener)
 	if !ok || invokingSessionID == "" || len(ports) == 0 || ctx.Err() != nil {

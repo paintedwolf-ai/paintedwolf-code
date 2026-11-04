@@ -15,6 +15,9 @@ type SocketObservation struct {
 	// handle is the raw kernel handle the host-wide socket table also reports.
 	// It stays unexported so kernel addresses never reach logs or receipts.
 	handle uint64
+	// sharedBind is whether the socket admits a second bind of its exact address,
+	// where the platform reports it.
+	sharedBind bool
 }
 
 func sameEndpoint(a, b netip.AddrPort) bool {
