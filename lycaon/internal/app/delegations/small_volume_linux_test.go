@@ -4,19 +4,20 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
-const smallVolumeEnv = "LYCAON_TEST_SMALL_VOLUME"
+const inMountNamespaceEnv = "LYCAON_TEST_IN_MOUNT_NAMESPACE"
 
-// smallVolume runs the test again inside a private mount namespace holding a small tmpfs, which
-// vanishes with the process, and returns "" once that run has passed. A host that refuses
+// ranInOwnMountNamespace runs the test again inside a private mount namespace, whose mounts
+// vanish with its process, and reports true once that run passed. A host that refuses
 // unprivileged namespaces cannot run this test.
-func smallVolume(t *testing.T) string {
+func ranInOwnMountNamespace(t *testing.T) bool {
 	t.Helper()
-	if dir := os.Getenv(smallVolumeEnv); dir != "" {
-		return dir
+	if os.Getenv(inMountNamespaceEnv) != "" {
+		return false
 	}
-	dir := t.TempDir()
 	if err := exec.CommandContext(t.Context(), "unshare", "-Urm", "true").Run(); err != nil {
 		t.Skipf("unprivileged mount namespaces unavailable: %v", err)
 	}
@@ -24,13 +25,19 @@ func smallVolume(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("test binary: %v", err)
 	}
-	script := `mount -t tmpfs -o size=16m none "$1" && shift && exec "$@"`
-	cmd := exec.CommandContext(t.Context(), "unshare", "-Urm", "sh", "-c", script, "sh", dir, self, "-test.run=^"+t.Name()+"$", "-test.v")
-	cmd.Env = append(os.Environ(), smallVolumeEnv+"="+dir)
+	cmd := exec.CommandContext(t.Context(), "unshare", "-Urm", self, "-test.run=^"+t.Name()+"$", "-test.v")
+	cmd.Env = append(os.Environ(), inMountNamespaceEnv+"=1")
 	out, err := cmd.CombinedOutput()
 	t.Logf("namespace run:\n%s", out)
 	if err != nil {
 		t.Fatalf("namespace run: %v", err)
 	}
-	return ""
+	return true
+}
+
+func mountSmallVolume(t *testing.T, path string) {
+	t.Helper()
+	if err := unix.Mount("none", path, "tmpfs", 0, "size=16m"); err != nil {
+		t.Fatalf("mount small volume: %v", err)
+	}
 }

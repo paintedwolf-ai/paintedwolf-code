@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -35,12 +36,16 @@ func fillVolume(t *testing.T, dir string) {
 // A real volume with no free blocks. The database lives elsewhere: this proves what retention
 // itself needs from a full volume, not what SQLite needs.
 func TestCancelFinishesOnAFullVolume(t *testing.T) {
-	volume := smallVolume(t)
-	if volume == "" {
+	if ranInOwnMountNamespace(t) {
 		return
 	}
 	f := newEngineFixture(t)
-	f.stateRoot = volume
+	// Branches must stay at their installation path, so the volume is mounted there and the
+	// coordinator keeps its state on it too, as it shares a volume with branches in production.
+	volume := enginepaths.WorkerBranchesRootUnder(f.dataRoot)
+	testutil.FailErr(t, "mount point", os.MkdirAll(volume, 0o755))
+	mountSmallVolume(t, volume)
+	f.stateRoot = filepath.Join(volume, "state")
 	f.boot()
 	task := f.claimMaterializedWorker()
 	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")

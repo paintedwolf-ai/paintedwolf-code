@@ -98,7 +98,7 @@ func newEngineFixture(t *testing.T) *engineFixture {
 func (f *engineFixture) boot() *Runtime {
 	f.t.Helper()
 	engine := New(f.database, nil, worker.WorkersConfig{})
-	engine.BranchRoot = enginepaths.WorkerBranchesRootUnder(f.stateRoot)
+	engine.BranchRoot = enginepaths.WorkerBranchesRootUnder(f.dataRoot)
 	engine.SeedRoot = enginepaths.WorkerSeedsRootUnder(f.stateRoot)
 	root := enginepaths.WorkerRecoveryRootUnder(f.stateRoot)
 	store, err := checkpoint.NewStore(filepath.Join(root, "checkpoints"))

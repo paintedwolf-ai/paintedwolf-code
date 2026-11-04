@@ -3,30 +3,25 @@ package delegations
 import (
 	"bytes"
 	"context"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// smallVolume attaches a private disk image and detaches it by its own device.
-func smallVolume(t *testing.T) string {
+func ranInOwnMountNamespace(*testing.T) bool { return false }
+
+// mountSmallVolume attaches a private disk image at path and detaches it by its own device.
+func mountSmallVolume(t *testing.T, path string) {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "lycaon-full-*")
-	testutil.FailErr(t, "volume dir", err)
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	image, mount := filepath.Join(dir, "volume.dmg"), filepath.Join(dir, "mount")
-	testutil.FailErr(t, "mount dir", os.Mkdir(mount, 0o755))
+	image := filepath.Join(t.TempDir(), "volume.dmg")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if out, err := exec.CommandContext(ctx, "/usr/bin/hdiutil", "create", "-quiet", "-size", "16m", "-fs", "HFS+", "-volname", "lycaonfull", image).CombinedOutput(); err != nil {
 		t.Fatalf("create image: %v: %s", err, out)
 	}
-	out, err := exec.CommandContext(ctx, "/usr/bin/hdiutil", "attach", "-nobrowse", "-noverify", "-mountpoint", mount, image).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "/usr/bin/hdiutil", "attach", "-nobrowse", "-noverify", "-mountpoint", path, image).CombinedOutput()
 	if err != nil {
 		t.Fatalf("attach image: %v: %s", err, out)
 	}
@@ -41,5 +36,4 @@ func smallVolume(t *testing.T) string {
 			t.Errorf("detach %s: %v: %s", device, err, out)
 		}
 	})
-	return mount
 }
