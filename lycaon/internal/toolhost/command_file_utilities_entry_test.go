@@ -224,8 +224,15 @@ func TestCommandFileUtilitiesAreNativeAndRecordUncataloguedForms(t *testing.T) {
 		out, err := env.Call(t, t.Context(), program)
 		testutil.FailErr(t, program, err)
 		result := decodePipeOutcome(t, out)
-		if result.NativeGaps != 1 || result.Refusal != nil && result.Refusal.Code != "COMMAND_OPTION_UNSUPPORTED" {
-			t.Fatalf("%s: %+v refusal %+v", program, result, result.Refusal)
+		// An installed program runs and records the gap; without one the form is refused.
+		if result.Refusal != nil {
+			if result.Refusal.Code != "COMMAND_OPTION_UNSUPPORTED" {
+				t.Fatalf("%s: refusal %+v", program, result.Refusal)
+			}
+			continue
+		}
+		if result.NativeGaps != 1 {
+			t.Fatalf("%s: %+v", program, result)
 		}
 	}
 }
