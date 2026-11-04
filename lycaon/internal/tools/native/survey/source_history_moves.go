@@ -69,9 +69,10 @@ func recordedMoveAway(ctx context.Context, tctx tools.ToolContext, files tools.S
 }
 
 // movedBase gives a path the baseline never held the text of what moved there. The
-// ledger's predecessor comes first; a file it never captured has its bytes in the
-// baseline at the move's source. A source the baseline lacks leaves absence, since
-// the file was created this leg. beforeAt names where the text came from.
+// baseline at the move's source comes first, since a program may have changed the
+// file before the move and the ledger captured it after. A source the baseline lacks
+// leaves absence: the file was created this leg. Where the baseline holds no text,
+// the ledger's predecessor answers. beforeAt names where the text came from.
 func movedBase(
 	ctx context.Context,
 	tctx tools.ToolContext,
@@ -82,16 +83,14 @@ func movedBase(
 	compared *workspacebaseline.PathComparison,
 	compareSource func(path string) (workspacebaseline.PathComparison, error),
 ) (beforeAt string, moved bool, err error) {
-	roots := tctx.Source.Roots
+	var predecessor *sourceledger.ComparisonSide
+	var source ledgerLocation
 	if comp := recorded.comp; comp != nil && comp.Before.VersionID != "" && (comp.Before.RootID != at.rootID || comp.Before.Path != at.rel) {
-		compared.Before, compared.HasBefore = comp.Before.Content, sideReadable(comp.Before)
-		return projectroot.DisplayPath(roots, comp.Before.RootID, comp.Before.Path), true, nil
-	}
-	source, moved, err := recordedMoveSource(ctx, tctx, ledger.Files, branch, at)
-	if err != nil || !moved {
+		predecessor, source, moved = &comp.Before, ledgerLocation{rootID: comp.Before.RootID, rel: comp.Before.Path}, true
+	} else if source, moved, err = recordedMoveSource(ctx, tctx, ledger.Files, branch, at); err != nil || !moved {
 		return "", false, err
 	}
-	beforeAt = projectroot.DisplayPath(roots, source.rootID, source.rel)
+	beforeAt = projectroot.DisplayPath(tctx.Source.Roots, source.rootID, source.rel)
 	baseline, err := compareSource(beforeAt)
 	if err != nil {
 		return "", false, err
@@ -99,11 +98,12 @@ func movedBase(
 	switch {
 	case baseline.Absent || baseline.Kind == workspacebaseline.ChangeCreated:
 		return "", true, nil
-	case baseline.Kind == "":
-		// Something at the source matches the baseline again, so this reads no text.
-		compared.HasBefore = false
+	case baseline.Kind != "" && baseline.HasBefore:
+		compared.Before, compared.HasBefore = baseline.Before, true
+	case predecessor != nil:
+		compared.Before, compared.HasBefore = predecessor.Content, sideReadable(*predecessor)
 	default:
-		compared.Before, compared.HasBefore = baseline.Before, baseline.HasBefore
+		compared.HasBefore = false
 	}
 	return beforeAt, true, nil
 }
