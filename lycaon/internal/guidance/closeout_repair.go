@@ -46,7 +46,8 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 		case occurrence.RepairID != "":
 			targets = append(targets, map[string]any{
 				"id": occurrence.RepairID, "token": occurrence.Token,
-				"defect": string(outcome.Outcome), "link": occurrence.Link != nil,
+				"defect": string(outcome.Outcome), "web_link": occurrence.Kind == citationmd.KindWebLink,
+				"unnumbered": outcome.Resolution.UnnumberedOutput,
 			})
 		case occurrence.Owner != DraftFieldSynthesis:
 			document = append(document, occurrence.Owner+": "+occurrence.Token)
@@ -102,7 +103,7 @@ func citationRepairObservations(roots evidence.CitationRoots, ev evidence.Ledger
 		}
 		seen[rec.Handle] = true
 		choice := citationRepairObservation{Evidence: rec.Handle, Tool: rec.SourceTool, Path: rec.Path, SupersededBy: rec.SupersededBy}
-		if !rec.Survey && !rec.IsGate() {
+		if !rec.Survey && !rec.IsGate() && rec.ShowedLineNumbers() {
 			choice.Lines = observedLineRanges(rec)
 		}
 		out = append(out, choice)

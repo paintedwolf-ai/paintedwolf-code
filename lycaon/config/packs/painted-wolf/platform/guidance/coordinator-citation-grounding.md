@@ -4,9 +4,9 @@ Your answer is retained, and its valid citations stay as they are. Repair only w
 
 Rejected: {{ offenders_sample }}
 {% if repair_targets %}Citations to replace:
-{% for target in repair_targets %}- {{ target.id }}: `{{ target.token }}` ({{ target.defect }}){% if target.link %}, a link: give an observed URL{% endif %}
+{% for target in repair_targets %}- {{ target.id }}: `{{ target.token }}` ({{ target.defect }}){% if target.web_link %}, a web link: give an observed URL{% endif %}{% if target.unnumbered %}, from output with no line numbers: re-read with them, or cite the path with no line{% endif %}
 {% endfor %}{% endif %}
-Send one directive per citation and nothing else, such as `[cite: c1 => read#5:42]`, or `[cite: c2 => <https://example.test/observed-page>]` for a link. A link keeps its label. Or return the same answer with only its citations corrected.
+Send one directive per citation and nothing else, such as `[cite: c1 => read#5:42]`, `[cite: c1 => path/to/file]`, or `[cite: c2 => <https://example.test/observed-page>]` for a web link. A link keeps its label. Or return the same answer with only its citations corrected.
 {% if document_citation_targets %}Report fence citations to replace:
 {% for target in document_citation_targets %}- {{ target }}
 {% endfor %}
@@ -27,7 +27,7 @@ Copy exact handles; do not construct a handle from a tool name or call count. An
 Observed repair choices (not inferred support for your report). Cite a choice without `lines` by its bare handle, with no line number:
 {{ repair_observations }}
 {% endif %}
-{% if resume_work_allowed %}If the report needs more work, use an offered tool, then write a fresh report reflecting its results. This retires the retained answer. Otherwise repair citations using existing observations.{% else %}Repair citations using existing observations.{% endif %} Do not repeat an effect to obtain citations. A citation you cannot support can be left out of a corrected answer.
+{% if resume_work_allowed %}A tool that only reads keeps the retained answer, so you can still send directives after it. If the report needs more work, use a tool with effects, then write a fresh report reflecting its results: this retires the retained answer, and directives no longer apply. Otherwise repair citations using existing observations.{% else %}Repair citations using existing observations.{% endif %} Do not repeat an effect to obtain citations. A citation you cannot support can be left out of a corrected answer.
 {% if drafted_synthesis %}
 Retained answer:
 `````

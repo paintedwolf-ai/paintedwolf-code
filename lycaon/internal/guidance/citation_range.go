@@ -34,6 +34,7 @@ func applyCitationRange(roots evidence.CitationRoots, finding WorkerFindingInput
 		start, end := finding.Line+shift, finding.EndLine+shift
 		support := evidence.CoordinateSupport(rec, res.Path, start, end)
 		if support == evidence.CoordinateUnsupported {
+			refused.UnnumberedOutput = refused.UnnumberedOutput || (!rec.ShowedLineNumbers() && evidence.RangeObserved(rec, res.Path, start, end))
 			continue
 		}
 		bound := res
@@ -52,7 +53,61 @@ func applyCitationRange(roots evidence.CitationRoots, finding WorkerFindingInput
 	if fallback != nil {
 		return *fallback
 	}
+	if handle, ok := rangeAcrossRecords(finding, ev, res, excerpt); ok {
+		bound := res
+		bound.Handle, bound.Line, bound.EndLine, bound.LineCorrectedFrom = handle, finding.Line, finding.EndLine, 0
+		return bound
+	}
 	return refused
+}
+
+// rangeAcrossRecords validates a path citation against the union of the path's
+// active records, as when each line of a numbered read is its own record. It
+// returns the record holding the range's first line. An explicit handle keeps to
+// its own coverage, and an excerpt must anchor inside the range.
+func rangeAcrossRecords(finding WorkerFindingInput, ev evidence.Ledger, res evidence.Resolution, excerpt string) (string, bool) {
+	if _, known := evidence.ResolveHandle(ev, finding.Evidence); known {
+		return "", false
+	}
+	handles := ev.ByPath[filepath.ToSlash(res.Path)]
+	records := make([]evidence.Record, 0, len(handles))
+	first, anchored := "", excerpt == ""
+	for i := len(handles) - 1; i >= 0; i-- {
+		rec, ok := evidence.ResolveHandle(ev, handles[i])
+		if !ok || rec.SupersededBy != "" || rec.IsGate() {
+			continue
+		}
+		records = append(records, rec)
+		if first == "" && evidence.CoordinateSupport(rec, res.Path, finding.Line, finding.Line) == evidence.CoordinateObserved {
+			first = handles[i]
+		}
+		for _, anchor := range evidence.ExcerptAnchors(rec, res.Path, excerpt) {
+			anchored = anchored || (anchor >= finding.Line && anchor <= finding.EndLine)
+		}
+	}
+	return first, first != "" && anchored && evidence.UnionObserved(records, res.Path, finding.Line, finding.EndLine)
+}
+
+// unnumberedCoordinate reports a single line with no excerpt to check it, resting
+// only on output that showed no numbers while no numbered record covers it.
+func unnumberedCoordinate(finding WorkerFindingInput, ev evidence.Ledger, res evidence.Resolution) bool {
+	if finding.Line <= 0 || finding.EndLine > 0 || strings.TrimSpace(finding.Excerpt) != "" || !res.Verdict.Grounded() {
+		return false
+	}
+	rec, ok := evidence.ResolveHandle(ev, res.Handle)
+	if !ok || rec.ShowedLineNumbers() {
+		return false
+	}
+	if _, known := evidence.ResolveHandle(ev, finding.Evidence); known {
+		return true
+	}
+	for _, handle := range ev.ByPath[filepath.ToSlash(res.Path)] {
+		if other, ok := evidence.ResolveHandle(ev, handle); ok && other.SupersededBy == "" && !other.IsGate() &&
+			evidence.CoordinateSupport(other, res.Path, finding.Line, finding.Line) == evidence.CoordinateObserved {
+			return false
+		}
+	}
+	return true
 }
 
 // rangeCandidates lists the records that could support the range. An explicit

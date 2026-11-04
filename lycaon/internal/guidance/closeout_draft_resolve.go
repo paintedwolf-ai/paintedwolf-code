@@ -89,6 +89,10 @@ func ResolveDraftCitations(
 		switch occurrence.Kind {
 		case citationmd.KindCitation, citationmd.KindWorkspaceLink:
 			result = resolveDraftCitation(roots, occurrence, ev.Ledger, handleCode, unverifiableCode)
+			// The ledger moved since the parse: this is code again, not a defect.
+			if occurrence.InlineCode && result.Rejected() {
+				result = OccurrenceResolution{OccurrenceIndex: occurrence.Index, Kind: occurrence.Kind, Outcome: DirectiveParsed}
+			}
 		case citationmd.KindWebLink:
 			result.Outcome = CitationGrounded
 			observed := observedWebURL(*occurrence.Link, ev.Ledger)

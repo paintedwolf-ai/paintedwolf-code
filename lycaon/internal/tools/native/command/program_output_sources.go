@@ -55,6 +55,9 @@ func (r *ProgramRuntime) resolveOutputMappings(ctx context.Context, run *program
 					for _, pm := range proj.Mappings {
 						pm.OutputStartByte += m.OutputStartByte
 						pm.OutputEndByte += m.OutputStartByte
+						if m.PrintedLine != 0 {
+							pm.PrintedLine = m.PrintedLine
+						}
 						appendCoalesced(pm)
 					}
 					_ = proj.Close()

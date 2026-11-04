@@ -87,6 +87,7 @@ var factDecls = []factDecl{
 	{"progress_open_items", oarcore.TypeInt, FactTierHost, ""},
 	{"progress_has_open_steps", oarcore.TypeBool, FactTierHost, ""},
 	{"closeout_has_answer", oarcore.TypeBool, FactTierHost, ""},
+	{"closeout_only_repair_directives", oarcore.TypeBool, FactTierHost, ""},
 	{"task_envelope_echo", oarcore.TypeBool, FactTierHost, ""},
 	{"closeout_surface", oarcore.TypeBool, FactTierHost, ""},
 	{"progress_reconcile_needed", oarcore.TypeBool, FactTierHost, ""},

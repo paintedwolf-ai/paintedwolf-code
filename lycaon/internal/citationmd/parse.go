@@ -224,6 +224,9 @@ func (b *documentBuilder) checkVerification(o Occurrence) {
 
 func (b *documentBuilder) addZone(zone Zone, link *Link) {
 	b.doc.Zones = append(b.doc.Zones, zone)
+	if zone.Kind == ZoneCodeSpan && b.addCodeCitation(zone) {
+		return
+	}
 	entry := part{kind: literalPartKind(zone.Kind), span: zone.Span, definition: b.definitions[zone.Span.Start]}
 	if link != nil {
 		entry.kind = partLink

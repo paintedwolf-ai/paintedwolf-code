@@ -63,6 +63,9 @@ func IsBareJSONResponse(text string) bool {
 	return text != "" && (text[0] == '{' || text[0] == '[') && json.Valid([]byte(text))
 }
 
+// HasRepairDirective reports a `[cite: c1 => ...]` directive in the response.
+func (d CloseoutDraft) HasRepairDirective() bool { return len(draftRepairs(d)) > 0 }
+
 // CitationCount counts model-supplied source references, document ones included.
 func (d CloseoutDraft) CitationCount() int {
 	count := 0
@@ -167,7 +170,13 @@ func citedEvidenceFrom(c citationmd.Citation) CoordinatorCitedEvidence {
 
 // DraftParseOptions are the parse facts a live ledger and its roots supply.
 func DraftParseOptions(roots evidence.CitationRoots, ev evidence.Ledger) citationmd.Options {
-	return citationmd.Options{KnownPath: KnownLedgerPath(roots, ev), KnownHandleKind: KnownEvidenceKind(ev), SourceRoot: sourceRootPrefix(roots)}
+	return citationmd.Options{
+		KnownPath: KnownLedgerPath(roots, ev), KnownHandleKind: KnownEvidenceKind(ev), SourceRoot: sourceRootPrefix(roots),
+		CodeCitation: func(c citationmd.Citation) bool {
+			finding := WorkerFindingInput{Path: c.Path, Line: c.Line, EndLine: c.EndLine}
+			return classifyDraftFinding(roots, finding, ev).class == closeoutCitationGrounded
+		},
+	}
 }
 
 // sourceRootPrefix maps a source link's root id to the ledger's path spelling.

@@ -188,8 +188,11 @@ func repairText(doc citationmd.Document, occurrence DraftOccurrence, repair cita
 		}
 		return citationmd.RetargetLink(doc, occurrence.Occurrence, repair.URL), true
 	case citationmd.KindWorkspaceLink:
-		if repair.Citation == nil || repair.Citation.Path == "" {
+		if repair.Citation == nil {
 			return "", false
+		}
+		if repair.Citation.Path == "" {
+			return citationmd.LabelWithCitation(doc, occurrence.Occurrence, *repair.Citation), true
 		}
 		return citationmd.RetargetWorkspaceLink(doc, occurrence.Occurrence, *repair.Citation), true
 	case citationmd.KindArtifact, citationmd.KindVerify, citationmd.KindRepair:

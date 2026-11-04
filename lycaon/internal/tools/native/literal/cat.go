@@ -83,6 +83,7 @@ func catInput(inv *invocation, in *input, opts catOptions, state *lineState) err
 				if err := inv.out.text(numberPrefix(state.next, 6, "\t")); err != nil {
 					return err
 				}
+				inv.out.printedLine = state.next
 				state.next++
 			}
 		}
@@ -194,6 +195,7 @@ func runNl(inv *invocation) error {
 			prefix := blankPrefix
 			if mode == "a" || !blank {
 				prefix = numberPrefix(next, int(width), separator)
+				inv.out.printedLine = next
 				next++
 			}
 			if err := inv.out.text(prefix); err != nil {

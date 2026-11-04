@@ -80,5 +80,12 @@ func RetargetWorkspaceLink(doc Document, o Occurrence, c Citation) string {
 	return RetargetLink(doc, o, fileDestination(c.Path, fragment))
 }
 
+// LabelWithCitation is a workspace link's label as text, followed by a citation: a
+// handle names no destination for the link to keep.
+func LabelWithCitation(doc Document, o Occurrence, c Citation) string {
+	span := o.Link.LabelSpan
+	return doc.Source[span.Start:span.End] + " [" + c.Token() + "]"
+}
+
 // ZoneText is a zone's source text.
 func (d Document) ZoneText(z Zone) string { return d.Source[z.Span.Start:z.Span.End] }

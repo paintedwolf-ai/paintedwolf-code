@@ -183,6 +183,53 @@ func (s *shaper) flush() {
 	s.lineStart, s.breaks = 0, 0
 }
 
+// leftNeighbour is the last visible text byte on the current line, or zero when
+// nothing retractable stands there: no text, code, a kept link, or an escaped byte.
+func (s *shaper) leftNeighbour() byte {
+	at := len(s.out) - 1
+	if !s.visible || at < s.literalEnd || at < 0 || (at > 0 && s.out[at-1] == '\\') {
+		return 0
+	}
+	return s.out[at]
+}
+
+// retractNeighbour takes back the left neighbour and the space around it, leaving
+// the space before it pending so that the removal can still decide on it.
+func (s *shaper) retractNeighbour() {
+	s.out = s.out[:len(s.out)-1]
+	s.reclaimSpace()
+}
+
+// retractConjunction takes back a conjunction left with nothing to join.
+func (s *shaper) retractConjunction() bool {
+	for _, word := range []string{" and", " or", " &"} {
+		text := string(s.out[max(s.literalEnd, s.lineOut, len(s.out)-len(word)):])
+		if text == word && s.pendingSpace() {
+			s.out = s.out[:len(s.out)-len(word)]
+			s.pending = s.pending[:s.lineStart]
+			return true
+		}
+	}
+	return false
+}
+
+func (s *shaper) trimPending() { s.pending = s.pending[:s.lineStart] }
+
+func (s *shaper) reclaimSpace() {
+	end := len(s.out)
+	for end > s.literalEnd && end > s.lineOut && isSpaceByte(s.out[end-1]) {
+		end--
+	}
+	s.pending = append(s.pending[:s.lineStart], s.out[end:]...)
+	s.out = s.out[:end]
+	if len(s.out) <= s.lineOut {
+		s.visible = false
+	}
+	if len(s.out) == 0 {
+		s.emitted = false
+	}
+}
+
 func (s *shaper) lastByte() byte {
 	if len(s.out) == 0 {
 		return '\n'

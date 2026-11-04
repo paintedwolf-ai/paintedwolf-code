@@ -477,7 +477,7 @@
       "summary": "The requested owner {{ paintedwolf.ownership_target }} is unavailable for chown."
     },
     "CITATION_REPAIR_INVALID": {
-      "branch_instruction": "Keep the retained text as it is. To change your conclusions, use an offered tool, then write a fresh report.",
+      "branch_instruction": "Keep the retained text as it is. A tool that only reads keeps it; to change your conclusions, use a tool with effects, then write a fresh report.",
       "category": "recoverable",
       "emit": "guard:coordinator_synthesis",
       "summary": "The host applied none of this citation repair: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}."

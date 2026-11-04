@@ -64,6 +64,7 @@ type ProgressFacts struct {
 	ProgressClosedBeyondBaseline bool
 	ProgressReconciledSinceArm   bool
 	CloseoutHasAnswer            bool
+	CloseoutOnlyRepairDirectives bool
 	TaskEnvelopeEcho             bool
 	VerifyRequired               bool
 	VerifierPass                 bool

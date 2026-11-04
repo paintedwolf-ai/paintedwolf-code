@@ -164,7 +164,7 @@ func TestURLRepairKeepsObservedURLsWithoutMarkingMissingURLsMatched(t *testing.T
 		}
 	}
 	targets := CloseoutRepairHintData(roots, draft, resolved, ev, eval.Offenders)["repair_targets"].([]map[string]any)
-	if len(targets) != 1 || targets[0]["id"] != "c2" || targets[0]["link"] != true {
+	if len(targets) != 1 || targets[0]["id"] != "c2" || targets[0]["web_link"] != true {
 		t.Fatalf("targets = %+v", targets)
 	}
 	fallback, grounding := AssembleRetainedCloseout(roots, "implement_investigate", ev, draft, nil, eval.Code, 3)

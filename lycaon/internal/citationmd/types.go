@@ -37,6 +37,9 @@ type Options struct {
 	// carry, such as `@label/`. Nil means one root. An unknown id leaves the
 	// source URL as the path, which no observation matches.
 	SourceRoot func(rootID string) (prefix string, ok bool)
+	// CodeCitation reports whether the evidence supports a citation written as a
+	// standalone code span. Nil, or false, leaves the span literal code.
+	CodeCitation func(Citation) bool
 	// MaxSourceBytes and MaxOccurrences override the declared budgets.
 	MaxSourceBytes int
 	MaxOccurrences int
@@ -129,6 +132,9 @@ type Occurrence struct {
 	Artifact string
 	Verify   *verification.Assessment
 	Repair   *Repair
+	// InlineCode marks a citation read from a code span. It presents as a citation
+	// only when accepted; otherwise its bytes stay, as any other code does.
+	InlineCode bool
 }
 
 // IssueCode names a structured grammar defect.

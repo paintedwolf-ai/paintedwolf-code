@@ -1,6 +1,7 @@
 package literal
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -73,5 +74,57 @@ func TestDeliveredCommandWindowsQualifyOnlyTheirExactRanges(t *testing.T) {
 	defer lease.Close()
 	if len(lease.Mappings) != 0 {
 		t.Fatalf("line-number prefix mapped: %+v", lease.Mappings)
+	}
+}
+
+// A record's line numbers come from what the utility printed beside its bytes, and
+// only a number that is the line's own lets a reader state a coordinate.
+func TestDeliveredLinesKnowWhetherTheirOwnNumberWasPrinted(t *testing.T) {
+	h := newHarness(t, map[string]string{"fixture.go": deliveredSource, "other.go": "first\nsecond\n"})
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1, State: 1 << 20})
+	testutil.FailErr(t, "program memory", err)
+	for _, tc := range []struct {
+		name string
+		argv []string
+		// numbered lists the lines of path whose records may state a coordinate.
+		path     string
+		source   string
+		numbered []int
+		plain    []int
+	}{
+		{name: "cat", argv: []string{"cat", "fixture.go"}, path: "fixture.go", source: deliveredSource, plain: []int{1}},
+		{name: "cat -n", argv: []string{"cat", "-n", "fixture.go"}, path: "fixture.go", source: deliveredSource, numbered: []int{1, 2, 3, 4, 5}},
+		{name: "nl -ba", argv: []string{"nl", "-ba", "fixture.go"}, path: "fixture.go", source: deliveredSource, numbered: []int{1, 2, 3, 4, 5}},
+		{name: "cat -b numbers past a blank line differ", argv: []string{"cat", "-b", "fixture.go"}, path: "fixture.go", source: deliveredSource, numbered: []int{1}, plain: []int{2, 3, 4, 5}},
+		{name: "nl numbers past a blank line differ", argv: []string{"nl", "fixture.go"}, path: "fixture.go", source: deliveredSource, numbered: []int{1}, plain: []int{2, 3, 4, 5}},
+		{name: "cat -n second file continues the count", argv: []string{"cat", "-n", "other.go", "fixture.go"}, path: "fixture.go", source: deliveredSource, plain: []int{1, 2, 3, 4, 5}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := h.exec("", tc.argv...)
+			var numbered, plain []int
+			pins := h.pins.pins[r.execution]
+			for _, mapping := range r.mappings {
+				lease, err := commandprogram.ProjectStreamMappings(t.Context(), memory, []toolcontract.StreamSourceMapping{mapping}, mapping.OutputStartByte, mapping.OutputEndByte-mapping.OutputStartByte, commandprogram.MappingExactSlice)
+				testutil.FailErr(t, "project", err)
+				local := lease.Mappings[0]
+				pin, _ := pins[len(pins)-1].SourcePin()
+				if local.Source != pin {
+					_ = lease.Close()
+					continue
+				}
+				observed, err := evidence.ConfirmDeliveredSource(tc.path, pin, []byte(tc.source), []byte(r.stdout[mapping.OutputStartByte:mapping.OutputEndByte]), local, "response", "delivery")
+				_ = lease.Close()
+				testutil.FailErr(t, "confirm", err)
+				record := observed.Record()
+				if record.ShowedLineNumbers() {
+					numbered = append(numbered, record.LineRanges[0].Start)
+				} else {
+					plain = append(plain, record.LineRanges[0].Start)
+				}
+			}
+			if !slices.Equal(numbered, tc.numbered) || !slices.Equal(plain, tc.plain) {
+				t.Fatalf("numbered = %v plain = %v, want %v and %v", numbered, plain, tc.numbered, tc.plain)
+			}
+		})
 	}
 }

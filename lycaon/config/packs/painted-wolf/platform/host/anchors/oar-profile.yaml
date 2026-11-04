@@ -436,6 +436,8 @@ host_facts:
    type: bool
  - name: paintedwolf.closeout_has_answer
    type: bool
+ - name: paintedwolf.closeout_only_repair_directives
+   type: bool
  - name: paintedwolf.task_envelope_echo
    type: bool
  - name: paintedwolf.closeout_surface

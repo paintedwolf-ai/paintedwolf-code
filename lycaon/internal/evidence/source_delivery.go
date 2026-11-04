@@ -21,6 +21,9 @@ type SourceDelivery struct {
 	SourceEndByte   int64                  `json:"source_end_byte"`
 	StartLine       int                    `json:"start_line"`
 	EndLine         int                    `json:"end_line"`
+	// LineNumbered means the output printed this line's own source number, the only
+	// way a reader can state a coordinate from program output without counting.
+	LineNumbered bool `json:"line_numbered,omitempty"`
 }
 
 // DeliveredSourceObservation is constructed only after comparing actual emitted
@@ -63,7 +66,8 @@ func ConfirmDeliveredSource(path string, pin toolcontract.SourcePin, captured, d
 	}
 	first := 1 + bytes.Count(captured[:start], []byte{'\n'})
 	last := first + len(lines) - 1
-	fact := SourceDelivery{ResponseID: responseID, DeliveryID: deliveryID, Source: pin, SourceStartByte: start, SourceEndByte: end, StartLine: first, EndLine: last}
+	fact := SourceDelivery{ResponseID: responseID, DeliveryID: deliveryID, Source: pin, SourceStartByte: start, SourceEndByte: end, StartLine: first, EndLine: last,
+		LineNumbered: first == last && mapping.PrintedLine == int64(first)}
 	out.record = Record{Kind: "read", Shape: ShapeFileRegion, Fidelity: FidelityStructured, SourceTool: "command", Path: path, LineRanges: []LineRange{{Start: first, End: last}}, Body: lines, SourceDelivery: &fact}
 	return out, nil
 }

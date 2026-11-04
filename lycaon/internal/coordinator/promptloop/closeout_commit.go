@@ -165,7 +165,7 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	if l.Deps.NoteCloseoutGroundingReject != nil {
 		l.Deps.NoteCloseoutGroundingReject(ctx, sessionID, code, key, draft, unread)
 	}
-	exhausted := !retryEligible || stuck || budget.exhausted()
+	exhausted := !retryEligible || stuck || budget.exhausted() || st.noFurtherTurn
 	renderDecision := *decision
 	renderDecision.Data = budget.hintData(hintData, unread)
 	renderDecision.Data = maps.Clone(renderDecision.Data)

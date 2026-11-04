@@ -41,7 +41,11 @@ func planParts(doc Document, decide func(Occurrence) Rendition) []partPlan {
 		case partNode:
 			var kept []string
 			for _, member := range doc.Occurrences[p.first : p.first+p.count] {
-				if text := decide(member).Text; text != "" {
+				text := decide(member).Text
+				if text == "" && member.InlineCode {
+					text = doc.Source[member.Span.Start:member.Span.End]
+				}
+				if text != "" {
 					kept = append(kept, text)
 				}
 			}
@@ -78,7 +82,7 @@ func runEnds(doc Document, plans []partPlan) []int {
 	ends := make([]int, len(doc.parts))
 	for i := len(doc.parts) - 1; i >= 0; i-- {
 		ends[i] = doc.parts[i].span.End
-		if i+1 < len(doc.parts) && plans[i].removed && plans[i+1].removed && isSpaces(doc.Source[doc.parts[i].span.End:doc.parts[i+1].span.Start]) {
+		if i+1 < len(doc.parts) && plans[i].removed && plans[i+1].removed && joinsRemoved(doc.Source[doc.parts[i].span.End:doc.parts[i+1].span.Start]) {
 			ends[i] = ends[i+1]
 		}
 	}
@@ -104,6 +108,9 @@ type renderWalk struct {
 	runStart int
 	inRun    bool
 	work     int
+	// runRight is where the text after the current removed run resumes, past any
+	// separators the run left with nothing to separate.
+	runRight int
 }
 
 func renderCounted(doc Document, decide func(Occurrence) Rendition) (string, int) {
@@ -117,14 +124,28 @@ func renderCounted(doc Document, decide func(Occurrence) Rendition) (string, int
 	at := doc.Body.Start
 	for i, p := range doc.parts {
 		gap := doc.Source[at:p.span.Start]
-		out.text([]byte(gap))
+		joined := i > 0 && plans[i].removed && plans[i-1].removed && ends[i-1] > doc.parts[i-1].span.End
+		// A separator between two removed nodes goes with them.
+		if !joined || isSpaces(gap) {
+			out.text([]byte(gap))
+		}
 		walk.moved(at, p.span.Start)
-		if !plans[i].removed || !isSpaces(gap) {
+		if !joined {
 			walk.inRun = false
 		}
 		switch {
 		case plans[i].removed:
-			walk.removeNode(p, ends[i])
+			if !walk.inRun {
+				limit := doc.Body.End
+				for next := i + 1; next < len(doc.parts) && limit == doc.Body.End; next++ {
+					if doc.parts[next].span.Start >= ends[i] {
+						limit = doc.parts[next].span.Start
+					}
+				}
+				walk.runStart = p.span.Start
+				walk.runRight = walk.tidyAround(ends[i], limit)
+			}
+			walk.removeNode(p, walk.runRight)
 		case p.kind == partLiteral:
 			out.protect([]byte(doc.Source[p.span.Start:p.span.End]))
 		case p.kind == partRawHTML:
@@ -141,6 +162,9 @@ func renderCounted(doc Document, decide func(Occurrence) Rendition) (string, int
 		}
 		walk.moved(p.span.Start, p.span.End)
 		at = p.span.End
+		if plans[i].removed && ends[i] == p.span.End {
+			at = max(at, walk.runRight)
+		}
 	}
 	out.text([]byte(doc.Source[at:doc.Body.End]))
 	out.close()
@@ -235,6 +259,8 @@ func (w *renderWalk) removeNode(p part, runEnd int) {
 	case wouldBeThematicBreak.MatchString(rest) && w.prefixEmptied():
 		out.remove(false)
 		out.escapeNext = true
+	case closerOf(out.leftNeighbour()) != 0:
+		out.remove(false)
 	case isSpaceOrNewline(right) || (closesSentence(right, rest) && joinsAfter(out.lastByte())):
 		out.remove(false)
 	default:

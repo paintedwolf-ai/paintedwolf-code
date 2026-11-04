@@ -46,6 +46,9 @@ type Resolution struct {
 	LineCorrectedFrom int
 	Excerpt           string
 	Verdict           Verdict
+	// UnnumberedOutput means a record observed the lines through output that showed
+	// no numbers, which is why the coordinate was refused.
+	UnnumberedOutput bool
 }
 
 // Resolve binds a citation triple against the path-indexed ledger.

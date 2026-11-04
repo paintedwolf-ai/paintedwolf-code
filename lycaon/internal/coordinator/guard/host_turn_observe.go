@@ -41,6 +41,7 @@ func ObserveCoordinatorHostNoToolTurn(
 	gc.Session.CloseoutSurface = surface.SurfaceDeliversReport(surfaceID)
 	if lastAssistant != "" {
 		gc.Progress.CloseoutHasAnswer = draft.HasAnswer()
+		gc.Progress.CloseoutOnlyRepairDirectives = !gc.Progress.CloseoutHasAnswer && draft.HasRepairDirective()
 		gc.Progress.TaskEnvelopeEcho = assistantEchoesTaskEnvelope(lastAssistant)
 	}
 }

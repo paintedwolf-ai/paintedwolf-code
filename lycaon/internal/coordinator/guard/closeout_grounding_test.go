@@ -217,7 +217,7 @@ func TestFormatCloseoutGroundingReject_rendersFullCitationKick(t *testing.T) {
 			"offender_count":          1,
 			"observed_handles_sample": "leg-a:list#1, leg-b:read#2",
 			"observed_paths_sample":   "src/coropa, src/coropa/main.go",
-			"repair_targets":          []map[string]any{{"id": "c2", "token": "missing.go:1", "defect": "not_observed", "link": false}},
+			"repair_targets":          []map[string]any{{"id": "c2", "token": "missing.go:1", "defect": "not_observed", "web_link": false}},
 			"repair_observations":     `[{"evidence":"git_receipt#1","tool":"git_commit"}]`,
 		}},
 		draft,

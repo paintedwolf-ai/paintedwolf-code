@@ -35,6 +35,42 @@ func linesCoverRange(lines map[int]string, start, end int) bool {
 	return true
 }
 
+// UnionObserved reports whether the records together cover every line of the range
+// for path. Each contributes the lines it showed numbered; a gap between them fails.
+func UnionObserved(records []Record, path string, start, end int) bool {
+	if start <= 0 || end < start {
+		return false
+	}
+	var observed []LineRange
+	for _, rec := range records {
+		if rec.ShowedLineNumbers() {
+			observed = append(observed, observedLines(rec, path)...)
+		}
+	}
+	return LineRangesCover(observed, []LineRange{{Start: start, End: end}})
+}
+
+// observedLines lists the lines a record observed for path.
+func observedLines(rec Record, path string) []LineRange {
+	claim := effectiveClaimPath(rec, path)
+	if claim == "" || !pathObservedInRecord(rec, claim) {
+		return nil
+	}
+	lines, indexed := rec.grepLines[claim]
+	switch {
+	case indexed:
+	case len(rec.LineRanges) > 0:
+		return rec.LineRanges
+	default:
+		lines = lineContentIndex(rec, claim)
+	}
+	out := make([]LineRange, 0, len(lines))
+	for line := range lines {
+		out = append(out, LineRange{Start: line, End: line})
+	}
+	return out
+}
+
 // ExcerptAnchors returns, in order, the lines at which excerpt begins in the
 // observation of path. A trivially short excerpt anchors nowhere.
 func ExcerptAnchors(rec Record, path, excerpt string) []int {
@@ -70,8 +106,12 @@ const (
 )
 
 // CoordinateSupport decides a coordinate against one record. A mutation that reports
-// its lines is held to them. A deletion leaves no line to cite.
+// its lines is held to them. A deletion leaves no line to cite. Program output that
+// showed no line numbers supports the path alone: its reader had to count.
 func CoordinateSupport(rec Record, path string, start, end int) CoordinateFact {
+	if !rec.ShowedLineNumbers() {
+		return CoordinateUnsupported
+	}
 	if RangeObserved(rec, path, start, end) {
 		return CoordinateObserved
 	}
