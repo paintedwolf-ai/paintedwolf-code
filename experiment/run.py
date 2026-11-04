@@ -45,6 +45,16 @@ def setup(e, m, secret):
     p['agent_pool'] = {**p.get('agent_pool', {}), 'selection': 'first', 'models': [ref]}
     e.req('PATCH', '/v1/settings/model-policy', p)
 
+def check_arm(dest, arm):
+    """Refuse to record a run whose requests do not carry its arm's clause."""
+    p = dest/'llm-requests.jsonl'
+    for line in open(p):
+        for t in json.loads(line).get('tools') or []:
+            body = json.dumps(t)
+            if '"edit"' in body and 'old_string' in body:
+                if ('not part of the file' in body) != (arm == 'numbered'):
+                    raise SystemExit(f'arm check failed for {dest}')
+
 def one(model, arm, task, i, out, config_roots, secret):
     m = MODELS[model]; t = FX.TASKS[task]
     dest = out/model/arm/f'{task}-{i}'
@@ -92,6 +102,7 @@ def one(model, arm, task, i, out, config_roots, secret):
         log = subprocess.run(['git', 'log', '--format=%B'], cwd=repo, capture_output=True, text=True).stdout
         diff = subprocess.run(['git', 'diff'], cwd=repo, capture_output=True, text=True).stdout
         (dest/'git-status.txt').write_text(st); (dest/'git-log.txt').write_text(log); (dest/'git.diff').write_text(diff)
+        check_arm(dest, arm)
         (dest/'run.json').write_text(json.dumps({'model': m['model'], 'arm': arm, 'task': task, 'run': i, 'settled': end is not None, 'stopped_on_correct': early, 'seconds': secs, 'session_id': sid,
             'head': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=W, capture_output=True, text=True).stdout.strip(), 'prompt': t['prompt']}, indent=1))
         print(f'{model}/{arm}/{task}-{i}: settled={end is not None} seconds={secs}', flush=True)
