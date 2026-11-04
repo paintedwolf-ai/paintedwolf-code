@@ -14,12 +14,13 @@ import (
 const maxExecutionStateRows = 3
 
 // RenderExecutionStateMessage separates host instructions from receipt data.
-// It does not infer completion or execute a rejected operation.
-func RenderExecutionStateMessage(ctx context.Context, renderer *prompts.InjectRenderer, sessionID string, history []api.Message, declared string) api.Message {
+// It does not infer completion or execute a rejected operation. The window comes
+// from ReadExecutionStateWindow.
+func RenderExecutionStateMessage(ctx context.Context, renderer *prompts.InjectRenderer, sessionID string, window []api.Message, declared string) api.Message {
 	if renderer == nil {
 		return api.Message{}
 	}
-	vars := executionStateVars(history, declared)
+	vars := executionStateVars(window, declared)
 	if vars == nil {
 		return api.Message{}
 	}
@@ -43,55 +44,30 @@ func RenderExecutionStateMessage(ctx context.Context, renderer *prompts.InjectRe
 		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, ContentParts: parts}
 }
 
-func executionStateVars(history []api.Message, declared string) map[string]any {
-	var operations, executions []map[string]any
-	executionRecovery := false
-	for _, message := range history[api.UserIntentBoundary(history):] {
-		result := message.ToolResult
-		if message.Role != api.MessageRoleTool || !pairedExecutionReceipt(result) {
-			continue
-		}
-		receipt := result.Invocation
-		if (result.Tool == "update_progress" || result.Tool == "request_tools") && receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
-			for _, row := range operations {
-				code, _ := row["code"].(string)
-				switch result.Tool {
-				case "update_progress":
-					if code == "PROGRESS_MISSING" || code == "PROGRESS_ITEM_NOT_CLOSED" {
-						row["checklist_after"] = true
-					}
-				case "request_tools":
-					if code == "TOOL_NOT_OFFERED" {
-						row["tool_request_after"] = true
-					}
-				}
-			}
-		}
-		if rejectedChange(result) {
-			operations = append(operations, executionStateRow(message))
-		} else if receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
-			// A later successful change to the same path retires prior rejected
-			// changes to that path; pathless change rows retire on any later change.
-			// Other tools require an exact retry.
-			operations = withoutRetiredOperation(operations, result)
-		}
-		switch result.Tool {
-		case "command", "verify", "terminal_open", "terminal_write", "command_output", "terminal_read":
-			if result.Tool != "command_output" && result.Tool != "terminal_read" || receipt.SourceVerdict != "" {
-				executionRecovery = !receipt.Invoked || receipt.Status != api.InvocationStatusCompleted || receipt.Failure != nil || receipt.SourceVerdict == api.SourceVerdictFailed
-			}
-			executions = append(executions, executionStateRow(message))
-		}
-	}
-	if len(operations) == 0 && !executionRecovery {
+func executionStateVars(window []api.Message, declared string) map[string]any {
+	projection := projectExecutionState(window, declared)
+	if len(projection.Operations) == 0 && !projection.Recovery {
 		return nil
 	}
 	return map[string]any{
-		"operations": lastExecutionRows(operations), "executions": lastExecutionRows(executions),
-		"operations_omitted": max(0, len(operations)-maxExecutionStateRows),
-		"executions_omitted": max(0, len(executions)-maxExecutionStateRows),
+		"operations": executionRowVars(projection.Operations), "executions": executionRowVars(projection.Executions),
+		"operations_omitted": projection.OperationsOmitted,
+		"executions_omitted": projection.ExecutionsOmitted,
 		"declared_command":   quotedExecutionValue(declared),
 	}
+}
+
+func executionRowVars(rows []executionStateRow) []map[string]any {
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, map[string]any{
+			"tool": row.Tool, "call_id": row.CallID, "status": row.Status, "invoked": row.Invoked, "code": row.Code,
+			"path": row.Path, "command": row.Command, "cwd": row.Cwd, "resolvable": row.Resolvable,
+			"source_verdict": row.SourceVerdict, "source_revision": row.SourceRevision, "source_root_digest": row.SourceRootDigest,
+			"checklist_after": row.ChecklistAfter, "tool_request_after": row.ToolRequestAfter,
+		})
+	}
+	return out
 }
 
 func pairedExecutionReceipt(result *api.ToolResult) bool {
@@ -103,64 +79,7 @@ func isChangeTool(tool string) bool {
 	return tool == "write" || tool == "edit" || tool == "replace_lines"
 }
 
-func withoutRetiredOperation(rows []map[string]any, result *api.ToolResult) []map[string]any {
-	receipt := result.Invocation
-	completedTool := receipt.Tool
-	isChange := isChangeTool(completedTool)
-	var completedPath string
-	if isChange && result.ToolArgs != nil {
-		completedPath, _ = result.ToolArgs["path"].(string)
-	}
-
-	kept := rows[:0]
-	for _, row := range rows {
-		rowTool, _ := row["tool"].(string)
-		if isChange && isChangeTool(rowTool) {
-			rawPath, _ := row["raw_path"].(string)
-			if rawPath == "" || rawPath == completedPath {
-				continue
-			}
-		}
-		if receipt.ArgsDigest != "" && rowTool == completedTool && row["args_digest"] == receipt.ArgsDigest {
-			continue
-		}
-		kept = append(kept, row)
-	}
-	return kept
-}
-
-func executionStateRow(message api.Message) map[string]any {
-	result := message.ToolResult
-	receipt := result.Invocation
-	row := map[string]any{
-		"tool": receipt.Tool, "call_id": receipt.ToolCallID, "status": string(receipt.Status),
-		"invoked": receipt.Invoked, "args_digest": receipt.ArgsDigest,
-		"source_verdict": receipt.SourceVerdict, "source_revision": quotedExecutionValue(receipt.SourceRevision),
-		"source_root_digest": quotedExecutionValue(receipt.SourceRootDigest),
-	}
-	if receipt.Failure != nil {
-		row["code"] = receipt.Failure.Code
-	}
-	if result.ToolArgs != nil {
-		if rawPath, ok := result.ToolArgs["path"].(string); ok {
-			row["raw_path"] = rawPath
-		}
-	}
-	for _, key := range []string{"path", "command", "cwd"} {
-		value, _ := result.ToolArgs[key].(string)
-		row[key] = quotedExecutionValue(value)
-	}
-	row["verification_requested"], _ = result.ToolArgs["verification"].(bool)
-	for _, feedback := range result.Feedback {
-		if feedback.Code == "COMMAND_NOT_FOUND" {
-			value, _ := feedback.Details["resolvable"].(string)
-			row["resolvable"] = quotedExecutionValue(value)
-		}
-	}
-	return row
-}
-
-func lastExecutionRows(rows []map[string]any) []map[string]any {
+func lastExecutionRows(rows []executionStateRow) []executionStateRow {
 	return rows[max(0, len(rows)-maxExecutionStateRows):]
 }
 

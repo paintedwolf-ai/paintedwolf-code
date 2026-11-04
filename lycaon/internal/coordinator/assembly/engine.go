@@ -105,6 +105,9 @@ type AssemblyDeps struct {
 	BoardOrientReady BoardOrientReadyRecorder
 	EnrichHistory    func(sessionID string, history []api.Message) []api.Message
 	PromptToolLister PromptToolLister
+	// ReadMessageWindow reads canonical rows for projections that must not vary
+	// with compaction. Unwired, they read the supplied history.
+	ReadMessageWindow inject.MessageWindowReader
 	// LoadedTools returns the tools the turn ledger loaded beyond the surface floor.
 	LoadedTools func(sessionID string) map[string]bool
 	// OmittedUnits returns the instruction units the turn ledger left out.

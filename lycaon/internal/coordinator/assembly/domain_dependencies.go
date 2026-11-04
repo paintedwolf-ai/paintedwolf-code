@@ -46,6 +46,7 @@ type turnContextDeps struct {
 	HeldCalls           func(sessionID string) []heldcall.Running
 	Injects             *prompts.InjectRenderer
 	PeerReservations    PeerReservationSource
+	ReadMessageWindow   inject.MessageWindowReader
 	SiblingNoteDelivery SiblingNoteDeliveryRecorder
 	SkillPointer        func(sessionID string) *turnload.SkillRank
 	SkillPreload        func(sessionID string) *turnload.SkillPreload
@@ -113,6 +114,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		HeldCalls:           snapshot.HeldCalls,
 		Injects:             snapshot.Injects,
 		PeerReservations:    snapshot.PeerReservations,
+		ReadMessageWindow:   snapshot.ReadMessageWindow,
 		SiblingNoteDelivery: snapshot.SiblingNoteDelivery,
 		SkillPointer:        snapshot.SkillPointer,
 		SkillPreload:        snapshot.SkillPreload,

@@ -39,6 +39,7 @@ type AssemblyWorkflow struct {
 
 type Assembly struct {
 	Workflow      AssemblyWorkflow
+	Messages      inject.MessageWindowReader
 	Briefs        *sourcebrief.Service
 	Catalog       *sessioncatalog.Service
 	Closeout      *closeoutassembly.Service
@@ -99,6 +100,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 			}
 			return toolpresentation.EnrichHistory(sessionID, history, m.Stash)
 		},
+		ReadMessageWindow:       m.Messages,
 		PromptToolLister:        m.PromptTools,
 		LoadedTools:             m.Loading.LoadedTools,
 		OmittedUnits:            m.Loading.OmittedUnits,
