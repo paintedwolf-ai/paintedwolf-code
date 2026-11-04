@@ -184,14 +184,13 @@ func TestFeedOnlyWindowBoundsLimits(t *testing.T) {
 			{"hard ceiling", got.HardCeilingTokens, fallback.HardCeilingTokens},
 			{"target", got.TargetTokens, fallback.TargetTokens},
 			{"trigger", got.CompactionTriggerTokens(), fallback.CompactionTriggerTokens()},
-			{"worker summary", got.MaxWorkerSummaryChars, fallback.MaxWorkerSummaryChars},
 		} {
 			if budget.value <= 0 || budget.value >= budget.ceiling {
 				t.Errorf("%s = %d, want below the fallback's %d", budget.name, budget.value, budget.ceiling)
 			}
 		}
 		cfg, derived := mgr.ResolveRoots(nil)
-		if cfg.ModelContextWindow != 24576 || derived.MaxToolResultBytes != 65536 || derived.MaxCoordinatorLoopCycles != 32 {
+		if cfg.ModelContextWindow != 24576 || derived.MaxToolResultBytes != 65536 || derived.MaxCoordinatorLoopCycles != 32 || derived.MaxWorkerSummaryChars != 2048 {
 			t.Fatalf("resolved live %d, derived %+v", cfg.ModelContextWindow, derived)
 		}
 	})
