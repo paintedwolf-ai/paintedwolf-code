@@ -2,6 +2,7 @@ package inject_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -38,6 +39,67 @@ func TestRenderSourceChangesBlockParity(t *testing.T) {
 	}
 	if strings.Contains(got, "recording cap") {
 		t.Fatalf("untruncated brief mentions the cap:\n%s", got)
+	}
+}
+
+func TestACBRF01RowsWithNothingCountedOmitElsewhere(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	got := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", inject.SourceChangeBrief{
+		Files: []inject.SourceChangeFile{
+			{Path: "a.go", Actor: "user", Op: "edit", At: "14:02 UTC", Effects: 1},
+			{Path: "b.go", Actor: "user", Op: "edit", At: "14:03 UTC", Effects: 1},
+		},
+	})
+	for _, want := range []string{"- a.go — user edit at 14:02 UTC", "- b.go — user edit at 14:03 UTC"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("rendered brief missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "Elsewhere in the project") {
+		t.Fatalf("brief with nothing counted renders the elsewhere sentence:\n%s", got)
+	}
+}
+
+// The count may hold working-set files only when the last row is flagged, so
+// the two flag shapes must not render the same claim about the counted files.
+func TestACBRF03CountedWorkingSetFilesChangeTheElsewhereClaim(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	render := func(lastRowWorkingSet bool) string {
+		return inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", inject.SourceChangeBrief{
+			Files: []inject.SourceChangeFile{
+				{Path: "a.go", Actor: "user", Op: "edit", At: "14:02 UTC", Effects: 1, WorkingSet: true},
+				{Path: "b.go", Actor: "user", Op: "edit", At: "14:03 UTC", Effects: 1, WorkingSet: lastRowWorkingSet},
+			},
+			OtherFiles:   5,
+			OtherEffects: 7,
+		})
+	}
+	outside, overflow := render(false), render(true)
+	for _, block := range []string{outside, overflow} {
+		if !strings.Contains(block, "Elsewhere in the project: 7 change(s) across 5 file(s)") {
+			t.Fatalf("rendered brief missing the count:\n%s", block)
+		}
+	}
+	if outside == overflow {
+		t.Fatalf("both flag shapes render the same claim:\n%s", outside)
+	}
+}
+
+func TestACBRF06StoredRowsRenderLikeUnflaggedRows(t *testing.T) {
+	const stored = `{"files":[{"path":"a.go","actor":"user","op":"write","at":"14:02 UTC","effects":1}],"other_files":2,"other_effects":3}`
+	var brief inject.SourceChangeBrief
+	if err := json.Unmarshal([]byte(stored), &brief); err != nil {
+		t.Fatalf("unmarshal stored brief: %v", err)
+	}
+	if len(brief.Files) != 1 || brief.Files[0].WorkingSet {
+		t.Fatalf("stored rows = %+v, want one unflagged row", brief.Files)
+	}
+	renderer := promptstest.InjectRenderer(t)
+	got := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief)
+	for _, want := range []string{"- a.go — user write at 14:02 UTC", "Elsewhere in the project: 3 change(s) across 2 file(s)"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("rendered stored brief missing %q:\n%s", want, got)
+		}
 	}
 }
 

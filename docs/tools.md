@@ -808,7 +808,7 @@ The source ledger records every project mutation with its actor, and agents read
 
 | Surface | What it states |
 |---------|----------------|
-| Turn-start change brief | Files other actors changed between the previous turn boundary and this one, injected into coordinator assembly; working-set paths itemized, the rest counted (`inject.source_changes`) |
+| Turn-start change brief | Files other actors changed between the previous turn boundary and this one, injected into coordinator assembly; itemized up to the row cap, working set first, the rest counted (`inject.source_changes`) |
 | Read receipts | The ledger identity of the bytes a read served (recorded version id when the tracked head matches, an explicit note when not) plus the file's newest recorded change. `source.editor` states that the person's open document served the text, with its revision and whether it holds unsaved edits |
 | Edit rejects | `EDIT_TARGET_CHANGED_BY_OTHERS` when an edit misses **and** the ledger recorded foreign changes to the file during this session, with actor-classified provenance rows |
 | `source_history` | On-demand queries: with no arguments or `overview`, the session's change overview on the caller's branch, every actor; a file's change record (`effects`), per-line authorship over uncommitted state (`lines`), the session's own footprint (`mine`), historical version content (`version`), and version diffs (`diff`) |
