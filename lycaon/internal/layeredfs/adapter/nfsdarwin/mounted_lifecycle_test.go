@@ -50,6 +50,7 @@ func TestOpenThenDeletedFileNeverReachesTheChangeSet(t *testing.T) {
 	if st, err := f.Stat(); err != nil || st.Size() != 2 || st.Mode().Perm() != 0o600 {
 		t.Fatalf("fstat unlinked: %v err=%v", st, err)
 	}
+	v.barrier(t)
 	if changes := v.publishedChanges(t); len(changes) != 0 {
 		t.Fatalf("placeholder reached the change set: %+v", changes)
 	}
@@ -112,7 +113,7 @@ func TestMultipleRootsMountSeparatelyAndBarrierCoversBoth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
-	t.Cleanup(func() { _, _ = adp.Release(context.Background(), "view-multi") })
+	releaseWhenDone(t, adp, "view-multi")
 	if len(prep.Roots) != 2 {
 		t.Fatalf("roots: %+v", prep.Roots)
 	}
@@ -188,26 +189,6 @@ func TestReleaseNeverDeletesThroughAMountItDoesNotRecognize(t *testing.T) {
 	}
 }
 
-func TestReclaimDeadMountsTouchesOnlyUnservedViewMounts(t *testing.T) {
-	v := prepareRealMount(t, nfsdarwin.Config{}, map[string]string{"f": "x"})
-	// A fresh adapter models a restarted engine: the mount belongs to a server it does not run.
-	restarted := nfsdarwin.New(nfsdarwin.Config{})
-	if got, err := v.adp.ReclaimDeadMounts(t.Context(), v.runtimeDir); err != nil || len(got) != 0 {
-		t.Fatalf("a served mount was reclaimed: %v err=%v", got, err)
-	}
-	got, err := restarted.ReclaimDeadMounts(t.Context(), filepath.Join(v.tmp, "elsewhere"))
-	if err != nil || len(got) != 0 {
-		t.Fatalf("reclaim outside the runtime root: %v err=%v", got, err)
-	}
-	got, err = restarted.ReclaimDeadMounts(t.Context(), v.runtimeDir)
-	if err != nil || len(got) != 1 {
-		t.Fatalf("reclaim: %v err=%v", got, err)
-	}
-	if v.adp.IsViewActive(v.id) {
-		t.Fatal("view still active after its mount was reclaimed")
-	}
-}
-
 // TestEngineStartsProcessesInItsOwnMountUnderStopTheWorld is the macOS half of the Linux F1 hang.
 // Go forks here rather than vforks, so a child's chdir into the mount does not hold a scheduler
 // slot. A regression shows as a hang caught by the test deadline, not as a slow pass.
@@ -216,6 +197,7 @@ func TestEngineStartsProcessesInItsOwnMountUnderStopTheWorld(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(v.mnt, "tool.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write tool: %v", err)
 	}
+	ctx := settlesBeforeTestDeadline(t)
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -234,12 +216,12 @@ func TestEngineStartsProcessesInItsOwnMountUnderStopTheWorld(t *testing.T) {
 	defer close(stop)
 	sub := filepath.Join(v.mnt, "sub/deep")
 	for i := range 100 {
-		dirCmd := exec.Command("/usr/bin/true")
+		dirCmd := exec.CommandContext(ctx, "/usr/bin/true")
 		dirCmd.Dir = sub
 		if err := dirCmd.Run(); err != nil {
 			t.Fatalf("iteration %d working directory in mount: %v", i, err)
 		}
-		if err := exec.Command(filepath.Join(v.mnt, "tool.sh")).Run(); err != nil {
+		if err := exec.CommandContext(ctx, filepath.Join(v.mnt, "tool.sh")).Run(); err != nil {
 			t.Fatalf("iteration %d program from mount: %v", i, err)
 		}
 		f, err := os.Open(filepath.Join(sub, "f"))

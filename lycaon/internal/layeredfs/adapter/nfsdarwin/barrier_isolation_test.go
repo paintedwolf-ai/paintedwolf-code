@@ -87,7 +87,7 @@ func runBoundedFlushPublishPass(t *testing.T, tmp, trunkDir, label string) (file
 	if err != nil {
 		t.Fatalf("Prepare %s: %v", viewID, err)
 	}
-	defer func() { _, _ = adp.Release(t.Context(), viewID) }()
+	releaseWhenDone(t, adp, viewID)
 
 	wantWork := []byte("native-write-" + label + "\n")
 	if err := os.WriteFile(filepath.Join(prep.PrimaryWorkPath, "work.txt"), wantWork, 0o644); err != nil {
@@ -143,11 +143,17 @@ func runBoundedFlushPublishPass(t *testing.T, tmp, trunkDir, label string) (file
 }
 
 func TestBarrierDrainCancellationAndPerViewIsolationAndGateRetention(t *testing.T) {
-	if runtime.GOOS != "darwin" { t.Skip("nfsdarwin requires darwin") }
+	if runtime.GOOS != "darwin" {
+		t.Skip("nfsdarwin requires darwin")
+	}
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")
-	if err := os.MkdirAll(trunkDir, 0o755); err != nil { t.Fatalf("mkdir trunk: %v", err) }
-	if err := os.WriteFile(filepath.Join(trunkDir, "shared.txt"), []byte("seed\n"), 0o644); err != nil { t.Fatalf("write shared.txt: %v", err) }
+	if err := os.MkdirAll(trunkDir, 0o755); err != nil {
+		t.Fatalf("mkdir trunk: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(trunkDir, "shared.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write shared.txt: %v", err)
+	}
 
 	writeEntered := make(chan string, 4)
 	releaseHeldWrite := make(chan struct{})
@@ -166,8 +172,10 @@ func TestBarrierDrainCancellationAndPerViewIsolationAndGateRetention(t *testing.
 		QuiesceHook: nfsdarwin.NoopQuiesceHook, FlushClientHook: nfsdarwin.NoWritableMappingsFlushHook,
 		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
 	})
-	if err != nil { t.Fatalf("Prepare viewA: %v", err) }
-	t.Cleanup(func() { _, _ = adp.Release(t.Context(), viewA) })
+	if err != nil {
+		t.Fatalf("Prepare viewA: %v", err)
+	}
+	releaseWhenDone(t, adp, viewA)
 
 	srv := adp.ServerForView(viewA)
 	uid, gid := uint32(os.Getuid()), uint32(os.Getgid())

@@ -23,14 +23,20 @@ import (
 )
 
 func TestCheckpointBarrierDrainsPendingUnstableWritesAndExcludesNewMutations(t *testing.T) {
-	if runtime.GOOS != "darwin" { t.Skip("nfsdarwin requires darwin") }
+	if runtime.GOOS != "darwin" {
+		t.Skip("nfsdarwin requires darwin")
+	}
 	adp := nfsdarwin.New(nfsdarwin.Config{})
 	tmp := t.TempDir()
 	trunkDir, backingDir, runtimeDir, cpStoreDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime"), filepath.Join(tmp, "cp-store")
 	for _, d := range []string{trunkDir, backingDir, runtimeDir, cpStoreDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil { t.Fatalf("mkdir %s: %v", d, err) }
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
 	}
-	if err := os.WriteFile(filepath.Join(trunkDir, "pending.txt"), []byte("original-trunk\n"), 0o644); err != nil { t.Fatalf("seed pending.txt: %v", err) }
+	if err := os.WriteFile(filepath.Join(trunkDir, "pending.txt"), []byte("original-trunk\n"), 0o644); err != nil {
+		t.Fatalf("seed pending.txt: %v", err)
+	}
 
 	const viewID = "view-unstable-barrier"
 	prep, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
@@ -38,11 +44,15 @@ func TestCheckpointBarrierDrainsPendingUnstableWritesAndExcludesNewMutations(t *
 		QuiesceHook: nfsdarwin.NoopQuiesceHook, FlushClientHook: nfsdarwin.NoWritableMappingsFlushHook,
 		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
 	})
-	if err != nil { t.Fatalf("Prepare: %v", err) }
-	t.Cleanup(func() { _, _ = adp.Release(t.Context(), viewID) })
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	releaseWhenDone(t, adp, viewID)
 
 	srv := adp.ServerForView(viewID)
-	if srv == nil { t.Fatalf("missing server for view %s", viewID) }
+	if srv == nil {
+		t.Fatalf("missing server for view %s", viewID)
+	}
 
 	uid, gid := uint32(os.Getuid()), uint32(os.Getgid())
 	rpcConn, rootFH := mountTestNFSConn(t, srv.Addr().String(), extraTestExport(t, srv, viewID), uid, gid)
@@ -58,14 +68,18 @@ func TestCheckpointBarrierDrainsPendingUnstableWritesAndExcludesNewMutations(t *
 	}
 
 	cpStore, err := checkpoint.NewStore(cpStoreDir)
-	if err != nil { t.Fatalf("checkpoint.NewStore: %v", err) }
+	if err != nil {
+		t.Fatalf("checkpoint.NewStore: %v", err)
+	}
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		Core: prep.Core, Store: cpStore, WorkerID: "worker-unstable", TaskID: "task-unstable",
 		ProjectID: "proj-unstable", SourceGeneration: "gen-1",
 		SelectedRoots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunkDir, IsPrimary: true}},
 		Callbacks:     adp.NewBarrierProvider(viewID),
 	})
-	if err != nil { t.Fatalf("checkpoint.NewPublisher: %v", err) }
+	if err != nil {
+		t.Fatalf("checkpoint.NewPublisher: %v", err)
+	}
 
 	concurrentJukeboxChecked := false
 	pubRes, err := pub.Publish(t.Context(), checkpoint.PublishRequest{
@@ -92,57 +106,79 @@ func TestCheckpointBarrierDrainsPendingUnstableWritesAndExcludesNewMutations(t *
 }
 
 func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
-	if runtime.GOOS != "darwin" { t.Skip("nfsdarwin requires darwin") }
+	if runtime.GOOS != "darwin" {
+		t.Skip("nfsdarwin requires darwin")
+	}
 	adp := nfsdarwin.New(nfsdarwin.Config{})
 	tmp := t.TempDir()
 	trunkDir, backingDir, runtimeDir, cpStoreDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime"), filepath.Join(tmp, "cp-store")
 	for _, d := range []string{trunkDir, backingDir, runtimeDir, cpStoreDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil { t.Fatalf("mkdir %s: %v", d, err) }
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
 	}
 	initialBytes := []byte("0123456789abcdef\n")
-	if err := os.WriteFile(filepath.Join(trunkDir, "mapped.txt"), initialBytes, 0o644); err != nil { t.Fatalf("seed mapped.txt: %v", err) }
+	if err := os.WriteFile(filepath.Join(trunkDir, "mapped.txt"), initialBytes, 0o644); err != nil {
+		t.Fatalf("seed mapped.txt: %v", err)
+	}
 
 	const viewID = "view-mmap-contract"
 	prep, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
 		ViewID: viewID, BackingDir: backingDir, RuntimeDir: runtimeDir,
 		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
 	})
-	if err != nil { t.Fatalf("Prepare: %v", err) }
-	t.Cleanup(func() { _, _ = adp.Release(t.Context(), viewID) })
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	releaseWhenDone(t, adp, viewID)
 
 	if rec1, _, bErr := adp.CheckpointBarrier(t.Context(), viewID); bErr == nil || rec1.WritersQuiesced || rec1.WritableMappingsFlushed {
 		t.Fatalf("expected CheckpointBarrier without QuiesceHook to fail with false flags, got rec=%+v err=%v", rec1, bErr)
 	}
-	if err := adp.SetBarrierHooks(viewID, nfsdarwin.NoopQuiesceHook, nil); err != nil { t.Fatalf("SetBarrierHooks: %v", err) }
+	if err := adp.SetBarrierHooks(viewID, nfsdarwin.NoopQuiesceHook, nil); err != nil {
+		t.Fatalf("SetBarrierHooks: %v", err)
+	}
 	if rec2, _, bErr := adp.CheckpointBarrier(t.Context(), viewID); bErr == nil || !rec2.WritersQuiesced || rec2.WritableMappingsFlushed {
 		t.Fatalf("expected CheckpointBarrier without FlushClientHook to fail, got rec=%+v err=%v", rec2, bErr)
 	}
 
 	mf, err := os.OpenFile(filepath.Join(prep.PrimaryWorkPath, "mapped.txt"), os.O_RDWR, 0o644)
-	if err != nil { t.Fatalf("OpenFile mapped.txt: %v", err) }
+	if err != nil {
+		t.Fatalf("OpenFile mapped.txt: %v", err)
+	}
 	defer func() { _ = mf.Close() }()
 	_, _ = mf.ReadAt(make([]byte, len(initialBytes)), 0)
 
 	mappedSlice, err := syscall.Mmap(int(mf.Fd()), 0, len(initialBytes), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-	if err != nil { t.Fatalf("syscall.Mmap: %v", err) }
+	if err != nil {
+		t.Fatalf("syscall.Mmap: %v", err)
+	}
 	defer func() { _ = syscall.Munmap(mappedSlice) }()
 
 	wantMapped := []byte("mutated-by-mmap!\n")
 	copyToMapping(mappedSlice, wantMapped)
 	if err := adp.SetBarrierHooks(viewID, nfsdarwin.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := msyncForTest(mappedSlice); err != nil { return err }
+		if err := msyncForTest(mappedSlice); err != nil {
+			return err
+		}
 		return fssync.Always(mf)
-	}); err != nil { t.Fatalf("SetBarrierHooks with mmap sync: %v", err) }
+	}); err != nil {
+		t.Fatalf("SetBarrierHooks with mmap sync: %v", err)
+	}
 
 	cpStore, err := checkpoint.NewStore(cpStoreDir)
-	if err != nil { t.Fatalf("checkpoint.NewStore: %v", err) }
+	if err != nil {
+		t.Fatalf("checkpoint.NewStore: %v", err)
+	}
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		Core: prep.Core, Store: cpStore, WorkerID: "worker-mmap", TaskID: "task-mmap",
 		ProjectID: "proj-mmap", SourceGeneration: "gen-1",
 		SelectedRoots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunkDir, IsPrimary: true}},
 		Callbacks:     adp.NewBarrierProvider(viewID),
 	})
-	if err != nil { t.Fatalf("checkpoint.NewPublisher: %v", err) }
+	if err != nil {
+		t.Fatalf("checkpoint.NewPublisher: %v", err)
+	}
 	if _, err := pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "cp-mmap-1", Trigger: checkpoint.TriggerExplicitCapture}); err != nil {
 		t.Fatalf("Publish cp-mmap-1 failed: %v", err)
 	}
@@ -185,7 +221,7 @@ func TestReleaseRetainsStateOnUnmountAndRuntimeCleanupFailureAndSucceedsOnRetry(
 	t.Cleanup(func() {
 		adp.SetUmountBinForTest("", "")
 		adp.SetConfigCallbacksForTest(nil, nil)
-		_, _ = adp.Release(t.Context(), "view-retry-1")
+		_, _ = adp.Release(context.Background(), "view-retry-1")
 	})
 
 	prep2, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
@@ -195,7 +231,7 @@ func TestReleaseRetainsStateOnUnmountAndRuntimeCleanupFailureAndSucceedsOnRetry(
 	if err != nil {
 		t.Fatalf("Prepare view-keep-2: %v", err)
 	}
-	t.Cleanup(func() { _, _ = adp.Release(t.Context(), "view-keep-2") })
+	releaseWhenDone(t, adp, "view-keep-2")
 
 	adp.SetUmountBinForTest("/usr/bin/false", "/usr/bin/false")
 	if rel1, rErr := adp.Release(t.Context(), "view-retry-1"); rErr == nil || rel1.Settled || rel1.ReasonCode != adapter.ReasonCleanupFailed {
@@ -224,11 +260,15 @@ func TestReleaseRetainsStateOnUnmountAndRuntimeCleanupFailureAndSucceedsOnRetry(
 func readCheckpointEntryBlob(t *testing.T, cpStore *checkpoint.Store, checkpointID, relPath string) []byte {
 	t.Helper()
 	m, err := cpStore.LoadManifest(checkpointID)
-	if err != nil { t.Fatalf("LoadManifest(%s): %v", checkpointID, err) }
+	if err != nil {
+		t.Fatalf("LoadManifest(%s): %v", checkpointID, err)
+	}
 	for _, entry := range m.Entries {
 		if entry.Path.Rel == relPath {
 			data, err := cpStore.ReadBlob(entry.Final.SHA256)
-			if err != nil { t.Fatalf("ReadBlob(%s): %v", entry.Final.SHA256, err) }
+			if err != nil {
+				t.Fatalf("ReadBlob(%s): %v", entry.Final.SHA256, err)
+			}
 			return data
 		}
 	}
@@ -249,24 +289,35 @@ func extraTestExport(t *testing.T, srv *nfsserver.Server, viewID string) string 
 func mountTestNFSConn(t *testing.T, addr, exportPath string, uid, gid uint32) (net.Conn, []byte) {
 	t.Helper()
 	conn, err := net.Dial("tcp", addr)
-	if err != nil { t.Fatalf("dial %s: %v", addr, err) }
+	if err != nil {
+		t.Fatalf("dial %s: %v", addr, err)
+	}
 	var args bytes.Buffer
 	writeTestXDRString(&args, exportPath)
 	r := bytes.NewReader(sendTestRPCCall(t, conn, 1, 100005, 3, uint32(nfs.MountProcMount), uid, gid, args.Bytes()))
-	if st := readTestUint32(t, r); st != uint32(nfs.MountStatusOk) { t.Fatalf("MOUNTPROC3_MNT status=%d", st) }
+	if st := readTestUint32(t, r); st != uint32(nfs.MountStatusOk) {
+		t.Fatalf("MOUNTPROC3_MNT status=%d", st)
+	}
 	fh := make([]byte, readTestUint32(t, r))
-	if _, err := io.ReadFull(r, fh); err != nil { t.Fatalf("read root FH: %v", err) }
+	if _, err := io.ReadFull(r, fh); err != nil {
+		t.Fatalf("read root FH: %v", err)
+	}
 	return conn, fh
 }
 
 func lookupTestNFSFile(t *testing.T, conn net.Conn, dirFH []byte, name string, uid, gid uint32) []byte {
 	t.Helper()
 	var args bytes.Buffer
-	writeTestXDROpaque(&args, dirFH); writeTestXDRString(&args, name)
+	writeTestXDROpaque(&args, dirFH)
+	writeTestXDRString(&args, name)
 	r := bytes.NewReader(sendTestRPCCall(t, conn, 2, 100003, 3, uint32(nfs.NFSProcedureLookup), uid, gid, args.Bytes()))
-	if st := readTestUint32(t, r); st != uint32(nfs.NFSStatusOk) { t.Fatalf("LOOKUP(%s) status=%d", name, st) }
+	if st := readTestUint32(t, r); st != uint32(nfs.NFSStatusOk) {
+		t.Fatalf("LOOKUP(%s) status=%d", name, st)
+	}
 	fh := make([]byte, readTestUint32(t, r))
-	if _, err := io.ReadFull(r, fh); err != nil { t.Fatalf("read file FH: %v", err) }
+	if _, err := io.ReadFull(r, fh); err != nil {
+		t.Fatalf("read file FH: %v", err)
+	}
 	return fh
 }
 
@@ -284,24 +335,41 @@ func sendTestNFSWrite(t *testing.T, conn net.Conn, fileFH []byte, offset uint64,
 func sendTestRPCCall(t *testing.T, conn net.Conn, xid, prog, vers, proc, uid, gid uint32, args []byte) []byte {
 	t.Helper()
 	var cred, msg, frame bytes.Buffer
-	_ = binary.Write(&cred, binary.BigEndian, uint32(1)); writeTestXDRString(&cred, "localhost")
-	for _, v := range []uint32{uid, gid, 0} { _ = binary.Write(&cred, binary.BigEndian, v) }
-	for _, v := range []uint32{xid, 0, 2, prog, vers, proc, uint32(nfs.AuthFlavorUnix)} { _ = binary.Write(&msg, binary.BigEndian, v) }
+	_ = binary.Write(&cred, binary.BigEndian, uint32(1))
+	writeTestXDRString(&cred, "localhost")
+	for _, v := range []uint32{uid, gid, 0} {
+		_ = binary.Write(&cred, binary.BigEndian, v)
+	}
+	for _, v := range []uint32{xid, 0, 2, prog, vers, proc, uint32(nfs.AuthFlavorUnix)} {
+		_ = binary.Write(&msg, binary.BigEndian, v)
+	}
 	writeTestXDROpaque(&msg, cred.Bytes())
-	_ = binary.Write(&msg, binary.BigEndian, uint32(nfs.AuthFlavorNull)); _ = binary.Write(&msg, binary.BigEndian, uint32(0))
+	_ = binary.Write(&msg, binary.BigEndian, uint32(nfs.AuthFlavorNull))
+	_ = binary.Write(&msg, binary.BigEndian, uint32(0))
 	_, _ = msg.Write(args)
-	_ = binary.Write(&frame, binary.BigEndian, uint32(msg.Len())|0x80000000); _, _ = frame.Write(msg.Bytes())
-	if _, err := conn.Write(frame.Bytes()); err != nil { t.Fatalf("write RPC call: %v", err) }
+	_ = binary.Write(&frame, binary.BigEndian, uint32(msg.Len())|0x80000000)
+	_, _ = frame.Write(msg.Bytes())
+	if _, err := conn.Write(frame.Bytes()); err != nil {
+		t.Fatalf("write RPC call: %v", err)
+	}
 	var hdrBuf [4]byte
-	if _, err := io.ReadFull(conn, hdrBuf[:]); err != nil { t.Fatalf("read RPC reply header: %v", err) }
+	if _, err := io.ReadFull(conn, hdrBuf[:]); err != nil {
+		t.Fatalf("read RPC reply header: %v", err)
+	}
 	payload := make([]byte, binary.BigEndian.Uint32(hdrBuf[:])&0x7fffffff)
-	if _, err := io.ReadFull(conn, payload); err != nil { t.Fatalf("read RPC reply body: %v", err) }
+	if _, err := io.ReadFull(conn, payload); err != nil {
+		t.Fatalf("read RPC reply body: %v", err)
+	}
 	return payload[24:]
 }
 
 func writeTestXDROpaque(w *bytes.Buffer, b []byte) {
-	_ = binary.Write(w, binary.BigEndian, uint32(len(b))); _, _ = w.Write(b)
-	if pad := (4 - (len(b) & 3)) & 3; pad > 0 { var z [4]byte; _, _ = w.Write(z[:pad]) }
+	_ = binary.Write(w, binary.BigEndian, uint32(len(b)))
+	_, _ = w.Write(b)
+	if pad := (4 - (len(b) & 3)) & 3; pad > 0 {
+		var z [4]byte
+		_, _ = w.Write(z[:pad])
+	}
 }
 
 func writeTestXDRString(w *bytes.Buffer, s string) { writeTestXDROpaque(w, []byte(s)) }
@@ -309,6 +377,8 @@ func writeTestXDRString(w *bytes.Buffer, s string) { writeTestXDROpaque(w, []byt
 func readTestUint32(t *testing.T, r io.Reader) uint32 {
 	t.Helper()
 	var v uint32
-	if err := binary.Read(r, binary.BigEndian, &v); err != nil { t.Fatalf("read uint32: %v", err) }
+	if err := binary.Read(r, binary.BigEndian, &v); err != nil {
+		t.Fatalf("read uint32: %v", err)
+	}
 	return v
 }

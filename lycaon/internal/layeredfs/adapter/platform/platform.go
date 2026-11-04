@@ -5,6 +5,7 @@ package platform
 import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/nfsdarwin"
 )
 
 // ConnectionRecoveries names the adapters able to settle connections left by an earlier
@@ -12,5 +13,6 @@ import (
 func ConnectionRecoveries() map[adapter.AdapterID]adapter.ConnectionRecovery {
 	return map[adapter.AdapterID]adapter.ConnectionRecovery{
 		adapter.AdapterFUSELinux: fuselinux.New(fuselinux.Config{}),
+		adapter.AdapterNFSDarwin: nfsdarwin.New(nfsdarwin.Config{}),
 	}
 }

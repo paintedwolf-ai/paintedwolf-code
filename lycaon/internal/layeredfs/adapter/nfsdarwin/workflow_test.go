@@ -33,6 +33,9 @@ func TestMain(m *testing.M) {
 	if path := os.Getenv("NFSDARWIN_MMAP_PROBE"); path != "" {
 		os.Exit(runMappedWriter(path))
 	}
+	if tmp := os.Getenv("NFSDARWIN_ENGINE_PROBE"); tmp != "" {
+		os.Exit(runEngineHoldingAMount(tmp))
+	}
 	gittestsetup.Enable()
 	os.Exit(m.Run())
 }
@@ -76,7 +79,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("adp.Prepare: %v", err)
 	}
-	t.Cleanup(func() { _, _ = adp.Release(t.Context(), viewID) })
+	releaseWhenDone(t, adp, viewID)
 
 	// Bind workerID explicitly via nfsdarwin's production MountedViewBinding producer.
 	if err := adp.BindPrivateGit(viewID, workerID, gitMgr); err != nil {
@@ -180,12 +183,25 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("CaptureCheckpointGitState: state=%+v err=%v", cpGitState, err)
 	}
 
+	cpStore := publishWorkflowCheckpoint(t, adp, prep.Core, cpStoreDir, trunkDir, viewID, workerID, checkpointID, cpGitState)
+
+	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
+	assertReleaseClosesPrivateGit(t, adp, gitExec, viewID, trunkDir, workerID)
+
+	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
+	promoteWorkflowCheckpoint(t, cpStore, gitMgr, trunkDir, workerID, checkpointID, cpGitState)
+
+	assertWorkflowPromoted(t, trunkDir, workerID, checkpointID, workerHeadOID)
+}
+
+func publishWorkflowCheckpoint(t *testing.T, adp *nfsdarwin.Adapter, core *layeredfs.Core, cpStoreDir, trunkDir, viewID, workerID, checkpointID string, cpGitState *privategit.CheckpointGitState) *checkpoint.Store {
+	t.Helper()
 	cpStore, err := checkpoint.NewStore(cpStoreDir)
 	if err != nil {
 		t.Fatalf("checkpoint.NewStore: %v", err)
 	}
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
-		Core:             prep.Core,
+		Core:             core,
 		Store:            cpStore,
 		WorkerID:         workerID,
 		TaskID:           "task-e2e",
@@ -213,11 +229,11 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	if err != nil || pubRes.Manifest.CheckpointID != checkpointID {
 		t.Fatalf("Publish checkpoint failed: %v", err)
 	}
+	return cpStore
+}
 
-	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
-	assertReleaseClosesPrivateGit(t, adp, gitExec, viewID, trunkDir, workerID)
-
-	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
+func promoteWorkflowCheckpoint(t *testing.T, cpStore *checkpoint.Store, gitMgr *privategit.Manager, trunkDir, workerID, checkpointID string, cpGitState *privategit.CheckpointGitState) {
+	t.Helper()
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       cpStore,
 		TargetRoots: map[string]string{"primary": trunkDir},
@@ -257,6 +273,10 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	}
 
 	// Verify TrunkRoot now contains the promoted files and imported worker checkpoint Git refs.
+}
+
+func assertWorkflowPromoted(t *testing.T, trunkDir, workerID, checkpointID, workerHeadOID string) {
+	t.Helper()
 	promotedReadme, err := os.ReadFile(filepath.Join(trunkDir, "README.md"))
 	if err != nil || string(promotedReadme) != "updated by worker over nfs\n" {
 		t.Fatalf("expected promoted README.md in trunk, got %q err=%v", string(promotedReadme), err)
@@ -358,8 +378,12 @@ func snapshotTreeDigests(t *testing.T, root string) map[string]string {
 
 func assertTreesIdentical(t *testing.T, label string, before, after map[string]string) {
 	t.Helper()
-	if len(before) != len(after) { t.Fatalf("%s: entry count changed: before=%d after=%d", label, len(before), len(after)) }
+	if len(before) != len(after) {
+		t.Fatalf("%s: entry count changed: before=%d after=%d", label, len(before), len(after))
+	}
 	for k, v := range before {
-		if after[k] != v { t.Fatalf("%s: path %q changed: before=%s after=%s", label, k, v, after[k]) }
+		if after[k] != v {
+			t.Fatalf("%s: path %q changed: before=%s after=%s", label, k, v, after[k])
+		}
 	}
 }

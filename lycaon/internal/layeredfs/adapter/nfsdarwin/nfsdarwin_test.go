@@ -72,7 +72,7 @@ func TestProbeAndPrepareNFSDarwin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
-	t.Cleanup(func() { _, _ = adp.Release(t.Context(), "view-prepare-1") })
+	releaseWhenDone(t, adp, "view-prepare-1")
 
 	facts, ok := adp.MountFactsForView("view-prepare-1")
 	if !ok {
@@ -134,7 +134,7 @@ func TestImmediateCoherenceAndNegativeLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
-	t.Cleanup(func() { _, _ = adp.Release(t.Context(), "view-coherence") })
+	releaseWhenDone(t, adp, "view-coherence")
 
 	mnt := prep.PrimaryWorkPath
 	negFile := filepath.Join(mnt, "created-after-negative-lookup.txt")
@@ -220,7 +220,7 @@ func TestBarrierFailsOnDeadServerAndPreservesEarlierCheckpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
-	t.Cleanup(func() { _, _ = adp.Release(t.Context(), viewID) })
+	releaseWhenDone(t, adp, viewID)
 
 	if err := os.WriteFile(filepath.Join(prep.PrimaryWorkPath, "step1.txt"), []byte("checkpoint-one\n"), 0o644); err != nil {
 		t.Fatalf("write step1.txt: %v", err)

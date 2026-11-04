@@ -35,6 +35,6 @@ func syncVolume(_ string) error { return nil }
 
 func mountsWithin(_ string) ([]string, error) { return nil, nil }
 
-func deadViewMounts(_ string, _ uint32) ([]string, error) { return nil, nil }
+func mountTableEntries() ([]mountTableEntry, error) { return nil, nil }
 
 func flushMappedPages(_ *os.File, _ int64) error { return nil }

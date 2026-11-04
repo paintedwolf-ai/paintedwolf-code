@@ -18,8 +18,6 @@ const (
 	// FSCTL_SYNC_WAIT, from xnu's bsd/sys/fsctl.h, which the SDK does not ship.
 	fsiocSyncVolume = 0x80044101
 	fsctlSyncWait   = 1 << 1
-
-	viewExportSourcePrefix = "127.0.0.1:/views/"
 )
 
 // syncVolume writes back every dirty buffer of the one volume holding path and waits for it. It
@@ -82,21 +80,20 @@ func mountsWithin(dir string) ([]string, error) {
 	return out, nil
 }
 
-// deadViewMounts lists NFS view mounts below root owned by uid.
-func deadViewMounts(root string, uid uint32) ([]string, error) {
+func mountTableEntries() ([]mountTableEntry, error) {
 	table, err := mountTable()
 	if err != nil {
 		return nil, err
 	}
-	var out []string
+	out := make([]mountTableEntry, 0, len(table))
 	for i := range table {
-		on := filepath.Clean(int8SliceToString(table[i].Mntonname[:]))
-		if table[i].Owner != uid || int8SliceToString(table[i].Fstypename[:]) != "nfs" ||
-			!strings.HasPrefix(int8SliceToString(table[i].Mntfromname[:]), viewExportSourcePrefix) ||
-			!strings.HasPrefix(on, root+"/") {
-			continue
-		}
-		out = append(out, on)
+		out = append(out, mountTableEntry{
+			onName:   int8SliceToString(table[i].Mntonname[:]),
+			fromName: int8SliceToString(table[i].Mntfromname[:]),
+			fsType:   int8SliceToString(table[i].Fstypename[:]),
+			owner:    table[i].Owner,
+			device:   table[i].Fsid.Val[0],
+		})
 	}
 	return out, nil
 }

@@ -14,12 +14,16 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/nfsdarwin"
 )
+
+// settleMargin leaves room for a failing test to unmount a view whose server may be slow to answer.
+const settleMargin = 30 * time.Second
 
 type mountedView struct {
 	adp                 *nfsdarwin.Adapter
@@ -56,13 +60,35 @@ func prepareRealMount(t *testing.T, cfg nfsdarwin.Config, seed map[string]string
 		t.Fatalf("Prepare: %v", err)
 	}
 	v.mnt, v.core = prep.PrimaryWorkPath, prep.Core
+	releaseWhenDone(t, v.adp, v.id)
+	return v
+}
+
+// settlesBeforeTestDeadline returns a context that ends while the test can still fail and run its
+// cleanups. A package deadline panics the binary, which leaves every mount it holds behind.
+func settlesBeforeTestDeadline(t *testing.T) context.Context {
+	t.Helper()
+	deadline, ok := t.Deadline()
+	if !ok {
+		return t.Context()
+	}
+	ctx, cancel := context.WithDeadline(t.Context(), deadline.Add(-settleMargin))
+	t.Cleanup(cancel)
+	return ctx
+}
+
+// releaseWhenDone settles a view however its test ends. t.Context is already canceled in a cleanup,
+// and a failed release must not leave the mount for the next run to find.
+func releaseWhenDone(t *testing.T, adp *nfsdarwin.Adapter, viewID string) {
+	t.Helper()
+	facts, _ := adp.MountFactsForView(viewID)
 	t.Cleanup(func() {
-		if rcpt, err := v.adp.Release(context.Background(), v.id); err != nil && rcpt.ReasonCode != adapter.ReasonViewNotFound {
+		rcpt, err := adp.Release(context.Background(), viewID)
+		if err != nil && rcpt.ReasonCode != adapter.ReasonViewNotFound {
 			t.Errorf("release left the view behind: %+v err=%v", rcpt, err)
-			_ = exec.Command(nfsdarwin.DefaultUmountBin, "-f", v.mnt).Run()
+			_ = exec.Command(nfsdarwin.DefaultUmountBin, "-f", facts.MountPath).Run()
 		}
 	})
-	return v
 }
 
 func (v *mountedView) shell(t *testing.T, script string) string {
@@ -388,21 +414,13 @@ func TestFIFOAndUnixSocketWorkOnTheMount(t *testing.T) {
 	}
 }
 
-// publishedChanges omits AppleDouble sidecars, which the client writes on its own whenever the OS
-// tags a new file (com.apple.provenance), so their presence depends on what launched the test.
 func (v *mountedView) publishedChanges(t *testing.T) []layeredfs.ChangeEntry {
 	t.Helper()
 	changes, err := v.core.EnumerateChanges(true)
 	if err != nil {
 		t.Fatalf("changes: %v", err)
 	}
-	var out []layeredfs.ChangeEntry
-	for _, ch := range changes {
-		if !strings.HasPrefix(filepath.Base(ch.Path.Rel), "._") {
-			out = append(out, ch)
-		}
-	}
-	return out
+	return changes
 }
 
 // shortPathTo returns a path to dir short enough for a Unix socket address.

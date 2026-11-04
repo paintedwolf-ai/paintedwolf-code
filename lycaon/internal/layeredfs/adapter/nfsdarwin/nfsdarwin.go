@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/nfsserver"
@@ -39,8 +39,10 @@ const (
 	DefaultRetrans = 2
 	// DefaultTimeo is the soft mount timeout in deciseconds (1.0s).
 	DefaultTimeo = 10
-	// DefaultCachePolicy is the explicit zero-attribute/negative-name cache option set.
-	DefaultCachePolicy = "actimeo=0,acregmin=0,acregmax=0,acdirmin=0,acdirmax=0,nonegnamecache"
+	// DefaultCachePolicy is the explicit cache option set: no attribute or negative-name caching, and
+	// no READDIRPLUS. With READDIRPLUS the client answers a lookup from the last listing, which omits
+	// the ._ files that present held attributes, and then refuses to create the one it needs.
+	DefaultCachePolicy = "actimeo=0,acregmin=0,acregmax=0,acdirmin=0,acdirmax=0,nonegnamecache,nordirplus"
 
 	// unmountWaitBound limits how long one unmount attempt may hold Release. A helper stuck in the
 	// kernel cannot be killed, so the wait has to end on its own.
@@ -65,15 +67,15 @@ type Config struct {
 
 // MountFacts records the concrete mount options, ports, and export identity for a mounted root.
 type MountFacts struct {
-	ViewID, RootID, MountID, ConnectionID     string
-	MountPath, ExportPath, ExportSource       string
-	ServerPort, MountPort                     int
-	CachePolicy, RetryPolicy, Timeout         string
-	RSize, WSize                              int
-	MountOptions                              string
-	ParentDev, MountedDev                     int32
-	HandshakeUID, HandshakeGID                uint32
-	AllowedDataUID, AllowedDataGID            uint32
+	ViewID, RootID, MountID, ConnectionID string
+	MountPath, ExportPath, ExportSource   string
+	ServerPort, MountPort                 int
+	CachePolicy, RetryPolicy, Timeout     string
+	RSize, WSize                          int
+	MountOptions                          string
+	ParentDev, MountedDev                 int32
+	HandshakeUID, HandshakeGID            uint32
+	AllowedDataUID, AllowedDataGID        uint32
 }
 
 type rootMount struct {
@@ -327,10 +329,9 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, err.Error()
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
 	}
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "cat probe.txt")
-	cmd.Dir = prep.PrimaryWorkPath
-	if out, cErr := cmd.CombinedOutput(); cErr != nil || strings.TrimSpace(string(out)) != "coherent-probe" {
-		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: err=%v out=%q", cErr, string(out))
+	out, exitCode, cErr := execpkg.Run(ctx, "/bin/sh", []string{"-c", "cat probe.txt"}, execpkg.ExecOpts{Launch: execpkg.HostLaunch("nfs_probe"), Dir: prep.PrimaryWorkPath})
+	if cErr != nil || exitCode != 0 || strings.TrimSpace(string(out)) != "coherent-probe" {
+		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: exit=%d err=%v out=%q", exitCode, cErr, string(out))
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
 	}
 	res.WriteExercised = true

@@ -39,7 +39,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/layeredfs/adapter/eagercopy_lower.go":       "O_EXCL destination while materializing lower-layer snapshot files",
 	"lycaon/internal/layeredfs/adapter/eagercopy_seed.go":        "O_EXCL destination while materializing an isolated eager-copy seed tree",
 	"lycaon/internal/layeredfs/adapter/lifecycle.go":             "adapter lifecycle state marker written inside an owned runtime directory",
-	"lycaon/internal/layeredfs/adapter/nfsdarwin/nfsdarwin.go":   "ephemeral mount coherence probe in a private temporary directory removed on return",
+	"lycaon/internal/layeredfs/adapter/nfsdarwin/nfsdarwin.go":   "capability probe confined to a private temporary view",
 	"lycaon/internal/layeredfs/checkpoint/git_import_objects.go": "content-addressed loose object staging and rename into private git object store",
 	"lycaon/internal/layeredfs/checkpoint/store.go":              "O_EXCL blob staging and atomic rename inside the checkpoint store",
 	"lycaon/internal/layeredfs/privategit/executor_sync.go":      "private git worktree synchronization inside an isolated adapter view",
