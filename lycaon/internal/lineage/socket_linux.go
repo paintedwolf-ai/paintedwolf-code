@@ -18,6 +18,9 @@ func SocketsOf(pid int) ([]SocketObservation, error) {
 	return hostProc.socketsOf(pid, table)
 }
 
+// inetDiagSKV6Only is INET_DIAG_SKV6ONLY in linux/inet_diag.h.
+const inetDiagSKV6Only = 11
+
 // inet6V6Only queries NETLINK_SOCK_DIAG for per-inode IPV6_V6ONLY (INET_DIAG_SKV6ONLY)
 // on AF_INET6 sockets. If netlink is unavailable, callers fall back to bindv6only.
 func inet6V6Only(protocol Protocol) map[uint64]bool {
@@ -70,7 +73,7 @@ func inet6V6Only(protocol Protocol) map[uint64]bool {
 				if rtaLen < 4 || rtaLen > len(attrs) {
 					break
 				}
-				if rtaType == 9 && rtaLen >= 5 { // INET_DIAG_SKV6ONLY
+				if rtaType == inetDiagSKV6Only && rtaLen >= 5 {
 					out[inode] = attrs[4] != 0
 				}
 				aligned := (rtaLen + 3) &^ 3
