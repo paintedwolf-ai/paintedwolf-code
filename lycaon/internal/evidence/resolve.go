@@ -42,6 +42,7 @@ type Resolution struct {
 	Handle            string
 	Path              string
 	Line              int
+	EndLine           int // closes a validated inclusive range; zero otherwise
 	LineCorrectedFrom int
 	Excerpt           string
 	Verdict           Verdict

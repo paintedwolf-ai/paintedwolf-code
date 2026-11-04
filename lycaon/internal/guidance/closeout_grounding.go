@@ -260,7 +260,7 @@ func coordinatorFindingFromCitedEvidence(item CoordinatorCitedEvidence) WorkerFi
 	if norm, ok := normalizeSingleCoordinatorCitedEvidence(item); ok {
 		item = norm
 	}
-	return WorkerFindingInput{Evidence: item.Evidence, Path: item.Path, Line: item.Line, Excerpt: item.Excerpt}
+	return WorkerFindingInput{Evidence: item.Evidence, Path: item.Path, Line: item.Line, EndLine: item.EndLine, Excerpt: item.Excerpt}
 }
 
 // ResolveCitedEvidenceForWire maps typed citations to host provenance.

@@ -16,7 +16,9 @@ type CoordinatorCitedEvidence struct {
 	Evidence string `json:"evidence,omitempty"`
 	Path     string `json:"path,omitempty"`
 	Line     int    `json:"line,omitempty"`
-	Excerpt  string `json:"excerpt,omitempty"`
+	// EndLine closes an inclusive range; zero means a single line or no line.
+	EndLine int    `json:"end_line,omitempty"`
+	Excerpt string `json:"excerpt,omitempty"`
 }
 
 // CoordinatorCompletionReport is typed coordinator closeout metadata.
@@ -228,6 +230,9 @@ func normalizeCoordinatorCitedEvidence(in []CoordinatorCitedEvidence, max int) [
 		if item.Line > 0 {
 			key = fmt.Sprintf("%s:%d", key, item.Line)
 		}
+		if item.EndLine > 0 {
+			key = fmt.Sprintf("%s-%d", key, item.EndLine)
+		}
 		if _, dup := seen[key]; dup {
 			continue
 		}
@@ -269,10 +274,15 @@ func normalizeSingleCoordinatorCitedEvidence(item CoordinatorCitedEvidence) (Coo
 	if handle == "" && path == "" {
 		return CoordinatorCitedEvidence{}, false
 	}
+	endLine := item.EndLine
+	if endLine == line {
+		endLine = 0
+	}
 	return CoordinatorCitedEvidence{
 		Evidence: handle,
 		Path:     path,
 		Line:     line,
+		EndLine:  endLine,
 		Excerpt:  strings.TrimSpace(item.Excerpt),
 	}, true
 }
