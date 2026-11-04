@@ -22,6 +22,8 @@ var evidenceGroundedAmbientCodes = []string{
 var evidenceGroundedSynthesisCodes = []string{
 	"SYNTH_URL_NOT_OBSERVED",
 	"SYNTH_HANDLE_NOT_IN_LEGS",
+	"CITATION_REPAIR_INVALID",
+	"CITATION_SYNTAX_INVALID",
 	"SYNTH_CITATIONS_REQUIRED",
 	"SYNTH_CITATION_UNVERIFIABLE",
 }

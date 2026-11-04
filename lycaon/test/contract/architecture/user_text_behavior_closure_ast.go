@@ -291,6 +291,8 @@ var coordinatorPongoBooleanGateRE = regexp.MustCompile(`\{%\s*(?:if|elif)\s+(?:n
 var bannedCoordinatorGateNameRE = regexp.MustCompile(`(?i)(greenfield|dispatch[_-]?hint|user[_-]?intent|(^|[_-])nl([_-]|$)|build[_-]?intent|chat[_-]?approv)`)
 
 var registeredCoordinatorBooleanGates = map[string]bool{
+	"repair_targets":                               true,
+	"document_citation_targets":                    true,
 	"document_issues":                              true,
 	"agent_skills":                                 true,
 	"rating_questions":                             true,
@@ -390,7 +392,8 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"drafted_synthesis":        true,
 	// JSON projections of typed citation evaluation in guidance.CloseoutRepairHintData.
 	"repair_observations":          true,
-	"retained_citations":           true,
+	"repair_targets":               true, // citation repair: rejected occurrences by repair ID
+	"document_citation_targets":    true, // citation repair: rejected finding where entries
 	"resume_work_allowed":          true,
 	"can_recall":                   true, // recall in the closed turn's offered tools (promptloop rejectCloseoutGrounding)
 	"offenders_sample":             true, // report-document repair: guidance.OffenderHintData
