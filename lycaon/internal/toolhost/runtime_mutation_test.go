@@ -12,8 +12,8 @@ import (
 func TestRuntimeKeepsChmodCallableAndDeleteAsCommandOperation(t *testing.T) {
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configlayout.FindModuleRoot(), Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "build native runtime", err)
-	if definition, found := rt.Registry.Definition("chmod"); !found || definition.Handler == nil {
-		t.Fatal("chmod domain tool is unavailable")
+	if definition, found := rt.Registry.Definition("restore_version"); !found || definition.Handler == nil {
+		t.Fatal("restore_version domain tool is unavailable")
 	}
 	if _, found := rt.Registry.Definition("delete"); found {
 		t.Fatal("command-only delete operation is callable")

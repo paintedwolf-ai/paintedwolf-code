@@ -194,7 +194,6 @@ var compiledGrantIdentityNeutralArgs = map[string][]string{
 	},
 	"verify": {
 		"timeout_ms",
-		"wait_ms",
 	},
 	"view_image": {
 		"scale",

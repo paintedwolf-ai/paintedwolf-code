@@ -70,6 +70,8 @@ func TestCoordinatorToolSurface_managedSecretLifecycleFollowsMutationCapability(
 }
 
 var implementInvestigateDeferredTools = []string{
+	"command_output",
+	"command_stop",
 	"restore_version",
 	"source_history",
 	"verify",

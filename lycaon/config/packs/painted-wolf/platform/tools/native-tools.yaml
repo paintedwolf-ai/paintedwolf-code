@@ -478,7 +478,6 @@ grant_identity_neutral_args:
     - terminal_capture
   verify:
     - timeout_ms
-    - wait_ms
   grep:
     - max_matches
     - offset
