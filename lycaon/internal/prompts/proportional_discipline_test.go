@@ -40,7 +40,7 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 		"Report completion only with supporting evidence",
 		"verification results and remaining limits",
 		"## This turn",
-		"Text you write alongside tool calls",
+		"Text alongside tool calls",
 		"A response without tools ends the turn, including a promise to start or continue",
 		"invoked:false", "action did not run", "invoked:true", "does not prove success",
 	} {

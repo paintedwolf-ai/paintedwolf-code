@@ -1,1 +1,1 @@
-Cite a project path with its full repo-relative path as `[path/to/file:line]`, never bare words. A Markdown link is an accepted alternative and counts as the same citation: `[label](path/to/file#L12-L20)`, or a tool's `source.navigation` as `[label](source://root-id/path/to/file#L12)`. Use inline code for a path you are not citing.
+Cite a project path by its full repo-relative path as `[path/to/file:line]`, never bare words. A link also counts: `[label](path/to/file#L12-L20)`, or a tool's `source.navigation` as `[label](source://root-id/path/to/file#L12)`.

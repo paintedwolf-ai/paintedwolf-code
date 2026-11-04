@@ -130,6 +130,7 @@ func TestCoordinatorPolicyTemplateVarsKeys(t *testing.T) {
 	for _, key := range []string{
 		"coordinator_read_line_limit",
 		"defer_until_user_reply_tools",
+		"is_coordinator",
 		"lane_s_sync_tools",
 		"max_in_flight",
 		"max_read_workers",
