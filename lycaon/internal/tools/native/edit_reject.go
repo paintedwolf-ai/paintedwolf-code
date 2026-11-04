@@ -25,6 +25,7 @@ func editTargetChangedByOthers(
 	path, fileContent, oldString, newString string,
 	changes []*surveyreceipt.SourceChange,
 	totalChanges int,
+	sourceHistoryOffered bool,
 ) error {
 	data := editMissData(path, fileContent, oldString, newString)
 	rows := make([]map[string]any, 0, len(changes))
@@ -37,6 +38,7 @@ func editTargetChangedByOthers(
 	}
 	data["changed_by"] = rows
 	data["change_count"] = totalChanges
+	data["source_history_offered"] = sourceHistoryOffered
 	return &toolrejection.ToolReject{Code: "EDIT_TARGET_CHANGED_BY_OTHERS", Data: data}
 }
 

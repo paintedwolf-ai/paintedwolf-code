@@ -2,9 +2,17 @@ package tools
 
 import (
 	"context"
+
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
+
+// OffersSourceHistory reports whether the calling profile holds source_history,
+// so rejection copy names it only to an agent that can call it.
+func OffersSourceHistory(ctx context.Context, boundary *sandbox.Boundary, tc ToolContext) bool {
+	return boundary != nil && boundary.AssertToolAllowed(ctx, tc.ProfileID(), "source_history", tc.Turn.ToolAccess) == nil
+}
 
 // SourceHistory supplies independent read services to a tool invocation.
 type SourceHistory struct {

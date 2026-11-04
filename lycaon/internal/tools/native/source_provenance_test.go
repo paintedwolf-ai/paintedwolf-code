@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -408,8 +409,7 @@ func TestACOC02EditMissOnOwnCommandEffectsIsAnOrdinaryMiss(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			_, sha := writeProvenanceFile(t, dir, "main.go", "package main
-")
+			_, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
 			ledger := &fakeSourceLedger{
 				floor: 1, floorFound: true,
 				heads:   map[string]sourceledger.BranchHead{"r1/main.go": {FileID: "f1", VersionID: "v2", SHA256: sha, State: "content"}},
@@ -425,6 +425,36 @@ func TestACOC02EditMissOnOwnCommandEffectsIsAnOrdinaryMiss(t *testing.T) {
 			}
 			if tc.wantCount > 0 && reject.Data["change_count"] != tc.wantCount {
 				t.Fatalf("change_count = %v, want %d", reject.Data["change_count"], tc.wantCount)
+			}
+		})
+	}
+}
+
+func TestEditMissStatesWhetherTheProfileHoldsSourceHistory(t *testing.T) {
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{
+		{ID: "holds", Tools: map[string]bool{"edit": true, "source_history": true}},
+		{ID: "lacks", Tools: map[string]bool{"edit": true}},
+	})
+	for _, tc := range []struct {
+		profile string
+		want    bool
+	}{{"holds", true}, {"lacks", false}} {
+		t.Run(tc.profile, func(t *testing.T) {
+			dir := t.TempDir()
+			_, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
+			ledger := &fakeSourceLedger{
+				floor: 1, floorFound: true,
+				heads:   map[string]sourceledger.BranchHead{"r1/main.go": {FileID: "f1", VersionID: "v2", SHA256: sha, State: "content"}},
+				effects: map[string][]sourceledger.Effect{"f1": {{Origin: api.SourceChangeOriginUser, Op: api.SourceChangeOpWrite, Ordinal: 8}}},
+			}
+			tctx := provenanceCtx(dir, ledger)
+			tctx.Identity.Agent = tc.profile
+			_, err := (&EditTool{Boundary: boundary}).Run(context.Background(), map[string]any{
+				"path": "main.go", "old_string": "package moved", "new_string": "package main",
+			}, tctx)
+			var reject *toolrejection.ToolReject
+			if !errors.As(err, &reject) || reject.Code != "EDIT_TARGET_CHANGED_BY_OTHERS" || reject.Data["source_history_offered"] != tc.want {
+				t.Fatalf("edit miss = %v, want the reject with source_history_offered %v", err, tc.want)
 			}
 		})
 	}
