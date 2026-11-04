@@ -1,7 +1,6 @@
 package output
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -59,7 +58,7 @@ func (r *ParserRegistryImpl) Get(id string) (OutputParser, error) {
 }
 
 // Parse dispatches raw output to a registered parser.
-func (r *ParserRegistryImpl) Parse(_ context.Context, parserID string, raw []byte) (*Result, error) {
+func (r *ParserRegistryImpl) Parse(parserID string, raw []byte) (*Result, error) {
 	p, err := r.Get(parserID)
 	if err != nil {
 		return nil, err
@@ -75,7 +74,7 @@ var defaultParserRegistry = DefaultParserRegistry()
 
 // ParseOutput dispatches raw tool output to a registered parser by ID.
 func ParseOutput(parserID string, raw []byte) (*Result, error) {
-	return defaultParserRegistry.Parse(context.Background(), parserID, raw)
+	return defaultParserRegistry.Parse(parserID, raw)
 }
 
 // IsRegisteredOutputParser reports whether parserID is registered.
