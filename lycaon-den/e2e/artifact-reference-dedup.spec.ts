@@ -138,10 +138,7 @@ webE2e(
       const h = (window as unknown as { __harness: Harness }).__harness;
       await h.llm.pending(60_000);
       await h.llm.respond({
-        text: JSON.stringify({
-          synthesis: "Got the fixture.",
-          cited_evidence: [],
-        }),
+        text: "Got the fixture.",
       });
     });
 
@@ -159,11 +156,7 @@ webE2e(
         const h = (window as unknown as { __harness: Harness }).__harness;
         await h.llm.pending(60_000);
         await h.llm.respond({
-          text: JSON.stringify({
-            synthesis: "Same fixture again.",
-            cited_evidence: [],
-            artifact_ids: [id],
-          }),
+          text: `Same fixture again.\n\n[artifact:${id}]`,
         });
       },
       { id: artifactId },
