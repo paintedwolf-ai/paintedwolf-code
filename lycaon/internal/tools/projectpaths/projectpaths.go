@@ -313,7 +313,7 @@ func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bo
 		Abs:         abs,
 		DisplayPath: scopeRel,
 		ScopeRel:    scopeRel,
-		Root:        projectroot.RootRef{ID: "host-data", Path: filepath.Clean(host), IsPrimary: false},
+		Root:        projectroot.RootRef{ID: hostDataRootID, Path: filepath.Clean(host), IsPrimary: false},
 		External:    true,
 		Compressed:  tooloutput.IsBlobstoreCompressedRel(scopeRel),
 		ToolOutput:  strings.HasPrefix(scopeRel, tooloutput.ToolOutputSpillDir+"/") || strings.HasPrefix(scopeRel, tooloutput.PromoteSpillDir+"/"),

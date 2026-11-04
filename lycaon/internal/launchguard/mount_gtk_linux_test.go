@@ -14,7 +14,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -159,30 +158,6 @@ func buildGTKVolumeFixture(t *testing.T) (string, string) {
 	testutil.FailErr(t, "make caller build ancestry traversable for fixture installation", os.Chmod(directory, 0755))
 	retainGTKVolumeComponent(t, desktop, module)
 	return desktop, module
-}
-
-func startFixtureXvfb(t *testing.T) string {
-	t.Helper()
-	reader, writer, err := os.Pipe()
-	testutil.FailErr(t, "create own X display readiness", err)
-	defer reader.Close()
-	defer writer.Close()
-	log, err := os.Create(filepath.Join(t.TempDir(), "xvfb.log"))
-	testutil.FailErr(t, "retain own X display diagnostics", err)
-	t.Cleanup(func() { _ = log.Close() })
-	command := exec.Command("Xvfb", "-displayfd", "3", "-screen", "0", "800x600x24", "-nolisten", "tcp")
-	command.ExtraFiles = []*os.File{writer}
-	command.Stdout = log
-	command.Stderr = log
-	testutil.FailErr(t, "start own isolated X display", command.Start())
-	t.Cleanup(func() { _ = command.Process.Kill(); _ = command.Wait() })
-	_ = writer.Close()
-	testutil.FailErr(t, "bound own X display startup", reader.SetReadDeadline(time.Now().Add(5*time.Second)))
-	text, err := bufio.NewReader(reader).ReadString('\n')
-	testutil.FailErr(t, "receive own X display number", err)
-	number, err := strconv.ParseUint(strings.TrimSpace(text), 10, 16)
-	testutil.FailErr(t, "decode own X display number", err)
-	return fmt.Sprintf(":%d", number)
 }
 
 type gtkHeldFile struct {

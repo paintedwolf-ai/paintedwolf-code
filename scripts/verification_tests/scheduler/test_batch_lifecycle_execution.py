@@ -77,7 +77,7 @@ class BatchLifecycleTests(support.BatchFixture):
                                    timeout=self.state_timeout + 5)
         self.assertEqual(cancelled.returncode, 0, cancelled.stdout + cancelled.stderr)
         self.assertTrue(json.loads(cancelled.stdout)["released"])
-        result = json.loads(self.collect(self.start("--wait", submitted["job_id"]), code=2))
+        result = self.wait_result(submitted["job_id"], 2)
         self.assertEqual(result["exit_code"], 2, "a cancelled run establishes nothing")
         self.assertEqual(result["task_exit_code"], 130, "the tool's own code stays visible")
         self.assertEqual(self.queue.status()["runs"], [])
@@ -97,7 +97,7 @@ class BatchLifecycleTests(support.BatchFixture):
         waiter.communicate(timeout=5)
         self.assertEqual(len(self.queue.status()["runs"]), 1)
         self.queue.resume()
-        result = json.loads(self.collect(self.start("--wait", submitted["job_id"]), code=1))
+        result = self.wait_result(submitted["job_id"], 1)
         self.assertEqual(result["exit_code"], 1)
         self.assertEqual(len(self.records()), 1)
 
@@ -151,7 +151,7 @@ class BatchLifecycleTests(support.BatchFixture):
         directory.mkdir(parents=True)
         (directory / "job.json").write_text("{}")
         (directory / "completion.lock").touch()
-        result = json.loads(self.collect(self.start("--wait", job_id), code=2))
+        result = self.wait_result(job_id, 2)
         self.assertEqual(result["state"], "unverified")
 
     def test_malformed_background_result_is_unverified(self):
@@ -168,13 +168,13 @@ class BatchLifecycleTests(support.BatchFixture):
         for body in malformed:
             with self.subTest(body=body):
                 (directory / "result.json").write_text(body)
-                result = json.loads(self.collect(self.start("--wait", job_id), code=2))
+                result = self.wait_result(job_id, 2)
                 self.assertEqual(result["state"], "unverified")
         (directory / "result.json").write_text(json.dumps(valid))
         self.assertEqual(json.loads(self.collect(self.start("--wait", job_id))),
                          {**valid, "task_exit_code": 0})
         (directory / "completion.lock").unlink()
-        self.assertEqual(json.loads(self.collect(self.start("--wait", job_id), code=2))["state"], "unverified")
+        self.assertEqual(self.wait_result(job_id, 2)["state"], "unverified")
 
     def test_snapshot_toolchain_mutation_does_not_change_shared_runtime(self):
         self.hold.touch()
