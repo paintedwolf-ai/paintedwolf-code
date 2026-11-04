@@ -65,7 +65,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
-	if _, err := lycexec.LaunchLookup(argv[0], opts); confine.IsCommandNotFound(err) {
+	if _, err := lycexec.LaunchLookup(argv[0], opts); errors.Is(err, exec.ErrNotFound) || confine.IsCommandNotFound(err) {
 		_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "bash: %s: command not found\n", argv[0])
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
