@@ -3,10 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -175,5 +177,17 @@ func TestShippedRetirementsOfNoteNameTheContentContract(t *testing.T) {
 		if !ok || len(got.Names) != 0 || got.Contract == nil || got.Contract.ContentContract != "paintedwolf.markdown_note" {
 			t.Errorf("%s %s = %+v, want the markdown note contract", tc.kind, tc.name, got)
 		}
+	}
+	// The refusal a model sees reads the manifest; both must name the same tools.
+	manifest, err := nativemanifest.Load()
+	testutil.FailErr(t, "load native manifest", err)
+	want := map[string]string{}
+	for name, successors := range catalog.Vocabularies["tools"] {
+		if successors.Contract != nil {
+			want[name] = successors.Contract.ContentContract
+		}
+	}
+	if !reflect.DeepEqual(manifest.RetiredToContentContract, want) {
+		t.Fatalf("manifest %v, retirement catalog %v", manifest.RetiredToContentContract, want)
 	}
 }

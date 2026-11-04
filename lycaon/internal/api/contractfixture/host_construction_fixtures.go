@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/usernotice"
@@ -75,6 +76,7 @@ func newFixtureHost(t *testing.T, deps hostapi.Dependencies, reg tools.ToolRegis
 	if deps.Core.MutationGate != nil {
 		mgr.Runner.Execution.SetMutationGate(deps.Core.MutationGate)
 	}
+	oartest.InstallCloseoutPolicy(t, mgr)
 	return mgr
 }
 
