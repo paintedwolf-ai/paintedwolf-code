@@ -103,6 +103,7 @@ func (b *structureBudget) scanInline(line string) {
 			if b.depth > 0 {
 				b.depth--
 			}
+			b.scanRawForm(line[i:])
 		case '<', '-', '?':
 			b.scanRawForm(line[i:])
 		}

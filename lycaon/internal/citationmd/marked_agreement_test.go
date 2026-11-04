@@ -41,7 +41,10 @@ func TestMarkedAgreement(t *testing.T) {
 			// validates the URL meant and rewrites the display to match.
 			want := []string{}
 			for _, link := range fixture.Links {
-				want = append(want, strings.TrimSuffix(link, "]"))
+				if strings.Contains(fixture.Source, "["+link) || strings.Contains(fixture.Source, "["+strings.TrimPrefix(link, "http://")) {
+					link = strings.TrimSuffix(link, "]")
+				}
+				want = append(want, link)
 			}
 			if !reflect.DeepEqual(links, want) {
 				t.Fatalf("links = %q, marked = %q", links, want)

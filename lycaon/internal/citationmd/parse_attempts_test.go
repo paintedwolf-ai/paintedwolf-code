@@ -174,8 +174,8 @@ func TestRenderCreatesNoStructure(t *testing.T) {
 	cases := []struct{ name, source, want string }{
 		{"emphasis", "**[read#9]**", "**read#9**"},
 		{"glued word", "h[read#9]ttp", "hread#9ttp"},
-		{"new autolink", "<[read#9]x@y.z>", "<read#9x@y.z>"},
-		{"new link", "[[read#9]](x)", "[read#9](x)"},
+		{"new autolink", "<[read#9]https://x.test>", "<read#9https://x.test>"},
+		{"standard link stays", "[[read#9]](x)", "[[read#9]](x)"},
 		{"list item", "- [read#9]", ""},
 		{"list item among others", "- a\n- [read#9]\n- b", "- a\n- b"},
 		{"ordered item", "1. [read#9]", ""},

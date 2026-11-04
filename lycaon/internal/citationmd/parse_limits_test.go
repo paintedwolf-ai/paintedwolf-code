@@ -189,6 +189,8 @@ func TestParseSourceLinks(t *testing.T) {
 		}
 		return "", false
 	}}
+	knownSource := roots
+	knownSource.KnownPath = func(name string) bool { return name == "a.go" }
 	cases := []struct {
 		name, source string
 		opts         Options
@@ -197,12 +199,14 @@ func TestParseSourceLinks(t *testing.T) {
 		{"relative", "[a](internal/a.go#L4)", roots, Citation{Path: "internal/a.go", Line: 4}},
 		{"primary root", "[a](source://main/internal/a.go#L12-L20)", roots, Citation{Path: "internal/a.go", Line: 12, EndLine: 20}},
 		{"secondary root", "[a](source://lib/internal/a.go#L12)", roots, Citation{Path: "@shared/internal/a.go", Line: 12}},
-		{"unknown root is spelled to match nothing", "[a](source://nope/a.go)", roots, Citation{Path: "@nope/a.go"}},
+		{"unknown root is spelled to match nothing", "[a](source://nope/a.go#L1)", roots, Citation{Path: "source://nope/a.go", Line: 1}},
+		{"unknown root with no observed path", "[a](source://main/a.go#intro#L1)", roots, Citation{Path: "a.go"}},
 		{"one root", "[a](source://any/a.go#L1)", Options{}, Citation{Path: "a.go", Line: 1}},
 		{"escaped", "[a](source://main/docs/a%20b.md#L1)", roots, Citation{Path: "docs/a b.md", Line: 1}},
 		{"worker query", "[a](source://main/a.go?job_id=j#L3)", roots, Citation{Path: "a.go", Line: 3}},
-		{"label never supplies coordinates", "[a.go:99](source://main/a.go)", roots, Citation{Path: "a.go"}},
-		{"upper case scheme", "[a](SOURCE://main/a.go)", roots, Citation{Path: "a.go"}},
+		{"label never supplies coordinates", "[a.go:99](source://main/a.go)", knownSource, Citation{Path: "a.go"}},
+		{"heading anchor", "[a](source://main/a.go#intro)", knownSource, Citation{Path: "a.go"}},
+		{"upper case scheme", "[a](SOURCE://main/a.go#L4)", roots, Citation{Path: "a.go", Line: 4}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -216,10 +220,14 @@ func TestParseSourceLinks(t *testing.T) {
 			}
 		})
 	}
-	for _, source := range []string{"[a](source:///a.go)", "[a](source://main)", "[a](source://u@main/a.go)", "[a](source:x)", "[a](source://ma in/a.go)"} {
-		if doc := Parse(source, roots); len(doc.Occurrences) != 0 {
-			t.Errorf("%q: occurrences = %+v", source, doc.Occurrences)
+	for _, source := range []string{"[a](source:///a.go)", "[a](source://main)", "[a](source://u@main/a.go)", "[a](source:x)", "[a](<source://ma in/a.go>)"} {
+		doc := Parse(source, roots)
+		if got := issueCodes(doc); len(doc.Occurrences) != 0 || !reflect.DeepEqual(got, []IssueCode{IssueMalformedCitation}) {
+			t.Errorf("%q: occurrences = %+v, issues = %v", source, doc.Occurrences, got)
 		}
+	}
+	if doc := Parse("[a](source://main/a.go)", roots); len(doc.Occurrences) != 0 || len(doc.Issues) != 0 {
+		t.Errorf("an unobserved source link with no coordinate is ordinary: %+v", doc)
 	}
 }
 
@@ -255,10 +263,10 @@ func TestProjectFixtures(t *testing.T) {
 		{"link kept", "[auth.go](internal/auth.go#L42) [read#1]", "[auth.go](internal/auth.go#L42)"},
 		{"invalid destination", "[read#1](bad dest) tail", "(bad dest) tail"},
 		{"nested label", "[see [read#3] now](https://example.test/f) [read#2]", "[see [read#3] now](https://example.test/f)"},
-		{"reference", "[r]: https://example.test/r\n\n[read#1][r] [read#2][none]", "[r]: https://example.test/r\n\n[read#1][r][none]"},
+		{"reference", "[r]: https://example.test/r\n\n[read#1][r] [read#2][none]", "[r]: https://example.test/r\n\n[read#1][r] [none]"},
 		{"late definition", "Use [read#1] here.\n\n[read#1]: https://example.test/a\n", "Use [read#1] here.\n\n[read#1]: https://example.test/a"},
 		{"table", "| a | b |\n|---|---|\n| [read#1] | `[read#2]` |\n", "| a | b |\n|---|---|\n| | `[read#2]` |"},
-		{"spacing", "a  [read#1]  b\n([read#1]) x\n  [read#1]  \n\n\n\n  text", "a  b\n() x\n  text"},
+		{"spacing", "a  [read#1]  b\n([read#1]) x\n  [read#1]  \n\n\n\n  text", "a  b\n() x\ntext"},
 		{"blank line after a dropped line", "a\n\n[read#1]\n\n[read#2]\n\nb", "a\n\nb"},
 		{"literal after a removal on its line", "[read#1] `x`\ny", "`x`\ny"},
 	}

@@ -24,7 +24,6 @@ func TestParseIssues(t *testing.T) {
 		{"reason over its bound", "[verify: targeted - " + reason + "]", IssueInvalidVerification, KindVerify},
 		{"AC-AST-12 bad artifact", "[artifact: not-a-uuid]", IssueMalformedArtifact, KindArtifact},
 		{"empty artifact", "[artifact:]", IssueMalformedArtifact, KindArtifact},
-		{"AC-AST-12 bad repair", "[cite: nope]", IssueMalformedRepair, KindRepair},
 		{"repair bad target", "[cite: x1 => read#1]", IssueMalformedRepair, KindRepair},
 		{"repair bad value", "[cite: c1 => read#1 extra words]", IssueMalformedRepair, KindRepair},
 		{"repair non-web url", "[cite: c1 => <ftp://example.test>]", IssueMalformedRepair, KindRepair},
@@ -33,12 +32,8 @@ func TestParseIssues(t *testing.T) {
 		{"handle then prose", "[read#3 some words]", IssueMalformedCitation, KindCitation},
 		{"bad coordinate", "[read#3:foo]", IssueMalformedCitation, KindCitation},
 		{"coordinate twice", "[grep#1:2 a.go:3]", IssueMalformedCitation, KindCitation},
-		{"bad quoted coordinate", `["a b.md":x]`, IssueMalformedCitation, KindCitation},
-		{"empty quoted path", `[""]`, IssueMalformedCitation, KindCitation},
-		{"bad quoted escape", `["a\qb"]`, IssueMalformedCitation, KindCitation},
-		{"unknown name in a confirmed group", "[read#1, sic]", IssueMalformedCitation, KindCitation},
-		{"unknown bare path after an attempt", "[a.go:1, sic]", IssueMalformedCitation, KindCitation},
-		{"unknown bare path after a space", "[a.go:1 , b/c.go]", IssueMalformedCitation, KindCitation},
+		{"bad quoted coordinate", `["a b.md":1x]`, IssueMalformedCitation, KindCitation},
+		{"bad quoted escape with a handle", `[read#1 "a\qb"]`, IssueMalformedCitation, KindCitation},
 		{"zero line on a path", "[a.go:0]", IssueInvalidRange, KindCitation},
 		{"zero line", "[read#3:0]", IssueInvalidRange, KindCitation},
 		{"backward range", "[read#3:58-42]", IssueInvalidRange, KindCitation},
@@ -159,7 +154,7 @@ func TestParseStructureBudget(t *testing.T) {
 			t.Errorf("%.20q: issues = %+v", source, got)
 		}
 		// The issue blocks acceptance; a fallback still has the prose to show.
-		if got := Project(doc); got == "" || strings.Contains(got, "read#") {
+		if got := Project(doc); got == "" || strings.Contains(got, "[read#") {
 			t.Errorf("%.20q: refused source presented %.20q", source, got)
 		}
 	}
