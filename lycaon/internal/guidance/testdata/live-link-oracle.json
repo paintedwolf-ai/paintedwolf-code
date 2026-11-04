@@ -1125,7 +1125,7 @@
    "source": "[https://x.test/a]"
   },
   {
-   "present": "[https\u0026#58;//seen.test/a]",
+   "present": "[\u003chttps://seen.test/a\u003e]",
    "source": "[https://seen.test/a]"
   },
   {
@@ -1137,7 +1137,7 @@
    "source": "[docs: https://seen.test/a]"
   },
   {
-   "present": "(see [https\u0026#58;//seen.test/a])",
+   "present": "(see [\u003chttps://seen.test/a\u003e])",
    "source": "(see [https://seen.test/a])"
   },
   {
@@ -1149,7 +1149,7 @@
    "source": "[www.seen.test/a]"
   },
   {
-   "present": "[https\u0026#58;//seen.test/a].",
+   "present": "[\u003chttps://seen.test/a\u003e].",
    "source": "[https://seen.test/a]."
   },
   {

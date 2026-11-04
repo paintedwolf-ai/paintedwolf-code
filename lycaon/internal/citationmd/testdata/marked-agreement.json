@@ -390,7 +390,9 @@
   {
     "name": "web scheme with no slashes",
     "source": "[x](https:x.test)\n",
-    "links": [],
+    "links": [
+      "https:x.test"
+    ],
     "code": []
   },
   {

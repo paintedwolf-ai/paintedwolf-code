@@ -131,6 +131,8 @@ func renderCounted(doc Document, decide func(Occurrence) Rendition) (string, int
 			out.literal([]byte(doc.Source[p.span.Start:p.span.End]))
 		case plans[i].keep:
 			writeKeptLink(&out, doc, p)
+		case p.kind == partNode:
+			out.protect([]byte(plans[i].text))
 		default:
 			separateFromEscape(&out, plans[i].text)
 			out.text([]byte(plans[i].text))

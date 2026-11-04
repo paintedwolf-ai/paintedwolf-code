@@ -63,7 +63,10 @@ type bodyScan struct {
 	links  map[int]*Link
 	next   int
 	end    int
-	runEnd int
+	// runStart and runEnd bound the last measured run of URL bytes. A released
+	// bracket can move the scan back before it.
+	runStart int
+	runEnd   int
 	// lastOpen is the latest `[` still open on its line, or -1.
 	lastOpen int
 	machine  *nodeMachine
@@ -87,11 +90,14 @@ func (s *bodyScan) run() {
 		if m.idle() && s.enterBareLink(at) {
 			continue
 		}
-		switch s.source[at] {
-		case '[':
-			s.lastOpen = at
-		case ']':
-			s.lastOpen = -1
+		// Only idle text counts: a node attempt that is released is scanned again.
+		if m.idle() {
+			switch s.source[at] {
+			case '[':
+				s.lastOpen = at
+			case ']':
+				s.lastOpen = -1
+			}
 		}
 		m.feed(s.source[at])
 	}
@@ -99,7 +105,8 @@ func (s *bodyScan) run() {
 
 // urlTailEnd finds where a run of URL bytes ends, measuring each run only once.
 func (s *bodyScan) urlTailEnd(at int) int {
-	if at >= s.runEnd {
+	if at < s.runStart || at >= s.runEnd {
+		s.runStart = at
 		s.runEnd = at + urlRunEnd(s.source[at:s.end])
 	}
 	return s.runEnd
@@ -134,7 +141,7 @@ func (s *bodyScan) enterBareLink(at int) bool {
 	if url == "" {
 		return false
 	}
-	if strings.HasSuffix(url, "]") && s.lastOpen >= 0 && strings.IndexByte(s.source[s.lastOpen:at], '\n') < 0 {
+	if strings.HasSuffix(url, "]") && s.lastOpen >= 0 && s.lastOpen < at && strings.IndexByte(s.source[s.lastOpen:at], '\n') < 0 {
 		url = url[:len(url)-1]
 		s.lastOpen = -1
 	}
