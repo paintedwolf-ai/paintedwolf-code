@@ -11,11 +11,21 @@ var (
 
 const surfaceCardMaxEnumerated = 8
 
-// SurfaceCardVars are the facts partials/coordinator-surface-card.md renders.
+// SurfaceCard is one surface's catalog row as the turn prompt reads it.
+type SurfaceCard struct {
+	Label string
+	Rule  string
+	// PublishesText says valid text accompanying tool calls reaches the user.
+	PublishesText bool
+}
+
+// SurfaceCardVars are the facts partials/coordinator-surface-card.md and
+// partials/coordinator-text-and-citations.md render.
 type SurfaceCardVars struct {
-	Label       string
-	Rule        string
-	MayEdit     bool
+	Label         string
+	Rule          string
+	PublishesText bool
+	MayEdit       bool
 	MayRun      bool
 	MayDispatch bool
 	// EditDeferred distinguishes unloaded editing tools from unavailable ones.
@@ -25,10 +35,11 @@ type SurfaceCardVars struct {
 }
 
 // An empty catalog label selects the execution-mode family during rendering.
-func CoordinatorSurfaceCardVars(label, rule string, sticky, deferred []string) SurfaceCardVars {
+func CoordinatorSurfaceCardVars(card SurfaceCard, sticky, deferred []string) SurfaceCardVars {
 	out := SurfaceCardVars{
-		Label: strings.TrimSpace(label),
-		Rule:  strings.TrimSpace(rule),
+		Label:         strings.TrimSpace(card.Label),
+		Rule:          strings.TrimSpace(card.Rule),
+		PublishesText: card.PublishesText,
 	}
 	stickySet := toolNameSet(sticky)
 	out.MayEdit = anyPresent(surfaceCardEditTools, stickySet)
@@ -46,13 +57,14 @@ func CoordinatorSurfaceCardVars(label, rule string, sticky, deferred []string) S
 
 func (v SurfaceCardVars) TemplateVars() map[string]any {
 	return map[string]any{
-		"surface_card_label": v.Label,
-		"surface_card_rule":  v.Rule,
-		"card_may_edit":      v.MayEdit,
-		"card_may_run":       v.MayRun,
-		"card_may_dispatch":  v.MayDispatch,
-		"card_edit_deferred": v.EditDeferred,
-		"card_only_tools":    v.OnlyTools,
+		"surface_card_label":     v.Label,
+		"surface_card_rule":      v.Rule,
+		"surface_publishes_text": v.PublishesText,
+		"card_may_edit":          v.MayEdit,
+		"card_may_run":           v.MayRun,
+		"card_may_dispatch":      v.MayDispatch,
+		"card_edit_deferred":     v.EditDeferred,
+		"card_only_tools":        v.OnlyTools,
 	}
 }
 

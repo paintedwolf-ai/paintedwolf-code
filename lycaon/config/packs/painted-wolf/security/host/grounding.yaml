@@ -1,7 +1,7 @@
 post_turn:
   # Delegation post-turn carries the circuit-breaker escalation gate only. Completion
   # grounding is enforced at closeout via the worker ledger + CompletionCriteria —
-  # never by scanning coordinator prose.
+  # never by reading claim wording.
   mode: warn
 closeout:
   mode: block
@@ -14,8 +14,9 @@ ambient:
   post_turn:
     mode: warn
     # With workers: correlates WorkerQueue jobs with worker_summary tags on the parent session.
-    # With no workers: reads the coordinator's own citation-grounding audit (typed citations vs
-    # evidence ledger). Never scans prose. Inconsistencies are recorded as a per-turn audit.
+    # With no workers: reads the coordinator's own citation-grounding audit (citations parsed
+    # from Markdown vs evidence ledger). Claim wording is never read. Inconsistencies are
+    # recorded as a per-turn audit.
 circuit_breaker:
   max_ungrounded_warnings: 3
   max_consecutive_ungrounded: 2

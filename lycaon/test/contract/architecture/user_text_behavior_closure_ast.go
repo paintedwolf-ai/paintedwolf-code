@@ -366,6 +366,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"card_requestable":                             true,
 	"card_rule":                                    true,
 	"surface_card_label":                           true,
+	"surface_publishes_text":                       true,
 	"profile_has_terminal_open":                    true,
 	"profile_has_terminal_snapshot":                true,
 	"profile_has_render_view":                      true,

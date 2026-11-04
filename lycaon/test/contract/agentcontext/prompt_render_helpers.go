@@ -18,9 +18,9 @@ func bundledPromptEngine() *prompts.FileTemplateEngine {
 // renderSurfaceCardFor renders the turn banner for one coordinator surface.
 func renderSurfaceCardFor(t *testing.T, surfaceID string, sticky, deferred []string) string {
 	t.Helper()
-	label, rule, err := prompts.LoadCoordinatorSurfaceCard(surfaceID)
+	card, err := prompts.LoadCoordinatorSurfaceCard(surfaceID)
 	contractcheck.FailErr(t, "load surface card for "+surfaceID, err)
-	vars := prompts.CoordinatorSurfaceCardVars(label, rule, sticky, deferred).TemplateVars()
+	vars := prompts.CoordinatorSurfaceCardVars(card, sticky, deferred).TemplateVars()
 	out, err := bundledPromptEngine().Render(context.Background(),
 		"partials/coordinator-surface-card.md", vars)
 	contractcheck.FailErr(t, "render surface card for "+surfaceID, err)
