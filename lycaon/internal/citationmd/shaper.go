@@ -190,7 +190,26 @@ func (s *shaper) leftNeighbour() byte {
 	if !s.visible || at < s.literalEnd || at < 0 || (at > 0 && s.out[at-1] == '\\') {
 		return 0
 	}
+	// `](` could become a link's destination once its contents go.
+	if s.out[at] == '(' && at > 0 && s.out[at-1] == ']' {
+		return 0
+	}
 	return s.out[at]
+}
+
+// insideLinkDestination reports an open `](` before the current text on its line:
+// closing up what follows it could make a live link from text that failed to be one.
+func (s *shaper) insideLinkDestination() bool {
+	lowest := max(s.lineOut, len(s.out)-MaxInlineProtocolNodeBytes)
+	for at := len(s.out) - 1; at > lowest; at-- {
+		switch s.out[at] {
+		case ')':
+			return false
+		case '(':
+			return s.out[at-1] == ']'
+		}
+	}
+	return false
 }
 
 // retractNeighbour takes back the left neighbour and the space around it, leaving

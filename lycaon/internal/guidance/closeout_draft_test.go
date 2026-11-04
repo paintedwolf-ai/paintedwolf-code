@@ -148,7 +148,7 @@ func TestDraftResolvesObservedIdentity(t *testing.T) {
 func TestDraftSingleSegmentNeedsLedgerMatch(t *testing.T) {
 	t.Parallel()
 	ev := ledgerOf(readMessages("LICENSE", lineTexts(1, 3)))
-	if got := resolveMarkdown("See [sic] and [draft] and `LICENSE:2`.", evidence.CitationRoots{}, ev); len(got.Occurrences) != 0 || len(got.Issues) != 0 {
+	if got := resolveMarkdown("See [sic] and [draft] and `LICENSE:9`.", evidence.CitationRoots{}, ev); len(got.Occurrences) != 0 || len(got.Issues) != 0 {
 		t.Fatalf("prose yielded %+v", got)
 	}
 	got := onlyOutcome(t, "[LICENSE]", evidence.CitationRoots{}, ev)

@@ -63,7 +63,7 @@ func (w *renderWalk) tidyAround(runEnd, limit int) int {
 			return runEnd + space
 		case isSeparatorByte(left) && separator > 0:
 			return pastSpace(w.doc.Source, runEnd+space+separator, limit)
-		case isSeparatorByte(left) && closes:
+		case isSeparatorByte(left) && closes && !w.out.insideLinkDestination():
 			w.out.retractNeighbour()
 		case closes && w.out.retractConjunction():
 		default:
@@ -85,12 +85,10 @@ func pastSpace(source string, at, limit int) int {
 	return at
 }
 
+// closerOf covers parentheses only: closing up square brackets could make a link.
 func closerOf(opener byte) byte {
-	switch opener {
-	case '(':
+	if opener == '(' {
 		return ')'
-	case '[':
-		return ']'
 	}
 	return 0
 }

@@ -207,7 +207,7 @@ func TestRenderCreatesNoStructure(t *testing.T) {
 		{"N4 item does not take the next paragraph", "- a\n- [read#9]\n\nb", "- a\n\nb"},
 		{"N4 quote does not take the next paragraph", "> a\n> [read#9]\n\nb", "> a\n\nb"},
 		{"N4 continuation stays in its item", "- a\n\n  [read#9]\n      foo", "- a\n\n  foo"},
-		{"N4 double bracket", "[[read#9]]", ""},
+		{"N4 double bracket", "[[read#9]]", "[ ]"},
 		{"list item", "- [read#9]", ""},
 		{"list item among others", "- a\n- [read#9]\n- b", "- a\n\n- b"},
 		{"ordered item", "1. [read#9]", ""},
