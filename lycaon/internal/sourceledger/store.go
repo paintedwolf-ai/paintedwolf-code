@@ -87,7 +87,7 @@ func New(sqlDB db.Handle, contentDir string) *Store {
 	snapshots := sourcesnapshot.New(sqlDB, blobs, filepath.Join(filepath.Dir(contentDir), enginepaths.SourceObservationsDBName), backgroundwork.Process())
 	s := &Store{sqlDB: sqlDB, queries: queries, people: peoplestore.New(sqlDB), Content: blobs, Baselines: baselines, Snapshots: snapshots}
 	s.Inventory = &Inventory{inventoryJobs: make(map[string]*inventoryJob), inventoryNow: time.Now, observationBudget: commandObservationBudget, queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, writer: s}
-	s.Commands = &Commands{inventoryPasses: make(map[string]uint64), objects: blobs, observationBudget: commandObservationBudget, openWindows: make(map[string][]*openCommandWindow), passWake: make(chan struct{}), queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, windowSettle: commandWindowSettle}
+	s.Commands = &Commands{inventoryPasses: make(map[string]uint64), objects: blobs, observationBudget: commandObservationBudget, openWindows: make(map[string][]*openCommandWindow), overduePasses: make(map[string]int), passWake: make(chan struct{}), queries: queries, recordMu: &s.recordMu, retainBudget: commandObservationBudget / 2, snapshots: snapshots, sqlDB: sqlDB, windowSettle: commandWindowSettle}
 	s.Git = &Git{queries: queries, recordMu: &s.recordMu, sqlDB: sqlDB}
 	s.History = &History{queries: queries, sqlDB: sqlDB}
 	s.Walk = &Walk{queries: queries, sqlDB: sqlDB}

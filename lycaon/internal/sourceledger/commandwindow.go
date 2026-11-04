@@ -125,7 +125,7 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 	// it; incomplete coverage cannot prove the tree unchanged, so it pays a pass.
 	req.Force = !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(in.Roots))
 	req.Wait = true
-	if err := s.inventory.EnsureInventory(ctx, req); err != nil {
+	if err := s.awaitStartInventory(ctx, req); err != nil {
 		return nil, err
 	}
 	state, err := s.inventory.InventoryState(ctx, in.ProjectID, inventoryBranch(req.Roots), req.RootsGeneration)
@@ -176,21 +176,76 @@ func (s *Commands) insertWindow(ctx context.Context, w *openCommandWindow, comma
 	return tx.Commit()
 }
 
+// ErrWindowStartPending refuses a window while a pass that outlasted an earlier
+// open is still running: its start inventory is unknown, and waiting again would
+// charge another launch the whole budget.
+var ErrWindowStartPending = errors.New("command window start inventory is still running")
+
+// awaitStartInventory waits for the window's start inventory within ctx. The pass
+// is detached, so one that outlasts the budget finishes and a later open finds it
+// done; thrown away, a pass longer than the budget would never converge.
+func (s *Commands) awaitStartInventory(ctx context.Context, req InventoryRequest) error {
+	key := req.scopeKey()
+	s.windowsMu.Lock()
+	overdue := s.overduePasses[key] > 0
+	s.windowsMu.Unlock()
+	if overdue {
+		return ErrWindowStartPending
+	}
+	finished := make(chan error, 1)
+	go func() { finished <- s.inventory.EnsureInventory(context.WithoutCancel(ctx), req) }()
+	select {
+	case err := <-finished:
+		return err
+	case <-ctx.Done():
+	}
+	s.windowsMu.Lock()
+	s.overduePasses[key]++
+	s.windowsMu.Unlock()
+	go func() {
+		<-finished
+		s.windowsMu.Lock()
+		defer s.windowsMu.Unlock()
+		if s.overduePasses[key]--; s.overduePasses[key] == 0 {
+			delete(s.overduePasses, key)
+		}
+	}()
+	return ctx.Err()
+}
+
 // Retain before-images unavailable from repository objects or history until the window settles.
 const (
 	windowRetainFiles = 8192
 	windowRetainBytes = 256 << 20
 )
 
-// retainWindowStart keeps the before-images the window's admissions may
-// need, bounded by windowRetainFiles and windowRetainBytes.
+// retainWindowStart keeps the before-images the window's admissions may need,
+// bounded by windowRetainFiles, windowRetainBytes and retainBudget. A file left
+// unretained loses its before-image, not its attribution, so running out of time
+// keeps the window; stored objects carry over, so later opens resume cheaply.
 func (s *Commands) retainWindowStart(ctx context.Context, w *openCommandWindow) error {
 	if w.startSnapshotID == "" || s.snapshots == nil {
 		return nil
 	}
+	budget, cancel := context.WithTimeout(ctx, s.retainBudget)
+	defer cancel()
+	pins, err := s.retainStartObjects(budget, w)
+	if err != nil && budget.Err() == nil {
+		return err
+	}
+	if err != nil {
+		slog.InfoContext(ctx, "command window start retention bounded by time",
+			"window_id", w.id, "retained_files", len(pins), "limit", s.retainBudget)
+	}
+	return s.pinWindowObjects(context.WithoutCancel(ctx), w, pins)
+}
+
+// retainStartObjects stores what it can and returns what it stored, including
+// when it stops early with an error.
+func (s *Commands) retainStartObjects(ctx context.Context, w *openCommandWindow) ([]string, error) {
 	entries, err := s.snapshots.HashedEntries(ctx, w.startSnapshotID, MaxRevisionContentBytes, windowRetainFiles+1)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(entries) > windowRetainFiles {
 		slog.InfoContext(ctx, "command window start retention bounded",
@@ -211,29 +266,36 @@ func (s *Commands) retainWindowStart(ctx context.Context, w *openCommandWindow) 
 			pins = append(pins, entry.SHA256)
 			continue
 		} else if !errors.Is(err, sql.ErrNoRows) {
-			return err
+			return pins, err
 		}
 		raw, err := s.snapshots.Bytes(ctx, entry)
 		if errors.Is(err, sourcesnapshot.ErrContentUnavailable) {
-			// Already moved on; the pass that admits it records what it can.
+			// Already moved on, or out of time; the pass that admits it records what it can.
+			if ctx.Err() != nil {
+				return pins, ctx.Err()
+			}
 			continue
 		}
 		if err != nil {
-			return err
+			return pins, err
 		}
 		rel, stored, oids, err := s.objects.Put(ctx, entry.SHA256, raw)
 		if err != nil {
-			return err
+			return pins, err
 		}
 		if err := s.queries.UpsertSourceBlobObject(ctx, db.UpsertSourceBlobObjectParams{
 			Sha256: entry.SHA256, Size: int64(len(raw)), StoredSize: stored, StorageRelpath: rel,
 			GitOidSha1: oids.SHA1, GitOidSha256: oids.SHA256,
 		}); err != nil {
-			return err
+			return pins, err
 		}
 		retained += int64(len(raw))
 		pins = append(pins, entry.SHA256)
 	}
+	return pins, nil
+}
+
+func (s *Commands) pinWindowObjects(ctx context.Context, w *openCommandWindow, pins []string) error {
 	if len(pins) == 0 {
 		return nil
 	}
@@ -548,16 +610,20 @@ type Commands struct {
 	objects           *sourceblob.Store
 	observationBudget time.Duration
 	openWindows       map[string][]*openCommandWindow
-	passWake          chan struct{}
-	queries           *db.Queries
-	recordMu          *sync.Mutex
-	snapshots         *sourcesnapshot.Store
-	sqlDB             db.Handle
-	windowRecovery    sync.Once
-	windowSettle      time.Duration
-	windowsMu         sync.Mutex
-	git               commandsGitPort
-	inventory         commandsInventoryPort
+	// overduePasses counts passes still running after an open stopped waiting.
+	overduePasses map[string]int
+	passWake      chan struct{}
+	queries       *db.Queries
+	recordMu      *sync.Mutex
+	// retainBudget is the share of an open spent keeping before-images.
+	retainBudget   time.Duration
+	snapshots      *sourcesnapshot.Store
+	sqlDB          db.Handle
+	windowRecovery sync.Once
+	windowSettle   time.Duration
+	windowsMu      sync.Mutex
+	git            commandsGitPort
+	inventory      commandsInventoryPort
 }
 
 type commandsInventoryPort interface {
