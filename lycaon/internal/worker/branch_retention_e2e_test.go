@@ -3,12 +3,15 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -46,7 +49,7 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	mgr := workspace.NewManager(branches)
 	q := NewSQLQueue(sqlDB, 4)
 	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	q.SetWorkerWorkspaceManager(mgr)
+	q.SetWorkerWorkspaceManager(earlierFormatBranches{mgr})
 
 	id, err := q.Enqueue(ctx, api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id",
@@ -176,7 +179,7 @@ func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) 
 	queue := NewSQLQueue(restored, 4)
 	queue.SetBaselineStore(sourceledger.New(restored, filepath.Join(newRoot, "source-content")).Baselines)
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"))
-	queue.SetWorkerWorkspaceManager(manager)
+	queue.SetWorkerWorkspaceManager(earlierFormatBranches{manager})
 	return queue, manager
 }
 
@@ -189,7 +192,7 @@ func TestUnsealedWorkerEditsSurviveRelocatedArchive(t *testing.T) {
 	dataDir := testbaseline.DataDir(t, database)
 	queue := NewSQLQueue(database, 1)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches")))
+	queue.SetWorkerWorkspaceManager(earlierFormatBranches{workspace.NewManager(filepath.Join(dataDir, "worker-branches"))})
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue unsealed worker", err)
 	_, err = queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
@@ -220,4 +223,88 @@ func TestUnsealedWorkerEditsSurviveRelocatedArchive(t *testing.T) {
 	if err := backup.ValidateLiveReferences(ctx, restored.store.db, restoredRoot); err == nil {
 		t.Fatal("upgrade readiness accepted missing unsealed edits")
 	}
+}
+
+// earlierFormatBranches prepares the branch an earlier release left: a plain tree with metadata that
+// names no selection, whose result its baseline and sealed overlay carry. Retained jobs keep that path.
+type earlierFormatBranches struct{ *workspace.Manager }
+
+func (e earlierFormatBranches) CreateWorkerWorkspaceFromSources(_ context.Context, roots, sources []projectroot.RootRef, _, jobID string) (*workspace.Binding, workspace.SandboxLayout, error) {
+	root := filepath.Join(e.BranchBase(), enginepaths.ProjectKey(sources[0].Path), jobID)
+	if err := os.MkdirAll(root, 0o750); err != nil {
+		return nil, workspace.SandboxLayout{}, err
+	}
+	if err := filepath.WalkDir(sources[0].Path, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return walkErr
+		}
+		rel, err := filepath.Rel(sources[0].Path, path)
+		if err != nil {
+			return err
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(root, rel), raw, 0o644)
+	}); err != nil {
+		return nil, workspace.SandboxLayout{}, err
+	}
+	meta := workspace.JobMeta{SnapshotComplete: true}
+	for _, r := range roots {
+		meta.Roots = append(meta.Roots, workspace.JobMetaRoot{ID: r.ID, Path: r.Path, Label: r.Label, IsPrimary: r.IsPrimary})
+	}
+	if err := workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(root), meta); err != nil {
+		return nil, workspace.SandboxLayout{}, err
+	}
+	return &workspace.Binding{ID: jobID, Root: root}, workspace.SandboxLayout{Roots: roots}, nil
+}
+
+// A materialized worker's result stays in its tree, with the base that makes it mergeable, so both go
+// with the archive and a restored engine derives the checkpoint again.
+func TestCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T) {
+	ctx := t.Context()
+	project := t.TempDir()
+	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(project, "main.go"), []byte("package before\n"), 0o644))
+	testutil.FailErr(t, "seed untouched", os.WriteFile(filepath.Join(project, "keep.go"), []byte("package keep\n"), 0o644))
+	database := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", project)
+	dataDir := testbaseline.DataDir(t, database)
+	queue := NewSQLQueue(database, 1)
+	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches")))
+	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
+	testutil.FailErr(t, "enqueue", err)
+	next, err := queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
+	testutil.FailErr(t, "claim next", err)
+	task, err := queue.ClaimWorkerBranch(ctx, id)
+	testutil.FailErr(t, "claim branch", err)
+	task.ClaimToken = next.ClaimToken
+	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(task.WorkspaceRoot, "main.go"), []byte("package after\n"), 0o644))
+	if won, err := queue.Complete(ctx, task, api.WorkerResult{Status: "complete"}); err != nil || !won {
+		t.Fatalf("Complete: won=%v err=%v", won, err)
+	}
+
+	restored, manager := relocateWorkerInstallation(t, database, id)
+	restored.SetWorkerWorkspaceManager(manager)
+	coordinator := openFixtureRecovery(t, manager.BranchBase())
+	manager.WithRecovery(coordinator)
+	_, err = manager.RecoverWorkerViews(ctx)
+	testutil.FailErr(t, "startup recovery", err)
+
+	task, ok := restored.Get(id)
+	if !ok {
+		t.Fatal("restored worker missing")
+	}
+	store, manifest, published, err := session.OpenTaskCheckpointStore(task)
+	testutil.FailErr(t, "open task checkpoint", err)
+	if !published || len(manifest.Entries) != 1 || manifest.Entries[0].Path.Rel != "main.go" {
+		t.Fatalf("published=%v manifest=%+v", published, manifest)
+	}
+	base, err := store.ReadBlob(manifest.Entries[0].Base.SHA256)
+	testutil.FailErr(t, "read base", err)
+	if string(base) != "package before\n" {
+		t.Fatalf("restored base = %q", base)
+	}
+	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(&workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
 }

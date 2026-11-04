@@ -389,3 +389,23 @@ func TestNoCopyRunsPastItsBudget(t *testing.T) {
 		t.Fatalf("a copy started past its budget: %v", opened)
 	}
 }
+
+func TestCancellationStopsACopyInsideAFile(t *testing.T) {
+	source := t.TempDir()
+	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(source, "big.bin"), make([]byte, 1<<20), 0o644))
+	target := filepath.Join(t.TempDir(), "tree")
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	_, err := NewEagerCopyAdapter(ReasonNone).Prepare(ctx, PrepareRequest{
+		ViewID: "canceled-copy", RuntimeDir: t.TempDir(), TargetRootDirs: map[string]string{"repo": target},
+		CloneFile:  func(string, string) (bool, error) { return false, nil },
+		ProgressFn: func(MaterializeProgress) { cancel() },
+		Grants:     []RootGrant{{RootID: "repo", SourcePath: source, IsPrimary: true}},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("canceled tree remains: %v", statErr)
+	}
+}

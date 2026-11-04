@@ -308,6 +308,12 @@ func readoptMaterializedRepos(ctx context.Context, services *layeredServices, br
 		return fmt.Errorf("unsupported materialized Git record format %d", record.Format)
 	}
 	for _, gitView := range record.Views {
+		// A restored archive moved the worktree away from its retained objects, so its repository
+		// no longer opens. The files still capture; what a worker committed does not.
+		if rel, err := filepath.Rel(branchRoot, gitView.WorktreeDir); err != nil || !filepath.IsLocal(rel) {
+			slog.WarnContext(ctx, "materialized repository moved with a restored archive", "view_id", gitView.ViewID)
+			continue
+		}
 		if err := adoptGitView(ctx, services, gitView, core, nil, gitView.Repos); err != nil {
 			return err
 		}
@@ -345,8 +351,30 @@ func (m *Manager) offerMaterializedBranchesForRecovery(ctx context.Context) erro
 			}
 		}
 		branchClaimsMu.Unlock()
+		if err := m.republishLostCheckpoint(ctx, clean); err != nil {
+			slog.WarnContext(ctx, "republish materialized checkpoint", "job_id", tree.JobID, "err", err)
+		}
 	}
 	return nil
+}
+
+// republishLostCheckpoint serves a branch whose metadata names a checkpoint no store holds, as a restored
+// archive leaves one: its trees came back, and they are all the capture needs.
+func (m *Manager) republishLostCheckpoint(ctx context.Context, branchRoot string) error {
+	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
+	meta, err := LoadJobMeta(metaDir)
+	if err != nil || meta.LastPublishedCheckpointID == "" {
+		return err
+	}
+	if _, err := m.recovery.CheckpointStore().LoadManifest(meta.LastPublishedCheckpointID); !errors.Is(err, checkpoint.ErrCheckpointNotFound) {
+		return err
+	}
+	meta.LastPublishedCheckpointID, meta.CheckpointStoreDir = "", ""
+	if err := WriteJobMeta(metaDir, meta); err != nil {
+		return err
+	}
+	_, err = PublishBranchCheckpoint(ctx, branchRoot)
+	return err
 }
 
 func (m *Manager) reopenMaterializedBranch(ctx context.Context, branchRoot, jobID string) (*branchLayeredView, error) {
@@ -369,9 +397,18 @@ func (m *Manager) reopenMaterializedBranch(ctx context.Context, branchRoot, jobI
 	if err := os.RemoveAll(backing); err != nil {
 		return nil, err
 	}
+	layout, err := layoutFromJobMeta(meta)
+	if err != nil {
+		return nil, err
+	}
+	targets, err := branchTargetDirs(branchRoot, grantsForSources(layout.Roots))
+	if err != nil {
+		return nil, err
+	}
 	view, err := eager.Reopen(ctx, adapter.ReopenRequest{
 		ViewID: viewID, RuntimeDir: filepath.Join(m.branchRoot, adapterRuntimeDirName, filepath.Base(filepath.Dir(branchRoot))),
 		BackingDir: backing, StatManifestPath: enginepaths.StatManifestForBranchRoot(branchRoot),
+		WorkspaceDirs: targets, PristineDir: enginepaths.PristineTreeForBranchRoot(branchRoot),
 	})
 	if err != nil {
 		return nil, err

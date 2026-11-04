@@ -51,9 +51,30 @@ func branchTreeRoot(rel string) string {
 	return strings.Join(parts[:3], "/")
 }
 
+// materializedBaseOwner names the branch whose exact base rel belongs to: a materialized worker's
+// changes can only be derived again from its pristine tree and stat manifest, so they go with its tree.
+func materializedBaseOwner(rel string) string {
+	if rel != filepath.ToSlash(filepath.Clean(rel)) {
+		return ""
+	}
+	parts := strings.Split(rel, "/")
+	if len(parts) < 4 || parts[0] != enginepaths.WorkerBranchesDirName || !enginepaths.IsJobMetaDirName(parts[2]) ||
+		parts[2] == enginepaths.JobMetaDirSuffix || !workerMetadataPath(strings.Join(parts[:2], "/"), true) {
+		return ""
+	}
+	switch parts[3] {
+	case "pristine", "stat-manifest", "materialized-git.json":
+		return strings.Join(append(parts[:2:2], strings.TrimSuffix(parts[2], enginepaths.JobMetaDirSuffix)), "/")
+	}
+	return ""
+}
+
 func (s branchCapture) includes(rel string, directory bool) bool {
 	if workerMetadataPath(rel, directory) {
 		return true
+	}
+	if owner := materializedBaseOwner(rel); owner != "" {
+		return s.all || s.roots[owner]
 	}
 	root := branchTreeRoot(rel)
 	if root == "" {

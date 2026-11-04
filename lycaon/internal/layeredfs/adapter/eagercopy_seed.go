@@ -366,7 +366,7 @@ func (a *seedAccumulator) cloneOrCopy(rootID, src, dst string, mode fs.FileMode,
 	if budget := a.req.CopyBudget; budget != nil {
 		limit = max(budget.Limit-a.spentCost(), 0) + size + 1
 	}
-	n, err := a.meter.copyFile(src, dst, mode, limit)
+	n, err := a.meter.copyFile(a.ctx, src, dst, mode, limit)
 	if err != nil {
 		_ = os.Remove(dst)
 		return err

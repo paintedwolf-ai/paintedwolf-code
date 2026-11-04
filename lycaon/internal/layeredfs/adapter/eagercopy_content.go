@@ -1,12 +1,15 @@
 package adapter
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
 	"os"
 	"sync/atomic"
+
+	"github.com/lycaon/lycaon/internal/contextio"
 )
 
 // contentOpen is the one door through which a materialized path reads file content, so a clone
@@ -16,14 +19,14 @@ var contentOpen = func(path string) (*os.File, error) { return os.Open(path) }
 // contentMeter counts content bytes read through the door.
 type contentMeter struct{ read atomic.Int64 }
 
-func (m *contentMeter) hashFile(path string) (string, int64, error) {
+func (m *contentMeter) hashFile(ctx context.Context, path string) (string, int64, error) {
 	f, err := contentOpen(path)
 	if err != nil {
 		return "", 0, err
 	}
 	defer func() { _ = f.Close() }()
 	h := sha256.New()
-	n, err := io.Copy(h, f)
+	n, err := io.Copy(h, contextio.Reader{Context: ctx, Source: f})
 	m.read.Add(n)
 	if err != nil {
 		return "", n, err
@@ -43,7 +46,7 @@ func (m *contentMeter) readFile(path string) ([]byte, error) {
 }
 
 // copyFile streams at most limit bytes from src into a new dst when limit is positive.
-func (m *contentMeter) copyFile(src, dst string, mode os.FileMode, limit int64) (int64, error) {
+func (m *contentMeter) copyFile(ctx context.Context, src, dst string, mode os.FileMode, limit int64) (int64, error) {
 	in, err := contentOpen(src)
 	if err != nil {
 		return 0, err
@@ -53,9 +56,9 @@ func (m *contentMeter) copyFile(src, dst string, mode os.FileMode, limit int64) 
 	if err != nil {
 		return 0, err
 	}
-	var reader io.Reader = in
+	var reader io.Reader = contextio.Reader{Context: ctx, Source: in}
 	if limit > 0 {
-		reader = io.LimitReader(in, limit)
+		reader = io.LimitReader(reader, limit)
 	}
 	n, copyErr := io.Copy(out, reader)
 	m.read.Add(n)

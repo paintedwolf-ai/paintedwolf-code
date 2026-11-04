@@ -21,7 +21,7 @@ func TestStackedWorkerSnapshotsCompleteParentBranch(t *testing.T) {
 
 	queue := NewInMemoryQueue(2)
 	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds")))
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches")))
 	baseID, err := queue.Enqueue(t.Context(), api.WorkerTask{
 		ID: "base", ProjectID: p.ID, ParentSessionID: "parent",
 		WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical,
@@ -71,7 +71,7 @@ func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	queue := NewInMemoryQueue(1)
 	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds")))
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches")))
 	id, err := queue.Enqueue(t.Context(), api.WorkerTask{
 		ProjectID: p.ID, ParentSessionID: "parent", WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical,
 		AgentType: "implementer", Prompt: "choose", Brief: "choose",

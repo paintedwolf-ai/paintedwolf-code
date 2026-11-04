@@ -11,13 +11,14 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
 type passingConfinement struct{}
@@ -184,6 +185,9 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 	selector := adapter.NewSelector("linux", denied, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
 	selector.BudgetFor = adapter.ZeroBudget
 	mgr := newMaterializedManager(t, t.TempDir()).WithSelector(selector)
+	mgr.cloneAvailable = func(string) adapter.CloneAvailability {
+		return func(context.Context, adapter.RootGrant) (bool, error) { return false, nil }
+	}
 	var declaredBeforeCopy atomic.Bool
 	var declared atomic.Int64
 	mgr.cloneFile = func(string, string) (bool, error) {
@@ -394,5 +398,24 @@ func TestABranchWithoutAManifestKeepsItsBaselinePath(t *testing.T) {
 	}
 	if _, handled, err := OverlayWorkspaceDivergencePaths(t.Context(), root); handled || err != nil {
 		t.Fatalf("handled=%v err=%v", handled, err)
+	}
+}
+
+func TestIndexFactsCountACompletelyObservedRoot(t *testing.T) {
+	source := materializedSource(t)
+	project := "project-" + filepath.Base(source)
+	root := sourcecatalog.Root{ID: "primary", Path: source}
+	_, err := sourcecatalog.Process().Observe(t.Context(), project, []sourcecatalog.Root{root})
+	testutil.FailErr(t, "observe", err)
+	grants := withIndexFacts(t.Context(), project, []adapter.RootGrant{{RootID: "primary", SourcePath: source, IsPrimary: true}})
+	if grants[0].Estimate == nil {
+		t.Fatal("a settled catalog supplies no facts")
+	}
+	want := int64(len("package main\n") + len("package gone\n") + len("package kept\n"))
+	if grants[0].Estimate.EstimatedBytes != want || grants[0].Estimate.EstimatedEntries < 3 {
+		t.Fatalf("estimate = %+v", grants[0].Estimate)
+	}
+	if bare := withIndexFacts(t.Context(), "", []adapter.RootGrant{{RootID: "primary", SourcePath: source}}); bare[0].Estimate != nil {
+		t.Fatalf("no project should mean no facts: %+v", bare[0].Estimate)
 	}
 }

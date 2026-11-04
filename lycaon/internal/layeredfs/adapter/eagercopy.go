@@ -239,7 +239,11 @@ type ReopenRequest struct {
 	RuntimeDir       string
 	BackingDir       string
 	StatManifestPath string
-	ObservationSink  layeredfs.ObservationSink
+	// WorkspaceDirs and PristineDir say where the trees are now, which a restored archive moves.
+	// Unset, a view is where its manifest recorded it.
+	WorkspaceDirs   map[string]string
+	PristineDir     string
+	ObservationSink layeredfs.ObservationSink
 }
 
 // Reopen rebuilds a materialized view's Core from its stat manifest and pristine tree. The next
@@ -261,6 +265,12 @@ func (a *EagerCopyAdapter) Reopen(ctx context.Context, req ReopenRequest) (*Prep
 	primaryID, primaryPath := "", ""
 	var deny []string
 	for _, r := range header.Roots {
+		if dir := strings.TrimSpace(req.WorkspaceDirs[r.RootID]); dir != "" {
+			r.WorkspacePath = dir
+		}
+		if req.PristineDir != "" {
+			r.PristinePath = filepath.Join(req.PristineDir, r.RootID)
+		}
 		roots = append(roots, PreparedRoot{
 			RootID: r.RootID, Label: r.Label, SourcePath: r.SourcePath, Subroot: r.Subroot,
 			WorkspacePath: r.WorkspacePath, PristinePath: r.PristinePath, IsPrimary: r.IsPrimary,

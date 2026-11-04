@@ -162,6 +162,9 @@ func NewManager(branchRoot string) *Manager {
 	}
 }
 
+// BranchBase is the directory this manager keeps branches under.
+func (m *Manager) BranchBase() string { return m.branchRoot }
+
 // WithRecovery settles and rebuilds this manager's worker views through coord.
 func (m *Manager) WithRecovery(coord *recovery.Coordinator) *Manager {
 	m.recovery = coord

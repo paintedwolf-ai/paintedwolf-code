@@ -26,7 +26,7 @@ func TestReconcileSandboxRootsRemovesUnregisteredProjects(t *testing.T) {
 
 	removed, err := workspace.ReconcileSandboxRoots(context.Background(), branchRoot, []string{live}, nil, retainedJobIDs(nil))
 	testutil.FailErr(t, "ReconcileSandboxRoots", err)
-	if removed != 2 {
+	if removed != 1 {
 		t.Fatalf("removed = %d, want the orphan branch tree", removed)
 	}
 	if _, err := os.Stat(goneJob); !os.IsNotExist(err) {

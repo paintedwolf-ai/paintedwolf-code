@@ -331,7 +331,7 @@ func TestWorktreeReach_workerInheritance(t *testing.T) {
 		t.Fatalf("child root = %q want inherited worktree %q", childCtx.Source.Roots[0].Path, f.wtPath)
 	}
 
-	ws := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds"))
+	ws := workspace.NewManager(filepath.Join(t.TempDir(), "branches"))
 	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(t.Context(), tctx.Source.Roots, tctx.Source.Roots, tctx.Source.ActiveRootID, "job-reach")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	if !sameReachPath(layout.Roots[0].Path, f.wtPath) {

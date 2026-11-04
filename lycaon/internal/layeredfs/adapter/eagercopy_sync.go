@@ -157,7 +157,7 @@ func (s *statCapture) capture(ctx context.Context, view *PreparedView) error {
 			return err
 		}
 		for _, rec := range gone {
-			if err := s.removeEntry(view.Core, rec); err != nil {
+			if err := s.removeEntry(ctx, view.Core, rec); err != nil {
 				return err
 			}
 		}
@@ -165,7 +165,7 @@ func (s *statCapture) capture(ctx context.Context, view *PreparedView) error {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if err := s.applyVisit(view.Core, v, startedNS); err != nil {
+			if err := s.applyVisit(ctx, view.Core, v, startedNS); err != nil {
 				return err
 			}
 		}
@@ -173,9 +173,9 @@ func (s *statCapture) capture(ctx context.Context, view *PreparedView) error {
 	return nil
 }
 
-func (s *statCapture) removeEntry(core *layeredfs.Core, rec statRecord) error {
+func (s *statCapture) removeEntry(ctx context.Context, core *layeredfs.Core, rec statRecord) error {
 	qp := rec.qualified()
-	if _, err := s.baseFor(core, qp); err != nil {
+	if _, err := s.baseFor(ctx, core, qp); err != nil {
 		return err
 	}
 	rmdir := rec.Kind == layeredfs.EntryDirectory
@@ -188,8 +188,8 @@ func (s *statCapture) removeEntry(core *layeredfs.Core, rec statRecord) error {
 	return nil
 }
 
-func (s *statCapture) applyVisit(core *layeredfs.Core, v statVisit, startedNS int64) error {
-	base, err := s.baseFor(core, v.qp)
+func (s *statCapture) applyVisit(ctx context.Context, core *layeredfs.Core, v statVisit, startedNS int64) error {
+	base, err := s.baseFor(ctx, core, v.qp)
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func (s *statCapture) applyVisit(core *layeredfs.Core, v statVisit, startedNS in
 		rec = recordStat(v.qp.RootID, v.qp.Rel, layeredfs.EntrySymlink, v.info)
 		rec.LinkTarget = s.synced[v.qp].LinkTarget
 	case v.info.Mode().IsRegular():
-		err = syncRegularEntry(core, &s.meter, v.qp, v.path, v.info, base, s.synced)
+		err = syncRegularEntry(ctx, core, &s.meter, v.qp, v.path, v.info, base, s.synced)
 		rec = recordStat(v.qp.RootID, v.qp.Rel, layeredfs.EntryRegular, v.info)
 	default:
 		return nil
@@ -220,7 +220,7 @@ func (s *statCapture) applyVisit(core *layeredfs.Core, v statVisit, startedNS in
 // baseFor reads a path's exact base from the pristine tree the first time a capture needs it and
 // hands it to Core, which holds it from then on. A path the manifest does not name has no such base,
 // and one a parent layer supplies keeps the parent's: Core captures both of those itself.
-func (s *statCapture) baseFor(core *layeredfs.Core, qp layeredfs.QualifiedPath) (layeredfs.BaseCapture, error) {
+func (s *statCapture) baseFor(ctx context.Context, core *layeredfs.Core, qp layeredfs.QualifiedPath) (layeredfs.BaseCapture, error) {
 	if base, ok := s.bases[qp]; ok {
 		return base, nil
 	}
@@ -231,7 +231,7 @@ func (s *statCapture) baseFor(core *layeredfs.Core, qp layeredfs.QualifiedPath) 
 	if s.heldByParent(qp) {
 		return layeredfs.BaseCapture{}, nil
 	}
-	base, err := s.readPristineBase(rec)
+	base, err := s.readPristineBase(ctx, rec)
 	if err != nil {
 		return layeredfs.BaseCapture{}, err
 	}
@@ -254,10 +254,11 @@ func (s *statCapture) heldByParent(qp layeredfs.QualifiedPath) bool {
 	return false
 }
 
-func (s *statCapture) readPristineBase(rec statRecord) (layeredfs.BaseCapture, error) {
+func (s *statCapture) readPristineBase(ctx context.Context, rec statRecord) (layeredfs.BaseCapture, error) {
 	full := filepath.Join(s.pristine[rec.Root], filepath.FromSlash(rec.Rel))
 	xattrs, err := readPathXattrs(full)
-	if err != nil {
+	// An archive keeps files, so a restored pristine tree can lack an empty directory; its mode is here.
+	if err != nil && !(rec.Kind == layeredfs.EntryDirectory && errors.Is(err, fs.ErrNotExist)) {
 		return layeredfs.BaseCapture{}, err
 	}
 	base := layeredfs.BaseCapture{
@@ -265,11 +266,11 @@ func (s *statCapture) readPristineBase(rec statRecord) (layeredfs.BaseCapture, e
 		ModTime: rec.modTime(), LinkTarget: rec.LinkTarget, Xattrs: xattrs, CapturedAt: time.Now(),
 	}
 	if rec.Kind == layeredfs.EntryRegular {
-		sha, size, err := s.meter.hashFile(full)
+		sha, size, err := s.meter.hashFile(ctx, full)
 		if err != nil {
 			return layeredfs.BaseCapture{}, err
 		}
-		held, err := s.holdBaseBytes(full)
+		held, err := s.holdBaseBytes(ctx, full)
 		if err != nil {
 			return layeredfs.BaseCapture{}, err
 		}
@@ -278,7 +279,7 @@ func (s *statCapture) readPristineBase(rec statRecord) (layeredfs.BaseCapture, e
 	return base, nil
 }
 
-func (s *statCapture) holdBaseBytes(pristinePath string) (string, error) {
+func (s *statCapture) holdBaseBytes(ctx context.Context, pristinePath string) (string, error) {
 	s.baseSeq++
 	held := filepath.Join(s.basesDir, fmt.Sprintf("pristine-base-%08d", s.baseSeq))
 	cloned, err := fileclone.Clone(pristinePath, held)
@@ -286,7 +287,7 @@ func (s *statCapture) holdBaseBytes(pristinePath string) (string, error) {
 		return "", err
 	}
 	if !cloned {
-		if _, err := s.meter.copyFile(pristinePath, held, 0o600, 0); err != nil {
+		if _, err := s.meter.copyFile(ctx, pristinePath, held, 0o600, 0); err != nil {
 			return "", err
 		}
 	}
@@ -314,7 +315,7 @@ func (s *statCapture) changedPaths(ctx context.Context, roots []PreparedRoot) ([
 		visited := make(map[layeredfs.QualifiedPath]struct{}, len(visits))
 		for _, v := range visits {
 			visited[v.qp] = struct{}{}
-			differs, err := s.differsFromBase(v)
+			differs, err := s.differsFromBase(ctx, v)
 			if err != nil {
 				return nil, err
 			}
@@ -322,7 +323,7 @@ func (s *statCapture) changedPaths(ctx context.Context, roots []PreparedRoot) ([
 				out = append(out, v.qp)
 			}
 		}
-		captured, err := s.capturedDifferences(r, visited)
+		captured, err := s.capturedDifferences(ctx, r, visited)
 		if err != nil {
 			return nil, err
 		}
@@ -336,7 +337,7 @@ func (s *statCapture) changedPaths(ctx context.Context, roots []PreparedRoot) ([
 
 // capturedDifferences answers for paths an earlier capture took in, whose stat now matches the
 // capture rather than the base, and for bases it removed.
-func (s *statCapture) capturedDifferences(r PreparedRoot, visited map[layeredfs.QualifiedPath]struct{}) ([]layeredfs.QualifiedPath, error) {
+func (s *statCapture) capturedDifferences(ctx context.Context, r PreparedRoot, visited map[layeredfs.QualifiedPath]struct{}) ([]layeredfs.QualifiedPath, error) {
 	var out []layeredfs.QualifiedPath
 	for qp := range s.refreshed {
 		if _, done := visited[qp]; done || qp.RootID != r.RootID {
@@ -347,7 +348,7 @@ func (s *statCapture) capturedDifferences(r PreparedRoot, visited map[layeredfs.
 		if err != nil {
 			continue
 		}
-		differs, err := s.differsFromBase(statVisit{qp: qp, path: full, info: info})
+		differs, err := s.differsFromBase(ctx, statVisit{qp: qp, path: full, info: info})
 		if err != nil {
 			return nil, err
 		}
@@ -366,7 +367,7 @@ func (s *statCapture) capturedDifferences(r PreparedRoot, visited map[layeredfs.
 	return out, nil
 }
 
-func (s *statCapture) differsFromBase(v statVisit) (bool, error) {
+func (s *statCapture) differsFromBase(ctx context.Context, v statVisit) (bool, error) {
 	rec, inManifest := s.manifest[v.qp]
 	if !inManifest || !entryKindMatchesMode(rec.Kind, v.info.Mode()) {
 		return true, nil
@@ -381,11 +382,11 @@ func (s *statCapture) differsFromBase(v statVisit) (bool, error) {
 	if v.info.Mode().Perm() != rec.fileMode().Perm() {
 		return true, nil
 	}
-	diskSHA, _, err := s.meter.hashFile(v.path)
+	diskSHA, _, err := s.meter.hashFile(ctx, v.path)
 	if err != nil {
 		return false, err
 	}
-	baseSHA, _, err := s.meter.hashFile(filepath.Join(s.pristine[rec.Root], filepath.FromSlash(rec.Rel)))
+	baseSHA, _, err := s.meter.hashFile(ctx, filepath.Join(s.pristine[rec.Root], filepath.FromSlash(rec.Rel)))
 	if err != nil {
 		return false, err
 	}
@@ -450,6 +451,7 @@ func syncSymlinkEntry(
 // syncRegularEntry looks at one file whose stat differs. A hash that matches what Core already holds
 // stops here, so a touched file costs a read and no write.
 func syncRegularEntry(
+	ctx context.Context,
 	core *layeredfs.Core,
 	meter *contentMeter,
 	qp layeredfs.QualifiedPath,
@@ -465,7 +467,7 @@ func syncRegularEntry(
 		cur.Mode.Perm() != base.Mode.Perm() ||
 		!xattrsEqual(cur.Xattrs, base.Xattrs)
 
-	diskSHA, size, err := meter.hashFile(fullPath)
+	diskSHA, size, err := meter.hashFile(ctx, fullPath)
 	if err != nil {
 		return err
 	}
