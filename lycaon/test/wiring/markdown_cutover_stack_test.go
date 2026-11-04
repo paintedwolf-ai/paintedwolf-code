@@ -251,7 +251,7 @@ func TestNoteAndEffectSurviveAnInterruptedTurnOnce(t *testing.T) {
 		{fail: errors.New("connection lost")},
 		{text: "The effect was recorded once."},
 	}}
-	h, sess, dir, firstErr := runStack(t, script, "inspect")
+	h, sess, _, firstErr := runStack(t, script, "inspect")
 	if firstErr == nil {
 		t.Log("the provider failure ended the turn without a prompt error")
 	}
@@ -263,7 +263,9 @@ func TestNoteAndEffectSurviveAnInterruptedTurnOnce(t *testing.T) {
 	if len(notes) != 1 || notes[0].Content != "Starting on the notes." || notes[0].ID != wire.MidTurnNoteID(carrierOf(t, msgs, "command")) {
 		t.Fatalf("notes = %+v", notes)
 	}
-	effect, err := os.ReadFile(filepath.Join(dir, "effect.txt"))
+	reloaded, err := h.Store.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "reload session", err)
+	effect, err := os.ReadFile(filepath.Join(reloaded.WorkspacePath, "effect.txt"))
 	testutil.FailErr(t, "read effect", err)
 	if string(effect) != "ran\n" {
 		t.Fatalf("the tool effect replayed: %q", effect)
