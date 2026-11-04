@@ -12,65 +12,19 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
 
-// ReconcileOwnedWorkerViews reconciles only the mounts, connections, and processes belonging
-// to the specified worker IDs using their recorded identities, without sweeping path prefixes.
-func ReconcileOwnedWorkerViews(
-	ctx context.Context,
-	coord *recovery.Coordinator,
-	workerIDs []string,
-	retainJobIDs map[string]struct{},
-) (settled int, err error) {
-	if coord == nil {
-		return 0, nil
-	}
-	var errs []error
-	for _, workerID := range workerIDs {
-		if err := ctx.Err(); err != nil {
-			return settled, err
-		}
-		workerID = strings.TrimSpace(workerID)
-		if workerID == "" {
-			continue
-		}
-		if _, keep := retainJobIDs[workerID]; keep {
-			continue
-		}
-		j, lErr := coord.LoadWorkerJournal(workerID)
-		if lErr != nil {
-			if os.IsNotExist(lErr) {
-				continue
-			}
-			errs = append(errs, lErr)
-			continue
-		}
-		if j.ViewID == "" {
-			continue
-		}
-		if _, hasIdent, iErr := coord.LoadMountIdentity(workerID, j.ViewID); iErr != nil {
-			errs = append(errs, iErr)
-			continue
-		} else if !hasIdent {
-			continue
-		}
-		if _, cErr := coord.CancelAndRelease(ctx, recovery.CancelReleaseRequest{
-			WorkerID: workerID,
-			ViewID:   j.ViewID,
-		}); cErr != nil {
-			errs = append(errs, cErr)
-			continue
-		}
-		settled++
-	}
-	return settled, errors.Join(errs...)
-}
+// SandboxSettler proves nothing recorded can still reach a worker's data. An error
+// keeps the sandbox, and the settler retains the state a later retry resumes from.
+type SandboxSettler func(ctx context.Context, jobID, root string) error
 
-// ReconcileStaleSandboxes removes snapshotted candidates absent from current task state.
+// ReconcileStaleSandboxes removes snapshotted candidates absent from current task state,
+// settling each one first. A blocked candidate is kept and reported; the rest proceed.
 func ReconcileStaleSandboxes(
 	ctx context.Context,
 	branchRoot, primaryDir string,
+	settle SandboxSettler,
 	loadRetainedJobIDs func(context.Context) (map[string]struct{}, error),
 ) (removed int, err error) {
 	listing, err := listSandboxEntries(branchRoot, primaryDir)
@@ -92,15 +46,20 @@ func ReconcileStaleSandboxes(
 		}
 		return modI.Before(modJ)
 	})
+	var blocked []error
 	for _, dir := range listing.jobs {
 		if err := ctx.Err(); err != nil {
-			return removed, err
+			return removed, errors.Join(append(blocked, err)...)
 		}
 		if _, keep := retainJobIDs[dir.jobID]; keep {
 			continue
 		}
+		if err := settleBeforeRemoval(ctx, settle, dir.jobID, dir.root); err != nil {
+			blocked = append(blocked, err)
+			continue
+		}
 		if err := removeJobSandbox(dir.root); err != nil {
-			return removed, err
+			return removed, errors.Join(append(blocked, err)...)
 		}
 		removed++
 		slog.InfoContext(ctx, "removed stale worker sandbox",
@@ -111,9 +70,55 @@ func ReconcileStaleSandboxes(
 	}
 	orphans, err := removeUnretainedOrphanMeta(ctx, primaryDir, listing.metas, retainJobIDs)
 	if err != nil {
-		return removed, err
+		return removed, errors.Join(append(blocked, err)...)
 	}
-	return removed + orphans, nil
+	return removed + orphans, errors.Join(blocked...)
+}
+
+func settleBeforeRemoval(ctx context.Context, settle SandboxSettler, jobID, root string) error {
+	if settle != nil {
+		if err := settle(ctx, jobID, root); err != nil {
+			return fmt.Errorf("settle worker %s before removal: %w", jobID, err)
+		}
+	}
+	return RefuseMountedBranch(root)
+}
+
+// ErrBranchMounted refuses to delete through a filesystem still mounted in a branch tree.
+var ErrBranchMounted = errors.New("worker branch tree is mounted")
+
+// RefuseMountedBranch fails while a mount boundary remains at a branch root or at a per-root
+// directory beneath it. It reads kernel facts, so it holds even when records are missing:
+// recursive removal through a live mount would delete the worker's result.
+func RefuseMountedBranch(root string) error {
+	mounted, err := adapter.MountBoundaryPresent(root)
+	if err != nil {
+		return err
+	}
+	if mounted {
+		return fmt.Errorf("%w: %s", ErrBranchMounted, root)
+	}
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("%w: %s: %w", ErrBranchMounted, root, err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		child := filepath.Join(root, entry.Name())
+		mounted, err := adapter.MountBoundaryPresent(child)
+		if err != nil {
+			return err
+		}
+		if mounted {
+			return fmt.Errorf("%w: %s", ErrBranchMounted, child)
+		}
+	}
+	return nil
 }
 
 type sandboxDir struct {
@@ -208,6 +213,9 @@ func removeJobSandbox(root string) error {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return fmt.Errorf("sandbox root required")
+	}
+	if err := RefuseMountedBranch(root); err != nil {
+		return err
 	}
 	meta := enginepaths.MetaDirForBranchRoot(root)
 	if err := os.RemoveAll(root); err != nil {

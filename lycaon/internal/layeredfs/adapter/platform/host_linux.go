@@ -18,3 +18,9 @@ func newHostSelector(cfg Config) *adapter.Selector {
 	}
 	return adapter.NewSelector("linux", fuselinux.New(fuseCfg), nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
 }
+
+// ConnectionRecoveries names the adapters able to settle connections left by an earlier engine
+// process. A mounted adapter absent here settles only once its mount is gone.
+func ConnectionRecoveries() map[adapter.AdapterID]adapter.ConnectionRecovery {
+	return map[adapter.AdapterID]adapter.ConnectionRecovery{adapter.AdapterFUSELinux: fuselinux.New(fuselinux.Config{})}
+}

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/branchretention"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
@@ -27,6 +29,7 @@ type Runtime struct {
 	Executor        *worker.LocalWorkerExecutor
 	Cancel          *worker.CancelService
 	Workspace       *workspace.Manager
+	Recovery        *recovery.Coordinator
 	Criteria        delegation.CriteriaChecker
 	InjectRenderer  *prompts.InjectRenderer
 	PlaybookMatcher *prompts.PlaybookMatcher
@@ -80,8 +83,47 @@ func (r *Runtime) BranchRetentionDeps() branchretention.Deps {
 			}
 			return out, nil
 		},
-		Evict: workspace.EvictJobTree,
+		Evict: worker.BranchEvictor(r.Queue),
 	}
+}
+
+// SandboxSettler settles a worker's runtime before any path deletes its sandbox.
+func (r *Runtime) SandboxSettler() workspace.SandboxSettler {
+	if r.Workspace == nil {
+		return nil
+	}
+	return r.Workspace.SettleBranchRuntime
+}
+
+// RecoverWorkerViews runs once at engine startup, before the poller can claim. Collection runs
+// here too, because no publisher can be mid-capture yet; a failure is reported, not fatal.
+func (r *Runtime) RecoverWorkerViews(ctx context.Context) error {
+	if r.Recovery == nil || r.Queue == nil {
+		return nil
+	}
+	err := worker.RecoverWorkerViewsAtStartup(ctx, r.Queue, r.Workspace)
+	if _, gcErr := r.Recovery.CollectGarbage(ctx); gcErr != nil {
+		slog.WarnContext(ctx, "collect retained worker checkpoints", "err", gcErr)
+	}
+	r.reportLocalDataInventory(ctx)
+	return err
+}
+
+// reportLocalDataInventory states what startup found in each local-data bucket.
+func (r *Runtime) reportLocalDataInventory(ctx context.Context) {
+	inventory, err := workspace.BuildLocalDataInventory(ctx, r.BranchRoot, r.SeedRoot, r.Recovery)
+	if err != nil {
+		slog.WarnContext(ctx, "build worker local data inventory", "err", err)
+		return
+	}
+	bytesByBucket := make(map[recovery.InventoryBucket]int64, 3)
+	for _, entry := range inventory.Entries {
+		bytesByBucket[entry.Bucket] += entry.Bytes
+	}
+	slog.InfoContext(ctx, "worker local data",
+		"retained_results_bytes", bytesByBucket[recovery.BucketRetainedWorkerResults],
+		"interrupted_bytes", bytesByBucket[recovery.BucketInterruptedWorkingData],
+		"disposable_bytes", bytesByBucket[recovery.BucketDisposableRuntimeCache])
 }
 
 // ReconcileWorkerSandboxes preserves durable job references even when their captured root is detached.
@@ -100,13 +142,14 @@ func (r *Runtime) ReconcileWorkerSandboxes(ctx context.Context, roots []string) 
 		}
 		return retained, nil
 	}
-	removed, err := workspace.ReconcileSandboxRoots(ctx, r.BranchRoot, r.SeedRoot, roots, loadRetainedJobs)
+	settle := r.SandboxSettler()
+	removed, err := workspace.ReconcileSandboxRoots(ctx, r.BranchRoot, r.SeedRoot, roots, settle, loadRetainedJobs)
 	var errs []error
 	if err != nil {
 		errs = append(errs, err)
 	}
 	for _, root := range roots {
-		removedJobs, jobErr := worker.ReconcileProjectSandboxes(ctx, r.BranchRoot, root, func(c context.Context) ([]wire.WorkerTask, error) {
+		removedJobs, jobErr := worker.ReconcileProjectSandboxes(ctx, r.BranchRoot, root, settle, func(c context.Context) ([]wire.WorkerTask, error) {
 			return r.Queue.ListByWorkspacePath(c, root)
 		})
 		removed += removedJobs

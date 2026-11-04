@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	lexec "github.com/lycaon/lycaon/internal/exec"
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -119,7 +118,7 @@ func New(cfg Config) *Adapter {
 		cfg.HostOS = runtime.GOOS
 	}
 	if cfg.FusermountBin == "" {
-		if resolved, err := exec.LookPath("fusermount3"); err == nil && resolved != "" {
+		if resolved, err := execpkg.LookPath("fusermount3"); err == nil && resolved != "" {
 			cfg.FusermountBin = resolved
 		} else {
 			cfg.FusermountBin = DefaultFusermountBin
@@ -256,9 +255,9 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, err.Error()
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
 	}
-	out, _, code, cErr := lexec.RunSeparate(ctx, "/bin/sh", []string{"-c", "cat probe.txt"}, lexec.ExecOpts{Launch: lexec.HostLaunch("workspace mount probe"), Dir: prep.PrimaryWorkPath})
-	if cErr != nil || code != 0 || strings.TrimSpace(string(out)) != "coherent-probe" {
-		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: err=%v exit=%d out=%q", cErr, code, string(out))
+	out, exitCode, cErr := execpkg.Run(ctx, "/bin/sh", []string{"-c", "cat probe.txt"}, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_probe"), Dir: prep.PrimaryWorkPath})
+	if cErr != nil || exitCode != 0 || strings.TrimSpace(string(out)) != "coherent-probe" {
+		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: exit=%d err=%v out=%q", exitCode, cErr, string(out))
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}
 	}
 	res.WriteExercised = true

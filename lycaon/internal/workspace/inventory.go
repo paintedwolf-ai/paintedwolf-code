@@ -43,13 +43,12 @@ func BuildLocalDataInventory(
 		return recovery.LocalDataInventory{}, err
 	}
 	for _, t := range trees {
-		bucket := recovery.BucketDisposableRuntimeCache
 		if !t.Present {
-			bucket = recovery.BucketRetainedWorkerResults
+			continue
 		}
 		inv.Entries = append(inv.Entries, recovery.InventoryEntry{
 			ID:        "branch-" + t.ProjectKey + "-" + t.JobID,
-			Bucket:    bucket,
+			Bucket:    classifyBranchTree(coord, t.JobID),
 			WorkerID:  t.JobID,
 			Path:      t.Root,
 			Bytes:     t.AllocatedBytes,
@@ -93,6 +92,19 @@ type SeedCacheStatus struct {
 	LogicalBytes   int64
 	AllocatedBytes int64
 	LastUsed       time.Time
+}
+
+// classifyBranchTree separates a tree a retained checkpoint can rebuild from one that may hold
+// the only copy of its work, including when its recovery record cannot be read.
+func classifyBranchTree(coord *recovery.Coordinator, jobID string) recovery.InventoryBucket {
+	if coord == nil {
+		return recovery.BucketInterruptedWorkingData
+	}
+	journal, err := coord.LoadWorkerJournal(jobID)
+	if err == nil && journal.LastPublishedCheckpointID != "" && journal.ActivePhase == "" {
+		return recovery.BucketDisposableRuntimeCache
+	}
+	return recovery.BucketInterruptedWorkingData
 }
 
 // ListJobTrees inventories every branch under branchRoot across projects.
@@ -169,7 +181,8 @@ func listProjectJobTrees(ctx context.Context, parent, projectKey string) ([]JobT
 				t.Roots = layout.Roots
 			}
 		}
-		if t.Present {
+		// A mount's bytes are not the tree's, and a dead one fails every stat beneath it.
+		if t.Present && RefuseMountedBranch(t.Root) == nil {
 			bytes, err := treeAllocatedBytes(ctx, t.Root)
 			if err != nil {
 				return nil, err

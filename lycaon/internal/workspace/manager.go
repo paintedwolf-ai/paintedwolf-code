@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 )
 
 var sharedBranchViews sync.Map // map[string]branchViewState
@@ -169,6 +170,7 @@ type Manager struct {
 	maxEntries int64
 	maxBytes   int64
 	selector   *adapter.Selector
+	recovery   *recovery.Coordinator
 	viewsMu    sync.Mutex
 	views      map[string]branchViewState
 	privateGit *privategit.Manager
@@ -188,6 +190,12 @@ func NewManager(branchRoot, seedRoot string) *Manager {
 		maxBytes:   adapter.DefaultMaxBytes,
 		views:      make(map[string]branchViewState),
 	}
+}
+
+// WithRecovery settles and rebuilds this manager's worker views through coord.
+func (m *Manager) WithRecovery(coord *recovery.Coordinator) *Manager {
+	m.recovery = coord
+	return m
 }
 
 // WithSelector configures an explicit workspace adapter Selector on the Manager (#1658).

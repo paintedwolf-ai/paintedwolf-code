@@ -3,8 +3,6 @@ package recovery
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,6 +21,7 @@ func validateWorkerOwnership(j WorkerLifecycleJournal, expectedTaskID, expectedP
 }
 
 func settleOwnedRuntimeForRecovery(
+	ctx context.Context,
 	c *Coordinator,
 	workerID, prevViewID, fallbackBacking string,
 ) (ProcessSettlementReceipt, MountSettlementReceipt, string, error) {
@@ -43,58 +42,8 @@ func settleOwnedRuntimeForRecovery(
 	if backingDir == "" {
 		backingDir = ident.BackingDir
 	}
-
-	if c.cfg.ProcessCtrl != nil && len(ident.RecordedPIDs) > 0 {
-		procRec, err = c.cfg.ProcessCtrl.SettleProcesses(workerID, prevViewID, ident.RecordedPIDs)
-		if err != nil || !procRec.Settled || len(procRec.SurvivingPIDs) > 0 {
-			uErr := &UnresolvedSettlementError{
-				WorkerID:            workerID,
-				ViewID:              prevViewID,
-				SurvivingPIDs:       procRec.SurvivingPIDs,
-				Reason:              "surviving worker writer processes could not be settled before recovery",
-				RetainedCustody:     true,
-				RetainedStorageRefs: []string{ident.BackingDir, ident.RuntimeViewDir},
-				Cause:               err,
-			}
-			_ = c.AcquireClaim(RetentionClaim{
-				ClaimID:  "claim-unsettled-" + prevViewID,
-				Kind:     ClaimUnresolvedSettlement,
-				HolderID: prevViewID,
-				WorkerID: workerID,
-				ViewID:   prevViewID,
-			})
-			return procRec, mountRec, backingDir, uErr
-		}
-	}
-
-	if c.cfg.MountReconciler != nil {
-		mountRec, err = c.cfg.MountReconciler.ReconcileWorkerMount(ident)
-		if err != nil || !mountRec.Settled || len(mountRec.BusyPaths) > 0 {
-			uErr := &UnresolvedSettlementError{
-				WorkerID:            workerID,
-				ViewID:              prevViewID,
-				MountBusy:           true,
-				BusyMountPaths:      mountRec.BusyPaths,
-				Reason:              "owned worker mount remained busy during recovery reconciliation",
-				RetainedCustody:     true,
-				RetainedStorageRefs: []string{ident.BackingDir, ident.RuntimeViewDir},
-				Cause:               err,
-			}
-			_ = c.AcquireClaim(RetentionClaim{
-				ClaimID:  "claim-unsettled-" + prevViewID,
-				Kind:     ClaimUnresolvedSettlement,
-				HolderID: prevViewID,
-				WorkerID: workerID,
-				ViewID:   prevViewID,
-			})
-			return procRec, mountRec, backingDir, uErr
-		}
-	}
-
-	_ = c.ReleaseClaim("claim-unsettled-" + prevViewID)
-	_ = c.RemoveMountIdentity(workerID, prevViewID)
-	_ = c.RemoveInventoryEntry("inv-runtime-" + prevViewID)
-	return procRec, mountRec, backingDir, nil
+	procRec, mountRec, err = settleRecordedIdentity(ctx, c, ident)
+	return procRec, mountRec, backingDir, err
 }
 
 func salvageIfInterruptedOrUnsealed(
@@ -103,9 +52,8 @@ func salvageIfInterruptedOrUnsealed(
 	prevViewID, prevBacking string,
 	manifest checkpoint.Manifest,
 ) (*InterruptedWorkingRecord, error) {
-	hasTmpManifest := hasUncommittedCheckpointManifest(c)
 	hasUnsealed := hasUnsealedMutationsBeyondCheckpoint(prevBacking, manifest)
-	if j.ActivePhase == "" && !hasTmpManifest && !hasUnsealed {
+	if j.ActivePhase == "" && !hasUnsealed {
 		if existing, _ := c.ListInterruptedRecords(j.WorkerID); len(existing) > 0 {
 			last := existing[len(existing)-1]
 			if prevViewID == "" || last.ViewID == prevViewID {
@@ -116,9 +64,6 @@ func salvageIfInterruptedOrUnsealed(
 	}
 
 	phase := j.ActivePhase
-	if phase == "" && hasTmpManifest {
-		phase = PhasePublication
-	}
 	if phase == "" {
 		phase = PhaseActiveMutation
 	}
@@ -143,27 +88,6 @@ func salvageIfInterruptedOrUnsealed(
 		RecordedAt:   time.Now().UTC(),
 	})
 	return rec, nil
-}
-
-func hasUncommittedCheckpointManifest(c *Coordinator) bool {
-	cpRoot := filepath.Join(c.cfg.CheckpointStore.RootDir(), "checkpoints")
-	entries, err := os.ReadDir(cpRoot)
-	if err != nil {
-		return false
-	}
-	for _, d := range entries {
-		if !d.IsDir() {
-			continue
-		}
-		tmp := filepath.Join(cpRoot, d.Name(), "manifest.json.tmp")
-		fin := filepath.Join(cpRoot, d.Name(), "manifest.json")
-		if _, tErr := os.Stat(tmp); tErr == nil {
-			if _, fErr := os.Stat(fin); fErr != nil {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func reconstructViewFromManifest(
@@ -209,20 +133,37 @@ func reconstructViewFromManifest(
 		return nil, err
 	}
 
+	if err := recordPreparedViewIdentity(c, workerID, adp, view); err != nil {
+		_, _ = adp.Release(ctx, view.ViewID)
+		return nil, err
+	}
+	return view, nil
+}
+
+// recordPreparedViewIdentity fails rather than expose a view recovery could not later settle.
+func recordPreparedViewIdentity(c *Coordinator, workerID string, adp adapter.Adapter, view *adapter.PreparedView) error {
 	var mountPaths []string
 	for _, r := range view.Roots {
 		mountPaths = append(mountPaths, r.WorkspacePath)
 	}
-	_ = c.RecordMountIdentity(MountIdentityRecord{
+	connections, err := adapter.LoadRecordedConnections(view.RuntimeViewDir)
+	if err != nil {
+		return err
+	}
+	if err := c.RecordMountIdentity(MountIdentityRecord{
 		ViewID:         view.ViewID,
 		WorkerID:       workerID,
 		AdapterID:      adp.ID(),
+		Mounted:        adp.Facts().PreparationKind == adapter.PreparationMounted,
+		Connections:    connections,
 		MountPaths:     mountPaths,
 		RuntimeViewDir: view.RuntimeViewDir,
 		BackingDir:     view.BackingDir,
 		BootID:         c.cfg.CurrentBootID,
-	})
-	_ = c.UpsertInventoryEntry(InventoryEntry{
+	}); err != nil {
+		return err
+	}
+	return c.UpsertInventoryEntry(InventoryEntry{
 		ID:       "inv-runtime-" + view.ViewID,
 		Bucket:   BucketDisposableRuntimeCache,
 		WorkerID: workerID,
@@ -230,7 +171,6 @@ func reconstructViewFromManifest(
 		Path:     view.RuntimeViewDir,
 		PinnedBy: []string{view.ViewID},
 	})
-	return view, nil
 }
 
 func containsString(list []string, target string) bool {

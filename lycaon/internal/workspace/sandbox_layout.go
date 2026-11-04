@@ -208,7 +208,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 	if err != nil {
 		return err
 	}
-	choice, err := SelectWorkspaceAdapter(ctx, adapter.ProbeConfig{RuntimeDir: filepath.Join(m.branchRoot, adapterStateDirName)}, m.selector)
+	choice, err := SelectWorkspaceAdapter(ctx, adapter.ProbeConfig{RuntimeDir: filepath.Join(m.branchRoot, adapterRuntimeDirName)}, m.selector)
 	if err != nil {
 		return classifyProvisionError(err)
 	}
@@ -227,7 +227,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 	}
 
 	if len(sources) == 1 {
-		rtDir := filepath.Join(m.branchRoot, adapterStateDirName, enginepaths.ProjectKey(sources[0].Path))
+		rtDir := filepath.Join(m.branchRoot, adapterRuntimeDirName, enginepaths.ProjectKey(sources[0].Path))
 		view, err := provisionRoot(ctx, m, sources[0], branchRoot, rtDir, binding.ID, choice.Facts.FallbackReason)
 		if err != nil {
 			return err
@@ -245,7 +245,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 		if err != nil {
 			return err
 		}
-		rtDir := filepath.Join(m.branchRoot, adapterStateDirName, enginepaths.ProjectKey(source.Path))
+		rtDir := filepath.Join(m.branchRoot, adapterRuntimeDirName, enginepaths.ProjectKey(source.Path))
 		viewID := binding.ID + "-" + source.ID
 		view, err := provisionRoot(ctx, m, source, filepath.Join(branchRoot, dir), rtDir, viewID, choice.Facts.FallbackReason)
 		if err != nil {

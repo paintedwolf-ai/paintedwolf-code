@@ -4,6 +4,7 @@ package fuselinux
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,10 +14,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"golang.org/x/sys/unix"
 )
 
 const deadMountProbeBound = 5 * time.Second
+
+const (
+	fuseConnectionsRoot = "/sys/fs/fuse/connections"
+	sigkillPendingBit   = 1 << (uint(unix.SIGKILL) - 1)
+)
 
 type kernelMountEntry struct {
 	mountID       string
@@ -141,26 +148,110 @@ func checkKernelMountTable(mountPath, expectedFSName, expectedDev string) (bool,
 	return true, true
 }
 
-// deadViewMountPaths returns this user's view mounts under runtimeRoot whose FUSE connection has
-// ended. statfs always reaches the connection, and ENOTCONN is the kernel's report that it is gone. A mount that does not answer within the probe
-// bound still has a server, however slow, and is left alone.
-func deadViewMountPaths(ctx context.Context, runtimeRoot string, uid uint32) ([]string, error) {
+// findRecordedMount matches the mount table against a recorded identity. The source is
+// unique to the view and root, and the device, once recorded, names the connection.
+func findRecordedMount(rec adapter.RecordedConnection) (kernelMountEntry, recordedMountState, error) {
 	entries, err := readMountInfoEntries()
 	if err != nil {
-		return nil, err
+		return kernelMountEntry{}, recordedMountAbsent, err
 	}
-	root := canonicalPath(runtimeRoot)
-	wantOwner := fmt.Sprintf("user_id=%d", uid)
-	var dead []string
-	for _, entry := range entries {
-		if entry.filesystem != "fuse."+DefaultSubtype || !hasMountOption(entry.superOptions, wantOwner) || !pathWithin(root, entry.mountPoint) {
+	canonical := canonicalPath(rec.MountPath)
+	var matched *kernelMountEntry
+	for i := range entries {
+		if filepath.Clean(entries[i].mountPoint) == canonical {
+			matched = &entries[i]
+		}
+	}
+	if matched == nil {
+		return kernelMountEntry{}, recordedMountAbsent, nil
+	}
+	owner := fmt.Sprintf("user_id=%d", rec.OwnerUID)
+	if matched.filesystem != "fuse."+DefaultSubtype || matched.source != rec.FSName || !hasMountOption(matched.superOptions, owner) {
+		return *matched, recordedMountForeign, nil
+	}
+	if rec.DevMajorMinor != "" && matched.devMajorMinor != rec.DevMajorMinor {
+		return *matched, recordedMountForeign, nil
+	}
+	return *matched, recordedMountMatches, nil
+}
+
+// servingProcessEnded proves the recorded server cannot run again. Beyond a process that is
+// gone, a thread group whose leader has exited and whose every remaining thread has SIGKILL
+// pending is dying: it is held only by a thread waiting uninterruptibly on its own mount.
+func servingProcessEnded(server adapter.ProcessIdentity) bool {
+	if server.Ended() {
+		return true
+	}
+	return threadGroupDying(filepath.Join("/proc", strconv.Itoa(server.PID)))
+}
+
+func threadGroupDying(procDir string) bool {
+	if procState(filepath.Join(procDir, "stat")) != "Z" {
+		return false
+	}
+	tasks, err := os.ReadDir(filepath.Join(procDir, "task"))
+	if err != nil {
+		return false
+	}
+	for _, task := range tasks {
+		taskDir := filepath.Join(procDir, "task", task.Name())
+		if state := procState(filepath.Join(taskDir, "stat")); state == "Z" || state == "X" {
 			continue
 		}
-		if connectionEnded(ctx, entry.mountPoint) {
-			dead = append(dead, entry.mountPoint)
+		pending, ok := pendingSignals(filepath.Join(taskDir, "status"))
+		if !ok || pending&sigkillPendingBit == 0 {
+			return false
 		}
 	}
-	return dead, nil
+	return true
+}
+
+func procState(statPath string) string {
+	raw, err := os.ReadFile(statPath)
+	if err != nil {
+		return ""
+	}
+	closing := bytes.LastIndexByte(raw, ')')
+	if closing < 0 {
+		return ""
+	}
+	fields := bytes.Fields(raw[closing+1:])
+	if len(fields) == 0 {
+		return ""
+	}
+	return string(fields[0])
+}
+
+func pendingSignals(statusPath string) (uint64, bool) {
+	raw, err := os.ReadFile(statusPath)
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if value, found := strings.CutPrefix(line, "SigPnd:"); found {
+			mask, err := strconv.ParseUint(strings.TrimSpace(value), 16, 64)
+			return mask, err == nil
+		}
+	}
+	return 0, false
+}
+
+// abortConnection ends one FUSE connection through its control file, named by the minor of
+// the recorded anonymous device.
+func abortConnection(devMajorMinor string) error {
+	major, minor, found := strings.Cut(devMajorMinor, ":")
+	if !found || major != "0" {
+		return fmt.Errorf("fuselinux: %q is not a FUSE connection device", devMajorMinor)
+	}
+	if _, err := strconv.ParseUint(minor, 10, 32); err != nil {
+		return fmt.Errorf("fuselinux: %q is not a FUSE connection device: %w", devMajorMinor, err)
+	}
+	fd, err := unix.Open(filepath.Join(fuseConnectionsRoot, minor, "abort"), unix.O_WRONLY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return fmt.Errorf("fuselinux: open connection abort file: %w", err)
+	}
+	_, writeErr := unix.Write(fd, []byte("1"))
+	return errors.Join(writeErr, unix.Close(fd))
 }
 
 func pathWithin(root, candidate string) bool {

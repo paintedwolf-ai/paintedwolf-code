@@ -205,6 +205,15 @@ func registerServerHooks(b *serveBuilder, extensionJournal *extensionstate.SQLJo
 	}); err != nil {
 		return err
 	}
+	if b.delegations != nil {
+		b.server.Server.Admin.Project.Sandboxes.SettleWorker = b.delegations.SandboxSettler()
+		if err := b.registerRecovery(bootrecovery.Entry{
+			Name: "worker-views", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
+			Run: b.delegations.RecoverWorkerViews,
+		}); err != nil {
+			return err
+		}
+	}
 	// Serve recovery begins after runtime gates are sealed.
 	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "prompt-submissions", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,

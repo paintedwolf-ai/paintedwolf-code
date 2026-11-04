@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workspace"
 )
 
 type Deps struct {
@@ -133,6 +134,7 @@ type Sandboxes struct {
 	Sessions                *session.Host
 	WorkerBranchRoot        string
 	Workers                 worker.WorkerQueue
+	SettleWorker            workspace.SandboxSettler
 	background              *taskgroup.Group
 	sandboxReconcileLast    map[string]time.Time
 	sandboxReconcileMu      sync.Mutex

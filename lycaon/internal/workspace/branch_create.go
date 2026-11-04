@@ -168,7 +168,7 @@ func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Bindi
 			SourceGeneration: 1,
 		},
 		Storage: claim.ClaimStorage{
-			RuntimeDir:     filepath.Join(m.branchRoot, adapterStateDirName, projKey),
+			RuntimeDir:     filepath.Join(m.branchRoot, adapterRuntimeDirName, projKey),
 			BackingDir:     filepath.Join(metaDir, "backing"),
 			MetadataPath:   filepath.Join(metaDir, "view-metadata.json"),
 			TargetRootDirs: targetDirs,

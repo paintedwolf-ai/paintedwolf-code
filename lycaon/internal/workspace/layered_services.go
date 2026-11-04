@@ -19,7 +19,6 @@ import (
 // BranchCheckpointStoreSuffix names the sibling directory holding a branch's published checkpoints.
 const BranchCheckpointStoreSuffix = ".lycaon-checkpoint-store"
 
-const adapterStateDirName = ".adapter"
 
 // layeredServices are the host services every view on this Manager's branch root shares.
 type layeredServices struct {
@@ -53,7 +52,7 @@ func (r durableRetention) HoldUnresolved(_ context.Context, workerID, viewID str
 
 // OpenPrivateGit opens the private Git manager for a worker branch root.
 func OpenPrivateGit(branchRoot string) (*privategit.Manager, error) {
-	return privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(branchRoot, adapterStateDirName, "privategit")})
+	return privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(branchRoot, adapterRuntimeDirName, "privategit")})
 }
 
 // WithPrivateGit shares the host's private Git manager, the one the Git tools consult, with this Manager.
@@ -74,7 +73,7 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 	if strings.TrimSpace(m.branchRoot) == "" {
 		return nil, fmt.Errorf("worker branch root is unavailable")
 	}
-	stateDir := filepath.Join(m.branchRoot, adapterStateDirName)
+	stateDir := filepath.Join(m.branchRoot, adapterRuntimeDirName)
 	gitManager := m.privateGit
 	if gitManager == nil {
 		var err error
@@ -83,16 +82,19 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 			return nil, err
 		}
 	}
-	recoveryDir := filepath.Join(stateDir, "recovery")
-	store, err := checkpoint.NewStore(filepath.Join(recoveryDir, "checkpoints"))
-	if err != nil {
-		return nil, err
-	}
-	claims, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
-		RootDir: recoveryDir, CheckpointStore: store, GitStore: gitManager.Store(), GitManager: gitManager,
-	})
-	if err != nil {
-		return nil, err
+	claims := m.recovery
+	if claims == nil {
+		recoveryDir := filepath.Join(stateDir, "recovery")
+		store, err := checkpoint.NewStore(filepath.Join(recoveryDir, "checkpoints"))
+		if err != nil {
+			return nil, err
+		}
+		claims, err = recovery.NewCoordinator(recovery.CoordinatorConfig{
+			RootDir: recoveryDir, CheckpointStore: store, GitStore: gitManager.Store(), GitManager: gitManager,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	selector := m.selector
 	if selector == nil {
