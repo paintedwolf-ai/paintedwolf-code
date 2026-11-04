@@ -86,7 +86,7 @@ func movedBase(
 	var predecessor *sourceledger.ComparisonSide
 	var source ledgerLocation
 	if comp := recorded.comp; comp != nil && comp.Before.VersionID != "" && (comp.Before.RootID != at.rootID || comp.Before.Path != at.rel) {
-		predecessor, source, moved = &comp.Before, ledgerLocation{rootID: comp.Before.RootID, rel: comp.Before.Path}, true
+		predecessor, source = &comp.Before, ledgerLocation{rootID: comp.Before.RootID, rel: comp.Before.Path}
 	} else if source, moved, err = recordedMoveSource(ctx, tctx, ledger.Files, branch, at); err != nil || !moved {
 		return "", false, err
 	}
