@@ -1198,6 +1198,12 @@
       "emit": "guard:git_internals_write",
       "summary": "Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not writable via native tools."
     },
+    "GIT_NO_REPOSITORY_ON_WRITE_LEG": {
+      "branch_instruction": "Committed history belongs to a read-scoped leg or the coordinator on the primary tree; do not retry Git here.",
+      "category": "recoverable",
+      "emit": "guard:git_no_repository_on_write_leg",
+      "summary": "Git has no repository to read on this write leg."
+    },
     "GIT_OPERATION_FAILED": {
       "branch_instruction": "Report any unresolved state; do not claim the repository was left unchanged or that the operation completed.",
       "category": "recoverable",

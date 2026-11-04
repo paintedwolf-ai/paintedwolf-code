@@ -77,6 +77,12 @@ owner's read door with their catalogued options; `git shortlog` without a
 revision summarizes `HEAD`. Batch object reads, reflog maintenance and
 signature format atoms are refused.
 
+A worker branch is a copy without Git metadata. A read that finds no repository
+there refuses with `GIT_NO_REPOSITORY_ON_WRITE_LEG`, whose copy names the
+overview and session diff of `source_history` to a profile that holds it. On
+any other tree it keeps Git's fatal and status 128, and `external -- git …` is
+unaffected.
+
 `git bisect` runs natively on the Git owner. Sessions live in the repository's
 `BISECT_*` files and `refs/bisect` refs exactly as Git keeps them, so a user's
 own `git bisect` and `git status` see the same session, and every step checks

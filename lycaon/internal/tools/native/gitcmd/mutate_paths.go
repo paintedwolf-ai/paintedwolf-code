@@ -43,6 +43,17 @@ func resolveCommandDir(ctx context.Context, p Prepared, stderr io.Writer, write 
 	return dir, 0, nil
 }
 
+// writeLegRefusal is the refusal for a read on a worker branch, a copy without
+// Git metadata, and nil on any other tree. The copy names source_history only to
+// a profile that holds it.
+func writeLegRefusal(ctx context.Context, o *Owners, command string, tc tools.ToolContext) *toolrejection.ToolReject {
+	if strings.TrimSpace(tc.Source.WorkerBranchRoot) == "" {
+		return nil
+	}
+	offered := o.Boundary != nil && o.Boundary.AssertToolAllowed(ctx, tc.ProfileID(), "source_history", tc.Turn.ToolAccess) == nil
+	return &toolrejection.ToolReject{Code: "GIT_NO_REPOSITORY_ON_WRITE_LEG", Data: map[string]any{"command": command, "source_history_offered": offered}}
+}
+
 func resolveCommandRepo(ctx context.Context, p Prepared, stderr io.Writer, write bool) (string, gitrepo.Repo, int, error) {
 	dir, status, err := resolveCommandDir(ctx, p, stderr, false)
 	if err != nil || status != 0 {
@@ -50,6 +61,9 @@ func resolveCommandRepo(ctx context.Context, p Prepared, stderr io.Writer, write
 	}
 	repo, ok := gitrepo.Discover(dir)
 	if !ok {
+		if p.noRepository != nil && !write {
+			return "", gitrepo.Repo{}, 0, p.noRepository
+		}
 		_, _ = io.WriteString(stderr, "fatal: not a git repository (or any of the parent directories): .git\n")
 		return "", gitrepo.Repo{}, 128, nil
 	}

@@ -295,7 +295,7 @@ func operandInvalid(spec toolcontract.CommandSpecification, word, expected strin
 
 // run resolves the directory and repository, then streams Git's output.
 // Git's own fatal messages and status 128 stand for a missing -C directory
-// or a directory outside any repository.
+// or, off a worker branch, a directory outside any repository.
 func (p Prepared) run(ctx context.Context, streams commandprogram.Streams) (int, error) {
 	stderr := streams.Error
 	if stderr == nil {

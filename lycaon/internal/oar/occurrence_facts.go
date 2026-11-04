@@ -424,6 +424,7 @@ var occurrenceFactDecls = []factDecl{
 	{"sample_identifiers", oarcore.TypeString, FactTierHost, ""},
 	{"shape", oarcore.TypeString, FactTierHost, ""},
 	{"shell_metacharacters", oarcore.TypeBool, FactTierHost, ""},
+	{"source_history_offered", oarcore.TypeBool, FactTierHost, ""},
 	{"side", oarcore.TypeString, FactTierHost, ""},
 	{"size", oarcore.TypeString, FactTierHost, ""},
 	{"failure_source_unchanged", oarcore.TypeBool, FactTierHost, ""},

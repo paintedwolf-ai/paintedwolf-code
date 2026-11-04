@@ -1153,6 +1153,8 @@ host_facts:
    type: string
  - name: paintedwolf.shell_metacharacters
    type: bool
+ - name: paintedwolf.source_history_offered
+   type: bool
  - name: paintedwolf.side
    type: string
  - name: paintedwolf.size
