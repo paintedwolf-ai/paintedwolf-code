@@ -105,7 +105,7 @@ func (t *EditTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			if changes, total, ok := sourceview.ForeignChanges(ctx, tctx, fullPath); ok {
 				return "", editTargetChangedByOthers(path, old, oldString, newString, changes, total, tools.OffersSourceHistory(ctx, t.Boundary, tctx))
 			}
-			return "", editOldStringNotFound(path, old, oldString, newString)
+			return "", editOldStringNotFound(path, old, oldString, newString, tools.OffersSourceHistory(ctx, t.Boundary, tctx))
 		case occurrences > 1 && !replaceAll:
 			return "", editOldStringAmbiguous(path, occurrences)
 		}

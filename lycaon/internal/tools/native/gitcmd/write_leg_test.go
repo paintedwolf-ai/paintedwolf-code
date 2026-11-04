@@ -4,18 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-const noRepositoryOnWriteLeg = "GIT_NO_REPOSITORY_ON_WRITE_LEG"
 
 // gitReadSpellings is one admitted spelling of every read: the read forms, and
 // the mutation forms that read.
@@ -59,8 +55,15 @@ func (writeLegBranch) ValidateMeta(context.Context) error { return nil }
 
 func (writeLegBranch) EnsureParents(context.Context, string) error { return nil }
 
+// watchNoRepository installs the program's shared record on the harness.
+func watchNoRepository(h *harness) *atomic.Bool {
+	missed := &atomic.Bool{}
+	h.tc.Effects.GitNoRepository = missed
+	return missed
+}
+
 // newWriteLegHarness is a worker branch holding a plain directory and no repository.
-func newWriteLegHarness(t *testing.T) *harness {
+func newWriteLegHarness(t *testing.T) (*harness, *atomic.Bool) {
 	t.Helper()
 	h := newUninitializedHarness(t)
 	h.tc.Source.SourceWorkspaceKind, h.tc.Identity.WorkerJobID = api.SourceWorkspaceKindWorker, "job-1"
@@ -69,86 +72,72 @@ func newWriteLegHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "worker program paths", err)
 	h.paths = paths
 	testutil.FailErr(t, "plain dir", os.MkdirAll(filepath.Join(h.root, "plain"), 0o755))
-	return h
+	return h, watchNoRepository(h)
 }
 
-func TestACOP01AndACOP02EveryGitReadOnAWriteLegRefuses(t *testing.T) {
+func TestACOP01EveryGitReadOnAWriteLegKeepsGitsStatusAndStatesTheMiss(t *testing.T) {
 	t.Parallel()
 	for name, argv := range gitReadSpellings {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got := newWriteLegHarness(t).exec(argv...)
-			got.refused(t, name, noRepositoryOnWriteLeg)
-			if got.result.Terminal != toolcontract.ProducerRefused || got.result.StopCode != noRepositoryOnWriteLeg || got.stderr != "" {
-				t.Fatalf("%s = %+v stderr %q, want a refusal in place of Git's fatal", name, got.result, got.stderr)
+			h, missed := newWriteLegHarness(t)
+			got := h.exec(argv...)
+			if got.err != nil || got.result.Status != 128 || got.result.StopCode != "" || got.stderr == "" {
+				t.Fatalf("%s = %+v stderr %q err %v, want Git's status 128", name, got.result, got.stderr, got.err)
+			}
+			if !missed.Load() {
+				t.Fatalf("%s did not state the miss", name)
 			}
 		})
 	}
 }
 
-func TestACOP03EveryGitReadOffAWorkerBranchKeepsGitsStatus(t *testing.T) {
+func TestACOP03EveryGitReadOffAWorkerBranchStatesNoMiss(t *testing.T) {
 	t.Parallel()
 	for name, argv := range gitReadSpellings {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			h := newUninitializedHarness(t)
+			missed := watchNoRepository(h)
 			testutil.FailErr(t, "plain dir", os.MkdirAll(filepath.Join(h.root, "plain"), 0o755))
 			got := h.exec(argv...)
 			if got.err != nil || got.result.Status != 128 || got.result.StopCode != "" || got.stderr == "" {
 				t.Fatalf("%s = %+v stderr %q err %v, want Git's status 128", name, got.result, got.stderr, got.err)
 			}
-		})
-	}
-}
-
-func TestWriteLegRefusalStatesWhetherTheProfileHoldsSourceHistory(t *testing.T) {
-	t.Parallel()
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{
-		{ID: "holds", Tools: map[string]bool{"source_history": true}},
-		{ID: "lacks", Tools: map[string]bool{"edit": true}},
-	})
-	for _, tc := range []struct {
-		profile string
-		want    bool
-	}{{"holds", true}, {"lacks", false}} {
-		t.Run(tc.profile, func(t *testing.T) {
-			t.Parallel()
-			h := newWriteLegHarness(t)
-			h.owners.Boundary, h.tc.Identity.Agent = boundary, tc.profile
-			got := h.exec("git", "status")
-			got.refused(t, tc.profile, noRepositoryOnWriteLeg)
-			if data := toolrejection.AsToolReject(got.err).Data; data["source_history_offered"] != tc.want {
-				t.Fatalf("data = %v, want source_history_offered %v", data, tc.want)
+			if missed.Load() {
+				t.Fatalf("%s stated a miss off a worker branch", name)
 			}
 		})
 	}
 }
 
-func TestWriteLegRefusalNeedsAReadWithNoRepository(t *testing.T) {
+func TestWriteLegMissNeedsAReadWithNoRepository(t *testing.T) {
 	t.Parallel()
 	t.Run("a repository the worker made reads normally", func(t *testing.T) {
 		t.Parallel()
-		h := newWriteLegHarness(t)
+		h, missed := newWriteLegHarness(t)
 		h.git("init", "-q", "plain")
-		if got := h.exec("git", "-C", "plain", "status", "-s"); got.err != nil || got.result.Status != 0 {
-			t.Fatalf("status in the worker's repository = %+v err %v", got.result, got.err)
+		if got := h.exec("git", "-C", "plain", "status", "-s"); got.err != nil || got.result.Status != 0 || missed.Load() {
+			t.Fatalf("status in the worker's repository = %+v err %v missed %v", got.result, got.err, missed.Load())
 		}
 		testutil.FailErr(t, "second plain dir", os.MkdirAll(filepath.Join(h.root, "other"), 0o755))
-		beside := h.exec("git", "-C", "other", "status")
-		beside.refused(t, "directory beside the repository", noRepositoryOnWriteLeg)
-	})
-	t.Run("a mutation keeps Git's status", func(t *testing.T) {
-		t.Parallel()
-		h := newWriteLegHarness(t)
-		h.write("a.txt", "a\n")
-		if got := h.exec("git", "add", "a.txt"); got.err != nil || got.result.Status != 128 {
-			t.Fatalf("git add = %+v err %v, want status 128", got.result, got.err)
+		if got := h.exec("git", "-C", "other", "status"); got.result.Status != 128 || !missed.Load() {
+			t.Fatalf("directory beside the repository = %+v missed %v", got.result, missed.Load())
 		}
 	})
-	t.Run("a missing directory keeps Git's status", func(t *testing.T) {
+	t.Run("a mutation states no miss", func(t *testing.T) {
 		t.Parallel()
-		if got := newWriteLegHarness(t).exec("git", "-C", "nope", "status"); got.err != nil || got.result.Status != 128 {
-			t.Fatalf("missing -C = %+v err %v, want status 128", got.result, got.err)
+		h, missed := newWriteLegHarness(t)
+		h.write("a.txt", "a\n")
+		if got := h.exec("git", "add", "a.txt"); got.err != nil || got.result.Status != 128 || missed.Load() {
+			t.Fatalf("git add = %+v err %v missed %v", got.result, got.err, missed.Load())
+		}
+	})
+	t.Run("a missing directory states no miss", func(t *testing.T) {
+		t.Parallel()
+		h, missed := newWriteLegHarness(t)
+		if got := h.exec("git", "-C", "nope", "status"); got.err != nil || got.result.Status != 128 || missed.Load() {
+			t.Fatalf("missing -C = %+v err %v missed %v", got.result, got.err, missed.Load())
 		}
 	})
 }

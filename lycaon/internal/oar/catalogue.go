@@ -239,6 +239,7 @@ var factDecls = []factDecl{
 	{"credential_harvested", oarcore.TypeBool, FactTierHost, ""},
 	{"credential_ignored", oarcore.TypeBool, FactTierHost, ""},
 	{"editorconfig_mismatch", oarcore.TypeBool, FactTierHost, ""},
+	{"git_no_repository_on_write_leg", oarcore.TypeBool, FactTierHost, ""},
 	{"syntax_check_overridden", oarcore.TypeBool, FactTierHost, ""},
 	{"source_analysis_unavailable", oarcore.TypeBool, FactTierHost, ""},
 	{"http_request_web_page", oarcore.TypeBool, FactTierHost, ""},

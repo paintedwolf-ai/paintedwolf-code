@@ -150,8 +150,9 @@ func resolveRestorableVersion(
 			return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_NO_PREDECESSOR",
 				Data: map[string]any{
-					"path":   path,
-					"detail": fmt.Sprintf("file %s has only one recorded version (%s)", path, head.VersionID),
+					"path":                   path,
+					"detail":                 fmt.Sprintf("file %s has only one recorded version (%s)", path, head.VersionID),
+					"source_history_offered": tools.OffersSourceHistory(ctx, t.Boundary, tctx),
 				},
 			}
 		}

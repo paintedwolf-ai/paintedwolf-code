@@ -11,11 +11,10 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 )
 
-func editOldStringNotFound(path, fileContent, oldString, newString string) error {
-	return &toolrejection.ToolReject{
-		Code: "EDIT_OLD_STRING_NOT_FOUND",
-		Data: editMissData(path, fileContent, oldString, newString),
-	}
+func editOldStringNotFound(path, fileContent, oldString, newString string, sourceHistoryOffered bool) error {
+	data := editMissData(path, fileContent, oldString, newString)
+	data["source_history_offered"] = sourceHistoryOffered
+	return &toolrejection.ToolReject{Code: "EDIT_OLD_STRING_NOT_FOUND", Data: data}
 }
 
 // editTargetChangedByOthers is the miss whose cause the ledger can state: the

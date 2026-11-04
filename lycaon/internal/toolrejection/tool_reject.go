@@ -115,6 +115,10 @@ const VerifyUnverifiableCode = "VERIFY_UNVERIFIABLE"
 // the file's .editorconfig chain declares. The write still stands.
 const EditorConfigMismatchCode = "EDITORCONFIG_MISMATCH"
 
+// GitNoRepositoryOnWriteLegCode is stated on a command whose program read Git
+// on a worker branch with no repository. The program's own status stands.
+const GitNoRepositoryOnWriteLegCode = "GIT_NO_REPOSITORY_ON_WRITE_LEG"
+
 // HTTPRequestWebPageCode is stated on an http_request that delivered a remote
 // HTML document while fetch_url was on the turn's plan. The exchange stands.
 const HTTPRequestWebPageCode = "HTTP_REQUEST_WEB_PAGE"

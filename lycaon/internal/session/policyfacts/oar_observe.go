@@ -235,6 +235,16 @@ func ObserveEditorConfigMismatch(gc *oar.GuardContext, raised guidance.ToolResul
 	gc.PutRejectData(toolrejection.EditorConfigMismatchCode, raised.FeedbackFor(toolrejection.EditorConfigMismatchCode).Details)
 }
 
+// ObserveGitNoRepositoryOnWriteLeg publishes a program's write-leg Git miss and
+// whether the profile holds its answer to post-tool policy.
+func ObserveGitNoRepositoryOnWriteLeg(gc *oar.GuardContext, raised guidance.ToolResultFacts) {
+	if gc == nil || !raised.HasCode(toolrejection.GitNoRepositoryOnWriteLegCode) {
+		return
+	}
+	gc.Source.GitNoRepositoryOnWriteLeg = true
+	gc.PutRejectData(toolrejection.GitNoRepositoryOnWriteLegCode, raised.FeedbackFor(toolrejection.GitNoRepositoryOnWriteLegCode).Details)
+}
+
 // ObserveHTTPRequestWebPage publishes a web page http_request delivered and
 // its details to post-tool policy.
 func ObserveHTTPRequestWebPage(gc *oar.GuardContext, raised guidance.ToolResultFacts) {

@@ -3,6 +3,7 @@ package tools
 
 import (
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"sync/atomic"
 
 	"context"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -354,6 +355,10 @@ type InvocationEffects struct {
 	// CredentialFiles receives credential-file reads and model-authored writes.
 	CredentialFiles CredentialFiles
 	Out             *ToolInvocationOut
+	// GitNoRepository records that a native Git read on this program's worker
+	// branch found no repository. Program children have no Out and may run
+	// concurrently, so they share this.
+	GitNoRepository *atomic.Bool
 	// Presence receives what this call does to project files as the handler
 	// resolves it: targets, resolved mutations, approval holds, and landings.
 	Presence PresenceReporter

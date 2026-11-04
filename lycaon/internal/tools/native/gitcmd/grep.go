@@ -70,12 +70,12 @@ type gitGrep struct {
 
 // grep searches committed, staged or working-tree content with the shared
 // native regex engines and prints Git's REV:PATH:LINE layout.
-func (p Prepared) grep(ctx context.Context, streams commandprogram.Streams) (int, error) {
+func (p Prepared) grep(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (int, error) {
 	stderr := streams.Error
 	if stderr == nil {
 		stderr = io.Discard
 	}
-	dir, repo, status, err := resolveCommandRepo(ctx, p, stderr, false)
+	dir, repo, status, err := resolveCommandRepo(ctx, p, tc, stderr, false)
 	if err != nil || status != 0 {
 		return status, err
 	}

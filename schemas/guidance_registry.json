@@ -1006,7 +1006,7 @@
       "summary": "edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for old_string — a single-occurrence edit needs a unique target."
     },
     "EDIT_OLD_STRING_NOT_FOUND": {
-      "branch_instruction": "Inspect source_history only when attribution is needed. Do not replace the whole file to bypass a missing match.",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Only when attribution is needed, inspect `source_history(path)`, or `source_history()` for everything changed this session. {% endif %}Do not replace the whole file to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "{% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}. The requested new_string is already present {{ paintedwolf.replacement_matches }} time(s), first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}: old_string ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis ({{ paintedwolf.total_lines }} lines).{% endif %}"
@@ -1199,10 +1199,10 @@
       "summary": "Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not writable via native tools."
     },
     "GIT_NO_REPOSITORY_ON_WRITE_LEG": {
-      "branch_instruction": "Committed history belongs to a read-scoped leg or the coordinator on the primary tree; do not retry Git here.",
-      "category": "recoverable",
+      "branch_instruction": "Committed history belongs to a read-scoped leg or the coordinator on the primary tree.",
+      "category": "informational",
       "emit": "guard:git_no_repository_on_write_leg",
-      "summary": "Git has no repository to read on this write leg."
+      "summary": "A Git read in this command found no repository on this write leg."
     },
     "GIT_OPERATION_FAILED": {
       "branch_instruction": "Report any unresolved state; do not claim the repository was left unchanged or that the operation completed.",

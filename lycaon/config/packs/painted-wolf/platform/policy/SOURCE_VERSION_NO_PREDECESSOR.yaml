@@ -12,13 +12,16 @@ requires:
     - paintedwolf.rejection_code
     - paintedwolf.detail
     - paintedwolf.path
+    - paintedwolf.source_history_offered
 when: paintedwolf.rejection_code == "SOURCE_VERSION_NO_PREDECESSOR"
 effect: block
 copy:
   what: No predecessor version for {{ paintedwolf.path }} — {{ paintedwolf.detail }}.
   cause: The file has no earlier recorded version in this project's source ledger.
   why: Omitted version_id defaults to the immediate predecessor, which requires at least two recorded states.
-  fix: Query source_history(mode="effects") to check recorded history, or pass an explicit version_id.
+  fix: >-
+    {% if paintedwolf.source_history_offered %}Query `source_history(path, mode="effects")` to check recorded history,
+    or pass an explicit version_id.{% else %}Pass an explicit version_id.{% endif %}
   instead: Branch on Code; verify history via source_history
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:restore_version
@@ -29,6 +32,7 @@ x-paintedwolf-scenarios:
       detail: file has only one recorded version
       path: main.go
       profile: implement
+      source_history_offered: true
       tool: restore_version
     expect_contains:
       - 'Rejected:'

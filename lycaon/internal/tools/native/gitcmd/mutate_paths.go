@@ -43,26 +43,18 @@ func resolveCommandDir(ctx context.Context, p Prepared, stderr io.Writer, write 
 	return dir, 0, nil
 }
 
-// writeLegRefusal is the refusal for a read on a worker branch, a copy without
-// Git metadata, and nil on any other tree.
-func writeLegRefusal(ctx context.Context, o *Owners, command string, tc tools.ToolContext) *toolrejection.ToolReject {
-	if strings.TrimSpace(tc.Source.WorkerBranchRoot) == "" {
-		return nil
-	}
-	return &toolrejection.ToolReject{Code: "GIT_NO_REPOSITORY_ON_WRITE_LEG", Data: map[string]any{
-		"command": command, "source_history_offered": tools.OffersSourceHistory(ctx, o.Boundary, tc),
-	}}
-}
-
-func resolveCommandRepo(ctx context.Context, p Prepared, stderr io.Writer, write bool) (string, gitrepo.Repo, int, error) {
+// resolveCommandRepo finds the repository a command acts on. A read that finds
+// none on a worker branch, a copy without Git metadata, states that for the
+// program's warning; Git's own fatal and status stand.
+func resolveCommandRepo(ctx context.Context, p Prepared, tc tools.ToolContext, stderr io.Writer, write bool) (string, gitrepo.Repo, int, error) {
 	dir, status, err := resolveCommandDir(ctx, p, stderr, false)
 	if err != nil || status != 0 {
 		return "", gitrepo.Repo{}, status, err
 	}
 	repo, ok := gitrepo.Discover(dir)
 	if !ok {
-		if p.noRepository != nil && !write {
-			return "", gitrepo.Repo{}, 0, p.noRepository
+		if !write && tc.Effects.GitNoRepository != nil && strings.TrimSpace(tc.Source.WorkerBranchRoot) != "" {
+			tc.Effects.GitNoRepository.Store(true)
 		}
 		_, _ = io.WriteString(stderr, "fatal: not a git repository (or any of the parent directories): .git\n")
 		return "", gitrepo.Repo{}, 128, nil

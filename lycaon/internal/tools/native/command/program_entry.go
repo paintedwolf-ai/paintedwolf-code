@@ -316,6 +316,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	// to the call; a parked program's later effects never reach the call.
 	callTC := tc
 	run.tc.Effects.Out = &tools.ToolInvocationOut{}
+	run.tc.Effects.GitNoRepository = &atomic.Bool{}
 	park := newProgramPark(r.clock(), call, r.parkThreshold())
 	ports.Waits = park
 	handedOff = true

@@ -208,6 +208,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"mcp_error_code":                  gc.MCP.MCPErrorCode,
 		"mcp_schema_matched":              gc.MCP.MCPSchemaMatched,
 		"editorconfig_mismatch":           gc.Source.EditorConfigMismatch,
+		"git_no_repository_on_write_leg":  gc.Source.GitNoRepositoryOnWriteLeg,
 		"syntax_check_overridden":         gc.Source.SyntaxCheckOverridden,
 		"source_analysis_unavailable":     gc.Source.SourceAnalysisUnavailable,
 		"http_request_web_page":           gc.Invocation.HTTPRequestWebPage,

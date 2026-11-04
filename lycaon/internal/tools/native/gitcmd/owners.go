@@ -150,8 +150,6 @@ type Prepared struct {
 	// request and nested let git bisect run dispatch its check as a child.
 	request commandprogram.OperationRequest
 	nested  commandprogram.NestedCommand
-	// noRepository answers a read that finds no repository; nil keeps Git's fatal.
-	noRepository *toolrejection.ToolReject
 }
 
 // Prepare binds a reached Git command through the catalog grammar and its
@@ -205,7 +203,6 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if streams.Input != nil {
 		defer func() { _ = streams.Input.Close() }()
 	}
-	p.noRepository = writeLegRefusal(ctx, p.owners, p.command.spec.Name, tc)
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)
 	}
@@ -213,7 +210,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.command.spec.Name == "git grep" {
 		run = p.grep
 	}
-	status, err := run(ctx, streams)
+	status, err := run(ctx, tc, streams)
 	if err == nil {
 		err = ctx.Err()
 	}

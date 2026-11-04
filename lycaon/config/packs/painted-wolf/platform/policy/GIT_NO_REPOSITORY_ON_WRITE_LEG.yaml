@@ -1,27 +1,28 @@
 oar: '1.0'
 id: GIT_NO_REPOSITORY_ON_WRITE_LEG
 kind: policy
-anchor: tool.rejected
+anchor: tool.post_invoke
+selector:
+  tool: [command]
 requires:
-  profiles:
-  - tool
+  profiles: [tool]
   facts:
-  - paintedwolf.rejection_code
+  - paintedwolf.git_no_repository_on_write_leg
   - paintedwolf.source_history_offered
-when: paintedwolf.rejection_code == "GIT_NO_REPOSITORY_ON_WRITE_LEG"
-effect: block
+when: paintedwolf.git_no_repository_on_write_leg
+effect: warn
 copy:
-  what: Git has no repository to read on this write leg.
-  cause: A write leg works in a copy of the project without Git metadata.
-  why: Another directory or a retry cannot change that, so the answer has to come from elsewhere.
+  what: A Git read in this command found no repository on this write leg.
+  cause: A write leg works in a copy of the project without Git metadata, so Git reported its own fatal and status 128.
+  why: The command ran normally and Git's answer stands. Another directory or a retry cannot give Git a repository here.
   fix: >-
     {% if paintedwolf.source_history_offered %}Call `source_history()` for what changed on your branch this session,
     every actor, and `source_history(path, mode="diff")` for one file's change since the session began.
     {% else %}Work from the files on this leg, and state in your result anything that needs Git history.{% endif %}
-  instead: Committed history belongs to a read-scoped leg or the coordinator on the primary tree; do not retry Git here.
-x-paintedwolf-category: recoverable
+  instead: Committed history belongs to a read-scoped leg or the coordinator on the primary tree.
+x-paintedwolf-category: informational
 x-paintedwolf-emit: guard:git_no_repository_on_write_leg
-x-paintedwolf-message: Git has no repository on this write leg
+x-paintedwolf-message: a Git read found no repository on this write leg
 x-paintedwolf-scenarios:
 - id: default
   vars:
@@ -29,13 +30,13 @@ x-paintedwolf-scenarios:
     profile: implement
     source_history_offered: true
   expect_contains:
-  - 'Rejected:'
   - 'Code: GIT_NO_REPOSITORY_ON_WRITE_LEG'
+  - source_history()
 - id: without_source_history
   vars:
     tool: command
     profile: plan_write_only
     source_history_offered: false
   expect_contains:
-  - 'Rejected:'
   - 'Code: GIT_NO_REPOSITORY_ON_WRITE_LEG'
+  - state in your result

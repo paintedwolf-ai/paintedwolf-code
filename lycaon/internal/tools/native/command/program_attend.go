@@ -92,7 +92,20 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	if out := e.callTC.Effects.Out; out != nil {
 		out.CommandProgram, out.SourceRun = e.run.tc.Effects.Out.CommandProgram, e.run.tc.Effects.Out.SourceRun
 	}
+	r.stateGitNoRepository(callCtx, e)
 	return ending.result, ending.err
+}
+
+// stateGitNoRepository puts the program's write-leg Git miss on the call's
+// result, for its post-invoke warning.
+func (r *ProgramRuntime) stateGitNoRepository(ctx context.Context, e *programEvaluation) {
+	out, missed := e.callTC.Effects.Out, e.run.tc.Effects.GitNoRepository
+	if out == nil || missed == nil || !missed.Load() {
+		return
+	}
+	out.Facts = out.Facts.WithFeedback(toolrejection.GitNoRepositoryOnWriteLegCode, map[string]any{
+		"source_history_offered": tools.OffersSourceHistory(ctx, r.Boundary, e.callTC),
+	}, nil)
 }
 
 // parkProgram ends the call's turn on the session's wait lease. The program
@@ -136,6 +149,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 			out.CommandProgram = &receipt
 		}
 	}
+	r.stateGitNoRepository(callCtx, e)
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
 	if !state.Until.IsZero() {
 		result.WakeAt = state.Until.UTC().Format(time.RFC3339)

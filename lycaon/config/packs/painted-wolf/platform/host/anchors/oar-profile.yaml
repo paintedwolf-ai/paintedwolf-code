@@ -742,6 +742,9 @@ host_facts:
  - name: paintedwolf.credential_harvested
    type: bool
    observation: Whether the root session's harvest contains the candidate fingerprint. Provider failure if provenance lookup is unavailable.
+ - name: paintedwolf.git_no_repository_on_write_leg
+   type: bool
+   observation: True when a native Git read in this command's program, on a worker branch, found no repository.
  - name: paintedwolf.editorconfig_mismatch
    type: bool
    observation: True when a landed text write broke a rule its .editorconfig chain declares on lines the write inserted or rewrote; false when no rule is declared or the chain could not be read.
