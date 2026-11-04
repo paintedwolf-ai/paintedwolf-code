@@ -285,7 +285,8 @@ func TestClaimInterruptedAtEachBoundaryLeavesNoReadyPartialWorkerOrLeakedRetenti
 			Storage:  ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt"), MetadataPath: metaPath},
 			Grants:   grants,
 			Hooks: ClaimHooks{
-				Retention: ret,
+				Retention:         ret,
+				VerifyConfinement: passingConfinement,
 				Fault: func(_ context.Context, s ClaimStage) error {
 					if s == stage {
 						return injected

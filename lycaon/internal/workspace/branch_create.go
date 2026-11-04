@@ -192,15 +192,24 @@ func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Bindi
 	}
 	if len(sources) > 1 {
 		if err := services.privateGit.BindViewBranch(binding.ID, binding.Root); err != nil {
-			return nil, nil, errors.Join(err, services.coordinator.ReleaseWorkerView(ctx, binding.ID, services.retention))
+			return nil, nil, errors.Join(err, rollBackClaim(ctx, services, binding.ID, binding.ID))
 		}
 	}
 	layered, err := bindViewConsumer(binding.Root, cv, projectID, tracker, services)
 	if err != nil {
-		return nil, nil, errors.Join(err, services.coordinator.ReleaseWorkerView(ctx, binding.ID, services.retention))
+		return nil, nil, errors.Join(err, rollBackClaim(ctx, services, binding.ID, binding.ID))
 	}
 	recordBranchClaimState(binding.Root, cv, snap, layered)
 	return cv.Prepared, cv, nil
+}
+
+// rollBackClaim releases a view its claim could not finish. A failure stays in the coordinator's
+// custody and the recovery records stay, so a retry or startup settles the same facts.
+func rollBackClaim(ctx context.Context, services *layeredServices, workerID, viewID string) error {
+	if err := services.coordinator.ReleaseWorkerView(ctx, viewID, services.retention); err != nil {
+		return err
+	}
+	return services.recovery.ForgetReleasedView(workerID, viewID)
 }
 
 // adoptRecoveredMountedView gives a view recovery rebuilt the records a claim gives a new one: an
@@ -223,7 +232,7 @@ func (m *Manager) adoptRecoveredMountedView(ctx context.Context, branchRoot, job
 	}
 	layered, err := bindViewConsumer(branchRoot, cv, projectID, tracker, services)
 	if err != nil {
-		return errors.Join(err, services.coordinator.ReleaseWorkerView(ctx, view.ViewID, services.retention))
+		return errors.Join(err, rollBackClaim(ctx, services, jobID, view.ViewID))
 	}
 	recordBranchClaimState(branchRoot, cv, cv.State, layered)
 	return nil
