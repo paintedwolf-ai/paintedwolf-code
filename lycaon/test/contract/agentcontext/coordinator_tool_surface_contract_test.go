@@ -223,8 +223,8 @@ func TestCoordinatorToolSurface_investigateSurveyRouteRendered(t *testing.T) {
 	}
 	modeRendered, err := engine.Render(context.Background(), "agents/coordinator-mode-implement-investigate.md", vars)
 	contractcheck.FailErr(t, "render mode", err)
-	if !strings.Contains(modeRendered, "INVEST_HANDLE_NOT_OBSERVED") {
-		t.Fatal("investigate mode partial missing grounding hints")
+	if !strings.Contains(modeRendered, "Completion reply") {
+		t.Fatal("investigate mode partial missing its completion reply")
 	}
 	if strings.Contains(modeRendered, "COORDINATOR_INVESTIGATE_DENIED_PATH") {
 		t.Fatal("investigate mode must not contain obsolete COORDINATOR_INVESTIGATE_DENIED_PATH")
