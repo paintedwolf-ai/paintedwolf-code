@@ -84,7 +84,7 @@ func TestWindowClaimsDriftOnlyUntilItsLastProcessSettles(t *testing.T) {
 	writeRootFile(t, root, "gen.txt", "generated\n")
 	deliverWrites(ctx, root, "gen.txt")
 	release()
-	if id := testutil.AwaitValue(t, "the window goes idle", idled); id != window.ID {
+	if id := testutil.Receive(t, "the window goes idle", idled); id != window.ID {
 		t.Fatalf("idled window = %s, want %s", id, window.ID)
 	}
 	if effect := newestEffects(t, store, ctx)["gen.txt"]; effect.CommandWindowID != window.ID {
@@ -125,7 +125,7 @@ func TestHoldsCountConcurrentProcesses(t *testing.T) {
 		t.Fatalf("drift with one process still live = %+v, want the window", effect)
 	}
 	second()
-	testutil.AwaitValue(t, "the window goes idle", idled)
+	testutil.Receive(t, "the window goes idle", idled)
 	closeAndSettle(t, ctx, window)
 	if _, err := window.Hold(ctx); !errors.Is(err, ErrWindowClosed) {
 		t.Fatalf("hold after close = %v, want ErrWindowClosed", err)
@@ -225,7 +225,7 @@ func TestReanchorKeepsAGapThatNoPassObservedOutOfTheWindow(t *testing.T) {
 	idled := idleObserver(store)
 	window, first := programWindow(t, store, ctx, root)
 	first()
-	testutil.AwaitValue(t, "the window goes idle", idled)
+	testutil.Receive(t, "the window goes idle", idled)
 
 	writeRootFile(t, root, "gap.txt", "gap\n")
 	deliverWrites(ctx, root, "gap.txt")
@@ -234,7 +234,7 @@ func TestReanchorKeepsAGapThatNoPassObservedOutOfTheWindow(t *testing.T) {
 	writeRootFile(t, root, "second.txt", "second\n")
 	deliverWrites(ctx, root, "second.txt")
 	second()
-	testutil.AwaitValue(t, "the window goes idle again", idled)
+	testutil.Receive(t, "the window goes idle again", idled)
 	effects := newestEffects(t, store, ctx)
 	wantOutsideEffect(t, effects, "gap.txt")
 	if effects["second.txt"].CommandWindowID != window.ID {
@@ -249,7 +249,7 @@ func TestHoldAbandonedDuringReanchorLeavesTheWindowIdle(t *testing.T) {
 	idled := idleObserver(store)
 	window, first := programWindow(t, store, ctx, root)
 	first()
-	testutil.AwaitValue(t, "the window goes idle", idled)
+	testutil.Receive(t, "the window goes idle", idled)
 
 	gate := &gatedInventory{commandsInventoryPort: store.Commands.inventory, release: make(chan struct{}), entered: make(chan struct{}, 4)}
 	store.Commands.inventory = gate
@@ -259,9 +259,9 @@ func TestHoldAbandonedDuringReanchorLeavesTheWindowIdle(t *testing.T) {
 		_, err := window.Hold(waiting)
 		failed <- err
 	}()
-	testutil.AwaitValue(t, "the anchor pass began", gate.entered)
+	testutil.Receive(t, "the anchor pass began", gate.entered)
 	cancel()
-	if err := testutil.AwaitValue(t, "the abandoned hold returns", failed); !errors.Is(err, context.Canceled) {
+	if err := testutil.Receive(t, "the abandoned hold returns", failed); !errors.Is(err, context.Canceled) {
 		t.Fatalf("abandoned hold = %v", err)
 	}
 	close(gate.release)
@@ -429,7 +429,7 @@ func TestFailedGracePassListsAsIncompleteAndClearsOnTheNextPass(t *testing.T) {
 	real := store.Commands.inventory
 	store.Commands.inventory = failingInventory{real}
 	release()
-	testutil.AwaitValue(t, "the grace ends", idled)
+	testutil.Receive(t, "the grace ends", idled)
 	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 1 || !listed[0].Incomplete || listed[0].Closing {
 		t.Fatalf("open windows = %+v, want it incomplete and not closing", listed)
 	}
@@ -518,9 +518,9 @@ func TestUntrustedCoverageConvergesOnAPassLongerThanTheBudget(t *testing.T) {
 		_, err := store.Commands.OpenCommandWindow(opening, in)
 		opened <- err
 	}()
-	testutil.AwaitValue(t, "the pass began", gate.entered)
+	testutil.Receive(t, "the pass began", gate.entered)
 	stopWaiting()
-	if err := testutil.AwaitValue(t, "the first open gives up", opened); !errors.Is(err, context.Canceled) {
+	if err := testutil.Receive(t, "the first open gives up", opened); !errors.Is(err, context.Canceled) {
 		t.Fatalf("first open = %v", err)
 	}
 	for range 3 {
@@ -530,7 +530,7 @@ func TestUntrustedCoverageConvergesOnAPassLongerThanTheBudget(t *testing.T) {
 	}
 
 	close(gate.release)
-	testutil.AwaitCondition(t, "the pass finishes", func() bool { return store.Commands.overduePassCount() == 0 })
+	testutil.WaitFor(t, func() bool { return store.Commands.overduePassCount() == 0 })
 	if gate.canceled.Load() {
 		t.Fatal("the open's expired budget canceled the pass")
 	}

@@ -150,7 +150,7 @@ func TestProgramWindowACCW03JobTheProgramWaitsOnIsObserved(t *testing.T) {
 wait`)
 		done <- callResult{content, err}
 	}()
-	testutil.AwaitCondition(t, "the job started", func() bool {
+	testutil.WaitFor(t, func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "job.txt"))
 		return err == nil
 	})
@@ -159,7 +159,7 @@ wait`)
 		t.Fatalf("open windows = %+v, want the job's running window", listed)
 	}
 	testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-	result := testutil.AwaitValue(t, "program result", done)
+	result := testutil.Receive(t, "program result", done)
 	testutil.FailErr(t, "run program", result.err)
 	outcome := decodeOutcome(t, result.content)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != listed[0].ID || !outcome.SourceWindow.Settled {
@@ -185,7 +185,7 @@ until [ -e job.txt ]; do sleep 0.01; done`)
 		t.Fatalf("open windows with only a detached job left = %+v", listed)
 	}
 	testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-	testutil.AwaitCondition(t, "the job finished", func() bool {
+	testutil.WaitFor(t, func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "finished"))
 		return err == nil
 	})
@@ -208,13 +208,13 @@ until [ -e server.txt ]; do sleep 0.01; done`)
 	if outcome.SourceWindow == nil || !outcome.SourceWindow.Settled {
 		t.Fatalf("outcome = %+v", outcome)
 	}
-	t.Cleanup(func() {
+	defer func() {
 		testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-		testutil.AwaitCondition(t, "the job finished", func() bool {
+		testutil.WaitFor(t, func() bool {
 			_, err := os.Stat(filepath.Join(f.Dir, "finished"))
 			return err == nil
 		})
-	})
+	}()
 
 	peer, err := f.ledger.Commands.OpenCommandWindow(t.Context(), sourceledger.CommandWindowInput{
 		ProjectID: testdbseed.DefaultProjectID, Roots: []sourceledger.RootSpec{{ID: "r1", Path: f.Dir}}, SessionID: "peer-session", ToolName: "command",
@@ -437,15 +437,15 @@ func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 		content, err := f.Call(t, t.Context(), `timeout 10 /bin/sh -c 'echo a > ran.txt'; echo "status=$?"; `+writeGen)
 		done <- callResult{content, err}
 	}()
-	for testutil.AwaitValue(t, "the launch's wait timer", clock.requested) != 5*time.Second {
+	for testutil.Receive(t, "the launch's wait timer", clock.requested) != 5*time.Second {
 	}
 	clock.Advance(5 * time.Second)
-	testutil.AwaitCondition(t, "the delayed launch ran", func() bool {
+	testutil.WaitFor(t, func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "ran.txt"))
 		return err == nil
 	})
 	close(release)
-	result := testutil.AwaitValue(t, "program result", done)
+	result := testutil.Receive(t, "program result", done)
 	testutil.FailErr(t, "run program", result.err)
 	outcome := decodeOutcome(t, result.content)
 	if !strings.Contains(outcome.Stdout, "status=0") {
@@ -501,7 +501,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 				content, err := f.Call(t, t.Context(), source+`; touch finished; until [ -e end ]; do sleep 0.01; done`)
 				done <- callResult{content, err}
 			}()
-			testutil.AwaitCondition(t, "the live launch started", func() bool {
+			testutil.WaitFor(t, func() bool {
 				_, err := os.Stat(filepath.Join(f.Dir, "started"))
 				return err == nil
 			})
@@ -515,7 +515,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 			f.wantWindowEffect(t, "during.txt", listed[0].ID)
 
 			testutil.FailErr(t, "end the launch", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-			testutil.AwaitValue(t, "the window goes idle", idled)
+			testutil.Receive(t, "the window goes idle", idled)
 			testutil.FailErr(t, "drift after the launch", os.WriteFile(filepath.Join(f.Dir, "after.txt"), []byte("gap"), 0o600))
 			f.forcePass(t, "after.txt")
 			after, ok := f.newestEffect(t, "after.txt")
@@ -523,7 +523,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 				t.Fatalf("drift after the last launch = %+v, want a plain outside change", after)
 			}
 			testutil.FailErr(t, "end the program", os.WriteFile(filepath.Join(f.Dir, "end"), nil, 0o600))
-			result := testutil.AwaitValue(t, "program result", done)
+			result := testutil.Receive(t, "program result", done)
 			testutil.FailErr(t, "run program", result.err)
 		})
 	}
@@ -546,7 +546,7 @@ func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 	}()
 	testutil.AwaitClosed(t, "the open began", entered)
 	f.Runtime.Supervisor.Stop(f.Session)
-	testutil.AwaitValue(t, "the stopped program returns", done)
+	testutil.Receive(t, "the stopped program returns", done)
 	if programs := f.Programs(t); len(programs) != 1 || programs[0] != "interrupted" {
 		t.Fatalf("program state %v", programs)
 	}
@@ -564,7 +564,7 @@ func TestLaunchAfterEvaluationEndedRunsUnobservedAndOpensNothing(t *testing.T) {
 		t.Fatalf("outcome = %+v, want no window with no launch by the result", outcome)
 	}
 	testutil.FailErr(t, "continue the job", os.WriteFile(filepath.Join(f.Dir, "go"), nil, 0o600))
-	testutil.AwaitCondition(t, "the job finished", func() bool {
+	testutil.WaitFor(t, func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "finished"))
 		return err == nil
 	})
@@ -590,8 +590,8 @@ wait`)
 	if !strings.Contains(raw, `"state":"parked"`) {
 		t.Fatalf("parked result %s", raw)
 	}
-	parked := testutil.AwaitValue(t, "the program parks", parking.parked)
-	testutil.AwaitCondition(t, "the job started", func() bool {
+	parked := testutil.Receive(t, "the program parks", parking.parked)
+	testutil.WaitFor(t, func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
 		return err == nil
 	})
@@ -600,7 +600,7 @@ wait`)
 		t.Fatalf("open windows while parked = %+v", listed)
 	}
 	testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-	settled := testutil.AwaitValue(t, "parked program settles", parked.settled)
+	settled := testutil.Receive(t, "parked program settles", parked.settled)
 	testutil.FailErr(t, "settle parked program", settled.err)
 	outcome := decodeOutcome(t, settled.result)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != listed[0].ID || !outcome.SourceWindow.Settled {
@@ -621,8 +621,8 @@ func TestProgramWindowSpansAPark(t *testing.T) {
 	if !strings.Contains(raw, `"state":"parked"`) {
 		t.Fatalf("parked result %s", raw)
 	}
-	parked := testutil.AwaitValue(t, "the program parks", parking.parked)
-	testutil.AwaitCondition(t, "the generator ran", func() bool {
+	parked := testutil.Receive(t, "the program parks", parking.parked)
+	testutil.WaitFor(t, func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
 		return err == nil
 	})
@@ -631,7 +631,7 @@ func TestProgramWindowSpansAPark(t *testing.T) {
 		t.Fatalf("open windows while parked = %+v", listed)
 	}
 	final := parked.park.Interrupt(t.Context())
-	testutil.FailErr(t, "settle parked program", testutil.AwaitValue(t, "parked program settles", parked.settled).err)
+	testutil.FailErr(t, "settle parked program", testutil.Receive(t, "parked program settles", parked.settled).err)
 	outcome := decodeOutcome(t, final)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != listed[0].ID || !outcome.SourceWindow.Settled {
 		t.Fatalf("final outcome %s", final)
@@ -654,9 +654,9 @@ func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 	if !strings.Contains(raw, `"state":"parked"`) {
 		t.Fatalf("parked result %s", raw)
 	}
-	parked := testutil.AwaitValue(t, "the program parks", parking.parked)
+	parked := testutil.Receive(t, "the program parks", parking.parked)
 	close(gate)
-	windowID := testutil.AwaitValue(t, "the window goes idle after the generator", idled)
+	windowID := testutil.Receive(t, "the window goes idle after the generator", idled)
 	f.wantWindowEffect(t, "gen.txt", windowID)
 
 	for path, content := range map[string]string{"notes.md": "a person's note\n", "gen.txt": "a person's edit\n"} {
@@ -665,7 +665,7 @@ func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 	f.forcePass(t, "notes.md", "gen.txt")
 
 	final := parked.park.Interrupt(t.Context())
-	testutil.FailErr(t, "settle parked program", testutil.AwaitValue(t, "parked program settles", parked.settled).err)
+	testutil.FailErr(t, "settle parked program", testutil.Receive(t, "parked program settles", parked.settled).err)
 	outcome := decodeOutcome(t, final)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != windowID || !outcome.SourceWindow.Settled {
 		t.Fatalf("final outcome %s", final)
@@ -691,15 +691,15 @@ func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 		content, err := f.Call(t, t.Context(), writeGen+`; until [ -e go ]; do sleep 0.01; done; external -- /bin/sh -c 'echo second > second.txt'`)
 		done <- callResult{content, err}
 	}()
-	testutil.AwaitCondition(t, "the generator ran", func() bool {
+	testutil.WaitFor(t, func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
 		return err == nil
 	})
 	close(gate)
-	windowID := testutil.AwaitValue(t, "the window goes idle", idled)
+	windowID := testutil.Receive(t, "the window goes idle", idled)
 	testutil.FailErr(t, "write during the gap", os.WriteFile(filepath.Join(f.Dir, "gap.txt"), []byte("gap"), 0o600))
 	testutil.FailErr(t, "continue the program", os.WriteFile(filepath.Join(f.Dir, "go"), nil, 0o600))
-	result := testutil.AwaitValue(t, "program result", done)
+	result := testutil.Receive(t, "program result", done)
 	testutil.FailErr(t, "run program", result.err)
 	outcome := decodeOutcome(t, result.content)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != windowID || outcome.SourceWindow.Unobserved {
