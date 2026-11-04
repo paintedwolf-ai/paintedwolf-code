@@ -27,6 +27,9 @@ type SourceChangeFile struct {
 	// WorkingSet marks a path the session read or wrote. Briefs stored without
 	// the field render through the unflagged branch.
 	WorkingSet bool `json:"working_set,omitempty"`
+	// DuringYourCommand marks a file only the session's own command windows
+	// touched. Rows with it follow every other row.
+	DuringYourCommand bool `json:"during_your_command,omitempty"`
 }
 
 // SourceGitLine is one observed git ref movement inside the turn window,
@@ -53,7 +56,8 @@ type SourceGitLine struct {
 // no foreign change or no baseline exists — the builder never guesses. It is
 // stored on the turn it opened, so its JSON shape is durable.
 type SourceChangeBrief struct {
-	// Files itemizes foreign changes up to the row cap, working set first.
+	// Files itemizes changes up to the row cap: foreign changes with the working
+	// set first, then the session's own command effects with the working set first.
 	Files []SourceChangeFile `json:"files,omitempty"`
 	// Git itemizes observed ref movements in the window, oldest first, so file
 	// changes below read against their cause.
@@ -62,6 +66,8 @@ type SourceChangeBrief struct {
 	// Files.
 	OtherFiles   int `json:"other_files,omitempty"`
 	OtherEffects int `json:"other_effects,omitempty"`
+	// OtherWorkingSet reports that a counted file is in the working set.
+	OtherWorkingSet bool `json:"other_working_set,omitempty"`
 	// Truncated reports that the window overflowed the effect cap, so the
 	// counts above are a floor, not a total.
 	Truncated bool `json:"truncated,omitempty"`
@@ -73,10 +79,15 @@ func (b SourceChangeBrief) Empty() bool {
 }
 
 // OtherMayIncludeWorkingSet reports whether the counted files could be in the
-// working set. Rows list the working set first, so an unflagged last row means
-// every working-set file was itemized.
+// working set. A foreign last row says nothing about own command files counted
+// behind it, so the builder records that. Briefs stored without the record had
+// no third class, and there an unflagged last row means every working-set file
+// was itemized.
 func (b SourceChangeBrief) OtherMayIncludeWorkingSet() bool {
-	return b.OtherFiles > 0 && len(b.Files) > 0 && b.Files[len(b.Files)-1].WorkingSet
+	if b.OtherFiles == 0 {
+		return false
+	}
+	return b.OtherWorkingSet || (len(b.Files) > 0 && b.Files[len(b.Files)-1].WorkingSet)
 }
 
 // RenderSourceChangesBlock renders guidance/source-changes.md via Binding stem.
@@ -95,6 +106,7 @@ func RenderSourceChangesBlock(
 		files = append(files, map[string]any{
 			"path": f.Path, "actor": f.Actor, "detail": f.Detail,
 			"op": f.Op, "at": f.At, "effects": f.Effects, "working_set": f.WorkingSet,
+			"during_your_command": f.DuringYourCommand,
 		})
 	}
 	git := make([]map[string]any, 0, len(brief.Git))

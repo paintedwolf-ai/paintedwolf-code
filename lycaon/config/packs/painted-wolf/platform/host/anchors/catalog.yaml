@@ -655,7 +655,8 @@ anchors:
     description: >-
       Ledger-recorded files other actors changed between the previous turn
       boundary and this one, actor-classified; itemized up to the row cap,
-      working set first, the rest counted. Observed git ref movements (checkout, commit, pull …)
+      working set first, then files only this session's commands touched,
+      the rest counted. Observed git ref movements (checkout, commit, pull …)
       lead the block so file rows read against their cause.
     trigger_class: assembly_inject
     surface: coordinator
@@ -665,7 +666,7 @@ anchors:
         files:
           type: "object[]"
           required: true
-          description: "Rows with path, actor, detail, op, at, effects and working_set (bool)."
+          description: "Rows with path, actor, detail, op, at, effects, working_set (bool) and during_your_command (bool)."
         git: { type: "object[]", required: true }
         other_files: { type: "int", required: true }
         other_effects: { type: "int", required: true }

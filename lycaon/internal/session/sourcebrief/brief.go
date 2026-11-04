@@ -156,9 +156,35 @@ type sourceChangeBriefInputs struct {
 	Touched     map[string]bool
 }
 
-// assembleSourceChangeBrief itemizes changed files up to the row cap, working
-// set first, and counts the files that did not fit. Observed ref movements
-// precede their file effects.
+// fileGroups collects one class of effects per file. Effects arrive newest
+// first, so a group's first effect is its newest and order is newest-file first.
+type fileGroups struct {
+	byFile map[string]*fileGroup
+	order  []string
+}
+
+type fileGroup struct {
+	newest  sourceledger.Effect
+	effects int
+}
+
+func newFileGroups() *fileGroups {
+	return &fileGroups{byFile: make(map[string]*fileGroup)}
+}
+
+func (g *fileGroups) add(effect sourceledger.Effect) {
+	if group, seen := g.byFile[effect.FileID]; seen {
+		group.effects++
+		return
+	}
+	g.byFile[effect.FileID] = &fileGroup{newest: effect, effects: 1}
+	g.order = append(g.order, effect.FileID)
+}
+
+// assembleSourceChangeBrief itemizes changed files up to the row cap: foreign
+// changes first, working set leading, then files only the session's own command
+// windows touched, so a build's output cannot displace a person's edit. Files
+// that did not fit are counted. Observed ref movements precede their file effects.
 func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBrief {
 	brief := inject.SourceChangeBrief{Truncated: in.Truncated}
 	for i := len(in.Transitions) - 1; i >= 0; i-- {
@@ -168,12 +194,7 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 	if in.Truncated {
 		effects = effects[:sourceChangeBriefEffectCap]
 	}
-	type fileGroup struct {
-		newest  sourceledger.Effect
-		effects int
-	}
-	groups := make(map[string]*fileGroup)
-	order := make([]string, 0, len(effects))
+	foreign, own := newFileGroups(), newFileGroups()
 	for _, effect := range effects {
 		if effect.BranchID.IsWorker() {
 			continue
@@ -181,19 +202,19 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 		if effect.ActorClassFor(in.SessionID) == sourceledger.ActorYou {
 			continue
 		}
-		group, seen := groups[effect.FileID]
-		if !seen {
-			// Effects arrive newest first, so the first effect per file is its
-			// newest and first-seen order is newest-file first.
-			groups[effect.FileID] = &fileGroup{newest: effect, effects: 1}
-			order = append(order, effect.FileID)
+		if effect.DuringCommandOf(in.SessionID) {
+			own.add(effect)
 			continue
 		}
-		group.effects++
+		foreign.add(effect)
 	}
-	itemize := func(workingSet bool) {
-		for _, fileID := range order {
-			group := groups[fileID]
+	itemize := func(groups *fileGroups, workingSet, duringCommand bool) {
+		for _, fileID := range groups.order {
+			group := groups.byFile[fileID]
+			// A file another actor also changed is that actor's row.
+			if _, shared := foreign.byFile[fileID]; duringCommand && shared {
+				continue
+			}
 			display := projectroot.DisplayPath(in.Roots, group.newest.RootID, group.newest.Path)
 			if (in.Touched[group.newest.Path] || in.Touched[display]) != workingSet {
 				continue
@@ -201,21 +222,25 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 			if len(brief.Files) >= sourceChangeBriefFileCap {
 				brief.OtherFiles++
 				brief.OtherEffects += group.effects
+				brief.OtherWorkingSet = brief.OtherWorkingSet || workingSet
 				continue
 			}
 			brief.Files = append(brief.Files, inject.SourceChangeFile{
-				Path:       display,
-				Actor:      string(group.newest.ActorClassFor(in.SessionID)),
-				Detail:     group.newest.ActorDisplay(in.SessionID),
-				Op:         string(group.newest.Op),
-				At:         group.newest.TS.UTC().Format("15:04") + " UTC",
-				Effects:    group.effects,
-				WorkingSet: workingSet,
+				Path:              display,
+				Actor:             string(group.newest.ActorClassFor(in.SessionID)),
+				Detail:            group.newest.ActorDisplay(in.SessionID),
+				Op:                string(group.newest.Op),
+				At:                group.newest.TS.UTC().Format("15:04") + " UTC",
+				Effects:           group.effects,
+				WorkingSet:        workingSet,
+				DuringYourCommand: duringCommand,
 			})
 		}
 	}
-	itemize(true)
-	itemize(false)
+	itemize(foreign, true, false)
+	itemize(foreign, false, false)
+	itemize(own, true, true)
+	itemize(own, false, true)
 	return brief
 }
 

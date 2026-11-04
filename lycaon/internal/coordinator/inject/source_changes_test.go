@@ -85,6 +85,42 @@ func TestACBRF03CountedWorkingSetFilesChangeTheElsewhereClaim(t *testing.T) {
 	}
 }
 
+func TestACOC01OwnCommandRowsRenderDifferently(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	render := func(own bool) string {
+		return inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", inject.SourceChangeBrief{
+			Files: []inject.SourceChangeFile{{Path: "gen.go", Actor: "external", Op: "create", At: "14:02 UTC", Effects: 1, DuringYourCommand: own}},
+		})
+	}
+	if flagged, plain := render(true), render(false); flagged == plain || plain == "" {
+		t.Fatalf("own command row renders like a foreign row:\n%s", flagged)
+	}
+}
+
+func TestACOC01StoredBriefsKeepTheirElsewhereClaim(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stored string
+		want   bool
+	}{
+		{"before any row flag", `{"files":[{"path":"a.go","actor":"user"}],"other_files":2,"other_effects":3}`, false},
+		{"flagged last row", `{"files":[{"path":"a.go","actor":"user","working_set":true}],"other_files":2,"other_effects":3}`, true},
+		{"unflagged last row", `{"files":[{"path":"a.go","actor":"user","working_set":true},{"path":"b.go","actor":"user"}],"other_files":2,"other_effects":3}`, false},
+		{"nothing counted", `{"files":[{"path":"a.go","actor":"user","working_set":true}]}`, false},
+		{"recorded counted working set", `{"files":[{"path":"a.go","actor":"user"}],"other_files":2,"other_effects":3,"other_working_set":true}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var brief inject.SourceChangeBrief
+			if err := json.Unmarshal([]byte(tc.stored), &brief); err != nil {
+				t.Fatalf("unmarshal stored brief: %v", err)
+			}
+			if got := brief.OtherMayIncludeWorkingSet(); got != tc.want {
+				t.Fatalf("OtherMayIncludeWorkingSet = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestACBRF06StoredRowsRenderLikeUnflaggedRows(t *testing.T) {
 	const stored = `{"files":[{"path":"a.go","actor":"user","op":"write","at":"14:02 UTC","effects":1}],"other_files":2,"other_effects":3}`
 	var brief inject.SourceChangeBrief

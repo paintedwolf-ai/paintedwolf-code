@@ -93,7 +93,9 @@ func ChangeOf(effect sourceledger.Effect, viewerSessionID string) *surveyreceipt
 	return change
 }
 
-// ForeignChanges returns other actors' recorded changes, newest first; ok reports lookup completeness.
+// ForeignChanges returns other actors' recorded changes, newest first; ok reports
+// lookup completeness. Effects inside the session's own command windows are not
+// claimed as another actor's.
 func ForeignChanges(
 	ctx context.Context,
 	tctx tools.ToolContext,
@@ -123,7 +125,7 @@ func ForeignChanges(
 			return nil, 0, false
 		}
 		for _, effect := range page.Effects {
-			if effect.ActorClassFor(tctx.Identity.SessionID) == sourceledger.ActorYou {
+			if effect.ActorClassFor(tctx.Identity.SessionID) == sourceledger.ActorYou || effect.DuringCommandOf(tctx.Identity.SessionID) {
 				continue
 			}
 			total++
