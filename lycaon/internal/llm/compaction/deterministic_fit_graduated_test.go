@@ -235,6 +235,24 @@ func TestDeterministicFitAnchorsToStableOrdinals(t *testing.T) {
 	}
 }
 
+// A recent window larger than the budget must not pin the cut to the exact fit,
+// or every append would move it again.
+func TestDeterministicFitLeavesItsReservePastAnOversizedRecentWindow(t *testing.T) {
+	rows := make([]ContextMessage, 0, 200)
+	for i := range 200 {
+		rows = append(rows, ContextMessage{Ord: int64(i + 7), ID: strconv.Itoa(i), Role: string(api.MessageRoleAssistant), Content: fitDistinctBody(i)})
+	}
+	perRow := EstimateMessagesTokens(rows[:1])
+	budget := EstimateMessagesTokens(rows) - 10*perRow
+	reserve := 40 * perRow
+	cfg := fitCfg()
+	cfg.KeepRecentMessages = len(rows)
+	out := DeterministicFitWithReserve(cfg, rows, budget, reserve)
+	if got := EstimateMessagesTokens(out); got > budget-reserve/2 {
+		t.Fatalf("fit left %d tokens free of the %d reserve", budget-got, reserve)
+	}
+}
+
 func TestDeterministicFitLeavesNoInterleavedOrphan(t *testing.T) {
 	var rows []ContextMessage
 	for i := range 40 {

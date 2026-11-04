@@ -316,7 +316,8 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	reserve := fitReserve(tokens)
 	canShrinkTools := shrinkTools && m != nil && m.store != nil && recall
 	if canShrinkTools {
-		toolTokens := max(1, tokens-noticeTokens)
+		// Sized below the whole allocation so the projection and tail hold across appends.
+		toolTokens := max(1, tokens-noticeTokens-reserve)
 		rows = extendBodyProjection(ctx, rows, projectRecordedToolBodies(ctx, rows, toolTokens))
 		if retained := retainedToolTailMessages(rows, toolTokens); retained > 0 {
 			cfg.KeepRecentMessages = retained

@@ -35,7 +35,8 @@ func DeterministicFitWithReserve(cfg CompactionConfig, messages []ContextMessage
 	// Over budget here, so a notice is certain; reserve its cost before sizing.
 	budget := maxTokens - EstimateMessagesTokens(head) - EstimateMessagesTokens([]ContextMessage{contextTrimNotice()})
 	defaultFloor := len(body) - recentCompactionStart(body, max(1, cfg.KeepRecentMessages))
-	recent := recentCompactionCount(cfg, body, budget)
+	// A floor sized to the whole budget would cut minimally and slide on every append.
+	recent := recentCompactionCount(cfg, body, budget-reserve)
 	keepFloor := len(body) - recentCompactionStart(body, recent)
 	drop := fitFrontDropCount(body, keepFloor, defaultFloor, budget, reserve)
 	drop = completeFitStart(body, drop)
@@ -168,22 +169,24 @@ func fitFrontDropCount(body []ContextMessage, keepFloor, defaultFloor, budget, r
 		if pinnedPrefix[drop]+remaining[drop] > budget {
 			continue
 		}
-		if drop >= blockCap {
-			return drop
-		}
 		if drop == 0 {
 			return 0
 		}
+		limit := blockCap
+		if drop >= blockCap {
+			if reserve <= 0 {
+				return drop
+			}
+			// The minimum already crossed the recent window, so without room a
+			// cut made here would have to move again on the next append.
+			limit = maxDrop
+		}
 		target := drop
-		for target < blockCap && pinnedPrefix[target]+remaining[target] > budget-reserve {
+		for target < limit && pinnedPrefix[target]+remaining[target] > budget-reserve {
 			target++
 		}
-		// Stay on the grid, but never past the recent window floor.
-		blocked := fitAnchorDrop(body, drop, target)
-		if blocked > blockCap {
-			return blockCap
-		}
-		return blocked
+		// Stay on the grid, but never past the floor.
+		return min(fitAnchorDrop(body, drop, target), limit)
 	}
 	return maxDrop
 }
