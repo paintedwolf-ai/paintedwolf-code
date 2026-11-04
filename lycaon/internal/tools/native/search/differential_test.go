@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
-	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -64,7 +64,7 @@ func references(t *testing.T) []reference {
 				continue
 			}
 		case "rg":
-			// Only the pinned reference counts: records of a named binary file differ between releases.
+			// Only the pinned reference counts: an arbitrary release can have different JSON semantics.
 			if !bytes.HasPrefix(version, []byte("ripgrep 15.0.")) {
 				continue
 			}
@@ -84,8 +84,6 @@ func references(t *testing.T) []reference {
 	}
 	return out
 }
-
-var byteCountsSearched = regexp.MustCompile(`"bytes_searched":\d+`)
 
 func runReference(t *testing.T, ref reference, dir string, argv []string) (string, int) {
 	t.Helper()
@@ -114,6 +112,10 @@ type differentialCase struct {
 	sorted bool
 	// json compares JSON Lines with the measured elapsed fields hidden.
 	json bool
+	// mapped compares only where ripgrep maps a named file. A mapped binary record keeps its NUL and
+	// reports bytes searched to it; an unmapped one converts NUL and reports the whole file. ripgrep does
+	// not map on macOS even with --mmap. The native printer follows the mapped form.
+	mapped bool
 }
 
 func sortedLines(s string) string {
@@ -222,7 +224,7 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"rg", "--json", "-m", "1", "-A", "1", "alpha", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "-v", "alpha", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "-w", "alpha", "sub/c.txt"}, kinds: []string{"rg"}, json: true},
-	{argv: []string{"rg", "--json", "alpha", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "alpha", "bin.dat"}, kinds: []string{"rg"}, json: true, mapped: true},
 	{argv: []string{"rg", "--json", "zz", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
 	{argv: []string{"rg", "--hidden", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
@@ -271,6 +273,9 @@ func TestDifferentialAgainstInstalledReferences(t *testing.T) {
 			if !slices.Contains(c.kinds, ref.kind) {
 				continue
 			}
+			if c.mapped && runtime.GOOS == "darwin" {
+				continue
+			}
 			if ref.kind == "rg" != (c.argv[0] == "rg") || strings.HasSuffix(ref.kind, "-find") != (c.argv[0] == "find") {
 				continue
 			}
@@ -290,11 +295,6 @@ func TestDifferentialAgainstInstalledReferences(t *testing.T) {
 				}
 				if c.json {
 					want, gotOut = normalizeElapsed(want), normalizeElapsed(gotOut)
-				}
-				if slices.Contains(c.argv, "bin.dat") {
-					// How far one release reads a binary file differs by platform: 15.0.0 reports 5 bytes
-					// searched on Linux and 13 on macOS for this record.
-					want, gotOut = byteCountsSearched.ReplaceAllString(want, `"bytes_searched":0`), byteCountsSearched.ReplaceAllString(gotOut, `"bytes_searched":0`)
 				}
 				if gotOut != want || got.result.Status != status {
 					t.Fatalf("native stdout %q status %d\nreference stdout %q status %d", gotOut, got.result.Status, want, status)
