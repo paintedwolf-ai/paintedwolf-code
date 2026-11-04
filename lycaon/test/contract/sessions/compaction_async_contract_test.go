@@ -23,7 +23,7 @@ func TestCompactionSingleWriterContract(t *testing.T) {
 	lycaonRoot := filepath.Join(root, "lycaon")
 	allowed := map[string]bool{
 		"internal/session/history.Service.runBackgroundCompactionPage": true,
-		"internal/session/history.Service.ForceCompact":                true,
+		"internal/session/history.Service.forceCompact":                true,
 		"internal/session/history.Service.publishReductionSynthesis":   true,
 	}
 	callers, err := scanCompactionViewWriterCallers(lycaonRoot)
