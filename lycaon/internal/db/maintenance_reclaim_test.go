@@ -74,6 +74,9 @@ func TestDrainReturnsPagesWithOneRowRoundPerWake_AC_DB_03(t *testing.T) {
 	if progress.ReclaimedBytes != progress.PagesReclaimed*progress.PageSize {
 		t.Fatalf("reclaimed bytes = %d", progress.ReclaimedBytes)
 	}
+	if progress.DatabaseBytes == 0 || progress.UsedBytes+progress.FreeBytes != progress.PageCount*progress.PageSize {
+		t.Fatalf("byte accounting = %+v", progress)
+	}
 	if progress.FreelistPages >= cfg.IncrementalVacuumMinFreelistPages || progress.Condition != ReclaimBelowThreshold {
 		t.Fatalf("progress = %+v, want a drained freelist", progress)
 	}

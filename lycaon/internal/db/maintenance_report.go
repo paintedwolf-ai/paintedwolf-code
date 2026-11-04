@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -160,7 +159,6 @@ func (s *Store) storeFileBytes(ctx context.Context) (database, wal int64) {
 	if err := s.QueryRowContext(ctx, `PRAGMA database_list`).Scan(&seq, &name, &file); err != nil {
 		return 0, 0
 	}
-	file = strings.TrimSuffix(file, "\x00")
 	if info, err := os.Stat(file); err == nil {
 		database = info.Size()
 	}

@@ -95,7 +95,7 @@ func (s *Store) Sweep(ctx context.Context, createdBefore time.Time) (SweepReport
 	}
 	collector := snapshotCollector{db: s.db, queries: s.queries, pins: s.pins, cursor: &s.sweepCursor, limits: limits}
 	err := collector.sweep(ctx, db.FormatTime(createdBefore.UTC()))
-	if collector.report.OversizedDeferred > 0 || (collector.report.ChildRowsDeleted > 0 && err == nil) {
+	if collector.report.OversizedDeferred > 0 || collector.report.ChildRowsDeleted > 0 {
 		slog.InfoContext(ctx, "source snapshot collection progress",
 			"examined", collector.report.Examined, "retained", collector.report.Retained,
 			"snapshots_deleted", collector.report.SnapshotsDeleted, "manifests_deleted", collector.report.ManifestsDeleted,
