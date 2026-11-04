@@ -143,9 +143,10 @@ type overviewResult struct {
 	} `json:"since"`
 	Truncated bool `json:"truncated"`
 	Files     []struct {
-		Path      string `json:"path"`
-		Op        string `json:"op"`
-		Actor     string `json:"actor"`
+		Path       string `json:"path"`
+		Op         string `json:"op"`
+		Unrecorded bool   `json:"unrecorded"`
+		Actor      string `json:"actor"`
 		At        string `json:"at"`
 		Effects   int    `json:"effects"`
 		VersionID string `json:"version_id"`

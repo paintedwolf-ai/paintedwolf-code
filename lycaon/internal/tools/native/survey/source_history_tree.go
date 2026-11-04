@@ -1,0 +1,182 @@
+package survey
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workspacebaseline"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+const (
+	overviewTreeBudget      = overviewSettleBudget
+	overviewTreeUnknownNote = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
+	treeDiffNoTextNote      = "this file changed, but its baseline or live side has no text to compare"
+	treeDiffTouchedNote     = "this file's timestamp changed; its text did not"
+)
+
+func sourceTreeOf(tctx tools.ToolContext) tools.SourceTree {
+	return tools.SourceTree{BaselinePath: tctx.Source.WorkerBaselinePath, BranchRoot: tctx.Source.WorkerBranchRoot, Roots: tctx.Source.Roots}
+}
+
+// addTreeChanges appends rows for what the leg's tree changed beyond the ledger's
+// record. complete=false means the comparison did not finish: absence is unknown.
+func (t *SourceHistoryTool) addTreeChanges(
+	ctx context.Context,
+	tctx tools.ToolContext,
+	ledger tools.SourceHistory,
+	rootBranches map[string]sourcebranch.ID,
+	effects []sourceledger.Effect,
+	resp *sourceHistoryResponse,
+) (complete bool) {
+	if ledger.Tree == nil {
+		return false
+	}
+	budget := t.treeBudget
+	if budget == 0 {
+		budget = overviewTreeBudget
+	}
+	compare, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	changes, err := ledger.Tree.TreeChanges(compare, sourceTreeOf(tctx))
+	if err != nil {
+		return false
+	}
+	roots := tctx.Source.Roots
+	recorded := make(map[string]bool, len(resp.Files)+len(effects))
+	for _, row := range resp.Files {
+		recorded[row.Path] = true
+	}
+	// A rename's source is recorded too, though no row names it now.
+	for _, effect := range effects {
+		recorded[projectroot.DisplayPath(roots, effect.RootID, effect.Path)] = true
+		if effect.FromPath != "" {
+			recorded[projectroot.DisplayPath(roots, effect.FromRootID, effect.FromPath)] = true
+		}
+	}
+	for _, change := range changes {
+		if recorded[change.Path] {
+			continue
+		}
+		if len(resp.Files) >= overviewEffectCap {
+			resp.Truncated = true
+			break
+		}
+		// A truncated page does not prove the ledger has no row for this path.
+		if resp.Truncated {
+			found, err := pathHasEffect(compare, tctx, ledger, rootBranches, change.Path)
+			if err != nil {
+				return false
+			}
+			if found {
+				continue
+			}
+		}
+		resp.Files = append(resp.Files, sourceHistoryOverviewFile{Path: change.Path, Op: string(changeOp(change.Kind)), Unrecorded: true})
+	}
+	return true
+}
+
+func changeOp(kind workspacebaseline.ChangeKind) api.SourceChangeOp {
+	switch kind {
+	case workspacebaseline.ChangeCreated:
+		return api.SourceChangeOpCreate
+	case workspacebaseline.ChangeDeleted:
+		return api.SourceChangeOpDelete
+	case workspacebaseline.ChangeModified:
+	}
+	return api.SourceChangeOpWrite
+}
+
+func pathHasEffect(ctx context.Context, tctx tools.ToolContext, ledger tools.SourceHistory, rootBranches map[string]sourcebranch.ID, path string) (bool, error) {
+	rootID, rel, err := displayPathLocation(tctx.Source.Roots, path)
+	if err != nil {
+		return false, err
+	}
+	_, found, err := ledger.Files.OldestPathEffectAfterOnBranch(ctx, tctx.Identity.ProjectID, rootBranches[rootID], rootID, rel, 0)
+	return found, err
+}
+
+// displayPathLocation inverts projectroot.DisplayPath.
+func displayPathLocation(roots []projectroot.RootRef, path string) (rootID, rel string, err error) {
+	for _, root := range roots {
+		if root.IsPrimary || root.Label == "" {
+			continue
+		}
+		if rest, ok := strings.CutPrefix(path, "@"+root.Label+"/"); ok {
+			return root.ID, rest, nil
+		}
+	}
+	primary, err := projectroot.PrimaryRoot(roots)
+	if err != nil {
+		return "", "", err
+	}
+	return primary.ID, path, nil
+}
+
+// treeDiffOr answers a worker's default diff from its tree when the ledger has no
+// effect on the path, and otherwise returns the ledger's answer in resp.
+func (t *SourceHistoryTool) treeDiffOr(
+	ctx context.Context,
+	tctx tools.ToolContext,
+	display, rootID, rel string,
+	resp sourceHistoryResponse,
+) (string, error) {
+	if tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindWorker {
+		return marshalSourceHistory(display, resp)
+	}
+	ledger := tctx.Source.History
+	if ledger.Tree == nil {
+		resp.Note = joinNotes(resp.Note, overviewTreeUnknownNote)
+		return marshalSourceHistory(display, resp)
+	}
+	compared, err := ledger.Tree.TreePathChange(ctx, sourceTreeOf(tctx), projectroot.DisplayPath(tctx.Source.Roots, rootID, rel))
+	if err != nil {
+		resp.Note = joinNotes(resp.Note, overviewTreeUnknownNote)
+		return marshalSourceHistory(display, resp)
+	}
+	if compared.Kind == "" {
+		return marshalSourceHistory(display, resp)
+	}
+	out := sourceHistoryResponse{Mode: "diff", Path: display, Unrecorded: true, Since: &sourceHistorySince{}}
+	if compared.Kind == workspacebaseline.ChangeDeleted {
+		out.State = "absent"
+	}
+	if !compared.HasBefore || !compared.HasAfter {
+		out.Note = treeDiffNoTextNote
+		return marshalSourceHistory(display, out)
+	}
+	// Text from a credential file reaches no one until its exposure is recorded.
+	for _, text := range []string{compared.Before, compared.After} {
+		if err := tctx.ObserveCredentialDelivery(ctx, compared.Abs, display, text); err != nil {
+			return "", fmt.Errorf("record credential file read: %w", err)
+		}
+	}
+	out.Diff = comparisonDiff(sourceledger.Comparison{
+		Before: sourceledger.ComparisonSide{Content: compared.Before},
+		After:  sourceledger.ComparisonSide{Content: compared.After},
+	}, treeDiffLabel(display, "session baseline", compared.Kind == workspacebaseline.ChangeCreated), treeDiffLabel(display, "live", compared.Kind == workspacebaseline.ChangeDeleted))
+	if out.Diff == "" {
+		out.Note = treeDiffTouchedNote
+	}
+	return marshalSourceHistory(display, out)
+}
+
+func treeDiffLabel(display, side string, absent bool) string {
+	if absent {
+		return fmt.Sprintf("%s (absent)", display)
+	}
+	return fmt.Sprintf("%s (%s)", display, side)
+}
+
+func joinNotes(first, second string) string {
+	if first == "" {
+		return second
+	}
+	return first + "; " + second
+}

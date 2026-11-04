@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -42,6 +43,47 @@ func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []pr
 		return FilterOverlayPromoteCandidatePathsForRoots(roots, changed), nil
 	}
 	return promotionstate.FilterOverlayPromoteCandidatePaths(changed), nil
+}
+
+// OverlayTree compares a running worker's branch with its baseline for its own
+// tools, over the paths promotion would consider.
+type OverlayTree struct{}
+
+// TreeChanges returns the promotion candidates and how each changed.
+func (OverlayTree) TreeChanges(ctx context.Context, tree tools.SourceTree) ([]workspacebaseline.Change, error) {
+	baseline, err := workspacebaseline.Open(ctx, tree.BaselinePath, workspacebaseline.ContentStore(tree.BaselinePath))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = baseline.Close() }()
+	changes, err := baseline.ChangeSet(ctx, tree.Roots, tree.BranchRoot)
+	if err != nil {
+		return nil, err
+	}
+	out := changes[:0]
+	for _, change := range changes {
+		if overlayTreeAdmits(tree.Roots, change.Path) {
+			out = append(out, change)
+		}
+	}
+	return out, nil
+}
+
+// TreePathChange compares one path. A path promotion omits reads as unchanged.
+func (OverlayTree) TreePathChange(ctx context.Context, tree tools.SourceTree, path string) (workspacebaseline.PathComparison, error) {
+	if !overlayTreeAdmits(tree.Roots, path) {
+		return workspacebaseline.PathComparison{}, nil
+	}
+	baseline, err := workspacebaseline.Open(ctx, tree.BaselinePath, workspacebaseline.ContentStore(tree.BaselinePath))
+	if err != nil {
+		return workspacebaseline.PathComparison{}, err
+	}
+	defer func() { _ = baseline.Close() }()
+	return baseline.ComparePath(ctx, tree.Roots, tree.BranchRoot, path)
+}
+
+func overlayTreeAdmits(roots []projectroot.RootRef, path string) bool {
+	return len(FilterOverlayPromoteCandidatePathsForRoots(roots, []string{path})) == 1
 }
 
 // OverlayWorkspaceAvailable reports whether the task's overlay root is a real directory.
