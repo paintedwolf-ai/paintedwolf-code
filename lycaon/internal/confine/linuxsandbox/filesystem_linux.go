@@ -28,8 +28,8 @@ type opKind int
 const (
 	opWritable opKind = iota
 	opHidden
-	opReadOnly
 	opRestored
+	opReadOnly
 )
 
 // applyFilesystem expresses the plan's masks and restorations as mounts.

@@ -373,7 +373,7 @@ func (pc *planCompiler) writeRule(rule fsRule) error {
 			if rule.allow {
 				pc.allowWrite(path, m.subpath != "")
 			} else {
-				pc.denyWrite(path, m.except)
+				pc.denyWrite(path, m.except, m.subpath != "")
 			}
 		}
 	}
@@ -411,7 +411,17 @@ func (pc *planCompiler) allowWrite(path string, subtree bool) {
 // denyWrite masks a path read-only when a grant would otherwise reach it; its
 // exceptions are restored. Only a path still behind its placeholder needs no
 // mask: one a restoration brought back is as reachable as any other.
-func (pc *planCompiler) denyWrite(path string, except []string) {
+//
+// A subtree denial also overrides the earlier grants beneath it, and those stay
+// masked even when no grant reaches the denied path itself.
+func (pc *planCompiler) denyWrite(path string, except []string, subtree bool) {
+	if subtree {
+		for _, grant := range pc.grants {
+			if grant != path && PathAtOrUnder(grant, path) && !coveredByList(except, grant) {
+				pc.readOnly[grant] = true
+			}
+		}
+	}
 	if pc.concealed(path) || !coveredByList(pc.grants, path) {
 		return
 	}

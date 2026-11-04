@@ -28,7 +28,7 @@ func addControlPlaneReadFloor(rules *FilesystemRules, c Confinement) {
 	if c.SessionScratchRoot != "" {
 		allowed = append(allowed, fspath.CanonicalPath(c.SessionScratchRoot))
 	}
-	addManagedReadRoots(rules, subpathMatches(denied, FloorReadControlPlane), allowed)
+	addManagedReadRoots(rules, append(subpathMatches(denied, FloorReadControlPlane), readDenyMatches(c)...), allowed)
 	var matches []fsMatch
 	reachable := append([]string(nil), allowed...)
 	for _, g := range excludedWorkspaceGrants(c) {
@@ -50,30 +50,42 @@ func addControlPlaneReadFloor(rules *FilesystemRules, c Confinement) {
 // override denied ancestors only: a denial below a managed root still holds,
 // and only an approved read grant lifts that.
 func addManagedReadRoots(rules *FilesystemRules, denied []fsMatch, managed []string) {
-	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(managed, "")})
+	deniedPaths := make([]string, 0, len(denied))
+	for _, m := range denied {
+		if path := matchPath(m); path != "" {
+			deniedPaths = append(deniedPaths, path)
+		}
+	}
+	var reopened []string
+	for _, root := range managed {
+		if underAny(root, deniedPaths) {
+			reopened = append(reopened, root)
+		}
+	}
+	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(reopened, "")})
 	var below []fsMatch
 	var belowPaths []string
 	for _, m := range denied {
-		path := m.literal
-		if path == "" {
-			path = m.subpath
-		}
-		if path != "" && strictlyUnderAny(path, managed) {
+		if path := matchPath(m); path != "" && strictlyUnderAny(path, reopened) {
 			below = append(below, m)
 			belowPaths = append(belowPaths, path)
 		}
 	}
-	if len(below) == 0 {
-		return
-	}
 	rules.add(fsRule{op: opRead, matches: below})
 	var inner []string
-	for _, root := range managed {
+	for _, root := range reopened {
 		if strictlyUnderAny(root, belowPaths) {
 			inner = append(inner, root)
 		}
 	}
 	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(inner, "")})
+}
+
+func matchPath(m fsMatch) string {
+	if m.literal != "" {
+		return m.literal
+	}
+	return m.subpath
 }
 
 func strictlyUnderAny(path string, ancestors []string) bool {
