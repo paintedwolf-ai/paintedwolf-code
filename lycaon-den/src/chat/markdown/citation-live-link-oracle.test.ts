@@ -55,16 +55,16 @@ describe("accepted speech renders no unvalidated live link", () => {
     expect(rows.length).toBeGreaterThan(4);
     for (const { source, present } of rows) {
       const text = render(present, true).textContent ?? "";
-      expect({ source, text }).toEqual({ source, text: expect.not.stringMatching(/&(#\d+|lt|gt|amp);|\/) });
+      expect({ source, text }).toEqual({ source, text: expect.not.stringMatching(/&(#\d+|lt|gt|amp);|\\/) });
       expect({ source, text }).toEqual({ source, text: expect.stringContaining("a.go") });
     }
   });
 
   it.each([
-    ["1\. see a.go now", "1. see a.go now"],
-    ["https\://unobs.test/a see a.go", "https://unobs.test/a see a.go"],
-    ["www\.unobs.test see a.go", "www.unobs.test see a.go"],
-    ['\<a href="https\://unobs\.test"\>see a.go\</a\>', '<a href="https://unobs.test">see a.go</a>'],
+    ["1\\. see a.go now", "1. see a.go now"],
+    ["https\\://unobs.test/a see a.go", "https://unobs.test/a see a.go"],
+    ["www\\.unobs.test see a.go", "www.unobs.test see a.go"],
+    ['\\<a href="https\\://unobs\\.test"\\>see a.go\\</a\\>', '<a href="https://unobs.test">see a.go</a>'],
   ])("presents %s", (present, reads) => {
     const holder = render(present, true);
     expect(holder.textContent).toBe(reads);
