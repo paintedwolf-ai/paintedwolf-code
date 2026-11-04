@@ -552,7 +552,6 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 // settleProgram records the evaluator's aggregate; a supervisor stop or loss
 // overrides it with the interruption RunProgram reported.
 func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult, evaluated commandprogram.ProgramOutcome, stopped bool) error {
-	run.window.settle(ctx)
 	settlement := evaluated.Settlement("output:program-source:" + run.root.Identity.ProgramID)
 	if stopped || result.Terminal == toolcontract.ProducerInterrupted {
 		status := 130
