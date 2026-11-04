@@ -54,10 +54,8 @@ func runGitProgram(t *testing.T, f *programtest.Fixture, source string) command.
 }
 
 func TestACOP01AndACOP02WriteLegProgramsStopAtTheRefusal(t *testing.T) {
-	t.Parallel()
 	for _, source := range []string{"git status", "git diff -- src/main.go", "git log", "git status || true"} {
 		t.Run(source, func(t *testing.T) {
-			t.Parallel()
 			outcome := runGitProgram(t, newGitProgramFixture(t, true), "printf before; "+source+"; printf after")
 			if outcome.Refusal == nil || outcome.Refusal.Code != "GIT_NO_REPOSITORY_ON_WRITE_LEG" || outcome.StopCode != "GIT_NO_REPOSITORY_ON_WRITE_LEG" {
 				t.Fatalf("outcome = %+v, want the refusal as the stop", outcome)
@@ -70,7 +68,6 @@ func TestACOP01AndACOP02WriteLegProgramsStopAtTheRefusal(t *testing.T) {
 }
 
 func TestACOP03ProgramsWithoutARefusalKeepGitsStatus(t *testing.T) {
-	t.Parallel()
 	for _, tc := range []struct {
 		name         string
 		workerBranch bool
@@ -81,7 +78,6 @@ func TestACOP03ProgramsWithoutARefusalKeepGitsStatus(t *testing.T) {
 		{"external git status on a write leg", true, "external -- git status"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			outcome := runGitProgram(t, newGitProgramFixture(t, tc.workerBranch), tc.source)
 			if outcome.Refusal != nil || outcome.Status != 128 {
 				t.Fatalf("outcome = %+v, want Git's status 128 and no refusal", outcome)
