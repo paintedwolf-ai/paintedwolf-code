@@ -273,7 +273,8 @@ func TestDurableCompactionScalesRecentTailToReceiverBudget(t *testing.T) {
 		{ID: "answer", Ord: 4, Role: "assistant", Content: "Read complete"},
 		{ID: "current", Ord: 5, Role: "user", Content: "Continue", ContextPinned: true},
 	}
-	out, record, _, _, err := NewSimpleCompactor(cfg, nil).compactSession(t.Context(), SessionInfo{RecallAvailable: true}, rows, 1000)
+	reduction, err := NewSimpleCompactor(cfg, nil).compactSession(t.Context(), SessionInfo{RecallAvailable: true}, rows, 1000)
+	out, record := reduction.messages, reduction.continuation
 	testutil.FailErr(t, "compact receiver-sized recent tail", err)
 	if len(out) == 0 || record == nil || record.ThroughOrd < 3 {
 		t.Fatal("fixed recent-message retention prevented recoverable compaction")

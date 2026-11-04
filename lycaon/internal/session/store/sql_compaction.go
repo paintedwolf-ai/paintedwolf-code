@@ -108,6 +108,11 @@ func validateCompactionSource(ctx context.Context, queries *db.Queries, sessionI
 	return nil
 }
 
+// CompactionSourceClock reads the session's transcript mutation clock.
+func (s *SQL) CompactionSourceClock(ctx context.Context, sessionID string) (int64, error) {
+	return s.queries.GetSessionTranscriptSeq(ctx, sessionID)
+}
+
 // GetCompactionView returns the session's compacted view, ok=false when none exists.
 func (s *SQL) GetCompactionView(ctx context.Context, sessionID string) (*CompactionView, bool, error) {
 	if err := ctx.Err(); err != nil {

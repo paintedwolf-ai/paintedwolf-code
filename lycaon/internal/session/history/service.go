@@ -24,6 +24,7 @@ type Store interface {
 	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
 	GetCompactionView(context.Context, string) (*store.CompactionView, bool, error)
 	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)
+	CompactionSourceClock(context.Context, string) (int64, error)
 	PutCompactionView(context.Context, string, store.CompactionView) error
 }
 
@@ -48,5 +49,12 @@ func (m *Service) SetCompactor(compactor compaction.ContextCompactor) {
 	m.Compactor = compactor
 	m.Limits.SetFallback(compactor)
 }
-func (m *Service) SetDataDir(dir string)              { m.dataDir = dir }
-func (m *Service) ForgetCalibration(sessionID string) { m.calibration.Delete(sessionID) }
+func (m *Service) SetDataDir(dir string) { m.dataDir = dir }
+
+// ForgetSessionState releases calibration and attempt records after a reset or eviction.
+func (m *Service) ForgetSessionState(sessionID string) {
+	m.calibration.Delete(sessionID)
+	if m.Runner != nil {
+		m.Runner.attempts.forget(sessionID)
+	}
+}

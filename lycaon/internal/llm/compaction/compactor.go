@@ -28,10 +28,12 @@ type CompactionReport struct {
 	TargetTokens         int
 	TargetMet            bool
 	Reason               string
-	CacheHit             bool
-	MeasurementMethod    string
-	TextTokensBefore     int
-	TextTokensAfter      int
+	// SummaryFailure is the typed provider failure behind a rejected page.
+	SummaryFailure    error
+	CacheHit          bool
+	MeasurementMethod string
+	TextTokensBefore  int
+	TextTokensAfter   int
 }
 
 // SessionInfo supplies session metadata for compaction snapshots.
@@ -123,14 +125,15 @@ func (c *SimpleCompactor) Compact(ctx context.Context, info SessionInfo, message
 		report.Reason = "target_reached"
 		return
 	}
-	var compact []ContextMessage
-	compact, report.Continuation, report.Reason, report.CacheHit, err = c.compactSession(ctx, info, out, maxTokens)
+	reduction, err := c.compactSession(ctx, info, out, maxTokens)
+	report.Continuation, report.Reason, report.CacheHit = reduction.continuation, reduction.reason, reduction.cacheHit
+	report.SummaryFailure = reduction.summaryFailure
 	if err != nil {
 		return
 	}
-	if compact != nil {
-		report.SynthesisSources = removedCompactionMessages(out, compact)
-		out = compact
+	if reduction.messages != nil {
+		report.SynthesisSources = removedCompactionMessages(out, reduction.messages)
+		out = reduction.messages
 		report.SessionCompacted = true
 	}
 	return

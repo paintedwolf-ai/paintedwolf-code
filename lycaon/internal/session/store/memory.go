@@ -610,6 +610,19 @@ func (s *Memory) CompactionViewCurrent(ctx context.Context, sessionID string, co
 	return validateMemoryCompactionSource(s.messages[sessionID], s.transcriptSeq[sessionID], view) == nil, nil
 }
 
+// CompactionSourceClock reads the session's transcript mutation clock.
+func (s *Memory) CompactionSourceClock(ctx context.Context, sessionID string) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if _, ok := s.sessions[sessionID]; !ok {
+		return 0, ErrSessionNotFound
+	}
+	return s.transcriptSeq[sessionID], nil
+}
+
 // UpdateMessage replaces one message by ID.
 func (s *Memory) UpdateMessage(ctx context.Context, sessionID, messageID string, msg api.Message) (api.Message, error) {
 	if err := ctx.Err(); err != nil {
