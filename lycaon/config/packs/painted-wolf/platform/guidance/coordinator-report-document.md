@@ -14,9 +14,9 @@ Do not add any other keys. Omit optional fields with null or empty values.
   - {{ offender }}{% endfor %}
 {% endfor %}{% else %}Refused: {{ rejection_reason }}{% if offenders_sample %}: {{ offenders_sample }}{% if offenders_omitted %} +{{ offenders_omitted }} more{% endif %}{% endif %}{% endif %}
 
-The host has kept your Markdown answer{% if pinned_body_chars %} ({{ pinned_body_chars }} characters){% endif %}. Do not repeat it. Return only a `json` report fence with these defects fixed. Each finding keeps a one-line `title`, and `where` entries stay typed `{evidence, path, line, end_line, excerpt}`; never report an open claim as resolved.
+The host has kept your Markdown answer{% if pinned_body_chars %} ({{ pinned_body_chars }} characters){% endif %}. Do not repeat it. Return only a `json` report fence with these defects fixed. Each item in `findings` keeps a one-line `title`, and its `where` entries stay typed `{evidence, path, line, end_line, excerpt}`; `set_asides` keep their reasons; never report an open claim as resolved.
 {% if retained_document %}
-This fence holds every field the host read, and a field you leave out is cleared, so keep its `findings` and `set_asides` except the defective fields:
+This fence holds every field the host read, and a field you leave out is cleared, so keep everything except the defective fields:
 
 ```json
 {{ retained_document }}

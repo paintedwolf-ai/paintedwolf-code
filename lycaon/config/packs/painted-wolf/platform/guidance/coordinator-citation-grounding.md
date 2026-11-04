@@ -5,9 +5,9 @@ Your answer is retained, and its valid citations stay as they are. Repair only w
 Rejected: {{ offenders_sample }}
 {% if repair_targets %}Citations to replace:
 {% for target in repair_targets %}- {{ target.id }}: `{{ target.token }}` ({{ target.defect }}){% if target.link %}, a link: give an observed URL{% endif %}
-{% endfor %}
+{% endfor %}{% endif %}
 Send one directive per citation and nothing else, such as `[cite: c1 => read#5:42]`, or `[cite: c2 => <https://example.test/observed-page>]` for a link. A link keeps its label. Or return the same answer with only its citations corrected.
-{% endif %}{% if document_citation_targets %}Report fence citations to replace:
+{% if document_citation_targets %}Report fence citations to replace:
 {% for target in document_citation_targets %}- {{ target }}
 {% endfor %}
 Return the report fence with those `where` entries corrected.
