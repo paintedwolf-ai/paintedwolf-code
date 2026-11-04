@@ -25,7 +25,7 @@ func TestBeforeWaitReadsSurfaceAndDurableNotes(t *testing.T) {
 		blocked       bool
 	}{
 		{"publishing surface owes the text", "implement_routing", false, true},
-		{"private surface owes nothing", "implement_synthesis", false, false},
+		{"private surface owes nothing", "observe_synthesis", false, false},
 		{"root session on no surface owes nothing", "", false, false},
 		{"a committed note settles it", "implement_routing", true, false},
 	} {
