@@ -819,7 +819,7 @@ anchors:
   - id: coordinator.mid_turn_note
     title: Coordinator mid-turn note
     description: Assistant text accompanying tool calls audited before they run. Withheld text produces feedback; it never stops the tools.
-    trigger_class: post_turn
+    trigger_class: host_api
     surface: coordinator
     planes: [block, inform]
     envelope:
