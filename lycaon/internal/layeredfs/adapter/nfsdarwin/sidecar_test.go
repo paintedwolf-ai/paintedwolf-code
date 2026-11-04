@@ -120,20 +120,20 @@ func TestSidecarNamedDataStaysDataThroughTheMount(t *testing.T) {
 		}
 	}
 
-	// A complete file is held once its target exists, and reads back unchanged.
+	// Once a target arrives the file is no longer published. The server holds it as attributes unless
+	// the client got there first: some kernels remove a ._ file when they create its target.
 	testutil.FailErr(t, "write late target", os.WriteFile(filepath.Join(v.mnt, "no-target"), []byte("late"), 0o644))
 	v.barrier(t)
 	if ch, found := v.changeAt(t, "._no-target"); found {
 		t.Fatalf("complete sidecar with a target stayed: %+v", ch)
 	}
-	if got := v.shell(t, `xattr -p user.a no-target`); strings.TrimSpace(got) != "one" {
-		t.Fatalf("attribute after the target arrived: %q", got)
-	}
-	// The kernel may have added a provenance attribute, so the bytes need only still decode to it.
-	read, err := os.ReadFile(filepath.Join(v.mnt, "._no-target"))
-	testutil.FailErr(t, "read held sidecar", err)
-	if _, attrs, ok := nfsserver.DecodeAppleDoubleXattrs(read); !ok || string(attrs["user.a"]) != "one" {
-		t.Fatalf("held sidecar through the mount: %v ok=%v", attrs, ok)
+	if read, err := os.ReadFile(filepath.Join(v.mnt, "._no-target")); err == nil {
+		if _, attrs, ok := nfsserver.DecodeAppleDoubleXattrs(read); !ok || string(attrs["user.a"]) != "one" {
+			t.Fatalf("held sidecar through the mount: %v ok=%v", attrs, ok)
+		}
+		if got := v.shell(t, `xattr -p user.a no-target`); strings.TrimSpace(got) != "one" {
+			t.Fatalf("attribute after the target arrived: %q", got)
+		}
 	}
 
 	// Removing data removes data: the target's attributes are not derived from it.
