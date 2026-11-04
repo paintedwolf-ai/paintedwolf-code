@@ -291,6 +291,7 @@ var rejectCodeObservation = map[string]string{
 	"SURVEY_BUNDLE_REQUIRED":                    "bundle_required",
 	"SURVEY_BUNDLE_UNKNOWN":                     "unknown_target",
 	"SURVEY_PATH_ESCAPE":                        "path_escape",
+	"PRESENT_IMAGE_UNOBSERVED":                  "present_image_unobserved",
 	"PRESENT_MARKDOWN_EMBED":                    "present_markdown_embed",
 	"SYNTH_CITATIONS_REQUIRED":                  "citations_required",
 	"TASK_DECISION_PENDING":                     "decision_pending",

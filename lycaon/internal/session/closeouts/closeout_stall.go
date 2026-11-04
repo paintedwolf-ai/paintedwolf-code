@@ -35,9 +35,12 @@ func (c *Service) noteGroundingReject(rootID, code, offenderKey, draftedContent 
 	if code = strings.TrimSpace(code); code != "" {
 		entry.ForcedBy = appendDistinctCode(entry.ForcedBy, code)
 	}
+	// This draft answered the previous refusal, so it replaces what that
+	// refusal asked for; the next draft answers this one.
 	if s := strings.TrimSpace(draftedContent); s != "" {
-		entry.Drafted = guidance.RetainCloseoutDraft(entry.Drafted, s, guidance.RepairsReportDocument(entry.ForcedBy))
+		entry.Drafted = guidance.RetainCloseoutDraft(entry.Drafted, s, entry.Repair())
 	}
+	entry.BodyRepair = guidance.PresentationObservation(code) != ""
 	entry.Unread = slices.Clone(unread)
 	c.cycles.Store(rootID, cycle)
 	return entry.Attempt + entry.DocumentAttempt, prevKey

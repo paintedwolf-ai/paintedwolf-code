@@ -28,8 +28,17 @@ func (l *turnCloseout) observeCloseoutReport(ctx context.Context, sess *api.Sess
 		return observation, nil
 	}
 	if embeds := guidance.CloseoutMarkdownArtifactEmbedIDs(report.Synthesis); len(embeds) > 0 {
-		gc.Rejection.RejectObservation = "present_markdown_embed"
+		gc.Rejection.RejectObservation = guidance.PresentationObservation(guidance.PresentMarkdownEmbedCode)
 		gc.PutRejectData(guidance.PresentMarkdownEmbedCode, guidance.OffenderHintData(embeds))
+		return observation, nil
+	}
+	unobserved, err := l.unobservedImageSources(ctx, sess, history, report.Synthesis)
+	if err != nil {
+		return observation, err
+	}
+	if len(unobserved) > 0 {
+		gc.Rejection.RejectObservation = guidance.PresentationObservation(guidance.PresentImageUnobservedCode)
+		gc.PutRejectData(guidance.PresentImageUnobservedCode, guidance.OffenderHintData(unobserved))
 		return observation, nil
 	}
 	if deliversRunReport && l.Deps.CheckRunReportDocument != nil {
@@ -61,6 +70,29 @@ func (l *turnCloseout) observeCloseoutReport(ctx context.Context, sess *api.Sess
 		gc.PutRejectData(guidance.CloseoutNoNewEvidenceCode(surfaceID), guidance.OffenderHintData(offenders))
 	}
 	return observation, nil
+}
+
+// observedURLs is the evidence union's URL check, read only when the body
+// embeds a source the union would have to vouch for. Nil vouches for nothing.
+func (l *turnCloseout) observedURLs(ctx context.Context, sess *api.Session, history []api.Message, synthesis string) (func(string) bool, error) {
+	if l.Deps.EvidenceLedger == nil || len(guidance.CloseoutUnobservedImageSources(synthesis, nil)) == 0 {
+		return nil, nil
+	}
+	ev, err := guidance.UnionCloseoutEvidence(ctx, l.Deps.EvidenceLedger, sess.ID, history)
+	if err != nil {
+		return nil, err
+	}
+	return ev.URLSeen, nil
+}
+
+// unobservedImageSources lists the image sources the body embeds that no
+// artifact and no observed URL vouch for.
+func (l *turnCloseout) unobservedImageSources(ctx context.Context, sess *api.Session, history []api.Message, synthesis string) ([]string, error) {
+	observed, err := l.observedURLs(ctx, sess, history, synthesis)
+	if err != nil {
+		return nil, err
+	}
+	return guidance.CloseoutUnobservedImageSources(synthesis, observed), nil
 }
 
 // The first defect selects policy; every defect accompanies the repair.
