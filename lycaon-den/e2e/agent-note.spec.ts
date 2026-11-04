@@ -132,16 +132,6 @@ function manualCompletions(request: APIRequestContext, sessionId: string) {
   };
   return {
     waitForNextRequest: nextRequest,
-    // The handle the model is shown on the latest tool result of its next request.
-    async latestHandle() {
-      const response = await request.get(`${apiUrl}/harness/llm/pending?wait=30000&session_id=${sessionId}`, { headers });
-      expect(response.ok(), await response.text()).toBeTruthy();
-      const { messages } = (await response.json()) as { messages: Array<{ role: string; content: string }> };
-      const result = messages.filter((row) => row.role === "tool").at(-1)?.content ?? "";
-      const handle = result.match(/\[([a-z_-]+#\d+)\]/)?.[1];
-      expect(handle, result).toBeTruthy();
-      return handle!;
-    },
     async respond(content: string, calls: Array<{ name: string; args: Record<string, unknown> }> = []) {
       const { id, tools } = await nextRequest();
       for (const call of calls) expect(tools).toContain(call.name);
@@ -239,7 +229,6 @@ webE2e.describe("agent mid-turn note", () => {
         await expect(notes.filter({ hasText: "I'll look at the auth path." })).toHaveCount(1, { timeout: 30_000 });
         await expect(notes.first().getByTestId("citation-evidence-chicklet")).toHaveCount(0);
         await driver.completed(firstRead!);
-        const handle = await llm.latestHandle();
 
         // After an observation: uncited text stays out of the transcript.
         await llm.respond("This uncited claim stays private.", [read]);
@@ -248,7 +237,7 @@ webE2e.describe("agent mid-turn note", () => {
         await expect(notes).toHaveCount(1);
 
         // A valid citation publishes, with its evidence and no protocol syntax left.
-        await llm.respond(`The readme is recorded [README.md:1-2].`, [read]);
+        await llm.respond("The readme is recorded [README.md:1-2].", [read]);
         const cited = notes.filter({ hasText: "The readme is recorded" });
         await expect(cited).toHaveCount(1, { timeout: 30_000 });
         await expect(cited).not.toContainText("[README.md");
@@ -256,7 +245,7 @@ webE2e.describe("agent mid-turn note", () => {
         const opened = cited.locator('.den-source-path-link[data-den-source-end-line="2"]');
         await expect(opened).toHaveAttribute("data-den-source-line", "1");
 
-        await llm.respond(`Auth is described in the readme [${handle}].`);
+        await llm.respond("Auth is described in the readme [README.md:1-2].");
         await expect(stream.getByText("Auth is described in the readme")).toBeVisible({ timeout: 30_000 });
         await expect(stream.getByTestId("agent-note-badge")).toHaveCount(2);
       } finally {
