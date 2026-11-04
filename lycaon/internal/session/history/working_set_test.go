@@ -141,6 +141,9 @@ func TestShortActiveTurnStaysCanonicalAC_KV_02(t *testing.T) {
 	if !slices.Equal(ids, want) {
 		t.Fatalf("active turn = %v, want %v", ids, want)
 	}
+	if indexOfID(projected, "summary") > indexOfID(projected, "opener") {
+		t.Fatal("summary ending before the opener moved after it")
+	}
 	assertPairedExchanges(t, projected)
 	if again := svc.ApplyView(t.Context(), sess, projected); len(again) != len(projected) {
 		t.Fatalf("repeated application changed %d rows to %d", len(projected), len(again))
@@ -149,22 +152,26 @@ func TestShortActiveTurnStaysCanonicalAC_KV_02(t *testing.T) {
 
 func TestLongTurnReplacesOnlyValidatedOlderRangeAC_KV_01(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
-	svc, mem, sess := newTurnSession(t, cfg)
-	canonical := seedTurn(t, mem, sess.ID, 160, "recorded observation")
-	alloc := activeTurnAllocation(cfg)
-	start := activeWorkingSetStart(canonical, alloc)
+	seeded := func(t *testing.T) (*Service, *store.Memory, *api.Session, []api.Message) {
+		t.Helper()
+		svc, mem, sess := newTurnSession(t, cfg)
+		return svc, mem, sess, seedTurn(t, mem, sess.ID, 160, "recorded observation")
+	}
+	_, _, _, canonical := seeded(t)
+	start := activeWorkingSetStart(canonical, activeTurnAllocation(cfg))
 	if rows := len(canonical) - indexOfID(canonical, canonical[slices.IndexFunc(canonical, func(row api.Message) bool { return row.Ord == start })].ID); rows != ActiveTurnWorkingSetRows {
 		t.Fatalf("working set holds %d rows, want %d", rows, ActiveTurnWorkingSetRows)
 	}
 
 	t.Run("coverage before the boundary", func(t *testing.T) {
+		svc, mem, sess, canonical := seeded(t)
 		publishCoverage(t, mem, sess.ID, canonical, start+40, 120, cfg.ModelContextWindow)
 		projected := loadProjected(t, svc, sess)
 		if countID(projected, "opener") != 1 || indexOfID(projected, "opener") >= indexOfID(projected, "assistant-100") {
 			t.Fatalf("opener must appear once before later exchanges: %d", countID(projected, "opener"))
 		}
-		if indexOfID(projected, "summary") > indexOfID(projected, "opener") {
-			t.Fatal("summary ending before intra-turn replacement moved after the opener unexpectedly")
+		if indexOfID(projected, "opener") > indexOfID(projected, "summary") {
+			t.Fatal("opener must precede a summary reaching into the turn")
 		}
 		for _, row := range projected {
 			if row.Ord <= 0 || row.Role != api.MessageRoleTool {
@@ -181,6 +188,7 @@ func TestLongTurnReplacesOnlyValidatedOlderRangeAC_KV_01(t *testing.T) {
 	})
 
 	t.Run("summary spanning the boundary is not clipped", func(t *testing.T) {
+		svc, mem, sess, canonical := seeded(t)
 		summarized := start + 20
 		publishCoverage(t, mem, sess.ID, canonical, start+40, summarized, cfg.ModelContextWindow)
 		projected := loadProjected(t, svc, sess)
@@ -421,7 +429,7 @@ func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 			svc, mem, sess := setup(t, true)
 			feed.window = tc.window
 			hard := svc.compactionConfig(t.Context(), sess).HardCeilingTokens
-			canonical := seedTurn(t, mem, sess.ID, 300, strings.Repeat("recorded observation ", 150))
+			seedTurn(t, mem, sess.ID, 300, strings.Repeat("recorded observation ", 150))
 			frame := strings.Repeat("Standing instructions. ", 400)
 			for step := range 4 {
 				testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sess.ID, turnExchange(1000+step, strings.Repeat("recorded observation ", 150))...))
@@ -437,7 +445,6 @@ func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 				}
 				assertPairedExchanges(t, fitted.Messages)
 			}
-			_ = canonical
 		})
 	}
 

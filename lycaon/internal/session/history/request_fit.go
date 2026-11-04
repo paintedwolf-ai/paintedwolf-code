@@ -166,6 +166,15 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 			kept = append(kept, row)
 		}
 		rows = kept
+	} else {
+		// An unvalidated summary establishes nothing; dropped rows get a named omission.
+		kept := rows[:0:0]
+		for _, row := range rows {
+			if !row.CompactionCheckpoint && !(len(row.ContentParts) == 1 && row.ContentParts[0].Source == "compaction_summary") {
+				kept = append(kept, row)
+			}
+		}
+		rows = kept
 	}
 	lastOrd := int64(0)
 	for _, row := range rows {
