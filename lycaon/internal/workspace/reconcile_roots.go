@@ -124,6 +124,9 @@ func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket
 			continue
 		}
 		root := filepath.Join(bucket.path, jobID)
+		if placedBranchAbsent(stateRoot, root) {
+			continue
+		}
 		removed, err := removeUnownedBranch(ctx, root)
 		if err != nil {
 			return changed, err

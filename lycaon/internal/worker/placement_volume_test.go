@@ -25,7 +25,10 @@ import (
 // A claim on a second volume stores only its logical address, survives the
 // volume going away and returning, and travels in a backup to another device.
 func TestPlacedWorkerSurvivesEjectAndRelocatesThroughBackup(t *testing.T) {
-	volume := testvolume.New(t, testvolume.Movable)
+	volume, ran := testvolume.New(t, testvolume.Movable)
+	if ran {
+		return
+	}
 	t.Cleanup(workspace.UseCopyAsCloneForTest())
 	ctx := t.Context()
 	project := volume.Dir(t, "project")

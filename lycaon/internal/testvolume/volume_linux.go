@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -19,16 +18,18 @@ import (
 const namespaceChildEnv = "PW_TESTVOLUME_NAMESPACE_CHILD"
 
 // New returns a real second volume. Mounting needs a private namespace, so a test
-// on Linux re-runs itself inside one and the parent reports the child's outcome.
-func New(t *testing.T, kind Kind) *Volume {
+// on Linux re-runs itself inside one. The second result is true in the parent once
+// that run has passed, and the caller returns.
+func New(t *testing.T, kind Kind) (*Volume, bool) {
 	t.Helper()
 	if kind == Clonable {
-		return reflinkVolume(t)
+		return reflinkVolume(t), false
 	}
 	if os.Getenv(namespaceChildEnv) == "" {
 		runInNamespace(t)
+		return nil, true
 	}
-	return tmpfsVolume(t)
+	return tmpfsVolume(t), false
 }
 
 func reflinkVolume(t *testing.T) *Volume {
@@ -75,8 +76,6 @@ func runInNamespace(t *testing.T) {
 	if strings.Contains(output.String(), "--- SKIP: "+name) {
 		t.Skip("private namespace run skipped")
 	}
-	// The test already ran in the child. This is FailNow's exit without the failure.
-	runtime.Goexit()
 }
 
 func tmpfsVolume(t *testing.T) *Volume {

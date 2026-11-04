@@ -16,7 +16,10 @@ import (
 )
 
 func TestRetentionAndInventoryFindABranchOnAnotherVolume(t *testing.T) {
-	volume := testvolume.New(t, testvolume.Movable)
+	volume, ran := testvolume.New(t, testvolume.Movable)
+	if ran {
+		return
+	}
 	t.Cleanup(workspace.UseCopyAsCloneForTest())
 	project := volume.Dir(t, "project")
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(project, "a.txt"), []byte("hello"), 0o600))

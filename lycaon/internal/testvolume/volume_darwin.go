@@ -10,7 +10,8 @@ import (
 )
 
 // New attaches a fresh disk image. A host without hdiutil cannot run these tests.
-func New(t *testing.T, kind Kind) *Volume {
+// The second result is true when the caller should return; it never is on macOS.
+func New(t *testing.T, kind Kind) (*Volume, bool) {
 	t.Helper()
 	if _, err := exec.LookPath("hdiutil"); err != nil {
 		t.Skipf("hdiutil unavailable: %v", err)
@@ -50,7 +51,7 @@ func New(t *testing.T, kind Kind) *Volume {
 			}
 		}
 	})
-	return v
+	return v, false
 }
 
 // MakeReadOnly remounts the volume read-only.

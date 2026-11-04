@@ -135,8 +135,11 @@ func forgetPlacedBranch(stateRoot, branchRoot string) error {
 	}
 	projectKey, jobID := branchIdentity(branchRoot)
 	logical := filepath.Join(enginepaths.WorkerBranchesRootUnder(stateRoot), projectKey, jobID)
-	_ = os.RemoveAll(enginepaths.MetaDirForBranchRoot(logical))
-	removeBranchLocks(logical)
+	// A tree here came from restore, and this layout record is its own.
+	if _, err := os.Lstat(logical); os.IsNotExist(err) {
+		_ = os.RemoveAll(enginepaths.MetaDirForBranchRoot(logical))
+		removeBranchLocks(logical)
+	}
 	return workerplacement.ForgetBranch(context.Background(), stateRoot, projectKey, jobID)
 }
 
@@ -172,9 +175,32 @@ func listAllSandboxEntries(stateRoot, branchRoot, primaryDir string) (sandboxLis
 			return sandboxListing{}, err
 		}
 		out.jobs = append(out.jobs, listing.jobs...)
-		out.metas = append(out.metas, listing.metas...)
+		for _, meta := range listing.metas {
+			// A placed branch's layout record goes with the branch, not on its own.
+			if base == branchRoot && branchIsPlaced(stateRoot, strings.TrimSuffix(meta.root, enginepaths.JobMetaDirSuffix)) {
+				continue
+			}
+			out.metas = append(out.metas, meta)
+		}
 	}
 	return out, nil
+}
+
+func branchIsPlaced(stateRoot, logicalRoot string) bool {
+	projectKey, jobID := branchIdentity(logicalRoot)
+	_, placed, err := workerplacement.PhysicalBranchRoot(stateRoot, projectKey, jobID)
+	// An unreadable registry cannot prove a record is an orphan.
+	return err != nil || placed
+}
+
+// placedBranchAbsent reports a state-folder address whose tree is on an absent volume.
+func placedBranchAbsent(stateRoot, logicalRoot string) bool {
+	projectKey, jobID := branchIdentity(logicalRoot)
+	physical, placed, err := workerplacement.PhysicalBranchRoot(stateRoot, projectKey, jobID)
+	if err != nil {
+		return true
+	}
+	return placed && branchVolumeAvailable(physical) != nil
 }
 
 // sourceAdmit excludes engine storage that a broad root would otherwise copy: the

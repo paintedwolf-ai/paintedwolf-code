@@ -113,7 +113,10 @@ func volumeListing(t *testing.T, root string) map[string]bool {
 }
 
 func TestSecondVolumeSourceClonesWithZeroCopiedBytes(t *testing.T) {
-	volume := testvolume.New(t, testvolume.Clonable)
+	volume, ran := testvolume.New(t, testvolume.Clonable)
+	if ran {
+		return
+	}
 	project := volume.Dir(t, "project")
 	want := writeTree(t, project, projectFiles)
 	fixture := newPlacementFixture(t)
@@ -158,7 +161,10 @@ func TestSecondVolumeSourceClonesWithZeroCopiedBytes(t *testing.T) {
 }
 
 func TestRootAttachedAtVolumeRootCopiesToStateFolderAndNeverOntoTheVolume(t *testing.T) {
-	volume := testvolume.New(t, testvolume.NoClone)
+	volume, ran := testvolume.New(t, testvolume.NoClone)
+	if ran {
+		return
+	}
 	writeTree(t, volume.Root, projectFiles)
 	before := volumeListing(t, volume.Root)
 	fixture := newPlacementFixture(t)
@@ -217,7 +223,10 @@ func TestHomeAttachmentHoldingTheStateFolderClonesTwiceWithoutGrowth(t *testing.
 }
 
 func TestHomeOnSecondVolumePlacesAtVolumeRoot(t *testing.T) {
-	volume := testvolume.New(t, testvolume.Clonable)
+	volume, ran := testvolume.New(t, testvolume.Clonable)
+	if ran {
+		return
+	}
 	home := volume.Dir(t, "home")
 	writeTree(t, home, projectFiles)
 	fixture := placementFixtureAt(t, filepath.Join(home, ".config", "paintedwolf"))
@@ -236,7 +245,10 @@ func TestHomeOnSecondVolumePlacesAtVolumeRoot(t *testing.T) {
 }
 
 func TestRootsSpanningVolumesAreNotClonable(t *testing.T) {
-	volume := testvolume.New(t, testvolume.NoClone)
+	volume, ran := testvolume.New(t, testvolume.NoClone)
+	if ran {
+		return
+	}
 	onVolume := volume.Dir(t, "one")
 	other := t.TempDir()
 	writeTree(t, onVolume, map[string]string{"a.txt": "a"})
@@ -257,7 +269,10 @@ func TestRootsSpanningVolumesAreNotClonable(t *testing.T) {
 }
 
 func TestUnwritableVolumeRootIsNotClonableAndWritesNothing(t *testing.T) {
-	volume := testvolume.New(t, testvolume.Movable)
+	volume, ran := testvolume.New(t, testvolume.Movable)
+	if ran {
+		return
+	}
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
 	volume.MakeReadOnly(t)
@@ -281,7 +296,10 @@ func TestUnwritableVolumeRootIsNotClonableAndWritesNothing(t *testing.T) {
 }
 
 func TestSourceThatCannotCloneDeclaresCostBeforeCopying(t *testing.T) {
-	volume := testvolume.New(t, testvolume.NoClone)
+	volume, ran := testvolume.New(t, testvolume.NoClone)
+	if ran {
+		return
+	}
 	project := volume.Dir(t, "project")
 	want := writeTree(t, project, projectFiles)
 	fixture := newPlacementFixture(t)
@@ -327,7 +345,10 @@ func TestSourceThatCannotCloneDeclaresCostBeforeCopying(t *testing.T) {
 }
 
 func TestDiskThatCannotHoldTheCopyRefusesWithTheNumbers(t *testing.T) {
-	volume := testvolume.New(t, testvolume.NoClone)
+	volume, ran := testvolume.New(t, testvolume.NoClone)
+	if ran {
+		return
+	}
 	project := volume.Dir(t, "project")
 	want := writeTree(t, project, projectFiles)
 	fixture := newPlacementFixture(t)
@@ -350,7 +371,10 @@ func TestDiskThatCannotHoldTheCopyRefusesWithTheNumbers(t *testing.T) {
 }
 
 func TestCancelledCopyReleasesOnlyItsOwnPreparation(t *testing.T) {
-	volume := testvolume.New(t, testvolume.NoClone)
+	volume, ran := testvolume.New(t, testvolume.NoClone)
+	if ran {
+		return
+	}
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
 	fixture := newPlacementFixture(t)
@@ -385,7 +409,10 @@ func TestCancelledCopyReleasesOnlyItsOwnPreparation(t *testing.T) {
 }
 
 func TestEjectedVolumeKeepsRecordsAndTheWorkerRecoversOnRemount(t *testing.T) {
-	volume := testvolume.New(t, testvolume.Movable)
+	volume, ran := testvolume.New(t, testvolume.Movable)
+	if ran {
+		return
+	}
 	t.Cleanup(UseCopyAsCloneForTest())
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
@@ -456,7 +483,10 @@ func TestEjectedVolumeKeepsRecordsAndTheWorkerRecoversOnRemount(t *testing.T) {
 }
 
 func TestPlacedBranchIsFoundByRetentionAndLifecycle(t *testing.T) {
-	volume := testvolume.New(t, testvolume.Movable)
+	volume, ran := testvolume.New(t, testvolume.Movable)
+	if ran {
+		return
+	}
 	t.Cleanup(UseCopyAsCloneForTest())
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
@@ -504,7 +534,10 @@ func TestPlacedBranchIsFoundByRetentionAndLifecycle(t *testing.T) {
 }
 
 func TestStateFolderTreeWinsOverAStaleRecordAfterRestore(t *testing.T) {
-	volume := testvolume.New(t, testvolume.Movable)
+	volume, ran := testvolume.New(t, testvolume.Movable)
+	if ran {
+		return
+	}
 	t.Cleanup(UseCopyAsCloneForTest())
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
@@ -513,6 +546,7 @@ func TestStateFolderTreeWinsOverAStaleRecordAfterRestore(t *testing.T) {
 	testutil.FailErr(t, "create", err)
 	restored := fixture.mgr.jobRoot(project, "job")
 	testutil.FailErr(t, "restore tree", os.MkdirAll(restored, 0o750))
+	restoredMeta := filepath.Join(enginepaths.MetaDirForBranchRoot(restored), jobMetaFileName)
 
 	logical, ok, err := workerplacement.LogicalFromPhysical(fixture.state, binding.Root)
 	testutil.FailErr(t, "logical", err)
@@ -536,6 +570,9 @@ func TestStateFolderTreeWinsOverAStaleRecordAfterRestore(t *testing.T) {
 	}
 	if _, err := os.Lstat(restored); err != nil {
 		t.Fatalf("restored tree was removed: %v", err)
+	}
+	if _, err := os.Lstat(restoredMeta); err != nil {
+		t.Fatalf("restored layout record was removed: %v", err)
 	}
 }
 
