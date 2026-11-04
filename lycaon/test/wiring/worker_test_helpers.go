@@ -40,16 +40,15 @@ func TaskToolArgs(agentType, goal string, writePaths ...string) map[string]any {
 	return args
 }
 
-// MockCoordinatorCloseoutMarkdown builds envelope-only coordinator closeout JSON for wiring mocks.
+// MockCoordinatorCloseoutMarkdown builds a coordinator closeout citing each path.
 func MockCoordinatorCloseoutMarkdown(synthesis string, citedPaths ...string) string {
-	if len(citedPaths) == 0 {
-		return synthesis + ` [main.go:1 "package main"]`
-	}
-	citations := make([]string, 0, len(citedPaths))
+	out := synthesis
 	for _, path := range citedPaths {
-		citations = append(citations, "["+path+`:1 "x"]`)
+		if path != "" {
+			out += " [" + path + `:1 "x"]`
+		}
 	}
-	return synthesis + " " + strings.Join(citations, " ")
+	return out
 }
 
 // MockWorkerCompletionJSON builds a worker finish-turn JSON report for wiring mocks.
