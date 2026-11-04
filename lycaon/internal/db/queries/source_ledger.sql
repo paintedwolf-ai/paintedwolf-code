@@ -561,13 +561,18 @@ GROUP BY e.file_id ORDER BY first_ordinal ASC, e.path ASC LIMIT ?;
 
 -- Paths a session's work produced on the primary tree: its own tool writes
 -- plus what its commands were observed changing, so a lockfile a build
--- regenerated stages with the edit that caused it.
+-- regenerated stages with the edit that caused it. A command's claim on a file
+-- lasts until the file's next change by anyone else on that branch.
 -- name: ListSessionAuthoredFiles :many
 SELECT e.file_id, e.root_id, e.path, e.from_path,
        MIN(e.ordinal) AS first_ordinal, MIN(e.created_ts) AS first_ts
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = ? AND o.session_id = ? AND e.root_id = ?
-  AND (o.origin = 'agent' OR o.command_window_id IS NOT NULL)
+  AND (o.origin = 'agent' OR (o.command_window_id IS NOT NULL AND o.session_id = (
+        SELECT newest_op.session_id
+        FROM source_effects newest JOIN source_operations newest_op ON newest_op.id = newest.operation_id
+        WHERE newest.file_id = e.file_id AND newest_op.branch_id = o.branch_id
+        ORDER BY newest.ordinal DESC LIMIT 1)))
   AND (o.branch_id = '' OR substr(o.branch_id,1,9)='worktree:')
 GROUP BY e.file_id ORDER BY first_ordinal ASC, e.path ASC LIMIT ?;
 
