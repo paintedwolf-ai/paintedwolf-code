@@ -137,7 +137,7 @@ func TestWorkerKickTemplatesIncludeProseOnlyPartial(t *testing.T) {
 	if strings.Contains(string(coordCloseout), "completion-envelope-only-turn.md") {
 		t.Fatal("coordinator-closeout.md must not include the worker-only envelope partial")
 	}
-	if !strings.Contains(string(coordCloseout), "[verify:") {
+	if !strings.Contains(string(coordCloseout), "partials/coordinator-forced-final-answer.md") {
 		t.Fatal("coordinator-closeout.md must teach inline citations")
 	}
 }
