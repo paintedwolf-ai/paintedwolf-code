@@ -431,6 +431,25 @@ func TestPublicationPrecedesToolsAndToolsAlwaysRun(t *testing.T) {
 	}
 }
 
+// AC-MID-02, MC-INV-07: a response cannot cite the dispatch its own call has not
+// made. The text is withheld and charged, and the dispatch still runs.
+func TestPendingDispatchCannotBeCitedBesideItsOwnCall(t *testing.T) {
+	h := newMidTurnHarness(t, publishingSurface)
+	out, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "Started [task#1].", "task")
+	if strings.Join(h.order, ",") != "task" {
+		t.Fatalf("order = %v, want the dispatch alone", h.order)
+	}
+	if _, ok := noteFor(out, "c1"); ok {
+		t.Fatal("a predicted handle published")
+	}
+	if len(h.notices) != 1 || h.notices[0] != strings.ToLower(guidance.MidTurnNoteHandleUngroundCode) || h.friction != 1 {
+		t.Fatalf("notices = %v, friction = %d", h.notices, h.friction)
+	}
+	if !guard.DeriveWaitVisibility(out).Unpublished {
+		t.Fatal("withheld text left no debt")
+	}
+}
+
 // AC-MID-14, AC-MID-19: private text is neither published nor owed.
 func TestPrivateTextPublishesNothingAndOwesNothing(t *testing.T) {
 	for _, tc := range []struct {

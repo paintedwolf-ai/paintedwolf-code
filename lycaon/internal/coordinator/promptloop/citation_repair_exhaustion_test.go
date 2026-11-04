@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/citationmd"
@@ -35,6 +36,7 @@ func TestCitationRepairExhaustionKeepsPinnedReport(t *testing.T) {
 	retained := activeRetained(pinned+"\n\n```json\n"+`{"headline":"Original report","summary":"Historical observation","limits":["Inspection only."]}`+"\n```", 1, true, guidance.InvestHandleNotObservedCode)
 	ledger := evidence.AssembleLedger([]evidence.Record{{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "notes.txt", Body: []string{"Release marker: amber"}}})
 	var committed api.Message
+	var drafts []string
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			HintConfig:                          hints,
@@ -50,8 +52,11 @@ func TestCitationRepairExhaustionKeepsPinnedReport(t *testing.T) {
 			},
 		},
 		Projection: ProjectionDeps{
-			AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
-			AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
+			AppendMessages: func(context.Context, string, ...api.Message) error { return nil },
+			AppendDraftVersion: func(_ context.Context, _, _, body, _ string) (int, error) {
+				drafts = append(drafts, body)
+				return 1, nil
+			},
 			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
 				if msg.Grounding != nil {
 					committed = msg
@@ -70,6 +75,10 @@ func TestCitationRepairExhaustionKeepsPinnedReport(t *testing.T) {
 	testutil.FailErr(t, "finish exhausted citation repair", err)
 	if !out.breakLoop || !state.proseFinishDelivered || committed.Content != "The original marker was amber [notes.txt](notes.txt)." {
 		t.Fatalf("exhaustion did not preserve the report body: outcome=%+v content=%q", out, committed.Content)
+	}
+	// AC-CLO-11: the rejected raw draft stays inspectable after exhaustion.
+	if len(drafts) == 0 || !strings.Contains(strings.Join(drafts, "\n"), "read#999") {
+		t.Fatalf("raw rejected draft not retained: %q", drafts)
 	}
 	meta := committed.CompletionReport
 	if meta == nil || meta.Headline != "Original report" || meta.Summary != "Historical observation" || len(meta.Limits) != 1 || meta.Limits[0] != "Inspection only." {

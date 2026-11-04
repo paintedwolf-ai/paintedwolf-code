@@ -33,11 +33,16 @@ func TestDataPartsGetOneHeaderAndUnchangedBodies(t *testing.T) {
 		{"read result", api.Message{Role: api.MessageRoleTool, Content: body, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted}, "Data from tool:"},
 		{"host feedback", api.Message{Role: api.MessageRoleUser, ContentParts: []api.MessageContentPart{{Content: body, Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted, Source: "tool_feedback"}}}, "Data from host (tool_feedback):"},
 		{"compaction summary", api.Message{Role: api.MessageRoleUser, ContentParts: []api.MessageContentPart{{Content: body, Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted, Source: "compaction_summary"}}}, "Data from host (compaction_summary):"},
+		{"tool description", api.Message{Role: api.MessageRoleUser, ContentParts: []api.MessageContentPart{{Content: body, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Source: "tool_description"}}}, "Data from tool (tool_description):"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := lastProjected(t, tc.msg).Content
+			projected := lastProjected(t, tc.msg)
+			got := projected.Content
 			if got != tc.header+"\n"+body {
 				t.Fatalf("projection = %q", got)
+			}
+			if projected.Authority != tc.msg.Authority || projected.TrustTier != tc.msg.TrustTier || projected.Origin != tc.msg.Origin {
+				t.Fatalf("projection changed its facts: %+v from %+v", projected, tc.msg)
 			}
 			if strings.Contains(got, "⟦D") {
 				t.Fatalf("legacy marker: %q", got)

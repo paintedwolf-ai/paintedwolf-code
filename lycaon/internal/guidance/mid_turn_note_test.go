@@ -22,6 +22,22 @@ func midTurnLedger() guidance.CloseoutEvidence {
 	})}
 }
 
+// AC-MID-06, MC-INV-07: a progress note keeps the handle of what it cited, so its
+// evidence kind stays what the receipt proves rather than a file read.
+func TestProgressNotesKeepTheirReceiptHandle(t *testing.T) {
+	t.Parallel()
+	for text, handle := range map[string]string{
+		"Dispatched the worker [task#1].": "task#1",
+		"The package exists [list#2].":    "list#2",
+		"Tests ran [command#4].":          "command#4",
+	} {
+		audit := guidance.AuditMidTurnNote(guidance.MidTurnNoteInput{Text: text, Evidence: midTurnLedger(), CitationsRequired: true})
+		if audit.Outcome != guidance.MidTurnPublish || audit.Grounding == nil || len(audit.Grounding.CitedEvidence) != 1 || audit.Grounding.CitedEvidence[0].Handle != handle {
+			t.Errorf("%q: outcome %v grounding %+v, want %s", text, audit.Outcome, audit.Grounding, handle)
+		}
+	}
+}
+
 func TestAuditMidTurnNote(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("Worker one finished its survey. ", 40) + "\n\n" + strings.Repeat("Worker two is still running. ", 40)

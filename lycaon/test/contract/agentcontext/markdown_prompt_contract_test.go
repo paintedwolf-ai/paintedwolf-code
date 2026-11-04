@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	publicationRule = "Text alongside tool calls is shown to the user when valid"
+	publicationRule = "Text alongside tool calls is shown to the user when valid: say only what you mean them to see, never scratchpad or deliberation."
 	privateTextRule = "Text alongside tool calls on this step is private working context"
 	finalAnswerRule = "Write your final answer as Markdown, citing where each claim is made"
 	verifyRule      = "`[verify: targeted - reason]`"
@@ -125,13 +125,17 @@ func TestWithheldNoticesCarryTheRecoveryForm(t *testing.T) {
 	contractcheck.FailErr(t, "load hints", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	formatter := guidance.NewStaticRejectFormatter(cfg)
-	for _, code := range []string{
-		guidance.MidTurnNoteUngroundedCode, guidance.MidTurnNoteHandleUngroundCode, guidance.MidTurnNoteURLOnlyCode,
-		guidance.MidTurnNoteArtifactCode, guidance.MidTurnNoteSyntaxCode, guidance.MidTurnNoteEmbedCode,
+	// An image's recovery drops the image, so it is not the citation sentence.
+	const imageRepair = "Publish a brief update without the image, or"
+	for code, repair := range map[string]string{
+		guidance.MidTurnNoteUngroundedCode: withheldRepair, guidance.MidTurnNoteHandleUngroundCode: withheldRepair,
+		guidance.MidTurnNoteURLOnlyCode: withheldRepair, guidance.MidTurnNoteArtifactCode: withheldRepair,
+		guidance.MidTurnNoteSyntaxCode: withheldRepair, guidance.MidTurnNoteEmbedCode: withheldRepair,
+		guidance.MidTurnNoteImageCode: imageRepair,
 	} {
 		body, err := formatter.Format(code, guidance.OffenderHintData([]string{"read#9"}))
 		contractcheck.FailErr(t, "render "+code, err)
-		for _, needed := range []string{"Code: " + code, withheldNotice, withheldRepair} {
+		for _, needed := range []string{"Code: " + code, withheldNotice, repair} {
 			if !strings.Contains(body, needed) {
 				t.Errorf("%s lacks %q:\n%s", code, needed, body)
 			}
