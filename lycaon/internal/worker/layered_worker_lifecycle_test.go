@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/denialprobe"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	lexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -323,6 +324,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	if err != nil || code != 0 || !strings.Contains(string(out), "initial") {
 		t.Fatalf("private Git on the mount: code=%d err=%v out=%q", code, err, out)
 	}
+	assertWorkerShellGitWorks(t, root, fixture.source, worktree)
 	testutil.FailErr(t, "finish worker Git", finish())
 	if _, err := os.Stat(filepath.Join(fixture.source, "added.go")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("private file reached the source: %v", err)
@@ -358,9 +360,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	}
 }
 
-// assertWorkerProcessIsDenied builds the boundary a worker's own command gets, through the path its
-// tool context takes, with the broadest loopback grant, and asks the kernel what it refuses.
-func assertWorkerProcessIsDenied(t *testing.T, root, source string, view *adapter.PreparedView) {
+func workerCommandBox(t *testing.T, root, source string) *confine.Confinement {
 	t.Helper()
 	// No egress broker runs here, and the view's denials do not depend on egress.
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
@@ -373,6 +373,27 @@ func assertWorkerProcessIsDenied(t *testing.T, root, source string, view *adapte
 	if !ok {
 		t.Fatal("a worker command got no boundary")
 	}
+	return box
+}
+
+// A worker's own git runs under its boundary, and its repository must stay reachable through the view.
+func assertWorkerShellGitWorks(t *testing.T, root, source, worktree string) {
+	t.Helper()
+	box := workerCommandBox(t, root, source)
+	git, err := osexec.LookPath("git")
+	testutil.FailErr(t, "find git", err)
+	plan := lexec.AgentLaunch(lexec.LaunchAgentCommand, "worker shell git", box).WithPathAuthority(confine.NativeLaunchPaths(worktree))
+	out, code, err := lexec.Run(t.Context(), git, []string{"log", "--format=%s"}, lexec.ExecOpts{Launch: plan, Dir: worktree})
+	if err != nil || code != 0 || !strings.Contains(string(out), "initial") {
+		t.Fatalf("a worker's git under its boundary: code=%d err=%v out=%q", code, err, out)
+	}
+}
+
+// assertWorkerProcessIsDenied builds the boundary a worker's own command gets, through the path its
+// tool context takes, with the broadest loopback grant, and asks the kernel what it refuses.
+func assertWorkerProcessIsDenied(t *testing.T, root, source string, view *adapter.PreparedView) {
+	t.Helper()
+	box := workerCommandBox(t, root, source)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "control listener", err)
 	defer func() { _ = listener.Close() }()
