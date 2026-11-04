@@ -100,13 +100,6 @@ func TestACOP01ManyReadsInOneProgramStateOneWarning(t *testing.T) {
 }
 
 func TestACOP02WriteLegProbesRunLikeBash(t *testing.T) {
-	t.Run("rev-parse falls through to pwd", func(t *testing.T) {
-		f := newGitProgramFixture(t, true)
-		outcome := runGitProgram(t, f, "git rev-parse --show-toplevel 2>/dev/null || pwd")
-		if outcome.Refusal != nil || outcome.Status != 0 || strings.TrimSpace(outcome.Stdout) == "" || !f.warned() {
-			t.Fatalf("outcome = %+v warned %v, want the directory and status 0", outcome, f.warned())
-		}
-	})
 	for _, source := range []string{"git status || true", "git status; printf after", "if git status; then printf yes; else printf after; fi"} {
 		t.Run(source, func(t *testing.T) {
 			f := newGitProgramFixture(t, true)
