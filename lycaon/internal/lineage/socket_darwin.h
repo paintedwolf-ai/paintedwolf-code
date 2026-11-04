@@ -10,9 +10,10 @@
 
 struct pw_socket_row {
  uint64_t socket_handle, pcb_handle, generation;
+ unsigned char shared_bind;
  unsigned char local[16], remote[16];
  uint16_t local_port, remote_port;
- unsigned char ipv4, listening, udp, shared_bind;
+ unsigned char ipv4, listening, udp;
 };
 
 // One native descriptor walk serves listener, port-holder and exact
@@ -74,8 +75,8 @@ static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
   }
   if (info.psi.soi_family != AF_INET && info.psi.soi_family != AF_INET6) continue;
   struct pw_socket_row *row = &out[(*count)++];
-  row->udp = udp;
   row->shared_bind = (info.psi.soi_options & SO_REUSEPORT) != 0;
+  row->udp = udp;
   row->socket_handle = info.psi.soi_so;
   row->pcb_handle = info.psi.soi_pcb;
   row->generation = in->insi_gencnt;
