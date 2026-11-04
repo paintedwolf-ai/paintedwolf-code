@@ -2,7 +2,7 @@
 """One-shot runs for the numbered source experiment: fresh owned sidecar per run, both arms
 interleaved over the same fixture and task order. A run that already has run.json is never
 rerun. Never prints or stores a key."""
-import argparse, importlib.util, json, os, pathlib, shutil, subprocess, sys, tempfile, time, uuid
+import argparse, importlib.util, json, os, pathlib, shutil, socket, subprocess, sys, tempfile, time, uuid
 
 R = pathlib.Path.home()/'.local/share/paintedwolf-markdown-citations'
 HERE = pathlib.Path(__file__).parent
@@ -45,6 +45,21 @@ def setup(e, m, secret):
     p['agent_pool'] = {**p.get('agent_pool', {}), 'selection': 'first', 'models': [ref]}
     e.req('PATCH', '/v1/settings/model-policy', p)
 
+one_retry = 'void'
+
+def provider_down(dest):
+    """The provider was unreachable at some call, so the run measured nothing about the model."""
+    return 'unreachable after' in (dest/'llm-requests.jsonl').read_text(errors='replace')
+
+def wait_provider(m):
+    if m['kind'] != 'fireworks':
+        return
+    while True:
+        try:
+            socket.gethostbyname('api.fireworks.ai'); return
+        except OSError:
+            print('waiting for provider DNS', flush=True); time.sleep(60)
+
 def check_arm(dest, arm):
     """Refuse to record a run whose requests do not carry its arm's clause."""
     p = dest/'llm-requests.jsonl'
@@ -64,7 +79,13 @@ def one(model, arm, task, i, out, config_roots, secret):
     env = {'PW_EXP_NUMBERED_SOURCE': '1' if arm == 'numbered' else '0'}
     e = live.Engine(scratch, config_root=config_roots[arm], env=env)
     try:
-        setup(e, m, secret)
+        try:
+            setup(e, m, secret)
+        except RuntimeError as ex:
+            if 'provider_catalog_unavailable' in str(ex):
+                print('provider catalog unavailable; slot not used', flush=True); time.sleep(30)
+                return one_retry
+            raise
         repo = make_repo(scratch/'repo')
         proj = e.req('POST', '/v1/projects', {'roots': [{'path': str(repo)}], 'name': f'numx-{task}-{i}'})
         sess = e.req('POST', '/v1/sessions', {'project_id': proj['id'], 'posture': 'build'})
@@ -103,6 +124,11 @@ def one(model, arm, task, i, out, config_roots, secret):
         diff = subprocess.run(['git', 'diff'], cwd=repo, capture_output=True, text=True).stdout
         (dest/'git-status.txt').write_text(st); (dest/'git-log.txt').write_text(log); (dest/'git.diff').write_text(diff)
         check_arm(dest, arm)
+        if provider_down(dest):
+            void = out.parent/'void'/model/arm; void.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(dest), str(void/f'{task}-{i}-{int(time.time())}'))
+            print(f'{model}/{arm}/{task}-{i}: void, provider unreachable', flush=True)
+            return one_retry
         (dest/'run.json').write_text(json.dumps({'model': m['model'], 'arm': arm, 'task': task, 'run': i, 'settled': end is not None, 'stopped_on_correct': early, 'seconds': secs, 'session_id': sid,
             'head': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=W, capture_output=True, text=True).stdout.strip(), 'prompt': t['prompt']}, indent=1))
         print(f'{model}/{arm}/{task}-{i}: settled={end is not None} seconds={secs}', flush=True)
@@ -130,7 +156,10 @@ def main():
         for task in args.tasks.split(','):
             order = arms if i % 2 else list(reversed(arms))
             for arm in order:
-                one(args.model, arm, task, i, out, roots, secret)
+                while True:
+                    wait_provider(MODELS[args.model])
+                    if one(args.model, arm, task, i, out, roots, secret) != one_retry:
+                        break
 
 if __name__ == '__main__':
     main()
