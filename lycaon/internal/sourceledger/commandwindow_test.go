@@ -171,6 +171,79 @@ func TestCommandWindowAdmitsWhatTheCommandChanged(t *testing.T) {
 	}
 }
 
+func TestWindowIsSettledFollowsSettlement(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	window := openTestWindow(t, store, ctx, root, "make")
+	if window.IsSettled() {
+		t.Fatal("open window reported settled")
+	}
+	// Without watcher coverage the close runs the final pass before it returns.
+	testutil.FailErr(t, "close command window", window.Close(ctx))
+	if !window.IsSettled() {
+		t.Fatal("a synchronous close returned before the window settled")
+	}
+}
+
+func TestWindowOnTrustedCoverageSettlesAfterClose(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	repochange.MarkCoverageCompleteForTest(root)
+	t.Cleanup(func() { repochange.CloseRoot(root) })
+	store.Commands.SetWindowSettleForTest(time.Hour)
+	window := openTestWindow(t, store, ctx, root, "make")
+	testutil.FailErr(t, "close command window", window.Close(ctx))
+	if window.IsSettled() {
+		t.Fatal("window settled with its pass still owed")
+	}
+	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
+	testutil.FailErr(t, "inventory request", err)
+	req.Force, req.Wait = true, true
+	testutil.FailErr(t, "pass after close", store.Inventory.EnsureInventory(ctx, req))
+	<-window.Settled()
+	if !window.IsSettled() {
+		t.Fatal("settled channel closed but IsSettled is false")
+	}
+}
+
+func TestOpenSessionWindowsListsOnlyThatSessionsUnsettledWindows(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	repochange.MarkCoverageCompleteForTest(root)
+	t.Cleanup(func() { repochange.CloseRoot(root) })
+	store.Commands.SetWindowSettleForTest(time.Hour)
+	mine := openTestWindow(t, store, ctx, root, "make")
+	other, err := store.Commands.OpenCommandWindow(ctx, CommandWindowInput{
+		ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s2", ToolName: "command",
+	})
+	testutil.FailErr(t, "open other session window", err)
+	listed := store.Commands.OpenSessionWindows("p1", "s1")
+	if len(listed) != 1 || listed[0].ID != mine.ID || listed[0].Closing {
+		t.Fatalf("running window = %+v", listed)
+	}
+	testutil.FailErr(t, "close command window", mine.Close(ctx))
+	listed = store.Commands.OpenSessionWindows("p1", "s1")
+	if len(listed) != 1 || listed[0].ID != mine.ID || !listed[0].Closing {
+		t.Fatalf("closing window = %+v", listed)
+	}
+	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
+	testutil.FailErr(t, "inventory request", err)
+	req.Force, req.Wait = true, true
+	testutil.FailErr(t, "pass after close", store.Inventory.EnsureInventory(ctx, req))
+	<-listed[0].Settled
+	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 0 {
+		t.Fatalf("settled window still listed: %+v", listed)
+	}
+	if listed := store.Commands.OpenSessionWindows("p1", "s2"); len(listed) != 1 || listed[0].ID != other.ID {
+		t.Fatalf("other session windows = %+v", listed)
+	}
+	if listed := store.Commands.OpenSessionWindows("other-project", "s2"); len(listed) != 0 {
+		t.Fatalf("other project windows = %+v", listed)
+	}
+	var none *Commands
+	if listed := none.OpenSessionWindows("p1", "s1"); listed != nil {
+		t.Fatalf("unconfigured ledger windows = %+v", listed)
+	}
+	testutil.FailErr(t, "close other window", other.Close(ctx))
+}
+
 func TestCommandWindowThatObservedNothingLeavesNoRow(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "main.go", "package main\n")
@@ -359,6 +432,26 @@ func TestInterruptedWindowsSettleWhenAFreshProcessOpensOne(t *testing.T) {
 	}
 	if _, err := fresh.queries.GetSourceCommandWindow(ctx, quiet.ID); err == nil {
 		t.Fatal("unreferenced orphan window kept its row")
+	}
+}
+
+func TestBootRecoverySettlesWindowsWithoutWaitingForTheNextOpen(t *testing.T) {
+	ledger := openDiskLedger(t)
+	store, ctx, root := ledger.store, context.Background(), ledger.root
+	orphan := openTestWindow(t, store, ctx, root, "npm run dev")
+	writeRootFile(t, root, "public/bundle.js", "//\n")
+	deliverWrites(ctx, root, "public/bundle.js")
+	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
+	testutil.FailErr(t, "inventory request", err)
+	req.Force, req.Wait = true, true
+	testutil.FailErr(t, "pass during the orphan", store.Inventory.EnsureInventory(ctx, req))
+
+	fresh := New(ledger.sqlDB, ledger.contentDir)
+	fresh.Commands.RecoverInterruptedWindows(ctx)
+	row, err := fresh.queries.GetSourceCommandWindow(ctx, orphan.ID)
+	testutil.FailErr(t, "read orphan window", err)
+	if row.State != string(api.SourceCommandWindowInterrupted) {
+		t.Fatalf("orphan window = %+v, want interrupted", row)
 	}
 }
 

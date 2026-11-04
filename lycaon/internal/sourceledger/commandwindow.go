@@ -116,7 +116,7 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.observationBudget)
 	defer cancel()
-	s.recoverInterruptedWindows(ctx)
+	s.RecoverInterruptedWindows(ctx)
 	req, err := s.windowInventoryRequest(ctx, in.ProjectID, in.Roots)
 	if err != nil {
 		return nil, err
@@ -287,6 +287,42 @@ func (o *OpenCommandWindow) Settled() <-chan struct{} {
 	return o.window.settled
 }
 
+// IsSettled reports, without waiting, whether the window's row is final.
+func (o *OpenCommandWindow) IsSettled() bool {
+	select {
+	case <-o.Settled():
+		return true
+	default:
+		return false
+	}
+}
+
+// SessionWindow is one of a session's windows that has not settled.
+type SessionWindow struct {
+	ID string
+	// Closing means its process ended and only settlement remains.
+	Closing bool
+	Settled <-chan struct{}
+}
+
+// OpenSessionWindows lists the session's unsettled windows. Memory is the only
+// record of an open window; rows from an earlier process were interrupted.
+func (s *Commands) OpenSessionWindows(projectID, sessionID string) []SessionWindow {
+	if s == nil {
+		return nil
+	}
+	projectID, sessionID = strings.TrimSpace(projectID), strings.TrimSpace(sessionID)
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	var out []SessionWindow
+	for _, window := range s.openWindows[projectID] {
+		if window.sessionID == sessionID {
+			out = append(out, SessionWindow{ID: window.id, Closing: window.closing, Settled: window.settled})
+		}
+	}
+	return out
+}
+
 func (s *Commands) closeCommandWindow(ctx context.Context, w *openCommandWindow) error {
 	ended := time.Now().UTC()
 	s.windowsMu.Lock()
@@ -414,9 +450,9 @@ func (s *Commands) finishWindow(ctx context.Context, id, admissionMode string, e
 	return tx.Commit()
 }
 
-// recoverInterruptedWindows settles rows an earlier process left running:
+// RecoverInterruptedWindows settles rows an earlier process left running:
 // memory is the only record of an open window, so all of them are interrupted.
-func (s *Commands) recoverInterruptedWindows(ctx context.Context) {
+func (s *Commands) RecoverInterruptedWindows(ctx context.Context) {
 	s.windowRecovery.Do(func() {
 		s.recordMu.Lock()
 		defer s.recordMu.Unlock()
@@ -498,6 +534,12 @@ func (s *Commands) commandWindowsFor(ctx context.Context, ids []string) (map[str
 		out[row.ID] = commandWindowFromRow(row)
 	}
 	return out, nil
+}
+
+// SetWindowSettleForTest replaces the settle period, so a test decides whether
+// a closed window on trusted coverage settles on a pass rather than on time.
+func (s *Commands) SetWindowSettleForTest(period time.Duration) {
+	s.windowSettle = period
 }
 
 // Commands attributes source observations to host command windows.
