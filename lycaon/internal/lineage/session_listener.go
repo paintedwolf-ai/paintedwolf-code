@@ -42,7 +42,7 @@ func ObserveSessionListener(ctx context.Context, session string, endpoint netip.
 	if err != nil {
 		return "", false, fmt.Errorf("%w: %w", ErrObservationIncomplete, err)
 	}
-	walk, err := walkEndpointHolders(ctx, endpoint, owned, pids, SocketsOf, unreadableByThisUser)
+	walk, err := walkEndpointHolders(ctx, endpoint, owned, pids, socketWalker(), unreadableByThisUser)
 	if err != nil {
 		return "", false, err
 	}

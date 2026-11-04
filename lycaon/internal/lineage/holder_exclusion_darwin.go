@@ -21,6 +21,8 @@ func unreadableByThisUser(pid int, err error) bool {
 	return infoErr == nil && info != nil && int(info.Proc.P_pid) == pid && info.Eproc.Ucred.Uid != uint32(os.Geteuid())
 }
 
+func socketWalker() func(pid int) ([]SocketObservation, error) { return SocketsOf }
+
 // unreadHoldersExcluded rests on what the kernel admits to bind, measured on
 // macOS 15.7 and 27.2. A second socket on an exact address needs SO_REUSEPORT on
 // both, and connections reach the later one. A wildcard socket of another user

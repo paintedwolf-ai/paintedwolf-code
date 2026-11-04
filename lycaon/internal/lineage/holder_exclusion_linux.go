@@ -11,6 +11,17 @@ import (
 // /proc/<pid>/fd is unreadable across users; /proc/net never is.
 func unreadableByThisUser(_ int, err error) bool { return errors.Is(err, fs.ErrPermission) }
 
+// socketWalker reads the socket table once, since one walk visits every process.
+func socketWalker() func(pid int) ([]SocketObservation, error) {
+	table, err := hostProc.sockets([]Protocol{ProtocolTCP})
+	return func(pid int) ([]SocketObservation, error) {
+		if err != nil {
+			return nil, err
+		}
+		return hostProc.socketsOf(pid, table)
+	}
+}
+
 func unreadHoldersExcluded(endpoint netip.AddrPort, walk endpointHolders) bool {
 	table, err := hostProc.sockets([]Protocol{ProtocolTCP})
 	return err == nil && tableExcludesOthers(table, endpoint, walk)
