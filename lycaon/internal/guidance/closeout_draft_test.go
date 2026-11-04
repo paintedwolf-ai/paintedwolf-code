@@ -319,7 +319,7 @@ func TestDraftResolverOutcomes(t *testing.T) {
 	if ambiguous.Code != legacy.Code {
 		t.Fatalf("draft code %q differs from existing code %q", ambiguous.Code, legacy.Code)
 	}
-	wrongPath := onlyOutcome(t, `[other.ts:3 "func NewBoard() {"]`, evidence.CitationRoots{}, unique)
+	wrongPath := onlyOutcome(t, `[sub/other.ts:3 "func NewBoard() {"]`, evidence.CitationRoots{}, unique)
 	if wrongPath.Outcome != guidance.CitationNotObserved || wrongPath.Code != guidance.SynthHandleNotInLegsCode {
 		t.Fatalf("unobserved path = %+v", wrongPath)
 	}
