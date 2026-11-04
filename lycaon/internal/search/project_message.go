@@ -30,7 +30,7 @@ func groundingRows(projectID, sessionID, messageID, ts, role string, gr *api.Cit
 	if gr == nil {
 		return nil
 	}
-	verified := gr.Traced
+	verified := gr.Traced && !gr.EvidenceOptional
 	var rows []IndexRow
 	for i, rec := range gr.EvidenceRecords {
 		rows = append(rows, evidenceRecordRow(projectID, sessionID, messageID, ts, role, verified, gr.HintCode, rec, rowSuffix(prefix+"evidence_record", i, rec.Handle)))

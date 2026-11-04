@@ -29,7 +29,7 @@ func EvidenceOptionalGrounding(report CoordinatorCompletionReport) *api.Citation
 			Summary: "No citations required: no tool observations in this turn",
 		}}),
 	}
-	if report.Verification.Valid() {
+	if report.Verification != nil && report.Verification.Valid() {
 		out.Verification = &api.CitationVerification{Method: report.Verification.Method, Reason: report.Verification.Reason}
 	}
 	return out

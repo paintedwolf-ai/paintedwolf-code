@@ -191,7 +191,7 @@ func TestLastAssistantAuditSkipsAgentNotes(t *testing.T) {
 	answer := &api.CitationGrounding{Traced: true}
 	got := lastAssistantAudit([]api.Message{
 		{Role: api.MessageRoleAssistant, Grounding: answer},
-		{Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Grounding: &api.CitationGrounding{EvidenceOptional: true}},
+		{Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Grounding: &api.CitationGrounding{Traced: true, EvidenceOptional: true}},
 	})
 	if got != answer {
 		t.Fatalf("audit = %+v", got)

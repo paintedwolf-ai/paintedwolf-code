@@ -78,7 +78,7 @@ func AuditMidTurnNote(in MidTurnNoteInput) MidTurnNoteAudit {
 	if offenders := midTurnSyntaxOffenders(draft); len(offenders) > 0 {
 		return audit.withhold(MidTurnNoteSyntaxCode, OffenderHintData(offenders))
 	}
-	if embeds := midTurnEmbedIDs(draft.Parsed); len(embeds) > 0 {
+	if embeds := CloseoutMarkdownArtifactEmbedIDs(draft.Parsed); len(embeds) > 0 {
 		return audit.withhold(MidTurnNoteEmbedCode, OffenderHintData(embeds))
 	}
 	resolved := ResolveDraftCitations(in.Roots, in.SurfaceID, draft, in.Evidence, in.Presentable)
@@ -117,7 +117,7 @@ func AuditMidTurnNote(in MidTurnNoteInput) MidTurnNoteAudit {
 		}, in.Evidence, CloseoutGroundingEval{})
 		return audit
 	}
-	audit.Grounding = &api.CitationGrounding{EvidenceOptional: true}
+	audit.Grounding = EvidenceOptionalGrounding(CoordinatorCompletionReport{Verification: draft.Verification})
 	return audit
 }
 
@@ -160,20 +160,6 @@ func midTurnSyntaxOffenders(draft CloseoutDraft) []string {
 		}
 	}
 	return offenders
-}
-
-// midTurnEmbedIDs finds bare artifact ids used as image sources. Only image and
-// HTML zones are searched, so a literal example in code stays allowed.
-func midTurnEmbedIDs(doc citationmd.Document) []string {
-	var ids []string
-	for _, zone := range doc.Zones {
-		switch zone.Kind {
-		case citationmd.ZoneImage, citationmd.ZoneRawHTML, citationmd.ZoneHTMLBlock:
-			ids = append(ids, CloseoutMarkdownArtifactEmbedIDs(doc.Source[zone.Span.Start:zone.Span.End])...)
-		case citationmd.ZoneFence, citationmd.ZoneIndented, citationmd.ZoneDefinition, citationmd.ZoneCodeSpan, citationmd.ZoneLink, citationmd.ZoneAutolink:
-		}
-	}
-	return ids
 }
 
 // midTurnStructuralOptions parse text with no ledger at hand: registered handle

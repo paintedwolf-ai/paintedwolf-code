@@ -40,7 +40,7 @@ func TestAuditMidTurnNote(t *testing.T) {
 		traced      bool
 		optional    bool
 	}{
-		{name: "AC-MID-01 pre-evidence update publishes as evidence-optional", text: "I'll inspect the parser.", ev: empty, want: guidance.MidTurnPublish, contains: "inspect the parser", optional: true},
+		{name: "AC-MID-01 pre-evidence update publishes as evidence-optional", text: "I'll inspect the parser.", ev: empty, want: guidance.MidTurnPublish, contains: "inspect the parser", traced: true, optional: true},
 		{name: "AC-MID-02 pending handle is rejected even before evidence", text: "Started [task#1].", ev: empty, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},
 		{name: "AC-MID-03 cited update publishes without its marker", text: "The timeout is set in [read#3:42]. Checking callers.", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "Checking callers", absent: "read#3", traced: true},
 		{name: "AC-MID-04 uncited after observations withholds", text: "Still looking.", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteUngroundedCode},
@@ -52,12 +52,12 @@ func TestAuditMidTurnNote(t *testing.T) {
 		{name: "AC-MID-12 unknown artifact withholds without friction", text: "Screenshot [read#3:42] [artifact:" + midTurnArtifact + "].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteArtifactCode},
 		{name: "presentable artifact publishes with its citation", text: "Screenshot [read#3:42] [artifact:" + midTurnArtifact + "].", ev: midTurnLedger(), required: true, presentable: []string{midTurnArtifact}, want: guidance.MidTurnPublish, traced: true},
 		{name: "artifact alone does not satisfy a citation requirement", text: "[artifact:" + midTurnArtifact + "]", ev: midTurnLedger(), required: true, presentable: []string{midTurnArtifact}, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteUngroundedCode},
-		{name: "artifact alone publishes before evidence", text: "[artifact:" + midTurnArtifact + "]", ev: empty, presentable: []string{midTurnArtifact}, want: guidance.MidTurnPublish, optional: true},
+		{name: "artifact alone publishes before evidence", text: "[artifact:" + midTurnArtifact + "]", ev: empty, presentable: []string{midTurnArtifact}, want: guidance.MidTurnPublish, traced: true, optional: true},
 		{name: "malformed node withholds without friction", text: "Range [read#3:9-2] is odd.", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteSyntaxCode},
 		{name: "repair directive has no meaning here", text: "Fixed [cite: c1 => read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteSyntaxCode},
 		{name: "embedded artifact image withholds", text: "Look [read#3:42] ![shot](" + midTurnArtifact + ").", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteEmbedCode},
 		{name: "literal embed example stays allowed", text: "Syntax is `![shot](" + midTurnArtifact + ")` [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "![shot]", traced: true},
-		{name: "literal citation example is not a citation", text: "The form is `[read#99]`.", ev: empty, want: guidance.MidTurnPublish, contains: "[read#99]", optional: true},
+		{name: "literal citation example is not a citation", text: "The form is `[read#99]`.", ev: empty, want: guidance.MidTurnPublish, contains: "[read#99]", traced: true, optional: true},
 		{name: "pathless citation alone says nothing", text: "[task#1]", ev: midTurnLedger(), required: true, want: guidance.MidTurnSilent},
 		{name: "a dispatch receipt has no line to cite", text: "Started [task#1:1].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},
 		{name: "a command receipt has no line to cite", text: "Ran [command#4:2].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},

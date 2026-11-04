@@ -241,35 +241,39 @@ func coordinatorFindingFromCitedEvidence(item CoordinatorCitedEvidence) WorkerFi
 	return WorkerFindingInput{Evidence: item.Evidence, Path: item.Path, Line: item.Line, EndLine: item.EndLine, Excerpt: item.Excerpt}
 }
 
-// ResolveCitedEvidenceForWire maps typed citations to host provenance.
+// ResolveCitedEvidenceForWire maps typed citations to host provenance through
+// the resolver that accepted them, so the panel names the record that decided.
 func ResolveCitedEvidenceForWire(roots evidence.CitationRoots, ev evidence.Ledger, cited []CoordinatorCitedEvidence) []api.CitationGroundingCitedEvidence {
-	inputs := coordinatorCitedEvidenceInputs(cited)
-	resolved := ResolveFindingsForWire(roots, ev, inputs, nil)
-	// A bare path cites a file and has no line to verify.
-	for _, input := range inputs {
-		if input.Evidence != "" || input.Path == "" || input.Line > 0 || input.Excerpt != "" {
+	var out []api.CitationGroundingCitedEvidence
+	for _, input := range coordinatorCitedEvidenceInputs(cited) {
+		outcome := classifyDraftFinding(roots, input, ev)
+		res := outcome.resolution
+		switch {
+		case outcome.class == closeoutCitationGrounded:
+		case outcome.class == closeoutCitationSurvey && res.Handle != "":
+		default:
 			continue
 		}
-		if outcome := classifyDraftFinding(roots, input, ev); outcome.class == closeoutCitationGrounded {
-			resolved = append(resolved, ResolvedFinding{Handle: outcome.resolution.Handle, Path: outcome.resolution.Path, Verdict: outcome.resolution.Verdict})
-		}
-	}
-	if len(resolved) == 0 {
-		return nil
-	}
-	out := make([]api.CitationGroundingCitedEvidence, 0, len(resolved))
-	for _, item := range resolved {
 		out = append(out, api.CitationGroundingCitedEvidence{
-			Handle:   item.Handle,
-			Path:     item.Path,
-			Line:     item.Line,
-			EndLine:  item.EndLine,
-			Excerpt:  item.Excerpt,
-			Verdict:  WireCitationVerdict(item.Verdict),
-			Openable: evidence.IsOpenablePath(roots, item.Path),
+			Handle:   res.Handle,
+			Path:     res.Path,
+			Line:     res.Line,
+			EndLine:  res.EndLine,
+			Excerpt:  res.Excerpt,
+			Verdict:  citedWireVerdict(res),
+			Openable: evidence.IsOpenablePath(roots, res.Path),
 		})
 	}
 	return out
+}
+
+// citedWireVerdict keeps matched for a checked excerpt. A coordinate alone says
+// the record stands behind the location, not that anything compared that line.
+func citedWireVerdict(res evidence.Resolution) api.CitationVerdict {
+	if strings.TrimSpace(res.Excerpt) == "" {
+		return api.CitationVerdictTraced
+	}
+	return WireCitationVerdict(res.Verdict)
 }
 
 func citedEvidenceCheckTokens(roots evidence.CitationRoots, ev evidence.Ledger, cited []CoordinatorCitedEvidence) []string {

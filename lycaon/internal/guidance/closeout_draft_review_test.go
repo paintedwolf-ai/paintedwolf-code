@@ -222,6 +222,47 @@ func TestDraftCoordinatesAfterMutation(t *testing.T) {
 	}
 }
 
+// The panel shows matched as an exact check, so a coordinate nobody compared stays
+// traced: a mutation supports any line on its path, and no line was read.
+func TestCitedEvidenceWireVerdicts(t *testing.T) {
+	t.Parallel()
+	edited := evidence.AssembleLedger([]evidence.Record{{Handle: "edit#1", Kind: "edit", Shape: evidence.ShapeFileRegion, Path: "a.go"}})
+	read := handleMembershipLedger(t).Ledger
+	cases := []struct {
+		name    string
+		ev      evidence.Ledger
+		cite    guidance.CoordinatorCitedEvidence
+		handle  string
+		verdict api.CitationVerdict
+		end     int
+	}{
+		{name: "line on a mutated path", ev: edited, cite: guidance.CoordinatorCitedEvidence{Path: "a.go", Line: 42}, handle: "edit#1", verdict: api.CitationVerdictTraced},
+		{name: "fabricated line on a mutated path", ev: edited, cite: guidance.CoordinatorCitedEvidence{Path: "a.go", Line: 999999}, handle: "edit#1", verdict: api.CitationVerdictTraced},
+		{name: "range on a mutated path keeps its end", ev: edited, cite: guidance.CoordinatorCitedEvidence{Path: "a.go", Line: 42, EndLine: 43}, handle: "edit#1", verdict: api.CitationVerdictTraced, end: 43},
+		{name: "explicit mutation handle", ev: edited, cite: guidance.CoordinatorCitedEvidence{Evidence: "edit#1", Line: 42}, handle: "edit#1", verdict: api.CitationVerdictTraced},
+		{name: "read line with no excerpt", ev: read, cite: guidance.CoordinatorCitedEvidence{Path: "src/a.go", Line: 2}, handle: "read#1", verdict: api.CitationVerdictTraced},
+		{name: "bare handle", ev: read, cite: guidance.CoordinatorCitedEvidence{Evidence: "read#1"}, handle: "read#1", verdict: api.CitationVerdictTraced},
+		{name: "bare path", ev: read, cite: guidance.CoordinatorCitedEvidence{Path: "src/a.go"}, handle: "read#1", verdict: api.CitationVerdictTraced},
+		{name: "excerpt the read holds", ev: read, cite: guidance.CoordinatorCitedEvidence{Path: "src/a.go", Line: 1, Excerpt: "package main"}, handle: "read#1", verdict: api.CitationVerdictMatched},
+		{name: "a line the read did not cover never reaches the panel", ev: read, cite: guidance.CoordinatorCitedEvidence{Path: "src/a.go", Line: 999}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := guidance.ResolveCitedEvidenceForWire(evidence.CitationRoots{}, tc.ev, []guidance.CoordinatorCitedEvidence{tc.cite})
+			if tc.handle == "" {
+				if len(got) != 0 {
+					t.Fatalf("wire = %+v, want nothing", got)
+				}
+				return
+			}
+			if len(got) != 1 || got[0].Handle != tc.handle || got[0].Verdict != tc.verdict || got[0].EndLine != tc.end {
+				t.Fatalf("wire = %+v", got)
+			}
+		})
+	}
+}
+
 // N1: the observed scheme survives on an accepted www link.
 func TestPresentWWWKeepsObservedScheme(t *testing.T) {
 	t.Parallel()

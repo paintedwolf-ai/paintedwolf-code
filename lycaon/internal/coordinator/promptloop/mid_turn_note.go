@@ -149,7 +149,8 @@ func (l *toolBatch) settleExhaustedVisibility(ctx context.Context, sess *api.Ses
 			ID: hostProgressNoteID(carrierID), Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote,
 			Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
 			Visibility: api.MessageVisibilityTranscript, Content: body,
-			Grounding: &api.CitationGrounding{EvidenceOptional: true},
+			// Structured worker facts in the host's words: nothing to trace or cite.
+			Grounding: &api.CitationGrounding{Traced: true, EvidenceOptional: true},
 		}
 		var err error
 		if history, err = l.commitMidTurnNote(ctx, sessionID, history, note, lastToolTS, st); err != nil {
