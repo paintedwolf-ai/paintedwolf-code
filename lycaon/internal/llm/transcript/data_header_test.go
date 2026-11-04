@@ -41,8 +41,15 @@ func TestDataPartsGetOneHeaderAndUnchangedBodies(t *testing.T) {
 			if got != tc.header+"\n"+body {
 				t.Fatalf("projection = %q", got)
 			}
-			if projected.Authority != tc.msg.Authority || projected.TrustTier != tc.msg.TrustTier || projected.Origin != tc.msg.Origin {
-				t.Fatalf("projection changed its facts: %+v from %+v", projected, tc.msg)
+			if len(tc.msg.ContentParts) == 0 {
+				if projected.Authority != tc.msg.Authority || projected.TrustTier != tc.msg.TrustTier || projected.Origin != tc.msg.Origin {
+					t.Fatalf("projection changed its facts: %+v from %+v", projected, tc.msg)
+				}
+			} else {
+				want, gotPart := tc.msg.ContentParts[0], projected.ContentParts[0]
+				if gotPart.Authority != want.Authority || gotPart.TrustTier != want.TrustTier || gotPart.Origin != want.Origin || gotPart.Source != want.Source {
+					t.Fatalf("projection changed its facts: %+v from %+v", gotPart, want)
+				}
 			}
 			if strings.Contains(got, "⟦D") {
 				t.Fatalf("legacy marker: %q", got)
