@@ -11,8 +11,8 @@ import (
 
 // The kernel and the host verdict read one rule list; every probe must get the
 // same answer from both, or a denied effect could go unreported.
-func TestSeatbeltAgreesWithFilesystemVerdict(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestKernelAgreesWithFilesystemVerdict(t *testing.T) {
+	helper := requireLiveBoundary(t)
 	c, probes := verdictFixture(t, outsideTemporaryWriteRoots(t))
 	for _, probe := range probes {
 		switch {
@@ -27,7 +27,7 @@ func TestSeatbeltAgreesWithFilesystemVerdict(t *testing.T) {
 	for _, probe := range probes {
 		t.Run(probe.name, func(t *testing.T) {
 			verdict := boundary.Filesystem.Verdict(probe.access, probe.path)
-			kernelAllowed := kernelPermits(t, self, c, probe)
+			kernelAllowed := kernelPermits(t, helper, c, probe)
 			if kernelAllowed != verdict.Allowed {
 				t.Fatalf("kernel allowed=%v, verdict=%+v for %s %s", kernelAllowed, verdict, probe.access, probe.path)
 			}
@@ -35,17 +35,17 @@ func TestSeatbeltAgreesWithFilesystemVerdict(t *testing.T) {
 	}
 }
 
-func kernelPermits(t *testing.T, self string, c confine.Confinement, probe boundaryProbe) bool {
+func kernelPermits(t *testing.T, helper string, c confine.Confinement, probe boundaryProbe) bool {
 	t.Helper()
 	if probe.access == confine.AccessRead {
-		return confinedExit(t, self, c, "/bin/cat", probe.path) == 0
+		return confinedExit(t, helper, c, "/bin/cat", probe.path) == 0
 	}
 	if probe.path == "/dev/disk0" {
 		// Opening the device for write proves the rule without writing a byte.
-		return confinedExit(t, self, c, "/bin/sh", "-c", `exec 3>>"$1"`, "sh", probe.path) == 0
+		return confinedExit(t, helper, c, "/bin/sh", "-c", `exec 3>>"$1"`, "sh", probe.path) == 0
 	}
 	_, statErr := os.Lstat(probe.path)
-	code := confinedExit(t, self, c, "/bin/sh", "-c", `: >> "$1"`, "sh", probe.path)
+	code := confinedExit(t, helper, c, "/bin/sh", "-c", `: >> "$1"`, "sh", probe.path)
 	if code == 0 && os.IsNotExist(statErr) {
 		_ = os.Remove(probe.path)
 	}
