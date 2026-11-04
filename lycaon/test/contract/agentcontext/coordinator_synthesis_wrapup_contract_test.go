@@ -29,8 +29,6 @@ func TestCoordinatorSynthesisWrapupPromptAssembly(t *testing.T) {
 		"`edit`",
 		"`task`",
 		"Do not narrate fixes",
-		"SYNTH_HANDLE_NOT_IN_LEGS",
-		"SYNTH_CITATION_UNVERIFIABLE",
 		"tool results in this chat",
 		"Render when useful",
 		"mockups or other visuals",

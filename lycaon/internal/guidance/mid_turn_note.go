@@ -73,13 +73,15 @@ type MidTurnNoteAudit struct {
 	Data        map[string]any
 	// Attempted reports that the text supplied a citation, valid or not.
 	Attempted bool
+	// CitationsRequired echoes the requirement this audit applied.
+	CitationsRequired bool
 }
 
 // AuditMidTurnNote validates every supplied reference, then decides whether
 // citations were required. Neither step reads the prose around a reference.
 func AuditMidTurnNote(in MidTurnNoteInput) MidTurnNoteAudit {
 	draft := ParseCloseoutDraft(in.Text, DraftParseOptions(in.Roots, in.Evidence.Ledger))
-	audit := MidTurnNoteAudit{Attempted: midTurnCitationCount(draft.Parsed) > 0 || len(draft.Issues) > 0}
+	audit := MidTurnNoteAudit{Attempted: midTurnCitationCount(draft.Parsed) > 0 || len(draft.Issues) > 0, CitationsRequired: in.CitationsRequired}
 	if IsBareJSONResponse(in.Text) {
 		return audit.withhold(MidTurnNoteSyntaxCode, OffenderHintData([]string{bareJSONOffender}))
 	}
@@ -188,9 +190,11 @@ func MidTurnTextAttemptsCitation(text string) bool {
 	return midTurnCitationCount(doc) > 0 || len(doc.Issues) > 0
 }
 
-// IntentWindowHasCitableObservations reads tool rows since the current user
-// intent: a minted handle, an accepted dispatch, or a command receipt.
-func IntentWindowHasCitableObservations(history []api.Message) bool {
+// IntentWindowHasCitableObservations reports whether the model holds something it
+// can cite from tool rows since the current user intent: a printed handle, or a
+// command output the ledger confirmed as delivered source, cited by its path. A
+// command with no such output leaves nothing to cite, so it requires nothing.
+func IntentWindowHasCitableObservations(history []api.Message, ledger evidence.Ledger) bool {
 	for _, msg := range intentWindow(history) {
 		if msg.Role != api.MessageRoleTool {
 			continue
@@ -198,8 +202,24 @@ func IntentWindowHasCitableObservations(history []api.Message) bool {
 		if len(msg.EvidenceHandles) > 0 {
 			return true
 		}
-		if msg.ToolResult != nil && (msg.ToolResult.Dispatch != nil || msg.ToolResult.CommandProgram != nil) {
+		if msg.ToolResult != nil && programDeliveredSource(msg.ToolResult.CommandProgram, ledger) {
 			return true
+		}
+	}
+	return false
+}
+
+// programDeliveredSource finds a delivered source record for one of the program's
+// retained outputs. A delivery's identity starts with its output's reference.
+func programDeliveredSource(program *api.CommandProgramReceipt, ledger evidence.Ledger) bool {
+	if program == nil {
+		return false
+	}
+	for _, output := range program.Outputs {
+		for _, rec := range ledger.Handles {
+			if rec.SourceDelivery != nil && output.Ref != "" && strings.HasPrefix(rec.SourceDelivery.DeliveryID, output.Ref+":") {
+				return true
+			}
 		}
 	}
 	return false

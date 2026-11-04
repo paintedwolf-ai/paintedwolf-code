@@ -17,7 +17,7 @@ publisher_tool_text: >-
   Assistant text accompanying tool calls is shown directly to the user when it is
   valid, so write it for them and keep scratchpad out of it. Before this request has
   observations it publishes as written. After that it needs inline citations, such as
-  [read#3:42], and without them it is withheld and the host tells you why. Tool
+  [path:line], and without them it is withheld and the host tells you why. Tool
   results record what executed and whether it succeeded.
 private_tool_text: >-
   Assistant text accompanying tool calls is private working context that the user

@@ -45,7 +45,7 @@ func EvaluateCoordinatorCloseoutGrounding(
 	if err != nil {
 		return CloseoutGroundingVerdict{}, err
 	}
-	resolved := guidance.ResolveDraftCitations(roots, surfaceID, draft, ev, guidance.PresentableVisualArtifactIDs(history))
+	resolved := guidance.ResolveDraftCitations(roots, surfaceID, draft, ev, guidance.SessionPresentableArtifactIDs(history))
 	eval := guidance.EvaluateDraftCitations(draft, resolved)
 	report := draft.Report()
 	if eval.Code == "" && draft.CitationCount() == 0 {

@@ -96,7 +96,7 @@ func ObserveWaitVisibility(sess *api.Session, history []api.Message, tool string
 	visibility := DeriveWaitVisibility(history)
 	gc.Session.UnpublishedToolTextPending = visibility.Pending()
 	gc.Session.MidTurnCitationAttempted = visibility.CitationAttempted
-	gc.Session.MidTurnCitationsRequired = guidance.IntentWindowHasCitableObservations(history)
+	gc.Session.MidTurnCitationsRequired = visibility.Pending() && !visibility.CitationAttempted
 	if visibility.Pending() {
 		gc.PutRejectData(WaitHiddenTextCode, map[string]any{
 			"observed_handles_sample": strings.Join(guidance.IntentWindowHandles(history, waitHandleSampleSize), ", "),

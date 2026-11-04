@@ -1,6 +1,7 @@
 package guidance
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -85,5 +86,29 @@ func TestBindCloseoutPresentArtifactsPrefersReportThenHistory(t *testing.T) {
 	)
 	if len(fallback.ArtifactIDs) != 1 || fallback.ArtifactIDs[0] != "from-history" {
 		t.Fatalf("fallback = %#v", fallback.ArtifactIDs)
+	}
+}
+
+// A directive may present what the session has seen: an earlier turn's capture, an
+// upload, or an earlier presentation. The default binding stays on this intent.
+func TestSessionPresentableArtifactsSpanTheSession(t *testing.T) {
+	still := &api.VisualArtifact{ID: "earlier-capture", Mime: "image/png"}
+	history := []api.Message{
+		{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Look", ContentParts: []api.MessageContentPart{{Content: "image", ArtifactID: "uploaded"}}},
+		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "capture_page", Visual: still}},
+		{Role: api.MessageRoleAssistant, Content: "Done", ArtifactIDs: []string{"presented"}},
+		{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Show that again"},
+	}
+	got := SessionPresentableArtifactIDs(history)
+	for _, want := range []string{"uploaded", "earlier-capture", "presented"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("%q missing from %v", want, got)
+		}
+	}
+	if slices.Contains(got, "never-seen") {
+		t.Errorf("unseen id present: %v", got)
+	}
+	if latest := PresentableVisualArtifactIDs(history); len(latest) != 0 {
+		t.Errorf("the default binding reaches past this intent: %v", latest)
 	}
 }

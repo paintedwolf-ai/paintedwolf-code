@@ -12,10 +12,10 @@ requires:
 when: paintedwolf.reject_observation == "mid_turn_note_artifact_unknown"
 effect: warn
 copy:
-  what: '[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} artifact directive(s) name an artifact not presentable in this request: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  cause: '[artifact:<uuid>] takes ids observed since the last user message. A made-up or stale id resolves to nothing.'
+  what: '[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} artifact directive(s) name an artifact this session has not seen: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  cause: '[artifact:<uuid>] takes ids this session has seen, from tool results, worker proof, or attachments. A made-up id resolves to nothing.'
   why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
-  fix: '{% if paintedwolf.surface_presentable_ids %}Presentable ids: {{ paintedwolf.surface_presentable_ids }}. Use one only if it supports the update. {% else %}No presentable still has been observed since the last user message. Produce one before presenting it. {% endif %}Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
+  fix: '{% if paintedwolf.surface_presentable_ids %}Presentable ids: {{ paintedwolf.surface_presentable_ids }}. Use one only if it supports the update. {% else %}This session has no presentable image yet. Produce one before presenting it. {% endif %}Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
   instead: 'Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; use an observed artifact id or omit the directive'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:mid_turn_note

@@ -39,7 +39,7 @@ func (m *Service) Assemble(
 		ev = guidance.CloseoutEvidence{Ledger: evidence.InitLedger()}
 	}
 	legs := m.terminalLegCloseouts(ctx, root, history)
-	return assembleGroundedLedgerCloseout(roots, surfaceID, ev, legs, draft, guidance.PresentableVisualArtifactIDs(history), forcedBy, retryCount)
+	return assembleGroundedLedgerCloseout(roots, surfaceID, ev, legs, draft, guidance.SessionPresentableArtifactIDs(history), forcedBy, retryCount)
 }
 
 type legCloseout struct {

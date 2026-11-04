@@ -7,6 +7,7 @@ requires:
     - paintedwolf.mid_turn_citation_attempted
     - paintedwolf.mid_turn_citations_required
     - paintedwolf.observed_handles_sample
+    - paintedwolf.observed_paths_sample
     - paintedwolf.reject_observation
 when: paintedwolf.reject_observation == "mid_turn_note_ungrounded" && paintedwolf.mid_turn_citations_required && !paintedwolf.mid_turn_citation_attempted
 effect: warn
@@ -14,7 +15,7 @@ copy:
   what: '[HOST: MESSAGE WITHHELD FROM USER] Your text alongside the last tool calls cited nothing.'
   cause: 'This request already has citable observations, so an update must cite at least one.'
   why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
-  fix: 'Cite what the update reports, for example [read#3:42] for a file, [task#1] for a dispatch, or [command#4] for a command. A dispatch citation proves the dispatch, not the worker''s results.{% if paintedwolf.observed_handles_sample %} Observed handles: {{ paintedwolf.observed_handles_sample }}.{% endif %} Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
+  fix: 'Cite what the update reports: a file as [path:line], or a handle printed in a tool result, such as [task#1] for a dispatch. A dispatch citation proves the dispatch, not the worker''s results.{% if paintedwolf.observed_handles_sample %} Observed handles: {{ paintedwolf.observed_handles_sample }}.{% endif %}{% if paintedwolf.observed_paths_sample %} Observed paths: {{ paintedwolf.observed_paths_sample }}.{% endif %} Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
   instead: 'Branch on Code MID_TURN_NOTE_UNGROUNDED; do not repeat the same text uncited'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:mid_turn_note
