@@ -289,7 +289,7 @@ func locatedChild(core *layeredfs.Core, parentPath layeredfs.QualifiedPath, name
 	if err != nil {
 		return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
 	}
-	meta, err := core.Lstat(qpath)
+	meta, err := core.LstatAttrs(qpath)
 	if err != nil || meta.StableID() != id {
 		return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
 	}

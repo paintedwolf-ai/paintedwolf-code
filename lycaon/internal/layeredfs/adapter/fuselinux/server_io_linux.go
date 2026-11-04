@@ -184,7 +184,7 @@ func (s *Server) opOpendir(nodeID uint64) ([]byte, int32) {
 	if !ok {
 		return nil, -int32(syscall.ENOENT)
 	}
-	attr, err := s.core.Lstat(s.qpath(rel))
+	attr, err := s.core.LstatAttrs(s.qpath(rel))
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}

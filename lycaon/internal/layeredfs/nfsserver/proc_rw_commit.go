@@ -23,7 +23,7 @@ func statRecord(s *Server, rec *handleRecord) (layeredfs.EntryAttr, error) {
 		return s.stability.EffectiveMeta(rec.key, rec.unlinked.meta), nil
 	}
 	defer s.stability.sidecars.settled(rec.qpath)()
-	meta, err := viewCore.Lstat(rec.qpath)
+	meta, err := viewCore.LstatAttrs(rec.qpath)
 	if err != nil {
 		adMeta, _, ok := s.stability.sidecars.synth(viewCore, rec.qpath)
 		if !ok {

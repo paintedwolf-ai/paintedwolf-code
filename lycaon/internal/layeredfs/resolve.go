@@ -62,6 +62,29 @@ func (c *Core) Lstat(qpath QualifiedPath) (EntryAttr, error) {
 	return res.attr, nil
 }
 
+// LstatAttrs is Lstat without the extended attributes, for callers that present metadata only.
+// The kernel asks for this on every path component it walks, so it must not open the file.
+func (c *Core) LstatAttrs(qpath QualifiedPath) (EntryAttr, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return EntryAttr{}, err
+	}
+	defer c.barrier.leaveOp()
+	res, err := resolveWith(c, qpath, false, false, false)
+	if err != nil {
+		return EntryAttr{}, err
+	}
+	emitObservation(c, ObservationEvent{
+		Path:       res.qpath,
+		Layer:      res.layer,
+		NodeID:     res.attr.NodeID,
+		Generation: res.attr.Generation,
+		Kind:       ObserveLookup,
+		Size:       res.attr.Size,
+		ModTimeNS:  res.attr.ModTime.UnixNano(),
+	})
+	return res.attr, nil
+}
+
 // Readlink reads the target of a symbolic link without following the final component.
 func (c *Core) Readlink(qpath QualifiedPath) (string, error) {
 	if err := c.barrier.enterOp(); err != nil {
@@ -86,6 +109,12 @@ func (c *Core) Readlink(qpath QualifiedPath) (string, error) {
 }
 
 func resolvePath(c *Core, qpath QualifiedPath, followFinal bool, writeIntent bool) (resolvedLayerEntry, error) {
+	return resolveWith(c, qpath, followFinal, writeIntent, true)
+}
+
+// resolveWith loads extended attributes for the final component only when wantXattrs is set, and
+// never for the directories on the way to it.
+func resolveWith(c *Core, qpath QualifiedPath, followFinal, writeIntent, wantXattrs bool) (resolvedLayerEntry, error) {
 	c.mu.RLock()
 	if c.state.released {
 		c.mu.RUnlock()
@@ -105,8 +134,10 @@ func resolvePath(c *Core, qpath QualifiedPath, followFinal bool, writeIntent boo
 	if err != nil {
 		return resolvedLayerEntry{}, err
 	}
+	walk := newLowerWalk(c, qpath.RootID)
+	defer walk.close()
 	if qpath.Rel == "." {
-		return lookupExactComponent(c, qpath)
+		return lookupComponent(c, qpath, walk, wantXattrs)
 	}
 
 	parts := strings.Split(qpath.Rel, "/")
@@ -135,11 +166,11 @@ func resolvePath(c *Core, qpath QualifiedPath, followFinal bool, writeIntent boo
 		if err != nil {
 			return resolvedLayerEntry{}, err
 		}
-		entry, lErr := lookupExactComponent(c, candPath)
+		isFinal := len(parts) == 0
+		entry, lErr := lookupComponent(c, candPath, walk, isFinal && wantXattrs)
 		if lErr != nil {
 			return resolvedLayerEntry{}, lErr
 		}
-		isFinal := len(parts) == 0
 		if entry.attr.Kind == EntrySymlink && (!isFinal || followFinal) {
 			hops++
 			if hops > maxSymlinkHops {
@@ -168,7 +199,7 @@ func resolvePath(c *Core, qpath QualifiedPath, followFinal bool, writeIntent boo
 	if len(resolvedParts) > 0 {
 		finalRel = strings.Join(resolvedParts, "/")
 	}
-	return lookupExactComponent(c, QualifiedPath{RootID: qpath.RootID, Rel: finalRel})
+	return lookupComponent(c, QualifiedPath{RootID: qpath.RootID, Rel: finalRel}, walk, wantXattrs)
 }
 
 func expandSymlinkTarget(c *Core, rootID, rawTarget string, remaining []string) ([]string, bool, error) {
@@ -223,7 +254,20 @@ func resolveParentDir(c *Core, qpath QualifiedPath, writeIntent bool) (Qualified
 	return parentRes.qpath, name, nil
 }
 
+func newLowerWalk(c *Core, rootID string) *osLowerWalk {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if p, ok := c.roots.providers[rootID].(*osLowerProvider); ok {
+		return p.walk()
+	}
+	return nil
+}
+
 func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, error) {
+	return lookupComponent(c, qpath, nil, true)
+}
+
+func lookupComponent(c *Core, qpath QualifiedPath, walk *osLowerWalk, wantXattrs bool) (resolvedLayerEntry, error) {
 	qpath.Rel = cleanRelPath(qpath.Rel)
 
 	c.mu.RLock()
@@ -291,16 +335,24 @@ func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, err
 	}
 
 	c.counters.lowerLookups.Add(1)
-	le, err := provider.Lstat(qpath.Rel)
+	var le LowerEntry
+	var err error
+	if walk != nil {
+		le, err = walk.lstat(qpath.Rel)
+	} else {
+		le, err = provider.Lstat(qpath.Rel)
+	}
 	if err != nil {
 		return resolvedLayerEntry{}, err
 	}
 	if le.Kind == EntryAbsent {
 		return resolvedLayerEntry{}, fs.ErrNotExist
 	}
-	xattrs, xErr := provider.ListXattr(qpath.Rel)
-	if xErr != nil {
-		return resolvedLayerEntry{}, xErr
+	var xattrs map[string][]byte
+	if wantXattrs {
+		if xattrs, err = provider.ListXattr(qpath.Rel); err != nil {
+			return resolvedLayerEntry{}, err
+		}
 	}
 	attr := lowerEntryToAttr(qpath, le, xattrs)
 	if attr.Kind == EntryDirectory {

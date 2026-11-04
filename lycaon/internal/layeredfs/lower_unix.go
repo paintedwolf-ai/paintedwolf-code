@@ -87,24 +87,124 @@ func (p *osLowerProvider) Lstat(rel string) (LowerEntry, error) {
 	}
 	defer func() { _ = parent.Close() }()
 
+	return lstatAt(int(parent.Fd()), name)
+}
+
+func lstatAt(parentFD int, name string) (LowerEntry, error) {
 	var st unix.Stat_t
 	flag := unix.AT_SYMLINK_NOFOLLOW
 	if name == "." {
 		flag = 0
 	}
-	if err := unix.Fstatat(int(parent.Fd()), name, &st, flag); err != nil {
+	if err := unix.Fstatat(parentFD, name, &st, flag); err != nil {
 		return LowerEntry{}, err
 	}
 	entry := statToLowerEntry(st)
 	if entry.Kind == EntrySymlink {
 		buf := make([]byte, unix.PathMax)
-		n, lErr := unix.Readlinkat(int(parent.Fd()), name, buf)
+		n, lErr := unix.Readlinkat(parentFD, name, buf)
 		if lErr != nil {
 			return LowerEntry{}, lErr
 		}
 		entry.LinkTarget = string(buf[:n])
 	}
 	return entry, nil
+}
+
+// osLowerWalk serves the lookups of one path resolution with one open per directory. Every descent
+// is O_NOFOLLOW from the directory above it, the same confinement a walk from the root gives, and
+// the descriptor lives only as long as the resolution.
+type osLowerWalk struct {
+	p      *osLowerProvider
+	dirRel string
+	fd     int
+}
+
+func (p *osLowerProvider) walk() *osLowerWalk {
+	return &osLowerWalk{p: p, dirRel: ".", fd: -1}
+}
+
+func (w *osLowerWalk) close() {
+	if w == nil {
+		return
+	}
+	if w.fd >= 0 {
+		_ = unix.Close(w.fd)
+	}
+	w.dirRel, w.fd = ".", -1
+}
+
+func (w *osLowerWalk) lstat(rel string) (LowerEntry, error) {
+	rel = cleanRelPath(rel)
+	if rel == "." {
+		return w.p.Lstat(rel)
+	}
+	dir, name := ".", rel
+	if i := strings.LastIndexByte(rel, '/'); i >= 0 {
+		dir, name = rel[:i], rel[i+1:]
+	}
+	if name == "" || name == "." || name == ".." {
+		return LowerEntry{}, ErrPathEscape
+	}
+	if err := w.descendTo(dir, rel); err != nil {
+		w.close()
+		return LowerEntry{}, err
+	}
+	if w.p.hook != nil {
+		w.p.hook(rel, name)
+	}
+	return lstatAt(w.currentFD(), name)
+}
+
+func (w *osLowerWalk) currentFD() int {
+	if w.fd >= 0 {
+		return w.fd
+	}
+	return int(w.p.rootFile.Fd())
+}
+
+// descendTo moves to dir, restarting from the root when a symlink expansion or ".." left the
+// held position outside it.
+func (w *osLowerWalk) descendTo(dir, rel string) error {
+	if w.dirRel == dir {
+		return nil
+	}
+	remaining := dir
+	if w.dirRel != "." {
+		if !strings.HasPrefix(dir, w.dirRel+"/") {
+			w.close()
+			if dir == "." {
+				return nil
+			}
+		} else {
+			remaining = dir[len(w.dirRel)+1:]
+		}
+	}
+	for _, comp := range strings.Split(remaining, "/") {
+		if comp == "" || comp == "." || comp == ".." {
+			return ErrPathEscape
+		}
+		if w.p.hook != nil {
+			w.p.hook(rel, comp)
+		}
+		next, err := unix.Openat(w.currentFD(), comp, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		if err != nil {
+			if errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR) {
+				return ErrSymlinkEscape
+			}
+			return err
+		}
+		if w.fd >= 0 {
+			_ = unix.Close(w.fd)
+		}
+		w.fd = next
+		if w.dirRel == "." {
+			w.dirRel = comp
+		} else {
+			w.dirRel += "/" + comp
+		}
+	}
+	return nil
 }
 
 func (p *osLowerProvider) Readlink(rel string) (string, error) {

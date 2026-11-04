@@ -45,6 +45,16 @@ func cloneFileIfSupported(_, _ string) (bool, error) {
 
 type osLowerProvider struct{}
 
+type osLowerWalk struct{}
+
+func (p *osLowerProvider) walk() *osLowerWalk { return nil }
+
+func (w *osLowerWalk) close() {}
+
+func (w *osLowerWalk) lstat(_ string) (LowerEntry, error) {
+	return LowerEntry{}, ErrUnsupportedOperation
+}
+
 func newOSLowerProvider(_ string, _ func(rel, comp string), _ func(rel string) error) (*osLowerProvider, error) {
 	return nil, ErrUnsupportedOperation
 }
