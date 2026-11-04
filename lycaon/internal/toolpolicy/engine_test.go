@@ -171,7 +171,7 @@ func TestListForPromptFiltersBySessionScope(t *testing.T) {
 
 	addressed := listedNames(eng.ListForPrompt(context.Background(),
 		&api.Session{ID: "s1"}, "explore_readonly"))
-	wantAddressed := []string{"git_checkout", "read"}
+	wantAddressed := []string{"read", "git_checkout"}
 	if !reflect.DeepEqual(addressed, wantAddressed) {
 		t.Fatalf("addressed session listed %v want %v", addressed, wantAddressed)
 	}
