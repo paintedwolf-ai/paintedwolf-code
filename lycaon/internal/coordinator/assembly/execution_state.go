@@ -18,7 +18,7 @@ func (e *turnContextAssembler) appendExecutionState(ctx context.Context, sess *a
 		var err error
 		window, err = inject.ReadExecutionStateWindow(ctx, e.deps.ReadMessageWindow, sess.ID)
 		if err != nil {
-			slog.Warn("read execution state window", "session_id", sess.ID, "error", err)
+			slog.WarnContext(ctx, "read execution state window", "session_id", sess.ID, "error", err)
 			return out
 		}
 	}
