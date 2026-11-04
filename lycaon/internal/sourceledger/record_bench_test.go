@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -61,61 +62,72 @@ func BenchmarkRecordBatchPromoteScale(b *testing.B) {
 }
 
 // Measures what a program's first external launch waits for: the pass and the
-// start retention a window open runs.
+// start retention a window open runs. Committed files need no retention.
 func BenchmarkOpenCommandWindow(b *testing.B) {
-	for _, files := range []int{100, 2000, 10000} {
-		for _, trusted := range []bool{true, false} {
-			b.Run(fmt.Sprintf("files-%d/trusted-%t", files, trusted), func(b *testing.B) {
-				sqlDB := testdbfixture.Open(b, "store.db")
-				testdbseed.InsertProject(b, sqlDB, "p1")
-				root := b.TempDir()
-				for i := range files {
-					dir := filepath.Join(root, fmt.Sprintf("pkg%d", i%50))
-					if err := os.MkdirAll(dir, 0o750); err != nil {
-						b.Fatalf("mkdir: %v", err)
-					}
-					if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("file%d.go", i)), fmt.Appendf(nil, "package p // %d\n", i), 0o640); err != nil {
-						b.Fatalf("write: %v", err)
-					}
-				}
-				if _, err := sqlDB.ExecContext(b.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-					VALUES ('r1', 'p1', ?, 'root', 1, ?, 'attached')`, root, db.FormatTime(time.Now().UTC())); err != nil {
-					b.Fatalf("insert root: %v", err)
-				}
-				store := New(sqlDB, b.TempDir())
-				store.Commands.windowSettle = 0
-				store.Commands.observationBudget = time.Minute
-				if trusted {
-					repochange.MarkCoverageCompleteForTest(root)
-					b.Cleanup(func() { repochange.CloseRoot(root) })
-				}
-				in := CommandWindowInput{ProjectID: "p1", Roots: []RootSpec{{ID: "r1", Path: root}}, SessionID: "s1", ToolName: "command", CommandLine: "make"}
-				ctx := context.Background()
-				// The first open is the cold capture; a session pays it once.
-				first := time.Now()
-				window, err := store.Commands.OpenCommandWindow(ctx, in)
-				if err != nil {
-					b.Fatalf("first open: %v", err)
-				}
-				b.ReportMetric(float64(time.Since(first).Milliseconds()), "first-open-ms")
-				if err := window.Close(ctx); err != nil {
-					b.Fatalf("first close: %v", err)
-				}
-				<-window.Settled()
-				b.ResetTimer()
-				for b.Loop() {
-					window, err := store.Commands.OpenCommandWindow(ctx, in)
-					if err != nil {
-						b.Fatalf("open: %v", err)
-					}
-					b.StopTimer()
-					if err := window.Close(ctx); err != nil {
-						b.Fatalf("close: %v", err)
-					}
-					<-window.Settled()
-					b.StartTimer()
-				}
-			})
+	for _, files := range []int{2000, 10000} {
+		for _, committed := range []bool{true, false} {
+			for _, watched := range []bool{true, false} {
+				b.Run(fmt.Sprintf("files-%d/committed-%t/watched-%t", files, committed, watched), func(b *testing.B) {
+					benchmarkOpenCommandWindow(b, files, committed, watched)
+				})
+			}
 		}
 	}
+}
+
+func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool) {
+	if !watched {
+		repochange.DisableWatchersForTest()
+		b.Cleanup(repochange.ResetWatchersForTest)
+	}
+	sqlDB := testdbfixture.Open(b, "store.db")
+	testdbseed.InsertProject(b, sqlDB, "p1")
+	root := b.TempDir()
+	for i := range files {
+		dir := filepath.Join(root, fmt.Sprintf("pkg%d", i%50))
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			b.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("file%d.go", i)), fmt.Appendf(nil, "package p // %d\n", i), 0o640); err != nil {
+			b.Fatalf("write: %v", err)
+		}
+	}
+	if committed {
+		gittest.Init(b, root)
+		gittest.CommitAll(b, root, "Tree")
+	}
+	if _, err := sqlDB.ExecContext(b.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
+		VALUES ('r1', 'p1', ?, 'root', 1, ?, 'attached')`, root, db.FormatTime(time.Now().UTC())); err != nil {
+		b.Fatalf("insert root: %v", err)
+	}
+	store := New(sqlDB, b.TempDir())
+	store.Commands.windowSettle = 0
+	store.Commands.observationBudget = time.Minute
+	if watched {
+		repochange.MarkCoverageCompleteForTest(root)
+		b.Cleanup(func() { repochange.CloseRoot(root) })
+	}
+	in := CommandWindowInput{ProjectID: "p1", Roots: []RootSpec{{ID: "r1", Path: root}}, SessionID: "s1", ToolName: "command", CommandLine: "make"}
+	ctx := context.Background()
+	openAndClose := func() {
+		window, err := store.Commands.OpenCommandWindow(ctx, in)
+		if err != nil {
+			b.Fatalf("open: %v", err)
+		}
+		b.StopTimer()
+		if err := window.Close(ctx); err != nil {
+			b.Fatalf("close: %v", err)
+		}
+		<-window.Settled()
+		b.StartTimer()
+	}
+	// The first open is the cold capture; a project pays it once.
+	first := time.Now()
+	openAndClose()
+	firstOpen := time.Since(first)
+	b.ResetTimer()
+	for b.Loop() {
+		openAndClose()
+	}
+	b.ReportMetric(float64(firstOpen.Milliseconds()), "first-cycle-ms")
 }
