@@ -100,10 +100,10 @@ def selected_lanes(scope, lanes):
     areas = {"go" if p.startswith("lycaon/") else "den" for p in ordinary}
     # Repository contracts read source outside the package/import graph.
     chosen = {"limits", "contracts", "integration-build", "behavior"}
-    if any(tooling(path) for path in scope["paths"]):
-        chosen.add("runner")
     for dependency in native:
         chosen |= dependency["lanes"]
+    if any(tooling(path) for path in scope["paths"]):
+        chosen.add("runner")
     if "go" in areas:
         chosen |= {"behavior", "lint", "vulnerabilities", "command-scale"}
     if "den" in areas:
