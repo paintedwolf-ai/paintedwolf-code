@@ -26,12 +26,12 @@ type nodeIdentityKey struct {
 }
 
 type recordedTrunkState struct {
-	kind                           TrunkChangeKind
-	sha256                         string
-	size, modTimeNS                int64
-	ino, dev, generation           uint64
-	deleted                        bool
-	updatedAt                      time.Time
+	kind                 TrunkChangeKind
+	sha256               string
+	size, modTimeNS      int64
+	ino, dev, generation uint64
+	deleted              bool
+	updatedAt            time.Time
 }
 
 type obsState struct {
@@ -46,12 +46,12 @@ type obsState struct {
 }
 
 type coherenceState struct {
-	trunkState                     map[layeredfs.QualifiedPath]recordedTrunkState
-	staleObsIDs                    map[string]string
-	pendingNotice                  map[layeredfs.QualifiedPath]struct{}
-	pendingObsRefs                 map[string]struct{}
-	lastConsumedNotice             *TrunkChangedNotice
-	overflowByRoot                 map[string][]string
+	trunkState         map[layeredfs.QualifiedPath]recordedTrunkState
+	staleObsIDs        map[string]string
+	pendingNotice      map[layeredfs.QualifiedPath]struct{}
+	pendingObsRefs     map[string]struct{}
+	lastConsumedNotice *TrunkChangedNotice
+	overflowByRoot     map[string][]string
 }
 
 // DescriptorTracker provides open-descriptor observation methods on a Tracker.
