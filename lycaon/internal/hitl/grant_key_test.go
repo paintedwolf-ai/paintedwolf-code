@@ -87,9 +87,9 @@ func TestGrantKeyIgnoresAuthorityNeutralArgs(t *testing.T) {
 }
 
 func TestVerifyGrantKeyIgnoresItsDeclaredWaitWindow(t *testing.T) {
-	base := directIPAction(map[string]any{"command": "go test ./...", "timeout_ms": 1000})
+	base := directIPAction(map[string]any{"program": "go test ./...", "timeout_ms": 1000})
 	base.Invocation.Tool = "verify"
-	changed := directIPAction(map[string]any{"command": "go test ./...", "timeout_ms": 1000, "wait_ms": 5000})
+	changed := directIPAction(map[string]any{"program": "go test ./...", "timeout_ms": 5000})
 	changed.Invocation.Tool = "verify"
 	if hitl.GrantKey(base) != hitl.GrantKey(changed) {
 		t.Fatal("verify's declared wait window changed execution authority")

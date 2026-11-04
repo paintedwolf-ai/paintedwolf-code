@@ -46,6 +46,8 @@ var coordinatorPromptlessAllowlist = map[string]string{
 	"terminal_read":       "pty read on investigate/overlay-promote; calling convention in tool schema",
 	"terminal_snapshot":   "pty vt grid snapshot on investigate/overlay-promote; calling convention in tool schema",
 	"terminal_close":      "pty close on investigate/overlay-promote; calling convention in tool schema",
+	"command_stop":        "live job termination primitive; taught by the shared runner-operating-procedure unit and tool schema",
+	"held_stop":           "held-call cancellation primitive; surfaced by held-call continuation envelopes and tool schema",
 	"worker_cancel":       "cancellation primitive; convention in coordinator-worker-chain-kick partial and tool schema",
 	"web_search":          "coordinator-core invariant 6; inline external lookup when on surface schema",
 	"fetch_url":           "coordinator-core invariant 6; inline external lookup when on surface schema",
