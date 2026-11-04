@@ -2,6 +2,7 @@ package hostcmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -88,10 +89,23 @@ func StagePlaceholders(stages []exec.Stage) []StageResult {
 }
 
 // SourceWindow is the command's source observation window. Until Settled, the
-// window may not have recorded all of the command's changes.
+// window may not have recorded all of the command's changes. Unobserved means a
+// process ran with no window watching it; with no ID, none ever opened.
 type SourceWindow struct {
-	ID      string `json:"id"`
-	Settled bool   `json:"settled"`
+	ID         string `json:"id,omitempty"`
+	Settled    bool   `json:"settled"`
+	Unobserved bool   `json:"unobserved,omitempty"`
+}
+
+// MarshalJSON states settlement only for a window that exists.
+func (w SourceWindow) MarshalJSON() ([]byte, error) {
+	if w.ID == "" {
+		return json.Marshal(struct {
+			Unobserved bool `json:"unobserved"`
+		}{w.Unobserved})
+	}
+	type plain SourceWindow
+	return json.Marshal(plain(w))
 }
 
 // Result is stdout/stderr summary from a host command pipeline run.

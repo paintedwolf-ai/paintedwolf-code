@@ -80,10 +80,13 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, refusedResult("COMMAND_EXEC_DENIED")), err
 	}
-	// Open before the process starts, so earlier drift is not attributed to it.
-	if err := l.window.ensure(ctx); err != nil {
+	// Open before the process starts, so earlier drift is not attributed to it,
+	// and stay held until it has exited, on every path out of this launch.
+	release, err := l.window.enter(ctx)
+	if err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
 	}
+	defer release()
 	launchArgv, cleanupProcSubst, err := materializeExternalArgv(tctx.Host.SessionScratchDir, fields)
 	if err != nil {
 		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
