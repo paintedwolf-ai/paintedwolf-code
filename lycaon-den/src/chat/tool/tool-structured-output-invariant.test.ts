@@ -144,7 +144,7 @@ describe("tool structured output invariant", () => {
       const view = buildStructuredToolPresentation(part("source_history", output));
       expect(violatesStructuredToolPresentation(view, output), mode).toBeNull();
     }
-    const overview = SOURCE_HISTORY_MODE_FIXTURES.overview;
+    const overview = SOURCE_HISTORY_MODE_FIXTURES.overview ?? "";
     const rendered = JSON.stringify(
       buildStructuredToolPresentation(part("source_history", overview)).sections,
     );
