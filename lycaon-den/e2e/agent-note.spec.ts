@@ -126,14 +126,15 @@ function manualCompletions(request: APIRequestContext, sessionId: string) {
   const nextRequest = async () => {
     const response = await request.get(`${apiUrl}/harness/llm/pending?wait=30000&session_id=${sessionId}`, { headers });
     expect(response.ok(), await response.text()).toBeTruthy();
-    const pending = (await response.json()) as { pending: boolean; id: string };
+    const pending = (await response.json()) as { pending: boolean; id: string; tools: string[] };
     expect(pending.pending).toBe(true);
-    return pending.id;
+    return pending;
   };
   return {
     waitForNextRequest: nextRequest,
     async respond(content: string, calls: Array<{ name: string; args: Record<string, unknown> }> = []) {
-      const id = await nextRequest();
+      const { id, tools } = await nextRequest();
+      for (const call of calls) expect(tools).toContain(call.name);
       const toolCalls = calls.map((call) => ({ id: crypto.randomUUID(), ...call }));
       const reply = await request.post(`${apiUrl}/harness/llm/respond`, {
         headers,
@@ -216,7 +217,7 @@ webE2e.describe("agent mid-turn note", () => {
       const sessionId = (await stream.getAttribute("data-session-id"))!;
       await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
       try {
-        const prompt = await apiPostPrompt(request, sessionId, { text: "Where is auth?" });
+        const prompt = await apiPostPrompt(request, sessionId, { text: "Read README.md and tell me where auth is." });
         expect(prompt.ok(), await prompt.text()).toBe(true);
         const driver = manualHarnessTools(request, sessionId);
         const llm = manualCompletions(request, sessionId);

@@ -154,6 +154,11 @@ webE2e(
     await page.evaluate(
       async ({ id }) => {
         const h = (window as unknown as { __harness: Harness }).__harness;
+        // A directive presents what this request observed, so the turn views it first.
+        await h.llm.pending(60_000);
+        await h.llm.respond({ toolCalls: [{ id: crypto.randomUUID(), name: "request_tools", args: { need: "view_image" } }] });
+        await h.llm.pending(60_000);
+        await h.llm.respond({ toolCalls: [{ id: crypto.randomUUID(), name: "view_image", args: { handle: id } }] });
         await h.llm.pending(60_000);
         await h.llm.respond({
           text: `Same fixture again.\n\n[artifact:${id}]`,
