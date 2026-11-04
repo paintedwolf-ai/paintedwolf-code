@@ -33,6 +33,8 @@ type sourceHistoryOverviewFile struct {
 	Branch   string `json:"branch,omitempty"`
 	WindowID string `json:"window_id,omitempty"`
 	Settled  *bool  `json:"settled,omitempty"`
+	// DuringYourCommand states the caller's own window was open, not that its command wrote the change.
+	DuringYourCommand bool `json:"during_your_command,omitempty"`
 }
 
 // sourceHistoryOpenWindow is a command window whose effects may not be listed yet.
@@ -207,6 +209,8 @@ func overviewFiles(effects []sourceledger.Effect, facts overviewRowFacts) []sour
 			At:        effect.TS.UTC().Format(sourceview.StampTimeLayout),
 			Effects:   1,
 			VersionID: effect.AfterVersionID,
+
+			DuringYourCommand: effect.DuringCommandOf(facts.sessionID),
 		}
 		if facts.namesBranch {
 			row.Branch = effect.BranchID.String()

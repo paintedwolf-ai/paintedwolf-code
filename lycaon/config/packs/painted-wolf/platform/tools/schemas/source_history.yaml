@@ -5,11 +5,11 @@ schema:
   properties:
     mode:
       type: string
-      enum: [effects, lines, mine, version, diff]
-      description: effects (default with a path) lists a file's recorded changes newest first; lines attributes the current lines; mine lists paths this session authored; version reads historical content; diff compares versions. Omit mode and path for the overview
+      enum: [effects, lines, mine, version, diff, overview]
+      description: effects (default with a path) lists a file's recorded changes newest first; lines attributes the current lines; mine lists paths this session authored; version reads historical content; diff compares versions; overview (default without a path) lists the session's changes
     path:
       type: string
-      description: Repo-relative file path (required except for mine and the no-argument overview)
+      description: Repo-relative file path (required except for mine and overview)
     version_id:
       type: string
       description: version mode (required) or diff mode (optional; omitted compares head with the session baseline) — retained source version ID from an effect row or read receipt

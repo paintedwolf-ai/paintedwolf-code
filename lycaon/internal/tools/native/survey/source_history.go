@@ -116,12 +116,14 @@ func (t *SourceHistoryTool) Run(ctx context.Context, args map[string]any, tctx t
 	mode, _ := args["mode"].(string)
 	mode = strings.TrimSpace(mode)
 	if mode == "" {
-		if path, _ := args["path"].(string); strings.TrimSpace(path) == "" {
-			return t.runOverview(ctx, tctx)
-		}
 		mode = "effects"
+		if path, _ := args["path"].(string); strings.TrimSpace(path) == "" {
+			mode = "overview"
+		}
 	}
 	switch mode {
+	case "overview":
+		return t.runOverview(ctx, tctx)
 	case "effects":
 		return t.runEffects(ctx, args, tctx)
 	case "lines":
@@ -135,7 +137,7 @@ func (t *SourceHistoryTool) Run(ctx context.Context, args map[string]any, tctx t
 	default:
 		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_HISTORY_MODE_INVALID",
-			Data: map[string]any{"mode": mode, "detail": "mode must be effects, lines, mine, version, or diff"},
+			Data: map[string]any{"mode": mode, "detail": "mode must be effects, lines, mine, version, diff, or overview"},
 		}
 	}
 }

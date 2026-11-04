@@ -135,6 +135,7 @@ type overviewResult struct {
 		Branch    string `json:"branch"`
 		WindowID  string `json:"window_id"`
 		Settled   *bool  `json:"settled"`
+		During    bool   `json:"during_your_command"`
 	} `json:"files"`
 	OpenWindows []struct {
 		ID      string `json:"id"`
@@ -319,6 +320,30 @@ func TestSourceHistoryOverviewACOV07AndACOV10MineStaysAuthoredPaths(t *testing.T
 	}
 }
 
+func TestSourceHistoryOverviewACOV13ExplicitModeMatchesTheDefault(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.beginSession(historySession)
+	h.record(effectSeed{path: "a.go", content: "one\n"})
+	want := runOverviewCall(t, h.tool, h.tctx)
+	if len(want.Files) != 1 {
+		t.Fatalf("default overview = %+v", want)
+	}
+	for name, args := range map[string]map[string]any{
+		"mode alone":      {"mode": "overview"},
+		"path is ignored": {"mode": "overview", "path": "../outside/never.go"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out, err := h.tool.Run(t.Context(), args, h.tctx)
+			testutil.FailErr(t, "source_history overview", err)
+			var got overviewResult
+			testutil.FailErr(t, "decode overview", json.Unmarshal([]byte(out), &got))
+			if got.Mode != "overview" || !got.Recorded || len(got.Files) != 1 || got.Files[0].Path != "a.go" {
+				t.Fatalf("overview = %+v, want the same rows as the default", got)
+			}
+		})
+	}
+}
+
 func TestSourceHistoryOverviewACOV09WorkerFloodNeitherFillsNorTruncates(t *testing.T) {
 	h := newHistoryHarness(t)
 	h.beginSession(historySession)
@@ -422,6 +447,26 @@ func TestSourceHistoryOverviewACOV08RowsStateTheirWindow(t *testing.T) {
 	for _, file := range unread.Files {
 		if file.WindowID != "" || file.Settled != nil {
 			t.Fatalf("nil reader row = %+v, want no window facts", file)
+		}
+	}
+}
+
+// The fact names the viewer's own window; it does not change the actor class.
+func TestSourceHistoryOverviewMarksEffectsDuringYourCommand(t *testing.T) {
+	own := windowEffect("own.go", "w-own")
+	own.SessionID = historySession
+	foreign := windowEffect("foreign.go", "w-peer")
+	foreign.SessionID = "peer"
+	drift := windowEffect("drift.go", "")
+	drift.SessionID = historySession
+	result := runOverviewCall(t, &SourceHistoryTool{}, windowContext(t, &windowLedger{effects: []sourceledger.Effect{own, foreign, drift}}, nil))
+	want := map[string]bool{"own.go": true, "foreign.go": false, "drift.go": false}
+	if len(result.Files) != len(want) {
+		t.Fatalf("files = %+v", result.Files)
+	}
+	for _, file := range result.Files {
+		if file.During != want[file.Path] || file.Actor != "external" {
+			t.Fatalf("row %+v, want during_your_command %v and actor external", file, want[file.Path])
 		}
 	}
 }

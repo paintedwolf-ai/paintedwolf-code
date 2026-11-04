@@ -126,6 +126,7 @@ func TestSourceHistoryOverviewACCW02ProgramEffectsListSettled(t *testing.T) {
 			Actor    string `json:"actor"`
 			WindowID string `json:"window_id"`
 			Settled  *bool  `json:"settled"`
+			During   bool   `json:"during_your_command"`
 		} `json:"files"`
 		OpenWindows []struct {
 			ID string `json:"id"`
@@ -137,7 +138,7 @@ func TestSourceHistoryOverviewACCW02ProgramEffectsListSettled(t *testing.T) {
 	}
 	for _, file := range overview.Files {
 		if file.Path == "gen.txt" {
-			if file.WindowID != out.SourceWindow.ID || file.Settled == nil || !*file.Settled || file.Actor != "external" {
+			if file.WindowID != out.SourceWindow.ID || file.Settled == nil || !*file.Settled || file.Actor != "external" || !file.During {
 				t.Fatalf("generated row = %+v, want an observed change in settled window %s", file, out.SourceWindow.ID)
 			}
 			return

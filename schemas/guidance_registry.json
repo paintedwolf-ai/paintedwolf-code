@@ -2671,7 +2671,7 @@
       "summary": "An explicit workflow check is unresolved for revision {{ paintedwolf.source_revision }}."
     },
     "SOURCE_HISTORY_MODE_INVALID": {
-      "branch_instruction": "Branch on Code; pick one of the five modes",
+      "branch_instruction": "Branch on Code; pick one of the six modes",
       "category": "recoverable",
       "emit": "guard:source_history",
       "summary": "source_history does not know mode {{ paintedwolf.mode }}."

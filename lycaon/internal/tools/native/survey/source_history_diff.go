@@ -97,9 +97,10 @@ func (t *SourceHistoryTool) runDiff(
 	return marshalSourceHistory(display, resp)
 }
 
-// runSessionDiff compares head with the file's state before the first effect the
-// caller's branch recorded on it this session. Both versions come from the file's
-// own record, so a move within the window is not a path mismatch.
+// runSessionDiff compares the file now, or its absence once deleted, with its state
+// before the first effect the caller's branch recorded on it this session. Both
+// sides come from the file's own record, so a move within the window is not a path
+// mismatch.
 func (t *SourceHistoryTool) runSessionDiff(
 	ctx context.Context,
 	tctx tools.ToolContext,
@@ -112,7 +113,7 @@ func (t *SourceHistoryTool) runSessionDiff(
 		return "", err
 	}
 	resp := sourceHistoryResponse{Mode: "diff", Path: display}
-	head, err := ledger.Files.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
+	current, err := resolveDiffEnd(ctx, tctx, ledger, branch, rootID, rel)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		resp.Note = sourceHistoryNoRecordNote
 		return marshalSourceHistory(display, resp)
@@ -130,19 +131,19 @@ func (t *SourceHistoryTool) runSessionDiff(
 	}
 	resp.Recorded = true
 	resp.Since = &sourceHistorySince{Ordinal: floor}
-	resp.VersionID = head.VersionID
-	earliest, found, err := ledger.Files.OldestFileEffectAfterOnBranch(ctx, tctx.Identity.ProjectID, branch, head.FileID, floor)
+	resp.VersionID, resp.State = current.versionID, current.state
+	earliest, found, err := ledger.Files.OldestFileEffectAfterOnBranch(ctx, tctx.Identity.ProjectID, branch, current.fileID, floor)
 	if err != nil {
 		return "", fmt.Errorf("source history session baseline: %w", err)
 	}
 	if !found {
-		resp.BaseVersionID = head.VersionID
+		resp.BaseVersionID = current.versionID
 		resp.Note = sourceHistoryNoSessionEffectNote
 		return marshalSourceHistory(display, resp)
 	}
-	comp, err := ledger.Comparison.CompareVersionPair(ctx, tctx.Identity.ProjectID, earliest.BeforeVersionID, head.VersionID)
+	comp, err := ledger.Comparison.CompareVersionPair(ctx, tctx.Identity.ProjectID, earliest.BeforeVersionID, current.versionID)
 	if err != nil {
-		return "", comparisonError(err, head.VersionID)
+		return "", comparisonError(err, current.versionID)
 	}
 	if err := rejectUndiffableSides(comp); err != nil {
 		return "", err
@@ -152,8 +153,41 @@ func (t *SourceHistoryTool) runSessionDiff(
 	if comp.Before.VersionID != "" {
 		fromLabel = fmt.Sprintf("%s (%s, session baseline)", display, comp.Before.VersionID)
 	}
-	resp.Diff = comparisonDiff(comp, fromLabel, fmt.Sprintf("%s (%s)", display, head.VersionID))
+	toLabel := fmt.Sprintf("%s (absent)", display)
+	if current.versionID != "" {
+		toLabel = fmt.Sprintf("%s (%s)", display, current.versionID)
+	}
+	resp.Diff = comparisonDiff(comp, fromLabel, toLabel)
 	return marshalSourceHistory(display, resp)
+}
+
+// diffEnd is what a session diff compares against. A deleted file has no version
+// on this side: its state is absence.
+type diffEnd struct {
+	fileID, versionID, state string
+}
+
+// resolveDiffEnd finds the file at this path now, or the file deleted from it.
+// ErrHistoryNotFound means the path was never tracked on the branch.
+func resolveDiffEnd(
+	ctx context.Context,
+	tctx tools.ToolContext,
+	ledger tools.SourceHistory,
+	branch sourcebranch.ID,
+	rootID, rel string,
+) (diffEnd, error) {
+	head, err := ledger.Files.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
+	if err == nil {
+		return diffEnd{fileID: head.FileID, versionID: head.VersionID}, nil
+	}
+	if !errors.Is(err, sourceledger.ErrHistoryNotFound) {
+		return diffEnd{}, err
+	}
+	deleted, err := ledger.Files.ResolveDeletedPath(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
+	if err != nil {
+		return diffEnd{}, err
+	}
+	return diffEnd{fileID: deleted.FileID, state: "absent"}, nil
 }
 
 func comparisonError(err error, versionID string) error {

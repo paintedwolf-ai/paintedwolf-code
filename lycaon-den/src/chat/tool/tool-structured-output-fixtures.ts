@@ -659,7 +659,7 @@ export const SOURCE_HISTORY_MODE_FIXTURES: Record<string, string> = {
     recorded: true,
     since: { ordinal: 4 },
     files: [
-      { path: "main.go", op: "write", actor: "you", at: "2026-08-26 14:02 UTC", effects: 2, version_id: "v-2", window_id: "w-1", settled: true },
+      { path: "main.go", op: "write", actor: "you", at: "2026-08-26 14:02 UTC", effects: 2, version_id: "v-2", window_id: "w-1", settled: true, during_your_command: true },
       { path: "@docs/guide.md", op: "write", actor: "user", at: "2026-08-26 13:50 UTC", effects: 1, version_id: "v-5" },
     ],
     open_windows: [{ id: "w-2", running: true }],

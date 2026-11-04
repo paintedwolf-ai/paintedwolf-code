@@ -45,6 +45,24 @@ func TestActorDisplayNamesForeignAgentsOnly(t *testing.T) {
 	}
 }
 
+func TestDuringCommandOfNeedsTheViewersOwnWindow(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		effect Effect
+		viewer string
+		want   bool
+	}{
+		{"own window", Effect{CommandWindowID: "w", SessionID: "s1"}, "s1", true},
+		{"another session's window", Effect{CommandWindowID: "w", SessionID: "s2"}, "s1", false},
+		{"no window", Effect{SessionID: "s1"}, "s1", false},
+		{"no viewer", Effect{CommandWindowID: "w"}, "", false},
+	} {
+		if got := tc.effect.DuringCommandOf(tc.viewer); got != tc.want {
+			t.Errorf("%s: DuringCommandOf = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestTurnCheckpointAndActivityFloorReportAbsenceAsUnknown(t *testing.T) {
 	store, ctx := openLedger(t)
 	if _, found, err := store.Checkpoints.TurnCheckpoint(ctx, "p1", "s1", 1); err != nil || found {
