@@ -5,13 +5,12 @@ from ci_policy import lint_scope
 
 
 class LintScopeTests(unittest.TestCase):
-    def test_explicit_scope_reaches_both_analyzers_without_appending_the_whole_module(self):
+    def test_explicit_scope_reaches_analysis_without_appending_the_whole_module(self):
         commands = lint_scope.commands('full', '/tool/golangci-lint', '30m',
                                        ['--scope', './internal/launchguard', '--show-stats'])
-        self.assertEqual(commands[0], ['go', 'vet', './internal/launchguard'])
-        self.assertEqual(commands[1], ['/tool/golangci-lint', 'run', '--timeout', '30m',
+        self.assertEqual(commands[0], ['/tool/golangci-lint', 'run', '--timeout', '30m',
                                        '--show-stats', './internal/launchguard'])
-        self.assertTrue(commands[2][1].endswith('/scripts/deadcode-check.sh'))
+        self.assertTrue(commands[1][1].endswith('/scripts/deadcode-check.sh'))
         self.assertFalse(any('./...' in command for command in commands))
 
     def test_default_and_fast_modes_keep_their_original_obligations(self):

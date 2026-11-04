@@ -188,7 +188,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
 
   lint:full:
-    desc: GitHub workflows + Go vet + full golangci-lint + deadcode
+    desc: GitHub workflows + full golangci-lint + deadcode
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
