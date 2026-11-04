@@ -121,7 +121,8 @@ func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	f := newWindowFixture(t)
 	repochange.MarkCoverageCompleteForTest(f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
-	f.ledger.Commands.SetWindowSettleForTest(time.Hour)
+	gate := make(chan time.Time)
+	f.ledger.Commands.SetWindowSettleGateForTest(gate)
 	outcome := f.run(t, writeGen)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.Settled {
 		t.Fatalf("outcome = %+v, want an unsettled source window", outcome)
@@ -130,7 +131,8 @@ func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != outcome.SourceWindow.ID || !listed[0].Closing {
 		t.Fatalf("open windows = %+v, want the program's closing window", listed)
 	}
-	f.forcePass(t, "gen.txt")
+	repochange.Notify(t.Context(), repochange.Event{ProjectDir: f.Dir, Kind: repochange.WorktreeChanged, Paths: []string{"gen.txt"}, Source: repochange.SourceWatcher})
+	close(gate)
 	testutil.AwaitClosed(t, "window settles", listed[0].Settled)
 	if listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session); len(listed) != 0 {
 		t.Fatalf("settled window still listed: %+v", listed)
@@ -458,8 +460,7 @@ func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 	f.wantWindowEffect(t, "gen.txt", outcome.SourceWindow.ID)
 }
 
-// Waiting on the program's held window keeps real cancellation distinct: a stop
-// during the wait reports the interruption, not an unobserved launch.
+// A launch that ran with no window watching it says so.
 func TestProgramResultStatesWhenObservationNeverStarted(t *testing.T) {
 	f := newWindowFixture(t)
 	f.opener.before = func(context.Context) error { return sourceledger.ErrWindowStartPending }
