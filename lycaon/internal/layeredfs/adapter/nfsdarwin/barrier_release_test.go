@@ -1,3 +1,5 @@
+//go:build darwin
+
 package nfsdarwin_test
 
 import (
@@ -9,7 +11,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"testing"
 
@@ -23,9 +24,6 @@ import (
 )
 
 func TestCheckpointBarrierDrainsPendingUnstableWritesAndExcludesNewMutations(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 	adp := nfsdarwin.New(nfsdarwin.Config{})
 	tmp := t.TempDir()
 	trunkDir, backingDir, runtimeDir, cpStoreDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime"), filepath.Join(tmp, "cp-store")
@@ -106,9 +104,6 @@ func TestCheckpointBarrierDrainsPendingUnstableWritesAndExcludesNewMutations(t *
 }
 
 func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 	adp := nfsdarwin.New(nfsdarwin.Config{})
 	tmp := t.TempDir()
 	trunkDir, backingDir, runtimeDir, cpStoreDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime"), filepath.Join(tmp, "cp-store")
@@ -197,9 +192,6 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 }
 
 func TestReleaseRetainsStateOnUnmountAndRuntimeCleanupFailureAndSucceedsOnRetry(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 
 	adp := nfsdarwin.New(nfsdarwin.Config{})
 	tmp := t.TempDir()

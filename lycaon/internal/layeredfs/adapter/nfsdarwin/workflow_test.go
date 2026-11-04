@@ -1,3 +1,5 @@
+//go:build darwin
+
 package nfsdarwin_test
 
 import (
@@ -10,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -41,9 +42,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")

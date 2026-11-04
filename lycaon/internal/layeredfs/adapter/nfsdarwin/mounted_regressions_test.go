@@ -1,3 +1,5 @@
+//go:build darwin
+
 package nfsdarwin_test
 
 import (
@@ -9,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -34,9 +35,6 @@ type mountedView struct {
 
 func prepareRealMount(t *testing.T, cfg nfsdarwin.Config, seed map[string]string) *mountedView {
 	t.Helper()
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 	tmp := t.TempDir()
 	v := &mountedView{adp: nfsdarwin.New(cfg), id: "view-regress", tmp: tmp, trunk: filepath.Join(tmp, "trunk"), runtimeDir: filepath.Join(tmp, "runtime")}
 	if err := os.MkdirAll(v.trunk, 0o755); err != nil {

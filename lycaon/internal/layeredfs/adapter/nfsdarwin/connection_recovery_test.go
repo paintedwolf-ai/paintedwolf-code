@@ -1,3 +1,5 @@
+//go:build darwin
+
 package nfsdarwin_test
 
 import (
@@ -8,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -75,9 +76,6 @@ func runEngineHoldingAMount(tmp string) int {
 // one from the durable record alone, leaves a live server's mount and any other mount at the path
 // alone, and does not signal a process still holding the settled mount.
 func TestRecordedConnectionSettlesOnlyByItsIdentity(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 	tmp, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve temp dir", err)
 	engine, mountPath := startEngineHoldingAMount(t, tmp)

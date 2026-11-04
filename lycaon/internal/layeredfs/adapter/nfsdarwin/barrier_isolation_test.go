@@ -1,3 +1,5 @@
+//go:build darwin
+
 package nfsdarwin_test
 
 import (
@@ -7,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -22,9 +23,6 @@ import (
 )
 
 func TestBoundedClientFlushSkipsUntouchedUnreadableAndSpecialFiles(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")
@@ -143,9 +141,6 @@ func runBoundedFlushPublishPass(t *testing.T, tmp, trunkDir, label string) (file
 }
 
 func TestBarrierDrainCancellationAndPerViewIsolationAndGateRetention(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")
 	if err := os.MkdirAll(trunkDir, 0o755); err != nil {

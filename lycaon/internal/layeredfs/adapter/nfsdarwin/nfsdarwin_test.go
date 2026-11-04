@@ -1,3 +1,5 @@
+//go:build darwin
+
 package nfsdarwin_test
 
 import (
@@ -6,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -17,9 +18,6 @@ import (
 )
 
 func TestProbeAndPrepareNFSDarwin(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 
 	nonDarwin := nfsdarwin.New(nfsdarwin.Config{HostOS: "linux"})
 	if res, err := nonDarwin.Probe(t.Context(), adapter.ProbeConfig{}); err == nil || res.Supported || res.ReasonCode != adapter.ReasonUnsupportedPlatform {
@@ -109,9 +107,6 @@ func TestProbeAndPrepareNFSDarwin(t *testing.T) {
 }
 
 func TestImmediateCoherenceAndNegativeLookup(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 
 	adp := nfsdarwin.New(nfsdarwin.Config{})
 	tmp := t.TempDir()
@@ -189,9 +184,6 @@ func TestImmediateCoherenceAndNegativeLookup(t *testing.T) {
 }
 
 func TestBarrierFailsOnDeadServerAndPreservesEarlierCheckpoints(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 
 	adp := nfsdarwin.New(nfsdarwin.Config{})
 	tmp := t.TempDir()
@@ -286,9 +278,6 @@ func TestBarrierFailsOnDeadServerAndPreservesEarlierCheckpoints(t *testing.T) {
 }
 
 func TestReleaseDoesNotUnmountUnownedPath(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 
 	umountLog := filepath.Join(t.TempDir(), "umount-invocations.log")
 	wrapperScript := filepath.Join(t.TempDir(), "umount-wrapper.sh")
