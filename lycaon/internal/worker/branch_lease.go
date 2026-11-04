@@ -137,7 +137,7 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 	if s == nil || s.Store == nil || s.Queue == nil {
 		return fmt.Errorf("merge apply sweep requires queue and store")
 	}
-	eng := s.engine()
+	settleCommittedPromotes(ctx, s.Queue, s.DataDir)
 	for {
 		ids, err := s.Store.ListMergeApplying(ctx)
 		if err != nil {
@@ -155,7 +155,7 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 			if lockErr != nil {
 				return lockErr
 			}
-			if _, err := eng.reclaimOrphanedApply(ctx, task, id); err != nil {
+			if _, err := s.engine().reclaimOrphanedApply(ctx, task, id); err != nil {
 				slog.WarnContext(ctx, "orphaned merge apply repair deferred", "job_id", id, "err", err)
 			}
 			lock.release()
@@ -260,7 +260,7 @@ func (s mergeEngine) holdBranch(ctx context.Context, jobID string) (*BranchLease
 	task, exists := s.Queue.Get(jobID)
 	checkpointed := exists && task != nil && session.CheckpointStoreDirForTask(task) != ""
 	if checkpointed {
-		if err := session.SyncTaskCheckpointToWorkspace(task); err != nil {
+		if err := session.SyncTaskCheckpointToWorkspace(task, s.taskRootRefs(ctx, task)); err != nil {
 			return nil, fmt.Errorf("rehydrate checkpoint branch: %w", err)
 		}
 	}

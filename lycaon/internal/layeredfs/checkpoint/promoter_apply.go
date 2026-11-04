@@ -90,6 +90,9 @@ func (pr *Promoter) apply(ctx context.Context, req ApplyRequest, importRefs chec
 	}
 
 	if !exists {
+		if err := removeAppliedPathMarkers(pr.cfg.Store.promotionsDir, txID); err != nil {
+			return nil, err
+		}
 		refStatus := EffectSkipped
 		if req.ImportGitRefs && (len(m.PrivateGit.Refs) > 0 || m.PrivateGit.HeadRef != "") {
 			refStatus = EffectPending
@@ -110,18 +113,18 @@ func (pr *Promoter) apply(ctx context.Context, req ApplyRequest, importRefs chec
 	}
 
 	if rec.FilePromotionStatus != EffectCompleted {
-		for _, ch := range req.Preview.PlannedChanges {
-			if hasPath(rec.AppliedPaths, ch.Path) {
+		applied := appliedPathSet(rec.AppliedPaths)
+		for index, ch := range req.Preview.PlannedChanges {
+			if _, done := applied[ch.Path]; done {
 				continue
 			}
 			if err := pr.targets.applyPlannedChange(ch); err != nil {
 				return nil, err
 			}
-			rec.AppliedPaths = append(rec.AppliedPaths, ch.Path)
-			rec.UpdatedAt = time.Now().UTC()
-			if err := pr.savePromotionRecord(rec); err != nil {
+			if err := recordAppliedPath(pr.cfg.Store.promotionsDir, txID, index, ch.Path); err != nil {
 				return nil, err
 			}
+			rec.AppliedPaths = append(rec.AppliedPaths, ch.Path)
 			if req.FaultInjector != nil {
 				if err := req.FaultInjector(ApplyFaultMidFileApply); err != nil {
 					return nil, err
@@ -130,6 +133,10 @@ func (pr *Promoter) apply(ctx context.Context, req ApplyRequest, importRefs chec
 		}
 		rec.FilePromotionStatus, rec.UpdatedAt = EffectCompleted, time.Now().UTC()
 		if err := pr.savePromotionRecord(rec); err != nil {
+			return nil, err
+		}
+		// The record now names every path; a crash here leaves only duplicates to fold.
+		if err := removeAppliedPathMarkers(pr.cfg.Store.promotionsDir, txID); err != nil {
 			return nil, err
 		}
 	}
@@ -179,8 +186,9 @@ func (pr *Promoter) Reject(_ context.Context, checkpointID, reason string) (*Pro
 
 // RevalidatePreviewTargets checks the bound target facts, excluding journaled applied paths on retry.
 func (pr *Promoter) RevalidatePreviewTargets(preview *PromotionPreview, applied []layeredfs.QualifiedPath) error {
+	done := appliedPathSet(applied)
 	for _, obs := range preview.TargetObservations {
-		if hasPath(applied, obs.Path) {
+		if _, ok := done[obs.Path]; ok {
 			continue
 		}
 		cur, err := pr.targets.observeTarget(obs.Path)
@@ -211,11 +219,10 @@ func sameTargetObservation(a, b TargetObservation) bool {
 	return false
 }
 
-func hasPath(list []layeredfs.QualifiedPath, target layeredfs.QualifiedPath) bool {
-	for _, p := range list {
-		if p == target {
-			return true
-		}
+func appliedPathSet(paths []layeredfs.QualifiedPath) map[layeredfs.QualifiedPath]struct{} {
+	set := make(map[layeredfs.QualifiedPath]struct{}, len(paths))
+	for _, path := range paths {
+		set[path] = struct{}{}
 	}
-	return false
+	return set
 }

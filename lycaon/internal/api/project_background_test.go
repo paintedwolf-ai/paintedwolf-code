@@ -610,26 +610,22 @@ func TestProjectBackgroundEventsAndReconnectReplay(t *testing.T) {
 	reader := bufio.NewReader(resp.Body)
 	readNextProjectBackgroundEvent := func(r *bufio.Reader) (string, wire.ProjectBackgroundEvent) {
 		t.Helper()
-		var lastID string
 		for {
 			line, readErr := r.ReadString('\n')
 			testutil.FailErr(t, "read SSE line", readErr)
 			line = strings.TrimRight(line, "\r\n")
-			if after, ok := strings.CutPrefix(line, "id:"); ok {
-				lastID = strings.TrimSpace(after)
-				continue
-			}
 			data, ok := strings.CutPrefix(line, "data:")
 			if !ok {
 				continue
 			}
 			var envEvent struct {
+				Cursor  string                      `json:"cursor"`
 				Topic   wire.EventTopic             `json:"topic"`
-				Payload wire.ProjectBackgroundEvent `json:"payload"`
+				Payload wire.ProjectBackgroundEvent `json:"data"`
 			}
 			testutil.FailErr(t, "decode SSE envelope", json.Unmarshal([]byte(strings.TrimSpace(data)), &envEvent))
 			if envEvent.Topic == wire.EventTopicProjectBackground {
-				return lastID, envEvent.Payload
+				return envEvent.Cursor, envEvent.Payload
 			}
 		}
 	}
@@ -659,7 +655,7 @@ func TestProjectBackgroundEventsAndReconnectReplay(t *testing.T) {
 		t.Fatalf("ports_changed event = %+v", portsEv)
 	}
 	if cursorAfterPorts == "" {
-		t.Fatal("expected SSE id cursor on ports_changed event")
+		t.Fatal("expected envelope cursor on ports_changed event")
 	}
 
 	// 3. Disconnect SSE stream, stop the process while disconnected, then reconnect with ?after=cursorAfterPorts.

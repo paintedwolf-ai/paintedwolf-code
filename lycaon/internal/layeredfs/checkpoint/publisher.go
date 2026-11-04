@@ -113,10 +113,7 @@ func (p *Publisher) Publish(ctx context.Context, req PublishRequest) (PublishRes
 	if req.Trigger == "" {
 		req.Trigger = TriggerExplicitCapture
 	}
-	item := &pendingPublish{
-		req:  req,
-		done: make(chan publishOutcome, 1),
-	}
+	item := &pendingPublish{req: req, done: make(chan publishOutcome, 1)}
 	p.mu.Lock()
 	p.queue = append(p.queue, item)
 	if p.active {
@@ -222,10 +219,7 @@ func (p *Publisher) executeBatch(ctx context.Context, batch []*pendingPublish) (
 		return PublishResult{}, err
 	}
 
-	return PublishResult{
-		Manifest:       manifest,
-		CoalescedCount: len(batch),
-	}, nil
+	return PublishResult{Manifest: manifest, CoalescedCount: len(batch)}, nil
 }
 
 func (p *Publisher) flushRegisteredMappings() error {

@@ -4,13 +4,14 @@
   "kind": "construction",
   "workstream": "immutable-worker-checkpoints",
   "disposition": "retain",
-  "reason": "Retain explicit host promotion composition at 497 receiver lines, 18 methods and 18 fields. Existing queue, branch, journal, scan, document and source-event owners remain visible. Checkpoint integration adds a typed importer port; it does not restore the retired monolithic promotion implementation.",
-  "reviewed_commit": "bd060249916b4513aba81ab615d13e81549da7fb",
+  "reason": "Retain explicit host promotion composition at 497 receiver lines, 18 methods and 18 fields. Existing queue, branch, journal, scan, document and source-event owners remain visible. Checkpoint integration adds a typed importer port; it does not restore the retired monolithic promotion implementation. Reviewed after recovery gained committed settlement: RecoverOrphanedMergeApplies only calls it, and the boundary tests now include the crash contract through this boot entry.",
+  "reviewed_commit": "d06b59bf83db41c4f6ff6d0589dd9a679da7d9ff",
   "ceiling": 497,
   "boundaries": {
-    "lycaon/internal/worker/merge_apply_claim_test.go": "651b2650409ea4b7663ec1e416e2864bab401ab7fc2f9f58d091c4805a224bd7",
-    "lycaon/internal/worker/promote_transaction_test.go": "0afc31a18954a0acca4f100cf5d4264529e66c864936f126e5c6ac18f70c96f5",
+    "lycaon/internal/worker/merge_apply_claim_test.go": "e121a03da567198a7761275beccd762aafeb473557ceb1a98a3d42b0c3cd1f20",
+    "lycaon/internal/worker/promote_transaction_test.go": "aad52a289ce5551d8a0bfaeebe06c75a111a65a8c72175389fe9026e56cdc06d",
+    "lycaon/internal/worker/promote_recovery_test.go": "4e0c4f5d02e28d03751768fb952e3685bfd0fe4f2d8e89ff392727f78b4df1eb",
     "lycaon/internal/worker/sql_store_obligation_test.go": "f16f62406c9ba1a0216bb456778f5551a92dad1235a5be414e7c69bfba75fc9b"
   },
-  "reviewed_shape": "7841ddd9447e96f24e6b12fb843d4e5d96cb9b907d04335ec1b6fbb9e15f1e5e"
+  "reviewed_shape": "c39d4febded2af9a235550d0190a51a0547a9ad61c162ea050f1d977b9b0e7cb"
 }

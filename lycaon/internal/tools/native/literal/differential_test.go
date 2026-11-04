@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +31,7 @@ var referenceFamily = map[string]string{
 var differentialCases = []struct {
 	argv, stdin string
 	stderr      bool
+	statLayout  bool
 }{
 	{argv: "cat -n lines"}, {argv: "cat -b lines"}, {argv: "cat -s lines"}, {argv: "cat -A lines"}, {argv: "cat -v lines"}, {argv: "cat -T lines"},
 	{argv: "cat -n input empty input"}, {argv: "cat missing input", stderr: true},
@@ -43,8 +46,8 @@ var differentialCases = []struct {
 	{argv: "ls -p tree-a"}, {argv: "ls --group-directories-first tree-a"}, {argv: "ls -L dir"}, {argv: "ls -LF dir"},
 	{argv: "ls --color=never dir"}, {argv: "ls --color=auto dir"}, {argv: "ls -i dir"}, {argv: "ls -s dir"}, {argv: "ls -is tree-a"},
 	{argv: "ls -m dir"}, {argv: "ls -sm dir"}, {argv: "ls -im dir"}, {argv: "ls -ism dir"}, {argv: "ls -k dir"}, {argv: "ls -ks dir"}, {argv: "ls -H -F link"},
-	{argv: "stat input"}, {argv: "stat dir"}, {argv: "stat link"},
-	{argv: "stat -c %n|%s|%a|%A|%F|%Y input"}, {argv: "stat -c %Hd,%Ld input"}, {argv: "stat -c %F empty"}, {argv: "stat -c %F link"}, {argv: "stat -L -c %F link"}, {argv: "stat -c %%%s input"},
+	{argv: "stat input", statLayout: true}, {argv: "stat dir", statLayout: true}, {argv: "stat link", statLayout: true},
+	{argv: "stat -c %n|%s|%a|%A|%F|%Y input"}, {argv: "stat -c %Hd,%Ld input", statLayout: true}, {argv: "stat -c %F empty"}, {argv: "stat -c %F link"}, {argv: "stat -L -c %F link"}, {argv: "stat -c %%%s input"},
 	{argv: "diff same-a same-b"}, {argv: "diff -u old new"}, {argv: "diff -U 1 old new"}, {argv: "diff -q old new"}, {argv: "diff -u noeol-a noeol-b"},
 	{argv: "diff -u -w ws-a ws-b"}, {argv: "diff -u -b ws-a ws-b"}, {argv: "diff -u -B blank-a blank-b"}, {argv: "diff -u blank-a blank-b"},
 	{argv: "diff bin-a bin-b"}, {argv: "diff -u empty input"}, {argv: "diff -u input empty"}, {argv: "diff -r -u tree-a tree-b"},
@@ -65,6 +68,22 @@ var differentialCases = []struct {
 // referenceBinary finds a host utility of the selected compatibility target.
 // Homebrew and other ports install GNU tools with a g prefix (gls, gstat)
 // beside the platform's own; either spelling qualifies when it is the target.
+var coreutilsVersion = regexp.MustCompile(`GNU coreutils\) (\d+)\.(\d+)`)
+
+// judgesStatLayout reports whether a stat prints the device layout the catalog
+// targets: decimal major,minor, observed from 9.12. Older releases print a
+// hexadecimal pair and have no %Hd or %Ld.
+func judgesStatLayout(binary string) bool {
+	out, _ := exec.Command(binary, "--version").CombinedOutput()
+	match := coreutilsVersion.FindSubmatch(out)
+	if match == nil {
+		return false
+	}
+	major, _ := strconv.Atoi(string(match[1]))
+	minor, _ := strconv.Atoi(string(match[2]))
+	return major > 9 || (major == 9 && minor >= 12)
+}
+
 func referenceBinary(name string) (string, bool) {
 	family := referenceFamily[name]
 	for _, candidate := range []string{"g" + name, name} {
@@ -110,7 +129,7 @@ func TestDifferentialAgainstReferenceUtilities(t *testing.T) {
 			}
 			binaries[argv[0]] = binary
 		}
-		if binary == "" {
+		if binary == "" || (c.statLayout && !judgesStatLayout(binary)) {
 			continue
 		}
 		t.Run(c.argv, func(t *testing.T) {

@@ -15,6 +15,12 @@ func (tree *promotionTargets) applyPlannedChange(ch PlannedChange) error {
 		return err
 	}
 	defer func() { _ = root.Close() }()
+	return withWritableParent(root, ch.Path.Rel, func() error {
+		return tree.applyPlannedChangeInRoot(root, ch)
+	})
+}
+
+func (tree *promotionTargets) applyPlannedChangeInRoot(root *os.Root, ch PlannedChange) error {
 	switch ch.Action {
 	case ActionNoop:
 		return nil
@@ -104,10 +110,10 @@ func (tree *promotionTargets) writeTargetRegular(root *os.Root, ch PlannedChange
 	if _, err := file.Write(data); err != nil {
 		return err
 	}
-	if err := file.Chmod(mode); err != nil {
+	if err := applyFileXattrs(file, ch.Xattrs); err != nil {
 		return err
 	}
-	if err := applyFileXattrs(file, ch.Xattrs); err != nil {
+	if err := file.Chmod(mode); err != nil {
 		return err
 	}
 	if tree.recordPostimage != nil {
