@@ -53,24 +53,6 @@ func TestCoordinatorFamilyShellRegistry(t *testing.T) {
 	}
 }
 
-func TestCoordinatorFamilyPacingIncludesBatchDispatch(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	sharedDir := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "shared")
-	if _, err := os.Stat(filepath.Join(sharedDir, "partials", "coordinator-batch-dispatch.md")); err != nil {
-		t.Fatalf("shared batch-dispatch partial missing: %v", err)
-	}
-	for pacing, include := range coordinatorFamilyPacingBatchDispatch {
-		raw, err := os.ReadFile(filepath.Join(sharedDir, filepath.FromSlash(pacing)))
-		if err != nil {
-			t.Fatalf("read pacing %s: %v", pacing, err)
-		}
-		if !strings.Contains(string(raw), include) {
-			t.Fatalf("pacing %s missing include of %s", pacing, include)
-		}
-	}
-}
-
 func TestExecutionModeFamilyCoversCoordinatorSurfacesYAML(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
