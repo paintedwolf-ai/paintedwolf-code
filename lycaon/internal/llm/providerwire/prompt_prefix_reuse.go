@@ -109,7 +109,7 @@ func countSegments(counter tokenest.Counter, segments []modelcall.ModelInputSegm
 }
 
 func cutChanged(prev, cur modelcall.HistoryCutFacts) bool {
-	return prev.TailOrd != cur.TailOrd || prev.WorkingSetOrd != cur.WorkingSetOrd || prev.FitOrd != cur.FitOrd || prev.Generation != cur.Generation
+	return prev.TailOrd != cur.TailOrd || prev.WorkingSetOrd != cur.WorkingSetOrd || prev.FitOrd != cur.FitOrd || prev.BodiesOrd != cur.BodiesOrd || prev.Generation != cur.Generation
 }
 
 func firstDifferenceCause(prev prefixBaseline, found bool, cur prefixBaseline, common int, identity promptCacheIdentity, out observability.PromptCacheObservation) string {

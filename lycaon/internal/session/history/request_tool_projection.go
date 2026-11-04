@@ -23,59 +23,90 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message, tokens .
 		if len(tokens) > 0 && tokens[0] > 1 && retainedToolTailTokens(out, i) <= tokens[0] {
 			break
 		}
-		raw := row.Content
-		if row.ModelProjected {
-			raw = row.ToolResult.Content
+		if projected, ok := projectToolBody(ctx, row); ok {
+			out[i] = projected
 		}
-		content, fitted, isHistory := raw, len(raw) <= 2048, false
-		if !fitted {
-			content, fitted, isHistory = projectRecallHistoryPage(ctx, raw, 2048, row.ToolResult.ToolArgs)
-			if !fitted && !isHistory && row.ToolResult.Tool == "recall" {
-				content, fitted = projectRecallSearch(raw, 2048)
-			}
-		}
-		if !fitted {
-			record := recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
-				SourceSeq: row.Seq, Format: "text", BodyRunes: 4096}
-			envelope, err := json.Marshal(struct {
-				Compacted bool                  `json:"compacted"`
-				Outcome   api.ToolResultOutcome `json:"outcome,omitempty"`
-				Record    recall.HistoryRequest `json:"record_request"`
-			}{true, row.ToolResult.Outcome, record})
-			if err != nil {
-				continue
-			}
-			content = string(envelope)
-			historyJSON, err := json.Marshal(record)
-			if err == nil {
-				if rendered, err := guidance.RenderGuidance(ctx, "compaction/tool-result-reference", map[string]any{
-					"tool": row.ToolResult.Tool, "outcome": row.ToolResult.Outcome,
-					"evidence_handles": row.EvidenceHandles, "history_json": string(historyJSON),
-				}); err == nil && rendered != "" && len(rendered) <= 2048 {
-					content = rendered
-				}
-			}
-			if !isHistory {
-				if partial, fitted := tooloutput.FitWireJSON(raw, 2048-len(content)-1); fitted {
-					content += "\n" + partial
-				}
-			}
-		}
-		tiers := []api.ContentTrustTier{row.TrustTier}
-		for _, part := range api.MessageTextParts(row) {
-			tiers = append(tiers, part.TrustTier)
-		}
-		row.TrustTier = api.FloorTrustTier(tiers...)
-		row.Authority = api.ContentAuthorityNone
-		row.Content = content
-		row.ContentParts = nil
-		row.ModelProjected = false
-		result := *row.ToolResult
-		result.Content = content
-		row.ToolResult = &result
-		out[i] = row
 	}
 	return out
+}
+
+// projectToolBodiesThrough replays a held projection on every oversized body up to through.
+func projectToolBodiesThrough(ctx context.Context, rows []api.Message, through int64) []api.Message {
+	out := append([]api.Message(nil), rows...)
+	for i, row := range out {
+		if row.Ord > through || !isOversizedToolBody(row) {
+			continue
+		}
+		if projected, ok := projectToolBody(ctx, row); ok {
+			out[i] = projected
+		}
+	}
+	return out
+}
+
+// extendBodyProjection carries a body projection forward to the next anchor, so
+// each append does not rewrite one more retained row. The latest exchange stays whole.
+func extendBodyProjection(ctx context.Context, before, projected []api.Message) []api.Message {
+	last := lastProjectedBody(before, projected)
+	if last == 0 {
+		return projected
+	}
+	through := (last/PrefixGridRowStep+1)*PrefixGridRowStep - 1
+	return projectToolBodiesThrough(ctx, projected, min(through, projected[latestExchangeStart(projected)].Ord-1))
+}
+
+func projectToolBody(ctx context.Context, row api.Message) (api.Message, bool) {
+	raw := row.Content
+	if row.ModelProjected {
+		raw = row.ToolResult.Content
+	}
+	content, fitted, isHistory := raw, len(raw) <= 2048, false
+	if !fitted {
+		content, fitted, isHistory = projectRecallHistoryPage(ctx, raw, 2048, row.ToolResult.ToolArgs)
+		if !fitted && !isHistory && row.ToolResult.Tool == "recall" {
+			content, fitted = projectRecallSearch(raw, 2048)
+		}
+	}
+	if !fitted {
+		record := recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
+			SourceSeq: row.Seq, Format: "text", BodyRunes: 4096}
+		envelope, err := json.Marshal(struct {
+			Compacted bool                  `json:"compacted"`
+			Outcome   api.ToolResultOutcome `json:"outcome,omitempty"`
+			Record    recall.HistoryRequest `json:"record_request"`
+		}{true, row.ToolResult.Outcome, record})
+		if err != nil {
+			return row, false
+		}
+		content = string(envelope)
+		historyJSON, err := json.Marshal(record)
+		if err == nil {
+			if rendered, err := guidance.RenderGuidance(ctx, "compaction/tool-result-reference", map[string]any{
+				"tool": row.ToolResult.Tool, "outcome": row.ToolResult.Outcome,
+				"evidence_handles": row.EvidenceHandles, "history_json": string(historyJSON),
+			}); err == nil && rendered != "" && len(rendered) <= 2048 {
+				content = rendered
+			}
+		}
+		if !isHistory {
+			if partial, fitted := tooloutput.FitWireJSON(raw, 2048-len(content)-1); fitted {
+				content += "\n" + partial
+			}
+		}
+	}
+	tiers := []api.ContentTrustTier{row.TrustTier}
+	for _, part := range api.MessageTextParts(row) {
+		tiers = append(tiers, part.TrustTier)
+	}
+	row.TrustTier = api.FloorTrustTier(tiers...)
+	row.Authority = api.ContentAuthorityNone
+	row.Content = content
+	row.ContentParts = nil
+	row.ModelProjected = false
+	result := *row.ToolResult
+	result.Content = content
+	row.ToolResult = &result
+	return row, true
 }
 
 func projectRecallHistoryPage(ctx context.Context, raw string, maxBytes int, originalArgs map[string]any) (string, bool, bool) {

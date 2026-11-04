@@ -27,14 +27,17 @@ const (
 )
 
 // lessReserve shrinks an allocation by the room a forced advance aims to free.
-// A small allocation keeps at least half of itself rather than collapsing.
+// A small allocation keeps most of itself rather than collapsing to its last exchange.
 func (a workingSetAllocation) lessReserve() workingSetAllocation {
 	return workingSetAllocation{
 		rows:   a.rows - min(PrefixGridRowStep, a.rows/2),
-		tokens: a.tokens - min(max(2048, a.tokens/16), a.tokens/2),
-		bytes:  a.bytes - min(max(8192, a.bytes/16), a.bytes/2),
+		tokens: a.tokens - fitReserve(a.tokens),
+		bytes:  a.bytes - min(max(8192, a.bytes/16), a.bytes/4),
 	}
 }
+
+// fitReserve is the token room a required advance aims to leave free.
+func fitReserve(tokens int) int { return min(max(2048, tokens/16), tokens/4) }
 
 // fittingStart returns the first index whose suffix stays within alloc.
 func fittingStart(rows []api.Message, alloc workingSetAllocation) int {
@@ -108,7 +111,10 @@ func markRow(row api.Message) cutoffMark { return cutoffMark{ord: row.Ord, id: r
 type cutoffState struct {
 	key             cutoffKey
 	tail, work, fit cutoffMark
-	change          string
+	// bodies is the last ordinal whose recorded tool body later requests replay
+	// as a recoverable projection.
+	bodies int64
+	change string
 }
 
 func (st cutoffState) lineageHolds(rows []api.Message) bool {
@@ -166,7 +172,7 @@ func (t *cutoffTracker) takeFacts(sessionID string) modelcall.HistoryCutFacts {
 		return modelcall.HistoryCutFacts{}
 	}
 	facts := modelcall.HistoryCutFacts{Generation: st.key.generation, TailOrd: st.tail.ord,
-		WorkingSetOrd: st.work.ord, FitOrd: st.fit.ord, Change: st.change}
+		WorkingSetOrd: st.work.ord, FitOrd: st.fit.ord, BodiesOrd: st.bodies, Change: st.change}
 	st.change = ""
 	t.sessions.Store(sessionID, st)
 	return facts
@@ -225,30 +231,50 @@ func (m *Service) holdWorkingSet(key cutoffKey, sessionID string, rows []api.Mes
 
 // noteFitCut feeds a tighter final fit back into later projection: the working
 // set follows it, so summary publication can still cover what the fit omitted.
-func (m *Service) noteFitCut(key cutoffKey, sessionID string, rows []api.Message, fitted []api.Message) {
+func (m *Service) noteFitCut(key cutoffKey, sessionID string, rows, fitted []api.Message) {
 	_, through := omittedOrdinals(rows, compaction.ContextMessagesFromAPI(fitted))
-	if through == 0 {
+	bodies := lastProjectedBody(rows, fitted)
+	if through == 0 && bodies == 0 {
 		return
 	}
 	at := slices.IndexFunc(fitted, func(row api.Message) bool { return row.Ord > through && !row.ContextPinned })
-	if at < 0 {
-		return
-	}
 	m.cutoffs.update(sessionID, key, rows, func(st *cutoffState) {
-		mark := markRow(fitted[at])
-		if mark.ord <= st.fit.ord {
+		if bodies > st.bodies {
+			st.bodies, st.change = bodies, cutoffFitAdvanced
+		}
+		if through == 0 || at < 0 || fitted[at].Ord <= st.fit.ord {
 			return
 		}
-		st.fit, st.change = mark, cutoffFitAdvanced
-		if mark.ord > st.work.ord {
-			st.work = mark
+		st.fit, st.change = markRow(fitted[at]), cutoffFitAdvanced
+		if st.fit.ord > st.work.ord {
+			st.work = st.fit
 		}
 	})
 }
 
-// fitHeldCut returns the held fit ordinal for rows already validated against lineage.
-func (m *Service) fitHeldCut(key cutoffKey, sessionID string, rows []api.Message) int64 {
-	var held int64
-	m.cutoffs.update(sessionID, key, rows, func(st *cutoffState) { held = st.fit.ord })
-	return held
+// lastProjectedBody finds the newest tool row whose body the fit replaced.
+func lastProjectedBody(rows, fitted []api.Message) int64 {
+	original := make(map[string]string, len(rows))
+	for _, row := range rows {
+		if row.Role == api.MessageRoleTool {
+			original[row.ID] = row.Content
+		}
+	}
+	last := int64(0)
+	for _, row := range fitted {
+		if body, ok := original[row.ID]; ok && body != row.Content {
+			last = max(last, row.Ord)
+		}
+	}
+	return last
+}
+
+// heldFit returns the held fit and body-projection ordinals. It creates no
+// record, so a request that never fitted leaves no state behind.
+func (m *Service) heldFit(key cutoffKey, sessionID string, rows []api.Message) (held, bodies int64) {
+	if _, found := m.cutoffs.sessions.Load(sessionID); !found {
+		return 0, 0
+	}
+	m.cutoffs.update(sessionID, key, rows, func(st *cutoffState) { held, bodies = st.fit.ord, st.bodies })
+	return held, bodies
 }

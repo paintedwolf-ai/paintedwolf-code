@@ -182,7 +182,10 @@ func (m *Service) applyFitCut(ctx context.Context, sess *api.Session, key cutoff
 	if m == nil || sess == nil || len(rows) == 0 {
 		return rows, nil
 	}
-	held := m.fitHeldCut(key, sess.ID, rows)
+	held, bodies := m.heldFit(key, sess.ID, rows)
+	if bodies > 0 {
+		rows = projectToolBodiesThrough(ctx, rows, bodies)
+	}
 	if held == 0 {
 		return rows, nil
 	}
@@ -295,25 +298,22 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 		noticeTokens = compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{*sized}))
 	}
 	rows = promptassembly.MarkContextPins(sess, rows, min(8192, max(0, tokens/5)))
-	reserve := min(max(2048, tokens/16), tokens/2)
-	contexts := compaction.ContextMessagesFromAPI(rows)
-	fitted := compaction.DeterministicFitWithReserve(cfg, contexts, tokens, reserve)
-	// Dropping old rows comes first: shrinking bodies a later request may keep
-	// whole would rewrite retained history on every call.
-	if shrinkTools && m != nil && m.store != nil && recall && compaction.EstimateMessagesTokens(fitted) > tokens {
+	reserve := fitReserve(tokens)
+	canShrinkTools := shrinkTools && m != nil && m.store != nil && recall
+	if canShrinkTools {
 		toolTokens := max(1, tokens-noticeTokens)
-		rows = projectRecordedToolBodies(ctx, rows, toolTokens)
+		rows = extendBodyProjection(ctx, rows, projectRecordedToolBodies(ctx, rows, toolTokens))
 		if retained := retainedToolTailMessages(rows, toolTokens); retained > 0 {
 			cfg.KeepRecentMessages = retained
 		}
+	}
+	contexts := compaction.ContextMessagesFromAPI(rows)
+	fitted := compaction.DeterministicFitWithReserve(cfg, contexts, tokens, reserve)
+	if canShrinkTools && compaction.EstimateMessagesTokens(fitted) > tokens {
+		rows = projectRecordedToolBodies(ctx, rows)
+		cfg.KeepRecentMessages = max(1, retainedToolTailMessages(rows, 0))
 		contexts = compaction.ContextMessagesFromAPI(rows)
 		fitted = compaction.DeterministicFitWithReserve(cfg, contexts, tokens, reserve)
-		if compaction.EstimateMessagesTokens(fitted) > tokens {
-			rows = projectRecordedToolBodies(ctx, rows)
-			cfg.KeepRecentMessages = max(1, retainedToolTailMessages(rows, 0))
-			contexts = compaction.ContextMessagesFromAPI(rows)
-			fitted = compaction.DeterministicFitWithReserve(cfg, contexts, tokens, reserve)
-		}
 	}
 	firstDropped, through := omittedOrdinals(rows, fitted)
 	if through > 0 {
